@@ -21,6 +21,8 @@ vi.mock('../../../../i18n/LanguageContext', () => ({
 vi.mock('../../../../shared/utils/haptics', () => ({ hapticFeedback: () => undefined }));
 
 import AudioRecorder from '../AudioRecorder';
+// plr-d10 I12 — the mic's accessible name is now the founder's own Marathi sentence (was "Start Recording").
+import { MIC_INSTRUCTION, REC_WORDS } from '../recorder/recorderWords';
 
 afterEach(() => {
     cleanup();
@@ -44,18 +46,22 @@ describe('AudioRecorder when the microphone is refused', () => {
 
         // Trying to record is what triggers the OS prompt — just-in-time, at the moment
         // the feature is invoked, not in a sweep at onboarding.
-        fireEvent.click(screen.getByRole('button', { name: 'Start Recording' }));
+        fireEvent.click(screen.getByRole('button', { name: MIC_INSTRUCTION }));
 
         await waitFor(() =>
-            expect(screen.getByText('voice.micDeniedTypeInstead')).toBeInTheDocument());
+            expect(screen.getByText(REC_WORDS.micDenied)).toBeInTheDocument());
 
-        // The typing input is still there and still usable.
-        const input = document.querySelector('input[name="textInput"]') as HTMLInputElement;
-        expect(input).toBeInTheDocument();
-        expect(input).toBeEnabled();
+        // The typing way in is still there and still usable. plr-d10 I12: it is the quiet
+        // "type instead" line under the mic (was an always-open text box), and after a refusal it
+        // is drawn at full strength, because it is now THE way in.
+        const link = screen.getByTestId('typed-link');
+        expect(link).toBeEnabled();
+        expect(link.className).toContain('opacity-100');
+        fireEvent.click(link);
 
+        const input = screen.getByTestId('typed-input');
         fireEvent.change(input, { target: { value: 'आज फवारणी केली' } });
-        fireEvent.submit(input.closest('form') as HTMLFormElement);
+        fireEvent.click(screen.getByTestId('typed-send'));
         expect(onTextCaptured).toHaveBeenCalledWith('आज फवारणी केली');
     });
 
@@ -63,10 +69,10 @@ describe('AudioRecorder when the microphone is refused', () => {
         denyMicrophone();
         render(<AudioRecorder onAudioCaptured={vi.fn()} onTextCaptured={vi.fn()} />);
 
-        fireEvent.click(screen.getByRole('button', { name: 'Start Recording' }));
+        fireEvent.click(screen.getByRole('button', { name: MIC_INSTRUCTION }));
 
         await waitFor(() =>
-            expect(screen.getByText('voice.micDeniedTypeInstead')).toBeInTheDocument());
-        expect(screen.queryByText(/voice\.micError/)).not.toBeInTheDocument();
+            expect(screen.getByText(REC_WORDS.micDenied)).toBeInTheDocument());
+        expect(screen.queryByText(REC_WORDS.micError)).not.toBeInTheDocument();
     });
 });

@@ -38,6 +38,14 @@ export class StreamingPcmRecorder {
         void this.config;
     }
 
+    /**
+     * The live microphone stream while recording, else null. READ-ONLY: it lets the recorder's level
+     * meter listen (plr-d10 I12) without touching what is captured, trimmed, hashed or encoded.
+     */
+    get liveStream(): MediaStream | null {
+        return this.mediaStream;
+    }
+
     static isSupported(): boolean {
         if (typeof window === 'undefined') return false;
         const ctor = StreamingPcmRecorder.resolveAudioContextCtor();

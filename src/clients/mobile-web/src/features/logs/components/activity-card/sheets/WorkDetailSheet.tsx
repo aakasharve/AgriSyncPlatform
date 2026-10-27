@@ -9,7 +9,8 @@ import { AlertTriangle, Check, HelpCircle, ListPlus, X, Zap } from 'lucide-react
 import Button from '../../../../../shared/components/ui/Button';
 import IssueFormSheet from '../../IssueFormSheet';
 import { BucketIssue } from '../../../../../domain/types/log.types';
-import { t as translateForced } from '../../../../../i18n/translations';
+// PLR-D10 I13 (LP-27): its words in his language only.
+import { useSheetStrings } from './sheetStrings';
 
 // Font rule (CHARTER): Marathi body text -> Noto Sans Devanagari.
 const MARATHI_BODY = "'Noto Sans Devanagari', sans-serif";
@@ -40,6 +41,7 @@ const WorkDetailSheet = ({
      */
     provenanceVerified?: boolean
 }) => {
+    const S = useSheetStrings();
     const [selected, setSelected] = useState<string[]>(workTypes || []);
     const [custom, setCustom] = useState('');
     const [issue, setIssue] = useState<BucketIssue | undefined>(initialIssue);
@@ -69,7 +71,7 @@ const WorkDetailSheet = ({
                 <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                     <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
                         <ListPlus size={20} className="text-emerald-500" />
-                        Work Done
+                        {S.workTitle}
                     </h3>
                     <div className="flex items-center gap-2">
                         {/* Issue Button */}
@@ -100,13 +102,13 @@ const WorkDetailSheet = ({
                                         className="text-[11px] font-semibold leading-snug text-amber-700"
                                         style={{ fontFamily: MARATHI_BODY }}
                                     >
-                                        {translateForced('voice.unverifiedSourceLabel', 'mr')}
+                                        {S.unsure}
                                     </span>
                                 </div>
                             )}
                             {sourceText && (
                                 <div className="flex items-start gap-2 mb-2">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5 whitespace-nowrap">YOU SAID:</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5 whitespace-nowrap">{S.youSaid}</span>
                                     <p className="text-xs font-medium text-slate-600 italic">"{sourceText}"</p>
                                 </div>
                             )}
@@ -123,7 +125,7 @@ const WorkDetailSheet = ({
                         </div>
                     )}
 
-                    <p className="text-sm text-slate-500">Select activities performed today:</p>
+                    <p className="text-sm text-slate-500">{S.selectActivities}</p>
 
                     <div className="flex flex-wrap gap-2">
                         {allOptions.map(opt => (
@@ -143,16 +145,16 @@ const WorkDetailSheet = ({
                     <form onSubmit={addCustom} className="flex gap-2 pt-2">
                         <input
                             className="flex-1 p-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-emerald-500"
-                            placeholder="Add other activity..."
+                            placeholder={S.addOther}
                             value={custom}
                             onChange={e => setCustom(e.target.value)}
                         />
-                        <button disabled={!custom.trim()} className="bg-slate-800 text-white px-4 rounded-lg font-bold text-sm disabled:opacity-50">Add</button>
+                        <button disabled={!custom.trim()} className="bg-slate-800 text-white px-4 rounded-lg font-bold text-sm disabled:opacity-50">{S.add}</button>
                     </form>
                 </div>
 
                 <Button onClick={() => { onSave(selected, issue); onClose(); }} className="w-full py-4 shadow-lg">
-                    Save Work Details
+                    {S.saveWork}
                 </Button>
             </div>
 

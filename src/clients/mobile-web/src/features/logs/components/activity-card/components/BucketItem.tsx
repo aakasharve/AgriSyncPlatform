@@ -5,7 +5,8 @@
 
 import React from 'react';
 import { AlertTriangle, Check, HelpCircle, Zap } from 'lucide-react';
-import { t as translateForced } from '../../../../../i18n/translations';
+// PLR-D10 I13 (LP-27): its words in his language only.
+import { useActivityCardStrings } from '../activityCardStrings';
 
 // Font rule (CHARTER): Marathi body text -> Noto Sans Devanagari. The
 // "not certain I heard this" flag is Marathi copy shown inline with the
@@ -32,6 +33,7 @@ const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, s
      */
     provenanceVerified?: boolean
 }) => {
+    const s = useActivityCardStrings();
 
     // Theme Maps
     const themes = {
@@ -148,10 +150,10 @@ const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, s
                     <div className="flex items-center gap-1 mt-0.5">
                         {filled ? (
                             <span className={`text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-white/60 backdrop-blur-sm ${t.text}`}>
-                                {sublabel || 'Completed'}
+                                {sublabel || s.completed}
                             </span>
                         ) : (
-                            <span className="text-xs font-medium text-slate-400">Tap to add details</span>
+                            <span className="text-xs font-medium text-slate-400">{s.tapToAdd}</span>
                         )}
                     </div>
                 </div>
@@ -188,14 +190,14 @@ const BucketItem = ({ icon, label, sublabel, filled, theme = 'slate', onClick, s
                                 className="text-[11px] font-semibold leading-snug text-amber-700"
                                 style={{ fontFamily: MARATHI_BODY }}
                             >
-                                {translateForced('voice.unverifiedSourceLabel', 'mr')}
+                                {s.unsure}
                             </span>
                         </div>
                     )}
                     <div className="flex flex-col gap-2">
                         {sourceText && (
                             <div className="flex items-start gap-2">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">YOU SAID:</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5">{s.youSaid}</span>
                                 <p className="text-xs font-medium text-slate-600 italic">"{sourceText}"</p>
                             </div>
                         )}

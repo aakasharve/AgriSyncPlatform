@@ -86,6 +86,7 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
             <LabourFeaturePage
                 // spec: plr-d10 (I17, H19) — मागे returns where he came from (the hub, the log page…);
                 // the hub only when there is nowhere he came from. It was fixed to the hub.
+                // (I12, WP-6): the work home's "आजची हजेरी" door goes back home, the hub row back to the hub.
                 onExit={() => ctx.goBackOr('profile')}
                 onGoToLog={(opts) => {
                     // Labour V2 R1 Task 3.1 — the labour mic is a VERIFICATION instrument.

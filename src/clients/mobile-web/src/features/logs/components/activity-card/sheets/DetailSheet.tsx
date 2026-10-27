@@ -9,6 +9,8 @@ import { LedgerDefaults, FarmerProfile, Plot } from '../../../../../types';
 import { AlertTriangle, User, Users, Droplets, Tractor, X } from 'lucide-react';
 import Button from '../../../../../shared/components/ui/Button';
 import IssueFormSheet from '../../IssueFormSheet';
+// PLR-D10 I13 (LP-27): its words in his language only.
+import { useSheetStrings } from './sheetStrings';
 
 /**
  * One sheet serves labour, irrigation AND machinery: `data` arrives as whichever
@@ -39,6 +41,7 @@ const DetailSheet = ({
     currentPlot?: Plot,
     cropContractUnit?: string
 }) => {
+    const S = useSheetStrings();
     // SYNCHRONOUS INITIALIZATION (Prevents empty flash)
     const [localData, setLocalData] = useState<DetailData>(() => {
         // If editing existing data, use it
@@ -183,7 +186,7 @@ const DetailSheet = ({
                         {type === 'labour' && <Users size={20} className="text-orange-500" />}
                         {type === 'irrigation' && <Droplets size={20} className="text-blue-500" />}
                         {type === 'machinery' && <Tractor size={20} className="text-slate-500" />}
-                        {type === 'labour' ? 'Labour Details' : type === 'irrigation' ? 'Daily Irrigation' : 'Machinery Usage'}
+                        {S.detailTitle(type)}
                     </h3>
                     <div className="flex items-center gap-2">
                         {/* Issue Button */}
@@ -218,7 +221,7 @@ const DetailSheet = ({
                                         className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${labourTab === t ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-600'
                                             }`}
                                     >
-                                        {t === 'HIRED' ? 'Daily Wage' : t === 'CONTRACT' ? 'Contract' : 'Self'}
+                                        {S.labourTab(t as 'HIRED' | 'CONTRACT' | 'SELF')}
                                     </button>
                                 ))}
                             </div>
@@ -244,7 +247,7 @@ const DetailSheet = ({
                                     {/* 3. Counts with Validation */}
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Total Labours</label>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">{S.totalLabours}</label>
                                             <input
                                                 type="number"
                                                 className="w-full p-3 border border-slate-200 rounded-xl font-bold text-lg mt-1 focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 outline-none"
@@ -259,7 +262,7 @@ const DetailSheet = ({
 
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">Male Split</label>
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase">{S.maleSplit}</label>
                                                 <input
                                                     type="number"
                                                     className={`w-full p-3 border rounded-xl font-bold text-lg mt-1 focus:ring-2 outline-none ${localData.count && (localData.maleCount || 0) + (localData.femaleCount || 0) !== localData.count
@@ -272,7 +275,7 @@ const DetailSheet = ({
                                                 />
                                             </div>
                                             <div>
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">Female Split</label>
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase">{S.femaleSplit}</label>
                                                 <input
                                                     type="number"
                                                     className={`w-full p-3 border rounded-xl font-bold text-lg mt-1 focus:ring-2 outline-none ${localData.count && (localData.maleCount || 0) + (localData.femaleCount || 0) !== localData.count
@@ -290,7 +293,7 @@ const DetailSheet = ({
                                             (localData.maleCount || 0) + (localData.femaleCount || 0) !== localData.count && (
                                                 <p className="text-[10px] text-amber-600 font-bold flex items-center gap-1 animate-in fade-in slide-in-from-top-1">
                                                     <AlertTriangle size={10} />
-                                                    Split ({(localData.maleCount || 0) + (localData.femaleCount || 0)}) doesn't match Total ({localData.count})
+                                                    {S.splitMismatch((localData.maleCount || 0) + (localData.femaleCount || 0), localData.count)}
                                                 </p>
                                             )}
                                     </div>
@@ -307,7 +310,7 @@ const DetailSheet = ({
                                             className="text-xs font-bold text-slate-400 uppercase"
                                             style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
                                         >
-                                            कामाचे तास
+                                            {S.hoursWorked}
                                         </label>
                                         <input
                                             type="number"
@@ -324,8 +327,8 @@ const DetailSheet = ({
                                     {/* Auto-Calculated Total */}
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
                                         <div>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase">Total Paid (Auto)</p>
-                                            <p className="text-xs text-slate-500 mt-0.5">Based on shift rates</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase">{S.totalPaidAuto}</p>
+                                            <p className="text-xs text-slate-500 mt-0.5">{S.basedOnShift}</p>
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <span className="text-lg font-bold text-slate-400">₹</span>
@@ -344,31 +347,31 @@ const DetailSheet = ({
                                 <div className="space-y-4 animate-in fade-in">
                                     <div className="flex gap-2">
                                         <div className="w-1/3">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Unit</label>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">{S.unit}</label>
                                             <select
                                                 className="w-full p-3 border border-slate-200 rounded-xl mt-1 bg-white text-sm font-bold focus:ring-2 focus:ring-orange-500/20 outline-none"
                                                 value={localData.contractUnit || 'Acre'}
                                                 onChange={e => setLocalData({ ...localData, contractUnit: e.target.value })}
                                             >
-                                                <option value="Tree">Per Tree</option>
-                                                <option value="Acre">Per Acre</option>
-                                                <option value="Row">Per Row</option>
-                                                <option value="Lump Sum">Lump Sum</option>
+                                                <option value="Tree">{S.contractUnit('Tree')}</option>
+                                                <option value="Acre">{S.contractUnit('Acre')}</option>
+                                                <option value="Row">{S.contractUnit('Row')}</option>
+                                                <option value="Lump Sum">{S.contractUnit('Lump Sum')}</option>
                                             </select>
                                         </div>
                                         <div className="flex-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Quantity</label>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">{S.quantity}</label>
                                             <input
                                                 type="number"
                                                 className="w-full p-3 border border-slate-200 rounded-xl mt-1 focus:ring-2 focus:ring-orange-500/20 outline-none"
                                                 value={localData.contractQuantity || ''}
-                                                placeholder={localData.contractUnit === 'Tree' ? 'No. of Trees' : 'Qty'}
+                                                placeholder={localData.contractUnit === 'Tree' ? S.noOfTrees : S.qty}
                                                 onChange={e => setLocalData({ ...localData, contractQuantity: parseFloat(e.target.value) })}
                                             />
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase">Total Contract Amount (₹)</label>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase">{S.contractAmount}</label>
                                         <input
                                             type="number"
                                             className="w-full p-3 border border-slate-200 rounded-xl mt-1 font-bold text-lg focus:ring-2 focus:ring-orange-500/20 outline-none"
@@ -383,8 +386,8 @@ const DetailSheet = ({
                             {labourTab === 'SELF' && (
                                 <div className="animate-in fade-in bg-slate-50 p-6 rounded-xl border border-slate-200 text-center">
                                     <User size={32} className="mx-auto text-slate-400 mb-2" />
-                                    <p className="text-sm font-bold text-slate-600">Self / Family Labour</p>
-                                    <p className="text-xs text-slate-400 mt-1">No cost will be recorded for this activity.</p>
+                                    <p className="text-sm font-bold text-slate-600">{S.selfTitle}</p>
+                                    <p className="text-xs text-slate-400 mt-1">{S.selfNoCost}</p>
                                 </div>
                             )}
                         </>
@@ -403,13 +406,13 @@ const DetailSheet = ({
                                         onClick={() => setLocalData({ ...localData, durationHours: hrs })}
                                         className={`flex-1 py-3 rounded-xl border font-bold transition-all ${localData.durationHours === hrs ? 'bg-blue-50 border-blue-300 text-blue-700 ring-1 ring-blue-200' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'}`}
                                     >
-                                        {hrs}h
+                                        {S.hoursChip(hrs)}
                                     </button>
                                 ))}
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Source</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">{S.source}</label>
                                     <select
                                         className="w-full p-2.5 border border-slate-200 rounded-xl bg-white mt-1 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
                                         value={localData.motorId || ''}
@@ -419,22 +422,22 @@ const DetailSheet = ({
                                             setLocalData({ ...localData, motorId: e.target.value, source: source?.name || 'Unknown' });
                                         }}
                                     >
-                                        <option value="">Select Motor</option>
+                                        <option value="">{S.selectMotor}</option>
                                         {profile.motors.map(m => (
                                             <option key={m.id} value={m.id}>{m.name}</option>
                                         ))}
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Method</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">{S.method}</label>
                                     <select
                                         className="w-full p-2.5 border border-slate-200 rounded-xl bg-white mt-1 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
                                         value={localData.method || 'Drip'}
                                         onChange={e => setLocalData({ ...localData, method: e.target.value })}
                                     >
-                                        <option value="Drip">Drip</option>
-                                        <option value="Flood">Flood</option>
-                                        <option value="Sprinkler">Sprinkler</option>
+                                        <option value="Drip">{S.value('Drip')}</option>
+                                        <option value="Flood">{S.value('Flood')}</option>
+                                        <option value="Sprinkler">{S.value('Sprinkler')}</option>
                                     </select>
                                 </div>
                             </div>
@@ -451,7 +454,7 @@ const DetailSheet = ({
                                         onClick={() => setLocalData({ ...localData, type: m })}
                                         className={`flex-1 py-2 text-xs font-bold rounded-lg capitalize transition-all ${localData.type === m ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}
                                     >
-                                        {m}
+                                        {S.value(m)}
                                     </button>
                                 ))}
                             </div>
@@ -469,14 +472,14 @@ const DetailSheet = ({
                                         }}
                                         className={`flex-1 py-1.5 text-[10px] font-bold rounded-lg capitalize transition-all ${localData.ownership === o ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-600'}`}
                                     >
-                                        {o}
+                                        {S.value(o)}
                                     </button>
                                 ))}
                             </div>
 
                             <div className="flex gap-3">
                                 <div className="flex-1">
-                                    <label className="text-xs font-bold text-slate-400 uppercase">Usage (Hrs)</label>
+                                    <label className="text-xs font-bold text-slate-400 uppercase">{S.usageHours}</label>
                                     <input
                                         type="number"
                                         className={`w-full p-3 border rounded-xl mt-1 font-bold focus:ring-2 outline-none ${localData.ownership === 'owned' && !localData.hoursUsed
@@ -489,12 +492,12 @@ const DetailSheet = ({
                                         onChange={e => setLocalData({ ...localData, hoursUsed: parseFloat(e.target.value) })}
                                     />
                                     {localData.ownership === 'owned' && !localData.hoursUsed && (
-                                        <p className="text-[10px] text-amber-600 font-bold mt-1">Hours mandatory for owned</p>
+                                        <p className="text-[10px] text-amber-600 font-bold mt-1">{S.hoursMandatory}</p>
                                     )}
                                 </div>
                                 <div className="flex-1">
                                     <label className="text-xs font-bold text-slate-400 uppercase text-right block">
-                                        {localData.ownership === 'rented' ? 'Rental Cost (₹)' : 'Fuel Cost (₹)'}
+                                        {localData.ownership === 'rented' ? S.rentalCost : S.fuelCost}
                                     </label>
                                     <input
                                         type="number"
@@ -510,7 +513,7 @@ const DetailSheet = ({
                 </div>
 
                 <Button onClick={() => { onSave(localData); onClose(); }} className="w-full py-4 text-sm shadow-lg">
-                    Confirm Details
+                    {S.confirmDetails}
                 </Button>
             </div>
 

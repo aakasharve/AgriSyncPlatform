@@ -16,6 +16,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import DetailSheet from '../DetailSheet';
+import { sheetStrings } from '../sheetStrings';
 import type { LedgerDefaults, FarmerProfile } from '../../../../../../types';
 
 const defaults = {
@@ -50,7 +51,8 @@ function renderLabourSheet() {
 }
 
 function confirm() {
-    fireEvent.click(screen.getByText('Confirm Details'));
+    // Outside a language provider the sheet speaks the app's default, Marathi (PLR-D10 I13, LP-27).
+    fireEvent.click(screen.getByText(sheetStrings('mr').confirmDetails));
 }
 
 describe('DetailSheet — कामाचे तास (stated hours)', () => {

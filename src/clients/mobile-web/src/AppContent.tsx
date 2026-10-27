@@ -42,6 +42,7 @@ import {
 // that file's header for what it does and does NOT solve (multi-farm data
 // isolation is a pre-existing, separate gap, not introduced here).
 import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInputs';
+import { getSessionUserId } from './infrastructure/storage/AuthTokenStore';
 // spec: owner-oversight-loop (§P-I) — the ONE definition of "a view change
 // right now would destroy work in progress". The tap path (below) and the
 // swipe path (`core/navigation/MainViewTransition.tsx`, wired in
@@ -51,6 +52,7 @@ import { useAuth } from './app/providers/AuthProvider';
 // spec: plr-d10 (I14, CMP-3) — a worker gets no तुलना; the one rule, read here for the switcher.
 import { useOptionalFarmContext } from './core/session/FarmContext';
 import { hiddenMainViewsFor } from './core/navigation/hiddenViews';
+import { useWorkTabViewChange } from './features/logs/components/entry/workHomeRequest';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -162,14 +164,25 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     // `data.history` itself still has to be a prop (the drawer's per-person
     // breakdown needs individual records, not a scalar), but nothing else
     // from `data` crosses this boundary.
+    // PLR-D10 I13 — who "you" are on this phone (the result screen's same pair), so his OWN voice
+    // auto-saves are not counted as waiting on him.
+    const activeOperatorId = data.farmerProfile.activeOperatorId;
+    const sessionUserId = getSessionUserId();
     const oversightHeaderInputs = useMemo(
         () => buildOversightHeaderInputs(
             data.history,
             data.crops,
             data.farmerProfile.operators,
             data.plannedTasks,
+            new Set([activeOperatorId, sessionUserId].filter((id): id is string => !!id)),
         ),
-        [data.history, data.crops, data.farmerProfile.operators, data.plannedTasks],
+        [data.history, data.crops, data.farmerProfile.operators, data.plannedTasks, activeOperatorId, sessionUserId],
+    );
+
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I12, H08) — the header's page switcher.
+    const onWorkTabViewChange = useWorkTabViewChange(
+        { mode: voice.mode, hasActiveLogContext: context.hasActiveLogContext, status: voice.status },
+        { setMainView: navigation.setMainView, requestLogHome: navigation.requestLogHome, resetSaved: _handleReset, setMode: voice.setMode },
     );
 
     return (
@@ -183,7 +196,10 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 // screen. Its other hops (the sync drawer's "not synced" page, आजची कामे) keep the
                 // ordinary route history, so their मागे still returns where he was.
                 onNavigate={(route) => (route === 'profile' ? navigation.openPlace(route) : navigation.setCurrentRoute(route))}
-                onViewChange={navigation.setMainView}
+                // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — a tap on the आजची कामे card
+                // (again, or from another tab) opens its work home fresh, also from the saved card.
+                // Never over an unsaved review form or a parse in progress (`workTabTapAction`).
+                onViewChange={onWorkTabViewChange}
                 // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6, PLR-D9 N1) — the page
                 // switcher only on the home tabs; a place (खरेदी, सेट-अप केंद्र…) has its own title
                 // and मागे, and used to show आजची कामे lit while the farmer was on खरेदी.

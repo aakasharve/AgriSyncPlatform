@@ -2,7 +2,7 @@
 // Pure helpers used by AppRouter and its route render functions. No hooks, no JSX.
 
 import { DailyLog, LogVerificationStatus } from '../../types';
-import { formatDisplayTime } from '../../shared/utils/displayTime';
+import { formatDisplayTime, formatFarmerTime } from '../../shared/utils/displayTime';
 
 export type FeedStatusTone = 'pending' | 'rejected' | 'approved';
 
@@ -30,9 +30,22 @@ const NOON_PLACEHOLDER = /T12:00:00(\.0+)?$/;
  * because `mainView` imports it; the formatting itself lives in one place now.
  */
 export const formatLogTime = (iso?: string): string =>
-    iso && NOON_PLACEHOLDER.test(iso)
+    isUntimedLogStamp(iso)
         ? '--:--'
         : formatDisplayTime(iso, '--:--');
+
+/** True for the zone-less midday stamp a typed log carries in place of a time it never captured (above). */
+export function isUntimedLogStamp(iso?: string): boolean {
+    return !!iso && NOON_PLACEHOLDER.test(iso);
+}
+
+/**
+ * PLR-D10 I13 (LP-24, LP-27) — a log's time in the farmer's words ("सकाळी 9:10", `formatFarmerTime`), so the
+ * activity feed, its glance and the result screen read one recording the same way. A typed log's placeholder,
+ * or no time at all, gives '' (no time is shown): never "दुपारी 12:00" for a time nobody captured (P4).
+ */
+export const formatFarmerLogTime = (iso?: string): string =>
+    isUntimedLogStamp(iso) ? '' : formatFarmerTime(iso);
 
 export const truncateLine = (value: string, maxLength: number = 72): string => {
     if (!value) return value;

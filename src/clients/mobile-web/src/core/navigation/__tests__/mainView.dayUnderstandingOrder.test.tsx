@@ -178,7 +178,9 @@ afterEach(() => {
     vi.resetModules();
 });
 
-describe('renderLogView — Day Understanding Score leads the saved-to-ledger surface', () => {
+// Each test re-imports mainView after vi.resetModules (a cold module graph); in the full parallel run that can pass
+// the 15 s default, so this suite gets the same budget as mainView.voiceResult.test.tsx.
+describe('renderLogView — Day Understanding Score leads the saved-to-ledger surface', { timeout: 60_000 }, () => {
     it('renders the score + bar ABOVE the crop summary and the recognition panel', async () => {
         const renderLogView = await loadRenderLogView(true, 8);
         render(<>{renderLogView(makeCtx())}</>);

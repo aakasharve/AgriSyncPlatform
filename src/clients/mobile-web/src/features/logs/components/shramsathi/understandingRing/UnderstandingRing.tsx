@@ -35,6 +35,8 @@ export interface UnderstandingRingProps {
   replayKey?: string | number;
   /** Play the reveal even when the phone's "reduce motion" setting is on (otherwise it jumps to the final picture). */
   ignoreReducedMotion?: boolean;
+  /** This replayKey already played on this phone (e.g. the screen was opened again): land on the final frame. */
+  settled?: boolean;
   message?: MessageFn;
   /** A missed orb was tapped – e.g. open the voice recorder for that category. The engine already shows the hint. */
   onMissedTap?: (node: RingNodeData) => void;
@@ -44,7 +46,7 @@ export interface UnderstandingRingProps {
 
 export function UnderstandingRing({
   score, total = 10, nodes, variant = 'cinematic', ringMode = 'gauge', numerals = 'deva', sound = false,
-  haptics, replayKey, ignoreReducedMotion, message, onMissedTap, fallback = null, className,
+  haptics, replayKey, ignoreReducedMotion, settled = false, message, onMissedTap, fallback = null, className,
 }: UnderstandingRingProps): ReactNode {
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<CineHandle | RingHandle | null>(null);
@@ -64,7 +66,7 @@ export function UnderstandingRing({
     const el = host.current;
     if (!el || !shown) return;
     const now = performance.now(), last = played.current;
-    const replay = !last || last.key !== replayKey || now - last.at < 1000;
+    const replay = !settled && (!last || last.key !== replayKey || now - last.at < 1000);
     if (!last || last.key !== replayKey) played.current = { key: replayKey, at: now };
     const h = cb.current.haptics;
     const opts = {
@@ -83,7 +85,7 @@ export function UnderstandingRing({
     return () => { handle.current?.destroy(); handle.current = null; };
     // `nodes` is represented by nodesKey; `sound` is applied live below without a replay.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shown, score, total, nodesKey, variant, ringMode, numerals, replayKey, ignoreReducedMotion]);
+  }, [shown, score, total, nodesKey, variant, ringMode, numerals, replayKey, ignoreReducedMotion, settled]);
 
   useEffect(() => { handle.current?.setSound(sound); }, [sound]);
 

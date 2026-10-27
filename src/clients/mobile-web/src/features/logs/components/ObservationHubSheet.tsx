@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ObservationNote, CropProfile } from '../../../types';
-import { X, Mic, Send, AlertCircle, Calendar, Tag, CheckSquare, Plus, Check, Clock, StickyNote, Bell, AlertTriangle } from 'lucide-react';
+// PLR-D10 I13 (LP-27): its words in his language only.
+import { useSheetStrings } from './activity-card/sheets/sheetStrings';
+import { X, Mic, Check } from 'lucide-react';
 
 interface ObservationHubSheetProps {
     isOpen: boolean;
@@ -18,15 +20,16 @@ const ObservationHubSheet: React.FC<ObservationHubSheetProps> = ({
     isOpen,
     onClose,
     onSave,
-    existingNotes,
+    existingNotes: _existingNotes,
     crops,
     selectedCropId,
     selectedPlotId,
     selectedDate,
     initialType = 'observation'
 }) => {
+    const S = useSheetStrings();
     const [inputText, setInputText] = useState('');
-    const [type, setType] = useState<'observation' | 'reminder'>(initialType);
+    const [type] = useState<'observation' | 'reminder'>(initialType);
 
     if (!isOpen) return null;
 
@@ -62,9 +65,9 @@ const ObservationHubSheet: React.FC<ObservationHubSheetProps> = ({
                 {/* HEADER */}
                 <div className="px-6 py-5 flex items-center justify-between border-b border-slate-50">
                     <div>
-                        <h2 className="text-xl font-bold text-slate-900">Add {type === 'reminder' ? 'Reminder' : 'Observation'}</h2>
+                        <h2 className="text-xl font-bold text-slate-900">{S.noteTitle(type === 'reminder')}</h2>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-                            {selectedDate} • {currentCrop?.name || 'Farm'}
+                            {selectedDate} • {currentCrop?.name || S.farm}
                         </p>
                     </div>
                     <button
@@ -83,7 +86,7 @@ const ObservationHubSheet: React.FC<ObservationHubSheetProps> = ({
                             <textarea
                                 value={inputText}
                                 onChange={(e) => setInputText(e.target.value)}
-                                placeholder={type === 'reminder' ? "What do you need to be reminded of?" : "Record crop growth, noticeable issues, or general log notes..."}
+                                placeholder={S.noteHint(type === 'reminder')}
                                 className="w-full bg-transparent text-slate-800 placeholder:text-slate-400 text-base leading-relaxed resize-none outline-none min-h-[160px]"
                                 autoFocus
                             />
@@ -103,7 +106,7 @@ const ObservationHubSheet: React.FC<ObservationHubSheetProps> = ({
                                 } `}
                         >
                             <Check size={20} />
-                            Save {type === 'reminder' ? 'Reminder' : 'Observation'}
+                            {S.noteSave(type === 'reminder')}
                         </button>
                     </div>
 

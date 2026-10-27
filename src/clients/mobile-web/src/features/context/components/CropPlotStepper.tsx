@@ -49,6 +49,8 @@ export interface StepperLabels {
     entireFarmHelp?: string;
     /** The one short line under "entire farm" on its card. Falls back to the approved hint. */
     entireFarmShort?: string;
+    /** The "entire farm" name itself. Falls back to the approved label in the app's language. */
+    entireFarm?: string;
 }
 export interface StepperExtras {
     /** Controlled step (optional): lets a caller return to the plot step after the mic. */
@@ -62,6 +64,12 @@ export interface StepperExtras {
     /** Shown once a plot (or the whole farm) is chosen. `dense` = the step is crowded: render it smaller. */
     footer?: React.ReactNode | ((ctx: { dense: boolean }) => React.ReactNode);
     labels?: StepperLabels;
+    /**
+     * Only the footer is shown (the plot step's choices are hidden, NOT unmounted) — used while the
+     * mic in the footer is recording, so the recorder keeps its place in the tree and the whole
+     * recording screen fits (PLR-D5: recording replaces the choices). Default false.
+     */
+    focusFooter?: boolean;
 }
 export interface CropPlotStepperProps extends StepperExtras {
     crops: readonly StepperCrop[];
@@ -80,7 +88,7 @@ const RoundCrop: React.FC<{ iconName: string; name: string; px: number }> = ({ i
 };
 
 export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
-    crops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels,
+    crops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false,
 }) => {
     const language = useOptionalLanguage()?.language ?? 'en';
     const sel: Selection = { crops: [...selectedCrops], plots: selectedPlots };
@@ -91,7 +99,7 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
     const go = (s: StepperStep) => { setInnerStep(s); onStepChange?.(s); };
     const emit = (n: Selection) => { if (!disabled) onSelectionChange(n.crops, n.plots); };
 
-    const entireFarm = resolveOversightString(language, 'entireFarmLabel');
+    const entireFarm = labels?.entireFarm ?? resolveOversightString(language, 'entireFarmLabel');
     const entireFarmHint = resolveOversightString(language, 'entireFarmHint');
     const renderFooter = (dense: boolean) => (typeof footer === 'function' ? footer({ dense }) : footer);
     const renderLead = (cropNames: string[]) => (typeof lead === 'function' ? lead({ step, cropNames, global }) : lead);
@@ -133,6 +141,8 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
 
     return (
         <div className="px-3 pb-3 pt-2" style={{ fontFamily: SANS }} data-testid="flow-step-plot" data-ready={isReady(sel) ? 'yes' : 'no'}>
+            {/* `contents` keeps today's layout exactly; `hidden` (focusFooter) hides the choices without unmounting the footer. */}
+            <div className={focusFooter ? 'hidden' : 'contents'} data-testid="flow-choices" aria-hidden={focusFooter || undefined}>
             {global ? (
                 <>
                 <div className="flex items-center gap-2" data-testid="flow-strip">
@@ -243,15 +253,16 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                     </div>
                 </>
             )}
+            </div>
 
             {/* The mic belongs to the page, below the choices: it never floats or sticks over other elements (founder 2026-10-24). */}
             {isReady(sel) && (
-                <div data-testid="flow-mic-slot" className="mt-3">
+                <div data-testid="flow-mic-slot" className={focusFooter ? undefined : 'mt-3'}>
                     {renderFooter(dense)}
                 </div>
             )}
             {/* Crowded choices cannot fit above the bottom nav; let the step scroll clear of it. */}
-            {shown.length > 4 && <div className="h-24" aria-hidden="true" />}
+            {shown.length > 4 && !focusFooter && <div className="h-24" aria-hidden="true" />}
         </div>
     );
 };

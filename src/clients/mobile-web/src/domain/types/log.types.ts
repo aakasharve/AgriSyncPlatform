@@ -688,6 +688,8 @@ export interface DailyLog {
 
     /** B002 — `'labour'` for a हजेरी-door save (server derives labour only); read at queue time, never pulled back. */
     captureScope?: LogCaptureScope;
+    /** PLR-D10 I13 — saved straight from a voice parse, no review tap: the server keeps it unconfirmed. Rides the create; a pull keeps it. */
+    autoSavedFromVoice?: boolean;
 
     /**
      * Understanding Meter score — stamped at save time (W1.P3.T1, task 1c).

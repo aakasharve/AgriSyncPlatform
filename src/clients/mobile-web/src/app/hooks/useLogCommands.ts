@@ -32,6 +32,7 @@ import { LogCommandServiceImpl } from '../../application/services/LogCommandServ
 import { useDataSource } from '../providers/DataSourceProvider';
 import { enqueueLogsForSync } from '../../features/logs/services/logSyncMutationService';
 import { countCompletedIrrigationEvents } from '../../features/logs/services/irrigationCompletion';
+import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStrings';
 // Labour Phase 2 / T2 — a record that never reached the sync queue is still ON
 // THE PHONE, and it is described with the SAME words the header chip uses for
 // that situation (T1's `sync.onPhone`). Two surfaces, one claim, one string.
@@ -50,14 +51,15 @@ import { countCompletedIrrigationEvents } from '../../features/logs/services/irr
 // that fact, so this is the only place that can tell it.
 import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast } from '../helpers/saveToastMessages';
+import { buildDayProgressToast, buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast } from '../helpers/saveToastMessages';
 
 // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
 // `ManualSubmitOutcome` moved to `useLogCommands.types.ts` (its own doc
 // comment lives there) to keep this file under the 800-line budget;
 // re-exported here so existing `from './useLogCommands'` imports (and any
 // future ones) keep working.
-import type { ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
+import type { AutoSaveOptions, ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
+import { markAutoSavedFromVoice } from '../helpers/autoSavedVoiceLog';
 export type { ManualSubmitOutcome, UseLogCommandsResult };
 
 // `UseLogCommandsResult` moved to `useLogCommands.types.ts` for the same
@@ -201,9 +203,8 @@ export const useLogCommands = ({
         const summary: LastSavedLogSummaryItem[] = logs.map(log => {
             const selection = log.context.selection[0];
             const contextCropId = selection?.cropId;
-            const cropName = contextCropId === 'FARM_GLOBAL'
-                ? 'Farm'
-                : crops.find(c => c.id === contextCropId)?.name || 'Unknown Crop';
+            // The saved card ("कुठे") is Marathi: no English "Farm" / "Unknown Crop" fallback (LP-27, P4).
+            const cropName = contextCropId === 'FARM_GLOBAL' ? RESULT_STR.wholeFarm : crops.find(c => c.id === contextCropId)?.name || '—';
 
             // LABOUR_PHASE2 B1b — "Stored In" must name every plot the record
             // asserts, because one record can now assert several. Reading
@@ -218,7 +219,7 @@ export const useLogCommands = ({
                     .find(crop => crop.id === contextCropId)
                     ?.plots.find(plot => plot.id === assertedPlotIds[0])
                     ?.name
-                || 'Farm';
+                || (assertedPlotIds.length > 0 ? '—' : RESULT_STR.wholeFarm); // a plot with no name is not "the whole farm"
 
             const count = (log.cropActivities?.length || 0) +
                 (log.labour?.length || 0) +
@@ -284,7 +285,11 @@ export const useLogCommands = ({
     }, [crops, plannedTasks]);
 
     // --- AUTO SAVE ---
-    const handleAutoSave = useCallback(async (logData: AgriLogResponse, provenance?: LogProvenance) => {
+    // PLR-D10 I13 — the voice path's ONE save (founder 2026-09-02: no review form, no Save tap). Resolves to
+    // the logs once they are on the phone, or null when nothing was written (the caller then keeps the parse
+    // in the review form). A step that fails AFTER the write still shows the saved record: a retry would mint
+    // a second copy. No English toast on failure any more: the review form with his parse IS the message.
+    const handleAutoSave = useCallback(async (logData: AgriLogResponse, provenance?: LogProvenance, options: AutoSaveOptions = {}): Promise<DailyLog[] | null> => {
 
         // PHASE 25: Context Switching & Global Voice
         let effectiveScope = logScope;
@@ -309,15 +314,17 @@ export const useLogCommands = ({
         // Safety check: Must have effective scope or active context
         if (!hasActiveLogContext && !logData.suggestedContext) {
             logger.warn("Auto-save blocked: No context");
-            return;
+            return null;
         }
 
         const correlationId = CorrelationId.generate();
         logger.info('Auto-save started', { correlationId, summary: logData.summary });
+        let written: DailyLog[] | null = null;
+        let attempted: DailyLog[] = [];
 
         try {
             // SINGLE WRITE PATH: Delegate to Service
-            const newLogs = await logCommandService.createFromVoice(
+            const created = await logCommandService.createFromVoice(
                 logData,
                 effectiveScope,
                 crops,
@@ -327,12 +334,16 @@ export const useLogCommands = ({
                 // loop is on. Flag read stays in the app layer (domain-agnostic).
                 FEATURE_FLAGS.dailyLoop
             );
+            const newLogs = options.autoSavedFromVoice ? created.map(markAutoSavedFromVoice) : created;
+            attempted = newLogs;
 
             // Persist (Service handles persistence via injected repo)
             await logCommandService.confirmAndSave(
                 newLogs,
                 setHistory // Update UI
             );
+            written = newLogs;
+            await options.onWritten?.(newLogs);
             // T2 — the result is EVIDENCE, not noise. `null` in demo mode,
             // where nothing is meant to reach a server at all.
             const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
@@ -352,23 +363,32 @@ export const useLogCommands = ({
                 [...newLogs, ...history]
             );
 
-            // AUTO-SAVE SUCCESS: Show the success screen instead of just a toast
-            setToast(buildSkippedSyncToast(syncOutcome, language) ?? buildQueuedLogToast(language, beforePercent, afterPercent));
+            // AUTO-SAVE SUCCESS: the voice result screen says "लक्षात ठेवलं" itself, so a voice save's toast keeps
+            // only the day's progress (no claim, no "नोंद"); the honest "will not be sent" one wins over both.
+            const progressToast = options.autoSavedFromVoice ? buildDayProgressToast : buildQueuedLogToast;
+            setToast(buildSkippedSyncToast(syncOutcome, language) ?? progressToast(language, beforePercent, afterPercent));
             setStatus('success');
             setMode('manual'); // Ensure we are in a view that shows the success state overlay
 
             logger.info('Auto-save completed', { correlationId });
+            return newLogs;
         } catch (e) {
             logger.error("Auto-save error", e, { correlationId });
-            setToast({ message: "Failed to auto-save", type: 'error' });
-            setError("Failed to auto-save. Please check your connection.");
+            if (!written) {
+                // Not kept: drop confirmAndSave's optimistic copy, so the review form is its only home (no ghost).
+                const ghostIds = new Set(attempted.map(l => l.id));
+                if (ghostIds.size > 0) setHistory(prev => prev.filter(l => !ghostIds.has(l.id)));
+                return null;
+            }
+            calculateLogSummary(written, null); // no evidence either way about the server: no claim
+            setLastSavedLogIds(written.map(l => l.id));
+            setStatus('success');
+            setMode('manual');
+            return written;
         }
-        // Pre-existing exhaustive-deps gap (predates Task 3.5; calculateLogSummary
-        // and isDemoMode are used but not listed) — not introduced by this
-        // change; not touched to avoid altering this callback's memoization
-        // behavior for handleAutoSave, which has no caller in the app today.
-         
-    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setToast, setStatus, setMode, setLastSavedLogSummary, setLastSavedLogIds, setError, computeClosureDelta, history, setLogScope, language]);
+        // Pre-existing exhaustive-deps gap (calculateLogSummary and isDemoMode are used but not listed) — kept,
+        // so this callback's memoization is unchanged. Its one caller is the voice auto-save (PLR-D10 I13).
+    }, [hasActiveLogContext, logScope, crops, farmerProfile, logCommandService, setHistory, setPlannedTasks, setToast, setStatus, setMode, setLastSavedLogSummary, setLastSavedLogIds, computeClosureDelta, history, setLogScope, language]);
 
     // --- FINAL CONFIRM ---
     const handleFinalConfirm = useCallback(async (editedData: AgriLogResponse | null, draftLog: AgriLogResponse | null) => {

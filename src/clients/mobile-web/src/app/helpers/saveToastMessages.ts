@@ -131,6 +131,22 @@ export function buildQueuedLogToast(
 }
 
 /**
+ * The toast for a VOICE auto-save that reached the sync queue (PLR-D10 I13). The result screen it lands on
+ * already says "लक्षात ठेवलं" — only after the phone's write — so the toast does not say it again, and the
+ * word "नोंद" is not used on that path (PLR-D5 :65). What it keeps from the queued toast is the day's progress,
+ * the same local arithmetic over the history, named as such.
+ */
+export function buildDayProgressToast(language: Language, beforePercent: number, afterPercent: number): SaveToastMessage {
+    return {
+        message: language === 'mr'
+            // PROPOSED (Marathi); the label is FOUNDER (PLR-D1): a number the app works out itself says so.
+            ? `आजचा दिवस ${beforePercent}% वरून ${afterPercent}% पूर्ण · आपोआप मोजलं`
+            : `Day ${beforePercent}% to ${afterPercent}% complete`,
+        type: 'success',
+    };
+}
+
+/**
  * The toast for a successful EDIT.
  *
  * Two true things and no more:

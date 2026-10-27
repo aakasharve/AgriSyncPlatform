@@ -35,6 +35,7 @@ import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRe
 import FirstRunWait from '../../features/onboarding/firstRun/FirstRunWait';
 // spec: plr-d10 (I14, CMP-3) — the one role → hidden-tab rule (a worker gets no तुलना).
 import { hiddenMainViewsFor } from './hiddenViews';
+import { useHomeAttendanceDoor } from '../../features/labour/useHomeAttendanceDoor';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -89,9 +90,10 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
     // Session's active farm — threaded into ctx so the hook-free route render
     // functions (mainView) can reach it. See AppRouterContext.activeFarmId.
-    // `currentFarm` (its role) decides the hidden tabs (a worker gets no तुलना); the first run's
-    // welcome reads its role from `firstRunFarm` instead.
-    const { currentFarmId, currentFarm } = useFarmContext();
+    // `currentFarm` (its role) decides the hidden tabs (a worker gets no तुलना) and the work home's
+    // हजेरी door; the first run's welcome reads its role from `firstRunFarm` instead.
+    const { currentFarmId, currentFarm, meContext } = useFarmContext();
+    const userId = meContext?.me?.userId ?? null;
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
     const hiddenViews = hiddenMainViewsFor(currentFarm?.role);
@@ -101,6 +103,15 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     React.useEffect(() => {
         if (onHiddenView) setMainView('log');
     }, [onHiddenView, setMainView]);
+
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I12, H10) — the work home's हजेरी door.
+    // Owner tier by the server-told role; anyone else (never a worker, never an unknown role) only
+    // with the owner's labour grant AS THE SERVER ANSWERS IT: asked when the tab opens online, so a
+    // मुकादम on a fresh phone sees the door on first use (I12-V1-M2). Hidden while unknown.
+    const farmRole = currentFarm?.role ?? null;
+    const canOpenAttendanceFromHome = useHomeAttendanceDoor({
+        role: farmRole, userId, farmId: currentFarmId, active: currentRoute === 'main' && mainView === 'log',
+    });
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
     const {
         isDemoMode, setIsDemoMode,
@@ -121,6 +132,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
         voiceStreamingPhase, liveCaption,
         continuityLevel, savedPendingCaptureId,
+        voiceResult,
     } = voice;
 
     const weatherData = weather.weatherData;
@@ -280,6 +292,10 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         hiddenViews,
         goBackOr: navigation.goBackOr,
         logIntent, setLogIntent, lastLabourLogIds,
+        logHomePending: navigation.logHomePending,
+        consumeLogHome: navigation.consumeLogHome,
+        farmRole,
+        canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,
         farmerProfile, setFarmerProfile,
@@ -296,6 +312,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         draftLog, setDraftLog, provenance,
         voiceStreamingPhase, liveCaption,
         continuityLevel, savedPendingCaptureId,
+        voiceResult,
         weatherData,
         weatherStatus,
         boundaryUnset,

@@ -123,6 +123,8 @@ function makeCtx(overrides: Partial<AppRouterContext> = {}): AppRouterContext {
         refetchWeather: () => {},
         setCurrentRoute: () => {},
         ownerDisplayName: 'Owner',
+        // plr-d10 I12-V1-m6: the running cost shows once the server has told the role (unknown stays closed).
+        farmRole: 'PrimaryOwner',
         todayDayState: {
             closurePercent: 100, isClosed: true, hasStarted: true,
             completedCount: 0, plannedCount: 0, pendingCount: 0, unverifiedCount: 0,
@@ -181,7 +183,9 @@ afterEach(() => {
     vi.resetModules();
 });
 
-describe('renderLogView — the log view offers no route into the review inbox, waiting or not', () => {
+// Each test re-imports mainView after vi.resetModules (a cold module graph); in the full parallel run that can pass
+// the 15 s default, so this suite gets the same budget as mainView.voiceResult.test.tsx.
+describe('renderLogView — the log view offers no route into the review inbox, waiting or not', { timeout: 60_000 }, () => {
     it('empty review queue: no "Pending approvals", no "Verify now" (Close-Day/Close-Yesterday), and no Running Cost warning', async () => {
         const renderLogView = await loadRenderLogView();
         const ctx = makeCtx({

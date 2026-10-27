@@ -1,9 +1,11 @@
 
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, AlertTriangle, MessageSquare, AlertCircle } from 'lucide-react';
+import { X, AlertTriangle, MessageSquare } from 'lucide-react';
 import { BucketIssue, BucketIssueType, BucketIssueSeverity } from '../../../domain/types/log.types';
 import Button from '../../../shared/components/ui/Button';
+// PLR-D10 I13 (LP-27): its words in his language only.
+import { useSheetStrings } from './activity-card/sheets/sheetStrings';
 
 interface IssueFormSheetProps {
     onSave: (issue: BucketIssue) => void;
@@ -36,25 +38,27 @@ const ActivityIcon = ({ size, className }: { size?: number, className?: string }
     <svg xmlns="http://www.w3.org/2000/svg" width={size || 24} height={size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
 );
 
-const ISSUE_TYPES: { type: BucketIssueType, label: string, icon: any }[] = [
-    { type: 'MACHINERY', label: 'Machinery Breakdown', icon: AlertTriangle },
-    { type: 'ELECTRICITY', label: 'No Electricity', icon: ZapIcon },
-    { type: 'WATER_SOURCE', label: 'Water Issue', icon: DropletIcon },
-    { type: 'LABOR_SHORTAGE', label: 'Labour Shortage', icon: UsersIcon },
-    { type: 'MATERIAL_SHORTAGE', label: 'Material Shortage', icon: PackageIcon },
-    { type: 'WEATHER', label: 'Weather Block', icon: CloudIcon },
-    { type: 'PEST', label: 'Pest Outbreak', icon: BugIcon },
-    { type: 'DISEASE', label: 'Disease', icon: ActivityIcon },
-    { type: 'OTHER', label: 'Other Issue', icon: MessageSquare },
+// The words for each kind and level are in sheetStrings.ts (his language only).
+const ISSUE_TYPES: { type: BucketIssueType, icon: React.ComponentType<{ size?: number; className?: string }> }[] = [
+    { type: 'MACHINERY', icon: AlertTriangle },
+    { type: 'ELECTRICITY', icon: ZapIcon },
+    { type: 'WATER_SOURCE', icon: DropletIcon },
+    { type: 'LABOR_SHORTAGE', icon: UsersIcon },
+    { type: 'MATERIAL_SHORTAGE', icon: PackageIcon },
+    { type: 'WEATHER', icon: CloudIcon },
+    { type: 'PEST', icon: BugIcon },
+    { type: 'DISEASE', icon: ActivityIcon },
+    { type: 'OTHER', icon: MessageSquare },
 ];
 
-const SEVERITIES: { level: BucketIssueSeverity, label: string, color: string }[] = [
-    { level: 'LOW', label: 'Minor - Work continued', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-    { level: 'MEDIUM', label: 'Major - Work impacted', color: 'bg-orange-100 text-orange-800 border-orange-200' },
-    { level: 'HIGH', label: 'Critical - Work stopped', color: 'bg-red-100 text-red-800 border-red-200' },
+const SEVERITIES: { level: BucketIssueSeverity, color: string }[] = [
+    { level: 'LOW', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    { level: 'MEDIUM', color: 'bg-orange-100 text-orange-800 border-orange-200' },
+    { level: 'HIGH', color: 'bg-red-100 text-red-800 border-red-200' },
 ];
 
-export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose, initialData, isOpen = true, bucketType }) => {
+export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose, initialData, isOpen = true, bucketType: _bucketType }) => {
+    const S = useSheetStrings();
     const [issueType, setIssueType] = useState<BucketIssueType>(initialData?.issueType || 'OTHER');
     const [reason, setReason] = useState(initialData?.reason || '');
     const [severity, setSeverity] = useState<BucketIssueSeverity>(initialData?.severity || 'LOW');
@@ -64,7 +68,7 @@ export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose,
 
     const handleSave = () => {
         if (!reason.trim()) {
-            alert('Please describe the issue');
+            alert(S.describeFirst);
             return;
         }
         onSave({
@@ -87,7 +91,7 @@ export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose,
                         <div className="bg-amber-100 p-2 rounded-full text-amber-600">
                             <AlertTriangle size={20} />
                         </div>
-                        Report Issue
+                        {S.issueTitle}
                     </h3>
                     <button onClick={onClose} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors">
                         <X size={18} />
@@ -97,7 +101,7 @@ export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose,
                 <div className="space-y-6">
                     {/* 1. Issue Type */}
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">What went wrong?</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">{S.whatWentWrong}</label>
                         <div className="grid grid-cols-3 gap-2">
                             {ISSUE_TYPES.map(t => {
                                 const Icon = t.icon;
@@ -116,7 +120,7 @@ export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose,
                                     >
                                         <Icon size={20} className={isSelected ? 'text-amber-600' : 'text-slate-400'} />
                                         <span className={`text-[10px] font-bold text-center leading-tight ${isSelected ? 'text-amber-800' : 'text-slate-500'}`}>
-                                            {t.label}
+                                            {S.issueType(t.type)}
                                         </span>
                                     </button>
                                 );
@@ -126,7 +130,7 @@ export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose,
 
                     {/* 2. Severity */}
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Impact Level</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">{S.impactLevel}</label>
                         <div className="flex flex-col gap-2">
                             {SEVERITIES.map(s => (
                                 <button
@@ -138,7 +142,7 @@ export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose,
                                     `}
                                 >
                                     <div className={`w-4 h-4 rounded-full border-2 ${severity === s.level ? 'border-current bg-current' : 'border-slate-300'}`} />
-                                    <span className="text-sm font-bold">{s.label}</span>
+                                    <span className="text-sm font-bold">{S.severity(s.level)}</span>
                                 </button>
                             ))}
                         </div>
@@ -147,19 +151,19 @@ export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose,
                     {/* 3. Reason & Notes */}
                     <div className="space-y-3">
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase">Description</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase">{S.description}</label>
                             <input
                                 className="w-full p-3 border border-slate-200 rounded-xl mt-1 font-bold outline-none focus:border-amber-500"
-                                placeholder="e.g. Pump burned out due to voltage"
+                                placeholder={S.descriptionHint}
                                 value={reason}
                                 onChange={(e) => setReason(e.target.value)}
                             />
                         </div>
                         <div>
-                            <label className="text-xs font-bold text-slate-400 uppercase">Additional Check (Optional)</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase">{S.moreOptional}</label>
                             <textarea
                                 className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm outline-none focus:border-amber-500 resize-none"
-                                placeholder="More details..."
+                                placeholder={S.moreHint}
                                 value={note}
                                 onChange={(e) => setNote(e.target.value)}
                                 rows={2}
@@ -168,7 +172,7 @@ export const IssueFormSheet: React.FC<IssueFormSheetProps> = ({ onSave, onClose,
                     </div>
 
                     <Button onClick={handleSave} className="w-full py-4 shadow-lg bg-amber-500 hover:bg-amber-600 text-white border-none">
-                        Save Issue Report
+                        {S.saveIssue}
                     </Button>
                 </div>
             </div>

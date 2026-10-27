@@ -141,6 +141,8 @@ function makeCtx(overrides: Partial<AppRouterContext> = {}): AppRouterContext {
         refetchWeather: () => {},
         setCurrentRoute: () => {},
         ownerDisplayName: 'Owner',
+        // plr-d10 I12-V1-m6: the running cost shows once the server has told the role (unknown stays closed).
+        farmRole: 'PrimaryOwner',
         todayDayState: today,
         yesterdayDayState: yesterday,
         showCloseDaySummary: false,

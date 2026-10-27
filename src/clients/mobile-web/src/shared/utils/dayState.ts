@@ -82,6 +82,12 @@ interface DayStateOptions extends ScopeOptions {
     crops: CropProfile[];
     tasks?: PlannedTask[];
     date?: string;
+    /**
+     * PLR-D10 I13 — unverified logs the CALLER knows nobody is waiting to review (the viewer's own voice
+     * auto-saves). They still count in `unverifiedCount` and earn no confirmation credit; they only stop
+     * holding the day open (`isClosed`). Absent = every unverified log holds it open, as before.
+     */
+    reviewNotAwaited?: (log: DailyLog) => boolean;
 }
 
 interface CostRunningOptions extends ScopeOptions {
@@ -488,7 +494,8 @@ export const computeDayState = ({
     tasks = [],
     date = getDateKey(),
     selectedCropIds,
-    selectedPlotIds
+    selectedPlotIds,
+    reviewNotAwaited
 }: DayStateOptions): DayState => {
     const dateKey = normalizeDateKey(date);
     const scope: ScopeOptions = { selectedCropIds, selectedPlotIds };
@@ -626,7 +633,8 @@ export const computeDayState = ({
     // Closed" on a day that has not begun — a reproach for doing nothing wrong,
     // and day 1 of the pilot for a farmer with no schedule template.
     const dayHasSubstance = plannedCount > 0 || dayHasRecord;
-    const isClosed = dayHasSubstance && pendingCount === 0 && unverifiedCount === 0;
+    const awaitingReviewCount = dayLogs.filter(log => isLogUnverified(log) && !reviewNotAwaited?.(log)).length;
+    const isClosed = dayHasSubstance && pendingCount === 0 && awaitingReviewCount === 0;
 
     const sprayDaysAgo = getLastActionDaysAgo(scopedLogs, dateKey, scope, 'spray');
     const irrigationDaysAgo = getLastActionDaysAgo(scopedLogs, dateKey, scope, 'irrigation');

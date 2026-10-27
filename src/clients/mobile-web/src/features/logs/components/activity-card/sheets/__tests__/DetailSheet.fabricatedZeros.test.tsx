@@ -28,6 +28,12 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+// PLR-D10 I13 (LP-27): the sheet now speaks his language; these checks read its English, so they run as an
+// English user (the Marathi run is in reviewFormLanguage.test.tsx).
+vi.mock('../../../../../../i18n/LanguageContext', () => ({
+    useOptionalLanguage: () => ({ language: 'en', setLanguage: () => undefined, t: (k: string) => k }),
+    useLanguage: () => ({ language: 'en', setLanguage: () => undefined, t: (k: string) => k }),
+}));
 import DetailSheet from '../DetailSheet';
 import type { LedgerDefaults, FarmerProfile, Plot } from '../../../../../../types';
 

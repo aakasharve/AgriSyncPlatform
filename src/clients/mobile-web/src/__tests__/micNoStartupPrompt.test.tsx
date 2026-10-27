@@ -27,6 +27,8 @@ vi.mock('../infrastructure/voice/StreamingPcmRecorder', () => ({
 
 import AudioRecorder from '../features/voice/components/AudioRecorder';
 import AudioRecorderStreaming from '../features/voice/components/AudioRecorderStreaming';
+// plr-d10 I12 — the mic's accessible name is now the founder's own Marathi sentence (was "Start Recording").
+import { MIC_INSTRUCTION, REC_WORDS } from '../features/voice/components/recorder/recorderWords';
 
 afterEach(() => {
     cleanup();
@@ -68,14 +70,14 @@ describe('no microphone permission request at app start', () => {
         render(<AudioRecorderStreaming onAudioCaptured={vi.fn()} />);
         expect(h.recorderStart).not.toHaveBeenCalled();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Start Recording' }));
-        await waitFor(() => expect(screen.getByText('voice.micDeniedTypeInstead')).toBeInTheDocument());
-        expect(screen.queryByText(/voice\.micError/)).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: MIC_INSTRUCTION }));
+        await waitFor(() => expect(screen.getByText(REC_WORDS.micDenied)).toBeInTheDocument());
+        expect(screen.queryByText(REC_WORDS.micError)).not.toBeInTheDocument();
 
         // retry by tapping again: the OS is asked again and a grant now records
         h.recorderStart.mockResolvedValue(undefined);
-        fireEvent.click(screen.getByRole('button', { name: 'Start Recording' }));
+        fireEvent.click(screen.getByRole('button', { name: MIC_INSTRUCTION }));
         await waitFor(() => expect(h.recorderStart).toHaveBeenCalledTimes(2));
-        await waitFor(() => expect(screen.queryByText('voice.micDeniedTypeInstead')).not.toBeInTheDocument());
+        await waitFor(() => expect(screen.queryByText(REC_WORDS.micDenied)).not.toBeInTheDocument());
     });
 });

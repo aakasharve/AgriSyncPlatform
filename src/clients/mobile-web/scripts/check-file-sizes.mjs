@@ -28,7 +28,11 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', '__tests__', '__mocks__']);
 // the one that could not be.
 const QUARANTINE = new Map([
   ['features/voice/useVoiceRecorder.ts', {
-    at: 849,
+    // 848 since 2026-10-26: the voice auto-save hand-off (PLR-D10 I13) landed without growing it. That lane
+    // changed the voice path and did NOT take the split below: it is a UI release, and the reason below (no
+    // capture-path refactor riding along with an unrelated UI release) held for it too. Still owed by the next
+    // change to the voice CAPTURE stages themselves.
+    at: 848,
     since: '2026-08-30',
     why: 'Down from 893 the same day: its types and pure helpers moved to '
        + 'useVoiceRecorder.types.ts. The remaining 49 lines are all inside '

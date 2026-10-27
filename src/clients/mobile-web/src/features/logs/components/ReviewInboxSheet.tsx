@@ -25,6 +25,9 @@
  * an implementation detail. (`VerificationStateMachine.cs` has no
  * Draft -> Verified transition either, so a single-hop approve would fail
  * for every Draft log regardless of the mutation used.)
+ * UPDATE 2026-10-26 (PLR-D10 I13): the "no server handler" part above is history — the server applies
+ * `verify_log_v2` now (`PushSyncBatchHandler.HandleVerifyLogV2Async`; see `application/usecases/VerifyLog.ts`).
+ * The job-card payout hook is unchanged and still a founder decision, so nothing here is re-wired.
  *
  * So the props are GONE from the interface, not merely unused — a future
  * re-wire has to be a deliberate act that changes this file, rather than a

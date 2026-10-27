@@ -297,6 +297,9 @@ function preserveLocalOnlyFields(
         phaseAtLogTime: existing.phaseAtLogTime ?? incoming.phaseAtLogTime,
         dayNumberAtLogTime: existing.dayNumberAtLogTime ?? incoming.dayNumberAtLogTime,
         deletion: existing.deletion ?? incoming.deletion,
+        // PLR-D10 I13 — "this phone saved his words with no review tap". The server keeps its own marker off
+        // the wire, so without this the first pull would turn his auto-save back into a log awaiting him.
+        ...(existing.autoSavedFromVoice === true && { autoSavedFromVoice: true }),
 
         // ── P0.5 — `meta` IS MERGED, NOT REPLACED ───────────────────────────
         //

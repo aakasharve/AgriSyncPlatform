@@ -42,6 +42,7 @@
 import type { CropProfile, DailyLog, FarmOperator, PlannedTask } from '../../types';
 import { computeDayState, isLogUnverified } from '../../shared/utils/dayState';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
+import { isOwnAutoSavedVoiceLog } from './autoSavedVoiceLog';
 
 export interface OversightHeaderInputs {
     /** Sum of every crop's `plots.length` (spec §2.1's "४ प्लॉट" line). */
@@ -79,6 +80,8 @@ export function buildOversightHeaderInputs(
     crops: CropProfile[],
     operators: FarmOperator[],
     plannedTasks: PlannedTask[],
+    /** Who "you" are on this phone (active operator + signed-in user). Empty = nobody's own auto-saves known. */
+    youIds: ReadonlySet<string> = new Set(),
 ): OversightHeaderInputs {
     const plotCount = crops.reduce((sum, crop) => sum + crop.plots.length, 0);
 
@@ -87,8 +90,14 @@ export function buildOversightHeaderInputs(
         operatorNameById[operator.id] = operator.name;
     }
 
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — his OWN voice auto-save is not waiting on
+    // anyone: it counts even if he never confirms it (founder decision 2026-09-02), and nothing behind this
+    // row could confirm it for him (P5). So it neither raises the approval row nor holds a day open. Other
+    // people's logs count exactly as before.
+    const reviewNotAwaited = (log: DailyLog) => isOwnAutoSavedVoiceLog(log, youIds);
+
     const unverifiedCount = history.filter(
-        (log) => log.verification?.required === true && isLogUnverified(log),
+        (log) => log.verification?.required === true && isLogUnverified(log) && !reviewNotAwaited(log),
     ).length;
 
     // MERGE RECONCILIATION (main <- feat/dfes-companion): `hasStarted` is now
@@ -111,6 +120,7 @@ export function buildOversightHeaderInputs(
         crops,
         tasks: plannedTasks,
         date: yesterdayDateKey(),
+        reviewNotAwaited,
     });
     const yesterdayNotClosed = yesterday.hasStarted && !yesterday.isClosed;
 

@@ -7,6 +7,17 @@
 // farmer had to scroll past before reaching the plot selector, the only
 // question this screen exists for.
 //
+// ======================================================================
+// SUPERSEDED BY plr-d10 I12 (founder-approved redesign, PLR-D5/D6/D9 §6) — REWRITTEN.
+// ======================================================================
+// Task 7's locked order was "plot selector first, running cost below it". The founder's approved
+// आजची कामे tab replaces that screen: it now OPENS ON A WORK HOME (the "झालेले काम सांगा" door, the
+// "आजची हजेरी" door for owner/labour grant, and the running-cost card re-homed below them), and the
+// crop -> plots -> mic steps sit behind the first door (`LogEntryFlow`). So "selector before cost"
+// is no longer a property of this screen; what Task 7 was PROTECTING still is, and is asserted below:
+// the Daily Closure surface stays gone, the weather chip stays in the header, the running cost is
+// still on the tab (now as the flow's `cost`, rendered on the home), nothing dropped.
+//
 // Following the pattern `labour-log-banner.test.tsx` established: `renderLogView`
 // is a plain function returning an (unrendered) React element tree. Walking
 // `.props.children` never invokes any component's function body, so heavy
@@ -18,6 +29,13 @@ import type { AppRouterContext } from '../routeContext';
 import { renderLogView } from '../mainView';
 import CompactWeatherChip from '../../../features/oversight/components/CompactWeatherChip';
 import CropSelector from '../../../features/context/components/CropSelector';
+import SathiGuideCard from '../../../features/oversight/components/SathiGuideCard';
+import HelpBar from '../../../features/oversight/components/HelpBar';
+import InputMethodToggle from '../../../shared/components/ui/InputMethodToggle';
+import ManualEntry from '../../../features/logs/components/ManualEntry';
+import SavedScreenBack from '../../../features/logs/components/shramsathi/SavedScreenBack';
+import { LogEntryFlow, type LogEntryFlowProps } from '../../../features/logs/components/entry/LogEntryFlow';
+import { ReviewBackBar } from '../../../features/logs/components/entry/ReviewBackBar';
 
 /**
  * Pre-order DFS over an unrendered element tree, collecting every element in
@@ -108,7 +126,7 @@ function makeLogViewCtx(overrides: Partial<AppRouterContext> = {}): AppRouterCon
         operatorNameById: new Map(),
         getLogContextSnapshot: vi.fn(),
         handleEditLog: vi.fn(),
-        costSnapshot: { today: 1200, cropSoFar: 45000, unverifiedToday: 3 },
+        costSnapshot: { today: 1200, cropSoFar: 45000, unverifiedToday: 3, scopeLabel: 'संपूर्ण शेत' },
         yesterdayCost: 900,
         setRecordingSegment: vi.fn(),
         lastSavedLogSummary: [],
@@ -118,6 +136,9 @@ function makeLogViewCtx(overrides: Partial<AppRouterContext> = {}): AppRouterCon
         logIntent: null,
         setLogIntent: vi.fn(),
         lastLabourLogIds: [],
+        // I12-V1-m6 — the running cost is shown only once the server has told the role (unknown stays
+        // closed), so the default farmer here is the owner.
+        farmRole: 'PrimaryOwner',
         // `todayDayState` is a REQUIRED AppRouterContext field. It was absent
         // here only because the blocks that read it left with the Task 7
         // reorder; the dfes-companion daily-loop hero reads it again, and
@@ -134,33 +155,24 @@ function makeLogViewCtx(overrides: Partial<AppRouterContext> = {}): AppRouterCon
     return { ...base, ...overrides } as unknown as AppRouterContext;
 }
 
-describe('renderLogView — home-screen reorder (Task 7)', () => {
-    it('the_plot_selector_renders_before_any_cost_or_closure_block', () => {
-        const ctx = makeLogViewCtx();
-        const tree = renderLogView(ctx);
+describe('renderLogView — the आजची कामे tab opens on the work home (plr-d10 I12, supersedes Task 7 order)', () => {
+    const flowOf = (tree: React.ReactNode) =>
+        flattenElements(tree).find((el) => el.type === LogEntryFlow) as React.ReactElement<LogEntryFlowProps> | undefined;
+
+    it('the_entry_flow_replaces_the_legacy_screen — no guide card, no dead help bar, no carousel, no voice/manual toggle', () => {
+        const tree = renderLogView(makeLogViewCtx());
         const elements = flattenElements(tree);
-
-        const cropSelectorContainerIdx = elements.findIndex(
-            (el) => (el.props as { id?: string }).id === 'crop-selector-container',
-        );
-        const cropSelectorIdx = elements.findIndex((el) => el.type === CropSelector);
-        const runningCostIdx = elements.findIndex(
-            (el) => (el.props as { ['data-testid']?: string })['data-testid'] === 'running-cost-card',
-        );
-
-        expect(cropSelectorContainerIdx).toBeGreaterThan(-1);
-        expect(cropSelectorIdx).toBeGreaterThan(-1);
-        expect(runningCostIdx).toBeGreaterThan(-1);
-
-        // The plot selector (both its wrapper and the CropSelector element
-        // itself) renders strictly before the Running Cost card — spec §5's
-        // locked order: "1. Header ... 2. The plot selector ... 3. Running
-        // cost / day progress — ambient, below".
-        expect(cropSelectorContainerIdx).toBeLessThan(runningCostIdx);
-        expect(cropSelectorIdx).toBeLessThan(runningCostIdx);
+        expect(flowOf(tree)).toBeDefined();
+        for (const legacy of [SathiGuideCard, HelpBar, CropSelector, InputMethodToggle]) {
+            expect(elements.some((el) => el.type === legacy)).toBe(false);
+        }
+        const allText = collectLiteralText(tree).join(' | ');
+        expect(allText).not.toContain('Select a plot to continue');
+        expect(allText).not.toContain('Recording');
+        expect(allText).not.toContain('Cancel & Go Back');
     });
 
-    it('the_daily_closure_card_is_gone_from_the_log_view', () => {
+    it('the_daily_closure_card_is_gone_from_the_log_view — and the running cost is re-homed, not dropped', () => {
         const ctx = makeLogViewCtx();
         const tree = renderLogView(ctx);
         const elements = flattenElements(tree);
@@ -172,9 +184,7 @@ describe('renderLogView — home-screen reorder (Task 7)', () => {
         expect(allText).not.toContain('Daily Log');
         expect(allText).not.toContain('Owner:');
 
-        // The Daily Closure card itself — ring, state line, Close Day
-        // button, task counts, pending-approvals line, and the
-        // yesterday-not-closed block. All moved to the oversight drawer.
+        // The Daily Closure card itself — all moved to the oversight drawer.
         expect(allText).not.toContain('Daily Closure');
         expect(allText).not.toContain('Day Closed');
         expect(allText).not.toContain('Day Not Closed');
@@ -182,23 +192,89 @@ describe('renderLogView — home-screen reorder (Task 7)', () => {
         expect(allText).not.toContain('Pending approvals');
         expect(allText).not.toContain('Yesterday not fully closed');
         expect(allText).not.toContain('Close Yesterday');
-
-        // The Running Cost card's "unreliable" line — spec §4.2: removed
-        // entirely (not moved), because the same fact already lives in the
-        // drawer and a third copy is what this reorder exists to remove.
         expect(allText).not.toContain('Cost may be inaccurate');
 
-        // Running Cost's ambient numbers are NOT gone — they moved below the
-        // selector (proven by the ordering test above); this test only
-        // proves the closure/heading content, which really is deleted.
-        expect(allText).toContain('खर्च:');
+        // Running Cost's ambient numbers are NOT gone — the flow draws them on its work home.
+        expect(flowOf(tree)!.props.cost).toEqual({ today: 1200, yesterday: 900, soFar: 45000, scopeLabel: 'संपूर्ण शेत' });
+    });
+
+    it('a worker gets no money on the home (PLR-D9 §6), nor does a role not yet known; everyone else does', () => {
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'Worker' })))!.props.cost).toBeUndefined();
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: null })))!.props.cost).toBeUndefined();
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: undefined })))!.props.cost).toBeUndefined();
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'Mukadam' })))!.props.cost).toBeDefined();
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'SecondaryOwner' })))!.props.cost).toBeDefined();
+    });
+
+    it('the हजेरी door is wired only when the router says this person may manage labour, and opens the real हजेरी route', () => {
+        expect(flowOf(renderLogView(makeLogViewCtx({ canOpenAttendanceFromHome: false })))!.props.onOpenAttendance).toBeUndefined();
+        const setCurrentRoute = vi.fn();
+        const flow = flowOf(renderLogView(makeLogViewCtx({ canOpenAttendanceFromHome: true, setCurrentRoute })))!;
+        flow.props.onOpenAttendance!();
+        expect(setCurrentRoute).toHaveBeenCalledWith('labour');
+    });
+
+    it('the tab tap reaches the flow as a one-shot request it acknowledges', () => {
+        const consumeLogHome = vi.fn();
+        const flow = flowOf(renderLogView(makeLogViewCtx({ logHomePending: true, consumeLogHome })))!;
+        expect(flow.props.homeRequested).toBe(true);
+        expect(flow.props.onHomeRequestHandled).toBe(consumeLogHome);
+    });
+
+    it('the review of a parsed entry is NOT the flow: manual mode with a plot chosen still shows ManualEntry', () => {
+        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true }));
+        expect(flowOf(tree)).toBeUndefined();
+        expect(flattenElements(tree).some((el) => el.type === ManualEntry)).toBe(true);
+    });
+
+    // I12-V1-M1 — the review used to be a dead end (no मागे; the tab tap ignores it; Save was the only exit).
+    const backBarOf = (tree: React.ReactNode) =>
+        flattenElements(tree).find((el) => el.type === ReviewBackBar) as React.ReactElement<{ onBack: () => void }> | undefined;
+
+    it('the review has a visible way back: "मागे" ABOVE the form, one step to the mic of the SAME plots', () => {
+        const setMode = vi.fn();
+        const setDraftLog = vi.fn();
+        const setLogScope = vi.fn();
+        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true, setMode, setDraftLog, setLogScope }));
+        const elements = flattenElements(tree);
+        const bar = backBarOf(tree);
+        expect(bar).toBeDefined();
+        expect(elements.indexOf(bar!)).toBeLessThan(elements.findIndex((el) => el.type === ManualEntry));
+        bar!.props.onBack();
+        // back to the mic (voice mode) — the scope is NOT cleared, so the flow opens on that plot's mic
+        expect(setMode).toHaveBeenCalledWith('voice');
+        expect(setLogScope).not.toHaveBeenCalled();
+        // the unsaved parse does not leak into the hand-filled form later
+        expect(setDraftLog).toHaveBeenCalledWith(null);
+    });
+
+    it('the हजेरी door\'s result has the same "मागे" (logIntent labour)', () => {
+        const setMode = vi.fn();
+        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true, logIntent: 'labour', setMode }));
+        backBarOf(tree)!.props.onBack();
+        expect(setMode).toHaveBeenCalledWith('voice');
+    });
+
+    it('while one part is being said again, its own "रद्द करा" is the way back — no second मागे', () => {
+        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true, recordingSegment: 'labour' }));
+        expect(backBarOf(tree)).toBeUndefined();
+    });
+
+    it('after a save, "मागे" / "आणखी नोंद करा" reset the draft AND return to the mic (voice), not to an empty form', () => {
+        const handleReset = vi.fn();
+        const setMode = vi.fn();
+        const tree = renderLogView(makeLogViewCtx({ status: 'success', handleReset, setMode }));
+        const back = flattenElements(tree).find((el) => el.type === SavedScreenBack) as React.ReactElement<{ onBack: () => void }>;
+        back.props.onBack();
+        expect(handleReset).toHaveBeenCalledTimes(1);
+        expect(setMode).toHaveBeenCalledWith('voice');
     });
 
     it('no_longer_renders_CompactWeatherChip — Task 11 moved it into AppHeader row 1, never rendered twice', () => {
         // Founder header restructure (task-11 brief): "The weather chip
         // moves into row 1 [of AppHeader] ... It must be removed from
         // mainView.tsx so it is not rendered twice." Even with real weather
-        // props present on ctx (proving this isn't just "no props, so
+        // props present on ctx (proving this is not just "no props, so
         // nothing to show"), `renderLogView` must not mount the chip.
         const ctx = makeLogViewCtx({
             weatherData: { locationName: 'Arve Farm' } as unknown as AppRouterContext['weatherData'],
@@ -211,9 +287,8 @@ describe('renderLogView — home-screen reorder (Task 7)', () => {
         const chip = elements.find((el) => el.type === CompactWeatherChip);
         expect(chip).toBeUndefined();
 
-        // The plot selector is still reachable and still real — this test
+        // The entry flow is still reachable and still real — this test
         // proves REMOVAL, not breakage of the rest of the idle view.
-        const cropSelectorIdx = elements.findIndex((el) => el.type === CropSelector);
-        expect(cropSelectorIdx).toBeGreaterThan(-1);
+        expect(flowOf(tree)).toBeDefined();
     });
 });

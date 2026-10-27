@@ -6,6 +6,7 @@
 import React from 'react';
 import UnclearSegmentCard from '../../../../../shared/components/ui/UnclearSegmentCard';
 import { UnclearSegment } from '../../../../logs/logs.types';
+import { useReviewFormStrings } from '../reviewFormStrings';
 
 interface UnclearSegmentsListProps {
     unclearSegments: UnclearSegment[];
@@ -26,6 +27,8 @@ const UnclearSegmentsList: React.FC<UnclearSegmentsListProps> = ({
     onManualEdit,
     onSubmitCorrection,
 }) => {
+    // PLR-D10 I13 (LP-27) — in his language only (reviewFormStrings).
+    const str = useReviewFormStrings();
     if (unclearSegments.length === 0) return null;
 
     return (
@@ -44,7 +47,7 @@ const UnclearSegmentsList: React.FC<UnclearSegmentsListProps> = ({
                     {/* Correction Input Overlay */}
                     {correctionId === seg.id && (
                         <div className="ml-4 mr-4 -mt-2 mb-4 bg-white p-3 rounded-b-xl border-x border-b border-red-100 shadow-sm animate-in fade-in">
-                            <label className="text-xs font-bold text-slate-500 mb-1 block">Correct Meaning:</label>
+                            <label className="text-xs font-bold text-slate-500 mb-1 block">{str.correctMeaning}</label>
                             <div className="flex gap-2">
                                 <input
                                     autoFocus
@@ -52,13 +55,13 @@ const UnclearSegmentsList: React.FC<UnclearSegmentsListProps> = ({
                                     value={correctionText}
                                     onChange={e => setCorrectionText(e.target.value)}
                                     className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/20"
-                                    placeholder="What did you mean?"
+                                    placeholder={str.whatDidYouMean}
                                 />
                                 <button
                                     onClick={onSubmitCorrection}
                                     className="bg-emerald-600 text-white px-3 py-2 rounded-lg text-xs font-bold"
                                 >
-                                    Save
+                                    {str.correctionSave}
                                 </button>
                             </div>
                         </div>

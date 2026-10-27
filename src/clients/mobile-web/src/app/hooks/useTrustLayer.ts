@@ -95,6 +95,8 @@ export const useTrustLayer = ({
      * queued is `verify_log_v2`, whose handler answers
      * `MUTATION_TYPE_UNIMPLEMENTED` (`PushSyncBatchHandler.cs`), so the
      * push was refused every time while the farmer was shown a tick.
+     * (UPDATE 2026-10-26, PLR-D10 I13: the server applies `verify_log_v2` now — see
+     * `application/usecases/VerifyLog.ts`; the rule above, no write before the durable read-back, stands.)
      *
      * The failure branch's `setHistory` is gone for the same reason,
      * inverted: it wrote `required: true` and an error string into the

@@ -1,0 +1,124 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — what the log tab shows after a VOICE auto-save:
+ * the ONE result screen (`VoiceResultContainer`) instead of the old saved card. The saved card
+ * (`savedView.tsx`) stays for typed entries and the हजेरी door.
+ *
+ * Every real piece the saved card had for a voice save is kept here: the meter (now the ring, in the hero),
+ * what was understood (now part by part), the "not queued" honesty badge (for EACH plot's log when he named
+ * several, as the saved card listed them), Sathi's ONE question
+ * (`LedgerRecognitionPanel`, flag-gated inside, remounted per save so a spoken answer settles), the daily
+ * clarity line (`dailyLoop`), the conservative task close (`taskCloseConfirm`), "बदला" (was "नोंद पाहा":
+ * the same edit form) and the way back to the mic of the same plot. "कामाचा नकाशा" is the आढावा tab, one tap
+ * away in the page switcher; it is not repeated on this screen.
+ */
+import React from 'react';
+import { FEATURE_FLAGS } from '../../app/featureFlags';
+import type { VoiceResultState } from '../../app/hooks/useVoiceAutoSave';
+import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRecognitionPanel';
+import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
+import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScreenBack';
+// The model's own rule for "the log that carries his words" (useVoiceAutoSave keeps the same one-liner): it keeps the
+// auto-save hook and its clip store out of the log tab's first load.
+import { primaryOf } from '../../features/logs/components/voiceResult/resultModel';
+import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStrings';
+import { stashPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
+import { findConfirmableTaskCloses } from '../../features/logs/services/taskAutoClose';
+import { logger } from '../../infrastructure/observability/Logger';
+import type { DailyLog } from '../../types';
+import { getDateKey } from '../domain/services/DateKeyService';
+import type { AppRouterContext } from './routeContext';
+import { VoiceResultContainer } from './lazyComponents';
+import { TaskCloseConfirmSlot } from './savedView';
+
+/** The voice result to show: only while it is the latest save (a typed save afterwards gets the saved card). */
+export const currentVoiceResult = (ctx: AppRouterContext): VoiceResultState | null => {
+    const r = ctx.voiceResult;
+    return r && r.logIds.length > 0 && r.logIds[0] === ctx.lastSavedLogIds?.[0] ? r : null;
+};
+
+/**
+ * "Crop · plot, plot" as named on the farm; the whole farm by its own name.
+ * KNOWN GAP (spec I18): `cropName` is stored as the server sent it, and the server keeps crop names in English
+ * only, so a Marathi screen can read "Grapes · …" until I18's language-aware crop helper lands.
+ */
+const placeOf = (logs: readonly DailyLog[]): string => {
+    const sel = logs.flatMap(l => l.context?.selection ?? []);
+    if (sel.length === 0 || sel.every(s => s.cropId === 'FARM_GLOBAL')) return RESULT_STR.wholeFarm;
+    const crops = [...new Set(sel.map(s => s.cropName).filter(Boolean))];
+    const plots = [...new Set(sel.flatMap(s => s.selectedPlotNames ?? []).filter(Boolean))];
+    return [crops.join(', '), plots.join(', ')].filter(Boolean).join(' · ');
+};
+
+export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResultState): React.ReactNode => {
+    const logs = result.logIds.map(id => ctx.history.find(l => l.id === id)).filter((l): l is DailyLog => !!l);
+    const savedLog = primaryOf(logs);
+    const selection = savedLog?.context?.selection?.[0];
+    const farmId = ctx.activeFarmId ?? selection?.farmId ?? null;
+    const topTaskClose = FEATURE_FLAGS.taskCloseConfirm
+        ? findConfirmableTaskCloses(ctx.plannedTasks ?? [], savedLog, savedLog?.date ?? getDateKey())[0]
+        : undefined;
+
+    const extras = (FEATURE_FLAGS.dailyLoop || topTaskClose) ? (
+        <div className="space-y-3">
+            {FEATURE_FLAGS.dailyLoop && <DailyLoopClarity done={ctx.todayDayState.completedCount} left={ctx.todayDayState.pendingCount} />}
+            {topTaskClose && (
+                <TaskCloseConfirmSlot key={topTaskClose.task.id} candidate={topTaskClose} onConfirm={(candidate) => {
+                    ctx.handleUpdateTask(candidate.task.id, { status: 'done', completedAt: new Date().toISOString() });
+                    logger.info('task_close.confirmed', {
+                        component: 'TaskCloseConfirm', action: 'task_close_confirmed', taskId: candidate.task.id,
+                        plotId: candidate.task.plotId, matchedActivityTitle: candidate.matchedActivityTitle,
+                    });
+                }} />
+            )}
+        </div>
+    ) : undefined;
+
+    return (
+        <>
+            {/* The existing sticky back (BUG-2 2026-08-14): reachable however far he scrolls, and it owns the
+                phone's hardware back. Same one step as the bottom bar's "मागे": the mic of the same plot. */}
+            <SavedScreenBack onBack={ctx.handleReset} />
+            {/* Loaded on first show (lazyComponents); the brief wait shows nothing rather than an English "Loading...". */}
+            <React.Suspense fallback={<div className="min-h-[40vh]" aria-busy="true" data-testid="voice-result-loading" />}>
+                <VoiceResultContainer
+                    result={result}
+                    history={ctx.history}
+                    farmerProfile={ctx.farmerProfile}
+                    operatorNameById={ctx.operatorNameById}
+                    farmId={farmId}
+                    farmRole={ctx.farmRole}
+                    placeLabel={placeOf(logs)}
+                    syncQueuedById={new Map(ctx.lastSavedLogSummary.map(s => [s.logId, s.syncQueued] as const))}
+                    onEdit={ctx.handleEditLog}
+                    onBack={ctx.handleReset}
+                    onAddAnother={ctx.handleReset}
+                    questionPanel={savedLog ? (
+                        <LedgerRecognitionPanel
+                            key={savedLog.id}
+                            farmId={farmId}
+                            plotId={selection?.selectedPlotIds?.[0] ?? null}
+                            crop={selection?.cropName ?? ''}
+                            todayLocalDate={savedLog.date}
+                            crops={ctx.crops}
+                            savedLog={savedLog}
+                            allLogs={ctx.history}
+                            weather={ctx.weatherData}
+                            // wave-3.7, founder decision 3 — the tap writes nothing; it stashes the answer and hands
+                            // him the SAME microphone (no second recording surface).
+                            onAnswerBySpeaking={(pending) => {
+                                stashPendingQuestionAnswer(pending);
+                                ctx.setStatus('idle');
+                                ctx.setMode('voice');
+                                ctx.setMainView('log');
+                            }}
+                        />
+                    ) : undefined}
+                    extras={extras}
+                />
+            </React.Suspense>
+        </>
+    );
+};

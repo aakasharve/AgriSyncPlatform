@@ -56,6 +56,9 @@ export const PiiReviewQueuePage = React.lazy(() => import('../../features/admin/
 // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
 // voice-note drafts review surface.
 export const AiDraftsPage = React.lazy(() => import('../../pages/AiDraftsPage'));
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — the ONE result screen after a voice save. It carries
+// the ring and its canvas engine, so it loads when first shown, not with the log tab (I13-V3 m4).
+export const VoiceResultContainer = React.lazy(() => import('../../features/logs/components/voiceResult/VoiceResultContainer').then(module => ({ default: module.VoiceResultContainer })));
 
 export const RouteLoader: React.FC = () => (
     React.createElement('div', {

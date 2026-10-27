@@ -6,6 +6,7 @@ import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyn
 import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
 import { type DailyLog } from '../../../types';
 import { buildTaskPayloads, ensureUuid, normalizeName } from './logTaskPayloads';
+import { buildWeatherStampPayload } from './weatherStampPayload';
 import {
     WORKER_NAME_MAX_LENGTH,
     WORKER_NAMES_MAX_PER_ENGAGEMENT,
@@ -735,42 +736,13 @@ export async function enqueueLogsForSync(
             // derive labour only. Read HERE, at queue time: the queued payload is what
             // syncs and replays, and `captureScope` does not survive a pull's rebuild.
             ...(log.captureScope === 'labour' && { captureScope: 'labour' as const }),
-            // B2.8 — carry the weather already captured at confirm-time to the server
-            // (persisted into ssf.weather_stamps). Omit the client-only `id` (server generates).
-            //
-            // B1d — `plotId` is CONDITIONAL, by the same rule every other
-            // optional field on this payload follows: a value we do not have is
-            // not sent, rather than sent as `undefined`. A record naming a set
-            // of plots (or संपूर्ण शेत) has one observed condition and no single
-            // plot to record it against, and `weather_stamps.plot_id` is
-            // `uuid NULL`, so absence is the shape the server already models.
-            //
-            // It is sent AS RECORDED and never repaired here. The producer
-            // (`LogCommandServiceImpl.stampWeather`) is the one place that
-            // decides, and it sets the field explicitly on every path — because
-            // the weather clients fill it with `'farm'` / `'device'` /
-            // `'unknown'`, and any of those reaching `ZGuid` would throw out of
-            // `MutationQueue.enqueue` and cost the farmer the entire record.
-            weatherStamp: log.weatherStamp
-                ? {
-                      ...(log.weatherStamp.plotId ? { plotId: log.weatherStamp.plotId } : {}),
-                      timestampLocal: log.weatherStamp.timestampLocal,
-                      timestampProvider: log.weatherStamp.timestampProvider,
-                      provider: log.weatherStamp.provider,
-                      tempC: log.weatherStamp.tempC,
-                      humidity: log.weatherStamp.humidity,
-                      windKph: log.weatherStamp.windKph,
-                      precipMm: log.weatherStamp.precipMm,
-                      cloudCoverPct: log.weatherStamp.cloudCoverPct,
-                      conditionText: log.weatherStamp.conditionText,
-                      iconCode: log.weatherStamp.iconCode,
-                      rainProbNext6h: log.weatherStamp.rainProbNext6h,
-                      windGustKph: log.weatherStamp.windGustKph,
-                      soilMoistureVolumetric0To10: log.weatherStamp.soilMoistureVolumetric0To10,
-                      uvIndex: log.weatherStamp.uvIndex,
-                      alerts: log.weatherStamp.alerts,
-                  }
-                : undefined,
+            // PLR-D10 I13 (founder 2026-09-02) — saved straight from a voice parse with no review
+            // tap: the server keeps it unconfirmed until his own confirm. Read HERE, at queue time,
+            // like `captureScope`; every other save sends no key at all, exactly as before (P11).
+            // RELEASE GATE: an older server refuses the key, so the server ships first.
+            ...(log.autoSavedFromVoice === true && { autoSavedFromVoice: true }),
+            // B2.8 / B1d — the weather captured at confirm-time; the rules live with the builder.
+            weatherStamp: buildWeatherStampPayload(log.weatherStamp),
             // Labour V1 Task 8.1 — structured labour rides on the SAME payload as
             // the log so the server can stage it in Phase 1. Omitted (not `[]`)
             // when there is no labour, so the server's `Count: > 0` guard reads a

@@ -18,8 +18,9 @@
 
 import type {
     FarmContext, CropProfile, FarmerProfile,
-    InputMode, 
+    InputMode, AgriLogResponse,
 } from '../../types';
+import type { LogProvenance } from '../../domain/ai/LogProvenance';
 import type { VoiceParserPort } from '../../application/ports';
 import type { LogScope } from '../../domain/types/log.types';
 import type { VoicePreprocessor } from '../../infrastructure/voice/VoicePreprocessor';
@@ -56,6 +57,24 @@ return events.some(event => {
 });
 };
 
+/** PLR-D10 I13 — the recording a parse came from: its clip key on this phone (when known) and when he spoke. */
+export interface VoiceRecordingRef {
+    recordedAtUtc: string;
+    clipId?: string;
+}
+
+/**
+ * PLR-D10 I13 — the voice auto-save hand-off (founder 2026-09-02: auto-save on a successful parse, no
+ * review form, no Save tap). Called ONLY with a successful parse of a RECORDING — never typed text, never a
+ * one-part re-record. Resolves `true` when the auto-save took the parse and owns the screen from here;
+ * `false` keeps today's review form with the parse in it.
+ */
+export type VoiceDraftSink = (
+    draft: AgriLogResponse,
+    provenance: LogProvenance | undefined,
+    recording: VoiceRecordingRef,
+) => Promise<boolean>;
+
 export interface UseVoiceRecorderProps {
 currentLogContext: FarmContext | null;
 logScope: LogScope; // Needed for parser
@@ -65,6 +84,8 @@ farmerProfile: FarmerProfile;
 setMode: (mode: InputMode) => void;
 parser: VoiceParserPort;
 voicePreprocessor: VoicePreprocessor;
+/** PLR-D10 I13 — see `VoiceDraftSink`. Absent = every parse goes to the review form, as before. */
+onVoiceDraft?: VoiceDraftSink;
 }
 
 export type PreprocessedAudioResult = {

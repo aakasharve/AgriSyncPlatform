@@ -5,6 +5,7 @@
 
 import React from 'react';
 import Button from '../../../../../shared/components/ui/Button';
+import { useReviewFormStrings } from '../reviewFormStrings';
 
 interface CostStripProps {
     selectedLogId: string | null;
@@ -19,6 +20,8 @@ const CostStrip: React.FC<CostStripProps> = ({
     setManualTotalCost,
     onSaveDay,
 }) => {
+    // PLR-D10 I13 (LP-27) — in his language only (reviewFormStrings: English as it was, Marathi approved/proposed).
+    const str = useReviewFormStrings();
     return (
         <div className="mt-8 mb-4 max-w-xl mx-auto animate-in slide-in-from-bottom-2 fade-in duration-500">
             <div className="bg-white rounded-2xl shadow-sm border border-stone-200 p-2 pl-5 flex items-center justify-between gap-4">
@@ -26,10 +29,10 @@ const CostStrip: React.FC<CostStripProps> = ({
                 {/* Input Section */}
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                     <div className="bg-emerald-100 p-2 rounded-full text-emerald-700 shrink-0">
-                        <img src="/assets/rupee_gold.png" alt="Cost" className="w-5 h-5" />
+                        <img src="/assets/rupee_gold.png" alt="" className="w-5 h-5" />
                     </div>
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-bold text-stone-400 uppercase leading-none mb-0.5">Total Paid</span>
+                        <span className="text-[10px] font-bold text-stone-400 leading-none mb-0.5" data-testid="manual-total-label">{str.totalPaid}</span>
                         <div className="flex items-center">
                             <span className="text-stone-400 font-bold mr-1">₹</span>
                             <input
@@ -52,7 +55,7 @@ const CostStrip: React.FC<CostStripProps> = ({
                         : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'
                         }`}
                 >
-                    {selectedLogId ? 'Update Log' : 'Save Entry'}
+                    {selectedLogId ? str.saveEdit : str.saveNew}
                 </Button>
             </div>
         </div>

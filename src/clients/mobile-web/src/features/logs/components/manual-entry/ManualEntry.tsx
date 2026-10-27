@@ -30,6 +30,7 @@ import FarmWideTodayPanel from '../FarmWideTodayPanel';
 import { isFarmWideSelection } from '../../../../app/helpers/appContentDailyCounts';
 import { emitClosureSubmitted } from '../../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../../core/session/FarmContext';
+import { useReviewFormStrings } from './reviewFormStrings';
 
 const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect, recordedDateKey, attendanceOnly = false, captureScope }) => {
 
@@ -40,6 +41,8 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
     // mountedAtRef is the form-open timestamp used for durationMs.
     const { currentFarmId } = useFarmContext();
     const mountedAtRef = React.useRef(Date.now());
+    // PLR-D10 I13 (LP-27) — the form's own words in his language only (reviewFormStrings).
+    const str = useReviewFormStrings();
     // Voice-vs-manual is determined by provenance.source at submit time.
     const [cropActivities, setCropActivities] = useState<CropActivityEvent[]>([]);
     const [expenses, setExpenses] = useState<ActivityExpenseEvent[]>([]);
@@ -196,13 +199,14 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             setUnclearSegments(initialData.unclearSegments.map(s => ({
                 ...s,
                 id: s.id || `seg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-                rawText: s.rawText || 'Unclear audio segment',
+                // PLR-D10 I13 (LP-27): the stand-ins for a phrase sent without its words, in his language.
+                rawText: s.rawText || str.unclearRaw,
                 confidence: s.confidence || 0.5,
                 reason: ((s.reason && ['ambiguous_verb', 'unknown_vocabulary', 'incomplete_sentence', 'conflicting_markers', 'no_actionable_content', 'audio_quality', 'mixed_languages', 'unknown'].includes(s.reason)) ? s.reason : 'unknown') as UnclearReason,
-                userMessage: s.userMessage || "I couldn't quite understand this part, please check."
+                userMessage: s.userMessage || str.unclearMessage
             })));
         }
-    }, [initialData]);
+    }, [initialData, str]);
 
     const handleDismissUnclear = (id: string) => {
         setUnclearSegments(prev => prev.filter(s => s.id !== id));
@@ -287,7 +291,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         ];
 
         if (allCosts.some(c => c < 0)) {
-            alert("❌ Negative costs are not allowed. Please check your entries.");
+            alert(str.negativeCost);
             return;
         }
 
@@ -302,7 +306,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             activityExpenses: expenses,
         }).length > 0;
         if (totalCalculated > 0 && !hasWork && observations.length === 0) {
-            const proceed = confirm("⚠️ Costs are recorded but no work activities or observations are listed. Save anyway?");
+            const proceed = confirm(str.costWithoutWork);
             if (!proceed) return;
         }
 
@@ -458,7 +462,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         : zeroTodayCounts;
 
     const selectedPlotSummary = (() => {
-        if (!context || context.selection.length === 0) return 'No selection';
+        if (!context || context.selection.length === 0) return str.noSelection;
         const selectedPairs = context.selection.flatMap(selection =>
             selection.selectedPlotNames.map(plotName => ({
                 cropName: selection.cropName,
@@ -470,7 +474,7 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
             return `${selectedPairs[0].cropName} • ${selectedPairs[0].plotName}`;
         }
 
-        return `${selectedPairs.length} plots across ${context.selection.length} crops`;
+        return str.plotsAcrossCrops(selectedPairs.length, context.selection.length);
     })();
 
     const selectedTargetGroups: TargetSelectionGroup[] = (context?.selection || []).map((selection) => {
