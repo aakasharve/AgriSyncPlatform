@@ -61,6 +61,8 @@ import { ShramSathiUnderstanding } from '../../features/logs/components/shramsat
 import { AppRouterContext } from './routeContext';
 import { buildFeedEntries } from './activityFeedEntries';
 import { ReflectPage, ComparePage } from './lazyComponents';
+import { compareTabProps } from './compareTab';
+import { openLogFlow } from './openLogFlow';
 import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 
 /*
@@ -140,7 +142,14 @@ export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
             ledgerDefaults={ctx.ledgerDefaults}
             tasks={ctx.plannedTasks}
             onUpdateTask={(task) => ctx.handleUpdateTask(task.id, task)}
-            onAddTask={() => ctx.setShowTaskCreationSheet(true)}
+            // spec: plr-d10 (I14, T2) — a to-do is added in place, in Marathi ("आठवण जोडा"), into the SAME
+            // task store the English "Add New Task" sheet wrote; "बोलून सांगा" opens the voice log flow, where a
+            // spoken reminder already becomes a to-do (LogFactory), through the one door (`openLogFlow.ts`).
+            // This list was the sheet's ONLY opener (`SchedulerPage` takes `onOpenTaskCreator` but never calls
+            // it), so the sheet — and its "Assign to" chips, whose `assigneeId` nothing ever reads — is no
+            // longer reachable (P5; reported, not hidden).
+            onSaveTask={ctx.handleSaveTask}
+            onTellTodo={() => { openLogFlow(ctx); }}
             onEditLog={(log: DailyLog) => {
                 ctx.setMainView('log');
                 const context = log.context.selection[0];
@@ -179,20 +188,18 @@ export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
             navigate={ctx.setCurrentRoute}
             focusLogRequest={ctx.reflectFocusRequest}
             onFocusLogConsumed={() => ctx.setReflectFocusRequest(null)}
+            // spec: plr-d10 (I14, H16) — लक्ष द्या's "तुकडा पहा": open narrowed to that plot, once.
+            focusPlotId={ctx.reflectFocusPlotId ?? null}
+            onFocusPlotConsumed={() => ctx.setReflectFocusPlotId?.(null)}
         />
     );
 };
 
+// spec: plr-d10 (I14 — CMP-1/2/3) — तुलना is a home tab with no back of its own; a worker gets nothing
+// here even for one frame. The wiring lives in `./compareTab.ts`.
 export const renderCompareView = (ctx: AppRouterContext): React.ReactNode => {
-    if (ctx.currentRoute !== 'main' || ctx.mainView !== 'compare') return null;
-    return (
-        <ComparePage
-            plots={ctx.crops.flatMap(c => c.plots)}
-            crops={ctx.crops}
-            logs={ctx.history}
-            onBack={() => ctx.setMainView('log')}
-        />
-    );
+    const props = compareTabProps(ctx);
+    return props ? <ComparePage {...props} /> : null;
 };
 
 export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {

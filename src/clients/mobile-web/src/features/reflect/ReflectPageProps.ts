@@ -5,6 +5,7 @@
 
 import { DailyLog } from '../logs/logs.types';
 import { CropProfile, LedgerDefaults, LogVerificationStatus, FarmOperator } from '../../types';
+import type { PlannedTask } from '../../types';
 import type { FeedEntry } from '../logs/components/TodayActivityFeed';
 
 export interface ReflectPageProps {
@@ -22,6 +23,12 @@ export interface ReflectPageProps {
     navigate?: (route: any) => void;
     focusLogRequest?: { logId: string; date: string; plotId?: string } | null;
     onFocusLogConsumed?: () => void;
+    /**
+     * spec plr-d10 (I14, H16) — open the page narrowed to this one plot (a लक्ष द्या "तुकडा पहा" card), then
+     * call `onFocusPlotConsumed`. A plot that is not on this phone leaves the page on the whole farm.
+     */
+    focusPlotId?: string | null;
+    onFocusPlotConsumed?: () => void;
 
     /** Today's logs for the Activity Feed, behind its own button at the top of this page. Omit to hide the button. */
     activityFeed?: { entries: readonly FeedEntry[]; dateLabel: string };
@@ -32,4 +39,8 @@ export interface ReflectPageProps {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing prop shape (not part of the Activity Feed change); typing it is a separate cleanup
     onUpdateTask?: (task: any) => void;
     onAddTask?: () => void;
+    /** spec plr-d10 (I14, T2) — save a to-do typed in place ("आठवण जोडा") to the task store. Preferred over `onAddTask`. */
+    onSaveTask?: (task: PlannedTask) => void;
+    /** spec plr-d10 (I14, T2) — "बोलून सांगा": open the real voice log flow (a spoken reminder becomes a to-do). */
+    onTellTodo?: () => void;
 }

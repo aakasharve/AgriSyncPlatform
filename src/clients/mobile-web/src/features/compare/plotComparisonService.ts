@@ -436,7 +436,12 @@ function buildActivityBucket(
 // MATCHING LOGIC
 // ============================================
 
-function matchItems(planned: PlannedItem[], executed: ExecutedItem[]) {
+// Access widened from private → exported (spec: plr-d10 I14, CMP-1) so the तुलना card's 7-day week
+// (`compareWeek.ts`) matches the logs recorded IN the week against the work due in the week with THIS
+// matcher, on copies, instead of reading `isMatched` from the stage-wide pass above (which credits each log
+// to the OLDEST open item of the stage, so this week's work read as weeks-old work). Nothing else changed:
+// every call site here is unchanged and the body is the same.
+export function matchItems(planned: PlannedItem[], executed: ExecutedItem[]) {
     let matchedCount = 0;
 
     // 1. Try name-based matching first

@@ -8,14 +8,17 @@
  * top to bottom by time: वेळ उलटून गेली (red) → आज → पुढचे दिवस → तारीख नाही → झालेली (folded).
  * Each row: one big round tick (a tap marks it done, a tap again re-opens it), the work in big words, the
  * place in its crop's colour, आठवण/काम and where it came from, तातडीचं/महत्त्वाचं, and when.
- * "+ काम / आठवण जोडा" opens the app's real task sheet (the old "+ Add Task"). Every Marathi string is PROPOSED.
+ * Adding (spec plr-d10 I14, T2): with `onAddTodo` the list adds in place — "आठवण जोडा" + "बोलून सांगा"
+ * (`TodoAddForm.tsx`, the approved preview's design; the app passes it). `onAdd` (a button that opens a
+ * sheet) is kept only for a caller that gives no `onAddTodo`. Every Marathi string is PROPOSED.
  *
- * Not carried over from the preview, because the real app has nothing behind them yet: the line "these are on
- * लक्ष द्या too" (late tasks feed the day-closure count, not the लक्ष द्या page) and the "बोलून सांगा" button.
+ * Late to-dos are on लक्ष द्या too (spec plr-d10 I14, H15 / T3 — `AttentionLateTodos.tsx`): the same store,
+ * so a tick on either page clears both.
  */
 import React, { useState } from 'react';
 import { AlarmClock, Bell, Check, ClipboardCheck, Plus } from 'lucide-react';
-import type { TodoItem, TodoList } from './todoModel';
+import type { NewTodo, TodoItem, TodoList } from './todoModel';
+import { TodoAddForm } from './TodoAddForm';
 import { Num, Tap } from './ui';
 
 export const TodoRow: React.FC<{ t: TodoItem; onToggle: () => void }> = ({ t, onToggle }) => {
@@ -46,17 +49,29 @@ export const TodoRow: React.FC<{ t: TodoItem; onToggle: () => void }> = ({ t, on
     );
 };
 
-const Group: React.FC<{ title: string; tone: string; items: readonly TodoItem[]; onToggle: (t: TodoItem) => void; testId: string }> = ({ title, tone, items, onToggle, testId }) =>
+const Group: React.FC<{ title: string; tone: string; items: readonly TodoItem[]; onToggle: (t: TodoItem) => void; testId: string; note?: string }> = ({ title, tone, items, onToggle, testId, note }) =>
     items.length ? (
         <div className="space-y-2" data-testid={testId}>
             <p className={`m-0 flex items-center gap-1.5 px-1 text-[14px] font-extrabold ${tone}`}>{title} <Num className="opacity-70">({items.length})</Num></p>
+            {note && <p className="m-0 px-1 text-[12.5px] font-semibold text-stone-500" data-testid={`${testId}-note`}>{note}</p>}
             {items.map(t => <TodoRow key={t.id} t={t} onToggle={() => onToggle(t)} />)}
         </div>
     ) : null;
 
-export const TodoSection: React.FC<{ list: TodoList; onToggle: (t: TodoItem) => void; onAdd?: () => void }> = ({ list, onToggle, onAdd }) => {
+interface TodoSectionProps {
+    list: TodoList;
+    onToggle: (t: TodoItem) => void;
+    /** The app's task sheet (used when `onAddTodo` is not given). */
+    onAdd?: () => void;
+    /** Add in place, in Marathi (T2). Preferred over `onAdd`. */
+    onAddTodo?: (todo: Omit<NewTodo, 'place'>) => void;
+    /** "बोलून सांगा": the real voice log flow (a spoken reminder becomes a to-do there). */
+    onTell?: () => void;
+}
+
+export const TodoSection: React.FC<TodoSectionProps> = ({ list, onToggle, onAdd, onAddTodo, onTell }) => {
     const [showDone, setShowDone] = useState(false);
-    const addButton = onAdd && (
+    const addButton = onAddTodo ? <TodoAddForm onAdd={onAddTodo} onTell={onTell} /> : onAdd && (
         <Tap onClick={onAdd} data-testid="todo-add" className="flex min-h-[52px] w-full items-center justify-center gap-1.5 rounded-full border-2 border-emerald-600 bg-white text-[15px] font-extrabold text-emerald-800">
             <Plus size={19} aria-hidden="true" />काम / आठवण जोडा
         </Tap>
@@ -84,7 +99,7 @@ export const TodoSection: React.FC<{ list: TodoList; onToggle: (t: TodoItem) => 
                     </div>
                 ))}
             </div>
-            <Group testId="todo-group-late" title="⏰ वेळ उलटून गेली" tone="text-rose-700" items={list.late} onToggle={onToggle} />
+            <Group testId="todo-group-late" title="⏰ वेळ उलटून गेली" tone="text-rose-700" note="ही कामं 'लक्ष द्या' मध्येही दिसतात." items={list.late} onToggle={onToggle} />
             <Group testId="todo-group-today" title="आज करायचं" tone="text-amber-800" items={list.today} onToggle={onToggle} />
             <Group testId="todo-group-later" title="पुढचे दिवस" tone="text-blue-800" items={list.later} onToggle={onToggle} />
             <Group testId="todo-group-nodate" title="तारीख ठरलेली नाही" tone="text-stone-700" items={list.noDate} onToggle={onToggle} />

@@ -1,132 +1,100 @@
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I14 — H14, H16) — one server board card in the app's
+ * common look (a glass card with a coloured edge, PLR-D9 preview `app/PlacePages.tsx`), Marathi only: the
+ * server's `titleMr` / `descriptionMr` / `suggestedActionLabelMr` (the English twin lines are gone — no
+ * doubled labels). The button is drawn ONLY when the page gives it somewhere to go (`onAction`); a card
+ * whose action has no place in the app shows no button (P5) instead of a button that does nothing.
+ */
 import React from 'react';
+import { TriangleAlert } from 'lucide-react';
 import AttentionRankPill from './AttentionRankPill';
 import type { AttentionCardCacheRecord } from '../../../infrastructure/storage/DexieDatabase';
+import { GlassCard, IconDot, Tap, type Tone } from '../../../shared/components/ui/placeUi';
+import { stageNameMr } from '../../../shared/utils/stageNameMr';
+import { attentionRankOf, type AttentionRankName } from '../attentionWire';
 
 interface AttentionCardProps {
     card: AttentionCardCacheRecord;
-    /**
-     * Called when the suggested-action button is tapped. The parent
-     * page decides how to route based on `card.suggestedAction`
-     * (e.g. `AssignTest` → TestQueuePage). When omitted, the button
-     * still renders but does nothing — useful for offline-safe stub
-     * states.
-     */
+    /** Follow the card's button. Omit when the action has nowhere to go: no button is drawn. */
     onAction?: (card: AttentionCardCacheRecord) => void;
+    /**
+     * The button's words (`attentionButtonLabelMr`: names where it goes). Defaults to the server's
+     * `suggestedActionLabelMr`; empty → no button.
+     */
+    actionLabel?: string | null;
     /** CEI Phase 3 — open compliance signal count for this plot */
     openComplianceSignalCount?: number;
     /** Called when the compliance signal chip is tapped */
     onComplianceChipTap?: (plotId: string, farmId: string) => void;
 }
 
-const rankBorder: Record<string, string> = {
-    Critical: 'border-rose-200 bg-white',
-    NeedsAttention: 'border-amber-200 bg-white',
-    Watch: 'border-stone-200 bg-white',
-    Healthy: 'border-emerald-200 bg-white',
+// The rank arrives as the server's ordinal number (`attentionWire.ts`). A rank we cannot read gets a plain
+// edge, never another band's colour.
+const RANK_EDGE: Record<AttentionRankName, { edge: string; tone: Tone }> = {
+    Critical: { edge: 'border-l-rose-500', tone: 'rose' },
+    NeedsAttention: { edge: 'border-l-amber-500', tone: 'amber' },
+    Watch: { edge: 'border-l-blue-500', tone: 'blue' },
+    Healthy: { edge: 'border-l-emerald-500', tone: 'green' },
+};
+const UNKNOWN_EDGE: { edge: string; tone: Tone } = { edge: 'border-l-stone-300', tone: 'stone' };
+
+// The server's health score names (`HealthScore.cs`), in Marathi. PROPOSED (Marathi)
+const HEALTH_MR: Record<string, string> = {
+    Excellent: 'तब्येत: उत्तम',
+    Good: 'तब्येत: चांगली',
+    NeedsAttention: 'तब्येत: लक्ष द्या',
+    Critical: 'तब्येत: गंभीर',
 };
 
-const AttentionCard: React.FC<AttentionCardProps> = ({ card, onAction, openComplianceSignalCount, onComplianceChipTap }) => {
-    const border = rankBorder[card.rank] ?? 'border-stone-200 bg-white';
+const AttentionCard: React.FC<AttentionCardProps> = ({ card, onAction, actionLabel, openComplianceSignalCount, onComplianceChipTap }) => {
+    const buttonLabel = actionLabel === undefined ? card.suggestedActionLabelMr : actionLabel;
+    const rankName = attentionRankOf(card.rank);
+    const rank = rankName ? RANK_EDGE[rankName] : UNKNOWN_EDGE;
+    const health = card.latestHealthScore ? HEALTH_MR[card.latestHealthScore] : undefined;
+    const place = [card.farmName, card.plotName].filter(Boolean).join(' · ');
+    // The server's stage is raw `CropCycle.Stage` (English template name, or "unstated" / "Unknown"):
+    // said in Marathi, or not shown at all.
+    const stage = stageNameMr(card.stageName);
 
     return (
-        <div className={`rounded-2xl border ${border} shadow-sm p-4 flex flex-col gap-3`}>
-            {/* Header row */}
-            <div className="flex items-start justify-between gap-2">
-                <AttentionRankPill rank={card.rank} />
-                <div className="flex items-center gap-2">
-                    {/* CEI Phase 3 — compliance signal count chip */}
-                    {openComplianceSignalCount != null && openComplianceSignalCount > 0 && (
-                        <button
-                            type="button"
-                            onClick={() => onComplianceChipTap?.(card.plotId, card.farmId)}
-                            className="inline-flex items-center gap-1 rounded-full bg-rose-100 border border-rose-200 px-2 py-0.5 text-[10px] font-semibold text-rose-700 active:bg-rose-200"
-                            style={{ fontFamily: "'DM Sans', sans-serif" }}
-                        >
-                            <span>⚠</span>
-                            <span>{openComplianceSignalCount} signal{openComplianceSignalCount !== 1 ? 's' : ''}</span>
-                        </button>
-                    )}
-                    <div className="text-right">
-                        <p
-                            style={{ fontFamily: "'DM Sans', sans-serif" }}
-                            className="text-xs font-semibold text-stone-700 truncate max-w-[120px]"
-                        >
-                            {card.farmName}
-                        </p>
-                        <p
-                            style={{ fontFamily: "'DM Sans', sans-serif" }}
-                            className="text-xs text-stone-400"
-                        >
-                            {card.plotName}
-                        </p>
+        <GlassCard className={`border-l-4 ${rank.edge}`} testId={`attention-card-${card.cardId}`}>
+            <div className="flex items-start gap-3">
+                <IconDot tone={rank.tone}><TriangleAlert size={22} aria-hidden="true" /></IconDot>
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <AttentionRankPill rank={card.rank} />
+                        {stage && <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[12.5px] font-bold text-stone-600" data-testid="attention-stage">{stage}</span>}
                     </div>
+                    <p className="m-0 mt-1.5 text-[16px] font-extrabold leading-snug text-stone-900">{card.titleMr}</p>
+                    {card.descriptionMr && <p className="m-0 mt-0.5 text-[13.5px] font-semibold leading-snug text-stone-600">{card.descriptionMr}</p>}
+                    {place && <p className="m-0 mt-1 text-[12.5px] font-bold text-stone-500">{place}</p>}
                 </div>
             </div>
 
-            {/* Stage chip */}
-            {card.stageName && (
-                <span
-                    className="self-start inline-block rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-500"
-                    style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                >
-                    {card.stageName}
-                </span>
+            {(health || (card.overdueTaskCount != null && card.overdueTaskCount > 0) || (openComplianceSignalCount != null && openComplianceSignalCount > 0)) && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                    {card.overdueTaskCount != null && card.overdueTaskCount > 0 && (
+                        // PROPOSED (Marathi) — was "{n} overdue"
+                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[12.5px] font-bold text-amber-800 ring-1 ring-amber-200">{card.overdueTaskCount} कामं बाकी</span>
+                    )}
+                    {health && <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[12.5px] font-bold text-stone-700">{health}</span>}
+                    {openComplianceSignalCount != null && openComplianceSignalCount > 0 && onComplianceChipTap && (
+                        <Tap onClick={() => onComplianceChipTap(card.plotId, card.farmId)}
+                            className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[12.5px] font-bold text-rose-800 ring-1 ring-rose-200">
+                            {/* "चेतावण्या" = the app's own word for these (ComplianceSignalsPage title) */}
+                            ⚠ {openComplianceSignalCount} चेतावण्या
+                        </Tap>
+                    )}
+                </div>
             )}
 
-            {/* Body */}
-            <div>
-                <p
-                    style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                    className="text-sm font-semibold text-stone-800 leading-snug"
-                >
-                    {card.titleMr}
-                </p>
-                <p
-                    style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    className="text-xs text-stone-400 mt-0.5"
-                >
-                    {card.titleEn}
-                </p>
-                <p
-                    style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}
-                    className="text-sm text-stone-600 mt-1.5 leading-relaxed"
-                >
-                    {card.descriptionMr}
-                </p>
-            </div>
-
-            {/* Metric chips */}
-            <div className="flex gap-2 flex-wrap">
-                {card.overdueTaskCount != null && card.overdueTaskCount > 0 && (
-                    <span
-                        className="rounded-full bg-amber-50 border border-amber-200 px-2.5 py-0.5 text-xs text-amber-700"
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    >
-                        {card.overdueTaskCount} overdue
-                    </span>
-                )}
-                {card.latestHealthScore && (
-                    <span
-                        className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-600"
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    >
-                        {card.latestHealthScore}
-                    </span>
-                )}
-            </div>
-
-            {/* Primary action button */}
-            <button
-                type="button"
-                className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-semibold text-white active:bg-emerald-700 transition-colors disabled:bg-stone-200 disabled:text-stone-400"
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
-                onClick={() => onAction?.(card)}
-                disabled={!onAction}
-            >
-                <span>{card.suggestedActionLabelMr}</span>
-                <span className="text-emerald-200 ml-1 text-xs">{card.suggestedActionLabelEn}</span>
-            </button>
-        </div>
+            {onAction && buttonLabel && (
+                <Tap onClick={() => onAction(card)} data-testid={`attention-go-${card.cardId}`}
+                    className="mt-3 flex min-h-[46px] w-full items-center justify-center rounded-full border-2 border-emerald-600 bg-white text-[15px] font-extrabold text-emerald-800">
+                    {buttonLabel}
+                </Tap>
+            )}
+        </GlassCard>
     );
 };
 

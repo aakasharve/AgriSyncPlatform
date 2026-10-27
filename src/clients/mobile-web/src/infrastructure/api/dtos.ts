@@ -405,13 +405,13 @@ export interface AttentionCardDto {
     plotName: string;
     cropCycleId?: string | null;
     stageName?: string | null;
-    rank: string;
+    rank: string | number; // plr-d10 I14: C# enum ordinal on the wire (no string converter) — read via attentionWire.ts
     computedAtUtc: string;
     titleEn: string;
     titleMr: string;
     descriptionEn: string;
     descriptionMr: string;
-    suggestedAction: string;
+    suggestedAction: string | number;
     suggestedActionLabelEn: string;
     suggestedActionLabelMr: string;
     overdueTaskCount?: number | null;

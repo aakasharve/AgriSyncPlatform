@@ -50,6 +50,12 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
             </div>
 
             {/* GLOBAL SHEETS */}
+            {/* spec: plr-d10 (I14, T2; verifier I14-V3-07c) — UNREACHABLE today, kept mounted on purpose and
+                reported to the founder: its only opener was the to-do list, which now adds a to-do in place
+                ("आठवण जोडा", `TodoAddForm.tsx`); `SchedulerPage` declares `onOpenTaskCreator` but never calls it.
+                The sheet is English and its "Assign to" chips write an `assigneeId` nothing reads (P5). Delete it
+                with its state (`useAppData`, `routeContext`, `simpleRoutes`, the preview ctx) once the founder
+                confirms nothing else should open it. */}
             <TaskCreationSheet
                 isOpen={showTaskCreationSheet}
                 onClose={() => setShowTaskCreationSheet(false)}

@@ -30,7 +30,7 @@ import { useAttachmentRetry } from '../attachments';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmContext } from '../../core/session/FarmContext';
-import { emitClosureSummaryViewed } from '../../core/telemetry/eventEmitters';
+import { emitClosureSummaryViewed, emitNextActionCreated } from '../../core/telemetry/eventEmitters';
 import FarmWideTodayPanel from '../logs/components/FarmWideTodayPanel';
 import { TodayActivityButton, TodayActivitySheet } from '../logs/components/TodayActivityFeed';
 import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
@@ -54,7 +54,7 @@ import { buildPlotDayCard } from './overview/plotDayModel';
 import { BucketKey, PlotDayCards } from './overview/PlotDayCards';
 import { atNoon, fromDateKey, relLabel } from './overview/reflectDates';
 import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
-import { buildTodoList, mergeTasks, toggledTask, type TodoItem } from './overview/todoModel';
+import { buildTodoList, mergeTasks, newTodoTask, toggledTask, type NewTodo, type TodoItem } from './overview/todoModel';
 import { TodoCount, TodoSection } from './overview/TodoSection';
 import { Num, SANS, SectionBlock } from './overview/ui';
 import { useLogAttachmentCount } from './overview/useLogAttachmentCount';
@@ -76,6 +76,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     tasks,
     onUpdateTask,
     onAddTask,
+    onSaveTask,
+    onTellTodo,
     // `onVerifyLog` is still declared on `ReflectPageProps` and still passed by `core/navigation/mainView.tsx`,
     // but nothing on this page calls it: its only consumer was `ReviewInbox`'s Approve button, removed because it
     // enqueued `verify_log_v2`, which the server answers with MUTATION_TYPE_UNIMPLEMENTED (see `ReviewInbox.tsx`).
@@ -84,6 +86,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     operators = [],
     navigate,
     activityFeed,
+    focusPlotId,
+    onFocusPlotConsumed,
 }) => {
     const defaults = ledgerDefaults || FALLBACK_DEFAULTS;
     const { currentFarmId } = useFarmContext();
@@ -102,6 +106,16 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const { retryUpload } = useAttachmentRetry();
     const selectedLogAttachmentCount = useLogAttachmentCount(selectedLog?.id);
     useEffect(() => { setShowSelectedLogAttachments(false); }, [selectedLog?.id]);
+
+    // spec plr-d10 (I14, H16) — लक्ष द्या's "तुकडा पहा": narrow the page to that one plot (its crop + the plot), once
+    // the farm's crops are here; a plot this phone does not hold leaves the whole farm. Either way it is read once.
+    useEffect(() => {
+        if (!focusPlotId) return;
+        const owner = crops.find(c => (c.plots ?? []).some(p => p.id === focusPlotId));
+        if (!owner && crops.length === 0) return; // crops not loaded yet: wait for them
+        if (owner) setSel({ crop: owner.id, plotIds: [focusPlotId] });
+        onFocusPlotConsumed?.();
+    }, [focusPlotId, crops, onFocusPlotConsumed]);
 
     // ── what the page shows (pure adapters over the real stores) ───────────────────────────────
     // a picked crop that is no longer on the farm falls back to everything, never to an empty page
@@ -156,6 +170,15 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     // ── actions ────────────────────────────────────────────────────────────────────────────────
     const pickDay = (d: Date) => { setDate(atNoon(d)); setCalView(atNoon(d)); };
     const toggleTask = (t: TodoItem) => { if (t.canToggle) onUpdateTask?.(toggledTask(t.task)); };
+    // spec plr-d10 (I14, T2) — a to-do typed in place: the one plot the page is narrowed to, else the whole farm.
+    // Same record and the same `next_action.created` event the task sheet emits (`TaskCreationSheet.handleSave`).
+    const addTodo = onSaveTask ? (todo: Omit<NewTodo, 'place'>) => {
+        const refs = wholeFarm ? [] : plotRefsInScope(crops, scope);
+        const only = refs.length === 1 && refs[0].plotId ? { plotId: refs[0].plotId, cropId: refs[0].cropId } : undefined;
+        const task = newTodoTask({ ...todo, place: only }, todayKey, crypto.randomUUID());
+        onSaveTask(task);
+        if (currentFarmId) emitNextActionCreated({ farmId: currentFarmId, taskId: task.id });
+    } : undefined;
     const openLogMoneyLens = (log: DailyLog) => {
         const first = log.context.selection?.[0];
         setMoneyLensFilters({
@@ -241,7 +264,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
                 <SectionBlock id="todo" title="करायची कामे" icon={<ListChecks size={22} aria-hidden="true" />} tone="amber"
                     hint="कामं आणि आठवणी — वेळ उलटली की लाल" count={<TodoCount list={todoList} />}>
-                    <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} />
+                    <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} onAddTodo={addTodo} onTell={onTellTodo} />
                 </SectionBlock>
 
                 <SectionBlock id="day" title="प्लॉटनिहाय काम" icon={<CalendarDays size={22} aria-hidden="true" />} tone="blue" hint={`${relLabel(date)} — प्रत्येक प्लॉटवर काय झालं`}>

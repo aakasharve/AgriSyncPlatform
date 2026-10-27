@@ -14,6 +14,8 @@
  *
  *     सगळ्या शेती आज व्यवस्थित आहेत  /  All your farms are on track today
  *
+ * (now "सध्या लक्ष देण्यासारखे काही नाही." — founder D-1 — still with the same stamp rule)
+ *
  * asserting "today" from data that may be a day old. The fix is not new
  * copy: it is showing the SAME "as of <time>" stamp the non-empty branch
  * already renders, so the sentence reads as true regardless of which day
@@ -35,7 +37,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
-import { formatDisplayTime } from '../../../../shared/utils/displayTime';
+import { formatFarmerTime } from '../../../../shared/utils/displayTime';
 
 const cursorRef: { current: { tableName: string; lastSyncAt: string; version: number } | undefined } = {
     current: undefined,
@@ -64,7 +66,8 @@ const fakeDb = {
 
 import AttentionPage from '../AttentionPage';
 
-const FALSE_REASSURANCE = 'सगळ्या शेती आज व्यवस्थित आहेत';
+// spec: plr-d10 (I14) — the empty board's sentence is the founder's own (D-1, FOUNDER-ANSWERS-2026-10-26).
+const FALSE_REASSURANCE = 'सध्या लक्ष देण्यासारखे काही नाही.';
 const YESTERDAY_SYNC_ISO = '2026-08-28T06:00:00.000Z';
 
 describe('AttentionPage — the all-clear says WHEN it is from, even on a stale-but-not-failed board (Task 8b)', () => {
@@ -82,10 +85,14 @@ describe('AttentionPage — the all-clear says WHEN it is from, even on a stale-
 
         await waitFor(() => expect(screen.getByText(FALSE_REASSURANCE)).toBeInTheDocument());
 
-        // The exact wording the non-empty branch already uses for this —
-        // reused verbatim, not invented for this branch.
-        const expectedLabel = formatDisplayTime(YESTERDAY_SYNC_ISO);
-        expect(expectedLabel).not.toBe('');
-        await waitFor(() => expect(screen.getByText(`as of ${expectedLabel}`)).toBeInTheDocument());
+        // spec: plr-d10 (I14, H14) — the stamp is Marathi now (was "as of 11:30 AM"), and it carries the DAY
+        // as well as the time, so a pull from another day can never read as today's: the date of the last
+        // successful sync, the farmer-facing time of day, "पर्यंतची माहिती".
+        const time = formatFarmerTime(YESTERDAY_SYNC_ISO);
+        expect(time).not.toBe('');
+        await waitFor(() => expect(screen.getByTestId('attention-as-of')).toBeInTheDocument());
+        const stamp = screen.getByTestId('attention-as-of').textContent ?? '';
+        expect(stamp).toBe(`28 ऑग, ${time} पर्यंतची माहिती`);
+        expect(stamp).not.toMatch(/as of|आज/);
     });
 });

@@ -78,6 +78,11 @@ export interface AppRouterContext {
     setCurrentRoute: Navigation['setCurrentRoute'];
     /** A screen's own back button: where he came from, else the given parent (WP-6). */
     goBackOr: Navigation['goBackOr'];
+    /**
+     * spec: plr-d10 (I14, CMP-3) — home tabs this person may not open (`hiddenViews.ts`: a worker gets
+     * no तुलना). Optional so a ctx built without a farm role (the dev previews, tests) hides nothing.
+     */
+    hiddenViews?: readonly Navigation['mainView'][];
     mainView: Navigation['mainView'];
     setMainView: Navigation['setMainView'];
     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) — "why am
@@ -176,6 +181,13 @@ export interface AppRouterContext {
     setShowNoWorkReason: React.Dispatch<React.SetStateAction<boolean>>;
     reflectFocusRequest: { logId: string; date: string; plotId?: string } | null;
     setReflectFocusRequest: React.Dispatch<React.SetStateAction<{ logId: string; date: string; plotId?: string } | null>>;
+    /**
+     * spec: plr-d10 (I14, H16) — open पूर्ण शेतीचा आढावा narrowed to ONE plot (a लक्ष द्या "तुकडा पहा" card).
+     * Read once by `ReflectPage`, then cleared. Optional so a ctx built without it (the dev previews, tests)
+     * simply opens the whole farm.
+     */
+    reflectFocusPlotId?: string | null;
+    setReflectFocusPlotId?: (plotId: string | null) => void;
     // FINDING F3 — `showCloseDaySummary` / `showCloseYesterdaySummary` were
     // removed from this contract. Their only readers went with the Daily
     // Closure card in commit `0e4ad118` (spec §4.2 moved it into the waiting

@@ -33,6 +33,8 @@ import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 import { OPEN_REVIEW_INBOX_EVENT } from '../../features/oversight/oversightNavigationEvents';
 import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRequest';
 import FirstRunWait from '../../features/onboarding/firstRun/FirstRunWait';
+// spec: plr-d10 (I14, CMP-3) — the one role → hidden-tab rule (a worker gets no तुलना).
+import { hiddenMainViewsFor } from './hiddenViews';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -87,9 +89,18 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
     // Session's active farm — threaded into ctx so the hook-free route render
     // functions (mainView) can reach it. See AppRouterContext.activeFarmId.
-    const { currentFarmId } = useFarmContext();
+    // `currentFarm` (its role) decides the hidden tabs (a worker gets no तुलना); the first run's
+    // welcome reads its role from `firstRunFarm` instead.
+    const { currentFarmId, currentFarm } = useFarmContext();
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
+    const hiddenViews = hiddenMainViewsFor(currentFarm?.role);
+    // A tab this person may not open is never left on screen (e.g. a farm switch from an owner seat to a
+    // worker seat while तुलना was open): back to आजची कामे. Above every early return (rules of hooks).
+    const onHiddenView = hiddenViews.includes(mainView);
+    React.useEffect(() => {
+        if (onHiddenView) setMainView('log');
+    }, [onHiddenView, setMainView]);
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
     const {
         isDemoMode, setIsDemoMode,
@@ -137,6 +148,8 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     // each other and both live in renderGlobalSheets.
     const [showNoWorkReason, setShowNoWorkReason] = React.useState(false);
     const [reflectFocusRequest, setReflectFocusRequest] = React.useState<{ logId: string; date: string; plotId?: string } | null>(null);
+    // spec: plr-d10 (I14, H16) — लक्ष द्या's "तुकडा पहा" opens the overview on that plot.
+    const [reflectFocusPlotId, setReflectFocusPlotId] = React.useState<string | null>(null);
 
     // Convert a DailyLog to an editable AgriLogResponse (manual ledger edit flow).
     const handleEditLog = (log: DailyLog) => {
@@ -264,6 +277,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const ctx: AppRouterContext = {
         activeFarmId: currentFarmId,
         currentRoute, setCurrentRoute, mainView, setMainView,
+        hiddenViews,
         goBackOr: navigation.goBackOr,
         logIntent, setLogIntent, lastLabourLogIds,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
@@ -293,6 +307,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         showQuickLog, setShowQuickLog,
         showNoWorkReason, setShowNoWorkReason,
         reflectFocusRequest, setReflectFocusRequest,
+        reflectFocusPlotId, setReflectFocusPlotId,
         ownerDisplayName: derivations.ownerDisplayName,
         operatorNameById: derivations.operatorNameById,
         todayDateKey: derivations.todayDateKey,
@@ -324,6 +339,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
                     view={mainView}
                     onChangeView={setMainView}
                     disabled={isRecordingPathBusy(status)}
+                    hiddenViews={hiddenViews}
                 >
                     {renderReflectView(ctx)}
                     {renderCompareView(ctx)}

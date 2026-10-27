@@ -48,6 +48,9 @@ import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInp
 // `AppRouter.tsx`) both call it, so the two can never drift apart.
 import { isRecordingPathBusy } from './shared/utils/recordingPathBusy';
 import { useAuth } from './app/providers/AuthProvider';
+// spec: plr-d10 (I14, CMP-3) — a worker gets no तुलना; the one rule, read here for the switcher.
+import { useOptionalFarmContext } from './core/session/FarmContext';
+import { hiddenMainViewsFor } from './core/navigation/hiddenViews';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -87,6 +90,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     // FR-8: the 0-farm doors' "← मागे" goes back to the phone number — that is, signs out. The doors
     // ask "बाहेर पडायचं?" first (FirstFarmDoors); only "बाहेर पडा" there calls this.
     const { logout } = useAuth();
+    // The person's role on the CURRENT farm (`/me/context`), so the switcher leaves out what they may not open.
+    const hiddenViews = hiddenMainViewsFor(useOptionalFarmContext()?.currentFarm?.role);
     const app = useAgriLogApp({ initialCrops, currentFarmId, currentFarmName });
     useTemplateCatalogSync();
 
@@ -183,6 +188,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 // switcher only on the home tabs; a place (खरेदी, सेट-अप केंद्र…) has its own title
                 // and मागे, and used to show आजची कामे lit while the farmer was on खरेदी.
                 navCardsOnlyOnMain
+                // spec: plr-d10 (I14, CMP-3) — founder 2026-10-25: a worker gets no तुलना card.
+                hiddenViews={hiddenViews}
                 disabled={isRecordingPathBusy(voice.status)}
                 activeOperator={data.farmerProfile.operators.find(op => op.id === data.farmerProfile.activeOperatorId)}
                 farmContext={myFarms ? {
