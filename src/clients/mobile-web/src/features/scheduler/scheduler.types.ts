@@ -84,6 +84,14 @@ export interface PeriodicExpectation {
     frequencyMode: FrequencyMode;
     frequencyValue: number;
     notes?: string;
+    /**
+     * spec: plr-d10 (I15, V2-07) — the routine's OWN days, as the reference schedule wrote them (days from the
+     * schedule's day 0): it first falls on `startDay` and stops after `endDay`, as the server's
+     * PlanDerivationEngine does (e.g. a spray on days 18–35 of a stage that starts on day 16). Absent on old
+     * and hand-made schedules: the routine runs over its whole stage exactly as before (additive, P11).
+     */
+    startDay?: number;
+    endDay?: number;
 }
 
 export interface OneTimeExpectation {

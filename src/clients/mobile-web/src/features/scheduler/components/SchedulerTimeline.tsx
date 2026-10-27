@@ -1,404 +1,122 @@
-import React, { useMemo, useEffect, useState } from 'react';
-import { Plot, DailyLog } from '../../../types';
-import DayCard, { BlockStatus, DayCardProps } from './DayCard';
-import { calculateEffectiveDay } from '../../../shared/utils/timelineUtils';
-import { FileEdit, ArrowLeft } from 'lucide-react';
-import ScheduleDetailModal from './ScheduleDetailModal';
-import { getDateKey } from '../../../core/domain/services/DateKeyService';
-
-import {
-    getTemplateForCrop,
-    derivePlannedItemsForDay,
-    PlannedTaskDerived,
-    getOperationCategory,
-    getEffectiveStartDate
-} from '../../../features/scheduler/planning/ClientPlanEngine';
+/**
+ * The day-by-day grid of a plot's schedule (दिवसवार तक्ता): one row per day, four cells — सिंचन, खत, फवारणी,
+ * कामे — from 7 days back to the schedule's last day, grouped by stage, with "तुम्ही इथे आहात" on today.
+ * In a plot's first 10 days it starts at the land-preparation days before day 0 instead ("तयारी", the old
+ * grid's PREP rows), as the old grid did. A row's weather shows its numbers only: the provider's condition
+ * text is English, so it is not shown on this Marathi grid.
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I15; inventory S2, S6, S16). It used to:
+ *   - guess the crop from the template id's TEXT (`templateId.includes('grape')`…), which never matches the
+ *     server's GUID ids, so every real plot got a generic stand-in schedule — it now draws the page's model,
+ *     built from the plot's real template (resolved from the real crop);
+ *   - read only the FIRST log of a day — every log of the day now counts;
+ *   - never say MISSED — a past day whose expected part was not done now says राहिलं;
+ *   - speak English (Water / Nutri / Spray / Work, DAY, "We are here") — now Marathi.
+ * Tapping any cell opens that day's sheet (it opened an English per-cell popup that made up advice).
+ */
+import React, { useEffect, useMemo } from 'react';
+import { ArrowLeft } from 'lucide-react';
+import DayCard, { type BlockStatus, type DayCardProps, type DayCardWords } from './DayCard';
+import { addDays, dayDateLabel } from '../schedulePage/scheduleDates';
+import { SC } from '../schedulePage/scheduleCopy';
+import { PART_LABEL, type CellStatus, type DayCell, type ScheduleDay, type ScheduleModel } from '../schedulePage/scheduleModel';
 
 interface SchedulerTimelineProps {
-    plot: Plot;
-    logs: DailyLog[];
-    onEditLog: (date: string) => void;
-    onEditSchedule: () => void;
+    model: ScheduleModel;
+    onOpenDay: (dateKey: string) => void;
 }
 
-type TimelineCategory = 'IRRIGATION' | 'NUTRITION' | 'SPRAY' | 'ACTIVITY';
-type TimelineDetail = {
-    text: string;
-    items: PlannedTaskDerived[];
-    notes: string;
-} | null;
-type TimelineDay = {
-    dayNumber: number;
-    dayType: 'PREP' | 'CYCLE';
-    date: Date;
-    dateLabel: string;
-    isToday: boolean;
-    isPast: boolean;
-    stage: { name: string; note: string };
-    status: DayCardProps['status'];
-    notes: {
-        irrigation?: string;
-        nutrition?: string;
-        spray?: string;
-        activity?: string;
-        general: string;
-    };
-    details: {
-        irrigation: TimelineDetail;
-        nutrition: TimelineDetail;
-        spray: TimelineDetail;
-        activity: TimelineDetail;
-    };
-    dayLog?: DailyLog;
-    weatherContext?: DayCardProps['weatherContext'];
-};
-type TimelineGroup = {
-    stageShort: string;
-    stageNote: string;
-    days: TimelineDay[];
-};
-type DetailModalState = {
-    dateLabel: string;
-    dayNumber: number;
-    category: TimelineCategory;
-    status: BlockStatus;
-    note?: string;
-    baseline?: string;
-    logData?: DailyLog;
+const BLOCK: Readonly<Record<CellStatus, BlockStatus>> = {
+    done: 'DONE', extra: 'DONE', missed: 'MISSED', due: 'PENDING', planned: 'PLANNED', none: 'NOT_REQUIRED',
 };
 
-const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ plot, logs, onEditLog, onEditSchedule }) => {
+export const GRID_WORDS: DayCardWords = {
+    day: 'दिवस',
+    prep: SC.prep,
+    status: { DONE: SC.doneWord, MISSED: SC.missedWord, PENDING: SC.expectedWord, PLANNED: SC.expectedWord, NOT_REQUIRED: '—' },
+};
 
-    const instance = plot.schedule;
+/** The old grid started 15 days before day 0 while the plot was within its first 10 days. */
+const PREP_VIEW_UNTIL_DAY = 10;
 
-    // Generate Timeline Data using PlanEngine
-    const timelineData = useMemo(() => {
-        const startDate = getEffectiveStartDate(plot);
-        if (!startDate) return [];
+// The schedule's own task name when it has one, so two different sprays on a day read differently.
+const note = (cell: DayCell): string | undefined =>
+    cell.items.length > 0 ? cell.items.map(i => i.detail ?? i.title).join(', ') : cell.status === 'extra' ? SC.extraWord : undefined;
 
-        // Get Template via PlanEngine
-        // Assuming plot has a crop name or we need to look it up. 
-        // Plot doesn't always have crop name directly attached in valid format for lookup if it's not passed.
-        // But createInitialScheduleInstance in SchedulerPage passed 'activeCrop.name'.
-        // If plot.schedule exists, it has templateId. We might need to look up crop name from that or context.
-        // For now, let's assume SchedulerPage ensured plot.schedule is valid or we fallback.
-        // Accessing crop name is tricky if not in props. 
-        // HACK: SchedulerPage passes fully hydrated plot? No. 
-        // We will try to infer or use a prop if available. 
-        // Actually, internal `schedulerUtils` `getTemplateForCrop` works on string.
-        // `plot.schedule.templateId` usually contains crop code e.g. `tpl_tomato_v1`.
+function weatherOf(day: ScheduleDay): DayCardProps['weatherContext'] {
+    const log = day.logs.find(l => l.weatherStamp || l.weatherSnapshot?.current);
+    if (!log) return undefined;
+    if (log.weatherStamp) {
+        const ws = log.weatherStamp;
+        return { tempC: ws.tempC, conditionText: ws.conditionText, iconCode: ws.iconCode, humidity: ws.humidity, windKph: ws.windKph, cloudCover: ws.cloudCoverPct, isSevere: ws.precipMm > 15 || ws.windKph > 40 };
+    }
+    const ws = log.weatherSnapshot!.current;
+    return { tempC: ws.tempC, conditionText: ws.conditionText, iconCode: ws.iconCode, humidity: ws.humidity, windKph: ws.windKph, cloudCover: 0, isSevere: ws.precipMm > 15 || ws.windKph > 40 };
+}
 
-        // Let's rely on the fact that for now we are running single crop context usually.
-        // If strictly provided, better. But let's try to extract from templateId or fallback.
-        // The master implementation roadmap implies we should have this.
-        // Let's use a safe fallback or extraction.
-        let cropCode = 'generic';
-        if (instance?.templateId) {
-            if (instance.templateId.includes('tomato')) cropCode = 'Tomato';
-            else if (instance.templateId.includes('grape')) cropCode = 'Grape'; // Case sensitive in utils?
-            else if (instance.templateId.includes('pom')) cropCode = 'Pomegranate';
-            else if (instance.templateId.includes('onion')) cropCode = 'Onion';
-            else if (instance.templateId.includes('sugarcane')) cropCode = 'Sugarcane';
+const SchedulerTimeline: React.FC<SchedulerTimelineProps> = ({ model, onOpenDay }) => {
+    const groups = useMemo(() => {
+        const from = model.todayDay <= PREP_VIEW_UNTIL_DAY ? (model.days[0]?.key ?? model.todayKey) : addDays(model.todayKey, -7);
+        const out: { stageId: string | null; prep: boolean; name: string; days: ScheduleDay[] }[] = [];
+        for (const day of model.days) {
+            if (day.key < from) continue;
+            const last = out[out.length - 1];
+            if (last && last.stageId === day.stageId && last.prep === day.prep) last.days.push(day);
+            else out.push({ stageId: day.stageId, prep: day.prep, name: day.prep ? SC.prep : model.stages.find(s => s.id === day.stageId)?.name ?? '—', days: [day] });
         }
+        return out;
+    }, [model]);
 
-        const template = getTemplateForCrop(cropCode);
-        // Ideally we should pass 'crop' object to this component to be safe.
-        // But let's proceed with this heuristic for Phase 1 to avoid breaking Props interface everywhere yet.
-
-        const today = new Date();
-        const oneDay = 1000 * 60 * 60 * 24;
-
-        // Determine Current Day Index to optimize view
-        const diffTime = today.getTime() - startDate.getTime();
-        const currentDayIndex = Math.floor(diffTime / oneDay);
-
-        // Dynamic Start
-        const START_DAY = currentDayIndex > 10 ? currentDayIndex - 7 : -15;
-        const END_DAY = 240;
-
-        const days: TimelineDay[] = [];
-
-        // Helper to group PlanItems into UI Categories
-        const groupItems = (items: PlannedTaskDerived[]) => {
-            const groups = {
-                irrigation: [] as PlannedTaskDerived[],
-                nutrition: [] as PlannedTaskDerived[],
-                spray: [] as PlannedTaskDerived[],
-                activity: [] as PlannedTaskDerived[]
-            };
-
-            items.forEach(item => {
-                const cat = item.category;
-                if (cat === 'IRRIGATION') groups.irrigation.push(item);
-                else if (cat === 'FERTIGATION') groups.nutrition.push(item);
-                else if (cat === 'FOLIAR_SPRAY') groups.spray.push(item);
-                else groups.activity.push(item); // Catch-all: WEED, PRUNING, HARVEST, CULTURAL, OTHER
-            });
-
-            // Format for UI (text + details)
-            const format = (list: PlannedTaskDerived[]): TimelineDetail => {
-                if (list.length === 0) return null;
-                return {
-                    text: list.map(i => i.name).join(', '), // Summary text
-                    items: list, // Full details for modal
-                    notes: list.map(i => i.notes).filter(Boolean).join('; ')
-                };
-            };
-
-            return {
-                irrigation: format(groups.irrigation),
-                nutrition: format(groups.nutrition),
-                spray: format(groups.spray),
-                activity: format(groups.activity)
-            };
-        };
-
-
-        for (let d = START_DAY; d <= END_DAY; d++) {
-            const currentDate = new Date(startDate.getTime() + (d * oneDay));
-            const dateStr = getDateKey(currentDate);
-            const isToday = dateStr === getDateKey(today);
-            const isFuture = currentDate > today && !isToday;
-            const isPast = currentDate < today && !isToday;
-
-            // ADAPTIVE TIMELINE: 
-            // We use calculateEffectiveDay to determine which "Plan Day" fits this "Calendar Date"
-            // honoring the schedule shifts.
-            const { effectiveDay } = calculateEffectiveDay(plot, currentDate);
-
-            // 1. Get Plan from Engine
-            // PlanEngine expects dayNumber. If items strictly map to integers.
-            // effectiveDay is 1-based usually. PlanEngine logic (dayNumber) should match structure.
-            // Templates use 0-based or 1-based?
-            // schedulerUtils factories use dayStart: 0.. etc.
-            // derivedPlannedItemsForDay logic needs to align.
-            // Let's assume dayNumber passed to engine is the effective cycle age.
-            // For PREP days (negative), engine returns nothing usually unless template has prep stages (future).
-            const dailyPlan = derivePlannedItemsForDay(template, instance!, effectiveDay);
-
-            const plannedGroups = groupItems(dailyPlan.plannedItems);
-            const stageName = dailyPlan.stage?.name || 'Unknown Stage';
-            const stageNote = dailyPlan.stage?.description || ''; // Use description or leave blank
-
-            // 2. Get Actual Log
-            const dayLog = logs.find(l => l.context.selection.some(s => s.selectedPlotIds.includes(plot.id)) && l.date.split('T')[0] === dateStr);
-
-            // 3. Status Resolution
-            const resolveBlock = (category: 'irrigation' | 'nutrition' | 'spray' | 'activity'): { status: BlockStatus, note?: string, detail?: any } => {
-                const planGroup = plannedGroups[category];
-
-                let isDone = false;
-                if (dayLog) {
-                    if (category === 'irrigation' && dayLog.irrigation?.length > 0) isDone = true;
-                    if (category === 'nutrition' && dayLog.inputs?.some(i => i.type === 'fertilizer')) isDone = true;
-                    if (category === 'spray' && (dayLog.inputs?.some(i => i.type === 'pesticide' || i.type === 'fungicide') || dayLog.cropActivities?.some(a => a.title.toLowerCase().includes('spray')))) isDone = true;
-                    if (category === 'activity' && (dayLog.cropActivities?.length > 0 || dayLog.labour?.length > 0)) isDone = true;
-                }
-
-                if (isDone) return { status: 'DONE', note: planGroup?.text, detail: planGroup };
-
-                if (planGroup) {
-                    return { status: isFuture ? 'PLANNED' : 'PENDING', note: planGroup.text, detail: planGroup };
-                }
-
-                return { status: 'NOT_REQUIRED' };
-            };
-
-            const irrig = resolveBlock('irrigation');
-            const fert = resolveBlock('nutrition');
-            const spray = resolveBlock('spray');
-            const activ = resolveBlock('activity');
-
-            // Force Activity DONE catch-all
-            if (dayLog && (dayLog.cropActivities?.length > 0 || dayLog.labour?.length > 0) && activ.status !== 'DONE') {
-                activ.status = 'DONE';
-            }
-
-            // Weather Context Logic (Existing)
-            let weatherContext: DayCardProps['weatherContext'] | undefined;
-            if (dayLog) {
-                // ... existing logic ...
-                if (dayLog.weatherStamp) {
-                    const ws = dayLog.weatherStamp;
-                    weatherContext = {
-                        tempC: ws.tempC,
-                        conditionText: ws.conditionText,
-                        iconCode: ws.iconCode,
-                        humidity: ws.humidity,
-                        windKph: ws.windKph,
-                        cloudCover: ws.cloudCoverPct,
-                        isSevere: (ws.precipMm > 15 || (ws.windKph > 40))
-                    };
-                } else if (dayLog.weatherSnapshot?.current) {
-                    const ws = dayLog.weatherSnapshot.current;
-                    weatherContext = {
-                        tempC: ws.tempC,
-                        conditionText: ws.conditionText,
-                        iconCode: ws.iconCode,
-                        humidity: ws.humidity,
-                        windKph: ws.windKph,
-                        cloudCover: 0,
-                        isSevere: (ws.precipMm > 15 || (ws.windKph > 40))
-                    };
-                }
-            }
-
-            // Day Display Logic
-            const isPrep = d < 0;
-            const displayDayNumber = isPrep ? (d + 16) : (d + 1);
-            const dateLabelFormatted = currentDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-
-            days.push({
-                dayNumber: displayDayNumber,
-                dayType: isPrep ? 'PREP' : 'CYCLE',
-                date: currentDate,
-                dateLabel: dateLabelFormatted,
-                isToday,
-                isPast,
-                stage: { name: stageName, note: stageNote },
-                status: {
-                    irrigation: irrig.status,
-                    nutrition: fert.status,
-                    spray: spray.status,
-                    activity: activ.status
-                },
-                notes: {
-                    irrigation: irrig.note,
-                    nutrition: fert.note,
-                    spray: spray.note,
-                    activity: activ.note,
-                    general: ''
-                },
-                details: {
-                    irrigation: irrig.detail,
-                    nutrition: fert.detail,
-                    spray: spray.detail,
-                    activity: activ.detail
-                },
-                dayLog,
-                weatherContext
-            });
-        }
-
-        // Grouping by Stage
-        const groups: TimelineGroup[] = [];
-        let currentGroup: TimelineGroup | null = null;
-        for (const item of days) {
-            const stageName = item.stage.name;
-            if (!currentGroup || currentGroup.stageShort !== stageName) {
-                currentGroup = { stageShort: stageName, stageNote: item.stage.note, days: [] };
-                groups.push(currentGroup);
-            }
-            currentGroup.days.push(item);
-        }
-        return groups;
-
-    }, [plot.startDate, plot.schedule, logs, plot.id]);
-
-    // Modal State
-    const [detailModal, setDetailModal] = useState<DetailModalState | null>(null);
-
-    const handleTapBlock = (day: TimelineDay, category: TimelineCategory) => {
-        const catKey = category.toLowerCase() as 'irrigation' | 'nutrition' | 'spray' | 'activity';
-        const detail = day.details[catKey];
-        const status = day.status[catKey];
-
-        setDetailModal({
-            dateLabel: day.dateLabel,
-            dayNumber: day.dayNumber,
-            category,
-            status,
-            note: detail?.text,      // Main text
-            baseline: detail?.notes, // Subtext -> Notes
-            logData: day.dayLog
-        });
-    };
-
-    // Auto-scroll to Today
     useEffect(() => {
-        setTimeout(() => {
-            const todayEl = document.getElementById('scheduler-today-row');
-            if (todayEl) {
-                todayEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }, 500);
-    }, [instance]);
-
-    if (!instance) return <div className="p-8 text-center text-stone-400">No schedule active.</div>;
+        const t = setTimeout(() => document.getElementById('scheduler-today-row')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 400);
+        return () => clearTimeout(t);
+    }, [model.todayKey]);
 
     return (
-        <div className="space-y-8 relative">
-            <ScheduleDetailModal
-                isOpen={!!detailModal}
-                onClose={() => setDetailModal(null)}
-                data={detailModal}
-            />
-
-            <div className="space-y-0 pb-32">
-                {timelineData.map((group, gIdx) => (
-                    <div key={gIdx} className="relative mb-0">
-                        {/* STAGE HEADER (Sticky) */}
-                        <div className="sticky top-14 z-20 bg-[#FDFBF7] py-2 border-b-2 border-stone-800 flex flex-col shadow-sm gap-1">
-                            <div className="flex items-center justify-between px-2">
-                                <h3 className="text-sm font-black text-stone-800 uppercase tracking-widest font-mono">
-                                    {group.stageShort}
-                                </h3>
-                                <div className="text-[10px] font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full font-mono">
-                                    DAYS {group.days[0].dayNumber} - {group.days[group.days.length - 1].dayNumber}
-                                </div>
-                            </div>
-                            {/* Generic Note */}
-                            {group.stageNote && (
-                                <div className="px-2">
-                                    <p className="text-[10px] text-stone-600 font-medium bg-yellow-50/50 border-l-2 border-yellow-400 pl-2 py-1 italic leading-tight rounded-r">
-                                        <span className="font-bold text-yellow-600 not-italic mr-1">Note:</span>
-                                        {group.stageNote}
-                                    </p>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* COLUMN HEADERS */}
-                        <div className="flex border-b border-stone-300 bg-stone-50 text-[9px] font-bold text-stone-400 uppercase tracking-wider py-1.5 sticky top-[102px] z-10 shadow-sm">
-                            <div className="w-14 text-center border-r border-stone-200">Day</div>
-                            <div className="flex-1 grid grid-cols-4 divide-x divide-stone-200">
-                                <div className="text-center text-blue-400">Water</div>
-                                <div className="text-center text-emerald-400">Nutri</div>
-                                <div className="text-center text-rose-400">Spray</div>
-                                <div className="text-center text-amber-400">Work</div>
-                            </div>
-                        </div>
-
-                        {/* ROWS */}
-                        <div className="border-l-4 border-l-stone-800 ml-0.5">
-                            {group.days.map(day => (
-                                <div key={day.dayNumber} id={day.isToday ? 'scheduler-today-row' : undefined} className="relative">
-                                    {/* TODAY INDICATOR (Floating Right) */}
-                                    {day.isToday && (
-                                        <div className="absolute right-1 top-1/2 -translate-y-1/2 z-30 flex items-center gap-1 bg-white/90 px-2 py-1 rounded-full shadow-md border border-emerald-100">
-                                            <span className="text-[9px] font-black text-emerald-600 uppercase tracking-wide">We are here</span>
-                                            <ArrowLeft size={16} strokeWidth={3} className="text-emerald-500 animate-pulse" />
-                                        </div>
-                                    )}
-                                    <DayCard
-                                        dayNumber={day.dayNumber}
-                                        dayType={day.dayType}
-                                        dateLabel={day.dateLabel}
-                                        isToday={day.isToday}
-                                        isPast={day.isPast}
-                                        status={day.status}
-                                        notes={day.notes}
-                                        onTapBlock={(category) => handleTapBlock(day, category)}
-                                        weatherContext={day.weatherContext}
-                                    />
-                                </div>
-                            ))}
+        <div className="space-y-6 pb-24" data-testid="schedule-grid">
+            {groups.map(group => (
+                <div key={`${group.stageId}-${group.days[0].key}`} className="relative">
+                    <div className="sticky top-[61px] z-10 flex items-center justify-between gap-2 border-b-2 border-stone-800 bg-[#FDFBF7] px-2 py-2">
+                        <h3 className="m-0 text-[16px] font-black text-stone-800">{group.name}</h3>
+                        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[13px] font-bold text-stone-600">
+                            {SC.dayN(group.days[0].day)} – {group.days[group.days.length - 1].day}
+                        </span>
+                    </div>
+                    <div className="flex border-b border-stone-300 bg-stone-50 py-1.5 text-[12px] font-extrabold text-stone-600">
+                        <div className="w-14 border-r border-stone-200 text-center">{GRID_WORDS.day}</div>
+                        <div className="grid flex-1 grid-cols-4 divide-x divide-stone-200 text-center">
+                            <div className="text-blue-700">{PART_LABEL.irrigation}</div>
+                            <div className="text-emerald-700">{PART_LABEL.nutrition}</div>
+                            <div className="text-rose-700">{PART_LABEL.spray}</div>
+                            <div className="text-amber-700">{PART_LABEL.work}</div>
                         </div>
                     </div>
-                ))}
-            </div>
-            {/* Scroll Padding */}
-            <div className="h-48" />
+                    <div className="ml-0.5 border-l-4 border-l-stone-800">
+                        {group.days.map(day => (
+                            <div key={day.key} id={day.when === 'today' ? 'scheduler-today-row' : undefined} className="relative" data-testid={`grid-${day.key}`}>
+                                {day.when === 'today' && (
+                                    <div className="absolute right-1 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full border border-emerald-100 bg-white/90 px-2 py-1 shadow-md">
+                                        <span className="text-[12px] font-black text-emerald-700">{SC.here}</span>
+                                        <ArrowLeft size={16} strokeWidth={3} className="text-emerald-500" aria-hidden="true" />
+                                    </div>
+                                )}
+                                <DayCard
+                                    dayNumber={day.day}
+                                    dateLabel={dayDateLabel(day.key)}
+                                    isToday={day.when === 'today'}
+                                    isPast={day.when === 'past'}
+                                    dayType={day.prep ? 'PREP' : 'CYCLE'}
+                                    status={{ irrigation: BLOCK[day.cells.irrigation.status], nutrition: BLOCK[day.cells.nutrition.status], spray: BLOCK[day.cells.spray.status], activity: BLOCK[day.cells.work.status] }}
+                                    notes={{ irrigation: note(day.cells.irrigation), nutrition: note(day.cells.nutrition), spray: note(day.cells.spray), activity: note(day.cells.work) }}
+                                    onTapBlock={() => onOpenDay(day.key)}
+                                    weatherContext={weatherOf(day)}
+                                    words={GRID_WORDS}
+                                />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 };
