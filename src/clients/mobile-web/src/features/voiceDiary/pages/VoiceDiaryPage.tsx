@@ -12,9 +12,16 @@
 // Layout follows Wave 1.A design refs Screen 1: sticky glass header,
 // state-aware RetentionBanner, then calendar + day list. EmptyState
 // renders only when consent is OFF AND the local Dexie has no rows.
+//
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I17) — the setup hub's
+// "आवाज नोंदी" place: the shared title bar with one big मागे and the same name
+// as the hub row (H19, V-2); the calendar pages back month by month to the first
+// recording (V-3); and the "keep my recordings" switch sits at the foot of this
+// page (PLR-D9 O8 / preview HubPages RecordingsPage), so the banner's "चालू करा"
+// opens that switch's own turn-on confirmation instead of the leftover Settings page.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import {
     getDatabase,
@@ -41,10 +48,11 @@ import RetentionBanner from '../components/RetentionBanner';
 import EmptyStatePrompt from '../components/EmptyStatePrompt';
 import type { UnifiedClip } from '../components/ClipPlayerCard';
 import { useFullHistoryJournalConsent } from '../hooks/useFullHistoryJournalConsent';
+import { VoiceRetainedConsentToggleView } from '../../consent/VoiceRetainedConsentToggle';
+import { PageBar } from '../../../shared/components/ui/placeUi';
 
 interface VoiceDiaryPageProps {
     onBack: () => void;
-    onOpenSettings: () => void;
     /** Test seam — lets the spec inject a deterministic locale. */
     forceLocale?: VoiceDiaryLocale;
 }
@@ -62,7 +70,6 @@ async function readLocalClips(): Promise<VoiceClipCacheRecord[]> {
 
 const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     onBack,
-    onOpenSettings,
     forceLocale,
 }) => {
     const { language } = useLanguage();
@@ -74,7 +81,19 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     const [loading, setLoading] = useState(true);
     const [consentSince, setConsentSince] = useState<string | null>(null);
 
-    const { granted: consentGranted, loaded: consentLoaded, reload: reloadConsent } = useFullHistoryJournalConsent();
+    const consent = useFullHistoryJournalConsent();
+    const { granted: consentGranted, loaded: consentLoaded, reload: reloadConsent } = consent;
+    // Once he picks a day (or a month) himself, the page stops moving his choice.
+    const pickedByHim = useRef(false);
+    const pickDate = useCallback((dateKey: string) => {
+        pickedByHim.current = true;
+        setSelectedDateKey(dateKey);
+    }, []);
+    // The banner's and the empty page's "चालू करा": it asks to turn saving ON exactly as the switch at
+    // the foot of this page does (its own first-grant confirmation opens; nothing is saved until he
+    // agrees). It used to only scroll to the switch, so "turn on" turned nothing on.
+    const [turnOnRequest, setTurnOnRequest] = useState(0);
+    const requestTurnOn = useCallback(() => setTurnOnRequest(n => n + 1), []);
 
     const loadClips = useCallback(async () => {
         setLoading(true);
@@ -253,9 +272,10 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     }, [unifiedClips, selectedDateKey]);
 
     // If the user has clips but none on today, advance the calendar to the
-    // most recent day with clips (mirrors V1 behaviour).
+    // most recent day with clips (mirrors V1 behaviour) — only until he picks a
+    // day himself: an older month, or a day with nothing on it, is his choice to see.
     useEffect(() => {
-        if (unifiedClips.length === 0) return;
+        if (unifiedClips.length === 0 || pickedByHim.current) return;
         const hasSelection = unifiedClips.some(
             clip => getDateKey(clip.recordedAtUtc) === selectedDateKey,
         );
@@ -271,50 +291,37 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
 
     return (
         <div className="space-y-5 pb-24" data-testid="voice-diary-page">
-            <div className="sticky top-[57px] z-30 -mx-1 border-b border-stone-100 bg-stone-50/95 px-1 py-3 backdrop-blur">
-                <div className="flex items-center justify-between gap-3">
-                    <button
-                        type="button"
-                        onClick={onBack}
-                        className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-stone-700 shadow-sm active:bg-stone-100"
-                        aria-label={tVoiceDiary(locale, 'page.back')}
-                    >
-                        <ArrowLeft size={20} />
-                    </button>
-                    <div className="min-w-0 flex-1">
-                        <h1 className="truncate font-['Noto_Serif_Devanagari'] font-bold text-xl text-stone-900">
-                            {tVoiceDiary(locale, 'page.title')}
-                        </h1>
-                        <p className="truncate font-['DM_Sans'] text-xs font-bold text-stone-500">
-                            {tVoiceDiary(locale, 'page.subtitle')}
-                        </p>
-                    </div>
+            <PageBar
+                title={tVoiceDiary(locale, 'page.title')}
+                onBack={onBack}
+                right={(
                     <button
                         type="button"
                         onClick={() => void loadClips()}
-                        className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-emerald-700 shadow-sm active:bg-emerald-50"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-emerald-700 shadow-sm ring-1 ring-stone-200 active:bg-emerald-50"
                         aria-label={tVoiceDiary(locale, 'page.refresh')}
                         data-testid="voice-diary-refresh"
                     >
                         <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
                     </button>
-                </div>
-            </div>
+                )}
+            />
 
             <RetentionBanner
                 locale={locale}
                 granted={consentGranted}
-                onOpenSettings={!consentGranted ? onOpenSettings : undefined}
+                onOpenSettings={!consentGranted ? requestTurnOn : undefined}
             />
 
             {showEmptyState ? (
-                <EmptyStatePrompt locale={locale} onOpenSettings={onOpenSettings} />
+                <EmptyStatePrompt locale={locale} onOpenSettings={requestTurnOn} />
             ) : (
                 <>
                     <CalendarWithDots
                         countsByDate={countsByDate}
                         selectedDateKey={selectedDateKey}
-                        onSelectDate={setSelectedDateKey}
+                        onSelectDate={pickDate}
+                        locale={locale}
                     />
                     <DayClipList
                         locale={locale}
@@ -323,6 +330,10 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                     />
                 </>
             )}
+
+            {/* "keep my recordings" lives on this page (the same consent as on गोपनीयता व संमती). It is
+                drawn from THIS page's consent answer, so the banner above follows a change at once. */}
+            <VoiceRetainedConsentToggleView locale={locale} consent={consent} turnOnRequest={turnOnRequest} />
         </div>
     );
 };

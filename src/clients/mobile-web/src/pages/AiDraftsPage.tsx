@@ -14,13 +14,14 @@
  * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Mic, Trash2 } from 'lucide-react';
+import { Mic, Trash2 } from 'lucide-react';
+import { PageBar } from '../shared/components/ui/placeUi';
+import { useBackDismiss } from '../core/navigation/useBackDismiss';
 import { useAppDataState, useAppCommandsState, useAppLogState, useAppViewHelpers, useAppVoiceState } from '../app/context/AppFeatureContexts';
 import { getDateKey } from '../core/domain/services/DateKeyService';
 import type { TodayCounts } from '../domain/types/farm.types';
 import ManualEntry from '../features/logs/components/ManualEntry';
 import type { ManualEntryProps } from '../features/logs/components/manual-entry/types';
-import { formatDisplayDateTime } from '../shared/utils/displayTime';
 import {
     listUnreviewedAiResults,
     markAiResultReviewed,
@@ -29,52 +30,36 @@ import {
     type UnreviewedAiResult,
     type AiDraftForReview,
 } from '../infrastructure/sync/PendingAiResultsReader';
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I17, H19 + PLR-D9 T1-T3) — one title bar with one
+// big मागे (it had two English "Back" buttons), and every line in plain Marathi (it was English). The
+// setup hub shows this place's row only while something waits. The words live in one module.
+//
+// IMPORTANT 2 (fix round 1) — the discard confirm is operation-correct, not hardcoded to "voice note".
+// NEW (fix round 3) — the row's date comes from `resolveRecordedInstant(job)` (the same capture-preferring
+// instant `buildAiDraftForReview` dates the saved log from), never `job.result.receivedAtUtc` (the DRAIN
+// instant): one note, one date, on one screen.
+import {
+    DRAFTS_CANNOT_OPEN,
+    DRAFTS_DISCARD,
+    DRAFTS_EMPTY_LINE,
+    DRAFTS_EMPTY_TITLE,
+    DRAFTS_LINE,
+    DRAFTS_LOADING,
+    DRAFTS_NOT_OPENABLE,
+    DRAFTS_NOT_SAVED,
+    DRAFTS_OPEN,
+    DRAFTS_TITLE,
+    discardConfirmMessage,
+    formatRecordedAt,
+    previewLabel,
+    savedWithWarningMessage,
+} from './aiDraftsCopy';
 
 interface AiDraftsPageProps {
     onBack: () => void;
 }
 
 type ReviewingDraft = { job: UnreviewedAiResult } & AiDraftForReview;
-
-/** English-only placeholder copy (Global Constraint: never compose new Marathi). */
-function operationNoun(job: UnreviewedAiResult): string {
-    if (job.operationType === 'receipt_extract') return 'receipt scan';
-    if (job.operationType === 'patti_extract') return 'patti scan';
-    return 'voice note';
-}
-
-/** IMPORTANT 2 (fix round 1) — operation-correct, not hardcoded to "voice note". */
-function discardConfirmMessage(job: UnreviewedAiResult): string {
-    const destination = job.operationType === 'voice_parse' ? 'log' : 'records';
-    return `Discard this ${operationNoun(job)}? It will not be added to your ${destination}.`;
-}
-
-function previewLabel(job: UnreviewedAiResult): string {
-    if (job.operationType !== 'voice_parse') {
-        return job.operationType === 'receipt_extract' ? 'Receipt scan' : 'Patti scan';
-    }
-
-    const payload = job.result.payload as { parsedLog?: Record<string, unknown> } | undefined;
-    const parsedLog = payload?.parsedLog;
-    const summary = parsedLog && typeof parsedLog.summary === 'string' ? parsedLog.summary : undefined;
-    const transcript = parsedLog && typeof parsedLog.fullTranscript === 'string' ? parsedLog.fullTranscript : undefined;
-    return summary || transcript || job.context.textTranscript || 'Voice note';
-}
-
-// NEW (fix round 3) — renamed from `formatReceivedAt`, and its caller below
-// switched from `job.result.receivedAtUtc` (the DRAIN instant) to
-// `resolveRecordedInstant(job)` (the same capture-preferring instant
-// `buildAiDraftForReview` dates the saved log from). Before this, an offline
-// text note drained the morning after it was typed showed one day HERE and
-// saved under a DIFFERENT day once reviewed — the same note, two dates, on
-// one screen.
-function formatRecordedAt(iso: string): string {
-    try {
-        return formatDisplayDateTime(iso, iso);
-    } catch {
-        return iso;
-    }
-}
 
 const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     const { crops, farmerProfile, ledgerDefaults } = useAppDataState();
@@ -143,11 +128,13 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
         restoreLogScope();
         setReviewing(null);
     }, [restoreLogScope]);
+    // plr-d10 (I17): the phone's own Back closes the review first, exactly like the title bar's मागे.
+    useBackDismiss(reviewing !== null, closeReview);
 
     const handleReview = (job: UnreviewedAiResult) => {
         const built = buildAiDraftForReview(job, crops);
         if (!built) {
-            window.alert('This draft cannot be opened for review here yet.');
+            window.alert(DRAFTS_CANNOT_OPEN);
             return;
         }
 
@@ -225,7 +212,7 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
             // Step 4 of the brief is "only after the farmer acts", and a
             // no-op is not an act. Stay on the review screen so the note is
             // not lost.
-            window.alert('Could not save this log. Please try again.');
+            window.alert(DRAFTS_NOT_SAVED);
             return;
         }
 
@@ -263,9 +250,9 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
             // swap one false claim for another. `buildEditSavedMessage`'s zero
             // branch is the precedent: no claim beats a claim with no use.
             //
-            // English placeholder only (Global Constraint): no Marathi is
-            // composed here, and no existing Marathi string says this.
-            window.alert('Saved on your phone. Something after the save failed, and it has not reached your farm records.');
+            // plr-d10 (I17): now in Marathi, same three claims in the same
+            // order — the approved phone claim first (`onPhoneClaim`).
+            window.alert(savedWithWarningMessage());
         }
 
         // outcome is 'saved' or 'saved_with_warning' — either way the record
@@ -300,14 +287,9 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
         });
 
         return (
-            <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
-                <button
-                    type="button"
-                    onClick={closeReview}
-                    className="mb-4 flex items-center gap-1.5 rounded-full bg-white py-2 pl-2.5 pr-3.5 text-[13px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-100"
-                >
-                    <ArrowLeft size={16} /> Back to Drafts
-                </button>
+            <div className="pb-24 min-h-screen" data-testid="ai-drafts-review">
+                {/* मागे closes the review and returns to the list (restoring the log scope, as before). */}
+                <PageBar title={DRAFTS_TITLE} onBack={closeReview} />
                 <ManualEntry
                     context={reviewing.context}
                     crops={crops}
@@ -325,30 +307,19 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
     }
 
     return (
-        <div className="max-w-4xl mx-auto px-4 py-6 pb-24 min-h-screen bg-slate-50">
-            <div className="mb-6 flex items-center gap-3">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="flex items-center gap-1.5 rounded-full bg-white py-2 pl-2.5 pr-3.5 text-[13px] font-bold text-slate-700 shadow-sm ring-1 ring-slate-100"
-                >
-                    <ArrowLeft size={16} /> Back
-                </button>
-                <div>
-                    <h1 className="text-2xl font-black text-slate-800 tracking-tight">AI Drafts</h1>
-                    <p className="text-slate-500 font-medium text-sm">Voice notes recorded offline, waiting for your review</p>
-                </div>
-            </div>
+        <div className="pb-24 min-h-screen" data-testid="ai-drafts-list">
+            <PageBar title={DRAFTS_TITLE} onBack={onBack} />
+            <p className="mb-4 text-sm font-semibold text-stone-600">{DRAFTS_LINE}</p>
 
-            {loading && <p className="text-slate-400 text-sm">Loading...</p>}
+            {loading && <p className="text-slate-400 text-sm" data-testid="ai-drafts-loading">{DRAFTS_LOADING}</p>}
 
             {!loading && drafts.length === 0 && (
-                <div className="rounded-3xl border border-dashed border-slate-200 p-12 text-center bg-white/50">
+                <div className="rounded-3xl border border-dashed border-slate-200 p-12 text-center bg-white/50" data-testid="ai-drafts-empty">
                     <div className="w-16 h-16 bg-emerald-50 text-emerald-300 rounded-full flex items-center justify-center mx-auto mb-4">
                         <Mic size={32} />
                     </div>
-                    <h3 className="font-bold text-slate-400 text-lg">All caught up!</h3>
-                    <p className="text-sm text-slate-300 mt-1">No offline notes waiting for review.</p>
+                    <h3 className="font-bold text-slate-500 text-lg">{DRAFTS_EMPTY_TITLE}</h3>
+                    <p className="text-sm text-slate-500 mt-1">{DRAFTS_EMPTY_LINE}</p>
                 </div>
             )}
 
@@ -369,7 +340,7 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
                                         plainly that review isn't built for this yet, and that
                                         the row is kept, not lost, if the farmer does nothing. */}
                                     {!reviewable && (
-                                        <p className="text-xs text-amber-600 mt-1">Review isn't available for this yet. You can discard it, or leave it here.</p>
+                                        <p className="text-xs text-amber-700 mt-1" data-testid={`ai-draft-not-openable-${job.id}`}>{DRAFTS_NOT_OPENABLE}</p>
                                     )}
                                 </div>
                             </div>
@@ -378,9 +349,10 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
                                     <button
                                         type="button"
                                         onClick={() => handleReview(job)}
-                                        className="rounded-full bg-emerald-600 text-white px-3 py-1.5 text-xs font-bold"
+                                        className="min-h-[44px] rounded-full bg-emerald-600 text-white px-4 py-1.5 text-sm font-bold"
+                                        data-testid={`ai-draft-open-${job.id}`}
                                     >
-                                        Review
+                                        {DRAFTS_OPEN}
                                     </button>
                                 )}
                                 <button
@@ -388,7 +360,9 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
                                     onClick={() => handleDiscard(job)}
                                     disabled={busyJobId === job.id}
                                     className="p-2 rounded-lg bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-600 disabled:opacity-50"
-                                    title="Discard"
+                                    title={DRAFTS_DISCARD}
+                                    aria-label={DRAFTS_DISCARD}
+                                    data-testid={`ai-draft-discard-${job.id}`}
                                 >
                                     <Trash2 size={16} />
                                 </button>

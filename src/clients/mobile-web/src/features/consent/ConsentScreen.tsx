@@ -26,16 +26,22 @@ import ConsentAgreement from './ConsentAgreement';
 import ConsentToggle, { type ConsentToggleId } from './ConsentToggle';
 import RevokeAllButton from './RevokeAllButton';
 import { APP_VERSION } from '../../infrastructure/api/transport';
+import { PageBar } from '../../shared/components/ui/placeUi';
 
 interface Props {
     onBack?: () => void;
     /** Test seam — lets the spec inject a deterministic locale. */
     forceLocale?: ConsentLocale;
+    /**
+     * spec: plr-d10 (I17) — drawn inside the one "गोपनीयता व संमती" page, which owns the single title
+     * bar: no title bar of its own here. Only the look changes; every consent word stays as it is.
+     */
+    embedded?: boolean;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
-const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale }) => {
+const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale, embedded = false }) => {
     const { language } = useLanguage();
     const locale: ConsentLocale = forceLocale ?? toConsentLocale(language);
 
@@ -130,24 +136,15 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale }) => {
 
     return (
         <div
-            className="space-y-4 pb-24 px-4"
+            className={`space-y-4 ${embedded ? '' : 'pb-24'}`}
             data-testid="consent-screen"
             // The locale attribute makes the rendered language easy to read off a
             // Sentry/Replay snapshot.
             data-consent-locale={locale}
         >
-            <div className="pt-4">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="text-sm font-bold text-stone-500 hover:text-stone-700 mb-3"
-                    data-testid="consent-back"
-                >
-                    ←
-                </button>
-                <h1 className="text-2xl font-display font-black text-stone-900">{title}</h1>
-                <p className="text-sm text-stone-600 mt-2 leading-relaxed">{intro}</p>
-            </div>
+            {/* spec: plr-d10 (I17, H19) — the one title bar with one big मागे (was a bare "←"). */}
+            {!embedded && <PageBar title={title} onBack={onBack} />}
+            <p className="text-sm text-stone-600 leading-relaxed">{intro}</p>
 
             {/* Voice narration placeholder — populated by a follow-up PR
                 (counsel-approved script). Keeps layout stable. */}

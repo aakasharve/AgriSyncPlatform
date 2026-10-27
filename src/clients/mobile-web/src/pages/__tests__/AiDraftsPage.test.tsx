@@ -115,6 +115,12 @@ vi.mock('../../features/logs/components/ManualEntry', () => ({
 
 import AiDraftsPage from '../AiDraftsPage';
 
+// plr-d10 (I17, PLR-D9 T1-T3): the page speaks plain Marathi now. The button that opens a note in the
+// save form ("Review" before) says उघडा; every honesty rule below is unchanged, only its language.
+const OPEN = 'उघडा';
+/** The approved phone claim (`sync.onPhone`, mr) — the same string the header chip uses. */
+const PHONE_CLAIM_MR = 'लक्षात ठेवलं ✓';
+
 const MOCK_CROPS: CropProfile[] = [{
     id: 'crop-grapes',
     name: 'Grapes',
@@ -147,9 +153,9 @@ const BUILT_DRAFT: AiDraftForReview = {
 async function openReview() {
     const rendered = render(<AiDraftsPage onBack={vi.fn()} />);
     await waitFor(() => {
-        expect(screen.getByRole('button', { name: /review/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument();
     });
-    fireEvent.click(screen.getByRole('button', { name: /review/i }));
+    fireEvent.click(screen.getByRole('button', { name: OPEN }));
     await waitFor(() => {
         expect(screen.getByTestId('manual-entry-stub')).toBeInTheDocument();
     });
@@ -207,7 +213,9 @@ describe('AiDraftsPage — the app-level scope this page overwrites is always re
             selectedCropIds: ['crop-grapes'], selectedPlotIds: ['plot-a'], mode: 'single', applyPolicy: 'broadcast',
         });
 
-        fireEvent.click(screen.getByText('Back to Drafts'));
+        // plr-d10 (I17, H19): the one title bar's मागे closes the review (it was an English "Back to Drafts").
+        expect(screen.getByTestId('page-back')).toHaveTextContent('मागे');
+        fireEvent.click(screen.getByTestId('page-back'));
 
         await waitFor(() => {
             expect(screen.queryByTestId('manual-entry-stub')).not.toBeInTheDocument();
@@ -298,7 +306,8 @@ describe('AiDraftsPage — handleManualSubmit\'s 3-way outcome is read correctly
         });
         expect(alertSpy).toHaveBeenCalledTimes(1);
         const [alertMessage] = alertSpy.mock.calls[0] as [string];
-        expect(alertMessage.toLowerCase()).not.toContain('try again');
+        // "पुन्हा प्रयत्न करा" is "try again"
+        expect(alertMessage).not.toMatch(/पुन्हा|प्रयत्न/);
         alertSpy.mockRestore();
     });
 });
@@ -339,21 +348,25 @@ describe('AiDraftsPage — the saved_with_warning sentence tells the truth (N1, 
         return message;
     };
 
+    // plr-d10 (I17): the same six rules, asserted on the Marathi sentence.
     it('leads with the phone claim — the record is asserted SAFE before any bad news', async () => {
         const message = await captureAlert();
         // `startsWith`, not `contains` — same rule every caller-side test of
         // `saveToastMessages` holds. Reassurance last is how duplicates start.
-        expect(message.startsWith('Saved on your phone.')).toBe(true);
+        expect(message.startsWith(PHONE_CLAIM_MR)).toBe(true);
+        // and it is Marathi only: no English sentence left on this path
+        expect(message).not.toMatch(/[A-Za-z]/);
     });
 
     it('states positively that the record is NOT in the farm records', async () => {
         const message = await captureAlert();
-        expect(message).toContain('has not reached your farm records');
+        // "has not reached the farm records" — present perfect, the approved "शेतनोंदी" word
+        expect(message).toContain('ही नोंद शेतनोंदीत पोचलेली नाही');
     });
 
     it('says a step after the save failed — the farmer is told something went wrong', async () => {
         const message = await captureAlert();
-        expect(message).toContain('Something after the save failed');
+        expect(message).toContain('जतन झाल्यानंतरची एक पायरी चुकली');
     });
 
     it('promises no later send: no "not yet", no "will send", no "automatically"', async () => {
@@ -361,17 +374,19 @@ describe('AiDraftsPage — the saved_with_warning sentence tells the truth (N1, 
         // The exact shape `saveToastMessages.ts` forbids in writing. A promise
         // of a retry that no code path can keep is the defect this phase
         // exists to remove, and it is what round 3 shipped here.
-        expect(message).not.toMatch(/not yet|will send|will be sent|sends? later|automatically|shortly|soon/i);
+        // अजून = yet · जाईल / होईल / पाठव… = will (be) sent · आपोआप = automatically · लवकरच / थोड्या वेळाने = soon
+        expect(message).not.toMatch(/अजून|जाईल|होईल|पाठव|आपोआप|लवकरच|थोड्या वेळाने|नंतर पाठ/);
     });
 
     it('never blames connectivity — the documented trigger is payload validation, not being offline', async () => {
         const message = await captureAlert();
-        expect(message).not.toMatch(/offline|online|internet|connection|network|signal/i);
+        expect(message).not.toMatch(/नेट|इंटरनेट|ऑनलाइन|ऑफलाइन|कनेक्शन|सिग्नल|रेंज/);
     });
 
     it('never asks for a retry — the record exists and a retry would mint a duplicate', async () => {
         const message = await captureAlert();
-        expect(message).not.toMatch(/try again|retry|record it again|save it again/i);
+        // पुन्हा / परत = again · प्रयत्न = try
+        expect(message).not.toMatch(/पुन्हा|परत|प्रयत्न/);
     });
 });
 
@@ -425,10 +440,13 @@ describe('AiDraftsPage — non-reviewable rows (IMPORTANT 2)', () => {
 
         render(<AiDraftsPage onBack={vi.fn()} />);
 
-        await waitFor(() => {
-            expect(screen.getByText(/review isn't available/i)).toBeInTheDocument();
-        });
-        expect(screen.queryByRole('button', { name: /^review$/i })).not.toBeInTheDocument();
+        // "this photo cannot be opened here yet — discard it, or leave it here" (kept, not lost)
+        expect(await screen.findByTestId('ai-draft-not-openable-9')).toHaveTextContent(
+            'हा फोटो इथे अजून उघडता येत नाही. काढून टाका, किंवा इथेच राहू द्या.',
+        );
+        expect(screen.queryByRole('button', { name: OPEN })).not.toBeInTheDocument();
+        // the row names what it is: a bill photo, not a voice note
+        expect(screen.getByTestId('ai-drafts-list')).toHaveTextContent('बिलाचा फोटो');
     });
 
     it('uses operation-correct discard copy for a receipt scan, not "voice note"', async () => {
@@ -443,14 +461,26 @@ describe('AiDraftsPage — non-reviewable rows (IMPORTANT 2)', () => {
 
         render(<AiDraftsPage onBack={vi.fn()} />);
         await waitFor(() => {
-            expect(screen.getByTitle('Discard')).toBeInTheDocument();
+            expect(screen.getByTitle('काढून टाका')).toBeInTheDocument();
         });
-        fireEvent.click(screen.getByTitle('Discard'));
+        fireEvent.click(screen.getByTitle('काढून टाका'));
 
         expect(confirmSpy).toHaveBeenCalledTimes(1);
         const [confirmMessage] = confirmSpy.mock.calls[0];
-        expect(confirmMessage).toContain('receipt scan');
-        expect(confirmMessage).not.toContain('voice note');
+        // "discard this bill photo? it will not go into the farm records" — masculine, for a photo
+        expect(confirmMessage).toBe('हा बिलाचा फोटो काढून टाकायचा? तो शेतनोंदीत जाणार नाही.');
+        expect(confirmMessage).not.toContain('आवाज नोंद');
+        // declined: nothing was marked
+        expect(mockMarkAiResultReviewed).not.toHaveBeenCalled();
+        confirmSpy.mockRestore();
+    });
+
+    it('a voice note\'s discard confirm names a voice note (feminine), and a yes marks it reviewed', async () => {
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        render(<AiDraftsPage onBack={vi.fn()} />);
+        fireEvent.click(await screen.findByTitle('काढून टाका'));
+        expect(confirmSpy.mock.calls[0][0]).toBe('ही आवाज नोंद काढून टाकायची? ती शेतनोंदीत जाणार नाही.');
+        await waitFor(() => expect(mockMarkAiResultReviewed).toHaveBeenCalledWith(7));
         confirmSpy.mockRestore();
     });
 });
@@ -460,7 +490,7 @@ describe('AiDraftsPage — the list row and the review screen agree on the note\
         render(<AiDraftsPage onBack={vi.fn()} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /review/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument();
         });
 
         expect(mockResolveRecordedInstant).toHaveBeenCalledWith(DRAFT_JOB);
@@ -468,7 +498,75 @@ describe('AiDraftsPage — the list row and the review screen agree on the note\
         // deliberately a DIFFERENT day than DRAFT_JOB.result.receivedAtUtc
         // ('2026-08-14T19:00:00.000Z'). If the list ever regresses to reading
         // receivedAtUtc directly, this fails on the wrong day showing.
-        expect(screen.getByText(/13 Aug/)).toBeInTheDocument();
-        expect(screen.queryByText(/14 Aug/)).not.toBeInTheDocument();
+        // plr-d10 (I17): in his words — the farm's (IST) day in Marathi and the part of the day, not
+        // "13 Aug, 8:30 PM" (15:00 UTC is 20:30 IST: रात्री).
+        expect(screen.getByText('13 ऑग, रात्री 8:30')).toBeInTheDocument();
+        expect(screen.queryByText(/14 ऑग|Aug|AM|PM/)).not.toBeInTheDocument();
+    });
+});
+
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I17, H19) — the hub row's own words on the one title
+// bar with one big मागे; the two English "Back" buttons and the "AI Drafts" title are gone.
+describe('AiDraftsPage — one title bar with मागे', () => {
+    it('the list is titled like the hub row, and मागे goes back', async () => {
+        const onBack = vi.fn();
+        render(<AiDraftsPage onBack={onBack} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument());
+        // the setup hub row's own name (one name for the place)
+        expect(screen.getByTestId('page-title')).toHaveTextContent('नेट नसताना केलेल्या नोंदी');
+        expect(screen.getAllByTestId('page-back')).toHaveLength(1);
+        expect(screen.queryByText('AI Drafts')).toBeNull();
+        expect(screen.queryByText(/^Back$/)).toBeNull();
+        fireEvent.click(screen.getByTestId('page-back'));
+        expect(onBack).toHaveBeenCalledTimes(1);
+    });
+
+    it('the whole list page is plain Marathi: no English word a farmer would see', async () => {
+        mockListUnreviewedAiResults.mockResolvedValue([DRAFT_JOB, {
+            ...DRAFT_JOB, id: 9, operationType: 'patti_extract',
+            result: { operationType: 'patti_extract', receivedAtUtc: '2026-08-14T19:00:00.000Z', payload: {} },
+        } as unknown as UnreviewedAiResult]);
+        render(<AiDraftsPage onBack={vi.fn()} />);
+        await screen.findByRole('button', { name: OPEN });
+        const page = screen.getByTestId('ai-drafts-list');
+        // visible text, and the labels a screen reader would say
+        expect(page.textContent ?? '').not.toMatch(/[A-Za-z]/);
+        for (const el of Array.from(page.querySelectorAll('[title],[aria-label]'))) {
+            expect(`${el.getAttribute('title') ?? ''}${el.getAttribute('aria-label') ?? ''}`).not.toMatch(/[A-Za-z]/);
+        }
+        // a voice note with no words read out yet is called a voice note; the sale slip a slip photo
+        expect(page).toHaveTextContent('आवाज नोंद');
+        expect(page).toHaveTextContent('पट्टीचा फोटो');
+    });
+
+    it('nothing waiting: says so in Marathi (it said "All caught up!")', async () => {
+        mockListUnreviewedAiResults.mockResolvedValue([]);
+        render(<AiDraftsPage onBack={vi.fn()} />);
+        const empty = await screen.findByTestId('ai-drafts-empty');
+        expect(empty).toHaveTextContent('सगळ्या नोंदी पाहून झाल्या');
+        expect(empty).toHaveTextContent('नेट नसताना केलेली एकही नोंद बाकी नाही.');
+        expect(screen.getByTestId('ai-drafts-list').textContent ?? '').not.toMatch(/[A-Za-z]/);
+    });
+
+    it('an unsaved note says so in Marathi and asks him to try again (nothing was written)', async () => {
+        mockHandleManualSubmit.mockResolvedValue('not_saved');
+        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+        await openReview();
+        fireEvent.click(screen.getByText('Save'));
+        await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('ही नोंद जतन झाली नाही. पुन्हा प्रयत्न करा.'));
+        alertSpy.mockRestore();
+    });
+
+    it('in review the title bar\'s मागे closes the review and does NOT leave the page', async () => {
+        const onBack = vi.fn();
+        render(<AiDraftsPage onBack={onBack} />);
+        await waitFor(() => expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument());
+        fireEvent.click(screen.getByRole('button', { name: OPEN }));
+        await waitFor(() => expect(screen.getByTestId('manual-entry-stub')).toBeInTheDocument());
+        expect(screen.getAllByTestId('page-back')).toHaveLength(1);
+        fireEvent.click(screen.getByTestId('page-back'));
+        await waitFor(() => expect(screen.queryByTestId('manual-entry-stub')).toBeNull());
+        expect(screen.getByTestId('ai-drafts-list')).toBeInTheDocument();
+        expect(onBack).not.toHaveBeenCalled();
     });
 });

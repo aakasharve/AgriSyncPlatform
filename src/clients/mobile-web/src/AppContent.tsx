@@ -93,9 +93,11 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6) — every screen opens at
     // its top. The ONE scroll container outlives the route swapped inside it, so the last
     // screen's offset used to carry over and a farmer landed halfway down a new page.
+    // (I17, H20) A re-tap of the place he is in reopens its first screen WITHOUT a route
+    // change (`placeResetKey` moves), so that first screen opens at its top as well.
     React.useLayoutEffect(() => {
         pageScrollRef.current?.scrollTo?.({ top: 0 });
-    }, [navigation.currentRoute, navigation.mainView]);
+    }, [navigation.currentRoute, navigation.mainView, navigation.placeResetKey]);
 
     // spec: 2026-08-25-prod-cutover-waves — Android hardware Back (native only).
     // Overlays close first, then the app's own route history, and only at Home
@@ -157,7 +159,11 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             <AppHeader
                 currentRoute={navigation.currentRoute}
                 currentView={navigation.mainView}
-                onNavigate={navigation.setCurrentRoute}
+                // spec: plr-d10-redesign-real-integration-2026-10-25 (I17, PLR-D9 N3) — the header's
+                // सेट-अप केंद्र is a PLACE: re-tapped from inside it, it returns to the hub's first
+                // screen. Its other hops (the sync drawer's "not synced" page, आजची कामे) keep the
+                // ordinary route history, so their मागे still returns where he was.
+                onNavigate={(route) => (route === 'profile' ? navigation.openPlace(route) : navigation.setCurrentRoute(route))}
                 onViewChange={navigation.setMainView}
                 // spec: plr-d10-redesign-real-integration-2026-10-25 (WP-6, PLR-D9 N1) — the page
                 // switcher only on the home tabs; a place (खरेदी, सेट-अप केंद्र…) has its own title
@@ -257,7 +263,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             <BottomNavigation
                 currentRoute={navigation.currentRoute}
                 currentView={navigation.mainView}
-                onNavigate={(route) => navigation.setCurrentRoute(route)}
+                onNavigate={(route) => navigation.openPlace(route)}
                 onViewChange={(view) => navigation.setMainView(view)}
                 hidden={isKeyboardOpen}
             />

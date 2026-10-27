@@ -2,11 +2,30 @@
  * Sub-plan 04 Task 5 — OfflineConflictPage.
  *
  * Lists every mutation the server rejected and offers retry/discard per
- * row. Marathi-first copy with English subtitles for low-literacy users.
+ * row.
+ *
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I17, H19 / PLR-D9 T1-T2) — the one title bar with
+ * one big मागे (it was an English "← Back"), and the English copies printed beside or under the Marathi
+ * words ("(Loading…)", "No conflicts to resolve.", "(Retry)", "(Discard)") are gone.
+ *
+ * NOT yet plain Marathi: each row still shows technical content to the farmer — the raw mutation name,
+ * the server's reason text and a JSON preview of what was sent. Turning those into words he can read
+ * needs a name for every kind of record and is outside this change (noted for the founder).
+ *
+ * P4 — a list that could not be READ is not "all synced": that line is shown only when the list was
+ * read and is empty. A failed read says so instead.
  */
 import React, { useEffect, useState, useCallback } from 'react';
 import { ConflictResolutionService, type RejectedMutationView } from './ConflictResolutionService';
 import { formatDisplayTimestamp } from '../../../shared/utils/displayTime';
+import { PageBar } from '../../../shared/components/ui/placeUi';
+
+/** The page's own heading words, now its title. */
+const CONFLICTS_TITLE = 'सिंक न झालेल्या नोंदी';
+// PROPOSED (Marathi): the list could not be read (not the same as "nothing is waiting").
+const CONFLICTS_READ_FAILED = 'या नोंदी आत्ता उघडता आल्या नाहीत. थोड्या वेळाने पुन्हा उघडा.';
+// PROPOSED (Marathi): a retry / discard that did not go through (nothing changed, so trying again is honest).
+const CONFLICTS_ACTION_FAILED = 'हे झालं नाही. पुन्हा प्रयत्न करा.';
 
 interface OfflineConflictPageProps {
     onBack?: () => void;
@@ -16,14 +35,17 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
     const [items, setItems] = useState<RejectedMutationView[] | null>(null);
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [readFailed, setReadFailed] = useState(false);
 
     const refresh = useCallback(async () => {
         try {
             const fresh = await ConflictResolutionService.list();
             setItems(fresh);
             setError(null);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+            setReadFailed(false);
+        } catch {
+            // P4: not "all synced" — we do not know. Say the list could not be opened.
+            setReadFailed(true);
             setItems([]);
         }
     }, []);
@@ -37,8 +59,8 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
         try {
             await ConflictResolutionService.retry(mutationId);
             setItems(prev => prev ? prev.filter(i => i.mutationId !== mutationId) : prev);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+        } catch {
+            setError(CONFLICTS_ACTION_FAILED);
         } finally {
             setBusyId(null);
         }
@@ -49,8 +71,8 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
         try {
             await ConflictResolutionService.discard(mutationId);
             setItems(prev => prev ? prev.filter(i => i.mutationId !== mutationId) : prev);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : String(err));
+        } catch {
+            setError(CONFLICTS_ACTION_FAILED);
         } finally {
             setBusyId(null);
         }
@@ -58,37 +80,34 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
 
     if (items === null) {
         return (
-            <div className="p-4 text-center text-slate-500" data-testid="conflict-loading">
-                लोड होत आहे… (Loading…)
+            <div data-testid="conflict-loading">
+                <PageBar title={CONFLICTS_TITLE} onBack={onBack} />
+                <p className="p-4 text-center text-slate-500">लोड होत आहे…</p>
+            </div>
+        );
+    }
+
+    if (readFailed) {
+        return (
+            <div data-testid="conflict-read-failed">
+                <PageBar title={CONFLICTS_TITLE} onBack={onBack} />
+                <p className="p-4 text-center text-rose-700" role="alert">{CONFLICTS_READ_FAILED}</p>
             </div>
         );
     }
 
     if (items.length === 0) {
         return (
-            <div className="p-4 text-center" data-testid="conflict-empty">
-                {onBack && (
-                    <button type="button" onClick={onBack} className="text-sm text-emerald-700 mb-3" data-testid="conflict-back">
-                        ← Back
-                    </button>
-                )}
-                <h2 className="font-headings text-xl">सर्व नोंदी सिंक झाल्या आहेत.</h2>
-                <p className="text-sm text-slate-500">No conflicts to resolve.</p>
+            <div data-testid="conflict-empty">
+                <PageBar title={CONFLICTS_TITLE} onBack={onBack} />
+                <h2 className="p-4 text-center font-headings text-xl">सर्व नोंदी सिंक झाल्या आहेत.</h2>
             </div>
         );
     }
 
     return (
-        <div className="p-4 space-y-3" data-testid="conflict-list">
-            {onBack && (
-                <button type="button" onClick={onBack} className="text-sm text-emerald-700" data-testid="conflict-back">
-                    ← Back
-                </button>
-            )}
-            <header>
-                <h2 className="font-headings text-xl">सिंक न झालेल्या नोंदी ({items.length})</h2>
-                <p className="text-sm text-slate-500">{items.length} mutation{items.length === 1 ? '' : 's'} need your attention.</p>
-            </header>
+        <div className="space-y-3 pb-4" data-testid="conflict-list">
+            <PageBar title={`${CONFLICTS_TITLE} (${items.length})`} onBack={onBack} />
             {error && (
                 <div className="rounded bg-rose-50 p-2 text-sm text-rose-700" data-testid="conflict-error" role="alert">
                     {error}
@@ -121,7 +140,7 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
                             className="rounded bg-emerald-600 px-3 py-1 text-white disabled:opacity-50"
                             data-testid={`retry-${item.mutationId}`}
                         >
-                            पुन्हा प्रयत्न करा (Retry)
+                            पुन्हा प्रयत्न करा
                         </button>
                         <button
                             type="button"
@@ -130,7 +149,7 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
                             className="rounded bg-rose-600 px-3 py-1 text-white disabled:opacity-50"
                             data-testid={`discard-${item.mutationId}`}
                         >
-                            काढून टाका (Discard)
+                            काढून टाका
                         </button>
                     </div>
                 </article>

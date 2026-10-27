@@ -17,7 +17,7 @@
 // the farmer cannot otherwise know from a checkbox — that this stops
 // FUTURE saving and leaves everything already saved alone.
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, BookOpen } from 'lucide-react';
 import { agriSyncClient } from '../../infrastructure/api/AgriSyncClient';
 import {
@@ -25,7 +25,10 @@ import {
     tVoiceDiary,
 } from '../../i18n/voiceDiaryTranslations';
 import { APP_VERSION } from '../../infrastructure/api/transport';
-import { useFullHistoryJournalConsent } from '../voiceDiary/hooks/useFullHistoryJournalConsent';
+import {
+    useFullHistoryJournalConsent,
+    type UseFullHistoryJournalConsentResult,
+} from '../voiceDiary/hooks/useFullHistoryJournalConsent';
 import VoiceRetainedFirstGrantBanner from './VoiceRetainedFirstGrantBanner';
 import VoiceRetainedStopFutureBanner from './VoiceRetainedStopFutureBanner';
 
@@ -35,12 +38,34 @@ interface Props {
     onOpenVoiceDiary?: () => void;
 }
 
-const VoiceRetainedConsentToggle: React.FC<Props> = ({ locale, onOpenVoiceDiary }) => {
-    const { granted, loaded, state, reload } = useFullHistoryJournalConsent();
+/**
+ * spec: plr-d10 (I17, PLR-D9 O8) — the toggle drawn from a consent answer the CALLER already holds.
+ * The recordings page (आवाज नोंदी) shows this switch itself and passes its own answer, so the page's
+ * banner and the switch can never disagree after a change (one read, one `reload`).
+ *
+ * `turnOnRequest`: the page's own "चालू करा" button. Each new value asks to turn saving ON exactly as
+ * ticking this switch does — the same first-grant confirmation opens, and nothing is saved until he
+ * says "मी सहमत आहे". (It used to only scroll to this switch, so "turn on" turned nothing on.)
+ */
+export const VoiceRetainedConsentToggleView: React.FC<Props & {
+    consent: UseFullHistoryJournalConsentResult;
+    turnOnRequest?: number;
+}> = ({
+    locale, onOpenVoiceDiary, consent, turnOnRequest = 0,
+}) => {
+    const { granted, loaded, state, reload } = consent;
     const [showFirstGrant, setShowFirstGrant] = useState(false);
     const [showStopFuture, setShowStopFuture] = useState(false);
     const [saving, setSaving] = useState(false);
     const [expanded, setExpanded] = useState(false);
+
+    // Only a NEW request opens the confirmation (not the first render, not a re-render).
+    const lastTurnOnRequest = useRef(turnOnRequest);
+    useEffect(() => {
+        if (turnOnRequest === lastTurnOnRequest.current) return;
+        lastTurnOnRequest.current = turnOnRequest;
+        if (loaded && !granted) setShowFirstGrant(true);
+    }, [turnOnRequest, loaded, granted]);
 
     const persistConsent = useCallback(
         async (nextValue: boolean) => {
@@ -119,11 +144,9 @@ const VoiceRetainedConsentToggle: React.FC<Props> = ({ locale, onOpenVoiceDiary 
                         className="mt-1.5 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
                     />
                     <div className="flex-1 min-w-0">
+                        {/* spec: plr-d10 (I17, V-2) — one line in his language; the English second line is gone. */}
                         <div className="font-['Noto_Sans_Devanagari'] font-bold text-base text-stone-800">
                             {tVoiceDiary(locale, 'consentToggle.title')}
-                        </div>
-                        <div className="font-['DM_Sans'] text-sm font-bold text-stone-500 mt-0.5">
-                            {tVoiceDiary(locale, 'consentToggle.titleEn')}
                         </div>
                         <button
                             type="button"
@@ -140,9 +163,6 @@ const VoiceRetainedConsentToggle: React.FC<Props> = ({ locale, onOpenVoiceDiary 
                             <div className="mt-2 space-y-1 text-sm text-stone-600 leading-relaxed">
                                 <p className="font-['Noto_Sans_Devanagari']">
                                     {tVoiceDiary(locale, 'consentToggle.helper')}
-                                </p>
-                                <p className="font-['DM_Sans'] text-xs text-stone-500">
-                                    {tVoiceDiary(locale, 'consentToggle.helperEn')}
                                 </p>
                             </div>
                         )}
@@ -181,6 +201,12 @@ const VoiceRetainedConsentToggle: React.FC<Props> = ({ locale, onOpenVoiceDiary 
             )}
         </>
     );
+};
+
+/** The self-contained toggle (reads the consent itself) — the Settings page uses this one. */
+const VoiceRetainedConsentToggle: React.FC<Props> = (props) => {
+    const consent = useFullHistoryJournalConsent();
+    return <VoiceRetainedConsentToggleView {...props} consent={consent} />;
 };
 
 export default VoiceRetainedConsentToggle;

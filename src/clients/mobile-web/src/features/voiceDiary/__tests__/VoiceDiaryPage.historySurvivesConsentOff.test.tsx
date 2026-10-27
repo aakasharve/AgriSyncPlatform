@@ -24,8 +24,13 @@
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, configure } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// The page reads the phone, the consent and the server before drawing: under a full parallel run that
+// outlasted the 1 s default wait and failed at random (it passes alone). A wait resolves as soon as
+// its condition holds, so the longer ceiling slows nothing that passes.
+configure({ asyncUtilTimeout: 10_000 });
 
 vi.mock('../../../infrastructure/api/AgriSyncClient', () => ({
     agriSyncClient: {
@@ -115,7 +120,7 @@ describe('VoiceDiaryPage — saved history after the farmer stops future saving'
     it('still asks the retained tier for history even though future saving is off', async () => {
         mockedRange.mockResolvedValue([retainedClip]);
 
-        render(<VoiceDiaryPage onBack={() => undefined} onOpenSettings={() => undefined} forceLocale="en-IN" />);
+        render(<VoiceDiaryPage onBack={() => undefined} forceLocale="en-IN" />);
 
         await waitFor(() => {
             expect(mockedRange).toHaveBeenCalledTimes(1);
@@ -125,7 +130,7 @@ describe('VoiceDiaryPage — saved history after the farmer stops future saving'
     it('renders the retained clip rather than the empty state', async () => {
         mockedRange.mockResolvedValue([retainedClip]);
 
-        render(<VoiceDiaryPage onBack={() => undefined} onOpenSettings={() => undefined} forceLocale="en-IN" />);
+        render(<VoiceDiaryPage onBack={() => undefined} forceLocale="en-IN" />);
 
         // Present: the clip he recorded before turning the toggle off.
         await waitFor(() => {
@@ -144,7 +149,7 @@ describe('VoiceDiaryPage — saved history after the farmer stops future saving'
         // state at all.
         mockedRange.mockResolvedValue([]);
 
-        render(<VoiceDiaryPage onBack={() => undefined} onOpenSettings={() => undefined} forceLocale="en-IN" />);
+        render(<VoiceDiaryPage onBack={() => undefined} forceLocale="en-IN" />);
 
         await waitFor(() => {
             expect(screen.getByTestId('voice-diary-empty-state')).toBeInTheDocument();

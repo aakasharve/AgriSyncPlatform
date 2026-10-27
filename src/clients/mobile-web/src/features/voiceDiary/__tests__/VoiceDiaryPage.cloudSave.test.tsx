@@ -15,8 +15,13 @@
 import '@testing-library/jest-dom/vitest';
 import 'fake-indexeddb/auto';
 import React from 'react';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, configure } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// The page reads the phone database, the consent and the server before it draws a clip: under a full
+// parallel run that took longer than the 1 s default wait and failed at random (it passes alone). The
+// waits resolve as soon as their condition holds, so a longer ceiling slows nothing that passes.
+configure({ asyncUtilTimeout: 10_000 });
 
 await vi.hoisted(async () => {
     const { Blob: NodeBlob } = await import('node:buffer');
@@ -94,7 +99,7 @@ async function seedClip(clipId: string, minutes: number, extra: Record<string, u
 }
 
 const mount = (locale: 'en-IN' | 'mr-IN' = 'en-IN') =>
-    render(<VoiceDiaryPage onBack={() => undefined} onOpenSettings={() => undefined} forceLocale={locale} />);
+    render(<VoiceDiaryPage onBack={() => undefined} forceLocale={locale} />);
 
 const sourceBadge = (clipId: string) => screen.getByTestId(`voice-diary-clip-source-${clipId}`).textContent;
 const unsavedBadge = (clipId: string) => screen.queryByTestId(`voice-diary-clip-pending-cloud-${clipId}`);

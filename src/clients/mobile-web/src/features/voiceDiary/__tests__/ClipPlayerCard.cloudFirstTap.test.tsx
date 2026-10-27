@@ -66,7 +66,7 @@ describe('ClipPlayerCard - first tap on a server-only recording', () => {
         const audio = document.querySelector('audio') as HTMLAudioElement;
         observer.observe(audio, { attributes: true, attributeFilter: ['src'] });
 
-        fireEvent.click(screen.getByLabelText('Play'));
+        fireEvent.click(screen.getByLabelText('ऐका')); // plr-d10 (I17, V-2): the Marathi card's play button
 
         await waitFor(() => expect(playedWithSrc.length).toBe(1));
         await new Promise(r => setTimeout(r, 30)); // let any late attribute write land
@@ -88,7 +88,7 @@ describe('ClipPlayerCard - first tap on a server-only recording', () => {
             />,
         );
 
-        fireEvent.click(screen.getByLabelText('Play'));
+        fireEvent.click(screen.getByLabelText('ऐका')); // plr-d10 (I17, V-2): the Marathi card's play button
 
         await waitFor(() => expect(openRetainedClip).toHaveBeenCalledTimes(1));
         expect(playedWithSrc.length).toBe(0);

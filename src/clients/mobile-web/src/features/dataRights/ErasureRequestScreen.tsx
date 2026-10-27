@@ -12,6 +12,7 @@ import {
     tDataRights,
     type DataRightsLocale,
 } from '../../i18n/dataRightsTranslations';
+import { PageBar } from '../../shared/components/ui/placeUi';
 
 interface Props {
     onBack?: () => void;
@@ -19,6 +20,8 @@ interface Props {
     forceLocale?: DataRightsLocale;
     /** Test seam — allows tests to inject a fetch mock. */
     submitFn?: () => Promise<{ requestId: string }>;
+    /** spec: plr-d10 (I17) — a section of the one "गोपनीयता व संमती" page (which owns the title bar). */
+    embedded?: boolean;
 }
 
 type SubmitStatus = 'idle' | 'confirming' | 'submitting' | 'success' | 'error';
@@ -40,7 +43,7 @@ async function defaultSubmit(): Promise<{ requestId: string }> {
     return { requestId: body?.requestId ?? '' };
 }
 
-const ErasureRequestScreen: React.FC<Props> = ({ onBack, forceLocale, submitFn }) => {
+const ErasureRequestScreen: React.FC<Props> = ({ onBack, forceLocale, submitFn, embedded = false }) => {
     const { language } = useLanguage();
     const locale = forceLocale ?? toDataRightsLocale(language);
     const [status, setStatus] = useState<SubmitStatus>('idle');
@@ -66,25 +69,18 @@ const ErasureRequestScreen: React.FC<Props> = ({ onBack, forceLocale, submitFn }
 
     return (
         <div
-            className="space-y-4 pb-24 px-4"
+            className={`space-y-4 ${embedded ? '' : 'pb-24'}`}
             data-testid="erasure-request-screen"
             data-data-rights-locale={locale}
         >
-            <div className="pt-4">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="text-sm font-bold text-stone-500 hover:text-stone-700 mb-3"
-                    data-testid="erasure-back"
-                >
-                    ←
-                </button>
-                <h1 className="text-2xl font-display font-black text-stone-900">{title}</h1>
-                <p className="text-sm text-stone-600 mt-2 leading-relaxed">{intro}</p>
-            </div>
+            {/* spec: plr-d10 (I17, H19) — the one title bar with one big मागे (was a bare "←"). */}
+            {embedded
+                ? <h3 className="m-0 text-[16px] font-extrabold text-stone-900">{title}</h3>
+                : <PageBar title={title} onBack={onBack} />}
+            <p className="text-sm text-stone-600 leading-relaxed">{intro}</p>
 
             {status === 'idle' && (
-                <div className="pt-4">
+                <div>
                     <button
                         type="button"
                         onClick={() => setStatus('confirming')}
