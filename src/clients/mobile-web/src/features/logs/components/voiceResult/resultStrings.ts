@@ -9,6 +9,11 @@
  *   - FOUNDER: quoted from his decision docs (PLR-D1 / PLR-D5) or the task that carries his words.
  *   - PROPOSED (Marathi): the preview's own wording or new wording, waiting for his review.
  * The word "नोंद" is not used on these screens (PLR-D5 :65); the waiting screen keeps its own quotes.
+ *
+ * KNOWN GAP (spec I18, language-strict): this screen is Marathi in BOTH languages (the preview it ports, the ring's
+ * own words and the eight part names exist only in Marathi). An English-mode user sees Marathi here, beside the
+ * few embedded pieces that follow his language (the not-queued badge, Sathi's question). Carried to I18, which
+ * owns the one language-aware label helper; not patched here string by string.
  */
 import { t } from '../../../../i18n/translations';
 
@@ -25,11 +30,17 @@ export const RESULT_STR = {
     // APPROVED — confirmation.edit / common.back.
     edit: t('confirmation.edit', 'mr'),
     back: t('common.back', 'mr'),
-    // FOUNDER — the meter heading in his wording ("श्रम साथीला … समजले"), the screen's own words from PLR-D1/D5.
+    // APPROVED — the review form's flag for an item the server could not find in his words (voice.unverifiedSourceLabel).
+    unsure: t('voice.unverifiedSourceLabel', 'mr'),
+    // FOUNDER — PLR-D5 :65 ("आणखी सांगा" replaces "आणखी नोंद करा").
+    addAnother: 'आणखी सांगा',
+    // FOUNDER — the ring's own label for a stoppage (understandingRing/categories.ts, founder 2026-10-25).
+    blockers: 'अडथळे / अडचणी',
+    // PROPOSED (Marathi) — the preview marks these three as proposed (UnderstandingHero "Proposed Marathi", model.ts
+    // "PROPOSED wording"); PLR-D1 round 5 itself says "यातून काय जोडलं". They go to his Marathi review.
     ringHeading: 'श्रम साथीला किती समजले',
     addedTitle: 'यातून काय समजलं',
     confirm: 'पक्कं आहे',
-    addAnother: 'आणखी सांगा',
     // PROPOSED (Marathi) — from the founder-approved design preview (postVoiceResult/model.ts STR), still unreviewed.
     justNow: 'आत्ताचं बोलणं',
     todayCount: (n: number) => `आज ${n} वेळा सांगितलं`,
@@ -56,9 +67,16 @@ export const RESULT_STR = {
     linksSub: 'एखादा भाग दाबा — कोणत्या शब्दांतून समजले ते दिसेल',
     wrote: 'श्रम साथीने लिहिले',
     newTag: 'नवीन',
+    // PROPOSED (Marathi) — the preview's tag for an entry filled in by hand (TypedLog.tsx TYPED_STR.tag).
+    typedTag: 'लिहिलेलं',
+    // PROPOSED (Marathi) — the line under a confirmed recording. Claims only his WORDS (the transcript on the log):
+    // the clip row is processing_30d, so the preview's "तुमचं बोलणं आणि शब्द जपले आहेत" promised a recording kept
+    // for good that is not.
+    keptSafe: 'तुमचे शब्द जपले आहेत',
     // PROPOSED (Marathi) — new wording written for this screen.
     unclearTitle: 'हे साथीला नीट समजलं नाही',
     confirmFailed: 'आत्ता पक्कं करता आलं नाही — पुन्हा दाबा',
     wholeFarm: 'संपूर्ण शेत',
-    blockers: 'अडथळे / अडचणी',
+    // PROPOSED (Marathi) — a part he mentioned that the server could not find in his words: "not sure", never "not said".
+    unsurePart: 'नक्की समजलं नाही',
 } as const;

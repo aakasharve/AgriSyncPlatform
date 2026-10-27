@@ -11,23 +11,24 @@
  *   1. the recording he JUST made: "लक्षात ठेवलं" (true: the screen exists only after the phone's durable
  *      write) and the server state honestly; his words colour-marked; a big play button; "यातून काय समजलं";
  *      Sathi's ONE question (the existing panel, flag-gated); "पक्कं आहे", unlocked once he heard his clip;
- *      "बदला" (the existing edit form);
+ *      "बदला" (the existing edit form) — one per plot, each with its own not-queued badge, when he named several;
  *   2. the plot's whole day, one row per part; 3. the day's earlier recordings, newest first;
  *   4. the bottom bar: "मागे" + "आणखी सांगा".
  * One screen for readers and non-readers alike (no mode switch).
  */
 import React, { useRef, useState } from 'react';
-import { Check, Mic, Pencil } from 'lucide-react';
+import { Check, MapPin, Mic, Pencil } from 'lucide-react';
 import FlowBackButton from '../../../context/components/FlowBackButton';
 import { NotQueuedForServerBadge } from '../../../../core/navigation/mainViewComponents';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import type { RingNodeData } from '../shramsathi/understandingRing';
 import ClipPlayer from './ClipPlayer';
-import { AddedRow, DayRow, EarlierRecording, TimePill, WhoChip } from './DayParts';
+import { AddedRow, BlockerRow, DayRow, EarlierRecording, TimePill, WhoChip } from './DayParts';
 import { PartLinks, Words } from './HisWords';
 import ResultHero from './ResultHero';
 import { PARTS, markTranscript, type DayView, type PartKey, type RecordingView } from './resultModel';
 import { RESULT_STR } from './resultStrings';
+import { scrollBelowHeader } from './scrollBelowHeader';
 import type { LogSyncState } from './useRecordingTrust';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
@@ -43,21 +44,27 @@ export interface VoiceResultScreenProps {
     unclear: readonly string[];
     /** Clips on this phone, by log id (this recording's and the earlier ones'). */
     clips: ReadonlyMap<string, VoiceClipCacheRecord>;
+    /** This phone has been asked for the clips: until then "no clip" is unknown, and the confirm stays locked. */
+    clipsReady: boolean;
     playingId: string | null;
     progress: number;
     lengthOf: (logId: string) => number | null;
     heard: ReadonlySet<string>;
     onTogglePlay: (logId: string) => void;
     sync: LogSyncState;
-    /** From the save's enqueue result: false = it will not reach the server (honest badge); null = no claim. */
-    syncQueued: boolean | null | undefined;
-    /** Owner tier with a server identity: may send the verify (P5: others never see a button that would fail). */
+    /** Per log, from the save's enqueue result: false = it will not reach the server (honest badge); null = no claim. */
+    syncQueuedOf: (logId: string) => boolean | null | undefined;
+    /**
+     * May send the verify the server would accept: the server's verify gate (owner tier, or the owner's labour
+     * grant), a server identity, and at least one of this recording's logs on its way to the server (P5).
+     */
     canConfirm: boolean;
     /** He confirmed this recording (in this session, or the log already says so). */
     confirmed: boolean;
     confirmFailed: boolean;
     onConfirm: () => void;
-    onEdit: () => void;
+    /** Opens the existing edit form for that log of this recording. */
+    onEdit: (logId: string) => void;
     onBack: () => void;
     onAddAnother: () => void;
     onTellMore: (part: PartKey) => void;
@@ -66,6 +73,12 @@ export interface VoiceResultScreenProps {
     /** The other existing post-save surfaces the container keeps (clarity line, task close). */
     extras?: React.ReactNode;
 }
+
+/** The plots one log of this recording is about, as named on the farm (his own words for them). */
+const plotsOf = (r: RecordingView): string => {
+    const names = (r.log.context?.selection ?? []).flatMap(s => s.selectedPlotNames ?? []).filter(Boolean);
+    return names.length > 0 ? names.join(', ') : RESULT_STR.wholeFarm;
+};
 
 export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const { day } = p;
@@ -78,16 +91,23 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const runs = markTranscript(primary.transcript, addedEntries);
     const clip = p.clips.get(primary.id);
     const heard = p.heard.has(primary.id);
-    const unlocked = heard || !clip;
+    // Founder PLR-D1 round 2: confirm unlocks once his clip is HEARD. Only when this phone holds no clip of it
+    // (nothing to hear) may he confirm by reading his words instead — and only once that is known. The approved
+    // preview does the same for an entry with no recording behind it (PostVoiceResult.tsx: typed → "वाचा आणि
+    // पक्कं करा"). OPEN for the founder: whether a VOICE recording whose clip is missing may be confirmed by reading.
+    const unlocked = heard || (p.clipsReady && !clip);
     const nowIds = new Set(day.current.map(r => r.id));
-    const byLog = new Map([...day.current, ...day.earlier].map(r => [r.id, r]));
-    const count = day.current.length > 0 ? day.earlier.length + 1 : day.earlier.length;
-    const toWords = () => latest.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    // How many times he SPOKE today: one recording, however many plots it named, counted once (the earlier ones
+    // are already one row each); an entry typed on the form is not a time he "said" it.
+    const count = day.earlier.filter(r => !r.typed).length + 1;
+    const severalPlots = day.current.length > 1;
+    // Lands his words below the sticky back bar, never under it (the preview's scrollBelowHeader).
+    const toWords = () => scrollBelowHeader(latest.current);
 
     return (
         <div className="space-y-3 pb-6 pt-1" style={{ fontFamily: SANS }} data-testid="voice-result">
             <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr-place">{p.placeLabel}</span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr-place"><MapPin size={16} aria-hidden="true" />{p.placeLabel}</span>
                 <span className="text-xs font-bold text-stone-600" data-testid="vr-count">{count > 1 ? RESULT_STR.todayCount(count) : RESULT_STR.firstToday}</span>
             </div>
 
@@ -102,7 +122,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
             </div>
 
             <ResultHero farmId={p.farmId} dayDate={primary.log.date} savedLogId={primary.id} recordingKey={p.recordingKey}
-                nodes={p.nodes} missing={day.missing} onTellMore={p.onTellMore} onReadMore={toWords} />
+                nodes={p.nodes} missing={day.missing} unsure={day.unsure} onTellMore={p.onTellMore} onReadMore={toWords} />
 
             <section ref={latest} className="rounded-3xl border-2 border-emerald-600 bg-white p-3.5" data-testid="vr-latest">
                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px] font-extrabold">
@@ -114,7 +134,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     {p.sync === 'needsFix' && <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-800" data-testid="vr-needs-fix">{RESULT_STR.needsFix}</span>}
                     {p.confirmed && <span className="rounded-full bg-emerald-900 px-2.5 py-1 text-white" data-testid="vr-confirmed-badge">{RESULT_STR.confirmedBadge}</span>}
                 </div>
-                <NotQueuedForServerBadge syncQueued={p.syncQueued} />
+                {!severalPlots && <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />}
 
                 {runs.length > 0 && <Words runs={runs} tags focus={focus} />}
                 <PartLinks runs={runs} entries={addedEntries} focus={focus} onFocus={setFocus} />
@@ -133,10 +153,13 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     </div>
                 )}
 
-                {addedEntries.length > 0 && (
+                {(addedEntries.length > 0 || day.blockersNow.length > 0) && (
                     <div className="mt-3" data-testid="vr-added">
                         <div className="mb-1.5 text-[13px] font-extrabold text-emerald-800">{RESULT_STR.addedTitle}</div>
-                        <div className="space-y-1.5">{addedEntries.map(e => <AddedRow key={`${e.logId}:${e.id}`} entry={e} />)}</div>
+                        <div className="space-y-1.5">
+                            {addedEntries.map(e => <AddedRow key={`${e.logId}:${e.id}`} entry={e} />)}
+                            {day.blockersNow.map(b => <BlockerRow key={b.id} entry={b} />)}
+                        </div>
                     </div>
                 )}
 
@@ -145,10 +168,11 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 {p.canConfirm && (p.confirmed ? (
                     <div className="mt-3 rounded-2xl border-2 border-emerald-900 bg-emerald-50 p-3 text-center font-extrabold text-emerald-900" data-testid="vr-confirm-done">
                         <Check className="mx-auto mb-0.5" size={22} aria-hidden="true" /> {RESULT_STR.confirmedDone}
+                        <div className="mt-0.5 text-[13px] font-bold text-emerald-800" data-testid="vr-kept-safe">{RESULT_STR.keptSafe}</div>
                     </div>
                 ) : (
                     <div className="mt-3">
-                        <div className="mb-1.5 text-base font-extrabold">{!clip ? RESULT_STR.readAndConfirm : heard ? RESULT_STR.listenAndConfirm : RESULT_STR.lockedLabel}</div>
+                        <div className="mb-1.5 text-base font-extrabold">{heard ? RESULT_STR.listenAndConfirm : unlocked ? RESULT_STR.readAndConfirm : RESULT_STR.lockedLabel}</div>
                         <button type="button" onClick={p.onConfirm} disabled={!unlocked} data-testid="vr-confirm"
                             className="min-h-[62px] w-full rounded-2xl bg-emerald-700 text-xl font-extrabold text-white disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-600">
                             {unlocked ? `✔ ${RESULT_STR.confirm}` : RESULT_STR.unlockHint}
@@ -157,10 +181,26 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     </div>
                 ))}
 
-                <button type="button" onClick={p.onEdit} data-testid="vr-edit"
-                    className="mt-2 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-stone-300 bg-white text-base font-extrabold text-stone-700">
-                    <Pencil size={18} aria-hidden="true" /> {RESULT_STR.edit}
-                </button>
+                {severalPlots ? (
+                    // He named several plots: one log each. Each can be fixed, and each says if it will not reach the server.
+                    <div className="mt-2 space-y-1.5" data-testid="vr-plots">
+                        {day.current.map(r => (
+                            <div key={r.id} data-testid={`vr-plot-${r.id}`} className="rounded-2xl border border-stone-200 bg-white p-1.5">
+                                <button type="button" onClick={() => p.onEdit(r.id)} data-testid={`vr-edit-${r.id}`}
+                                    className="flex min-h-[48px] w-full items-center gap-2 rounded-xl px-2 text-left text-base font-extrabold text-stone-700">
+                                    <Pencil size={18} aria-hidden="true" />
+                                    <span className="min-w-0 flex-1 truncate">{RESULT_STR.edit} · {plotsOf(r)}</span>
+                                </button>
+                                <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(r.id)} />
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <button type="button" onClick={() => p.onEdit(primary.id)} data-testid="vr-edit"
+                        className="mt-2 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-stone-300 bg-white text-base font-extrabold text-stone-700">
+                        <Pencil size={18} aria-hidden="true" /> {RESULT_STR.edit}
+                    </button>
+                )}
             </section>
 
             {p.extras}
@@ -170,7 +210,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 <p className="m-0 mb-2 text-[12px] text-stone-600">{RESULT_STR.tapForHistory}</p>
                 <div className="space-y-2">
                     {PARTS.filter(m => day.byPart[m.key].length > 0).map(m => (
-                        <DayRow key={m.key} part={m.key} entries={day.byPart[m.key]} byLog={byLog} touched={day.touchedNow.has(m.key)}
+                        <DayRow key={m.key} part={m.key} entries={day.byPart[m.key]} byLog={day.recordingByLog} touched={day.touchedNow.has(m.key)}
                             showWho={day.speakers.length > 1} nowIds={nowIds} />
                     ))}
                 </div>

@@ -19,6 +19,9 @@
  * success, moving a job card `Completed -> VerifiedForPayout` — a money path
  * that is a founder decision, not an implementation detail. `P5` therefore
  * leaves one option: remove the control and say why.
+ * UPDATE 2026-10-26 (PLR-D10 I13): the "no server handler" part above is history — the server applies
+ * `verify_log_v2` now (`PushSyncBatchHandler.HandleVerifyLogV2Async`; see `application/usecases/VerifyLog.ts`).
+ * The job-card payout hook is unchanged and still a founder decision, so nothing here is re-wired.
  *
  * `onVerify` is removed from the props, not left unused, so re-enabling has
  * to be a deliberate edit here rather than a callback swap at the call site.

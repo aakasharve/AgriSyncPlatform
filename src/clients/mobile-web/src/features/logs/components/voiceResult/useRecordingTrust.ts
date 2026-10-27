@@ -17,7 +17,7 @@
  *    them alone (P5). The record counts whether or not he ever confirms (founder 2026-09-02).
  *    "तुम्ही पक्कं केलं" states HIS act (queued on this phone), never that the server has accepted it.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSelector } from '@xstate/react';
 import { getRootStore } from '../../../../app/state/RootStore';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
@@ -66,19 +66,24 @@ export function useConfirmRecording({ verifierUserId, repository, auditPort, pro
     const [confirmed, setConfirmed] = useState<ReadonlySet<string>>(() => new Set());
     const [failed, setFailed] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    // Logs whose verify is queued or on its way, read synchronously: a second tap in the same moment (before
+    // React re-renders) must not queue a second verify for the same log.
+    const sent = useRef(new Set<string>());
 
     const confirm = useCallback(async (logId: string): Promise<boolean> => {
-        if (!verifierUserId || busy) return false;
+        if (!verifierUserId || sent.current.has(logId)) return false;
+        sent.current.add(logId);
         setBusy(true);
         setFailed(null);
         try {
             const result = await verifyLog({ logId, verifierId: verifierUserId, action: 'approve' }, repository, auditPort, profile);
-            if (result.success) setConfirmed(s => new Set(s).add(logId)); else setFailed(logId);
+            if (result.success) setConfirmed(s => new Set(s).add(logId));
+            else { sent.current.delete(logId); setFailed(logId); }
             return result.success;
         } finally {
             setBusy(false);
         }
-    }, [verifierUserId, busy, repository, auditPort, profile]);
+    }, [verifierUserId, repository, auditPort, profile]);
 
     return { confirmed, failed, busy, confirm };
 }

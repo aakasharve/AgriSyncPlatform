@@ -18,7 +18,9 @@ import InputDetailSheet from './sheets/InputDetailSheet';
 import ExpenseDetailSheet from './sheets/ExpenseDetailSheet';
 import DetailSheet from './sheets/DetailSheet';
 import WorkDetailSheet from './sheets/WorkDetailSheet';
-import { t as translateForced } from '../../../../i18n/translations';
+import DisturbanceSheet from './sheets/DisturbanceSheet';
+// PLR-D10 I13 (LP-27): every word on the card in his language only (activityCardStrings.ts).
+import { useActivityCardStrings } from './activityCardStrings';
 
 // Font rule (CHARTER): Marathi body text -> Noto Sans Devanagari.
 const MARATHI_BODY = "'Noto Sans Devanagari', sans-serif";
@@ -48,6 +50,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     onUpdateIssue, // NEW: Prop to update main activity issue
     todayLogs = [] // NEW: Destructure todayLogs with default
 }: ActivityCardProps & { onUpdateIssue?: (issue: BucketIssue | undefined) => void }) => {
+    const s = useActivityCardStrings();
     const [refiningItem, setRefiningItem] = useState<{ name: string; mode: 'manual' | 'voice' } | null>(null);
     const expenses = rawExpenses.map((expense) => ({
         ...expense,
@@ -130,7 +133,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 machinery: linkedData.machinery ? [linkedData.machinery] : [],
                 activityExpenses: expenses,
             },
-        ]);
+        ], s.workDone);
     };
 
     // State for Sheets
@@ -189,7 +192,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
     const getLabourLabel = () => {
         const l = linkedData.labour;
         if (!l) return undefined; // Let component handle "Add details..."
-        if (l.type === 'SELF') return 'Self • Family Labour';
+        if (l.type === 'SELF') return s.selfFamily;
 
         // A stated 0 IS data and must still show; NaN (a cleared money field)
         // and absence must not.
@@ -198,16 +201,16 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
 
         if (l.type === 'CONTRACT') {
             const quantity = stated(l.contractQuantity)
-                ? `${l.contractQuantity} ${l.contractUnit || ''}`.trim()
-                : l.contractUnit;
-            return ['Contract', quantity, money(l.totalCost)].filter(Boolean).join(' • ');
+                ? `${l.contractQuantity} ${s.value(l.contractUnit)}`.trim()
+                : s.value(l.contractUnit);
+            return [s.contract, quantity, money(l.totalCost)].filter(Boolean).join(' • ');
         }
 
         // HIRED: "2M + 4F • ₹1200"
         const parts = [];
-        if (l.maleCount) parts.push(`${l.maleCount}M`);
-        if (l.femaleCount) parts.push(`${l.femaleCount}F`);
-        const workers = parts.join(' + ') || (stated(l.count) ? `${l.count} Workers` : undefined);
+        if (l.maleCount) parts.push(s.male(l.maleCount));
+        if (l.femaleCount) parts.push(s.female(l.femaleCount));
+        const workers = parts.join(' + ') || (stated(l.count) ? s.workers(l.count as number) : undefined);
         return [workers, money(l.totalCost)].filter(Boolean).join(' • ') || undefined;
     };
 
@@ -232,10 +235,10 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
         // Try to show Product Names first
         const productNames = main.mix?.map(m => m.productName).filter(Boolean).slice(0, 2).join(', ');
         const extraCount = (main.mix?.length || 0) - 2;
-        const products = productNames ? (extraCount > 0 ? `${productNames} +${extraCount}` : productNames) : `${main.mix?.length} Items`;
+        const products = productNames ? (extraCount > 0 ? `${productNames} +${extraCount}` : productNames) : s.items(main.mix?.length);
 
         // Method Suffix
-        const method = main.method === 'Spray' ? (main.carrierType === 'Blower' ? 'Blower' : 'Spray') : main.method;
+        const method = s.value(main.method === 'Spray' ? (main.carrierType === 'Blower' ? 'Blower' : 'Spray') : main.method);
 
         return `${products} • ${method}`;
     };
@@ -252,7 +255,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                             <h4 className="text-lg font-bold text-slate-800 leading-tight">
                                 {activity.title === 'Crop Activity' && activity.workTypes && activity.workTypes.length > 0
                                     ? activity.workTypes[0]
-                                    : activity.title
+                                    : ['Crop Activity', 'Log Entry', 'Field Work'].includes(activity.title) ? s.genericTitle(activity.title) : activity.title
                                 }
                             </h4>
                             {verificationStatus && <TrustBadge status={verificationStatus} size="sm" />}
@@ -278,7 +281,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 <div className="space-y-4">
                     <BucketItem
                         icon={<ListPlus />}
-                        label="Work Done"
+                        label={s.work}
                         sublabel={getWorkDoneSublabel()}
                         filled={isWorkFilled}
                         theme="emerald"
@@ -327,7 +330,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                                                     />
                                                 ) : (
                                                     <span className={`font-bold text-emerald-900 leading-tight uppercase tracking-wide ${isRefining ? 'animate-pulse text-emerald-500' : ''}`}>
-                                                        {isRefining && refiningItem.mode === 'voice' ? 'Listening...' : w}
+                                                        {isRefining && refiningItem.mode === 'voice' ? s.listening : w}
                                                     </span>
                                                 )}
                                             </div>
@@ -341,7 +344,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                                                             onRefineWorkType?.(w, '', 'voice');
                                                         }}
                                                         className="p-1.5 hover:bg-emerald-100 rounded-lg text-emerald-400 hover:text-emerald-600 transition-colors"
-                                                        title="Speak to refine"
+                                                        title={s.speakToRefine}
                                                     >
                                                         <Mic size={14} />
                                                     </button>
@@ -351,7 +354,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                                                             setRefineValue(w);
                                                         }}
                                                         className="p-1.5 hover:bg-emerald-100 rounded-lg text-emerald-400 hover:text-emerald-600 transition-colors"
-                                                        title="Edit name"
+                                                        title={s.editName}
                                                     >
                                                         <PenLine size={14} />
                                                     </button>
@@ -365,7 +368,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     )}
 
                     {/* Transparency Block - moved to BOTTOM of the work section */}
-                    {isWorkFilled && (activity.sourceText || activity.systemInterpretation) && (
+                    {isWorkFilled && (activity.sourceText || s.shown(activity.systemInterpretation)) && (
                         <div className="mt-2 pt-3 border-t border-slate-100/50 px-1">
                             {activity.provenanceVerified === false && (
                                 <div
@@ -377,23 +380,23 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                                         className="text-[11px] font-semibold leading-snug text-amber-700"
                                         style={{ fontFamily: MARATHI_BODY }}
                                     >
-                                        {translateForced('voice.unverifiedSourceLabel', 'mr')}
+                                        {s.unsure}
                                     </span>
                                 </div>
                             )}
                             {activity.sourceText && (
                                 <div className="flex items-start gap-2 mb-2">
-                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5 whitespace-nowrap">YOU SAID:</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-0.5 whitespace-nowrap">{s.youSaid}</span>
                                     <p className="text-xs font-medium text-slate-600 italic">"{activity.sourceText}"</p>
                                 </div>
                             )}
-                            {activity.systemInterpretation && (
+                            {s.shown(activity.systemInterpretation) && (
                                 <div className="flex items-start gap-2 bg-emerald-100/30 p-2.5 rounded-xl border border-emerald-50 border-l-4 border-l-emerald-400">
                                     <div className="mt-1 text-emerald-500">
                                         <Zap size={10} fill="currentColor" />
                                     </div>
                                     <p className="text-[11px] font-medium text-emerald-800 leading-relaxed italic">
-                                        {activity.systemInterpretation}
+                                        {s.shown(activity.systemInterpretation)}
                                     </p>
                                 </div>
                             )}
@@ -404,19 +407,19 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 {/* 2. Labour Bucket */}
                 <BucketItem
                     icon={<Users />}
-                    label="Labour & Wages"
+                    label={s.labour}
                     sublabel={(() => {
                         const daily = getDailyLabourTotal();
                         if (isLabourFilled) return getLabourLabel();
-                        if (daily.totalWorkers == null) return `Today: — Staff (Logged)`; // Task 29 — em-dash when unstated, never a fabricated count
-                        if (daily.totalWorkers > 0) return `Today: ${daily.totalWorkers} Staff (Logged)`;
+                        if (daily.totalWorkers == null) return s.todayStaffUnknown; // Task 29 — em-dash when unstated, never a fabricated count
+                        if (daily.totalWorkers > 0) return s.todayStaff(daily.totalWorkers);
                         return undefined;
                     })()}
                     filled={isLabourFilled}
                     theme="orange"
                     onClick={() => setActiveSheet('labour')}
                     sourceText={linkedData.labour?.sourceText}
-                    systemInterpretation={linkedData.labour?.systemInterpretation}
+                    systemInterpretation={s.shown(linkedData.labour?.systemInterpretation)}
                     hasIssue={isLabourIssue}
                     provenanceVerified={linkedData.labour?.provenanceVerified}
                 />
@@ -424,38 +427,38 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 {/* 3. Inputs Bucket */}
                 <BucketItem
                     icon={<FlaskConical />}
-                    label="Inputs & Protection"
+                    label={s.inputs}
                     sublabel={(() => {
                         const dailyCount = getDailyInputsTotal();
                         if (isInputsFilled) return getInputLabel();
-                        if (dailyCount > 0) return `Today: ${dailyCount} Item(s) applied`;
+                        if (dailyCount > 0) return s.todayItems(dailyCount);
                         return undefined;
                     })()}
                     filled={isInputsFilled}
                     theme="purple"
                     onClick={() => setActiveSheet('input')}
                     sourceText={inputs.find(i => i.sourceText)?.sourceText}
-                    systemInterpretation={inputs.find(i => i.systemInterpretation)?.systemInterpretation}
+                    systemInterpretation={s.shown(inputs.find(i => i.systemInterpretation)?.systemInterpretation)}
                     provenanceVerified={inputs.find(i => i.sourceText)?.provenanceVerified}
                 />
 
                 {/* 4. Irrigation Bucket */}
                 <BucketItem
                     icon={isIrrigationIssue ? <AlertTriangle /> : <Droplets />}
-                    label="Irrigation"
+                    label={s.irrigation}
                     sublabel={(() => {
                         const dailyHours = getDailyIrrigationTotal();
-                        if (isIrrigationFilled && !isLinkedIrrigationCompleted) return `Today: ${dailyHours}h Total Run`;
-                        if (isIrrigationIssue) return linkedData.irrigation?.issue?.reason || 'Issue Logged';
-                        if (isIrrigationFilled) return `${linkedData.irrigation?.durationHours}h ${linkedData.irrigation?.method} • ${linkedData.irrigation?.source}`;
-                        if (dailyHours > 0) return `Today: ${dailyHours}h Total Run`;
+                        if (isIrrigationFilled && !isLinkedIrrigationCompleted) return s.todayRun(dailyHours);
+                        if (isIrrigationIssue) return linkedData.irrigation?.issue?.reason || s.issueLogged;
+                        if (isIrrigationFilled) return s.irrigationLine(linkedData.irrigation?.durationHours, linkedData.irrigation?.method, linkedData.irrigation?.source);
+                        if (dailyHours > 0) return s.todayRun(dailyHours);
                         return undefined;
                     })()}
                     filled={isIrrigationFilled}
                     theme={isIrrigationIssue ? "amber" : "blue"}
                     onClick={() => setActiveSheet('irrigation')}
                     sourceText={linkedData.irrigation?.sourceText}
-                    systemInterpretation={linkedData.irrigation?.systemInterpretation}
+                    systemInterpretation={s.shown(linkedData.irrigation?.systemInterpretation)}
                     hasIssue={isIrrigationIssue}
                     provenanceVerified={linkedData.irrigation?.provenanceVerified}
                 />
@@ -463,49 +466,49 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 {/* 5. Machinery Bucket */}
                 <BucketItem
                     icon={<Tractor />}
-                    label="Machinery"
+                    label={s.machinery}
                     sublabel={(() => {
                         const dailyHours = getDailyMachineryTotal();
-                        if (isMachineryFilled) return `${linkedData.machinery?.type} • ${linkedData.machinery?.hoursUsed}h`;
-                        if (dailyHours > 0) return `Today: ${dailyHours}h Machine Work`;
+                        if (isMachineryFilled) return s.machineLine(linkedData.machinery?.type, linkedData.machinery?.hoursUsed);
+                        if (dailyHours > 0) return s.todayMachine(dailyHours);
                         return undefined;
                     })()}
                     filled={isMachineryFilled}
                     theme="indigo"
                     onClick={() => setActiveSheet('machinery')}
                     sourceText={linkedData.machinery?.sourceText}
-                    systemInterpretation={linkedData.machinery?.systemInterpretation}
+                    systemInterpretation={s.shown(linkedData.machinery?.systemInterpretation)}
                     hasIssue={isMachineryIssue}
                     provenanceVerified={linkedData.machinery?.provenanceVerified}
                 />
 
                 {/* 6. Expenses Bucket */}
                 <BucketItem
-                    icon={<img src="/assets/rupee_black.png" alt="Expense" className="w-5 h-5 opacity-80" />}
-                    label="Expenses"
+                    icon={<img src="/assets/rupee_black.png" alt={s.expenseAlt} className="w-5 h-5 opacity-80" />}
+                    label={s.expenses}
                     sublabel={(() => {
                         const dailyTotal = getDailyExpenseTotal();
-                        if (isExpensesFilled) return `₹${expenses.reduce((s, e) => s + e.totalAmount, 0)} Total`;
-                        if (dailyTotal > 0) return `Today: ₹${dailyTotal} Total Expenses`;
+                        if (isExpensesFilled) return s.expenseTotal(expenses.reduce((sum, e) => sum + e.totalAmount, 0));
+                        if (dailyTotal > 0) return s.todayExpenses(dailyTotal);
                         return undefined;
                     })()}
                     filled={isExpensesFilled}
                     theme="rose"
                     onClick={() => { setEditingExpense(undefined); setActiveSheet('expense'); }}
                     sourceText={expenses.find(e => e.sourceText)?.sourceText}
-                    systemInterpretation={expenses.find(e => e.systemInterpretation)?.systemInterpretation}
+                    systemInterpretation={s.shown(expenses.find(e => e.systemInterpretation)?.systemInterpretation)}
                     provenanceVerified={expenses.find(e => e.sourceText)?.provenanceVerified}
                 />
 
                 <BucketItem
                     icon={<MessageSquare />}
-                    label="Observations / Notes"
-                    sublabel={isObservationsFilled ? `${generalNotes.length} Note(s)` : undefined}
+                    label={s.observations}
+                    sublabel={isObservationsFilled ? s.notes(generalNotes.length) : undefined}
                     filled={isObservationsFilled}
                     theme="emerald"
                     onClick={() => setActiveSheet('observation')}
                     sourceText={observations.find(o => o.sourceText)?.sourceText}
-                    systemInterpretation={observations.find(o => o.systemInterpretation)?.systemInterpretation}
+                    systemInterpretation={s.shown(observations.find(o => o.systemInterpretation)?.systemInterpretation)}
                     provenanceVerified={observations.find(o => o.sourceText)?.provenanceVerified}
                 />
 
@@ -531,13 +534,13 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     return (
                         <BucketItem
                             icon={getDisturbanceIcon(disturbance?.group)}
-                            label="Issues & Blockers"
-                            sublabel={disturbance?.reason || `${disturbance?.group} Issue`}
+                            label={s.blockers}
+                            sublabel={disturbance?.reason || s.issueOf(disturbance?.group)}
                             filled={true}
                             theme={getTheme(disturbance?.scope)}
                             onClick={() => setActiveSheet('disturbance')}
                             sourceText={disturbance?.sourceText}
-                            systemInterpretation={disturbance?.systemInterpretation}
+                            systemInterpretation={s.shown(disturbance?.systemInterpretation)}
                         />
                     );
                 })()}
@@ -545,20 +548,20 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 {/* 8. Reminders Bucket */}
                 <BucketItem
                     icon={<Bell />}
-                    label="Reminders"
+                    label={s.reminders}
                     sublabel={isRemindersFilled ? (() => {
                         const all = [...(plannedTasks || []), ...reminderNotes];
                         const unique = all.filter((item, index) => {
                             const text = 'title' in item ? item.title : item.textRaw;
                             return all.findIndex(i => ('title' in i ? i.title : i.textRaw) === text) === index;
                         });
-                        return `${unique.length} ITEM(S)`;
+                        return s.reminderItems(unique.length);
                     })() : undefined}
                     filled={isRemindersFilled}
                     theme="indigo"
                     onClick={() => setActiveSheet('reminder')}
                     sourceText={plannedTasks.find(t => t.sourceText)?.sourceText || reminderNotes.find(n => n.sourceText)?.sourceText}
-                    systemInterpretation={plannedTasks.find(t => t.systemInterpretation)?.systemInterpretation || reminderNotes.find(n => n.systemInterpretation)?.systemInterpretation}
+                    systemInterpretation={s.shown(plannedTasks.find(t => t.systemInterpretation)?.systemInterpretation || reminderNotes.find(n => n.systemInterpretation)?.systemInterpretation)}
                     provenanceVerified={(plannedTasks.find(t => t.sourceText) ?? reminderNotes.find(n => n.sourceText))?.provenanceVerified}
                 />
             </div>
@@ -585,7 +588,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
             {/* REMINDERS LIST (Micro-View inside Card) */}
             {isRemindersFilled && (
                 <div className="mt-2 space-y-2 mb-3">
-                    <h5 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest px-1 italic">PLANNED REMINDERS</h5>
+                    <h5 className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest px-1 italic">{s.plannedReminders}</h5>
                     {(() => {
                         const all = [...(plannedTasks || []), ...reminderNotes];
                         // Deduplicate by text/title
@@ -612,7 +615,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                 <PenLine size={14} className="absolute top-2.5 left-2.5 text-slate-400" />
                 <input
                     type="text"
-                    placeholder="Outcome (e.g. 5 rows done)"
+                    placeholder={s.outcomePlaceholder}
                     className="w-full pl-8 p-2 bg-slate-50 border border-slate-100 rounded-lg text-sm focus:bg-white focus:border-slate-300 outline-none transition-colors"
                     defaultValue={activity.notes}
                     onBlur={(_e) => { /* Update logic if needed */ }}
@@ -630,7 +633,7 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     onClose={() => setActiveSheet(null)}
                     availableActivities={[]} // Ideally passed from parent
                     sourceText={activity.sourceText}
-                    systemInterpretation={activity.systemInterpretation}
+                    systemInterpretation={s.shown(activity.systemInterpretation)}
                     initialIssue={activity.issue}
                     provenanceVerified={activity.provenanceVerified}
                 />
@@ -680,99 +683,10 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     selectedDate={new Date().toLocaleDateString('en-CA')}
                     initialType="reminder"
                 />
-            ) : activeSheet === 'disturbance' ? (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end justify-center">
-                    <div className="bg-white rounded-t-3xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto animate-in slide-in-from-bottom-6 fade-in-20">
-                        {(() => {
-                            const disturbance = draftDisturbance || todayLogs?.find((log: DailyLog) => log.disturbance)?.disturbance;
-
-                            if (!disturbance) return null;
-
-                            const getDisturbanceIcon = (group: string = '') => {
-                                if (group.toLowerCase().includes('machinery')) return <Wrench className="text-amber-600" size={24} />;
-                                if (group.toLowerCase().includes('electricity') || group.toLowerCase().includes('power')) return <Zap className="text-amber-600" size={24} />;
-                                if (group.toLowerCase().includes('weather') || group.toLowerCase().includes('rain')) return <Cloud className="text-blue-600" size={24} />;
-                                return <AlertTriangle className="text-amber-600" size={24} />;
-                            };
-
-                            const scopeColors = {
-                                'FULL_DAY': 'bg-red-50 border-red-200 text-red-800',
-                                'PARTIAL': 'bg-amber-50 border-amber-200 text-amber-800',
-                                'DELAYED': 'bg-yellow-50 border-yellow-200 text-yellow-800'
-                            };
-
-                            return (
-                                <>
-                                    {/* Header */}
-                                    <div className="sticky top-0 bg-white border-b border-stone-200 p-4 flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            {getDisturbanceIcon(disturbance.group)}
-                                            <div>
-                                                <h3 className="font-bold text-lg text-stone-800">Issues & Blockers</h3>
-                                                <p className="text-xs text-stone-500">{disturbance.group || 'Disturbance'}</p>
-                                            </div>
-                                        </div>
-                                        <button onClick={() => setActiveSheet(null)} className="p-2 hover:bg-stone-100 rounded-full">
-                                            <X size={20} />
-                                        </button>
-                                    </div>
-
-                                    {/* Content */}
-                                    <div className="p-6 space-y-4">
-                                        {/* Scope Badge */}
-                                        <div className={`inline-block px-3 py-1.5 rounded-full text-sm font-bold border ${scopeColors[disturbance.scope || 'PARTIAL']}`}>
-                                            {disturbance.scope === 'FULL_DAY' ? '🛑 Full Day Blocked' : disturbance.scope === 'PARTIAL' ? '⚠️ Partial Disruption' : '⏳ Delayed'}
-                                        </div>
-
-                                        {/* Reason */}
-                                        <div className="bg-stone-50 rounded-xl p-4 border border-stone-200">
-                                            <div className="text-xs font-bold text-stone-500 uppercase mb-1">Reason</div>
-                                            <div className="text-base text-stone-800 font-medium">{disturbance.reason || 'Not specified'}</div>
-                                        </div>
-
-                                        {/* Note */}
-                                        {disturbance.note && (
-                                            <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
-                                                <div className="text-xs font-bold text-amber-700 uppercase mb-1">Details</div>
-                                                <div className="text-sm text-stone-700">{disturbance.note}</div>
-                                            </div>
-                                        )}
-
-                                        {/* Blocked Segments */}
-                                        {disturbance.blockedSegments && disturbance.blockedSegments.length > 0 && (
-                                            <div className="bg-stone-50 rounded-xl p-4 border border-stone-200">
-                                                <div className="text-xs font-bold text-stone-500 uppercase mb-2">Affected Areas</div>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {disturbance.blockedSegments.map((seg, idx) => (
-                                                        <span key={idx} className="px-3 py-1 bg-white rounded-lg text-xs font-medium text-stone-700 border border-stone-200">
-                                                            {seg.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Transparency Block */}
-                                        {(disturbance.sourceText || disturbance.systemInterpretation) && (
-                                            <div className="bg-gradient-to-br from-slate-50 to-stone-50 rounded-xl p-4 border border-stone-200">
-                                                <div className="text-xs font-bold text-stone-500 uppercase mb-2">🎤 You Said</div>
-                                                {disturbance.sourceText && (
-                                                    <div className="text-sm italic text-stone-600 mb-2">"{disturbance.sourceText}"</div>
-                                                )}
-                                                {disturbance.systemInterpretation && (
-                                                    <div className="text-xs text-stone-500 mt-1">
-                                                        <span className="font-bold">Interpretation:</span> {disturbance.systemInterpretation}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </>
-                            );
-                        })()}
-                    </div>
-                </div>
-            ) : activeSheet && (
+            ) : activeSheet === 'disturbance' ? (() => {
+                const disturbance = draftDisturbance || todayLogs?.find((log: DailyLog) => log.disturbance)?.disturbance;
+                return disturbance ? <DisturbanceSheet disturbance={disturbance} onClose={() => setActiveSheet(null)} /> : null;
+            })() : activeSheet && (
 
                 <DetailSheet
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any

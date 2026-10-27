@@ -14,7 +14,7 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { useSelector } from '@xstate/react';
-import { X } from 'lucide-react';
+import { HelpCircle, X } from 'lucide-react';
 import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { getRootStore } from '../../../../app/state/RootStore';
 import { useDayUnderstanding } from '../../hooks/useDayUnderstanding';
@@ -24,6 +24,7 @@ import { PartIcon } from './HisWords';
 import RingStage from './RingStage';
 import { PARTS, PART_OF_NODE, type PartKey } from './resultModel';
 import { RESULT_STR } from './resultStrings';
+import { scrollBelowHeader } from './scrollBelowHeader';
 
 const SERIF = "'Noto Serif Devanagari', serif";
 /** The server's stored classification for a day he said had no work (DayUnderstandingCard). Compared, never computed. */
@@ -50,12 +51,14 @@ export interface ResultHeroProps {
     recordingKey: string;
     nodes: RingNodeData[];
     missing: readonly PartKey[];
+    /** Parts mentioned only by what the server could not verify: "not sure" (amber), never "not said". */
+    unsure?: readonly PartKey[];
     onTellMore: (part: PartKey) => void;
     onReadMore: () => void;
 }
 
 /** The meter (flag-gated). Its own component so a flag-off build mounts no fetch at all. */
-const Meter: React.FC<Omit<ResultHeroProps, 'missing'>> = ({ farmId, dayDate, savedLogId, recordingKey, nodes, onTellMore, onReadMore }) => {
+const Meter: React.FC<Omit<ResultHeroProps, 'missing' | 'unsure'>> = ({ farmId, dayDate, savedLogId, recordingKey, nodes, onTellMore, onReadMore }) => {
     const heroTop = useRef<HTMLDivElement>(null);
     const lastSyncAtMs = useSelector(getRootStore().sync, s => s.context.lastSyncAtMs);
     const { score, classification, refresh } = useDayUnderstanding(farmId, dayDate, `${savedLogId ?? ''}:${lastSyncAtMs ?? ''}`);
@@ -68,15 +71,16 @@ const Meter: React.FC<Omit<ResultHeroProps, 'missing'>> = ({ farmId, dayDate, sa
                 <p className="m-0 text-[19px] font-extrabold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RESULT_STR.ringHeading}</p>
             </div>
             <RingStage score={noWork ? null : score} nodes={nodes} variant={ringVariant()} saveKey={recordingKey}
-                onSettled={() => heroTop.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })} onReadMore={onReadMore}
+                onSettled={() => scrollBelowHeader(heroTop.current)} onReadMore={onReadMore}
                 onMissedTap={n => { const p = PART_OF_NODE[n.id]; if (p) onTellMore(p); }}
                 fallback={<p className="m-0 text-center text-sm text-stone-600" data-testid="vr-meter-pending">{noWork ? RESULT_STR.noWorkDay : RESULT_STR.meterPending}</p>} />
         </div>
     );
 };
 
-export const ResultHero: React.FC<ResultHeroProps> = (props) => {
+export const ResultHero: React.FC<ResultHeroProps> = ({ unsure: unsureParts, ...props }) => {
     const missing = new Set(props.missing);
+    const unsure = new Set(unsureParts ?? []);
     return (
         <section className="rounded-3xl border border-white/60 bg-white/85 p-3.5 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)]" data-testid="vr-hero">
             {FEATURE_FLAGS.understandingMeter ? <Meter {...props} /> : (
@@ -95,6 +99,16 @@ export const ResultHero: React.FC<ResultHeroProps> = (props) => {
                         <span className="text-[12px] font-extrabold leading-tight text-red-800">{p.label}</span>
                         <span className="text-[11.5px] font-bold leading-tight text-red-700">{RESULT_STR.noneYet}</span>
                     </button>
+                ) : unsure.has(p.key) ? (
+                    // He said something here, but the server could not find it in his words: the flagged item is listed
+                    // below with "बरोबर आहे का?". Not a tell-again button: saying it again would record it twice.
+                    <span key={p.key} data-testid={`vr-part-${p.key}`} data-told="unsure"
+                        className="relative flex min-h-[78px] flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-amber-300 bg-amber-50 px-1 py-1.5 text-center">
+                        <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-amber-500 text-white"><HelpCircle size={13} strokeWidth={3} aria-hidden="true" /></span>
+                        <PartIcon part={p.key} size={26} />
+                        <span className="text-[12px] font-extrabold leading-tight text-amber-900">{p.label}</span>
+                        <span className="text-[11.5px] font-bold leading-tight text-amber-800">{RESULT_STR.unsurePart}</span>
+                    </span>
                 ) : (
                     <span key={p.key} data-testid={`vr-part-${p.key}`} data-told="yes"
                         className="flex min-h-[78px] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-center" style={{ background: p.tint }}>

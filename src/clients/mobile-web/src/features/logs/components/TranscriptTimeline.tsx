@@ -12,6 +12,8 @@ import React, { useState } from 'react';
 import { Clock, FileText, ChevronDown, ChevronUp, Edit3, Keyboard } from 'lucide-react';
 import { LogTimelineEntry } from '../logs.types';
 import { CropSymbol } from '../../context/components/CropSelector';
+// PLR-D10 I13 (LP-27) — the review form's timeline speaks his language only (English as it was, Marathi proposed).
+import { useReviewFormStrings } from './manual-entry/reviewFormStrings';
 
 // ============================================
 // TRANSCRIPT ENTRY COMPONENT
@@ -24,6 +26,7 @@ interface TranscriptEntryProps {
 
 const TranscriptEntry: React.FC<TranscriptEntryProps> = ({ entry, onClick }) => {
     const isClickable = !!onClick;
+    const str = useReviewFormStrings();
 
     return (
         <div
@@ -41,19 +44,19 @@ const TranscriptEntry: React.FC<TranscriptEntryProps> = ({ entry, onClick }) => 
                 </span>
                 {entry.source === 'VOICE' && (
                     <span className="text-[10px] bg-purple-100/70 text-purple-700 px-1.5 py-0.5 rounded-full font-semibold">
-                        🎙️ Voice
+                        {str.sourceVoice}
                     </span>
                 )}
                 {entry.source === 'MANUAL' && (
                     <span className="text-[10px] bg-blue-100/70 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5">
-                        <Keyboard size={10} /> Manual
+                        <Keyboard size={10} /> {str.sourceTyped}
                     </span>
                 )}
 
                 {/* Edit indicator on hover */}
                 {isClickable && (
                     <span className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                        <Edit3 size={10} /> Tap to Edit
+                        <Edit3 size={10} /> {str.tapToEdit}
                     </span>
                 )}
             </div>
@@ -77,7 +80,7 @@ const TranscriptEntry: React.FC<TranscriptEntryProps> = ({ entry, onClick }) => 
                 ))}
                 {entry.contexts.length > 3 && (
                     <span className="text-xs text-slate-400 font-medium self-center">
-                        +{entry.contexts.length - 3} more
+                        {str.more(entry.contexts.length - 3)}
                     </span>
                 )}
             </div>
@@ -93,27 +96,27 @@ const TranscriptEntry: React.FC<TranscriptEntryProps> = ({ entry, onClick }) => 
             <div className="flex flex-wrap gap-1 mt-2">
                 {entry.loggedItems.activities > 0 && (
                     <span className="text-[10px] bg-emerald-100/70 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">
-                        {entry.loggedItems.activities} activity
+                        {str.itemsActivity(entry.loggedItems.activities)}
                     </span>
                 )}
                 {entry.loggedItems.observations > 0 && (
                     <span className="text-[10px] bg-sky-100/70 text-sky-700 px-1.5 py-0.5 rounded-full font-semibold">
-                        {entry.loggedItems.observations} note
+                        {str.itemsNote(entry.loggedItems.observations)}
                     </span>
                 )}
                 {entry.loggedItems.irrigation > 0 && (
                     <span className="text-[10px] bg-cyan-100/70 text-cyan-700 px-1.5 py-0.5 rounded-full font-semibold">
-                        💧 irrigation
+                        {str.itemsWater}
                     </span>
                 )}
                 {entry.loggedItems.labour > 0 && (
                     <span className="text-[10px] bg-amber-100/70 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">
-                        {entry.loggedItems.labour} labour
+                        {str.itemsLabour(entry.loggedItems.labour)}
                     </span>
                 )}
                 {entry.loggedItems.expenses > 0 && (
                     <span className="text-[10px] bg-red-100/70 text-red-700 px-1.5 py-0.5 rounded-full font-semibold">
-                        ₹ {entry.loggedItems.expenses} expense
+                        {str.itemsExpense(entry.loggedItems.expenses)}
                     </span>
                 )}
             </div>
@@ -137,6 +140,7 @@ const TranscriptTimeline: React.FC<TranscriptTimelineProps> = ({
     onEntryClick
 }) => {
     const [expanded, setExpanded] = useState(false);
+    const str = useReviewFormStrings();
     const displayEntries = expanded ? entries : entries.slice(0, maxDisplay);
 
     if (entries.length === 0) return null;
@@ -147,7 +151,7 @@ const TranscriptTimeline: React.FC<TranscriptTimelineProps> = ({
             <div className="flex items-center justify-between mb-2.5">
                 <span className="text-xs font-bold text-slate-600 flex items-center gap-1.5 uppercase tracking-wide">
                     <FileText size={13} className="text-slate-400" />
-                    Today's Logs ({entries.length})
+                    {str.todayEntries(entries.length)}
                 </span>
                 {entries.length > maxDisplay && (
                     <button
@@ -155,9 +159,9 @@ const TranscriptTimeline: React.FC<TranscriptTimelineProps> = ({
                         className="text-xs text-blue-600 font-bold flex items-center gap-0.5 hover:text-blue-700 transition-colors px-2 py-1 rounded-lg hover:bg-blue-50"
                     >
                         {expanded ? (
-                            <>Show less <ChevronUp size={14} /></>
+                            <>{str.showLess} <ChevronUp size={14} /></>
                         ) : (
-                            <>+{entries.length - maxDisplay} more <ChevronDown size={14} /></>
+                            <>{str.more(entries.length - maxDisplay)} <ChevronDown size={14} /></>
                         )}
                     </button>
                 )}

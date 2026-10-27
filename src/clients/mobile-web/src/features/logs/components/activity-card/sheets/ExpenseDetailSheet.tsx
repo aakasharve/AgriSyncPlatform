@@ -8,6 +8,8 @@ import { createPortal } from 'react-dom';
 import { ActivityExpenseEvent } from '../../../../../types';
 import { X } from 'lucide-react';
 import Button from '../../../../../shared/components/ui/Button';
+// PLR-D10 I13 (LP-27): its words in his language only.
+import { useSheetStrings } from './sheetStrings';
 
 const ExpenseDetailSheet = ({
     initialData,
@@ -18,15 +20,16 @@ const ExpenseDetailSheet = ({
     onSave: (data: ActivityExpenseEvent) => void,
     onClose: () => void
 }) => {
+    const S = useSheetStrings();
     const [reason, setReason] = useState(initialData?.reason || '');
     const [amount, setAmount] = useState<number>(initialData?.totalAmount || 0);
     const [notes, setNotes] = useState(initialData?.notes || '');
-    const [items, setItems] = useState<any[]>(initialData?.items || []);
+    const [items] = useState<ActivityExpenseEvent['items']>(initialData?.items || []);
 
     const handleSave = () => {
         const newEvent: ActivityExpenseEvent = {
             id: initialData?.id || `exp_${Date.now()}`,
-            reason: reason || 'Expense',
+            reason: reason || S.expenseDefault,
             items: items,
             totalAmount: amount,
             notes: notes
@@ -41,25 +44,25 @@ const ExpenseDetailSheet = ({
             <div className="bg-white w-full max-w-lg p-5 rounded-t-3xl shadow-2xl relative z-10 animate-in slide-in-from-bottom-full duration-300">
                 <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                     <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
-                        <img src="/assets/rupee_black.png" alt="Expense" className="w-5 h-5 opacity-80" />
-                        Add Expense
+                        <img src="/assets/rupee_black.png" alt={S.expenseAlt} className="w-5 h-5 opacity-80" />
+                        {S.expenseTitle}
                     </h3>
                     <button onClick={onClose} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors"><X size={18} /></button>
                 </div>
 
                 <div className="space-y-4 mb-6">
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase">Expense Reason</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase">{S.expenseReason}</label>
                         <input
                             className="w-full p-3 border border-slate-200 rounded-xl mt-1 font-bold outline-none focus:border-rose-500"
-                            placeholder="e.g. Nylon Rope, Tea, Transport"
+                            placeholder={S.expenseReasonHint}
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
                             autoFocus
                         />
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase">Total Amount (₹)</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase">{S.totalAmount}</label>
                         <input
                             type="number"
                             className="w-full p-3 border border-slate-200 rounded-xl mt-1 font-bold text-xl outline-none focus:border-rose-500"
@@ -69,10 +72,10 @@ const ExpenseDetailSheet = ({
                         />
                     </div>
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase">Notes (Optional)</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase">{S.notesOptional}</label>
                         <textarea
                             className="w-full p-3 border border-slate-200 rounded-xl mt-1 text-sm outline-none focus:border-rose-500 resize-none"
-                            placeholder="Additional details..."
+                            placeholder={S.notesHint}
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                             rows={2}
@@ -81,7 +84,7 @@ const ExpenseDetailSheet = ({
                 </div>
 
                 <Button onClick={handleSave} className="w-full py-4 shadow-lg bg-rose-600 hover:bg-rose-700 text-white">
-                    Save Expense
+                    {S.saveExpense}
                 </Button>
             </div>
         </div>,

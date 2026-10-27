@@ -11,6 +11,8 @@ import Button from '../../../../../shared/components/ui/Button';
 import IssueFormSheet from '../../IssueFormSheet';
 import { BucketIssue } from '../../../../../domain/types/log.types';
 import InventorySuggestions from '../components/InventorySuggestions';
+// PLR-D10 I13 (LP-27): its words in his language only.
+import { useSheetStrings } from './sheetStrings';
 
 const InputDetailSheet = ({
     inputs,
@@ -25,10 +27,12 @@ const InputDetailSheet = ({
     profile: FarmerProfile,
     currentPlot?: Plot
 }) => {
+    const S = useSheetStrings();
     // We treat the "editing" state as a single object for the UI, but it might result in multiple InputEvents (e.g. Both)
     // For simplicity, we edit one "Main" application logic. If multiple exist, we take the first.
     const [method, setMethod] = useState<InputMethod | 'Both'>(inputs[0]?.method || 'Spray');
-    const [carrierType, setCarrierType] = useState<'Blower' | 'Tank' | 'Hours' | 'Pati'>(inputs[0]?.carrierType as any || 'Blower');
+    // A string: the unit select also offers values the stored union does not name ("Kg"); cast once, on save.
+    const [carrierType, setCarrierType] = useState<string>(inputs[0]?.carrierType || 'Blower');
     const [carrierCount, setCarrierCount] = useState<number>(inputs[0]?.carrierCount || 0);
     const [mix, setMix] = useState<InputMixItem[]>(inputs[0]?.mix || []);
     const [reason, setReason] = useState<InputReason | undefined>(inputs[0]?.reason);
@@ -37,7 +41,7 @@ const InputDetailSheet = ({
     // --- THEME LOGIC ---
     const isSpray = method === 'Spray' || method === 'Both';
     const SheetIcon = isSpray ? FlaskConical : Sprout;
-    const sheetTitle = isSpray ? 'Spray Application' : 'Nutrition & Fertigation';
+    const sheetTitle = S.inputTitle(isSpray);
 
     // Dynamic Classes
     const focusClass = isSpray ? 'focus:border-purple-500' : 'focus:border-emerald-500';
@@ -65,7 +69,7 @@ const InputDetailSheet = ({
         setMix([...mix, { id: Date.now().toString(), productName: '', dose: 0, unit: 'ml/L' }]);
     };
 
-    const updateMixItem = (id: string, field: keyof InputMixItem, value: any) => {
+    const updateMixItem = (id: string, field: keyof InputMixItem, value: InputMixItem[keyof InputMixItem]) => {
         setMix(mix.map(item => item.id === id ? { ...item, [field]: value } : item));
     };
 
@@ -119,7 +123,7 @@ const InputDetailSheet = ({
             newEvents.push({
                 ...baseEvent,
                 method: method as InputMethod,
-                carrierType: carrierType as any,
+                carrierType: carrierType as InputEvent['carrierType'],
                 carrierCount,
                 computedWaterVolume: calculatedVolume > 0 ? calculatedVolume : undefined
             });
@@ -158,7 +162,7 @@ const InputDetailSheet = ({
 
                     {/* 1. Method Selection */}
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase">Method</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase">{S.method}</label>
                         <div className="flex gap-2 mt-1 overflow-x-auto pb-1 scrollbar-hide">
                             {['Spray', 'Both', 'Drip', 'Soil', 'Drenching'].map(m => {
                                 const isThisSpray = m === 'Spray' || m === 'Both';
@@ -169,10 +173,10 @@ const InputDetailSheet = ({
                                 return (
                                     <button
                                         key={m}
-                                        onClick={() => setMethod(m as any)}
+                                        onClick={() => setMethod(m as InputMethod | 'Both')}
                                         className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all whitespace-nowrap ${method === m ? activeClass : 'bg-white border-slate-200 text-slate-500'}`}
                                     >
-                                        {m}
+                                        {S.value(m)}
                                     </button>
                                 );
                             })}
@@ -186,32 +190,32 @@ const InputDetailSheet = ({
                                 {method === 'Spray' && <Tractor size={14} />}
                                 {method === 'Drip' && <Clock size={14} />}
                                 {method === 'Soil' && <Package size={14} />}
-                                Carrier Details
+                                {S.carrierDetails}
                             </label>
                         </div>
 
                         <div className="flex gap-3 items-end">
                             {method === 'Spray' && (
                                 <div className="flex-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Equipment</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">{S.equipment}</label>
                                     <select
                                         className="w-full p-2.5 rounded-xl border border-slate-200 text-sm font-bold outline-none bg-white"
                                         value={selectedMachineId}
                                         onChange={(e) => setSelectedMachineId(e.target.value)}
                                     >
-                                        <option value="">Select Blower/Tank...</option>
+                                        <option value="">{S.selectEquipment}</option>
                                         {sprayers.map(m => (
-                                            <option key={m.id} value={m.id}>{m.name} ({m.capacity || '?'}L)</option>
+                                            <option key={m.id} value={m.id}>{S.machineOption(m.name, m.capacity || '?')}</option>
                                         ))}
-                                        <option value="manual_blower">Standard Blower (600L)</option>
-                                        <option value="manual_tank">Hand Tank (20L)</option>
+                                        <option value="manual_blower">{S.standardBlower}</option>
+                                        <option value="manual_tank">{S.handTank}</option>
                                     </select>
                                 </div>
                             )}
 
                             <div className="w-1/3">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase">
-                                    {method === 'Drip' ? 'Hours' : method === 'Soil' ? 'Count' : 'Count'}
+                                    {S.countLabel(method)}
                                 </label>
                                 <div className="relative">
                                     <input
@@ -222,22 +226,22 @@ const InputDetailSheet = ({
                                         placeholder="0"
                                     />
                                     <span className="absolute right-3 top-3 text-xs font-bold text-slate-400">
-                                        {method === 'Drip' ? 'Hrs' : method === 'Soil' ? 'Pati' : 'Qty'}
+                                        {S.countUnit(method)}
                                     </span>
                                 </div>
                             </div>
 
                             {method === 'Soil' && (
                                 <div className="w-1/3">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Unit</label>
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase">{S.unit}</label>
                                     <select
                                         className="w-full p-3 rounded-xl border border-slate-200 text-sm font-bold outline-none bg-white"
                                         value={carrierType}
-                                        onChange={e => setCarrierType(e.target.value as any)}
+                                        onChange={e => setCarrierType(e.target.value)}
                                     >
-                                        <option value="Pati">Pati</option>
-                                        <option value="Bag">Bag</option>
-                                        <option value="Kg">Kg</option>
+                                        <option value="Pati">{S.value('Pati')}</option>
+                                        <option value="Bag">{S.value('Bag')}</option>
+                                        <option value="Kg">{S.value('Kg')}</option>
                                     </select>
                                 </div>
                             )}
@@ -247,20 +251,20 @@ const InputDetailSheet = ({
                     {/* 3. Mix Builder */}
                     <div>
                         <div className="flex justify-between items-center mb-2">
-                            <label className="text-xs font-bold text-slate-400 uppercase">Mix Items</label>
+                            <label className="text-xs font-bold text-slate-400 uppercase">{S.mixItems}</label>
                             <button onClick={addMixItem} className={`text-xs font-bold ${textClass} flex items-center gap-1 hover:${bgClass} px-2 py-1 rounded`}>
-                                <Plus size={14} /> Add Item
+                                <Plus size={14} /> {S.addItem}
                             </button>
                         </div>
 
                         <div className="space-y-2">
-                            {mix.map((item, idx) => (
+                            {mix.map((item) => (
                                 <div key={item.id} className="gap-2 items-center animate-in slide-in-from-left-2 rounded-xl border border-slate-100 p-2 bg-slate-50/50">
                                     {/* Top Row: Product Name & Linkage */}
                                     <div className="flex gap-2 mb-2 items-start">
                                         <div className="flex-1 relative group">
                                             <input
-                                                placeholder="Product Name"
+                                                placeholder={S.productName}
                                                 className={`w-full p-2.5 rounded-xl border text-sm font-bold outline-none ${focusClass}
                                                     ${item.linkedExpenseId ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-white border-slate-200'}
                                                 `}
@@ -301,7 +305,7 @@ const InputDetailSheet = ({
                                         <div className="flex-1 relative">
                                             <input
                                                 type="number"
-                                                placeholder="Dose"
+                                                placeholder={S.dose}
                                                 className={`w-full p-2.5 rounded-xl border border-slate-200 text-sm font-bold outline-none bg-white ${focusClass}`}
                                                 value={item.dose || ''}
                                                 onChange={e => updateMixItem(item.id, 'dose', parseFloat(e.target.value))}
@@ -312,16 +316,16 @@ const InputDetailSheet = ({
                                             value={item.unit}
                                             onChange={e => updateMixItem(item.id, 'unit', e.target.value)}
                                         >
-                                            <option value="ml/L">ml/L</option>
-                                            <option value="g/L">g/L</option>
-                                            <option value="kg/ac">kg/ac</option>
-                                            <option value="L/ac">L/ac</option>
+                                            <option value="ml/L">{S.doseUnit('ml/L')}</option>
+                                            <option value="g/L">{S.doseUnit('g/L')}</option>
+                                            <option value="kg/ac">{S.doseUnit('kg/ac')}</option>
+                                            <option value="L/ac">{S.doseUnit('L/ac')}</option>
                                         </select>
                                     </div>
 
                                     {item.linkedExpenseId && (
                                         <div className="mt-1 text-[10px] text-emerald-600 font-bold px-1 flex justify-between">
-                                            <span>Linked to Inventory</span>
+                                            <span>{S.linked}</span>
                                             <button
                                                 onClick={() => {
                                                     updateMixItem(item.id, 'linkedExpenseId', undefined);
@@ -329,7 +333,7 @@ const InputDetailSheet = ({
                                                 }}
                                                 className="underline hover:text-emerald-800"
                                             >
-                                                Unlink
+                                                {S.unlink}
                                             </button>
                                         </div>
                                     )}
@@ -338,7 +342,7 @@ const InputDetailSheet = ({
                             ))}
                             {mix.length === 0 && (
                                 <div className="text-center py-6 border-2 border-dashed border-slate-100 rounded-xl bg-slate-50/50">
-                                    <p className="text-slate-400 text-sm">No products added.</p>
+                                    <p className="text-slate-400 text-sm">{S.noProducts}</p>
                                 </div>
                             )}
                         </div>
@@ -346,7 +350,7 @@ const InputDetailSheet = ({
 
                     {/* 4. Reason & Recommendation */}
                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase">Reason</label>
+                        <label className="text-xs font-bold text-slate-400 uppercase">{S.reason}</label>
                         <div className="flex flex-wrap gap-2 mt-1 mb-3">
                             {['Preventive', 'Disease', 'Pest', 'Growth', 'Deficiency'].map(r => (
                                 <button
@@ -354,12 +358,12 @@ const InputDetailSheet = ({
                                     onClick={() => setReason(r as InputReason)}
                                     className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${reason === r ? 'bg-slate-800 text-white border-slate-800' : 'bg-white border-slate-200 text-slate-500'}`}
                                 >
-                                    {r}
+                                    {S.value(r)}
                                 </button>
                             ))}
                         </div>
                         <input
-                            placeholder="Recommended By (e.g. Dealer Name)"
+                            placeholder={S.recommendedBy}
                             className={`w-full p-3 rounded-xl border border-slate-200 text-sm outline-none ${focusClass}`}
                             value={recommendedBy}
                             onChange={e => setRecommendedBy(e.target.value)}
@@ -370,7 +374,7 @@ const InputDetailSheet = ({
 
                 <div className="mt-6 pt-4 border-t border-slate-100">
                     <Button onClick={handleSave} className="w-full py-4 shadow-xl">
-                        Save Input Application
+                        {S.saveInput}
                     </Button>
                 </div>
             </div>

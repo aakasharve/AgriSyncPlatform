@@ -12,6 +12,7 @@ import {
 } from '../../../../../types';
 import { BucketIssue } from '../../../../../domain/types/log.types';
 import { SAFE_DEFAULTS } from '../types';
+import { useReviewFormStrings } from '../reviewFormStrings';
 
 interface ActivityLedgerProps {
     selectedLogId: string | null;
@@ -32,7 +33,8 @@ interface ActivityLedgerProps {
     defaults?: LedgerDefaults;
     setExpenses: React.Dispatch<React.SetStateAction<ActivityExpenseEvent[]>>;
     setObservations: React.Dispatch<React.SetStateAction<ObservationNote[]>>;
-    onUpdateDetails: (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: any) => void;
+    // Typed as ManualEntry's `updateDetails` takes it (was `any`, the lint gate's one warning in this file).
+    onUpdateDetails: (activityId: string, type: 'labour' | 'irrigation' | 'machinery' | 'input', data: LabourEvent | IrrigationEvent | MachineryEvent | InputEvent[]) => void;
     onDeleteActivity: (id: string) => void;
     onUpdateWorkTypes: (activityId: string, types: string[]) => void;
     onRefineWorkType: (oldType: string, newType: string, mode: 'manual' | 'voice') => void;
@@ -64,14 +66,16 @@ const ActivityLedger: React.FC<ActivityLedgerProps> = ({
     onRefineWorkType,
     onUpdateIssue,
 }) => {
+    // PLR-D10 I13 (LP-27) — in his language only (reviewFormStrings).
+    const str = useReviewFormStrings();
     return (
         <div className={`space-y-4 min-h-[200px] border-l-2 pl-4 transition-colors ${selectedLogId ? 'border-amber-200' : 'border-emerald-100/50'}`}>
 
 
             {cropActivities.length === 0 ? (
                 <div className="border-2 border-dashed border-stone-200 rounded-2xl p-8 text-center bg-stone-50/50">
-                    <p className="text-stone-400 font-bold">No activities logged today</p>
-                    <p className="text-xs text-stone-300 mt-1">Select above or type to add</p>
+                    <p className="text-stone-400 font-bold">{str.noActivities}</p>
+                    <p className="text-xs text-stone-300 mt-1">{str.noActivitiesHint}</p>
                 </div>
             ) : (
                 cropActivities.map(act => (

@@ -8,7 +8,8 @@
  *   - the reward words are page text under the ring once it has landed, with a ↓ to his words;
  *   - a tap during the full-screen part skips to the small one;
  *   - it plays again ONLY for a new recording (`saveKey`): opening the same result again lands on the final
- *     frame (remembered for this app session), and there is no replay button.
+ *     frame (remembered for this app session), and there is no replay button;
+ *   - when the score only arrives after he has started using the screen, it lands settled in the card instead.
  * OPEN (founder): the preview plays the reveal even when the phone's "reduce motion" setting is on, and so
  * does this port, so the PC test shows the animation he approved. Whether the real app should honour that
  * setting is his call (preview RingStage.tsx :14-15).
@@ -43,9 +44,33 @@ type Phase = 'full' | 'shrink' | 'small';
 interface Box { left: number; top: number; width: number }
 
 export const RingStage: React.FC<Props> = ({ score, nodes, variant, saveKey, onMissedTap, onSettled, onReadMore, fallback }) => {
-    const [seenBefore] = useState(() => played.has(saveKey));
-    const cinematic = variant === 'cinematic' && score != null && score > 0 && !seenBefore;
-    const [phase, setPhase] = useState<Phase>(cinematic ? 'full' : 'small');
+    // Already played in this app session when the screen opened (it was opened again): land on the final frame.
+    // A NEW recording on the same mounted screen is never "seen before".
+    const [opened] = useState(() => ({ key: saveKey, seen: played.has(saveKey) }));
+    const seenBefore = opened.key === saveKey && opened.seen;
+    const showsScore = score != null && score > 0;
+    // The recording whose reveal has STARTED. Latched: the server score can come and go with the sync cycles (a
+    // failed refetch sets it to null for a moment); that must never start the reveal a second time over the same
+    // recording, perhaps while he is listening to his clip. Only a new recording plays it again.
+    const [revealedKey, setRevealedKey] = useState<string | null>(() => (seenBefore ? saveKey : null));
+    // The recording he has already USED this screen for (a tap, a key) — tracked per recording.
+    const [touchedKey, setTouchedKey] = useState<string | null>(null);
+    const keyNow = useRef(saveKey);
+    useEffect(() => { keyNow.current = saveKey; });
+    useEffect(() => {
+        const mark = () => setTouchedKey(keyNow.current);
+        window.addEventListener('pointerdown', mark, true);
+        window.addEventListener('keydown', mark, true);
+        return () => { window.removeEventListener('pointerdown', mark, true); window.removeEventListener('keydown', mark, true); };
+    }, []);
+    const pending = showsScore && revealedKey !== saveKey;
+    // The server score usually arrives only once the new log has synced. When he is already using the screen
+    // (playing his clip, reaching for "पक्कं आहे"), no full-screen overlay is laid over what he is doing: the ring
+    // lands settled in its card instead (round 3, I13-V2-m4).
+    const landLate = pending && touchedKey === saveKey;
+    const startReveal = pending && !landLate;
+    const [settledKey, setSettledKey] = useState<string | null>(null);
+    const [phase, setPhase] = useState<Phase>(startReveal && variant === 'cinematic' ? 'full' : 'small');
     const [box, setBox] = useState<Box | null>(null);
     const slot = useRef<HTMLDivElement>(null);
     const timers = useRef<number[]>([]);
@@ -69,16 +94,35 @@ export const RingStage: React.FC<Props> = ({ score, nodes, variant, saveKey, onM
         }, SHRINK_MS + 60));
     }, []);
 
+    // Once the ring has had a real score to show for this recording, opening the screen again lands settled —
+    // the canvas reveal and the light (non-canvas) ring alike.
+    useEffect(() => { if (score != null && score > 0) played.add(saveKey); }, [score, saveKey]);
+
     useEffect(() => {
-        if (!cinematic) { setPhase('small'); return undefined; }
+        if (!startReveal) return;
         played.add(saveKey);
+        setRevealedKey(saveKey);
+        if (variant !== 'cinematic') return; // the light ring plays in its card by itself
         setPhase('full');
         const { nodes: ns, score: sc } = latest.current;
         const lock = plan(ns.map(n => ({ state: n.state })), sc ?? 0, 10, 'gauge', CINEMATIC_PACING).lock;
         clear();
         timers.current.push(window.setTimeout(shrink, lock + HOLD_AFTER_LOCK_MS));
-        return clear;
-    }, [saveKey, cinematic, shrink]);
+    }, [saveKey, startReveal, shrink, variant]);
+
+    useEffect(() => {
+        if (!landLate) return;
+        played.add(saveKey);
+        setRevealedKey(saveKey);
+        setSettledKey(saveKey);
+    }, [landLate, saveKey]);
+
+    // The score went away mid-reveal: land in the card at once (never a full-screen ring with nothing in it).
+    useEffect(() => {
+        if (!showsScore) { clear(); setPhase('small'); }
+    }, [showsScore]);
+
+    useEffect(() => clear, []);
 
     useLayoutEffect(() => {
         if (phase !== 'full') return;
@@ -89,7 +133,7 @@ export const RingStage: React.FC<Props> = ({ score, nodes, variant, saveKey, onM
 
     const moving = phase !== 'small' && box != null;
     const missed = nodes.filter(n => n.state === 'missed').length;
-    const showsScore = score != null && score > 0;
+    const cinematic = variant === 'cinematic';
     return (
         <>
             <div ref={slot} data-testid="vr-ring" data-phase={phase} className="mx-auto w-full max-w-[min(230px,24vh)] [&_.ssc-card]:!hidden"
@@ -101,7 +145,8 @@ export const RingStage: React.FC<Props> = ({ score, nodes, variant, saveKey, onM
                 )}
                 <div data-testid="vr-ring-box"
                     style={moving ? { position: 'fixed', zIndex: 201, left: box.left, top: box.top, width: box.width, transition: phase === 'shrink' ? `left ${SHRINK_MS}ms cubic-bezier(.65,0,.35,1), top ${SHRINK_MS}ms cubic-bezier(.65,0,.35,1), width ${SHRINK_MS}ms cubic-bezier(.65,0,.35,1)` : undefined } : undefined}>
-                    <UnderstandingRing score={score} nodes={nodes} variant={variant} haptics={false} ignoreReducedMotion settled={seenBefore}
+                    <UnderstandingRing score={score} nodes={nodes} variant={variant} haptics={false} ignoreReducedMotion
+                        settled={seenBefore || landLate || settledKey === saveKey}
                         replayKey={saveKey} onMissedTap={onMissedTap} fallback={fallback} />
                 </div>
             </div>

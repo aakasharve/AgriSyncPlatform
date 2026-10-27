@@ -132,6 +132,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         handleAutoSave: commands.handleAutoSave,
         logIntent: navigation.logIntent,
         setStatus: voice.setStatus,
+        farmId: currentFarmId ?? null,
     });
     useEffect(() => { voiceDraftSink.current = autoSave.sink; }, [autoSave.sink]);
     const { clearVoiceResult } = autoSave;

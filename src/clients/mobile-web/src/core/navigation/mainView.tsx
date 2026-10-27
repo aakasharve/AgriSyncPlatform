@@ -58,6 +58,7 @@ import { ShramSathiUnderstanding } from '../../features/logs/components/shramsat
 
 import { AppRouterContext } from './routeContext';
 import { buildFeedEntries } from './activityFeedEntries';
+import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
 import { ReflectPage, ComparePage } from './lazyComponents';
 import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 
@@ -128,7 +129,10 @@ export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
         ctx.handleEditLog(log);
     };
     const activityFeed = {
-        entries: buildFeedEntries(ctx.todayLogs, { crops: ctx.crops, operatorNameById: ctx.operatorNameById, getLogContextSnapshot: ctx.getLogContextSnapshot, onOpenLog: openLogToEdit }),
+        entries: buildFeedEntries(ctx.todayLogs, {
+            crops: ctx.crops, operatorNameById: ctx.operatorNameById, getLogContextSnapshot: ctx.getLogContextSnapshot, onOpenLog: openLogToEdit,
+            youIds: new Set([ctx.farmerProfile?.activeOperatorId, getSessionUserId()].filter((x): x is string => !!x)),
+        }),
         dateLabel: new Date().toLocaleDateString('mr-IN', { weekday: 'long', day: 'numeric', month: 'short', timeZone: DISPLAY_TIME_ZONE }),
     };
     return (

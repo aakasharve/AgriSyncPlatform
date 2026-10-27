@@ -27,6 +27,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 
+import { VersionRegistry } from '../../../../../core/contracts/VersionRegistry';
 import { LogVerificationStatus, type DailyLog } from '../../../../../types';
 import type { DailyLogDto, SyncPullResponse, VerificationEventDto } from '../../../../../infrastructure/api/dtos';
 import {
@@ -132,4 +133,48 @@ describe('an auto-saved voice log on the phone — captured is not reviewed', ()
         const day = computeDayState({ logs: [log], crops: [], date: DAY });
         expect(day.closurePercent).toBe(100);
     });
+
+    // I13 fidelity MAJOR — the phone's own marker is what keeps his auto-save off "waiting on you"
+    // (appContentOversightInputs). The server sends no marker, so the pull must not erase the phone's.
+    it('keeps the phone\'s own auto-save marker across a pull, and the log stays an honest draft', async () => {
+        await db.logs.put({
+            id: LOG_ID,
+            schemaVersion: VersionRegistry.DB_SCHEMA_VERSION,
+            log: phoneCopyOfHisAutoSave(),
+            date: DAY,
+            isDeleted: 0,
+        });
+
+        const log = await pullAndRead(db, autoSavedLogAsTheServerSendsIt());
+
+        expect(log.autoSavedFromVoice).toBe(true);
+        expect(log.meta?.createdByOperatorId).toBe(OWNER_ID);
+        expect(log.verification?.status).toBe(LogVerificationStatus.DRAFT);
+        expect(log.verification?.verifiedAtISO).toBeUndefined();
+    });
+
+    it('control: a log this phone did not auto-save gains no marker from a pull', async () => {
+        const log = await pullAndRead(db, autoSavedLogAsTheServerSendsIt());
+
+        expect(log.autoSavedFromVoice).toBeUndefined();
+    });
 });
+
+/** His log as `markAutoSavedFromVoice` left it on this phone, before the server answered. */
+function phoneCopyOfHisAutoSave(): DailyLog {
+    return {
+        id: LOG_ID,
+        date: DAY,
+        context: { selection: [] },
+        dayOutcome: 'WORK_RECORDED',
+        cropActivities: [],
+        irrigation: [],
+        labour: [],
+        inputs: [],
+        machinery: [],
+        meta: { createdAtISO: '2026-10-26T04:00:00.000Z', createdByOperatorId: OWNER_ID },
+        verification: { status: LogVerificationStatus.DRAFT, required: true },
+        autoSavedFromVoice: true,
+        financialSummary: { totalLabourCost: 0, totalInputCost: 0, totalMachineryCost: 0, grandTotal: 0 },
+    };
+}

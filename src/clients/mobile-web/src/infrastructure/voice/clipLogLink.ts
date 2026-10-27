@@ -44,16 +44,44 @@ export async function linkClipToLog(ref: RecordingRef, dailyLogId: string): Prom
     return row.id;
 }
 
-/** The clips on this phone that carry one of these logs, keyed by log id. One scan of a small table. */
-export async function clipsForLogs(dailyLogIds: readonly string[]): Promise<Map<string, VoiceClipCacheRecord>> {
+/**
+ * The clips on this phone that carry one of these logs, keyed by log id.
+ *
+ * `dailyLogId` is not indexed (no Dexie version bump, see the record type), so this walks rows. A clip row
+ * holds its audio, and a phone keeps up to 30 days of clips, so callers pass `recordedSinceUtc` (from
+ * `clipScanFloor`) and only the clips recorded since then are walked, through the existing `recordedAtUtc`
+ * index. Without it every clip row is walked once (one at a time, matches kept).
+ */
+export async function clipsForLogs(dailyLogIds: readonly string[], recordedSinceUtc?: string): Promise<Map<string, VoiceClipCacheRecord>> {
     const out = new Map<string, VoiceClipCacheRecord>();
     if (dailyLogIds.length === 0) return out;
     const wanted = new Set(dailyLogIds);
-    const rows = await getDatabase().voiceClips.filter(c => !!c.dailyLogId && wanted.has(c.dailyLogId)).toArray();
+    const table = getDatabase().voiceClips;
+    const scope = recordedSinceUtc ? table.where('recordedAtUtc').aboveOrEqual(recordedSinceUtc) : table.toCollection();
+    const rows = await scope.filter(c => !!c.dailyLogId && wanted.has(c.dailyLogId)).toArray();
     for (const row of rows) {
         if (row.dailyLogId && hasAudio(row)) out.set(row.dailyLogId, row);
     }
     return out;
+}
+
+/** How far back a clip of these logs can have been recorded: a day before the earliest log was saved. */
+const CLIP_BEFORE_LOG_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The floor for `clipsForLogs`: a clip is recorded BEFORE the log it became is saved (the parse runs in between),
+ * so nothing older than a day before the earliest of these logs can be theirs. Undefined (scan all) when any
+ * log has no creation time, so no clip is ever missed for want of one.
+ */
+export function clipScanFloor(logs: ReadonlyArray<{ meta?: { createdAtISO?: string } }>): string | undefined {
+    if (logs.length === 0) return undefined;
+    let earliest = Infinity;
+    for (const l of logs) {
+        const ms = Date.parse(l.meta?.createdAtISO ?? '');
+        if (!Number.isFinite(ms)) return undefined;
+        earliest = Math.min(earliest, ms);
+    }
+    return new Date(earliest - CLIP_BEFORE_LOG_MS).toISOString();
 }
 
 /** A clip can be played from this phone only when its bytes are here (sealed or plain). */

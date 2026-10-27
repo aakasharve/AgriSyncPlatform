@@ -46,6 +46,8 @@ export interface FeedEntry {
      * everything understood from it. Sample/preview entries omit it (then the card just opens).
      */
     log?: DailyLog;
+    /** PLR-D10 I13 — the person holding this phone spoke it (the glance then says "तुम्ही", like the result screen). */
+    byYou?: boolean;
     onOpen: () => void;
 }
 
@@ -55,7 +57,6 @@ export const FEED_STR = {
     subtitle: 'आज कोणी काय केलं ते पाहा',
     empty: 'आज अजून काहीही सांगितलं नाही',
     back: 'मागे',
-    count: (n: string) => `${n} नोंदी`,
     hint: '▶ दाबा — बोलणं ऐकू येईल · कार्डावर दाबा — त्यातून काय समजलं ते सगळं दिसेल',
 } as const;
 

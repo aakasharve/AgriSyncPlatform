@@ -116,7 +116,8 @@ const ActivityFeedCard: React.FC<ActivityFeedCardProps> = ({
                     className="flex min-h-[52px] min-w-0 flex-1 items-center gap-2 rounded-xl text-left active:bg-stone-50">
                     <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-1.5">
-                            <span className="inline-block shrink-0 rounded-full border border-stone-300 bg-stone-100 px-2 py-0.5 text-[12px] font-extrabold text-stone-700" data-testid="card-time">{timeLabel}</span>
+                            {/* No time captured (a typed entry): no pill, never a made-up time (P4). */}
+                            {timeLabel && <span className="inline-block shrink-0 rounded-full border border-stone-300 bg-stone-100 px-2 py-0.5 text-[12px] font-extrabold text-stone-700" data-testid="card-time">{timeLabel}</span>}
                             {audio && <span className="text-[12px] font-bold tabular-nums text-stone-700" data-testid="card-duration">{audio.durationLabel}</span>}
                             {verificationStatus
                                 ? <VerificationStatusBadge status={verificationStatus} size="sm" />

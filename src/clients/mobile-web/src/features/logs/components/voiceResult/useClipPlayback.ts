@@ -11,18 +11,29 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import { clipsForLogs, readClipAudio } from '../../../../infrastructure/voice/clipLogLink';
 
-/** The clips (on this phone) of these logs, keyed by log id. Empty until read; a log with no clip is simply absent. */
-export function useLogClips(logIds: readonly string[]): ReadonlyMap<string, VoiceClipCacheRecord> {
+export interface LogClips {
+    /** The clips (on this phone) of these logs, keyed by log id; a log with no clip is simply absent. */
+    clips: ReadonlyMap<string, VoiceClipCacheRecord>;
+    /**
+     * False until this phone has been asked once. Until then "no clip" is not yet KNOWN, so nothing may act on
+     * it (the confirm stays locked rather than opening for a recording whose clip is still being looked up).
+     */
+    ready: boolean;
+}
+
+/** `recordedSinceUtc` narrows the scan to clips recorded since then (see `clipScanFloor`); absent = all clips. */
+export function useLogClips(logIds: readonly string[], recordedSinceUtc?: string): LogClips {
     const [clips, setClips] = useState<ReadonlyMap<string, VoiceClipCacheRecord>>(() => new Map());
+    const [ready, setReady] = useState(false);
     const key = [...logIds].sort().join(',');
     useEffect(() => {
         let cancelled = false;
-        clipsForLogs(key ? key.split(',') : [])
-            .then(found => { if (!cancelled) setClips(found); })
-            .catch(() => { if (!cancelled) setClips(new Map()); });
+        clipsForLogs(key ? key.split(',') : [], recordedSinceUtc)
+            .then(found => { if (!cancelled) { setClips(found); setReady(true); } })
+            .catch(() => { if (!cancelled) { setClips(new Map()); setReady(true); } });
         return () => { cancelled = true; };
-    }, [key]);
-    return clips;
+    }, [key, recordedSinceUtc]);
+    return { clips, ready };
 }
 
 export interface ClipPlayback {
@@ -42,6 +53,11 @@ const defaultAudio: AudioFactory = url => new Audio(url);
 export function useClipPlayback(createAudio: AudioFactory = defaultAudio): ClipPlayback {
     const audio = useRef<HTMLAudioElement | null>(null);
     const url = useRef<string | null>(null);
+    // Opening a clip is a decrypt (async). Every start or stop takes a new ticket; a decrypt that finishes under an
+    // old ticket (stopped, another clip asked for, the screen left) is dropped — never a second, unstoppable player.
+    const ticket = useRef(0);
+    const loading = useRef<string | null>(null);
+    const mounted = useRef(true);
     const [playingId, setPlayingId] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
     const [lengths, setLengths] = useState<ReadonlyMap<string, number>>(() => new Map());
@@ -55,12 +71,22 @@ export function useClipPlayback(createAudio: AudioFactory = defaultAudio): ClipP
         url.current = null;
     }, []);
 
-    const stop = useCallback(() => { release(); setPlayingId(null); setProgress(0); }, [release]);
+    const stop = useCallback(() => {
+        ticket.current += 1;
+        loading.current = null;
+        release();
+        if (mounted.current) { setPlayingId(null); setProgress(0); }
+    }, [release]);
 
     const toggle = useCallback(async (logId: string, clip: VoiceClipCacheRecord) => {
+        if (loading.current === logId) return; // a second tap while it opens: the first one plays
         if (playingId === logId) { stop(); return; }
         stop();
-        const blob = await readClipAudio(clip);
+        const mine = ticket.current;
+        loading.current = logId;
+        const blob = await readClipAudio(clip).catch(() => null);
+        if (mine !== ticket.current || !mounted.current) return;
+        loading.current = null;
         if (!blob) return;
         const src = URL.createObjectURL(blob);
         const a = createAudio(src);
@@ -74,10 +100,13 @@ export function useClipPlayback(createAudio: AudioFactory = defaultAudio): ClipP
         a.onended = () => { setHeard(h => new Set(h).add(logId)); stop(); };
         setPlayingId(logId);
         setProgress(0);
-        try { await a.play(); } catch { stop(); }
+        try { await a.play(); } catch { if (mine === ticket.current) stop(); } // a later tap's player is not stopped
     }, [playingId, stop, createAudio]);
 
-    useEffect(() => release, [release]);
+    useEffect(() => {
+        mounted.current = true;
+        return () => { mounted.current = false; ticket.current += 1; loading.current = null; release(); };
+    }, [release]);
 
     return { playingId, progress, lengths, heard, toggle, stop };
 }

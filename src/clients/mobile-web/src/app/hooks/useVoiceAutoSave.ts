@@ -16,7 +16,12 @@
  *     the 'success' status), so "लक्षात ठेवलं" is never said early.
  *   - The clip of this recording is linked to the log on this phone in that same window.
  *   - Not taken, so today's review form gets the parse: the हजेरी door (labour has its own result screen),
- *     a parse with nothing understood in it, and a save that wrote nothing. Nothing is ever lost.
+ *     a parse with nothing understood in it, a parse that would MOVE the save to a plot the AI suggested
+ *     (`suggestedContext` — he must choose that himself, never silently), and a save that wrote nothing.
+ *     Nothing is ever lost.
+ *   - The day-closure analytics event (`closure.submitted`, method 'voice') is sent once the save is on the
+ *     phone, as the review form's Save tap sent it before (DWC v2 §2.8): the admin MIS counts closed days,
+ *     action time and repeat use from it, and voice is now the main way a day is closed.
  */
 import { useCallback, useRef, useState } from 'react';
 import type { AgriLogResponse, DailyLog } from '../../types';
@@ -24,6 +29,7 @@ import type { LogProvenance } from '../../domain/ai/LogProvenance';
 import type { VoiceDraftSink, VoiceRecordingRef } from '../../features/voice/useVoiceRecorder.types';
 import { linkClipToLog } from '../../infrastructure/voice/clipLogLink';
 import { logger } from '../../infrastructure/observability/Logger';
+import { emitClosureSubmitted } from '../../core/telemetry/eventEmitters';
 import { isAutoSavableVoiceDraft } from '../helpers/autoSavedVoiceLog';
 import type { UseLogCommandsResult } from './useLogCommands.types';
 import type { LogIntent } from './useAppNavigation';
@@ -46,20 +52,35 @@ export interface UseVoiceAutoSaveProps {
     setStatus: (status: 'success') => void;
     /** Injected for tests; the real link writes `dailyLogId` on the clip row. */
     linkClip?: (recording: VoiceRecordingRef, dailyLogId: string) => Promise<string | null>;
+    /** The farm the save is for (the closure event names it; no farm, no event — as the review form did). */
+    farmId?: string | null;
+    /** Injected for tests; the real one validates and queues the analytics event. */
+    emitClosure?: typeof emitClosureSubmitted;
 }
+
+/** How many of the eight parts the parse filled (the review form's `fields_used`, counted the same way). */
+const partsFilled = (d: AgriLogResponse): number => [
+    d.cropActivities, d.irrigation, d.labour, d.inputs, d.machinery, d.activityExpenses, d.observations, d.plannedTasks,
+].filter(bucket => (bucket?.length ?? 0) > 0).length;
+
+/** The AI wants this save on a plot he did not pick: only the review form may do that, in front of him. */
+const movesThePlot = (d: AgriLogResponse): boolean => !!(d.suggestedContext?.cropId && d.suggestedContext?.plotId);
 
 export const recordingKey = (r: VoiceRecordingRef): string => `${r.clipId ?? '-'}|${r.recordedAtUtc}`;
 
 /** The log of a recording that carries his words (one record holds the day's facts); else the first. */
 export const primaryLogOf = (logs: readonly DailyLog[]): DailyLog | undefined => logs.find(l => !!l.fullTranscript) ?? logs[0];
 
-export function useVoiceAutoSave({ handleAutoSave, logIntent, setStatus, linkClip = linkClipToLog }: UseVoiceAutoSaveProps) {
+export function useVoiceAutoSave({
+    handleAutoSave, logIntent, setStatus, linkClip = linkClipToLog, farmId = null, emitClosure = emitClosureSubmitted,
+}: UseVoiceAutoSaveProps) {
     const [voiceResult, setVoiceResult] = useState<VoiceResultState | null>(null);
     // 'saving' while a save is in flight, 'saved' once it wrote. Absent = never handled (or wrote nothing).
     const handled = useRef(new Map<string, 'saving' | 'saved'>());
 
     const sink: VoiceDraftSink = useCallback(async (draft: AgriLogResponse, provenance: LogProvenance | undefined, recording: VoiceRecordingRef) => {
-        if (logIntent === 'labour' || !isAutoSavableVoiceDraft(draft)) return false;
+        if (logIntent === 'labour' || !isAutoSavableVoiceDraft(draft) || movesThePlot(draft)) return false;
+        const startedAt = Date.now();
         const key = recordingKey(recording);
         const seen = handled.current.get(key);
         if (seen) {
@@ -80,6 +101,20 @@ export function useVoiceAutoSave({ handleAutoSave, logIntent, setStatus, linkCli
             });
             if (saved) {
                 handled.current.set(key, 'saved');
+                const primary = primaryLogOf(saved);
+                if (farmId && primary) {
+                    // From the moment he started speaking (else from the hand-over) to the phone's write.
+                    const spokeAt = Date.parse(recording.recordedAtUtc);
+                    try {
+                        emitClosure({
+                            farmId, logId: primary.id, method: 'voice',
+                            durationMs: Math.max(0, Date.now() - (Number.isFinite(spokeAt) ? spokeAt : startedAt)),
+                            fields_used: partsFilled(draft),
+                        });
+                    } catch (error) {
+                        logger.warn('closure.submitted not sent for a voice save', { error: String(error) });
+                    }
+                }
                 return true;
             }
         } catch (error) {
@@ -87,7 +122,7 @@ export function useVoiceAutoSave({ handleAutoSave, logIntent, setStatus, linkCli
         }
         handled.current.delete(key);
         return false;
-    }, [handleAutoSave, logIntent, setStatus, linkClip]);
+    }, [handleAutoSave, logIntent, setStatus, linkClip, farmId, emitClosure]);
 
     const clearVoiceResult = useCallback(() => setVoiceResult(null), []);
 

@@ -32,6 +32,7 @@ import { LogCommandServiceImpl } from '../../application/services/LogCommandServ
 import { useDataSource } from '../providers/DataSourceProvider';
 import { enqueueLogsForSync } from '../../features/logs/services/logSyncMutationService';
 import { countCompletedIrrigationEvents } from '../../features/logs/services/irrigationCompletion';
+import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStrings';
 // Labour Phase 2 / T2 — a record that never reached the sync queue is still ON
 // THE PHONE, and it is described with the SAME words the header chip uses for
 // that situation (T1's `sync.onPhone`). Two surfaces, one claim, one string.
@@ -50,7 +51,7 @@ import { countCompletedIrrigationEvents } from '../../features/logs/services/irr
 // that fact, so this is the only place that can tell it.
 import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast } from '../helpers/saveToastMessages';
+import { buildDayProgressToast, buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast } from '../helpers/saveToastMessages';
 
 // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
 // `ManualSubmitOutcome` moved to `useLogCommands.types.ts` (its own doc
@@ -202,9 +203,8 @@ export const useLogCommands = ({
         const summary: LastSavedLogSummaryItem[] = logs.map(log => {
             const selection = log.context.selection[0];
             const contextCropId = selection?.cropId;
-            const cropName = contextCropId === 'FARM_GLOBAL'
-                ? 'Farm'
-                : crops.find(c => c.id === contextCropId)?.name || 'Unknown Crop';
+            // The saved card ("कुठे") is Marathi: no English "Farm" / "Unknown Crop" fallback (LP-27, P4).
+            const cropName = contextCropId === 'FARM_GLOBAL' ? RESULT_STR.wholeFarm : crops.find(c => c.id === contextCropId)?.name || '—';
 
             // LABOUR_PHASE2 B1b — "Stored In" must name every plot the record
             // asserts, because one record can now assert several. Reading
@@ -219,7 +219,7 @@ export const useLogCommands = ({
                     .find(crop => crop.id === contextCropId)
                     ?.plots.find(plot => plot.id === assertedPlotIds[0])
                     ?.name
-                || 'Farm';
+                || (assertedPlotIds.length > 0 ? '—' : RESULT_STR.wholeFarm); // a plot with no name is not "the whole farm"
 
             const count = (log.cropActivities?.length || 0) +
                 (log.labour?.length || 0) +
@@ -320,6 +320,7 @@ export const useLogCommands = ({
         const correlationId = CorrelationId.generate();
         logger.info('Auto-save started', { correlationId, summary: logData.summary });
         let written: DailyLog[] | null = null;
+        let attempted: DailyLog[] = [];
 
         try {
             // SINGLE WRITE PATH: Delegate to Service
@@ -334,6 +335,7 @@ export const useLogCommands = ({
                 FEATURE_FLAGS.dailyLoop
             );
             const newLogs = options.autoSavedFromVoice ? created.map(markAutoSavedFromVoice) : created;
+            attempted = newLogs;
 
             // Persist (Service handles persistence via injected repo)
             await logCommandService.confirmAndSave(
@@ -361,10 +363,10 @@ export const useLogCommands = ({
                 [...newLogs, ...history]
             );
 
-            // AUTO-SAVE SUCCESS: the voice result screen says "लक्षात ठेवलं" itself, so only the honest
-            // "will not be sent" toast stays on that path.
-            const skippedToast = buildSkippedSyncToast(syncOutcome, language);
-            if (skippedToast || !options.autoSavedFromVoice) setToast(skippedToast ?? buildQueuedLogToast(language, beforePercent, afterPercent));
+            // AUTO-SAVE SUCCESS: the voice result screen says "लक्षात ठेवलं" itself, so a voice save's toast keeps
+            // only the day's progress (no claim, no "नोंद"); the honest "will not be sent" one wins over both.
+            const progressToast = options.autoSavedFromVoice ? buildDayProgressToast : buildQueuedLogToast;
+            setToast(buildSkippedSyncToast(syncOutcome, language) ?? progressToast(language, beforePercent, afterPercent));
             setStatus('success');
             setMode('manual'); // Ensure we are in a view that shows the success state overlay
 
@@ -372,7 +374,12 @@ export const useLogCommands = ({
             return newLogs;
         } catch (e) {
             logger.error("Auto-save error", e, { correlationId });
-            if (!written) return null;
+            if (!written) {
+                // Not kept: drop confirmAndSave's optimistic copy, so the review form is its only home (no ghost).
+                const ghostIds = new Set(attempted.map(l => l.id));
+                if (ghostIds.size > 0) setHistory(prev => prev.filter(l => !ghostIds.has(l.id)));
+                return null;
+            }
             calculateLogSummary(written, null); // no evidence either way about the server: no claim
             setLastSavedLogIds(written.map(l => l.id));
             setStatus('success');

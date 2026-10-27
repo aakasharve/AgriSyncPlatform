@@ -48,9 +48,13 @@ export function normalizeSuggestedAction(action?: string): 'auto_confirm' | 'man
 // The backend's legacy-prompt parsedLog (promptVersion legacy-2026-02-22) drifts from
 // the strict AgriLogResponseSchema: event items omit `id`, `confidence` is a scalar, and
 // extra `_meta`/`fieldConfidences` keys are present. Discarding the whole parse blocks the
-// farmer entirely. This generates the missing event ids so the parse renders on the
-// confirm screen; it is PURE shape-normalization (never invents/changes content). The
-// human confirm-step is the integrity gate. Does NOT touch the schema (shared contract).
+// farmer entirely. This generates the missing event ids so the parse can be used; it is
+// PURE shape-normalization (never invents/changes content) and leaves a MISSING list
+// missing, so readers must take an absent list as empty. There is no longer always a human
+// confirm-step: since PLR-D10 I13 a recording's parse is saved at once (founder decision
+// 2026-09-02), and the integrity gate is that it is saved UNCONFIRMED (`autoSavedFromVoice`:
+// a draft until his own "पक्कं आहे") and shown to him on the result screen. Typed text still
+// opens the review form. Does NOT touch the schema (shared contract).
 export function normalizeDriftedParsedLog(raw: unknown): unknown {
     if (!raw || typeof raw !== 'object') return raw;
     const genId = (): string =>

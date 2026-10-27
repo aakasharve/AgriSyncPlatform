@@ -12,12 +12,26 @@
  *   - His words are colour-marked ONLY with a phrase that is VERIFIED: the item's `sourceText`, not flagged
  *     unverified by the server (`provenanceVerified !== false`), and found word-for-word in his transcript.
  *     An item without such a phrase is shown without a quote; no phrase is ever made up.
+ *   - An item the server could NOT verify (`provenanceVerified === false`) is never a plain fact: it carries
+ *     `verified: false` (the screen shows the approved "हे मी नक्की ऐकलं नाही" flag) and does not make its
+ *     part "told" — the ring's own rule (`dayCategoryCoverage` drops such items too). Its part reads "not sure",
+ *     never "not said" (PLR-D1 LP-19: never tell him he did not say what the screen shows he said).
+ *   - ONE rule for the ring and the eight parts (round 3): a part is "told" exactly when the ring's own coverage
+ *     says so (`toldParts`). So the money he states on labour, a spray or a machine makes खर्च told (and is shown
+ *     there, as he said it), water that was not given is a stoppage (not पाणी ✓), a spray tank's water belongs
+ *     to the spray, and an "issue" note is a stoppage — each exactly where the ring puts it.
  *   - The screen is the plot's WHOLE DAY: the recording just made, and the day's earlier ones newest first.
+ *     One recording that named several plots became several logs; it is still ONE recording here.
  */
-import { LogVerificationStatus, type DailyLog } from '../../../../types';
-import { resolveLabourHeadcount } from '../../../../domain/logs/labourHeadcount';
-import { formatFarmerTime } from '../../../../shared/utils/displayTime';
-import { buildNodes, dayCategoryStates, type CategoryId, type IconName, type RingNodeData } from '../shramsathi/understandingRing';
+import { LogVerificationStatus, type DailyLog, type IrrigationEvent, type ObservationNote, type PlannedTask } from '../../../../types';
+import { t } from '../../../../i18n/translations';
+import { formatFarmerLogTime } from '../../../../core/navigation/helpers';
+import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion';
+// The ring's pure parts by file, not its barrel: this model is read by the activity feed on every app load, and the
+// barrel also evaluates the canvas engines (only the result screen, loaded on demand, needs those).
+import { buildNodes, type CategoryId, type RingNodeData } from '../shramsathi/understandingRing/categories';
+import { dayCategoryStates, type CoverageExtras } from '../shramsathi/understandingRing/dayCategoryCoverage';
+import type { IconName } from '../shramsathi/understandingRing/icons';
 
 export type PartKey = 'crop' | 'labour' | 'irrigation' | 'inputs' | 'expense' | 'machinery' | 'observation' | 'planned';
 
@@ -53,7 +67,15 @@ export interface PartEntry {
     value: string | null;
     /** His own verified phrase for it, if any. */
     quote?: string;
+    /** False when the server could not find the item's phrase in his words: flagged, never a plain fact. */
+    verified: boolean;
 }
+
+/**
+ * A stoppage he reported ("पाऊस आला, काम झालं नाही", "लाईट नव्हती, पाणी दिलं नाही", an "issue" note): not one of
+ * the eight parts, but understood all the same — the ring's अडथळे / अडचणी.
+ */
+export interface BlockerEntry { id: string; logId: string; value: string | null; quote?: string; verified: boolean }
 
 interface Sourced { sourceText?: string; provenanceVerified?: boolean }
 
@@ -65,66 +87,183 @@ export function verifiedPhrase(item: Sourced, transcript: string | undefined): s
 }
 
 const LATIN = /[A-Za-z]/;
+const DEVANAGARI = /[ऀ-ॿ]/;
 const clean = (s?: string | null): string => (s ?? '').trim();
 /** A number exactly as recorded (no rounding up into something he did not say). */
 const asRecorded = (n: number): string => String(n);
 /**
- * A free-text label the PARSER wrote (an activity title, a reason). Kept when it is Marathi; when it is
- * English and his own verified phrase exists, his phrase is shown instead (no English on his screen).
+ * A label the PARSER wrote (an activity title, a reason, a product name). Kept when it is Marathi — a brand
+ * name in Latin letters inside Marathi words stays, they are his words. A label with NO Marathi at all
+ * ("Spraying") is NOT shown (founder rule: no English on his screens): the entry then shows his own verified
+ * phrase, or only its part's name. The value itself is untouched in the record ("बदला" shows it).
  */
-const parserText = (text: string | undefined, quote: string | undefined): string => {
-    const t = clean(text);
-    return t && LATIN.test(t) && quote ? '' : t;
+const marathiOnly = (text: string | undefined | null): string => {
+    const s = clean(text);
+    return LATIN.test(s) && !DEVANAGARI.test(s) ? '' : s;
 };
+/** The first of these labels that can be shown in Marathi. */
+const firstMarathi = (...texts: Array<string | undefined | null>): string => texts.map(marathiOnly).find(Boolean) ?? '';
 
 // PROPOSED (Marathi) — machine names for the parser's machine types.
 const MACHINE: Partial<Record<string, string>> = {
     tractor: 'ट्रॅक्टर', tiller: 'टिलर', harvester: 'हार्वेस्टर', drone: 'ड्रोन', sprayer: 'फवारणी यंत्र',
 };
+// APPROVED — the app's words for the two halves of a labour split (workSummary), for money on a machine
+// (workSummary.rentalCost / fuelCost) and for a day's typed total (reflectPage.totalCost).
+const MALE = t('workSummary.maleWorkers', 'mr');
+const FEMALE = t('workSummary.femaleWorkers', 'mr');
+const RENT = t('workSummary.rentalCost', 'mr');
+const FUEL = t('workSummary.fuelCost', 'mr');
+const DAY_TOTAL = t('reflectPage.totalCost', 'mr');
+// PROPOSED (Marathi) — the unit words built into the values on this screen, not yet reviewed.
+const PEOPLE = 'जण'; // PROPOSED (Marathi) — "4 जण"
+const HOURS = 'तास'; // PROPOSED (Marathi) — "2 तास"
+const LITRES = 'लिटर'; // PROPOSED (Marathi) — "600 लिटर"
+const EACH = 'प्रत्येकी'; // PROPOSED (Marathi) — a wage per person, "₹400 प्रत्येकी"
+const RATE = 'दर'; // PROPOSED (Marathi) — a rate he stated, "₹30 दर"
 
 const join = (...parts: Array<string | null | undefined>): string => parts.map(clean).filter(Boolean).join(' · ');
+const positive = (n: number | undefined): n is number => typeof n === 'number' && n > 0;
+/** A rupee amount exactly as stated; nothing when none was stated (never "₹0"). */
+const rupees = (n: number | undefined, unit = ''): string => (positive(n) ? `₹${asRecorded(n)}${unit ? ` ${unit}` : ''}` : '');
+
+/**
+ * Labour as he said it, by the app's own headcount rule (`resolveLabourHeadcount`: a total counts only when it
+ * is above 0, else the split): his total ("4 जण"), his split ("3 पुरुष · 2 महिला") — and when the split IS his
+ * total ("५ बायका": count 5 AND femaleCount 5) the split, so it still says who they were. A total beside a split
+ * that is not the same people is shown with it. Never a sum the app made, never a 0 for a job workers did.
+ */
+const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: number; activity?: string }): string => {
+    const split = join(positive(e.maleCount) ? `${asRecorded(e.maleCount)} ${MALE}` : '', positive(e.femaleCount) ? `${asRecorded(e.femaleCount)} ${FEMALE}` : '');
+    if (positive(e.count)) {
+        if (!split) return `${asRecorded(e.count)} ${PEOPLE}`;
+        // Compared, never shown: is the split the same people as his total?
+        return (e.maleCount ?? 0) + (e.femaleCount ?? 0) === e.count ? split : join(`${asRecorded(e.count)} ${PEOPLE}`, split);
+    }
+    if (split) return split;
+    // A stated "nobody" (count 0 and no split) is a real 0 in the app's rule; silence is not.
+    return e.count === 0 ? `0 ${PEOPLE}` : marathiOnly(e.activity);
+};
+
+/** The money he said on a labour row, as said: the total, the wage per person, a rate. */
+const labourMoney = (e: { totalCost?: number; wagePerPerson?: number; rate?: number }): string =>
+    join(rupees(e.totalCost), rupees(e.wagePerPerson, EACH), e.rate !== e.wagePerPerson ? rupees(e.rate, RATE) : '');
+
+/** Water actually given, by the app's own rule; a spray tank's water belongs to the spray, not to पाणी. */
+const isGivenWater = (e: IrrigationEvent): boolean => e.role !== 'spray-carrier' && isCompletedIrrigationEvent(e);
+/** Water he tried to give and could not ("लाईट नव्हती, पाणी दिलं नाही"): a stoppage, as the ring reads it. */
+const isWaterStoppage = (e: IrrigationEvent): boolean => e.role !== 'spray-carrier' && !isCompletedIrrigationEvent(e);
+
+// The log factories write every planned task TWICE: once as the task and once as a mirrored "reminder" note
+// (voice tag 'planned_task', manual tag 'manual_task'); and a reminder note becomes a task that points back
+// at it (`sourceObservationId`). Shown once each, never twice ("उद्या फवारणी" is one thing he said).
+const MIRROR_TAGS = new Set(['planned_task', 'manual_task']);
+
+function plannedOnce(log: DailyLog): { observations: ObservationNote[]; tasks: PlannedTask[] } {
+    const notes = log.observations ?? [];
+    const noteIds = new Set(notes.map(o => o.id));
+    // A task made FROM one of this log's notes is that note (or that note's own task): the note stands for it.
+    // A cancelled task is not something he plans to do (the ring does not count it either).
+    const tasks = (log.plannedTasks ?? []).filter(task => task.status !== 'cancelled' && !(task.sourceObservationId && noteIds.has(task.sourceObservationId)));
+    const titles = new Set(tasks.map(task => clean(task.title)).filter(Boolean));
+    const observations = notes.filter(o => o.noteType !== 'reminder'
+        || !((o.tags ?? []).some(tag => MIRROR_TAGS.has(tag)) || titles.has(clean(o.textRaw))));
+    return { observations, tasks };
+}
 
 /** Everything understood from ONE log, part by part, in the parts' order. */
 export function partEntriesOf(log: DailyLog): PartEntry[] {
     const transcript = log.fullTranscript;
     const out: PartEntry[] = [];
-    const add = (part: PartKey, index: number, item: Sourced & { id?: string }, valueOf: (quote?: string) => string) => {
+    const costs: PartEntry[] = [];
+    const add = (part: PartKey, index: number, item: Sourced & { id?: string }, value: string) => {
         const quote = verifiedPhrase(item, transcript);
-        const value = valueOf(quote);
-        out.push({ id: item.id || `${log.id}:${part}:${index}`, logId: log.id, part, value: value || quote || null, quote });
+        out.push({
+            id: item.id || `${log.id}:${part}:${index}`, logId: log.id, part, value: value || quote || null, quote,
+            verified: item.provenanceVerified !== false,
+        });
+    };
+    // Money he said on ANOTHER part (a wage, a spray's cost, a machine's rent) is listed under खर्च too, as he said
+    // it and named by what it paid for. Without its phrase: that phrase already marks the other part in his words.
+    const addCost = (src: PartKey, index: number, item: Sourced & { id?: string }, what: string, money: string) => {
+        if (!money) return;
+        costs.push({ id: `${item.id || `${log.id}:${src}:${index}`}:cost`, logId: log.id, part: 'expense', value: join(what || partMeta(src).label, money), verified: item.provenanceVerified !== false });
     };
 
-    (log.cropActivities ?? []).forEach((a, i) => add('crop', i, a, q => parserText(a.workTypes?.filter(Boolean).join(', ') || a.title, q)));
-    (log.labour ?? []).forEach((e, i) => add('labour', i, e, q => {
-        const n = resolveLabourHeadcount(e);
-        return n != null ? `${asRecorded(n)} जण` : parserText(e.activity, q);
-    }));
-    (log.irrigation ?? []).forEach((e, i) => add('irrigation', i, e, () => join(
-        (e.durationHours ?? 0) > 0 ? `${asRecorded(e.durationHours as number)} तास` : '',
-        (e.waterVolumeLitres ?? 0) > 0 ? `${asRecorded(e.waterVolumeLitres as number)} लिटर` : '',
-    )));
-    (log.inputs ?? []).forEach((e, i) => add('inputs', i, e, () => {
-        const names = (e.mix ?? []).map(m => clean(m.productName)).filter(Boolean);
-        return names.length > 0 ? names.join(', ') : clean(e.productName);
-    }));
-    (log.activityExpenses ?? []).forEach((e, i) => add('expense', i, e, q => join(
-        parserText(e.reason, q),
-        typeof e.totalAmount === 'number' ? `₹${asRecorded(e.totalAmount)}` : '',
-    )));
-    (log.machinery ?? []).forEach((e, i) => add('machinery', i, e, () => join(
-        MACHINE[e.type],
-        (e.hoursUsed ?? 0) > 0 ? `${asRecorded(e.hoursUsed as number)} तास` : '',
-    )));
-    (log.observations ?? []).forEach((o, i) => add(o.noteType === 'reminder' ? 'planned' : 'observation', i, o, () => clean(o.textRaw)));
-    (log.plannedTasks ?? []).forEach((t, i) => add('planned', i, t, q => parserText(t.title, q)));
+    // The parser writes the Marathi title beside English work types ({title:'फवारणी', workTypes:['Spraying']}).
+    // A free note on the work or on the water is shown with it when it reads in Marathi (the feed card's old
+    // "Note:" line, I13 round 3); an English note stays in the record ("बदला").
+    (log.cropActivities ?? []).forEach((a, i) => add('crop', i, a, join(firstMarathi(a.title, a.workTypes?.filter(Boolean).join(', ')), marathiOnly(a.notes))));
+    (log.labour ?? []).forEach((e, i) => {
+        add('labour', i, e, labourValue(e));
+        addCost('labour', i, e, '', labourMoney(e));
+    });
+    (log.irrigation ?? []).forEach((e, i) => {
+        if (!isGivenWater(e)) return; // not given: a stoppage (blockersOf); a spray's water: the spray's
+        add('irrigation', i, e, join(
+            positive(e.durationHours) ? `${asRecorded(e.durationHours)} ${HOURS}` : '',
+            positive(e.waterVolumeLitres) ? `${asRecorded(e.waterVolumeLitres)} ${LITRES}` : '',
+            marathiOnly(e.notes),
+        ));
+    });
+    (log.inputs ?? []).forEach((e, i) => {
+        const names = (e.mix ?? []).map(m => marathiOnly(m.productName)).filter(Boolean);
+        const what = names.length > 0 ? names.join(', ') : marathiOnly(e.productName);
+        add('inputs', i, e, what);
+        addCost('inputs', i, e, what, rupees(e.cost));
+    });
+    (log.activityExpenses ?? []).forEach((e, i) => add('expense', i, e, join(marathiOnly(e.reason), rupees(e.totalAmount))));
+    (log.machinery ?? []).forEach((e, i) => {
+        add('machinery', i, e, join(MACHINE[e.type], positive(e.hoursUsed) ? `${asRecorded(e.hoursUsed)} ${HOURS}` : ''));
+        addCost('machinery', i, e, MACHINE[e.type] ?? '', join(rupees(e.rentalCost) && `${RENT} ${rupees(e.rentalCost)}`, rupees(e.fuelCost) && `${FUEL} ${rupees(e.fuelCost)}`));
+    });
+    // A day total he typed on the form (no voice behind it): shown as typed, under its approved name.
+    if (positive(log.manualTotalCost)) costs.push({ id: `${log.id}:manualTotal`, logId: log.id, part: 'expense', value: `${DAY_TOTAL} ${rupees(log.manualTotalCost)}`, verified: true });
+    const { observations, tasks } = plannedOnce(log);
+    // An "issue" note is a stoppage (blockersOf), as the ring reads it.
+    observations.forEach((o, i) => { if (o.noteType !== 'issue') add(o.noteType === 'reminder' ? 'planned' : 'observation', i, o, marathiOnly(o.textRaw)); });
+    tasks.forEach((task, i) => add('planned', i, task, marathiOnly(task.title)));
 
     const order = new Map(PARTS.map((p, i) => [p.key, i]));
-    return out.sort((a, b) => (order.get(a.part) ?? 0) - (order.get(b.part) ?? 0));
+    return [...out, ...costs].sort((a, b) => (order.get(a.part) ?? 0) - (order.get(b.part) ?? 0));
+}
+
+/** The stoppage the log's day-level disturbance records, as he said it; null when there is none. */
+export function blockerOf(log: DailyLog): BlockerEntry | null {
+    const d = log.disturbance;
+    if (!d) return null;
+    const quote = verifiedPhrase(d, log.fullTranscript);
+    return { id: `${log.id}:blocker`, logId: log.id, value: firstMarathi(d.reason, d.note, d.impact) || quote || null, quote, verified: true };
+}
+
+/** Every stoppage in a log, as the ring reads them: its disturbance, water that was not given, an "issue" note. */
+export function blockersOf(log: DailyLog): BlockerEntry[] {
+    const transcript = log.fullTranscript;
+    const out: BlockerEntry[] = [];
+    const day = blockerOf(log);
+    if (day) out.push(day);
+    (log.irrigation ?? []).forEach((e, i) => {
+        if (!isWaterStoppage(e)) return;
+        const quote = verifiedPhrase(e, transcript);
+        out.push({
+            id: `${e.id || `${log.id}:irrigation:${i}`}:stopped`, logId: log.id, quote, verified: e.provenanceVerified !== false,
+            value: join(partMeta('irrigation').label, firstMarathi(e.issue?.reason, e.issue?.note, e.notes)),
+        });
+    });
+    (log.observations ?? []).forEach((o, i) => {
+        if (o.noteType !== 'issue') return;
+        const quote = verifiedPhrase(o, transcript);
+        out.push({ id: `${o.id || `${log.id}:issue:${i}`}:issue`, logId: log.id, value: marathiOnly(o.textRaw) || quote || null, quote, verified: o.provenanceVerified !== false });
+    });
+    return out;
 }
 
 /** "He confirmed it": the same rule the rest of the app uses for a verified log. */
 export const isConfirmed = (log: DailyLog): boolean =>
     log.verification?.status === LogVerificationStatus.VERIFIED || log.verification?.status === LogVerificationStatus.APPROVED;
+
+/** Filled in by hand on the form (no voice behind it): the preview's "लिहिलेलं". Only a positive claim counts. */
+export const isTyped = (log: DailyLog): boolean => log.meta?.provenance?.source === 'manual';
 
 export interface Who { name: string; you: boolean }
 
@@ -144,40 +283,80 @@ export const whoSpoke = (log: DailyLog, deps: WhoDeps): Who => {
     return { name: (id && deps.nameOf(id)) || deps.unknownLabel, you: false };
 };
 
-/** One recording of the day. */
+/**
+ * Which recording a log came from. The log factories stamp every log of one save with ONE clock reading, one
+ * speaker and one parse (`sourceAiJobId`), so logs sharing all three are one recording that named several
+ * plots. No time = its own recording.
+ */
+export const recordingKeyOf = (log: DailyLog): string =>
+    log.meta?.createdAtISO
+        ? `${log.meta.createdAtISO}|${log.meta.createdByOperatorId ?? ''}|${log.meta.provenance?.sourceAiJobId ?? ''}`
+        : `log:${log.id}`;
+
+/** The log of a recording that carries his words (one record holds the day's facts); else the first. */
+export const primaryOf = (logs: readonly DailyLog[]): DailyLog | undefined => logs.find(l => !!l.fullTranscript) ?? logs[0];
+
+/** Logs grouped by recording, in first-seen order. */
+export function groupByRecording(logs: readonly DailyLog[]): DailyLog[][] {
+    const groups = new Map<string, DailyLog[]>();
+    for (const l of logs) {
+        const key = recordingKeyOf(l);
+        groups.set(key, [...(groups.get(key) ?? []), l]);
+    }
+    return [...groups.values()];
+}
+
+/** One recording of the day (the logs it became, read as one). */
 export interface RecordingView {
+    /** The log that carries his words (its clip is linked to it). */
     log: DailyLog;
     id: string;
+    /** Every log this recording became (one per plot when he named several). */
+    logIds: string[];
     timeLabel: string;
     who: Who;
     confirmed: boolean;
+    /** Filled in by hand: there is no recording behind it. */
+    typed: boolean;
     transcript: string;
     entries: PartEntry[];
+    /** The stoppages it reported. */
+    blockers: BlockerEntry[];
 }
 
-export const recordingOf = (log: DailyLog, deps: WhoDeps): RecordingView => ({
-    log,
-    id: log.id,
-    timeLabel: formatFarmerTime(log.meta?.createdAtISO),
-    who: whoSpoke(log, deps),
-    confirmed: isConfirmed(log),
-    transcript: clean(log.fullTranscript),
-    entries: partEntriesOf(log),
-});
+/** One recording from the (non-empty) list of logs it became. */
+export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingView => {
+    const log = primaryOf(all) as DailyLog;
+    return {
+        log,
+        id: log.id,
+        logIds: all.map(l => l.id),
+        timeLabel: formatFarmerLogTime(log.meta?.createdAtISO), // '' for a typed log's placeholder: no made-up time
+        who: whoSpoke(log, deps),
+        confirmed: all.every(isConfirmed),
+        typed: all.every(isTyped),
+        transcript: clean(log.fullTranscript),
+        entries: all.flatMap(partEntriesOf),
+        blockers: all.flatMap(blockersOf),
+    };
+};
 
 const plotIdsOf = (logs: readonly DailyLog[]): Set<string> =>
     new Set(logs.flatMap(l => l.context?.selection?.flatMap(s => s.selectedPlotIds ?? []) ?? []));
 
 /**
  * The plot's day: every log of the same day that touches one of the plots of `current` (or, for a record
- * of the whole farm, the other whole-farm records of that day). Deleted logs never count.
+ * of the whole farm, the other whole-farm records of that day). Deleted logs never count, and neither does
+ * a log the phone KNOWS belongs to another farm (both farms recorded and different; no guess either way).
  */
 export function sameDayLogs(current: readonly DailyLog[], history: readonly DailyLog[]): DailyLog[] {
     const date = current[0]?.date;
     if (!date) return [];
     const plots = plotIdsOf(current);
+    const farm = current.find(l => l.meta?.farmId)?.meta?.farmId;
     return history.filter(l => {
         if (l.date !== date || l.deletion) return false;
+        if (farm && l.meta?.farmId && l.meta.farmId !== farm) return false;
         const its = plotIdsOf([l]);
         return plots.size === 0 ? its.size === 0 : [...its].some(p => plots.has(p));
     });
@@ -191,17 +370,38 @@ const createdMs = (log: DailyLog): number => {
 export interface Speaker { name: string; you: boolean; times: number }
 
 export interface DayView {
-    /** The recording he just made (one log per plot when he named several). */
+    /** The recording he just made, one view per log (one log per plot when he named several). */
     current: RecordingView[];
-    /** Today's earlier recordings for the same plot(s), NEWEST FIRST. */
+    /** Today's earlier recordings for the same plot(s), NEWEST FIRST — one row per recording. */
     earlier: RecordingView[];
+    /** Every log id of the day → the recording it belongs to. */
+    recordingByLog: ReadonlyMap<string, RecordingView>;
     /** Every part, in order, with what the whole day says about it. */
     byPart: Record<PartKey, PartEntry[]>;
-    /** Parts the day says nothing about: shown in red as "not mentioned", never as 0. */
+    /** Parts the day does not tell and holds nothing about: shown in red as "not said", never as 0. */
     missing: PartKey[];
+    /**
+     * Parts the day mentions but does not TELL (by the ring's rule): only what the server could not verify. Shown
+     * as "not sure" — never as "not said", for the screen lists what he said right below.
+     */
+    unsure: PartKey[];
     /** Parts the recording just made added to. */
     touchedNow: Set<PartKey>;
+    /** Stoppages the recording just made reported. */
+    blockersNow: BlockerEntry[];
+    /** Who SPOKE today, each counted once per RECORDING (not per plot it named); a typed entry is not "said". */
     speakers: Speaker[];
+}
+
+/** The app's own rule for water that was given (the ring's default guess is only for callers without one). */
+const COVERAGE: CoverageExtras = { isCompletedIrrigation: isCompletedIrrigationEvent };
+
+/** The parts the day TELLS, by the ring's own coverage rules: one rule for the ring's orbs and the eight parts. */
+export function toldParts(logs: readonly DailyLog[], date: string | undefined): Set<PartKey> {
+    const states = dayCategoryStates(logs, date, COVERAGE);
+    const told = new Set<PartKey>();
+    for (const [id, part] of Object.entries(PART_OF_NODE)) if (part && states[id as CategoryId] === 'told') told.add(part);
+    return told;
 }
 
 export function buildDayView(current: readonly DailyLog[], history: readonly DailyLog[], deps: WhoDeps): DayView {
@@ -209,24 +409,34 @@ export function buildDayView(current: readonly DailyLog[], history: readonly Dai
     const earlierLogs = sameDayLogs(current, history)
         .filter(l => !currentIds.has(l.id))
         .sort((a, b) => createdMs(b) - createdMs(a));
-    const now = current.map(l => recordingOf(l, deps));
-    const earlier = earlierLogs.map(l => recordingOf(l, deps));
+    const now = current.map(l => recordingOf([l], deps));
+    const earlier = groupByRecording(earlierLogs).map(g => recordingOf(g, deps));
+
+    const recordingByLog = new Map<string, RecordingView>();
+    for (const r of earlier) for (const id of r.logIds) recordingByLog.set(id, r);
+    for (const r of now) recordingByLog.set(r.id, r);
 
     const byPart = Object.fromEntries(PARTS.map(p => [p.key, [] as PartEntry[]])) as Record<PartKey, PartEntry[]>;
     for (const r of [...now, ...earlier]) for (const e of r.entries) byPart[e.part].push(e);
 
     const speakers: Speaker[] = [];
-    for (const r of [...[...earlier].reverse(), ...now]) {
-        const hit = speakers.find(s => s.name === r.who.name && s.you === r.who.you);
-        if (hit) hit.times += 1; else speakers.push({ ...r.who, times: 1 });
+    const nowWho = (now.find(r => !!r.transcript) ?? now[0])?.who;
+    for (const who of [...[...earlier].reverse().filter(r => !r.typed).map(r => r.who), ...(nowWho ? [nowWho] : [])]) {
+        const hit = speakers.find(s => s.name === who.name && s.you === who.you);
+        if (hit) hit.times += 1; else speakers.push({ ...who, times: 1 });
     }
 
+    const told = toldParts([...current, ...earlierLogs], current[0]?.date);
+    const notTold = PARTS.map(p => p.key).filter(k => !told.has(k));
     return {
         current: now,
         earlier,
+        recordingByLog,
         byPart,
-        missing: PARTS.filter(p => byPart[p.key].length === 0).map(p => p.key),
+        missing: notTold.filter(k => byPart[k].length === 0),
+        unsure: notTold.filter(k => byPart[k].length > 0),
         touchedNow: new Set(now.flatMap(r => r.entries.map(e => e.part))),
+        blockersNow: now.flatMap(r => r.blockers),
         speakers,
     };
 }
@@ -273,7 +483,7 @@ export function phrasesByPart(runs: readonly WordRun[]): Array<{ part: PartKey; 
  * ring stays grey — a part that was not told shows as the red X (an invitation, never a 0).
  */
 export function ringNodesForDay(logs: readonly DailyLog[], date: string | undefined): RingNodeData[] {
-    return buildNodes(dayCategoryStates(logs, date)).map(n => (n.state === 'neutral' ? { ...n, state: 'missed' as const } : n));
+    return buildNodes(dayCategoryStates(logs, date, COVERAGE)).map(n => (n.state === 'neutral' ? { ...n, state: 'missed' as const } : n));
 }
 
 /** Which part a ring orb belongs to, so tapping a red orb opens the mic to tell it. */

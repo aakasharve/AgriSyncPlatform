@@ -8,19 +8,20 @@ import { Check } from 'lucide-react';
 import { CropSymbol } from '../../../../context/components/CropSelector';
 import { getCropTheme } from '../../../../../shared/utils/colorTheme';
 import type { TargetSelectionGroup } from '../types';
+import { useReviewFormStrings } from '../reviewFormStrings';
 
 const MultiTargetDestinationCard: React.FC<{ groups: TargetSelectionGroup[] }> = ({ groups }) => {
+    // PLR-D10 I13 (LP-27) — in his language only (reviewFormStrings).
+    const str = useReviewFormStrings();
     return (
         <div className="mx-4 mb-4 rounded-[2rem] border border-emerald-100 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
                 <div>
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Review Save Target</p>
-                    <p className="mt-1 text-sm font-semibold text-stone-700">
-                        This log will be stored in each crop below with its selected plots.
-                    </p>
+                    <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">{str.saveTargetTitle}</p>
+                    <p className="mt-1 text-sm font-semibold text-stone-700">{str.saveTargetSub}</p>
                 </div>
                 <div className="rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">
-                    {groups.reduce((sum, group) => sum + group.plotNames.length, 0)} plots
+                    {str.plots(groups.reduce((sum, group) => sum + group.plotNames.length, 0))}
                 </div>
             </div>
 
@@ -42,7 +43,7 @@ const MultiTargetDestinationCard: React.FC<{ groups: TargetSelectionGroup[] }> =
                                         <div>
                                             <p className={`text-base font-black ${theme.text}`}>{group.cropName}</p>
                                             <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-stone-500">
-                                                {group.plotNames.length === 1 ? '1 plot selected' : `${group.plotNames.length} plots selected`}
+                                                {str.plotsSelected(group.plotNames.length)}
                                             </p>
                                         </div>
                                     </div>

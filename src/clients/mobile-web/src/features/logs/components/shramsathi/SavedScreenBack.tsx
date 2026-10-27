@@ -97,6 +97,8 @@ export function SavedScreenBack({ onBack }: SavedScreenBackProps): React.ReactEl
         // invisible and only the hairline separates chrome from content.
         <div
             data-testid="saved-back-bar"
+            // PLR-D10 I13: marks a bar that stays on top, so a scroll to his words lands below it (scrollBelowHeader).
+            data-sticky-top=""
             className="sticky top-0 z-30 -mx-4 mb-2 border-b border-stone-200/80 bg-surface-100 px-4 py-2"
         >
             <button

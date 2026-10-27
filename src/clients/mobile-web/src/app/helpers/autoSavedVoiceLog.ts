@@ -16,10 +16,11 @@ import { LogVerificationStatus, type AgriLogResponse, type DailyLog } from '../.
  */
 export function isAutoSavableVoiceDraft(draft: AgriLogResponse): boolean {
     if (draft.dayOutcome === 'IRRELEVANT_INPUT') return false;
-    const items = draft.cropActivities.length + draft.irrigation.length + draft.labour.length + draft.inputs.length
-        + draft.machinery.length + (draft.activityExpenses?.length ?? 0) + (draft.observations?.length ?? 0)
-        + (draft.plannedTasks?.length ?? 0);
-    return items > 0 || !!draft.disturbance;
+    // A parse can arrive WITHOUT one of these lists (`normalizeDriftedParsedLog` leaves a missing list missing).
+    // Missing reads as empty — never a throw, which would reach him as the English "Could not process log…".
+    const parts = [draft.cropActivities, draft.irrigation, draft.labour, draft.inputs, draft.machinery,
+        draft.activityExpenses, draft.observations, draft.plannedTasks];
+    return parts.some(part => (part?.length ?? 0) > 0) || !!draft.disturbance;
 }
 
 /**
@@ -35,4 +36,19 @@ export function markAutoSavedFromVoice(log: DailyLog): DailyLog {
         autoSavedFromVoice: true,
         verification: { status: LogVerificationStatus.DRAFT, required: true },
     };
+}
+
+/**
+ * Is this HIS OWN voice log, saved by this phone with no review tap? `youIds` is who "you" are here: the
+ * active operator and the signed-in user (the same pair the result screen uses).
+ *
+ * Founder decision 2026-09-02: the record counts even if he never confirms it. So it may not be held up as
+ * work waiting on him (P5: his "पक्कं आहे" exists only on the result screen, and the review inbox shows only
+ * other people's logs). Everywhere else it stays honest: unconfirmed on its card, no confirmation credit.
+ *
+ * Read off the phone's own marker: the server keeps its marker off the wire, and the pull keeps this one.
+ */
+export function isOwnAutoSavedVoiceLog(log: DailyLog, youIds: ReadonlySet<string>): boolean {
+    const creator = log.meta?.createdByOperatorId;
+    return log.autoSavedFromVoice === true && !!creator && youIds.has(creator);
 }

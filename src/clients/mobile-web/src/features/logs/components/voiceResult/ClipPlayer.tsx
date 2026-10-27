@@ -50,6 +50,33 @@ const envelopeOf = (seed: string, n: number): number[] => {
     });
 };
 
+/** The preview's flowing trace under the bars while the clip plays (postVoiceResult `ElectricWave`), same picture. */
+const electricPath = (env: number[]): string => {
+    const W = 320, H = 22, n = 80;
+    const pts = Array.from({ length: n + 1 }, (_, i) => {
+        const e = env[Math.min(env.length - 1, Math.floor((i / n) * env.length))];
+        const jag = (i % 2 === 0 ? -1 : 1) * (0.35 + 0.65 * Math.abs(Math.sin(i * 0.83))) * e * (H / 2 - 2);
+        return `${((i / n) * W).toFixed(1)},${(H / 2 + jag).toFixed(1)}`;
+    });
+    return `M${pts.join(' L')}`;
+};
+
+const ElectricWave: React.FC<{ env: number[]; testId: string }> = ({ env, testId }) => {
+    const d = React.useMemo(() => electricPath(env), [env]);
+    return (
+        <svg viewBox="0 0 320 22" preserveAspectRatio="none" aria-hidden="true" data-testid={testId} className="mt-1 block h-[18px] w-full overflow-visible" style={{ filter: 'drop-shadow(0 0 3px rgba(20,72,230,0.55))' }}>
+            <defs>
+                <linearGradient id={`${testId}-g`} x1="0" x2="1" y1="0" y2="0">
+                    <stop offset="0" stopColor={WAVE_GREEN} /><stop offset="0.5" stopColor="#1FA6A0" /><stop offset="1" stopColor={WAVE_BLUE} />
+                </linearGradient>
+            </defs>
+            <path d={d} fill="none" stroke={`url(#${testId}-g)`} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" opacity="0.45" />
+            <path d={d} fill="none" stroke={`url(#${testId}-g)`} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" strokeDasharray="30 42" className="animate-plr-flow" />
+            <path d={d} fill="none" stroke="#FFFFFF" strokeWidth="0.9" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" strokeDasharray="5 67" className="animate-plr-flow-fast" />
+        </svg>
+    );
+};
+
 export interface ClipPlayerProps {
     /** Seeds the picture (the clip's id). */
     clipKey: string;
@@ -85,6 +112,7 @@ export const ClipPlayer: React.FC<ClipPlayerProps> = ({ clipKey, durationSec, pl
                     ))}
                     {playing && <span className="absolute -bottom-0.5 -top-0.5 w-0.5 rounded bg-blue-700" style={{ left: `calc(${prog * 100}% - 1px)` }} />}
                 </div>
+                {playing && <ElectricWave env={env} testId={`${testId}-electric`} />}
                 <div className="mt-1 flex items-center justify-between text-[12px] font-bold tabular-nums text-stone-700">
                     <span>{durationSec != null ? mmss(prog * durationSec) : '—'}</span>
                     <span data-testid={`${testId}-length`}>{durationSec != null ? mmss(durationSec) : '—'}</span>

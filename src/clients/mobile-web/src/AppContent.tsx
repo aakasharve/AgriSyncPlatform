@@ -41,6 +41,7 @@ import {
 // that file's header for what it does and does NOT solve (multi-farm data
 // isolation is a pre-existing, separate gap, not introduced here).
 import { buildOversightHeaderInputs } from './app/helpers/appContentOversightInputs';
+import { getSessionUserId } from './infrastructure/storage/AuthTokenStore';
 // spec: owner-oversight-loop (§P-I) — the ONE definition of "a view change
 // right now would destroy work in progress". The tap path (below) and the
 // swipe path (`core/navigation/MainViewTransition.tsx`, wired in
@@ -141,14 +142,19 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     // `data.history` itself still has to be a prop (the drawer's per-person
     // breakdown needs individual records, not a scalar), but nothing else
     // from `data` crosses this boundary.
+    // PLR-D10 I13 — who "you" are on this phone (the result screen's same pair), so his OWN voice
+    // auto-saves are not counted as waiting on him.
+    const activeOperatorId = data.farmerProfile.activeOperatorId;
+    const sessionUserId = getSessionUserId();
     const oversightHeaderInputs = useMemo(
         () => buildOversightHeaderInputs(
             data.history,
             data.crops,
             data.farmerProfile.operators,
             data.plannedTasks,
+            new Set([activeOperatorId, sessionUserId].filter((id): id is string => !!id)),
         ),
-        [data.history, data.crops, data.farmerProfile.operators, data.plannedTasks],
+        [data.history, data.crops, data.farmerProfile.operators, data.plannedTasks, activeOperatorId, sessionUserId],
     );
 
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I12, H08) — the header's page switcher.
