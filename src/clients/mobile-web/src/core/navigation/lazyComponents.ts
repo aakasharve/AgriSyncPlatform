@@ -30,7 +30,7 @@ export const TaskCreationSheet = React.lazy(() => import('../../features/schedul
 export const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
 export const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
 export const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
-// First-run welcome, shown once after login and before the consent screen.
+// The welcome written for the role — the LAST first-run step, after the permissions (plr-d10 I16).
 export const WelcomeScreen = React.lazy(() => import('../../pages/WelcomeScreen'));
 export const QrDemoPage = React.lazy(() => import('../../pages/QrDemoPage'));
 export const AttentionPage = React.lazy(() => import('../../features/attention/pages/AttentionPage'));

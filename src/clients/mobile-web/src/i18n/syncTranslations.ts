@@ -201,8 +201,11 @@ export interface SyncTranslations {
  * Shram Sathi speaking in the FIRST person.
  *
  * Not a new rule — the repo's existing one, made explicit so it stops being
- * re-litigated. `WelcomeScreen.tsx:148` already ships
- * `मी श्रम साथी — तुमच्या रोजच्या शेतीकामाची घडी बसवायला मदत करतो`, and the
+ * re-litigated. The first-run स्वागत screen already ships Shram Sathi speaking as मी
+ * (`features/onboarding/firstRun/firstRunCopy.ts`, `welcome.sathiLead`/`sathiName`/`sathiTail`:
+ * `मी श्रम साथी. रोज शेतात काय झालं ते मला बोलून सांगा — बाकी हिशोब मी ठेवतो.` — before
+ * plr-d10 I16 the same first-person line was `WelcomeScreen.tsx`'s
+ * `मी श्रम साथी — तुमच्या रोजच्या शेतीकामाची घडी बसवायला मदत करतो`), and the
  * Understanding-Meter design states it verbatim: the subject of any gap is
  * Shram Sathi (मला / श्रम साथीला), never the farmer (तुम्ही).
  *

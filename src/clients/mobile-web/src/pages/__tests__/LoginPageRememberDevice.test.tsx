@@ -68,7 +68,8 @@ function renderAndSwitchToPassword() {
     render(<LoginPage />);
     // By default LoginPage shows the OTP form.
     // Click the "Use password" link to switch to the password mode.
-    const pwBtn = screen.getByRole('button', { name: /use password/i });
+    // spec: plr-d10 I16 (LANG-2) — the labels are Marathi only now (no "/ Use password", "· Phone"…).
+    const pwBtn = screen.getByRole('button', { name: /पासवर्डने लॉग इन करा/ });
     fireEvent.click(pwBtn);
 }
 
@@ -83,14 +84,15 @@ describe('LoginPage — password mode remember-device controls', () => {
 
     it('renders PasswordField (show/hide toggle button present)', () => {
         renderAndSwitchToPassword();
-        // PasswordField renders a toggle button labelled "Show password"
-        expect(screen.getByRole('button', { name: 'Show password' })).toBeInTheDocument();
+        // PasswordField renders a toggle button, named in the chosen language (plr-d10 I16 LANG-2:
+        // the Marathi login no longer reads "Show password" aloud).
+        expect(screen.getByRole('button', { name: 'पासवर्ड दाखवा' })).toBeInTheDocument();
     });
 
     it('renders "Remember this device" text in the password form', () => {
         renderAndSwitchToPassword();
         // Use getAllByText since the label has a <span> wrapping the English text
-        const els = screen.getAllByText('Remember this device');
+        const els = screen.getAllByText('हे डिव्हाइस लक्षात ठेवा');
         expect(els.length).toBeGreaterThanOrEqual(1);
         expect(els[0]).toBeInTheDocument();
     });
@@ -106,11 +108,11 @@ describe('LoginPage — password mode remember-device controls', () => {
         renderAndSwitchToPassword();
 
         // Fill phone — use the specific input id
-        const phoneInput = screen.getByLabelText('Phone');
+        const phoneInput = screen.getByLabelText('मोबाईल नंबर');
         fireEvent.change(phoneInput, { target: { value: '8888888888' } });
 
         // Fill password — use the specific input id to avoid matching the aria-label
-        const passwordInput = screen.getByLabelText('Password');
+        const passwordInput = screen.getByLabelText('पासवर्ड');
         fireEvent.change(passwordInput, { target: { value: 'Testuser@123' } });
 
         // Checkbox is already checked (default)
@@ -118,7 +120,7 @@ describe('LoginPage — password mode remember-device controls', () => {
         expect(checkbox).toBeChecked();
 
         // Submit the form
-        const submitBtn = screen.getByRole('button', { name: /sign in/i });
+        const submitBtn = screen.getByRole('button', { name: /^लॉग इन करा$/ });
         fireEvent.click(submitBtn);
 
         await waitFor(() => {
@@ -135,8 +137,8 @@ describe('LoginPage — password mode remember-device controls', () => {
         renderAndSwitchToPassword();
 
         // Fill phone + password using specific labels
-        fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '8888888888' } });
-        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Testuser@123' } });
+        fireEvent.change(screen.getByLabelText('मोबाईल नंबर'), { target: { value: '8888888888' } });
+        fireEvent.change(screen.getByLabelText('पासवर्ड'), { target: { value: 'Testuser@123' } });
 
         // Uncheck the checkbox
         const checkbox = screen.getByRole('checkbox');
@@ -144,7 +146,7 @@ describe('LoginPage — password mode remember-device controls', () => {
         expect(checkbox).not.toBeChecked();
 
         // Submit
-        fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+        fireEvent.click(screen.getByRole('button', { name: /^लॉग इन करा$/ }));
 
         await waitFor(() => {
             expect(mockLogin).toHaveBeenCalledWith(

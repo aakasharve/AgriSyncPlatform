@@ -65,6 +65,11 @@ vi.mock('../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: vi.fn(), t: (key: string) => key }),
 }));
 import JoinFarmLandingPage, { __resetCompletedJoinsForTests } from '../JoinFarmLandingPage';
+import { joinLandingCopy } from '../../features/onboarding/qr/joinLandingCopy';
+
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — round-2 review LANG-2-QR) — the page speaks
+// ONE language: in Marathi the "could not reach" line is Marathi, never the English it used to print.
+const UNREACHABLE_MR = joinLandingCopy('mr').errors.unreachable;
 
 const CLAIM = {
     membershipId: 'm-1', farmId: 'farm-2', farmName: 'पवार यांची शेती', role: 'Worker', wasAlreadyMember: false,
@@ -192,7 +197,8 @@ describe('D6 - success comes from the server, never from a browser flag', () => 
         await waitFor(() => expect(screen.getByText('सामील व्हा')).not.toBeDisabled());
         expect(screen.queryByText('तुम्ही जोडले गेलात!')).toBeNull();
         expect(urlHasToken()).toBe(true);
-        expect(document.body.textContent).toContain('Could not reach the server');
+        expect(document.body.textContent).toContain(UNREACHABLE_MR);
+        expect(document.body.textContent).not.toContain('Could not reach the server');
     });
 
     it('a claim the server answered 200 stands even when /farms/mine cannot be reached', async () => {

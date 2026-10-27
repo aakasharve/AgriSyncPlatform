@@ -57,16 +57,21 @@ vi.mock('../pages/LoginPage', () => ({ default: () => <div data-testid="login-pa
 vi.mock('../pages/JoinFarmLandingPage', () => ({ default: () => null }));
 vi.mock('../features/consent/gate/useConsentGateLink', () => ({ useConsentGateLinkReconciliation: vi.fn() }));
 vi.mock('../app/featureFlags', () => ({ IS_OVERSIGHT_PREVIEW_ENABLED: false }));
+// spec: plr-d10 I16 — स्वागत now comes before login once per phone. These tests are about the
+// auth gate, so the phone has already passed it (beforeEach); its own tests: App.firstRunOrder.test.tsx.
+vi.mock('../features/onboarding/firstRun/FirstRunWelcome', () => ({ default: () => <div data-testid="first-run-welcome" /> }));
 
 import App from '../App';
 import { agriSyncClient } from '../infrastructure/api/AgriSyncClient';
 import { clearAuthSession } from '../infrastructure/storage/AuthTokenStore';
+import { markFirstRunWelcomeSeen } from '../infrastructure/storage/FirstRunDeviceStore';
 
 const KEY = 'agrisync_auth_session_v1';
 const spy = () => (agriSyncClient as unknown as { _spy: ReturnType<typeof vi.fn> })._spy;
 
 beforeEach(() => {
     window.localStorage.clear();
+    markFirstRunWelcomeSeen();
     clearAuthSession();
     spy().mockReset();
 });

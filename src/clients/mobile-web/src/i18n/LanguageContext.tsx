@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 // `Language` is re-exported by `translations.ts` from the `language.ts` leaf, so
 // it is a TYPE here and must be imported as one — `isolatedModules` is on and a
 // value-shaped import of a type-only re-export is the kind of thing that
@@ -15,9 +15,11 @@ import React, { createContext, useContext, ReactNode } from 'react';
 import { t as translate, type Language } from './translations';
 import { LanguageSyncFromServer } from './LanguageSyncFromServer';
 import { useUiPref } from '../shared/hooks/useUiPref';
+import { readDeviceLanguage, writeDeviceLanguage } from '../infrastructure/storage/FirstRunDeviceStore';
 
 interface LanguageContextType {
     language: Language;
+    /** An explicit choice by the person (स्वागत, सेट-अप केंद्र, the notice's switch): kept on the phone. */
     setLanguage: (lang: Language) => void;
     t: (key: string) => string;
 }
@@ -42,10 +44,36 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
     // back to English.
     //
     // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 4
-    const [storedLanguage, setStoredLanguage] = useUiPref<Language>('agrilog_language', 'mr');
-    const language: Language = storedLanguage === 'en' || storedLanguage === 'mr' ? storedLanguage : 'mr';
+    //
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — LANG-1). The language is chosen on
+    // स्वागत, BEFORE login, while the pre-login database is open. Signing in opens the farmer's own
+    // database (and remounts this provider), where that `uiPrefs` row does not exist — so the choice
+    // was lost the moment he signed in. An explicit choice is now ALSO kept on the phone
+    // (`FirstRunDeviceStore`) and read FIRST, synchronously, so the first paint after sign-in is
+    // already in his language. Precedence: the phone's explicit choice → this database's stored
+    // value → Marathi. The server's preference (`LanguageSyncFromServer`) applies only when nobody
+    // has chosen on this phone: the server value is never written by the app (no endpoint), so it
+    // would otherwise turn every choice back into Marathi on each start.
+    //
+    // DECISION FOR THE FOUNDER (round-1 review LANG-1-a): the choice belongs to the PHONE, not to the
+    // person. On a shared family phone, once anyone picks a language (स्वागत, सेट-अप केंद्र, the
+    // notice's switch), every account signed in later on that phone opens in it, and its own server
+    // preference is not applied; anyone can change it in सेट-अप केंद्र → भाषा. That is the price of
+    // carrying the choice across sign-in (the person is not known when he chooses on स्वागत). Pinned by
+    // `i18n/__tests__/languageCarryOver.test.tsx` ("the choice belongs to the phone").
+    const [deviceChoice, setDeviceChoice] = useState<Language | null>(() => readDeviceLanguage());
+    const [storedLanguage, setStoredLanguage] = useUiPref<Language>('agrilog_language', deviceChoice ?? 'mr');
+    const fromStore: Language = storedLanguage === 'en' || storedLanguage === 'mr' ? storedLanguage : 'mr';
+    const language: Language = deviceChoice ?? fromStore;
 
     const setLanguage = (lang: Language) => {
+        writeDeviceLanguage(lang);
+        setDeviceChoice(lang);
+        setStoredLanguage(lang);
+    };
+
+    // The server's preference: this database only, never recorded as the phone's choice.
+    const applyServerLanguage = (lang: Language) => {
         setStoredLanguage(lang);
     };
 
@@ -53,7 +81,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
 
     return (
         <LanguageContext.Provider value={{ language, setLanguage, t }}>
-            <LanguageSyncFromServer />
+            <LanguageSyncFromServer apply={applyServerLanguage} skip={deviceChoice !== null} />
             {children}
         </LanguageContext.Provider>
     );

@@ -38,7 +38,7 @@ describe.each([['OTP'], ['password']])('LoginPage join button (%s mode)', (mode)
         const prompt = vi.spyOn(window, 'prompt').mockImplementation(() => null);
         const alert = vi.spyOn(window, 'alert').mockImplementation(() => undefined);
         render(<LoginPage />);
-        if (mode === 'password') fireEvent.click(screen.getByRole('button', { name: /use password/i }));
+        if (mode === 'password') fireEvent.click(screen.getByRole('button', { name: /पासवर्डने लॉग इन करा/ }));
 
         const button = screen.getByTestId('login-join');
         expect(button).toHaveTextContent(JOIN_DOOR_LABEL);

@@ -103,6 +103,15 @@ export function requestJoinFarm(): void {
     window.dispatchEvent(new Event(OPEN_JOIN_FARM_EVENT));
 }
 
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I16, round-1 review F10). How long the first
+ * run waits for /farms/mine before it stops holding the screen. `getMyFarms` has no timeout of its
+ * own, so on a hanging (not refused) connection the first run used to show an empty screen for as
+ * long as the request hung. After this wait an unknown list reads as "no farm known" (exactly what a
+ * refused request already did); the request is NOT abandoned — a late answer still lands.
+ */
+export const FARM_LIST_WAIT_MS = 10_000;
+
 export function useFarmContextState(): FarmContextState {
     const { isAuthenticated, session } = useAuth();
     const [myFarms, setMyFarms] = React.useState<MyFarmDto[] | null>(null);
@@ -122,6 +131,12 @@ export function useFarmContextState(): FarmContextState {
     const farmContext = useOptionalFarmContext();
     const farmContextRef = React.useRef(farmContext);
     farmContextRef.current = farmContext;
+    // Round-2 review EDGE-1. Set when `handleWizardComplete` closed the 0-farm screen for a farm the
+    // server had ALREADY made and the list went back to "not known yet" (null). If the re-read then
+    // fails (offline) or hangs past FARM_LIST_WAIT_MS, nothing confirms a farm: the doors come back
+    // (he was on them a moment ago) instead of the empty app with no farm and no way on. Any answer
+    // from the server clears it (a farm listed → the first run goes on; none → the doors anyway).
+    const doorsUntilListedRef = React.useRef(false);
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join door opens on request from
     // anywhere, and by itself right after sign-in when the login screen's join button asked
@@ -137,6 +152,7 @@ export function useFarmContextState(): FarmContextState {
 
     React.useEffect(() => {
         if (!isAuthenticated) {
+            doorsUntilListedRef.current = false;
             setMyFarms(null);
             setPendingFarms([]);
             setShowFirstFarmWizard(false);
@@ -146,10 +162,23 @@ export function useFarmContextState(): FarmContextState {
         }
 
         let cancelled = false;
+        const stopWaiting = () => {
+            // A list already on screen stays; only a list still unknown (null) stops being waited for.
+            setMyFarms(prev => prev ?? []);
+            if (doorsUntilListedRef.current) {
+                doorsUntilListedRef.current = false;
+                setShowMinimalOnboarding(true);
+            }
+        };
+        const waitTimer = setTimeout(() => {
+            if (!cancelled) stopWaiting();
+        }, FARM_LIST_WAIT_MS);
         (async () => {
             try {
                 const listed = await getMyFarms();
+                clearTimeout(waitTimer);
                 if (cancelled) return;
+                doorsUntilListedRef.current = false;
                 // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F2) — /farms/mine now lists a
                 // typed-code join request too (status PendingApproval). That is not a farm the
                 // person is in: the server sends it no data and refuses its writes. So it is never
@@ -177,10 +206,14 @@ export function useFarmContextState(): FarmContextState {
                     SessionStore.setCurrentFarmId(next);
                 }
             } catch {
-                if (!cancelled) setMyFarms([]);
+                clearTimeout(waitTimer);
+                // A failed RE-read is not "no farms": the list already on screen (for example the
+                // farm the server has just created) stays. Only a list never read becomes empty
+                // (round-1 review F8a — the new farm used to vanish mid-first-run here).
+                if (!cancelled) stopWaiting();
             }
         })();
-        return () => { cancelled = true; };
+        return () => { cancelled = true; clearTimeout(waitTimer); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refreshCounter, isAuthenticated, session?.userId, hasRealToken]);
 
@@ -194,7 +227,36 @@ export function useFarmContextState(): FarmContextState {
         setShowMinimalOnboarding(false);
         setCurrentFarmId(result.farmId);
         SessionStore.setCurrentFarmId(result.farmId);
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (I16) — the farm the server just made
+        // is listed AT ONCE, so the first run goes straight on to फोनच्या परवानग्या instead of
+        // flashing the empty app until /farms/mine answers. Only what the server returned: its id,
+        // name and code, and the creator's seat (the bootstrap makes him its owner). The re-read
+        // below replaces this entry with the server's own.
+        //
+        // Only for a farm made by THIS call (round-1 review F8b). `wasAlreadyBootstrapped` means the
+        // server handed back a farm made earlier — one this person may have left since — so nothing
+        // claims he owns it: a list with no farm in it goes back to "not known yet" (the first run
+        // waits, bounded by FARM_LIST_WAIT_MS) until the server's own list answers. If it never does
+        // (offline, or hung past the wait), the 0-farm doors come back (round-2 review EDGE-1).
+        setMyFarms(prev => {
+            if (prev?.some(f => f.farmId === result.farmId)) return prev;
+            if (result.wasAlreadyBootstrapped) {
+                if (prev && prev.length > 0) return prev;
+                doorsUntilListedRef.current = true; // EDGE-1: idempotent, safe if React re-runs this
+                return null;
+            }
+            return [...(prev ?? []), {
+                farmId: result.farmId,
+                name: result.farmName,
+                role: 'PrimaryOwner',
+                farmCode: result.farmCode,
+                subscription: null,
+                status: 'Active',
+            }];
+        });
         setRefreshCounter(x => x + 1);
+        // The app-wide farm list (/me/context) learns about the new farm too.
+        void farmContextRef.current?.refresh();
     }, []);
 
     const handleJoinViaQr = React.useCallback(() => {

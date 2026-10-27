@@ -32,6 +32,7 @@ import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
 // here as a window event; see that module's header for why.
 import { OPEN_REVIEW_INBOX_EVENT } from '../../features/oversight/oversightNavigationEvents';
 import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRequest';
+import FirstRunWait from '../../features/onboarding/firstRun/FirstRunWait';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -42,7 +43,25 @@ import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRe
 // Memo derivations live in ./hooks/useAppRouterDerivations.
 // URL nudge handling lives in ./hooks/useNudgeRouteEffect.
 
-const AppRouter: React.FC = () => {
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-6, FR-7, FR-8). The first run's
+ * last two steps — फोनच्या परवानग्या, then the welcome written for the role — come AFTER the farm
+ * is created or joined (PLR-D9 T8), so they need the farm the person is now IN. `AppContent` owns
+ * that list (/farms/mine, Active seats only) and hands the open one down. Optional, so a caller
+ * that passes nothing gets exactly the router body (no farm → no first-run step).
+ */
+export interface FirstRunFarm {
+    name: string;
+    role: string;
+}
+
+interface AppRouterProps {
+    firstRunFarm?: FirstRunFarm | null;
+    /** False while the farm lists have not answered yet (so "no farm" is not yet known). */
+    farmsKnown?: boolean;
+}
+
+const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown = true }) => {
     const navigation = useAppNavigationState();
     const context = useAppLogState();
     const data = useAppDataState();
@@ -52,19 +71,23 @@ const AppRouter: React.FC = () => {
     const trust = useAppTrustState();
     const { handleReset, lastSavedLogSummary, lastSavedLogIds } = useAppUiRuntime();
 
-    const [permissionsGranted, setPermissionsGranted] = useUiPref<boolean>(
+    // The same two once-only prefs as before (installed users who passed them see neither again —
+    // P11); only their ORDER changed: permissions first, the role welcome last.
+    const [permissionsGranted, setPermissionsGranted, permissionsLoaded] = useUiPref<boolean>(
         'shramsafal_permissions_granted',
         typeof window === 'undefined',
     );
-    // First-run welcome, shown once after login and before the consent screen.
-    const [welcomeSeen, setWelcomeSeen] = useUiPref<boolean>(
+    // The welcome written for the role — the LAST first-run step (it was the first, right after login).
+    const [welcomeSeen, setWelcomeSeen, welcomeLoaded] = useUiPref<boolean>(
         'shramsafal_welcome_seen',
         typeof window === 'undefined',
     );
+    // FR-8: back from the role welcome re-opens the permissions step for this visit.
+    const [permissionsAgain, setPermissionsAgain] = React.useState(false);
     const { getTodayCounts, getContextColorIndicator } = useAppViewHelpers();
     // Session's active farm — threaded into ctx so the hook-free route render
     // functions (mainView) can reach it. See AppRouterContext.activeFarmId.
-    const { currentFarmId, currentFarm } = useFarmContext();
+    const { currentFarmId } = useFarmContext();
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
     const { logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady } = context;
@@ -197,20 +220,42 @@ const AppRouter: React.FC = () => {
     // on this door again). The 2026-08-31 ruling it implemented is
     // superseded by the founder's 2026-09-01 final direction §7 / D1–D3.
 
-    if (!welcomeSeen) {
-        return (
-            <React.Suspense fallback={<RouteLoader />}>
-                <WelcomeScreen onContinue={() => setWelcomeSeen(true)} farmRole={currentFarm?.role} />
-            </React.Suspense>
-        );
-    }
-
-    if (!permissionsGranted) {
-        return (
-            <React.Suspense fallback={<RouteLoader />}>
-                <OnboardingPermissionsPage onComplete={() => setPermissionsGranted(true)} />
-            </React.Suspense>
-        );
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I16). A mocked pref without a third
+    // element reads as loaded. Until both prefs have answered, nothing first-run is decided — an
+    // installed user must not see a flash of a step he passed long ago. The farm list's wait is
+    // bounded by `useFarmContextState` (FARM_LIST_WAIT_MS): a list that has not answered by then
+    // reads as "not known to have a farm", and a late answer still lands.
+    const firstRunPending = !permissionsGranted || !welcomeSeen || permissionsAgain;
+    if (firstRunPending) {
+        if (permissionsLoaded === false || welcomeLoaded === false || (!firstRunFarm && !farmsKnown)) {
+            // Round-2 review WAIT-1: a spinner and "उघडत आहे…" after a beat, not an empty area.
+            return <FirstRunWait />;
+        }
+        // With no farm yet the 0-farm doors (MinimalOnboarding, drawn by AppContent) are on top;
+        // a person whose only seat is a request still waiting stays there ("विनंती पाठवली").
+        if (firstRunFarm) {
+            if (!permissionsGranted || permissionsAgain) {
+                // NO onBack here, on purpose (round-1 review F1 / FR-8-a — a deviation from "मागे on
+                // every step", reported to the founder): the step before (the farm form, or the join)
+                // has already happened on the server and cannot be undone or edited from here. See
+                // OnboardingPermissionsPage's header. The role welcome's back DOES return here.
+                return (
+                    <React.Suspense fallback={<RouteLoader />}>
+                        <OnboardingPermissionsPage onComplete={() => { setPermissionsGranted(true); setPermissionsAgain(false); }} />
+                    </React.Suspense>
+                );
+            }
+            return (
+                <React.Suspense fallback={<RouteLoader />}>
+                    <WelcomeScreen
+                        onContinue={() => setWelcomeSeen(true)}
+                        onBack={() => setPermissionsAgain(true)}
+                        farmRole={firstRunFarm.role}
+                        farmName={firstRunFarm.name}
+                    />
+                </React.Suspense>
+            );
+        }
     }
 
     // Snapshot ctx every route render-function consumes. Keeps the route

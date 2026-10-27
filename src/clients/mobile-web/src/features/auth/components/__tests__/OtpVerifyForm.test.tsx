@@ -85,7 +85,8 @@ describe('OtpVerifyForm — remember-device controls', () => {
 
     it('renders "Remember this device" text', () => {
         renderForm();
-        const els = screen.getAllByText('Remember this device');
+        // spec: plr-d10 I16 (LANG-2) — Marathi only, no "· Remember this device".
+        const els = screen.getAllByText('हे डिव्हाइस लक्षात ठेवा');
         expect(els.length).toBeGreaterThanOrEqual(1);
         expect(els[0]).toBeInTheDocument();
     });
@@ -107,7 +108,7 @@ describe('OtpVerifyForm — remember-device controls', () => {
         renderForm();
 
         // Fill in the 6-digit OTP
-        const otpInput = screen.getByRole('textbox', { name: /6-digit code/i });
+        const otpInput = screen.getByRole('textbox', { name: /६-अंकी कोड/ });
         fireEvent.change(otpInput, { target: { value: '123456' } });
 
         // Checkbox is already checked (default); submit
@@ -141,7 +142,7 @@ describe('OtpVerifyForm — remember-device controls', () => {
         expect(checkbox).not.toBeChecked();
 
         // Fill OTP + submit
-        const otpInput = screen.getByRole('textbox', { name: /6-digit code/i });
+        const otpInput = screen.getByRole('textbox', { name: /६-अंकी कोड/ });
         fireEvent.change(otpInput, { target: { value: '654321' } });
         fireEvent.submit(otpInput.closest('form')!);
 
@@ -172,7 +173,7 @@ describe('OtpVerifyForm — remember-device controls', () => {
     // evidence: docs/LAUNCH-READINESS-AND-AGRISTACK-2026-08-23.md — Decision 2 item 4
     it('shows the name field immediately, without waiting for a response', () => {
         renderForm();
-        expect(screen.getByRole('textbox', { name: /your name/i })).toBeInTheDocument();
+        expect(screen.getByRole('textbox', { name: /तुमचं नाव/ })).toBeInTheDocument();
     });
 
     it('sends the typed name to verifyOtp so the server never invents one', async () => {
@@ -185,10 +186,10 @@ describe('OtpVerifyForm — remember-device controls', () => {
 
         renderForm();
 
-        fireEvent.change(screen.getByRole('textbox', { name: /your name/i }), {
+        fireEvent.change(screen.getByRole('textbox', { name: /तुमचं नाव/ }), {
             target: { value: '  पुरुषोत्तम आरवे  ' },
         });
-        const otpInput = screen.getByRole('textbox', { name: /6-digit code/i });
+        const otpInput = screen.getByRole('textbox', { name: /६-अंकी कोड/ });
         fireEvent.change(otpInput, { target: { value: '123456' } });
         fireEvent.submit(otpInput.closest('form')!);
 
@@ -213,10 +214,10 @@ describe('OtpVerifyForm — remember-device controls', () => {
         renderForm();
 
         // Whitespace only — not a name.
-        fireEvent.change(screen.getByRole('textbox', { name: /your name/i }), {
+        fireEvent.change(screen.getByRole('textbox', { name: /तुमचं नाव/ }), {
             target: { value: '   ' },
         });
-        const otpInput = screen.getByRole('textbox', { name: /6-digit code/i });
+        const otpInput = screen.getByRole('textbox', { name: /६-अंकी कोड/ });
         fireEvent.change(otpInput, { target: { value: '123456' } });
         fireEvent.submit(otpInput.closest('form')!);
 

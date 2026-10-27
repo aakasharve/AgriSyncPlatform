@@ -152,7 +152,8 @@ const passwordInput = (): HTMLInputElement => {
     return el;
 };
 const sendOtp = () => screen.getByRole('button', { name: /Send OTP|OTP पाठवा/ });
-const signIn = () => screen.getByRole('button', { name: /^sign in$/i });
+// spec: plr-d10 I16 (LANG-2) — one language per screen: "लॉग इन करा" in Marathi, "Sign in" in English.
+const signIn = () => screen.getByRole('button', { name: /^(sign in|लॉग इन करा)$/i });
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 40)); });
 
 async function renderLogin(): Promise<HTMLElement> {
@@ -162,7 +163,7 @@ async function renderLogin(): Promise<HTMLElement> {
 
 async function renderPasswordMode(): Promise<HTMLElement> {
     render(<LoginPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /use password/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /पासवर्डने लॉग इन करा|sign in with password/i }));
     return screen.findByTestId('consent-tick', {}, { timeout: 5000 });
 }
 

@@ -17,7 +17,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { resetAndSeed } from '../fixtures/seed.api';
-import { loginViaPassword, tickConsentIfPresent, HOME_READY_TESTID } from '../fixtures/loginHelper';
+import { loginViaPassword, passFirstRunWelcomeIfPresent, tickConsentIfPresent, HOME_READY_TESTID } from '../fixtures/loginHelper';
 
 test.describe('Login', () => {
     test('login with seeded user lands on home', async ({ page }) => {
@@ -35,6 +35,7 @@ test.describe('Login', () => {
         // Negative test — cannot use loginViaPassword (it asserts success).
         // Inline the toggle-to-password flow with a WRONG password.
         await page.goto('/');
+        await passFirstRunWelcomeIfPresent(page);
 
         const useLegacyButton = page.getByRole('button', { name: /password.*legacy|पासवर्डने/i });
         await useLegacyButton.waitFor({ timeout: 15_000 });
@@ -53,10 +54,14 @@ test.describe('Login', () => {
         await tickConsentIfPresent(page, submitBtn);
         await submitBtn.click();
 
-        // An inline alert div (role="alert") should appear with an error message
+        // An inline alert div (role="alert") should appear with an error message.
+        // spec: plr-d10 I16 (LANG-2, round-2 review E2E-1) — a fresh browser context has no chosen
+        // language, so the page is Marathi and LoginPage shows authCopy's MR `password.failed`
+        // ("लॉग इन झालं नाही. …", src/features/auth/authCopy.ts) instead of AuthProvider's English
+        // "Login failed. Check phone/password…" (still shown to someone who chose English).
         const alert = page.getByRole('alert').first();
         await expect(alert).toBeVisible({ timeout: 10_000 });
-        await expect(alert).toContainText(/invalid|incorrect|wrong|चुकीचे|unauthorized|login failed|check phone/i);
+        await expect(alert).toContainText(/लॉग इन झालं नाही|invalid|incorrect|wrong|चुकीचे|unauthorized|login failed|check phone/i);
 
         // Still on login — home shell should NOT be present
         await expect(page.getByTestId(HOME_READY_TESTID)).not.toBeVisible();

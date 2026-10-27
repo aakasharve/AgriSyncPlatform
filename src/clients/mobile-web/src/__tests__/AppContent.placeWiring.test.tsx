@@ -33,6 +33,10 @@ vi.mock('../features/context/components/BottomNavigation', () => ({
     ),
 }));
 vi.mock('../features/context/components/MeAlertRail', () => ({ default: () => null }));
+// multi-user step 2's access notice reads FarmContext; this test is about the place wiring only.
+vi.mock('../features/context/components/AccessStatusNotice', () => ({ default: () => null }));
+// the first run's 0-farm doors sign out through useAuth; this test is about the place wiring only.
+vi.mock('../app/providers/AuthProvider', () => ({ useAuth: () => ({ logout: vi.fn() }) }));
 vi.mock('../core/navigation/AppRouter', () => ({ default: () => null }));
 vi.mock('../shared/components/ui/ActionToast', () => ({ default: () => null }));
 vi.mock('../features/weather/components/WeatherReactionPrompt', () => ({ default: () => null }));

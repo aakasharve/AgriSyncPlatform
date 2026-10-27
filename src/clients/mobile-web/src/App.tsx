@@ -22,6 +22,8 @@ import { setAiTestModeEnabled, clearAiTestMode } from './infrastructure/storage/
 import AppShell from './app/components/AppShell';
 import LoginPage from './pages/LoginPage';
 import JoinFarmLandingPage from './pages/JoinFarmLandingPage';
+import FirstRunWelcome from './features/onboarding/firstRun/FirstRunWelcome';
+import { hasSeenFirstRunWelcome, markFirstRunWelcomeSeen } from './infrastructure/storage/FirstRunDeviceStore';
 // spec: 2026-08-25-prod-cutover-waves (B1) — the pre-login acceptance gets its owner.
 import { useConsentGateLinkReconciliation } from './features/consent/gate/useConsentGateLink';
 import { IS_OVERSIGHT_PREVIEW_ENABLED } from './app/featureFlags';
@@ -45,6 +47,14 @@ const AppFrame: React.FC<{
     // shell during 'checking' and never flash LoginPage before boot validation.
     const { isAuthenticated, authStatus, session } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-1, FR-8) — स्वागत is the FIRST
+    // screen, before login, once per phone. The login screen's "← मागे" brings it back (that is
+    // also where the language is chosen before signing in).
+    const [showWelcome, setShowWelcome] = useState<boolean>(() => !hasSeenFirstRunWelcome());
+    const startFromWelcome = () => {
+        markFirstRunWelcomeSeen();
+        setShowWelcome(false);
+    };
 
     // spec: plr-d10-x1-consent-tick-on-phone-screen-2026-10-25 — there is no full-screen
     // consent gate any more. Consent is one tick on every screen that takes a phone number
@@ -88,9 +98,24 @@ const AppFrame: React.FC<{
     // at some point, and re-gating a live account on a Dexie miss would lock him out of his
     // own farm over a cleared cache. Re-consent on a NEW notice version is a server-side
     // decision, not a client cache one.
+    //
+    // A QR deep link (above) still goes straight to its own page: a worker who scanned the
+    // owner's QR is not sent round स्वागत first. DECISION FOR THE FOUNDER (round-1 review F7): this
+    // departs from PLR-D9 T8's order (स्वागत first for everyone). On that page the language can still
+    // be changed — the consent tick's notice has the मराठी / English switch (ConsentNoticeSheet), and the
+    // whole page follows it: every word there is `joinLandingCopy` in ONE language (round-2 LANG-2-QR).
+    if (!isAuthenticated && showWelcome) {
+        return (
+            <AppShell>
+                <FirstRunWelcome onStart={startFromWelcome} />
+            </AppShell>
+        );
+    }
     return (
         <AppShell>
-            {isAuthenticated ? <AppContent crops={crops} setCrops={setCrops} /> : <LoginPage />}
+            {isAuthenticated
+                ? <AppContent crops={crops} setCrops={setCrops} />
+                : <LoginPage onBack={() => setShowWelcome(true)} />}
         </AppShell>
     );
 };

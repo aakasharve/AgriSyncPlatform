@@ -28,30 +28,13 @@ import {
     normalizeFarmCode,
     readJoinLink,
 } from '../qr/farmCodeEntry';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { joinByCodeCopy } from './joinByCodeCopy';
 
-/** PROPOSED Marathi (founder review). `unknown` and `roleNote` follow the approved preview's words. */
-export const JOIN_BY_CODE_COPY = {
-    title: 'शेतात सामील व्हा',
-    codeLabel: 'मालकाने दिलेला शेताचा कोड टाका',
-    codePlaceholder: '६ अक्षरांचा कोड',
-    roleNote: 'तुमची भूमिका मालक ठरवतील.',
-    checking: 'तपासत आहे…',
-    unknown: 'हा कोड सापडला नाही. मालकाला पुन्हा विचारा.',
-    rateLimited: 'थोड्या वेळाने पुन्हा प्रयत्न करा',
-    failed: 'आत्ता पाठवता आलं नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.',
-    // M5: the sign-in itself is gone (refused even after one refresh) — the internet is not the problem.
-    signedOut: 'तुमचं लॉगिन संपलं आहे. पुन्हा लॉग इन करा.',
-    badLink: 'ही लिंक ओळखता आली नाही. मालकाला ती पुन्हा पाठवायला सांगा.',
-    retry: 'पुन्हा पाठवा',
-    qrTitle: 'QR असेल तर',
-    qrLine: 'फोनच्या कॅमेऱ्याने QR स्कॅन करा — सामील होण्याचं पान उघडेल. मालकाने लिंक पाठवली असेल तर ती वरच्या चौकटीत टाका.',
-    sentTitle: 'विनंती पाठवली',
-    sentLine: 'मालक तुमची भूमिका ठरवतील आणि मंजूर करतील — तोपर्यंत वाट पाहा',
-    activeTitle: 'तुम्ही आधीच या शेतात आहात',
-    pausedTitle: 'या शेतातलं तुमचं काम थांबवलं आहे',
-    pausedLine: 'मालकाशी बोला.',
-    ok: 'ठीक आहे',
-} as const;
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — round-2 review LANG-strict-EN-join) — the words
+// live in `joinByCodeCopy.ts` with an English side, so someone who chose English sees English here too.
+// `JOIN_BY_CODE_COPY` (the Marathi) is still exported from here for the screens that already import it.
+export { JOIN_BY_CODE_COPY } from './joinByCodeCopy';
 
 type Phase = 'enter' | 'sending' | 'done';
 type Problem = 'unknown' | 'rateLimited' | 'failed' | 'signedOut' | 'badLink' | null;
@@ -70,6 +53,7 @@ const defaultOpenJoinLink = (href: string): void => {
 };
 
 const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, onJoined, openJoinLink = defaultOpenJoinLink }) => {
+    const C = joinByCodeCopy(useOptionalLanguage()?.language);
     const [raw, setRaw] = useState('');
     const [phase, setPhase] = useState<Phase>('enter');
     const [problem, setProblem] = useState<Problem>(null);
@@ -149,7 +133,6 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
         if (code.length >= FARM_CODE_LENGTH) setProblem('unknown');
     };
 
-    const C = JOIN_BY_CODE_COPY;
     const problemLine = problem === null ? null : {
         unknown: C.unknown,
         rateLimited: C.rateLimited,
@@ -164,7 +147,7 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
         <div className="fixed inset-0 z-[70] overflow-y-auto bg-gradient-to-b from-emerald-50 via-stone-50 to-white"
             role="dialog" aria-modal="true" aria-label={C.title} data-testid="join-by-code" style={{ fontFamily: SANS }}>
             <div className="mx-auto max-w-md px-4 pb-10">
-                <PageBar title={C.title} onBack={onClose} />
+                <PageBar title={C.title} onBack={onClose} backLabel={C.back} />
 
                 {phase !== 'done' && (
                     <div className="space-y-3">

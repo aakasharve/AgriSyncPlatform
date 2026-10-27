@@ -4,10 +4,11 @@ import { expect } from '@playwright/test';
 /**
  * Shared login helper for Sub-plan 05 specs.
  *
- * The mobile-web LoginPage renders the OTP flow by default ("OTP पाठवा / Send OTP").
+ * A fresh browser context first shows स्वागत (plr-d10 I16); `passFirstRunWelcomeIfPresent` taps
+ * "सुरू करूया". The mobile-web LoginPage then renders the OTP flow by default ("OTP पाठवा").
  * Specs use the legacy password form because OTP requires SMS delivery
  * which CI does not have. To reach the password form, click the
- * "पासवर्डने लॉग इन करा / Use password" toggle button.
+ * "पासवर्डने लॉग इन करा" toggle button (Marathi only since plr-d10 I16).
  *
  * Then fill phone + password + optionally toggle the "Remember this device"
  * checkbox (pre-checked by default; pass rememberDevice: false to uncheck it),
@@ -21,9 +22,7 @@ import { expect } from '@playwright/test';
  * can omit the option or pass `true`.
  *
  * Selector note: the checkbox has id="remember-device-password" and its label
- * text is "हे डिव्हाइस लक्षात ठेवा · Remember this device" (Marathi/Devanagari). We target it by
- * label role using /Remember this device/i so the query is locale-independent
- * and resilient to Marathi text changes.
+ * text is "हे डिव्हाइस लक्षात ठेवा" (Marathi only since plr-d10 I16 — the English half is gone).
  */
 /**
  * The testid that proves the signed-in app shell (the Home log view) is on screen.
@@ -78,6 +77,25 @@ export async function tickConsentIfPresent(page: Page, submit: Locator): Promise
 }
 
 
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-1) — स्वागत is the first screen on a
+ * phone (browser context) that has not seen it, before the login. Tap "सुरू करूया" when it is there;
+ * return quietly when the login is already on screen.
+ */
+export async function passFirstRunWelcomeIfPresent(page: Page): Promise<void> {
+    const start = page.getByTestId('first-run-start');
+    const login = page.getByRole('button', { name: /पासवर्डने/ });
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+        if (await start.isVisible().catch(() => false)) {
+            await start.click();
+            return;
+        }
+        if (await login.isVisible().catch(() => false)) return;
+        await page.waitForTimeout(250);
+    }
+}
+
 export async function loginViaPassword(
     page: Page,
     phone: string,
@@ -85,12 +103,12 @@ export async function loginViaPassword(
     options: LoginOptions = {},
 ): Promise<void> {
     await page.goto('/');
+    await passFirstRunWelcomeIfPresent(page);
 
     // Toggle from OTP (default) to password (legacy) form. The button is only
     // visible while topMode === 'otp'; clicking switches to topMode='password'.
-    // LoginPage.tsx renders: "पासवर्डने लॉग इन करा / Use password" (Marathi/Devanagari).
-    // Match the unambiguous English part — script-independent, avoids Devanagari/Bengali confusion.
-    const useLegacyButton = page.getByRole('button', { name: /Use password/i });
+    // spec: plr-d10 I16 (LANG-2) — LoginPage.tsx renders "पासवर्डने लॉग इन करा" only (no "/ Use password").
+    const useLegacyButton = page.getByRole('button', { name: /पासवर्डने लॉग इन करा/ });
     await useLegacyButton.waitFor({ timeout: 15_000 });
     await useLegacyButton.click();
 
@@ -107,9 +125,9 @@ export async function loginViaPassword(
     // The "Remember this device" checkbox (id="remember-device-password") is
     // pre-checked. Only interact when the caller explicitly wants it OFF.
     // We use getByLabel so the selector is tied to the visible label text,
-    // not to a fragile id — label text: "हे डिव्हाइस लक्षात ठेवा · Remember this device" (Marathi)
+    // not to a fragile id — label text: "हे डिव्हाइस लक्षात ठेवा" (Marathi only since plr-d10 I16)
     if (options.rememberDevice === false) {
-        const rememberCheckbox = page.getByLabel(/Remember this device/i);
+        const rememberCheckbox = page.getByLabel(/हे डिव्हाइस लक्षात ठेवा/);
         await rememberCheckbox.waitFor({ timeout: 10_000 });
         // The checkbox is pre-checked; we need to uncheck it.
         await rememberCheckbox.uncheck();
@@ -121,15 +139,12 @@ export async function loginViaPassword(
     await tickConsentIfPresent(page, submitButton);
     await submitButton.click();
 
-    let landing = await waitForLoginLanding(page);
-    // First-run WelcomeScreen (shramsafal_welcome_seen) renders once after login,
-    // before the permission gate. Click through it, then re-evaluate the landing.
-    if (landing === 'welcome') {
-        await page.getByTestId('welcome-continue').click();
-        landing = await waitForLoginLanding(page);
-    }
-    if (landing === 'permissions') {
-        await page.getByTestId('onboarding-skip').click();
+    // spec: plr-d10 I16 — after sign-in, a first-run phone shows फोनच्या परवानग्या and then the welcome
+    // written for the role (in that order). Click through whichever is on screen until home.
+    for (let step = 0; step < 3; step += 1) {
+        const landing = await waitForLoginLanding(page);
+        if (landing === 'home') break;
+        await page.getByTestId(landing === 'welcome' ? 'welcome-continue' : 'permissions-continue').click();
     }
 
     // Auth + initial sync pull takes a moment; the home shell only appears once
@@ -141,7 +156,7 @@ async function waitForLoginLanding(page: Page): Promise<'home' | 'permissions' |
     const deadline = Date.now() + 30_000;
     const homeGreeting = page.getByTestId(HOME_READY_TESTID);
     const welcomeContinue = page.getByTestId('welcome-continue');
-    const skipBtn = page.getByTestId('onboarding-skip');
+    const skipBtn = page.getByTestId('permissions-continue');
     const alert = page.getByRole('alert').first();
 
     while (Date.now() < deadline) {
