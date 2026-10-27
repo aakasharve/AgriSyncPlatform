@@ -12,12 +12,13 @@
  * and बाहेर पडा. No English doubling. It claims "ओळख पडताळलेली" only when told `verified`.
  */
 import React, { useState } from 'react';
-import { BarChart3, CheckCircle2, LogOut, MapPin, Medal, ShieldCheck, Sprout, Users } from 'lucide-react';
+import { BarChart3, CheckCircle2, LogOut, MapPin, Medal, ShieldCheck, Sprout, UserPlus, Users } from 'lucide-react';
 import type { ProfileTab } from '../ProfilePage';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher';
 import FarmsSection from './FarmsSection';
 import { Chip, GlassCard, PageBar, RowLink, SANS, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
+import { TEAM_COPY } from '../team/teamCopy';
 
 export interface SetupHelp {
     what: string;
@@ -69,6 +70,18 @@ interface SetupHubMenuProps {
     onOpenFinance?: () => void;
     onOpenLabour?: () => void;
     onOpenReferrals?: () => void;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11) — the current farm's permanent code, shown
+     * on the top card (as the approved preview does). Absent / null = no code from the server: nothing
+     * is shown rather than an invented one.
+     */
+    farmCode?: string | null;
+    /** Opens "माझी टीम": owner tier (to manage) and a मुकादम (to look at his crew); never a worker. */
+    onOpenTeam?: () => void;
+    /** A मुकादम only looks at the team: the row says "माझ्या टोळीतले लोक". */
+    teamViewOnly?: boolean;
+    /** People waiting for the owner's answer (from the owner-only roster); 0 = none. */
+    teamRequestCount?: number;
     settingsItems?: { id: string; label: string; icon: React.ReactNode; subtitle?: string }[];
     onSelectExtra?: (id: string) => void;
     logout: () => void;
@@ -135,7 +148,8 @@ const SetupRow: React.FC<{ item: HubMenuItem; isNext: boolean; onSelect: () => v
 export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
     farmerName, verified, farmName, farms, familyName, onOpenFarm, onAddFarm,
     currentFarmId, onSwitchFarm, onCreateFarm, onJoinViaQr,
-    language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenLabour, onOpenReferrals, settingsItems, onSelectExtra, logout,
+    language, setupProgress, items, onSelect, onExit, onOpenFinance, onOpenLabour, onOpenReferrals,
+    farmCode, onOpenTeam, teamViewOnly, teamRequestCount = 0, settingsItems, onSelectExtra, logout,
 }) => {
     const [showFarmSwitcher, setShowFarmSwitcher] = useState(false);
 
@@ -157,6 +171,12 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                             {farmName && <p className="m-0 flex items-center gap-1 text-[14px] font-semibold text-stone-600"><MapPin size={15} aria-hidden="true" />{farmName}</p>}
                             {verified && <p className="m-0 mt-0.5 flex items-center gap-1 text-[13px] font-extrabold text-emerald-800" data-testid="hub-verified"><ShieldCheck size={15} aria-hidden="true" />ओळख पडताळलेली</p>}
                         </div>
+                        {/* spec: plr-d7-m1 step 2 (MU-11) — the farm's permanent code, as on the approved hub card. */}
+                        {farmCode && (
+                            <span className="shrink-0 rounded-xl bg-stone-100 px-2.5 py-1.5 text-center text-[11px] font-bold leading-tight text-stone-600" data-testid="hub-farm-code">
+                                शेत कोड<br /><b className="text-[13px] tracking-wider text-stone-900">{farmCode}</b>
+                            </span>
+                        )}
                     </div>
                 </GlassCard>
 
@@ -181,9 +201,17 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     </div>
                 )}
 
-                {(onOpenLabour || farmSwitcherReady || onOpenReferrals) && (
+                {(onOpenTeam || onOpenLabour || farmSwitcherReady || onOpenReferrals) && (
                     <div className="space-y-2" data-testid="hub-people">
                         <SectionHead title="माणसं आणि शेती" />
+                        {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 2, MU-11 / P-4) — "माझी टीम": the team, the
+                            farm QR + code, and the people waiting for the owner's answer. */}
+                        {onOpenTeam && (
+                            <RowLink testId="hub-team" icon={<Users size={22} aria-hidden="true" />} tone="blue" title={TEAM_COPY.pageTitle}
+                                line={teamViewOnly ? TEAM_COPY.crewLine : teamRequestCount > 0 ? TEAM_COPY.requestsTitle(teamRequestCount) : TEAM_COPY.hubLine}
+                                badge={teamRequestCount > 0 ? <Chip tone="amber"><UserPlus size={14} aria-hidden="true" />{teamRequestCount}</Chip> : undefined}
+                                onClick={onOpenTeam} />
+                        )}
                         {/* FOUNDER NAMING DECISION (2026-10-16): the section is `कामगार व हजेरी` (door and room agree).
                             The subtitle stays `मजुरी` — Task 7 / 7b honesty deletions stand. */}
                         {onOpenLabour && <RowLink testId="hub-labour" icon={<Users size={22} aria-hidden="true" />} tone="green" title="कामगार व हजेरी" line="मजुरी" onClick={onOpenLabour} />}

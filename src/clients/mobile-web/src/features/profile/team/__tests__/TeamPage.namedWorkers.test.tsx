@@ -2,6 +2,10 @@
 /**
  * Team page actions are REAL (spec: 2026-08-25-prod-cutover-waves).
  *
+ * spec: plr-d7-m1-multiuser-2026-10-26 (step 2, P-4) — the team moved out of the ओळख page into its
+ * own screen ("माझी टीम", TeamPage). These are the same named-worker assertions, against the screen
+ * the card lives on now (moved from IdentitySection.teamActions.test.tsx).
+ *
  * "Add worker" and "Remove" used to edit a phone-local profile list and call no server. They now go
  * through the existing field-operator routes, are offered only to owner/co-owner, show a row only
  * after the server has accepted it, and say so honestly when the phone is offline (there is no
@@ -11,69 +15,50 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 
-vi.mock('../../../i18n/LanguageContext', () => ({
+vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: vi.fn(), t: (k: string) => k }),
-}));
-vi.mock('../../admin/billing/EntitlementBanner', () => ({ default: () => null }));
-vi.mock('../../people/components/MembershipsList', () => ({ default: () => null }));
-vi.mock('../hooks/useLabourPermissions', () => ({
-    useLabourPermissions: () => ({
-        rows: null, loading: false, loadFailed: false, savingUserId: null, error: null,
-        reload: vi.fn(), setPermission: vi.fn(), dismissError: vi.fn(),
-    }),
 }));
 
 const fetchFieldOperators = vi.fn();
 const createFieldOperator = vi.fn();
 const deactivateFieldOperator = vi.fn();
-vi.mock('../../labour/data/fieldOperatorClient', () => ({
+vi.mock('../../../labour/data/fieldOperatorClient', () => ({
     fetchFieldOperators: (...a: unknown[]) => fetchFieldOperators(...a),
     createFieldOperator: (...a: unknown[]) => createFieldOperator(...a),
     deactivateFieldOperator: (...a: unknown[]) => deactivateFieldOperator(...a),
 }));
 const writeCachedRoster = vi.fn();
-vi.mock('../../labour/data/fieldOperatorRosterCache', () => ({
+vi.mock('../../../labour/data/fieldOperatorRosterCache', () => ({
     readCachedRoster: () => null,
     writeCachedRoster: (...a: unknown[]) => writeCachedRoster(...a),
 }));
 
-import IdentitySection from '../sections/IdentitySection';
-import { FarmerProfile, VerificationStatus } from '../../../types';
+import { TeamPage } from '../TeamPage';
+import type { UseLabourPermissionsResult } from '../../hooks/useLabourPermissions';
+import type { LabourPermission } from '../../data/labourPermissionsClient';
 
 const op = (id: string, displayName: string, isActive = true) => ({ id, displayName, isActive, fullName: undefined });
 
-function profile(extra: Partial<FarmerProfile> = {}): FarmerProfile {
-    return {
-        name: 'Akash', village: 'Pune', phone: '9999999999',
-        verificationStatus: VerificationStatus.PhoneVerified,
-        operators: [],
-        ...extra,
-    } as FarmerProfile;
-}
+const roster = (rows: LabourPermission[] | null = []): UseLabourPermissionsResult => ({
+    rows, loading: false, loadFailed: false, savingUserId: null, error: null,
+    reload: vi.fn(async () => undefined), setPermission: vi.fn(async () => undefined), dismissError: vi.fn(), adoptRow: vi.fn(),
+});
 
-function mount(role: string | null, prof: FarmerProfile = profile()) {
-    const onUpdateProfile = vi.fn();
-    const utils = render(
-        <IdentitySection
-            profile={prof}
-            onUpdateProfile={onUpdateProfile}
-            logout={vi.fn()}
-            myFarm={role === null ? null : { farmId: 'farm-1', name: 'Farm', role, subscription: null }}
-            myMemberships={[]}
-            farmDetails={null}
-            weatherConnected={false}
-            connectingWeather={false}
-            connectError={null}
-            handleConnectWeather={vi.fn()}
-            setShowFarmBoundary={vi.fn()}
-            handleOpenInviteQr={vi.fn()}
-            nonExitableFarmIds={new Set()}
-            handleExitMembership={vi.fn(async () => undefined)}
-            isWorkerOnAnyFarm={false}
-            workerProfile={null}
+const linked = (userId: string, displayName: string, role = 'SecondaryOwner'): LabourPermission => ({
+    userId, role, status: 'Active', canManageLabourRecords: true, hasExplicitGrant: false,
+    source: 'OwnerTier', isGrantEditable: false, labourGrantExpiresAtUtc: null, displayName,
+});
+
+function mount(role: string | null, rows: LabourPermission[] = []) {
+    return render(
+        <TeamPage
+            farmId={role === null ? null : 'farm-1'}
+            farmCode="K7M2QP"
+            callerRole={role}
+            callerUserId="me"
+            roster={roster(rows)}
         />,
     );
-    return { ...utils, onUpdateProfile };
 }
 
 const ADD = 'कामगाराचं नाव जोडा';
@@ -100,10 +85,10 @@ describe.each([['PrimaryOwner'], ['SecondaryOwner']])('Team page as %s', (role) 
         expect(screen.getByRole('button', { name: new RegExp(ADD) })).toBeTruthy();
     });
 
-    it('Add: the row appears only after the server accepted it; nothing is written to the phone-local profile', async () => {
+    it('Add: the row appears only after the server accepted it', async () => {
         let resolve!: (v: unknown) => void;
         createFieldOperator.mockImplementation(() => new Promise((r) => { resolve = r; }));
-        const { onUpdateProfile } = mount(role);
+        mount(role);
         await screen.findByText('Ganesh');
 
         openAndType('Ramesh');
@@ -122,7 +107,6 @@ describe.each([['PrimaryOwner'], ['SecondaryOwner']])('Team page as %s', (role) 
         resolve(op(clientId, 'Ramesh'));
         expect(await screen.findByText('Ramesh')).toBeTruthy();
         expect(writeCachedRoster).toHaveBeenCalled();
-        expect(onUpdateProfile).not.toHaveBeenCalled();
     });
 
     it('Add failing: no row, an honest failure, and the retry reuses the SAME id (idempotent)', async () => {
@@ -202,26 +186,16 @@ describe.each([['PrimaryOwner'], ['SecondaryOwner']])('Team page as %s', (role) 
         expect(createFieldOperator).not.toHaveBeenCalled();
     });
 
-    it('removed (inactive) workers are not listed; a linked app user has no Remove here', async () => {
+    it('removed (inactive) workers are not listed; a linked app user is not a named worker', async () => {
         fetchFieldOperators.mockResolvedValue([op('w1', 'Ganesh'), op('w2', 'Gone', false)]);
-        mount(role, profile({
-            operators: [{ id: 'user-9', name: 'Sunita', role: 'SECONDARY_OWNER', capabilities: [], isVerifier: true, isActive: true }] as never,
-        }));
+        mount(role, [linked('user-9', 'Sunita')]);
         await screen.findByText('Ganesh');
         expect(screen.queryByText('Gone')).toBeNull();
-        expect(await screen.findByText('Sunita')).toBeTruthy();
-        fireEvent.click(screen.getByText('Sunita'));
-        // Only the one named worker has a Remove control; the linked user's card has none.
+        // The linked person is on her own person card, never in the named-workers list.
+        expect(within(screen.getByTestId('team-person-user-9')).getByText('Sunita')).toBeTruthy();
+        // Only the one named worker has a named-worker Remove control.
         expect(screen.queryAllByTestId(/^remove-w/)).toHaveLength(1);
         expect(screen.queryByText(/टीममधून काढा/)).toBeNull();
-    });
-
-    it('a phone-local-only "member" from the old mock is no longer presented as a team member', async () => {
-        mount(role, profile({
-            operators: [{ id: 'op_123', name: 'Phantom', role: 'WORKER', capabilities: [], isVerifier: false, isActive: true, localOnly: true }] as never,
-        }));
-        await screen.findByText('Ganesh');
-        expect(screen.queryByText('Phantom')).toBeNull();
     });
 });
 

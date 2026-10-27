@@ -30,6 +30,13 @@ export interface MeFarm {
     plan: MePlan;
     planValidUntilUtc: string | null;
     capabilities: MeCapabilities;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE (absent from an older server): the
+     * seat's EFFECTIVE permission names ("AddCost", "PlanWork", …), empty unless Active.
+     */
+    permissions?: string[] | null;
+    /** The owner's written reason for a pause ("काम थांबवलं — कारण…"), or null. */
+    statusReason?: string | null;
 }
 
 export interface MeIdentity {

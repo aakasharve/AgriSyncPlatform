@@ -11,6 +11,7 @@ import React, { useEffect, useMemo } from 'react';
 import BottomNavigation from './features/context/components/BottomNavigation';
 import AppHeader from './features/context/components/AppHeader';
 import MeAlertRail from './features/context/components/MeAlertRail';
+import AccessStatusNotice from './features/context/components/AccessStatusNotice';
 import AppRouter from './core/navigation/AppRouter';
 import ActionToast from './shared/components/ui/ActionToast';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
@@ -201,6 +202,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             />
 
             <MeAlertRail />
+            {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — a waiting request / a paused seat, said plainly. */}
+            <AccessStatusNotice />
 
             <main
                 ref={pageScrollRef}

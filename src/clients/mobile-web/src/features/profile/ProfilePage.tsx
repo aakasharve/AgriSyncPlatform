@@ -31,6 +31,11 @@ import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
 import { buildSettingsExtraIds } from './settingsItems';
 import { PageBar, SANS, Tap } from '../../shared/components/ui/placeUi';
+import { useLabourPermissions } from './hooks/useLabourPermissions';
+import { isOwnerTierRole } from './helpers/teamRoster';
+import { TeamPage } from './team/TeamPage';
+import { TEAM_COPY } from './team/teamCopy';
+import { splitRoster } from './team/teamModel';
 
 import type { CropProfile, FarmerProfile } from '../../types';
 import { VerificationStatus } from '../../domain/types/farm.types';
@@ -60,7 +65,9 @@ export type ProfileTab =
     | 'machines'
     | 'health'
     | 'intelligence'
-    | 'people';
+    | 'people'
+    /** spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — "माझी टीम", its own page (not a setup step). */
+    | 'team';
 
 /** Local Hub section type (was imported from the now-removed SetupHubAccordion). */
 type HubSection = { id: ProfileTab; label: string; icon: React.ReactNode; body: React.ReactNode };
@@ -194,6 +201,23 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
     const plotCount = crops.reduce((n, c) => n + c.plots.length, 0);
 
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner-only team roster, read ONCE here:
+    // the hub's "माझी टीम" row shows how many people wait for an answer, the team page lists them.
+    // Asked only when the SERVER says this person is owner tier on the farm (the route refuses
+    // anyone else), so no one else's phone makes a refused call.
+    const teamFarmId = farmAdmin.myFarm?.farmId ?? null;
+    const callerIsOwnerTier = isOwnerTierRole(farmAdmin.myFarm?.role);
+    const teamRoster = useLabourPermissions(callerIsOwnerTier ? teamFarmId : null);
+    // Founder D-22 (26 Oct): only the PRIMARY owner answers a request, so only his hub counts them.
+    const teamRequestCount = farmAdmin.myFarm?.role === 'PrimaryOwner'
+        ? splitRoster(teamRoster.rows).requests.length
+        : 0;
+    const teamFarmCode = farmAdmin.myMemberships.find(m => m.farmId === teamFarmId)?.farmCode ?? null;
+    // The approved hub (PLR-D9 preview): the owner tier manages the team; a मुकादम looks at his crew;
+    // a worker's hub has no team row.
+    const canOpenTeam = callerIsOwnerTier || farmAdmin.myFarm?.role === 'Mukadam';
+    const openTeam = canOpenTeam ? () => setActiveTab('team') : undefined;
+
     return (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-4 pb-[calc(8rem+var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))]" style={{ fontFamily: SANS }}>
             {farmAdmin.myFarm && (
@@ -267,7 +291,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 connectError={farmAdmin.connectError}
                                 handleConnectWeather={farmAdmin.handleConnectWeather}
                                 setShowFarmBoundary={farmAdmin.setShowFarmBoundary}
-                                handleOpenInviteQr={farmAdmin.handleOpenInviteQr}
+                                onOpenTeam={openTeam}
                                 nonExitableFarmIds={nonExitableFarmIds}
                                 handleExitMembership={farmAdmin.handleExitMembership}
                                 isWorkerOnAnyFarm={isWorkerOnAnyFarm}
@@ -399,6 +423,23 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     );
                 }
 
+                if (activeTab === 'team') {
+                    return (
+                        <div data-testid="hub-page-team">
+                            <PageBar title={TEAM_COPY.pageTitle} onBack={() => setActiveTab(null)} />
+                            <TeamPage
+                                farmId={teamFarmId}
+                                farmCode={teamFarmCode}
+                                callerRole={farmAdmin.myFarm?.role ?? null}
+                                callerUserId={authSession?.userId ?? null}
+                                operators={profile.operators}
+                                roster={teamRoster}
+                                onShowQr={() => { void farmAdmin.handleOpenInviteQr(); }}
+                            />
+                        </div>
+                    );
+                }
+
                 const current = activeTab ? sections.find(s => s.id === activeTab) : undefined;
                 if (!current) {
                     return (
@@ -423,6 +464,10 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             onOpenFinance={onOpenFinanceManager}
                             onOpenLabour={onOpenLabour}
                             onOpenReferrals={onOpenReferrals}
+                            farmCode={teamFarmCode}
+                            onOpenTeam={openTeam}
+                            teamViewOnly={!callerIsOwnerTier}
+                            teamRequestCount={teamRequestCount}
                             settingsItems={settingsItems}
                             onSelectExtra={handleSelectExtra}
                             logout={logout}

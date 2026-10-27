@@ -19,6 +19,8 @@ import { captureAttachment } from '../../../application/use-cases/CaptureAttachm
 import { resolveFarmIdFromSyncState } from '../../../infrastructure/sync/SyncContext';
 import { attachmentUploadWorker } from '../../../infrastructure/sync/AttachmentUploadWorker';
 import AllocationSelector from '../../finance/components/AllocationSelector';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import { mayChangeRecordedMoney } from '../../../core/session/farmPermissions';
 import { SANS } from '../../../shared/components/ui/placeUi';
 
 /** Shown while a photo taken offline waits to be read (the reader's own message is English). */
@@ -61,6 +63,11 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     const [queuedExtractionMessage, setQueuedExtractionMessage] = useState<string | null>(null);
     const [showAllocation, setShowAllocation] = useState(false);
     const [savedCostEntryId, setSavedCostEntryId] = useState<string>('');
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, verifier MU2-V1) — splitting a whole-farm bill
+    // over the plots is CHANGING money: the server refuses it without the AddCost permission (the
+    // primary owner, or someone he stored it for). The bill itself is recorded for everyone; only
+    // the split step is offered to a seat the server lets split (an older server: as before).
+    const maySplitBill = mayChangeRecordedMoney(useOptionalFarmContext()?.currentFarm);
 
     // 4. Verification state (two-lane progressive UX)
     const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
@@ -234,7 +241,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
         });
 
         // If farm-scoped, show allocation step
-        if (scope === 'FARM' && crops.flatMap(c => c.plots).length > 1) {
+        if (scope === 'FARM' && maySplitBill && crops.flatMap(c => c.plots).length > 1) {
             setSavedCostEntryId(newExpense.id);
             setShowAllocation(true);
             onSave(); // Notify parent that expense is saved

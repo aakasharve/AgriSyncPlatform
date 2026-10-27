@@ -25,6 +25,8 @@ export const PENDING_SEAT_COPY = {
     withdrawing: 'मागे घेत आहे…',
     withdrawFailed: 'आत्ता मागे घेता आलं नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.',
     pausedLine: `${JOIN_BY_CODE_COPY.pausedTitle}. ${JOIN_BY_CODE_COPY.pausedLine}`,
+    // spec: plr-d7-m1 step 2 — the owner's written reason for the pause.
+    reason: (why: string) => `कारण: ${why}`, // PROPOSED (Marathi)
 } as const;
 
 /** What a seat that is not Active means to the person holding it. */
@@ -38,6 +40,8 @@ export interface WaitingSeat {
     farmId: string;
     name: string;
     status?: string | null;
+    /** spec: plr-d7-m1 step 2 — the owner's reason, sent for a paused seat only. */
+    statusReason?: string | null;
 }
 
 export interface PendingJoinRequestsProps {
@@ -90,6 +94,11 @@ const PendingJoinRequests: React.FC<PendingJoinRequestsProps> = ({ seats, onWith
                                 {kind === 'paused' ? PENDING_SEAT_COPY.pausedLine : PENDING_SEAT_COPY.requestLine}
                             </span>
                         </p>
+                        {kind === 'paused' && seat.statusReason && (
+                            <p className="m-0 mt-1 pl-6 text-sm font-bold" data-testid={`pending-seat-reason-${seat.farmId}`}>
+                                {PENDING_SEAT_COPY.reason(seat.statusReason)}
+                            </p>
+                        )}
                         {kind === 'request' && onWithdraw && (
                             <button
                                 type="button"

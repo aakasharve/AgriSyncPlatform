@@ -147,6 +147,30 @@ describe('fresh install: the acknowledged clip comes back from the server archiv
         expect(await openRetainedClip(CLIP)).toEqual({ ok: false, error: 'dek_unavailable' });
     });
 
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, P11-M1) — /me/context is asked with
+    // includePending, so it lists a waiting join request and a paused seat too. Neither is a farm
+    // this person is in: no DEK call may name such a farm, and only an Active seat is tried.
+    it.each([['PendingApproval'], ['Suspended']])(
+        'a %s seat is never tried as a binding: no DEK call names its farm',
+        async (status) => {
+            await recordAndUpload();
+            await wipeIndexedDb();
+            await signIn('user-a', 'owner-a');
+            server.memberships.set('user-a', ['owner-a']);
+            server.seatStatus.set('owner-a', status);
+
+            expect(await openRetainedClip(CLIP)).toEqual({ ok: false, error: 'binding_unavailable' });
+            expect(server.dekFarmIds).not.toContain('farm-for-owner-a');
+
+            // CONTROL: the same seat once Active opens the clip byte-for-byte.
+            server.seatStatus.set('owner-a', 'Active');
+            clearCachedDek();
+            const opened = await openRetainedClip(CLIP);
+            expect(opened.ok && Array.from(opened.bytes)).toEqual(Array.from(PLAINTEXT));
+            expect(server.dekFarmIds).toContain('farm-for-owner-a');
+        },
+    );
+
     it('a farmer with no known farms cannot open it (no unbound open)', async () => {
         await recordAndUpload();
         await wipeIndexedDb();

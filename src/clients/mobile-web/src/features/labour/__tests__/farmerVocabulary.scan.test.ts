@@ -24,9 +24,18 @@ import { join } from 'node:path';
 
 const ROOT = process.cwd(); // vitest root = src/clients/mobile-web
 const LABOUR_DIR = join(ROOT, 'src', 'features', 'labour');
+// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the team moved to its own screen ("माझी टीम");
+// the D5 switch moved from TeamMemberCard (deleted) into LabourAccessControl. Every new team surface
+// is scanned for the same rule.
 const AUTHORITY_SURFACES = [
-    join(ROOT, 'src', 'features', 'profile', 'components', 'TeamMemberCard.tsx'),
+    join(ROOT, 'src', 'features', 'profile', 'components', 'LabourAccessControl.tsx'),
     join(ROOT, 'src', 'features', 'profile', 'sections', 'IdentitySection.tsx'),
+    join(ROOT, 'src', 'features', 'profile', 'team', 'teamCopy.ts'),
+    join(ROOT, 'src', 'features', 'profile', 'team', 'TeamPage.tsx'),
+    join(ROOT, 'src', 'features', 'profile', 'team', 'TeamPersonCard.tsx'),
+    join(ROOT, 'src', 'features', 'profile', 'team', 'JoinRequestCard.tsx'),
+    join(ROOT, 'src', 'features', 'profile', 'team', 'FarmCodeCard.tsx'),
+    join(ROOT, 'src', 'features', 'profile', 'team', 'ReasonStep.tsx'),
 ];
 
 /*

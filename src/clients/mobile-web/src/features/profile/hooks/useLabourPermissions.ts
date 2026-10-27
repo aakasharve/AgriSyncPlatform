@@ -77,6 +77,12 @@ export interface UseLabourPermissionsResult {
         labourGrantExpiresAtUtc?: string | null,
     ) => Promise<void>;
     dismissError: () => void;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — adopt ONE row the server returned from an
+     * owner decision (approve / decline / pause / restore / remove / change). Replaces that
+     * member's row, or adds it; never a row the caller built itself.
+     */
+    adoptRow: (row: LabourPermission) => void;
 }
 
 export function useLabourPermissions(farmId: string | null | undefined): UseLabourPermissionsResult {
@@ -159,6 +165,15 @@ export function useLabourPermissions(farmId: string | null | undefined): UseLabo
 
     const dismissError = useCallback(() => setError(null), []);
 
+    const adoptRow = useCallback((row: LabourPermission) => {
+        setRows(current => {
+            const list = current ?? [];
+            return list.some(r => r.userId === row.userId)
+                ? list.map(r => (r.userId === row.userId ? row : r))
+                : [...list, row];
+        });
+    }, []);
+
     return {
         rows,
         loading,
@@ -168,5 +183,6 @@ export function useLabourPermissions(farmId: string | null | undefined): UseLabo
         reload: load,
         setPermission,
         dismissError,
+        adoptRow,
     };
 }

@@ -29,6 +29,7 @@ import { resolveDek } from '../security/tenantDekClient';
 import { readFarmOwnerAccountId } from './VoiceClipRetention';
 import { getVoiceDiaryById } from '../voiceDiary/voiceDiaryApiClient';
 import { toArchiveClipId } from './archiveClipId';
+import { isActiveSeat } from '../../core/session/seatStatus';
 
 export type RetainedClipReadError =
     | 'not_found'
@@ -80,12 +81,19 @@ async function localOwnerCandidates(clipId: string): Promise<{ owners: OwnerCand
     return { owners, mimeType: row?.mimeType };
 }
 
-/** Same set, from the server, for a device whose farm cache has not filled yet. */
+/**
+ * Same set, from the server, for a device whose farm cache has not filled yet.
+ *
+ * spec: plr-d7-m1-multiuser-2026-10-26 (step 2, P11-M1) — /me/context is asked WITH
+ * includePending, so it also lists a join request still waiting for the owner and a paused seat.
+ * Neither is a farm this person is in (the server's DEK resolve checks an ACTIVE membership), so
+ * only Active seats are candidates — the same reading every farm list on the phone uses.
+ */
 async function serverOwnerCandidates(): Promise<OwnerCandidate[]> {
     try {
         const me = await agriSyncClient.getMeContext();
         const owners: OwnerCandidate[] = [];
-        for (const farm of me.farms) {
+        for (const farm of me.farms.filter(isActiveSeat)) {
             const ownerAccountId = String(farm.ownerAccountId ?? '').trim();
             const farmId = String(farm.farmId ?? '').trim();
             if (ownerAccountId && farmId && !owners.some(o => o.ownerAccountId === ownerAccountId)) {

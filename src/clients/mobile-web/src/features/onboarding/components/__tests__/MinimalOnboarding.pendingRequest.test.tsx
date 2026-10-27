@@ -104,3 +104,21 @@ describe('MinimalOnboarding with seats that grant nothing yet', () => {
         expect(screen.queryByTestId('minimal-onboarding-pending')).toBeNull();
     });
 });
+
+// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — a paused person is told the OWNER's reason (the
+// server sends it for a paused seat only); a request never shows one.
+describe('a paused seat carries the owner\'s reason', () => {
+    it('shows "कारण: …" under the paused line, and nothing like it for a request', () => {
+        render(
+            <MinimalOnboarding
+                isOpen
+                onComplete={vi.fn()}
+                onJoinViaQr={vi.fn()}
+                pendingSeats={[{ ...PAUSED, statusReason: 'हिशोब बाकी' }, REQUEST]}
+                onWithdrawRequest={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId('pending-seat-reason-f-paused')).toHaveTextContent('कारण: हिशोब बाकी');
+        expect(screen.queryByTestId('pending-seat-reason-f-req')).toBeNull();
+    });
+});

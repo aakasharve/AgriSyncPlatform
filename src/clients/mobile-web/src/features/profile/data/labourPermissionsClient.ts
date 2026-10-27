@@ -108,6 +108,27 @@ export interface LabourPermission {
      * Absent/null = the server had no name: show none, never invent one.
      */
     displayName?: string | null;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE (absent from an older server). The
+     * member's EFFECTIVE permission names ("AddCost", "PlanWork", …), computed by the server's one
+     * rule; empty for a seat that is not Active.
+     */
+    permissions?: string[] | null;
+    /** The owner's written reason for the last pause / removal / decline, or null. */
+    statusReason?: string | null;
+    /** This member registered the farm: nobody may pause, remove or change him (no control drawn). */
+    isRegistrant?: boolean;
+    /** How the seat came to be ("SelfJoin" = typed the farm code, "QrScan", …). Wording only. */
+    joinedVia?: string | null;
+    /** When the seat was made — for a waiting request, when the person asked. */
+    requestedAtUtc?: string | null;
+    /**
+     * M-7 — the last four digits of the person's account phone (names are self-typed). Only on the
+     * owner's roster; absent/null = unknown: show nothing, never an invented number.
+     */
+    phoneLast4?: string | null;
+    /** M-8 — an owner approved this seat (he asked), as opposed to a direct farm-QR join. Wording only. */
+    approvedByOwner?: boolean;
 }
 
 /** The server's error code when a role already carries the capability. */

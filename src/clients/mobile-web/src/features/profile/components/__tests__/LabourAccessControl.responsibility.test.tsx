@@ -1,24 +1,22 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import TeamMemberCard from '../TeamMemberCard';
+import LabourAccessControl from '../LabourAccessControl';
 
-const member = { id: 'user-1', name: 'प्रकाश', role: 'worker' };
+/*
+ * spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the D5 labour switch moved out of the old
+ * TeamMemberCard into LabourAccessControl, which the new team screen's person card renders. These
+ * are the SAME assertions the card carried, against the moved control.
+ */
+const member = { id: 'user-1', name: 'प्रकाश' };
 
 const renderCard = (labourAccess: {
     canManage: boolean; isEditable: boolean; saving: boolean;
     expiresAtUtc: string | null;
     onChange: (next: boolean, expiresAtUtc: string | null) => void;
 }) => render(
-    <TeamMemberCard
-        member={member as never}
-        labourAccess={labourAccess}
-        onToggleCap={() => {}}
-        onDelete={() => {}}
-    />,
+    <LabourAccessControl memberId={member.id} memberName={member.name} access={labourAccess} />,
 );
-
-const openCard = () => fireEvent.click(screen.getByText('जबाबदारी ठरवा'));
 
 afterEach(() => cleanup());
 
@@ -26,7 +24,6 @@ describe('जबाबदारी द्या (D5)', () => {
     it('OFF state offers जबाबदारी द्या and picking कायम grants with no end', () => {
         const onChange = vi.fn();
         renderCard({ canManage: false, isEditable: true, saving: false, expiresAtUtc: null, onChange });
-        openCard();
 
         fireEvent.click(screen.getByText('जबाबदारी द्या'));
         expect(screen.getByText('प्रकाशला किती दिवस?')).toBeTruthy();
@@ -41,7 +38,6 @@ describe('जबाबदारी द्या (D5)', () => {
     it('a day chip grants until the computed local midnight', () => {
         const onChange = vi.fn();
         renderCard({ canManage: false, isEditable: true, saving: false, expiresAtUtc: null, onChange });
-        openCard();
         fireEvent.click(screen.getByText('जबाबदारी द्या'));
         fireEvent.click(screen.getByText('2 दिवस'));
 
@@ -56,7 +52,6 @@ describe('जबाबदारी द्या (D5)', () => {
         const onChange = vi.fn();
         const end = new Date(2026, 8, 5).toISOString();
         renderCard({ canManage: true, isEditable: true, saving: false, expiresAtUtc: end, onChange });
-        openCard();
 
         expect(screen.getByText('माणसांची जबाबदारी आहे')).toBeTruthy();
         expect(screen.getByText('4 सप्टेंबरपर्यंत · नंतर जबाबदारी आपोआप संपेल')).toBeTruthy();
@@ -69,7 +64,6 @@ describe('जबाबदारी द्या (D5)', () => {
         const { container } = renderCard({
             canManage: true, isEditable: false, saving: false, expiresAtUtc: null, onChange: vi.fn(),
         });
-        openCard();
         expect(container.textContent).not.toMatch(/permission|grant|\brole\b|claim|policy|access/i);
     });
 });

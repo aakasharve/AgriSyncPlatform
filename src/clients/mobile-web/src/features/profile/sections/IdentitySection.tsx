@@ -15,17 +15,16 @@ import React from 'react';
 import {
     MapPin, Clock,
     ChevronRight, CheckCircle2, ShieldCheck, Check, Users, Phone, AlertTriangle, FileText, Upload, Eye, LogOut,
-    Cloud, QrCode, Medal
+    Cloud, Medal
 } from 'lucide-react';
 import { FarmerProfile, VerificationStatus } from '../../../types';
 import EntitlementBanner, { type SubscriptionSnapshotView } from '../../admin/billing/EntitlementBanner';
 import MembershipsList from '../../people/components/MembershipsList';
 import PendingJoinRequests from '../../onboarding/components/PendingJoinRequests';
 import type { MyFarmDto, FarmDetailsDto } from '../../onboarding/qr/inviteApi';
-import { TeamMemberCard } from '../components/TeamMemberCard';
-import { useLabourPermissions } from '../hooks/useLabourPermissions';
-import { FarmWorkersCard } from '../components/FarmWorkersCard';
-import { isOwnerTierRole, isPhoneLocalOnlyMember, mergeTeamWithServerRoster } from '../helpers/teamRoster';
+import { isOwnerTierRole } from '../helpers/teamRoster';
+import { RowLink } from '../../../shared/components/ui/placeUi';
+import { TEAM_COPY } from '../team/teamCopy';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { getOperatorRoleLabel } from '../../../shared/roles/roleLabels';
 import { isActiveSeat } from '../../../core/session/seatStatus';
@@ -57,7 +56,15 @@ interface IdentitySectionProps {
     connectError: string | null;
     handleConnectWeather: () => void;
     setShowFarmBoundary: (v: boolean) => void;
-    handleOpenInviteQr: () => void;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 2, P-4 / MU-10) — the team moved to its own page
+     * (सेट-अप केंद्र → माणसं → माझी टीम), where the farm QR now opens. Kept so older callers still
+     * type-check; this page no longer reads it.
+     */
+    handleOpenInviteQr?: () => void;
+    /** Opens "माझी टीम" (ProfilePage decides for whom: owner tier, or a मुकादम to look): a plain
+     *  door from where the team used to live. */
+    onOpenTeam?: () => void;
     nonExitableFarmIds: Set<string>;
     handleExitMembership: (farmId: string, farmName: string) => Promise<void>;
     isWorkerOnAnyFarm: boolean;
@@ -67,7 +74,6 @@ interface IdentitySectionProps {
 
 const IdentitySection: React.FC<IdentitySectionProps> = ({
     profile,
-    onUpdateProfile,
     logout,
     myFarm,
     myMemberships,
@@ -79,7 +85,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     connectError,
     handleConnectWeather,
     setShowFarmBoundary,
-    handleOpenInviteQr,
+    onOpenTeam,
     nonExitableFarmIds,
     handleExitMembership,
 }) => {
@@ -93,29 +99,10 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     const serverRole = currentSeat
         ? (isActiveSeat(currentSeat) ? currentSeat.role : null)
         : (myFarm?.role ?? null);
-    // LABOUR_PHASE2 Phase 5. `myFarm.farmId` is the SERVER's farm id. The hook
-    // makes no request until it resolves, and on a failed read it stays `null`
-    // rather than falling back to the local profile — see its docblock for why
-    // that matters (`profile.operators[].id` is not a server userId).
-    //
-    // Owner-tier ONLY (server-sent `myFarm.role`): the roster route is owner/co-owner-only,
-    // so asking as anyone else is a refused call, and answering it is what lets the owner's
-    // Team list show every member's real role and name (see helpers/teamRoster.ts).
-    const callerIsOwnerTier = isOwnerTierRole(myFarm?.role);
-    // The server told us the caller is NOT owner/co-owner: owner-only actions (share QR,
-    // add/remove member) are refused or meaningless for him, so they are not offered.
-    // Unknown (no farm loaded yet) keeps today's behaviour rather than guessing.
-    const callerIsKnownNonOwner = !!myFarm && !callerIsOwnerTier;
-    const labourPermissions = useLabourPermissions(callerIsOwnerTier ? (myFarm?.farmId ?? null) : null);
-    // Linked app users only. A "member" that exists nowhere but this phone (the old local-only Add
-    // member) is not a team member and is not presented as one; named workers have their own card.
-    const teamOperators = React.useMemo(
-        () => mergeTeamWithServerRoster(
-            (profile.operators ?? []).filter(op => !isPhoneLocalOnlyMember(op)),
-            labourPermissions.rows,
-        ),
-        [profile.operators, labourPermissions.rows],
-    );
+    // The team (linked people, requests, the farm QR, named workers) is its own page now
+    // ("माझी टीम", spec plr-d7-m1 step 2); the roster route is owner/co-owner-only, so the door is
+    // offered only to whom ProfilePage passes it (owner tier, or a मुकादम to look).
+    const teamLine = isOwnerTierRole(myFarm?.role) ? TEAM_COPY.hubLine : TEAM_COPY.crewLine;
     return (
         <div className="bg-transparent animate-in fade-in space-y-6">
 
@@ -130,8 +117,8 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                             <div className="bg-amber-500 text-white px-6 py-3 flex items-center gap-3">
                                 <Clock size={20} />
                                 <div>
-                                    <p className="font-bold text-sm">ओळख तपासली जात आहे · ID under review</p>
-                                    <p className="text-xs opacity-90">पडताळणी पूर्ण झाल्यावर विश्वासू नोंदी सुरू होतील · Trusted records unlock once verified</p>
+                                    <p className="font-bold text-sm">ओळख तपासली जात आहे</p>
+                                    <p className="text-xs opacity-90">पडताळणी पूर्ण झाल्यावर विश्वासू नोंदी सुरू होतील</p>
                                 </div>
                             </div>
                         );
@@ -220,29 +207,29 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
 
                     {/* DETAILED FIELDS - Always visible */}
                     <div className="mt-6 pt-6 border-t border-slate-100">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">ओळख तपशील · Identity Details</h4>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4">ओळख तपशील</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">पूर्ण नाव · Full Name</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">पूर्ण नाव</p>
                                 <p className="text-sm font-bold text-slate-700">{profile.name || '—'}</p>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">मोबाईल नंबर · Mobile Number</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">मोबाईल नंबर</p>
                                 <p className="text-sm font-bold text-slate-700">{profile.phone || '—'}</p>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">गाव / तालुका / जिल्हा · Village / Taluka / District</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">गाव / तालुका / जिल्हा</p>
                                 <p className="text-sm font-bold text-slate-700">{profile.village || '—'}</p>
                             </div>
 
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">सातबारा (7/12) · Land Record</p>
-                                <p className="text-sm font-bold text-slate-500">अजून जोडलेले नाही · Not added yet</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">सातबारा (7/12)</p>
+                                <p className="text-sm font-bold text-slate-500">अजून जोडलेले नाही</p>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase">ओळखपत्र · Identity Document</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase">ओळखपत्र</p>
                                 <p className="text-sm font-bold text-amber-600 flex items-center gap-1">
-                                    <Clock size={12} /> जोडायचे बाकी · Yet to add
+                                    <Clock size={12} /> जोडायचे बाकी
                                 </p>
                             </div>
                         </div>
@@ -275,7 +262,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                             }
                             return (
                                 <button className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-xl flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors">
-                                    <Eye size={18} /> पडताळलेली ओळख पहा · View Verified Identity
+                                    <Eye size={18} /> पडताळलेली ओळख पहा
                                 </button>
                             );
                         })()}
@@ -349,9 +336,9 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                                 <Cloud size={24} />
                                             </div>
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-sm font-bold text-emerald-900">हवामान जोडा · Connect weather</p>
+                                                <p className="text-sm font-bold text-emerald-900">हवामान जोडा</p>
                                                 <p className="mt-0.5 text-[11px] leading-relaxed text-emerald-800/70">
-                                                    थेट पाऊस, तापमान आणि ५ दिवसांचा अंदाज तुमच्या रोजच्या नोंदीत दिसेल · Live rain, temperature &amp; a 5-day forecast on your daily log.
+                                                    थेट पाऊस, तापमान आणि ५ दिवसांचा अंदाज तुमच्या रोजच्या नोंदीत दिसेल
                                                 </p>
                                             </div>
                                         </div>
@@ -362,7 +349,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                             className="mt-3 w-full py-3.5 bg-gradient-to-b from-emerald-500 to-emerald-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 hover:from-emerald-600 hover:to-emerald-700 active:scale-[0.98] active:from-emerald-700 active:to-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-200/60"
                                         >
                                             <Cloud size={18} />
-                                            {connectingWeather ? 'जोडत आहे… · Connecting…' : 'आता जोडा · Connect now'}
+                                            {connectingWeather ? 'जोडत आहे…' : 'आता जोडा'}
                                         </button>
                                         {connectError && (
                                             <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
@@ -451,113 +438,13 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                 100 (ReliabilityScore.cs). Trust score is deferred by founder
                 decision; this returns only with a real metrics read-model. */}
 
-            {/* 2. FARM TEAM HIERARCHY (LAYERS 2 & 3) */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-                <div className="mb-5">
-                    <div className="mb-3">
-                        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                            <Users size={20} className="text-emerald-600" />
-                            {t('profile.myFarmTeam')}
-                        </h3>
-                        <p className="text-xs text-slate-400 mt-1">{t('profile.manageAccess')}</p>
-                    </div>
-                    {!callerIsKnownNonOwner && (
-                    <div className="grid grid-cols-1 gap-2">
-                        <button
-                            onClick={handleOpenInviteQr}
-                            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-emerald-200 active:scale-95 transition-all"
-                        >
-                            <QrCode size={16} /> Share farm QR
-                        </button>
-                    </div>
-                    )}
-                </div>
-
-                {/* Prominent invite banner — visible when the team is empty so a first-time farmer knows the QR exists. */}
-                {!callerIsKnownNonOwner && teamOperators.length === 0 && (
-                    <button
-                        onClick={handleOpenInviteQr}
-                        className="mb-4 w-full text-left rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-4 py-4 shadow-sm hover:border-emerald-300 transition-colors"
-                    >
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white">
-                                <QrCode size={20} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <div className="font-bold text-emerald-800">कामगारांना जोडा · Add your workers</div>
-                                <div className="text-xs text-emerald-700/80">त्यांना शेताचा QR दाखवा. ते स्कॅन करतात, फोन नंबर टाकतात — झालं.</div>
-                            </div>
-                        </div>
-                    </button>
-                )}
-
-                {/* LABOUR_PHASE2 Phase 5 — English, because no Marathi has been
-                    approved for these two situations and no agent may invent
-                    farmer-facing Marathi. On the founder-copy list. */}
-                {labourPermissions.error && (
-                    <p role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                        {labourPermissions.error}
-                    </p>
-                )}
-
-                <div className="space-y-3">
-                    {/* Existing People or Dummies if none */}
-                    {teamOperators.length > 0 ? (
-                        teamOperators.map(person => {
-                            return (
-                                <TeamMemberCard
-                                    key={person.id}
-                                    member={person as never}
-                                    /* LABOUR_PHASE2 Phase 5 — matched on the SERVER's
-                                       userId, never on `person.id`, which is a LOCAL
-                                       profile id the server has never seen. A member with
-                                       no server row gets NO switch, rather than a switch
-                                       whose PUT would target a phantom user. L5b confirmed
-                                       this is conditional: pre-pull ids render 0 switches;
-                                       once the reconciler sets id := server userId they
-                                       render correctly. */
-                                    labourAccess={(() => {
-                                        const row = labourPermissions.rows?.find(r => r.userId === person.id);
-                                        if (!row) return undefined;
-                                        return {
-                                            canManage: row.canManageLabourRecords,
-                                            isEditable: row.isGrantEditable,
-                                            saving: labourPermissions.savingUserId === row.userId,
-                                            expiresAtUtc: row.labourGrantExpiresAtUtc,
-                                            onChange: (next: boolean, expiresAtUtc: string | null) =>
-                                                void labourPermissions.setPermission(row.userId, next, expiresAtUtc),
-                                        };
-                                    })()}
-                                    onToggleCap={(cap) => {
-                                        const has = person.capabilities?.includes(cap);
-                                        const newCaps = has
-                                            ? (person.capabilities || []).filter(c => c !== cap)
-                                            : [...(person.capabilities || []), cap];
-                                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                        const updatedOperators = profile.operators!.map(p => p.id === person.id ? { ...p, capabilities: newCaps } as any : p);
-                                        onUpdateProfile({ ...profile, operators: updatedOperators });
-                                    }}
-                                    /* No Remove here: a linked app user leaves through the
-                                       membership exit, not through a button on his card. */
-                                />
-                            );
-                        })
-                    ) : (
-                        <div className="text-center p-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                            <div className="w-12 h-12 bg-slate-100 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <Users size={24} />
-                            </div>
-                            <p className="text-sm font-bold text-slate-500">{t('profile.noTeamMembers')}</p>
-                            <p className="text-xs text-slate-400">{t('profile.addFamilyOrWorkers')}</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Named workers (no login): the only part of the Team page where an owner can add or
-                remove a person, and both go to the server. Owner / co-owner only, as told by the
-                server-sent role; before the farm is known there is nothing to send it to. */}
-            {callerIsOwnerTier && myFarm && <FarmWorkersCard farmId={myFarm.farmId} />}
+            {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 2, P-4) — the team moved out of ओळख to
+                its own page; this is the door to it from where it used to be. Every team control
+                (QR, requests, pause / remove, हजेरी व पक्कं, named workers) lives there now. */}
+            {onOpenTeam && (
+                <RowLink testId="identity-open-team" icon={<Users size={22} aria-hidden="true" />} tone="blue"
+                    title={TEAM_COPY.pageTitle} line={teamLine} onClick={onOpenTeam} />
+            )}
 
         </div>
     );

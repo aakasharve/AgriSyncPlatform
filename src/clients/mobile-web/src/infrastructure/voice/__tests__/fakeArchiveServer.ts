@@ -42,6 +42,12 @@ class FakeArchiveServer {
     grantSince = new Map<string, string | null>();
     /** Owner accounts of the farms each user belongs to (for /me/context). */
     memberships = new Map<string, string[]>();
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 2, P11-M1) — the seat status /me/context reports
+     * for an owner account's farm (the phone asks with includePending, so a waiting request or a
+     * paused seat is listed too). Unset = no status field (an older server: every seat Active).
+     */
+    seatStatus = new Map<string, string>();
     stored = new Map<string, Map<string, PersistVoiceClipRetainedRequest>>();
     persistCalls: PersistVoiceClipRetainedRequest[] = [];
     dekFetches = 0;
@@ -62,6 +68,7 @@ class FakeArchiveServer {
         this.consent.clear();
         this.grantSince.clear();
         this.memberships.clear();
+        this.seatStatus.clear();
         this.stored.clear();
         this.persistCalls = [];
         this.dekFetches = 0;
@@ -131,6 +138,7 @@ class FakeArchiveServer {
             farms: (this.memberships.get(this.user) ?? []).map(ownerAccountId => ({
                 ownerAccountId,
                 farmId: `farm-for-${ownerAccountId}`,
+                ...(this.seatStatus.has(ownerAccountId) ? { status: this.seatStatus.get(ownerAccountId) } : {}),
             })),
         }),
     };

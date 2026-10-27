@@ -86,6 +86,11 @@ export interface MyFarmDto {
      * Read it through `isActiveSeat` (core/session/seatStatus).
      */
     status?: string;
+    /**
+     * spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ADDITIVE: the owner's written reason, sent
+     * for a PAUSED seat only (shown to the person: "काम थांबवलं — कारण…").
+     */
+    statusReason?: string | null;
 }
 
 export interface InviteApiError {
