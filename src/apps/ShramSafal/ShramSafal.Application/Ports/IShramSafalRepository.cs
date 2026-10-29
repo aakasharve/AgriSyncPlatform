@@ -150,6 +150,17 @@ public interface IShramSafalRepository
 
     Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default);
     Task<CostEntry?> GetCostEntryByIdAsync(Guid costEntryId, CancellationToken ct = default);
+
+    /// <summary>
+    /// spec: pre-launch-repair L2b (R-1) — the stored cost entry with this id, read-only and untracked, as the
+    /// caller's tenant scope can see it (under FORCE RLS only the farm in scope; a row of another farm reaches
+    /// the write as a primary-key clash instead, which the sync push turns into the typed conflict), or
+    /// <c>null</c>. Used by <c>AddCostEntryHandler</c> to answer a repeat of an id it already holds.
+    /// Default body = "none stored", so the in-tree test doubles compile (A10); production overrides it.
+    /// </summary>
+    Task<CostEntry?> FindCostEntryForReplayAsync(Guid costEntryId, CancellationToken ct = default)
+        => Task.FromResult<CostEntry?>(null);
+
     Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default);
     Task<List<CostEntry>> GetCostEntriesForDuplicateCheck(FarmId farmId, Guid? plotId, string category, DateTime since, CancellationToken ct = default);
     Task AddFinanceCorrectionAsync(FinanceCorrection correction, CancellationToken ct = default);

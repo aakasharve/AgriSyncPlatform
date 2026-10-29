@@ -74,6 +74,27 @@ public sealed class AddCostEntryHandler(
             return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: pre-launch-repair L2b (R-1; founder D-41 phase A) — ONE stored entry per money entry id.
+        // The phone derives the id from the entry's own source (a bill line, a log entry), so a double tap,
+        // a retry under a new device id, a reopen of खरेदी or a recovery send all carry the SAME id.
+        //   - same id, same farm, same person → that entry again: answered with the STORED entry as success
+        //     (nothing new written, nothing re-flagged, no audit row — nothing happened). Before the plan
+        //     gate on purpose: the entry is already saved, and a lapsed plan must not hold back the answer.
+        //   - same id, another farm or another person → never the same entry: the typed conflict, nothing
+        //     stored. (Under FORCE RLS another farm's row is invisible here; its write then fails on the
+        //     primary key, which PushSyncBatchHandler turns into this same conflict.)
+        // Clients that send a random id (every APK shipped before this) never repeat one: unchanged for them.
+        if (command.CostEntryId is { } askedId && askedId != Guid.Empty)
+        {
+            var stored = await repository.FindCostEntryForReplayAsync(askedId, ct);
+            if (stored is not null)
+            {
+                return stored.FarmId == farmId && stored.CreatedByUserId == new UserId(command.CreatedByUserId)
+                    ? Result.Success(new AddCostEntryResultDto(stored.ToDto(), IsPotentialDuplicate: false))
+                    : Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.CostEntryIdConflict);
+            }
+        }
+
         // Phase 5 entitlement gate (PaidFeature.EditFinance).
         var gate = await EntitlementGate.CheckAsync<AddCostEntryResultDto>(
             entitlementPolicy, new UserId(command.CreatedByUserId), farmId,

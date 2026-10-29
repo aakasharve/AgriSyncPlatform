@@ -15,6 +15,8 @@
  * A button whose handler the route did not give is not drawn (P5). Nothing recorded → said in words, never ₹ 0.
  * spec: pre-launch-repair L2a (D-19) — each bill says where its money and its photo stand, from the sync
  * evidence the app already keeps (`useMoneyEvidence`), never "on the server" before the server said so.
+ * spec: pre-launch-repair L2b (R-4) — money and bill photos still on this phone are listed above the bills
+ * (`UnsentMoneyCard`) and sent only after the farmer confirms the farm.
  */
 import React, { useState } from 'react';
 import { BookOpen, Camera, Keyboard, Mic, Search } from 'lucide-react';
@@ -23,6 +25,7 @@ import { procurementRepository } from '../services/procurementRepository';
 import { ExpenseSummaryCards } from '../features/procurement/components/ExpenseSummaryCards';
 import { ExpenseCard } from '../features/procurement/components/ExpenseCard';
 import { ReceiptCaptureSheet } from '../features/procurement/components/ReceiptCaptureSheet';
+import { UnsentMoneyCard } from '../features/procurement/components/UnsentMoneyCard';
 import { ALL, billsInView, matchesSearch, pickLabel, placeOf, totalsOf } from '../features/procurement/components/billView';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
 import { billClaim, useMoneyEvidence } from '../features/finance/moneyEntryState';
@@ -94,6 +97,8 @@ const ProcurementPage: React.FC<Props> = ({ crops = [], onBack, onTell, onGo }) 
                     {pickLabel(crops, pick)} — इथे जोडलेल्या बिलांची बेरीज
                 </p>
                 <ExpenseSummaryCards totals={totals} plotName={activePlot?.name} />
+
+                <UnsentMoneyCard crops={crops} onSent={refreshData} />
 
                 <BigButton onClick={() => setShowCaptureSheet(true)} testId="scan-receipt-btn"><Camera size={20} aria-hidden="true" />बिलाचा फोटो काढा</BigButton>
                 {onTell && (

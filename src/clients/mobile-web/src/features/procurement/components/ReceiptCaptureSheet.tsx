@@ -24,7 +24,7 @@ import { extractReceiptWithSession, VerificationStatus } from '../receipt/receip
 import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile } from '../../../types';
 import { ScopeSelectorRadio } from './ScopeSelectorRadio';
 import { procurementRepository } from '../../../services/procurementRepository';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4, v5 as uuidv5 } from 'uuid';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { financeCommandService } from '../../finance/financeCommandService';
 import { captureAttachment } from '../../../application/use-cases/CaptureAttachment';
@@ -68,6 +68,12 @@ interface Props {
 }
 
 export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, activePlotId }) => {
+    // spec: pre-launch-repair L2b (R-1) — the bill's identity is minted ONCE, when this sheet opens, and its
+    // lines are numbered under it; so a second tap on "जतन करा" is the same bill and the same money entries
+    // (their ids derive from `<billId>:<lineId>`), never a second expense. It used to be minted on save.
+    const [billId] = useState(() => uuidv4());
+    const saved = useRef(false);
+
     // 1. Image State
     const [image, setImage] = useState<string | null>(null);
     const [isExtracting, setIsExtracting] = useState(false);
@@ -248,18 +254,21 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     };
 
     const handleConfirm = () => {
-        if (!extraction || !farmId || !isGivenAmount(editedTotal)) return;
+        if (!extraction || !farmId || !isGivenAmount(editedTotal) || saved.current) return;
+        saved.current = true;
 
         // Construct final object. No payment status: the bill did not state one (R-6).
+        // R-2: an unpicked plot or crop is absent, never '' (an empty crop used to go out as the season id).
         const newExpense: ProcurementExpense = {
-            id: uuidv4(),
+            id: billId,
+            farmId,
             date: extraction.date || getDateKey(),
             createdAt: new Date().toISOString(),
             scope: scope,
-            plotId: scope === 'PLOT' ? selectedPlotId : undefined,
-            cropId: (scope === 'CROP' || scope === 'PLOT') ? selectedCropId : undefined,
+            plotId: scope === 'PLOT' ? (selectedPlotId || undefined) : undefined,
+            cropId: (scope === 'CROP' || scope === 'PLOT') ? (selectedCropId || undefined) : undefined,
             vendorName: editedVendor,
-            lineItems: extraction.lineItems.map(i => ({ ...i, id: uuidv4(), totalAmount: i.totalAmount, category: i.suggestedCategory })),
+            lineItems: extraction.lineItems.map((i, idx) => ({ ...i, id: uuidv5(String(idx), billId), totalAmount: i.totalAmount, category: i.suggestedCategory })),
             subtotal: extraction.subtotal || editedTotal,
             grandTotal: editedTotal,
             receiptImageUrl: image || undefined, // the list's thumbnail, kept on this phone only

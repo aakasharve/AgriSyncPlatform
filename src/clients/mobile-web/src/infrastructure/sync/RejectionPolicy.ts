@@ -66,6 +66,10 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     'UNAUTHORIZED',
     // Domain-level permanent errors that won't change on retry without
     // human intervention.
+    // spec: pre-launch-repair L2b (R-1) — `ShramSafal.CostEntry.Conflict` (a money entry id the server holds
+    // on another farm or for another person) lands HERE through its last segment, in this client AND in every
+    // APK already in the field: shown to the farmer, never silently retried. (A repeat of an id the server holds
+    // for the same farm and person is not a rejection at all — the server answers it as saved.)
     'CONFLICT',
     'DUPLICATE_KEY',
     'NOT_FOUND',

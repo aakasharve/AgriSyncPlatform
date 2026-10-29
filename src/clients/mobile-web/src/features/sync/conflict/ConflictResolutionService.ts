@@ -28,6 +28,9 @@ import {
     DEPENDENCY_PLOT_UNRESOLVED_CODE,
 } from '../../../infrastructure/sync/MutationDependency';
 
+/** spec: pre-launch-repair L2b (R-1) — `ShramSafalErrors.CostEntryIdConflict`; normalises to CONFLICT (PERMANENT). */
+export const COST_ENTRY_ID_CONFLICT_CODE = 'ShramSafal.CostEntry.Conflict';
+
 export interface RejectedMutationView {
     mutationId: string;
     mutationType: string;
@@ -80,7 +83,7 @@ export class ConflictResolutionService {
                     mutationType: r.mutationType,
                     capturedAt: r.createdAt,
                     reason: r.lastError ?? 'UNKNOWN',
-                    hint: this.hintFor(r.lastError, r.status === 'FAILED'),
+                    hint: this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode),
                     payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
                 };
             });
@@ -169,7 +172,13 @@ export class ConflictResolutionService {
         }
     }
 
-    private static hintFor(reason: string | undefined, autoRetriesExhausted = false): string | undefined {
+    private static hintFor(reason: string | undefined, autoRetriesExhausted = false, errorCode?: string): string | undefined {
+        // spec: pre-launch-repair L2b (R-1) — the server holds this money entry's id on ANOTHER farm or for
+        // another person, so it refused the entry instead of saving it twice. Re-sending cannot change that.
+        // PROPOSED (Marathi)
+        if (errorCode === COST_ENTRY_ID_CONFLICT_CODE) {
+            return 'हीच खर्चाची नोंद दुसऱ्या शेतावर किंवा दुसऱ्या व्यक्तीच्या नावाने आधीच आहे. ती पुन्हा पाठवली जाणार नाही — श्रम सफलच्या नंबरला कॉल करा.';
+        }
         if (!reason) {
             // §P0.7 box 2d — a cap-exhausted row can reach this screen with no
             // `lastError` at all (a batch that omitted it never produced one).

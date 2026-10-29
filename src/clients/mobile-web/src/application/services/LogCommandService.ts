@@ -396,6 +396,9 @@ export class LogCommandServiceImpl implements LogCommandService {
         const allSelections = log.context.selection || [];
         const assertedCropIds = new Set(allSelections.map(entry => entry.cropId).filter(Boolean));
         const assertedPlotIds = allSelections.flatMap(entry => entry.selectedPlotIds || []);
+        // spec: pre-launch-repair L2b (R-2) — `cropId` is the phone's crop label and stays on the phone; the
+        // crop SEASON sent to the server is resolved from the plot and the log's date (`resolveMoneyPlace`).
+        // It used to go out as the season id, so a log naming one crop had its money dropped before queueing.
         const soleCropId = assertedCropIds.size === 1 ? [...assertedCropIds][0] : undefined;
         const cropId = soleCropId && soleCropId !== 'FARM_GLOBAL' ? soleCropId : undefined;
         const plotId = assertedPlotIds.length === 1 ? assertedPlotIds[0] : undefined;
@@ -421,6 +424,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 eventType: 'Expense',
                 category: 'Labour',
                 farmId,
+                logId: log.id,
                 cropId,
                 plotId,
                 amount,
@@ -442,6 +446,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 eventType: 'Expense',
                 category: 'Input',
                 farmId,
+                logId: log.id,
                 cropId,
                 plotId,
                 amount,
@@ -462,6 +467,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 eventType: 'Expense',
                 category: 'Machinery',
                 farmId,
+                logId: log.id,
                 cropId,
                 plotId,
                 amount,
@@ -483,6 +489,7 @@ export class LogCommandServiceImpl implements LogCommandService {
                 eventType: 'Expense',
                 category,
                 farmId,
+                logId: log.id,
                 cropId,
                 plotId,
                 amount,

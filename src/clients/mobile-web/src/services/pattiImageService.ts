@@ -7,19 +7,22 @@ import { agriSyncClient } from '../infrastructure/api/AgriSyncClient';
 import { getAuthSession } from '../infrastructure/storage/AuthTokenStore';
 import { IdempotencyKeyFactory } from '../infrastructure/ai/IdempotencyKeyFactory';
 import { getDatabase } from '../infrastructure/storage/DexieDatabase';
+import { SessionStore } from '../infrastructure/storage/SessionStore';
+import { resolveFarmIdFromSyncState, resolveKnownFarmId } from '../infrastructure/sync/SyncContext';
 
-async function resolveFarmIdFromCache(): Promise<string | undefined> {
-    const db = getDatabase();
-
-    const cachedPayload = await db.appMeta.get('shramsafal_last_pull_payload');
-    const farms = (cachedPayload?.value as { farms?: Array<{ id?: string }> } | undefined)?.farms ?? [];
-    const firstFarmId = farms.find(farm => typeof farm.id === 'string' && farm.id.length > 0)?.id;
-    if (firstFarmId) {
-        return firstFarmId;
+/**
+ * spec: pre-launch-repair L2b (L2a review leftover; D-19 "never first-farm fallback") — the farm a sale slip is
+ * read under: the farm of the harvest's own plot, else the farm the app is working on if this phone holds it
+ * (`resolveKnownFarmId`, the bill sheet's and the log path's rule). It used to be the FIRST farm of the last
+ * download (then the first cached day ledger's), so a farmer with two farms had his slip read under the wrong
+ * one. No farm known = not read, said plainly below — never a guessed farm.
+ */
+async function resolvePattiFarmId(plotId?: string): Promise<string | undefined> {
+    const fromPlot = await resolveFarmIdFromSyncState(plotId).catch(() => null);
+    if (fromPlot) {
+        return fromPlot;
     }
-
-    const firstDayLedger = await db.dayLedgers.toCollection().first();
-    return firstDayLedger?.farmId;
+    return (await resolveKnownFarmId(SessionStore.getCurrentFarmId()).catch(() => null)) ?? undefined;
 }
 
 function base64ToBlob(base64: string, mimeType: string): Blob {
@@ -40,9 +43,11 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 export const processPattiImage = async (
     imageData: string,
     mimeType: string,
-    cropName: string
+    cropName: string,
+    /** The harvest's plot — its farm is the farm the slip is read under. */
+    plotId?: string,
 ): Promise<Record<string, unknown>> => {
-    const farmId = await resolveFarmIdFromCache();
+    const farmId = await resolvePattiFarmId(plotId);
     if (!farmId) {
         return {
             success: false,

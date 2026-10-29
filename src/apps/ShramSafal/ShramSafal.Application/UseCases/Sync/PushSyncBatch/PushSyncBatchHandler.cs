@@ -474,16 +474,70 @@ public sealed class PushSyncBatchHandler(
         // retry whose first attempt had already committed.
         var strategy = dbContext.Database.CreateExecutionStrategy();
         return await strategy.ExecuteAsync(
-            innerCt => ExecuteMutationInTransactionAsync(
-                deviceId,
-                clientRequestId,
-                mutationType,
-                mutation,
-                actorUserId,
-                actorRole,
-                appVersion,
-                innerCt),
+            async innerCt =>
+            {
+                var result = await ExecuteMutationInTransactionAsync(
+                    deviceId,
+                    clientRequestId,
+                    mutationType,
+                    mutation,
+                    actorUserId,
+                    actorRole,
+                    appVersion,
+                    costEntryClashSeenBefore: false,
+                    innerCt);
+
+                // spec: pre-launch-repair L2b (R-1) — an add_cost_entry whose id hit an EXISTING row's
+                // primary key, and that the sync store does not know as this device's own earlier send, is
+                // run ONCE more in a fresh transaction. If the row is this farm's, the handler now sees it and
+                // answers (the stored entry, or the typed conflict for another person); if it is still
+                // invisible it belongs to another farm, and the second clash is the typed conflict.
+                return result.ErrorCode == CostEntryIdClashRecheckCode
+                    ? await ExecuteMutationInTransactionAsync(
+                        deviceId,
+                        clientRequestId,
+                        mutationType,
+                        mutation,
+                        actorUserId,
+                        actorRole,
+                        appVersion,
+                        costEntryClashSeenBefore: true,
+                        innerCt)
+                    : result;
+            },
             ct);
+    }
+
+    /// <summary>
+    /// spec: pre-launch-repair L2b (R-1) — internal only, never sent: "this add_cost_entry clashed on the
+    /// cost-entry primary key once; look again". See the caller above.
+    /// </summary>
+    private const string CostEntryIdClashRecheckCode = "ShramSafal.Internal.CostEntryIdClashRecheck";
+
+    /// <summary>
+    /// spec: pre-launch-repair L2b (R-1) — did this write fail on the PRIMARY KEY of <c>ssf.cost_entries</c>
+    /// (SQLSTATE 23505)? The table was created by raw SQL with an inline <c>PRIMARY KEY</c>, so Postgres named
+    /// it <c>cost_entries_pkey</c>; <c>PK_cost_entries</c> is EF's name, for a database EF created. Matched by
+    /// reflection — the same technique as <c>ShramSafalRepository.IsUniqueViolationOn</c> — so no provider
+    /// type reaches this layer.
+    /// </summary>
+    private static bool IsCostEntryIdClash(DbUpdateException ex)
+    {
+        for (Exception? inner = ex; inner is not null; inner = inner.InnerException)
+        {
+            if (inner.GetType().Name != "PostgresException")
+            {
+                continue;
+            }
+
+            var sqlState = inner.GetType().GetProperty("SqlState")?.GetValue(inner) as string;
+            var constraint = inner.GetType().GetProperty("ConstraintName")?.GetValue(inner) as string;
+            return string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && (string.Equals(constraint, "cost_entries_pkey", StringComparison.Ordinal)
+                    || string.Equals(constraint, "PK_cost_entries", StringComparison.Ordinal));
+        }
+
+        return false;
     }
 
     private async Task<SyncMutationResultDto> ExecuteMutationInTransactionAsync(
@@ -494,6 +548,7 @@ public sealed class PushSyncBatchHandler(
         Guid actorUserId,
         string actorRole,
         string? appVersion,
+        bool costEntryClashSeenBefore,
         CancellationToken ct)
     {
         await using var transaction = await BeginTransactionIfSupportedAsync(ct);
@@ -546,7 +601,7 @@ public sealed class PushSyncBatchHandler(
 
             return CreateAppliedResult(clientRequestId, mutationType, execution.Data);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
         {
             await RollbackAsync(transaction, ct);
             dbContext.ChangeTracker.Clear();
@@ -555,6 +610,17 @@ public sealed class PushSyncBatchHandler(
             if (deduplicated is not null)
             {
                 return CreateDuplicateResult(clientRequestId, mutationType, deduplicated);
+            }
+
+            // spec: pre-launch-repair L2b (R-1) — a money entry id already stored. Not this device's own
+            // earlier send (checked just above), so: look once more (the caller), then say what it is — the
+            // typed conflict, which every phone parks for the farmer instead of retrying the same bytes.
+            if (string.Equals(mutationType, "add_cost_entry", StringComparison.Ordinal) && IsCostEntryIdClash(ex))
+            {
+                var conflict = Domain.Common.ShramSafalErrors.CostEntryIdConflict;
+                return costEntryClashSeenBefore
+                    ? CreateFailedResult(clientRequestId, mutationType, conflict.Code, conflict.Description)
+                    : CreateFailedResult(clientRequestId, mutationType, CostEntryIdClashRecheckCode, conflict.Description);
             }
 
             return CreateFailedResult(

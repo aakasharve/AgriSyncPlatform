@@ -17,6 +17,7 @@ import {
 import { X, Save } from 'lucide-react';
 import { addOtherIncomeEntry } from '../../../../services/harvestService';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
+import { idGenerator } from '../../../../core/domain/services/IdGenerator';
 import { BigButton, ChoiceChips, SANS, TextField } from '../../../../shared/components/ui/placeUi';
 import { OTHER_INCOME_SOURCE_LABEL } from './otherIncomeLabels';
 
@@ -37,11 +38,15 @@ const OtherIncomeSheet: React.FC<OtherIncomeSheetProps> = ({ crops, onClose, onS
     const [description, setDescription] = useState(initialDescription);
     const [date, setDate] = useState(getDateKey());
     const [selectedCropId, setSelectedCropId] = useState<string>('');
+    // spec: pre-launch-repair L2b (R-1) — this entry's identity, minted ONCE when the sheet opens: a second tap
+    // on save stores the same entry and sends the same money entry, never a second income.
+    const [entryId] = useState(() => `inc_${idGenerator.generate()}`);
 
     const handleSubmit = () => {
         if (!amount || !description) return;
 
         addOtherIncomeEntry({
+            id: entryId,
             amount: parseFloat(amount),
             source,
             description,

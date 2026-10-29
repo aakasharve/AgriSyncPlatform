@@ -49,6 +49,10 @@ export interface ProcurementExpense {
     createdAt: string;               // ISO timestamp of record creation
     updatedAt?: string;
 
+    // The farm the bill was saved for (spec: pre-launch-repair L2b, R-4). Absent on bills saved before it
+    // existed: the recovery list then asks the farmer which farm, never guesses one.
+    farmId?: string;
+
     // Scope binding
     scope: ExpenseScope;
     plotId?: string;                 // If scope = PLOT

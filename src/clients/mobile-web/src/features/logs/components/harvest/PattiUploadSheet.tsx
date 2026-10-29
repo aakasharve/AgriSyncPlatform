@@ -5,8 +5,7 @@
 
 import React, { useState, useRef } from 'react';
 import {
-    HarvestSession,
-    SaleEntry
+    HarvestSession
 } from '../../../../types';
 import {
     X,
@@ -14,17 +13,15 @@ import {
     Loader2,
     Check,
     AlertTriangle,
-    ScanLine,
-    Image as ImageIcon
+    ScanLine
 } from 'lucide-react';
-import Button from '../../../../shared/components/ui/Button';
 import { processPattiImage } from '../../../../services/pattiImageService';
 
 interface PattiUploadSheetProps {
     session: HarvestSession;
     cropName: string;
     onClose: () => void;
-    onDataExtracted: (data: any) => void;
+    onDataExtracted: (data: Record<string, unknown>) => void;
 }
 
 const PattiUploadSheet: React.FC<PattiUploadSheetProps> = ({ session, cropName, onClose, onDataExtracted }) => {
@@ -56,18 +53,18 @@ const PattiUploadSheet: React.FC<PattiUploadSheetProps> = ({ session, cropName, 
                 const mimeType = file.type;
 
                 try {
-                    const extractedData = await processPattiImage(cleanBase64, mimeType, cropName);
+                    const extractedData = await processPattiImage(cleanBase64, mimeType, cropName, session.plotId);
                     setStatus('SUCCESS');
                     setTimeout(() => {
                         onDataExtracted(extractedData);
                     }, 1000);
-                } catch (err: any) {
+                } catch (err: unknown) {
                     console.error("Analysis Error", err);
                     setStatus('ERROR');
                     setErrorMsg("Could not read the receipt. Please try again or enter manually.");
                 }
             };
-        } catch (err) {
+        } catch {
             setStatus('ERROR');
             setErrorMsg("File reading failed.");
         }

@@ -227,6 +227,12 @@ internal sealed class ShramSafalRepository(
         return await db.CostEntries.FirstOrDefaultAsync(c => c.Id == costEntryId, ct);
     }
 
+    // spec: pre-launch-repair L2b (R-1) — see IShramSafalRepository.
+    public async Task<CostEntry?> FindCostEntryForReplayAsync(Guid costEntryId, CancellationToken ct = default)
+    {
+        return await db.CostEntries.AsNoTracking().FirstOrDefaultAsync(c => c.Id == costEntryId, ct);
+    }
+
     public async Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
     {
         var ids = costEntryIds.Distinct().ToList();

@@ -267,14 +267,16 @@ export const getOtherIncomeEntries = (plotId?: string): OtherIncomeEntry[] => {
     return entries;
 };
 
-export const addOtherIncomeEntry = (entry: Omit<OtherIncomeEntry, 'id'>): OtherIncomeEntry => {
+// spec: pre-launch-repair L2b (R-1) — `id` is minted by the sheet when it OPENS, so a second tap on save is
+// the same entry (stored once, one money entry), never a second income. Without one, a fresh id as before.
+export const addOtherIncomeEntry = (entry: Omit<OtherIncomeEntry, 'id'> & { id?: string }): OtherIncomeEntry => {
     const newEntry: OtherIncomeEntry = {
         ...entry,
-        id: `inc_${idGenerator.generate()}`
+        id: entry.id ?? `inc_${idGenerator.generate()}`
     };
 
     // Read current
-    const currentEntries = getStoredOtherIncome();
+    const currentEntries = getStoredOtherIncome().filter(e => e.id !== newEntry.id);
     const updatedEntries = [newEntry, ...currentEntries];
 
     // Save
@@ -290,7 +292,7 @@ export const addOtherIncomeEntry = (entry: Omit<OtherIncomeEntry, 'id'>): OtherI
         plotId: newEntry.plotId,
         amount: newEntry.amount,
         notes: `${newEntry.source}: ${newEntry.description}`,
-        paymentMode: 'Cash'
+        // No payment mode: the farmer did not say how he was paid (spec: pre-launch-repair L2b; it was 'Cash').
     });
 
     return newEntry;
@@ -319,8 +321,9 @@ export const updateHarvestSession = (session: HarvestSession): void => {
             amount: sale.netAmount,
             qty: sale.totalQuantity,
             unit: saleUnit === 'KG' || saleUnit === 'TON' || saleUnit === 'QUINTAL' ? 'kg' : 'unit',
-            unitPrice: sale.gradeWiseSales[0]?.pricePerUnit || 0,
-            paymentMode: 'Cash',
+            // A rate nobody gave stays absent (it was sent as 0), and so does the payment mode: a sale slip
+            // says nothing about cash (spec: pre-launch-repair L2b; it was 'Cash' on every sale).
+            ...(sale.gradeWiseSales[0]?.pricePerUnit ? { unitPrice: sale.gradeWiseSales[0].pricePerUnit } : {}),
             cropId: session.cropId,
             plotId: session.plotId,
             notes: `Harvest Sale - ${sale.totalQuantity} ${saleUnit} - Patti: ${sale.pattiNumber || 'N/A'}`

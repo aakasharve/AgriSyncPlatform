@@ -47,6 +47,17 @@ public static class ShramSafalErrors
     public static readonly Error ScheduleTemplateUnpublished = Error.Conflict("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
     public static readonly Error ScheduleNotActive = Error.Conflict("ShramSafal.ScheduleNotActive", "Schedule subscription is not active and cannot transition.");
 
+    // spec: pre-launch-repair L2b (R-1; founder D-41 phase A). A money entry's id is now DERIVED on the
+    // phone from its source (a bill line, a log entry), so a repeat of the same source re-sends the same id.
+    // The same id from the same farm and the same person is that entry again and is answered with the stored
+    // entry (AddCostEntryHandler). The same id from a DIFFERENT farm or a different person is not the same
+    // entry and can never become one: refused with this code, never stored twice, never retried.
+    // THREE SEGMENTS for the same reason as LabourAssignmentConflict below: the last one normalises to
+    // CONFLICT, which every phone already shipped classifies PERMANENT (doctrine P11).
+    public static readonly Error CostEntryIdConflict = Error.Conflict(
+        "ShramSafal.CostEntry.Conflict",
+        "This money entry id is already recorded on another farm or by another person. It was not saved again.");
+
     // 2026-08-27 prod incident (device db658ce1, 4 rejected create_daily_log
     // attempts 19:15:19-19:15:57, plus 20 cascaded add_log_task rejections). The
     // client re-asserted a labourAssignmentId that is already the PRIMARY KEY of a

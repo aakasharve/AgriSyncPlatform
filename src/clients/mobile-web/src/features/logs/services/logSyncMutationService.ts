@@ -514,7 +514,7 @@ export type CycleResolution = 'at-capture' | 'from-log-date';
  * season's log predates this season's `startDate`, so the open cycle does not
  * contain it and only the closed one does.
  */
-function selectCycleContainingDate(
+export function selectCycleContainingDate(
     candidates: readonly CropCycleDto[],
     logDate: string,
 ): CropCycleDto | null {

@@ -15,6 +15,9 @@ import { AddCostEntryCommand } from '../../application/usecases/sync/AddCostEntr
 import { SetPriceConfigCommand } from '../../application/usecases/sync/SetPriceConfigCommand';
 import { CorrectCostEntryCommand } from '../../application/usecases/sync/CorrectCostEntryCommand';
 import { financeService } from './financeService';
+import { moneyEntryIdFor } from './moneyEntryIdentity';
+import { resolveMoneyPlace } from './moneyPlace';
+import { holdMoney, releaseHeldMoney, type HeldMoneyReason } from './heldMoney';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { noteUnqueueableLogs } from '../sync/status/unqueueableLogs';
 import {
@@ -123,92 +126,82 @@ export type ApplyAdjustmentInput = Omit<MoneyAdjustment, 'id' | 'correctedAt'> &
     id?: string;
 };
 
-export const financeCommandService = {
-    createMoneyEventFromSource(payload: MoneySourcePayload): MoneyEvent {
-        // Idempotency guard: `sourceId` is deterministic per (log, entry) —
-        // e.g. `${log.id}:labour:${entry.id}` — so a re-save of the same log
-        // (double-tap, retry after a transient failure, autosave firing
-        // twice) must not double-count a day's cost. Skip re-creating and
-        // re-enqueueing when an event for this exact source already exists.
-        const existing = financeService.getMoneyEvents()
-            .find(e => e.sourceType === payload.type && e.sourceId === payload.sourceId);
-        if (existing) {
-            return existing;
-        }
+/** What queueing one money entry came to: in the outbox, or kept on this phone (and why). */
+export type MoneyQueueOutcome = 'queued' | HeldMoneyReason;
 
-        // DATA_PRINCIPLE_SPINE 02.6 fix (Decision 3a, 2026-07-19): this id is
-        // sent as `costEntryId` below and MUST satisfy the sync-contract's
-        // `ZGuid` schema (a bare UUID, no prefix) — a `me_`-prefixed id fails
-        // `validatePayload` at MutationQueue.enqueue() time and throws
-        // silently (the caller never awaits/catches this promise), so the
-        // expense was saved to the local cache but never reached the
-        // outbox — the finance page showed it as "saved" while it was
-        // rejected on-device before ever touching the network.
-        const id = idGenerator.generate();
-        const createdByUserId = getCurrentUserId(payload.createdByUserId);
-        const amount = Number(payload.amount || 0);
-        // spec: plr-d10-redesign-real-integration-2026-10-25 (I4 — X4). The farm is the
-        // caller's, else the farm this phone is working on now (the same source the log
-        // path uses). It used to fall back to the FIRST cached money event's farm — the
-        // wrong farm for a farmer with two — or to the literal 'farm_unknown', which fails
-        // the GUID check, so a first bill on a fresh phone was kept on the phone and never
-        // sent. With no farm at all nothing is queued and the entry is reported as unsent
-        // (the receipt or log it came from stays on the phone).
-        // spec: pre-launch-repair L2a (R-3) — `null` is the caller saying "I looked and no farm is known"
-        // (a log whose plot this phone cannot place): kept on the phone, never sent to the session's farm.
-        const farmId = payload.farmId === null ? '' : (payload.farmId || SessionStore.getCurrentFarmId() || '');
-        const event: MoneyEvent = {
-            id,
-            farmId,
-            plotId: payload.plotId,
-            cropId: payload.cropId,
-            dateTime: payload.dateTime,
-            type: payload.eventType,
-            category: payload.category,
-            amount,
-            qty: payload.qty,
-            unit: payload.unit,
-            unitPrice: payload.unitPrice,
-            paymentMode: payload.paymentMode,
-            vendorName: payload.vendorName,
-            sourceType: payload.type,
-            sourceId: payload.sourceId,
-            createdByUserId,
-            trustStatus: 'Unverified',
-            reviewStatus: 'OK',
-            reviewReasons: [],
-            priceSource: 'Manual',
-            notes: payload.notes,
-            attachments: payload.attachments || [],
-            createdAt: systemClock.nowISO(),
-        };
+/** The in-memory event for a money source — `id` derived from its source key, `farmId` '' when none is known. */
+function buildMoneyEvent(payload: MoneySourcePayload, id: string, farmId: string): MoneyEvent {
+    return {
+        id,
+        farmId,
+        plotId: payload.plotId,
+        cropId: payload.cropId,
+        dateTime: payload.dateTime,
+        type: payload.eventType,
+        category: payload.category,
+        amount: Number(payload.amount || 0),
+        qty: payload.qty,
+        unit: payload.unit,
+        unitPrice: payload.unitPrice,
+        paymentMode: payload.paymentMode,
+        vendorName: payload.vendorName,
+        sourceType: payload.type,
+        sourceId: payload.sourceId,
+        createdByUserId: getCurrentUserId(payload.createdByUserId),
+        trustStatus: 'Unverified',
+        reviewStatus: 'OK',
+        reviewReasons: [],
+        priceSource: 'Manual',
+        notes: payload.notes,
+        attachments: payload.attachments || [],
+        createdAt: systemClock.nowISO(),
+    };
+}
 
-        financeService._addEvent(event);
+/**
+ * Queue one money entry — or keep it on this phone, written down (`heldMoney`), and say so.
+ *
+ * spec: pre-launch-repair L2b (R-2) — the plot and crop season on the wire are the SERVER's
+ * (`resolveMoneyPlace`), never the phone's own crop label; a plot the server does not have keeps the entry on
+ * the phone. (R-4) — anything not queued is written down durably so the खरेदी recovery list can offer it
+ * again under the same id. The session note (`noteNeverReachedOutbox`) is made synchronously, before any wait.
+ */
+async function queueMoneyEntry(event: MoneyEvent, payload: MoneySourcePayload): Promise<MoneyQueueOutcome> {
+    const hold = async (reason: HeldMoneyReason, cause: unknown): Promise<MoneyQueueOutcome> => {
+        noteNeverReachedOutbox(event.id, 'money event', cause);
+        await holdMoney({ costEntryId: event.id, payload, reason, heldAt: systemClock.nowISO() })
+            .catch(err => console.error('[finance] could not write down a money entry kept on this phone', err));
+        return reason;
+    };
 
-        if (!farmId) {
-            noteNeverReachedOutbox(id, 'money event', new Error('no current farm on this phone'));
-            return event;
-        }
+    if (!event.farmId) return hold('no-farm', new Error('no farm known for this money entry'));
 
-        AddCostEntryCommand.enqueue({
-            costEntryId: id,
+    // Placing the entry sits inside the try too: an unexpected throw there keeps the entry on the phone
+    // (written down and listed) instead of losing it (doctrine P10).
+    try {
+        const entryDate = toDateKey(event.dateTime);
+        const place = await resolveMoneyPlace(event.farmId, event.plotId, entryDate);
+        if (!place.sendable) return await hold('plot-not-on-server', new Error(`plot ${event.plotId} is not on the server`));
+
+        await AddCostEntryCommand.enqueue({
+            costEntryId: event.id,
             farmId: event.farmId,
-            plotId: event.plotId,
-            cropCycleId: event.cropId,
+            ...(place.plotId ? { plotId: place.plotId } : {}),
+            ...(place.cropCycleId ? { cropCycleId: place.cropCycleId } : {}),
             categoryId: moneyCategoryToCostCategoryId(event.category),
             description: event.notes || event.sourceId || '',
             amount: event.amount,
             currencyCode: 'INR',
-            entryDate: toDateKey(event.dateTime),
+            entryDate,
             // The farmer's own statement, passed straight through. NOT derived
             // from the sign of `amount` and NOT derived from `category` — both
             // would be a guess wearing a statement's clothes (`P1`). Before this
             // line existed, income and expense produced byte-identical payloads
             // and the server recorded both as money SPENT.
             direction: payload.eventType,
-            // The six that used to stop here. Conditional so an unstated field
-            // stays absent on the wire rather than becoming a sentinel; nothing
-            // below computes a value that the farmer did not give.
+            // Conditional so an unstated field stays absent on the wire rather
+            // than becoming a sentinel; nothing below computes a value that the
+            // farmer did not give.
             ...(event.qty !== undefined ? { qty: event.qty } : {}),
             ...(event.unit !== undefined ? { unit: event.unit } : {}),
             ...(event.unitPrice !== undefined ? { unitPrice: event.unitPrice } : {}),
@@ -218,10 +211,60 @@ export const financeCommandService = {
             // client can honestly make about every event it creates.
             attachments: event.attachments ?? [],
             ...(payload.location ? { location: payload.location } : {}),
-        }).catch(err => noteNeverReachedOutbox(id, 'money event', err));
-        triggerSyncBestEffort();
+        });
+    } catch (err) {
+        return hold('refused-on-phone', err);
+    }
+    return 'queued';
+}
+
+export const financeCommandService = {
+    createMoneyEventFromSource(payload: MoneySourcePayload): MoneyEvent {
+        // spec: pre-launch-repair L2b (R-1) — the entry's id is DERIVED from its source key, so every repeat
+        // of the same source (double tap, retry, reopen, recovery, re-derivation after a reinstall) is the
+        // same entry: the local queue keeps one row (`add_cost_entry:<id>`) and the server answers a repeat
+        // with the stored entry. A bare UUID, as the contract's `ZGuid` requires (DATA_PRINCIPLE_SPINE 02.6).
+        const id = moneyEntryIdFor(payload.sourceId);
+
+        // Idempotency guard, in memory: an event for this exact source — or with this id, which is how an
+        // entry read back from the server looks — already exists, so nothing is re-created or re-sent.
+        const existing = financeService.getMoneyEvents()
+            .find(e => (e.sourceType === payload.type && e.sourceId === payload.sourceId) || e.id === id);
+        if (existing) {
+            return existing;
+        }
+
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (I4 — X4). The farm is the
+        // caller's, else the farm this phone is working on now (the same source the log
+        // path uses) — never the first cached event's farm, never 'farm_unknown'. With no farm
+        // at all nothing is queued and the entry is kept on this phone and reported.
+        // spec: pre-launch-repair L2a (R-3) — `null` is the caller saying "I looked and no farm is known"
+        // (a log whose plot this phone cannot place): kept on the phone, never sent to the session's farm.
+        const farmId = payload.farmId === null ? '' : (payload.farmId || SessionStore.getCurrentFarmId() || '');
+        const event = buildMoneyEvent(payload, id, farmId);
+
+        financeService._addEvent(event);
+        void queueMoneyEntry(event, payload)
+            .catch(err => console.error('[finance] queueing a money entry failed', err))
+            .finally(triggerSyncBestEffort);
 
         return event;
+    },
+
+    /**
+     * spec: pre-launch-repair L2b (R-4) — send a money entry that was kept on this phone, AFTER the farmer
+     * confirmed its farm in खरेदी. Same derived id as its first attempt, so it can never become a second
+     * expense; the written-down record is released once the entry is in the outbox.
+     */
+    async sendKeptMoney(payload: MoneySourcePayload, confirmedFarmId: string): Promise<MoneyQueueOutcome> {
+        const id = moneyEntryIdFor(payload.sourceId);
+        const confirmed: MoneySourcePayload = { ...payload, farmId: confirmedFarmId };
+        const event = buildMoneyEvent(confirmed, id, confirmedFarmId);
+        if (!financeService.getMoneyEvents().some(e => e.id === id)) financeService._addEvent(event);
+        const outcome = await queueMoneyEntry(event, confirmed);
+        if (outcome === 'queued') await releaseHeldMoney(id).catch(() => undefined);
+        triggerSyncBestEffort();
+        return outcome;
     },
 
     createPriceBookItem(input: Omit<PriceBookItem, 'id'>): PriceBookItem {

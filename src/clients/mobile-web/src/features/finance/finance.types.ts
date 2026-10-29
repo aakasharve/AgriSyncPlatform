@@ -148,6 +148,11 @@ export interface MoneySourcePayload {
     attachments?: string[];
     createdByUserId?: string;
     location?: import('../../infrastructure/api/AgriSyncClient').LocationDto | null;
+    /**
+     * The log this money came from, when it came from one (spec: pre-launch-repair L2b, R-4): lets money kept on
+     * this phone for want of a farm find its farm again from the log once the log's farm is known.
+     */
+    logId?: string;
 }
 
 export interface FinancePipelineBucket {
