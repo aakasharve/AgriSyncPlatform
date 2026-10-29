@@ -43,10 +43,12 @@ export function isWorkerRole(role: string | null | undefined): boolean {
 }
 
 /**
- * May the work home show the farm's running cost? Not to a worker (PLR-D9 §6: "कामगार — … no money"),
- * and not while the server has not told this phone the role yet: unknown stays closed (I12-V1-m6),
- * the same default as the हजेरी door.
+ * May the work home show the farm's running cost? ONLY to the primary account holder — the farm's
+ * creator, `PrimaryOwner` as the server told this phone (PLR-D10 I20 / N7; founder D-22 "work access
+ * ≠ money access" and D-26 "neither सहमालक nor कुटुंब receives additional powers automatically").
+ * A co-owner, family member, मुकादम or expert gets nothing from the label; a worker never; and a
+ * role the server has not told this phone yet stays closed (I12-V1-m6).
  */
 export function mayShowFarmMoney(role: string | null | undefined): boolean {
-    return typeof role === 'string' && role.length > 0 && !isWorkerRole(role);
+    return role === 'PrimaryOwner';
 }

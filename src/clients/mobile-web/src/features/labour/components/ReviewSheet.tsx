@@ -33,7 +33,6 @@ import { formatReviewDetail } from '../reviewDetailDate';
 import { t as translate } from '../../../i18n/translations';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
-import { SeparateConfirm } from './SeparateConfirm';
 
 interface Props {
     open: boolean;
@@ -78,10 +77,6 @@ interface Props {
      * is absent or not unique (answer: no picker, and still no nag).
      */
     history?: DailyLog[];
-    /** DESIGN PREVIEW ONLY — 'separate' = हजेरी and मजुरी confirmed apart (SeparateConfirm, sends nothing). Default: the real मंजूर / शंका. */
-    confirmMode?: 'together' | 'separate';
-    /** Who is confirming, shown on a separate confirmation (मालक / मुकादम). */
-    confirmerLabel?: string;
 }
 
 const DISPUTE_REASON = 'या नोंदीवर शंका आहे — एकदा विचारून घ्यायचं आहे.';
@@ -358,7 +353,7 @@ const ReviewFacts: React.FC<{ item: ReviewItem }> = ({ item }) => {
     );
 };
 
-const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown, reviewListLoading, confirmMode = 'together', confirmerLabel = 'मालक' }) => {
+const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown, reviewListLoading }) => {
     const [gone, setGone] = useState<Record<string, boolean>>({});
     const [confirming, setConfirming] = useState<Record<string, ConfirmKind>>({});
     const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
@@ -716,12 +711,14 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                                       * fixed width) so the safe, common action is the big
                                       * green one and the two can never be confused by shape.
                                       */}
-                                    {confirmMode === 'separate' ? (
-                                        <SeparateConfirm item={it} confirmerLabel={confirmerLabel} onQuery={() => onToast('शंका नोंदवली — नमुना, काही पाठवलं नाही')} />
-                                    ) : <div className="mt-3 flex gap-3">
+                                    {/* PLR-D10 I20 / N8 (founder D-6): ONE मंजूर. The preview-only two-button
+                                        "हजेरी बरोबर / मजुरी बरोबर" card (SeparateConfirm, confirmMode='separate') was
+                                        DELETED so that model cannot resurface; money confirmation, when built, is its
+                                        own fact on the agreement and never releases money. */}
+                                    <div className="mt-3 flex gap-3">
                                         {mayApprove && <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> मंजूर</button>}
                                         {mayApprove && <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>}
-                                    </div>}
+                                    </div>
                                     {/*
                                       * Labour V1 Task 13 — the attribution
                                       * overlay, BELOW मंजूर/शंका on purpose:

@@ -8,7 +8,7 @@
  * this phone (newest cached read-out wins); never a worker by role alone; unknown stays closed.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isWorkerRole, mayOpenAttendanceFromHome, readCachedLabourGrant } from '../homeAttendanceDoor';
+import { isWorkerRole, mayOpenAttendanceFromHome, mayShowFarmMoney, readCachedLabourGrant } from '../homeAttendanceDoor';
 import { saveLabourReadout } from '../data/labourReadout';
 import type { LabourData } from '../labour.types';
 
@@ -35,6 +35,15 @@ describe('mayOpenAttendanceFromHome', () => {
         expect(mayOpenAttendanceFromHome('Mukadam', true)).toBe(true);
         expect(isWorkerRole('Worker')).toBe(true);
         expect(isWorkerRole('Mukadam')).toBe(false);
+    });
+});
+
+describe('mayShowFarmMoney (PLR-D10 I20 / N7, founder D-22 + D-26)', () => {
+    it('only the primary account holder sees the farm money; no label grants it', () => {
+        expect(mayShowFarmMoney('PrimaryOwner')).toBe(true);
+        for (const role of ['SecondaryOwner', 'Mukadam', 'Worker', 'Agronomist', 'Consultant', '', null, undefined]) {
+            expect(mayShowFarmMoney(role)).toBe(false);
+        }
     });
 });
 

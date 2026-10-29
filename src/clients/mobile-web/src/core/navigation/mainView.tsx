@@ -425,7 +425,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             homeRequested={ctx.logHomePending ?? false}
                             onHomeRequestHandled={ctx.consumeLogHome}
                             // H10 — the हजेरी door only for the owner tier or the owner's labour grant.
-                            onOpenAttendance={ctx.canOpenAttendanceFromHome ? () => setCurrentRoute('labour') : undefined}
+                            // merge-review m1 — opened as a PLACE over the home tabs, so हजेरी's मागे
+                            // lands on home (a plain route change could hand back the history of an
+                            // earlier, abandoned "बोलून हजेरी" round trip and land on the hub).
+                            onOpenAttendance={ctx.canOpenAttendanceFromHome
+                                ? () => (ctx.openPlace ? ctx.openPlace('labour') : setCurrentRoute('labour'))
+                                : undefined}
                             // The running-cost card (c95afa1c), re-homed on the work home. A worker sees no
                             // money (PLR-D9 §6: "कामगार — … no money"), and neither does a role the
                             // server has not told this phone yet (unknown stays closed, I12-V1-m6).

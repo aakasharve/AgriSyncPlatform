@@ -20,7 +20,6 @@ export const SAFE_DEFAULTS: LedgerDefaults = {
         defaultDuration: 2
     },
     labour: {
-        defaultWage: 300,
         defaultHours: 8,
         shifts: []
     },

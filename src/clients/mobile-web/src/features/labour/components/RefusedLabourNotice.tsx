@@ -41,6 +41,7 @@ const RefusedLabourNotice: React.FC<{
     const { marks, noWorkDeclarationRefused } = state;
     if (marks.length === 0 && !noWorkDeclarationRefused) return null;
     const allMissingResponsibility = marks.length > 0 && marks.every((m) => m.missingResponsibility);
+    const allFutureDate = marks.length > 0 && marks.every((m) => m.futureDate);
 
     return (
         <div data-testid="labour-refused-notice" role="status"
@@ -50,6 +51,9 @@ const RefusedLabourNotice: React.FC<{
                     <p className="text-[19px] font-bold leading-snug text-stone-800">{COPY.refusedMarksTitle(marks.length)}</p>
                     {allMissingResponsibility && (
                         <p data-testid="labour-refused-reason" className="mt-1 text-[16px] leading-snug text-stone-700">{COPY.refusedMissingResponsibility}</p>
+                    )}
+                    {allFutureDate && (
+                        <p data-testid="labour-refused-reason" className="mt-1 text-[16px] leading-snug text-stone-700">{COPY.refusedFutureDate}</p>
                     )}
                     <button type="button" data-testid="labour-refused-show" aria-expanded={open}
                         onClick={() => setOpen((o) => !o)}

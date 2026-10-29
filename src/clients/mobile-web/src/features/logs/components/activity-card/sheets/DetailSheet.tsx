@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { LedgerDefaults, FarmerProfile, Plot } from '../../../../../types';
 import { AlertTriangle, User, Users, Droplets, Tractor, X } from 'lucide-react';
@@ -114,41 +114,11 @@ const DetailSheet = ({
         setLocalData((prev: DetailData) => ({ ...prev, shiftId }));
     };
 
-    // Auto-calculate total cost whenever counts or shift changes
-    useEffect(() => {
-        if (type === 'labour' && localData.type === 'HIRED' && localData.shiftId) {
-            const shift = defaults.labour.shifts.find(s => s.id === localData.shiftId);
-            // Labour V1 final fix (C2) — DERIVE FROM A STATEMENT, NEVER FROM
-            // SILENCE. This effect fires on mount (a shift is pre-selected), so
-            // without this guard it immediately wrote `totalCost: 0, count: 0`
-            // over the initializer and put the fabricated zeros straight back —
-            // removing them above would have achieved nothing. A total derived
-            // from no headcount at all is not a cheaper total, it is a number
-            // nobody said. Once EITHER split carries a number the arithmetic is
-            // exactly as before, so the "Total Paid (Auto)" box still fills in
-            // on the first keystroke.
-            const hasStatedSplit = typeof localData.maleCount === 'number'
-                || typeof localData.femaleCount === 'number';
-            if (shift && hasStatedSplit) {
-                const mCost = (localData.maleCount || 0) * (shift.defaultRateMale || 0);
-                const fCost = (localData.femaleCount || 0) * (shift.defaultRateFemale || 0);
-                const total = mCost + fCost;
-
-                // Update total cost AND total count
-                setLocalData((prev: DetailData) => ({
-                    ...prev,
-                    totalCost: total,
-                    count: (prev.maleCount || 0) + (prev.femaleCount || 0)
-                }));
-            }
-        }
-        // `type` is fixed for the lifetime of a mounted sheet, and
-        // `defaults.labour.shifts` is a fresh array identity on most parent
-        // renders — adding either would re-run an effect that calls
-        // setLocalData, i.e. trade a lint warning for a render loop. The
-        // effect intentionally keys only on the values it recomputes from.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [localData.maleCount, localData.femaleCount, localData.shiftId, localData.type]);
+    // PLR-D10 I20 / N3 (founder D-7, 2026-10-26) — the "Total Paid (Auto)" effect was DELETED. It
+    // filled `totalCost` with maleCount × shift.defaultRateMale + femaleCount × shift.defaultRateFemale
+    // (and overwrote the farmer's own total with the split sum) the moment a split was typed: a wage
+    // worked out from a headcount, which D-7 forbids. The money box is now only what he types; left
+    // empty, the amount stays absent and every screen shows "—" (P4). Shift rates no longer exist.
 
     const handleContractUnitInit = () => {
         if (!localData.contractUnit) {
@@ -324,11 +294,10 @@ const DetailSheet = ({
                                         />
                                     </div>
 
-                                    {/* Auto-Calculated Total */}
+                                    {/* The amount the farmer TYPES — never worked out from a count (N3, D-7). */}
                                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
                                         <div>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase">{S.totalPaidAuto}</p>
-                                            <p className="text-xs text-slate-500 mt-0.5">{S.basedOnShift}</p>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase">{S.totalPaid}</p>
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <span className="text-lg font-bold text-slate-400">₹</span>

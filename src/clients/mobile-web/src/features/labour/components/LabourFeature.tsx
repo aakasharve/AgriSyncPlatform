@@ -43,7 +43,7 @@ import { t as translate } from '../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import type { DailyLog, LedgerDefaults } from '../../../types';
-import type { LedgerRow } from '../labour.types';
+import type { LabourData, LedgerRow } from '../labour.types';
 import { BackHeader, LoadErrorBanner, LoadingState } from './LabourUiKit';
 import { ATTENDANCE_COPY } from '../attendanceCopy';
 import LabourHub from './LabourHub';
@@ -53,6 +53,9 @@ import Attendance, { type AttendanceMode, type ManualAttendanceMark } from './At
 import { attendanceTitleFor, choosableWorkDates } from '../attendanceDay';
 import WeeklyDashboard from './WeeklyDashboard';
 import HajeriLedger from './HajeriLedger';
+import HajeriVahi from './HajeriVahi';
+import { openingVahiPeriod, type VahiPeriodState } from '../vahiPeriod';
+import OwnAttendanceComingSoon from './OwnAttendanceComingSoon';
 import HajeriCellDetail from './HajeriCellDetail';
 import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
 import RefusedLabourNotice from './RefusedLabourNotice';
@@ -141,10 +144,7 @@ export const LabourFeature: React.FC<{
      * derive it from) may state it; otherwise it is derived from `history` exactly as before.
      */
     anchorOverride?: LabourAnchor;
-    /** DESIGN PREVIEW ONLY — see ReviewSheet/SeparateConfirm. The real app passes nothing (the real मंजूर / शंका). */
-    confirmMode?: 'together' | 'separate';
-    confirmerLabel?: string;
-}> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds, onBeginNoWorkLane, onDeclareNoWorkDay, anchorOverride, confirmMode, confirmerLabel }) => {
+}> = ({ onExit, onGoToLog, history, ledgerDefaults, lastLabourLogIds, onBeginNoWorkLane, onDeclareNoWorkDay, anchorOverride }) => {
     const { data, loading, error, refresh, timeWindow, setTimeWindow, staleSinceIso } = useLabourState();
     // Safe (non-throwing) outside a provider (`?preview=labour` mounts with
     // none) — `farm` stays `null` there, and the QR-invite CTA below hides
@@ -154,7 +154,11 @@ export const LabourFeature: React.FC<{
     const [inviteOpen, setInviteOpen] = useState(false);
     const [stack, setStack] = useState<ScreenState[]>([{ name: 'hub' }]);
     const [reviewOpen, setReviewOpen] = useState(false);
-    const [cellDetail, setCellDetail] = React.useState<{ row: LedgerRow; dayIndex: number } | null>(null);
+    // I23 — the day travels WITH the cell: a paged वही page is not the feature's own read-out, so the
+    // detail must not look its date up in `data.ledger.days`.
+    const [cellDetail, setCellDetail] = React.useState<{ row: LedgerRow; dayIndex: number; dayIso: string } | null>(null);
+    const openCellOf = (source: LabourData) => (row: LedgerRow, dayIndex: number) =>
+        setCellDetail({ row, dayIndex, dayIso: source.ledger.days[dayIndex] ?? '' });
     const [toast, setToast] = useState<string | null>(null);
     const toastTimer = useRef<number | undefined>(undefined);
 
@@ -215,6 +219,10 @@ export const LabourFeature: React.FC<{
     // while the last `/me` failed: once `/me` answers, `farm` is the authority
     // (and if the answer excludes the remembered farm, it is no longer used).
     const farmId = farm?.farmId ?? (farmCtx?.loadFailed ? farmCtx.currentFarmId ?? undefined : undefined);
+    // PLR-D10 L3a / D-35 — a plain worker (the server-told role) looking at his own view: his own हजेरी
+    // is "coming soon" (it needs a safe login↔name link first, D-8). Never inferred from the view alone:
+    // an owner offline also gets the 'own'-shaped local register.
+    const ownAttendanceComingSoon = farm?.role === 'Worker' && data.view === 'own';
     /**
      * Journey fixes D1/D6 - what the SERVER REFUSED (a mark with no
      * responsibility behind it, a no-work declaration that did not land),
@@ -252,6 +260,10 @@ export const LabourFeature: React.FC<{
     }, [refused, loadParkedQuestions]);
 
     const push = useCallback((s: ScreenState) => setStack((st) => [...st, s]), []);
+    // I23 — the वही's open page lives HERE, so a background refresh (which remounts the screen) keeps
+    // the farmer on the old week he is reading; every fresh open of the वही starts at today.
+    const [vahiPeriod, setVahiPeriod] = useState<VahiPeriodState | undefined>(undefined);
+    const openLedger = useCallback(() => { setVahiPeriod(undefined); push({ name: 'ledger' }); }, [push]);
     const back = useCallback(() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)), []);
     const handleBack = () => { if (stack.length > 1) back(); else onExit(); };
     const showToast = useCallback((m: string) => {
@@ -365,6 +377,7 @@ export const LabourFeature: React.FC<{
         void Promise.resolve().then(() => backgroundSyncWorker.triggerNow()).catch(() => { /* queued either way */ });
         showToast(ON_PHONE_MR);
         // Show him where it landed: replace this screen with the हजेरी वही.
+        setVahiPeriod(undefined); // it lands on today's page
         setStack((st) => [...st.slice(0, -1), { name: 'ledger' }]);
         // AFTER the queue rows exist, so the register composes the new marks
         // (attendanceOverlay); offline the refetch fails into the local-plane
@@ -457,7 +470,7 @@ export const LabourFeature: React.FC<{
                                 <HajeriLedger
                                     data={data}
                                     onToast={showToast}
-                                    onOpenCell={(row, dayIndex) => setCellDetail({ row, dayIndex })}
+                                    onOpenCell={openCellOf(data)}
                                 />
                             ) : null}
                         </>
@@ -493,7 +506,7 @@ export const LabourFeature: React.FC<{
                                     openAttendance('no-work');
                                 } : undefined}
                                 onDashboard={() => push({ name: 'dashboard' })}
-                                onLedger={() => push({ name: 'ledger' })}
+                                onLedger={openLedger}
                                 onReview={() => setReviewOpen(true)}
                                 onGoToLog={goToLog}
                                 onInviteWorker={farm ? () => setInviteOpen(true) : undefined}
@@ -502,8 +515,9 @@ export const LabourFeature: React.FC<{
                                 ledgerDefaults={ledgerDefaults}
                                 lastLabourLogIds={lastLabourLogIds}
                                 rosterPeople={farmId ? readCachedRoster(farmId)?.filter((o) => o.isActive) ?? undefined : undefined}
-                                onOpenCell={(row, dayIndex) => setCellDetail({ row, dayIndex })}
+                                onOpenCell={openCellOf(data)}
                                 onToast={showToast}
+                                ownAttendanceComingSoon={ownAttendanceComingSoon}
                             />
                         )}
                         {cur.name === 'mukadam' && cur.id && (
@@ -530,19 +544,27 @@ export const LabourFeature: React.FC<{
                             <WeeklyDashboard
                                 data={data}
                                 onReview={() => setReviewOpen(true)}
-                                onLedger={() => push({ name: 'ledger' })}
+                                onLedger={openLedger}
                                 onToast={showToast}
                                 timeWindow={timeWindow}
                                 onTimeWindowChange={setTimeWindow}
                             />
                         )}
-                        {cur.name === 'ledger' && (
-                            <HajeriLedger
+                        {/* I23 (D-16) — the वही with its history: ‹ › week / month, exact dates, आज, read-only.
+                            D-35 — a worker's own हजेरी is "coming soon": a plain note, never an empty grid. */}
+                        {cur.name === 'ledger' && (ownAttendanceComingSoon ? (
+                            <div className="px-4 pb-24 pt-2"><OwnAttendanceComingSoon /></div>
+                        ) : (
+                            <HajeriVahi
                                 data={data}
+                                period={vahiPeriod ?? openingVahiPeriod(timeWindow)}
+                                onPeriodChange={setVahiPeriod}
+                                mainWindow={timeWindow}
+                                farmId={farm?.farmId}
+                                onOpenCell={(row, dayIndex, dayIso) => setCellDetail({ row, dayIndex, dayIso })}
                                 onToast={showToast}
-                                onOpenCell={(row, dayIndex) => setCellDetail({ row, dayIndex })}
                             />
-                        )}
+                        ))}
                     </>
                 )}
             </div>
@@ -552,14 +574,13 @@ export const LabourFeature: React.FC<{
                 roster belongs to, and the local log the engagement id was
                 minted on. Both already exist here; neither is required, and
                 without them the sheet renders exactly as it did before. */}
-            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} reviewListUnknown={error} reviewListLoading={loading}
-                confirmMode={confirmMode} confirmerLabel={confirmerLabel} />
+            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} reviewListUnknown={error} reviewListLoading={loading} />
 
             {cellDetail && (
                 <HajeriCellDetail
                     row={cellDetail.row}
                     dayIndex={cellDetail.dayIndex}
-                    dayIso={data.ledger.days[cellDetail.dayIndex] ?? ''}
+                    dayIso={cellDetail.dayIso}
                     onClose={() => setCellDetail(null)}
                 />
             )}

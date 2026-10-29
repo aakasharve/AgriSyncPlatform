@@ -31,6 +31,7 @@ import { Check, BookText, Clock, Users } from 'lucide-react';
 import type { LabourData, LedgerCell, LedgerRow } from '../labour.types';
 import { Avatar, EmptyState } from './LabourUiKit';
 import { isReadableWeekRange } from '../weekLabel';
+import { windowRangeOf } from '../vahiPeriod';
 import { formatLedgerDayHead } from '../marathiDate';
 import { t as translate } from '../../../i18n/translations';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
@@ -82,7 +83,9 @@ const HajeriLedger: React.FC<{
     onOpenCell?: (row: LedgerRow, dayIndex: number) => void;
     /** Drawn open inside the हजेरी hub's "हजेरी बघा" section (founder 2026-10-25) — no screen-level padding there. */
     embedded?: boolean;
-}> = ({ data, onOpenCell, embedded }) => {
+    /** I23 — the paged वही draws its own heading (with ‹ › and आज) above the grid. */
+    hideHeading?: boolean;
+}> = ({ data, onOpenCell, embedded, hideHeading }) => {
     const L = data.ledger;
 
     // Carried MINOR (3.4b precedent — display dedup by EXACT key, never by
@@ -99,17 +102,22 @@ const HajeriLedger: React.FC<{
     // be noise, and one missing while the state IS on screen would leave the
     // weaker treatment unexplained.
     const hasUnsynced = rows.some((r) => r.cells.some((c) => c !== null && c.unsynced === true));
+    // N4 — the exact dates this grid answers for (the server's own window), else a readable legacy label.
+    const range = windowRangeOf(data) || (isReadableWeekRange(L.weekLabel) ? L.weekLabel : '');
+    const unbounded = !data.dashboard.windowFrom && !data.dashboard.windowTo;
 
     return (
         <div className={embedded ? 'flex flex-col gap-2.5' : 'flex flex-col gap-2.5 px-4 pb-24 pt-2'} data-testid={embedded ? 'hub-ledger-open' : undefined}>
-            <div className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
-                <span className="text-[13px] font-extrabold text-slate-800">
+            {!hideHeading && <div className="flex items-center justify-center rounded-2xl border border-slate-100 bg-white p-2 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
+                <span data-testid="ledger-heading" className="text-[13px] font-extrabold text-slate-800">
                     {/* inside the hub the section already says हजेरी बघा and a tile says हजेरी वही — the open grid names only its
-                        dates. With no readable range it says सर्व दिवस: the default window is ALL days, so "this week" would be false. */}
-                    {embedded ? (isReadableWeekRange(L.weekLabel) ? L.weekLabel : 'सर्व दिवस')
-                        : isReadableWeekRange(L.weekLabel) ? `${L.weekLabel} · हजेरी वही` : 'हजेरी वही'}
+                        dates. PLR-D10 I23 / N4 (founder D-16): the dates are the range the SERVER filtered on (windowFrom /
+                        windowTo), so a week or month window names its exact days and never "सर्व दिवस"; only the
+                        unbounded आजपर्यंत window, which really is every day on record, still says सर्व दिवस. */}
+                    {embedded ? (range !== '' ? range : unbounded ? 'सर्व दिवस' : 'हजेरी वही')
+                        : range !== '' ? `${range} · हजेरी वही` : 'हजेरी वही'}
                 </span>
-            </div>
+            </div>}
 
             {/* Legend — the approved vocabulary, and nothing else. */}
             <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 p-1">

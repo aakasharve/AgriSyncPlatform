@@ -39,9 +39,9 @@ import type { LedgerDefaults, FarmerProfile, Plot } from '../../../../../../type
 
 const defaults = {
     labour: {
-        defaultWage: 400,
         defaultHours: 8,
-        shifts: [{ id: 'full', name: 'Full Day', defaultRateMale: 500, defaultRateFemale: 400 }],
+        // A shift with NO rate: shift rates were deleted (N2/N3, D-7) — none can fill money.
+        shifts: [{ id: 'full', name: 'Full Day' }],
     },
     irrigation: { method: 'Drip', source: 'Well', defaultDuration: 2 },
     machinery: { defaultRentalCost: 1000, defaultFuelCost: 200 },
@@ -141,7 +141,7 @@ describe('DetailSheet labour — a stated zero is data and must survive', () => 
         expect(has(saved, 'count')).toBe(true);
     });
 
-    it('typing 0 into a split states the split AND the total it derives', () => {
+    it('typing 0 into a split states the split, and derives NO money and NO total from it', () => {
         const { onSave } = renderFreshLabourSheet();
 
         fireEvent.change(input('Male Split'), { target: { value: '0' } });
@@ -149,41 +149,50 @@ describe('DetailSheet labour — a stated zero is data and must survive', () => 
 
         const saved = onSave.mock.calls[0][0];
         expect(saved.maleCount).toBe(0);
-        // Once a headcount exists the derivation is legitimate again: this 0 is
-        // computed from something the farmer said, not from silence.
-        expect(saved.totalCost).toBe(0);
-        expect(saved.count).toBe(0);
+        // PLR-D10 I20 / N3 (founder D-7): a split no longer writes `totalCost` (count × shift
+        // rate) or overwrites the farmer's total. Money is only what he typed.
+        expect(has(saved, 'totalCost')).toBe(false);
+        expect(has(saved, 'count')).toBe(false);
     });
 });
 
-describe('DetailSheet labour — the auto-total display still works', () => {
+/**
+ * PLR-D10 I20 / N3 (founder D-7, 2026-10-26) — "Total Paid (Auto)" used to fill itself with
+ * count × the shift's default rate the moment a split was typed: a wage nobody stated. The box is
+ * now plain "Total Paid": the farmer types the amount, or it stays empty ("—" downstream).
+ */
+describe('DetailSheet labour — the money box never fills itself', () => {
     afterEach(() => cleanup());
 
-    it('one keystroke in Male Split fills Total Paid (Auto) exactly as before', () => {
+    const moneyBox = () => screen.getByText('Total Paid').closest('div')!
+        .parentElement!.querySelector('input') as HTMLInputElement;
+
+    it('a typed split leaves the money box empty and saves no amount', () => {
         const { onSave } = renderFreshLabourSheet();
 
         fireEvent.change(input('Male Split'), { target: { value: '3' } });
 
-        // Read off the rendered "Total Paid (Auto)" box, not just the saved object.
-        const money = screen.getByText('Total Paid (Auto)').closest('div')!
-            .parentElement!.querySelector('input') as HTMLInputElement;
-        expect(money.value).toBe('1500');
+        expect(moneyBox().value).toBe('');
+        expect(screen.queryByText('Total Paid (Auto)')).toBeNull();
+        expect(screen.queryByText('Based on shift rates')).toBeNull();
 
         confirm();
-        expect(onSave.mock.calls[0][0].totalCost).toBe(1500);
-        expect(onSave.mock.calls[0][0].count).toBe(3);
+        expect(onSave.mock.calls[0][0].totalCost).toBeUndefined();
+        expect(onSave.mock.calls[0][0].maleCount).toBe(3);
     });
 
-    it('both splits still add up across the two shift rates', () => {
+    it('an amount the farmer types is saved exactly as typed, whatever the splits are', () => {
         const { onSave } = renderFreshLabourSheet();
 
         fireEvent.change(input('Male Split'), { target: { value: '3' } });
         fireEvent.change(input('Female Split'), { target: { value: '2' } });
+        fireEvent.change(moneyBox(), { target: { value: '1700' } });
         confirm();
 
         const saved = onSave.mock.calls[0][0];
-        expect(saved.totalCost).toBe(3 * 500 + 2 * 400);
-        expect(saved.count).toBe(5);
+        expect(saved.totalCost).toBe(1700);
+        expect(saved.maleCount).toBe(3);
+        expect(saved.femaleCount).toBe(2);
     });
 });
 

@@ -4,6 +4,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Labour;
 
@@ -56,6 +57,14 @@ public sealed class RecordAttendanceMarkHandler(
         }
 
         var now = clock.UtcNow;
+
+        // 1b — PLR-D10 I23 / N6 (founder D-16): no हजेरी for a day that has not happened. The
+        // farm's India date decides "today" (FarmLocalDay, the one IST rule), never UTC and never
+        // the phone. Refused before anything is staged; past days stay open (no past limit).
+        if (command.WorkDate > FarmLocalDay.From(now))
+        {
+            return Result.Failure<RecordAttendanceMarkResult>(ShramSafalErrors.AttendanceFutureDate);
+        }
 
         // 2 — write authority: the SAME single predicate every governed labour
         // action asks (no attendance-specific flag, Correction 1), evaluated at

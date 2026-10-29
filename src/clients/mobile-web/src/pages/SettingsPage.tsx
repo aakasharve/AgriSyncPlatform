@@ -1,11 +1,10 @@
 import React from 'react';
 import { useAppNavigationState } from '../app/context/AppFeatureContexts';
 import { BookOpen, FlaskConical, Bot, Coins, Leaf, Mic, Activity } from 'lucide-react';
-import { LedgerDefaults, LabourShift, CropProfile } from '../types';
+import { LedgerDefaults, CropProfile } from '../types';
 import NotificationTestComponent from '../shared/components/NotificationTestComponent';
 import HarvestComingSoon from '../features/logs/components/harvest/HarvestComingSoon';
 import { useLanguage } from '../i18n/LanguageContext';
-import { idGenerator } from '../core/domain/services/IdGenerator';
 // spec: voice-diary-e2e-2026-05-17 (D.19) — Settings entry for the
 // FullHistoryJournal consent toggle. Lives next to the existing
 // Voice Journal "Open" CTA so the toggle is discoverable in the same
@@ -20,43 +19,13 @@ interface SettingsPageProps {
     crops: CropProfile[];
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({
-    defaults,
-    onUpdateDefaults
-}) => {
+// PLR-D10 I20 / N2 (founder D-7): the unused `_addShift` / `_updateShift` / `_deleteShift` handlers
+// (and the `handleDefaultChange` only they called) were DELETED. `_addShift` seeded every new shift
+// with ₹300 / ₹200 rates — the re-entry point for a wage worked out from a headcount. No shift rate
+// exists any more; the `defaults` / `onUpdateDefaults` props stay on the interface for the callers.
+const SettingsPage: React.FC<SettingsPageProps> = () => {
     const { setCurrentRoute, goBackOr } = useAppNavigationState();
     const { t, language } = useLanguage();
-
-    const handleDefaultChange = (category: keyof LedgerDefaults, field: string, value: unknown) => {
-        onUpdateDefaults({
-            ...defaults,
-            [category]: {
-                ...defaults[category],
-                [field]: value
-            }
-        });
-    };
-
-    const _addShift = () => {
-        const newShift: LabourShift = {
-            id: `shift_${idGenerator.generate()}`,
-            name: 'New Shift',
-            defaultRateMale: 300,
-            defaultRateFemale: 200
-        };
-        const newShifts = [...(defaults.labour.shifts || []), newShift];
-        handleDefaultChange('labour', 'shifts', newShifts);
-    };
-
-    const _updateShift = (id: string, field: keyof LabourShift, value: unknown) => {
-        const newShifts = defaults.labour.shifts.map(s => s.id === id ? { ...s, [field]: value } : s);
-        handleDefaultChange('labour', 'shifts', newShifts);
-    };
-
-    const _deleteShift = (id: string) => {
-        const newShifts = defaults.labour.shifts.filter(s => s.id !== id);
-        handleDefaultChange('labour', 'shifts', newShifts);
-    };
 
     return (
         <div className="space-y-6 pb-24">

@@ -74,6 +74,19 @@ describe('useAppNavigation — openPlace (bottom bar / सेट-अप के�
         expect(result.current.currentRoute).toBe('main');
     });
 
+    // merge-review m1 — हजेरी opened from the WORK HOME's door lands back on home, even when an earlier
+    // "बोलून हजेरी" round trip from the hub was abandoned on the log page: the door is a fresh open
+    // (openPlace), not the round trip's return, so the stale hub history is not handed back.
+    it('हजेरी opened from the work home door: मागे lands on home, even after an abandoned hub round trip', () => {
+        const { result } = renderHook(() => useAppNavigation());
+        act(() => result.current.openPlace('profile'));
+        act(() => result.current.setCurrentRoute('labour'));
+        act(() => result.current.setCurrentRoute('main')); // the mic hop, then he gives up on the log page
+        act(() => result.current.openPlace('labour'));      // the work home's "आजची हजेरी" door
+        act(() => result.current.goBackOr('profile'));
+        expect(result.current.currentRoute).toBe('main');
+    });
+
     it('the round trip is remembered for ONE hop only: leaving the log page elsewhere forgets it', () => {
         const { result } = renderHook(() => useAppNavigation());
         act(() => result.current.openPlace('profile'));

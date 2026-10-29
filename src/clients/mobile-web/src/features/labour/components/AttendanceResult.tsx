@@ -129,9 +129,17 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                             farmer with a statement he never made this session;
                             the anchor's figure carries the स्पष्ट माहिती chip
                             instead (both chips are the approved D9.5 harvest). */}
-                        <span className="ml-auto rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
-                            {spokenCount != null ? COPY.youSaidChip : COPY.explicitChip}
-                        </span>
+                        {/* D-46: a count the mic opened on before the owner confirmed it is
+                            PROVISIONAL — "खात्री बाकी" in amber, never the accepted-fact chip. */}
+                        {spokenCount == null && anchor.state === 'anchored' && anchor.provisional ? (
+                            <span data-testid="attendance-count-provisional" className="ml-auto rounded-lg bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800">
+                                {COPY.provisionalChip}
+                            </span>
+                        ) : (
+                            <span className="ml-auto rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
+                                {spokenCount != null ? COPY.youSaidChip : COPY.explicitChip}
+                            </span>
+                        )}
                     </div>
                 )}
                 {displayNames.length > 0 && (

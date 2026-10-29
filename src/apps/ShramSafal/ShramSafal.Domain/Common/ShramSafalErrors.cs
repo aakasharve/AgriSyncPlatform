@@ -136,6 +136,17 @@ public static class ShramSafalErrors
     public static readonly Error MissingVoiceTranscript = Error.Validation("ShramSafal.MissingVoiceTranscript", "Text transcript is required for AI parsing.");
     public static readonly Error InvalidCommand = Error.Validation("ShramSafal.InvalidCommand", "Request is invalid.");
 
+    // PLR-D10 I23 / N6 (founder D-16, 2026-10-26): "Future attendance must not be recorded as
+    // completed work. Future work belongs in planning." An attendance mark dated after the farm's
+    // India date is refused. THREE SEGMENTS for the same reason as LabourAssignmentConflict below:
+    // RejectionPolicy.ts normalizeCode keeps the tail after the LAST dot, and INVALIDCOMMAND is in
+    // PERMANENT_REJECTION_CODES on every phone already shipped (1.0.15–1.0.17), so an installed
+    // phone parks the row for the farmer (P10) instead of retrying it for ever (P11). The full code
+    // stays distinct so a new phone can say WHY.
+    public static readonly Error AttendanceFutureDate = Error.Validation(
+        "ShramSafal.AttendanceFutureDate.InvalidCommand",
+        "Attendance cannot be recorded for a day that has not happened yet. Future work belongs in planning.");
+
     // 2026-08-28. POST /shramsafal/corrections passed three client-supplied
     // strings straight into length-capped columns with no bound anywhere on the
     // path; CorrectionEvent.Record only checks non-blank. An over-long value

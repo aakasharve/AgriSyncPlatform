@@ -19,10 +19,13 @@ import { Mic, ClipboardCheck, Inbox, LayoutDashboard, BookText, Users, CloudRain
 import type { LabourData } from '../labourMock';
 import type { LedgerRow } from '../labour.types';
 import HajeriLedger from './HajeriLedger';
+import OwnAttendanceComingSoon from './OwnAttendanceComingSoon';
+import { VAHI_UNIT_LABELS } from '../vahiPeriod';
 import { inr } from '../labourMock';
 import type { DailyLog, LedgerDefaults } from '../../../types';
 import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
 import { formatCurrency } from '../../../shared/utils/currency';
+import { statedLabourMoney } from '../../../domain/logs/labourMoney';
 import { GroupLabel, PersonRow, HelpNote, EmptyState, Avatar } from './LabourUiKit';
 import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
@@ -88,6 +91,12 @@ interface Props {
     /** The open हजेरी वही in "हजेरी बघा": a tapped cell opens its detail (who, what was said, how it was counted). */
     onOpenCell?: (row: LedgerRow, dayIndex: number) => void;
     onToast?: (m: string) => void;
+    /**
+     * PLR-D10 L3a / D-35 — the caller is a plain worker looking at his own view (the server-told
+     * role, never inferred here): his own हजेरी is "coming soon", shown as a plain note in place of
+     * the grid. Absent for everyone else.
+     */
+    ownAttendanceComingSoon?: boolean;
 }
 
 /**
@@ -232,9 +241,11 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
                                     actually stated a cost of zero, which is a fact, not
                                     an absence. */}
                                 <span className="block font-mono text-[20px] font-extrabold text-orange-700">
-                                    {labour.events.some((event) => event.totalCost != null)
-                                        ? formatCurrency(labour.totalCost)
-                                        : '—'}
+                                    {/* N1 — the same helper as the log detail, so the two screens agree. */}
+                                    {(() => {
+                                        const stated = statedLabourMoney(labour.events);
+                                        return stated === null ? '—' : formatCurrency(stated);
+                                    })()}
                                 </span>
                             </span>
                         </div>
@@ -331,7 +342,7 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
     );
 };
 
-const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople, onOpenCell, onToast }) => {
+const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople, onOpenCell, onToast, ownAttendanceComingSoon }) => {
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
@@ -470,15 +481,19 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             return disagreement ? <HeadcountDisagreementCard disagreement={disagreement} markedCount={presentIds.length} /> : null;
         })()}
 
-        <HajeriLedger data={data} onToast={onToast ?? (() => undefined)} onOpenCell={onOpenCell} embedded />
+        {ownAttendanceComingSoon
+            ? <OwnAttendanceComingSoon />
+            : <HajeriLedger data={data} onToast={onToast ?? (() => undefined)} onOpenCell={onOpenCell} embedded />}
 
         <div className="grid grid-cols-2 gap-2.5">
             <QuickTile icon={<Inbox size={20} />} chip="bg-amber-100 text-amber-700" label="तपासा" sub="मंजूर करा" badge={data.dashboard.pending} onClick={onReview} />
             {/* TASK 11: no period in the sub-line — the आढावा screen lets the farmer pick the period. */}
             <QuickTile icon={<LayoutDashboard size={20} />} chip="bg-violet-100 text-violet-600" label="आढावा" onClick={onDashboard} />
         </div>
-        {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated — this opens every week of it. */}
-        <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub="सर्व दिवस" layout="row" onClick={onLedger} />
+        {/* Correction 5 (founder, 2026-09-01): the हजेरी वही is NEVER gated — this opens every week of it.
+            PLR-D10 I23 / N4 (D-16): it no longer says "सर्व दिवस" — the वही opens on one period with its exact
+            dates and turns back a week or a month at a time, which is what the sub-line now says. */}
+        <QuickTile icon={<BookText size={20} />} chip="bg-blue-100 text-blue-600" label="हजेरी वही" sub={`${VAHI_UNIT_LABELS.week} · ${VAHI_UNIT_LABELS.month}`} layout="row" onClick={onLedger} />
 
         {/* D6 (master review 2026-09-02) — one Labour, TWO money truths, never
             one figure. Owner view only: D-H8 keeps money off every non-owner

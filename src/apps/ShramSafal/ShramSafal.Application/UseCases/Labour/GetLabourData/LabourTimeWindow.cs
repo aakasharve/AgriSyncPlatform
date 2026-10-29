@@ -66,12 +66,41 @@ public sealed record LabourTimeWindow(DateOnly? FromDate, DateOnly? ToDateInclus
     /// <c>FarmLocalDay.From(clock.UtcNow)</c>. Passed in rather than read from a
     /// clock here so this type stays pure and the one IST rule keeps one owner.
     /// </param>
-    public static LabourTimeWindow? Resolve(string? window, DateOnly farmLocalToday)
+    /// <param name="anchor">
+    /// PLR-D10 I23 (founder D-16, "turning back a week or a month") — OPTIONAL: a farm-local day
+    /// that picks WHICH day / week / month the window is. <c>null</c> = the period containing
+    /// today, exactly as before (a phone that never sends one sees no change, P11). A past
+    /// period is returned WHOLE (a past week is Monday–Sunday, a past month is the 1st to its
+    /// last day); the period containing today still ends today. An anchor after today is
+    /// refused (no future हजेरी), and so is an anchor on <see cref="AllTime"/>, which has no
+    /// period to pick. The phone never computes a boundary: it steps one day past the range the
+    /// server last returned and asks again.
+    /// </param>
+    public static LabourTimeWindow? Resolve(string? window, DateOnly farmLocalToday, DateOnly? anchor = null)
     {
         var normalized = (window ?? string.Empty).Trim().ToLowerInvariant();
         if (normalized.Length == 0)
         {
             normalized = AllTime;
+        }
+
+        if (anchor is { } day)
+        {
+            if (day > farmLocalToday)
+            {
+                return null;
+            }
+
+            return normalized switch
+            {
+                Today => new LabourTimeWindow(day, day),
+                Week => EndingNoLaterThanToday(StartOfWeek(day), StartOfWeek(day).AddDays(6), farmLocalToday),
+                Month => EndingNoLaterThanToday(
+                    new DateOnly(day.Year, day.Month, 1),
+                    new DateOnly(day.Year, day.Month, DateTime.DaysInMonth(day.Year, day.Month)),
+                    farmLocalToday),
+                _ => null
+            };
         }
 
         return normalized switch
@@ -83,6 +112,32 @@ public sealed record LabourTimeWindow(DateOnly? FromDate, DateOnly? ToDateInclus
             _ => null
         };
     }
+
+    /// <summary>
+    /// Parses the wire anchor (<c>yyyy-MM-dd</c>, invariant). Blank = no anchor. Anything else
+    /// that is not exactly a calendar date is <c>false</c> — refused, never guessed.
+    /// </summary>
+    public static bool TryParseAnchor(string? raw, out DateOnly? anchor)
+    {
+        anchor = null;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return true;
+        }
+
+        if (DateOnly.TryParseExact(raw.Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var parsed))
+        {
+            anchor = parsed;
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>A period never reaches past today: the window is a statement about elapsed days.</summary>
+    private static LabourTimeWindow EndingNoLaterThanToday(DateOnly from, DateOnly to, DateOnly farmLocalToday)
+        => new(from, to > farmLocalToday ? farmLocalToday : to);
 
     /// <summary>
     /// Monday-anchored, kept from the code this replaces because it matches the

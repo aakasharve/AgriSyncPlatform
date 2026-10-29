@@ -353,8 +353,8 @@ export interface LabourShift {
     name: string; // "Morning Shift", "Full Day"
     startTime?: string;
     endTime?: string;
-    defaultRateMale?: number;
-    defaultRateFemale?: number;
+    // PLR-D10 I20 / N2 (founder D-7): `defaultRateMale` / `defaultRateFemale` were DELETED. A shift
+    // rate multiplied by a headcount is a wage nobody stated; nothing reads or writes a rate now.
 }
 
 export interface LedgerDefaults {
@@ -364,7 +364,7 @@ export interface LedgerDefaults {
         defaultDuration: number;
     };
     labour: {
-        defaultWage: number;
+        // `defaultWage` DELETED (N2, D-7): a constant ₹400 that was never saved and never stated.
         defaultHours: number;
         shifts: LabourShift[];
     };

@@ -717,6 +717,72 @@ public sealed class LabourWindowScopingTests
         result.Value!.Dashboard.Logs.Should().Be(0);
     }
 
+    // ─── PLR-D10 I23 (founder D-16): turning back a week or a month inside the हजेरी वही ──────
+    //
+    // An OPTIONAL `anchor` date picks WHICH week / month / day the window is. The server still
+    // owns every boundary (Monday-anchored week, calendar month, India date), so the phone only
+    // ever steps one day past the range the server last sent. A past period is the WHOLE period;
+    // the current one ends today; a future anchor is refused (no future हजेरी). No anchor means
+    // exactly what it meant before, so a phone that never sends one sees no change (P11).
+
+    [Theory]
+    // window,  anchor,       from,         to,           man-days, logs, columns
+    [InlineData("week", "2026-08-05", "2026-08-03", "2026-08-09", 4, 1, 7)]   // a past week: Mon–Sun, all 7 days
+    [InlineData("week", "2026-08-09", "2026-08-03", "2026-08-09", 4, 1, 7)]   // its Sunday is still that week
+    [InlineData("week", "2026-08-28", "2026-08-24", "2026-08-28", 3, 2, 5)]   // this week ends TODAY
+    [InlineData("month", "2026-07-15", "2026-07-01", "2026-07-31", 8, 1, 31)] // a past month: the whole month
+    [InlineData("month", "2026-08-05", "2026-08-01", "2026-08-28", 7, 3, 28)] // this month ends TODAY
+    [InlineData("today", "2026-07-15", "2026-07-15", "2026-07-15", 8, 1, 1)]  // one past day
+    public async Task An_anchor_picks_the_period_and_every_windowed_figure_follows_it(
+        string window, string anchor, string from, string to, int manDays, int logs, int columns)
+    {
+        var repo = FullScenario();
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), window, anchor));
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Dashboard.WindowFrom.Should().Be(from);
+        result.Value!.Dashboard.WindowTo.Should().Be(to);
+        result.Value!.Dashboard.ManDays.Should().Be(manDays);
+        result.Value!.Dashboard.Logs.Should().Be(logs);
+        result.Value!.Ledger.Days.Should().HaveCount(columns, "a bounded period draws every one of its days");
+        result.Value!.Ledger.Days.First().Should().Be(from);
+        result.Value!.Ledger.Days.Last().Should().Be(to);
+    }
+
+    [Theory]
+    [InlineData("week", "2026-08-29")]     // tomorrow: no future हजेरी (D-16)
+    [InlineData("alltime", "2026-08-05")]  // आजपर्यंत has no period to anchor
+    [InlineData("week", "05-08-2026")]     // not an ISO date
+    [InlineData("week", "2026-02-30")]     // not a date at all
+    public async Task An_anchor_the_server_cannot_honour_is_refused_never_widened(string window, string anchor)
+    {
+        var repo = FullScenario();
+
+        var result = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), window, anchor));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Contain("InvalidCommand");
+    }
+
+    [Fact]
+    public async Task No_anchor_is_exactly_the_old_answer()
+    {
+        var repo = FullScenario();
+
+        var withoutAnchor = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), "week"));
+        var blankAnchor = await BuildHandler(repo).HandleAsync(
+            new GetLabourDataQuery(new FarmId(FarmGuid), new UserId(OwnerGuid), "week", "  "));
+
+        withoutAnchor.Value!.Dashboard.WindowFrom.Should().Be("2026-08-24");
+        withoutAnchor.Value!.Dashboard.WindowTo.Should().Be("2026-08-28");
+        blankAnchor.Value!.Dashboard.WindowFrom.Should().Be("2026-08-24");
+        blankAnchor.Value!.Dashboard.WindowTo.Should().Be("2026-08-28");
+    }
+
     // ─── Builders ────────────────────────────────────────────────────────────
 
     private static DailyLog BuildLog(Guid id, DateOnly logDate)

@@ -143,7 +143,7 @@ export const PREVIEW_FARMS_MULTI: MyFarmDto[] = [
  * reused, not reinvented. */
 export const PREVIEW_LEDGER_DEFAULTS: LedgerDefaults = {
     irrigation: { method: 'Drip', source: 'Well', defaultDuration: 60 },
-    labour: { defaultWage: 400, defaultHours: 8, shifts: [] },
+    labour: { defaultHours: 8, shifts: [] },
     machinery: { defaultRentalCost: 1000, defaultFuelCost: 100 },
 };
 

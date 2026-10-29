@@ -291,6 +291,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         currentRoute, setCurrentRoute, mainView, setMainView,
         hiddenViews,
         goBackOr: navigation.goBackOr,
+        openPlace: navigation.openPlace,
         logIntent, setLogIntent, lastLabourLogIds,
         logHomePending: navigation.logHomePending,
         consumeLogHome: navigation.consumeLogHome,

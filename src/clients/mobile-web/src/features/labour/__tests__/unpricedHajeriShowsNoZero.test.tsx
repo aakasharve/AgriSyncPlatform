@@ -33,7 +33,7 @@ vi.mock('../../../i18n/LanguageContext', () => ({
 // just-logged card is LabourHub's, not the register's, and still shows money.
 const ledgerDefaults: LedgerDefaults = {
     irrigation: { method: 'Drip', source: 'well', defaultDuration: 2 },
-    labour: { defaultWage: 400, defaultHours: 8, shifts: [] },
+    labour: { defaultHours: 8, shifts: [] },
     machinery: { defaultRentalCost: 0, defaultFuelCost: 0 },
 };
 

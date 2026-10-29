@@ -366,10 +366,16 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
 export async function fetchLabourData(
     farmId: string,
     window: LabourWindow = DEFAULT_LABOUR_WINDOW,
+    /**
+     * PLR-D10 I23 (founder D-16) — OPTIONAL `yyyy-MM-dd` day that picks WHICH week / month / day
+     * the window is (the हजेरी वही turning back). The server owns every boundary; absent = the
+     * period containing today, and the request is exactly what it was before.
+     */
+    anchor?: string,
 ): Promise<LabourData> {
     const response = await agriSyncClient.http.get<LabourDataDto>(
         labourDataPath(farmId),
-        { params: { window } },
+        { params: anchor ? { window, anchor } : { window } },
     );
     const dto = response.data;
 

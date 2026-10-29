@@ -166,6 +166,18 @@ describe('AttendanceResult — count attribution reflects its source', () => {
         expect(screen.getByText('सांगितलेलं')).toBeInTheDocument();
         expect(screen.queryByText('स्पष्ट माहिती')).toBeNull();
     });
+    // Founder D-46 (2026-10-27): the mic opens on the latest captured headcount even before the owner
+    // confirmed it — but that figure is PROVISIONAL and the screen says so ("खात्री बाकी"), never
+    // "स्पष्ट माहिती" (which reads as an accepted fact). The count itself is unchanged (P7).
+    it('a provisional anchor (captured, not yet confirmed) shows its count as खात्री बाकी, never as confirmed', () => {
+        drawWithAnchor({ state: 'anchored', headcount: 12, logId: 'log-1', provisional: true }, [
+            { id: 'l1', type: 'hired', workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number],
+        ]);
+        expect(screen.getByText('12')).toBeInTheDocument();
+        expect(screen.getByText('खात्री बाकी')).toBeInTheDocument();
+        expect(screen.queryByText('स्पष्ट माहिती')).toBeNull();
+        expect(screen.queryByText('सांगितलेलं')).toBeNull();
+    });
 });
 
 describe('AttendanceResult — 3.5c: बरोबर enqueues marks for uniquely-resolved names only', () => {

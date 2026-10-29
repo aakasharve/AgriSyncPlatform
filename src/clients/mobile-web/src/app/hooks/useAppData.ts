@@ -180,7 +180,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     // --- AUXILIARY STATE ---
     const [ledgerDefaults, setLedgerDefaults] = useState<LedgerDefaults>({
         irrigation: { method: 'Drip', source: 'Well', defaultDuration: 60 },
-        labour: { defaultWage: 400, defaultHours: 8, shifts: [] },
+        labour: { defaultHours: 8, shifts: [] },
         machinery: { defaultRentalCost: 1000, defaultFuelCost: 100 }
     });
     const [userResources, setUserResources] = useState<ResourceItem[]>([]);

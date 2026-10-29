@@ -24,7 +24,7 @@ export interface SheetStrings {
     labourTab: (tab: 'HIRED' | 'CONTRACT' | 'SELF') => string;
     totalLabours: string; maleSplit: string; femaleSplit: string;
     splitMismatch: (split: number, total: number) => string;
-    hoursWorked: string; totalPaidAuto: string; basedOnShift: string;
+    hoursWorked: string; totalPaid: string;
     unit: string; contractUnit: (unit: 'Tree' | 'Acre' | 'Row' | 'Lump Sum') => string;
     quantity: string; noOfTrees: string; qty: string; contractAmount: string;
     selfTitle: string; selfNoCost: string;
@@ -65,7 +65,7 @@ const EN: SheetStrings = {
     labourTab: tab => (tab === 'HIRED' ? 'Daily Wage' : tab === 'CONTRACT' ? 'Contract' : 'Self'),
     totalLabours: 'Total Labours', maleSplit: 'Male Split', femaleSplit: 'Female Split',
     splitMismatch: (split, total) => `Split (${split}) doesn't match Total (${total})`,
-    hoursWorked: 'Hours worked', totalPaidAuto: 'Total Paid (Auto)', basedOnShift: 'Based on shift rates',
+    hoursWorked: 'Hours worked', totalPaid: 'Total Paid', // N3 (D-7): the amount he types; never "(Auto)"
     unit: 'Unit', contractUnit: unit => (unit === 'Lump Sum' ? 'Lump Sum' : `Per ${unit}`),
     quantity: 'Quantity', noOfTrees: 'No. of Trees', qty: 'Qty', contractAmount: 'Total Contract Amount (₹)',
     selfTitle: 'Self / Family Labour', selfNoCost: 'No cost will be recorded for this activity.',
@@ -112,7 +112,6 @@ const MR_DOSE: Record<'ml/L' | 'g/L' | 'kg/ac' | 'L/ac', string> = {
     'ml/L': 'मिली/लिटर', 'g/L': 'ग्रॅम/लिटर', 'kg/ac': 'किलो/एकर', 'L/ac': 'लिटर/एकर',
 };
 const SAVE_MR = t('confirmation.save', 'mr'); // APPROVED "जतन करा"
-const AUTO = 'आपोआप मोजलं'; // FOUNDER — PLR-D1: a total the app worked out itself is labelled so.
 
 const MR: SheetStrings = {
     confirmDetails: SAVE_MR, saveInput: SAVE_MR, saveWork: SAVE_MR, saveExpense: SAVE_MR, saveIssue: SAVE_MR,
@@ -125,8 +124,7 @@ const MR: SheetStrings = {
     maleSplit: t('workSummary.maleWorkers', 'mr'), femaleSplit: t('workSummary.femaleWorkers', 'mr'), // APPROVED
     splitMismatch: (split, total) => `पुरुष + महिला (${split}) एकूण मजुरांशी (${total}) जुळत नाही`, // PROPOSED (Marathi)
     hoursWorked: 'कामाचे तास', // the label this sheet already had
-    totalPaidAuto: `एकूण मजुरी (${AUTO})`, // PROPOSED (Marathi)
-    basedOnShift: 'पाळीच्या दरानुसार', // PROPOSED (Marathi)
+    totalPaid: t('reflectPage.totalCost', 'mr'), // APPROVED "एकूण खर्च" — the review form's own word (N3, D-7)
     unit: t('profile.unit', 'mr'), // APPROVED "एकक"
     contractUnit: unit => MR_CONTRACT[unit],
     quantity: 'प्रमाण', noOfTrees: 'झाडांची संख्या', qty: 'प्रमाण', // PROPOSED (Marathi)

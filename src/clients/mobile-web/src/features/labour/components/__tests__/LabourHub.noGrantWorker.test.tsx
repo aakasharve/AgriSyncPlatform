@@ -84,3 +84,34 @@ describe('LabourHub - a plain Worker whose response names people it does not con
         expect(() => render(<MukadamDetail {...props} />)).not.toThrow();
     });
 });
+
+// PLR-D10 L3a / D-35 (founder 2026-10-27: "YES — But need to show this as feature to be coming
+// soon"). A worker's OWN हजेरी needs a safe login↔name link first (D-8), so it is not built yet.
+// Until then his हजेरी बघा says so in plain words: a note, not a button, and never an empty grid
+// pretending to be his record (P5).
+describe('LabourHub — a worker sees his own हजेरी as "coming soon" (D-35)', () => {
+    afterEach(() => { cleanup(); mockGet.mockReset(); });
+
+    it('shows a plain note in place of the grid, with nothing to tap', async () => {
+        mockGet.mockResolvedValue({ data: crashingWire() });
+        const data = await fetchLabourData('farm-1');
+
+        render(<LabourHub {...hubProps(data)} ownAttendanceComingSoon />);
+
+        const note = screen.getByTestId('own-attendance-coming-soon');
+        expect(note).toHaveTextContent('तुमची स्वतःची हजेरी इथे लवकरच दिसेल');
+        expect(note.tagName).not.toBe('BUTTON');
+        expect(note.querySelector('button, a, [role="button"]')).toBeNull();
+        expect(screen.queryByTestId('hub-ledger-open')).toBeNull();
+    });
+
+    it('everyone else keeps the open वही', async () => {
+        mockGet.mockResolvedValue({ data: crashingWire() });
+        const data = await fetchLabourData('farm-1');
+
+        render(<LabourHub {...hubProps(data)} />);
+
+        expect(screen.queryByTestId('own-attendance-coming-soon')).toBeNull();
+        expect(screen.getByTestId('hub-ledger-open')).toBeInTheDocument();
+    });
+});

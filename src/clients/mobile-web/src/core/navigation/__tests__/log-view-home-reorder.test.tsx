@@ -198,20 +198,29 @@ describe('renderLogView — the आजची कामे tab opens on the work 
         expect(flowOf(tree)!.props.cost).toEqual({ today: 1200, yesterday: 900, soFar: 45000, scopeLabel: 'संपूर्ण शेत' });
     });
 
-    it('a worker gets no money on the home (PLR-D9 §6), nor does a role not yet known; everyone else does', () => {
+    // PLR-D10 I20 / N7 (founder D-22, D-26): only the PRIMARY account holder (the farm's creator)
+    // sees the farm's money on the home. A co-owner or family label, a मुकादम or an expert is
+    // granted nothing by the label; a worker never; a role not yet known stays closed.
+    it('only the primary account holder gets the running cost on the home (N7, D-26)', () => {
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'PrimaryOwner' })))!.props.cost).toBeDefined();
         expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'Worker' })))!.props.cost).toBeUndefined();
         expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: null })))!.props.cost).toBeUndefined();
         expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: undefined })))!.props.cost).toBeUndefined();
-        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'Mukadam' })))!.props.cost).toBeDefined();
-        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'SecondaryOwner' })))!.props.cost).toBeDefined();
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'Mukadam' })))!.props.cost).toBeUndefined();
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'SecondaryOwner' })))!.props.cost).toBeUndefined();
+        expect(flowOf(renderLogView(makeLogViewCtx({ farmRole: 'Agronomist' })))!.props.cost).toBeUndefined();
     });
 
-    it('the हजेरी door is wired only when the router says this person may manage labour, and opens the real हजेरी route', () => {
+    // merge-review m1 — the work home's door opens हजेरी as a PLACE over the home tabs (openPlace), so
+    // its मागे lands on home, never on a hub the farmer opened in some earlier, abandoned round trip.
+    it('the हजेरी door is wired only when the router says this person may manage labour, and opens हजेरी over home', () => {
         expect(flowOf(renderLogView(makeLogViewCtx({ canOpenAttendanceFromHome: false })))!.props.onOpenAttendance).toBeUndefined();
         const setCurrentRoute = vi.fn();
-        const flow = flowOf(renderLogView(makeLogViewCtx({ canOpenAttendanceFromHome: true, setCurrentRoute })))!;
+        const openPlace = vi.fn();
+        const flow = flowOf(renderLogView(makeLogViewCtx({ canOpenAttendanceFromHome: true, setCurrentRoute, openPlace })))!;
         flow.props.onOpenAttendance!();
-        expect(setCurrentRoute).toHaveBeenCalledWith('labour');
+        expect(openPlace).toHaveBeenCalledWith('labour');
+        expect(setCurrentRoute).not.toHaveBeenCalled();
     });
 
     it('the tab tap reaches the flow as a one-shot request it acknowledges', () => {

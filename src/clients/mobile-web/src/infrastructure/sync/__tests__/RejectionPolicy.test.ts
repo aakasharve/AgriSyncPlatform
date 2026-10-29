@@ -16,6 +16,16 @@ describe('RejectionPolicy.categorizeRejection', () => {
         }
     });
 
+    // PLR-D10 L3a (I23 / N6, founder D-16) — the server refuses a हजेरी mark dated after the farm's India
+    // date with a THREE-segment code whose tail is InvalidCommand, so every phone already shipped
+    // (same tail rule) parks it for the farmer instead of retrying it for ever (P10 / P11).
+    it('a future-dated attendance mark is PERMANENT by the tail rule installed phones use', () => {
+        expect(categorizeRejection({
+            errorCode: 'ShramSafal.AttendanceFutureDate.InvalidCommand',
+            errorMessage: 'Attendance cannot be recorded for a day that has not happened yet. Future work belongs in planning.',
+        })).toBe('PERMANENT');
+    });
+
     it('matches permanent codes case-insensitively', () => {
         expect(categorizeRejection({ errorCode: 'client_too_old' })).toBe('PERMANENT');
         expect(categorizeRejection({ errorCode: 'Mutation_Type_Unknown' })).toBe('PERMANENT');

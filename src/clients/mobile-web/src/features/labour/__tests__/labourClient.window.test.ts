@@ -98,4 +98,18 @@ describe('labourClient — adjustable time window', () => {
         expect(data.dashboard.manDays).toBeNull();
         expect(data.dashboard.money).toEqual({ recorded: null, paid: 0, advance: 0, owed: null });
     });
+
+    // PLR-D10 I23 (founder D-16) — turning back a week or a month in the हजेरी वही. The OPTIONAL
+    // anchor day says WHICH week / month; the server owns every boundary. Without one the request is
+    // byte-identical to before, so nothing else that reads labour data changes.
+    it('sends the anchor day only when the वही turns back to a past period', async () => {
+        mockGet.mockResolvedValueOnce(okResponse());
+        mockGet.mockResolvedValueOnce(okResponse());
+
+        await fetchLabourData('farm-123', 'week', '2026-10-19');
+        await fetchLabourData('farm-123', 'week');
+
+        expect(mockGet.mock.calls[0][1]).toEqual({ params: { window: 'week', anchor: '2026-10-19' } });
+        expect(mockGet.mock.calls[1][1]).toEqual({ params: { window: 'week' } });
+    });
 });

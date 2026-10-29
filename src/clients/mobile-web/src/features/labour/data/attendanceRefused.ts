@@ -37,6 +37,12 @@ export interface RefusedLabourMark {
      * marks (`ShramSafal.Forbidden`). Any other code claims NO reason.
      */
     missingResponsibility: boolean;
+    /**
+     * PLR-D10 L3a (I23 / N6, founder D-16) — the server refused it because its day has not happened
+     * yet ("no future हजेरी"). Read from the FULL code: its tail is InvalidCommand (so every shipped
+     * phone parks it), and only the middle segment says why.
+     */
+    futureDate: boolean;
 }
 
 export interface RefusedLabourState {
@@ -65,6 +71,10 @@ export const isContradictionCode = (code: string | undefined): boolean =>
 
 export const isForbiddenCode = (code: string | undefined): boolean => tailOf(code) === 'FORBIDDEN';
 
+/** The server's "no हजेरी for a day that has not happened" refusal (ShramSafalErrors.AttendanceFutureDate). */
+export const isFutureDateCode = (code: string | undefined): boolean =>
+    (code ?? '').trim().toUpperCase() === 'SHRAMSAFAL.ATTENDANCEFUTUREDATE.INVALIDCOMMAND';
+
 export async function listRefusedLabourState(farmId: string): Promise<RefusedLabourState> {
     const [rejected, failed] = await Promise.all([
         mutationQueue.getRejectedUserReview(),
@@ -89,6 +99,7 @@ export async function listRefusedLabourState(farmId: string): Promise<RefusedLab
             ...(p.dayMark ? { dayMark: p.dayMark } : {}),
             ...(p.nightMark ? { nightMark: p.nightMark } : {}),
             missingResponsibility: isForbiddenCode(row.errorCode),
+            futureDate: isFutureDateCode(row.errorCode),
         });
         clientRequestIds.push(row.clientRequestId);
     }

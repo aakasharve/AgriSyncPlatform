@@ -32,9 +32,9 @@ const baseProps = () => ({
 const ledgerDefaults: LedgerDefaults = {
     irrigation: { method: 'Drip', source: 'well', defaultDuration: 2 },
     labour: {
-        defaultWage: 300,
         defaultHours: 8,
-        shifts: [{ id: 'full', name: 'Full Day', defaultRateMale: 400, defaultRateFemale: 300 }],
+        // No wage and no shift rate exist any more (N2, D-7): nothing here can price a headcount.
+        shifts: [{ id: 'full', name: 'Full Day' }],
     },
     machinery: { defaultRentalCost: 0, defaultFuelCost: 0 },
 };
@@ -431,7 +431,10 @@ describe('LabourHub - the attendance door (हजेरी घ्या)', () =>
         expect(screen.getByText('नावं दाबून हजेरी')).toBeInTheDocument();
         expect(screen.getByText('आज कोण आलं')).toBeInTheDocument();
         expect(screen.getByText('हजेरी वही')).toBeInTheDocument();
-        expect(screen.getByText('सर्व दिवस')).toBeInTheDocument();
+        // PLR-D10 I23 / N4 (founder D-16): the tile no longer claims "सर्व दिवस" — the वही opens on a
+        // period with its exact dates and pages by week or month, which is what the tile now says.
+        expect(screen.getByText('आठवडा · महिना')).toBeInTheDocument();
+        expect(screen.queryByText('सर्व दिवस')).toBeNull();
     });
 
     it('the tile opens the screen through onAttendance', () => {
@@ -514,7 +517,7 @@ describe('LabourHub - Android tile layout', () => {
 
     it('lets sub-lines wrap instead of truncating them', () => {
         render(<LabourHub {...baseProps()} data={data} />);
-        for (const sub of ['आज कोण आलं', 'सर्व दिवस', 'मंजूर करा']) {
+        for (const sub of ['आज कोण आलं', 'आठवडा · महिना', 'मंजूर करा']) {
             expect(screen.getByText(sub).className).not.toMatch(/\btruncate\b/);
         }
     });

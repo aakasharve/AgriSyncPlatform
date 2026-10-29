@@ -92,6 +92,18 @@ describe('listRefusedLabourState — what the labour screens must tell the farme
         expect(state.marks[0].missingResponsibility).toBe(false);
     });
 
+    // PLR-D10 L3a (I23 / N6, founder D-16) — "no future हजेरी". The server's refusal is parked (its
+    // tail is InvalidCommand → PERMANENT) and the farmer is told why, by its own full code.
+    it('a mark refused for a future day is named with that reason, never as missing responsibility', async () => {
+        const future = await markRowId('11111111-1111-1111-1111-111111111111');
+        await mutationQueue.markRejectedUserReview(future, 'Attendance cannot be recorded for a day that has not happened yet.', 'ShramSafal.AttendanceFutureDate.InvalidCommand');
+
+        const state = await listRefusedLabourState(FARM);
+        expect(state.marks).toHaveLength(1);
+        expect(state.marks[0]).toMatchObject({ futureDate: true, missingResponsibility: false });
+        expect(await getLocalAttendanceMarks(FARM)).toEqual([]); // parked: no longer drawn as live intent
+    });
+
     it('a pending or discarded mark is not "refused"', async () => {
         await markRowId('11111111-1111-1111-1111-111111111111');
         const dropped = await markRowId('22222222-1111-1111-1111-111111111111');

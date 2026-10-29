@@ -79,6 +79,11 @@ export interface AppRouterContext {
     /** A screen's own back button: where he came from, else the given parent (WP-6). */
     goBackOr: Navigation['goBackOr'];
     /**
+     * Opens a PLACE over the home tabs (its मागे returns home) — the bottom bar's open. Optional so
+     * older context builders compile; merge-review m1: the work home's हजेरी door uses it.
+     */
+    openPlace?: Navigation['openPlace'];
+    /**
      * spec: plr-d10 (I14, CMP-3) — home tabs this person may not open (`hiddenViews.ts`: a worker gets
      * no तुलना). Optional so a ctx built without a farm role (the dev previews, tests) hides nothing.
      */

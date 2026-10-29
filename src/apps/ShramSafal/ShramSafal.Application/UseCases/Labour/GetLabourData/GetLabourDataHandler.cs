@@ -164,7 +164,10 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         //       otherwise, is the defect this task exists to remove (same
         //       stance as GetFinanceSummaryHandler.NormalizeGroupBy).
         var farmLocalToday = FarmLocalDay.From(clock.UtcNow);
-        var window = LabourTimeWindow.Resolve(query.Window, farmLocalToday);
+        // PLR-D10 I23 — the optional anchor picks a past week / month (founder D-16).
+        var window = LabourTimeWindow.TryParseAnchor(query.Anchor, out var anchor)
+            ? LabourTimeWindow.Resolve(query.Window, farmLocalToday, anchor)
+            : null;
         if (window is null)
         {
             return Result.Failure<LabourDataDto>(ShramSafalErrors.InvalidCommand);

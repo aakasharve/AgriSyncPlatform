@@ -6,6 +6,7 @@
 import React from 'react';
 import { DayWorkSummary } from '../../../types';
 import { formatCurrency } from '../../../shared/utils/currency';
+import { statedLabourMoney } from '../../../domain/logs/labourMoney';
 import { Users, Droplets, Tractor, Package, CheckSquare, FileText, User, ShieldCheck, Clock, SprayCan, Leaf } from 'lucide-react';
 import { formatDisplayTime } from '../../../shared/utils/displayTime';
 
@@ -153,7 +154,13 @@ const DailyWorkSummaryView: React.FC<DailyWorkSummaryViewProps> = ({ summary }) 
                                 </div>
                                 <span className="font-bold text-sm text-slate-800">Labour</span>
                             </div>
-                            <span className="text-xs font-mono text-orange-700 font-bold">{formatCurrency(summary.labour.totalCost)}</span>
+                            {/* N1 (D-7): the money STATED, or "—" — never a ₹0 nobody said (P4). */}
+                            <span data-testid="day-summary-labour-amount" className="text-xs font-mono text-orange-700 font-bold">
+                                {(() => {
+                                    const stated = statedLabourMoney(summary.labour.events);
+                                    return stated === null ? '—' : formatCurrency(stated);
+                                })()}
+                            </span>
                         </div>
                         <div className="pl-8 text-sm text-slate-600 space-y-0.5">
                             {/* Counts only (WP-1 A8): no default rate, no count × rate. */}

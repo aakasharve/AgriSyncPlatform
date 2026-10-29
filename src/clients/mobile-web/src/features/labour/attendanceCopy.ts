@@ -15,6 +15,12 @@ export const ATTENDANCE_COPY = {
     /** The manual door: people the user marked on the list - marked, not spoken. */
     markedChip: 'निवडलेले',
     explicitChip: 'स्पष्ट माहिती',
+    /**
+     * Founder D-46 (2026-10-27) — his own words for a record saved but not yet confirmed
+     * ("नोंदी जतन झाल्या · खात्री बाकी"): the chip on a headcount the mic opened on before the
+     * owner confirmed it. Provisional context, never shown as confirmed.
+     */
+    provisionalChip: 'खात्री बाकी',
     /** Rung 2 — count known, nobody named (mockup 05, locked as drawn). */
     rungWho: (n: number) => `या ${n} जणांमध्ये कोण होते?`,
     /** Rung 3 — remainder (founder harvest, supersedes the mockup's unapproved line). */
@@ -42,6 +48,8 @@ export const ATTENDANCE_COPY = {
     refusedMarksTitle: (n: number) => `${n} हजेरी शेतनोंदीत जमा झाली नाही`,
     /** Shown ONLY when the server's own code says the caller may not take marks. */
     refusedMissingResponsibility: 'कामगारांची जबाबदारी तुमच्याकडे नाही.',
+    /** PLR-D10 L3a (D-16) — shown ONLY when the server's own code says the day has not happened yet. PROPOSED (Marathi). */
+    refusedFutureDate: 'पुढच्या दिवसाची हजेरी घेता येत नाही.',
     refusedShowWhich: 'कोणत्या ते बघा',
     refusedRetry: 'पुन्हा प्रयत्न करा',
     /** The no-work declaration did not reach the farm record. */

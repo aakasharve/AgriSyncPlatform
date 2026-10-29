@@ -45,7 +45,7 @@ import SettingsPage from '../SettingsPage';
 
 const DEFAULTS: LedgerDefaults = {
     irrigation: { method: 'drip', source: 'well', defaultDuration: 60 },
-    labour: { defaultWage: 300, defaultHours: 8, shifts: [] },
+    labour: { defaultHours: 8, shifts: [] },
     machinery: { defaultRentalCost: 0, defaultFuelCost: 0 },
 };
 

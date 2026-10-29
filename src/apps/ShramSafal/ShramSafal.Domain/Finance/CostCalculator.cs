@@ -2,16 +2,9 @@ namespace ShramSafal.Domain.Finance;
 
 public static class CostCalculator
 {
-    public static decimal CalculateLabourCost(int maleCount, int femaleCount, decimal maleRate, decimal femaleRate)
-    {
-        if (maleCount < 0 || femaleCount < 0)
-        {
-            throw new ArgumentException("Worker counts cannot be negative.");
-        }
-
-        var total = (maleCount * maleRate) + (femaleCount * femaleRate);
-        return decimal.Round(total, 2, MidpointRounding.AwayFromZero);
-    }
+    // PLR-D10 I20 / N2 (founder D-7, 2026-10-26): `CalculateLabourCost` (count × rate) was DELETED.
+    // It had no caller, and a wage worked out from a headcount is exactly what D-7 forbids: money
+    // comes only from what the farmer stated, or later from an explicit agreement. Do not re-add it.
 
     public static decimal CalculateMachineryCost(decimal fuelCost, decimal rentalCost)
     {

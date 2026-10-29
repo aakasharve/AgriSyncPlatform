@@ -12,18 +12,9 @@
 
 import { CostBreakdown } from '../../types';
 
-/**
- * Calculate total labour cost from male/female counts and rates
- * Rates MUST come from Settings (LedgerDefaults), never user-typed
- */
-export const calculateLabourCost = (
-    maleCount: number,
-    femaleCount: number,
-    maleRate: number,
-    femaleRate: number
-): number => {
-    return (maleCount * maleRate) + (femaleCount * femaleRate);
-};
+// PLR-D10 I20 / N2 (founder D-7): `calculateLabourCost` (count × rate) was DELETED. It had no
+// caller, and a wage worked out from a headcount is what D-7 forbids — labour money is only what
+// the farmer stated (`domain/logs/labourMoney.ts`). Do not re-add it.
 
 /**
  * Calculate total machinery cost (fuel + rental)

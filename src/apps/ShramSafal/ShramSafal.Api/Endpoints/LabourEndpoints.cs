@@ -51,9 +51,15 @@ public static class LabourEndpoints
         // आजपर्यंत (all time), so a client shipped before this parameter
         // existed keeps working with no change. An unrecognised value is
         // rejected by the handler as an invalid command, not silently widened.
+        //
+        // PLR-D10 I23 (founder D-16) — `anchor` (`?anchor=yyyy-MM-dd`) is OPTIONAL in the same
+        // way: it picks WHICH week / month / day the window is, so the हजेरी वही can turn back a
+        // week or a month. Omitted = the period containing today, exactly as before; a future or
+        // malformed anchor is refused by the handler, never widened.
         group.MapGet("/farms/{farmId:guid}/labour", async Task<IResult> (
             Guid farmId,
             string? window,
+            string? anchor,
             ClaimsPrincipal user,
             IHandler<GetLabourDataQuery, LabourDataDto> handler,
             ICallerFarmTenantScope scope,
@@ -71,7 +77,7 @@ public static class LabourEndpoints
             }
 
             var result = await handler.HandleAsync(
-                new GetLabourDataQuery(new FarmId(farmId), new UserId(userId), window),
+                new GetLabourDataQuery(new FarmId(farmId), new UserId(userId), window, anchor),
                 ct);
 
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);

@@ -64,7 +64,7 @@ import { useLogAttachmentCount } from './overview/useLogAttachmentCount';
 // Used only when the caller passes no ledger defaults (the log drawer needs some). Unchanged.
 const FALLBACK_DEFAULTS: LedgerDefaults = {
     irrigation: { method: 'drip', source: 'Well', defaultDuration: 2 },
-    labour: { defaultWage: 300, defaultHours: 8, shifts: [{ id: 's1', name: 'Full Day', defaultRateMale: 400, defaultRateFemale: 250 }] },
+    labour: { defaultHours: 8, shifts: [{ id: 's1', name: 'Full Day' }] },
     machinery: { defaultRentalCost: 1000, defaultFuelCost: 200 },
 };
 

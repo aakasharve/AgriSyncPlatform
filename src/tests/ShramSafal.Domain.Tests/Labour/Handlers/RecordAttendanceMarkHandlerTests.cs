@@ -295,6 +295,58 @@ public sealed class RecordAttendanceMarkHandlerTests
         repo.SaveCalls.Should().Be(0);
     }
 
+    // ─── PLR-D10 I23 / N6 (founder D-16): no हजेरी for a day that has not happened ──────────
+
+    /// <summary>
+    /// Future work belongs in planning, never in हजेरी (D-16). The server refuses a mark dated
+    /// after the farm's India date, BEFORE anything is staged, with a code whose last segment is
+    /// <c>InvalidCommand</c>: RejectionPolicy.ts keeps the tail after the last dot, and
+    /// INVALIDCOMMAND is PERMANENT on every phone already shipped, so an old phone parks the row
+    /// for the farmer (P10) instead of retrying it for ever (P11).
+    /// </summary>
+    [Fact]
+    public async Task A_mark_dated_after_the_farms_India_today_is_refused_with_a_permanent_code_and_stages_nothing()
+    {
+        var repo = Repo();
+
+        var result = await Build(repo).HandleAsync(Cmd() with { WorkDate = Day.AddDays(1) });
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("ShramSafal.AttendanceFutureDate.InvalidCommand");
+        result.Error.Code[(result.Error.Code.LastIndexOf('.') + 1)..].Should().Be("InvalidCommand",
+            "installed phones classify a rejection by the code's LAST segment");
+        repo.AddedMarks.Should().BeEmpty();
+        repo.AddedCorrections.Should().BeEmpty();
+        repo.SaveCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Today_is_the_India_date_not_the_UTC_date()
+    {
+        // 19:00 UTC on 2 Sep = 00:30 IST on 3 Sep: the farmer's today is the 3rd.
+        var repo = Repo();
+        var handler = new RecordAttendanceMarkHandler(
+            repo, new SequentialIdGenerator(), new FixedClock(new DateTime(2026, 9, 2, 19, 0, 0, DateTimeKind.Utc)));
+
+        var result = await handler.HandleAsync(Cmd() with { WorkDate = new DateOnly(2026, 9, 3) });
+
+        result.IsSuccess.Should().BeTrue();
+        result.Value!.Outcome.Should().Be(AttendanceDayOutcome.Recorded);
+        repo.AddedMarks.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task An_old_day_is_still_recorded_no_past_limit_is_added()
+    {
+        // D-16: "no silent server-wide six-day limit" — only the future is refused.
+        var repo = Repo();
+
+        var result = await Build(repo).HandleAsync(Cmd() with { WorkDate = Day.AddDays(-40) });
+
+        result.IsSuccess.Should().BeTrue();
+        repo.AddedMarks.Should().ContainSingle(m => m.WorkDate == Day.AddDays(-40));
+    }
+
     // ─── Test doubles ────────────────────────────────────────────────────────
 
     private sealed class SequentialIdGenerator : IIdGenerator

@@ -23,4 +23,10 @@ namespace ShramSafal.Application.UseCases.Labour.GetLabourData;
 /// <c>GetFinanceSummaryQuery.GroupBy</c> / <c>NormalizeGroupBy</c> already
 /// uses.</para>
 /// </param>
-public sealed record GetLabourDataQuery(FarmId FarmId, UserId CallerUserId, string? Window = null);
+/// <param name="Anchor">
+/// PLR-D10 I23 (founder D-16) — OPTIONAL farm-local day (<c>yyyy-MM-dd</c>) that picks which
+/// day / week / month <paramref name="Window"/> is; see <see cref="LabourTimeWindow.Resolve"/>.
+/// Omitted = the period containing today, exactly as before. Raw string for the same reason as
+/// <paramref name="Window"/>: a malformed value is a domain refusal, not a model-binding 400.
+/// </param>
+public sealed record GetLabourDataQuery(FarmId FarmId, UserId CallerUserId, string? Window = null, string? Anchor = null);
