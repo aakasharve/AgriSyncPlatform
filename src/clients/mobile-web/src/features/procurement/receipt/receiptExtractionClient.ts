@@ -25,20 +25,6 @@ const CATEGORY_SET: ReadonlySet<ExpenseCategory> = new Set<ExpenseCategory>([
 
 const SCOPE_SET: ReadonlySet<ExpenseScope> = new Set<ExpenseScope>(['PLOT', 'CROP', 'FARM', 'UNKNOWN']);
 
-async function resolveFarmIdFromCache(): Promise<string | undefined> {
-    const db = getDatabase();
-
-    const cachedPayload = await db.appMeta.get('shramsafal_last_pull_payload');
-    const farms = (cachedPayload?.value as { farms?: Array<{ id?: string }> } | undefined)?.farms ?? [];
-    const firstFarmId = farms.find(farm => typeof farm.id === 'string' && farm.id.length > 0)?.id;
-    if (firstFarmId) {
-        return firstFarmId;
-    }
-
-    const firstDayLedger = await db.dayLedgers.toCollection().first();
-    return firstDayLedger?.farmId;
-}
-
 function readNumber(value: unknown): number | undefined {
     if (typeof value === 'number' && Number.isFinite(value)) {
         return value;
@@ -304,12 +290,16 @@ function buildPartialUpdate(
  * 3. Starts a background verification poller; fires `onVerification` when done
  *
  * Falls back to the legacy `extractReceiptData` if session creation fails.
+ *
+ * spec: pre-launch-repair L2a (R-3, D-19) — the farm is the CALLER's (the farm of the bill's plot, or the
+ * farm the app is working on). It used to be the FIRST farm of the last download, so a farmer with two
+ * farms could have his bill read — and its reading kept — under the wrong one.
  */
 export const extractReceiptWithSession = async (
     imageBase64: string,
+    farmId: string,
     onVerification: (update: VerificationUpdate) => void,
 ): Promise<ReceiptExtractionResponse> => {
-    const farmId = await resolveFarmIdFromCache();
     if (!farmId) {
         return {
             success: false,
@@ -324,7 +314,7 @@ export const extractReceiptWithSession = async (
 
     if (!navigator.onLine) {
         // Offline — fall back to legacy path which queues to pendingAiJobs
-        return extractReceiptData(imageBase64);
+        return extractReceiptData(imageBase64, farmId);
     }
 
     const mimeType = extractMimeType(imageBase64);
@@ -367,7 +357,7 @@ export const extractReceiptWithSession = async (
         return draftExtraction;
     } catch {
         // Session API failed — fall back to legacy direct extraction
-        const fallback = await extractReceiptData(imageBase64);
+        const fallback = await extractReceiptData(imageBase64, farmId);
         if (fallback.queued) {
             return fallback;
         }
@@ -385,8 +375,7 @@ export const extractReceiptWithSession = async (
  * Backend-driven receipt extraction client.
  * When offline, request is persisted in pendingAiJobs and processed by BackgroundSyncWorker.
  */
-export const extractReceiptData = async (imageBase64: string): Promise<ReceiptExtractionResponse> => {
-    const farmId = await resolveFarmIdFromCache();
+export const extractReceiptData = async (imageBase64: string, farmId: string): Promise<ReceiptExtractionResponse> => {
     if (!farmId) {
         return {
             success: false,

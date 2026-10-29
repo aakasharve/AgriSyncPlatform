@@ -66,8 +66,8 @@ export interface ProcurementExpense {
     tax?: number;
     grandTotal: number;              // Final amount paid
 
-    // Payment
-    paymentStatus: 'PAID' | 'CREDIT' | 'PARTIAL';
+    // Payment — absent = the bill did not say (never assumed paid; spec: pre-launch-repair L2a R-6)
+    paymentStatus?: 'PAID' | 'CREDIT' | 'PARTIAL';
     amountPaid?: number;
     creditDueDate?: string;
 

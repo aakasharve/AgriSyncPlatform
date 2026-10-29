@@ -32,6 +32,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { LogCommandServiceImpl } from '../LogCommandService';
+import { financeService } from '../../../features/finance/financeService';
 import type { LogsRepository } from '../../ports';
 import type { DailyLog, LabourEvent } from '../../../types';
 
@@ -77,10 +78,13 @@ describe('LogCommandServiceImpl.confirmAndSave — money capture (Decision 3a)',
         // DatabaseClosedError rejection). Clearing the one table these tests
         // touch is enough for exact-count assertions to be trustworthy.
         await getDatabase().mutationQueue.clear();
+        // The farm the app is working on is a farm this phone knows (the farm-wide log's own stamp is
+        // checked against it, exactly as the log's own sync does — L2a R-3).
+        await getDatabase().farms.put({ id: FARM_ID, payload: { id: FARM_ID }, updatedAt: '2026-07-19T00:00:00.000Z' });
         vi.clearAllMocks();
     });
 
-    it('propagates the ACTIVE farm id (SessionStore) into the enqueued expense for an explicit stated total', async () => {
+    it('a farm-wide log: the expense goes to the farm the log was saved under (the ACTIVE farm then)', async () => {
         const service = new LogCommandServiceImpl(fakeRepo);
         const log = makeLog([
             { id: 'l1', type: 'HIRED', count: 4, wagePerPerson: 400, totalCost: 1600 } as LabourEvent,
@@ -201,5 +205,78 @@ describe('LogCommandServiceImpl.confirmAndSave — labourAssignmentId mint (Task
         await service.confirmAndSave(logs);
 
         expect(logs[0].labour[0].durationHours).toBe(4);
+    });
+});
+
+/**
+ * spec: pre-launch-repair L2a (R-3) — a log's money goes where the LOG goes: the farm of the log's own
+ * plot, never the farm the app happens to show; a log whose plot this phone cannot place keeps its money
+ * on the phone instead of sending it to a guessed farm.
+ */
+describe('LogCommandServiceImpl.confirmAndSave — the money follows the log’s own farm (L2a R-3)', () => {
+    const FARM_A = '44444444-4444-4444-4444-444444444444';
+    const PLOT_ON_A = '55555555-5555-5555-5555-555555555555';
+
+    beforeEach(async () => {
+        const db = getDatabase();
+        await db.mutationQueue.clear();
+        await db.farms.put({ id: FARM_A, payload: { id: FARM_A }, updatedAt: '2026-07-19T00:00:00.000Z' });
+        await db.plots.put({ id: PLOT_ON_A, farmId: FARM_A, payload: { id: PLOT_ON_A, farmId: FARM_A }, updatedAt: '2026-07-19T00:00:00.000Z' });
+        vi.clearAllMocks();
+    });
+
+    function plotLog(plotId: string, id: string): DailyLog {
+        return {
+            id: `log-${id}`,
+            date: '2026-07-19',
+            context: { selection: [{ cropId: 'FARM_GLOBAL', cropName: 'Farm-wide', selectedPlotIds: [plotId], selectedPlotNames: ['A-1'] }] },
+            cropActivities: [], irrigation: [], inputs: [], machinery: [],
+            labour: [{ id, type: 'HIRED', count: 2, totalCost: 800 } as LabourEvent],
+        } as unknown as DailyLog;
+    }
+
+    it('a log on a plot of farm A, saved while the app shows another farm, sends its money to farm A', async () => {
+        const service = new LogCommandServiceImpl(fakeRepo);
+        await service.confirmAndSave([plotLog(PLOT_ON_A, 'r3a')]);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const pending = await pendingAddCostEntryRows();
+        expect(pending).toHaveLength(1);
+        const payload = pending[0].payload as { farmId: string; amount: number; plotId?: string };
+        expect(payload.farmId).toBe(FARM_A);
+        expect(payload.farmId).not.toBe(FARM_ID);
+        expect(payload.plotId).toBe(PLOT_ON_A);
+        expect(payload.amount).toBe(800);
+    });
+
+    it('a log whose plot this phone cannot place keeps its money on the phone — nothing sent to a guessed farm', async () => {
+        const service = new LogCommandServiceImpl(fakeRepo);
+        const unknownPlot = '66666666-6666-6666-6666-666666666666';
+        await service.confirmAndSave([plotLog(unknownPlot, 'r3b')]);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(await pendingAddCostEntryRows()).toHaveLength(0);
+    });
+
+    // L2a review m3 — the farm lookup runs AFTER the log is saved; if it throws, the save must still
+    // succeed and the log's money is "no farm known": kept on the phone (the local money entry exists, with
+    // no farm), nothing queued, nothing sent to the session's farm.
+    it('a farm lookup that throws: the save still succeeds and the money is kept, not sent', async () => {
+        const db = getDatabase();
+        const lookup = vi.spyOn(db.plots, 'get').mockRejectedValueOnce(new Error('lookup failed'));
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const added = vi.spyOn(financeService, '_addEvent');
+        const service = new LogCommandServiceImpl(fakeRepo);
+
+        await expect(service.confirmAndSave([plotLog(PLOT_ON_A, 'r3c')])).resolves.toBeUndefined();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(lookup).toHaveBeenCalled();
+        expect(fakeRepo.batchSave).toHaveBeenCalledTimes(1);
+        expect(added).toHaveBeenCalledWith(expect.objectContaining({ sourceId: 'log-r3c:labour:r3c', amount: 800, farmId: '' }));
+        expect(await pendingAddCostEntryRows()).toHaveLength(0);
+        lookup.mockRestore();
+        errors.mockRestore();
+        added.mockRestore();
     });
 });

@@ -11,7 +11,7 @@
  * "0 / ₹ 0" was a constant dressed as a measurement (I8 review B003, P4). A pile with no entry says नोंद नाही.
  */
 import React, { useMemo } from 'react';
-import { BarChart3, BookOpen, CheckCircle2, ClipboardCheck, RefreshCw, Settings2, Tags, TriangleAlert, TrendingUp } from 'lucide-react';
+import { BarChart3, BookOpen, CheckCircle2, ClipboardCheck, RefreshCw, Tags, TriangleAlert, TrendingUp } from 'lucide-react';
 import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import type { FinancePipelineBucket } from '../features/finance/finance.types';
@@ -91,13 +91,11 @@ const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, o
                     onClick={() => onNavigate('finance-ledger')} testId="fin-open-ledger" />
                 <RowLink icon={<Tags size={22} aria-hidden="true" />} tone="violet" title={FINANCE_TITLE['finance-price-book']} line="मजुरी, खत-औषध, यंत्र, इंधन — ठरलेले दर"
                     onClick={() => onNavigate('finance-price-book')} testId="fin-open-prices" />
-                <RowLink icon={<ClipboardCheck size={22} aria-hidden="true" />} tone="amber" title={FINANCE_TITLE['finance-review-inbox']} line="मोठी रक्कम, दुहेरी नोंद — एकदा पाहा"
+                <RowLink icon={<ClipboardCheck size={22} aria-hidden="true" />} tone="amber" title={FINANCE_TITLE['finance-review-inbox']} line="तपासायच्या नोंदी — एकदा पाहा" /* PROPOSED (Marathi): no promise of big-amount / duplicate detection (D-18) */
                     onClick={() => onNavigate('finance-review-inbox')} testId="fin-open-review"
                     badge={waiting && waiting.count > 0 ? <Chip tone="amber">{waiting.count}</Chip> : undefined} />
                 <RowLink icon={<BarChart3 size={22} aria-hidden="true" />} tone="green" title={FINANCE_TITLE['finance-reports']} line="नफा-तोटा आणि खर्च कुठे गेला"
                     onClick={() => onNavigate('finance-reports')} testId="fin-open-reports" />
-                <RowLink icon={<Settings2 size={22} aria-hidden="true" />} tone="stone" title={FINANCE_TITLE['finance-settings']} line="मोठ्या रकमेची मर्यादा, दुहेरी नोंद"
-                    onClick={() => onNavigate('finance-settings')} testId="fin-open-settings" />
             </div>
         </MoneyPage>
     );

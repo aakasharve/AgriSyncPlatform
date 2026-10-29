@@ -24,7 +24,6 @@ import {
     PriceBookPage,
     ReviewInboxPage,
     ReportsPage,
-    FinanceSettingsPage,
     QrDemoPage,
     AttentionPage,
     TestQueuePage,
@@ -328,17 +327,6 @@ export const renderFinanceReportsRoute = (ctx: AppRouterContext): React.ReactNod
     );
 };
 
-export const renderFinanceSettingsRoute = (ctx: AppRouterContext): React.ReactNode => {
-    if (ctx.currentRoute !== 'finance-settings') return null;
-    return (
-        <FinanceSettingsPage
-            currentRoute={ctx.currentRoute}
-            onNavigate={ctx.setCurrentRoute}
-            onBack={() => ctx.goBackOr('finance-manager')}
-        />
-    );
-};
-
 export const renderQrDemoRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'qr-demo') return null;
     return (
@@ -569,7 +557,6 @@ export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.Reac
     renderFinancePriceBookRoute,
     renderFinanceReviewInboxRoute,
     renderFinanceReportsRoute,
-    renderFinanceSettingsRoute,
     renderQrDemoRoute,
     renderAttentionRoute,
     renderTestsRoute,

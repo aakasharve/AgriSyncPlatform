@@ -154,7 +154,9 @@ export const financeCommandService = {
         // the GUID check, so a first bill on a fresh phone was kept on the phone and never
         // sent. With no farm at all nothing is queued and the entry is reported as unsent
         // (the receipt or log it came from stays on the phone).
-        const farmId = payload.farmId || SessionStore.getCurrentFarmId() || '';
+        // spec: pre-launch-repair L2a (R-3) — `null` is the caller saying "I looked and no farm is known"
+        // (a log whose plot this phone cannot place): kept on the phone, never sent to the session's farm.
+        const farmId = payload.farmId === null ? '' : (payload.farmId || SessionStore.getCurrentFarmId() || '');
         const event: MoneyEvent = {
             id,
             farmId,

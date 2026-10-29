@@ -495,7 +495,7 @@ describe('B003 — each failure in its own Marathi line', () => {
         fireEvent.click(screen.getByTestId('test-action-t-coll'));
         await fillResultSheet();
         await act(async () => { fireEvent.click(screen.getByTestId('record-save')); });
-        expect(await screen.findByTestId('record-error')).toHaveTextContent('रिपोर्टची फाइल अजून सर्व्हरवर पोचलेली नाही. थोड्या वेळाने पुन्हा जतन करा.');
+        expect(await screen.findByTestId('record-error')).toHaveTextContent('अहवाल अजून जोडता येत नाही.');
         expect(screen.getByTestId('record-save')).toBeEnabled(); // it can be tried again
 
         server.report.mockImplementation(async () => ({ status: 403 }));

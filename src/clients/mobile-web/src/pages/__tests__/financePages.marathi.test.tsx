@@ -57,7 +57,6 @@ import LedgerPage from '../LedgerPage';
 import PriceBookPage from '../PriceBookPage';
 import ReviewInboxPage from '../ReviewInboxPage';
 import ReportsPage from '../ReportsPage';
-import FinanceSettingsPage from '../FinanceSettingsPage';
 import AllocationSelector from '../../features/finance/components/AllocationSelector';
 import DuplicateWarning from '../../features/finance/components/DuplicateWarning';
 import type { AppRoute, Plot } from '../../types';
@@ -69,7 +68,6 @@ const PAGES: [string, AppRoute, React.FC<PageProps>, string][] = [
     ['price book', 'finance-price-book', PriceBookPage, 'दरपत्रक'],
     ['review inbox', 'finance-review-inbox', ReviewInboxPage, 'तपासायचे'],
     ['reports', 'finance-reports', ReportsPage, 'अहवाल'],
-    ['settings', 'finance-settings', FinanceSettingsPage, 'हिशोबाची सेटिंग'],
 ];
 
 beforeEach(() => {
@@ -164,12 +162,16 @@ describe('getting around: one title bar, never a dead end', () => {
         expect(screen.queryByTestId('finance-nav')).toBeNull();
         const rows: [string, AppRoute][] = [
             ['fin-open-ledger', 'finance-ledger'], ['fin-open-prices', 'finance-price-book'], ['fin-open-review', 'finance-review-inbox'],
-            ['fin-open-reports', 'finance-reports'], ['fin-open-settings', 'finance-settings'],
+            ['fin-open-reports', 'finance-reports'],
         ];
         for (const [testId, route] of rows) {
             fireEvent.click(screen.getByTestId(testId));
             expect(onNavigate).toHaveBeenLastCalledWith(route);
         }
+        // spec: pre-launch-repair L2a (R-7, D-18) — the two finance settings did nothing, so their row is gone.
+        expect(screen.queryByTestId('fin-open-settings')).toBeNull();
+        expect(document.body.textContent).not.toContain('हिशोबाची सेटिंग');
+        expect(document.body.textContent).not.toContain('मोठ्या रकमेची मर्यादा');
     });
 });
 

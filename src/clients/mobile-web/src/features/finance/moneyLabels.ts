@@ -23,7 +23,6 @@ export const FINANCE_TITLE = {
     'finance-price-book': 'दरपत्रक',
     'finance-review-inbox': 'तपासायचे',
     'finance-reports': 'अहवाल',
-    'finance-settings': 'हिशोबाची सेटिंग',
 } as const satisfies Partial<Record<AppRoute, string>>;
 
 export type FinanceRoute = keyof typeof FINANCE_TITLE;

@@ -230,7 +230,10 @@ export function groupTests(rows: readonly DexieTestInstance[], filter: TestFilte
 export const FAILURE_NO_PERMISSION = 'ही नोंद करायची परवानगी तुम्हाला नाही.';
 /** The sheet's close refreshes the list (TestQueuePage), which is what makes "यादी ताजी होईल" true. */
 export const FAILURE_MOVED_ON = 'ही चाचणी आधीच पुढच्या टप्प्यावर गेली आहे. हे बंद करा — यादी ताजी होईल.';
-export const FAILURE_REPORT_NOT_UPLOADED = 'रिपोर्टची फाइल अजून सर्व्हरवर पोचलेली नाही. थोड्या वेळाने पुन्हा जतन करा.';
+// spec: pre-launch-repair L2a (R-10, D-20) — the old line promised the file would reach the server and the save
+// would then work ('… थोड्या वेळाने पुन्हा जतन करा'), which cannot come true until lab-report attach is built.
+// PROPOSED (Marathi)
+export const FAILURE_REPORT_NOT_UPLOADED = 'अहवाल अजून जोडता येत नाही.';
 
 /**
  * A failed call → one plain Marathi line (review B003). Reads the `status` / `code` a `TestsApiError` carries

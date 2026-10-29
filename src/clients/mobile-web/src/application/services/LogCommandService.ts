@@ -18,6 +18,7 @@ import { getWeatherForLocation } from '../usecases/AttachWeatherSnapshot';
 import { financeCommandService } from '../../features/finance/financeCommandService';
 import { MoneyCategory } from '../../features/finance/finance.types';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
+import { resolveLogFarmId } from '../../features/logs/services/logSyncMutationService';
 // Labour Phase 2 / T2 — the use case's own response type, so the additive
 // `persistedLabourCorrections` evidence survives this pass-through instead of
 // being erased by a narrower inline structural type.
@@ -202,9 +203,9 @@ export class LogCommandServiceImpl implements LogCommandService {
         //    `FarmContextSwitcher` pill that `AppHeader` shows on every screen.
         //    It is not a guess about the farmer's intent: it is the farm the app
         //    was displaying as the working context at the instant they saved.
-        //    It is also the SAME accessor `captureMoneyEventsFromLog` below
-        //    already relies on for exactly this question (Decision 3a,
-        //    2026-07-19) — one answer to "which farm", not two.
+        //    `captureMoneyEventsFromLog` below reads this stamp back through
+        //    `resolveLogFarmId`, so a log and its money get one answer to
+        //    "which farm", not two (L2a R-3).
         //
         //    WHY HERE. This method is the single write boundary every creating
         //    path funnels through — all four `LogFactory` branches and the
@@ -228,7 +229,9 @@ export class LogCommandServiceImpl implements LogCommandService {
         await this.repo.batchSave(logs);
 
         // 5. Finance spine capture
-        logs.forEach(log => this.captureMoneyEventsFromLog(log));
+        for (const log of logs) {
+            await this.captureMoneyEventsFromLog(log);
+        }
     }
 
     // ... properties
@@ -357,21 +360,20 @@ export class LogCommandServiceImpl implements LogCommandService {
         } catch (e) { console.error("Weather enrichment failed", e); }
     }
 
-    private captureMoneyEventsFromLog(log: DailyLog): void {
-        const selection = log.context.selection?.[0];
-        // Phase 3 / Decision 3a (2026-07-19): `selection.farmId` is almost
-        // never populated by LogFactory, so every call below used to fall
-        // through `createMoneyEventFromSource`'s fallback chain (a STALE
-        // cached event's farmId — wrong farm for a multi-farm user who just
-        // switched — or the literal string 'farm_unknown' on a virgin
-        // cache). Both the sync-contract's `AddCostEntryPayload.farmId` AND
-        // `costEntryId` fields are `ZGuid` (bare UUID), so a non-UUID farmId
-        // fails validation exactly like the `me_<uuid>` costEntryId bug:
-        // silently, on-device, before the mutation ever reaches the outbox.
-        // `SessionStore.getCurrentFarmId()` is the same synchronous,
-        // reliably-current farm id `FarmContext`/`switchFarm` keep in sync —
-        // a real fix, not another guess.
-        const farmId = selection?.farmId ?? SessionStore.getCurrentFarmId() ?? undefined;
+    private async captureMoneyEventsFromLog(log: DailyLog): Promise<void> {
+        // spec: pre-launch-repair L2a (R-3; R3-access-offline split brain). The money of a log goes to
+        // the farm the LOG goes to — the farm of the log's own plot(s), or, for a log that names no plot,
+        // the farm recorded when it was saved — through the SAME resolver the log's own sync uses
+        // (`resolveLogFarmId`). It used to be the session pointer, so a log on a plot of farm A, saved
+        // while the app showed farm B, sent its money to farm B. When the log's farm cannot be placed
+        // (its plot is not on this phone, or its plots disagree) the money stays on this phone with the
+        // log (`null`), never on a guessed farm.
+        // A lookup that THROWS is the same "no farm known" (L2a review m3): the log is already saved above,
+        // so a failed lookup must not make it look failed — its money is kept on this phone, not sent.
+        const farmId = await resolveLogFarmId(log).catch((error: unknown) => {
+            console.error('Could not place the log\'s farm; its money stays on this phone', error);
+            return null;
+        });
 
         // LABOUR_PHASE2 B1b — a money event may name a plot and a crop ONLY when
         // the record names exactly one of each.

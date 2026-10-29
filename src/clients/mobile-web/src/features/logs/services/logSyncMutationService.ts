@@ -3,6 +3,7 @@ import { CreateDailyLogCommand, type LabourItemPayload, type ManualDraftPayload 
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+import { resolveKnownFarmId } from '../../../infrastructure/sync/SyncContext';
 import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
 import { type DailyLog } from '../../../types';
 import { buildTaskPayloads, ensureUuid, normalizeName } from './logTaskPayloads';
@@ -383,13 +384,8 @@ async function resolveLogPlots(
  * never `farms[0]`, never a sentinel (founder decision O-1, `P4`).
  */
 async function resolveRecordedFarmId(log: DailyLog): Promise<string | null> {
-    const farmId = log.meta?.farmId;
-    if (!farmId) {
-        return null;
-    }
-
-    const farmRecord = await getDatabase().farms.get(farmId);
-    return farmRecord ? farmId : null;
+    // The farm-held check is shared with the bill sheet (`resolveKnownFarmId`, L2a review m8).
+    return resolveKnownFarmId(log.meta?.farmId);
 }
 
 /**

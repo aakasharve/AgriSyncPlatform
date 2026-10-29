@@ -77,5 +77,9 @@ describe('the review inbox while approving has no server path', () => {
         expect(document.body.textContent).not.toContain('तपासून झालं');
         expect(document.body.textContent).not.toContain('वेगळ्या दिसल्या');
         expect(screen.queryByTestId('review-approve-unavailable')).toBeNull();
+        // spec: pre-launch-repair L2a (R-7, D-18) — no promise the server does not keep: nothing sets a
+        // double entry aside, so the page no longer says one "will come here".
+        expect(document.body.textContent).not.toContain('इथे येईल');
+        expect(document.body.textContent).not.toContain('दुहेरी नोंद');
     });
 });

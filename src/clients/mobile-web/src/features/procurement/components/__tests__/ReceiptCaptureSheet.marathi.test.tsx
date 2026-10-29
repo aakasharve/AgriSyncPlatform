@@ -15,10 +15,11 @@ const extractReceiptWithSession = vi.fn<() => Promise<ReceiptExtractionResponse>
 vi.mock('../../receipt/receiptExtractionClient', () => ({
     extractReceiptWithSession: () => extractReceiptWithSession(),
 }));
-vi.mock('../../../../infrastructure/sync/SyncContext', () => ({ resolveFarmIdFromSyncState: async () => null }));
+// The bill's farm is known (the plot's farm) — L2a R-3: with none known, nothing is read (own test file).
+vi.mock('../../../../infrastructure/sync/SyncContext', () => ({ resolveFarmIdFromSyncState: async () => 'farm-1' }));
+vi.mock('../../../finance/moneyEntryState', () => ({ useMoneyEvidence: () => null }));
 vi.mock('../../../../infrastructure/sync/AttachmentUploadWorker', () => ({ attachmentUploadWorker: { triggerNow: vi.fn() } }));
 vi.mock('../../../../application/use-cases/CaptureAttachment', () => ({ captureAttachment: vi.fn() }));
-vi.mock('../../../finance/components/AllocationSelector', () => ({ default: () => null }));
 const saveExpense = vi.fn();
 vi.mock('../../../../services/procurementRepository', () => ({ procurementRepository: { saveExpense: (...a: unknown[]) => saveExpense(...a) } }));
 const createMoneyEventFromSource = vi.fn();
@@ -77,7 +78,7 @@ describe('ReceiptCaptureSheet — Marathi, same save', () => {
             scope: 'PLOT', plotId: 'p1', grandTotal: 600, vendorName: 'कृषी सेवा केंद्र', date: '2026-10-20',
         }));
         expect(createMoneyEventFromSource).toHaveBeenCalledTimes(1);
-        expect(createMoneyEventFromSource).toHaveBeenCalledWith(expect.objectContaining({ type: 'Procurement', eventType: 'Expense', amount: 600, plotId: 'p1' }));
+        expect(createMoneyEventFromSource).toHaveBeenCalledWith(expect.objectContaining({ type: 'Procurement', eventType: 'Expense', amount: 600, plotId: 'p1', farmId: 'farm-1' }));
         expect(onSave).toHaveBeenCalledTimes(1);
         expect(onClose).toHaveBeenCalledTimes(1);
     });

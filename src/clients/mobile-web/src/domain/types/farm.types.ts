@@ -397,7 +397,6 @@ export type AppRoute =
     | 'finance-price-book'
     | 'finance-review-inbox'
     | 'finance-reports'
-    | 'finance-settings'
     | 'qr-demo'
     | 'referrals'
     | 'attention'

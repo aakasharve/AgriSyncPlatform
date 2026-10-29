@@ -1,11 +1,24 @@
 /**
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — every word the farmer sees here is now Marathi
- * (it was English: "New Expense", "Take Photo", "Convert to Expense"…). Words only: the photo capture, the
- * reading of the bill, the checks, where the bill goes, and the save — the receipt and its money entries —
- * are exactly as before. The offline line no longer shows the reader's English message; it says the same
- * thing in Marathi. `AllocationSelector` (finance) is not this file's and is unchanged.
+ * (it was English: "New Expense", "Take Photo", "Convert to Expense"…).
+ *
+ * spec: pre-launch-repair L2a (R-3, R-6, R-8, R-9; D-12 / D-18 / D-19 / D-41):
+ *   - the farm: the farm of the page's plot, else the farm the app is working on (a remembered farm counts
+ *     only if this phone holds it — `resolveKnownFarmId`) — never "the first farm of the last download".
+ *     With no farm known nothing is read or sent and the sheet asks ONCE which of the farmer's farms the
+ *     bill is for (the header's switcher is out of reach under this sheet); choosing one carries on exactly
+ *     like a known farm, and so does the app learning its farm meanwhile. Until then the photo is only on
+ *     this open sheet — the words never claim it is kept — so closing asks first, and "पुन्हा काढा" drops
+ *     it. With no farm at all the sheet says so, promising nothing. The photo, its reading and the money
+ *     all use that ONE farm.
+ *   - no invented values: no "paid"/"cash" unless the bill said so, no ₹0 rate, no ₹0 line; an amount
+ *     nobody gave shows "—"; a total-only bill is saved as one entry for its total (`billMoneyLines`).
+ *   - the photo is queued once (the original file, untouched) and its upload state is shown in the words
+ *     the app already has (`AttachmentStatusBadge`); the money entry names the photo's id, never the photo.
+ *   - the "split this bill across plots" step is gone: it could never land (the split named the bill, not
+ *     a server money entry — N2). A whole-farm bill stays recorded as whole-farm.
  */
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Camera, X, Check, Loader2, AlertTriangle } from 'lucide-react';
 import { extractReceiptWithSession, VerificationStatus } from '../receipt/receiptExtractionClient';
 import { ReceiptExtractionResponse, ProcurementExpense, ExpenseScope, CropProfile } from '../../../types';
@@ -14,28 +27,38 @@ import { procurementRepository } from '../../../services/procurementRepository';
 import { v4 as uuidv4 } from 'uuid';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { financeCommandService } from '../../finance/financeCommandService';
-import { MoneyCategory } from '../../finance/finance.types';
 import { captureAttachment } from '../../../application/use-cases/CaptureAttachment';
-import { resolveFarmIdFromSyncState } from '../../../infrastructure/sync/SyncContext';
+import { resolveFarmIdFromSyncState, resolveKnownFarmId } from '../../../infrastructure/sync/SyncContext';
 import { attachmentUploadWorker } from '../../../infrastructure/sync/AttachmentUploadWorker';
-import AllocationSelector from '../../finance/components/AllocationSelector';
+import { SessionStore } from '../../../infrastructure/storage/SessionStore';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
-import { mayChangeRecordedMoney } from '../../../core/session/farmPermissions';
+import AttachmentStatusBadge from '../../attachments/components/AttachmentStatusBadge';
+import { useMoneyEvidence } from '../../finance/moneyEntryState';
+import { billMoneyLines, billPaymentMode, isGivenAmount } from '../billMoney';
 import { SANS } from '../../../shared/components/ui/placeUi';
 
 /** Shown while a photo taken offline waits to be read (the reader's own message is English). */
 const QUEUED_OFFLINE_MR = 'बिलाचा फोटो फोनवर ठेवला आहे. इंटरनेट आल्यावर वाचला जाईल.';
+// PROPOSED (Marathi) — no farm known: asked once which farm; until then the photo is sent nowhere (and the
+// words do not claim it is kept — it lives only on this open sheet).
+export const FARM_UNKNOWN_MR = 'हे बिल कोणत्या शेताचं? शेत निवडा. तोपर्यंत फोटो कुठेही पाठवलेला नाही.';
+// PROPOSED (Marathi) — the app knows no farm at all: said plainly, with no promise that the photo is kept.
+export const NO_FARM_AT_ALL_MR = 'या फोनवर अजून एकही शेत नाही. हा फोटो कुठेही ठेवलेला किंवा पाठवलेला नाही.';
+// PROPOSED (Marathi) — closing the sheet while a photo still waits for its farm.
+export const CLOSE_WAITING_MR = 'फोटो अजून कुठेही पाठवलेला नाही — बंद केलं तर तो राहणार नाही. बंद करायचं?';
+// PROPOSED (Marathi)
+export const CLOSE_ANYWAY_MR = 'हो, बंद करा';
+// PROPOSED (Marathi)
+export const KEEP_OPEN_MR = 'नाही, थांबा';
+// PROPOSED (Marathi) — the photo could not even be kept on the phone for sending.
+export const PHOTO_NOT_KEPT_MR = 'फोटो फोनवर ठेवता आला नाही. पुन्हा काढा.';
 
-const mapExpenseCategoryToMoneyCategory = (category: string): MoneyCategory => {
-    if (category === 'LABOUR') return 'Labour';
-    if (category === 'FUEL') return 'Fuel';
-    if (category === 'MACHINERY_RENTAL') return 'Machinery';
-    if (category === 'TRANSPORT') return 'Transport';
-    if (category === 'ELECTRICITY') return 'Electricity';
-    if (category === 'EQUIPMENT_REPAIR') return 'Repair';
-    if (['FERTILIZER', 'PESTICIDE', 'FUNGICIDE', 'SEEDS_PLANTS', 'IRRIGATION'].includes(category)) return 'Input';
-    return 'Other';
-};
+const readAsDataUrl = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+});
 
 interface Props {
     onClose: () => void;
@@ -49,25 +72,28 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     const [image, setImage] = useState<string | null>(null);
     const [isExtracting, setIsExtracting] = useState(false);
 
+    // The farm this bill belongs to (photo, reading and money alike), and a photo waiting for one.
+    const farmCtx = useOptionalFarmContext();
+    const contextFarmId = farmCtx?.currentFarmId ?? null;
+    const knownFarms = farmCtx?.farms ?? [];
+    const [farmId, setFarmId] = useState<string | null>(null);
+    const [waiting, setWaiting] = useState<{ file: File; base64: string } | null>(null);
+    const [confirmClose, setConfirmClose] = useState(false);
+
     // 2. Data State
     const [extraction, setExtraction] = useState<ReceiptExtractionResponse | null>(null);
     const [scope, setScope] = useState<ExpenseScope>('FARM'); // Default to FARM safe
     const [selectedPlotId, setSelectedPlotId] = useState<string>(activePlotId || '');
     const [selectedCropId, setSelectedCropId] = useState<string>('');
 
-    // 3. User Edits (for correction)
-    const [editedTotal, setEditedTotal] = useState<number>(0);
+    // 3. User Edits (for correction). `null` = no total given — shown empty, never ₹0.
+    const [editedTotal, setEditedTotal] = useState<number | null>(null);
     const [editedVendor, setEditedVendor] = useState<string>('');
-    const [attachmentIds, setAttachmentIds] = useState<string[]>([]);
-    const [attachmentCaptureError, setAttachmentCaptureError] = useState<string | null>(null);
+    const [photo, setPhoto] = useState<{ id: string; status: string } | null>(null);
+    const [photoNotKept, setPhotoNotKept] = useState(false);
     const [queuedExtractionMessage, setQueuedExtractionMessage] = useState<string | null>(null);
-    const [showAllocation, setShowAllocation] = useState(false);
-    const [savedCostEntryId, setSavedCostEntryId] = useState<string>('');
-    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, verifier MU2-V1) — splitting a whole-farm bill
-    // over the plots is CHANGING money: the server refuses it without the AddCost permission (the
-    // primary owner, or someone he stored it for). The bill itself is recorded for everyone; only
-    // the split step is offered to a seat the server lets split (an older server: as before).
-    const maySplitBill = mayChangeRecordedMoney(useOptionalFarmContext()?.currentFarm);
+    const evidence = useMoneyEvidence();
+    const photoStatus = photo ? (evidence?.photos.get(photo.id) ?? photo.status) : null;
 
     // 4. Verification state (two-lane progressive UX)
     const [verificationStatus, setVerificationStatus] = useState<VerificationStatus | null>(null);
@@ -87,48 +113,74 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
         const file = e.target.files?.[0];
         if (!file) return;
 
-        setAttachmentCaptureError(null);
-        setAttachmentIds([]);
-        void queueAttachmentCapture(file);
+        setPhoto(null);
+        setPhotoNotKept(false);
+        setWaiting(null);
+        setConfirmClose(false);
+        const base64 = await readAsDataUrl(file);
+        setImage(base64);
 
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64ForDisplay = reader.result as string;
-            setImage(base64ForDisplay);
-            processImage(base64ForDisplay);
+        const farm = (await resolveFarmIdFromSyncState(activePlotId).catch(() => null))
+            ?? contextFarmId
+            // A remembered farm counts only if this phone holds it — the log path's own check (review m8).
+            ?? (await resolveKnownFarmId(SessionStore.getCurrentFarmId()).catch(() => null));
+        if (!farm) {
+            setWaiting({ file, base64 }); // only on this open sheet; nothing is read or sent to a guessed farm
+            return;
         }
-        reader.readAsDataURL(file);
+        begin(farm, file, base64);
     };
 
-    const queueAttachmentCapture = async (file: File): Promise<void> => {
-        try {
-            const farmId = await resolveFarmIdFromSyncState(activePlotId);
-            if (!farmId) {
-                // Sync metadata not yet available — silently skip attachment queuing.
-                // Receipt AI extraction still runs. Attachment can be re-linked after first sync.
-                console.warn('[ReceiptCapture] Farm ID unavailable for attachment queue — skipping queue, extraction continues.');
-                return;
-            }
+    const begin = (farm: string, file: File, base64: string) => {
+        setFarmId(farm);
+        setWaiting(null);
+        setConfirmClose(false);
+        void queuePhoto(farm, file);
+        void processImage(base64, farm);
+    };
 
+    // A photo waiting for its farm carries on by itself once the app knows the farm.
+    useEffect(() => {
+        if (waiting && contextFarmId) begin(contextFarmId, waiting.file, waiting.base64);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- `begin` is this render's; the trigger is the farm arriving
+    }, [waiting, contextFarmId]);
+
+    // A photo still waiting for its farm was sent nowhere: closing asks first (it would be lost).
+    const requestClose = () => {
+        if (waiting) setConfirmClose(true);
+        else onClose();
+    };
+
+    // "पुन्हा काढा" discards the photo — a waiting one too, so it can never be queued later (review m4).
+    const retake = () => {
+        setImage(null);
+        setWaiting(null);
+        setConfirmClose(false);
+    };
+
+    /** The original file, queued once for upload to the bill's farm — never compressed or changed. */
+    const queuePhoto = async (farm: string, file: File): Promise<void> => {
+        try {
             const queued = await captureAttachment({
                 source: 'file',
-                farmId,
-                linkedEntityId: farmId,
+                farmId: farm,
+                linkedEntityId: farm,
                 linkedEntityType: 'Farm',
                 file,
                 fileName: file.name,
                 mimeType: file.type
             });
 
-            setAttachmentIds([queued.id]);
+            setPhoto({ id: queued.id, status: queued.status });
             void attachmentUploadWorker.triggerNow();
         } catch (error) {
             console.error('Attachment queue capture failed', error);
-            // Silent — attachment upload failure does not block receipt extraction or saving.
+            // Not silent: the farmer is told the photo was not kept (the bill itself can still be saved).
+            setPhotoNotKept(true);
         }
     };
 
-    const processImage = async (base64: string) => {
+    const processImage = async (base64: string, farm: string) => {
         setIsExtracting(true);
         setVerificationStatus(null);
         setQueuedExtractionMessage(null);
@@ -140,13 +192,14 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
         try {
             const result = await extractReceiptWithSession(
                 base64,
+                farm,
                 (update) => {
                     setVerificationStatus(update.status);
 
                     if (update.status === 'verified' && update.updated) {
                         const { grandTotal, vendorName } = update.updated;
 
-                        if (grandTotal !== undefined) {
+                        if (isGivenAmount(grandTotal)) {
                             // Auto-apply if user hasn't touched the field; otherwise suggest
                             setUserEditedTotal(prev => {
                                 if (!prev) setEditedTotal(grandTotal);
@@ -173,7 +226,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             }
 
             setExtraction(result);
-            setEditedTotal(result.grandTotal || 0);
+            setEditedTotal(isGivenAmount(result.grandTotal) ? result.grandTotal : null);
             setEditedVendor(result.vendorName || '');
             if (result.suggestedScope && result.suggestedScope !== 'UNKNOWN') {
                 setScope(result.suggestedScope);
@@ -195,9 +248,9 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
     };
 
     const handleConfirm = () => {
-        if (!extraction) return;
+        if (!extraction || !farmId || !isGivenAmount(editedTotal)) return;
 
-        // Construct final object
+        // Construct final object. No payment status: the bill did not state one (R-6).
         const newExpense: ProcurementExpense = {
             id: uuidv4(),
             date: extraction.date || getDateKey(),
@@ -206,12 +259,11 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
             plotId: scope === 'PLOT' ? selectedPlotId : undefined,
             cropId: (scope === 'CROP' || scope === 'PLOT') ? selectedCropId : undefined,
             vendorName: editedVendor,
-            lineItems: extraction.lineItems.map(i => ({ ...i, id: uuidv4(), totalAmount: i.totalAmount, category: i.suggestedCategory, unitPrice: i.unitPrice || 0 })), // Map lightly
+            lineItems: extraction.lineItems.map(i => ({ ...i, id: uuidv4(), totalAmount: i.totalAmount, category: i.suggestedCategory })),
             subtotal: extraction.subtotal || editedTotal,
             grandTotal: editedTotal,
-            paymentStatus: 'PAID', // Default assumption, editable later
-            receiptImageUrl: image || undefined, // In real app, upload to storage first!
-            attachmentIds: attachmentIds.length > 0 ? attachmentIds : undefined,
+            receiptImageUrl: image || undefined, // the list's thumbnail, kept on this phone only
+            attachmentIds: photo ? [photo.id] : undefined,
             aiExtracted: true,
             userVerified: true,
             aiRawResponse: JSON.stringify(extraction)
@@ -219,35 +271,29 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
 
         procurementRepository.saveExpense(newExpense);
 
-        newExpense.lineItems.forEach((item) => {
+        billMoneyLines(newExpense).forEach((line) => {
             financeCommandService.createMoneyEventFromSource({
                 type: 'Procurement',
-                sourceId: `${newExpense.id}:${item.id}`,
+                sourceId: line.sourceId,
                 dateTime: new Date(newExpense.date).toISOString(),
                 eventType: 'Expense',
-                category: mapExpenseCategoryToMoneyCategory(item.category),
+                category: line.category,
+                farmId,
                 plotId: newExpense.plotId,
                 cropId: newExpense.cropId,
-                amount: item.totalAmount,
-                qty: item.quantity,
-                unit: item.unit,
-                unitPrice: item.unitPrice,
-                paymentMode: newExpense.paymentStatus === 'CREDIT' ? 'Credit' : 'Cash',
-                vendorName: newExpense.vendorName,
+                amount: line.amount,
+                qty: line.qty,
+                unit: line.unit,
+                unitPrice: line.unitPrice,
+                paymentMode: billPaymentMode(newExpense),
+                vendorName: newExpense.vendorName?.trim() || undefined,
                 createdByUserId: newExpense.operatorId || 'owner',
-                attachments: newExpense.attachmentIds
-                    ?? (newExpense.receiptImageUrl ? [newExpense.receiptImageUrl] : [])
+                // The queued photo's id — never the photo itself (it used to fall back to the whole base64).
+                attachments: newExpense.attachmentIds ?? [],
             });
         });
 
-        // If farm-scoped, show allocation step
-        if (scope === 'FARM' && maySplitBill && crops.flatMap(c => c.plots).length > 1) {
-            setSavedCostEntryId(newExpense.id);
-            setShowAllocation(true);
-            onSave(); // Notify parent that expense is saved
-            return;
-        }
-
+        // A whole-farm bill stays recorded as whole-farm: no split step (R-9).
         onSave();
         onClose();
     };
@@ -268,11 +314,21 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                 {/* HEAD */}
                 <div className="flex-none p-4 border-b border-gray-100 flex items-center justify-between bg-white">
                     <h2 className="text-lg font-black text-gray-800">नवं बिल</h2>
-                    <button onClick={onClose} aria-label="बंद करा" className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20} /></button>
+                    <button onClick={requestClose} aria-label="बंद करा" className="p-2 bg-gray-100 rounded-full hover:bg-gray-200"><X size={20} /></button>
                 </div>
 
                 {/* BODY */}
                 <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+
+                    {confirmClose && (
+                        <div role="alertdialog" data-testid="bill-close-confirm" className="mb-4 rounded-lg border border-amber-300 bg-white px-3 py-3 text-sm font-semibold text-stone-800">
+                            <p className="m-0">{CLOSE_WAITING_MR}</p>
+                            <div className="mt-3 flex gap-2">
+                                <button type="button" onClick={() => setConfirmClose(false)} className="flex-1 rounded-lg bg-gray-100 py-2 font-bold text-stone-700">{KEEP_OPEN_MR}</button>
+                                <button type="button" onClick={onClose} className="flex-1 rounded-lg bg-amber-600 py-2 font-bold text-white">{CLOSE_ANYWAY_MR}</button>
+                            </div>
+                        </div>
+                    )}
 
                     {/* 1. IMAGE CAPTURE */}
                     {!image && (
@@ -303,14 +359,32 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                     {/* 2. PREVIEW & PROCESSING */}
                     {image && (
                         <div className="flex flex-col gap-6">
-                            {attachmentCaptureError && (
-                                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                                    {attachmentCaptureError}
+                            {waiting && (
+                                <div data-testid="bill-farm-unknown" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                                    {knownFarms.length > 0 ? (
+                                        <>
+                                            <p className="m-0">{FARM_UNKNOWN_MR}</p>
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                {knownFarms.map(f => (
+                                                    <button key={f.farmId} type="button" data-testid={`bill-farm-choice-${f.farmId}`}
+                                                        onClick={() => begin(f.farmId, waiting.file, waiting.base64)}
+                                                        className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-bold text-stone-800">
+                                                        {f.name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </>
+                                    ) : NO_FARM_AT_ALL_MR}
                                 </div>
                             )}
-                            {!attachmentCaptureError && attachmentIds.length > 0 && (
-                                <div data-testid="attachment-queued-banner" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                                    फोटो पाठवण्यासाठी रांगेत ठेवला आहे.
+                            {photoNotKept && (
+                                <div data-testid="bill-photo-not-kept" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                                    {PHOTO_NOT_KEPT_MR}
+                                </div>
+                            )}
+                            {photo && photoStatus && (
+                                <div data-testid="bill-photo-state" className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-700">
+                                    बिलाचा फोटो <AttachmentStatusBadge status={photoStatus} />
                                 </div>
                             )}
                             {queuedExtractionMessage && (
@@ -322,7 +396,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                             {/* Image Thumbnail */}
                             <div className="relative w-full h-48 bg-black rounded-xl overflow-hidden shadow-sm shrink-0">
                                 <img src={image} alt="बिलाचा फोटो" className="w-full h-full object-contain opacity-80" />
-                                <button onClick={() => setImage(null)} className="absolute bottom-2 right-2 px-3 py-1 bg-black/60 text-white text-xs rounded-lg font-bold backdrop-blur-md border border-white/20">
+                                <button onClick={retake} className="absolute bottom-2 right-2 px-3 py-1 bg-black/60 text-white text-xs rounded-lg font-bold backdrop-blur-md border border-white/20">
                                     पुन्हा काढा
                                 </button>
                             </div>
@@ -391,8 +465,9 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                             <label className="text-[13px] font-bold text-stone-600 block">बिलातल्या वस्तू</label>
                                             {extraction.lineItems.map((item, idx) => (
                                                 <div key={idx} className="flex justify-between items-center text-sm py-1 border-b border-dotted border-gray-100 last:border-0">
-                                                    <span className="text-gray-700 font-medium">{item.name} <span className="text-gray-400 text-xs">({item.quantity} {item.unit})</span></span>
-                                                    <span className="font-bold text-gray-900">₹{item.totalAmount}</span>
+                                                    <span className="text-gray-700 font-medium">{item.name}{item.quantity !== undefined && <span className="text-gray-400 text-xs"> ({item.quantity} {item.unit ?? ''})</span>}</span>
+                                                    {/* An amount nobody read is "—", never ₹0. */}
+                                                    <span className="font-bold text-gray-900" data-testid={`bill-line-amount-${idx}`}>{isGivenAmount(item.totalAmount) ? `₹${item.totalAmount}` : '—'}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -403,8 +478,10 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                                 <span className="text-xl font-black text-gray-900">₹</span>
                                                 <input
                                                     type="number"
-                                                    value={editedTotal}
-                                                    onChange={(e) => { setEditedTotal(Number(e.target.value)); setUserEditedTotal(true); }}
+                                                    value={editedTotal ?? ''}
+                                                    placeholder="—"
+                                                    data-testid="bill-total"
+                                                    onChange={(e) => { setEditedTotal(e.target.value === '' ? null : Number(e.target.value)); setUserEditedTotal(true); }}
                                                     className="w-full text-2xl font-black text-gray-900 border-b border-gray-200 outline-none focus:border-emerald-500 py-1"
                                                 />
                                             </div>
@@ -465,26 +542,13 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                     )}
                 </div>
 
-                {/* ALLOCATION FOLLOW-UP */}
-                {showAllocation && (
-                    <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-                        <AllocationSelector
-                            costEntryId={savedCostEntryId}
-                            totalAmount={editedTotal}
-                            plots={crops.flatMap(c => c.plots)}
-                            onAllocate={() => onClose()}
-                            onCancel={() => onClose()}
-                        />
-                    </div>
-                )}
-
                 {/* FOOTER */}
-                {!showAllocation && image && !isExtracting && extraction && (
+                {image && !isExtracting && extraction && (
                     <div className="flex-none p-4 bg-white border-t border-gray-100 flex gap-3">
                         <button onClick={onClose} className="flex-1 py-4 text-stone-600 font-bold hover:bg-gray-50 rounded-xl">रद्द करा</button>
                         <button
                             onClick={handleConfirm}
-                            disabled={!editedTotal || (scope === 'PLOT' && !selectedPlotId) || (scope === 'CROP' && !selectedCropId)}
+                            disabled={!isGivenAmount(editedTotal) || (scope === 'PLOT' && !selectedPlotId) || (scope === 'CROP' && !selectedCropId)}
                             className="flex-[2] py-4 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"
                         >
                             <Check size={20} /> खर्च म्हणून जतन करा

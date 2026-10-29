@@ -22,7 +22,6 @@ export const LedgerPage = React.lazy(() => import('../../pages/LedgerPage'));
 export const PriceBookPage = React.lazy(() => import('../../pages/PriceBookPage'));
 export const ReviewInboxPage = React.lazy(() => import('../../pages/ReviewInboxPage'));
 export const ReportsPage = React.lazy(() => import('../../pages/ReportsPage'));
-export const FinanceSettingsPage = React.lazy(() => import('../../pages/FinanceSettingsPage'));
 export const AdminAiOpsPage = React.lazy(() => import('../../features/admin/ai/AdminAiOpsPage').then(module => ({ default: module.AdminAiOpsPage })));
 export const AdminOpsPage = React.lazy(() => import('../../features/admin/ops/AdminOpsPage').then(module => ({ default: module.AdminOpsPage })));
 export const ReferralsPage = React.lazy(() => import('../../pages/ReferralsPage'));

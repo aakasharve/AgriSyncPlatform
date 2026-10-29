@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 /**
- * spec: plr-d7-m1-multiuser-2026-10-26 (step 2, verifier MU2-V1) — after a whole-farm bill is saved
- * on a farm with several plots, the sheet offers to split it over the plots ("खर्च प्लॉटमध्ये वाटा").
- * The server lets only a seat with the AddCost permission split money (the primary owner, or someone
- * he stored it for), so the step is offered exactly to those seats — the bill itself is recorded for
- * everyone, unchanged. When the phone cannot know (an older server sends no `permissions`; no farm
- * context), the step is offered as before (P11).
+ * spec: pre-launch-repair L2a (R-9, P5) — the "split this bill across plots" step that followed a whole-farm
+ * bill is gone for EVERY seat: it sent the bill's own id as a money entry id, which the server never has, so
+ * the split could never land (alignment N2). A whole-farm bill is recorded once, as whole-farm, and the sheet
+ * closes. (Before: plr-d7-m1-multiuser step 2 offered it to seats with AddCost; that permission helper stays,
+ * for when allocation is built — P-D12.)
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -19,10 +18,8 @@ vi.mock('../../receipt/receiptExtractionClient', () => ({
 }));
 vi.mock('../../../../infrastructure/sync/SyncContext', () => ({ resolveFarmIdFromSyncState: async () => null }));
 vi.mock('../../../../infrastructure/sync/AttachmentUploadWorker', () => ({ attachmentUploadWorker: { triggerNow: vi.fn() } }));
-vi.mock('../../../../application/use-cases/CaptureAttachment', () => ({ captureAttachment: vi.fn() }));
-vi.mock('../../../finance/components/AllocationSelector', () => ({
-    default: (props: { totalAmount: number }) => <div data-testid="split-bill-step">split {props.totalAmount}</div>,
-}));
+vi.mock('../../../../application/use-cases/CaptureAttachment', () => ({ captureAttachment: vi.fn(async () => ({ id: 'att-1', status: 'pending' })) }));
+vi.mock('../../../finance/moneyEntryState', () => ({ useMoneyEvidence: () => null }));
 const saveExpense = vi.fn();
 vi.mock('../../../../services/procurementRepository', () => ({ procurementRepository: { saveExpense: (...a: unknown[]) => saveExpense(...a) } }));
 const createMoneyEventFromSource = vi.fn();
@@ -56,47 +53,30 @@ function withFarm(permissions: string[] | undefined, node: React.ReactElement): 
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-function sheet(onSave: () => void, onClose: () => void) {
-    return <ReceiptCaptureSheet onClose={onClose} onSave={onSave} crops={CROPS} />;
-}
-
 async function photographAndSave() {
     fireEvent.change(screen.getByTestId('attachment-input'), { target: { files: [new File(['x'], 'bill.png', { type: 'image/png' })] } });
     await screen.findByText('बिलातल्या वस्तू');
     fireEvent.click(screen.getByText('खर्च म्हणून जतन करा'));
 }
 
-describe('the split-the-bill step follows what the server lets this seat do', () => {
-    it('a worker (server sent no AddCost) records the whole-farm bill and is NOT offered the split', async () => {
+describe('no split-the-bill step — a whole-farm bill stays whole-farm (L2a R-9)', () => {
+    it.each([
+        ['a worker (no AddCost)', []],
+        ['the primary owner (AddCost)', ['SeeMoney', 'AddCost', 'PlanWork']],
+        ['an older server (no permissions sent)', undefined],
+    ] as const)('%s: the bill is recorded once as whole-farm, no split is offered, the sheet closes', async (_who, permissions) => {
         extractReceiptWithSession.mockResolvedValue(WHOLE_FARM_BILL);
         const onSave = vi.fn(); const onClose = vi.fn();
-        render(withFarm([], sheet(onSave, onClose)));
-        await photographAndSave();
-
-        expect(saveExpense).toHaveBeenCalledWith(expect.objectContaining({ scope: 'FARM', grandTotal: 900 }));
-        expect(createMoneyEventFromSource).toHaveBeenCalledWith(expect.objectContaining({ amount: 900, eventType: 'Expense' }));
-        expect(screen.queryByTestId('split-bill-step')).toBeNull();
-        expect(onSave).toHaveBeenCalledTimes(1);
-        expect(onClose).toHaveBeenCalledTimes(1);
-    });
-
-    it('the primary owner (server sent AddCost) records the bill and IS offered the split', async () => {
-        extractReceiptWithSession.mockResolvedValue(WHOLE_FARM_BILL);
-        const onSave = vi.fn(); const onClose = vi.fn();
-        render(withFarm(['SeeMoney', 'AddCost', 'PlanWork'], sheet(onSave, onClose)));
+        render(withFarm(permissions as string[] | undefined, <ReceiptCaptureSheet onClose={onClose} onSave={onSave} crops={CROPS} />));
         await photographAndSave();
 
         expect(saveExpense).toHaveBeenCalledTimes(1);
-        expect(screen.getByTestId('split-bill-step')).toHaveTextContent('split 900');
+        expect(saveExpense).toHaveBeenCalledWith(expect.objectContaining({ scope: 'FARM', grandTotal: 900, plotId: undefined }));
+        expect(createMoneyEventFromSource).toHaveBeenCalledTimes(1);
+        expect(createMoneyEventFromSource).toHaveBeenCalledWith(expect.objectContaining({ amount: 900, eventType: 'Expense', plotId: undefined, farmId: 'farm-1' }));
+        expect(document.body.textContent).not.toContain('वाटा');
         expect(onSave).toHaveBeenCalledTimes(1);
-        expect(onClose).not.toHaveBeenCalled();
-    });
-
-    it('an older server (no permissions sent) keeps today\'s split step', async () => {
-        extractReceiptWithSession.mockResolvedValue(WHOLE_FARM_BILL);
-        render(withFarm(undefined, sheet(vi.fn(), vi.fn())));
-        await photographAndSave();
-        expect(screen.getByTestId('split-bill-step')).toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });
 

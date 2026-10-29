@@ -161,7 +161,7 @@ export const getUserColor = (name: string) => {
 const PAGE_TOGGLE_ROUTES: readonly AppRoute[] = [
   'main', 'schedule', 'procurement', 'income', 'profile', 'settings',
   'finance-manager', 'finance-ledger', 'finance-price-book',
-  'finance-review-inbox', 'finance-reports', 'finance-settings',
+  'finance-review-inbox', 'finance-reports',
 ];
 
 const AppHeader: React.FC<AppHeaderProps> = ({

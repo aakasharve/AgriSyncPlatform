@@ -13,6 +13,8 @@
  *     `Procurement` filter matched nothing and the drawer said there was no entry (I8 review B002);
  *   - "बोलून सांगा" / "हाताने लिहा" → the log flow, and the row to पैसे व हिशोब.
  * A button whose handler the route did not give is not drawn (P5). Nothing recorded → said in words, never ₹ 0.
+ * spec: pre-launch-repair L2a (D-19) — each bill says where its money and its photo stand, from the sync
+ * evidence the app already keeps (`useMoneyEvidence`), never "on the server" before the server said so.
  */
 import React, { useState } from 'react';
 import { BookOpen, Camera, Keyboard, Mic, Search } from 'lucide-react';
@@ -23,6 +25,8 @@ import { ExpenseCard } from '../features/procurement/components/ExpenseCard';
 import { ReceiptCaptureSheet } from '../features/procurement/components/ReceiptCaptureSheet';
 import { ALL, billsInView, matchesSearch, pickLabel, placeOf, totalsOf } from '../features/procurement/components/billView';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
+import { billClaim, useMoneyEvidence } from '../features/finance/moneyEntryState';
+import { billMoneyLines } from '../features/procurement/billMoney';
 import { FinanceFilters } from '../features/finance/finance.types';
 import { BigButton, Chip, ChoiceChips, GlassCard, PageBar, RowLink, SANS, SectionHead } from '../shared/components/ui/placeUi';
 
@@ -60,6 +64,8 @@ const ProcurementPage: React.FC<Props> = ({ crops = [], onBack, onTell, onGo }) 
     const totals = totalsOf(inView);
     const shown = inView.filter(e => matchesSearch(e, searchQuery));
     const searching = searchQuery.trim().length > 0;
+    const evidence = useMoneyEvidence();
+    const photoOf = (e: ProcurementExpense) => (evidence && e.attachmentIds?.[0] ? evidence.photos.get(e.attachmentIds[0]) : undefined);
 
     return (
         <div className="pb-24 animate-in fade-in max-w-4xl mx-auto px-4 sm:px-6" style={{ fontFamily: SANS }} data-testid="procurement-page">
@@ -129,6 +135,8 @@ const ProcurementPage: React.FC<Props> = ({ crops = [], onBack, onTell, onGo }) 
                                 key={expense.id}
                                 expense={expense}
                                 place={placeOf(expense, crops)}
+                                moneyClaim={evidence ? billClaim(evidence, billMoneyLines(expense).map(l => l.sourceId)) : null}
+                                photoStatus={photoOf(expense)}
                                 onMoneyClick={(e) => {
                                     setLensFilters({
                                         fromDate: e.date,

@@ -10,6 +10,10 @@
  *
  * Removed: an attachment-count read that ran on every refresh and fed nothing — its list was dropped from
  * the screen in c2014824; the counts were never shown since.
+ *
+ * spec: pre-launch-repair L2a (D-19) — each entry says where it stands: on this phone, on the server, or
+ * needs you (`MoneyStateChip`, from the sync evidence the app already keeps — never "on the server" before
+ * the server acknowledged it).
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import { CircleHelp, Pencil, TrendingDown, TrendingUp } from 'lucide-react';
@@ -21,6 +25,8 @@ import { FinanceFilters } from '../features/finance/finance.types';
 import CostCorrectionSheet from '../features/finance/components/CostCorrectionSheet';
 import { MoneyPage } from '../features/finance/components/MoneyPage';
 import { MonthlyCostPdfButton } from '../features/finance/components/MonthlyCostPdfButton';
+import { MoneyStateChip } from '../features/finance/components/MoneyStateChip';
+import { entryClaim, useMoneyEvidence } from '../features/finance/moneyEntryState';
 import {
     BUCKET_LABEL, CATEGORY_LABEL, FINANCE_TITLE, SOURCE_LABEL, entriesCount, entryState, formatDayKey, rupees,
 } from '../features/finance/moneyLabels';
@@ -56,6 +62,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
     const totalIncome = events.filter(e => e.type === 'Income').reduce((sum, e) => sum + e.effectiveAmount, 0);
     const totalExpense = events.filter(e => e.type === 'Expense').reduce((sum, e) => sum + e.effectiveAmount, 0);
     const noDirection = events.filter(e => e.type === 'Unknown').length;
+    const evidence = useMoneyEvidence();
 
     const filteredEvents = useMemo(() => {
         if (filterType === 'All') return events;
@@ -145,6 +152,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
                                     </div>
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                         <Chip tone={STATE_TONE[state]}>{BUCKET_LABEL[state]}</Chip>
+                                        <MoneyStateChip claim={evidence ? entryClaim(evidence, item.id) : null} testId={`ledger-state-${item.id}`} />
                                         {item.type === 'Unknown' && <Chip tone="stone">जमा की खर्च — नोंद नाही</Chip>}
                                         {!item.plotId && item.type === 'Expense' && <Chip tone="blue">प्लॉटवर वाटलेला नाही</Chip>}
                                         {item.jobCardId && (

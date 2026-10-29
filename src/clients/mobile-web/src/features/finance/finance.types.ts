@@ -130,7 +130,12 @@ export interface MoneySourcePayload {
     dateTime: string;
     eventType: MoneyEventType;
     category: MoneyCategory;
-    farmId?: string;
+    /**
+     * The farm this money belongs to. Absent = the farm the app is working on now. `null` = the caller
+     * looked (e.g. the log's own plot) and no farm is known: the entry stays on this phone and is never
+     * sent to a guessed farm (spec: pre-launch-repair L2a, R-3).
+     */
+    farmId?: string | null;
     plotId?: string;
     cropId?: string;
     amount?: number;

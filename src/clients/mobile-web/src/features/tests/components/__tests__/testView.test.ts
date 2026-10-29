@@ -98,7 +98,13 @@ describe('failures, in words (review B003)', () => {
     it('403 → no permission; 400 TestInvalidState → moved on; 400 TestAttachmentInvalid → report not uploaded', () => {
         expect(failureWords({ status: 403 }, FALLBACK)).toBe('ही नोंद करायची परवानगी तुम्हाला नाही.');
         expect(failureWords({ status: 400, code: 'ShramSafal.TestInvalidState' }, FALLBACK)).toBe('ही चाचणी आधीच पुढच्या टप्प्यावर गेली आहे. हे बंद करा — यादी ताजी होईल.');
-        expect(failureWords({ status: 400, code: 'ShramSafal.TestAttachmentInvalid' }, FALLBACK)).toBe('रिपोर्टची फाइल अजून सर्व्हरवर पोचलेली नाही. थोड्या वेळाने पुन्हा जतन करा.');
+        expect(failureWords({ status: 400, code: 'ShramSafal.TestAttachmentInvalid' }, FALLBACK)).toBe('अहवाल अजून जोडता येत नाही.');
+    });
+
+    it('L2a R-10: the report line promises nothing that cannot come true (no "reaches the server", no "save again")', () => {
+        const line = failureWords({ status: 400, code: 'ShramSafal.TestAttachmentInvalid' }, FALLBACK);
+        expect(line).not.toContain('सर्व्हर');
+        expect(line).not.toContain('पुन्हा जतन करा');
     });
 
     it('anything else → the caller\'s try-again line', () => {

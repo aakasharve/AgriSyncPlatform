@@ -42,7 +42,8 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
         <MoneyPage title={FINANCE_TITLE['finance-review-inbox']} testId="fin-review" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
             {/* Only when there is something to look at (I8 review B005): over an empty inbox it contradicted the line below. */}
             {entries.length > 0 && (
-                <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">या नोंदी वेगळ्या दिसल्या — मोठी रक्कम किंवा दुहेरी नोंद. एकदा पाहा.</p>
+                // PROPOSED (Marathi)
+                <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">या नोंदी एकदा पाहा.</p>
             )}
 
             {entries.length > 0 && (
@@ -86,7 +87,6 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
                         <IconDot tone="green" size={56}><Sparkles size={28} aria-hidden="true" /></IconDot>
                         {/* Not "everything has been checked": there is no checking step yet (PENDING D-12). */}
                         <p className="m-0 text-[17px] font-extrabold text-stone-900">पाहण्यासारखी कोणतीही नोंद नाही</p>
-                        <p className="m-0 text-[13.5px] font-semibold text-stone-600">मोठी रक्कम किंवा दुहेरी नोंद दिसली, तर ती इथे येईल.</p>
                     </div>
                 </GlassCard>
             )}

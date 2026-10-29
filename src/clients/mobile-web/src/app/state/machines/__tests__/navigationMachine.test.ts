@@ -87,7 +87,7 @@ describe('navigationMachine — route transitions', () => {
             'main', 'profile', 'settings', 'voiceDiary', 'ai-admin', 'ops-admin',
             'schedule', 'procurement', 'income', 'test-e2e', 'finance-manager',
             'finance-ledger', 'finance-price-book', 'finance-review-inbox',
-            'finance-reports', 'finance-settings', 'qr-demo', 'referrals',
+            'finance-reports', 'qr-demo', 'referrals',
             'attention', 'offline-conflicts', 'tests', 'test-detail', 'compliance',
             'service-proof', 'jobs', 'job-detail', 'worker-profile', 'farm-boundary',
         ] as const;
