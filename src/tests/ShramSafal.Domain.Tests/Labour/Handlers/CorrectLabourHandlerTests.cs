@@ -369,6 +369,93 @@ public sealed class CorrectLabourHandlerTests
         result.Value!.AttributedFieldOperatorIds.Should().BeEquivalentTo([ganesh]);
     }
 
+    /// <summary>
+    /// PLR-D10 L3b (founder D-34). Taking a name OFF a work entry is the other
+    /// half of "attribution never changes the count": removing Ganesh from a
+    /// six-person work leaves six people and the same wage — he becomes one of
+    /// the anonymous, he does not stop having worked.
+    /// </summary>
+    [Fact]
+    public async Task D34_removing_a_name_leaves_the_count_and_wage_untouched_and_explains_itself()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid);
+        var log = MakeLog(Guid.NewGuid(), FarmAGuid);
+        var assignment = LabourAssignment.Create(
+            Guid.NewGuid(), log.Id, LabourEngagementType.Hired,
+            maleCount: 4, femaleCount: 2, workerCount: 6, wagePerPerson: 400m,
+            contractUnit: null, contractQuantity: null, totalCost: 2400m,
+            linkedActivityId: null, createdAtUtc: Now, time: LabourTime.ServerAssumed());
+        repo.SeedLog(log);
+        repo.SeedAssignment(assignment);
+        var ganesh = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        repo.SeedOperator(FieldOperator.Create(ganesh, "गणेश", null, new FarmId(FarmAGuid), new UserId(CallerGuid), Now));
+        repo.SeedWorkRow(FieldOperatorWorkRow.Create(
+            Guid.NewGuid(), ganesh, assignment.Id, new FarmId(FarmAGuid),
+            new DateOnly(2026, 8, 10), "गणेश", new UserId(CallerGuid), Now));
+
+        var result = await BuildHandler(repo, new FakeMutationStore()).HandleAsync(
+            Command(assignment.Id, removals: [ganesh]));
+
+        result.IsSuccess.Should().BeTrue();
+        assignment.WorkerCount.Should().Be(6, "P7 — un-naming a person never shrinks the work's count");
+        assignment.MaleCount.Should().Be(4);
+        assignment.FemaleCount.Should().Be(2);
+        assignment.WagePerPerson.Should().Be(400m);
+        assignment.TotalCost.Should().Be(2400m);
+        repo.RemovedRows.Should().ContainSingle().Which.FieldOperatorId.Should().Be(ganesh);
+        repo.Corrections.Should().ContainSingle(c =>
+            c.ChangedField == "Attribution" && c.OriginalValue == ganesh.ToString() && c.NewValue == null);
+        result.Value!.WorkerCount.Should().Be(6);
+        result.Value!.AttributedFieldOperatorIds.Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// PLR-D10 L3b (founder D-34) — the correction route is a second door to
+    /// the same overlay, so it holds the same line as attach: more names than
+    /// the work's (post-correction) count is refused, with ZERO mutation.
+    /// </summary>
+    [Fact]
+    public async Task D34_adding_more_names_than_the_work_states_is_refused_with_zero_mutation()
+    {
+        var (repo, store, assignment) = Scenario(workerCount: 1);
+        var balu = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var ganesh = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        repo.SeedOperator(FieldOperator.Create(balu, "बाळू", null, new FarmId(FarmAGuid), new UserId(CallerGuid), Now));
+        repo.SeedOperator(FieldOperator.Create(ganesh, "गणेश", null, new FarmId(FarmAGuid), new UserId(CallerGuid), Now));
+        repo.SeedWorkRow(FieldOperatorWorkRow.Create(
+            Guid.NewGuid(), balu, assignment.Id, new FarmId(FarmAGuid),
+            new DateOnly(2026, 8, 10), "बाळू", new UserId(CallerGuid), Now));
+
+        var result = await BuildHandler(repo, store).HandleAsync(Command(assignment.Id, adds: [ganesh]));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Be("ShramSafal.Attribution.ExceedsHeadcount");
+        assignment.WorkerCount.Should().Be(1);
+        repo.AddedRows.Should().BeEmpty();
+        repo.Corrections.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task D34_a_swap_on_a_full_work_is_not_more_names_and_is_allowed()
+    {
+        var (repo, store, assignment) = Scenario(workerCount: 1);
+        var balu = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var ganesh = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        repo.SeedOperator(FieldOperator.Create(balu, "बाळू", null, new FarmId(FarmAGuid), new UserId(CallerGuid), Now));
+        repo.SeedOperator(FieldOperator.Create(ganesh, "गणेश", null, new FarmId(FarmAGuid), new UserId(CallerGuid), Now));
+        repo.SeedWorkRow(FieldOperatorWorkRow.Create(
+            Guid.NewGuid(), balu, assignment.Id, new FarmId(FarmAGuid),
+            new DateOnly(2026, 8, 10), "बाळू", new UserId(CallerGuid), Now));
+
+        var result = await BuildHandler(repo, store).HandleAsync(
+            Command(assignment.Id, adds: [ganesh], removals: [balu]));
+
+        result.IsSuccess.Should().BeTrue("one out, one in: still one name on a one-person work");
+        assignment.WorkerCount.Should().Be(1);
+    }
+
     [Fact]
     public async Task Attributing_an_operator_from_another_farm_is_Forbidden_with_zero_mutation()
     {

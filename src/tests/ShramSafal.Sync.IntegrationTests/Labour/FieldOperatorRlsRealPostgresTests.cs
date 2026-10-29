@@ -595,6 +595,70 @@ public sealed class FieldOperatorRlsRealPostgresTests(Xunit.Abstractions.ITestOu
         output.WriteLine("[EVIDENCE] ManDays deliberately NOT asserted — Constraint 4: V1 does not redefine that unit.");
     }
 
+    /// <summary>
+    /// PLR-D10 L3b (founder D-34), as the real app role against a real database.
+    /// The founder's own case: Plot work A — 6 people, work B — 4 people, the
+    /// same day. Ganesh is named on BOTH works (one person, two attributions);
+    /// work A gets six names in all; a seventh name on work A is refused with
+    /// zero writes. The two counts reload as 6 and 4 throughout — naming people
+    /// never changes, deduplicates or "fixes" a work's count (P7).
+    /// </summary>
+    [Fact]
+    public async Task D34_one_person_on_two_works_and_a_seventh_name_on_a_six_person_work_is_refused()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        var (_, workA) = await PlantEngagementAsync(FarmA, PlotA, CycleA, workerCount: 6);
+        var (_, workB) = await PlantEngagementAsync(FarmA, PlotA, CycleA, workerCount: 4);
+        var ganesh = await PlantFieldOperatorAsync(FarmA, "गणेश");
+        var others = new List<Guid>();
+        foreach (var name in new[] { "रमेश", "सुनील", "बाळू", "सखाराम", "विलास", "संदीप" })
+        {
+            others.Add(await PlantFieldOperatorAsync(FarmA, name));
+        }
+
+        async Task<AgriSync.BuildingBlocks.Results.Result<AttachFieldOperatorResult>> Attach(Guid op, Guid work) =>
+            await AttachAsync(FarmA, MukadamUserId, new AttachFieldOperatorCommand(
+                new FarmId(FarmA), op, work, new UserId(MukadamUserId)));
+
+        (await Attach(ganesh, workA)).IsSuccess.Should().BeTrue();
+        (await Attach(ganesh, workB)).IsSuccess.Should().BeTrue("one person may be named on several works of a day");
+        foreach (var op in others.Take(5))
+        {
+            (await Attach(op, workA)).IsSuccess.Should().BeTrue();
+        }
+
+        var seventh = await Attach(others[5], workA);
+
+        seventh.IsFailure.Should().BeTrue("work A states 6 people and all 6 are named");
+        seventh.Error.Code.Should().Be("ShramSafal.Attribution.ExceedsHeadcount");
+
+        await using var read = new NpgsqlConnection(_superuserConn);
+        await read.OpenAsync();
+        var countA = Convert.ToInt32(await ScalarAsync(read,
+            "SELECT worker_count FROM ssf.labour_assignments WHERE \"Id\" = @id", ("id", workA)));
+        var countB = Convert.ToInt32(await ScalarAsync(read,
+            "SELECT worker_count FROM ssf.labour_assignments WHERE \"Id\" = @id", ("id", workB)));
+        var namedA = await ScalarLongAsync(read,
+            "SELECT COUNT(*) FROM ssf.field_operator_work_rows WHERE labour_assignment_id = @id", ("id", workA));
+        var namedB = await ScalarLongAsync(read,
+            "SELECT COUNT(*) FROM ssf.field_operator_work_rows WHERE labour_assignment_id = @id", ("id", workB));
+        var ganeshRows = await ScalarLongAsync(read,
+            "SELECT COUNT(*) FROM ssf.field_operator_work_rows WHERE field_operator_id = @id", ("id", ganesh));
+
+        countA.Should().Be(6, "P7 — work A's count is participation in work A, never reduced or raised by names");
+        countB.Should().Be(4, "P7 — Ganesh on both works does not deduplicate work B's count");
+        namedA.Should().Be(6, "six names landed; the refused seventh wrote nothing");
+        namedB.Should().Be(1);
+        ganeshRows.Should().Be(2, "one person, two works, two attribution rows");
+
+        output.WriteLine("[EVIDENCE] === PLR-D10 L3b D-34 per-work attribution (app role) ===");
+        output.WriteLine($"[EVIDENCE] work A worker_count RELOAD = {countA} (expect 6) · names = {namedA} (expect 6)");
+        output.WriteLine($"[EVIDENCE] work B worker_count RELOAD = {countB} (expect 4) · names = {namedB} (expect 1)");
+        output.WriteLine($"[EVIDENCE] Ganesh attribution rows     = {ganeshRows} (expect 2)");
+        output.WriteLine($"[EVIDENCE] seventh name on work A      = {seventh.Error.Code}");
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // 14.4 — LIFECYCLE (Scenario 12). SCRATCH farms only (doctrine E5).
     // ═════════════════════════════════════════════════════════════════════════

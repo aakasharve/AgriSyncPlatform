@@ -220,6 +220,157 @@ public sealed class AttachFieldOperatorHandlerTests
         repo.WorkRowInsertAttempts.Should().Be(0);
     }
 
+    // ─── PLR-D10 L3b (founder D-34) — "या N जणांमध्ये कोण होते?" per work ─────
+    //
+    // Voice Log tells HOW MANY for each work; attribution tells WHO in WHICH
+    // work; neither overwrites the other (doctrine P7). These pin the server
+    // half: naming people never moves the count or the wage, one person may be
+    // named on several works of the same day, and naming MORE people than the
+    // work states is refused with zero writes — never "fixed" by changing N.
+
+    private static LabourAssignment MakePricedAssignment(Guid id, Guid dailyLogId, int workerCount) =>
+        LabourAssignment.Create(
+            id, dailyLogId, LabourEngagementType.Hired,
+            maleCount: null, femaleCount: null, workerCount: workerCount, wagePerPerson: 400m,
+            contractUnit: null, contractQuantity: null, totalCost: 400m * workerCount,
+            linkedActivityId: null, createdAtUtc: Now, time: LabourTime.ServerAssumed());
+
+    private static FakeRepo GrantedRepo()
+    {
+        var repo = new FakeRepo();
+        repo.SetRole(FarmAGuid, CallerGuid, AppRole.Mukadam);
+        repo.GrantLabour(FarmAGuid, CallerGuid);
+        return repo;
+    }
+
+    private static Task<AgriSync.BuildingBlocks.Results.Result<AttachFieldOperatorResult>> AttachAsync(
+        FakeRepo repo, Guid operatorId, Guid assignmentId) =>
+        BuildHandler(repo).HandleAsync(new AttachFieldOperatorCommand(
+            new FarmId(FarmAGuid), operatorId, assignmentId, new UserId(CallerGuid)));
+
+    [Fact]
+    public async Task D34_naming_people_never_changes_the_works_count_or_wage()
+    {
+        var repo = GrantedRepo();
+        var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 10, 27));
+        var assignment = MakePricedAssignment(Guid.NewGuid(), log.Id, workerCount: 6);
+        repo.SeedLog(log);
+        repo.SeedAssignment(assignment);
+        var people = new[] { "गणेश", "रमेश", "सुनील" }
+            .Select(name => MakeOperator(Guid.NewGuid(), FarmAGuid, name)).ToList();
+        people.ForEach(repo.SeedOperator);
+
+        foreach (var person in people)
+        {
+            (await AttachAsync(repo, person.Id, assignment.Id)).IsSuccess.Should().BeTrue();
+        }
+
+        repo.InsertedRows.Should().HaveCount(3, "three people were named — the overlay is real");
+        assignment.WorkerCount.Should().Be(6,
+            "P7: six people worked; naming three leaves six (3 known, 3 still anonymous), never 3");
+        assignment.MaleCount.Should().BeNull();
+        assignment.FemaleCount.Should().BeNull();
+        assignment.WagePerPerson.Should().Be(400m, "attribution carries no wage and must never set one");
+        assignment.TotalCost.Should().Be(2400m, "attribution must never move money");
+    }
+
+    [Fact]
+    public async Task D34_one_person_may_be_named_on_two_works_of_the_same_day_and_both_counts_stand()
+    {
+        // The founder's own case: Plot 1 pruning — 6, Plot 2 tying — 4. Ganesh
+        // worked both. One person, two attributions, counts stay 6 and 4.
+        var repo = GrantedRepo();
+        var day = new DateOnly(2026, 10, 27);
+        var pruningLog = MakeLog(Guid.NewGuid(), FarmAGuid, day);
+        var tyingLog = MakeLog(Guid.NewGuid(), FarmAGuid, day);
+        var pruning = MakePricedAssignment(Guid.NewGuid(), pruningLog.Id, workerCount: 6);
+        var tying = MakePricedAssignment(Guid.NewGuid(), tyingLog.Id, workerCount: 4);
+        repo.SeedLog(pruningLog);
+        repo.SeedLog(tyingLog);
+        repo.SeedAssignment(pruning);
+        repo.SeedAssignment(tying);
+        var ganesh = MakeOperator(Guid.NewGuid(), FarmAGuid, "गणेश");
+        repo.SeedOperator(ganesh);
+
+        (await AttachAsync(repo, ganesh.Id, pruning.Id)).IsSuccess.Should().BeTrue();
+        (await AttachAsync(repo, ganesh.Id, tying.Id)).IsSuccess.Should().BeTrue();
+
+        repo.InsertedRows.Should().HaveCount(2);
+        repo.InsertedRows.Select(r => r.LabourAssignmentId).Should().BeEquivalentTo([pruning.Id, tying.Id]);
+        repo.InsertedRows.Should().OnlyContain(r => r.FieldOperatorId == ganesh.Id && r.WorkDate == day);
+        pruning.WorkerCount.Should().Be(6, "work-entry headcount is participation in THAT work, never deduplicated");
+        tying.WorkerCount.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task D34_naming_more_people_than_the_work_states_is_refused_with_zero_writes()
+    {
+        var repo = GrantedRepo();
+        var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 10, 27));
+        var assignment = MakePricedAssignment(Guid.NewGuid(), log.Id, workerCount: 2);
+        repo.SeedLog(log);
+        repo.SeedAssignment(assignment);
+        var first = MakeOperator(Guid.NewGuid(), FarmAGuid, "गणेश");
+        var second = MakeOperator(Guid.NewGuid(), FarmAGuid, "रमेश");
+        var third = MakeOperator(Guid.NewGuid(), FarmAGuid, "सुनील");
+        repo.SeedOperator(first);
+        repo.SeedOperator(second);
+        repo.SeedOperator(third);
+        (await AttachAsync(repo, first.Id, assignment.Id)).IsSuccess.Should().BeTrue();
+        (await AttachAsync(repo, second.Id, assignment.Id)).IsSuccess.Should().BeTrue();
+        var attemptsBefore = repo.WorkRowInsertAttempts;
+
+        var result = await AttachAsync(repo, third.Id, assignment.Id);
+
+        result.IsFailure.Should().BeTrue("the work states 2 people and both are already named");
+        result.Error.Code.Should().Be("ShramSafal.Attribution.ExceedsHeadcount");
+        repo.WorkRowInsertAttempts.Should().Be(attemptsBefore, "a refusal writes nothing");
+        assignment.WorkerCount.Should().Be(2, "the count is never raised to fit the names (P7)");
+        assignment.TotalCost.Should().Be(800m);
+    }
+
+    [Fact]
+    public async Task D34_re_naming_someone_already_on_a_full_work_stays_an_idempotent_success()
+    {
+        var repo = GrantedRepo();
+        var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 10, 27));
+        var assignment = MakePricedAssignment(Guid.NewGuid(), log.Id, workerCount: 1);
+        repo.SeedLog(log);
+        repo.SeedAssignment(assignment);
+        var ganesh = MakeOperator(Guid.NewGuid(), FarmAGuid, "गणेश");
+        repo.SeedOperator(ganesh);
+        (await AttachAsync(repo, ganesh.Id, assignment.Id)).IsSuccess.Should().BeTrue();
+
+        var retry = await AttachAsync(repo, ganesh.Id, assignment.Id);
+
+        retry.IsSuccess.Should().BeTrue("a retried attach of the SAME person is not 'one more person'");
+        retry.Value!.AlreadyAttached.Should().BeTrue();
+        repo.InsertedRows.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task D34_a_work_with_no_stated_headcount_has_no_cap_to_enforce()
+    {
+        // "मजुरांनी छाटणी केली" — nobody said how many. Unknown is not zero (P4),
+        // so there is no number to refuse against; naming stays possible.
+        var repo = GrantedRepo();
+        var log = MakeLog(Guid.NewGuid(), FarmAGuid, new DateOnly(2026, 10, 27));
+        var assignment = LabourAssignment.Create(
+            Guid.NewGuid(), log.Id, LabourEngagementType.Hired,
+            maleCount: null, femaleCount: null, workerCount: null, wagePerPerson: null,
+            contractUnit: null, contractQuantity: null, totalCost: null,
+            linkedActivityId: null, createdAtUtc: Now, time: LabourTime.ServerAssumed());
+        repo.SeedLog(log);
+        repo.SeedAssignment(assignment);
+        var ganesh = MakeOperator(Guid.NewGuid(), FarmAGuid, "गणेश");
+        repo.SeedOperator(ganesh);
+
+        var result = await AttachAsync(repo, ganesh.Id, assignment.Id);
+
+        result.IsSuccess.Should().BeTrue();
+        assignment.WorkerCount.Should().BeNull("an unstated count stays unstated — never fabricated from the names");
+    }
+
     // ─── Test doubles ────────────────────────────────────────────────────────
 
     private sealed class SequentialIdGenerator : IIdGenerator
@@ -274,8 +425,22 @@ public sealed class AttachFieldOperatorHandlerTests
                 return Task.FromResult(false);
             }
 
+            // Mirrors the unique (operator, assignment) index: a second insert
+            // of the same pair is "already existed", exactly like the real repo.
+            if (InsertedRows.Any(x => x.FieldOperatorId == r.FieldOperatorId
+                                      && x.LabourAssignmentId == r.LabourAssignmentId))
+            {
+                return Task.FromResult(false);
+            }
+
             InsertedRows.Add(r);
             return Task.FromResult(true);
         }
+
+        /// <summary>The live attribution set — everything this fake has accepted.</summary>
+        public override Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(
+            Guid labourAssignmentId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<FieldOperatorWorkRow>>(
+                InsertedRows.Where(r => r.LabourAssignmentId == labourAssignmentId).ToList());
     }
 }

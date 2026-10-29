@@ -116,6 +116,24 @@ public sealed class AttachFieldOperatorHandler(
             return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.Forbidden);
         }
 
+        // ── PLR-D10 L3b (founder D-34): never more names than the work's count. ──
+        // "या 6 जणांमध्ये कोण होते?" — six people may be named, not seven. The
+        // count is READ here and never written: a seventh name is refused rather
+        // than letting names contradict (or, worse, one day "correct") the number
+        // the farmer reported (P7). A person already on this work is not one more
+        // person — that retry falls through to the idempotent TryAdd below. Rows
+        // are filtered to THIS farm for the same E4 reason as the checks above.
+        var namedOnThisWork = (await repository.GetFieldOperatorWorkRowsForAssignmentAsync(assignment.Id, ct))
+            .Where(r => r.FarmId == command.FarmId)
+            .Select(r => r.FieldOperatorId)
+            .ToHashSet();
+        if (!namedOnThisWork.Contains(fieldOperator.Id)
+            && AttributionHeadcount.Exceeds(
+                AttributionHeadcount.StatedHeadcount(assignment), namedOnThisWork.Count + 1))
+        {
+            return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.AttributionExceedsHeadcount);
+        }
+
         // 11.5 — snapshot the operator's CURRENT DisplayName now; a later
         // Rename must never rewrite this row (see FieldOperatorWorkRow's own
         // remarks). WorkDate is derived from the parent log, not the caller.

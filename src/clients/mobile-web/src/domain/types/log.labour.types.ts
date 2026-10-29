@@ -119,10 +119,12 @@ export interface LabourEvent {
      *
      * DOCTRINE P7, AND IT IS THE INVARIANT THIS FEATURE BREAKS MOST OFTEN:
      * attaching a person NEVER changes the reported quantity. This list's
-     * length is not a headcount and must never be summed, counted or compared
-     * against one. Eight workers with three people attributed is still eight —
-     * `count` is the only headcount, and `resolveLabourHeadcount`
-     * (domain/logs/labourHeadcount.ts) is the only derivation of it.
+     * length is not a headcount and must never be summed into, substituted for
+     * or used to change one. Eight workers with three people attributed is
+     * still eight — `count` is the only headcount, and `resolveLabourHeadcount`
+     * (domain/logs/labourHeadcount.ts) is the only derivation of it. Founder
+     * D-34 (PLR-D10 L3b) permits exactly one READ against it: "3 named · 5
+     * anonymous" and no more names than `count` (features/labour/workAttribution.ts).
      *
      * Empty is normal and complete. Absent means no server statement.
      */

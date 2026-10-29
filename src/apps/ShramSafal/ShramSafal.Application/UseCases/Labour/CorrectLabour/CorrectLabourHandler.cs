@@ -221,6 +221,23 @@ public sealed class CorrectLabourHandler(
             operatorsToAdd.Add(fieldOperator);
         }
 
+        // PLR-D10 L3b (founder D-34) — the same line attach holds: never more
+        // names than the work's count, judged against the count AFTER this
+        // action's own quantity section. Only an action that ADDS someone can
+        // cross it; a swap (one out, one in) on a full work does not. Refused
+        // here, before staging, so the refusal writes nothing.
+        if (operatorsToAdd.Count > 0)
+        {
+            var headcountAfter = quantity is { } restated
+                ? LabourHeadcount.Resolve(restated.WorkerCount, restated.MaleCount, restated.FemaleCount)
+                : AttributionHeadcount.StatedHeadcount(assignment);
+            var namedAfter = attachedIds.Count - removals.Count(attachedIds.Contains) + operatorsToAdd.Count;
+            if (AttributionHeadcount.Exceeds(headcountAfter, namedAfter))
+            {
+                return Result.Failure<CorrectLabourResult>(ShramSafalErrors.AttributionExceedsHeadcount);
+            }
+        }
+
         // ═════════════════════════════════════════════════════════════════════
         // STAGING BEGINS. Everything below mutates. Nothing above may.
         // ═════════════════════════════════════════════════════════════════════

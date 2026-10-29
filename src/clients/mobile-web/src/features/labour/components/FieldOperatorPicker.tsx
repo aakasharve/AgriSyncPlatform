@@ -27,10 +27,19 @@
  *
  * ── ATTRIBUTION NEVER CHANGES HEADCOUNT (Constraint 3) ───────────────────
  * `WorkerCount = 8` with three people attached is still 8. Nothing here
- * displays, implies or computes otherwise: this component never reads,
- * renders or derives a headcount, and never shows an "attached / total"
- * ratio, which is the shape that would quietly turn an overlay back into a
- * completion target.
+ * writes, implies or computes otherwise.
+ *
+ * PLR-D10 L3b (founder D-34, 2026-10-27) — the work's stated count IS now
+ * READ, for exactly three things and never to change it: to ask the founder's
+ * own per-work question "या N जणांमध्ये कोण होते?" once the farmer opens the
+ * picker; to state the truthful split once someone is named ("३ जणांची नावं ·
+ * ३ अनामिक" — the rest stay anonymous, no identities are invented); and to make
+ * an (N+1)th name impossible, with a plain reason (the server refuses it too).
+ * Still never a ratio, a percentage or a "/" — and the CLOSED opt-in carries no
+ * number at all, so a headcount-only card is exactly as quiet as before (P9).
+ * People named on another work of the same day are offered first, and people
+ * marked present in हजेरी are a labelled suggestion — neither is ever linked
+ * without the farmer's own tap here (D-34: never infer work from presence).
  *
  * ── B2: IDENTICAL NAMES ARE REAL PEOPLE, NOT DUPLICATES ──────────────────
  * Two Field Operators may share a `DisplayName` AND a `FullName` by design —
@@ -67,6 +76,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { UserPlus, Check, Plus, Users } from 'lucide-react';
 import type { AvatarTone } from '../labourMock';
+import type { AttributedOperator } from '../../../types';
 import { Avatar, EmptyState, GroupLabel, LoadErrorBanner, LoadingState, NameOnlyBadge } from './LabourUiKit';
 import {
     attachFieldOperator,
@@ -74,6 +84,10 @@ import {
     fetchFieldOperators,
     type FieldOperator,
 } from '../data/fieldOperatorClient';
+import { WORK_ATTRIBUTION_COPY, attributionReadout, isOverHeadcountRefusal, orderRowsForWork } from '../workAttribution';
+
+const NO_IDS: ReadonlySet<string> = new Set();
+const NO_ATTRIBUTION: readonly AttributedOperator[] = [];
 
 /** Same six-tone palette the rest of the feature draws avatars from. */
 const TONES: AvatarTone[] = ['em', 'bl', 'vi', 'or', 'am', 'rs'];
@@ -159,21 +173,34 @@ interface Props {
     labourAssignmentId: string;
     /** The host's existing toast channel — every outcome is reported through it. */
     onToast?: (message: string) => void;
+    /** D-34 — this work's STATED headcount (read, never written). Absent = nobody said how many. */
+    headcount?: number;
+    /** D-34 — who the server says is already named on this work (sync read-back). */
+    initialAttached?: readonly AttributedOperator[];
+    /** D-34 — people named on another work of the same day: offered first, never linked here. */
+    namedElsewhereIds?: ReadonlySet<string>;
+    /** D-34 — people marked present in हजेरी that day: a suggestion only, never linked here. */
+    presentIds?: ReadonlySet<string>;
+    /** Told after a successful attach, so the host can offer this person first on the day's other works. */
+    onAttached?: (operator: FieldOperator) => void;
 }
 
-const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onToast }) => {
+const FieldOperatorPicker: React.FC<Props> = ({
+    farmId, labourAssignmentId, onToast, headcount, initialAttached = NO_ATTRIBUTION,
+    namedElsewhereIds = NO_IDS, presentIds = NO_IDS, onAttached,
+}) => {
     const [open, setOpen] = useState(false);
     const [roster, setRoster] = useState<FieldOperator[] | null>(null);
     const [loading, setLoading] = useState(false);
     const [loadFailed, setLoadFailed] = useState(false);
     /**
      * 13.1b — what this engagement now carries, so the farmer can see बाळू
-     * landed and does not attach him twice by accident. Session-local BY
-     * DESIGN: V1's attribution ledger is write-only (no reputation dashboard,
-     * no worker history, no read-back endpoint), and inventing a read model
-     * here would be a different project. A re-attach after a reload is
-     * harmless anyway — the server is idempotent and answers
-     * `alreadyAttached`, which is surfaced honestly below.
+     * landed and does not attach him twice by accident. This sitting's own
+     * attaches; `attachedAll` below adds the server's read-back
+     * (`initialAttached`, LABOUR_PHASE2 Phase 3 sync pull), so a reload no
+     * longer forgets who is named — which D-34's "N named · M anonymous" and
+     * its no-more-than-N rule both depend on. A re-attach stays harmless: the
+     * server is idempotent and answers `alreadyAttached`.
      */
     const [attached, setAttached] = useState<FieldOperator[]>([]);
     const [busyId, setBusyId] = useState<string | null>(null);
@@ -210,13 +237,16 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
 
     /** Returns the outcome instead of toasting, so the two call sites (tap a
      *  person / add-then-attach) can each say the true thing. */
-    const runAttach = async (operator: FieldOperator): Promise<'ok' | 'already' | 'failed'> => {
+    const runAttach = async (operator: FieldOperator): Promise<'ok' | 'already' | 'failed' | 'full'> => {
         try {
             const result = await attachFieldOperator(farmId, operator.id, labourAssignmentId);
             setAttached((prev) => (prev.some((a) => a.id === operator.id) ? prev : [...prev, operator]));
+            onAttached?.(operator);
             return result.alreadyAttached ? 'already' : 'ok';
-        } catch {
-            return 'failed';
+        } catch (error) {
+            // D-34 — the work already carries N names. Not retryable, so never
+            // "try again": the plain reason instead. The count is untouched.
+            return isOverHeadcountRefusal(error) ? 'full' : 'failed';
         }
     };
 
@@ -224,7 +254,8 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
         setBusyId(operator.id);
         const outcome = await runAttach(operator);
         setBusyId(null);
-        if (outcome === 'failed') onToast?.('जोडता आलं नाही — पुन्हा प्रयत्न करा');
+        if (outcome === 'full') onToast?.(WORK_ATTRIBUTION_COPY.full(headcount));
+        else if (outcome === 'failed') onToast?.('जोडता आलं नाही — पुन्हा प्रयत्न करा');
         else if (outcome === 'already') onToast?.(`${operator.displayName} आधीच जोडलेला आहे`);
         else onToast?.(`${operator.displayName} ✓ जोडलं`);
     };
@@ -240,7 +271,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
         const displayName = newName.trim();
         // `loadFailed` blocks this too: creating against a roster we could not
         // read is how a farmer ends up with a second बाळू he already had.
-        if (!displayName || adding || loadFailed) return;
+        if (!displayName || adding || loadFailed || full) return;
         setAdding(true);
         let created: FieldOperator;
         try {
@@ -255,7 +286,9 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
         setNewFullName('');
         const outcome = await runAttach(created);
         setAdding(false);
-        if (outcome === 'failed') onToast?.(`${created.displayName}चं नाव यादीत आलं, पण या कामाला लावता आलं नाही — पुन्हा प्रयत्न करा`);
+        // The person is on the farm's list either way; the toast says so, then why this work refused.
+        if (outcome === 'full') onToast?.(`${created.displayName}चं नाव यादीत आलं. ${WORK_ATTRIBUTION_COPY.full(headcount)}`);
+        else if (outcome === 'failed') onToast?.(`${created.displayName}चं नाव यादीत आलं, पण या कामाला लावता आलं नाही — पुन्हा प्रयत्न करा`);
         else onToast?.(`${created.displayName} ✓ जोडलं`);
     };
 
@@ -263,15 +296,30 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
     // work to a retired person is not a thing a farmer can mean. (V1 has no
     // deactivation surface, so today this filters nothing; it is one line
     // that keeps the picker correct the day one exists.)
-    const rows = useMemo(() => buildPickerRows((roster ?? []).filter((o) => o.isActive)), [roster]);
-    const attachedIds = useMemo(() => new Set(attached.map((a) => a.id)), [attached]);
+    // Server read-back first (oldest attach first), then this sitting's — one entry per person.
+    const attachedAll = useMemo(() => {
+        const merged: FieldOperator[] = initialAttached.map((a) => ({
+            id: a.fieldOperatorId, displayName: a.displayNameAtAttach, isActive: true,
+        }));
+        attached.forEach((a) => { if (!merged.some((m) => m.id === a.id)) merged.push(a); });
+        return merged;
+    }, [initialAttached, attached]);
+    const attachedIds = useMemo(() => new Set(attachedAll.map((a) => a.id)), [attachedAll]);
+    // D-34 — people named today (here or on another work) first, then people present in हजेरी.
+    const rows = useMemo(() => {
+        const named = new Set([...attachedIds, ...namedElsewhereIds]);
+        return orderRowsForWork(buildPickerRows((roster ?? []).filter((o) => o.isActive)), named, presentIds);
+    }, [roster, attachedIds, namedElsewhereIds, presentIds]);
+    // D-34 — N names on an N-person work: one more is impossible here (and refused by the server).
+    const full = headcount != null && attachedAll.length >= headcount;
+    const readout = attributionReadout(attachedAll.length, headcount);
     const busy = busyId !== null || adding;
 
     return (
         <div className="mt-3" data-testid="fo-picker">
-            {attached.length > 0 && (
+            {attachedAll.length > 0 && (
                 <div data-testid="fo-picker-attached" className="mb-2 flex flex-wrap items-center gap-1.5">
-                    {attached.map((a) => (
+                    {attachedAll.map((a) => (
                         <span
                             key={a.id}
                             data-testid={`fo-attached-${a.id}`}
@@ -280,6 +328,10 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                             <Check size={15} strokeWidth={3} /> {a.displayName}
                         </span>
                     ))}
+                    {/* D-34 — the truthful split, only once someone is named: never a ratio, never a nag. */}
+                    {readout && (
+                        <span data-testid="fo-picker-readout" className="basis-full text-[16px] font-semibold text-stone-500">{readout}</span>
+                    )}
                 </div>
             )}
 
@@ -300,14 +352,22 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                     className="flex min-h-[56px] w-full items-center gap-2.5 rounded-xl border border-stone-100 bg-stone-50 px-3.5 py-3 text-left transition-transform active:scale-[0.99]"
                 >
                     <UserPlus size={20} className="flex-shrink-0 text-stone-400" />
-                    <span className="flex-1 text-[17px] font-bold text-stone-600">{attached.length ? 'आणखी नाव जोडा' : 'नावं जोडा'}</span>
+                    {/* A full work promises nothing it cannot do: it opens to see the names, not to add one. */}
+                    <span className="flex-1 text-[17px] font-bold text-stone-600">{full ? 'नावं पाहा' : attachedAll.length ? 'आणखी नाव जोडा' : 'नावं जोडा'}</span>
                     <span className="flex-shrink-0 rounded-lg bg-white px-2 py-1 text-[15px] font-bold text-stone-400">हवं तर</span>
                 </button>
             ) : (
                 <div data-testid="fo-picker-panel" className="rounded-xl border border-stone-100 bg-stone-50 p-3">
+                    {/* D-34 — the founder's own per-work question, asked only once he opted in. */}
+                    {headcount != null && headcount > 0 && (
+                        <p data-testid="fo-picker-question" className="mb-1 text-[19px] font-bold leading-snug text-stone-800">{WORK_ATTRIBUTION_COPY.question(headcount)}</p>
+                    )}
                     {/* Constraint 3, said out loud: attaching a name does not
                         touch the number the farmer reported. */}
                     <p className="text-[16px] leading-snug text-stone-600">कोण काम करत होतं ते इथे सांगता येतं. किती जण होते, ते यानं बदलत नाही.</p>
+                    {full && (
+                        <p data-testid="fo-picker-full" className="mt-1.5 text-[16px] font-semibold leading-snug text-stone-600">{WORK_ATTRIBUTION_COPY.full(headcount)}</p>
+                    )}
 
                     <GroupLabel>माणूस निवडा</GroupLabel>
                     {loading && <LoadingState label="नावांची यादी येत आहे…" compact />}
@@ -372,7 +432,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                                 key={row.operator.id}
                                 type="button"
                                 data-testid={`fo-row-${row.operator.id}`}
-                                disabled={isAttached || busy}
+                                disabled={isAttached || busy || full}
                                 onClick={() => void pick(row.operator)}
                                 className={`mt-1.5 flex min-h-[68px] w-full items-center gap-3 rounded-[16px] border bg-white p-3 text-left transition-transform active:scale-[0.98] disabled:active:scale-100 ${isAttached ? 'border-emerald-200' : 'border-stone-100'}`}
                             >
@@ -387,6 +447,13 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                                     </span>
                                     {row.fullName && <span className="mt-0.5 block truncate text-[16px] text-stone-500">{row.fullName}</span>}
                                     {row.ambiguous && <span className="mt-0.5 block text-[16px] text-stone-500">सारखं नाव — माणूस वेगळा</span>}
+                                    {/* D-34 — why this person is near the top. A label, never a link. */}
+                                    {!isAttached && namedElsewhereIds.has(row.operator.id) && (
+                                        <span data-testid={`fo-named-elsewhere-${row.operator.id}`} className="mt-0.5 block text-[16px] font-semibold text-stone-500">{WORK_ATTRIBUTION_COPY.namedElsewhereChip}</span>
+                                    )}
+                                    {!isAttached && !namedElsewhereIds.has(row.operator.id) && presentIds.has(row.operator.id) && (
+                                        <span data-testid={`fo-present-${row.operator.id}`} className="mt-0.5 block text-[16px] font-semibold text-stone-500">{WORK_ATTRIBUTION_COPY.presentChip}</span>
+                                    )}
                                 </span>
                                 <span className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full ${isAttached ? 'bg-emerald-50 text-emerald-600' : 'bg-stone-100 text-stone-400'}`}>
                                     {isAttached ? <Check size={20} strokeWidth={3} /> : <Plus size={20} strokeWidth={2.6} />}
@@ -416,7 +483,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                             // the field never truncates something the server would
                             // have accepted.
                             maxLength={200}
-                            disabled={loadFailed}
+                            disabled={loadFailed || full}
                             aria-label="नवीन माणसाचं नाव"
                             placeholder="नाव"
                             data-testid="fo-new-name"
@@ -433,7 +500,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                             value={newFullName}
                             onChange={(e) => setNewFullName(e.target.value)}
                             maxLength={200}
-                            disabled={loadFailed}
+                            disabled={loadFailed || full}
                             aria-label="पूर्ण नाव किंवा ओळख — ऐच्छिक"
                             placeholder="पूर्ण नाव किंवा ओळख — हवं तर"
                             data-testid="fo-new-full-name"
@@ -442,7 +509,7 @@ const FieldOperatorPicker: React.FC<Props> = ({ farmId, labourAssignmentId, onTo
                         <button
                             type="button"
                             data-testid="fo-add"
-                            disabled={!newName.trim() || busy || loadFailed}
+                            disabled={!newName.trim() || busy || loadFailed || full}
                             onClick={() => void addPerson()}
                             className="flex min-h-[56px] w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 text-[18px] font-extrabold text-white transition-transform active:scale-[0.97] disabled:opacity-50"
                         >

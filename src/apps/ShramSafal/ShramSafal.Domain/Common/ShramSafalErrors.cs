@@ -82,6 +82,15 @@ public static class ShramSafalErrors
         "ShramSafal.LabourAssignment.Conflict",
         "This labour entry is already recorded on another daily log. The same engagement cannot belong to two logs — recording it again would count the same workers twice.");
 
+    // spec: plr-d10 I26 (founder D-34, PLR-D10 L3b). A work entry says HOW MANY people worked; naming
+    // people says WHO among them. Naming more people than the work states would contradict its count,
+    // and the count is never changed to fit the names (doctrine P7) — so the extra name is refused.
+    // REST-only (attach / correction routes), never a sync mutation, so the RejectionPolicy tail rule
+    // above does not apply; an older phone shows its generic "could not attach" for it.
+    public static readonly Error AttributionExceedsHeadcount = Error.Conflict(
+        "ShramSafal.Attribution.ExceedsHeadcount",
+        "Every person this work entry counts is already named. Naming one more would contradict the count, and naming people never changes the count.");
+
     // --- Forbidden (role / ownership / not-allowed) ----------------------------------------
     public static readonly Error Forbidden = Error.Forbidden("ShramSafal.Forbidden", "User is not allowed to modify this farm.");
     // READ refusal: the caller is a member but their role may not read this
