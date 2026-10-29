@@ -140,6 +140,30 @@ describe('useLabourState — adjustable time window', () => {
         expect(result.current.data).not.toBe(firstAnswer);
     });
 
+    // PLR-D10 L3b — the background refresh (sync settled, an approval) every few seconds used to blank the
+    // screen behind a spinner, which closed an open name picker and threw away a half-typed name.
+    it('a background refresh of the SAME farm and window keeps the live answer on screen until the new one lands', async () => {
+        mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: 'farm-1' });
+        const firstAnswer = { ...EMPTY_LABOUR_DATA, topLevelIds: ['w1'] };
+        const secondAnswer = { ...EMPTY_LABOUR_DATA, topLevelIds: ['w1', 'w2'] };
+        mockFetchLabourData.mockResolvedValueOnce(firstAnswer);
+
+        const { result } = renderHook(() => useLabourState());
+        await waitFor(() => expect(result.current.data).toBe(firstAnswer));
+
+        let answer: (value: typeof secondAnswer) => void = () => {};
+        mockFetchLabourData.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+        act(() => result.current.refresh());
+
+        expect(mockFetchLabourData).toHaveBeenCalledTimes(2);
+        expect(result.current.loading).toBe(false);
+        expect(result.current.data).toBe(firstAnswer);
+
+        await act(async () => { answer(secondAnswer); });
+        await waitFor(() => expect(result.current.data).toBe(secondAnswer));
+        expect(result.current.loading).toBe(false);
+    });
+
     it('a failed fetch under a narrowed window is still an honest error, not an empty period', async () => {
         mockUseOptionalFarmContext.mockReturnValue({ currentFarmId: 'farm-1' });
         mockFetchLabourData.mockResolvedValueOnce(EMPTY_LABOUR_DATA);

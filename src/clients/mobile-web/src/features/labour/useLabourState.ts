@@ -43,7 +43,7 @@
  * (`EMPTY_LABOUR_DATA`), never रोकडे/रमेश/सुनीता and their mock ₹ balances
  * mistaken for their own farm's real data.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { LABOUR_MOCK, EMPTY_LABOUR_DATA, type LabourData } from './labourMock';
 import { fetchLabourData } from './data/labourClient';
 import { getLocalAttendanceMarks, getLocalAttendanceNameHints, type LocalAttendanceMark } from './data/attendanceLocal';
@@ -213,6 +213,13 @@ export const useLabourState = (): UseLabourStateResult => {
     const [retryToken, setRetryToken] = useState(0);
     const [staleSinceIso, setStaleSinceIso] = useState<string | null>(null);
     /**
+     * PLR-D10 L3b — which user+farm+window the screen is showing a LIVE answer for. A background refresh
+     * of that same answer (sync settled, an approval, a token re-mint) keeps it on screen and swaps in the
+     * new one when it lands: no spinner, so an open name picker or a half-typed name is not thrown away
+     * every few seconds. Any other key (new farm, new window, after an error) resets exactly as before.
+     */
+    const shownKeyRef = useRef<string | null>(null);
+    /**
      * TASK 11 — the window every fetch below is scoped to.
      *
      * TASK 17 (R14 superseded) — PERSISTED across visits, per the founder's
@@ -238,6 +245,8 @@ export const useLabourState = (): UseLabourStateResult => {
 
     useEffect(() => {
         setStaleSinceIso(null);
+        const shownKey = shownKeyRef.current;
+        if (isPreview || !farmId || !authReady) shownKeyRef.current = null;
         if (isPreview) {
             // No provider at all (preview) — mock fallback.
             // This is the ONLY branch that may show LABOUR_MOCK.
@@ -299,10 +308,15 @@ export const useLabourState = (): UseLabourStateResult => {
         }
 
         let cancelled = false;
+        const key = `${userId ?? ''}|${farmId}|${timeWindow}`;
         // Real farm: never let a stale mock (or a previous farm's data) sit
         // on screen while this loads — show the honest empty state instead.
-        setData(EMPTY_LABOUR_DATA);
-        setLoading(true);
+        // The one exception is a refresh of the live answer already on screen
+        // for this same user, farm and window (see `shownKeyRef`).
+        if (shownKey !== key) {
+            setData(EMPTY_LABOUR_DATA);
+            setLoading(true);
+        }
         setError(false);
         (async () => {
             try {
@@ -316,8 +330,10 @@ export const useLabourState = (): UseLabourStateResult => {
                 if (!cancelled) {
                     setData(overlayLocalAttendance(real, plane.marks, plane.hints));
                     setError(false);
+                    shownKeyRef.current = key;
                 }
             } catch (err) {
+                if (!cancelled) shownKeyRef.current = null;
                 if (isFarmAccessRefused(err)) {
                     // The server READ the request and said this user is not a
                     // member of the farm (403): access ended. The cached

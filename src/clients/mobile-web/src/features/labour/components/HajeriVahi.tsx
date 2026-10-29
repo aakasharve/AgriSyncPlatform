@@ -96,14 +96,19 @@ const HajeriVahi: React.FC<Props> = ({ data, period, onPeriodChange, mainWindow,
 
     const requestKey = `${unit}|${anchor ?? ''}|${retry}`;
 
+    // `data` is a dependency on purpose: when the feature's read-out is refreshed in place (a sync settled,
+    // a mark was saved or refused), this page is asked again too. The page on screen stays until the new
+    // answer lands, and a failed re-ask of a page already shown keeps that page.
     useEffect(() => {
         if (reuseMain || !farmId) return;
         let live = true;
         loadPage(farmId, unit, anchor)
             .then((d) => { if (live) setPage({ status: 'ready', key: requestKey, data: d }); })
-            .catch(() => { if (live) setPage({ status: 'error', key: requestKey }); });
+            .catch(() => {
+                if (live) setPage((p) => (p.status === 'ready' && p.key === requestKey ? p : { status: 'error', key: requestKey }));
+            });
         return () => { live = false; };
-    }, [farmId, unit, anchor, reuseMain, requestKey]);
+    }, [farmId, unit, anchor, reuseMain, requestKey, data]);
 
     // Until THIS request answers, the screen is loading — never the previous page, never an error.
     const answered = !reuseMain && page.status !== 'idle' && page.key === requestKey ? page : null;
