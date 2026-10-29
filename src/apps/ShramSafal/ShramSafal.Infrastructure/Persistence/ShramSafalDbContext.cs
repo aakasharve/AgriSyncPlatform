@@ -30,6 +30,9 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<FarmInvitation> FarmInvitations => Set<FarmInvitation>();
     public DbSet<FarmJoinToken> FarmJoinTokens => Set<FarmJoinToken>();
     public DbSet<SubscriptionProjection> SubscriptionProjections => Set<SubscriptionProjection>();
+
+    /// <summary>spec R-11 (b) — view over accounts.access_extensions (read-only).</summary>
+    public DbSet<AccessExtensionProjection> AccessExtensionProjections => Set<AccessExtensionProjection>();
     public DbSet<Plot> Plots => Set<Plot>();
     public DbSet<CropCycle> CropCycles => Set<CropCycle>();
     public DbSet<DailyLog> DailyLogs => Set<DailyLog>();

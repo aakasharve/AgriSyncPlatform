@@ -4865,6 +4865,44 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("raw_blob_subjects", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Subscriptions.AccessExtensionProjection", b =>
+                {
+                    b.Property<Guid>("AccessExtensionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("access_extension_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime>("EndsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at_utc");
+
+                    b.Property<Guid>("GrantedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("granted_by_user_id");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTime>("StartsAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at_utc");
+
+                    b.HasKey("AccessExtensionId");
+
+                    b.ToTable((string)null);
+
+                    b.ToView("access_extension_projections", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Subscriptions.SubscriptionProjection", b =>
                 {
                     b.Property<Guid>("SubscriptionId")

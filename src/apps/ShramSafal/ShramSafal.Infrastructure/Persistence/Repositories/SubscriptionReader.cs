@@ -22,4 +22,20 @@ internal sealed class SubscriptionReader(ShramSafalDbContext db) : ISubscription
             .ThenByDescending(x => x.UpdatedAtUtc)
             .FirstOrDefaultAsync(ct);
     }
+
+    public Task<AccessExtensionProjection?> GetActiveAccessExtensionAsync(
+        OwnerAccountId ownerAccountId,
+        DateTime asOfUtc,
+        CancellationToken ct = default)
+    {
+        // Start inclusive, end exclusive (AccessExtension.IsActiveAt). Several rows may overlap
+        // (append-only history); the one ending last is the one in effect.
+        return db.AccessExtensionProjections
+            .AsNoTracking()
+            .Where(x => x.OwnerAccountId == ownerAccountId
+                && x.StartsAtUtc <= asOfUtc
+                && x.EndsAtUtc > asOfUtc)
+            .OrderByDescending(x => x.EndsAtUtc)
+            .FirstOrDefaultAsync(ct);
+    }
 }

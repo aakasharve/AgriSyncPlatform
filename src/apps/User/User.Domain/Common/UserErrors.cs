@@ -35,4 +35,19 @@ public static class UserErrors
 
     public static readonly Error DuplicateMembership =
         Error.Conflict("User.DuplicateMembership", "User already has an active membership in this app.");
+
+    /// <summary>
+    /// spec I19 (pre-launch repair, D-23) — password sign-up is closed unless the test-only
+    /// setting <c>Auth:AllowPasswordRegistration</c> is on. Sign-up is by SMS code
+    /// (<c>/user/auth/start-otp</c> → <c>/verify-otp</c>). HTTP 403.
+    /// </summary>
+    public static readonly Error PasswordRegistrationClosed =
+        Error.Forbidden("auth.password_registration_closed", "Password sign-up is closed. Sign up with the SMS code sent to your phone.");
+
+    /// <summary>
+    /// spec I19 — the caller may never choose an account role at sign-up (that role used to be
+    /// read by test, compliance and schedule-template checks on every farm). HTTP 400.
+    /// </summary>
+    public static readonly Error RegisterRoleNotAllowed =
+        Error.Validation("auth.register_role_not_allowed", "An account role cannot be chosen at sign-up.");
 }

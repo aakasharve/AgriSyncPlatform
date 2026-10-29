@@ -14,7 +14,7 @@ using User.Infrastructure.Persistence;
 namespace AgriSync.Bootstrapper.Endpoints;
 
 /// <summary>
-/// First-farm bootstrap. Creates OwnerAccount → starts 14-day trial →
+/// First-farm bootstrap. Creates OwnerAccount → starts the FIRST 14-day trial (never a second, R-11 a) →
 /// creates Farm attached to that account → assigns FarmCode → creates
 /// PrimaryOwner FarmMembership. All in one transaction across both
 /// DbContexts (following the pattern already established by
@@ -78,22 +78,8 @@ public static class FirstFarmBootstrapEndpoints
                 accountsDb.OwnerAccounts.Add(account);
             }
 
-            // 2. Trial subscription — preserve invariant I6 (at most one Active/Trialing).
-            var subscription = await accountsDb.Subscriptions
-                .Where(s => s.OwnerAccountId == account.Id
-                    && (s.Status == SubscriptionStatus.Trialing || s.Status == SubscriptionStatus.Active))
-                .FirstOrDefaultAsync(ct);
-
-            if (subscription is null)
-            {
-                subscription = Subscription.StartTrial(
-                    id: SubscriptionId.New(),
-                    ownerAccountId: account.Id,
-                    planCode: PlanCode.ShramSafalPro,
-                    trialStartUtc: nowUtc,
-                    trialEndsAtUtc: nowUtc.AddDays(14));
-                accountsDb.Subscriptions.Add(subscription);
-            }
+            // 2. The FIRST trial only (spec R-11 a) — see StartFirstTrialOrGetCurrentAsync.
+            var subscription = await StartFirstTrialOrGetCurrentAsync(accountsDb, account.Id, nowUtc, ct);
 
             // 3. Decide the bootstrap farm id and RECORD IT ON THE ACCOUNT (accounts side)
             //    BEFORE any ssf write. This is what makes the operation idempotent and
@@ -133,6 +119,43 @@ public static class FirstFarmBootstrapEndpoints
         .RequireAuthorization();
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Step 2 of <c>POST /bootstrap/first-farm</c>. spec R-11 (a) (pre-launch repair, founder N-1:
+    /// "Remove both accidental trial resets … repeated farm creation"): a 14-day trial is started
+    /// ONLY for an owner account that has never had a subscription row of any status. It used to
+    /// look for a Trialing/Active row only, so an owner whose trial had ended who walked through
+    /// "create farm" again got a brand-new trial on the same farm. Otherwise the account's current
+    /// subscription is returned unchanged (Trialing/Active first, else the most recently updated),
+    /// so invariant I6 (at most one Trialing/Active row) still holds. The trial length is NOT changed
+    /// here (14 days; the 21-day trial comes with the full N-1 plan).
+    /// Public so a real-Postgres test runs exactly this code.
+    /// </summary>
+    public static async Task<Subscription> StartFirstTrialOrGetCurrentAsync(
+        AccountsDbContext accountsDb,
+        OwnerAccountId ownerAccountId,
+        DateTime nowUtc,
+        CancellationToken ct)
+    {
+        var current = await accountsDb.Subscriptions
+            .Where(s => s.OwnerAccountId == ownerAccountId)
+            .OrderBy(s => s.Status == SubscriptionStatus.Trialing || s.Status == SubscriptionStatus.Active ? 0 : 1)
+            .ThenByDescending(s => s.UpdatedAtUtc)
+            .FirstOrDefaultAsync(ct);
+        if (current is not null)
+        {
+            return current;
+        }
+
+        var trial = Subscription.StartTrial(
+            id: SubscriptionId.New(),
+            ownerAccountId: ownerAccountId,
+            planCode: PlanCode.ShramSafalPro,
+            trialStartUtc: nowUtc,
+            trialEndsAtUtc: nowUtc.AddDays(14));
+        accountsDb.Subscriptions.Add(trial);
+        return trial;
     }
 
     /// <summary>

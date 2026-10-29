@@ -264,6 +264,45 @@ export function isPlotDependencyRejection(input: RejectionInput): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// spec R-11 (c) — the FOURTH class: HELD. The farm's plan, not the row.
+// ---------------------------------------------------------------------------
+
+/**
+ * The server's `entitlement.<reason>` refusals that mean "this farm's trial / plan does not allow
+ * new paid writes right now" (`EntitlementGate.cs`: `entitlement.subscriptionexpired`, …). Lookup
+ * form, as `normalizeCode` produces it (tail after the last dot, upper-cased).
+ *
+ * NOT `entitlement.nomembership` — that is about the PERSON, not the farm's plan, and is not
+ * something waiting can fix.
+ *
+ * WHY THIS IS NOT RETRYABLE (founder N-1, 26 Oct: "Stop treating subscription refusal as a
+ * temporary network failure"). Before this, the refusal fell through to RETRYABLE: every attempt
+ * was CHARGED, five refusals parked the row as stuck, and an unlock later still needed a manual
+ * "Retry All". Nothing about the row was judged — the farm's plan was — so the row is HELD:
+ * kept on the phone, never charged, never a conflict for the farmer to resolve, re-asked on a slow
+ * timer, and sent by itself (same client ids, so never twice) once the server allows it again.
+ */
+const HELD_ENTITLEMENT_CODES = new Set([
+    'SUBSCRIPTIONEXPIRED',
+    'SUBSCRIPTIONMISSING',
+    'SUBSCRIPTIONPASTDUEFORWRITE',
+    'SUBSCRIPTIONCANCELED',
+    'SUBSCRIPTIONSUSPENDED',
+]);
+
+/**
+ * Did the server hold this row back because of the farm's trial / plan (spec R-11 c)?
+ * Code only, and only an `entitlement.*` code: a free-text message is never enough.
+ */
+export function isEntitlementHeldRejection(input: Pick<RejectionInput, 'errorCode'>): boolean {
+    const raw = input.errorCode?.trim() ?? '';
+    if (!raw.toLowerCase().startsWith('entitlement.')) {
+        return false;
+    }
+    return HELD_ENTITLEMENT_CODES.has(normalizeCode(raw));
+}
+
+// ---------------------------------------------------------------------------
 // Labour Phase 2 -> Phase 1 (honesty backstop), Task T3 / finding R1.
 // ---------------------------------------------------------------------------
 
@@ -313,7 +352,15 @@ export type MutationFailureKind =
      * Only produced when the parent is demonstrably still in progress. A parent
      * that will never move produces a durable rejection instead, not this.
      */
-    | 'DEPENDENCY';
+    | 'DEPENDENCY'
+    /**
+     * spec R-11 (c) — the row was refused because of the FARM'S trial / plan
+     * (`isEntitlementHeldRejection`), not anything about the row. Uncharged, never a
+     * conflict, re-asked on the slow `HELD_RECHECK_MS` timer so it goes by itself once
+     * the server allows the farm again. The server's code is kept on the row so the
+     * phone can say, in one plain line, why the work is still on it.
+     */
+    | 'HELD';
 
 /**
  * HTTP statuses that describe the SERVER's own availability rather than the

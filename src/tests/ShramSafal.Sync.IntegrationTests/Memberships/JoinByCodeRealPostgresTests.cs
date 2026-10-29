@@ -536,9 +536,10 @@ public sealed class JoinByCodeRealPostgresTests : IAsyncLifetime
 
     // -- SEC-1: per client network and across all callers -----------------------------------
     //
-    // POST /user/auth/register mints a password account for any phone with no OTP and login marks
-    // it verified (founder decision D-23, untouched), so a per-PERSON limit alone does not bound
-    // guessing. These facts prove the two limits that do, through the real forwarded-header rule
+    // A per-PERSON limit alone does not bound guessing: whoever can make several accounts spends
+    // the limit on each. Password self-registration is closed by default and a password login never
+    // marks a phone verified (spec I19, D-23), but a test stack with the switch on, or one person
+    // holding several numbers, can still do it. These facts prove the two limits that do, through the real forwarded-header rule
     // (RateLimitingConfig.CreateForwardedHeadersOptions, the one Program.cs uses).
 
     [Fact]

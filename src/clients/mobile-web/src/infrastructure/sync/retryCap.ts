@@ -34,6 +34,13 @@
  * because the tower dropped out has not been refused by anyone, and charging it
  * would let ~75 seconds of bad rural signal latch the chip red permanently.
  *
+ * NOR DO HELD ROWS (spec R-11 c): a row refused because the FARM'S trial / plan
+ * does not allow new work right now (`entitlement.subscriptionexpired`, …) was
+ * never judged on its own merits. Charging it burned the five retries in a
+ * minute and left a perfectly good record "stuck" after the farm was allowed
+ * again. Held rows wait uncharged and go by themselves (`MutationQueue`,
+ * `HELD_RECHECK_MS`).
+ *
  * A row past the cap is NOT abandoned. `retryAllFailedByUser()` and the per-row
  * retry both ignore it, because the cap exists to stop the WORKER asking
  * forever, not to refuse the farmer.

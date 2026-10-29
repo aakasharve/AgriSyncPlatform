@@ -451,6 +451,13 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // NULLABLE access columns it added to ssf.farm_memberships; no policy, no grant, no row.
         // Reverting it mid-proof loses nothing this fact asserts about.
         "20261026141837_AddMembershipAccessFields",
+        // spec R-11 (b) — an ACCOUNTS migration; it shows here only because this harness keeps every
+        // context's history in one table. The ShramSafal migrator never reverts it. Its Down() (read
+        // in full) drops accounts.access_extensions — no ssf policy, no ssf grant, no ssf row.
+        "20261027040015_AddAccessExtensions",
+        // spec R-11 (b) — Down() read in full: DROP VIEW IF EXISTS ssf.access_extension_projections.
+        // A read-only view with no farm column; no policy, no row. Re-Up recreates it and its grant.
+        "20261027040113_AddAccessExtensionProjection",
     ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —

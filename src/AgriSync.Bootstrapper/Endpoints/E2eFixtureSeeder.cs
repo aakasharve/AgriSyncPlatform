@@ -125,6 +125,13 @@ public sealed class E2eFixtureSeeder(
 
         if (existing is not null)
         {
+            // spec I19 — a fixture user seeded before the change relied on the (removed) login
+            // stamp; mark it verified (saved by the caller's userContext.SaveChangesAsync).
+            if (existing.PhoneVerifiedAtUtc is null)
+            {
+                existing.MarkPhoneVerified(nowUtc);
+            }
+
             return false; // already seeded
         }
 
@@ -134,6 +141,10 @@ public sealed class E2eFixtureSeeder(
             AdminDisplayName,
             passwordHasher.Hash(AdminPassword),
             nowUtc);
+
+        // spec I19 (pre-launch repair, D-23) — a password login no longer verifies a number, so
+        // the E2E fixture user is marked verified here, on purpose and in the open.
+        user.MarkPhoneVerified(nowUtc);
 
         user.AddMembership(
             Guid.Parse("00000000-0000-0000-0000-0000000000e1"),

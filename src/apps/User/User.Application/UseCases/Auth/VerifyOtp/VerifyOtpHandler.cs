@@ -92,6 +92,13 @@ public sealed class VerifyOtpHandler(
             user = existingUser;
             // Existing user just completed OTP — stamp the verification timestamp
             // so the semi-literate UI stops showing the "verify phone" banner.
+            //
+            // spec I19 (pre-launch repair, D-23): that is ALL an SMS sign-in does to an existing
+            // account. It never clears a password, never changes AuthMode and never revokes other
+            // sessions — real owners sign in with a password too (the admin console accepts only
+            // phone + password), and nothing in the data tells their password from a stranger's.
+            // The back door is closed elsewhere: password self-registration is off by default and
+            // a password login never marks a number verified.
             user.MarkPhoneVerified(utcNow);
             await userRepository.SaveChangesAsync(ct);
         }

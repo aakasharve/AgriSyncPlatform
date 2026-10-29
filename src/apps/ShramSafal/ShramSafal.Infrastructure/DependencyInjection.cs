@@ -424,6 +424,8 @@ public static class DependencyInjection
         // above. The interface lives in ShramSafal.Application.Ports so Api adapters
         // can inject it.
         services.AddScoped<ICallerFarmTenantScope, CallerFarmTenantScope>();
+        // spec R-11 (d) — the trial / plan gate for the skip-listed live-caption route.
+        services.AddScoped<IAiStreamEntitlementCheck, AiStreamEntitlementCheck>();
         services.AddScoped<IJoinClaimTenantScope, JoinClaimTenantScope>();
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — typed farm-code join.
         services.AddScoped<IJoinCodeTenantScope, JoinCodeTenantScope>();

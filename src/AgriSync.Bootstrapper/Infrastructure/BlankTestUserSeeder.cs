@@ -68,6 +68,10 @@ public sealed class BlankTestUserSeeder(
                 passwordHasher.Hash(Password),
                 nowUtc);
 
+            // spec I19 (pre-launch repair, D-23) — a password login no longer verifies a number,
+            // so this founder TEST user is marked verified here, on purpose and in the open.
+            user.MarkPhoneVerified(nowUtc);
+
             user.AddMembership(
                 Guid.Parse("00000000-0000-0000-0099-000000000001"),
                 AppId,
@@ -77,6 +81,13 @@ public sealed class BlankTestUserSeeder(
             userContext.Users.Add(user);
             await userContext.SaveChangesAsync(ct);
             return;
+        }
+
+        // spec I19 — a test user seeded before the change relied on the (removed) login stamp.
+        if (existing.PhoneVerifiedAtUtc is null)
+        {
+            existing.MarkPhoneVerified(nowUtc);
+            await userContext.SaveChangesAsync(ct);
         }
 
         var membership = existing.Memberships

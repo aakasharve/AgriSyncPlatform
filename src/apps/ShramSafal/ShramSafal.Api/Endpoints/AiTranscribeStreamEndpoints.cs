@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
@@ -48,6 +49,16 @@ namespace ShramSafal.Api.Endpoints;
 /// <c>TenantConnectionInterceptor</c> with "no tenant claim set". (The
 /// prior claim here that the middleware "binds the set_config call
 /// upstream" was FALSE for this route — no farm GUC is ever set.)
+/// </para>
+///
+/// <para>
+/// spec R-11 (d) (pre-launch repair, N-1) — the trial / plan gate. The form must carry
+/// <c>farm_id</c>; the caller must be an active member of that farm and the farm must be allowed
+/// <c>PaidFeature.AiParse</c> — the same check as <c>/ai/voice-parse</c>
+/// (<see cref="IAiStreamEntitlementCheck"/>, which opens its own short read-only transaction
+/// because this route has none). Refused before any audio is transcoded or any SSE byte is
+/// written. No installed app calls this route (<c>useStreamingParse</c> is false and guarded by a
+/// test), so requiring <c>farm_id</c> breaks no phone.
 /// </para>
 /// </summary>
 public static class AiTranscribeStreamEndpoints
@@ -94,7 +105,7 @@ public static class AiTranscribeStreamEndpoints
         CancellationToken ct)
     {
         var logger = loggerFactory.CreateLogger("AiTranscribeStream");
-        if (!EndpointActorContext.TryGetUserId(user, out _))
+        if (!EndpointActorContext.TryGetUserId(user, out var userId))
         {
             httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
@@ -110,6 +121,34 @@ public static class AiTranscribeStreamEndpoints
         }
 
         var form = await request.ReadFormAsync(ct);
+
+        // spec R-11 (d) — the trial / plan gate, before any audio work.
+        if (!Guid.TryParse(form["farm_id"].ToString(), out var farmId) || farmId == Guid.Empty)
+        {
+            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await httpContext.Response.WriteAsJsonAsync(
+                new { error = "ShramSafal.InvalidCommand", message = "farm_id is required." },
+                ct);
+            return;
+        }
+
+        var refusal = await httpContext.RequestServices
+            .GetRequiredService<IAiStreamEntitlementCheck>()
+            .CheckAsync(farmId, userId, ct);
+        if (refusal is not null)
+        {
+            httpContext.Response.StatusCode = refusal.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Validation => StatusCodes.Status400BadRequest,
+                AgriSync.BuildingBlocks.Results.ErrorKind.NotFound => StatusCodes.Status404NotFound,
+                _ => StatusCodes.Status403Forbidden,
+            };
+            await httpContext.Response.WriteAsJsonAsync(
+                new { error = refusal.Code, message = refusal.Description },
+                ct);
+            return;
+        }
+
         var audioFile = form.Files["audio"] ?? form.Files.FirstOrDefault();
         if (audioFile is null || audioFile.Length == 0)
         {

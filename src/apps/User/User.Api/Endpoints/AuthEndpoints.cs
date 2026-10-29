@@ -39,11 +39,12 @@ public static class AuthEndpoints
                 return Results.ValidationProblem(validationErrors);
             }
 
+            // spec I19 — AppId is ignored (no app membership is ever written at sign-up) and a
+            // Role is passed through only so the handler can refuse it.
             var command = new RegisterUserCommand(
                 request.Phone!,
                 request.Password!,
                 request.DisplayName!,
-                request.AppId,
                 request.Role,
                 BuildDeviceSession(context, request.RememberDevice, request.DeviceId, request.DeviceName, request.Platform));
 
@@ -59,7 +60,13 @@ public static class AuthEndpoints
 
             if (!result.IsSuccess)
             {
-                return Results.BadRequest(new { error = result.Error.Code, message = result.Error.Description });
+                // spec I19 — closed sign-up is a 403 with its typed code; every other refusal
+                // (role chosen, number taken) stays a 400 as before.
+                return Results.Json(
+                    new { error = result.Error.Code, message = result.Error.Description },
+                    statusCode: result.Error.Kind == ErrorKind.Forbidden
+                        ? StatusCodes.Status403Forbidden
+                        : StatusCodes.Status400BadRequest);
             }
 
             // TODO(security): consider X-CSRF-Token on state-changing auth routes — tracked follow-up
@@ -407,12 +414,16 @@ public static class AuthEndpoints
     }
 }
 
+/// <param name="AppId">spec I19 — accepted for wire compatibility and IGNORED: sign-up never writes an
+/// app membership.</param>
+/// <param name="Role">spec I19 — must be absent. Any value is refused
+/// (<c>auth.register_role_not_allowed</c>); the caller never chooses an account role.</param>
 public sealed record RegisterRequest(
     string? Phone,
     string? Password,
     string? DisplayName,
-    string? AppId = "shramsafal",
-    string? Role = "PrimaryOwner",
+    string? AppId = null,
+    string? Role = null,
     bool RememberDevice = false,
     string? DeviceId = null,
     string? DeviceName = null,

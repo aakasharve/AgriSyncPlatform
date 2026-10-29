@@ -1,15 +1,16 @@
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using ShramSafal.Application.Contracts.Dtos;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.UseCases;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -21,6 +22,13 @@ namespace ShramSafal.Api.Endpoints;
 // Flag-gating happens client-side (DEFAULT_VOICE_CONFIG.useStreamingParse) so
 // the endpoint is always reachable; if the client's flag is off it simply
 // keeps calling /ai/voice-parse instead.
+//
+// spec R-11 (d) (pre-launch repair, N-1) — the route now carries the SAME trial / plan
+// gate as /ai/voice-parse: farmId is required, and the caller's farm must be allowed
+// PaidFeature.AiParse (an expired trial without an access extension is refused with
+// entitlement.subscriptionexpired) BEFORE any SSE byte is written. No installed app calls
+// this route (useStreamingParse is false and guarded by a test), so requiring farmId
+// breaks no phone.
 public static class AiStreamingEndpoints
 {
     private static readonly JsonSerializerOptions SseSerializerOptions = new(JsonSerializerDefaults.Web)
@@ -83,10 +91,8 @@ public static class AiStreamingEndpoints
         //   • farmId present → EstablishForCallerAsync validates membership
         //     (the 403 isolation gate) and sets the single-farm GUCs so any
         //     farm-scoped read/write under this request is isolated.
-        //   • farmId absent (legacy client not yet sending it) → the stream
-        //     only reads the platform-global AiProviderConfig, so admin-elevate
-        //     to clear the interceptor's fail-closed guard. No farm GUC is set;
-        //     no farm-scoped data is reachable, so isolation is preserved.
+        //   • farmId absent → 400 since spec R-11 (d) (it used to admin-elevate
+        //     and stream with no farm, which skipped the trial gate entirely).
         //
         // This MUST run inside the per-request transaction that
         // TenantTransactionMiddleware opened (the GUCs are tx-local); the SSE
@@ -97,29 +103,44 @@ public static class AiStreamingEndpoints
         // runs. A bare in-memory harness that wires neither (no tenancy stack,
         // no relational DbContext, stubbed orchestrator) simply skips scoping —
         // there is no interceptor to fail-closed and no farm data to isolate.
-        var tenantContext = httpContext.RequestServices.GetService<TenantContext>();
-        if (request.FarmId is { } farmId && farmId != Guid.Empty)
+        // spec R-11 (d) — no farm, no gate to apply: refused (the farm-less, ungated path that
+        // let streaming voice bypass the trial is gone).
+        if (request.FarmId is not { } farmId || farmId == Guid.Empty)
         {
-            var tenantScope = httpContext.RequestServices.GetService<ICallerFarmTenantScope>();
-            if (tenantScope is not null)
+            httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await httpContext.Response.WriteAsJsonAsync(
+                new { error = "ShramSafal.InvalidCommand", message = "farmId is required." },
+                ct);
+            return;
+        }
+
+        var tenantScope = httpContext.RequestServices.GetService<ICallerFarmTenantScope>();
+        if (tenantScope is not null)
+        {
+            var scopeResult = await tenantScope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
             {
-                var scopeResult = await tenantScope.EstablishForCallerAsync(farmId, userId, ct);
-                if (!scopeResult.IsSuccess)
-                {
-                    httpContext.Response.StatusCode = MapErrorStatusCode(scopeResult.Error);
-                    await httpContext.Response.WriteAsJsonAsync(
-                        new { error = scopeResult.Error.Code, message = scopeResult.Error.Description },
-                        ct);
-                    return;
-                }
+                httpContext.Response.StatusCode = MapErrorStatusCode(scopeResult.Error);
+                await httpContext.Response.WriteAsJsonAsync(
+                    new { error = scopeResult.Error.Code, message = scopeResult.Error.Description },
+                    ct);
+                return;
             }
         }
-        else if (tenantContext is not null && !tenantContext.IsAdminCrossTenant)
+
+        // spec R-11 (d) — the same entitlement gate as /ai/voice-parse (ParseVoiceInputHandler),
+        // inside the farm scope just established. Fail-closed: the policy is always registered in
+        // production, and a host without one cannot stream.
+        var entitlementPolicy = httpContext.RequestServices.GetRequiredService<IEntitlementPolicy>();
+        var refusal = await EntitlementGate.CheckErrorAsync(
+            entitlementPolicy, new UserId(userId), new FarmId(farmId), PaidFeature.AiParse, ct);
+        if (refusal is not null)
         {
-            // Global-config-only path: elevate so the provider-config read does
-            // not fail-closed. ElevateToAdminCrossTenant is a no-op-safe entry
-            // when no single-tenant claim was set in this scope.
-            tenantContext.ElevateToAdminCrossTenant();
+            httpContext.Response.StatusCode = MapErrorStatusCode(refusal);
+            await httpContext.Response.WriteAsJsonAsync(
+                new { error = refusal.Code, message = refusal.Description },
+                ct);
+            return;
         }
 
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 founder fix — thread
@@ -192,11 +213,9 @@ public sealed record ParseVoiceStreamRequest(
     // rather than the server's request-receipt time.
     DateTime? RecordedAt = null,
     // spec: voice-stream-tenant-and-lenient-metadata-2026-06-10 — the
-    // caller's farm. OPTIONAL-tolerant: present → the handler establishes
-    // the membership-validated single-farm tenant scope (matches the batch
-    // /ai/voice-parse contract) so any farm-scoped read/write is isolated and
-    // a forged farmId is rejected with 403; absent (legacy client not yet
-    // sending it) → the handler admin-elevates for the global-config-only
-    // read. Once the streaming client is updated to send farmId this becomes
-    // the authorization gate for the streaming path too.
+    // caller's farm: the handler establishes the membership-validated
+    // single-farm tenant scope (matches the batch /ai/voice-parse contract)
+    // so any farm-scoped read/write is isolated and a forged farmId is
+    // rejected with 403. spec R-11 (d): REQUIRED now (absent → 400) because
+    // it is also what the trial / plan gate is evaluated on.
     Guid? FarmId = null);

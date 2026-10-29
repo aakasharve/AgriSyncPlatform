@@ -274,6 +274,49 @@ namespace Accounts.Infrastructure.Persistence.Migrations
                     b.ToTable("owner_account_memberships", "accounts");
                 });
 
+            modelBuilder.Entity("Accounts.Domain.Subscriptions.AccessExtension", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("access_extension_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime>("EndsAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("ends_at_utc");
+
+                    b.Property<Guid>("GrantedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("granted_by_user_id");
+
+                    b.Property<Guid>("OwnerAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_account_id");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTime>("StartsAtUtc")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("starts_at_utc");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerAccountId")
+                        .HasDatabaseName("ix_access_extensions_owner_account_id");
+
+                    b.ToTable("access_extensions", "accounts", t =>
+                        {
+                            t.HasCheckConstraint("ck_access_extensions_ends_after_starts", "ends_at_utc > starts_at_utc");
+                        });
+                });
+
             modelBuilder.Entity("Accounts.Domain.Subscriptions.Subscription", b =>
                 {
                     b.Property<Guid>("Id")

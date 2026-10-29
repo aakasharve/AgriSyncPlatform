@@ -17,7 +17,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using ShramSafal.Api.Endpoints;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Domain.AI;
 using Xunit;
@@ -32,6 +34,7 @@ namespace ShramSafal.Sync.IntegrationTests.Scenarios;
 public sealed class AiStreamingEndpointTests
 {
     private static readonly Guid TestUserId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+    private static readonly Guid TestFarmId = Guid.Parse("00000000-0000-0000-0000-0000000000f1");
 
     [Fact]
     public async Task ParseVoiceStream_StreamsExpectedSseEvents()
@@ -47,7 +50,7 @@ public sealed class AiStreamingEndpointTests
 
         using var resp = await harness.Client.PostAsJsonAsync(
             "/shramsafal/ai/parse-voice-stream",
-            new { transcript = "आज पाणी दिलं.", scenarioId = "test-1" });
+            new { transcript = "आज पाणी दिलं.", scenarioId = "test-1", farmId = TestFarmId });
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
         Assert.Equal("text/event-stream", resp.Content.Headers.ContentType?.MediaType);
@@ -79,6 +82,45 @@ public sealed class AiStreamingEndpointTests
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
 
+    /// <summary>spec R-11 (d) — no farm, no gate to apply: refused, nothing streamed.</summary>
+    [Fact]
+    public async Task ParseVoiceStream_ReturnsBadRequest_WhenFarmIdMissing()
+    {
+        var orchestrator = new ScriptedOrchestrator(new[] { new ParseStreamEvent(Type: "complete", Payload: null) });
+        await using var harness = await CreateHarnessAsync(orchestrator);
+
+        using var resp = await harness.Client.PostAsJsonAsync(
+            "/shramsafal/ai/parse-voice-stream",
+            new { transcript = "आज पाणी दिलं." });
+
+        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        Assert.Contains("farmId is required", await resp.Content.ReadAsStringAsync());
+        Assert.Equal(0, orchestrator.Calls);
+    }
+
+    /// <summary>spec R-11 (d) — an expired farm (no access extension) is refused BEFORE any SSE
+    /// byte, with the same code /ai/voice-parse sends; the orchestrator (the AI cost) never runs.</summary>
+    [Theory]
+    [InlineData(EntitlementReason.SubscriptionExpired, "entitlement.subscriptionexpired")]
+    [InlineData(EntitlementReason.SubscriptionMissing, "entitlement.subscriptionmissing")]
+    public async Task ParseVoiceStream_RefusesAFarmWhosePlanDoesNotAllowAi(EntitlementReason reason, string expectedCode)
+    {
+        var orchestrator = new ScriptedOrchestrator(new[] { new ParseStreamEvent(Type: "complete", Payload: null) });
+        var policy = new FixedPolicy(new EntitlementDecision(false, reason, 4));
+        await using var harness = await CreateHarnessAsync(orchestrator, policy: policy);
+
+        using var resp = await harness.Client.PostAsJsonAsync(
+            "/shramsafal/ai/parse-voice-stream",
+            new { transcript = "आज पाणी दिलं.", farmId = TestFarmId });
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.NotEqual("text/event-stream", resp.Content.Headers.ContentType?.MediaType);
+        Assert.Contains(expectedCode, await resp.Content.ReadAsStringAsync());
+        Assert.Equal(0, orchestrator.Calls);
+        Assert.Equal(PaidFeature.AiParse, policy.LastFeature);
+        Assert.Equal(new FarmId(TestFarmId), policy.LastFarmId);
+    }
+
     [Fact]
     public async Task ParseVoiceStream_ReturnsUnauthorized_WhenNoAuth()
     {
@@ -95,7 +137,8 @@ public sealed class AiStreamingEndpointTests
 
     private static async Task<TestHarness> CreateHarnessAsync(
         IAiOrchestrator orchestrator,
-        bool authenticated = true)
+        bool authenticated = true,
+        IEntitlementPolicy? policy = null)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
         {
@@ -115,6 +158,8 @@ public sealed class AiStreamingEndpointTests
         builder.Services.AddAuthorization();
         builder.Services.AddSingleton(orchestrator);
         builder.Services.AddSingleton<TestAuthOptions>(new TestAuthOptions(authenticated));
+        // spec R-11 (d) — the route asks the entitlement policy (allow unless a test says otherwise).
+        builder.Services.AddSingleton<IEntitlementPolicy>(policy ?? new FixedPolicy(new EntitlementDecision(true, EntitlementReason.Allowed, 1)));
 
         var app = builder.Build();
         app.UseAuthentication();
@@ -151,8 +196,23 @@ public sealed class AiStreamingEndpointTests
         }
     }
 
+    private sealed class FixedPolicy(EntitlementDecision decision) : IEntitlementPolicy
+    {
+        public PaidFeature? LastFeature { get; private set; }
+        public FarmId? LastFarmId { get; private set; }
+
+        public Task<EntitlementDecision> EvaluateAsync(UserId userId, FarmId farmId, PaidFeature feature, CancellationToken ct = default)
+        {
+            LastFeature = feature;
+            LastFarmId = farmId;
+            return Task.FromResult(decision);
+        }
+    }
+
     private sealed class ScriptedOrchestrator(IReadOnlyList<ParseStreamEvent> events) : IAiOrchestrator
     {
+        public int Calls { get; private set; }
+
         public Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)>
             ParseVoiceWithFallbackAsync(
                 Guid userId,
@@ -229,6 +289,7 @@ public sealed class AiStreamingEndpointTests
             string? scenarioId,
             [EnumeratorCancellation] CancellationToken ct = default)
         {
+            Calls++;
             foreach (var evt in events)
             {
                 ct.ThrowIfCancellationRequested();

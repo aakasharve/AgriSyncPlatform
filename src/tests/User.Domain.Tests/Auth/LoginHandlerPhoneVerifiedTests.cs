@@ -12,11 +12,10 @@ using DomainRefreshToken = global::User.Domain.Security.RefreshToken;
 namespace UserAuthLoginTests;
 
 /// <summary>
-/// Covers the fix for spec bootstrap-phone-verified-password-login-2026-06-04:
-/// the password sign-in path (internal test user only) must issue a token that
-/// carries phone_verified=true, so /bootstrap/first-farm stops 403-ing with
-/// "Verify your phone first." The seeded password user starts with a null
-/// PhoneVerifiedAtUtc, so LoginHandler stamps it on a successful login.
+/// spec I19 (pre-launch repair, D-23) — supersedes bootstrap-phone-verified-password-login-2026-06-04.
+/// A password login NEVER marks a number verified: only a correct SMS code does. The founder's test
+/// users stay verified because their seeders mark them verified on purpose (covered for the real
+/// seeders by the real-Postgres SeededDemoLoginRealPostgresTests).
 /// </summary>
 public class LoginHandlerPhoneVerifiedTests
 {
@@ -24,30 +23,30 @@ public class LoginHandlerPhoneVerifiedTests
         new("test-device", RememberDevice: false, DeviceName: null, Platform: "unknown");
 
     [Fact]
-    public async Task Password_login_of_unverified_user_stamps_verified_and_token_carries_phone_verified()
+    public async Task Password_login_never_marks_the_number_verified()
     {
         var now = DateTime.UtcNow;
-        var user = DomainUser.Register(new UserId(Guid.NewGuid()), DomainPhone.Create("8888888888"), "Test User", "stored-hash", now);
-        user.PhoneVerifiedAtUtc.Should().BeNull("a password-seeded user starts unverified — this is the bug condition");
+        var user = DomainUser.Register(new UserId(Guid.NewGuid()), DomainPhone.Create("9876543210"), "Stranger", "stored-hash", now);
+        user.PhoneVerifiedAtUtc.Should().BeNull("a password-registered number starts unverified");
 
         var jwt = new CapturingJwtTokenService();
         var userRepo = new SingleUserRepository(user);
         var handler = new LoginHandler(userRepo, new NoopRefreshTokenRepository(), new AlwaysTrueHasher(), jwt, new GuidIdGenerator(), new FakeClock(now));
 
-        var result = await handler.HandleAsync(new LoginCommand("8888888888", "Testuser@123", DefaultSession));
+        var result = await handler.HandleAsync(new LoginCommand("9876543210", "any-password", DefaultSession));
 
-        result.IsSuccess.Should().BeTrue();
-        user.PhoneVerifiedAtUtc.Should().NotBeNull("a successful password login stamps the internal test user phone-verified");
-        userRepo.SaveChangesCalls.Should().BeGreaterThan(0, "the stamp must be persisted");
-        jwt.LastPhoneVerified.Should().BeTrue("the password token must carry phone_verified=true so /bootstrap/first-farm passes");
+        result.IsSuccess.Should().BeTrue("the password still opens the account it belongs to");
+        user.PhoneVerifiedAtUtc.Should().BeNull("a password proves nothing about who holds the phone");
+        userRepo.SaveChangesCalls.Should().Be(0, "nothing about the user is written by a password login");
+        jwt.LastPhoneVerified.Should().BeFalse("the token must not claim phone_verified=true");
     }
 
     [Fact]
-    public async Task Already_verified_user_is_not_restamped_and_token_stays_verified()
+    public async Task A_number_verified_on_purpose_stays_verified_after_a_password_login()
     {
         var now = DateTime.UtcNow;
         var user = DomainUser.Register(new UserId(Guid.NewGuid()), DomainPhone.Create("8888888888"), "Test User", "stored-hash", now);
-        user.MarkPhoneVerified(now.AddDays(-1));
+        user.MarkPhoneVerified(now.AddDays(-1)); // what the demo seeders now do
         var stampedAt = user.PhoneVerifiedAtUtc;
 
         var jwt = new CapturingJwtTokenService();
@@ -56,8 +55,8 @@ public class LoginHandlerPhoneVerifiedTests
         var result = await handler.HandleAsync(new LoginCommand("8888888888", "Testuser@123", DefaultSession));
 
         result.IsSuccess.Should().BeTrue();
-        user.PhoneVerifiedAtUtc.Should().Be(stampedAt, "an already-verified user must not be re-stamped");
-        jwt.LastPhoneVerified.Should().BeTrue();
+        user.PhoneVerifiedAtUtc.Should().Be(stampedAt, "a login does not re-stamp");
+        jwt.LastPhoneVerified.Should().BeTrue("the seeded demo user keeps working on the PC test stack");
     }
 
     // ---- hand-rolled fakes (this project has no mocking library) ----

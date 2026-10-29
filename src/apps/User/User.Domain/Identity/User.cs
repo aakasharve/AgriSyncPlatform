@@ -112,9 +112,14 @@ public sealed class User : Entity<UserId>
     }
 
     /// <summary>
-    /// Marks the phone as OTP-verified. Idempotent — repeated calls update
-    /// the timestamp but never clear it. Called by <c>VerifyOtpHandler</c>
-    /// when an existing user completes an OTP login.
+    /// Marks the phone as verified. Idempotent — repeated calls update the timestamp but never
+    /// clear it.
+    ///
+    /// <para>spec I19 (pre-launch repair, D-23): only two callers may vouch for a number. An SMS
+    /// code proven by its holder (<c>VerifyOtpHandler</c> — which does nothing else to an existing
+    /// account: it never clears a password, changes <see cref="AuthMode"/> or ends other sessions)
+    /// and the seeders that create the founder's own TEST users on purpose (PurveshDemoSeeder,
+    /// BlankTestUserSeeder, E2eFixtureSeeder). A password login never calls this any more.</para>
     /// </summary>
     public void MarkPhoneVerified(DateTime utcNow)
     {

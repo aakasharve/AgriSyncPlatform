@@ -12,6 +12,7 @@ import BottomNavigation from './features/context/components/BottomNavigation';
 import AppHeader from './features/context/components/AppHeader';
 import MeAlertRail from './features/context/components/MeAlertRail';
 import AccessStatusNotice from './features/context/components/AccessStatusNotice';
+import HeldWorkNotice from './features/context/components/HeldWorkNotice';
 import AppRouter from './core/navigation/AppRouter';
 import ActionToast from './shared/components/ui/ActionToast';
 import WeatherReactionPrompt from './features/weather/components/WeatherReactionPrompt';
@@ -247,6 +248,8 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             <MeAlertRail />
             {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — a waiting request / a paused seat, said plainly. */}
             <AccessStatusNotice />
+            {/* spec R-11 (c) — work held back by the farm's trial / plan, said plainly to owner and worker. */}
+            <HeldWorkNotice farm={openFarm} />
 
             <main
                 ref={pageScrollRef}

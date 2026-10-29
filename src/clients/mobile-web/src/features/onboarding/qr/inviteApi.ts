@@ -70,7 +70,10 @@ export interface SubscriptionSnapshotDto {
     status: string;
     planCode: string;
     validUntilUtc: string;
+    /** What the server will do for new work — also true while a server-managed access extension is active (spec R-11 b). */
     allowsOwnerWrites: boolean;
+    /** spec R-11 (b) — ADDITIVE (absent from older servers): end of the active access extension, if any. */
+    accessExtendedUntilUtc?: string | null;
 }
 
 export interface MyFarmDto {

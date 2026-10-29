@@ -17,4 +17,14 @@ public interface ISubscriptionReader
     Task<SubscriptionProjection?> GetByOwnerAccountAsync(
         OwnerAccountId ownerAccountId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// spec R-11 (b) — the owner account's server-managed pilot access extension that is active
+    /// at <paramref name="asOfUtc"/> (the one ending last when several overlap), or null. Read
+    /// through the <c>ssf.access_extension_projections</c> view; Accounts owns the rows.
+    /// </summary>
+    Task<AccessExtensionProjection?> GetActiveAccessExtensionAsync(
+        OwnerAccountId ownerAccountId,
+        DateTime asOfUtc,
+        CancellationToken ct = default);
 }

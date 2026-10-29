@@ -1248,6 +1248,15 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    access_changed_at_utc) with no default, no backfill, no index, no policy and no
         //    grant; Down() drops exactly those five. Never touches ssf.audit_events. Safe mid-proof.
         "20261026141837_AddMembershipAccessFields",
+
+        // ── Reviewed 2026-10-27 (spec: pre-launch repair R-11 b); Down()s read in full.
+        //    AddAccessExtensions is an ACCOUNTS migration (listed only because this harness keeps
+        //    every context's history in one table; the ssf migrator never reverts it): its Down()
+        //    drops accounts.access_extensions. AddAccessExtensionProjection's Down() drops the
+        //    read-only view ssf.access_extension_projections. Neither touches ssf.audit_events,
+        //    a policy or a ledger grant. Safe mid-proof.
+        "20261027040015_AddAccessExtensions",
+        "20261027040113_AddAccessExtensionProjection",
     ];
 
     /// <summary>

@@ -23,7 +23,7 @@ namespace AgriSync.Bootstrapper.Migrations;
 ///
 /// Plan reference: §7.2 Step B and Task 2.3.2.
 /// </summary>
-internal sealed class BackfillFarmOwnerAccounts : IHostedService
+public sealed class BackfillFarmOwnerAccounts : IHostedService
 {
     private readonly IServiceProvider _services;
     private readonly ILogger<BackfillFarmOwnerAccounts> _logger;
@@ -74,10 +74,10 @@ internal sealed class BackfillFarmOwnerAccounts : IHostedService
             if (farmsWithoutAccount.Count == 0)
             {
                 _logger.LogInformation("Farm→OwnerAccount backfill: no work to do.");
-                // Still run trial bootstrap — existing OwnerAccounts may
-                // have been created pre-Phase-5 and need a subscription.
+                // Still run trial bootstrap — an OwnerAccount created pre-Phase-5 that has
+                // NEVER had a subscription gets its first trial (and nothing else does).
                 var nowUtc2 = DateTime.UtcNow;
-                await StartTrialsForNewOwnerAccountsAsync(accountsDb, nowUtc2, cancellationToken);
+                await StartTrialsForNewOwnerAccountsAsync(accountsDb, nowUtc2, _logger, cancellationToken);
                 return;
             }
 
@@ -133,11 +133,9 @@ internal sealed class BackfillFarmOwnerAccounts : IHostedService
                 created,
                 attached);
 
-            // Phase 5: auto-start a 14-day trial subscription for any
-            // OwnerAccount that does not yet have one. Idempotent via
-            // the partial unique index `ux_subscriptions_owner_account_active`
-            // (plan invariant I6).
-            await StartTrialsForNewOwnerAccountsAsync(accountsDb, nowUtc, cancellationToken);
+            // Phase 5: auto-start a 14-day trial subscription for any OwnerAccount that has
+            // NEVER had a subscription (spec R-11 a — see the method).
+            await StartTrialsForNewOwnerAccountsAsync(accountsDb, nowUtc, _logger, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -145,22 +143,28 @@ internal sealed class BackfillFarmOwnerAccounts : IHostedService
         }
     }
 
-    private async Task StartTrialsForNewOwnerAccountsAsync(
+    /// <summary>
+    /// spec R-11 (a) (pre-launch repair, founder N-1: "Remove both accidental trial resets") —
+    /// a trial is started ONLY for an owner account that has never had a subscription row of any
+    /// status. The anti-join used to match "no Trialing/Active row", so an Expired, Canceled,
+    /// Suspended or PastDue account got a brand-new 14-day trial on EVERY server start — a farm
+    /// locked on day 15 silently unlocked at the next release. An account whose trial ended now
+    /// stays as it is; keeping a pilot farm working is the explicit, recorded access extension
+    /// (accounts.access_extensions), never a restart.
+    /// </summary>
+    public static async Task StartTrialsForNewOwnerAccountsAsync(
         AccountsDbContext accountsDb,
         DateTime nowUtc,
+        ILogger logger,
         CancellationToken cancellationToken)
     {
-        // Every OwnerAccount, every active/trialing subscription. Anti-join
-        // gives us accounts that need a trial started.
         var accountsNeedingTrial = await accountsDb.OwnerAccounts
-            .Where(a => !accountsDb.Subscriptions.Any(s =>
-                s.OwnerAccountId == a.Id
-                && (s.Status == SubscriptionStatus.Trialing || s.Status == SubscriptionStatus.Active)))
+            .Where(a => !accountsDb.Subscriptions.Any(s => s.OwnerAccountId == a.Id))
             .ToListAsync(cancellationToken);
 
         if (accountsNeedingTrial.Count == 0)
         {
-            _logger.LogInformation("Trial bootstrap: no OwnerAccounts need a trial.");
+            logger.LogInformation("Trial bootstrap: no OwnerAccount is without a subscription.");
             return;
         }
 
@@ -182,8 +186,8 @@ internal sealed class BackfillFarmOwnerAccounts : IHostedService
 
         await accountsDb.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation(
-            "Trial bootstrap: started {Count} 14-day trial(s).",
+        logger.LogInformation(
+            "Trial bootstrap: started {Count} first 14-day trial(s).",
             trialsCreated);
     }
 

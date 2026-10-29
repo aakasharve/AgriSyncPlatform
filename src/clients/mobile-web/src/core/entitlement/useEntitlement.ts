@@ -10,6 +10,12 @@
  * Usage:
  *   const { allowed, reason } = useEntitlement(currentFarm, 'write');
  *   if (!allowed) return <EntitlementBanner ... />;
+ *
+ * spec R-11 (c) — wired (it had no caller): `HeldWorkNotice` asks `evaluateEntitlement` whether the
+ * open farm's plan allows new work, for the owner AND every member. Its old claim that "workers
+ * have no write features gated by subscription" was false — the server's entitlement gate refuses
+ * a worker's log on an expired farm exactly like the owner's — so the role no longer exempts
+ * anyone. `allowsOwnerWrites` already folds in a server-managed access extension (R-11 b).
  */
 
 import type { SubscriptionSnapshotDto } from '../../features/onboarding/qr/inviteApi';
@@ -39,15 +45,10 @@ const ALLOWED: EntitlementDecision = { allowed: true, reason: 'allowed' };
  */
 export function evaluateEntitlement(
     subscription: SubscriptionSnapshotDto | null | undefined,
-    role: string,
+    // Kept for callers' sake; the server gates EVERY member of the farm the same way (spec R-11 c).
+    _role: string,
     feature: EntitlementFeature,
 ): EntitlementDecision {
-    // Workers have no write features gated by subscription — they
-    // contribute logs; the owner's account pays for the platform.
-    if (role !== 'PrimaryOwner' && role !== 'SecondaryOwner') {
-        return ALLOWED;
-    }
-
     // Read is always allowed regardless of subscription state.
     if (feature === 'read') return ALLOWED;
 

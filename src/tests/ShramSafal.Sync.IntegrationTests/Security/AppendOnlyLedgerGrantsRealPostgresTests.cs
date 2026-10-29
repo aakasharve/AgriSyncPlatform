@@ -108,6 +108,14 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    full. Five NULLABLE columns on ssf.farm_memberships (Down() drops exactly those). No
         //    privilege change, no ledger table. Safe mid-proof.
         "20261026141837_AddMembershipAccessFields",
+
+        // ── Reviewed 2026-10-27 (spec: pre-launch repair R-11 b); Down()s read in full.
+        //    AddAccessExtensions (an ACCOUNTS migration, listed because this harness shares one
+        //    history table; the ssf migrator never reverts it) drops accounts.access_extensions;
+        //    AddAccessExtensionProjection drops the read-only view ssf.access_extension_projections
+        //    (its only grant is SELECT on that view). No ssf ledger table, no ledger grant. Safe mid-proof.
+        "20261027040015_AddAccessExtensions",
+        "20261027040113_AddAccessExtensionProjection",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

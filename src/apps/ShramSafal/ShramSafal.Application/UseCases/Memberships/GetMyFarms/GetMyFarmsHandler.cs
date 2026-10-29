@@ -16,12 +16,19 @@ namespace ShramSafal.Application.UseCases.Memberships.GetMyFarms;
 /// show as an ordinary farm it cannot open.</param>
 public sealed record GetMyFarmsCommand(UserId CallerUserId, bool IncludePending = false);
 
+/// <param name="AllowsOwnerWrites">What the server's entitlement gate will do for paid writes: true
+/// for a Trialing/Active subscription, and (spec R-11 b) also true while the account has an active
+/// server-managed access extension.</param>
+/// <param name="AccessExtendedUntilUtc">spec R-11 (b) — ADDITIVE, last (older apps ignore it): the end
+/// of the active access extension, or null when none is active. Lets a screen say the truth — the
+/// subscription's own status is unchanged, access continues because of the extension.</param>
 public sealed record SubscriptionSnapshot(
     int StatusCode,
     string Status,
     string PlanCode,
     DateTime ValidUntilUtc,
-    bool AllowsOwnerWrites);
+    bool AllowsOwnerWrites,
+    DateTime? AccessExtendedUntilUtc = null);
 
 /// <param name="Status">spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — ADDITIVE, last: the
 /// caller's seat status on this farm (<c>"Active"</c>, <c>"PendingApproval"</c>,
@@ -55,7 +62,8 @@ public sealed record MyFarmsResult(IReadOnlyList<MyFarmDto> Farms);
 /// </summary>
 public sealed class GetMyFarmsHandler(
     IShramSafalRepository repository,
-    ISubscriptionReader subscriptionReader)
+    ISubscriptionReader subscriptionReader,
+    IClock clock)
 {
     public async Task<Result<MyFarmsResult>> HandleAsync(GetMyFarmsCommand command, CancellationToken ct = default)
     {
@@ -97,15 +105,23 @@ public sealed class GetMyFarmsHandler(
             SubscriptionSnapshot? snapshot = null;
             if (row.OwnerAccountId != Guid.Empty)
             {
-                var sub = await subscriptionReader.GetByOwnerAccountAsync(new OwnerAccountId(row.OwnerAccountId), ct);
+                var ownerAccountId = new OwnerAccountId(row.OwnerAccountId);
+                var sub = await subscriptionReader.GetByOwnerAccountAsync(ownerAccountId, ct);
                 if (sub is not null)
                 {
+                    // spec R-11 (b) — same rule as DefaultEntitlementPolicy: an active extension keeps
+                    // paid writes allowed, so the phone does not tell the owner "expired" while the
+                    // server is accepting his work.
+                    var extension = sub.AllowsOwnerWrites
+                        ? null
+                        : await subscriptionReader.GetActiveAccessExtensionAsync(ownerAccountId, clock.UtcNow, ct);
                     snapshot = new SubscriptionSnapshot(
                         StatusCode: sub.Status,
                         Status: MapStatus(sub.Status),
                         PlanCode: sub.PlanCode,
                         ValidUntilUtc: sub.ValidUntilUtc,
-                        AllowsOwnerWrites: sub.AllowsOwnerWrites);
+                        AllowsOwnerWrites: sub.AllowsOwnerWrites || extension is not null,
+                        AccessExtendedUntilUtc: extension?.EndsAtUtc);
                 }
             }
 

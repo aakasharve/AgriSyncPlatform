@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
@@ -26,10 +27,17 @@ namespace ShramSafal.Infrastructure.Auth;
 ///      are denied with reason SubscriptionPastDueForWrite so the owner
 ///      sees a consistent "billing needs attention" banner.
 ///   6. Else → Deny with status-specific reason.
+///
+/// spec R-11 (b) (pre-launch repair, founder N-1) — between 4 and 6: an owner account with an
+/// ACTIVE server-managed access extension (<c>accounts.access_extensions</c>: reason, start, end,
+/// granted by) is allowed whatever its subscription status says, including no subscription row.
+/// The decision reports <see cref="EntitlementReason.Allowed"/> with the subscription's real status,
+/// so nothing pretends the subscription itself is current.
 /// </summary>
 internal sealed class DefaultEntitlementPolicy(
     IShramSafalRepository farmRepository,
-    ISubscriptionReader subscriptionReader) : IEntitlementPolicy
+    ISubscriptionReader subscriptionReader,
+    IClock clock) : IEntitlementPolicy
 {
     public async Task<EntitlementDecision> EvaluateAsync(
         UserId userId,
@@ -69,14 +77,21 @@ internal sealed class DefaultEntitlementPolicy(
         }
 
         var subscription = await subscriptionReader.GetByOwnerAccountAsync(farm.OwnerAccountId, ct);
+        if (subscription is not null && subscription.AllowsOwnerWrites)
+        {
+            return new EntitlementDecision(true, EntitlementReason.Allowed, subscription.Status);
+        }
+
+        // spec R-11 (b) — the explicit, recorded pilot extension keeps the farm working.
+        var extension = await subscriptionReader.GetActiveAccessExtensionAsync(farm.OwnerAccountId, clock.UtcNow, ct);
+        if (extension is not null)
+        {
+            return new EntitlementDecision(true, EntitlementReason.Allowed, subscription?.Status);
+        }
+
         if (subscription is null)
         {
             return new EntitlementDecision(false, EntitlementReason.SubscriptionMissing, null);
-        }
-
-        if (subscription.AllowsOwnerWrites)
-        {
-            return new EntitlementDecision(true, EntitlementReason.Allowed, subscription.Status);
         }
 
         var reason = subscription.Status switch

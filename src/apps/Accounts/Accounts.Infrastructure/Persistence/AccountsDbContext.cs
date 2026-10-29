@@ -14,6 +14,9 @@ public sealed class AccountsDbContext(DbContextOptions<AccountsDbContext> option
     public DbSet<OwnerAccountMembership> OwnerAccountMemberships => Set<OwnerAccountMembership>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<SubscriptionWebhookEvent> SubscriptionWebhookEvents => Set<SubscriptionWebhookEvent>();
+
+    /// <summary>spec R-11 (b) — server-managed pilot access extensions (append-only).</summary>
+    public DbSet<AccessExtension> AccessExtensions => Set<AccessExtension>();
     public DbSet<ReferralCode> ReferralCodes => Set<ReferralCode>();
     public DbSet<ReferralRelationship> ReferralRelationships => Set<ReferralRelationship>();
     public DbSet<GrowthEvent> GrowthEvents => Set<GrowthEvent>();

@@ -1372,6 +1372,10 @@ public sealed partial class PurveshDemoSeeder
                 _passwordHasher.Hash(seed.Password),
                 nowUtc);
 
+            // spec I19 (pre-launch repair, D-23) — a password login no longer verifies a number,
+            // so the founder's demo users are marked verified here, on purpose and in the open.
+            user.MarkPhoneVerified(nowUtc);
+
             user.AddMembership(
                 CreateDeterministicGuid($"{SeedVersion}:membership:{seed.Key}"),
                 AppId,
@@ -1381,6 +1385,13 @@ public sealed partial class PurveshDemoSeeder
             _userContext.Users.Add(user);
             await _userContext.SaveChangesAsync(cancellationToken);
             return user;
+        }
+
+        // spec I19 — a demo user seeded before the change relied on the (removed) login stamp.
+        if (existing.PhoneVerifiedAtUtc is null)
+        {
+            existing.MarkPhoneVerified(nowUtc);
+            await _userContext.SaveChangesAsync(cancellationToken);
         }
 
         var membership = existing.Memberships

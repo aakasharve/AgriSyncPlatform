@@ -26,6 +26,10 @@ public static class DependencyInjection
         // Phase 3 OTP policy (plan §5.2) — Application-layer, provider-agnostic.
         services.Configure<OtpPolicyOptions>(configuration.GetSection(OtpPolicyOptions.SectionName));
 
+        // spec I19 (pre-launch repair, D-23) — password self-registration is closed unless
+        // Auth:AllowPasswordRegistration is explicitly true (test stacks only; default false).
+        services.Configure<PasswordRegistrationOptions>(configuration.GetSection(PasswordRegistrationOptions.SectionName));
+
         // Use-case handlers
         services.AddScoped<RegisterUserHandler>();
         services.AddScoped<LoginHandler>();

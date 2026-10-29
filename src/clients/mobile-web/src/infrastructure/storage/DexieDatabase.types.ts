@@ -132,6 +132,16 @@ export interface MutationQueueItem {
      * need it most.
      */
     attemptCount?: number;
+    /**
+     * spec R-11 (c) — the farm this record was made on, stamped by `MutationQueue.enqueue`
+     * (the payload's own `farmId`, else the farm open at the time). Lets the phone say "held for
+     * the farm's trial / plan" on THAT farm only, not on every farm the person works on.
+     * Absent on rows queued by an older app (`queuedRowFarmId` falls back to the payload).
+     *
+     * NOT INDEXED, deliberately — same rule as `errorCode` / `nextRetryAfterMs`: no Dexie
+     * version bump.
+     */
+    farmId?: string;
 }
 
 // =============================================================================

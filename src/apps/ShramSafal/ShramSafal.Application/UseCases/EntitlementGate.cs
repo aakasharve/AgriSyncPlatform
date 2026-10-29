@@ -11,10 +11,25 @@ namespace ShramSafal.Application.UseCases;
 /// error shape, code naming, and user-facing messages stay identical
 /// across handlers — and new handlers can't accidentally skip the gate
 /// (architecture test in Phase 8.5 will enforce).
+///
+/// <para>spec R-11 (d) — public, so the two streaming AI routes (which are endpoints, not
+/// handlers) refuse with exactly the same code and message as the non-streaming ones.</para>
 /// </summary>
-internal static class EntitlementGate
+public static class EntitlementGate
 {
     public static async Task<Result<T>?> CheckAsync<T>(
+        IEntitlementPolicy policy,
+        UserId callerUserId,
+        FarmId farmId,
+        PaidFeature feature,
+        CancellationToken ct)
+    {
+        var error = await CheckErrorAsync(policy, callerUserId, farmId, feature, ct);
+        return error is null ? null : Result.Failure<T>(error);
+    }
+
+    /// <summary>The refusal as a bare <see cref="Error"/> (<c>entitlement.&lt;reason&gt;</c>, Forbidden), or null when allowed.</summary>
+    public static async Task<Error?> CheckErrorAsync(
         IEntitlementPolicy policy,
         UserId callerUserId,
         FarmId farmId,
@@ -27,9 +42,9 @@ internal static class EntitlementGate
             return null;
         }
 
-        return Result.Failure<T>(Error.Forbidden(
+        return Error.Forbidden(
             $"entitlement.{decision.Reason.ToString().ToLowerInvariant()}",
-            BuildMessage(decision.Reason)));
+            BuildMessage(decision.Reason));
     }
 
     private static string BuildMessage(EntitlementReason reason) => reason switch

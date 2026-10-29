@@ -721,6 +721,8 @@ try
     app.MapShramSafalApi();
     app.MapAccountsModuleEndpoints();
     app.MapFirstFarmBootstrapEndpoints();
+    // spec R-11 (b) — admin-only grant / list of server-managed pilot access extensions.
+    app.MapAccessExtensionAdminEndpoints();
 
     // agrisync-prompt-ops Phase 1 — env-gated test/staging endpoint
     // (POST /api/ai/eval-parse). Internally returns early in Production

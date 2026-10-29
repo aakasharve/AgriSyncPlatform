@@ -89,11 +89,12 @@ public static class RateLimitingConfig
             // signed-in user, falling back to the IP — the same resolver as "ai". The policy NAME is
             // the route's own constant, so the two can never drift apart.
             //
-            // A per-USER limit alone does not bound guessing: POST /user/auth/register makes a
-            // password account for any phone with no OTP and POST /user/auth/login marks that
-            // phone verified (founder decision D-23 — left exactly as it is here), so one machine
-            // can mint accounts and spend 10 tries on each. The two limits that DO bound it are
-            // the global limiter below, which applies to this same route.
+            // A per-USER limit alone does not bound guessing: whoever can make several accounts
+            // spends 10 tries on each. Password self-registration (POST /user/auth/register) is
+            // closed unless Auth:AllowPasswordRegistration is on (test stacks only) and a password
+            // login never marks a phone verified (spec I19, D-23), but a test stack with the switch
+            // on, or one person holding several numbers, can still do it. The two limits that DO
+            // bound it are the per-network and global limits below, which apply to this same route.
             options.AddPolicy(MembershipEndpoints.JoinRateLimitPolicy, httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: ResolveAiRateLimitPartitionKey(httpContext),

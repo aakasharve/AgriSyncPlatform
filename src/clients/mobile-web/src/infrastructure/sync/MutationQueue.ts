@@ -7,6 +7,7 @@ import { validatePayload } from './PayloadValidator';
 import type { MutationFailureKind } from './RejectionPolicy';
 import { readDeviceId, writeDeviceId } from '../storage/DeviceIdStore';
 import { MAX_AUTO_RETRY_COUNT } from './retryCap';
+import { SessionStore } from '../storage/SessionStore';
 
 const SYNC_SCOPE = 'shramsafal';
 const LAST_PULL_META_KEY = 'shramsafal_last_pull_payload';
@@ -49,6 +50,25 @@ const BACKOFF_CEILING_MS = 60000;
 export function backoffDelayMs(attemptCount: number): number {
     return Math.min(BACKOFF_BASE_MS * Math.pow(2, attemptCount), BACKOFF_CEILING_MS);
 }
+
+/**
+ * spec R-11 (c) — the farm a queued record belongs to: the farm stamped on the row at enqueue,
+ * else (a row queued by an older app) the payload's own `farmId`. `undefined` when neither says.
+ */
+export function queuedRowFarmId(row: Partial<Pick<MutationQueueItem, 'farmId' | 'payload'>>): string | undefined {
+    if (row.farmId) return row.farmId;
+    const payloadFarmId = (row.payload as { farmId?: unknown } | null | undefined)?.farmId;
+    return typeof payloadFarmId === 'string' && payloadFarmId.trim().length > 0 ? payloadFarmId : undefined;
+}
+
+/**
+ * spec R-11 (c) — how long a HELD row (refused because of the farm's trial / plan) waits before
+ * the worker asks the server again. Slower than the 60 s backoff ceiling because the answer
+ * changes only when the farm is allowed again (an extension or a subscription), not with signal;
+ * fast enough that a held record goes by itself within a couple of minutes of that. A tap on
+ * "Retry All" still sends it at once (`CLEAR_BACKOFF`).
+ */
+export const HELD_RECHECK_MS = 2 * 60 * 1000;
 
 /**
  * Is this row allowed on the wire yet?
@@ -130,6 +150,9 @@ export class MutationQueue {
         const clientRequestId = options?.clientRequestId ?? idGenerator.generate();
         const clientCommandId = options?.clientCommandId ?? clientRequestId;
         const now = systemClock.nowISO();
+        // spec R-11 (c) — the farm this record was made on (the payload's own farmId, else the
+        // farm open now), so a "held" notice speaks only on that farm.
+        const farmId = queuedRowFarmId({ payload }) ?? SessionStore.getCurrentFarmId() ?? undefined;
 
         const record: MutationQueueItem = {
             deviceId,
@@ -141,6 +164,7 @@ export class MutationQueue {
             createdAt: now,
             updatedAt: now,
             retryCount: 0,
+            ...(farmId ? { farmId } : {}),
         };
 
         try {
@@ -196,6 +220,8 @@ export class MutationQueue {
             status: 'APPLIED',
             updatedAt: systemClock.nowISO(),
             lastError: undefined,
+            // spec R-11 (c) — a record that was HELD and has now gone stops being reported as held.
+            errorCode: undefined,
             ...CLEAR_BACKOFF,
         });
     }
@@ -218,12 +244,23 @@ export class MutationQueue {
      * Defaults to `REJECTION` so a caller that says nothing gets the stricter,
      * bounded behaviour — a silent omission can never produce an uncapped loop.
      *
+     * spec R-11 (c) — `HELD` (the farm's trial / plan refused it) is uncharged too, waits the
+     * slow `HELD_RECHECK_MS` instead of the exponential backoff, and keeps the server's
+     * `errorCode` on the row so the phone can say why the record is still here. Every other
+     * kind clears a stale code (a row that was held and now fails for another reason is no
+     * longer held).
+     *
      * @returns the row's CHARGED retry count after this attempt, so the caller
      *          can tell — without a second read — whether this is the failure
      *          that just exhausted the cap and therefore needs announcing to
      *          the farmer (§P0.7 box 2d).
      */
-    async markFailed(id: number, error: string, kind: MutationFailureKind = 'REJECTION'): Promise<number> {
+    async markFailed(
+        id: number,
+        error: string,
+        kind: MutationFailureKind = 'REJECTION',
+        errorCode?: string,
+    ): Promise<number> {
         const db = getDatabase();
         const existing = await db.mutationQueue.get(id);
         const chargedRetries = existing?.retryCount ?? 0;
@@ -231,14 +268,21 @@ export class MutationQueue {
         // does about it. Counted separately from `retryCount` so the two
         // deliberately-uncharged kinds still back off.
         const attemptCount = (existing?.attemptCount ?? 0) + 1;
-        const nextRetryCount = kind === 'REJECTION' ? chargedRetries + 1 : chargedRetries;
+        // spec R-11 (c) — a HELD row is brought back BELOW the cap: a row already at it (charged
+        // by an older app for this same refusal, which never judged the row) would otherwise never
+        // be retried automatically, while the notice promises it goes by itself.
+        const nextRetryCount = kind === 'REJECTION'
+            ? chargedRetries + 1
+            : kind === 'HELD' ? Math.min(chargedRetries, MAX_AUTO_RETRY_COUNT - 1) : chargedRetries;
+        const delayMs = kind === 'HELD' ? HELD_RECHECK_MS : backoffDelayMs(attemptCount);
         await db.mutationQueue.update(id, {
             status: 'FAILED',
             updatedAt: systemClock.nowISO(),
             retryCount: nextRetryCount,
             lastError: error,
+            errorCode: kind === 'HELD' ? errorCode : undefined,
             attemptCount,
-            nextRetryAfterMs: Date.now() + backoffDelayMs(attemptCount),
+            nextRetryAfterMs: Date.now() + delayMs,
         });
 
         return nextRetryCount;

@@ -38,18 +38,13 @@ public sealed class LoginHandler(
 
         var utcNow = clock.UtcNow;
 
-        // The password sign-in path is, by design (auth-rework 2026-06-03), the
-        // internal test user only — there is no public password registration; real
-        // users are OTP-only. That account is trusted, so a successful password
-        // login is treated as phone-verified: stamp it if the seeded row was created
-        // with a null PhoneVerifiedAtUtc, so the issued token (and every refresh,
-        // which reads this same state) carries phone_verified=true and the
-        // /bootstrap/first-farm gate passes.
-        if (!user.PhoneVerifiedAtUtc.HasValue)
-        {
-            user.MarkPhoneVerified(utcNow);
-            await userRepository.SaveChangesAsync(ct);
-        }
+        // spec I19 (pre-launch repair, D-23) — a password login NEVER marks the number verified.
+        // It used to stamp PhoneVerifiedAtUtc on the first successful login, so anyone who had
+        // registered a stranger's number with a password became that "verified" number and could
+        // start a farm or join one by QR. Only a correct SMS code verifies a number now
+        // (VerifyOtpHandler). The founder's own test users stay verified because their seeders
+        // mark them verified on purpose (PurveshDemoSeeder, BlankTestUserSeeder, E2eFixtureSeeder);
+        // the token below simply reports the stored state.
 
         // Revoke existing session for the same device only — other device sessions are preserved.
         await refreshTokenRepository.RevokeActiveForUserDeviceAsync(

@@ -11,6 +11,7 @@ import {
     categorizePushFailure,
     categorizeRejection,
     isDependencyPendingRejection,
+    isEntitlementHeldRejection,
     isPlotDependencyRejection,
 } from './RejectionPolicy';
 import {
@@ -444,6 +445,16 @@ export class BackgroundSyncWorker {
                 // spec: plr-d10-redesign-real-integration (I9 — X3) — the same rule for a log
                 // whose parent is a plot (or its crop cycle) made on this phone.
                 const rejection = { errorCode: result.errorCode, errorMessage: result.errorMessage };
+
+                // spec R-11 (c) — HELD, tested first: the FARM'S trial / plan refused it, so
+                // nothing about this row (or its parent) was judged. Kept on the phone,
+                // uncharged, never a conflict, re-asked on the slow timer; it goes by itself
+                // (same client ids, so never twice) once the server allows the farm again.
+                if (isEntitlementHeldRejection(rejection)) {
+                    await mutationQueue.markFailed(mutationId, errorMessage, 'HELD', result.errorCode ?? undefined);
+                    continue;
+                }
+
                 const resolveDependency = isDependencyPendingRejection(rejection)
                     ? resolveDailyLogDependency
                     : isPlotDependencyRejection(rejection) ? resolvePlotDependency : null;
