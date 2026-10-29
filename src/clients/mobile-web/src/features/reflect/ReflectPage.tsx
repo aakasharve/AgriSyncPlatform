@@ -7,15 +7,21 @@
  * The founder-approved redesign (PLR-D9 preview), fed from the stores this page has always read: `history`
  * (the logs), `crops` (crops and plots), `tasks` (the planned-task store), the harvest + other-income stores,
  * and the farm's operators. Founder, 2026-10-25: keep every real part, fix their order, make reminders the
- * to-do list. So, top to bottom, in FIXED places (a section folds shut; it never moves):
+ * to-do list. So, top to bottom, in this first-use order:
  *
  *   आजचा आढावा button (today's records) · review inbox (verifiers, when something waits) · the whole-farm
  *   panel (today) → शेताची स्थिती (crop + plots: narrows every section below) → करायची कामे (tasks +
  *   reminders) → प्लॉटनिहाय काम (in-hand income, the day bar, one card per plot with the 8 colour-coded
  *   counts) → निरीक्षणं व नोंदी → कामाचं कॅलेंडर (week / month) → उत्पन्न आणि खर्च (+ the finance ledger).
  *
- * Gone on purpose: the ↑↓ block re-ordering (and its saved order). Where nothing was recorded the page says
- * so ("—", "नोंद नाही"); no number is invented (P4). The pure adapters live in `./overview/*Model.ts`.
+ * spec: plr-d10 (I22) — founder D-1: the आढावा strip (लक्ष द्या's preview, `AttentionStrip`) sits above the
+ * sections, so what is urgent stays in sight whatever is folded. Founder D-4 (26 Oct, later than the 25 Oct
+ * "fixed places"): remembered folds and section order are existing behaviour and come back
+ * (`overview/useSectionLayout.ts`): first use opens शेताची स्थिती, करायची कामे and प्लॉटनिहाय काम and folds the
+ * rest (their headers keep a count or a line); his folds and order are remembered after that; "क्रम बदला" moves
+ * a section; शेताची स्थिती always stays first. A TEST build also shows the three-version comparison.
+ * Where nothing was recorded the page says so ("—", "नोंद नाही"); no number is invented (P4). The pure adapters
+ * live in `./overview/*Model.ts`.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CalendarRange, LayoutGrid, ListChecks, PieChart, StickyNote } from 'lucide-react';
@@ -58,7 +64,11 @@ import { atNoon, fromDateKey, relLabel } from './overview/reflectDates';
 import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
 import { buildTodoList, mergeTasks, newTodoTask, toggledTask, type NewTodo, type TodoItem } from './overview/todoModel';
 import { TodoCount, TodoSection } from './overview/TodoSection';
-import { Num, SANS, SectionBlock } from './overview/ui';
+import { Num, SANS, SectionBlock, Tap } from './overview/ui';
+import { useSectionLayout } from './overview/useSectionLayout';
+import { FIXED_FIRST, type SectionId } from './overview/sectionLayout';
+import { LayoutPreviewSwitch } from './overview/LayoutPreviewSwitch';
+import { AttentionStrip } from '../attention/components/AttentionStrip';
 import { useLogAttachmentCount } from './overview/useLogAttachmentCount';
 
 // Used only when the caller passes no ledger defaults (the log drawer needs some). Unchanged.
@@ -90,6 +100,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     activityFeed,
     focusPlotId,
     onFocusPlotConsumed,
+    onOpenAttention,
 }) => {
     const defaults = ledgerDefaults || FALLBACK_DEFAULTS;
     const { currentFarmId } = useFarmContext();
@@ -106,6 +117,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
     const [moneyLensFilters, setMoneyLensFilters] = useState<FinanceFilters>({});
     const { retryUpload } = useAttachmentRetry();
+    const layout = useSectionLayout();
+    const [reordering, setReordering] = useState(false);
     const selectedLogAttachmentCount = useLogAttachmentCount(selectedLog?.id);
     useEffect(() => { setShowSelectedLogAttachments(false); }, [selectedLog?.id]);
 
@@ -233,6 +246,60 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         ? <span className={`shrink-0 rounded-full px-2.5 py-1 text-[13px] font-extrabold ${tone}`} data-testid={testId}><Num>{n}</Num></span>
         : null);
 
+    type Fold = { open: boolean; onToggle: () => void; reorder?: { onMoveUp?: () => void; onMoveDown?: () => void } };
+    // One renderer per section id: the page draws them in the remembered order (founder D-4).
+    const section = (id: SectionId, fold: Fold): React.ReactNode => {
+        switch (id) {
+            case 'status':
+                return (
+                    <SectionBlock id="status" title="शेताची स्थिती" icon={<LayoutGrid size={22} aria-hidden="true" />} tone="green" hint="कोणत्या पिकाचं, कोणत्या प्लॉटचं पाहायचं ते निवडा" {...fold}>
+                        <FarmStatus crops={crops} sel={selection} onSel={setSel} />
+                    </SectionBlock>
+                );
+            case 'todo':
+                return (
+                    <SectionBlock id="todo" title="करायची कामे" icon={<ListChecks size={22} aria-hidden="true" />} tone="amber"
+                        hint="कामं आणि आठवणी — वेळ उलटली की लाल" count={<TodoCount list={todoList} />} {...fold}>
+                        <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} onAddTodo={addTodo} onTell={onTellTodo} />
+                    </SectionBlock>
+                );
+            case 'day':
+                return (
+                    <SectionBlock id="day" title="प्लॉटनिहाय काम" icon={<CalendarDays size={22} aria-hidden="true" />} tone="blue" hint={`${relLabel(date)} — प्रत्येक प्लॉटवर काय झालं`} {...fold}>
+                        <div className="space-y-3">
+                            <InHandCard amount={money.inHand} onOpen={navigate ? () => navigate('income') : undefined} />
+                            {/* DWC v2 §2.9 — renders nothing unless FEATURE_FLAGS.DwcChip is on. */}
+                            {currentFarmId && <DwcReminderChip farmId={currentFarmId} history={history} />}
+                            <DayBar date={date} onDate={pickDay} />
+                            {cards.length > 0
+                                ? <PlotDayCards cards={cards} isToday={isToday} onOpen={openCard} onCost={openLogMoneyLens} />
+                                : <p className="m-0 rounded-2xl bg-stone-50 p-3 text-center text-[14.5px] font-bold text-stone-600" data-testid="plot-cards-empty">पीक आणि प्लॉट जोडले की इथे रोजचं काम दिसेल.</p>}
+                        </div>
+                        <BucketKey />
+                    </SectionBlock>
+                );
+            case 'notes':
+                return (
+                    <SectionBlock id="notes" title="निरीक्षणं व नोंदी" icon={<StickyNote size={22} aria-hidden="true" />} tone="violet" hint={relLabel(date)}
+                        count={countBadge(notes.length, 'bg-violet-100 text-violet-800', 'notes-count')} {...fold}>
+                        <NotesList notes={notes} />
+                    </SectionBlock>
+                );
+            case 'calendar':
+                return (
+                    <SectionBlock id="calendar" title="कामाचं कॅलेंडर" icon={<CalendarRange size={22} aria-hidden="true" />} tone="green" hint="आठवडा किंवा महिना — रंग म्हणजे पीक" {...fold}>
+                        <ActivityCalendar date={date} onDate={d => setDate(atNoon(d))} mode={calMode} onMode={setCalMode} view={calView} onView={setCalView} dayOf={dayOf} legendCrops={legendCrops} />
+                    </SectionBlock>
+                );
+            case 'cost':
+                return (
+                    <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose" hint="आतापर्यंतचा हिशोब आणि खर्चाचा आलेख" {...fold}>
+                        <CostSection totals={money.totals} spend={money.spend} range={money.range} onOpenFinance={navigate ? () => navigate('finance-ledger') : undefined} />
+                    </SectionBlock>
+                );
+        }
+    };
+
     return (
         <div className="space-y-3 pb-20" style={{ fontFamily: SANS }} data-testid="reflect-page">
             {/* ACTIVITY FEED — today's records, one button (founder 2026-10-24). */}
@@ -259,41 +326,32 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 </div>
             )}
 
+            {/* spec: plr-d10 (I22, D-1) — लक्ष द्या's preview: the most urgent item and the count; a tap opens it. */}
+            {onOpenAttention && (
+                <div className="px-3">
+                    <AttentionStrip tasks={tasks} crops={crops} onOpen={onOpenAttention} />
+                </div>
+            )}
+
             <div className="space-y-3 px-3">
-                <SectionBlock id="status" title="शेताची स्थिती" icon={<LayoutGrid size={22} aria-hidden="true" />} tone="green" hint="कोणत्या पिकाचं, कोणत्या प्लॉटचं पाहायचं ते निवडा">
-                    <FarmStatus crops={crops} sel={selection} onSel={setSel} />
-                </SectionBlock>
-
-                <SectionBlock id="todo" title="करायची कामे" icon={<ListChecks size={22} aria-hidden="true" />} tone="amber"
-                    hint="कामं आणि आठवणी — वेळ उलटली की लाल" count={<TodoCount list={todoList} />}>
-                    <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} onAddTodo={addTodo} onTell={onTellTodo} />
-                </SectionBlock>
-
-                <SectionBlock id="day" title="प्लॉटनिहाय काम" icon={<CalendarDays size={22} aria-hidden="true" />} tone="blue" hint={`${relLabel(date)} — प्रत्येक प्लॉटवर काय झालं`}>
-                    <div className="space-y-3">
-                        <InHandCard amount={money.inHand} onOpen={navigate ? () => navigate('income') : undefined} />
-                        {/* DWC v2 §2.9 — renders nothing unless FEATURE_FLAGS.DwcChip is on. */}
-                        {currentFarmId && <DwcReminderChip farmId={currentFarmId} history={history} />}
-                        <DayBar date={date} onDate={pickDay} />
-                        {cards.length > 0
-                            ? <PlotDayCards cards={cards} isToday={isToday} onOpen={openCard} onCost={openLogMoneyLens} />
-                            : <p className="m-0 rounded-2xl bg-stone-50 p-3 text-center text-[14.5px] font-bold text-stone-600" data-testid="plot-cards-empty">पीक आणि प्लॉट जोडले की इथे रोजचं काम दिसेल.</p>}
-                    </div>
-                    <BucketKey />
-                </SectionBlock>
-
-                <SectionBlock id="notes" title="निरीक्षणं व नोंदी" icon={<StickyNote size={22} aria-hidden="true" />} tone="violet" hint={relLabel(date)}
-                    count={countBadge(notes.length, 'bg-violet-100 text-violet-800', 'notes-count')}>
-                    <NotesList notes={notes} />
-                </SectionBlock>
-
-                <SectionBlock id="calendar" title="कामाचं कॅलेंडर" icon={<CalendarRange size={22} aria-hidden="true" />} tone="green" hint="आठवडा किंवा महिना — रंग म्हणजे पीक">
-                    <ActivityCalendar date={date} onDate={d => setDate(atNoon(d))} mode={calMode} onMode={setCalMode} view={calView} onView={setCalView} dayOf={dayOf} legendCrops={legendCrops} />
-                </SectionBlock>
-
-                <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose" hint="आतापर्यंतचा हिशोब आणि खर्चाचा आलेख">
-                    <CostSection totals={money.totals} spend={money.spend} range={money.range} onOpenFinance={navigate ? () => navigate('finance-ledger') : undefined} />
-                </SectionBlock>
+                {layout.preview && (
+                    <LayoutPreviewSwitch version={layout.version} onVersion={layout.preview.setVersion} onFirstVisit={layout.preview.resetFirstVisit} />
+                )}
+                {[FIXED_FIRST, ...layout.order].map(id => {
+                    const at = layout.order.indexOf(id);
+                    const reorder = reordering && layout.move && id !== FIXED_FIRST ? {
+                        onMoveUp: at > 0 ? () => layout.move!(id, -1) : undefined,
+                        onMoveDown: at < layout.order.length - 1 ? () => layout.move!(id, 1) : undefined,
+                    } : undefined;
+                    return <React.Fragment key={id}>{section(id, { open: layout.isOpen(id), onToggle: () => layout.toggle(id), reorder })}</React.Fragment>;
+                })}
+                {layout.move && (
+                    <Tap onClick={() => setReordering(r => !r)} aria-pressed={reordering} data-testid="reflect-reorder-toggle"
+                        className="flex min-h-[46px] w-full items-center justify-center rounded-full border-2 border-stone-300 bg-white/80 text-[14.5px] font-extrabold text-stone-700">
+                        {/* PROPOSED (Marathi) */}
+                        {reordering ? 'क्रम झाला' : 'विभागांचा क्रम बदला'}
+                    </Tap>
+                )}
             </div>
 
             {(selectedLog || emptySelection) && detailInfo && (

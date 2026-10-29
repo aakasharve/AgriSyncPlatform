@@ -421,6 +421,7 @@ export interface AttentionCardDto {
 
 export interface AttentionBoardDto {
     cards: AttentionCardDto[];
+    scheduledWork?: unknown[] | null; // spec: plr-d10 (I22) — additive; each row read by `features/attention/scheduledWork.ts`
 }
 
 export interface SyncPullResponse {

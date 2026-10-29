@@ -42,6 +42,11 @@ export const isE2EHarnessEnabled = (): boolean => IS_E2E_HARNESS_ENABLED;
 // bundle entirely, not just hide it behind an unreachable `if`.
 export const IS_OVERSIGHT_PREVIEW_ENABLED: boolean = import.meta.env.DEV;
 
+// spec: plr-d10 (I22, founder D-4) — the आढावा layout comparison (V1 / V2 / V3) and its "मालकाचा आढावा — नमुना"
+// label: the founder's TEST copy (`vite build --mode fieldtest`) and `vite dev` only. Build-time constants, so a
+// release build (mode `production`) folds this to `false` and always runs V2.
+export const IS_LAYOUT_PREVIEW_ENABLED: boolean = import.meta.env.MODE === 'fieldtest' || import.meta.env.DEV;
+
 // DWC v2 §2.9 — runtime feature flags object. Plan placed this at
 // `shared/feature-flags/flags.ts`, but the existing repo convention is
 // `app/featureFlags.ts`; a second location would split the source of

@@ -269,6 +269,147 @@ public sealed class GetAttentionBoardHandlerTests
     }
 
     // ---------------------------------------------------------------------------
+    // spec: plr-d10 (I22, founder D-1) — the overdue matcher, by the farmer's WORK DAY
+    // ---------------------------------------------------------------------------
+
+    private static readonly DateOnly TodayLocal = new(2026, 4, 21); // Now = 10:00 UTC = 15:30 IST, same day
+
+    private static (FakeAttentionRepo Repo, CropCycle Cycle) PlotWithSchedule(params (string Name, int DayOffset)[] steps)
+    {
+        var farmTypedId = new FarmId(FarmId);
+        var farm = Farm.Create(farmTypedId, "Ramu Farm", new UserId(UserId), Now.AddDays(-100));
+        var plot = Plot.Create(PlotId1, farmTypedId, "Plot A", 2.5m, Now.AddDays(-100));
+        var cycle = CropCycle.Create(Guid.NewGuid(), farmTypedId, PlotId1, "Grapes", "Fruiting",
+            TodayLocal.AddDays(-60), null, Now.AddDays(-60));
+
+        var repo = new FakeAttentionRepo();
+        repo.AddFarmForUser(UserId, farm);
+        repo.AddPlot(plot);
+        repo.AddCropCycle(PlotId1, cycle);
+        repo.AddPlannedActivities(cycle.Id, steps
+            .Select(s => PlannedActivity.CreateLocallyAdded(Guid.NewGuid(), cycle.Id, s.Name, "Fruiting",
+                TodayLocal.AddDays(s.DayOffset), new UserId(UserId), "test", Now.AddDays(-60)))
+            .ToList());
+        return (repo, cycle);
+    }
+
+    /// <summary>A log for <paramref name="workDayOffset"/>, SENT days later (a back-dated entry), with one task.</summary>
+    private static void Record(FakeAttentionRepo repo, CropCycle cycle, string activityType, int workDayOffset, bool disputed = false)
+    {
+        var log = DailyLog.Create(Guid.NewGuid(), new FarmId(FarmId), PlotId1, cycle.Id, new UserId(UserId),
+            TodayLocal.AddDays(workDayOffset), null, null, Now);
+        var task = log.AddTask(Guid.NewGuid(), activityType, null, Now); // sent TODAY, done on the log's day
+        if (disputed)
+        {
+            log.Verify(Guid.NewGuid(), VerificationStatus.Confirmed, null, AppRole.Mukadam, new UserId(Guid.NewGuid()), Now.AddHours(-2));
+            log.Verify(Guid.NewGuid(), VerificationStatus.Disputed, "did not happen", AppRole.PrimaryOwner, new UserId(UserId), Now.AddHours(-1));
+        }
+        repo.AddDailyLog(log);
+        repo.AddExecutedTasks(cycle.Id, [task]);
+    }
+
+    [Fact]
+    public async Task Overdue_WorkRecordedOnItsScheduledDay_IsNotOverdue_EvenWhenSentDaysLater()
+    {
+        var (repo, cycle) = PlotWithSchedule(("Foliar Spray", -4));
+        Record(repo, cycle, "Spray Mancozeb", workDayOffset: -4);
+
+        var result = await CreateHandler(repo).HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.Cards);
+        Assert.Empty(result.Value.ScheduledWork!);
+    }
+
+    [Fact]
+    public async Task Overdue_WorkNotRecorded_IsOverdue_AndListedOneByOne()
+    {
+        var (repo, _) = PlotWithSchedule(("Foliar Spray", -1), ("Drip Irrigation", -6), ("Pruning", 2));
+
+        var result = await CreateHandler(repo).HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var card = Assert.Single(result.Value.Cards);
+        Assert.Equal(2, card.OverdueTaskCount);
+        var work = result.Value.ScheduledWork!;
+        Assert.Equal(2, work.Count); // the future pruning is not listed
+        Assert.Equal(("Drip Irrigation", 6, true), (work[0].ActivityName, work[0].DaysLate, work[0].IsMissed));
+        Assert.Equal(("Foliar Spray", 1, false), (work[1].ActivityName, work[1].DaysLate, work[1].IsMissed));
+        Assert.All(work, w => Assert.Equal((FarmId, PlotId1, "Plot A"), (w.FarmId, w.PlotId, w.PlotName)));
+    }
+
+    [Fact]
+    public async Task Overdue_OneSprayRecord_ClearsOneScheduledSpray_NotEverySprayOfTheSeason()
+    {
+        var (repo, cycle) = PlotWithSchedule(("Foliar Spray", -20), ("Foliar Spray", -2));
+        Record(repo, cycle, "Spray Sulphur", workDayOffset: -2);
+
+        var result = await CreateHandler(repo).HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, Assert.Single(result.Value.Cards).OverdueTaskCount);
+        var late = Assert.Single(result.Value.ScheduledWork!);
+        Assert.Equal(20, late.DaysLate);
+    }
+
+    [Fact]
+    public async Task Overdue_ADisputedRecord_DoesNotClearTheStep()
+    {
+        var (repo, cycle) = PlotWithSchedule(("Foliar Spray", -1));
+        Record(repo, cycle, "Spray", workDayOffset: -1, disputed: true);
+
+        var result = await CreateHandler(repo).HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var late = Assert.Single(result.Value.ScheduledWork!);
+        Assert.Equal("Foliar Spray", late.ActivityName);
+    }
+
+    [Fact]
+    public async Task Overdue_TodayIsTheFarmsIndiaDay_NotTheUtcDate()
+    {
+        // 21 Apr 20:00 UTC is already 22 Apr 01:30 in India: a step planned for 22 Apr is TODAY's work, and the
+        // step planned for 21 Apr is one day late.
+        var (repo, _) = PlotWithSchedule(("Foliar Spray", 0), ("Drip Irrigation", 1));
+        var asOf = new DateTime(2026, 4, 21, 20, 0, 0, DateTimeKind.Utc);
+
+        var result = await CreateHandler(repo).HandleAsync(new GetAttentionBoardQuery(UserId, asOf), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var work = result.Value.ScheduledWork!;
+        Assert.Equal(2, work.Count);
+        Assert.Equal(("Foliar Spray", 1), (work[0].ActivityName, work[0].DaysLate));
+        Assert.Equal(("Drip Irrigation", 0), (work[1].ActivityName, work[1].DaysLate));
+    }
+
+    [Fact]
+    public async Task Overdue_TodaysUnrecordedStep_IsListedForToday_WithoutAnyCard()
+    {
+        var (repo, _) = PlotWithSchedule(("Foliar Spray", 0));
+
+        var result = await CreateHandler(repo).HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.Cards); // nothing is late: the plot is not flagged
+        var today = Assert.Single(result.Value.ScheduledWork!);
+        Assert.Equal((0, false), (today.DaysLate, today.IsMissed));
+    }
+
+    [Fact]
+    public async Task Health_IsJudgedOnDueSteps_AFreshSeasonPlanIsNotCritical()
+    {
+        // The whole season is planned, nothing is due yet: before, the season's future steps counted as
+        // "missing" and the plot read Critical ("most planned activities are missing").
+        var (repo, _) = PlotWithSchedule(("Foliar Spray", 3), ("Drip Irrigation", 10), ("Pruning", 30));
+
+        var result = await CreateHandler(repo).HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Empty(result.Value.Cards);
+        Assert.Empty(result.Value.ScheduledWork!);
+    }
+
+    // ---------------------------------------------------------------------------
     // Private fake infrastructure
     // ---------------------------------------------------------------------------
 
@@ -380,6 +521,14 @@ public sealed class GetAttentionBoardHandlerTests
             var count = _disputedCounts.TryGetValue(plotId, out var c) ? c : 0;
             return Task.FromResult(count);
         }
+
+        // spec: plr-d10 (I22) — the farm's logs, so the handler can read each task's WORK day and dispute state.
+        private readonly List<DailyLog> _logs = new();
+
+        public void AddDailyLog(DailyLog log) => _logs.Add(log);
+
+        public Task<List<DailyLog>> GetDailyLogsByFarmAsync(FarmId farmId, CancellationToken ct = default) =>
+            Task.FromResult(_logs.Where(l => l.FarmId == farmId).ToList());
 
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
 

@@ -47,4 +47,15 @@ describe('bottom bar', () => {
         expect(screen.getByTestId('nav-cradle')).toBeTruthy();
     });
 
+
+    // spec: plr-d10 (I22, founder D-1) — लक्ष द्या always visible, with a small count of what its page lists.
+    it('लक्ष द्या carries the count of the items on its page; none when there is none', () => {
+        render(<BottomNavigation {...props({ attentionCount: 3 } as never)} />);
+        expect(screen.getByTestId('nav-attention-count').textContent).toBe('3');
+        expect(screen.getByTestId('nav-attention').getAttribute('aria-label')).toBe('लक्ष द्या, 3');
+        cleanup();
+        render(<BottomNavigation {...props({ attentionCount: 0 } as never)} />);
+        expect(screen.queryByTestId('nav-attention-count')).toBeNull();
+        expect(screen.getByTestId('nav-attention')).toBeTruthy();
+    });
 });

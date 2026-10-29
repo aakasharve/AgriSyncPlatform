@@ -94,6 +94,14 @@ const addDaysToKey = (key: string, n: number): string => {
     return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
 };
 
+/**
+ * spec: plr-d10 (I22, founder D-1) — "वेळ बदला" on a reminder: the same task, a new due day from the same four
+ * choices, in the same store (so करायची कामे and लक्ष द्या both move it). Nothing else on the task changes.
+ */
+export function rescheduledTask(t: PlannedTask, when: TodoWhen, todayKey: string): PlannedTask {
+    return { ...t, dueDate: when === 'no_date' ? undefined : addDaysToKey(todayKey, WHEN_DAYS[when]) };
+}
+
 export interface NewTodo {
     title: string;
     when: TodoWhen;

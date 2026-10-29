@@ -463,6 +463,15 @@ public interface IShramSafalRepository
         => Task.FromResult(new List<DailyLog>());
 
     /// <summary>
+    /// spec: plr-d10 (I22) — only the farm's logs with these ids. The attention board runs on every sync pull
+    /// and needs the work day of the current season's tasks, not the farm's whole history. The default body
+    /// filters <see cref="GetDailyLogsByFarmAsync"/> so the in-tree test doubles keep working; production
+    /// overrides it with one bounded, untracked query.
+    /// </summary>
+    async Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmByIdsAsync(FarmId farmId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+        => (await GetDailyLogsByFarmAsync(farmId, ct)).Where(l => ids.Contains(l.Id)).ToList();
+
+    /// <summary>
     /// Returns <see cref="PlannedActivity"/> records for all crop cycles on the given farm
     /// with <c>PlannedDate >= sinceDate</c>.
     /// </summary>

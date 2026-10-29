@@ -5,15 +5,17 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I6, WP-3)
  *
  * The few pieces every section of "पूर्ण शेतीचा आढावा" shares, copied from the approved preview:
- *   - SectionBlock: a section in a FIXED place (founder 2026-10-25: "the components were movable — make
- *     them fixed"). It can be folded shut and opened again; it can never be moved. Big Marathi title,
- *     one icon, a count when there is one.
+ *   - SectionBlock: a section that folds shut and opens again. Big Marathi title, one icon, a count when there
+ *     is one. spec: plr-d10 (I22, founder D-4, 26 Oct — later than the 25 Oct "make them fixed"): "Treat
+ *     remembered folds and section order as existing functionality." So the page may CONTROL it — `open` +
+ *     `onToggle` (the fold it remembers, `useSectionLayout.ts`) and `onMoveUp` / `onMoveDown` (only while the
+ *     page's "क्रम बदला" is on). Without them it behaves as before: open, folded only for this visit.
  *   - Tap: anything tappable presses in and ripples from the finger.
  *   - CropPhoto: the crop's real photo (`cropImageUrl`), or a plain leaf when there is none.
  *   - Num: a figure in DM Sans (font rule: numbers in DM Sans, Marathi in Noto Sans Devanagari).
  */
 import React, { useState } from 'react';
-import { ChevronDown, Sprout } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Sprout } from 'lucide-react';
 import { cropImageUrl } from '../../context/components/cropImage';
 
 export const SANS = "'Noto Sans Devanagari', sans-serif";
@@ -57,23 +59,46 @@ export const IconDot: React.FC<{ tone: Tone; children: React.ReactNode; size?: n
     <span className={`grid shrink-0 place-items-center rounded-2xl ${TONE[tone]}`} style={{ width: size, height: size }}>{children}</span>
 );
 
+const MoveButton: React.FC<{ onClick?: () => void; label: string; testId: string; children: React.ReactNode }> = ({ onClick, label, testId, children }) => (
+    <Tap onClick={onClick} disabled={!onClick} aria-label={label} data-testid={testId}
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-stone-100 text-stone-700 ring-1 ring-stone-300 disabled:opacity-30">
+        {children}
+    </Tap>
+);
+
 export const SectionBlock: React.FC<{
     id: string; title: string; icon: React.ReactNode; tone: Tone; hint?: string; count?: React.ReactNode; children: React.ReactNode;
-}> = ({ id, title, icon, tone, hint, count, children }) => {
-    const [open, setOpen] = useState(true);
+    /** Controlled fold (remembered by the page). Omit → open, folded only for this visit. */
+    open?: boolean;
+    onToggle?: () => void;
+    /** Order controls, drawn only while the page's "क्रम बदला" is on; an edge passes `undefined` (drawn disabled). */
+    reorder?: { onMoveUp?: () => void; onMoveDown?: () => void };
+}> = ({ id, title, icon, tone, hint, count, children, open: openProp, onToggle, reorder }) => {
+    const [ownOpen, setOwnOpen] = useState(true);
+    const open = openProp ?? ownOpen;
+    const toggle = onToggle ?? (() => setOwnOpen(o => !o));
     return (
         <section data-testid={`reflect-section-${id}`}
             className="overflow-hidden rounded-[26px] border border-white/60 bg-white/80 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)] backdrop-blur-md">
-            <Tap onClick={() => setOpen(o => !o)} aria-expanded={open} data-testid={`reflect-section-${id}-toggle`}
-                className="flex min-h-[64px] w-full items-center gap-3 px-3.5 py-2.5 text-left">
-                <IconDot tone={tone}>{icon}</IconDot>
-                <span className="min-w-0 flex-1">
-                    <span className="block text-[17.5px] font-extrabold leading-tight text-stone-900">{title}</span>
-                    {hint && <span className="block text-[12.5px] font-semibold leading-snug text-stone-500">{hint}</span>}
-                </span>
-                {count}
-                <ChevronDown size={22} className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
-            </Tap>
+            <div className="flex items-center">
+                <Tap onClick={toggle} aria-expanded={open} data-testid={`reflect-section-${id}-toggle`}
+                    className="flex min-h-[64px] min-w-0 flex-1 items-center gap-3 px-3.5 py-2.5 text-left">
+                    <IconDot tone={tone}>{icon}</IconDot>
+                    <span className="min-w-0 flex-1">
+                        <span className="block text-[17.5px] font-extrabold leading-tight text-stone-900">{title}</span>
+                        {hint && <span className="block text-[12.5px] font-semibold leading-snug text-stone-500">{hint}</span>}
+                    </span>
+                    {count}
+                    <ChevronDown size={22} className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+                </Tap>
+                {reorder && (
+                    <span className="flex shrink-0 gap-1.5 pr-3" data-testid={`reflect-section-${id}-reorder`}>
+                        {/* PROPOSED (Marathi) */}
+                        <MoveButton onClick={reorder.onMoveUp} label={`${title} वर हलवा`} testId={`reflect-section-${id}-up`}><ArrowUp size={20} aria-hidden="true" /></MoveButton>
+                        <MoveButton onClick={reorder.onMoveDown} label={`${title} खाली हलवा`} testId={`reflect-section-${id}-down`}><ArrowDown size={20} aria-hidden="true" /></MoveButton>
+                    </span>
+                )}
+            </div>
             {open && <div className="border-t border-stone-100 px-3 pb-3.5 pt-3">{children}</div>}
         </section>
     );

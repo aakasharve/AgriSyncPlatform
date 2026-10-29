@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getDatabase, AttentionCardCacheRecord } from '../../../infrastructure/storage/DexieDatabase';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
+import { SCHEDULED_WORK_META_KEY, storedScheduledWorkOf, type StoredScheduledWork } from '../scheduledWork';
 
 /**
  * The sync scope whose cursor proves this device has ever completed a pull.
@@ -42,6 +43,12 @@ interface UseAttentionBoardResult {
      * a different way — we could not find out.
      */
     loadFailed: boolean;
+    /**
+     * spec: plr-d10 (I22) — the server's scheduled steps due today or late (`scheduledWork.ts`). `null` when the
+     * phone holds no list from the server (never pulled, an older server, or the read failed) — unknown, never
+     * "nothing is late".
+     */
+    scheduledWork: StoredScheduledWork | null;
     refresh: () => void;
 }
 
@@ -50,6 +57,7 @@ export function useAttentionBoard(): UseAttentionBoardResult {
     const [asOf, setAsOf] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [loadFailed, setLoadFailed] = useState(false);
+    const [scheduledWork, setScheduledWork] = useState<StoredScheduledWork | null>(null);
 
     const load = useCallback(async () => {
         setIsLoading(true);
@@ -88,9 +96,26 @@ export function useAttentionBoard(): UseAttentionBoardResult {
         } finally {
             setIsLoading(false);
         }
+        // spec: plr-d10 (I22) — read on its own: a phone database without the list (or without `appMeta` at
+        // all) leaves the cards above exactly as they were read.
+        try {
+            const row = await getDatabase().appMeta.get(SCHEDULED_WORK_META_KEY);
+            setScheduledWork(storedScheduledWorkOf(row?.value));
+        } catch {
+            setScheduledWork(null);
+        }
     }, []);
 
     useEffect(() => { void load(); }, [load]);
+
+    // spec: plr-d10 (I22) — the footer count and the आढावा strip stay mounted, so they re-read after every pull
+    // (`postReconcileEvents.ts`), not only when they first appear.
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const reread = () => { void load(); };
+        window.addEventListener('agrisync:sync-reconciled', reread);
+        return () => window.removeEventListener('agrisync:sync-reconciled', reread);
+    }, [load]);
 
     /**
      * The retry the banner offers. Re-reading Dexie on its own could only ever
@@ -117,5 +142,5 @@ export function useAttentionBoard(): UseAttentionBoardResult {
         })();
     }, [load]);
 
-    return { cards, asOf, isLoading, loadFailed, refresh };
+    return { cards, asOf, isLoading, loadFailed, scheduledWork, refresh };
 }

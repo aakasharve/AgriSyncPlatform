@@ -20,7 +20,8 @@ const TASKS = [{ id: 't1', title: 'फवारणी' }] as PlannedTask[];
 const ctxFor = (currentRoute = 'attention') => ({
     currentRoute,
     setCurrentRoute: vi.fn(), setMainView: vi.fn(), goBackOr: vi.fn(), handleUpdateTask: vi.fn(), setReflectFocusPlotId: vi.fn(),
-    plannedTasks: TASKS, crops: [], hiddenViews: ['compare'],
+    plannedTasks: TASKS, crops: [{ id: 'grape', plots: [{ id: 'g1' }] }], hiddenViews: ['compare'],
+    status: 'idle', draftLog: null, handleReset: vi.fn(), setLogScope: vi.fn(), setMode: vi.fn(), farmRole: 'Mukadam',
 }) as unknown as AppRouterContext;
 
 const pageOf = (ctx: AppRouterContext) =>
@@ -74,5 +75,21 @@ describe('the लक्ष द्या route', () => {
 
     it('the person\'s hidden tabs travel with it (a worker: no तुलना button)', () => {
         expect(pageOf(ctxFor()).hiddenViews).toEqual(['compare']);
+    });
+
+    // spec: plr-d10 (I22, founder D-1 / D-22)
+    it('"काम नोंदवा" opens the recorder on THAT step plot (the one door), then home', () => {
+        const ctx = ctxFor();
+        pageOf(ctx).onRecordWork!({ plotId: 'g1' } as never);
+        expect(ctx.setLogScope).toHaveBeenCalledWith(expect.objectContaining({ selectedCropIds: ['grape'], selectedPlotIds: ['g1'] }));
+        expect(ctx.setMode).toHaveBeenCalledWith('voice');
+        expect(ctx.setMainView).toHaveBeenCalledWith('log');
+        expect(ctx.setCurrentRoute).toHaveBeenCalledWith('main');
+    });
+
+    it('"पुढे ठरवा" is for the primary owner alone (D-22)', () => {
+        expect(pageOf(ctxFor()).canReschedule).toBe(false);
+        const owner = { ...(ctxFor() as unknown as Record<string, unknown>), farmRole: 'PrimaryOwner' } as unknown as AppRouterContext;
+        expect(pageOf(owner).canReschedule).toBe(true);
     });
 });

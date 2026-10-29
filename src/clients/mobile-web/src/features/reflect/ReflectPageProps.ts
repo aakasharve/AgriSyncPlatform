@@ -29,6 +29,11 @@ export interface ReflectPageProps {
      */
     focusPlotId?: string | null;
     onFocusPlotConsumed?: () => void;
+    /**
+     * spec: plr-d10 (I22, founder D-1) — the आढावा strip's tap: open लक्ष द्या. Omit → no strip (a strip that
+     * cannot open its page would be a dead control, P5).
+     */
+    onOpenAttention?: () => void;
 
     /** Today's logs for the Activity Feed, behind its own button at the top of this page. Omit to hide the button. */
     activityFeed?: { entries: readonly FeedEntry[]; dateLabel: string };

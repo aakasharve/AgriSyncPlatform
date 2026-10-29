@@ -12,7 +12,10 @@
  *          card whose action has nowhere to go (a dispute; तुलना for a worker) draws NO button;
  *   H15/T3 — to-dos whose day has passed show here too, and a tick here or in करायची कामे clears both
  *          (one store — proven with both pages mounted over the same state).
- * Only the edges are mocked: Dexie (the board), the sync worker.
+ *   I22 (founder D-1) — three groups (वेळ निघून गेली / आज करायचे / निर्णय घ्यायचा) from ONE list: reminders
+ *          (झाले / वेळ बदला), the server's scheduled steps (काम नोंदवा / पुढे ठरवा), the plot cards; disputes
+ *          stay in मंजुरी; a step clears only on the server's word or a confirmed move.
+ * Only the edges are mocked: Dexie (the board), the sync worker, the HTTP call.
  */
 import React, { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,18 +24,22 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import type { AttentionCardCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import type { CropProfile, PlannedTask } from '../../../../types';
 
-const board = vi.hoisted(() => ({ cards: [] as unknown[], cursor: { tableName: 'shramsafal', lastSyncAt: '2026-10-26T03:30:00.000Z', version: 1 } as unknown }));
+const board = vi.hoisted(() => ({ cards: [] as unknown[], cursor: { tableName: 'shramsafal', lastSyncAt: '2026-10-26T03:30:00.000Z', version: 1 } as unknown, meta: {} as Record<string, unknown> }));
 const triggerNow = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+const apiFetch = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../../infrastructure/storage/DexieDatabase', () => ({
     getDatabase: () => ({
         attentionCards: { orderBy: () => ({ toArray: async () => board.cards }) },
         syncCursors: { get: async () => board.cursor },
+        appMeta: { get: async (key: string) => (key in board.meta ? { key, value: board.meta[key] } : undefined) },
     }),
 }));
 vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: () => triggerNow() } }));
+vi.mock('../../../../infrastructure/api/apiFetch', () => ({ apiFetch: (...args: unknown[]) => apiFetch(...args) }));
 
 import AttentionPage from '../AttentionPage';
+import { SCHEDULED_WORK_META_KEY, clearRescheduledForTests } from '../../scheduledWork';
 import { TodoSection } from '../../../reflect/overview/TodoSection';
 import { buildTodoList, toggledTask } from '../../../reflect/overview/todoModel';
 
@@ -59,7 +66,10 @@ beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-26T06:00:00.000Z'));
     board.cards = CARDS;
+    board.meta = {};
     triggerNow.mockClear();
+    apiFetch.mockReset();
+    clearRescheduledForTests();
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -74,8 +84,8 @@ describe('लक्ष द्या — Marathi page in the common look (H14)', 
         expect(screen.getByText('आज ज्याकडे पाहायला हवं, ते इथे. एक-एक करून पूर्ण करा.')).toBeInTheDocument();
         const text = screen.getByTestId('attention-page').textContent ?? '';
         expect(text).not.toMatch(ENGLISH);
-        // the server's Marathi, and Marathi rank words, Marathi chips
-        expect(screen.getAllByText('गंभीर')).toHaveLength(1);
+        // the server's Marathi, and Marathi rank words, Marathi chips (the one Critical card was a dispute: not here, D-1)
+        expect(screen.queryByText('गंभीर')).toBeNull();
         expect(screen.getAllByText('लक्ष द्या').length).toBeGreaterThan(1);
         expect(screen.getByText('4 कामं बाकी')).toBeInTheDocument();
         expect(screen.getByText('तब्येत: लक्ष द्या')).toBeInTheDocument();
@@ -86,7 +96,7 @@ describe('लक्ष द्या — Marathi page in the common look (H14)', 
         render(<AttentionPage onGo={vi.fn()} />);
         await waitFor(() => expect(screen.getByText('मराठी शीर्षक test')).toBeInTheDocument());
         const order = Array.from(document.querySelectorAll('[data-testid^="attention-card-"]')).map(e => e.getAttribute('data-testid'));
-        expect(order[0]).toBe('attention-card-dispute');
+        expect(order.slice(0, 3).sort()).toEqual(['attention-card-compare', 'attention-card-owed', 'attention-card-test']);
         expect(order.slice(-2)).toEqual(['attention-card-watch', 'attention-card-sync']);
     });
 
@@ -120,11 +130,12 @@ describe('लक्ष द्या — every button leads where it can be done,
         expect(onGo).toHaveBeenCalledTimes(4);
     });
 
-    it('a dispute has nowhere to be resolved in the app: its card shows what is wrong but no button', async () => {
+    it('a disputed record stays in मंजुरी (D-1): its card is not on लक्ष द्या at all, and nothing links to मंजुरी', async () => {
         render(<AttentionPage onGo={vi.fn()} />);
-        await waitFor(() => expect(screen.getByText('मराठी शीर्षक dispute')).toBeInTheDocument());
-        expect(screen.queryByTestId('attention-go-dispute')).toBeNull();
-        expect(within(screen.getByTestId('attention-card-dispute')).queryByRole('button')).toBeNull();
+        await waitFor(() => expect(screen.getByText('मराठी शीर्षक test')).toBeInTheDocument());
+        expect(screen.queryByTestId('attention-card-dispute')).toBeNull();
+        expect(screen.queryByText('मराठी शीर्षक dispute')).toBeNull();
+        expect(screen.getByTestId('attention-page')).not.toHaveTextContent('मंजुरी');
     });
 
     it('a worker (तुलना hidden) gets no "टप्पा तुलना पहा" button', async () => {
@@ -188,14 +199,15 @@ describe('लक्ष द्या — on the server\'s REAL wire format (numbe
 
     it('a Critical card (0) says "गंभीर" with the red edge — never "नजर ठेवा"; most serious first', async () => {
         render(<AttentionPage onGo={vi.fn()} />);
-        await waitFor(() => expect(screen.getByText('मराठी शीर्षक w-dispute')).toBeInTheDocument());
-        const dispute = screen.getByTestId('attention-card-w-dispute');
-        expect(within(dispute).getByTestId('attention-rank')).toHaveTextContent('गंभीर');
-        expect(dispute.className).toContain('border-l-rose-500');
+        await waitFor(() => expect(screen.getByText('मराठी शीर्षक w-signal')).toBeInTheDocument());
+        const critical = screen.getByTestId('attention-card-w-signal');
+        expect(within(critical).getByTestId('attention-rank')).toHaveTextContent('गंभीर');
+        expect(critical.className).toContain('border-l-rose-500');
         expect(within(screen.getByTestId('attention-card-w-watch')).getByTestId('attention-rank')).toHaveTextContent('नजर ठेवा');
         expect(within(screen.getByTestId('attention-card-w-sync')).getByTestId('attention-rank')).toHaveTextContent('ठीक');
         const order = Array.from(document.querySelectorAll('[data-testid^="attention-card-"]')).map(e => e.getAttribute('data-testid'));
-        expect(order.slice(0, 2).sort()).toEqual(['attention-card-w-dispute', 'attention-card-w-signal']);
+        expect(order[0]).toBe('attention-card-w-signal');
+        expect(order).not.toContain('attention-card-w-dispute');
         expect(order.at(-1)).toBe('attention-card-w-sync');
     });
 
@@ -203,7 +215,6 @@ describe('लक्ष द्या — on the server\'s REAL wire format (numbe
         render(<AttentionPage onGo={vi.fn()} />);
         await waitFor(() => expect(screen.getByText('मराठी शीर्षक w-test')).toBeInTheDocument());
         const stageOf = (id: string) => within(screen.getByTestId(`attention-card-${id}`)).queryByTestId('attention-stage');
-        expect(stageOf('w-dispute')).toHaveTextContent('फुलोरा ते फळधारणा');
         expect(stageOf('w-test')).toHaveTextContent('कांदा पोसणे');
         expect(stageOf('w-owed')).toHaveTextContent('झाडाची वाढ');
         expect(stageOf('w-watch')).toBeNull();
@@ -276,30 +287,78 @@ const TASKS = [
     t('nodate', 'खत आणायचं'),
 ];
 
-describe('लक्ष द्या — late to-dos, one store with करायची कामे (H15 / T3)', () => {
-    it('shows only the open to-dos whose day has passed; "सगळी करायची कामं पाहा" opens the list', async () => {
-        const onOpenTodos = vi.fn();
-        render(<AttentionPage tasks={TASKS} crops={CROPS} onUpdateTask={vi.fn()} onOpenTodos={onOpenTodos} />);
-        const late = screen.getByTestId('attention-overdue');
-        expect(late).toHaveTextContent('वेळ उलटून गेलेली कामं (1)');
-        expect(within(late).getByText('ठिबकची नळी तपासायची')).toBeInTheDocument();
-        expect(within(late).queryByText('फवारणी')).toBeNull();
-        expect(within(late).queryByText('बांधणी')).toBeNull();
-        expect(within(late).queryByText('खत आणायचं')).toBeNull();
-        fireEvent.click(screen.getByTestId('attention-open-todos'));
-        expect(onOpenTodos).toHaveBeenCalled();
-        await waitFor(() => expect(screen.getByText('मराठी शीर्षक test')).toBeInTheDocument());
+const step = (id: string, activityName: string, daysLate: number, isMissed = false, plotName = 'सोनाका') => ({
+    plannedActivityId: id, farmId: 'f1', plotId: 'g1', plotName, cropCycleId: 'cc1', activityName, stage: 'Flowering',
+    plannedDate: `2026-10-${String(26 - daysLate).padStart(2, '0')}`, daysLate, isMissed,
+});
+const STEPS = [step('s-late', 'Foliar Spray', 1), step('s-today', 'Drip Irrigation', 0), step('s-missed', 'Pruning', 6, true)];
+const withSteps = (items: unknown[] = STEPS) => { board.meta[SCHEDULED_WORK_META_KEY] = { items, asOfUtc: '2026-10-26T03:30:00.000Z' }; };
+const groupText = (key: string) => screen.getByTestId(`attention-group-${key}`);
+const rowIds = (key: string) => Array.from(groupText(key).querySelectorAll('[data-testid^="attention-step-"], [data-testid^="attention-reminder-"], [data-testid^="attention-card-"]'))
+    .map(e => e.getAttribute('data-testid'));
+
+describe('लक्ष द्या — founder D-1: three groups from one list (I22)', () => {
+    it('late, today and decide groups, most urgent first; the step list replaces the late-work cards; a dispute never shows', async () => {
+        withSteps();
+        render(<AttentionPage onGo={vi.fn()} tasks={TASKS} crops={CROPS} onUpdateTask={vi.fn()} />);
+        await waitFor(() => expect(screen.getByTestId('attention-group-decide')).toBeInTheDocument());
+
+        expect(groupText('late')).toHaveTextContent('वेळ निघून गेली (2)');
+        expect(rowIds('late')).toEqual(['attention-reminder-late', 'attention-step-s-late']); // 2 days late, then 1
+        expect(groupText('today')).toHaveTextContent('आज करायचे (2)');
+        expect(rowIds('today')).toEqual(['attention-step-s-today', 'attention-reminder-today']);
+        expect(groupText('decide')).toHaveTextContent('निर्णय घ्यायचा');
+        expect(rowIds('decide')[0]).toBe('attention-step-s-missed');
+        // the overdue-count card is itemised by the steps now; the dispute stays in मंजुरी
+        expect(screen.queryByTestId('attention-card-owed')).toBeNull();
+        expect(screen.queryByTestId('attention-card-dispute')).toBeNull();
+        expect(screen.getByTestId('attention-card-test')).toBeInTheDocument();
+
+        // the schedule's English is said in Marathi, with when
+        expect(screen.getByTestId('attention-step-s-late')).toHaveTextContent('फवारणी');
+        expect(screen.getByTestId('attention-step-s-late')).toHaveTextContent('काल');
+        expect(screen.getByTestId('attention-step-s-today')).toHaveTextContent('ठिबकने पाणी');
+        expect(screen.getByTestId('attention-step-s-missed')).toHaveTextContent('6 दिवस उशीर');
+        expect((screen.getByTestId('attention-page').textContent ?? '')).not.toMatch(/Foliar|Drip|Pruning/);
     });
 
-    it('while late to-dos are listed, the board\'s "all fine" sentence is not shown above them', async () => {
+    it('a server that sends no step list (older server): the late-work card keeps its place, nothing is guessed', async () => {
+        render(<AttentionPage onGo={vi.fn()} />);
+        await waitFor(() => expect(screen.getByTestId('attention-card-owed')).toBeInTheDocument());
+        expect(screen.queryByTestId(/^attention-step-/)).toBeNull();
+    });
+
+    it('nothing at all: "सध्या लक्ष देण्यासारखे काही नाही." with when it is from — never a crop-health claim', async () => {
+        board.cards = [];
+        withSteps([]);
+        render(<AttentionPage tasks={[]} />);
+        await waitFor(() => expect(screen.getByTestId('attention-all-clear')).toHaveTextContent('सध्या लक्ष देण्यासारखे काही नाही.'));
+        expect(screen.getByTestId('attention-as-of')).toBeInTheDocument();
+        expect(screen.getByTestId('attention-page')).not.toHaveTextContent('व्यवस्थित');
+    });
+
+    it('while a late reminder is listed, there is no all-clear above it', async () => {
         board.cards = [];
         render(<AttentionPage tasks={TASKS} crops={CROPS} onUpdateTask={vi.fn()} />);
         await waitFor(() => expect(screen.queryByTestId('attention-loading')).toBeNull());
         expect(screen.queryByTestId('attention-all-clear')).toBeNull();
-        expect(screen.getByTestId('attention-overdue')).toBeInTheDocument();
+        expect(screen.getByTestId('attention-reminder-late')).toBeInTheDocument();
     });
 
-    it('a tick on लक्ष द्या clears it from करायची कामे, and a tick there clears it here (same store)', async () => {
+    it('the farm on screen only: a step or a card of another farm is not listed', async () => {
+        board.cards = [card('other', 'NeedsAttention', 'AssignTest', 'चाचण्या नियुक्त करा', { farmId: 'f2' }), card('mine', 'Watch', 'OpenPlot', 'तुकडा पहा')];
+        withSteps([{ ...step('s-other', 'Foliar Spray', 1), farmId: 'f2' }, step('s-mine', 'Foliar Spray', 1)]);
+        const { buildAttentionModel } = await import('../../attentionItems');
+        const model = buildAttentionModel({
+            cards: board.cards as AttentionCardCacheRecord[], scheduledWork: board.meta[SCHEDULED_WORK_META_KEY] as never,
+            todos: { late: [], today: [] }, farmId: 'f1', todayKey: '2026-10-26',
+        });
+        expect([...model.late, ...model.decide].map(i => i.id)).toEqual(['step-s-mine', 'card-mine']);
+    });
+});
+
+describe('लक्ष द्या — a reminder: झाले / वेळ बदला, in the one store करायची कामे uses (D-1, H15 / T3)', () => {
+    it('झाले on लक्ष द्या clears it from करायची कामे too, and a tick there clears it here', async () => {
         const Both: React.FC = () => {
             const [tasks, setTasks] = useState<PlannedTask[]>(TASKS);
             const update = (task: PlannedTask) => setTasks(prev => prev.map(x => (x.id === task.id ? task : x)));
@@ -314,19 +373,80 @@ describe('लक्ष द्या — late to-dos, one store with कराय
         render(<Both />);
         const todoPage = () => screen.getByTestId('todo-page');
         expect(within(todoPage()).getByTestId('todo-group-late')).toHaveTextContent('ठिबकची नळी तपासायची');
-        expect(within(todoPage()).getByTestId('todo-group-late-note')).toHaveTextContent("ही कामं 'लक्ष द्या' मध्येही दिसतात.");
 
-        // tick on लक्ष द्या → gone from both late lists
-        fireEvent.click(within(screen.getByTestId('attention-overdue')).getByTestId('todo-tick-late'));
-        expect(screen.queryByTestId('attention-overdue')).toBeNull();
+        fireEvent.click(screen.getByTestId('attention-done-late'));
+        expect(screen.queryByTestId('attention-reminder-late')).toBeNull();
         expect(within(todoPage()).queryByTestId('todo-group-late')).toBeNull();
 
         // re-open it in करायची कामे → back on लक्ष द्या; tick it there → gone here
         fireEvent.click(within(todoPage()).getByTestId('todo-done-toggle'));
         fireEvent.click(within(todoPage()).getByTestId('todo-tick-late'));
-        expect(screen.getByTestId('attention-overdue')).toHaveTextContent('ठिबकची नळी तपासायची');
+        expect(screen.getByTestId('attention-reminder-late')).toHaveTextContent('ठिबकची नळी तपासायची');
         fireEvent.click(within(within(todoPage()).getByTestId('todo-group-late')).getByTestId('todo-tick-late'));
-        expect(screen.queryByTestId('attention-overdue')).toBeNull();
+        expect(screen.queryByTestId('attention-reminder-late')).toBeNull();
         await waitFor(() => expect(screen.queryByTestId('attention-loading')).toBeNull());
+    });
+
+    it('वेळ बदला moves the SAME task to the day he picks (उद्या), in the same store; nothing else changes', async () => {
+        const onUpdateTask = vi.fn();
+        render(<AttentionPage tasks={TASKS} crops={CROPS} onUpdateTask={onUpdateTask} />);
+        fireEvent.click(screen.getByTestId('attention-move-late'));
+        fireEvent.click(screen.getByTestId('attention-move-choices-late-tomorrow'));
+        expect(onUpdateTask).toHaveBeenCalledWith({ ...TASKS[0], dueDate: '2026-10-27' });
+        await waitFor(() => expect(screen.queryByTestId('attention-loading')).toBeNull());
+    });
+
+    it('"सगळी करायची कामं पाहा" opens the list', async () => {
+        const onOpenTodos = vi.fn();
+        render(<AttentionPage tasks={TASKS} crops={CROPS} onUpdateTask={vi.fn()} onOpenTodos={onOpenTodos} />);
+        fireEvent.click(screen.getByTestId('attention-open-todos'));
+        expect(onOpenTodos).toHaveBeenCalled();
+        await waitFor(() => expect(screen.queryByTestId('attention-loading')).toBeNull());
+    });
+});
+
+describe('लक्ष द्या — a scheduled step: काम नोंदवा / पुढे ठरवा (D-1)', () => {
+    it('काम नोंदवा opens the recorder for THAT step and clears nothing', async () => {
+        withSteps();
+        const onRecordWork = vi.fn();
+        render(<AttentionPage onRecordWork={onRecordWork} />);
+        await waitFor(() => expect(screen.getByTestId('attention-step-s-late')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('attention-record-s-late'));
+        expect(onRecordWork).toHaveBeenCalledWith(expect.objectContaining({ plannedActivityId: 's-late', plotId: 'g1' }));
+        expect(screen.getByTestId('attention-step-s-late')).toBeInTheDocument();
+    });
+
+    it('no "पुढे ठरवा" for a person the farm has not given planning to; no "काम नोंदवा" without a recorder (P5)', async () => {
+        withSteps();
+        render(<AttentionPage />);
+        await waitFor(() => expect(screen.getByTestId('attention-step-s-late')).toBeInTheDocument());
+        expect(screen.queryByTestId('attention-later-s-late')).toBeNull();
+        expect(screen.queryByTestId('attention-record-s-late')).toBeNull();
+    });
+
+    it('पुढे ठरवा: the server keeps the new day (the existing override endpoint); once it says yes, the step leaves every view', async () => {
+        withSteps();
+        apiFetch.mockResolvedValue({ ok: true, status: 200 });
+        render(<AttentionPage canReschedule />);
+        await waitFor(() => expect(screen.getByTestId('attention-step-s-late')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('attention-later-s-late'));
+        fireEvent.click(screen.getByTestId('attention-later-choices-s-late-day_after'));
+        await waitFor(() => expect(screen.queryByTestId('attention-step-s-late')).toBeNull());
+        const [path, init] = apiFetch.mock.calls[0] as [string, RequestInit];
+        expect(path).toBe('/shramsafal/planned-activities/s-late/override');
+        expect(JSON.parse(String(init.body))).toEqual(expect.objectContaining({ farmId: 'f1', newPlannedDate: '2026-10-28', reason: expect.any(String) }));
+        await waitFor(() => expect(triggerNow).toHaveBeenCalled()); // the server's own answer comes with the next pull
+        expect(screen.getByTestId('attention-step-s-today')).toBeInTheDocument();
+    });
+
+    it('पुढे ठरवा that the server did not confirm: the step stays, and he is told', async () => {
+        withSteps();
+        apiFetch.mockResolvedValue({ ok: false, status: 503 });
+        render(<AttentionPage canReschedule />);
+        await waitFor(() => expect(screen.getByTestId('attention-step-s-late')).toBeInTheDocument());
+        fireEvent.click(screen.getByTestId('attention-later-s-late'));
+        fireEvent.click(screen.getByTestId('attention-later-choices-s-late-tomorrow'));
+        await waitFor(() => expect(screen.getByTestId('attention-later-failed-s-late')).toBeInTheDocument());
+        expect(screen.getByTestId('attention-step-s-late')).toBeInTheDocument();
     });
 });

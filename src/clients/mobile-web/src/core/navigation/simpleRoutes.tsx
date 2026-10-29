@@ -7,6 +7,7 @@
 import React from 'react';
 import type { PageView } from '../../types';
 import { AppRouterContext } from './routeContext';
+import { openLogFlow } from './openLogFlow';
 import {
     ProfilePage,
     SettingsPage,
@@ -359,6 +360,17 @@ export const renderAttentionRoute = (ctx: AppRouterContext): React.ReactNode => 
                 crops={ctx.crops}
                 onUpdateTask={(task) => ctx.handleUpdateTask(task.id, task)}
                 onOpenTodos={() => openView('reflect')}
+                // spec: plr-d10 (I22, D-1) — "काम नोंदवा": the recorder on that step's plot, through the one door
+                // (`openLogFlow.ts`: a waiting draft is never moved). A plot this phone does not hold opens the
+                // recorder without one. Opening it clears nothing on लक्ष द्या.
+                onRecordWork={(step) => {
+                    const crop = ctx.crops.find(c => (c.plots ?? []).some(p => p.id === step.plotId));
+                    openLogFlow(ctx, crop ? { cropId: crop.id, plotId: step.plotId } : undefined);
+                    ctx.setCurrentRoute('main');
+                }}
+                // "पुढे ठरवा" — the primary owner only (founder D-22: planning authority starts there; the
+                // server's own check still applies).
+                canReschedule={ctx.farmRole === 'PrimaryOwner'}
             />
         </div>
     );

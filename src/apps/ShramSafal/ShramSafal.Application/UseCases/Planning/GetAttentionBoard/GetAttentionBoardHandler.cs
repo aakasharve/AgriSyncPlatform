@@ -6,6 +6,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Compliance;
+using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
@@ -32,14 +33,17 @@ public sealed class GetAttentionBoardHandler(
             return Result.Failure<AttentionBoardDto>(ShramSafalErrors.InvalidCommand);
 
         var asOf = query.AsOfUtc ?? clock.UtcNow;
-        var today = DateOnly.FromDateTime(asOf);
+        // spec: plr-d10 (I22) — "today" is the FARM's day (India time), not the UTC date: between 00:00 and 05:30
+        // IST the UTC date is still yesterday, which made a step planned for today read as not yet due.
+        var today = FarmLocalDay.From(asOf);
 
         // 1. Get all farmIds for the caller
         var farmIds = await repository.GetFarmIdsForUserAsync(query.CallerUserId, ct);
         if (farmIds.Count == 0)
-            return Result.Success(new AttentionBoardDto(asOf, Array.Empty<AttentionCardDto>()));
+            return Result.Success(new AttentionBoardDto(asOf, Array.Empty<AttentionCardDto>(), Array.Empty<ScheduledWorkItemDto>()));
 
         var cards = new List<AttentionCardDto>();
+        var scheduledWork = new List<ScheduledWorkItemDto>();
 
         foreach (var farmId in farmIds)
         {
@@ -67,23 +71,40 @@ public sealed class GetAttentionBoardHandler(
                 // Filter out removed planned activities
                 planned = planned.Where(p => !p.IsRemoved).ToList();
 
-                // Compute health using CompareEngine
+                // spec: plr-d10 (I22) — the plot's health is judged on the steps that were DUE, with the same
+                // matching as the overdue count below (CompareEngine's thresholds, per kind of work). It used to
+                // compare the whole season's plan — future steps included — against the work done so far by
+                // exact names, so a freshly planned plot read "most planned activities are missing" (Critical).
                 var stageName = latestCycle.Stage ?? "Unknown";
                 HealthScore? health = null;
-                if (planned.Count > 0)
-                {
-                    var compareResult = CompareEngine.ComputeStageComparison(planned, executed, stageName);
-                    health = compareResult.OverallHealth;
-                }
 
-                // Count overdue: planned where PlannedDate < asOf.Date AND no matching executed task
-                var executedTypes = executed
-                    .Where(t => t.ExecutionStatus != ExecutionStatus.Skipped && t.ExecutionStatus != ExecutionStatus.Delayed)
-                    .Select(t => t.ActivityType.Trim().ToLowerInvariant())
-                    .ToHashSet();
-                var overdueCount = planned
-                    .Count(p => p.PlannedDate < today
-                                && !executedTypes.Contains(p.ActivityName.Trim().ToLowerInvariant()));
+                // spec: plr-d10 (I22) — overdue = a step whose day has passed and that no recorded work met,
+                // matched one-to-one by kind of work and by DATE (ScheduledWorkMatcher). It used to be one name
+                // set over every task of the cycle: one "Spray" cleared every planned spray of the season.
+                var overdueCount = 0;
+                if (planned.Any(p => p.PlannedDate <= today))
+                {
+                    // spec: plr-d10 (I22) — the day each recorded task's WORK was done is its log's date, and a
+                    // disputed log's work is not "done". Only this season's logs are read (this runs on every pull).
+                    var logFacts = await LoadLogFactsAsync(new FarmId(farmId), executed, ct);
+                    var statuses = ScheduledWorkMatcher.Match(planned, ToRecordedWork(executed, logFacts), today);
+                    health = HealthOfDueSteps(statuses);
+                    foreach (var status in statuses.Where(s => s.State != ScheduledWorkState.Done))
+                    {
+                        if (status.State == ScheduledWorkState.Overdue) overdueCount++;
+                        scheduledWork.Add(new ScheduledWorkItemDto(
+                            PlannedActivityId: status.Planned.Id,
+                            FarmId: farmId,
+                            PlotId: plot.Id,
+                            PlotName: plot.Name,
+                            CropCycleId: latestCycle.Id,
+                            ActivityName: status.Planned.ActivityName,
+                            Stage: status.Planned.Stage,
+                            PlannedDate: status.Planned.PlannedDate,
+                            DaysLate: status.DaysLate,
+                            IsMissed: status.DaysLate > ScheduledWorkMatcher.OnTimeToleranceDays));
+                    }
+                }
 
                 // Count disputes
                 var disputeCount = await repository.GetDisputedLogCountForPlotAsync(plot.Id, ct);
@@ -177,8 +198,58 @@ public sealed class GetAttentionBoardHandler(
             .ThenBy(c => c.FarmName)
             .ToList();
 
-        return Result.Success(new AttentionBoardDto(asOf, sorted));
+        // Most late first, then by farm and plot — the order the लक्ष द्या page lists them.
+        var orderedWork = scheduledWork
+            .OrderByDescending(w => w.DaysLate)
+            .ThenBy(w => w.PlotName, StringComparer.Ordinal)
+            .ThenBy(w => w.PlannedActivityId)
+            .ToList();
+
+        return Result.Success(new AttentionBoardDto(asOf, sorted, orderedWork));
     }
+
+    /// <summary>
+    /// CompareEngine's per-kind thresholds over the steps whose day has passed (plus today's that are already
+    /// done). A step due today and not yet recorded is not a failure. <c>null</c> when nothing was due.
+    /// </summary>
+    private static HealthScore? HealthOfDueSteps(IReadOnlyList<ScheduledWorkStatus> statuses)
+    {
+        var judged = statuses.Where(s => s.State != ScheduledWorkState.DueToday).ToList();
+        if (judged.Count == 0) return null;
+        return CompareEngine.DetermineOverallHealth(judged
+            .GroupBy(s => CompareEngine.Categorize(s.Planned.ActivityName), StringComparer.OrdinalIgnoreCase)
+            .Select(g => CompareEngine.DetermineBucketHealth(g.Count(s => s.State == ScheduledWorkState.Done), g.Count()))
+            .ToList());
+    }
+
+    /// <summary>The logs these tasks belong to, as the two facts the matcher needs: the work day and whether it is disputed.</summary>
+    private async Task<Dictionary<Guid, (DateOnly WorkDate, bool Disputed)>> LoadLogFactsAsync(
+        FarmId farmId,
+        IEnumerable<LogTask> executed,
+        CancellationToken ct)
+    {
+        var ids = executed.Select(t => t.DailyLogId).Distinct().ToList();
+        var logs = await repository.GetDailyLogsForFarmByIdsAsync(farmId, ids, ct);
+        var facts = new Dictionary<Guid, (DateOnly, bool)>(logs.Count);
+        foreach (var log in logs)
+        {
+            facts[log.Id] = (log.LogDate, log.CurrentVerificationStatus == VerificationStatus.Disputed);
+        }
+        return facts;
+    }
+
+    /// <summary>
+    /// Each recorded task on its log's day. A task whose log is not in the farm's list (a store that cannot
+    /// say) falls back to the farm-local day it was recorded on, never to "today".
+    /// </summary>
+    private static List<RecordedWork> ToRecordedWork(
+        IEnumerable<LogTask> executed,
+        IReadOnlyDictionary<Guid, (DateOnly WorkDate, bool Disputed)> logFacts) =>
+        executed
+            .Select(t => logFacts.TryGetValue(t.DailyLogId, out var f)
+                ? new RecordedWork(t.ActivityType, f.WorkDate, t.ExecutionStatus, f.Disputed)
+                : new RecordedWork(t.ActivityType, FarmLocalDay.From(t.OccurredAtUtc), t.ExecutionStatus))
+            .ToList();
 
     private async Task<Dictionary<Guid, int>> GetMissingTestCountsByPlotAsync(
         FarmId farmId,

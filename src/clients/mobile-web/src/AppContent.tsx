@@ -53,6 +53,7 @@ import { useAuth } from './app/providers/AuthProvider';
 // spec: plr-d10 (I14, CMP-3) — a worker gets no तुलना; the one rule, read here for the switcher.
 import { useOptionalFarmContext } from './core/session/FarmContext';
 import { hiddenMainViewsFor } from './core/navigation/hiddenViews';
+import { useAttentionModel } from './features/attention/hooks/useAttentionModel';
 import { useWorkTabViewChange } from './features/logs/components/entry/workHomeRequest';
 
 interface AppContentProps {
@@ -102,6 +103,10 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
         navigation, context, data, voice, weather, commands: _commands, trust: _trust,
         toast, setToast, handleReset: _handleReset, lastSavedLogSummary: _lastSavedLogSummary, lastSavedLogIds: _lastSavedLogIds,
     } = app;
+
+    // spec: plr-d10 (I22, founder D-1) — the bottom bar's लक्ष द्या count: the items its page lists for this farm
+    // (one list for the page, this count and the आढावा strip — `attentionItems.ts`).
+    const attentionCount = useAttentionModel(data.plannedTasks, data.crops).total;
 
     // BUG-2 2026-08-14, cause 3 (founder: "there is no going back screen after
     // this screen"). `<main>` below is the app's ONE scroll container, so it —
@@ -309,6 +314,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 onNavigate={(route) => navigation.openPlace(route)}
                 onViewChange={(view) => navigation.setMainView(view)}
                 hidden={isKeyboardOpen}
+                attentionCount={attentionCount}
             />
 
             {toast && (

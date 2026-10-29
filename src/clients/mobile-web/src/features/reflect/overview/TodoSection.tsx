@@ -12,7 +12,7 @@
  * (`TodoAddForm.tsx`, the approved preview's design; the app passes it). `onAdd` (a button that opens a
  * sheet) is kept only for a caller that gives no `onAddTodo`. Every Marathi string is PROPOSED.
  *
- * Late to-dos are on लक्ष द्या too (spec plr-d10 I14, H15 / T3 — `AttentionLateTodos.tsx`): the same store,
+ * Late to-dos are on लक्ष द्या too (spec plr-d10 I14, H15 / T3 — `attentionItems.ts`, I22): the same store,
  * so a tick on either page clears both.
  */
 import React, { useState } from 'react';

@@ -193,6 +193,8 @@ export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
             onFocusLogConsumed={() => ctx.setReflectFocusRequest(null)}
             // spec: plr-d10 (I14, H16) — लक्ष द्या's "तुकडा पहा": open narrowed to that plot, once.
             focusPlotId={ctx.reflectFocusPlotId ?? null}
+            // spec: plr-d10 (I22, D-1) — the आढावा strip opens लक्ष द्या, as the bottom bar does (its मागे returns here).
+            onOpenAttention={() => (ctx.openPlace ? ctx.openPlace('attention') : ctx.setCurrentRoute('attention'))}
             onFocusPlotConsumed={() => ctx.setReflectFocusPlotId?.(null)}
         />
     );
