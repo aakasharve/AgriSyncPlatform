@@ -34,7 +34,7 @@
  * closure event keeps method 'voice', the method the review form's Save tap sent for a typed Sathi draft before.
  */
 import { useCallback, useRef, useState } from 'react';
-import type { AgriLogResponse } from '../../types';
+import type { AgriLogResponse, DailyLog } from '../../types';
 import type { LogProvenance } from '../../domain/ai/LogProvenance';
 import type { VoiceDraftSink, VoiceRecordingRef } from '../../features/voice/useVoiceRecorder.types';
 import { archiveIdForRecording, linkClipToLog } from '../../infrastructure/voice/clipLogLink';
@@ -56,6 +56,13 @@ export interface VoiceResultState {
     unclear: string[];
     /** Lane L6b — he typed it to Sathi: there is no recording behind it. */
     typed?: boolean;
+    /**
+     * Lane L6b fix — the logs exactly as this phone wrote them. The first sync pull rebuilds a log's crop work, water,
+     * sprays and notes from the server's flattened tasks and loses what Sathi read from his words (each item's own
+     * phrase, the amounts, his word for a product — `logsReconciler` "DELIBERATELY NOT PRESERVED"). The screen about
+     * the recording he just made reads those items from here (`resultModel.asWritten`).
+     */
+    written?: DailyLog[];
 }
 
 export interface UseVoiceAutoSaveProps {
@@ -117,7 +124,7 @@ export function useVoiceAutoSave({
                     const primary = primaryLogOf(logs);
                     const clipId = primary && !typed ? await linkClip(recording, primary.id).catch(() => null) : null;
                     const unclear = (draft.unclearSegments ?? []).map(s => s.rawText?.trim() ?? '').filter(t => t.length > 0);
-                    setVoiceResult({ logIds: logs.map(l => l.id), clipId, key, unclear, ...(typed && { typed: true }) });
+                    setVoiceResult({ logIds: logs.map(l => l.id), clipId, key, unclear, written: logs, ...(typed && { typed: true }) });
                 },
             });
             if (saved) {

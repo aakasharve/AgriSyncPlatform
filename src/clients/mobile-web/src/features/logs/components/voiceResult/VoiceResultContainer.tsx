@@ -20,7 +20,7 @@ import type { VoiceResultState } from '../../../../app/hooks/useVoiceAutoSave';
 import { resolveVerifierUserId } from '../../../../core/domain/verifierIdentity';
 import { getSessionUserId } from '../../../../infrastructure/storage/AuthTokenStore';
 import { clipScanFloor } from '../../../../infrastructure/voice/clipLogLink';
-import { buildDayView, isConfirmed, ringNodesForDay, sameDayLogs, type PartKey, type WhoDeps } from './resultModel';
+import { asWritten, buildDayView, isConfirmed, ringNodesForDay, sameDayLogs, type PartKey, type WhoDeps } from './resultModel';
 import { RESULT_STR } from './resultStrings';
 import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './useClipPlayback';
 import { useConfirmRecording, useLogSyncState } from './useRecordingTrust';
@@ -47,10 +47,17 @@ export interface VoiceResultContainerProps {
 }
 
 export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
-    result, history, farmerProfile, operatorNameById, farmId, farmRole, placeLabel, syncQueuedById,
+    result, history: liveHistory, farmerProfile, operatorNameById, farmId, farmRole, placeLabel, syncQueuedById,
     onEdit, onBack, onAddAnother, questionPanel, extras, createAudio,
 }) => {
     const sessionUserId = getSessionUserId();
+    // L6b fix — what Sathi understood from the recording just made is read as this phone wrote it: the first sync
+    // pull rebuilds those items from the server's flattened tasks and loses his phrases and amounts (`asWritten`).
+    const history = useMemo(() => {
+        if (!result.written?.length) return liveHistory;
+        const written = new Map(result.written.map(l => [l.id, l] as const));
+        return liveHistory.map(l => asWritten(l, written.get(l.id)) ?? l);
+    }, [liveHistory, result.written]);
     const current = useMemo(
         () => result.logIds.map(id => history.find(l => l.id === id)).filter((l): l is DailyLog => !!l),
         [result.logIds, history],

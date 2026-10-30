@@ -15,7 +15,7 @@
 import React from 'react';
 import { Droplets, FlaskConical, SprayCan, Waves } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
-import { amountText, productName, type ProductBox, type ProductWater } from './productModel';
+import { amountText, nameIsPhrase, productName, type ProductBox, type ProductWater } from './productModel';
 import { resultCopy, type ResultCopy } from './resultCopy';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
@@ -25,7 +25,8 @@ interface Shown { id: string; name: string; amount: string }
 
 const shownOf = (boxes: readonly ProductBox[], language: string | undefined): Shown[] =>
     boxes.flatMap(b => b.items)
-        .map(i => ({ id: i.id, name: productName(i, language), amount: amountText(i.amount, language) }))
+        // His whole phrase standing for the name already holds the amount he said: not repeated beside it.
+        .map(i => ({ id: i.id, name: productName(i, language), amount: nameIsPhrase(i, language) ? '' : amountText(i.amount, language) }))
         .filter(p => p.name || p.amount);
 
 /** His words for the water, else the number(s) exactly as recorded (the screen's own digits, as everywhere on it). */

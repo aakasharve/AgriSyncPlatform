@@ -117,6 +117,30 @@ describe('AudioRecorder — while recording', () => {
         expect(screen.queryByTestId('mic-stop-hint')).toBeNull();
     });
 
+    // spec: plr-d10 (lane L6b fix) — founder's live test: at 13-20 s, with the hint up, his first tap on the red stop
+    // did NOT stop (the hint was drawn over the top of the card, covering the button). The hint may never swallow it.
+    it('with the stop hint showing, ONE tap on stop stops the recording — the hint sits under the stop, never over it', async () => {
+        vi.useFakeTimers();
+        const onAudioCaptured = vi.fn();
+        render(<AudioRecorder onAudioCaptured={onAudioCaptured} />);
+        await startSpeaking();
+        act(() => { vi.advanceTimersByTime(13_000); });
+        const hint = screen.getByTestId('mic-stop-hint');
+        const stop = screen.getByTestId('mic-stop');
+        // Never an overlay: in the flow, AFTER the stop button, and only its "समजलं" takes a tap.
+        expect(hint.className).not.toMatch(/(^|\s)(absolute|fixed)(\s|$)/);
+        expect(hint.className).toContain('pointer-events-none');
+        expect(stop.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(hint.contains(stop)).toBe(false);
+
+        await act(async () => { fireEvent.click(stop); }); // one tap
+        expect(screen.getByTestId('mic-ui')).toHaveAttribute('data-recording', 'no');
+        expect(track.stop).toHaveBeenCalled(); // the microphone is closed
+        act(() => { vi.advanceTimersByTime(1_000); });
+        vi.useRealTimers(); // the clip is read with a FileReader
+        await waitFor(() => expect(onAudioCaptured).toHaveBeenCalledTimes(1)); // and what he said is sent, once
+    });
+
     it('cancel is set apart, in the founder\'s words, and still DISCARDS the clip (nothing is sent, the mic closes)', async () => {
         vi.useFakeTimers();
         const onAudioCaptured = vi.fn();

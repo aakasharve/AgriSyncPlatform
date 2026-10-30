@@ -63,4 +63,14 @@ describe('productModel — only what was said', () => {
         expect(productName({ id: 'y', label: 'Bavistin' }, 'mr')).toBe('');
         expect(productName({ id: 'z', label: 'M-45 पावडर' }, 'mr')).toBe('M-45 पावडर'); // a brand inside Marathi words stays
     });
+
+    // L6b fix — an earlier log after a sync pull carries the sync task's wording ("Spray इथरेल", a mix of unit 'unit').
+    it('never shows the sync task wording ("Spray …") as a name, and never a number without its unit', () => {
+        const [box] = productBoxesOf(day({
+            inputs: [{ id: 't', method: 'Spray', productName: 'Spray इथरेल', mix: [{ id: 'mx', productName: 'Spray इथरेल', unit: 'unit' }] }],
+        }));
+        expect(productName(box.items[0], 'mr')).toBe('इथरेल');
+        expect(amountText(box.items[0].amount, 'mr')).toBe('');
+        expect(amountText({ qty: 2, unit: '' }, 'mr')).toBe('');
+    });
 });

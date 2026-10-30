@@ -75,6 +75,36 @@ export function normalizeDriftedParsedLog(raw: unknown): unknown {
     return out;
 }
 
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lane L6b fix) — the parser names an input row's numbers
+ * differently from one parse to the next (two real responses, 2026-10-30): the dose as `quantity`/`unit` or as
+ * `dosePerLitre`/`doseUnit`, the spray water's unit as `carrierUnit` or `unitCarrier`. They are read here, ONCE,
+ * into the names the app already reads (`quantity`, `unit`, `carrierUnit`), for every parse on every path.
+ *
+ * Pure re-shaping, like `normalizeDriftedParsedLog`: a value is copied under the app's name only when that name is
+ * empty; nothing is removed, computed or invented. `dosePerLitre` itself stays as the parser wrote it — whether the
+ * dose really was per litre is decided from HIS words where it is shown (the parser put "250 ml in 500 L" there).
+ */
+export function normalizeInputDrift<T>(parsed: T): T {
+    const inputs = parsed && typeof parsed === 'object' ? (parsed as { inputs?: unknown }).inputs : undefined;
+    if (!Array.isArray(inputs)) return parsed;
+    const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    const isText = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
+    const rows = inputs.map((row: unknown) => {
+        if (!row || typeof row !== 'object') return row;
+        const r = row as Record<string, unknown>;
+        const out: Record<string, unknown> = { ...r };
+        if (!isNumber(r.quantity)) {
+            const dose = isNumber(r.dosePerLitre) ? r.dosePerLitre : isNumber(r.dose) ? r.dose : undefined;
+            if (dose !== undefined) out.quantity = dose;
+        }
+        if (!isText(r.unit) && isText(r.doseUnit)) out.unit = r.doseUnit;
+        if (!isText(r.carrierUnit) && isText(r.unitCarrier)) out.carrierUnit = r.unitCarrier;
+        return out;
+    });
+    return { ...(parsed as object), inputs: rows } as T;
+}
+
 // PURE MOVE — extracted verbatim from `BackendAiClient.parseInput` (the live
 // online-parse path). Behavior is unchanged: `.safeParse` first, and on drift
 // fall back to `normalizeDriftedParsedLog` (never discard a usable parse).
@@ -98,7 +128,7 @@ export function normalizeParsedLog(rawParsedLog: unknown): AgriLogResponse {
     // what the rest of the app consumes. The schema and the TS interface are
     // kept in lockstep by the AgriLogResponseSchema header invariant.
     if (parseResult.success) {
-        return parseResult.data as unknown as AgriLogResponse;
+        return normalizeInputDrift(parseResult.data as unknown as AgriLogResponse);
     }
 
     // ROBUSTNESS_2026-06-10 (Option A): the server parsed the log fine, but its
@@ -110,7 +140,7 @@ export function normalizeParsedLog(rawParsedLog: unknown): AgriLogResponse {
         '[voice-parse] AgriLogResponse schema drift — using normalized raw parse instead of discarding.',
         parseResult.error?.issues,
     );
-    return normalizeDriftedParsedLog(rawParsedLog) as unknown as AgriLogResponse;
+    return normalizeInputDrift(normalizeDriftedParsedLog(rawParsedLog) as unknown as AgriLogResponse);
 }
 
 export async function resolveFarmIdFromCache(): Promise<string | undefined> {

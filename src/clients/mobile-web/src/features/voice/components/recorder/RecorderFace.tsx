@@ -76,6 +76,18 @@ const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void;
 
             <VoiceLevelRing level={level} onStop={onStop} label={REC_WORDS.tapToStop} attention={hintOn} />
             <p className="relative m-0 text-[18px] font-extrabold text-stone-700" data-testid="mic-stop-instruction">{REC_WORDS.tapToStop}</p>
+            {/* After 10 seconds of speaking: when to press the red button, and why to keep going until then.
+                spec: plr-d10 (lane L6b fix) — it sits UNDER the stop, in the flow, never over it: drawn as an overlay
+                at the top of the card it covered the red button, so his first tap landed on the note and the
+                recording went on (founder's live test, 2026-10-30). One tap on stop always stops. */}
+            {hintOn && (
+                <div role="note" data-testid="mic-stop-hint"
+                    className="pointer-events-none relative mt-2 w-full motion-safe:animate-plr-pop rounded-2xl border-2 border-red-300 bg-white p-3 shadow-[0_10px_30px_rgba(244,63,94,0.25)]">
+                    <p className="m-0 text-[16px] font-extrabold leading-snug text-stone-900">{REC_WORDS.stopHint}</p>
+                    <button type="button" onClick={() => setHintDismissed(true)} data-testid="mic-stop-hint-ok"
+                        className="pointer-events-auto mt-2 inline-flex min-h-[48px] items-center rounded-full bg-emerald-700 px-5 text-[16px] font-extrabold text-white active:scale-95">{REC_WORDS.gotIt}</button>
+                </div>
+            )}
             {seconds >= AUTO_STOP_WARN_SEC && (
                 <p className="relative m-0 mt-1 text-[16px] font-bold text-amber-700" data-testid="mic-auto-stop">{REC_WORDS.autoStopping(Math.max(0, AUTO_STOP_SEC - seconds))}</p>
             )}
@@ -85,16 +97,6 @@ const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void;
                 className="relative mt-3 inline-flex min-h-[56px] max-w-[320px] items-center justify-center gap-2 rounded-3xl border-2 border-rose-300 bg-white px-5 py-2 text-center text-[16px] font-extrabold leading-snug text-rose-700 shadow-sm active:scale-95">
                 <X size={20} strokeWidth={3} className="shrink-0" aria-hidden="true" /> <span className="[text-wrap:balance]">{REC_WORDS.cancel}</span>
             </button>
-
-            {/* After 10 seconds of speaking: when to press the red button, and why to keep going until then. */}
-            {hintOn && (
-                <div role="note" data-testid="mic-stop-hint"
-                    className="absolute inset-x-3 top-2 z-30 motion-safe:animate-plr-pop rounded-2xl border-2 border-red-300 bg-white p-3 shadow-[0_10px_30px_rgba(244,63,94,0.25)]">
-                    <p className="m-0 text-[16px] font-extrabold leading-snug text-stone-900">{REC_WORDS.stopHint}</p>
-                    <button type="button" onClick={() => setHintDismissed(true)} data-testid="mic-stop-hint-ok"
-                        className="mt-2 inline-flex min-h-[48px] items-center rounded-full bg-emerald-700 px-5 text-[16px] font-extrabold text-white active:scale-95">{REC_WORDS.gotIt}</button>
-                </div>
-            )}
         </div>
     );
 };

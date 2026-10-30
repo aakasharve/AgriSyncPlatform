@@ -265,7 +265,11 @@ export class BackendAiClient implements VoiceParserPort {
             // Happy path: flush the streamed events (text chunks +
             // field_complete arrivals + the terminal complete) to the
             // consumer so the wizard still sees live field arrivals.
-            yield* buffered;
+            // spec: plr-d10 (lane L6b fix) — the terminal payload is read through the SAME
+            // `normalizeParsedLog` as the batch path, so a drifted field name is read one way.
+            yield* buffered.map(event => (event.type === 'complete' && event.payload
+                ? { ...event, payload: normalizeParsedLog(event.payload) }
+                : event));
             return;
         }
 

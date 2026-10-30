@@ -32,7 +32,7 @@ import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion'
 import { buildNodes, type CategoryId, type RingNodeData } from '../shramsathi/understandingRing/categories';
 import { dayCategoryStates, type CoverageExtras } from '../shramsathi/understandingRing/dayCategoryCoverage';
 import type { IconName } from '../shramsathi/understandingRing/icons';
-import { productBoxesOf, type ProductBox } from './productModel';
+import { productBoxesOf, withoutTaskPrefix, type ProductBox } from './productModel';
 
 export type PartKey = 'crop' | 'labour' | 'irrigation' | 'inputs' | 'expense' | 'machinery' | 'observation' | 'planned';
 
@@ -82,11 +82,35 @@ export interface BlockerEntry { id: string; logId: string; value: string | null;
 
 interface Sourced { sourceText?: string; provenanceVerified?: boolean }
 
-/** The item's phrase, ONLY when it is verified and appears word-for-word in his transcript. */
+/** Spacing and punctuation his words and an item's phrase may differ by — never a letter or a digit. */
+const SKIP = /[\s.,!?;:।॥"'“”‘’()[\]{}\-–—…]/;
+
+/**
+ * Where an item's phrase sits in his words, comparing letters only: case, spacing and punctuation aside (lane L6b
+ * fix — the parser's `sourceText` can drop a comma or a full stop, or start a sentence in lower case).
+ */
+export function findPhrase(transcript: string, phrase: string): { start: number; end: number } | null {
+    const at: number[] = [];
+    let flat = '';
+    for (let i = 0; i < transcript.length; i += 1) {
+        if (SKIP.test(transcript[i])) continue;
+        flat += transcript[i].toLowerCase();
+        at.push(i);
+    }
+    const needle = [...phrase].filter(ch => !SKIP.test(ch)).join('').toLowerCase();
+    const hit = needle ? flat.indexOf(needle) : -1;
+    return hit < 0 ? null : { start: at[hit], end: at[hit + needle.length - 1] + 1 };
+}
+
+/**
+ * The item's phrase, ONLY when it is verified and found in his transcript — returned as HIS words (the transcript's
+ * own stretch), so the mark lands exactly on what he said.
+ */
 export function verifiedPhrase(item: Sourced, transcript: string | undefined): string | undefined {
     const phrase = item.sourceText?.trim();
     if (!phrase || item.provenanceVerified === false || !transcript) return undefined;
-    return transcript.includes(phrase) ? phrase : undefined;
+    const hit = findPhrase(transcript, phrase);
+    return hit ? transcript.slice(hit.start, hit.end) : undefined;
 }
 
 const LATIN = /[A-Za-z]/;
@@ -211,8 +235,9 @@ export function partEntriesOf(log: DailyLog): PartEntry[] {
     });
     const boxes = productBoxesOf(log);
     (log.inputs ?? []).forEach((e, i) => {
-        const names = (e.mix ?? []).map(m => marathiOnly(m.productName)).filter(Boolean);
-        const what = names.length > 0 ? names.join(', ') : marathiOnly(e.productName);
+        // Never the sync task's "Spray …" / "Fertilizer …" wording a pulled log carries (L6b fix).
+        const names = (e.mix ?? []).map(m => marathiOnly(withoutTaskPrefix(m.productName))).filter(Boolean);
+        const what = names.length > 0 ? names.join(', ') : marathiOnly(withoutTaskPrefix(e.productName));
         add('inputs', i, e, what, boxes[i]);
         addCost('inputs', i, e, what, rupees(e.cost));
     });
@@ -260,6 +285,25 @@ export function blockersOf(log: DailyLog): BlockerEntry[] {
         out.push({ id: `${o.id || `${log.id}:issue:${i}`}:issue`, logId: log.id, value: marathiOnly(o.textRaw) || quote || null, quote, verified: o.provenanceVerified !== false });
     });
     return out;
+}
+
+/**
+ * Lane L6b fix — the recording he JUST made, as this phone wrote it. The first sync pull rebuilds a log's items from
+ * the server's flattened tasks (`logsReconciler`: crop work, water, sprays and notes "DELIBERATELY NOT PRESERVED"),
+ * which drops every item's own phrase, the amounts and his word for a product: the why-tiles and the product rows
+ * vanished seconds after the save (founder's live test, 2026-10-30). So for this screen only, what Sathi understood
+ * is read from the phone's own write, and everything else — the confirmation, who, when, the sync — from the current
+ * record. An edit never reaches this screen (it returns to the form's flow), so the write is never stale here.
+ */
+export function asWritten(current: DailyLog | undefined, written: DailyLog | undefined): DailyLog | undefined {
+    if (!current || !written) return current ?? written;
+    return {
+        ...current,
+        cropActivities: written.cropActivities, irrigation: written.irrigation, labour: written.labour, inputs: written.inputs,
+        machinery: written.machinery, activityExpenses: written.activityExpenses, observations: written.observations,
+        plannedTasks: written.plannedTasks, disturbance: written.disturbance,
+        fullTranscript: written.fullTranscript ?? current.fullTranscript,
+    };
 }
 
 /** "He confirmed it": the same rule the rest of the app uses for a verified log. */
