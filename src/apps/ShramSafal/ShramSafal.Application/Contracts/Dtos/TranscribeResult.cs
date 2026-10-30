@@ -39,4 +39,27 @@ public sealed record TranscribeResult
     /// Free-form; the orchestrator maps to <c>AiFailureClass</c> upstream.
     /// </summary>
     public string? Error { get; init; }
+
+    /// <summary>
+    /// PLR lane V-1 fix pass (B005) — set when the failure is DETERMINISTIC for this recording, so the orchestrator
+    /// must not run the same transcription again (it would re-bill every piece): <see cref="TranscribeFailureCodes"/>.
+    /// <c>null</c> for an ordinary failure (the existing fallback rules apply).
+    /// </summary>
+    public string? FailureCode { get; init; }
+
+    /// <summary>
+    /// PLR lane V-1 — how many speech-to-text requests the recording took (1 = sent whole; more = it was split
+    /// because it was longer than the provider takes in one request). 0 when unknown.
+    /// </summary>
+    public int Pieces { get; init; }
+}
+
+/// <summary>PLR lane V-1 fix pass (B005) — deterministic transcription failures.</summary>
+public static class TranscribeFailureCodes
+{
+    /// <summary>The recording is longer than the server will split; it was not transcribed at all.</summary>
+    public const string AudioTooLong = "audio_too_long";
+
+    /// <summary>One piece of a split recording failed after its own retry; the whole transcription failed.</summary>
+    public const string PartFailed = "stt_part_failed";
 }

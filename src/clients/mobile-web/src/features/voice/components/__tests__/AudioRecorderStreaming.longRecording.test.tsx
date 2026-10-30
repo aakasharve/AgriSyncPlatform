@@ -8,8 +8,10 @@
  * The streaming recorder's own encode plays the sound through the browser in real time after the stop, so a
  * 10-minute recording would wait about 10 minutes before it could even be sent. The recorder now also encodes the
  * same microphone stream live; a recording over `LIVE_ENCODE_AFTER_SEC` is emitted from that encoder at once
- * (`encodedLive`), without the post-stop encode. A shorter one takes today's path, untouched. If the live encoder is
- * unavailable or failed, a long recording falls back to today's path too — slow, never lost.
+ * (`encodedLive`), without the post-stop encode. A shorter one takes today's path, untouched.
+ * Fix pass (B002, B003): if the live encoder is unavailable, failed, or does not answer its stop in time, a long
+ * recording is sent as the recorder's own sound — a complete mu-law WAV written in one pass — NEVER through the
+ * real-time re-encode whose clock could cut it short. The PCM recorder is stopped whatever the live encoder did.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -18,6 +20,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
     processStreamingResult: vi.fn(),
+    pcmStops: 0,
+    hangStop: false,
     liveStream: null as MediaStream | null,
     recorders: [] as Array<{ stop: () => void; failNext?: boolean }>,
 }));
@@ -31,7 +35,7 @@ vi.mock('../../../../infrastructure/voice/StreamingPcmRecorder', () => ({
     StreamingPcmRecorder: class {
         get liveStream(): MediaStream | null { return h.liveStream; }
         start = async () => undefined;
-        stop = async () => ({ pcm: new Float32Array(16), sampleRate: 16000, durationMs: 123_456 });
+        stop = async () => { h.pcmStops++; return { pcm: new Float32Array(16000).fill(0.25), sampleRate: 16000, durationMs: 123_456 }; };
     },
 }));
 vi.mock('../../../../infrastructure/voice/VoicePreprocessor', () => ({
@@ -59,6 +63,7 @@ class FakeMediaRecorder {
     start() { this.state = 'recording'; }
     stop() {
         if (this.state === 'inactive') return;
+        if (h.hangStop) return; // B003: a stop that never answers
         this.state = 'inactive';
         if ((this as unknown as { failNext?: boolean }).failNext) { this.onerror?.(); } else { this.ondataavailable?.({ data: new Blob(['live-opus'], { type: 'audio/webm' }) }); }
         this.onstop?.();
@@ -74,6 +79,8 @@ beforeEach(() => {
     });
     h.liveStream = { getTracks: () => [] } as unknown as MediaStream;
     h.recorders = [];
+    h.pcmStops = 0;
+    h.hangStop = false;
     vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
     vi.useFakeTimers();
 });
@@ -132,7 +139,7 @@ describe('a long recording is sent as it was encoded while he spoke', () => {
         expect(await audio.blob.text()).toBe('re-encoded');
     });
 
-    it('a long recording whose live encoder failed still goes, by today\'s path (never lost)', async () => {
+    it('a long recording whose live encoder failed goes as his own sound, complete — never the real-time re-encode (B002)', async () => {
         const onAudioCaptured = vi.fn();
         render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} />);
         await startSpeaking();
@@ -140,11 +147,29 @@ describe('a long recording is sent as it was encoded while he spoke', () => {
         await wait(90_000);
         await stop();
 
-        expect(h.processStreamingResult).toHaveBeenCalledTimes(1);
-        expect(captured(onAudioCaptured).encodedLive).toBeUndefined();
+        expect(h.processStreamingResult).not.toHaveBeenCalled();
+        const audio = captured(onAudioCaptured);
+        expect(audio.encodedLive).toBe(true);
+        expect(audio.mimeType).toBe('audio/wav');
+        // Every one of the recorder's 16000 samples is in it (44-byte header + one byte a sample).
+        expect(audio.blob.size).toBe(44 + 16000);
     });
 
-    it('a phone with no live stream to encode uses today\'s path', async () => {
+    it('a live encoder whose stop never answers does not hang the stop: the PCM recorder still stops and his sound goes (B003)', async () => {
+        const onAudioCaptured = vi.fn();
+        render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} />);
+        await startSpeaking();
+        await wait(90_000);
+        h.hangStop = true;
+        await stop();
+
+        expect(h.pcmStops).toBe(1);
+        expect(onAudioCaptured).toHaveBeenCalledTimes(1);
+        expect(captured(onAudioCaptured).mimeType).toBe('audio/wav');
+        expect(h.processStreamingResult).not.toHaveBeenCalled();
+    });
+
+    it('a phone with no live stream to encode sends a long recording as its own sound, complete', async () => {
         h.liveStream = null;
         const onAudioCaptured = vi.fn();
         render(<AudioRecorderStreaming onAudioCaptured={onAudioCaptured} />);
@@ -153,7 +178,8 @@ describe('a long recording is sent as it was encoded while he spoke', () => {
         await stop();
 
         expect(h.recorders).toHaveLength(0);
-        expect(h.processStreamingResult).toHaveBeenCalledTimes(1);
+        expect(h.processStreamingResult).not.toHaveBeenCalled();
+        expect(captured(onAudioCaptured).mimeType).toBe('audio/wav');
     });
 
     it('cancel discards a long recording: nothing is sent', async () => {

@@ -2,35 +2,50 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 (lane AI-2, register F71) — the saved entry, as the parse reads it
- * when the farmer speaks a change to it ("बदला"). Pure.
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lane AI-2) — the saved entry, as the parse reads it when the
+ * farmer speaks a change to it ("बदला"). Pure.
  *
  * The parse answers in its own bucket shape, and the "बदला" merge (`correctionModel.mergeCorrection`, lane RF2, not
  * changed here) REPLACES each bucket the answer carries. So the model is shown the entry in that same shape, with
- * everything it may need to copy unchanged (product, method, units, tank water, cost), and nothing that is only the
- * app's own bookkeeping (ids, provenance flags, the phrase each value came from, links to other records).
+ * the values it may need to copy unchanged (product, method, units, tank water, cost, the work and the note words).
  *
- * Labour is the exception, shaped for the merge's identity rule (review B001): only what tells the engagements apart
- * (type, engagement, group) and the numbers a labour correction can change. Names and wages are left out — the merge
- * refuses a labour answer that carries them, and worker changes belong in हजेरी.
+ * Fix pass (review B006): an ALLOW-LIST per bucket — only the fields the model needs to copy reach the parse. No ids of
+ * any kind (row ids, assigneeId, sourceObservationId, observation links, gradeId, weather links), no vendor or vendor
+ * phone, no recommendedBy, no worker names or wages. A field not listed here never leaves the phone with a correction.
+ * Labour is shaped for the merge's identity rule (review B001): what tells the engagements apart (type, engagement,
+ * group) and the numbers a labour correction can change.
  */
 import type { DailyLog } from '../../../../types';
 
+type Fields = readonly string[];
+
+/** Per bucket: exactly the fields the parse may see. */
+const ALLOWED: Readonly<Record<string, Fields>> = {
+    cropActivities: ['title', 'workTypes', 'quantity', 'unit', 'areaCovered', 'notes'],
+    irrigation: ['method', 'source', 'durationHours', 'waterVolumeLitres', 'role', 'notes'],
+    labour: ['type', 'engagementType', 'gender', 'count', 'maleCount', 'femaleCount', 'durationHours', 'activity'],
+    inputs: [
+        'productName', 'rawProductName', 'type', 'method', 'quantity', 'unit', 'dose', 'npkGrade', 'reason',
+        'carrierMedium', 'carrierType', 'carrierCount', 'carrierCapacity', 'carrierVolume', 'carrierUnit',
+        'computedWaterVolume', 'cost', 'notes', 'mix',
+    ],
+    machinery: ['type', 'ownership', 'hoursUsed', 'rentalCost', 'fuelCost', 'fuelType', 'fuelQuantity', 'implement', 'nozzlesActive', 'operationPerformed', 'notes'],
+    activityExpenses: ['reason', 'category', 'totalAmount', 'items', 'notes'],
+    observations: ['noteType', 'textRaw', 'severity'],
+    plannedTasks: ['title', 'dueHint', 'category'],
+};
+
+/** Inside a list field, the same rule: the mixed products of a spray, the items of an expense. */
+const ALLOWED_INSIDE: Readonly<Record<string, Fields>> = {
+    mix: ['productName', 'dose', 'unit', 'npkGrade', 'basisQty', 'basisUnit'],
+    items: ['name', 'qty', 'unit', 'unitPrice', 'total'],
+    workTypes: [],
+};
+
+const DISTURBANCE: Fields = ['scope', 'group', 'reason', 'severity', 'blockedSegments', 'note', 'cause', 'impact'];
+
 /** The buckets, in the order the parse lists them. */
-const BUCKETS = ['cropActivities', 'irrigation', 'labour', 'inputs', 'machinery', 'activityExpenses', 'observations', 'plannedTasks'] as const;
-
-/** The app's own bookkeeping: never shown to the model. */
-const BOOKKEEPING = new Set([
-    'id', 'plotId', 'cropId', 'dateKey', 'timestamp', 'createdAt', 'updatedAt',
-    'numbers', 'provenance', 'provenanceVerified', 'sourceText', 'systemInterpretation', 'rawText',
-    'linkedActivityId', 'linkedExpenseId', 'linkedExpenseItemId', 'linkedHarvestSessionId', 'costSource',
-    'mixId', 'passId', 'motorId', 'operatorId', 'shiftId', 'sourceNoteId',
-    'detectedCrop', 'targetPlotName', 'isCommonActivity', 'tags', 'source', 'aiConfidence',
-    'status', 'resolvedAt', 'extractedTasks', 'textCleaned', 'issue', 'progress',
-]);
-
-/** What a labour row may carry into the parse: identity and the numbers a correction can change. */
-const LABOUR_FIELDS = ['type', 'engagementType', 'gender', 'count', 'maleCount', 'femaleCount', 'durationHours', 'activity'] as const;
+const BUCKETS = Object.keys(ALLOWED);
 
 /** Above this the entry is not sent (the server has its own, larger, cap); the parse is then a normal one, as before. */
 export const MAX_CORRECTION_ENTRY_CHARS = 10_000;
@@ -40,30 +55,26 @@ const isEmpty = (v: unknown): boolean =>
     || (Array.isArray(v) && v.length === 0)
     || (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0);
 
-/** A copy without bookkeeping keys and without empty values, at any depth. */
-function clean(value: unknown): unknown {
-    if (Array.isArray(value)) {
-        return value.map(clean).filter(v => !isEmpty(v));
-    }
-    if (value && typeof value === 'object') {
-        const out: Record<string, unknown> = {};
-        for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-            if (BOOKKEEPING.has(key) || typeof v === 'function') continue;
-            const c = clean(v);
-            if (!isEmpty(c)) out[key] = c;
-        }
-        return out;
-    }
-    return value;
-}
+const isPlainValue = (v: unknown): boolean => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
 
-const labourRow = (row: Record<string, unknown>): Record<string, unknown> => {
+/** Only the allowed fields of a row, each a plain value (or, for a listed list field, its allowed inside). */
+function pick(row: unknown, fields: Fields): Record<string, unknown> {
     const out: Record<string, unknown> = {};
-    for (const key of LABOUR_FIELDS) {
-        if (!isEmpty(row[key])) out[key] = row[key];
+    if (!row || typeof row !== 'object') return out;
+    const source = row as Record<string, unknown>;
+    for (const key of fields) {
+        const value = source[key];
+        if (isEmpty(value)) continue;
+        if (isPlainValue(value)) { out[key] = value; continue; }
+        const inside = ALLOWED_INSIDE[key];
+        if (!inside || !Array.isArray(value)) continue; // an object or list nobody listed: not sent
+        const list = inside.length === 0
+            ? value.filter(isPlainValue)
+            : value.map(item => pick(item, inside)).filter(item => !isEmpty(item));
+        if (list.length > 0) out[key] = list;
     }
     return out;
-};
+}
 
 /**
  * The entry's current parts in the parse's bucket shape, or `null` when it holds nothing a change could be about (or
@@ -75,12 +86,12 @@ export function correctionEntryForParse(log: DailyLog): Record<string, unknown> 
     for (const bucket of BUCKETS) {
         const rows = source[bucket];
         if (!Array.isArray(rows) || rows.length === 0) continue;
-        const shaped = bucket === 'labour'
-            ? rows.filter((r): r is Record<string, unknown> => !!r && typeof r === 'object').map(labourRow).filter(r => !isEmpty(r))
-            : (clean(rows) as unknown[]);
+        const shaped = rows.map(row => pick(row, ALLOWED[bucket])).filter(row => !isEmpty(row));
         if (shaped.length > 0) parts[bucket] = shaped;
     }
-    const disturbance = clean(log.disturbance);
+    const disturbance = log.disturbance ? pick({ ...log.disturbance, blockedSegments: undefined }, DISTURBANCE) : {};
+    const blocked = (log.disturbance?.blockedSegments ?? []).filter(isPlainValue);
+    if (blocked.length > 0) disturbance.blockedSegments = blocked;
     if (!isEmpty(disturbance)) parts.disturbance = disturbance;
     if (Object.keys(parts).length === 0) return null;
     return JSON.stringify(parts).length > MAX_CORRECTION_ENTRY_CHARS ? null : parts;

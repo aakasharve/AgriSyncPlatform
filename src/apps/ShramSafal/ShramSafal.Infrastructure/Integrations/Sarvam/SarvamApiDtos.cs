@@ -29,7 +29,9 @@ internal sealed record SarvamSttResult(
     string? Transcript,
     string? LanguageCode,
     string? Error,
-    string? DiarizedTranscriptJson = null)
+    string? DiarizedTranscriptJson = null,
+    string? FailureCode = null,
+    int Pieces = 1)
 {
     public static SarvamSttResult Success(string transcript, string? languageCode) =>
         new(true, transcript, languageCode, null, null);
@@ -37,8 +39,19 @@ internal sealed record SarvamSttResult(
     public static SarvamSttResult Success(string transcript, string? languageCode, string? diarizedTranscriptJson) =>
         new(true, transcript, languageCode, null, diarizedTranscriptJson);
 
+    /// <summary>PLR lane V-1 — a recording transcribed in <paramref name="pieces"/> pieces.</summary>
+    public static SarvamSttResult SuccessInPieces(string transcript, string? languageCode, int pieces) =>
+        new(true, transcript, languageCode, null, null, null, pieces);
+
     public static SarvamSttResult Failure(string error) =>
         new(false, null, null, error, null);
+
+    /// <summary>
+    /// PLR lane V-1 fix pass (B005) — a failure that is deterministic for this recording
+    /// (<c>TranscribeFailureCodes</c>): the orchestrator must not run the same transcription again.
+    /// </summary>
+    public static SarvamSttResult DeterministicFailure(string error, string failureCode, int pieces) =>
+        new(false, null, null, error, null, failureCode, pieces);
 }
 
 /// <summary>
@@ -69,10 +82,15 @@ internal sealed record SttCallOutcome(
 /// extracted into <see cref="Content"/> as a free-form string the caller
 /// usually parses as JSON via <c>GeminiJsonCleaner</c>.
 /// </summary>
-internal sealed record SarvamChatResult(bool IsSuccess, string? Content, string? Error)
+internal sealed record SarvamChatResult(bool IsSuccess, string? Content, string? Error, int? CompletionTokens = null)
 {
     public static SarvamChatResult Success(string content) =>
         new(true, content, null);
+
+    /// <summary>PLR lane V-1 fix pass — with the answer's size as Sarvam counted it (<c>usage.completion_tokens</c>),
+    /// so the structuring budget is measured on the live stack.</summary>
+    public static SarvamChatResult Success(string content, int? completionTokens) =>
+        new(true, content, null, completionTokens);
 
     public static SarvamChatResult Failure(string error) =>
         new(false, null, error);

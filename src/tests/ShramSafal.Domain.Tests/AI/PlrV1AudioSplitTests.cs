@@ -264,7 +264,8 @@ public sealed class PlrV1AudioSplitTests
             CancellationToken.None);
 
         Assert.False(result.IsSuccess);
-        Assert.Equal("Sarvam STT did not return a transcript.", result.Error);
+        Assert.Contains("Sarvam STT did not return a transcript.", result.Error, StringComparison.Ordinal);
+        Assert.Equal(ShramSafal.Application.Contracts.Dtos.TranscribeFailureCodes.PartFailed, result.FailureCode);
     }
 
     // ------------------------------------------------------------------ the plan, on PCM the test makes itself

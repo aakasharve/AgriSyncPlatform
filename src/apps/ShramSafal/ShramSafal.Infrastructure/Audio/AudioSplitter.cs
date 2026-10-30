@@ -53,14 +53,26 @@ internal sealed class AudioSplitter
     /// short closure inside a word.</summary>
     internal const int SmoothingFrames = 10;
 
-    /// <summary>A piece whose loud frames stay below this share of the clip's loud frames is a pause, not speech.</summary>
-    internal const double QuietRatio = 0.2;
+    /// <summary>
+    /// Review B004 — a piece is a PAUSE only when it is near-silent in absolute terms: its loud frames (95th
+    /// percentile, 20 ms RMS) stay at or below -50 dBFS. Never relative to the clip's loudest speech, which would let
+    /// soft speech beside loud speech count as a pause and its empty transcript pass as "nothing said".
+    /// </summary>
+    internal const double QuietCeilingDbfs = -50;
 
-    /// <summary>Absolute floor for "quiet" (about -55 dBFS on 16-bit audio).</summary>
-    internal const double QuietFloorRms = 60;
+    /// <summary><see cref="QuietCeilingDbfs"/> as a 16-bit RMS value (about 104).</summary>
+    internal static readonly double QuietCeilingRms = 32768 * Math.Pow(10, QuietCeilingDbfs / 20);
+
+    /// <summary>A clip its container says is at most this long is sent whole without being decoded (2 s under the
+    /// split threshold, for the probe's frame rounding).</summary>
+    internal const double ProbedUnsplitSeconds = 26;
+
+    /// <summary>Decodes running at once on this server (production has 2 vCPU).</summary>
+    internal const int MaxConcurrentDecodes = 2;
 
     private readonly IAudioTranscoder _transcoder;
     private readonly ILogger<AudioSplitter> _logger;
+    private readonly SemaphoreSlim _decodeGate = new(MaxConcurrentDecodes, MaxConcurrentDecodes);
 
     public AudioSplitter(IAudioTranscoder transcoder, ILogger<AudioSplitter> logger)
     {
@@ -76,10 +88,24 @@ internal sealed class AudioSplitter
     {
         ArgumentNullException.ThrowIfNull(audio);
 
+        // A clip whose container already says it is short is sent whole: no ffmpeg for most recordings.
+        if (AudioDurationProbe.TryRead(audio) is { } probed && probed.TotalSeconds <= ProbedUnsplitSeconds)
+        {
+            return AudioSplit.Unsplit;
+        }
+
         byte[] pcmBytes;
         try
         {
-            pcmBytes = await DecodeAsync(audio, mimeType, ct).ConfigureAwait(false);
+            await _decodeGate.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                pcmBytes = await DecodeAsync(audio, mimeType, ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                _decodeGate.Release();
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -104,14 +130,12 @@ internal sealed class AudioSplitter
 
         var frameRms = FrameRms(pcm);
         var ranges = PlanPieces(pcm, SampleRate);
-        var clipLoud = Percentile95(frameRms, 0, frameRms.Length);
         var pieces = new List<AudioPiece>(ranges.Count);
         for (var i = 0; i < ranges.Count; i++)
         {
             var (start, end) = ranges[i];
             var pieceLoud = Percentile95(frameRms, start / FrameSamples, (end + FrameSamples - 1) / FrameSamples);
-            var quiet = pieceLoud <= Math.Max(QuietRatio * clipLoud, QuietFloorRms);
-            pieces.Add(new AudioPiece(i, start, end, ToWav(pcm.Slice(start, end - start), SampleRate), quiet));
+            pieces.Add(new AudioPiece(i, start, end, ToWav(pcm.Slice(start, end - start), SampleRate), IsQuiet(pieceLoud)));
         }
 
         _logger.LogInformation(
@@ -224,6 +248,9 @@ internal sealed class AudioSplitter
         return smoothed;
     }
 
+    /// <summary>Near-silence in absolute terms (B004): the piece's loud frames at or below <see cref="QuietCeilingDbfs"/>.</summary>
+    internal static bool IsQuiet(double loudFrameRms) => loudFrameRms <= QuietCeilingRms;
+
     private static double[] FrameRms(ReadOnlySpan<short> pcm)
     {
         var frames = (pcm.Length + FrameSamples - 1) / FrameSamples;
@@ -316,8 +343,8 @@ internal sealed class AudioSplitter
 }
 
 /// <summary>One piece of a split clip: samples [<see cref="StartSample"/>, <see cref="EndSample"/>) as a WAV.</summary>
-/// <param name="IsQuiet">Its loud frames are far below the clip's: a pause. An empty transcript is then a pause
-/// heard correctly, not a failure.</param>
+/// <param name="IsQuiet">Near-silent in absolute terms (loud frames at or below -50 dBFS): a pause. An empty transcript
+/// is then a pause heard correctly, not a failure.</param>
 internal sealed record AudioPiece(int Index, int StartSample, int EndSample, byte[] Wav, bool IsQuiet)
 {
     public double Seconds => (EndSample - StartSample) / (double)AudioSplitter.SampleRate;

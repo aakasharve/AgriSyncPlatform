@@ -3,6 +3,8 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Infrastructure.AI;
 using ShramSafal.Infrastructure.Audio;
 
 namespace ShramSafal.Infrastructure.Integrations.Sarvam;
@@ -26,6 +28,9 @@ internal sealed class SarvamSttClient(
     private static readonly TimeSpan PieceRetryDelayCap = TimeSpan.FromSeconds(5);
 
     private readonly SarvamOptions _options = optionsAccessor.Value;
+
+    /// <summary>Does this client cut long recordings into pieces? (False only when no splitter was supplied.)</summary>
+    internal bool SplitsLongAudio => splitter is not null;
 
     public async Task<SarvamSttResult> TranscribeAsync(
         Stream audioStream,
@@ -98,8 +103,11 @@ internal sealed class SarvamSttClient(
                 var split = await splitter.SplitAsync(payload, mimeType, ct).ConfigureAwait(false);
                 if (split.IsTooLong)
                 {
-                    return SarvamSttResult.Failure(
-                        $"Audio is longer than {AudioSplitter.MaxSplitSeconds / 60:0} minutes; it was not transcribed.");
+                    // B005: the input is refused, deterministically — never retried, never handed on, not a breaker hit.
+                    return SarvamSttResult.DeterministicFailure(
+                        $"{AiErrorMarkers.InputRefused} Audio is longer than {AudioSplitter.MaxSplitSeconds / 60:0} minutes; it was not transcribed.",
+                        TranscribeFailureCodes.AudioTooLong,
+                        pieces: 0);
                 }
 
                 if (split.IsSplit)
@@ -144,7 +152,7 @@ internal sealed class SarvamSttClient(
         CancellationToken ct)
     {
         var texts = new string?[pieces.Count];
-        string? language = null;
+        var languages = new string?[pieces.Count];
         string? failure = null;
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var gate = new SemaphoreSlim(Math.Max(1, maxParallel));
@@ -178,7 +186,7 @@ internal sealed class SarvamSttClient(
                 }
 
                 texts[piece.Index] = outcome.Transcript?.Trim() ?? string.Empty;
-                Interlocked.CompareExchange(ref language, outcome.LanguageCode, null);
+                languages[piece.Index] = outcome.LanguageCode;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -203,17 +211,26 @@ internal sealed class SarvamSttClient(
         if (failure is not null)
         {
             logger.LogWarning("Sarvam STT split transcription failed: {Failure}", failure);
-            return SarvamSttResult.Failure(failure);
+            // B005: the failed piece already had its own retry — running the whole recording again would re-bill
+            // every piece, and a long recording cannot be answered by the multimodal fallback either.
+            return SarvamSttResult.DeterministicFailure(
+                AiErrorMarkers.ForSplitRecording(failure, pieces.Count),
+                TranscribeFailureCodes.PartFailed,
+                pieces.Count);
         }
 
         var joined = string.Join(" ", texts.Where(t => !string.IsNullOrWhiteSpace(t)));
         if (string.IsNullOrWhiteSpace(joined))
         {
-            return SarvamSttResult.Failure(NoTranscriptError);
+            return SarvamSttResult.DeterministicFailure(
+                AiErrorMarkers.ForSplitRecording(NoTranscriptError, pieces.Count),
+                TranscribeFailureCodes.PartFailed,
+                pieces.Count);
         }
 
         logger.LogInformation("Sarvam STT transcribed {Count} pieces of one clip.", pieces.Count);
-        return SarvamSttResult.Success(joined, language);
+        // The recording's language is the one its FIRST piece was heard in (not whichever piece answered first).
+        return SarvamSttResult.SuccessInPieces(joined, languages.FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)), pieces.Count);
     }
 
     /// <summary>One piece, with one more try after a rate limit, a server error or a timeout.</summary>
@@ -299,14 +316,19 @@ internal sealed class SarvamSttClient(
                     response.Headers.RetryAfter?.Delta);
             }
 
-            if (!TryExtractTranscript(body, out var transcript, out var languageCode))
+            switch (ReadTranscript(body, out var transcript, out var languageCode))
             {
-                // No transcript field at all, or an empty one: no words heard.
-                return SttCallOutcome.Succeeded(string.Empty, languageCode, null);
+                case TranscriptField.Missing:
+                    // B004: a 200 with no transcript field, or a body that is not JSON, is a PROTOCOL failure — never
+                    // "no words heard", which a quiet piece would turn into a silently skipped part of his speech.
+                    return SttCallOutcome.Failed("Sarvam STT answered without a transcript field.", retryable: true);
+                case TranscriptField.Empty:
+                    // The field is there and empty: no words heard.
+                    return SttCallOutcome.Succeeded(string.Empty, languageCode, null);
+                default:
+                    var diarizedJson = withDiarization ? TryExtractDiarizedTranscriptJson(body) : null;
+                    return SttCallOutcome.Succeeded(transcript, languageCode, diarizedJson);
             }
-
-            var diarizedJson = withDiarization ? TryExtractDiarizedTranscriptJson(body) : null;
-            return SttCallOutcome.Succeeded(transcript, languageCode, diarizedJson);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -353,7 +375,16 @@ internal sealed class SarvamSttClient(
         }
     }
 
-    private static bool TryExtractTranscript(
+    /// <summary>What a 200 answer says about the words: some, none (the field is there and empty), or no answer at
+    /// all (no transcript field, or not JSON) — B004 keeps the last apart from "none".</summary>
+    internal enum TranscriptField
+    {
+        Words,
+        Empty,
+        Missing
+    }
+
+    internal static TranscriptField ReadTranscript(
         string responseBody,
         out string transcript,
         out string? languageCode)
@@ -365,6 +396,10 @@ internal sealed class SarvamSttClient(
         {
             using var document = JsonDocument.Parse(responseBody);
             var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return TranscriptField.Missing;
+            }
 
             if (root.TryGetProperty("language_code", out var languageNode) &&
                 languageNode.ValueKind == JsonValueKind.String)
@@ -372,49 +407,47 @@ internal sealed class SarvamSttClient(
                 languageCode = languageNode.GetString();
             }
 
-            if (TryReadString(root, "transcript", out transcript) ||
-                TryReadString(root, "text", out transcript))
+            var sawField = false;
+            foreach (var holder in TranscriptHolders(root))
             {
-                return true;
-            }
-
-            if (root.TryGetProperty("results", out var results) &&
-                results.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var result in results.EnumerateArray())
+                foreach (var name in new[] { "transcript", "text" })
                 {
-                    if (TryReadString(result, "transcript", out transcript) ||
-                        TryReadString(result, "text", out transcript))
+                    if (!holder.TryGetProperty(name, out var node) || node.ValueKind != JsonValueKind.String)
                     {
-                        return true;
+                        continue;
+                    }
+
+                    sawField = true;
+                    var text = node.GetString();
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        transcript = text.Trim();
+                        return TranscriptField.Words;
                     }
                 }
             }
+
+            return sawField ? TranscriptField.Empty : TranscriptField.Missing;
         }
         catch (JsonException)
         {
-            return false;
+            return TranscriptField.Missing;
         }
-
-        return false;
     }
 
-    private static bool TryReadString(JsonElement root, string propertyName, out string value)
+    private static IEnumerable<JsonElement> TranscriptHolders(JsonElement root)
     {
-        value = string.Empty;
-        if (!root.TryGetProperty(propertyName, out var node) || node.ValueKind != JsonValueKind.String)
+        yield return root;
+        if (root.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
         {
-            return false;
+            foreach (var result in results.EnumerateArray())
+            {
+                if (result.ValueKind == JsonValueKind.Object)
+                {
+                    yield return result;
+                }
+            }
         }
-
-        var extracted = node.GetString();
-        if (string.IsNullOrWhiteSpace(extracted))
-        {
-            return false;
-        }
-
-        value = extracted.Trim();
-        return true;
     }
 
     private static string? TryExtractProviderError(string responseBody)

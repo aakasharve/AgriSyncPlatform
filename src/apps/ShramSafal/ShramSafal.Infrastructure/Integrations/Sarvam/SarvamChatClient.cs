@@ -59,7 +59,7 @@ internal sealed class SarvamChatClient(
                 return SarvamChatResult.Failure("Sarvam chat response did not contain content.");
             }
 
-            return SarvamChatResult.Success(content);
+            return SarvamChatResult.Success(content, TryExtractCompletionTokens(body));
         }
         catch (Exception ex)
         {
@@ -123,6 +123,25 @@ internal sealed class SarvamChatClient(
         }
 
         return false;
+    }
+
+    private static int? TryExtractCompletionTokens(string responseBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            return document.RootElement.TryGetProperty("usage", out var usage) &&
+                   usage.ValueKind == JsonValueKind.Object &&
+                   usage.TryGetProperty("completion_tokens", out var tokens) &&
+                   tokens.ValueKind == JsonValueKind.Number &&
+                   tokens.TryGetInt32(out var value)
+                ? value
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static string? TryExtractContent(string responseBody)

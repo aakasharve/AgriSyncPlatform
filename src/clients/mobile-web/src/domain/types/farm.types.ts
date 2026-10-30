@@ -451,8 +451,9 @@ export interface AudioData {
     // fallback can be removed and the field made required.
     recordedAtUtc?: string;
     /**
-     * Lane V-1 — the recorder encoded this while he spoke (a recording longer than `LIVE_ENCODE_AFTER_SEC`): upload it
-     * as it is. Re-encoding plays the sound through the browser in real time, so a long recording is never re-encoded.
+     * Lane V-1 — a long recording (over `LIVE_ENCODE_AFTER_SEC`), already final: encoded while he spoke, or (fix pass
+     * B002, the live encoding failed) his raw sound as a complete mu-law WAV. Upload it as it is. Re-encoding plays the
+     * sound through the browser in real time, so a long recording is never re-encoded.
      */
     encodedLive?: boolean;
     /** Lane V-1 — how long he spoke, as the recorder measured it (sent with an `encodedLive` recording). */

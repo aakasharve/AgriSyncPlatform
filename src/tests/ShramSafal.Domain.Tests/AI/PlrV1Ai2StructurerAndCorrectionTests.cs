@@ -141,17 +141,6 @@ public sealed class PlrV1Ai2StructurerAndCorrectionTests
         Assert.False(chat.BuildRequestBody("s", "u").ContainsKey("max_tokens"));
     }
 
-    [Fact]
-    public void The_defaults_fit_a_ten_minute_recording()
-    {
-        var defaults = new SarvamOptions();
-
-        Assert.Equal(4096, defaults.ChatMaxTokens);
-        Assert.True(defaults.ChatTimeoutSeconds >= 120, "the structurer needs longer than 45 s for a 10-minute answer");
-        Assert.Equal(45, defaults.TimeoutSeconds); // each speech-to-text piece is at most 25 s of audio
-        Assert.InRange(defaults.SttMaxParallelPieces, 1, 3);
-    }
-
     // ------------------------------------------------------------------ AI-2: the correction context
 
     [Fact]

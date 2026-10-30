@@ -29,6 +29,29 @@ namespace ShramSafal.Infrastructure;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Speech-to-text and the audio pieces it needs. PLR lane V-1: <see cref="SarvamSttClient"/> splits a recording
+    /// longer than Sarvam's 30 s limit only when <see cref="AudioSplitter"/> is registered — its constructor parameter
+    /// is optional, so a missing registration would silently send every long recording whole (and fail). Kept in one
+    /// place, and tested by resolving the client through it.
+    /// </summary>
+    internal static void AddVoiceTranscription(IServiceCollection services)
+    {
+        services.AddScoped<SarvamSttClient>();
+
+        // SARVAM_PRIMARY_VOICE_PIPELINE Task 2.3a — server-side audio
+        // transcoder. Singleton because FfmpegAudioTranscoder is stateless.
+        // Registered alongside the existing Sarvam streaming pieces so the
+        // /api/ai/transcribe-stream endpoint (Task 2.3) can pipe browser
+        // audio → PCM → Sarvam without the transcriber adapter inspecting
+        // MIME types.
+        services.AddSingleton<IAudioTranscoder, FfmpegAudioTranscoder>();
+
+        // PLR lane V-1 (register F67) — cuts a recording longer than 28 s into pieces Sarvam's
+        // speech-to-text REST call can take (30 s each); used by SarvamSttClient.
+        services.AddSingleton<AudioSplitter>();
+    }
+
     public static IServiceCollection AddShramSafalInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         var connectionString =
@@ -506,7 +529,7 @@ public static class DependencyInjection
         services.AddSingleton<AiFailureClassifier>();
         services.AddSingleton<AiAttemptCostEstimator>();
         services.AddScoped<IAiPromptBuilder, AiPromptBuilder>();
-        services.AddScoped<SarvamSttClient>();
+        AddVoiceTranscription(services);
         services.AddScoped<SarvamStreamingSttClient>();
         services.AddScoped<SarvamChatClient>();
         services.AddScoped<SarvamVisionClient>();
@@ -526,18 +549,6 @@ public static class DependencyInjection
         // registered as ITranscriberProvider — verbatim is async/background,
         // not part of the interactive transcribe/structure pipeline.
         services.AddScoped<SarvamVerbatimSttClient>();
-
-        // SARVAM_PRIMARY_VOICE_PIPELINE Task 2.3a — server-side audio
-        // transcoder. Singleton because FfmpegAudioTranscoder is stateless
-        // and FFMpegCore looks up the ffmpeg binary path once at first use
-        // (GlobalFFOptions). Registered alongside the existing Sarvam
-        // streaming pieces so the /api/ai/transcribe-stream endpoint
-        // (Task 2.3) can pipe browser audio → PCM → Sarvam without the
-        // transcriber adapter inspecting MIME types.
-        services.AddSingleton<IAudioTranscoder, FfmpegAudioTranscoder>();
-        // PLR lane V-1 (register F67) — cuts a recording longer than 28 s into pieces Sarvam's
-        // speech-to-text REST call can take (30 s each); used by SarvamSttClient.
-        services.AddSingleton<AudioSplitter>();
 
         services.AddScoped<IAiOrchestrator, AiOrchestrator>();
         // DISABLED (CTO ops-hardening): ExtractionVerificationWorker threw every cycle

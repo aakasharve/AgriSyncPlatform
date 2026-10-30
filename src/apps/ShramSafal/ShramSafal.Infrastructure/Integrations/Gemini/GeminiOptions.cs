@@ -14,7 +14,8 @@ public sealed class GeminiOptions
     public string VoiceFallbackModelId { get; set; } = DefaultVoiceFallbackModelId;
     public decimal Temperature { get; set; } = 0.2m;
     public int MaxTokens { get; set; } = 4096;
-    public int TimeoutSeconds { get; set; } = 30;
+    // PLR lane V-1 fix pass (orchestrator's call) — the voice fallback may get a long recording; 30 s was too short.
+    public int TimeoutSeconds { get; set; } = 120;
     public string BaseUrl { get; set; } = "https://generativelanguage.googleapis.com/v1beta";
 
     [Obsolete("Use StructurerModelId, OcrModelId, or VoiceFallbackModelId per operation.")]

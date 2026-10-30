@@ -25,6 +25,7 @@ import RecorderFace from './recorder/RecorderFace';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
 import { startLiveEncoder, type LiveEncoder } from './recorder/liveEncoder';
+import { mulawWavOf, RAW_UPLOAD_MIME } from './recorder/rawSoundUpload';
 import { DEFAULT_VOICE_CONFIG } from '../../../infrastructure/voice/types';
 import { StreamingPcmRecorder } from '../../../infrastructure/voice/StreamingPcmRecorder';
 import { StreamingSilenceTrimmer } from '../../../infrastructure/voice/StreamingSilenceTrimmer';
@@ -189,7 +190,14 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
 
     try {
       // Lane V-1 — the live encoding ends first, while the microphone is still open (the recorder's stop closes it).
-      const liveBlob = liveEncoder ? await liveEncoder.stop() : null;
+      // Review B003: that stop answers within LIVE_STOP_TIMEOUT_MS or counts as failed, and the PCM recorder is
+      // stopped whatever it did — the stop always completes.
+      let liveBlob: Blob | null = null;
+      try {
+        liveBlob = liveEncoder ? await liveEncoder.stop() : null;
+      } catch {
+        liveBlob = null;
+      }
       const recording = await recorder.stop();
 
       if (cancelledRef.current) {
@@ -210,16 +218,18 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       // recorder block) cannot race the in-flight stop.
       onProcessingStart?.();
 
-      // Lane V-1 — a long recording goes as it was encoded while he spoke: no real-time re-encode after the stop.
-      // When the live encoding failed, it takes today's path below (slow, but nothing is lost).
-      if (liveBlob && spokenSec > LIVE_ENCODE_AFTER_SEC) {
-        const liveBase64 = await blobToBase64NoPrefix(liveBlob);
+      // Lane V-1 — a long recording is NEVER re-encoded in real time after the stop: it goes as it was encoded while
+      // he spoke, or — review B002, the live encoding failed — as the recorder's own sound (a complete mu-law WAV,
+      // written in one pass). Either way it is complete; a wall-clock-cut encode is never sent as whole.
+      if (spokenSec > LIVE_ENCODE_AFTER_SEC) {
+        const durationMs = Math.round(recording.durationMs || spokenSec * 1000);
+        const blob = liveBlob ?? mulawWavOf(recording.pcm, recording.sampleRate);
         onAudioCaptured({
-          blob: liveBlob,
-          base64: liveBase64,
-          mimeType: 'audio/webm',
+          blob,
+          base64: await blobToBase64NoPrefix(blob),
+          mimeType: liveBlob ? 'audio/webm' : RAW_UPLOAD_MIME,
           encodedLive: true,
-          durationMs: Math.round(recording.durationMs || spokenSec * 1000),
+          durationMs,
         });
         return;
       }
@@ -244,10 +254,12 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
 
       // Match AudioRecorder.tsx's onAudioCaptured shape byte-for-byte:
       // { blob, base64, mimeType } where mimeType is 'audio/webm' (no codec suffix).
+      // Lane V-1 fix pass (B002): an encode that could not finish in time falls back to a complete WAV — it is
+      // labelled as the WAV it is, never as WebM.
       onAudioCaptured({
         blob: result.audioBlob,
         base64,
-        mimeType: 'audio/webm',
+        mimeType: result.mimeType.startsWith('audio/wav') ? 'audio/wav' : 'audio/webm',
       });
     } catch (err) {
       console.error('Error finalizing streaming recording:', err);

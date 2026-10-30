@@ -175,7 +175,10 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
             {
                 Success = false,
                 Error = stt.Error,
-                ProviderModelVersion = resolvedModel
+                ProviderModelVersion = resolvedModel,
+                // PLR lane V-1 fix pass (B005): a deterministic failure is never transcribed again by the orchestrator.
+                FailureCode = stt.FailureCode,
+                Pieces = stt.Pieces
             };
         }
 
@@ -215,7 +218,8 @@ internal sealed class SarvamStreamingSttClient : ITranscriberProvider
             Success = true,
             Transcript = stt.Transcript,
             LanguageCode = stt.LanguageCode ?? resolvedLanguage,
-            ProviderModelVersion = resolvedModel
+            ProviderModelVersion = resolvedModel,
+            Pieces = stt.Pieces
         };
     }
 

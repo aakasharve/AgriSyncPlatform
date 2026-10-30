@@ -25,6 +25,12 @@ export interface LiveEncoder {
 /** A chunk every second: what he said is held as he says it. */
 const TIMESLICE_MS = 1000;
 
+/**
+ * Review B003 — the encoder's stop must answer, or the recorder's stop would wait forever. A stop with no answer by
+ * then counts as a failed encoding (`null`): the recorder sends his sound its own way, never nothing.
+ */
+export const LIVE_STOP_TIMEOUT_MS = 3000;
+
 export function startLiveEncoder(stream: MediaStream | null | undefined): LiveEncoder | null {
     if (!stream || typeof MediaRecorder === 'undefined') return null;
     const mimeType = SegmentCompressor.getSupportedMimeType();
@@ -39,13 +45,22 @@ export function startLiveEncoder(stream: MediaStream | null | undefined): LiveEn
         const result = (): Blob | null => (failed || chunks.length === 0 ? null : new Blob(chunks, { type: 'audio/webm' }));
         return {
             stop: () => new Promise<Blob | null>(resolve => {
-                if (recorder.state === 'inactive') { resolve(result()); return; }
-                recorder.onstop = () => resolve(result());
+                let settled = false;
+                const settle = (blob: Blob | null) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    resolve(blob);
+                };
+                // B003: no answer in time = a failed encoding (an incomplete file is never handed on as whole).
+                const timer = setTimeout(() => { failed = true; settle(null); }, LIVE_STOP_TIMEOUT_MS);
+                if (recorder.state === 'inactive') { settle(result()); return; }
+                recorder.onstop = () => settle(result());
                 try {
                     recorder.stop();
                 } catch {
                     failed = true;
-                    resolve(null);
+                    settle(null);
                 }
             }),
         };

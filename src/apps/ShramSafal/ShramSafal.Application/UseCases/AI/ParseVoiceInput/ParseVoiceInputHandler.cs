@@ -262,12 +262,18 @@ public sealed class ParseVoiceInputHandler(
                         canonicalResult.Error ?? ShramSafalErrors.AiParsingFailed.Description));
             }
 
+            var heardWords = canonicalResult.RawTranscript ?? transcript ?? string.Empty;
+            var integrityChecked = ApplyTranscriptIntegrityCorrections(
+                canonicalResult.NormalizedJson,
+                heardWords,
+                _domainKnowledgeLayerEnabled,
+                _domainKnowledgePipeline);
+            // PLR lane AI-2 fix pass — a "बदला" parse (the phone sent the entry it changes) keeps what he did not
+            // change, makes no note of the negated half, and turns a product swap into the swapped row.
             using var document = JsonDocument.Parse(
-                ApplyTranscriptIntegrityCorrections(
-                    canonicalResult.NormalizedJson,
-                    canonicalResult.RawTranscript ?? transcript ?? string.Empty,
-                    _domainKnowledgeLayerEnabled,
-                    _domainKnowledgePipeline));
+                promptContext.CorrectionOf is { ValueKind: JsonValueKind.Object } correctedEntry
+                    ? CorrectionGuard.Apply(integrityChecked, correctedEntry, heardWords)
+                    : integrityChecked);
             var parsedLog = document.RootElement.Clone();
             var fieldConfidences = ExtractFieldConfidences(parsedLog);
             var overallConfidence = canonicalResult.OverallConfidence > 0

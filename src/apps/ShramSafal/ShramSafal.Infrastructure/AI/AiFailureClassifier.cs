@@ -112,6 +112,13 @@ internal sealed class AiFailureClassifier
             return AiFailureClass.TransientFailure;
         }
 
+        // PLR lane V-1 fix pass (B005) — a refused input is the input's failure, not the provider's: no retry,
+        // no fallback (UnsupportedInput is neither), and the orchestrator does not count it against the breaker.
+        if (AiErrorMarkers.Has(error, AiErrorMarkers.InputRefused))
+        {
+            return AiFailureClass.UnsupportedInput;
+        }
+
         var message = error.Trim().ToLowerInvariant();
         if (message.Contains("429", StringComparison.Ordinal) ||
             message.Contains("rate limit", StringComparison.Ordinal) ||

@@ -8,6 +8,9 @@ import { CompressionConfig } from './types';
 
 type AudioContextCtor = { new(options?: AudioContextOptions): AudioContext };
 
+/** Lane V-1 fix pass (B002) — the encode was stopped by its clock before the sound ended: only part of it is there. */
+export const ENCODE_CUT_SHORT = 'Encoding did not finish in real time; the encoded sound would be cut short.';
+
 export class SegmentCompressor {
     private readonly config: CompressionConfig;
 
@@ -94,6 +97,7 @@ export class SegmentCompressor {
             const audioContext = new AudioContextConstructor({ sampleRate });
             const timeoutMs = Math.max(1500, Math.ceil((pcmData.length / sampleRate) * 1000) + 1500);
             let settled = false;
+            let cutShort = false;
             let timeoutHandle: number | null = null;
 
             const complete = (callback: () => void) => {
@@ -140,6 +144,13 @@ export class SegmentCompressor {
                     const blob = new Blob(chunks, { type: mimeType });
                     complete(() => {
                         void audioContext.close().catch(() => {});
+                        // Lane V-1 fix pass (review B002): stopped by the clock, not by the sound's end, the encode
+                        // holds only part of the recording. That is a failure (the callers then send a complete WAV),
+                        // never a cut-short file passed on as whole.
+                        if (cutShort) {
+                            reject(new Error(ENCODE_CUT_SHORT));
+                            return;
+                        }
                         if (blob.size <= 0) {
                             reject(new Error('MediaRecorder produced an empty encoded blob.'));
                             return;
@@ -158,9 +169,15 @@ export class SegmentCompressor {
                 source.start(0);
 
                 timeoutHandle = window.setTimeout(() => {
+                    cutShort = true;
                     if (recorder.state === 'recording') {
                         recorder.stop();
+                        return;
                     }
+                    complete(() => {
+                        void audioContext.close().catch(() => {});
+                        reject(new Error(ENCODE_CUT_SHORT));
+                    });
                 }, timeoutMs);
             } catch (error) {
                 complete(() => {

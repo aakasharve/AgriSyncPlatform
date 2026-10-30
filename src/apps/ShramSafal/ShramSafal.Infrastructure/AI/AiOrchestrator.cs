@@ -51,7 +51,7 @@ internal sealed class AiOrchestrator(
         .GroupBy(x => x.ProviderType)
         .ToDictionary(x => x.Key, x => x.First());
 
-    public async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ParseVoiceWithFallbackAsync(
+    public Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> ParseVoiceWithFallbackAsync(
         Guid userId,
         Guid farmId,
         Stream audioStream,
@@ -64,7 +64,43 @@ internal sealed class AiOrchestrator(
         string? segmentMetadataJson = null,
         string? requestPayloadHash = null,
         string clientAppVersion = "unknown",
-        CancellationToken ct = default)
+        CancellationToken ct = default) =>
+        RunVoiceParseAsync(
+            userId,
+            farmId,
+            audioStream,
+            mimeType,
+            systemPrompt,
+            idempotencyKey,
+            languageHint,
+            inputSpeechDurationMs,
+            inputRawDurationMs,
+            segmentMetadataJson,
+            requestPayloadHash,
+            clientAppVersion,
+            fallbackProviderOnly: false,
+            ct);
+
+    /// <param name="fallbackProviderOnly">
+    /// PLR lane V-1 fix pass (B005) — the two-stage path already ran the primary provider's speech-to-text on this
+    /// recording (every piece billed); handing over to the full legacy path would run it AGAIN. With this set, only
+    /// the fallback provider is tried.
+    /// </param>
+    private async Task<(VoiceParseCanonicalResult Result, Guid JobId, AiProviderType ProviderUsed, bool FallbackUsed)> RunVoiceParseAsync(
+        Guid userId,
+        Guid farmId,
+        Stream audioStream,
+        string mimeType,
+        string systemPrompt,
+        string idempotencyKey,
+        string languageHint,
+        int? inputSpeechDurationMs,
+        int? inputRawDurationMs,
+        string? segmentMetadataJson,
+        string? requestPayloadHash,
+        string clientAppVersion,
+        bool fallbackProviderOnly,
+        CancellationToken ct)
     {
         var key = string.IsNullOrWhiteSpace(idempotencyKey) ? Guid.NewGuid().ToString("N") : idempotencyKey.Trim();
         var existing = await aiJobRepository.GetByIdempotencyKeyAsync(key, ct);
@@ -162,35 +198,57 @@ internal sealed class AiOrchestrator(
         var primary = ResolveProvider(config.GetProviderForOperation(AiOperationType.VoiceToStructuredLog), AiOperationType.VoiceToStructuredLog);
         var fallback = ResolveFallbackProvider(primary?.ProviderType, AiOperationType.VoiceToStructuredLog);
 
-        var primaryExecution = await ExecuteVoiceAttemptWithRetriesAsync(
-            job,
-            primary,
-            payload,
-            mimeType,
-            languageHint,
-            systemPrompt,
-            config,
-            requestPayloadHash,
-            ct);
-
-        if (primaryExecution.IsSuccess)
-        {
-            // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the prompt content
-            // hash on the canonical result returned to handlers.
-            var resultWithHash = primaryExecution.Result with { PromptContentHash = promptContentHash };
-            job.UpdateProvenance(primaryExecution.Result.ModelUsed ?? "unknown");
-            job.MarkSucceeded(resultWithHash.NormalizedJson ?? "{}", primaryExecution.Attempt!);
-            await aiJobRepository.SaveChangesAsync(ct);
-            return (resultWithHash, job.Id, primaryExecution.ProviderUsed, false);
-        }
-
-        if (!config.FallbackEnabled ||
-            fallback is null ||
-            !failureClassifier.IsFallbackEligible(primaryExecution.FailureClass))
+        if (fallbackProviderOnly && (!config.FallbackEnabled || fallback is null))
         {
             job.MarkFailed();
             await aiJobRepository.SaveChangesAsync(ct);
-            return (primaryExecution.Result with { PromptContentHash = promptContentHash }, job.Id, primaryExecution.ProviderUsed, false);
+            return (
+                new VoiceParseCanonicalResult
+                {
+                    Success = false,
+                    Error = "No fallback provider is available for this recording.",
+                    PromptContentHash = promptContentHash
+                },
+                job.Id,
+                primary?.ProviderType ?? AiProviderType.Gemini,
+                false);
+        }
+
+        if (!fallbackProviderOnly)
+        {
+            var primaryExecution = await ExecuteVoiceAttemptWithRetriesAsync(
+                job,
+                primary,
+                payload,
+                mimeType,
+                languageHint,
+                systemPrompt,
+                config,
+                requestPayloadHash,
+                ct);
+
+            if (primaryExecution.IsSuccess)
+            {
+                // DATA_PRINCIPLE_SPINE sub-phase 01.4 — stamp the prompt content
+                // hash on the canonical result returned to handlers.
+                var resultWithHash = primaryExecution.Result with { PromptContentHash = promptContentHash };
+                job.UpdateProvenance(primaryExecution.Result.ModelUsed ?? "unknown");
+                job.MarkSucceeded(resultWithHash.NormalizedJson ?? "{}", primaryExecution.Attempt!);
+                await aiJobRepository.SaveChangesAsync(ct);
+                return (resultWithHash, job.Id, primaryExecution.ProviderUsed, false);
+            }
+
+            // PLR lane V-1 fix pass (B005): a long recording's failure is not handed to a fallback that cannot
+            // answer it either (AiErrorMarkers.NoFallback).
+            if (!config.FallbackEnabled ||
+                fallback is null ||
+                !failureClassifier.IsFallbackEligible(primaryExecution.FailureClass) ||
+                AiErrorMarkers.Has(primaryExecution.Result.Error, AiErrorMarkers.NoFallback))
+            {
+                job.MarkFailed();
+                await aiJobRepository.SaveChangesAsync(ct);
+                return (primaryExecution.Result with { PromptContentHash = promptContentHash }, job.Id, primaryExecution.ProviderUsed, false);
+            }
         }
 
         var fallbackExecution = await ExecuteVoiceAttemptWithRetriesAsync(
@@ -396,10 +454,53 @@ internal sealed class AiOrchestrator(
                 firstTokenTimedOut: false);
 
             logger.LogWarning(
-                "[parse-voice-two-stage] transcribe returned no transcript for job {JobId} (provider={Transcriber}, failureClass={FailureClass}). Falling back.",
+                "[parse-voice-two-stage] transcribe returned no transcript for job {JobId} (provider={Transcriber}, failureClass={FailureClass}, failureCode={FailureCode}, pieces={Pieces}).",
                 job.Id,
                 transcriberType,
-                failureClass);
+                failureClass,
+                transcribeResult.FailureCode ?? "none",
+                transcribeResult.Pieces);
+
+            // PLR lane V-1 fix pass (B005) — a DETERMINISTIC transcription failure is never transcribed again: the
+            // legacy path would run the primary provider's speech-to-text over the whole recording once more (every
+            // piece billed again). A refused recording ends here; a failed piece of a SHORT split recording may go to
+            // the fallback provider only; a long one ends here (the multimodal fallback cannot answer it).
+            if (transcribeResult.FailureCode is not null)
+            {
+                if (transcribeResult.FailureCode == TranscribeFailureCodes.PartFailed &&
+                    transcribeResult.Pieces <= AiErrorMarkers.FallbackMaxPieces &&
+                    config.FallbackEnabled)
+                {
+                    return await RunVoiceParseAsync(
+                        userId,
+                        farmId,
+                        new MemoryStream(payload, writable: false),
+                        mimeType,
+                        systemPrompt,
+                        key,
+                        languageHint,
+                        inputSpeechDurationMs,
+                        inputRawDurationMs,
+                        segmentMetadataJson,
+                        requestPayloadHash,
+                        clientAppVersion,
+                        fallbackProviderOnly: true,
+                        ct);
+                }
+
+                job.MarkFailed();
+                await aiJobRepository.SaveChangesAsync(ct);
+                return (
+                    new VoiceParseCanonicalResult
+                    {
+                        Success = false,
+                        Error = transcribeResult.Error ?? "Transcription failed.",
+                        PromptContentHash = promptContentHash
+                    },
+                    job.Id,
+                    transcriberType,
+                    false);
+            }
 
             if (config.FallbackEnabled && failureClassifier.IsFallbackEligible(failureClass))
             {
@@ -518,13 +619,24 @@ internal sealed class AiOrchestrator(
         // backstop because we don't yet have a sibling structurer that
         // can take text-in and return AgriLog JSON-out with the same
         // confidence semantics.
-        if (config.FallbackEnabled && failureClassifier.IsFallbackEligible(structurerExecution.FailureClass))
+        //
+        // PLR lane V-1 fix pass (B005): a recording that was SPLIT for speech-to-text is not run through the full
+        // legacy path (it would transcribe every piece again, billed again). A short split recording goes to the
+        // fallback provider only; a long one fails here, visibly — the multimodal fallback's answer for a 10-minute
+        // recording is cut off at its token limit (measured live 2026-10-31, 619 s).
+        var split = transcribeResult.Pieces > 1;
+        var fallbackCanAnswer = !split || transcribeResult.Pieces <= AiErrorMarkers.FallbackMaxPieces;
+        if (config.FallbackEnabled &&
+            fallbackCanAnswer &&
+            failureClassifier.IsFallbackEligible(structurerExecution.FailureClass) &&
+            !AiErrorMarkers.Has(structurerExecution.Result.Error, AiErrorMarkers.NoFallback))
         {
             logger.LogWarning(
-                "[parse-voice-two-stage] structurer failed for job {JobId} (failureClass={FailureClass}); falling back to legacy multimodal.",
+                "[parse-voice-two-stage] structurer failed for job {JobId} (failureClass={FailureClass}); falling back ({Route}).",
                 job.Id,
-                structurerExecution.FailureClass);
-            return await ParseVoiceWithFallbackAsync(
+                structurerExecution.FailureClass,
+                split ? "fallback provider only" : "legacy multimodal");
+            return await RunVoiceParseAsync(
                 userId,
                 farmId,
                 new MemoryStream(payload, writable: false),
@@ -537,6 +649,7 @@ internal sealed class AiOrchestrator(
                 segmentMetadataJson,
                 requestPayloadHash,
                 clientAppVersion,
+                fallbackProviderOnly: split,
                 ct);
         }
 
@@ -1121,7 +1234,11 @@ internal sealed class AiOrchestrator(
             }
 
             lastFailure = execution;
-            if (attemptIndex >= maxAttempts || !failureClassifier.IsRetryEligible(execution.FailureClass))
+            // PLR lane V-1 fix pass (B005): a failure that already had its own retries (a speech-to-text piece) is not
+            // run again — that would re-bill every piece of the recording.
+            if (attemptIndex >= maxAttempts ||
+                !failureClassifier.IsRetryEligible(execution.FailureClass) ||
+                AiErrorMarkers.Has(execution.Result.Error, AiErrorMarkers.NoRetry))
             {
                 break;
             }
@@ -1262,10 +1379,16 @@ internal sealed class AiOrchestrator(
                     latencyMs,
                     failureClass,
                     result.Error ?? "Provider call failed.");
-                breaker.RecordFailure();
-                // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.6 — see
-                // ExecuteVoiceAttemptAsync catch-block comment.
-                breakerRegistry.RecordWindowFailure(provider.ProviderType, AiOperationType.VoiceToStructuredLog);
+                // PLR lane V-1 fix pass (B005): a refused INPUT (a recording over the split limit) says nothing
+                // about the provider's health, so it is not counted against its breaker.
+                if (!AiErrorMarkers.Has(result.Error, AiErrorMarkers.InputRefused))
+                {
+                    breaker.RecordFailure();
+                    // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.6 — see
+                    // ExecuteVoiceAttemptAsync catch-block comment.
+                    breakerRegistry.RecordWindowFailure(provider.ProviderType, AiOperationType.VoiceToStructuredLog);
+                }
+
                 return VoiceAttemptExecution.Failed(provider.ProviderType, failureClass, result.Error, attempt);
             }
 

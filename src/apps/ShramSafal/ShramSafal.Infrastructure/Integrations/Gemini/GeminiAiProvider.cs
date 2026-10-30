@@ -158,23 +158,67 @@ internal sealed class GeminiAiProvider : IAiProvider
                 ? ResolveVoiceFallbackModelId()
                 : ResolveStructurerModelId();
 
-            var generated = await GenerateContentAsync(systemPrompt, userParts, modelId, ct);
-            if (!generated.Success)
+            string? content;
+            if (rawTranscript is not null)
             {
-                return new VoiceParseCanonicalResult
+                // PLR lane V-1 fix pass (B001) — a long TEXT is structured in segments, all or nothing (the same rule
+                // as the Sarvam structurer); a correction is never segmented.
+                var segmentTokens = CorrectionPromptData.IsCorrectionPrompt(systemPrompt)
+                    ? int.MaxValue
+                    : new StructuringBudget(_options.MaxTokens > 0 ? _options.MaxTokens : 4096).SegmentTokens;
+                var structured = await ChunkedStructuring.StructureAsync(
+                    rawTranscript,
+                    segmentTokens,
+                    async (segment, segmentCt) =>
+                    {
+                        var part = await GenerateContentAsync(systemPrompt, [new { text = segment }], modelId, segmentCt);
+                        return part.Success
+                            ? SegmentAnswer.Ok(part.Content)
+                            : SegmentAnswer.Failed(part.Error, retryable: part.Error?.Contains("truncated", StringComparison.OrdinalIgnoreCase) != true);
+                    },
+                    logger,
+                    ct);
+                if (!structured.IsSuccess)
                 {
-                    Success = false,
-                    Error = generated.Error
-                };
+                    return new VoiceParseCanonicalResult { Success = false, Error = structured.Error };
+                }
+
+                content = structured.Content;
+            }
+            else
+            {
+                var generated = await GenerateContentAsync(systemPrompt, userParts, modelId, ct);
+                if (!generated.Success)
+                {
+                    return new VoiceParseCanonicalResult
+                    {
+                        Success = false,
+                        Error = generated.Error
+                    };
+                }
+
+                content = generated.Content;
             }
 
-            var cleaned = GeminiJsonCleaner.Clean(generated.Content!);
+            var cleaned = GeminiJsonCleaner.Clean(content!);
             var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
             // PLR lane V-1 — for a text input the server holds the transcript and the model no longer repeats it;
             // for audio (rawTranscript null) the model's own transcription stays.
             var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion, serverTranscript: rawTranscript);
             var confidence = TryExtractConfidence(normalized) ?? 0.75m;
             rawTranscript ??= TryExtractString(normalized, "fullTranscript");
+
+            // PLR lane V-1 fix pass (B007) — a successful AUDIO parse never stores an empty transcript: the model
+            // heard the recording itself and wrote no words for it, so nothing can be checked against what he said.
+            // That is a visible failure (a parse failure: no retry of the same call).
+            if (string.IsNullOrWhiteSpace(rawTranscript))
+            {
+                return new VoiceParseCanonicalResult
+                {
+                    Success = false,
+                    Error = "Gemini audio parse returned no transcript of the recording (parse incomplete)."
+                };
+            }
 
             // DATA_PRINCIPLE_SPINE 05.6 — append one row per successful
             // outbound Gemini call. Estimated payload bytes ≈ length of

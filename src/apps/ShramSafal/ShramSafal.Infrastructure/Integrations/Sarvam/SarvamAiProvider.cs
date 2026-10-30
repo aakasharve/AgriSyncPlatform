@@ -46,6 +46,7 @@ internal sealed class SarvamAiProvider(
         try
         {
             string transcript;
+            var sttPieces = 1;
             if (mimeType.StartsWith("text/", StringComparison.OrdinalIgnoreCase))
             {
                 transcript = await ReadTextAsync(audioStream, ct);
@@ -63,6 +64,7 @@ internal sealed class SarvamAiProvider(
                 }
 
                 transcript = stt.Transcript ?? string.Empty;
+                sttPieces = stt.Pieces;
             }
 
             if (string.IsNullOrWhiteSpace(transcript))
@@ -74,17 +76,45 @@ internal sealed class SarvamAiProvider(
                 };
             }
 
-            var completion = await chatClient.CompleteAsync(systemPrompt, transcript, ct);
-            if (!completion.IsSuccess)
+            // PLR lane V-1 fix pass (B001) — a transcript too long for one answer is structured in segments, all or
+            // nothing. A correction ("बदला") is never segmented: its block asks for whole buckets, which segments
+            // would repeat.
+            var segmentTokens = CorrectionPromptData.IsCorrectionPrompt(systemPrompt)
+                ? int.MaxValue
+                : new StructuringBudget(_options.ChatMaxTokens > 0 ? _options.ChatMaxTokens : 2048).SegmentTokens;
+            var structured = await ChunkedStructuring.StructureAsync(
+                transcript,
+                segmentTokens,
+                async (segment, segmentCt) =>
+                {
+                    var completion = await chatClient.CompleteAsync(systemPrompt, segment, segmentCt);
+                    if (!completion.IsSuccess)
+                    {
+                        return SegmentAnswer.Failed(completion.Error, retryable: completion.Error != SarvamChatClient.CutOffError);
+                    }
+
+                    // Measured, not assumed: the answer size against the transcript size the budget planned for.
+                    var spoken = StructuringBudget.EstimateTokens(segment);
+                    logger.LogInformation(
+                        "Sarvam structurer answer: {CompletionTokens} completion tokens for ~{SpokenTokens} transcript tokens (planned at most {Planned}).",
+                        completion.CompletionTokens?.ToString(CultureInfo.InvariantCulture) ?? "unknown",
+                        spoken,
+                        StructuringBudget.PredictedAnswerTokens(spoken));
+                    return SegmentAnswer.Ok(completion.Content);
+                },
+                logger,
+                ct);
+            if (!structured.IsSuccess)
             {
+                // B005: after a split recording, the error tells the orchestrator not to transcribe it all again.
                 return new VoiceParseCanonicalResult
                 {
                     Success = false,
-                    Error = completion.Error
+                    Error = AiErrorMarkers.ForSplitRecording(structured.Error ?? "Sarvam structurer failed.", sttPieces)
                 };
             }
 
-            var cleaned = GeminiJsonCleaner.Clean(completion.Content ?? "{}");
+            var cleaned = GeminiJsonCleaner.Clean(structured.Content ?? "{}");
             var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
             // PLR lane V-1 — the server holds the transcript; the model no longer repeats it (its answer must fit).
             var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion, serverTranscript: transcript);
