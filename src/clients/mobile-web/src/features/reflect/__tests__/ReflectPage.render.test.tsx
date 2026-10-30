@@ -279,19 +279,57 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         expect(lens).toEqual({ fromDate: TODAY_KEY, toDate: TODAY_KEY, plotId: 'g1' });
     });
 
-    it('lane RF2: the day feed button and its sheet are retired; whole-farm work lives on the "संपूर्ण शेत" card', () => {
+    it('RF2 fix pass: the "आजचा आढावा" button is back as it was (title, count, it follows the chosen day)', () => {
+        renderPage();
+        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('आजचा आढावा');
+        expect(screen.getByTestId('activity-feed-count')).toHaveTextContent('1');
+        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
+        pickOct21();
+        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('दिवसाचा आढावा');
+        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('बुधवार, 21 ऑक्टो');
+        fireEvent.click(screen.getByTestId('activity-feed-button'));
+        expect(screen.getByTestId('rf-feed-title')).toHaveTextContent('दिवसाचा आढावा');
+        expect(screen.getByTestId('rf-feed-block-cane:c1')).toBeInTheDocument();
+        expect(screen.queryByTestId('rf-feed-block-grape:g1')).toBeNull();
+    });
+
+    it('RF2 fix pass — the screen inside it (screen 2): one block per plot that had work, plus the whole farm; a time opens that recording in the block', () => {
+        const farmWide = log({ id: 'farm-today', cropId: 'FARM_GLOBAL', plotIds: [], labour: [{ id: 'l', type: 'HIRED', count: 3 }],
+            meta: { createdAtISO: '2026-10-25T04:00:00.000Z', createdByOperatorId: 'op-sunil' } });
+        const props = renderPage({ history: [...history, farmWide] });
+        expect(screen.getByTestId('activity-feed-count')).toHaveTextContent('2');
+        fireEvent.click(screen.getByTestId('activity-feed-button'));
+        const blocks = Array.from(document.querySelectorAll('[data-testid^="rf-feed-block-"]')).map(e => e.getAttribute('data-testid')).filter(id => !id!.endsWith('-times'));
+        expect(blocks).toEqual(['rf-feed-block-grape:g1', 'rf-feed-block-farm']); // only places with work that day
+        expect(screen.getByTestId('rf-feed-block-grape:g1-times')).toHaveTextContent('आज 1 वेळा सांगितलं');
+        expect(screen.getByTestId('rf-feed-block-farm')).toHaveTextContent('संपूर्ण शेत');
+        // ONE row of time chips per block; a tap opens that recording RIGHT THERE: its work as rows, and one small line
+        const block = screen.getByTestId('rf-feed-block-grape:g1');
+        fireEvent.click(within(block).getByTestId('rf-time-grape:g1-g1-today'));
+        expect(within(block).getByTestId('rf-rec-grape:g1-g1-today-who')).toHaveTextContent('तुम्ही');
+        expect(within(block).getByTestId('rf-rec-grape:g1-g1-today-state')).toHaveTextContent('पक्कं नाही');
+        expect(within(block).getByTestId('rf-rec-grape:g1-g1-today-parts')).toHaveTextContent('छाटणी');
+        expect(within(block).queryByTestId('vr-words')).toBeNull(); // no source-words panel
+        fireEvent.click(within(block).getByTestId('rf-rec-grape:g1-g1-today-edit-g1-today'));
+        expect(props.onOpenLog).toHaveBeenCalledWith(expect.objectContaining({ id: 'g1-today' }));
+        fireEvent.click(within(screen.getByTestId('rf-feed-block-farm')).getByTestId('rf-time-farm-farm-today'));
+        expect(screen.getByTestId('rf-rec-farm-farm-today-who')).toHaveTextContent('सुनील');
+        expect(screen.getByTestId('rf-rec-farm-farm-today-parts')).toHaveTextContent('3 जण');
+    });
+
+    it('the plot cards stay as built: whole-farm work also has its "संपूर्ण शेत" card', () => {
         const farmWide = log({ id: 'farm-today', cropId: 'FARM_GLOBAL', plotIds: [], labour: [{ id: 'l', type: 'HIRED', count: 3 }],
             meta: { createdAtISO: '2026-10-25T04:00:00.000Z', createdByOperatorId: 'op-sunil' } });
         renderPage({ history: [...history, farmWide] });
-        expect(screen.queryByTestId('activity-feed-button')).toBeNull();
-        expect(screen.queryByTestId('rf-feed')).toBeNull();
-        const farmCard = screen.getByTestId('plot-card-farm');
-        expect(farmCard.querySelector('[data-kind="labour"]')).toHaveTextContent('3 जण');
+        expect(screen.getByTestId('plot-card-farm').querySelector('[data-kind="labour"]')).toHaveTextContent('3 जण');
         expect(screen.getByTestId('plot-card-grape:g1').querySelector('[data-kind="labour"]')).toBeNull();
-        fireEvent.click(farmCard);
-        expect(screen.getByTestId('rf-day-title')).toHaveTextContent('संपूर्ण शेत');
-        fireEvent.click(screen.getByTestId('rf-time-farm-today'));
-        expect(screen.getByTestId('rf-rec-farm-today-who')).toHaveTextContent('सुनील');
+    });
+
+    it('B006: a crop with no plot opens "आणखी सांगा" with the crop → plot pickers (no place it cannot record on)', () => {
+        const props = renderPage({ crops: [...CROPS, { id: 'flowers', name: 'Flowers', iconName: '', color: 'bg-pink-500', plots: [], supportedTasks: [], workflow: [] } as never] });
+        fireEvent.click(screen.getByTestId('plot-card-flowers'));
+        fireEvent.click(screen.getByTestId('rf-day-tell'));
+        expect(props.onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addToDay', context: {} }));
     });
 
     it('a note opens its recording through the same plot-day view', () => {

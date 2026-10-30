@@ -577,14 +577,15 @@ describe('THE SAME PHONE — the names the farmer gave survive the sync that ack
             .payload as { captureScope?: string };
         expect((await queuedPayload()).captureScope).toBe('labour');
 
-        // A pull rebuilds the local record from the DTO, which has no word for the
-        // door, so the LOCAL copy loses it...
+        // A pull rebuilds the local record from the DTO. Lane RF2 fix pass (review B002): the record KEEPS the door
+        // across that pull (the server now states it, `DailyLogDto.captureScope`, and a silent older server keeps what
+        // this phone knew), so "बदला" refuses a हजेरी-door record before queueing a change the server would refuse.
         const [item] = await queuedLabour();
         await pull([serverLogDto(logs[0].id, [serverEngagementFor(item, logs[0].id, [], item.workerNames ?? [])])]);
         const [rebuilt] = await DexieLogsRepository.getInstance().getAll();
-        expect(rebuilt.captureScope).toBeUndefined();
+        expect(rebuilt.captureScope).toBe('labour');
 
-        // ...and that costs nothing: the payload that syncs (and replays) already holds it.
+        // ...and the payload that syncs (and replays) still holds it.
         expect((await queuedPayload()).captureScope).toBe('labour');
     });
 });

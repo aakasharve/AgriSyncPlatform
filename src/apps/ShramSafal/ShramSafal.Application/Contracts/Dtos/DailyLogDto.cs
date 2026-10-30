@@ -149,7 +149,17 @@ public sealed record DailyLogDto(
     /// details (every response but the pull, and any log stored before F1 or by an older phone);
     /// the device then keeps what it holds, or shows the task lines with nothing made up.
     /// </summary>
-    LogContentDto? Content = null);
+    LogContentDto? Content = null,
+
+    /// <summary>
+    /// spec: plr-d10 (lane RF2 fix pass, review B002) — which door saved this record, as
+    /// <c>ssf.daily_logs.capture_scope</c> holds it: <c>"labour"</c> for the हजेरी door (B002), <c>null</c>
+    /// for every other save and every record older than the column. A phone that pulls the record
+    /// keeps knowing it was a हजेरी-door save, so it refuses a details edit BEFORE queueing one the
+    /// server would refuse (lane F1). Additive and optional (P11): an older phone ignores it, an older
+    /// server never sends it.
+    /// </summary>
+    string? CaptureScope = null);
 
 /// <summary>
 /// spec: plr-d10 (lane F1) — one stored content row on the wire.

@@ -274,6 +274,12 @@ export interface DailyLogDto {
      * lines) — never "the details are empty". `logsReconciler` draws that line.
      */
     content?: LogContentDto | null;
+
+    /**
+     * spec: plr-d10 (lane RF2 fix pass, review B002) — the door that saved this record (`daily_logs.capture_scope`):
+     * `'labour'` for the हजेरी door, `null` for every other save. Absent on an older server (no statement).
+     */
+    captureScope?: string | null;
 }
 
 /** spec: plr-d10 (lane F1) — one stored content row (`ShramSafal…LogContentDto`). */

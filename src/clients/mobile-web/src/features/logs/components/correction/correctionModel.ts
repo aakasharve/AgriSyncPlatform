@@ -6,22 +6,28 @@
  *
  * THE MERGE RULE (orchestrator's call, kept simple and visible):
  *   - what he says is read as a NORMAL utterance in that entry's crop / plot (the same factory a recording's words go
- *     through, `LogFactory.createFromVoiceResult`, with the entry's own plot as the scope);
+ *     through, `LogFactory.createFromVoiceResult`, with the entry's own plot as the scope; the whole farm for an entry
+ *     with no plot, which the factory cannot place otherwise);
  *   - every bucket present in that reading REPLACES the same bucket of the entry; a bucket he did not mention stays
  *     exactly as it was;
  *   - nothing is written here — the screen shows before → after, and only "जतन करा" saves (a new content version
  *     through lane F1's `revise_log_content`; the server keeps every version, P3);
  *   - KNOWN LIMIT (reported, not fixed): "पण / also" ("पाच बायका पण होत्या") replaces the whole bucket, it does not add.
  *
- * Two record-keeping details, so a replaced bucket still reaches the server the way the old form's edit did:
- *   - labour: when the new reading has as many labour rows as the entry, each keeps its engagement's identity
- *     (`labourAssignmentId`) by position, so the change travels as a labour correction; a different number of rows
- *     changes WHICH engagements the day has, which no route can send — the save says so (`buildEditSavedMessage`);
- *   - planned work: a replaced `plannedTasks` brings its mirrored reminder notes with it, and the old mirrors go.
+ * Fix pass (review B001, B003, B010):
+ *   - LABOUR goes only to the engagement it is about, matched by IDENTITY (engagement type + group: male / female /
+ *     mixed / not said), never by position. Each said row must match exactly one engagement, one-to-one, and state a
+ *     number (never a count inferred from names — "बाळू नव्हता, गणेश होता" says no number); only the four numbers a
+ *     labour correction can carry change (count, men, women, hours). Anything else — ambiguous, a new engagement, names
+ *     only, a wage — changes NO labour here (`labourNotChanged`): worker changes for that entry are made in हजेरी;
+ *   - NOTES change by TYPE: a stoppage note, an observation and a reminder / planned work are three things; saying one
+ *     replaces only that type, and the others stay. Planned work and its reminder notes move together;
+ *   - WATER said as NOT given is the stoppage he said (the water row with its reason), never silently nothing.
  *
  * Before → after is shown the result screen's way (`partEntriesOf`): a part is "changed" when what it says differs.
  */
-import { LogVerificationStatus, type AgriLogResponse, type CropProfile, type DailyLog, type FarmerProfile, type LogScope, type ObservationNote } from '../../../../types';
+import { LogVerificationStatus, type AgriLogResponse, type CropProfile, type DailyLog, type FarmerProfile, type LabourEvent, type LogScope, type ObservationNote } from '../../../../types';
+import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion';
 import { LogFactory } from '../../../../core/domain/LogFactory';
 import { systemClock, type Clock } from '../../../../core/domain/services/Clock';
 import { idGenerator, type IdGenerator } from '../../../../core/domain/services/IdGenerator';
@@ -33,15 +39,19 @@ export const CORRECTABLE_BUCKETS = ['cropActivities', 'irrigation', 'labour', 'i
 export type CorrectableBucket = typeof CORRECTABLE_BUCKETS[number];
 
 const FARM_GLOBAL = 'FARM_GLOBAL';
-/** The tags `LogFactory` puts on a reminder note it mirrors from a planned task. */
-const MIRROR_TAGS = new Set(['planned_task', 'manual_task']);
-const isMirror = (o: ObservationNote): boolean => o.noteType === 'reminder' && (o.tags ?? []).some(t => MIRROR_TAGS.has(t));
+/** A note's type for the merge: a stoppage, a reminder (planned work), or an observation (anything else he noted). */
+type NoteKind = 'issue' | 'reminder' | 'observation';
+const noteKind = (o: ObservationNote): NoteKind => (o.noteType === 'issue' ? 'issue' : o.noteType === 'reminder' ? 'reminder' : 'observation');
 
-/** The entry's own crop and plot, as the recorder's scope (the whole farm for a farm-wide entry). */
+/**
+ * The entry's own crop and plot, as the recorder's scope. The whole farm for a farm-wide entry, and for an entry with
+ * no plot (a crop-level record): the recorder and the factory work on a plot or the whole farm only (review B006).
+ */
 export function scopeOfLog(log: DailyLog): LogScope {
     const sel = log.context?.selection?.[0];
-    if (!sel || sel.cropId === FARM_GLOBAL) return { selectedCropIds: [FARM_GLOBAL], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
-    return { selectedCropIds: [sel.cropId], selectedPlotIds: (sel.selectedPlotIds ?? []).slice(0, 1), mode: 'single', applyPolicy: 'broadcast' };
+    const plotId = sel?.selectedPlotIds?.[0];
+    if (!sel || sel.cropId === FARM_GLOBAL || !plotId) return { selectedCropIds: [FARM_GLOBAL], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
+    return { selectedCropIds: [sel.cropId], selectedPlotIds: [plotId], mode: 'single', applyPolicy: 'broadcast' };
 }
 
 /** Did he say anything a bucket can be changed with? (Nothing understood = nothing to show, nothing to save.) */
@@ -67,10 +77,12 @@ export function spokenAsLog(draft: AgriLogResponse, log: DailyLog, deps: SpokenD
 export interface CorrectionMerge {
     /** The buckets that change (only these are sent); a bucket he did not mention is absent. */
     updates: Partial<DailyLog>;
-    /** Which buckets his words replaced. */
+    /** Which buckets his words changed. */
     replaced: CorrectableBucket[];
     /** The entry as it would read after "जतन करा". */
     after: DailyLog;
+    /** He spoke about workers, but not as a change this screen can make (see `correctLabour`): labour stays as it was. */
+    labourNotChanged: boolean;
 }
 
 const said = (draft: AgriLogResponse, bucket: CorrectableBucket): boolean =>
@@ -79,32 +91,85 @@ const said = (draft: AgriLogResponse, bucket: CorrectableBucket): boolean =>
 /** Every item keeps an id (the record's rows are keyed by it). */
 const withIds = <T extends { id?: string }>(rows: readonly T[], idGen: IdGenerator): T[] => rows.map(r => (r.id ? r : { ...r, id: idGen.generate() }));
 
+const positive = (n: number | undefined): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
+/** The engagement's kind, in the newer field's words (the older `type` maps onto it). */
+const kindOf = (e: LabourEvent): string => e.engagementType ?? (e.type === 'CONTRACT' ? 'contract_piece' : e.type === 'SELF' ? 'self' : 'hired_daily');
+/** The engagement's group: as recorded, else as its own numbers say; "not said" when they say nothing. */
+const groupOf = (e: LabourEvent): string => {
+    if (e.gender && e.gender !== 'unknown') return e.gender;
+    if (positive(e.maleCount) && positive(e.femaleCount)) return 'mixed';
+    if (positive(e.femaleCount)) return 'female';
+    if (positive(e.maleCount)) return 'male';
+    return 'unsaid';
+};
+const identityOf = (e: LabourEvent): string => `${kindOf(e)}|${groupOf(e)}`;
+/** The numbers a labour correction can carry (`buildLabourCorrections`): nothing else of a row travels. */
+const statesNumber = (e: LabourEvent): boolean => positive(e.count) || positive(e.maleCount) || positive(e.femaleCount) || positive(e.durationHours);
+/** Money or names said on a row: no labour correction can carry them. */
+const saysMoreThanNumbers = (e: LabourEvent): boolean =>
+    positive(e.totalCost) || positive(e.wagePerPerson) || positive(e.rate) || (e.workerNames ?? []).length > 0;
+
+/**
+ * Review B001 — his labour words as corrections of the engagements they are ABOUT, matched by identity, one-to-one.
+ * `null` when they cannot be (ambiguous, a new engagement, names only, money or names said): then no labour changes.
+ */
+export function correctLabour(old: readonly LabourEvent[], spoken: readonly LabourEvent[]): LabourEvent[] | null {
+    if (spoken.length === 0 || spoken.some(r => !statesNumber(r) || saysMoreThanNumbers(r))) return null;
+    const out = [...old];
+    const used = new Set<number>();
+    for (const r of spoken) {
+        const matches = old.map((o, i) => ({ o, i })).filter(({ o }) => identityOf(o) === identityOf(r));
+        if (matches.length !== 1 || used.has(matches[0].i)) return null;
+        const { o, i } = matches[0];
+        used.add(i);
+        out[i] = {
+            ...o,
+            ...(positive(r.count) && { count: r.count }),
+            ...(positive(r.maleCount) && { maleCount: r.maleCount }),
+            ...(positive(r.femaleCount) && { femaleCount: r.femaleCount }),
+            ...(positive(r.durationHours) && { durationHours: r.durationHours }),
+        };
+    }
+    return out;
+}
+
 export function mergeCorrection(log: DailyLog, draft: AgriLogResponse, fresh: DailyLog, idGen: IdGenerator = idGenerator): CorrectionMerge {
     const updates: Partial<DailyLog> = {};
     const replaced: CorrectableBucket[] = [];
-    for (const bucket of CORRECTABLE_BUCKETS) {
+    for (const bucket of ['cropActivities', 'inputs', 'machinery', 'activityExpenses'] as const) {
         if (!said(draft, bucket)) continue;
         replaced.push(bucket);
         (updates as Record<string, unknown>)[bucket] = withIds((fresh[bucket] ?? []) as Array<{ id?: string }>, idGen);
     }
-    // Labour: the same number of rows keeps each engagement's identity, so the change is a correction the server takes.
-    if (updates.labour && (log.labour ?? []).length === updates.labour.length) {
-        const old = log.labour ?? [];
-        updates.labour = updates.labour.map((row, i) => ({
-            ...row,
-            id: old[i].id,
-            ...(old[i].labourAssignmentId ? { labourAssignmentId: old[i].labourAssignmentId } : {}),
-        }));
+    // Water: what was given, and — review B010 — water he said was NOT given, kept as the stoppage he said.
+    if (said(draft, 'irrigation')) {
+        replaced.push('irrigation');
+        const notGiven = (draft.irrigation ?? []).filter(e => e.role !== 'spray-carrier' && !isCompletedIrrigationEvent(e));
+        updates.irrigation = withIds([...(fresh.irrigation ?? []), ...notGiven], idGen);
     }
-    // Planned work brings its mirrored reminder notes; the old mirrors go with the old plans.
-    if (updates.plannedTasks && !updates.observations) {
+    // Labour (review B001): only the engagements his words are about, by identity; else nothing.
+    let labourNotChanged = false;
+    if (said(draft, 'labour')) {
+        const corrected = correctLabour(log.labour ?? [], draft.labour ?? []);
+        if (corrected) { updates.labour = corrected; replaced.push('labour'); } else labourNotChanged = true;
+    }
+    // Notes by TYPE (review B003); planned work and its reminder notes move together.
+    const freshNotes = fresh.observations ?? [];
+    const kinds = new Set<NoteKind>(freshNotes.map(noteKind));
+    if (said(draft, 'plannedTasks') || kinds.has('reminder')) {
+        kinds.add('reminder');
+        updates.plannedTasks = withIds(fresh.plannedTasks ?? [], idGen);
+        replaced.push('plannedTasks');
+    }
+    if (kinds.size > 0) {
         updates.observations = [
-            ...(log.observations ?? []).filter(o => !isMirror(o)),
-            ...(fresh.observations ?? []).filter(isMirror),
+            ...(log.observations ?? []).filter(o => !kinds.has(noteKind(o))),
+            ...withIds(freshNotes.filter(o => kinds.has(noteKind(o))), idGen),
         ];
+        replaced.push('observations');
     }
     if (draft.disturbance) updates.disturbance = fresh.disturbance ?? draft.disturbance;
-    return { updates, replaced, after: { ...log, ...updates } };
+    return { updates, replaced, after: { ...log, ...updates }, labourNotChanged };
 }
 
 /**
@@ -146,12 +211,13 @@ export function correctionRows(before: DailyLog, after: DailyLog, opts: { hideMo
     }).filter(r => r.before.length > 0 || r.after.length > 0);
 }
 
-/** The entry's stoppages, before and after. */
-export function blockerChange(before: DailyLog, after: DailyLog): { before: BlockerEntry[]; after: BlockerEntry[]; changed: boolean } {
+/** The entry's stoppages, before and after, and those his words removed (shown struck through, review B003). */
+export function blockerChange(before: DailyLog, after: DailyLog): { before: BlockerEntry[]; after: BlockerEntry[]; gone: BlockerEntry[]; changed: boolean } {
     const was = blockersOf(before);
     const now = blockersOf(after);
     const key = (xs: BlockerEntry[]) => JSON.stringify(xs.map(x => x.value));
-    return { before: was, after: now, changed: key(was) !== key(now) };
+    const kept = new Set(now.map(x => x.value));
+    return { before: was, after: now, gone: was.filter(x => !kept.has(x.value)), changed: key(was) !== key(now) };
 }
 
 /** A before value that is gone after his words: shown struck through on a changed part. */

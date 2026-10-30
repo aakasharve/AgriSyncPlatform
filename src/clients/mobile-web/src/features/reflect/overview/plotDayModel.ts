@@ -106,45 +106,60 @@ const ONE_EACH: ReadonlySet<PartKey> = new Set(['observation']);
 
 /**
  * Everything that happened, as chips, in the result screen's part order (stoppages last). One chip per part per
- * recording — never a number added across recordings (P4); the record's money is not a chip (the ledger's is).
+ * recording — never a number added across recordings (P4), and within one recording each value as said, a value said
+ * twice shown twice (review B007); the record's money is not a chip (the ledger's is).
+ *
+ * Lane RF2 fix pass (founder live test):
+ *   - an older record kept only as task lines (`legacyPartial`) gives its parts LABEL chips only — never the free text
+ *     its task line carries ("टोरस + मँकोझेब स्प्रे केले. थ्रिप्स दिसत होते."); that text stays in the day view;
+ *   - a label-only chip (a part told with nothing more) shows ONCE per card, however many recordings told it: a label
+ *     is not a number, so this adds nothing up (P4). Values are never merged across recordings.
  */
 export function dayChipsOf(logs: readonly DailyLog[], language?: string | null): DayChip[] {
     const byPart = new Map<PartKey, DayChip[]>(PARTS.map(p => [p.key, []]));
     const blockers: DayChip[] = [];
-    const names = new Map<string, DayChip>(); // `${part}|${verified}` → the one shared chip
+    const names = new Map<string, DayChip>(); // `${part}|${verified}` → the one shared crop-work chip
+    const labels = new Set<string>(); // `${part}|${verified}` → a label-only chip already on the card
+    const labelOnce = (part: PartKey, verified: boolean, key?: string) => {
+        const id = `${part}|${verified ? 'yes' : 'no'}`;
+        if (labels.has(id)) return;
+        labels.add(id);
+        byPart.get(part)!.push({ id: `chip:label:${id}`, kind: part, text: '', verified, ...(key && { recordingKey: key }) });
+    };
     for (const group of groupByRecording(logs)) {
         const view = withoutInventedStoppage(recordingOf(group, NO_WHO), group);
         const key = recordingKeyOf(view.log);
+        const legacy = view.legacyPartial;
+        const textOf = (e: PartEntry): string => (legacy ? '' : entryText(e, language));
         const perPart = new Map<PartKey, PartEntry[]>();
         for (const e of view.entries) {
             if (e.part === 'expense') continue; // money: the ledger's, on its own chip
             perPart.set(e.part, [...(perPart.get(e.part) ?? []), e]);
         }
         for (const [part, entries] of perPart) {
-            if (NAMES_ONLY.has(part)) {
-                for (const e of entries) {
-                    const id = `${part}|${e.verified ? 'yes' : 'no'}`;
-                    const chip = names.get(id) ?? { id: `chip:${id}`, kind: part, text: '', verified: e.verified };
-                    const text = entryText(e, language);
-                    const have = chip.text ? chip.text.split(' · ') : [];
-                    if (text && !have.includes(text)) chip.text = [...have, text].join(' · ');
-                    if (!names.has(id)) { names.set(id, chip); byPart.get(part)!.push(chip); }
-                }
-                continue;
-            }
-            if (ONE_EACH.has(part)) {
-                entries.forEach(e => byPart.get(part)!.push({ id: `chip:${e.id}`, kind: part, text: entryText(e, language), verified: e.verified, recordingKey: key }));
-                continue;
-            }
-            // One recording, one chip: its own values side by side, never added up. Unsure items get their own chip.
             for (const verified of [true, false]) {
                 const mine = entries.filter(e => e.verified === verified);
                 if (mine.length === 0) continue;
-                const texts = [...new Set(mine.map(e => entryText(e, language)).filter(Boolean))];
+                const texts = mine.map(textOf).filter(Boolean);
+                if (texts.length === 0) { labelOnce(part, verified, key); continue; }
+                if (NAMES_ONLY.has(part)) {
+                    // Work names, not amounts: the day's names share one chip, each name once.
+                    const id = `${part}|${verified ? 'yes' : 'no'}`;
+                    const chip = names.get(id) ?? { id: `chip:${id}`, kind: part, text: '', verified };
+                    const have = chip.text ? chip.text.split(' · ') : [];
+                    chip.text = [...have, ...texts.filter((t, i) => !have.includes(t) && texts.indexOf(t) === i)].join(' · ');
+                    if (!names.has(id)) { names.set(id, chip); byPart.get(part)!.push(chip); }
+                    continue;
+                }
+                if (ONE_EACH.has(part)) {
+                    mine.forEach(e => { const t = textOf(e); if (t) byPart.get(part)!.push({ id: `chip:${e.id}`, kind: part, text: t, verified, recordingKey: key }); });
+                    continue;
+                }
+                // One recording, one chip: its own values side by side as said (a value said twice, twice), never added up.
                 byPart.get(part)!.push({ id: `chip:${key}:${part}:${verified ? 'yes' : 'no'}`, kind: part, text: texts.join(' · '), verified, recordingKey: key });
             }
         }
-        view.blockers.forEach(b => blockers.push({ id: `chip:${b.id}`, kind: 'blocker', text: b.value ?? b.quote ?? '', verified: b.verified, recordingKey: key }));
+        view.blockers.forEach(b => blockers.push({ id: `chip:${b.id}`, kind: 'blocker', text: legacy ? '' : (b.value ?? ''), verified: b.verified, recordingKey: key }));
     }
     return [...PARTS.flatMap(p => byPart.get(p.key) ?? []), ...blockers];
 }

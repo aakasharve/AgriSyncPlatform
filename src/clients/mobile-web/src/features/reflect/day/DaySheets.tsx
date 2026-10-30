@@ -2,39 +2,37 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 (lanes RF, RF2) — the plot's day on आढावा (the founder's screen 1,
- * 2026-10-30: tap a plot card). It replaces lane RF's day sheet layout, and with the plot cards it replaces the day's
- * feed sheet and the one-recording glance (retired):
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lanes RF, RF2 and its fix pass) — the two full-screen views of the
+ * chosen day on आढावा, built from the same recording views and the same time chips (`RecordingTimes.tsx`):
  *
- *   - ALL of that plot-day's work, sorted into buckets in the result screen's look — the result screen's own rows
- *     (`DayRow`, opened, each value with the time it was told and who told it), never a number summed across
- *     recordings (P4);
- *   - under the buckets, the time chips ("दुपारी 1:15 · रात्री 8:02 …"), a green dot when confirmed; a tap shows that
- *     recording's parts inline with one small line — who · पक्कं status · ऐका (only where `listenModel` allows it) — and
- *     "बदला" (the speak-the-change screen, lane E1). No "यातून काय समजलं / कोणत्या शब्दांतून" panel here;
- *   - "आणखी सांगा" (today) opens THE ONE mic for this place and comes back here with the new work highlighted.
- * The same view serves the "संपूर्ण शेत" card and a note's link to its recording (opened on that recording).
+ *   - `PlotDayView` (the founder's screen 1, tap a plot card): ALL of that plot-day's work sorted into the result
+ *     screen's buckets (`DayRow`, opened, each value with the time it was told), then the time chips; "आणखी सांगा"
+ *     (today) asks THE ONE mic and lands back here with the new work highlighted;
+ *   - `DayFeedSheet` (the founder's screen 2, behind the "आजचा आढावा" button — the founder 2026-10-30: "put it as it is,
+ *     I asked you to rebuild the screen inside it"): ONE block per plot that had work that day, plus a "संपूर्ण शेत"
+ *     block for work with no plot; each block its identity, "N वेळा सांगितलं" and ONE row of time chips, a tap opening
+ *     that recording right there in the block.
+ * No source-words panel and no quoted words on either (fix pass D4). Nothing summed across recordings (P4).
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Mic, Pencil } from 'lucide-react';
+import React, { useEffect, useMemo } from 'react';
+import { ArrowLeft, Map as MapIcon, Mic } from 'lucide-react';
 import { useFarmContext } from '../../../core/session/FarmContext';
 import { emitClosureSummaryViewed } from '../../../core/telemetry/eventEmitters';
-import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { DailyLog } from '../../../types';
 import { PHONE_COLUMN } from '../../logs/components/phoneColumn';
-import { AddedRow, BlockerRow, DayRow, LegacyNote, TypedTag, WhoChip } from '../../logs/components/voiceResult/DayParts';
-import { ProductBoxCard } from '../../logs/components/voiceResult/ProductRows';
-import { showsProducts } from '../../logs/components/voiceResult/productModel';
+import { BlockerRow, DayRow } from '../../logs/components/voiceResult/DayParts';
+import { withoutQuotes } from '../../logs/components/voiceResult/partNames';
 import { PARTS, type PartKey } from '../../logs/components/voiceResult/resultModel';
+import { CropPhoto } from '../overview/ui';
 import { dayPartsOf, type DayRecording } from './dayRecordings';
-import { ListenControl, LogPhotos, StatusChip, useReflectCopy } from './RecordingParts';
+import { RecordingTimes, recId } from './RecordingTimes';
+import { useReflectCopy } from './RecordingParts';
 import type { DayListen } from './useDayListen';
+
+export { recId };
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const NO_IDS: ReadonlySet<string> = new Set();
-
-/** A test id from a log id (ids can carry characters a test id should not). */
-export const recId = (rec: DayRecording): string => rec.view.id;
 
 /** The frame of a full-screen view here: one big back, a head, a scrolling body. */
 const Sheet: React.FC<{ testId: string; label: string; z: string; onBack: () => void; head?: React.ReactNode; children: React.ReactNode }> = ({ testId, label, z, onBack, head, children }) => {
@@ -52,44 +50,6 @@ const Sheet: React.FC<{ testId: string; label: string; z: string; onBack: () => 
                 </div>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-24 pt-3">{children}</div>
             </div>
-        </div>
-    );
-};
-
-const plotOf = (log: DailyLog): string => (log.context?.selection ?? []).flatMap(s => s.selectedPlotNames ?? []).filter(Boolean).join(', ');
-
-/** One recording, inline under its time chip: who · status · ऐका, then its parts (result-screen rows) and "बदला". */
-const RecordingInline: React.FC<{ rec: DayRecording; listen: DayListen; onEdit?: (log: DailyLog) => void }> = ({ rec, listen, onEdit }) => {
-    const language = useOptionalLanguage()?.language;
-    const copy = useReflectCopy();
-    const { view } = rec;
-    const testId = `rf-rec-${recId(rec)}`;
-    const boxed = (e: typeof view.entries[number]) => e.verified && showsProducts(e.products, language);
-    const others = view.entries.filter(e => !boxed(e));
-    const boxes = view.entries.flatMap(e => (boxed(e) && e.products ? [e.products] : []));
-    const nothing = others.length === 0 && boxes.length === 0 && view.blockers.length === 0;
-    return (
-        <div data-testid={testId} data-confirmed={view.confirmed ? 'yes' : 'no'} className="rounded-2xl border border-dashed border-stone-300 bg-white p-3">
-            <div className="flex flex-wrap items-center gap-1.5" data-testid={`${testId}-line`}>
-                <WhoChip who={view.who} testId={`${testId}-who`} />
-                {view.typed && <TypedTag testId={`${testId}-typed`} />}
-                <StatusChip confirmed={view.confirmed} testId={`${testId}-state`} />
-            </div>
-            {!view.typed && <ListenControl rec={rec} listen={listen} testId={`${testId}-play`} />}
-            {view.legacyPartial && <LegacyNote testId={`${testId}-legacy`} />}
-            <div className="mt-2 space-y-1.5" data-testid={`${testId}-parts`}>
-                {nothing && <p className="m-0 text-[14px] font-semibold text-stone-600" data-testid={`${testId}-nothing`}>{copy.nothingUnderstood}</p>}
-                {others.map(e => <AddedRow key={`${e.logId}:${e.id}`} entry={e} />)}
-                {boxes.map(b => <ProductBoxCard key={b.id} box={b} />)}
-                {view.blockers.map(b => <BlockerRow key={b.id} entry={b} />)}
-            </div>
-            {rec.logs.map(l => <LogPhotos key={l.id} logId={l.id} />)}
-            {onEdit && rec.logs.map(l => (
-                <button key={l.id} type="button" onClick={() => { listen.stop(); onEdit(l); }} data-testid={`${testId}-edit-${l.id}`}
-                    className="mt-2 flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl border border-stone-300 bg-white text-base font-extrabold text-stone-700">
-                    <Pencil size={18} aria-hidden="true" /> {copy.edit}{rec.logs.length > 1 && plotOf(l) ? ` · ${plotOf(l)}` : ''}
-                </button>
-            ))}
         </div>
     );
 };
@@ -114,20 +74,15 @@ export const PlotDayView: React.FC<{
 }> = ({ title, subtitle, dayLabel, dateKey, isToday, recordings, listen, openKey = null, fresh = NO_IDS, onEdit, onTellMore, onClose }) => {
     const copy = useReflectCopy();
     const { currentFarmId } = useFarmContext();
-    const [open, setOpen] = useState<string | null>(openKey);
-    const openRef = useRef<HTMLDivElement | null>(null);
     const logsCount = recordings.reduce((n, r) => n + r.logs.length, 0);
     // DWC v2 §2.8 #7 — closure_summary.viewed when the day opens (the old drawer's event, kept).
     useEffect(() => {
         if (currentFarmId) emitClosureSummaryViewed({ farmId: currentFarmId, dateKey, logsCount, source: 'drawer_open' });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-    // A note's link lands on its recording, in sight.
-    useEffect(() => { if (openKey) openRef.current?.scrollIntoView?.({ block: 'nearest' }); }, [openKey]);
     const { byPart, byLog } = dayPartsOf(recordings);
     const freshParts = useMemo(() => new Set<PartKey>(PARTS.map(p => p.key).filter(k => byPart[k].some(e => fresh.has(e.logId)))), [byPart, fresh]);
-    const blockers = recordings.flatMap(r => r.view.blockers);
-    const opened = recordings.find(r => r.key === open);
+    const blockers = withoutQuotes(recordings.flatMap(r => r.view.blockers));
     const head = (
         <span className="min-w-0 flex-1">
             <span className="block truncate text-[17px] font-extrabold leading-tight text-stone-900" data-testid="rf-day-title">{title}</span>
@@ -153,33 +108,68 @@ export const PlotDayView: React.FC<{
                         <p className="m-0 mb-2 text-[13px] font-semibold text-stone-600">{copy.dayViewHint(isToday)}</p>
                         <div className="space-y-2">
                             {PARTS.filter(m => byPart[m.key].length > 0).map(m => (
-                                <DayRow key={m.key} part={m.key} entries={byPart[m.key]} byLog={byLog} touched={freshParts.has(m.key)} showWho nowIds={fresh} defaultOpen />
+                                <DayRow key={m.key} part={m.key} entries={withoutQuotes(byPart[m.key])} byLog={byLog} touched={freshParts.has(m.key)} showWho nowIds={fresh} defaultOpen />
                             ))}
                             {blockers.map(b => <BlockerRow key={b.id} entry={b} />)}
                         </div>
                     </div>
                     <div data-testid="rf-day-times">
                         <h3 className="m-0 mb-1.5 text-[13px] font-extrabold text-stone-700">{copy.timesTitle}</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {recordings.map(r => {
-                                const on = r.key === open;
-                                const isNew = r.logs.some(l => fresh.has(l.id));
-                                return (
-                                    <button key={r.key} type="button" aria-expanded={on} data-testid={`rf-time-${recId(r)}`} data-confirmed={r.view.confirmed ? 'yes' : 'no'}
-                                        onClick={() => { listen.stop(); setOpen(on ? null : r.key); }}
-                                        className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full border-2 px-3 text-[14.5px] font-extrabold ${on ? 'border-emerald-700 bg-emerald-700 text-white' : isNew ? 'border-emerald-600 bg-emerald-50 text-stone-900' : 'border-stone-200 bg-white text-stone-900'}`}>
-                                        <span className={`h-2 w-2 rounded-full ${on ? 'bg-white' : r.view.confirmed ? 'bg-emerald-500' : 'bg-stone-400'}`} aria-hidden="true" />
-                                        {r.view.timeLabel || (r.view.typed ? <TypedTag /> : '—')}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        <p className="m-0 mt-1.5 text-[12.5px] font-semibold text-stone-600">{copy.timesKey}</p>
-                        {opened && <div ref={openRef} className="mt-2"><RecordingInline rec={opened} listen={listen} onEdit={onEdit} /></div>}
+                        <RecordingTimes recordings={recordings} listen={listen} openKey={openKey} fresh={fresh} onEdit={onEdit} />
                     </div>
                     {tellMore}
                 </>
             )}
+        </Sheet>
+    );
+};
+
+/** One block of the day's work screen: a plot that had work that day, or the whole farm. */
+export interface FeedBlock {
+    key: string;
+    /** "सोनाका" (the plot), or the whole farm. */
+    title: string;
+    /** "द्राक्ष" — the crop, in his language. */
+    subtitle?: string;
+    crop?: { iconName: string; name: string };
+    recordings: DayRecording[];
+}
+
+/** The day's work (behind the "आजचा आढावा" button): one block per place, its time chips, a recording opened in place. */
+export const DayFeedSheet: React.FC<{
+    blocks: readonly FeedBlock[];
+    isToday: boolean;
+    dayLabel: string;
+    listen: DayListen;
+    onEdit?: (log: DailyLog) => void;
+    onClose: () => void;
+}> = ({ blocks, isToday, dayLabel, listen, onEdit, onClose }) => {
+    const copy = useReflectCopy();
+    return (
+        <Sheet testId="rf-feed" label={copy.feedTitle(isToday)} z="z-[55]" onBack={() => { listen.stop(); onClose(); }}>
+            <div className="flex items-center justify-between gap-2 px-1">
+                <h3 className="m-0 text-[20px] font-extrabold tracking-tight text-stone-900" data-testid="rf-feed-title">{copy.feedTitle(isToday)}</h3>
+                <span className="rounded-lg border border-stone-200 bg-white px-2.5 py-1 text-[13px] font-bold text-stone-700 shadow-sm" data-testid="rf-feed-date">{dayLabel}</span>
+            </div>
+            {blocks.length === 0
+                ? <div className="rounded-2xl border-2 border-dashed border-stone-200 bg-stone-50 p-8 text-center text-[16px] font-semibold text-stone-600" data-testid="rf-feed-empty">{copy.feedEmpty(isToday)}</div>
+                : blocks.map(b => (
+                    <section key={b.key} className="rounded-[18px] border border-stone-200 bg-white p-3" data-testid={`rf-feed-block-${b.key}`}>
+                        <div className="mb-2.5 flex items-center gap-2.5">
+                            {b.crop
+                                ? <CropPhoto iconName={b.crop.iconName} name={b.crop.name} px={44} />
+                                : <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-800" aria-hidden="true"><MapIcon size={22} /></span>}
+                            <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[18px] font-extrabold leading-tight text-stone-900">{b.title}</span>
+                                <span className="block text-[13px] font-bold text-stone-500" data-testid={`rf-feed-block-${b.key}-times`}>
+                                    {[b.subtitle, copy.timesTold(b.recordings.length, isToday)].filter(Boolean).join(' · ')}
+                                </span>
+                            </span>
+                        </div>
+                        <RecordingTimes recordings={b.recordings} listen={listen} idPrefix={`${b.key}-`} onEdit={onEdit} showKey={false} />
+                    </section>
+                ))}
+            {blocks.length > 0 && <p className="m-0 px-1 text-[12.5px] font-semibold text-stone-600">{copy.timesKey}</p>}
         </Sheet>
     );
 };

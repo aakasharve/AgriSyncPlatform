@@ -139,7 +139,9 @@ internal static class DtoMappingExtensions
             log.DayOutcome,
             // lane F1 — the record's version, so a confirm can name what it saw.
             log.ContentVersion,
-            content);
+            content,
+            // lane RF2 fix pass (review B002) — the door that saved it, verbatim (null = not the हजेरी door).
+            log.CaptureScope);
 
     /// <summary>
     /// spec: plr-d10 (lane F1) — a stored content row on the wire, the document VERBATIM. Nothing

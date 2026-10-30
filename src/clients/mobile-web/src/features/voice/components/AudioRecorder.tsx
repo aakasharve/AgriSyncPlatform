@@ -18,6 +18,7 @@ import { AudioData } from '../../../types';
 import { acquireMicStream } from '../../../infrastructure/voice/acquireMicStream';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { AUTO_STOP_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
 
 interface AudioRecorderProps {
@@ -47,7 +48,8 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
 
   // Combine errors: External (from AI) takes precedence if present, otherwise internal (mic permission).
   // An English message from the parse service is shown as plain Marathi (no English on this screen).
-  const displayError = externalError ? readableError(externalError) : internalError;
+  const language = useOptionalLanguage()?.language;
+  const displayError = externalError ? readableError(externalError, language) : internalError;
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);

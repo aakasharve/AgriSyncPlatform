@@ -4,7 +4,6 @@
 // the original AgriSyncClient.ts — only the structural layout changed.
 
 import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import packageJson from '../../../package.json';
 import type { AuthSession } from '../storage/AuthTokenStore';
 import type { AuthResponseDto, VerificationStatus } from './dtos';
 
@@ -12,10 +11,13 @@ import type { AuthResponseDto, VerificationStatus } from './dtos';
 // Stamped on every outgoing request as `X-App-Version`. The backend
 // PushSyncBatchHandler compares this against the catalog's
 // descriptor.SinceVersion and rejects mutations with `CLIENT_TOO_OLD`
-// if the client is below the threshold for that mutation. Sub-plan 04
-// will replace this with a build-time inject (vite define) that also
-// embeds the git SHA suffix.
-export const APP_VERSION: string = packageJson.version;
+// if the client is below the threshold for that mutation.
+//
+// F69 (lane RF2 fix pass) — ONE source of truth: the release version in `buildInfo.ts` (kept in lockstep with the
+// Android versionName). It used to be `package.json`'s "0.9.0", which no release ever bumped: the server then refused
+// `revise_log_content` ("requires app >= 1.0.0; client reports 0.9.0") and the same wrong value went into consent
+// records. Every importer of this name now gets the real release.
+export { APP_VERSION } from '../../buildInfo';
 
 export interface RetriableRequestConfig extends InternalAxiosRequestConfig {
     _agriSyncRetry?: boolean;

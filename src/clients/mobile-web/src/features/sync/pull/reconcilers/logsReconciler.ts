@@ -321,6 +321,9 @@ function preserveLocalOnlyFields(
             fullTranscript: existing.fullTranscript ?? details.fullTranscript,
         }),
         contentVersion: incoming.contentVersion ?? existing.contentVersion,
+        // lane RF2 fix pass (review B002) — "saved at the हजेरी door" survives the pull: the server's statement when it
+        // makes one, else what this phone already knew (an older server sends no such field).
+        ...((incoming.captureScope ?? existing.captureScope) === 'labour' && { captureScope: 'labour' as const }),
         legacyPartial: serverStatedDetails ? false : keepOwnDetails ? existing.legacyPartial : true,
         manualTotalCost: existing.manualTotalCost ?? incoming.manualTotalCost,
         understanding: existing.understanding ?? incoming.understanding,
@@ -657,6 +660,9 @@ function toDailyLog(
         // lane F1 — the server's record version (sent back by a confirm), and where the details
         // came from: `false` = the server's stored record, `true` = its task lines only.
         ...(typeof source.contentVersion === 'number' && { contentVersion: source.contentVersion }),
+        // lane RF2 fix pass (review B002) — the हजेरी door's mark, from the server's own record, so a pulled record
+        // still refuses a details edit on this phone (lane F1's rule) before anything is queued.
+        ...(source.captureScope === 'labour' && { captureScope: 'labour' as const }),
         legacyPartial: !statedDetails,
         // LABOUR_PHASE2 Phase 3 — the read-back. `?? []` is NOT a reading of the
         // empty set: an empty set is on-the-wire and flows through

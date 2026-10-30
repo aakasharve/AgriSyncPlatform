@@ -22,6 +22,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AudioData } from '../../../types';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { AUTO_STOP_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
 import { DEFAULT_VOICE_CONFIG } from '../../../infrastructure/voice/types';
 import { StreamingPcmRecorder } from '../../../infrastructure/voice/StreamingPcmRecorder';
@@ -87,7 +88,8 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   const level = useMicLevel(isRecording ? liveStream : null);
 
   // An English message from the parse service is shown as plain Marathi (no English on this screen).
-  const displayError = externalError ? readableError(externalError) : internalError;
+  const language = useOptionalLanguage()?.language;
+  const displayError = externalError ? readableError(externalError, language) : internalError;
 
   const recordingChangeRef = useRef(onRecordingChange);
   recordingChangeRef.current = onRecordingChange;

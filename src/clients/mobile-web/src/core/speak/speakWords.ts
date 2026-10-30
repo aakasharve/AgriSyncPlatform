@@ -51,19 +51,20 @@ const mr: SpeakWords = {
 const en: SpeakWords = {
     back: 'Back', // PROPOSED (English)
     wholeFarm: 'Whole farm', // PROPOSED (English)
-    band: (purpose, { part, question }) => {
+    band: (purpose, { part }) => {
         switch (purpose) {
             case 'fillPart':
                 return part ? { title: `Tell the ${partNameIn(part, 'en').toLowerCase()}`, hint: 'Say just that' } : { title: 'Tell more' }; // PROPOSED (English)
             case 'answerQuestion':
-                return { title: "Sathi's question", hint: question }; // PROPOSED (English)
+                // Review B009: Sathi's questions exist in Marathi only — English mode never shows the Marathi prompt here.
+                return { title: "Sathi's question", hint: 'Say your answer to the question you just saw' }; // PROPOSED (English)
             case 'correctEntry':
                 return { title: 'Say what should change', hint: 'e.g. "Not 300, 350 ml of Ethrel"' }; // PROPOSED (English)
             case 'addTodo':
                 return { title: 'Say the reminder', hint: 'e.g. "Check the drip pipe tomorrow"' }; // PROPOSED (English)
             case 'attention':
             case 'scheduleDone':
-                return { title: 'Tell the work done', hint: question }; // PROPOSED (English)
+                return { title: 'Tell the work done', hint: 'Say what was done' }; // PROPOSED (English)
             case 'addToDay':
             default:
                 return { title: 'Tell more', hint: 'Say what was done' }; // PROPOSED (English)

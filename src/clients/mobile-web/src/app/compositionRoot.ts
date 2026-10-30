@@ -3,7 +3,8 @@ import { CropProfile, InputMode } from '../types';
 import type { VoiceDraftSink } from '../features/voice/useVoiceRecorder.types';
 import { useVoiceAutoSave } from './hooks/useVoiceAutoSave';
 // Lane MIC-1 — a parse spoken for a purpose that keeps it unsaved (a correction) goes back to that screen, not to the auto-save.
-import { withSpeakPurpose } from '../core/speak/speakFlow';
+import { mayKeepOffline, withSpeakPurpose } from '../core/speak/speakFlow';
+import { setOfflineVoiceQueueGate } from '../infrastructure/ai/offlineVoiceQueue';
 
 // Feature Controllers
 import { useAppNavigation } from './hooks/useAppNavigation';
@@ -139,6 +140,8 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
     });
     const { setStatus: setVoiceStatus } = voice;
     useEffect(() => { voiceDraftSink.current = withSpeakPurpose(autoSave.sink, { setStatus: setVoiceStatus }); }, [autoSave.sink, setVoiceStatus]);
+    // Lane RF2 fix pass (review B004) — a correction's words are never kept offline (they would come back as a new log).
+    useEffect(() => { setOfflineVoiceQueueGate(mayKeepOffline); }, []);
     const { clearVoiceResult } = autoSave;
     // Leaving the result (मागे, आणखी सांगा, a new recording) drops it, so it can never stand in for a later save.
     const handleReset = () => { voice.handleResetVoice(); clearVoiceResult(); };

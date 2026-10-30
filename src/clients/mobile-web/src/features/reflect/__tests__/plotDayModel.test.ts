@@ -151,10 +151,41 @@ describe('the "संपूर्ण शेत" card (lane RF2) — whole-farm w
     });
 });
 
-describe.each(['mr', 'en'] as const)('dayChipsOf — a spray keeps its amount as said (%s)', language => {
-    it('the product with its dose, in the language\'s unit word', () => {
+describe('dayChipsOf — a spray keeps its amount as said, the result screen\'s way', () => {
+    it('Marathi: the product with its dose, "इथरेल · 300 मिली"', () => {
         const day = log({ id: 's', meta: meta('03:00'), inputs: [{ id: 'in', method: 'Spray', productName: 'इथरेल', quantity: 300, unit: 'ml' } as never] });
-        const [chip] = dayChipsOf([day], language).filter(c => c.kind === 'inputs');
-        expect(chip.text).toBe(language === 'en' ? 'इथरेल 300 ml' : 'इथरेल 300 मिली');
+        const [chip] = dayChipsOf([day], 'mr').filter(c => c.kind === 'inputs');
+        expect(chip.text).toBe('इथरेल · 300 मिली');
+    });
+
+    it('English: a product label in English letters with the English unit, "Ethrel · 300 ml" (review B009)', () => {
+        const day = log({ id: 's', meta: meta('03:00'), inputs: [{ id: 'in', method: 'Spray', productName: 'Ethrel', quantity: 300, unit: 'ml' } as never] });
+        const [chip] = dayChipsOf([day], 'en').filter(c => c.kind === 'inputs');
+        expect(chip.text).toBe('Ethrel · 300 ml');
+    });
+});
+
+describe('dayChipsOf — fix pass (review B007, founder live test D1 / D2)', () => {
+    it('B007: within one recording a value said twice shows twice ("5 जण · 5 जण"), never merged into one', () => {
+        const day = log({ id: 'd', meta: meta('03:00'), labour: [{ id: 'a', type: 'HIRED', count: 5 }, { id: 'b', type: 'CONTRACT', count: 5 }] });
+        const labour = dayChipsOf([day], 'mr').filter(c => c.kind === 'labour');
+        expect(labour.map(c => c.text)).toEqual(['5 जण · 5 जण']);
+    });
+
+    it('D1: an older record kept only as task lines gives its part a LABEL chip, never the free text of its task line', () => {
+        const old = log({ id: 'o', meta: meta('03:00'), legacyPartial: true, cropActivities: [{ id: 'c', title: 'टोरस + मँकोझेब स्प्रे केले. थ्रिप्स दिसत होते.' }] } as never);
+        const chips = dayChipsOf([old], 'mr');
+        expect(chips).toEqual([expect.objectContaining({ kind: 'crop', text: '' })]);
+        expect(JSON.stringify(chips)).not.toContain('थ्रिप्स');
+    });
+
+    it('D2: a label-only chip shows ONCE per card however many recordings told that part; values still never merge across recordings', () => {
+        const a = log({ id: 'a', meta: meta('03:00'), legacyPartial: true, irrigation: [{ id: 'w', notes: 'Method: Drip' }] } as never);
+        const b = log({ id: 'b', meta: meta('05:00', 'op2'), legacyPartial: true, irrigation: [{ id: 'w2', notes: 'Method: Drip' }] } as never);
+        const c = log({ id: 'c', meta: meta('07:00'), labour: [{ id: 'l1', type: 'HIRED', count: 4 }] });
+        const d = log({ id: 'e', meta: meta('09:00', 'op3'), labour: [{ id: 'l2', type: 'HIRED', count: 4 }] });
+        const chips = dayChipsOf([a, b, c, d], 'mr');
+        expect(chips.filter(x => x.kind === 'irrigation')).toEqual([expect.objectContaining({ text: '' })]);
+        expect(chips.filter(x => x.kind === 'labour').map(x => x.text)).toEqual(['4 जण', '4 जण']);
     });
 });

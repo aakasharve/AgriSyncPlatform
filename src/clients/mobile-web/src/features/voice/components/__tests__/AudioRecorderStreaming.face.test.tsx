@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => k }),
+    useOptionalLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => k }),
     LanguageProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('../../../../infrastructure/voice/StreamingPcmRecorder', () => ({

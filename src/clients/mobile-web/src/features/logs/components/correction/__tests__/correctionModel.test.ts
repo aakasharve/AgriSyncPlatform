@@ -6,8 +6,10 @@
  *
  *   - his words are read as a normal utterance in the entry's crop / plot (the log factory, the entry's own plot);
  *   - every bucket present in that reading REPLACES the same bucket; a bucket he did not mention stays exactly as it was;
- *   - labour keeps each engagement's identity by position (so it travels as a labour correction);
- *   - planned work brings its mirrored reminder notes, and the old mirrors go;
+ *   - labour goes only to the engagement it is about, by IDENTITY (type + group), never by position (review B001);
+ *     ambiguous, names-only, a new engagement or money said → no labour change, and the screen says where to make it;
+ *   - notes change by TYPE (stoppage / observation / reminder); planned work moves with its reminders (review B003);
+ *   - water said as NOT given becomes the stoppage he said (review B010);
  *   - before → after is read the result screen's way; a changed dose reads as a change ("इथरेल 300" → "इथरेल 350");
  *   - a confirmed entry's new version is not confirmed (a confirmation is for the version it was given for);
  *   - a हजेरी-door record is refused (lane F1's rule).
@@ -15,7 +17,7 @@
 import { describe, expect, it } from 'vitest';
 import { LogVerificationStatus, type AgriLogResponse, type CropProfile, type DailyLog, type FarmerProfile } from '../../../../../types';
 import {
-    blockerChange, correctionRows, goneValues, isLabourDoorLog, mergeCorrection, revisionUpdates, saysAnything, scopeOfLog, spokenAsLog,
+    blockerChange, correctLabour, correctionRows, goneValues, isLabourDoorLog, mergeCorrection, revisionUpdates, saysAnything, scopeOfLog, spokenAsLog,
 } from '../correctionModel';
 
 let n = 0;
@@ -64,22 +66,53 @@ describe('the merge rule — a bucket he mentions is replaced, the rest stays', 
         expect(m.after.fullTranscript).toBe(log.fullTranscript);
     });
 
-    it('labour said again with as many rows keeps the engagement\'s identity (a correction the server takes)', () => {
+    it('B001: labour said for the ONE engagement it is about keeps that engagement\'s identity (a correction the server takes)', () => {
         const m = merge(entry(), draft({ labour: [{ id: 'new', type: 'HIRED', count: 8 }] }));
+        expect(m.labourNotChanged).toBe(false);
         expect(m.updates.labour).toEqual([expect.objectContaining({ id: 'lb', labourAssignmentId: 'asg-1', count: 8 })]);
     });
 
-    it('labour said with a different number of rows is new rows (the save then says it stays on this phone)', () => {
-        const m = merge(entry(), draft({ labour: [{ id: 'x1', type: 'HIRED', count: 3 }, { id: 'x2', type: 'HIRED', count: 2 }] }));
-        expect(m.updates.labour).toHaveLength(2);
-        expect(m.updates.labour?.some(l => l.labourAssignmentId)).toBe(false);
+    it('B001: several engagements — "कंत्राटी 4, रोजंदारी 5" goes to each by identity, whatever the order he says them in', () => {
+        const log = entry({ labour: [
+            { id: 'h', type: 'HIRED', count: 6, labourAssignmentId: 'asg-h' },
+            { id: 'c', type: 'CONTRACT', count: 3, labourAssignmentId: 'asg-c' },
+        ] });
+        const m = merge(log, draft({ labour: [{ id: 'x1', type: 'CONTRACT', count: 4 }, { id: 'x2', type: 'HIRED', count: 5 }] }));
+        expect(m.updates.labour).toEqual([
+            expect.objectContaining({ id: 'h', labourAssignmentId: 'asg-h', count: 5 }),
+            expect.objectContaining({ id: 'c', labourAssignmentId: 'asg-c', count: 4 }),
+        ]);
     });
 
-    it('KNOWN LIMIT: "पाच बायका पण होत्या" replaces the whole labour part, it does not add to it', () => {
+    it('B001: one engagement said of two — only that one changes; the other stays exactly as it was', () => {
+        const log = entry({ labour: [
+            { id: 'w', type: 'HIRED', femaleCount: 5, labourAssignmentId: 'asg-w' },
+            { id: 'c', type: 'CONTRACT', count: 3, labourAssignmentId: 'asg-c' },
+        ] });
+        const m = merge(log, draft({ labour: [{ id: 'x', type: 'HIRED', femaleCount: 6 }] }));
+        expect(m.updates.labour?.[0]).toMatchObject({ id: 'w', femaleCount: 6 });
+        expect(m.updates.labour?.[1]).toBe(log.labour[1]);
+    });
+
+    it('B001: names only ("बाळू नव्हता, गणेश होता") never becomes a count — no labour change, and he is told where to make it', () => {
+        const m = merge(entry(), draft({ labour: [{ id: 'x', type: 'HIRED', workerNames: ['गणेश'] }] }));
+        expect(m.labourNotChanged).toBe(true);
+        expect(m.updates.labour).toBeUndefined();
+        expect(m.after.labour[0]).toMatchObject({ count: 5 });
+        expect(JSON.stringify(m)).not.toMatch(/"count":1\b/);
+    });
+
+    it('B001: ambiguous (two engagements of the same kind and group), a new engagement, or money said — no labour change', () => {
+        const two = entry({ labour: [{ id: 'a', type: 'HIRED', count: 2 }, { id: 'b', type: 'HIRED', count: 3 }] });
+        expect(merge(two, draft({ labour: [{ id: 'x', type: 'HIRED', count: 6 }] })).labourNotChanged).toBe(true);
+        expect(merge(entry({ labour: [] }), draft({ labour: [{ id: 'x', type: 'HIRED', count: 6 }] })).labourNotChanged).toBe(true);
+        expect(merge(entry(), draft({ labour: [{ id: 'x', type: 'HIRED', count: 5, totalCost: 2000 }] })).labourNotChanged).toBe(true);
+        expect(correctLabour(two.labour, [{ id: 'x', type: 'HIRED', count: 6 }])).toBeNull();
+    });
+
+    it('B001: a group he names is matched to that group only ("5 बायका" is not "5 जण")', () => {
         const m = merge(entry(), draft({ labour: [{ id: 'x', type: 'HIRED', femaleCount: 5 }] }));
-        expect(m.after.labour).toHaveLength(1);
-        expect(m.after.labour[0].femaleCount).toBe(5);
-        expect(m.after.labour[0].count).toBeUndefined();
+        expect(m.labourNotChanged).toBe(true);
     });
 
     it('planned work brings its mirrored reminder; the old mirror goes; his own notes stay', () => {
@@ -91,12 +124,44 @@ describe('the merge rule — a bucket he mentions is replaced, the rest stays', 
             ],
         });
         const m = merge(log, draft({ plannedTasks: [{ title: 'उद्या फवारणी', category: 'general', sourceText: 'उद्या फवारणी', systemInterpretation: '' }] }));
-        expect(m.replaced).toEqual(['plannedTasks']);
+        expect(m.replaced).toEqual(['plannedTasks', 'observations']);
         expect(m.after.plannedTasks?.map(t => t.title)).toEqual(['उद्या फवारणी']);
         const notes = m.after.observations ?? [];
         expect(notes.find(o => o.id === 'o-mine')).toBeDefined();
         expect(notes.find(o => o.id === 'o-mirror')).toBeUndefined();
         expect(notes.some(o => o.textRaw === 'उद्या फवारणी' && (o.tags ?? []).includes('planned_task'))).toBe(true);
+    });
+
+    it('B003: a new observation said keeps the entry\'s stoppage note and reminder; the before/after shows only what changed', () => {
+        const note = (id: string, noteType: 'issue' | 'observation' | 'reminder', textRaw: string) =>
+            ({ id, plotId: 'g1', dateKey: '2026-10-25', timestamp: '', textRaw, noteType, severity: 'normal', source: 'voice' }) as const;
+        const log = entry({ observations: [note('stop', 'issue', 'पाऊस आला, काम थांबलं'), note('old-obs', 'observation', 'पानं पिवळी'), note('rem', 'reminder', 'उद्या खत टाकायचं')] });
+        const m = merge(log, draft({ observations: [{ id: 'n', textRaw: 'कीड दिसली', noteType: 'observation', severity: 'normal', source: 'voice' } as never] }));
+        const types = (m.after.observations ?? []).map(o => `${o.noteType}:${o.textRaw}`);
+        expect(types).toContain('issue:पाऊस आला, काम थांबलं');
+        expect(types).toContain('reminder:उद्या खत टाकायचं');
+        expect(types).toContain('observation:कीड दिसली');
+        expect(types).not.toContain('observation:पानं पिवळी');
+        // the stoppage is not removed, so it is not struck through; the replaced observation is
+        expect(blockerChange(log, m.after).gone).toEqual([]);
+        const obsRow = correctionRows(log, m.after).find(r => r.part === 'observation')!;
+        expect(goneValues(obsRow)).toEqual(['पानं पिवळी']);
+    });
+
+    it('B003: a stoppage his words replace is shown struck through (gone), never silently dropped', () => {
+        const log = entry({ observations: [{ id: 'stop', plotId: 'g1', dateKey: '2026-10-25', timestamp: '', textRaw: 'पाऊस आला', noteType: 'issue', severity: 'normal', source: 'voice' }] });
+        const m = merge(log, draft({ observations: [{ id: 'n', textRaw: 'लाईट गेली', noteType: 'issue', severity: 'normal', source: 'voice' } as never] }));
+        const change = blockerChange(log, m.after);
+        expect(change.gone.map(b => b.value)).toEqual(['पाऊस आला']);
+        expect(change.after.map(b => b.value)).toEqual(['लाईट गेली']);
+    });
+
+    it('B010: water he says was NOT given becomes the stoppage he said; the given water it replaces is struck through', () => {
+        const log = entry();
+        const m = merge(log, draft({ irrigation: [{ id: 'w2', method: 'drip', source: 'Well', issue: { type: 'electricity', reason: 'लाईट नव्हती' } } as never] }));
+        const change = blockerChange(log, m.after);
+        expect(change.after.some(b => (b.value ?? '').includes('लाईट नव्हती'))).toBe(true);
+        expect(goneValues(correctionRows(log, m.after).find(r => r.part === 'irrigation')!)).toEqual(['2 तास']);
     });
 
     it('nothing understood: nothing to change (no bucket, no stoppage)', () => {
@@ -120,7 +185,8 @@ describe.each(['mr', 'en'] as const)('before → after, the result screen\'s way
         const inputs = rows.find(r => r.part === 'inputs')!;
         expect(inputs.changed).toBe(true);
         const ml = language === 'en' ? 'ml' : 'मिली';
-        expect(goneValues(inputs, language)).toEqual([`इथरेल 300 ${ml}`]);
+        // the result screen's own shape: "इथरेल · 300 मिली" (the product's label is the parser's; English mode keeps it)
+        expect(goneValues(inputs, language)).toEqual([`इथरेल · 300 ${ml}`]);
         expect(rows.find(r => r.part === 'irrigation')!.changed).toBe(false);
         expect(rows.find(r => r.part === 'labour')!.changed).toBe(false);
         expect(rows.find(r => r.part === 'crop')!.changed).toBe(false);
@@ -141,6 +207,20 @@ describe.each(['mr', 'en'] as const)('before → after, the result screen\'s way
 });
 
 describe('the new version and its status', () => {
+    it('a labour-only correction on a confirmed entry: the same true-status rule (the new version is not confirmed)', () => {
+        const log = entry({ verification: { required: true, status: LogVerificationStatus.VERIFIED } });
+        const m = merge(log, draft({ labour: [{ id: 'x', type: 'HIRED', count: 7 }] }));
+        expect(m.replaced).toEqual(['labour']);
+        expect(revisionUpdates(log, m).verification).toEqual({ status: LogVerificationStatus.DRAFT, required: true });
+    });
+
+    it('a crop-level entry (no plot) is read in the whole farm\'s context: never a scope the recorder cannot use', () => {
+        const cropLevel = entry({ context: { selection: [{ cropId: 'grape', cropName: 'Grapes', selectedPlotIds: [], selectedPlotNames: [] }] } });
+        expect(scopeOfLog(cropLevel)).toMatchObject({ selectedCropIds: ['FARM_GLOBAL'], selectedPlotIds: [] });
+        const m = merge(cropLevel, draft({ inputs: [{ id: 'x', method: 'Spray', mix: [], productName: 'इथरेल', quantity: 350, unit: 'ml' }] }));
+        expect(m.updates.inputs?.[0]).toMatchObject({ quantity: 350 });
+    });
+
     it('a confirmed entry: the new version says "पक्कं नाही" (a confirmation is for the version it was given for)', () => {
         const log = entry({ verification: { required: true, status: LogVerificationStatus.VERIFIED } });
         const m = merge(log, draft({ inputs: [{ id: 'x', method: 'Spray', mix: [], productName: 'इथरेल', quantity: 350, unit: 'ml' }] }));

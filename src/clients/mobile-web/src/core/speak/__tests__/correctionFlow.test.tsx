@@ -69,7 +69,7 @@ const SAID: AgriLogResponse = {
 };
 
 let drive: { set: (st: AppStatus) => void; history: () => DailyLog[] } = { set: () => undefined, history: () => [] };
-const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps }> = ({ start, save }) => {
+const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean }> = ({ start, save, refused = false }) => {
     const [history, setHistory] = useState<DailyLog[]>(start);
     const [status, setStatus] = useState<AppStatus>('idle');
     const [logScope, setLogScope] = useState<LogScope>(EMPTY);
@@ -79,7 +79,7 @@ const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps }> = ({ st
         currentRoute: 'main', mainView: 'reflect', isContextReady: logScope.selectedCropIds.length > 0,
         handleReset: vi.fn(), setMode: vi.fn(), setStatus, setLogScope, setCurrentRoute: vi.fn(), setMainView: vi.fn(),
     } as unknown as AppRouterContext;
-    return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} />;
+    return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} readRefused={async () => refused} />;
 };
 
 /** The real F1 path: `UpdateLog` with a phone store that holds the entry. */
@@ -139,9 +139,9 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         const inputs = screen.getByTestId('corr-part-inputs');
         expect(inputs).toHaveAttribute('data-changed', 'yes');
         expect(within(inputs).getByTestId('corr-changed-inputs')).toHaveTextContent(language === 'en' ? 'Changed' : 'बदललं');
-        expect(within(inputs).getByTestId('corr-old-inputs')).toHaveTextContent(`इथरेल 300 ${ml}`);
+        expect(within(inputs).getByTestId('corr-old-inputs')).toHaveTextContent(`इथरेल · 300 ${ml}`);
         expect(within(inputs).getByTestId('corr-old-inputs').className).toContain('line-through');
-        expect(within(inputs).getByTestId('corr-new-inputs')).toHaveTextContent(`इथरेल 350 ${ml}`);
+        expect(within(inputs).getByTestId('corr-new-inputs')).toHaveTextContent(`इथरेल · 350 ${ml}`);
         expect(screen.getByTestId('corr-part-irrigation')).toHaveAttribute('data-changed', 'no');
         expect(screen.getByTestId('corr-part-crop')).toHaveAttribute('data-changed', 'no');
         // it was confirmed: the new version's true status is said before he saves
@@ -198,6 +198,68 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         await speak({ ...SAID, inputs: [] });
         expect(screen.getByTestId('corr-nothing')).toBeInTheDocument();
         expect(screen.queryByTestId('corr-save')).toBeNull();
+    });
+
+    it('D3 + D4: "आत्ता जे आहे" reads as the result screen ("इथरेल · 300 मिली"), never his quoted words', () => {
+        const { deps } = realSave();
+        const quoted = { ...ENTRY, inputs: [{ ...ENTRY.inputs[0], sourceText: 'इथरेल 300 मिली फवारलं' }] } as DailyLog;
+        render(<Harness start={[quoted]} save={deps} />);
+        act(() => openCorrection('log-1'));
+        expect(screen.getByTestId('corr-now')).toHaveTextContent(`इथरेल · 300 ${ml}`);
+        expect(screen.getByTestId('corr-now').textContent).not.toContain('“');
+    });
+
+    it('B004: offline, the mic does not record — it says a change needs the internet, and nothing is asked of the recorder', () => {
+        const { deps } = realSave();
+        const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        render(<Harness start={[ENTRY]} save={deps} />);
+        act(() => openCorrection('log-1'));
+        fireEvent.click(screen.getByTestId('corr-mic'));
+        expect(speakState().request).toBeNull();
+        expect(screen.getByTestId('corr-offline')).toHaveTextContent(language === 'en' ? 'needs the internet' : 'इंटरनेट लागतं');
+        online.mockRestore();
+        fireEvent.click(screen.getByTestId('corr-mic'));
+        expect(speakState().request?.purpose).toBe('correctEntry');
+    });
+
+    it('B001: workers named without numbers change nothing; he is told worker changes for this entry are made in हजेरी', async () => {
+        const { deps, saved } = realSave();
+        render(<Harness start={[{ ...ENTRY, labour: [{ id: 'lb', type: 'HIRED', count: 5, labourAssignmentId: 'asg-1' }] } as DailyLog]} save={deps} />);
+        act(() => openCorrection('log-1'));
+        await speak({ ...SAID, inputs: [], labour: [{ id: 'x', type: 'HIRED', workerNames: ['गणेश'] }] });
+        expect(screen.getByTestId('corr-labour-hajeri')).toHaveTextContent(language === 'en' ? 'attendance' : 'हजेरी');
+        expect(screen.queryByTestId('corr-nothing')).toBeNull();
+        expect(screen.queryByTestId('corr-save')).toBeNull();
+        expect(postLabourCorrection).not.toHaveBeenCalled();
+        expect(saved).toHaveLength(0);
+    });
+
+    it('offline labour save: says plainly what was and was not saved, and keeps the before / after on screen to retry', async () => {
+        const { deps } = realSave();
+        postLabourCorrection.mockRejectedValueOnce(new Error('Network Error'));
+        const withLabour = { ...ENTRY, labour: [{ id: 'lb', type: 'HIRED', count: 5, labourAssignmentId: 'asg-1' }] } as DailyLog;
+        const repoSave: DailyLog[] = [];
+        const save: CorrectionSaveDeps = {
+            ...deps,
+            updateLog: (logId, updates, profile, reason) => updateLog({ logId, updatedData: updates, actorId: 'me', reason },
+                { getById: async () => withLabour, save: async (l: DailyLog) => { repoSave.push(l); } } as unknown as LogsRepository, profile),
+        };
+        render(<Harness start={[withLabour]} save={save} />);
+        act(() => openCorrection('log-1'));
+        await speak({ ...SAID, inputs: [], labour: [{ id: 'x', type: 'HIRED', count: 8 }] });
+        await act(async () => { fireEvent.click(screen.getByTestId('corr-save')); });
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByTestId('corr-save-failed')).toHaveTextContent(language === 'en' ? 'Nothing changed on this phone' : 'या फोनवर काहीही बदललं नाही');
+        expect(screen.getByTestId('corr-after')).toBeInTheDocument(); // still there: he can press again
+        expect(repoSave).toHaveLength(0);
+        expect(enqueue).not.toHaveBeenCalled();
+    });
+
+    it('B002: a change saved earlier that the server refused is said plainly — only on this phone, never "sent"', async () => {
+        const { deps } = realSave();
+        render(<Harness start={[ENTRY]} save={deps} refused />);
+        act(() => openCorrection('log-1'));
+        expect(await screen.findByTestId('corr-server-refused')).toHaveTextContent(language === 'en' ? 'only on this phone' : 'फक्त या फोनवर');
     });
 
     it('a हजेरी-door record is refused politely (lane F1): no mic, no save', () => {

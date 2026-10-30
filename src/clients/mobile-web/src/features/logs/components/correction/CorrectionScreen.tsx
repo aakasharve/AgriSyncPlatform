@@ -10,6 +10,9 @@
  *   3. after he speaks, back here: before → after — a changed part is outlined and tagged "बदललं", its old value struck
  *      through; "पुन्हा सांगा" (forget it, speak again) and "जतन करा" (the only thing that saves).
  * A record the हजेरी door saved is not changed here (lane F1 refuses it); the screen says so politely.
+ * Fix pass: every value reads as on the result screen ("इथरेल · 300 मिली"), never his quoted words; a removed stoppage is
+ * struck through like any removed value; workers he spoke of that cannot be changed here say where they can be; with
+ * no internet the mic does not record (a change needs it) and the screen says so.
  * No pencil, no form (the founder: "लिहून बदलण्याची सोय नाही — फक्त बोलून").
  */
 import React from 'react';
@@ -38,14 +41,22 @@ export interface CorrectionScreenProps {
         transcript: string;
         typed: boolean;
         rows: readonly CorrectionRow[];
-        blockers: { before: readonly BlockerEntry[]; after: readonly BlockerEntry[]; changed: boolean };
+        blockers: { before: readonly BlockerEntry[]; after: readonly BlockerEntry[]; gone: readonly BlockerEntry[]; changed: boolean };
         /** Nothing in his words changes the entry. */
         nothing: boolean;
+        /** He spoke about workers in a way this screen cannot change (review B001). */
+        labourNotChanged?: boolean;
     };
     /** A हजेरी-door record: not changed here. */
     refused: boolean;
     saving: boolean;
     saveFailed: boolean;
+    /** Why the save failed: the labour numbers (they need the internet), or anything else. */
+    saveFailedReason?: 'labour' | 'other';
+    /** No internet: the mic does not record (review B004). */
+    offline?: boolean;
+    /** A change saved earlier was refused by the server (review B002): said plainly, never "sent". */
+    serverRefused?: boolean;
     onSpeak: () => void;
     onAgain: () => void;
     onSave: () => void;
@@ -98,6 +109,7 @@ export const CorrectionScreen: React.FC<CorrectionScreenProps> = (p) => {
                     </span>
                 </div>
                 <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-24 pt-3">
+                    {p.serverRefused && <p className="m-0 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="corr-server-refused">{words.serverRefused}</p>}
                     {!p.proposal && (
                         <>
                             <div className="px-0.5 text-[13px] font-extrabold text-stone-600">{words.nowTitle}</div>
@@ -118,6 +130,7 @@ export const CorrectionScreen: React.FC<CorrectionScreenProps> = (p) => {
                         </div>
                     ) : !p.proposal ? (
                         <div className="pt-2 text-center">
+                            {p.offline && <p className="m-0 mb-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-left text-[15px] font-bold text-amber-950" data-testid="corr-offline">{words.offline}</p>}
                             <button type="button" onClick={p.onSpeak} aria-label={words.mic} data-testid="corr-mic"
                                 className="mx-auto grid h-[110px] w-[110px] place-items-center rounded-full bg-emerald-700 text-white shadow-[0_8px_24px_rgba(4,120,87,0.35)] active:scale-95">
                                 <Mic size={48} strokeWidth={2.25} aria-hidden="true" />
@@ -134,13 +147,19 @@ export const CorrectionScreen: React.FC<CorrectionScreenProps> = (p) => {
                                 {p.proposal.typed && <TypedTag testId="corr-said-typed" />}
                                 {p.proposal.transcript && <span>“{p.proposal.transcript}”</span>}
                             </div>
+                            {p.proposal.labourNotChanged && (
+                                <p className="m-0 rounded-2xl border border-stone-300 bg-white p-3 text-[15px] font-bold text-stone-800" data-testid="corr-labour-hajeri">{words.labourInHajeri}</p>
+                            )}
                             {p.proposal.nothing ? (
-                                <p className="m-0 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[15px] font-bold text-amber-900" data-testid="corr-nothing">{words.nothingChanged}</p>
+                                !p.proposal.labourNotChanged && <p className="m-0 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-[15px] font-bold text-amber-900" data-testid="corr-nothing">{words.nothingChanged}</p>
                             ) : (
                                 <div className="space-y-1.5" data-testid="corr-after">
                                     {p.proposal.rows.map(r => <PartRow key={r.part} row={r} language={language} />)}
+                                    {p.proposal.blockers.gone.map(b => (
+                                        <div key={`gone-${b.id}`} className="rounded-xl opacity-70 line-through" data-testid={`corr-blocker-gone-${b.id}`}><BlockerRow entry={b} /></div>
+                                    ))}
                                     {p.proposal.blockers.after.map(b => (
-                                        <div key={b.id} className={p.proposal?.blockers.changed ? 'rounded-xl ring-2 ring-emerald-500' : ''}><BlockerRow entry={b} /></div>
+                                        <div key={b.id} className={p.proposal?.blockers.changed ? 'rounded-xl ring-2 ring-emerald-500' : ''} data-testid={`corr-blocker-${b.id}`}><BlockerRow entry={b} /></div>
                                     ))}
                                 </div>
                             )}
@@ -157,7 +176,7 @@ export const CorrectionScreen: React.FC<CorrectionScreenProps> = (p) => {
                                     </button>
                                 )}
                             </div>
-                            {p.saveFailed && <p className="m-0 text-[14px] font-bold text-red-700" data-testid="corr-save-failed">{words.saveFailed}</p>}
+                            {p.saveFailed && <p className="m-0 text-[14px] font-bold text-red-700" data-testid="corr-save-failed">{p.saveFailedReason === 'labour' ? words.saveFailedLabour : words.saveFailed}</p>}
                             <p className="m-0 px-0.5 text-[13px] font-semibold text-stone-600">{words.versionNote}</p>
                         </>
                     )}

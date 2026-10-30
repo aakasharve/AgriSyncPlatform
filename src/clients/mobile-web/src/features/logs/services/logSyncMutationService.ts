@@ -741,7 +741,8 @@ export async function enqueueLogsForSync(
             ...(manualDraft !== undefined && { manualDraft }),
             // B002 (founder ruling 2026-08-31) — a हजेरी-door save tells the server to
             // derive labour only. Read HERE, at queue time: the queued payload is what
-            // syncs and replays, and `captureScope` does not survive a pull's rebuild.
+            // syncs and replays. (Lane RF2 fix pass: a pull now carries the mark back —
+            // `DailyLogDto.captureScope` — so the phone keeps knowing it after any pull.)
             ...(log.captureScope === 'labour' && { captureScope: 'labour' as const }),
             // PLR-D10 I13 (founder 2026-09-02) — saved straight from a voice parse with no review
             // tap: the server keeps it unconfirmed until his own confirm. Read HERE, at queue time,

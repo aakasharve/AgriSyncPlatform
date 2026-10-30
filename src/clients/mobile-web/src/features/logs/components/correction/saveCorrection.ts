@@ -25,9 +25,14 @@ export interface SaveCorrectionDeps {
     toast?: (message: string, type: 'success' | 'partial') => void;
 }
 
-export async function saveSpokenCorrection(deps: SaveCorrectionDeps, log: DailyLog, updates: Partial<DailyLog>): Promise<boolean> {
-    const result = await deps.updateLog(log.id, updates, deps.profile, SPOKEN_CORRECTION_REASON);
-    if (!result.success || !result.log) return false;
+/** What the save did: saved, or not — and when not, whether the labour numbers were part of it (they need the internet). */
+export type SaveOutcome = { ok: true } | { ok: false; reason: 'labour' | 'other' };
+
+export async function saveSpokenCorrection(deps: SaveCorrectionDeps, log: DailyLog, updates: Partial<DailyLog>): Promise<SaveOutcome> {
+    // The labour route posts first and needs the network; a throw anywhere means nothing was written on this phone.
+    const failed: SaveOutcome = { ok: false, reason: updates.labour ? 'labour' : 'other' };
+    const result = await deps.updateLog(log.id, updates, deps.profile, SPOKEN_CORRECTION_REASON).catch(() => null);
+    if (!result || !result.success || !result.log) return failed;
     const saved = result.log;
     deps.setHistory(prev => [saved, ...prev.filter(l => l.id !== log.id)]);
     const unsent = result.hasUnsentChanges ?? false;
@@ -35,5 +40,5 @@ export async function saveSpokenCorrection(deps: SaveCorrectionDeps, log: DailyL
         buildEditSavedMessage(result.persistedLabourCorrections ?? 0, deps.language, unsent, !(result.labourEngagementSetChanged ?? false)),
         unsent ? 'partial' : 'success',
     );
-    return true;
+    return { ok: true };
 }

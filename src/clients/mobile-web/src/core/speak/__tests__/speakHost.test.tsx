@@ -230,3 +230,25 @@ describe.each(['mr', 'en'] as const)('the band says why he is speaking (%s)', la
         vi.doUnmock('../../../i18n/LanguageContext');
     });
 });
+
+describe('fix pass — B009 (language strict) and B006 (never a mic that cannot start)', () => {
+    it('B009: English mode never shows Sathi\'s Marathi prompt in the band; Marathi mode shows it', async () => {
+        const { speakWords } = await import('../speakWords');
+        const devanagari = /[ऀ-ॿ]/;
+        const en = speakWords('en').band('answerQuestion', { question: 'आज किती मजूर होते?' });
+        expect(devanagari.test(`${en.title} ${en.hint ?? ''}`)).toBe(false);
+        expect(speakWords('mr').band('answerQuestion', { question: 'आज किती मजूर होते?' }).hint).toBe('आज किती मजूर होते?');
+        for (const purpose of ['addToDay', 'fillPart', 'correctEntry', 'addTodo', 'attention', 'scheduleDone'] as const) {
+            const b = speakWords('en').band(purpose, { part: 'labour', question: 'मराठी प्रश्न' });
+            expect(devanagari.test(`${b.title} ${b.hint ?? ''}`)).toBe(false);
+        }
+    });
+
+    it('B006: a crop-level entry\'s "बदला" mic opens on the whole farm (a place the recorder can use), never a crop with no plot', async () => {
+        const { placeOfLog } = await import('../SpeakHost');
+        const cropLevel = { context: { selection: [{ cropId: 'grape', cropName: 'Grapes', selectedPlotIds: [], selectedPlotNames: [] }] } } as never;
+        expect(placeOfLog(cropLevel)).toEqual({ cropId: 'FARM_GLOBAL' });
+        const plot = { context: { selection: [{ cropId: 'grape', cropName: 'Grapes', selectedPlotIds: ['g1'], selectedPlotNames: ['सोनाका'] }] } } as never;
+        expect(placeOfLog(plot)).toEqual({ cropId: 'grape', plotId: 'g1' });
+    });
+});

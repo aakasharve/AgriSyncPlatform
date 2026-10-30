@@ -11,6 +11,7 @@
  *   - PROPOSED words, each marked `// PROPOSED (Marathi)`, shown in the preview but not yet ruled.
  */
 import { t } from '../../../../i18n/translations';
+import { OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE } from '../../../../infrastructure/ai/offlineVoiceQueue';
 
 /** The founder's own sentence for the idle mic (2026-10-24). It replaces "नोंद सुरू करा" on this screen. */
 export const MIC_INSTRUCTION = 'हिरव्या रंगाचा माइक चे बटन एकदा दाबून बोलायला सुरवात करा';
@@ -56,8 +57,27 @@ export const STOP_HINT_FOR_SEC = 16;
 export const AUTO_STOP_SEC = 60;
 export const AUTO_STOP_WARN_SEC = AUTO_STOP_SEC - 10;
 
+/**
+ * Lane RF2 fix pass (review B004) — the two offline outcomes the parse reports as stable codes, in his language (the
+ * one place the recorder follows the app's language: the old English toast reached a Marathi screen).
+ */
+const OFFLINE_WORDS: Record<string, { mr: string; en: string }> = {
+    [OFFLINE_SAVED_MESSAGE]: {
+        mr: 'इंटरनेट नाही. तुमचं बोलणं फोनवर ठेवलं आहे — इंटरनेट आलं की समजून घेतलं जाईल.', // PROPOSED (Marathi)
+        en: 'No internet. Your words are kept on this phone and will be understood when you are online.', // PROPOSED (English)
+    },
+    [OFFLINE_NOT_KEPT_MESSAGE]: {
+        mr: 'बदल सांगायला इंटरनेट लागतं. आत्ता काहीही ठेवलं नाही — इंटरनेट आलं की पुन्हा सांगा.', // PROPOSED (Marathi)
+        en: 'A change needs the internet. Nothing was kept — say it again when you are online.', // PROPOSED (English)
+    },
+};
+
 const DEVANAGARI = /[ऀ-ॿ]/;
-/** An error the farmer can read: Marathi as it is, anything else replaced by the plain Marathi line. */
-export const readableError = (message: string): string => (DEVANAGARI.test(message) ? message : REC_WORDS.genericError);
+/** An error the farmer can read: the offline outcomes in his language, Marathi as it is, anything else the plain Marathi line. */
+export const readableError = (message: string, language?: string | null): string => {
+    const offline = OFFLINE_WORDS[message];
+    if (offline) return language === 'en' ? offline.en : offline.mr;
+    return DEVANAGARI.test(message) ? message : REC_WORDS.genericError;
+};
 
 export const formatClock = (s: number): string => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;

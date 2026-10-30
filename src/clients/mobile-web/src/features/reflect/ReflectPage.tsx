@@ -32,8 +32,10 @@
  * Lane RF2 (the founder's screen 1, 2026-10-30): the plot cards show only what happened, as chips in the result
  * screen's colours (no numbered squares, no colour key), plus a "संपूर्ण शेत" card for whole-farm work; a card opens
  * the plot's day (`day/DaySheets.PlotDayView`: buckets, then the time chips, each opening its recording inline). The
- * day's feed button, its sheet and the one-recording glance are RETIRED — the cards replace them; a note opens its
- * recording through the same plot-day view. "बदला" opens the speak-the-change screen (lane E1); "आणखी सांगा" and
+ * one-recording glance is retired; a note opens its recording through the same plot-day view.
+ * RF2 fix pass (founder 2026-10-30: "put it as it is, I asked you to rebuild the screen inside it"): the "आजचा आढावा"
+ * button is back exactly as it was (title, subtitle, count, it follows the chosen day); only the screen inside it is
+ * rebuilt (`DayFeedSheet`, the founder's screen 2: one block per place, its time chips). "बदला" opens the speak-the-change screen (lane E1); "आणखी सांगा" and
  * करायची कामे's "बोलून सांगा" go through THE ONE mic and come back here, the new work highlighted (lane MIC-1).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -52,6 +54,7 @@ import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { emitClosureSummaryViewed, emitNextActionCreated } from '../../core/telemetry/eventEmitters';
 import FarmWideTodayPanel from '../logs/components/FarmWideTodayPanel';
+import { TodayActivityButton } from '../logs/components/TodayActivityFeed';
 import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // The stylesheet this page has always loaded (the analysis cards are styled by it). Kept: lane RF only replaced the
 // English log drawer, and nothing here proves no other analysis card still needs it.
@@ -60,7 +63,7 @@ import '../analysis/components/DailyWorkSummary.css';
 import type { ReflectPageProps } from './ReflectPageProps';
 import DwcReminderChip from './components/DwcReminderChip';
 import { anyLog, dayRecordings, farmLogFilter, plotLogFilter, recordingOfLog, withMoneyShown, type DayRecording } from './day/dayRecordings';
-import { PlotDayView } from './day/DaySheets';
+import { DayFeedSheet, PlotDayView, type FeedBlock } from './day/DaySheets';
 import type { Viewer } from './day/listenModel';
 import { useReflectCopy } from './day/RecordingParts';
 import { useDayListen } from './day/useDayListen';
@@ -127,6 +130,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     // Lane RF2 — the open day view (a plot card's, or the whole farm's), the recording it opens on (a note's), and the
     // logs just told through the ONE mic from it (highlighted on landing).
     const [dayPlace, setDayPlace] = useState<DayPlace | null>(null);
+    const [feedOpen, setFeedOpen] = useState(false);
     const [openKey, setOpenKey] = useState<string | null>(null);
     const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
@@ -192,6 +196,21 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         () => (wholeFarm ? buildDayCardCore(placeDayLogs(history, dateKey, farmFilter), farmWideDayMoney(ledger, dateKey, moneyVisible), language) : undefined),
         [wholeFarm, history, dateKey, farmFilter, ledger, moneyVisible, language],
     );
+    // RF2 fix pass — the "आजचा आढावा" screen (screen 2): one block per plot of the farm that had work that day, then the
+    // whole farm's block for work with no plot. Farm-wide, as the button always was (it follows the chosen day).
+    const feedBlocks = useMemo<FeedBlock[]>(() => {
+        if (!feedOpen) return [];
+        const all = plotRefsInScope(crops, toViewScope(crops, selectAll(crops)));
+        const blocks: FeedBlock[] = all.map(ref => ({
+            key: ref.key,
+            title: ref.plotName ?? (cropNameIn(ref.cropName, language) || ref.cropName),
+            subtitle: ref.plotName ? cropNameIn(ref.cropName, language) || undefined : undefined,
+            crop: { iconName: ref.crop.iconName, name: ref.cropName },
+            recordings: dayRecordings(history, dateKey, plotLogFilter(ref), whoDeps, crops).map(shown),
+        }));
+        blocks.push({ key: 'farm', title: copy.wholeFarm, recordings: dayRecordings(history, dateKey, farmFilter, whoDeps, crops).map(shown) });
+        return blocks.filter(b => b.recordings.length > 0);
+    }, [feedOpen, crops, history, dateKey, whoDeps, shown, farmFilter, copy, language]);
     const placeRecs = useMemo(() => {
         if (!dayPlace) return [];
         const inView = 'farm' in dayPlace ? farmFilter : plotLogFilter(dayPlace.ref);
@@ -236,12 +255,13 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     } : undefined;
     // The money lens for one plot's day, by the server's own place for money (the plot) — not the phone's crop label,
     // which the ledger's entries do not carry (they hold the crop SEASON). Only for money he may see.
+    // Review B008: only a plot's money opens the lens — the lens can show that plot's day, the very figure on the chip.
+    // The whole farm's chip is not a button: the lens has no "no plot" view, so it would land on a different number.
     const openPlotMoney = moneyVisible ? (ref: PlotRef) => {
-        setMoneyLensFilters({ fromDate: dateKey, toDate: dateKey, ...(ref.plotId ? { plotId: ref.plotId } : {}) });
+        if (!ref.plotId) return;
+        setMoneyLensFilters({ fromDate: dateKey, toDate: dateKey, plotId: ref.plotId });
         setMoneyLensOpen(true);
     } : undefined;
-    // The whole farm's money that day (the same lens, the day alone).
-    const openFarmMoney = moneyVisible ? () => { setMoneyLensFilters({ fromDate: dateKey, toDate: dateKey }); setMoneyLensOpen(true); } : undefined;
     const openLog = (log: DailyLog) => { listen.stop(); onOpenLog?.(log); };
     const openPlace = (place: DayPlace, recordingKey: string | null = null) => { listen.stop(); setFresh(new Set()); setOpenKey(recordingKey); setDayPlace(place); };
     // A note opens its recording through the same plot-day view: its plot's card (in view), else the whole farm's.
@@ -252,11 +272,14 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     };
     // "आणखी सांगा" from a day view: THE ONE mic for that place (a recording is always today's: today only), landing back
     // on this view with the new work highlighted.
+    // Review B006: a crop with no plot cannot be the recorder's place (it records on a plot or the whole farm), so its day
+    // opens the mic with the crop → plot pickers — never a mic that cannot start (P5).
     const tellMoreFor = (place: DayPlace): (() => void) | undefined => (isToday && onSpeak ? () => {
         listen.stop();
+        const where = 'farm' in place ? { cropId: FARM_GLOBAL } : place.ref.plotId ? { cropId: place.ref.cropId, plotId: place.ref.plotId } : undefined;
         onSpeak({
             purpose: 'addToDay',
-            context: { place: 'farm' in place ? { cropId: FARM_GLOBAL } : { cropId: place.ref.cropId, plotId: place.ref.plotId } },
+            context: where ? { place: where } : {},
             onLanded: landing => { if (landing.kind === 'saved') setFresh(new Set(landing.logIds)); },
         });
     } : undefined);
@@ -300,7 +323,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                             <DayBar date={date} onDate={pickDay} />
                             {cards.length > 0
                                 ? <PlotDayCards cards={cards} farm={farmCard} isToday={isToday} onOpen={ref => openPlace({ ref })} onOpenFarm={() => openPlace({ farm: true })}
-                                    onCost={openPlotMoney} onFarmCost={openFarmMoney} />
+                                    onCost={openPlotMoney} />
                                 : <p className="m-0 rounded-2xl bg-stone-50 p-3 text-center text-[14.5px] font-bold text-stone-600" data-testid="plot-cards-empty">पीक आणि प्लॉट जोडले की इथे रोजचं काम दिसेल.</p>}
                         </div>
                     </SectionBlock>
@@ -329,8 +352,14 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     return (
         <div className="space-y-3 pb-20" style={{ fontFamily: SANS }} data-testid="reflect-page">
-            {/* Lane RF2 — the day's feed button and sheet are retired: the plot cards (and the whole farm's) replace them. */}
-            <div className="pt-1" />
+            {/* THE DAY'S WORK — one button; it follows the day the page is on (lane RF). RF2 fix pass: the screen inside it
+                is the founder's screen 2 (one block per place, time chips). */}
+            <div className="px-3 pt-4">
+                <TodayActivityButton count={dayRecs.length} title={copy.feedTitle(isToday)} subtitle={copy.feedSubtitle(isToday, dayLabel)} onClick={() => setFeedOpen(true)} />
+            </div>
+            {feedOpen && (
+                <DayFeedSheet blocks={feedBlocks} isToday={isToday} dayLabel={dayLabel} listen={listen} onEdit={onOpenLog ? openLog : undefined} onClose={() => setFeedOpen(false)} />
+            )}
 
             {/* REVIEW INBOX (Trust Layer 2) — a read surface; visible only to a verifier when something waits. */}
             {showInbox && (

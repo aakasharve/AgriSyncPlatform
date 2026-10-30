@@ -15,24 +15,43 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SPEAK_PURPOSES, type SpeakPurpose } from '../speakStore';
+import { SPEAK_PURPOSES, requestSpeak, resetSpeakStoreForTests, type SpeakPurpose } from '../speakStore';
+import { mayKeepOffline } from '../speakFlow';
+import { saysAnything } from '../../../features/logs/components/correction/correctionModel';
 
 const SRC = resolve(process.cwd(), 'src');
 const read = (rel: string): string => readFileSync(resolve(SRC, rel), 'utf-8');
 
-/** ROUTED: the button, the file that wires it to `requestSpeak` / `onSpeak`, and its purpose. */
-const ROUTED: Array<{ id: string; button: string; wiredIn: string; purpose: SpeakPurpose; place: 'known' | 'current' | 'unknown' }> = [
-    { id: 'result-add-another', button: 'result screen "आणखी सांगा"', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'addToDay', place: 'current' },
-    { id: 'result-untold-part', button: 'result screen "… सांगितलं नाही. दाबा आणि बोला" + a red ring orb', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'fillPart', place: 'current' },
-    { id: 'result-sathi-question', button: 'result screen Sathi question "बोलून सांगा"', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'answerQuestion', place: 'current' },
-    { id: 'saved-sathi-question', button: 'saved card Sathi question "बोलून सांगा"', wiredIn: 'core/navigation/savedView.tsx', purpose: 'answerQuestion', place: 'current' },
-    { id: 'saved-add-another', button: 'saved card "आणखी सांगा"', wiredIn: 'core/navigation/savedView.tsx', purpose: 'addToDay', place: 'current' },
-    { id: 'correction-mic', button: '"बदला" screen big mic + "पुन्हा सांगा"', wiredIn: 'core/speak/SpeakHost.tsx', purpose: 'correctEntry', place: 'known' },
-    { id: 'reflect-plot-day-tell', button: 'आढावा plot day "आणखी सांगा"', wiredIn: 'features/reflect/ReflectPage.tsx', purpose: 'addToDay', place: 'known' },
-    { id: 'reflect-todo-tell', button: 'आढावा करायची कामे "बोलून सांगा"', wiredIn: 'features/reflect/ReflectPage.tsx', purpose: 'addTodo', place: 'known' },
-    { id: 'attention-record', button: 'लक्ष द्या "काम नोंदवा"', wiredIn: 'core/navigation/simpleRoutes.tsx', purpose: 'attention', place: 'known' },
-    { id: 'procurement-tell', button: 'खरेदी "बोलून सांगा" / "हाताने लिहा"', wiredIn: 'core/navigation/simpleRoutes.tsx', purpose: 'addToDay', place: 'unknown' },
-    { id: 'tests-tell', button: 'चाचण्या "सांगा"', wiredIn: 'core/navigation/simpleRoutes.tsx', purpose: 'addToDay', place: 'unknown' },
+/**
+ * ROUTED: the button, the file that wires it, its purpose, and its ACTUAL CALL SITE (fix pass: the button's own prop
+ * or handler reaching the ONE mic with that purpose — not merely "the file mentions requestSpeak somewhere"). Each is
+ * also exercised by a render / behaviour test: `mainView.voiceResult` (add-another, untold part), `attentionRoute`
+ * (attention), `ReflectPage.render` + `todoAdd.reflectPage` (plot day, to-do), `correctionFlow` (correction),
+ * `speakHost` (the return for every purpose).
+ */
+const ROUTED: Array<{ id: string; button: string; wiredIn: string; purpose: SpeakPurpose; place: 'known' | 'current' | 'unknown'; site: RegExp }> = [
+    { id: 'result-add-another', button: 'result screen "आणखी सांगा"', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'addToDay', place: 'current',
+        site: /onAddAnother=\{\(\) => speakHere\(\{ purpose: 'addToDay', context: \{ place: 'current' \} \}\)\}/ },
+    { id: 'result-untold-part', button: 'result screen "… सांगितलं नाही. दाबा आणि बोला" + a red ring orb', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'fillPart', place: 'current',
+        site: /onTellMore=\{part => speakHere\(\{ purpose: 'fillPart', context: \{ place: 'current', part \} \}\)\}/ },
+    { id: 'result-sathi-question', button: 'result screen Sathi question "बोलून सांगा"', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'answerQuestion', place: 'current',
+        site: /onAnswerBySpeaking=\{\(pending\) => \{\s*stashPendingQuestionAnswer\(pending\);\s*speakHere\(\{ purpose: 'answerQuestion'/ },
+    { id: 'saved-sathi-question', button: 'saved card Sathi question "बोलून सांगा"', wiredIn: 'core/navigation/savedView.tsx', purpose: 'answerQuestion', place: 'current',
+        site: /onAnswerBySpeaking=\{\(pending\) => \{\s*stashPendingQuestionAnswer\(pending\);\s*requestSpeak\(\{\s*purpose: 'answerQuestion'/ },
+    { id: 'saved-add-another', button: 'saved card "आणखी सांगा"', wiredIn: 'core/navigation/savedView.tsx', purpose: 'addToDay', place: 'current',
+        site: /<button onClick=\{\(\) => requestSpeak\(\{ purpose: 'addToDay', context: \{ place: 'current' \}/ },
+    { id: 'correction-mic', button: '"बदला" screen big mic + "पुन्हा सांगा"', wiredIn: 'core/speak/SpeakHost.tsx', purpose: 'correctEntry', place: 'known',
+        site: /const speak = \(\) => \{[\s\S]*?requestSpeak\(\{\s*purpose: 'correctEntry'[\s\S]*onSpeak=\{speak\}[\s\S]*onAgain=\{\(\) => \{ setCorrectionProposal\(null\); speak\(\); \}\}/ },
+    { id: 'reflect-plot-day-tell', button: 'आढावा plot day "आणखी सांगा"', wiredIn: 'features/reflect/ReflectPage.tsx', purpose: 'addToDay', place: 'known',
+        site: /onTellMore=\{tellMoreFor\(dayPlace\)\}/ },
+    { id: 'reflect-todo-tell', button: 'आढावा करायची कामे "बोलून सांगा"', wiredIn: 'features/reflect/ReflectPage.tsx', purpose: 'addTodo', place: 'known',
+        site: /onTell=\{tellTodo\}/ },
+    { id: 'attention-record', button: 'लक्ष द्या "काम नोंदवा"', wiredIn: 'core/navigation/simpleRoutes.tsx', purpose: 'attention', place: 'known',
+        site: /onRecordWork=\{\(step\) => \{[^}]*\n[^}]*requestSpeak\(\{\s*purpose: 'attention'/ },
+    { id: 'procurement-tell', button: 'खरेदी "बोलून सांगा" / "हाताने लिहा"', wiredIn: 'core/navigation/simpleRoutes.tsx', purpose: 'addToDay', place: 'unknown',
+        site: /onTell=\{\(\) => \{ requestSpeak\(\{ purpose: 'addToDay', returnTo: \{ route: 'procurement'/ },
+    { id: 'tests-tell', button: 'चाचण्या "सांगा"', wiredIn: 'core/navigation/simpleRoutes.tsx', purpose: 'addToDay', place: 'unknown',
+        site: /onTell=\{\(\) => \{ requestSpeak\(\{ purpose: 'addToDay', returnTo: \{ route: 'tests'/ },
 ];
 
 /** NOT ROUTED, and why. Each named file is checked to NOT call the ONE mic (its meaning is its own). */
@@ -60,11 +79,21 @@ const NOT_ROUTED: Array<{ id: string; file: string; why: 'the recorder itself' |
 const callsTheOneMic = (src: string): boolean => /\brequestSpeak\(|\bonSpeak\(/.test(src);
 
 describe('MIC-1 — the routed speak entry points (test table)', () => {
-    it.each(ROUTED)('$id: $button → requestSpeak($purpose)', ({ wiredIn, purpose }) => {
+    it.each(ROUTED)('$id: $button → requestSpeak($purpose), at its own call site', ({ wiredIn, purpose, site }) => {
         expect(SPEAK_PURPOSES).toContain(purpose);
         const src = read(wiredIn);
-        expect(callsTheOneMic(src)).toBe(true);
+        expect(src).toMatch(site);
         expect(src).toContain(`purpose: '${purpose}'`);
+    });
+
+    it('the plot day\'s and the to-do\'s handlers are the ones that reach the ONE mic with their purposes', () => {
+        const page = read('features/reflect/ReflectPage.tsx');
+        const tell = page.slice(page.indexOf('const tellMoreFor'), page.indexOf('const tellTodo'));
+        expect(tell).toMatch(/onSpeak\(\{\s*purpose: 'addToDay'/);
+        const todo = page.slice(page.indexOf('const tellTodo'), page.indexOf('const dayLabel'));
+        expect(todo).toMatch(/onSpeak\(\{ purpose: 'addTodo'/);
+        expect(read('features/reflect/overview/TodoAddForm.tsx')).toMatch(/<Tap onClick=\{onTell\} data-testid="todo-tell"/);
+        expect(read('features/logs/components/correction/CorrectionScreen.tsx')).toMatch(/onClick=\{p\.onSpeak\}[^>]*data-testid="corr-mic"/);
     });
 
     it('every purpose but the schedule\'s has a routed entry point (no schedule screen offers to speak today)', () => {
@@ -118,22 +147,43 @@ describe('E1 — the old hand-filled form (ManualEntry) inventory', () => {
         expect(read('core/navigation/savedView.tsx')).not.toContain("setMode('manual')");
     });
 
-    it('where the form is STILL rendered: only the places with no new home yet (reported to the founder)', () => {
+    it('where the form is STILL rendered: only the places with no new home yet (static, dynamic and React.lazy imports all counted)', () => {
         const importers: string[] = [];
+        const IMPORTS_FORM = /(?:from\s+'[^']*\/ManualEntry'|import\(\s*'[^']*\/ManualEntry'\s*\))/;
         const walk = (dir: string) => {
             for (const e of readdirSync(dir, { withFileTypes: true })) {
                 if (e.isDirectory()) { if (!['__tests__', 'node_modules'].includes(e.name)) walk(join(dir, e.name)); continue; }
                 if (!/\.tsx?$/.test(e.name)) continue;
                 const file = join(dir, e.name);
-                if (/import\s+ManualEntry\s+from\s+'[^']*\/ManualEntry'/.test(readFileSync(file, 'utf-8'))) importers.push(relative(SRC, file).replace(/\\/g, '/'));
+                const rel = relative(SRC, file).replace(/\\/g, '/');
+                if (rel === 'features/logs/components/ManualEntry.tsx') continue; // the re-export shim itself
+                if (IMPORTS_FORM.test(readFileSync(file, 'utf-8'))) importers.push(rel);
             }
         };
         walk(SRC);
         // the log tab's one call (the हजेरी door's edit surface; a parse the voice auto-save declined) and the AI-drafts
-        // review page — nothing else
+        // review page (opened from the profile, loaded with React.lazy by the route table) — nothing else
         expect(importers.sort()).toEqual(['core/navigation/mainView.tsx', 'pages/AiDraftsPage.tsx']);
+        expect(read('core/navigation/lazyComponents.ts')).toMatch(/AiDraftsPage = React\.lazy\(\(\) => import\('\.\.\/\.\.\/pages\/AiDraftsPage'\)\)/);
         const main = read('core/navigation/mainView.tsx');
         expect(main).not.toContain('renderForm');
         expect(main).toContain('renderManualEntry({ provenance: ownProvenance, recordedDateKey: captureDay })');
     });
+
+    /**
+     * Review B005 — capabilities lost with NO home yet. Not built in this lane on purpose: they go to the founder as visual
+     * options, together with the kept old-form uses above. Each is pinned so it cannot be "fixed" silently.
+     */
+    it.each([
+        { gap: 'remove a wrong item, or a whole part, by speaking', proof: () => {
+            // a part he does not mention stays exactly as it was: there is no spoken way to say "remove it"
+            expect(saysAnything({ summary: '', dayOutcome: 'WORK_RECORDED', cropActivities: [], irrigation: [], labour: [], inputs: [], machinery: [], activityExpenses: [], missingSegments: [] })).toBe(false);
+        } },
+        { gap: 'record a change offline straight away (it needs the internet; nothing is kept)', proof: () => {
+            requestSpeak({ purpose: 'correctEntry', context: { place: { cropId: 'FARM_GLOBAL' } }, returnTo: { route: 'main', mainView: 'reflect' } });
+            expect(mayKeepOffline()).toBe(false);
+            resetSpeakStoreForTests();
+            expect(mayKeepOffline()).toBe(true);
+        } },
+    ])('no home yet (B005): $gap', ({ proof }) => { proof(); });
 });

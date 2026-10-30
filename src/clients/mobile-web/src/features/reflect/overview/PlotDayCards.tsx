@@ -34,11 +34,11 @@ export const Chip: React.FC<{ chip: DayChip }> = ({ chip }) => {
     const language = useOptionalLanguage()?.language;
     const copy = useReflectCopy();
     const blocker = chip.kind === 'blocker';
-    const name = blocker ? '' : partNameIn(chip.kind as Exclude<DayChip['kind'], 'blocker'>, language);
+    const name = blocker ? copy.stoppage : partNameIn(chip.kind as Exclude<DayChip['kind'], 'blocker'>, language);
     const text = chip.text || name;
     return (
         <span data-testid={`chip-${chip.id}`} data-kind={chip.kind} data-verified={chip.verified ? 'yes' : 'no'}
-            aria-label={[name, text, chip.verified ? '' : copy.unsure].filter(Boolean).join(': ')}
+            aria-label={[name, text === name ? '' : text, chip.verified ? '' : copy.unsure].filter(Boolean).join(': ')}
             className={`inline-flex max-w-full items-center gap-1.5 rounded-xl px-2 py-1 text-[14.5px] font-extrabold text-stone-900 ${blocker ? 'bg-orange-50 ring-1 ring-orange-300' : ''} ${chip.verified ? '' : 'border border-dashed border-amber-500'}`}
             style={blocker ? undefined : { background: partMeta(chip.kind as Exclude<DayChip['kind'], 'blocker'>).tint }}>
             <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-white/65">
@@ -50,21 +50,31 @@ export const Chip: React.FC<{ chip: DayChip }> = ({ chip }) => {
     );
 };
 
-/** The chips of a day, the ledger's money last (tap → the money lens, only for money he may see). */
+/**
+ * The chips of a day, the ledger's money last, labelled as the accounts' figure ("हिशोबातून", fix pass D5). A tap opens
+ * the money lens on that very figure (a plot's day); a figure the lens cannot show as it is (the whole farm's: the lens
+ * has no "no plot" view) is a plain chip, never a button that lands on a different number (review B008).
+ */
 const Chips: React.FC<{ card: DayCardCore; testKey: string; onCost?: () => void }> = ({ card, testKey, onCost }) => {
     const copy = useReflectCopy();
     const language = useOptionalLanguage()?.language;
+    const money = card.money?.amount != null ? card.money : undefined;
+    const inner = money && (
+        <>
+            <span className="grid h-[26px] w-[26px] place-items-center rounded-lg bg-white/65"><IndianRupee size={16} aria-hidden="true" /></span>
+            <Num>{rupees(money.amount as number)}</Num>
+            <span className="text-[11.5px] font-bold text-stone-700" data-testid={`plot-money-source-${testKey}`}>{copy.fromLedger}</span>
+            {money.partial.length > 0 && <span className="text-[11px] text-amber-800" data-testid={`plot-money-partial-${testKey}`}>· {copy.partialTag}</span>}
+        </>
+    );
+    const label = money ? `${partNameIn('expense', language)} ${rupees(money.amount as number)} ${copy.fromLedger}` : '';
+    const look = 'inline-flex items-center gap-1.5 rounded-xl px-2 py-1 text-[14.5px] font-extrabold text-stone-900';
     return (
         <span className="mt-2.5 flex flex-wrap gap-1.5" data-testid={`plot-chips-${testKey}`}>
             {card.chips.map(c => <Chip key={c.id} chip={c} />)}
-            {card.money?.amount != null && (onCost ? (
-                <Tap onClick={e => { e.stopPropagation(); onCost(); }} data-testid={`plot-money-${testKey}`} aria-label={`${partNameIn('expense', language)} ${rupees(card.money.amount)}`}
-                    className="inline-flex items-center gap-1.5 rounded-xl px-2 py-1 text-[14.5px] font-extrabold text-stone-900" style={{ background: MONEY_TINT }}>
-                    <span className="grid h-[26px] w-[26px] place-items-center rounded-lg bg-white/65"><IndianRupee size={16} aria-hidden="true" /></span>
-                    <Num>{rupees(card.money.amount)}</Num>
-                    {card.money.partial.length > 0 && <span className="text-[11px] text-amber-800" data-testid={`plot-money-partial-${testKey}`}>· {copy.partialTag}</span>}
-                </Tap>
-            ) : null)}
+            {money && (onCost
+                ? <Tap onClick={e => { e.stopPropagation(); onCost(); }} data-testid={`plot-money-${testKey}`} aria-label={label} className={look} style={{ background: MONEY_TINT }}>{inner}</Tap>
+                : <span data-testid={`plot-money-${testKey}`} data-tappable="no" aria-label={label} className={look} style={{ background: MONEY_TINT }}>{inner}</span>)}
         </span>
     );
 };
@@ -73,7 +83,9 @@ const Chips: React.FC<{ card: DayCardCore; testKey: string; onCost?: () => void 
 const Foot: React.FC<{ card: DayCardCore; isToday: boolean; testKey: string }> = ({ card, isToday, testKey }) => {
     const copy = useReflectCopy();
     if (card.recordings === 0) {
-        return <span className="mt-2.5 block text-[14px] font-bold text-stone-500" data-testid={`plot-empty-${testKey}`}>{copy.nothingTold(isToday)}</span>;
+        // Money from the accounts but nothing said: say exactly that (fix pass D5), never "nothing on this day".
+        const line = card.money?.amount != null ? copy.nothingSpoken : copy.nothingTold(isToday);
+        return <span className="mt-2.5 block text-[14px] font-bold text-stone-500" data-testid={`plot-empty-${testKey}`}>{line}</span>;
     }
     return (
         <span className="mt-2.5 flex items-center justify-between gap-2 text-[13px] font-bold text-stone-600">
@@ -127,7 +139,7 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
 };
 
 /** The "संपूर्ण शेत" card — whole-farm work, the same look. */
-export const FarmDayCardView: React.FC<{ card: DayCardCore; isToday: boolean; onOpen: () => void; onCost?: () => void }> = ({ card, isToday, onOpen, onCost }) => {
+export const FarmDayCardView: React.FC<{ card: DayCardCore; isToday: boolean; onOpen: () => void }> = ({ card, isToday, onOpen }) => {
     const copy = useReflectCopy();
     return (
         <CardButton testId="plot-card-farm" status={card.status} onOpen={onOpen} edge="bg-emerald-700">
@@ -139,7 +151,7 @@ export const FarmDayCardView: React.FC<{ card: DayCardCore; isToday: boolean; on
                 </span>
                 {card.confirmed !== undefined && <StatusChip confirmed={card.confirmed} testId="plot-state-farm" />}
             </span>
-            <Chips card={card} testKey="farm" onCost={onCost} />
+            <Chips card={card} testKey="farm" />
             <Foot card={card} isToday={isToday} testKey="farm" />
         </CardButton>
     );
@@ -153,10 +165,9 @@ export const PlotDayCards: React.FC<{
     onOpen: (ref: PlotRef) => void;
     onOpenFarm?: () => void;
     onCost?: (ref: PlotRef) => void;
-    onFarmCost?: () => void;
-}> = ({ cards, farm, isToday, onOpen, onOpenFarm, onCost, onFarmCost }) => (
+}> = ({ cards, farm, isToday, onOpen, onOpenFarm, onCost }) => (
     <div className="space-y-2.5" data-testid="plot-day-cards">
         {cards.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} />)}
-        {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} onCost={onFarmCost} />}
+        {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} />}
     </div>
 );

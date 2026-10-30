@@ -36,7 +36,7 @@ vi.mock('../../../infrastructure/sync/PayloadValidator', () => ({ validatePayloa
 import { LogVerificationStatus, type DailyLog } from '../../../types';
 import { resultCopy } from '../../logs/components/voiceResult/resultCopy';
 import { anyLog, dayRecordings, plotLogFilter, withMoneyShown, type DayRecording } from '../day/dayRecordings';
-import { PlotDayView } from '../day/DaySheets';
+import { DayFeedSheet, PlotDayView } from '../day/DaySheets';
 import type { ListenKind } from '../day/listenModel';
 import type { DayListen } from '../day/useDayListen';
 import { buildDayNotes } from '../overview/notesModel';
@@ -208,6 +208,52 @@ describe.each(['mr', 'en'] as const)('PlotDayView — the plot day, the founder 
         fireEvent.click(screen.getByTestId('rf-day-back'));
         expect(onClose).toHaveBeenCalled();
         expect(screen.getByTestId('rf-day-back')).toHaveTextContent(copy().back);
+    });
+});
+
+describe.each(['mr', 'en'] as const)('DayFeedSheet — the "आजचा आढावा" screen, the founder screen 2 (%s)', language => {
+    beforeEach(() => { lang.value = language; });
+    const copy = () => reflectCopy(language);
+    const g1 = (id: string, hhmm: string, who: string, count: number) => said(id, at(hhmm), who, { labour: [{ id: `l-${id}`, type: 'HIRED', count }] });
+
+    it('one block per place: its identity, "N वेळा सांगितलं", ONE row of time chips; a time opens that recording in the block', () => {
+        const onEdit = vi.fn();
+        const recs = recsOf([g1('a', '03:00', ME, 5), g1('b', '08:00', 'op-sunil', 10)]);
+        render(<DayFeedSheet blocks={[{ key: 'grape:g1', title: 'सोनाका', subtitle: 'द्राक्ष', recordings: recs }]} isToday dayLabel="x" listen={listenWith('none')} onEdit={onEdit} onClose={vi.fn()} />);
+        const block = screen.getByTestId('rf-feed-block-grape:g1');
+        expect(block).toHaveTextContent('सोनाका');
+        expect(screen.getByTestId('rf-feed-block-grape:g1-times')).toHaveTextContent(copy().timesTold(2, true));
+        const chips = within(screen.getByTestId('rf-times-grape:g1-')).getAllByRole('button').map(b => b.getAttribute('data-testid'));
+        expect(chips).toEqual(['rf-time-grape:g1-a', 'rf-time-grape:g1-b']);
+        fireEvent.click(screen.getByTestId('rf-time-grape:g1-b'));
+        expect(screen.getByTestId('rf-rec-grape:g1-b-who')).toHaveTextContent('सुनील');
+        expect(screen.getByTestId('rf-rec-grape:g1-b-state')).toHaveTextContent(copy().notConfirmed);
+        expect(screen.getByTestId('rf-rec-grape:g1-b-parts')).toHaveTextContent('10 जण');
+        // nothing summed across recordings
+        expect(block.textContent).not.toContain('15');
+        fireEvent.click(screen.getByTestId('rf-rec-grape:g1-b-edit-b'));
+        expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }));
+    });
+
+    it('nothing told that day: says so plainly', () => {
+        render(<DayFeedSheet blocks={[]} isToday={false} dayLabel="x" listen={listenWith('none')} onClose={vi.fn()} />);
+        expect(screen.getByTestId('rf-feed-empty')).toHaveTextContent(copy().feedEmpty(false));
+    });
+});
+
+describe('fix pass D4 — no quoted source words on the RF2 surfaces', () => {
+    it('the plot-day view and the opened recording show what was understood, never his quote', () => {
+        const quoted = said('q', at('03:00'), ME, {
+            fullTranscript: 'आज इथरेल 300 मिली फवारणी केली',
+            inputs: [{ id: 'i1', method: 'Spray', mix: [], productName: 'इथरेल', quantity: 300, unit: 'ml', sourceText: 'इथरेल 300 मिली फवारणी केली' }],
+        } as Partial<DailyLog>);
+        const recs = recsOf([quoted]);
+        render(<PlotDayView title="t" dayLabel="x" dateKey={TODAY_KEY} isToday recordings={recs} listen={listenWith('none')} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByTestId('rf-time-q'));
+        const text = screen.getByTestId('rf-day').textContent ?? '';
+        expect(text).not.toContain('“');
+        expect(text).not.toContain('फवारणी केली');
+        expect(screen.getByTestId('rf-day').querySelectorAll('mark')).toHaveLength(0);
     });
 });
 

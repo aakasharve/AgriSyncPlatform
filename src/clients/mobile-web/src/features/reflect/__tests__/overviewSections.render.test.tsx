@@ -145,6 +145,8 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
         const onCost = vi.fn();
         render(wrap(<PlotDayCards cards={cards} isToday onOpen={onOpen} onCost={onCost} />));
         expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('1,500');
+        // D5: the money chip says it is the accounts' figure
+        expect(screen.getByTestId('plot-money-source-grape:g1')).toHaveTextContent(language === 'en' ? 'from the accounts' : 'हिशोबातून');
         expect(screen.getByTestId('plot-money-partial-grape:g1')).toHaveTextContent(language === 'en' ? 'partial' : 'अपूर्ण');
         fireEvent.click(screen.getByTestId('plot-money-grape:g1'));
         expect(onCost).toHaveBeenCalledWith(expect.objectContaining({ key: 'grape:g1', plotId: 'g1' }));
@@ -157,12 +159,23 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
         render(wrap(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} />));
         expect(screen.getByTestId('plot-state-grape:g1')).toHaveTextContent(language === 'en' ? 'Not confirmed' : 'पक्कं नाही');
         expect(screen.queryByTestId('plot-state-grape:g2')).toBeNull(); // nothing told: no status at all
-        expect(screen.queryByTestId('plot-money-grape:g1')).toBeNull(); // money he may not see: no chip
+        // B008: with no lens to open, a figure is a plain chip, never a button that lands somewhere else
+        expect(screen.getByTestId('plot-money-grape:g1')).toHaveAttribute('data-tappable', 'no');
+        expect(screen.getByTestId('plot-money-grape:g1').tagName).toBe('SPAN');
         const hidden = refs.map(r => buildPlotDayCard(r, [worked], all, TODAY_KEY, TODAY, { amount: null, hidden: true, partial: [] }, language));
         cleanup();
         render(wrap(<PlotDayCards cards={hidden} isToday onOpen={vi.fn()} onCost={vi.fn()} />));
         expect(screen.queryByTestId('plot-money-grape:g1')).toBeNull();
         expect(screen.getByTestId('plot-card-grape:g1').textContent).not.toMatch(/₹/);
+    });
+
+    it('D5 + B008: the whole farm\'s money from bills with nothing said reads "बोलून काही सांगितलं नाही"; its chip is not a button', () => {
+        const farm = { chips: [], status: 'empty' as const, recordings: 0, money: { amount: 1800, hidden: false, partial: [] } };
+        render(wrap(<PlotDayCards cards={cards} farm={farm} isToday onOpen={vi.fn()} onOpenFarm={vi.fn()} onCost={vi.fn()} />));
+        expect(screen.getByTestId('plot-empty-farm')).toHaveTextContent(language === 'en' ? 'Nothing was said' : 'बोलून काही सांगितलं नाही');
+        expect(screen.getByTestId('plot-money-farm')).toHaveTextContent('1,800');
+        expect(screen.getByTestId('plot-money-farm')).toHaveAttribute('data-tappable', 'no');
+        expect(screen.getByTestId('plot-money-source-farm')).toHaveTextContent(language === 'en' ? 'from the accounts' : 'हिशोबातून');
     });
 
     it('the "संपूर्ण शेत" card: whole-farm work in the same style, its own door', () => {

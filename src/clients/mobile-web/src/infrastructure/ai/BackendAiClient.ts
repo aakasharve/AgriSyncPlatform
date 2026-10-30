@@ -8,6 +8,7 @@ import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
 import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
 import { resolveApiBaseUrl } from '../api/transport';
+import { OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, offlineVoiceQueueAllowed } from './offlineVoiceQueue';
 import { parseStreamConsumer } from './ParseStreamConsumer';
 import type { ParseStreamEvent } from '../../domain/ai/contracts/ParseStreamEvent';
 // spec: voice-diary-e2e-2026-05-17 (D.15) — internal pass-throughs to the
@@ -67,10 +68,16 @@ export class BackendAiClient implements VoiceParserPort {
             const context = this.buildContext(scope, crops, profile, options);
 
             if (!navigator.onLine) {
+                // Lane RF2 fix pass (review B004): words that are a correction of a saved entry are never kept as a
+                // pending job (it would come back as a NEW log); the parse says nothing was kept. Both outcomes are
+                // stable codes the screen shows in his language (`recorderWords.readableError`).
+                if (!offlineVoiceQueueAllowed()) {
+                    return { success: false, error: OFFLINE_NOT_KEPT_MESSAGE };
+                }
                 await this.enqueueOfflineVoiceJob(input, farmId, userId, context, scope);
                 return {
                     success: false,
-                    error: 'Saved locally. Will process when connected.',
+                    error: OFFLINE_SAVED_MESSAGE,
                 };
             }
 

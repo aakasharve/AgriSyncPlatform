@@ -21,7 +21,15 @@ export interface CorrectionWords {
     save: string;
     saving: string;
     saveFailed: string;
+    /** The labour numbers did not reach the server (they need the internet): nothing was saved on this phone. */
+    saveFailedLabour: string;
     nothingChanged: string;
+    /** Review B001: what he said about workers is not a change this screen can make. */
+    labourInHajeri: string;
+    /** Review B004: a change needs the internet; nothing is recorded or kept. */
+    offline: string;
+    /** Review B002: a change he saved earlier was refused by the server — it is only on this phone. */
+    serverRefused: string;
     versionNote: string;
     reconfirm: string;
     labourDoor: string;
@@ -47,6 +55,10 @@ const mr: CorrectionWords = {
     save: 'जतन करा', // PROPOSED (Marathi) — screen 4
     saving: 'जतन होत आहे…', // PROPOSED (Marathi)
     saveFailed: 'आत्ता जतन करता आलं नाही. काहीही बदललं नाही — पुन्हा दाबा.', // PROPOSED (Marathi)
+    saveFailedLabour: 'जतन झालं नाही: मजुरांचे आकडे पाठवायला इंटरनेट लागतं. या फोनवर काहीही बदललं नाही; मजुरांचा बदल सर्व्हरवर पूर्ण पोचला नसेल. इंटरनेट आल्यावर पुन्हा दाबा.', // PROPOSED (Marathi)
+    labourInHajeri: 'मजुरांबद्दल जे सांगितलं ते इथे बदललं नाही. या कामातले मजुरांचे बदल हजेरीत करा.', // PROPOSED (Marathi)
+    offline: 'बदल सांगायला इंटरनेट लागतं. आत्ता काहीही रेकॉर्ड केलं नाही — इंटरनेट आलं की पुन्हा दाबा.', // PROPOSED (Marathi)
+    serverRefused: 'आधी जतन केलेला बदल सर्व्हरने घेतला नाही. तो फक्त या फोनवर आहे.', // PROPOSED (Marathi)
     nothingChanged: 'यातून बदलायचं काही समजलं नाही. पुन्हा सांगा.', // PROPOSED (Marathi)
     versionNote: 'जतन केल्यावर नवीन आवृत्ती ठेवली जाते — आधीचं पण सर्व्हरवर राहतं.', // PROPOSED (Marathi) — screen 3's note
     reconfirm: 'हे आधी पक्कं केलं होतं. जतन केल्यावर नवीन आवृत्ती "पक्कं नाही" राहील, पुन्हा पक्कं होईपर्यंत.', // PROPOSED (Marathi)
@@ -71,6 +83,10 @@ const en: CorrectionWords = {
     save: 'Save', // PROPOSED (English)
     saving: 'Saving…', // PROPOSED (English)
     saveFailed: 'Could not save just now. Nothing was changed — press again.', // PROPOSED (English)
+    saveFailedLabour: 'Not saved: the worker numbers need the internet to be sent. Nothing changed on this phone; the worker change may not all have reached the server. Press again when you are online.', // PROPOSED (English)
+    labourInHajeri: 'What you said about workers was not changed here. Worker changes for this entry are made in attendance.', // PROPOSED (English)
+    offline: 'A change needs the internet. Nothing was recorded — press again when you are online.', // PROPOSED (English)
+    serverRefused: 'The server did not accept the change saved earlier. It is only on this phone.', // PROPOSED (English)
     nothingChanged: 'Nothing to change was understood from this. Say it again.', // PROPOSED (English)
     versionNote: 'Saving keeps a new version — the earlier one stays on the server too.', // PROPOSED (English)
     reconfirm: 'This was confirmed. After saving, the new version stays "Not confirmed" until it is confirmed again.', // PROPOSED (English)

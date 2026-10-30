@@ -102,6 +102,15 @@ export function afterLanding(request: SpeakRequest, landing: SpeakLanding, run: 
 }
 
 /**
+ * Review B004 — may words spoken NOW be kept offline as a pending job? Not a correction's: kept that way they would come
+ * back later as a NEW log. The parse then keeps nothing and says so (`offlineVoiceQueue`).
+ */
+export const mayKeepOffline = (): boolean => {
+    const purpose = speakState().request?.purpose;
+    return !purpose || !KEEPS_UNSAVED.has(purpose);
+};
+
+/**
  * The recorder's hand-off, purpose-aware: for a purpose that keeps his words unsaved (a correction) the parse is held
  * for the screen he started on and nothing is written; every other parse goes to the voice auto-save as always.
  */

@@ -6,12 +6,16 @@
  * the person's language, for the screens these lanes add (आढावा's chips, the "बदला" screen, the ONE mic's band).
  * Marathi: the result screen's own part names (REUSED from `PARTS`). English: PROPOSED (English).
  *
- * The entry text keeps a spray / fertiliser's amounts ("इथरेल · 350 मिली"): `partEntriesOf` names the products only
- * (the amounts live in the product box the result screen draws), and a changed dose must read as a change.
+ * The entry text keeps a spray / fertiliser's amounts ("इथरेल · 350 मिली", the result screen's own chip shape):
+ * `partEntriesOf` names the products only (the amounts live in the product box the result screen draws), and a changed
+ * dose must read as a change.
+ *
+ * Lane RF2 fix pass (D4): the RF2 surfaces show what was understood, never his quoted source words ("“इथरेल 300 मिली
+ * फवारणी केली”") — `withoutQuotes` drops them before the shared result-screen rows draw an entry.
  */
 import { cropWordMr } from '../../../scheduler/schedulePage/scheduleNames';
 import { amountText, nameIsPhrase, productName, showsProducts } from './productModel';
-import { partMeta, type PartEntry, type PartKey } from './resultModel';
+import { partMeta, type BlockerEntry, type PartEntry, type PartKey } from './resultModel';
 
 const EN: Record<PartKey, string> = {
     crop: 'Crop work', // PROPOSED (English)
@@ -35,7 +39,7 @@ export const partNameIn = (part: PartKey, language: string | null | undefined): 
 export function entryText(e: PartEntry, language: string | null | undefined): string {
     if (e.verified && showsProducts(e.products, language)) {
         const items = e.products.items
-            .map(i => [productName(i, language), nameIsPhrase(i, language) ? '' : amountText(i.amount, language)].filter(Boolean).join(' '))
+            .map(i => [productName(i, language), nameIsPhrase(i, language) ? '' : amountText(i.amount, language)].filter(Boolean).join(' · '))
             .filter(Boolean);
         if (items.length > 0) return items.join(', ');
     }
@@ -57,3 +61,6 @@ export function cropNameIn(name: string | undefined, language: string | null | u
     if (language === 'en') return LATIN.test(n) ? n : '';
     return cropWordMr(n) ?? (DEVANAGARI.test(n) ? n : '');
 }
+
+/** The entries without his quoted source words (the RF2 surfaces show what was understood, not the quote). */
+export const withoutQuotes = <T extends PartEntry | BlockerEntry>(entries: readonly T[]): T[] => entries.map(e => (e.quote ? { ...e, quote: undefined } : e));

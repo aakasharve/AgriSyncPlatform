@@ -4,8 +4,9 @@
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lanes RF, RF2) — the words lanes RF and RF2 add to आढावा: the
  * plot cards' chips line, the plot's day view (its buckets, its time chips, "आणखी सांगा"), the notes' link to their
- * recording, and the money section's "—" / "partial" lines. Lane RF2 retired the day's feed button and its sheet and
- * the one-recording glance (the plot cards replace them), and their words with them. One language at a time: Marathi mode shows only Marathi, English mode only
+ * recording, and the money section's "—" / "partial" lines. Lane RF2 retired the one-recording glance. Its fix pass
+ * (founder 2026-10-30: "put it as it is, I asked you to rebuild the screen inside it") brought the "आजचा आढावा" button
+ * back exactly as it was, and rebuilt only the screen inside it (one block per plot, time chips). One language at a time: Marathi mode shows only Marathi, English mode only
  * English (founder 2026-10-26). Each line says where it comes from:
  *   - REUSED: an existing app string, read from where it lives (never re-typed);
  *   - PROPOSED (Marathi) / PROPOSED (English): new wording, waiting for his review.
@@ -14,6 +15,7 @@
  * Known gap, inherited and not patched here: the result-screen parts this page reuses (`DayParts`, the part names
  * of `resultModel`, the time words of `formatFarmerLogTime`) are Marathi in both languages — spec I18 owns them.
  */
+import { FEED_STR } from '../logs/components/TodayActivityFeed';
 import { resultCopy } from '../logs/components/voiceResult/resultCopy';
 import { RESULT_STR } from '../logs/components/voiceResult/resultStrings';
 import { offsetOf, relLabel } from './overview/reflectDates';
@@ -30,6 +32,10 @@ export interface ReflectCopy {
     legacyPartial: string;
     back: string;
     edit: string;
+    /** The day's work (the "आजचा आढावा" button): its button and screen follow the chosen day. */
+    feedTitle: (isToday: boolean) => string;
+    feedSubtitle: (isToday: boolean, day: string) => string;
+    feedEmpty: (isToday: boolean) => string;
     /** आज / काल / … or the weekday and date, in this language. */
     dayName: (date: Date, today?: Date) => string;
     nothingUnderstood: string;
@@ -48,6 +54,11 @@ export interface ReflectCopy {
     tellMore: string;
     /** A chip the server could not find in his words. */
     unsure: string;
+    /** A stoppage chip with nothing more to say than that there was one. */
+    stoppage: string;
+    /** Lane RF2 fix pass (D5): the money chip says it is the accounts' figure, and a day with money but no words says so. */
+    fromLedger: string;
+    nothingSpoken: string;
     /** "दिवस 25" of the plot's season. */
     seasonDay: (n: number) => string;
     /** A note's link to the recording it came from. */
@@ -81,6 +92,10 @@ const mr: ReflectCopy = {
     // REUSED — RESULT_STR.back / edit (the app's approved common.back / confirmation.edit).
     back: RESULT_STR.back,
     edit: RESULT_STR.edit,
+    // REUSED for today (FEED_STR.title / subtitle / empty); PROPOSED (Marathi) for any other day — lane RF's own words.
+    feedTitle: (isToday: boolean) => (isToday ? FEED_STR.title : 'दिवसाचा आढावा'),
+    feedSubtitle: (isToday: boolean, day: string) => (isToday ? FEED_STR.subtitle : `${day} — कोणी काय केलं ते पाहा`),
+    feedEmpty: (isToday: boolean) => (isToday ? FEED_STR.empty : 'या दिवशी काहीही सांगितलं नाही'),
     // REUSED — reflectDates.relLabel (आज / काल / परवा / उद्या, else "बुधवार, 21 ऑक्टो").
     dayName: (date: Date, today?: Date) => relLabel(date, today),
     // PROPOSED (Marathi) — the same words ClipGlance shows for this case (its constant is not exported).
@@ -102,6 +117,11 @@ const mr: ReflectCopy = {
     tellMore: RESULT_STR.addAnother,
     // REUSED — RESULT_STR.unsurePart.
     unsure: RESULT_STR.unsurePart,
+    // REUSED — RESULT_STR.blockers (the ring's own word for a stoppage).
+    stoppage: RESULT_STR.blockers,
+    // PROPOSED (Marathi) — the orchestrator's call (RF2 fix pass D5).
+    fromLedger: 'हिशोबातून',
+    nothingSpoken: 'बोलून काही सांगितलं नाही',
     // REUSED — the plot card's own words for a season day (plotDayModel dayLabelOf, "दिवस 25").
     seasonDay: (n: number) => `दिवस ${n}`,
     // PROPOSED (Marathi)
@@ -137,6 +157,9 @@ const en: ReflectCopy = {
         if (o === 1) return 'Tomorrow'; // PROPOSED (English)
         return `${WEEKDAY_EN[date.getDay()]}, ${date.getDate()} ${MONTH_EN[date.getMonth()]}`;
     },
+    feedTitle: (isToday: boolean) => (isToday ? "Today's work" : "The day's work"), // PROPOSED (English)
+    feedSubtitle: (isToday: boolean, day: string) => (isToday ? 'See who did what today' : `${day} — see who did what`), // PROPOSED (English)
+    feedEmpty: (isToday: boolean) => (isToday ? 'Nothing has been told today yet' : 'Nothing was told on this day'), // PROPOSED (English)
     nothingUnderstood: 'Nothing has been understood from this yet', // PROPOSED (English)
     nothingTold: (isToday: boolean) => (isToday ? 'Nothing told yet today' : 'Nothing told on this day'), // PROPOSED (English)
     timesTold: (n: number, isToday: boolean) => `Told ${n} ${n === 1 ? 'time' : 'times'}${isToday ? ' today' : ''}`, // PROPOSED (English)
@@ -147,6 +170,9 @@ const en: ReflectCopy = {
     timesKey: 'Green dot = confirmed · grey = not confirmed', // PROPOSED (English)
     tellMore: 'Tell more', // PROPOSED (English)
     unsure: 'Not sure', // PROPOSED (English)
+    stoppage: 'Stoppage', // PROPOSED (English)
+    fromLedger: 'from the accounts', // PROPOSED (English)
+    nothingSpoken: 'Nothing was said', // PROPOSED (English)
     seasonDay: (n: number) => `Day ${n}`, // PROPOSED (English)
     noteSource: 'See where it came from', // PROPOSED (English)
     photos: (n: number) => `Photos attached ${n}`, // PROPOSED (English)
