@@ -135,6 +135,9 @@ Inputs (inputs[] rows and their mix[] items)
 - `carrierMedium` (optional, enum `water|oil|none`): the medium the input was
   carried in. Spray water is `water`; a neat/undiluted application is `none`.
   OMIT when the carrier is not stated.
+- `carrierVolume` + `carrierUnit` (optional, number + "L"): the spray tank
+  water stated for this input ("पाणी 400 लिटर वापरलं" → 400, "L"). This water
+  is the spray's; it is NEVER also an irrigation[] row. OMIT when not spoken.
 - `method` gains an additional value `paste_manual` (alongside the existing
   `Spray|Drip|Drenching|Soil`): use for hand-applied pastes (e.g. cut-paste,
   wound dressing) daubed manually rather than sprayed or drenched.
@@ -147,9 +150,13 @@ Inputs (inputs[] rows and their mix[] items)
   no advisor is mentioned — do not attribute to the farmer by default.
 
 Labour (labour[] rows) — no-multiply governor is strict here
-- `count` (optional, number): number of workers, as spoken.
+- `count` (optional, number): number of workers, as spoken. OMIT when no
+  number was spoken — never 0 for "not said". "Nobody came" is not a labour
+  row (it is an observation).
 - `gender` (optional, enum `male|female|mixed|unknown`): worker gender as
   stated; `mixed` when both are present; OMIT (or `unknown`) when unstated.
+  Crowd words (बायका, पुरुष, मजूर, लोक, जण, women, men, workers …) set
+  `gender` and the per-gender counts; they are NEVER `workerNames`.
 - `engagementType` (optional, enum
   `hired_daily|contract_piece|self|exchange`): how the labour was engaged.
   OMIT when the engagement basis is not stated.

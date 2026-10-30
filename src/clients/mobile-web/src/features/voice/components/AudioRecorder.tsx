@@ -4,7 +4,8 @@
  *
  * The batch (MediaRecorder) recorder. HOW audio is captured and handed on is unchanged: one
  * MediaRecorder on the mic stream, chunks -> one audio/webm Blob -> base64 -> `onAudioCaptured`,
- * auto-stop at 60 s, cancel empties the chunks (the clip is discarded).
+ * auto-stop at `AUTO_STOP_SEC` (the one limit, `recorder/recorderWords`), cancel empties the chunks
+ * (the clip is discarded).
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I12, LP-04, LP-06) — what it SHOWS is the
  * founder-approved mic (`recorder/RecorderFace`): his sentence on the idle card, "ऐकत आहे" with a
@@ -17,7 +18,7 @@ import { AudioData } from '../../../types';
 import { acquireMicStream } from '../../../infrastructure/voice/acquireMicStream';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
-import { REC_WORDS, readableError } from './recorder/recorderWords';
+import { AUTO_STOP_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
 
 interface AudioRecorderProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -139,7 +140,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
         const currentDuration = Math.floor((Date.now() - startTime) / 1000);
         setDuration(currentDuration);
 
-        if (currentDuration >= 60) {
+        if (currentDuration >= AUTO_STOP_SEC) {
           if (mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
           }

@@ -21,7 +21,7 @@
 import type { CropProfile, DailyLog } from '../../../types';
 import { headlineOf } from '../../../core/navigation/activityFeedEntries';
 import {
-    PARTS, groupByRecording, primaryOf, recordingKeyOf, recordingOf,
+    PARTS, groupByRecording, primaryOf, recordingKeyOf, recordingOf, withoutInventedStoppage,
     type PartEntry, type PartKey, type RecordingView, type WhoDeps,
 } from '../../logs/components/voiceResult/resultModel';
 import { isLogInScope, type PlotRef, type ViewScope } from '../overview/reflectSelection';
@@ -58,30 +58,8 @@ const createdMs = (log: DailyLog): number => {
     return Number.isFinite(ms) ? ms : UNKNOWN_TIME;
 };
 
-/** The only stoppages ending this way are water the result model reads as "not given" (`blockersOf`). */
-const WATER_STOPPED = ':stopped';
-const partOrder = new Map(PARTS.map((p, i) => [p.key, i]));
-
-/**
- * An older record kept only as task lines (lane F1, `legacyPartial`) carries its water as a bare "Irrigation" line:
- * no method, no hours, no reason. The result model reads such water as NOT given — a stoppage — but nothing in the
- * line says so. Here it is what the line says and no more: water was mentioned (the part, no value). Never a
- * stoppage that was not reported (P4).
- */
-function withoutInventedStoppage(view: RecordingView, logs: readonly DailyLog[]): RecordingView {
-    const legacy = new Set(logs.filter(l => l.legacyPartial === true).map(l => l.id));
-    if (legacy.size === 0) return view;
-    const invented = (id: string, logId: string) => legacy.has(logId) && id.endsWith(WATER_STOPPED);
-    const water: PartEntry[] = view.blockers
-        .filter(b => invented(b.id, b.logId))
-        .map((b): PartEntry => ({ id: `${b.id.slice(0, -WATER_STOPPED.length)}:legacy`, logId: b.logId, part: 'irrigation', value: null, verified: true }));
-    if (water.length === 0) return view;
-    return {
-        ...view,
-        blockers: view.blockers.filter(b => !invented(b.id, b.logId)),
-        entries: [...view.entries, ...water].sort((a, b) => (partOrder.get(a.part) ?? 0) - (partOrder.get(b.part) ?? 0)),
-    };
-}
+// An older record kept only as task lines (lane F1): its bare water line is "water mentioned", never a stoppage —
+// the result model's one rule (`withoutInventedStoppage`, register F63), shared with the result screen.
 
 /** The day's logs (deleted ones are not work done). */
 export const dayLogsOf = (history: readonly DailyLog[], dateKey: string): DailyLog[] =>

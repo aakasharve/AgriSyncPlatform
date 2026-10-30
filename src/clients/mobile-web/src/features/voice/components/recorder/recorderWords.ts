@@ -44,9 +44,17 @@ export const REC_WORDS = {
 /** The stop hint appears after this many seconds of speaking and stays this long unless dismissed. */
 export const STOP_HINT_AFTER_SEC = 10;
 export const STOP_HINT_FOR_SEC = 16;
-/** The recorder stops by itself at 60 s (unchanged); the countdown shows from here. */
-export const AUTO_STOP_WARN_SEC = 50;
+/**
+ * The recorder's ONE length limit, read by both recorders (`AudioRecorder`, `AudioRecorderStreaming`), and the
+ * countdown that announces it. The countdown says "{n} सेकंदात आपोआप थांबेल", so the stop must be real (P5).
+ *
+ * Register F18 / lane V-1: the founder wants "a minute to as long as you want". It stays 60 s FOR NOW because the
+ * path behind the mic cannot yet take more: Sarvam's speech-to-text REST call (both server voice paths) accepts
+ * 30 s of audio per request, and the structurer's answer is capped at 2048 tokens by default. Lifting this is one
+ * constant once the server transcribes in chunks and the answer fits (lane V-1 plan in the PLR register).
+ */
 export const AUTO_STOP_SEC = 60;
+export const AUTO_STOP_WARN_SEC = AUTO_STOP_SEC - 10;
 
 const DEVANAGARI = /[ऀ-ॿ]/;
 /** An error the farmer can read: Marathi as it is, anything else replaced by the plain Marathi line. */

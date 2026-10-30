@@ -98,6 +98,12 @@ internal sealed class AiResponseNormalizer
         var confidence = NormalizeConfidence(root["confidence"]);
         root["confidence"] = confidence;
 
+        // PLR F22/F23 (lane AI-1) — a crowd word is never a worker name, and a 0 is never a count; the
+        // spray's tank water is never a second, irrigation, entry. Deterministic, after the model, on
+        // every provider. Before provenance so a moved "nobody came" note is checked like any other.
+        LabourRowGuard.Apply(root);
+        SprayCarrierWaterGuard.Apply(root);
+
         var dayOutcome = NormalizeDayOutcome(root["dayOutcome"]?.GetValue<string>());
         if (!HasAnyWork(root) && root["disturbance"] is JsonObject)
         {

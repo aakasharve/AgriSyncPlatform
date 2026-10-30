@@ -159,6 +159,10 @@ const rupees = (n: number | undefined, unit = ''): string => (positive(n) ? `₹
  * is above 0, else the split): his total ("4 जण"), his split ("3 पुरुष · 2 महिला") — and when the split IS his
  * total ("५ बायका": count 5 AND femaleCount 5) the split, so it still says who they were. A total beside a split
  * that is not the same people is shown with it. Never a sum the app made, never a 0 for a job workers did.
+ *
+ * Register F23 (lane AI-1): a labour count of 0 is never shown as "0 जण". On a labour row it is the parser's "not
+ * understood" (the server now removes it at the source); "nobody came" is an observation, not a labour row. So a 0
+ * reads like silence: the task, else his own words (the entry's quote).
  */
 const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: number; activity?: string }): string => {
     const split = join(positive(e.maleCount) ? `${asRecorded(e.maleCount)} ${MALE}` : '', positive(e.femaleCount) ? `${asRecorded(e.femaleCount)} ${FEMALE}` : '');
@@ -167,9 +171,7 @@ const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: numb
         // Compared, never shown: is the split the same people as his total?
         return (e.maleCount ?? 0) + (e.femaleCount ?? 0) === e.count ? split : join(`${asRecorded(e.count)} ${PEOPLE}`, split);
     }
-    if (split) return split;
-    // A stated "nobody" (count 0 and no split) is a real 0 in the app's rule; silence is not.
-    return e.count === 0 ? `0 ${PEOPLE}` : marathiOnly(e.activity);
+    return split || marathiOnly(e.activity);
 };
 
 /** The money he said on a labour row, as said: the total, the wage per person, a rate. */
@@ -379,6 +381,35 @@ export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingV
     };
 };
 
+/** The only stoppages ending this way are water this model reads as "not given" (`blockersOf`). */
+const WATER_STOPPED = ':stopped';
+
+/**
+ * An older record kept only as task lines (lane F1, `legacyPartial`) carries its water as a bare "Irrigation" line:
+ * no method, no hours, no reason. `blockersOf` reads such water as NOT given — a stoppage — but nothing in the
+ * line says so. Here it is what the line says and no more: water was mentioned (the part, no value). Never a
+ * stoppage that was not reported (P4). ONE rule for every screen that reads a recording: the result screen's
+ * earlier recordings (register F63) and आढावा (`dayRecordings`).
+ */
+export function withoutInventedStoppage(view: RecordingView, logs: readonly DailyLog[]): RecordingView {
+    const legacy = new Set(logs.filter(l => l.legacyPartial === true).map(l => l.id));
+    if (legacy.size === 0) return view;
+    const invented = (id: string, logId: string) => legacy.has(logId) && id.endsWith(WATER_STOPPED);
+    const water: PartEntry[] = view.blockers
+        .filter(b => invented(b.id, b.logId))
+        .map((b): PartEntry => ({ id: `${b.id.slice(0, -WATER_STOPPED.length)}:legacy`, logId: b.logId, part: 'irrigation', value: null, verified: true }));
+    if (water.length === 0) return view;
+    const order = new Map(PARTS.map((p, i) => [p.key, i]));
+    return {
+        ...view,
+        blockers: view.blockers.filter(b => !invented(b.id, b.logId)),
+        entries: [...view.entries, ...water].sort((a, b) => (order.get(a.part) ?? 0) - (order.get(b.part) ?? 0)),
+    };
+}
+
+/** A recording read through the shared legacy-water rule (`withoutInventedStoppage`). */
+const readRecording = (logs: readonly DailyLog[], deps: WhoDeps): RecordingView => withoutInventedStoppage(recordingOf(logs, deps), logs);
+
 const plotIdsOf = (logs: readonly DailyLog[]): Set<string> =>
     new Set(logs.flatMap(l => l.context?.selection?.flatMap(s => s.selectedPlotIds ?? []) ?? []));
 
@@ -447,8 +478,8 @@ export function buildDayView(current: readonly DailyLog[], history: readonly Dai
     const earlierLogs = sameDayLogs(current, history)
         .filter(l => !currentIds.has(l.id))
         .sort((a, b) => createdMs(b) - createdMs(a));
-    const now = current.map(l => recordingOf([l], deps));
-    const earlier = groupByRecording(earlierLogs).map(g => recordingOf(g, deps));
+    const now = current.map(l => readRecording([l], deps));
+    const earlier = groupByRecording(earlierLogs).map(g => readRecording(g, deps));
 
     const recordingByLog = new Map<string, RecordingView>();
     for (const r of earlier) for (const id of r.logIds) recordingByLog.set(id, r);

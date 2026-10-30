@@ -133,3 +133,16 @@ describe('the activity card in English (an English user keeps English)', () => {
         expect(shownText()).toContain('Hours worked');
     });
 });
+
+describe('F23 (lane AI-1) — a labour count of 0 is never "0 जण" on the card', () => {
+    it('shows no "0 जण" for a parser 0, and still shows a real count', () => {
+        const zero = { id: 'lab0', type: 'HIRED', count: 0, sourceText: 'मजुरांनी छाटणी केली' } as LabourEvent;
+        const { unmount } = render(card({ linkedData: { labour: zero, irrigation, machinery } }));
+        expect(shownText()).not.toMatch(/(^|[^0-9०-९])[0०]\s*जण/);
+        unmount();
+
+        const four = { id: 'lab4', type: 'HIRED', count: 4, sourceText: 'चार मजूर' } as LabourEvent;
+        render(card({ linkedData: { labour: four, irrigation, machinery } }));
+        expect(shownText()).toContain(S.workers(4));
+    });
+});

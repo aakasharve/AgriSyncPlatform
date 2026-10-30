@@ -61,6 +61,16 @@ internal sealed class SarvamChatClient(
                 return SarvamChatResult.Failure(providerError);
             }
 
+            // PLR V-1 (lane AI-1) — the answer was CUT OFF at the model's output-token limit (Sarvam's default
+            // max_tokens is 2048 and this client sends none). Cut-off JSON does not parse, and the normalizer turns
+            // an unparseable answer into an EMPTY "successful" parse: the farmer's words silently become nothing.
+            // A cut-off answer is a failure, said out loud, so the orchestrator's fallback or the error path runs.
+            if (WasCutOff(body))
+            {
+                logger.LogWarning("Sarvam chat answer was cut off at the token limit (finish_reason=length).");
+                return SarvamChatResult.Failure(CutOffError);
+            }
+
             var content = TryExtractContent(body);
             if (string.IsNullOrWhiteSpace(content))
             {
@@ -74,6 +84,39 @@ internal sealed class SarvamChatClient(
             logger.LogWarning(ex, "Sarvam chat call failed.");
             return SarvamChatResult.Failure(ex.Message);
         }
+    }
+
+    internal const string CutOffError =
+        "Sarvam chat answer was cut off at the model's token limit (finish_reason=length); the parse is incomplete.";
+
+    private static bool WasCutOff(string responseBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            if (!document.RootElement.TryGetProperty("choices", out var choices) ||
+                choices.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            foreach (var choice in choices.EnumerateArray())
+            {
+                if (choice.ValueKind == JsonValueKind.Object &&
+                    choice.TryGetProperty("finish_reason", out var reason) &&
+                    reason.ValueKind == JsonValueKind.String &&
+                    string.Equals(reason.GetString(), "length", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        return false;
     }
 
     private static string? TryExtractContent(string responseBody)

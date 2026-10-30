@@ -22,7 +22,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { AudioData } from '../../../types';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
-import { REC_WORDS, readableError } from './recorder/recorderWords';
+import { AUTO_STOP_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
 import { DEFAULT_VOICE_CONFIG } from '../../../infrastructure/voice/types';
 import { StreamingPcmRecorder } from '../../../infrastructure/voice/StreamingPcmRecorder';
 import { StreamingSilenceTrimmer } from '../../../infrastructure/voice/StreamingSilenceTrimmer';
@@ -138,9 +138,11 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       timerRef.current = window.setInterval(() => {
         const currentDuration = Math.floor((Date.now() - startTime) / 1000);
         setDuration(currentDuration);
-        if (currentDuration >= 60) {
-          // Auto-stop at 60s — same as AudioRecorder.tsx behavior.
-          void stopRecording();
+        if (currentDuration >= AUTO_STOP_SEC) {
+          // Auto-stop at the one limit — same as AudioRecorder.tsx. Through the ref: this timer is made
+          // once, and the `stopRecording` of that first render still believed nothing was recording, so
+          // the stop never came while the face counted down to "0 सेकंदात आपोआप थांबेल" (lane V-1, P5).
+          void stopRecordingRef.current();
         }
       }, 1000);
     } catch (err) {
@@ -157,7 +159,6 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       setInternalErrorCode(name);
       setIsRecording(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- stopRecording is a stable callback
   }, []);
 
   const stopRecording = useCallback(async () => {
@@ -234,6 +235,9 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onProcessingStart is optional + behavior-stable (parent's setStatus from useState is stable); omitting it keeps stopRecording stable for the unmount-cleanup effect
   }, [isRecording, onAudioCaptured]);
+  // The latest stopRecording, for the timer made once in startRecording.
+  const stopRecordingRef = useRef(stopRecording);
+  stopRecordingRef.current = stopRecording;
 
   const cancelRecording = useCallback(() => {
     if (recorderRef.current && isRecording) {

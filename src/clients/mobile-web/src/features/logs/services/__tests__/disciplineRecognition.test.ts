@@ -22,10 +22,15 @@ describe('disciplineRecognition', () => {
     });
 
     it('gives a warm single-day line at streak 1', () => {
-        expect(buildRecognitionLine({ ...base, currentStreak: 1 })).toBe('आजची नोंद झाली. उद्याही भेटूया.');
+        expect(buildRecognitionLine({ ...base, currentStreak: 1 })).toBe('आजचं काम सांगितलं. उद्याही भेटूया.');
     });
 
     it('gives a gentle restart line at streak 0', () => {
-        expect(buildRecognitionLine({ ...base, currentStreak: 0 })).toBe('पुन्हा सुरुवात करूया — आजची नोंद मोलाची आहे.');
+        expect(buildRecognitionLine({ ...base, currentStreak: 0 })).toBe('पुन्हा सुरुवात करूया — आजचं काम सांगणं मोलाचं आहे.');
+    });
+
+    // PLR-D5 (lane AI-1): the result screen never says नोंद.
+    it.each([0, 1, 2, 7])('says no नोंद at streak %i', (currentStreak) => {
+        expect(buildRecognitionLine({ ...base, currentStreak })).not.toContain('नोंद');
     });
 });

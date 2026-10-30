@@ -92,7 +92,16 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        
                        A relationship word used as a name ("काका", "मामा", "दादा") counts as a
                        named person: the farmer knows who he means. Keep it verbatim in notes.
-                       
+
+                       A CROWD WORD IS NOT A NAME. बायका, बाया, महिला, स्त्रिया, पुरुष, गडी, माणसं,
+                       मजूर, लोक, जण (and women, men, workers, people, labour) say WHAT KIND of
+                       people and how many — never WHO. They NEVER go into workerNames or notes.
+                       - "5 बायका आणि 2 पुरुष छाटणीला होते" => ONE labour entry for the one task:
+                         femaleCount 5, maleCount 2, gender "mixed", activity pruning. Do NOT
+                         add a total count the farmer did not say (no count 7).
+                       - "5 बायका होत्या" => count 5, femaleCount 5, gender "female".
+                       - "बायका आल्या होत्या" (no number) => gender "female"; OMIT count.
+
                        If a task IS also stated, follow the normal rules and put the activity
                        on the labour entry as usual — this section only removes the
                        requirement that a task exist at all.
@@ -104,6 +113,10 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
 
                        --- STRICT CLASSIFICATION RULES ---
                        1. IRRIGATION: only if watering/motor/valve/tank/drip hours are explicitly implied.
+                          Water used to MIX or CARRY a spray ("पाणी 400 लिटर वापरलं" said with a
+                          spray) is that spray's tank water: put it on the spray's inputs entry as
+                          carrierVolume + carrierUnit ("L"), carrierMedium "water". It is NEVER also
+                          an irrigation entry.
                        2. INPUTS: only if material usage/purchase intent is explicit.
                        3. LABOUR: if worker/wage/man-day/contract signals exist, OR if any
                           PERSON is named as having come/been present/worked (attendance —
@@ -136,6 +149,13 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        or worked, with or without a number and with or without a task. Count
                        the names. Names may be full ("विलास जाधव"), first-only ("संतू"), or a
                        relationship word standing in for a person ("काका").
+
+                       --- A LABOUR COUNT IS ONLY WHAT WAS SAID ---
+                       - count, maleCount, femaleCount: only numbers the farmer said. When he did
+                         not say how many, OMIT the field. NEVER write 0 for "not said".
+                       - "मजुरांनी छाटणी केली" => labour entry with activity pruning and NO count.
+                       - "आज कोणी आलं नाही" / "labour आला नाही" (nobody came) is NOT a labour
+                         entry: record it as an observation (see examples).
 
                        --- COMPOUND LABOUR RULE ---
                        If Marathi sentence uses "आणि" / comma to connect separate worker groups doing different work,

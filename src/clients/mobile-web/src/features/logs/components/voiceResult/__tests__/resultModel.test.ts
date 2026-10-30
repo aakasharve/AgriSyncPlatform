@@ -206,8 +206,28 @@ describe('round 2 — numbers as he said them, nothing invented', () => {
         expect(value({ count: 0, maleCount: 3, femaleCount: 2 })).toBe('3 पुरुष · 2 महिला'); // never "0 जण" for a job workers did
         expect(value({ count: 4 })).toBe('4 जण');
         expect(value({ count: 6, maleCount: 3 })).toBe('6 जण · 3 पुरुष'); // a total beside a part of it: both, as said
-        expect(value({ count: 0 })).toBe('0 जण'); // a stated "nobody" is a real 0 (resolveLabourHeadcount)
         expect(value({ type: 'HIRED' })).toBeNull(); // silence is not 0
+    });
+
+    it('F23 (lane AI-1): a labour count of 0 is never "0 जण" — it reads as silence: the task, else his words', () => {
+        const value = (labour: Record<string, unknown>, extra: Partial<DailyLog> = {}) =>
+            partEntriesOf(log('L', { ...extra, labour: [{ id: 'l', ...labour }] }))[0].value;
+        expect(value({ count: 0 })).toBeNull();
+        expect(value({ count: 0, maleCount: 0, femaleCount: 0 })).toBeNull();
+        expect(value({ count: 0, activity: 'छाटणी' })).toBe('छाटणी');
+        // His own words stand for it when he said them (an older record that still carries the 0).
+        const words = value({ count: 0, sourceText: 'आज कोणी आलं नाही' }, { fullTranscript: 'आज कोणी आलं नाही' });
+        expect(words).toBe('आज कोणी आलं नाही');
+        for (const v of [value({ count: 0 }), words]) expect(v ?? '').not.toMatch(/(^|\s)[0०]\s*जण/);
+    });
+
+    it('F22 (lane AI-1): 5 women and 2 men read as women 5 · men 2, never a total the app made', () => {
+        const value = (labour: Record<string, unknown>) => partEntriesOf(log('L', { labour: [{ id: 'l', ...labour }] }))[0].value;
+        // The guard's one-row shape (no total said) and its two-row shape.
+        expect(value({ femaleCount: 5, maleCount: 2, gender: 'mixed' })).toBe('2 पुरुष · 5 महिला');
+        expect(value({ count: 5, femaleCount: 5, gender: 'female' })).toBe('5 महिला');
+        expect(value({ count: 2, maleCount: 2, gender: 'male' })).toBe('2 पुरुष');
+        expect(value({ femaleCount: 5, maleCount: 2 })).not.toContain('7');
     });
 
     it('an expense with no amount stated (0) shows no "₹0"', () => {
@@ -361,5 +381,28 @@ describe('round 4 — a time he can read, a note he said (I13-V3 M1, m3)', () =>
             irrigation: [{ id: 'w', durationHours: 2, notes: 'ठिबकची नळी फुटली' }],
         });
         expect(partEntriesOf(l).map(e => e.value)).toEqual(['फवारणी · दोन ओळी राहिल्या', 'छाटणी', '2 तास · ठिबकची नळी फुटली']);
+    });
+});
+
+describe('F63 (lane AI-1) — an older record kept only as task lines invents no stoppage on the result screen', () => {
+    // What lane F1's `detailsFromTasks` makes of a pre-F1 "Irrigation" task line: no method, no hours, no reason.
+    const old = log('OLD', {
+        legacyPartial: true,
+        meta: { createdAtISO: '2026-10-26T02:00:00.000Z', createdByOperatorId: 'op-me' },
+        irrigation: [{ id: 'w', notes: 'Method: Drip | Duration: 2 hrs' }],
+    });
+    const now = log('NOW', { cropActivities: [{ id: 'a', title: 'छाटणी' }] });
+
+    it('its water is "mentioned, no value" — the same rule आढावा reads — never "अडथळे: पाणी"', () => {
+        const [earlier] = buildDayView([now], [now, old], deps).earlier;
+        expect(earlier.id).toBe('OLD');
+        expect(earlier.blockers).toEqual([]);
+        expect(earlier.entries.map(e => [e.part, e.value])).toEqual([['irrigation', null]]);
+    });
+
+    it('the same water on a full record is still the stoppage it reports', () => {
+        const full = { ...old, legacyPartial: false } as DailyLog;
+        const [earlier] = buildDayView([now], [now, full], deps).earlier;
+        expect(earlier.blockers.map(b => b.id)).toEqual(['w:stopped']);
     });
 });

@@ -210,7 +210,9 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
         const parts = [];
         if (l.maleCount) parts.push(s.male(l.maleCount));
         if (l.femaleCount) parts.push(s.female(l.femaleCount));
-        const workers = parts.join(' + ') || (stated(l.count) ? s.workers(l.count as number) : undefined);
+        // Register F23 (lane AI-1): a headcount of 0 is the parser's "not understood", never "0 जण" — only a
+        // positive count is a number of people (money keeps its own stated-0 rule above).
+        const workers = parts.join(' + ') || ((l.count ?? 0) > 0 ? s.workers(l.count as number) : undefined);
         return [workers, money(l.totalCost)].filter(Boolean).join(' • ') || undefined;
     };
 

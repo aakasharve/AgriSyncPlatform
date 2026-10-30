@@ -364,6 +364,45 @@ internal static class MarathiPromptData
         """
         Input: "आज रॅली गोल्ड मारलं."
         Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Rally Gold","rawProductName":"रॅली गोल्ड","type":"fungicide","method":"Spray","sourceText":"रॅली गोल्ड मारलं"}],"confidence":0.9}
+        """,
+
+        // =====================================================================
+        // PLR AI-1 (AgriLogParser v3.7) — crowd words, unstated counts, spray water.
+        // spec: plr-d10-redesign-real-integration-2026-10-25; register F22 / F23.
+        // =====================================================================
+
+        // CROWD-POSITIVE (F22): बायका / पुरुष are KINDS of people, never names. One task
+        // → one row with the per-gender counts he said; no total he did not say.
+        """
+        Input: "5 बायका आणि 2 पुरुष छाटणीला होते."
+        Output: {"dayOutcome":"WORK_RECORDED","cropActivities":[{"title":"छाटणी","workTypes":["Pruning"],"sourceText":"छाटणीला होते"}],"labour":[{"type":"HIRED","femaleCount":5,"maleCount":2,"gender":"mixed","activity":"pruning","sourceText":"5 बायका आणि 2 पुरुष छाटणीला होते"}],"confidence":0.94}
+        """,
+
+        // CROWD-ABSTENTION (F22): a crowd word with no number → gender only, NO count,
+        // NO workerNames.
+        """
+        Input: "बायका आल्या होत्या, खुरपणी केली."
+        Output: {"dayOutcome":"WORK_RECORDED","cropActivities":[{"title":"खुरपणी","workTypes":["Weeding"],"sourceText":"खुरपणी केली"}],"labour":[{"type":"HIRED","gender":"female","activity":"weeding","sourceText":"बायका आल्या होत्या"}],"confidence":0.86}
+        """,
+
+        // COUNT-ABSTENTION (F23): workers worked, how many was not said → OMIT count.
+        // Never 0.
+        """
+        Input: "मजुरांनी छाटणी केली."
+        Output: {"dayOutcome":"WORK_RECORDED","cropActivities":[{"title":"छाटणी","workTypes":["Pruning"],"sourceText":"छाटणी केली"}],"labour":[{"type":"HIRED","activity":"pruning","sourceText":"मजुरांनी छाटणी केली"}],"confidence":0.88}
+        """,
+
+        // NOBODY-CAME (F23): not a labour row with 0 — an observation.
+        """
+        Input: "आज कामाला कोणी आलं नाही."
+        Output: {"dayOutcome":"DISTURBANCE_RECORDED","labour":[],"observations":[{"noteType":"observation","textRaw":"आज कामाला कोणी आलं नाही","textCleaned":"आज कामाला कोणी आलं नाही","sourceText":"आज कामाला कोणी आलं नाही"}],"confidence":0.9}
+        """,
+
+        // SPRAY-WATER: the tank water said in its own clause is the spray's carrier — on
+        // the input row (carrierVolume + carrierUnit), never an irrigation row.
+        """
+        Input: "आज इथरेल 300 मिली फवारणी केली, पाणी 400 लिटर वापरलं."
+        Output: {"dayOutcome":"WORK_RECORDED","inputs":[{"productName":"Ethrel","rawProductName":"इथरेल","type":"other","method":"Spray","quantity":300,"unit":"ml","carrierMedium":"water","carrierVolume":400,"carrierUnit":"L","sourceText":"इथरेल 300 मिली फवारणी केली, पाणी 400 लिटर वापरलं"}],"irrigation":[],"confidence":0.94}
         """
     ];
 
