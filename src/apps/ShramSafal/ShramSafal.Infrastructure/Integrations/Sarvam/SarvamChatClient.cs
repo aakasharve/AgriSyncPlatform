@@ -47,10 +47,19 @@ internal sealed class SarvamChatClient(
             // max_tokens is 2048; lane V-1 now sends ChatMaxTokens). Cut-off JSON does not parse, and the normalizer turns
             // an unparseable answer into an EMPTY "successful" parse: the farmer's words silently become nothing.
             // A cut-off answer is a failure, said out loud, so the orchestrator's fallback or the error path runs.
+            // PLR lane V-1 fix pass 2 — what the API says about every answer, as it says it: the live 10-minute run
+            // was cut off at 3721 completion tokens with max_tokens 4096, so the usage object (prompt / completion /
+            // total and any token details) and any reasoning text beside the answer are logged as returned.
+            var usage = TryExtractUsage(body);
+            var reasoningChars = TryExtractReasoningChars(body);
             if (WasCutOff(body))
             {
-                logger.LogWarning("Sarvam chat answer was cut off at the token limit (finish_reason=length).");
-                return SarvamChatResult.Failure(CutOffError);
+                logger.LogWarning(
+                    "Sarvam chat answer was cut off at the token limit (finish_reason=length). max_tokens={MaxTokens}; usage as returned: {Usage}; reasoning text: {ReasoningChars} chars.",
+                    _options.ChatMaxTokens,
+                    usage ?? "(none)",
+                    reasoningChars?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none");
+                return SarvamChatResult.CutOff(CutOffError, usage, TryExtractContent(body), reasoningChars);
             }
 
             var content = TryExtractContent(body);
@@ -59,7 +68,7 @@ internal sealed class SarvamChatClient(
                 return SarvamChatResult.Failure("Sarvam chat response did not contain content.");
             }
 
-            return SarvamChatResult.Success(content, TryExtractCompletionTokens(body));
+            return new SarvamChatResult(true, content, null, TryExtractCompletionTokens(body), usage, null, reasoningChars);
         }
         catch (Exception ex)
         {
@@ -123,6 +132,56 @@ internal sealed class SarvamChatClient(
         }
 
         return false;
+    }
+
+    /// <summary>The <c>usage</c> object exactly as the API returned it (token counts only — no words), or null.</summary>
+    private static string? TryExtractUsage(string responseBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            return document.RootElement.ValueKind == JsonValueKind.Object &&
+                   document.RootElement.TryGetProperty("usage", out var usage) &&
+                   usage.ValueKind == JsonValueKind.Object
+                ? usage.GetRawText()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The length of any reasoning text the model returned beside its answer (a reasoning model's
+    /// <c>reasoning_content</c> counts against max_tokens without being part of the answer).</summary>
+    private static int? TryExtractReasoningChars(string responseBody)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            if (!document.RootElement.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var choice in choices.EnumerateArray())
+            {
+                if (choice.ValueKind == JsonValueKind.Object &&
+                    choice.TryGetProperty("message", out var message) &&
+                    message.ValueKind == JsonValueKind.Object &&
+                    message.TryGetProperty("reasoning_content", out var reasoning) &&
+                    reasoning.ValueKind == JsonValueKind.String)
+                {
+                    return reasoning.GetString()?.Length ?? 0;
+                }
+            }
+
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static int? TryExtractCompletionTokens(string responseBody)

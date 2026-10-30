@@ -163,7 +163,8 @@ internal sealed class GeminiAiProvider : IAiProvider
             {
                 // PLR lane V-1 fix pass (B001) — a long TEXT is structured in segments, all or nothing (the same rule
                 // as the Sarvam structurer); a correction is never segmented.
-                var segmentTokens = CorrectionPromptData.IsCorrectionPrompt(systemPrompt)
+                var isCorrection = CorrectionPromptData.IsCorrectionPrompt(systemPrompt);
+                var segmentTokens = isCorrection
                     ? int.MaxValue
                     : new StructuringBudget(_options.MaxTokens > 0 ? _options.MaxTokens : 4096).SegmentTokens;
                 var structured = await ChunkedStructuring.StructureAsync(
@@ -172,12 +173,19 @@ internal sealed class GeminiAiProvider : IAiProvider
                     async (segment, segmentCt) =>
                     {
                         var part = await GenerateContentAsync(systemPrompt, [new { text = segment }], modelId, segmentCt);
-                        return part.Success
-                            ? SegmentAnswer.Ok(part.Content)
-                            : SegmentAnswer.Failed(part.Error, retryable: part.Error?.Contains("truncated", StringComparison.OrdinalIgnoreCase) != true);
+                        if (part.Success)
+                        {
+                            return SegmentAnswer.Ok(part.Content);
+                        }
+
+                        // A truncated answer is split in half (fix pass 2); anything else gets one more try.
+                        return part.Error?.Contains("truncated", StringComparison.OrdinalIgnoreCase) == true
+                            ? SegmentAnswer.CutOffAnswer(part.Error)
+                            : SegmentAnswer.Failed(part.Error, retryable: true);
                     },
                     logger,
-                    ct);
+                    ct,
+                    allowSplit: !isCorrection);
                 if (!structured.IsSuccess)
                 {
                     return new VoiceParseCanonicalResult { Success = false, Error = structured.Error };

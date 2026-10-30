@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Infrastructure.Integrations.Gemini;
 
@@ -154,29 +155,56 @@ internal static class ChunkedStructuring
 
     // ------------------------------------------------------------------ structure every segment, all or nothing
 
+    /// <summary>
+    /// PLR lane V-1 fix pass 2 — a segment whose answer is CUT OFF (finish_reason=length) is split in half at a
+    /// sentence boundary and each half structured, at most <see cref="MaxBisectDepth"/> times deep; a piece of
+    /// <see cref="MinBisectTokens"/> or less is not split again. Measured live 2026-10-31: a segment planned at 549
+    /// transcript tokens produced a 3721-token answer and was cut off — the plan's ratio was wrong, so the parse now
+    /// recovers by itself instead of failing the whole recording. Still ALL OR NOTHING: if the smallest piece is still
+    /// cut off, the whole parse fails visibly.
+    /// </summary>
+    public const int MaxBisectDepth = 3;
+
+    /// <summary>A cut-off piece at or under this estimated size is not split again (it fails instead).</summary>
+    public const int MinBisectTokens = 60;
+
+    /// <param name="allowSplit">False for a correction: its block asks for whole buckets, which pieces would repeat.</param>
     public static async Task<StructuredAnswer> StructureAsync(
         string transcript,
         int segmentTokens,
         Func<string, CancellationToken, Task<SegmentAnswer>> structureSegment,
         ILogger logger,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool allowSplit = true)
     {
-        var segments = Segment(transcript, segmentTokens);
+        var segments = allowSplit ? Segment(transcript, segmentTokens) : [transcript];
+        SegmentAnswer? wholeCutOff = null;
         if (segments.Count == 1)
         {
-            // Fits one answer: sent whole, exactly as before this lane.
-            var one = await structureSegment(transcript, ct).ConfigureAwait(false);
-            return one.IsSuccess
-                ? new StructuredAnswer(true, one.Content, null, 1)
-                : new StructuredAnswer(false, null, one.Error, 1);
+            // Fits one answer: sent whole, exactly as before this lane — and only split if its answer is cut off.
+            var one = await StructureOnceAsync(transcript, structureSegment, logger, "the transcript", ct).ConfigureAwait(false);
+            if (one.IsSuccess)
+            {
+                return new StructuredAnswer(true, one.Content, null, 1);
+            }
+
+            if (!one.CutOff || !allowSplit || SplitInHalf(transcript) is null)
+            {
+                return new StructuredAnswer(false, null, one.Error, 1);
+            }
+
+            logger.LogWarning("The structurer's answer for the whole transcript was cut off; structuring it in halves.");
+            wholeCutOff = one;
+        }
+        else
+        {
+            logger.LogInformation(
+                "Structuring a long transcript in {Count} segments (est. {Tokens} tokens each at most).",
+                segments.Count,
+                segmentTokens);
         }
 
-        logger.LogInformation(
-            "Structuring a long transcript in {Count} segments (est. {Tokens} tokens each at most).",
-            segments.Count,
-            segmentTokens);
-
-        var answers = new JsonObject?[segments.Count];
+        var answers = new List<JsonObject>?[segments.Count];
         string? failure = null;
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
         using var gate = new SemaphoreSlim(MaxParallel);
@@ -189,42 +217,64 @@ internal static class ChunkedStructuring
             }
         }
 
-        async Task RunAsync(int index)
+        // One call at a time per gate slot; the halves of a cut-off piece run as two new calls (the gate is held
+        // only around a call, never across a split, so two slots can never wait on each other).
+        async Task<SegmentAnswer> CallAsync(string text, string label)
         {
             await gate.WaitAsync(stop.Token).ConfigureAwait(false);
             try
             {
-                var label = $"part {index + 1} of {segments.Count}";
-                var text = segments[index].Trim();
-                var answer = await structureSegment(text, stop.Token).ConfigureAwait(false);
-                if (!answer.IsSuccess && answer.Retryable)
-                {
-                    logger.LogInformation("Structuring {Label} failed ({Error}); one more try.", label, answer.Error);
-                    answer = await structureSegment(text, stop.Token).ConfigureAwait(false);
-                }
-
-                if (!answer.IsSuccess)
-                {
-                    Fail($"Structuring failed on {label}: {answer.Error ?? "unknown error"}");
-                    return;
-                }
-
-                var parsed = TryParseObject(answer.Content);
-                if (parsed is null)
-                {
-                    Fail($"Structuring {label} returned no usable JSON (parse failure).");
-                    return;
-                }
-
-                answers[index] = parsed;
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Fail($"Structuring failed on part {index + 1} of {segments.Count}: {ex.Message}");
+                return await StructureOnceAsync(text, structureSegment, logger, label, stop.Token).ConfigureAwait(false);
             }
             finally
             {
                 gate.Release();
+            }
+        }
+
+        async Task<List<JsonObject>?> PieceAsync(string text, string label, int depth, SegmentAnswer? known)
+        {
+            var answer = known ?? await CallAsync(text, label).ConfigureAwait(false);
+
+            if (answer.IsSuccess)
+            {
+                var parsed = TryParseObject(answer.Content);
+                if (parsed is null)
+                {
+                    Fail($"Structuring {label} returned no usable JSON (parse failure).");
+                    return null;
+                }
+
+                return [parsed];
+            }
+
+            if (answer.CutOff && depth < MaxBisectDepth && SplitInHalf(text) is { } halves)
+            {
+                logger.LogWarning(
+                    "Structuring {Label}: the answer for ~{Tokens} transcript tokens was cut off; splitting it in two (depth {Depth}).",
+                    label,
+                    StructuringBudget.EstimateTokens(text),
+                    depth + 1);
+                var both = await Task.WhenAll(
+                    PieceAsync(halves.First, $"{label}, first half", depth + 1, known: null),
+                    PieceAsync(halves.Second, $"{label}, second half", depth + 1, known: null)).ConfigureAwait(false);
+                return both[0] is null || both[1] is null ? null : [.. both[0]!, .. both[1]!];
+            }
+
+            Fail($"Structuring failed on {label}: {answer.Error ?? "unknown error"}");
+            return null;
+        }
+
+        async Task RunAsync(int index)
+        {
+            try
+            {
+                var label = $"part {index + 1} of {segments.Count}";
+                answers[index] = await PieceAsync(segments[index].Trim(), label, depth: 0, known: wholeCutOff).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Fail($"Structuring failed on part {index + 1} of {segments.Count}: {ex.Message}");
             }
         }
 
@@ -234,18 +284,83 @@ internal static class ChunkedStructuring
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested && failure is not null)
         {
-            // One segment failed and stopped the rest; the failure says which.
+            // One piece failed and stopped the rest; the failure says which.
         }
 
         ct.ThrowIfCancellationRequested();
-        if (failure is not null)
+        if (failure is not null || answers.Any(a => a is null))
         {
+            failure ??= "Structuring stopped before every part was answered.";
             logger.LogWarning("Structuring a long transcript failed: {Failure}", failure);
-            // Every segment already had its own retry: the whole structuring is not run again.
+            // Every piece already had its own retry (and its own split): the whole structuring is not run again.
             return new StructuredAnswer(false, null, $"{AiErrorMarkers.NoRetry} {failure}", segments.Count);
         }
 
-        return new StructuredAnswer(true, Merge(answers.Select(a => a!).ToList()).ToJsonString(), null, segments.Count);
+        var all = answers.SelectMany(a => a!).ToList();
+        return new StructuredAnswer(true, all.Count == 1 ? all[0].ToJsonString() : Merge(all).ToJsonString(), null, all.Count);
+    }
+
+    /// <summary>One structurer call, with one more try for a transient failure (never for a cut-off answer).</summary>
+    private static async Task<SegmentAnswer> StructureOnceAsync(
+        string text,
+        Func<string, CancellationToken, Task<SegmentAnswer>> structureSegment,
+        ILogger logger,
+        string label,
+        CancellationToken ct)
+    {
+        var answer = await structureSegment(text, ct).ConfigureAwait(false);
+        if (!answer.IsSuccess && answer.Retryable && !answer.CutOff)
+        {
+            logger.LogInformation("Structuring {Label} failed ({Error}); one more try.", label, answer.Error);
+            answer = await structureSegment(text, ct).ConfigureAwait(false);
+        }
+
+        return answer;
+    }
+
+    /// <summary>
+    /// The text in two at the sentence boundary nearest its middle (else a clause mark, else a word gap); null when
+    /// it is too small to split (<see cref="MinBisectTokens"/>) or has no place to cut. The halves laid end to end are
+    /// the text.
+    /// </summary>
+    internal static (string First, string Second)? SplitInHalf(string text)
+    {
+        if (StructuringBudget.EstimateTokens(text) <= MinBisectTokens)
+        {
+            return null;
+        }
+
+        foreach (var units in new[] { CutAfter(text, SentenceEnds).ToList(), CutAfter(text, ClauseEnds).ToList(), CutAfterWhitespace(text).ToList() })
+        {
+            if (units.Count < 2)
+            {
+                continue;
+            }
+
+            var total = StructuringBudget.EstimateTokens(text);
+            var best = 1;
+            var bestGap = int.MaxValue;
+            var running = 0;
+            for (var k = 1; k < units.Count; k++)
+            {
+                running += StructuringBudget.EstimateTokens(units[k - 1]);
+                var gap = Math.Abs((2 * running) - total);
+                if (gap < bestGap)
+                {
+                    best = k;
+                    bestGap = gap;
+                }
+            }
+
+            var first = string.Concat(units.Take(best));
+            var second = string.Concat(units.Skip(best));
+            if (first.Trim().Length > 0 && second.Trim().Length > 0)
+            {
+                return (first.Trim(), second.Trim());
+            }
+        }
+
+        return null;
     }
 
     private static JsonObject? TryParseObject(string? content)
@@ -503,23 +618,24 @@ internal static class ChunkedStructuring
 }
 
 /// <summary>
-/// PLR lane V-1 fix pass (B001) — how much transcript one structurer answer can carry.
+/// PLR lane V-1 fix pass (B001, re-planned in fix pass 2) — how much transcript one structurer answer can carry.
 ///
 /// <para>
-/// The model's answer for a transcript is about <see cref="AnswerTokensPerSpokenToken"/> tokens per transcript token
-/// plus <see cref="AnswerOverheadTokens"/> for the JSON frame. Planned against the live 2026-10-31 points (an 80 s
-/// English answer fitted 4096 tokens; a 619 s one, about 2000 transcript tokens, did not — so the real ratio is above
-/// 1.85), with a wide margin: a segment is sized so its predicted answer uses only <see cref="PlannedShareOfAnswer"/>
-/// of the limit. With 4096 that is about 550 transcript tokens a segment, and stays inside the limit for any real
-/// ratio up to about 6.7. Each segment's actual answer size is logged (<c>completion_tokens</c>) so the ratio is
-/// MEASURED on the live stack, not assumed.
+/// The model's answer for a transcript is about <see cref="AnswerTokensPerSpokenToken"/> tokens per (estimated)
+/// transcript token plus <see cref="AnswerOverheadTokens"/> for the JSON frame. MEASURED live 2026-10-31 (real Sarvam,
+/// :5048): a segment of ~547 estimated transcript tokens produced 3721 completion tokens and was still cut off — a
+/// ratio of at least 6.8, not the 3.0 first planned. The plan now uses 8.0, and sizes a segment so its predicted
+/// answer is <see cref="PlannedShareOfAnswer"/> of the limit: with 4096 that is about 257 transcript tokens a
+/// segment, which stays under the 3721 tokens the live answer reached for any real ratio up to about 12.7. A segment
+/// whose answer is cut off anyway is split in half (<see cref="ChunkedStructuring.MaxBisectDepth"/>), so a wrong ratio
+/// costs extra calls, never the recording. Each answer's usage is logged as the API returns it.
 /// </para>
 /// </summary>
 internal readonly record struct StructuringBudget(int MaxAnswerTokens)
 {
-    public const double PlannedShareOfAnswer = 0.5;
+    public const double PlannedShareOfAnswer = 0.6;
     public const int AnswerOverheadTokens = 400;
-    public const double AnswerTokensPerSpokenToken = 3.0;
+    public const double AnswerTokensPerSpokenToken = 8.0;
     public const int MinSegmentTokens = 100;
 
     /// <summary>The most transcript tokens one segment may carry.</summary>
@@ -556,12 +672,125 @@ internal readonly record struct StructuringBudget(int MaxAnswerTokens)
 
 /// <summary>One segment's answer from the structurer.</summary>
 /// <param name="Retryable">A transient failure (worth one more try); a cut-off answer is not.</param>
-internal sealed record SegmentAnswer(bool IsSuccess, string? Content, string? Error, bool Retryable)
+/// <param name="CutOff">The answer was cut off at the token limit: the segment is split in half instead.</param>
+internal sealed record SegmentAnswer(bool IsSuccess, string? Content, string? Error, bool Retryable, bool CutOff = false)
 {
     public static SegmentAnswer Ok(string? content) => new(true, content, null, false);
 
     public static SegmentAnswer Failed(string? error, bool retryable) => new(false, null, error, retryable);
+
+    public static SegmentAnswer CutOffAnswer(string? error) => new(false, null, error, false, CutOff: true);
 }
 
 /// <summary>The structurer's answer for the whole transcript (merged when it was structured in segments).</summary>
 internal sealed record StructuredAnswer(bool IsSuccess, string? Content, string? Error, int Segments);
+
+/// <summary>
+/// PLR lane V-1 fix pass 2 (item c) — what an answer is made of, for the log: how many items it extracted and how many
+/// characters each repeated text field takes (sourceText, systemInterpretation, the note texts, …). Counts and sizes
+/// only, never the words. Works on a cut-off answer too (it reads the text, it does not need valid JSON), so the live
+/// run shows WHY an answer is about seven times its transcript.
+/// </summary>
+internal static class AnswerCensus
+{
+    private static readonly string[] TextFields =
+    [
+        "sourceText", "systemInterpretation", "textRaw", "textCleaned", "rawText", "notes", "summary", "title",
+        "english", "english_redacted", "reason", "note"
+    ];
+
+    private static readonly string[] Buckets =
+    [
+        "cropActivities", "irrigation", "labour", "inputs", "machinery", "activityExpenses", "observations", "plannedTasks",
+        "unclearSegments", "questionsForUser", "extractedTasks"
+    ];
+
+    public static string Describe(string? content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return "(no answer text)";
+        }
+
+        var fields = new List<string>();
+        foreach (var field in TextFields)
+        {
+            var matches = Regex.Matches(content, "\"" + field + @"""\s*:\s*""((?:[^""\\]|\\.)*)""");
+            if (matches.Count > 0)
+            {
+                fields.Add($"{field} {matches.Count}x/{matches.Sum(m => m.Groups[1].Length)}ch");
+            }
+        }
+
+        var buckets = new List<string>();
+        foreach (var bucket in Buckets)
+        {
+            var at = content.IndexOf("\"" + bucket + "\"", StringComparison.Ordinal);
+            if (at >= 0)
+            {
+                buckets.Add($"{bucket} {CountRows(content, at)}");
+            }
+        }
+
+        var items = Regex.Matches(content, @"""sourceText""\s*:").Count;
+        var keys = Regex.Matches(content, @"""[A-Za-z_]+""\s*:").Count;
+        return $"{content.Length}ch, {keys} keys, {items} items with sourceText; rows: {string.Join(", ", buckets)}; text fields: {string.Join(", ", fields)}";
+    }
+
+    /// <summary>Top-level objects in the array that follows a key (a cut-off array counts what arrived).</summary>
+    private static int CountRows(string content, int keyAt)
+    {
+        var open = content.IndexOf('[', keyAt);
+        var colon = content.IndexOf(':', keyAt);
+        if (open < 0 || colon < 0 || content[(colon + 1)..open].Trim().Length > 0)
+        {
+            return 0;
+        }
+
+        var depth = 0;
+        var rows = 0;
+        var inString = false;
+        for (var i = open; i < content.Length; i++)
+        {
+            var c = content[i];
+            if (inString)
+            {
+                if (c == '\\')
+                {
+                    i++;
+                }
+                else if (c == '"')
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            switch (c)
+            {
+                case '"':
+                    inString = true;
+                    break;
+                case '[' or '{':
+                    if (depth == 1 && c == '{')
+                    {
+                        rows++;
+                    }
+
+                    depth++;
+                    break;
+                case ']' or '}':
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return rows;
+                    }
+
+                    break;
+            }
+        }
+
+        return rows;
+    }
+}

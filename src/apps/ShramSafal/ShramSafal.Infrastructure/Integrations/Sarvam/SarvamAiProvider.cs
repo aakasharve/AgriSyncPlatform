@@ -79,7 +79,8 @@ internal sealed class SarvamAiProvider(
             // PLR lane V-1 fix pass (B001) — a transcript too long for one answer is structured in segments, all or
             // nothing. A correction ("बदला") is never segmented: its block asks for whole buckets, which segments
             // would repeat.
-            var segmentTokens = CorrectionPromptData.IsCorrectionPrompt(systemPrompt)
+            var isCorrection = CorrectionPromptData.IsCorrectionPrompt(systemPrompt);
+            var segmentTokens = isCorrection
                 ? int.MaxValue
                 : new StructuringBudget(_options.ChatMaxTokens > 0 ? _options.ChatMaxTokens : 2048).SegmentTokens;
             var structured = await ChunkedStructuring.StructureAsync(
@@ -88,22 +89,37 @@ internal sealed class SarvamAiProvider(
                 async (segment, segmentCt) =>
                 {
                     var completion = await chatClient.CompleteAsync(systemPrompt, segment, segmentCt);
+                    var spoken = StructuringBudget.EstimateTokens(segment);
                     if (!completion.IsSuccess)
                     {
-                        return SegmentAnswer.Failed(completion.Error, retryable: completion.Error != SarvamChatClient.CutOffError);
+                        if (completion.Error != SarvamChatClient.CutOffError)
+                        {
+                            return SegmentAnswer.Failed(completion.Error, retryable: true);
+                        }
+
+                        // Fix pass 2: what the cut answer was made of, and what the API said about it (item c).
+                        logger.LogWarning(
+                            "Sarvam structurer answer CUT OFF for ~{SpokenTokens} transcript tokens. Usage as returned: {Usage}. Reasoning text: {Reasoning}. Answer so far: {Census}.",
+                            spoken,
+                            completion.Usage ?? "(none)",
+                            completion.ReasoningChars?.ToString(CultureInfo.InvariantCulture) ?? "none",
+                            AnswerCensus.Describe(completion.PartialContent));
+                        return SegmentAnswer.CutOffAnswer(completion.Error);
                     }
 
                     // Measured, not assumed: the answer size against the transcript size the budget planned for.
-                    var spoken = StructuringBudget.EstimateTokens(segment);
                     logger.LogInformation(
-                        "Sarvam structurer answer: {CompletionTokens} completion tokens for ~{SpokenTokens} transcript tokens (planned at most {Planned}).",
+                        "Sarvam structurer answer: {CompletionTokens} completion tokens for ~{SpokenTokens} transcript tokens (planned at most {Planned}). Usage as returned: {Usage}. Answer: {Census}.",
                         completion.CompletionTokens?.ToString(CultureInfo.InvariantCulture) ?? "unknown",
                         spoken,
-                        StructuringBudget.PredictedAnswerTokens(spoken));
+                        StructuringBudget.PredictedAnswerTokens(spoken),
+                        completion.Usage ?? "(none)",
+                        AnswerCensus.Describe(completion.Content));
                     return SegmentAnswer.Ok(completion.Content);
                 },
                 logger,
-                ct);
+                ct,
+                allowSplit: !isCorrection);
             if (!structured.IsSuccess)
             {
                 // B005: after a split recording, the error tells the orchestrator not to transcribe it all again.

@@ -82,8 +82,23 @@ internal sealed record SttCallOutcome(
 /// extracted into <see cref="Content"/> as a free-form string the caller
 /// usually parses as JSON via <c>GeminiJsonCleaner</c>.
 /// </summary>
-internal sealed record SarvamChatResult(bool IsSuccess, string? Content, string? Error, int? CompletionTokens = null)
+internal sealed record SarvamChatResult(
+    bool IsSuccess,
+    string? Content,
+    string? Error,
+    int? CompletionTokens = null,
+    string? Usage = null,
+    string? PartialContent = null,
+    int? ReasoningChars = null)
 {
+    /// <summary>
+    /// PLR lane V-1 fix pass 2 — an answer cut off at the token limit, with what the API returned about it: the
+    /// <c>usage</c> object exactly as sent (prompt / completion / total tokens and any details), the cut answer (for a
+    /// field census in the log, never stored) and the length of any reasoning text the model produced beside it.
+    /// </summary>
+    public static SarvamChatResult CutOff(string error, string? usage, string? partialContent, int? reasoningChars) =>
+        new(false, null, error, null, usage, partialContent, reasoningChars);
+
     public static SarvamChatResult Success(string content) =>
         new(true, content, null);
 

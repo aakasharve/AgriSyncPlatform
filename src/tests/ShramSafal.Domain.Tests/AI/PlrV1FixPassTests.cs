@@ -58,7 +58,8 @@ public sealed class PlrV1FixPassTests(Xunit.Abstractions.ITestOutputHelper outpu
             var tokens = StructuringBudget.EstimateTokens(segment);
             Assert.True(tokens <= budget.SegmentTokens, $"a segment of ~{tokens} tokens is over the budget {budget.SegmentTokens}");
             // ...so its predicted answer uses at most half of the 4096-token limit: a 2x margin on the estimate.
-            Assert.True(StructuringBudget.PredictedAnswerTokens(tokens) <= 2048, $"predicted {StructuringBudget.PredictedAnswerTokens(tokens)} > 2048");
+            var planned = (int)(4096 * StructuringBudget.PlannedShareOfAnswer);
+            Assert.True(StructuringBudget.PredictedAnswerTokens(tokens) <= planned, $"predicted {StructuringBudget.PredictedAnswerTokens(tokens)} > {planned}");
         }
 
         output.WriteLine($"10-minute fixture: {words} words, {transcript.Length} chars, ~{StructuringBudget.EstimateTokens(transcript)} tokens; "
@@ -127,12 +128,19 @@ public sealed class PlrV1FixPassTests(Xunit.Abstractions.ITestOutputHelper outpu
     }
 
     [Fact]
-    public async Task One_cut_off_segment_fails_the_whole_parse_visibly_never_a_partial_success()
+    public async Task A_piece_still_cut_off_at_its_smallest_fails_the_whole_parse_visibly_never_a_partial_success()
     {
+        // Fix pass 2: a cut-off answer is split in half (up to three times); a piece that is STILL cut off then fails
+        // the whole parse — all or nothing.
         var transcript = TenMinuteTranscript();
         var segments = ChunkedStructuring.Segment(transcript, new StructuringBudget(4096).SegmentTokens);
-        var third = segments[2].Trim();
-        var chat = new FakeChat(segment => segment == third
+        const int poisoned = 2;
+        var third = segments[poisoned].Trim();
+        // A sentence of the third segment said only once (the fixture repeats its plain sentences every minute): any
+        // piece holding it is always cut off, however small.
+        var poison = third.Split('।', StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim())
+            .First(x => x.Length > 0 && transcript.Split(x).Length == 2);
+        var chat = new FakeChat(segment => segment.Contains(poison, StringComparison.Ordinal)
             ? CutOff()
             : Answer("""{"dayOutcome":"WORK_RECORDED","observations":[]}"""));
 
@@ -140,11 +148,11 @@ public sealed class PlrV1FixPassTests(Xunit.Abstractions.ITestOutputHelper outpu
 
         Assert.False(result.Success);
         Assert.Null(result.NormalizedJson);
-        Assert.Contains($"part 3 of {segments.Count}", result.Error, StringComparison.Ordinal);
+        Assert.Contains($"part {poisoned + 1} of {segments.Count}", result.Error, StringComparison.Ordinal);
         Assert.Contains(SarvamChatClient.CutOffError, result.Error, StringComparison.Ordinal);
         Assert.Contains(AiErrorMarkers.NoRetry, result.Error, StringComparison.Ordinal);
-        // A cut-off answer is not "tried once more" (only transient failures are).
-        Assert.Equal(1, chat.CallsFor(third));
+        // A cut-off answer is never "tried once more" as it was: it is split instead.
+        Assert.Equal(1, chat.CallsFor(segments[poisoned].Trim()));
     }
 
     [Fact]
