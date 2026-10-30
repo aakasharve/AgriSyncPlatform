@@ -1,0 +1,30 @@
+import type { LogContentPayloadType as LogContentPayload } from '../../../../../../../sync-contract/schemas/payloads/_log_content.zod';
+import { idGenerator } from '../../../core/domain/services/IdGenerator';
+import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
+
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lane F1) — an edit to what Sathi understood
+ * (`revise_log_content.zod.ts`). The server appends it as a NEW record version (the old one stays
+ * as history) and a confirmed day re-opens for the owner.
+ */
+export interface ReviseLogContentPayload {
+     /** The pull guard reads this key, so the edited log is left alone until the server accepts it. */
+     dailyLogId: string;
+     /** The record version the editor saw; an older one is accepted and recorded, never dropped. */
+     baseVersion: number;
+     content: LogContentPayload;
+     reason?: string;
+     revisedAtUtc: string;
+}
+
+export class ReviseLogContentCommand {
+     static async enqueue(payload: ReviseLogContentPayload): Promise<string> {
+          // One id per edit: every edit is its own mutation, deduplicated on replay by this key.
+          const clientRequestId = `${SyncMutationName.ReviseLogContent}:${payload.dailyLogId}:${idGenerator.generate()}`;
+          return mutationQueue.enqueue(SyncMutationName.ReviseLogContent, payload, {
+               clientRequestId,
+               clientCommandId: clientRequestId,
+          });
+     }
+}

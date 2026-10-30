@@ -26,12 +26,13 @@ const ObservationEventCard: React.FC<ObservationEventCardProps> = ({
     const getVisualStyle = () => {
         const baseClasses = "border-2 rounded-xl p-4 transition-all";
 
-        // Severity-based border
+        // Severity-based border. lane F1: an unstated severity takes the plain style; no label
+        // claims a severity he never gave.
         const severityBorder = {
             'urgent': 'border-red-300 bg-red-50',
             'important': 'border-amber-300 bg-amber-50',
             'normal': 'border-stone-200 bg-stone-50'
-        }[observation.severity];
+        }[observation.severity ?? 'normal'];
 
         return `${baseClasses} ${severityBorder}`;
     };
@@ -43,7 +44,7 @@ const ObservationEventCard: React.FC<ObservationEventCardProps> = ({
             'urgent': 'text-red-600',
             'important': 'text-amber-600',
             'normal': 'text-stone-600'
-        }[observation.severity];
+        }[observation.severity ?? 'normal'];
 
         const Icon = {
             'issue': AlertCircle,
@@ -81,7 +82,8 @@ const ObservationEventCard: React.FC<ObservationEventCardProps> = ({
                             {getTypeLabel()}
                         </span>
 
-                        {observation.severity !== 'normal' && (
+                        {/* lane F1: an unstated severity shows no badge — never an empty one, never 'normal'. */}
+                        {observation.severity && observation.severity !== 'normal' && (
                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${observation.severity === 'urgent'
                                 ? 'bg-red-200 text-red-700'
                                 : 'bg-amber-200 text-amber-700'

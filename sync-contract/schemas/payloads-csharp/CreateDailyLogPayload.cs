@@ -104,5 +104,7 @@ public sealed record CreateDailyLogPayload(
     /// <summary>Allowed values: "labour".</summary>
     string? CaptureScope = null,
     bool? AutoSavedFromVoice = null,
-    Guid? VoiceClipId = null
+    Guid? VoiceClipId = null,
+    // generator: unhandled zod typeName ZodEffects — emitted as object
+    object? Content = null
 );

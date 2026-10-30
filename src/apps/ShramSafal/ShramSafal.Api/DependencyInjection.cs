@@ -137,6 +137,8 @@ public static class DependencyInjection
         services.AddScoped<IDailyRichnessDerivationService, DailyRichnessDerivationService>();
         services.AddScoped<CreateDailyLogHandler>();
         services.AddScoped<AddLogTaskHandler>();
+        // spec: plr-d10 (lane F1) — an edit to what Sathi understood (revise_log_content).
+        services.AddScoped<ShramSafal.Application.UseCases.Logs.ReviseLogContent.ReviseLogContentHandler>();
         services.AddScoped<VerifyLogHandler>();
 
         // spec: dfes-companion-2026-07-11 (wave-1.5) — BackfillOwnerAttestationsHandler is

@@ -11,6 +11,8 @@ import {
     postLabourCorrection,
     type LabourCorrectionRequest,
 } from '../../features/labour/data/labourCorrectionsClient';
+import { buildLogContent } from '../../features/logs/services/logContentPayload';
+import { ReviseLogContentCommand } from './sync/ReviseLogContentCommand';
 // import { AuditLogRepository } from '../../infrastructure/storage/AuditLogRepository'; // Deprecated Fix-07
 
 interface UpdateLogRequest {
@@ -69,6 +71,13 @@ export interface UpdateLogResponse {
      * the server — the record's untouched parts make no claim either way.
      */
     hasUnsentChanges?: boolean;
+    /**
+     * spec: plr-d10 (lane F1) — `true` = this edit changed what Sathi understood (crop work,
+     * water, inputs, notes, machinery, expenses, planned work) and it was QUEUED to the server as
+     * `revise_log_content`: a new record version the server keeps, which re-opens a confirmed day.
+     * Queued, not yet accepted — the pull leaves the log alone until the server has it.
+     */
+    contentRevisionQueued?: boolean;
     /**
      * LABOUR V2 R1, Task 23 — DID THIS EDIT ADD OR REMOVE A WHOLE ENGAGEMENT,
      * i.e. is even the LOCAL half of the save about to be undone?
@@ -210,16 +219,15 @@ export function buildLabourCorrections(
 }
 
 /**
- * Every content bucket on a `DailyLog` that the edit path has NO server call
- * for. Labour is absent because it has one (`postLabourCorrection`); it is
- * handled separately below, per engagement.
+ * Every content bucket on a `DailyLog` whose edit travels as ONE document —
+ * `revise_log_content` (lane F1) — rather than per engagement. Labour is absent
+ * because it has its own route (`postLabourCorrection`), handled below.
  *
- * Two different fates hide in this list and neither is sent:
- *   - `cropActivities` / `irrigation` / `inputs` / `observations` are REBUILT by
- *     the next pull from `DailyLogDto.tasks` (`logsReconciler.toDailyLog`), so a
- *     local change to them is reverted the moment the log comes back down.
- *   - `machinery` / `activityExpenses` / `plannedTasks` have no `DailyLogDto`
- *     counterpart at all, so the pull zeroes them.
+ * Until lane F1 none of these had a server call: the pull rebuilt the first four
+ * from task lines and zeroed the rest, so an edit here lived on one phone. Now an
+ * edit to any of them is queued as a new record version and comes back on every
+ * phone's pull (`DailyLogDto.content`). When the document cannot be built (it does
+ * not fit the contract) nothing is queued, and `hasUnsentChanges` still says so.
  * `financialSummary` is deliberately NOT here: it is derived, and
  * `preserveLocalOnlyFields` already keeps the local one.
  */
@@ -366,8 +374,10 @@ export function hasUnsentChanges(
     existingLog: DailyLog,
     finalLog: DailyLog,
     corrections: readonly PendingLabourCorrection[],
+    // lane F1 — the content half of this edit was queued as `revise_log_content`, so it is sent.
+    contentRevisionQueued = false,
 ): boolean {
-    for (const key of UNSENT_CONTENT_KEYS) {
+    for (const key of contentRevisionQueued ? [] : UNSENT_CONTENT_KEYS) {
         if (Object.is(existingLog[key], finalLog[key])) {
             continue;
         }
@@ -400,6 +410,41 @@ export function hasUnsentChanges(
     }
 
     return false;
+}
+
+/**
+ * spec: plr-d10 (lane F1) — did this edit change what Sathi understood? The same comparison
+ * `hasUnsentChanges` makes, over the buckets the content document carries plus the disturbance
+ * chip (it rides the same document).
+ */
+export function changesLogContent(existingLog: DailyLog, finalLog: DailyLog): boolean {
+    return [...UNSENT_CONTENT_KEYS, 'disturbance' as const].some(key =>
+        !Object.is(existingLog[key], finalLog[key]) && stableJson(existingLog[key]) !== stableJson(finalLog[key]));
+}
+
+/**
+ * spec: plr-d10 (lane F1) — queue the content half of an edit as a new record version.
+ * Returns whether a revision was queued: `false` when nothing in the document changed, or when
+ * the document does not fit the contract (then the edit stays on this phone, and is said to).
+ */
+async function queueContentRevision(existingLog: DailyLog, finalLog: DailyLog, reason: string | undefined): Promise<boolean> {
+    if (!changesLogContent(existingLog, finalLog)) {
+        return false;
+    }
+    // An edit that removed every item is still a statement: it is sent even when empty.
+    const content = buildLogContent(finalLog, { evenIfEmpty: true });
+    if (!content) {
+        return false;
+    }
+    await ReviseLogContentCommand.enqueue({
+        dailyLogId: finalLog.id,
+        // The version the editor saw; 1 for a log this phone has not yet heard a version for.
+        baseVersion: existingLog.contentVersion ?? 1,
+        content,
+        ...(reason && reason.trim().length > 0 && { reason: reason.trim().slice(0, 400) }),
+        revisedAtUtc: new Date().toISOString(),
+    });
+    return true;
 }
 
 /**
@@ -441,11 +486,12 @@ export function hasUnsentChanges(
  * `success: false` for the same reason: this use case never reports a save it
  * did not make.
  *
- * WHAT IS STILL TRUE, AND STATED RATHER THAN GLOSSED: only the LABOUR portion of
- * an edit has a server path. Crop activities, irrigation, inputs, machinery and
- * expenses are now durable ON THIS PHONE and nowhere else. A second device will
- * not see them, and a pull that carries this log will rebuild those categories
- * from the server's own record. That is a real limit and the caller says so.
+ * WHAT WAS TRUE UNTIL LANE F1, AND IS KEPT AS HISTORY: only the LABOUR portion of
+ * an edit had a server path; crop activities, irrigation, inputs, machinery and
+ * expenses were durable ON THIS PHONE and nowhere else. Lane F1 gave them one:
+ * `revise_log_content` (step 5a). The signal below now stops firing for exactly
+ * the edits that path carried, and still fires when the document could not be
+ * built — the sentence was kept, as the paragraph below asks.
  *
  * AND FOR ONE RELEASE IT DID NOT (final review, F-1). Ruling `R19` read
  * "`repo.save` now runs" as "the limit is gone" and had the caveat deleted, so
@@ -575,7 +621,21 @@ export const updateLog = async (
         //    everyday read path reads that table — `getAll`/`getById`/`getByDate`
         //    all read `db.logs` only — so history is kept without being pushed
         //    into the farmer's daily view.
-        await repo.save(finalLog, {
+        // 5a. spec: plr-d10 (lane F1) — THE CONTENT HALF REACHES THE SERVER. Queued BEFORE the
+        //     local write, so the queue row already guards this log from a pull that lands in
+        //     between (`readPendingLogIds`): the local edit can never be overwritten by the old
+        //     version while its revision waits. A queue that refuses it throws into the catch
+        //     below — reported, never swallowed.
+        const contentRevisionQueued = await queueContentRevision(existingLog, finalLog, request.reason);
+
+        // 5b. lane F1 (review N4) — the version this phone now expects the record to be at. A second edit made
+        //     before the next pull names THIS version as its base, so it is not mistaken for an edit made from an
+        //     older one (staleBase). The next pull states the server's own version, and that wins.
+        const savedLog: DailyLog = contentRevisionQueued
+            ? { ...finalLog, contentVersion: (existingLog.contentVersion ?? 1) + 1 }
+            : finalLog;
+
+        await repo.save(savedLog, {
             actorId: request.actorId,
             reason: request.reason || 'Edit to log',
         });
@@ -590,9 +650,10 @@ export const updateLog = async (
         // can never describe a send that did not happen.
         return {
             success: true,
-            log: finalLog,
+            log: savedLog,
             persistedLabourCorrections: corrections.length,
-            hasUnsentChanges: hasUnsentChanges(existingLog, finalLog, corrections),
+            hasUnsentChanges: hasUnsentChanges(existingLog, finalLog, corrections, contentRevisionQueued),
+            contentRevisionQueued,
             // Task 23 — the sharper half of the same question. Computed from the
             // same two records, on the same line, after the correction loop
             // returned: it describes what this submit did, never what a later

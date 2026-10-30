@@ -31,10 +31,19 @@ import { reconcileFarmsPlotsCycles } from './reconcilers/farmsPlotsCyclesReconci
 import { reconcileAttentionBoard } from './reconcilers/attentionBoardReconciler';
 import { finalizeReconciliation } from './reconcilers/finalizeReconciliation';
 import { dispatchPostReconcileEvents } from './reconcilers/postReconcileEvents';
+import { markLogsRebuilt } from './logsRebuildMarker';
 
 export { dayLedgerMetaKey } from './helpers/dayLedgerMetaKey';
 
-export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void> {
+export interface ReconcileSyncPullOptions {
+    /**
+     * Lane F1 (review N9): this pull is the one full re-pull (`logsRebuildMarker.ts`). Every log is re-merged, and
+     * the marker is written in this transaction ONLY when the logs were actually reconciled.
+     */
+    rebuildLogs?: boolean;
+}
+
+export async function reconcileSyncPull(payload: SyncPullResponse, options: ReconcileSyncPullOptions = {}): Promise<void> {
     const { plotLookup, receivedAtUtc } = await reconcileProfileAndCrops(payload);
 
     const db = getDatabase();
@@ -73,7 +82,11 @@ export async function reconcileSyncPull(payload: SyncPullResponse): Promise<void
         db.dayLedgers, db.plannedTasks, db.attentionCards, db.attendanceMarks,
     ], async () => {
         if (pendingLogIds) {
-            importedLogs = await reconcileLogs(db, payload, plotLookup, pendingLogIds, receivedAtUtc);
+            importedLogs = await reconcileLogs(
+                db, payload, plotLookup, pendingLogIds, receivedAtUtc, options.rebuildLogs === true);
+            if (options.rebuildLogs) {
+                await markLogsRebuilt(db, receivedAtUtc);
+            }
         }
         await reconcileAttachments(db, payload, receivedAtUtc);
         referenceDataUpdated = await reconcileReferenceData(db, payload, receivedAtUtc);

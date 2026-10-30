@@ -123,6 +123,24 @@ public sealed class DailyLog : Entity<Guid>
     /// </summary>
     public int ContentVersion { get; private set; } = 1;
 
+    /// <summary>The value <see cref="CaptureScope"/> holds for a record saved at the हजेरी door.</summary>
+    public const string CaptureScopeLabour = "labour";
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1, review N12) — the door a record was saved at, when it is the हजेरी
+    /// (labour) door: <see cref="CaptureScopeLabour"/>. NULL for every other save AND for every
+    /// record written before this was kept (not known; nothing is back-filled, doctrine P4). A
+    /// labour-door record holds labour only (B002), so its details are never revised.
+    /// </summary>
+    public string? CaptureScope { get; private set; }
+
+    /// <summary>True when the record is known to have been saved at the हजेरी door.</summary>
+    public bool WasCapturedAtLabourDoor =>
+        string.Equals(CaptureScope, CaptureScopeLabour, StringComparison.Ordinal);
+
+    /// <summary>Records that this log was saved at the हजेरी door. Set once, at creation.</summary>
+    public void MarkCapturedAtLabourDoor() => CaptureScope = CaptureScopeLabour;
+
     public IReadOnlyCollection<LogTask> Tasks => _tasks.AsReadOnly();
     public IReadOnlyCollection<VerificationEvent> VerificationEvents => _verificationEvents.AsReadOnly();
 
@@ -397,6 +415,21 @@ public sealed class DailyLog : Entity<Guid>
         if (correctedAtUtc > ModifiedAtUtc)
         {
             ModifiedAtUtc = correctedAtUtc;
+        }
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1) — what Sathi understood for this log was stored or changed
+    /// (<see cref="DailyLogContent"/>), so the sync cursor must carry the log to every phone.
+    /// Same rule as <see cref="MarkLabourCorrected"/>: the clock only moves FORWARD, never back.
+    /// It also undoes the one backward step a task line can take: <see cref="AddTask"/> stamps the
+    /// phone's capture time, which is earlier than the server's own save.
+    /// </summary>
+    public void MarkContentRevised(DateTime revisedAtUtc)
+    {
+        if (revisedAtUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = revisedAtUtc;
         }
     }
 

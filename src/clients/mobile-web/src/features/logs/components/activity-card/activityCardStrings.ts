@@ -99,6 +99,8 @@ export interface ActivityCardStrings {
 }
 
 const titleCase = (seg: string): string => seg.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+/** Hours as the English card wrote them ("2h"), or '—' when none were stated. */
+const enHours = (h: number | undefined): string => (typeof h === 'number' && Number.isFinite(h) ? `${h}h` : '—');
 
 const EN: ActivityCardStrings = {
     language: 'en',
@@ -110,10 +112,11 @@ const EN: ActivityCardStrings = {
     selfFamily: 'Self • Family Labour', contract: 'Contract',
     male: n => `${n}M`, female: n => `${n}F`, workers: n => `${n} Workers`,
     todayStaffUnknown: 'Today: — Staff (Logged)', todayStaff: n => `Today: ${n} Staff (Logged)`,
-    items: n => `${n} Items`, todayItems: n => `Today: ${n} Item(s) applied`,
+    // lane F1 (review S7): a value he did not state is left out or shown as '—', never "undefined".
+    items: n => `${n ?? '—'} Items`, todayItems: n => `Today: ${n} Item(s) applied`,
     todayRun: h => `Today: ${h}h Total Run`, issueLogged: 'Issue Logged',
-    irrigationLine: (h, m, s) => `${h}h ${m} • ${s}`,
-    machineLine: (type, h) => `${type} • ${h}h`, todayMachine: h => `Today: ${h}h Machine Work`,
+    irrigationLine: (h, m, s) => [enHours(h), m].filter(Boolean).join(' ') + (s ? ` • ${s}` : ''),
+    machineLine: (type, h) => `${type || 'Machinery'} • ${enHours(h)}`, todayMachine: h => `Today: ${h}h Machine Work`,
     expenseTotal: n => `₹${n} Total`, todayExpenses: n => `Today: ₹${n} Total Expenses`,
     notes: n => `${n} Note(s)`, reminderItems: n => `${n} ITEM(S)`,
     plannedReminders: 'PLANNED REMINDERS', outcomePlaceholder: 'Outcome (e.g. 5 rows done)', expenseAlt: 'Expense',

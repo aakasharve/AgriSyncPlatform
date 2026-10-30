@@ -21,6 +21,7 @@ import type { LogProvenance } from '../ai/LogProvenance';
 import type { PatchEvent } from '../ledger/PatchEvent';
 import type { VlogScore } from './vlog-score.types'; // local use in DailyLog; re-exported below
 import type { TranscriptSnapshot } from './log-timeline.types'; // local use in DailyLog; re-exported below
+import type { DailyLogServerState } from './log.server.types'; // lane F1 — the server's copy (version, details source)
 
 // =============================================================================
 // FIELD-LEVEL PROVENANCE (W1.P2 — per-field confidence signal)
@@ -165,8 +166,8 @@ export interface IrrigationEvent {
      */
     numbers?: NumericFacts;
     linkedActivityId?: string;
-    method: string;
-    source: string;
+    method?: string; // lane F1: absent = not stated (a task-line rebuild never invents 'Drip')
+    source?: string; // lane F1: absent = not stated (never 'Field')
     durationHours?: number;
     waterVolumeLitres?: number;
     notes?: string;
@@ -223,7 +224,7 @@ export interface InputMixItem {
     numbers?: NumericFacts;
     productName: string;
     dose?: number;
-    unit: string; // ml/L, g/L, kg/acre, etc.
+    unit?: string; // ml/L, g/L, kg/acre, etc. lane F1: absent = not stated (never 'unit')
 
     // B2.1 — dose split + npk grade (optional, back-compat; dose?: number kept as-is)
     basisQty?: number;     // §3.2a — the "per X" basis quantity (e.g. 5ml per 1 L → basisQty:1)
@@ -253,8 +254,8 @@ export interface InputEvent {
     linkedExpenseItemId?: string;    // Specific line item if expense has multiple
     costSource?: 'MANUAL' | 'PROCUREMENT';
 
-    // Delivery
-    method: InputMethod;
+    // Delivery — lane F1: absent = not stated (a task-line rebuild never invents 'Spray')
+    method?: InputMethod;
     carrierMedium?: 'water' | 'oil' | 'none';   // §3.2c — what the input is carried in
 
     // B2.2 — mix/pass grouping (§3.2b)
@@ -639,7 +640,7 @@ export type LogCaptureScope = 'labour';
  * DailyLog - The immutable execution record for a single day.
  * This is the "truth" of what happened on the farm.
  */
-export interface DailyLog {
+export interface DailyLog extends DailyLogServerState {
     id: string;
     date: string;
     context: FarmContext;
@@ -678,7 +679,7 @@ export interface DailyLog {
     fullTranscript?: string; // Raw verbatim text for training data
     transcriptSnapshot?: TranscriptSnapshot; // For timeline display
     manualTotalCost?: number;
-    financialSummary: {
+    financialSummary?: { // lane F1: absent = the server stated no totals (a clean-device pull) — never five zeros
         totalLabourCost: number;
         totalInputCost: number;
         totalMachineryCost: number;

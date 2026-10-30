@@ -48,6 +48,8 @@ export interface SaveToastMessage {
 export interface EnqueueOutcomeSummary {
     queuedLogIds: readonly string[];
     skippedLogIds: readonly string[];
+    /** Lane F1 (review S5): queued, but their details did not fit the contract and stay on this phone. */
+    detailsKeptOnPhoneLogIds?: readonly string[];
 }
 
 /**
@@ -86,8 +88,18 @@ export function buildSkippedSyncToast(
     outcome: EnqueueOutcomeSummary | null,
     language: Language,
 ): SaveToastMessage | null {
-    if (!outcome || outcome.skippedLogIds.length === 0) {
+    if (!outcome) {
         return null;
+    }
+
+    // Lane F1 (review S5): every record was queued, but the details of some did not fit what the
+    // server can keep (over the size cap, or an item it cannot carry), so they went the old way and
+    // their details stay on this phone. Said quietly, after the phone claim — the same shape and the
+    // same `partial` weight as the edit path's `unsentEditTail`.
+    if (outcome.skippedLogIds.length === 0) {
+        return (outcome.detailsKeptOnPhoneLogIds?.length ?? 0) > 0
+            ? { message: `${onPhoneClaim(language)} — ${translate('sync.detailsKeptOnPhoneTail', language)}`, type: 'partial' }
+            : null;
     }
 
     const skipped = outcome.skippedLogIds.length;

@@ -165,6 +165,8 @@ export function buildSpend(logs: readonly DailyLog[], crops: readonly CropProfil
         totals.set(bucketKey, (totals.get(bucketKey) ?? 0) + scoped);
         total += scoped;
         const f = l.financialSummary;
+        // lane F1: a log whose totals the server never stated adds no mix (it added no spend above).
+        if (!f) continue;
         const ratio = scoped / f.grandTotal;
         const known = (f.totalLabourCost ?? 0) + (f.totalInputCost ?? 0) + (f.totalMachineryCost ?? 0);
         mix.labour += (f.totalLabourCost ?? 0) * ratio;

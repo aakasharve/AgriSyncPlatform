@@ -1845,6 +1845,82 @@ internal sealed class ShramSafalRepository(
         await db.LabourCorrections.AddAsync(c, ct);
     }
 
+    // ── spec: plr-d10 (lane F1) — what Sathi understood ─────────────────────────────────────
+    public async Task AddDailyLogContentAsync(DailyLogContent content, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        await db.DailyLogContents.AddAsync(content, ct);
+    }
+
+    public async Task<bool> TrySaveContentRevisionAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ux_daily_log_contents_log_version"))
+        {
+            // Lost the race for this record version. Discard everything this unit staged (the content
+            // row, the log's new version, task lines, events, audit rows) so the caller can re-read
+            // the record and apply the edit on top; nothing of the doomed attempt can be replayed.
+            foreach (var entry in db.ChangeTracker.Entries()
+                         .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return false;
+        }
+    }
+
+    public async Task<DailyLogContent?> GetCurrentDailyLogContentAsync(Guid dailyLogId, CancellationToken ct = default)
+    {
+        // AsNoTracking: rows are never updated by the app, only appended.
+        return await db.DailyLogContents
+            .AsNoTracking()
+            .Where(c => c.DailyLogId == dailyLogId)
+            .OrderByDescending(c => c.ContentVersion)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<DailyLogContent>> GetCurrentDailyLogContentsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        if (dailyLogIds is null || dailyLogIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await NewestLegitimateContents(db, dailyLogIds).ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1, review S4 / N5 / S8) — the newest LEGITIMATE content row of each
+    /// log, chosen in SQL. Legitimate = its <c>farm_id</c> is its log's own <c>farm_id</c>
+    /// (doctrine E4: the column is its own, FK checks bypass RLS, and a member of two farms passes
+    /// the read policy for both), and that test runs BEFORE the newest version is picked, so a
+    /// mismatched row at a higher version falls away and the newest legitimate row is served —
+    /// it can never empty the log. Newest = one row per log (<c>ROW_NUMBER() OVER (PARTITION BY
+    /// daily_log_id ORDER BY content_version DESC)</c>), so the pull no longer loads every version.
+    /// Internal so a real-Postgres test can read the SQL it becomes.
+    /// </summary>
+    internal static IQueryable<DailyLogContent> NewestLegitimateContents(
+        ShramSafalDbContext db, IReadOnlyCollection<Guid> dailyLogIds)
+    {
+        var ids = dailyLogIds as IList<Guid> ?? dailyLogIds.ToList();
+        return (
+                from content in db.DailyLogContents.AsNoTracking()
+                join log in db.DailyLogs.AsNoTracking()
+                    on new { LogId = content.DailyLogId, Farm = content.FarmId }
+                    equals new { LogId = log.Id, Farm = log.FarmId }
+                where ids.Contains(content.DailyLogId)
+                select content)
+            .GroupBy(content => content.DailyLogId)
+            .Select(versions => versions.OrderByDescending(content => content.ContentVersion).First());
+    }
+
     public async Task<IReadOnlyList<FieldOperatorWorkRow>> GetFieldOperatorWorkRowsForAssignmentAsync(
         Guid labourAssignmentId, CancellationToken ct = default)
     {

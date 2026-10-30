@@ -142,6 +142,7 @@ export type {
     GetExtractionSessionResponse,
     LabourEngagementDto,
     LocationDto,
+    LogContentDto,
     LoginRequest,
     LogTaskDto,
     MigrateScheduleRequest,

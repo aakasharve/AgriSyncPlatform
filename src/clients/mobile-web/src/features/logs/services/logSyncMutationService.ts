@@ -7,6 +7,7 @@ import { resolveKnownFarmId } from '../../../infrastructure/sync/SyncContext';
 import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
 import { type DailyLog } from '../../../types';
 import { buildTaskPayloads, ensureUuid, normalizeName } from './logTaskPayloads';
+import { logContentFor } from './logContentPayload';
 import { buildWeatherStampPayload } from './weatherStampPayload';
 import {
     WORKER_NAME_MAX_LENGTH,
@@ -667,10 +668,12 @@ export interface EnqueueLogsOptions {
 export async function enqueueLogsForSync(
     logs: DailyLog[],
     options: EnqueueLogsOptions = {},
-): Promise<{ queuedLogIds: string[]; skippedLogIds: string[] }> {
+): Promise<{ queuedLogIds: string[]; skippedLogIds: string[]; detailsKeptOnPhoneLogIds: string[] }> {
     const { cycleResolution = 'at-capture', triggerSync = true } = options;
     const queuedLogIds: string[] = [];
     const skippedLogIds: string[] = [];
+    // lane F1 (review S5) — logs whose details did not fit the contract: queued the old way, and said so.
+    const detailsKeptOnPhoneLogIds: string[] = [];
 
     for (const log of logs) {
         const target = await resolveSyncTarget(log, cycleResolution);
@@ -681,6 +684,14 @@ export async function enqueueLogsForSync(
 
         const labourPayloads = buildLabourPayloads(log);
     const manualDraft = buildManualDraft(log);
+        // lane F1 — what Sathi understood, stored WITH the log; none at the labour door, and withheld
+        // when it does not fit the contract (then the old task lines below carry the log, P9, and the
+        // farmer is told the details stay on this phone — review S5).
+        const contentOutcome = logContentFor(log);
+        const content = contentOutcome.kind === 'content' ? contentOutcome.content : undefined;
+        if (contentOutcome.kind === 'withheld') {
+            detailsKeptOnPhoneLogIds.push(log.id);
+        }
 
         await CreateDailyLogCommand.enqueue({
             dailyLogId: log.id,
@@ -741,6 +752,7 @@ export async function enqueueLogsForSync(
             ...(log.voiceClipId && { voiceClipId: log.voiceClipId }),
             // B2.8 / B1d — the weather captured at confirm-time; the rules live with the builder.
             weatherStamp: buildWeatherStampPayload(log.weatherStamp),
+            ...(content && { content }),
             // Labour V1 Task 8.1 — structured labour rides on the SAME payload as
             // the log so the server can stage it in Phase 1. Omitted (not `[]`)
             // when there is no labour, so the server's `Count: > 0` guard reads a
@@ -748,7 +760,9 @@ export async function enqueueLogsForSync(
             labour: labourPayloads.length > 0 ? labourPayloads : undefined,
         });
 
-        const taskPayloads = buildTaskPayloads(log);
+        // lane F1 — the server writes the task lines from `content` in the same save, word for word
+        // (LogTaskProjection.cs), so a log that carries it sends none of its own.
+        const taskPayloads = content ? [] : buildTaskPayloads(log);
         for (const task of taskPayloads) {
             await AddLogTaskCommand.enqueue({
                 dailyLogId: log.id,
@@ -769,6 +783,7 @@ export async function enqueueLogsForSync(
     return {
         queuedLogIds,
         skippedLogIds,
+        detailsKeptOnPhoneLogIds,
     };
 }
 

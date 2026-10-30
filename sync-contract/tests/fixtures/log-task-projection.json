@@ -1,0 +1,338 @@
+{
+  "_comment": "lane F1 — shared parity fixture. `content` is the document the phone sends; `expected` is exactly what the phone's buildTaskPayloads produces for it (activityType + notes). The C# LogTaskProjection must produce the same list. Generated from the real parse responses of 2026-10-30 plus edge values.",
+  "cases": [
+    {
+      "name": "real parse — typed Marathi entry (2026-10-30), variant dosePerLitre / carrierUnit",
+      "logId": "0f1f0000-0000-4000-8000-000000000001",
+      "content": {
+        "schema": 1,
+        "capturedAtUtc": "2026-10-30T05:00:00.000Z",
+        "fullTranscript": "आज ऊस S1 मध्ये इथरेल अडीचशे मिली पाचशे लिटर पाण्यात मिसळून फवारणी केली. पाच बायकांनी खुरपणी केली.",
+        "cropActivities": [
+          {
+            "title": "खुरपणी",
+            "workTypes": [
+              "Weeding"
+            ],
+            "sourceText": "पाच बायकांनी खुरपणी केली",
+            "provenanceVerified": true,
+            "id": "tm-cropActivities-0"
+          }
+        ],
+        "inputs": [
+          {
+            "productName": "इथरेल",
+            "type": "other",
+            "method": "Spray",
+            "dosePerLitre": 250,
+            "doseUnit": "मिली",
+            "carrierVolume": 500,
+            "carrierUnit": "लिटर",
+            "sourceText": "इथरेल अडीचशे मिली पाचशे लिटर पाण्यात मिसळून फवारणी केली",
+            "provenanceVerified": true,
+            "id": "tm-inputs-0",
+            "quantity": 250,
+            "unit": "मिली",
+            "mix": []
+          }
+        ]
+      },
+      "expected": [
+        {
+          "activityType": "Weeding",
+          "notes": null
+        },
+        {
+          "activityType": "Spray इथरेल",
+          "notes": "Qty: 250 मिली"
+        }
+      ]
+    },
+    {
+      "name": "real parse — spoken English entry (2026-10-30), variant quantity / unit / unitCarrier",
+      "logId": "0f1f0000-0000-4000-8000-000000000001",
+      "content": {
+        "schema": 1,
+        "capturedAtUtc": "2026-10-30T05:00:00.000Z",
+        "fullTranscript": "Today I sprayed Ethyl 250 milliliters in 500 liters of water.",
+        "inputs": [
+          {
+            "productName": "Ethrel",
+            "quantity": 250,
+            "unit": "मिलीलीटर",
+            "method": "Spray",
+            "carrierVolume": 500,
+            "unitCarrier": "लिटर",
+            "sourceText": "ethyl 250 milliliters in 500 liters of water",
+            "id": "se-inputs-0",
+            "carrierUnit": "लिटर",
+            "mix": []
+          }
+        ]
+      },
+      "expected": [
+        {
+          "activityType": "Spray Ethrel",
+          "notes": "Qty: 250 मिलीलीटर"
+        }
+      ]
+    },
+    {
+      "name": "edge values — JS truthiness, number formatting, label rules, every bucket",
+      "logId": "0f1f0000-0000-4000-8000-000000000001",
+      "content": {
+        "schema": 1,
+        "capturedAtUtc": "2026-10-30T05:00:00.000Z",
+        "cropActivities": [
+          {
+            "id": "c-1",
+            "title": "Pruning",
+            "workTypes": [
+              "छाटणी",
+              "Pruning"
+            ],
+            "notes": "  दोन ओळी  "
+          },
+          {
+            "id": "c-2",
+            "title": "Weeding",
+            "workTypes": [
+              ""
+            ],
+            "notes": ""
+          },
+          {
+            "id": "c-3",
+            "title": "Harvest"
+          }
+        ],
+        "irrigation": [
+          {
+            "id": "i-1",
+            "method": "Flood",
+            "source": "Canal",
+            "durationHours": 2,
+            "notes": "पाट"
+          },
+          {
+            "id": "i-2",
+            "method": "",
+            "source": "Well",
+            "durationHours": 1.5
+          },
+          {
+            "id": "i-3",
+            "durationHours": 0,
+            "waterVolumeLitres": 5000
+          },
+          {
+            "id": "i-4",
+            "method": "Drip",
+            "durationHours": 0.25
+          }
+        ],
+        "inputs": [
+          {
+            "id": "p-1",
+            "method": "Spray",
+            "productName": "Bavistin",
+            "type": "fungicide",
+            "reason": "Disease",
+            "quantity": 500,
+            "unit": "gm",
+            "cost": 450,
+            "mix": []
+          },
+          {
+            "id": "p-2",
+            "method": "Soil",
+            "reason": "Growth",
+            "mix": [
+              {
+                "id": "m-1",
+                "productName": "Urea",
+                "dose": 50,
+                "unit": "kg"
+              }
+            ],
+            "quantity": 50
+          },
+          {
+            "id": "p-3",
+            "method": "Drip",
+            "type": "fertilizer",
+            "mix": [],
+            "cost": 1200.5
+          },
+          {
+            "id": "p-4",
+            "method": "Spray",
+            "reason": "Deficiency",
+            "productName": "Zinc",
+            "quantity": 2.5,
+            "notes": "पानांवर"
+          },
+          {
+            "id": "p-5",
+            "method": "Spray",
+            "mix": [
+              {
+                "id": "m-2",
+                "productName": "",
+                "unit": "ml"
+              }
+            ]
+          }
+        ],
+        "observations": [
+          {
+            "id": "o-1",
+            "plotId": "p",
+            "dateKey": "2026-10-30",
+            "timestamp": "2026-10-30T05:00:00.000Z",
+            "textRaw": "पानावर डाग",
+            "textCleaned": "Spots on leaves",
+            "noteType": "issue",
+            "severity": "urgent",
+            "source": "voice"
+          },
+          {
+            "id": "o-2",
+            "plotId": "p",
+            "dateKey": "2026-10-30",
+            "timestamp": "2026-10-30T05:00:00.000Z",
+            "textRaw": "उद्या फवारणी",
+            "noteType": "reminder",
+            "severity": "normal",
+            "source": "voice"
+          },
+          {
+            "id": "o-3",
+            "plotId": "p",
+            "dateKey": "2026-10-30",
+            "timestamp": "2026-10-30T05:00:00.000Z",
+            "textRaw": "",
+            "textCleaned": "",
+            "noteType": "observation",
+            "severity": "normal",
+            "source": "manual"
+          }
+        ],
+        "machinery": [
+          {
+            "id": "k-1",
+            "type": "tractor",
+            "ownership": "rented",
+            "hoursUsed": 3,
+            "rentalCost": 2400,
+            "fuelCost": 600,
+            "notes": "पाटील"
+          },
+          {
+            "id": "k-2",
+            "type": "sprayer",
+            "ownership": "owned"
+          },
+          {
+            "id": "k-3",
+            "ownership": "unknown",
+            "hoursUsed": 0.5
+          }
+        ],
+        "activityExpenses": [
+          {
+            "id": "e-1",
+            "reason": "डिझेल",
+            "items": [],
+            "totalAmount": 617.5
+          }
+        ],
+        "plannedTasks": [
+          {
+            "id": "t-1",
+            "title": "उद्या फवारणी",
+            "plotId": "p",
+            "priority": "high",
+            "status": "pending",
+            "sourceType": "ai_extracted",
+            "createdAt": "2026-10-30T05:00:00.000Z"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "activityType": "छाटणी",
+          "notes": "  दोन ओळी  "
+        },
+        {
+          "activityType": "Weeding",
+          "notes": ""
+        },
+        {
+          "activityType": "Harvest",
+          "notes": null
+        },
+        {
+          "activityType": "Irrigation",
+          "notes": "Method: Flood • Source: Canal • Duration: 2 hrs • पाट"
+        },
+        {
+          "activityType": "Irrigation",
+          "notes": "Source: Well • Duration: 1.5 hrs"
+        },
+        {
+          "activityType": "Irrigation",
+          "notes": null
+        },
+        {
+          "activityType": "Irrigation",
+          "notes": "Method: Drip • Duration: 0.25 hrs"
+        },
+        {
+          "activityType": "Spray Bavistin",
+          "notes": "Qty: 500 gm • Cost: ₹450"
+        },
+        {
+          "activityType": "Fertilizer Urea",
+          "notes": "Qty: 50"
+        },
+        {
+          "activityType": "Fertilizer Input",
+          "notes": "Cost: ₹1200.5"
+        },
+        {
+          "activityType": "Fertilizer Zinc",
+          "notes": "Qty: 2.5 • पानांवर"
+        },
+        {
+          "activityType": "Spray Input",
+          "notes": null
+        },
+        {
+          "activityType": "Machinery tractor",
+          "notes": "Hours: 3 • Rent: ₹2400 • Fuel: ₹600 • पाटील"
+        },
+        {
+          "activityType": "Machinery sprayer",
+          "notes": null
+        },
+        {
+          "activityType": "Machinery undefined",
+          "notes": "Hours: 0.5"
+        },
+        {
+          "activityType": "Observation",
+          "notes": "Spots on leaves"
+        },
+        {
+          "activityType": "Reminder",
+          "notes": "उद्या फवारणी"
+        },
+        {
+          "activityType": "Observation",
+          "notes": ""
+        }
+      ]
+    }
+  ]
+}

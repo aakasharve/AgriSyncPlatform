@@ -3,6 +3,7 @@ import { systemClock } from '../../core/domain/services/Clock';
 import { agriSyncClient, type SyncMutationType } from '../api/AgriSyncClient';
 import { getAuthSession } from '../storage/AuthTokenStore';
 import { reconcileSyncPull } from '../../features/sync/pull/SyncPullReconciler';
+import { isLogsRebuildDue } from '../../features/sync/pull/logsRebuildMarker';
 import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType } from './SyncMutationCatalog';
@@ -560,10 +561,13 @@ export class BackgroundSyncWorker {
     }
 
     private async pullLatestDeltas(): Promise<void> {
-        const sinceCursor = await mutationQueue.getCursor() ?? '0';
+        // Lane F1 (review N9): ONE full re-pull after this version is installed, so every log pulled before it is
+        // rebuilt truthfully (logsRebuildMarker.ts). Until the marker is written, the pull starts from the beginning.
+        const rebuildLogs = await isLogsRebuildDue(getDatabase());
+        const sinceCursor = rebuildLogs ? '0' : (await mutationQueue.getCursor() ?? '0');
         const payload = await agriSyncClient.pullSyncChanges(sinceCursor);
         await mutationQueue.saveLastPullPayload(payload);
-        await reconcileSyncPull(payload);
+        await reconcileSyncPull(payload, { rebuildLogs });
 
         const nextCursor = payload.nextCursorUtc || payload.serverTimeUtc || systemClock.nowISO();
         await mutationQueue.setCursor(nextCursor);

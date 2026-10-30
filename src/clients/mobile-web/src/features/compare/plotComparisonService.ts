@@ -359,7 +359,7 @@ function buildIrrigationBucket(
                 id: `exec_${irrig.id}`,
                 sourceLogId: log.id,
                 sourceEventId: irrig.id,
-                name: `${irrig.method} - ${irrig.durationHours || 0}hrs`,
+                name: [irrig.method, typeof irrig.durationHours === 'number' ? `${irrig.durationHours}hrs` : undefined].filter(Boolean).join(' - ') || '—', // lane F1 (review S7): an unstated method / duration is '—', never "undefined - 0hrs"
                 executedDate: log.date,
                 executedDay: calculateDayNumber(referenceDate, log.date),
                 quantity: irrig.durationHours,

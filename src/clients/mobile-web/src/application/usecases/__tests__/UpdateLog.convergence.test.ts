@@ -37,7 +37,7 @@ vi.mock('../../../features/labour/data/labourCorrectionsClient', () => ({
     postLabourCorrection: (...args: unknown[]) => mockPostCorrection(...args),
 }));
 
-import { updateLog } from '../UpdateLog';
+import { hasUnsentChanges, updateLog } from '../UpdateLog';
 import { reconcileLogs } from '../../../features/sync/pull/reconcilers/logsReconciler';
 import { DexieLogsRepository } from '../../../infrastructure/storage/DexieLogsRepository';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
@@ -48,6 +48,8 @@ import type {
     LabourEngagementDto,
     SyncPullResponse,
 } from '../../../infrastructure/api/AgriSyncClient';
+import { readPendingLogIds } from '../../../features/sync/pull/internal/pendingMutations';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
 const FARM = 'f1f1f1f1-1111-4111-8111-111111111111';
 const PLOT_A = 'aaaa1111-1111-4111-8111-111111111111';
@@ -152,7 +154,7 @@ beforeEach(async () => {
     const db = getDatabase();
     await Promise.all([
         db.logs.clear(), db.plots.clear(), db.farms.clear(),
-        db.auditEvents.clear(), db.outbox.clear(),
+        db.auditEvents.clear(), db.outbox.clear(), db.mutationQueue.clear(),
     ]);
     vi.clearAllMocks();
     mockPostCorrection.mockResolvedValue({
@@ -428,8 +430,8 @@ describe('a local edit does not disarm the pull freshness guard', () => {
 // ---------------------------------------------------------------------------
 
 /** The same log, restated by the server an hour later — a genuine delta row. */
-const freshLogDto = (workerCount: number) =>
-    logDto(workerCount, { modifiedAtUtc: '2026-08-13T07:00:00.000Z' });
+const freshLogDto = (workerCount: number, over: Partial<DailyLogDto> = {}) =>
+    logDto(workerCount, { modifiedAtUtc: '2026-08-13T07:00:00.000Z', ...over });
 
 describe('a FRESH pull rebuilds the log, and the save said so in advance', () => {
     /** Pull once so the local row carries a watermark, then edit both halves. */
@@ -445,34 +447,92 @@ describe('a FRESH pull rebuilds the log, and the save said so in advance', () =>
         );
     }
 
-    it('replaces the non-labour half of the edit, because the server was never told it', async () => {
+    it('lane F1 — KEEPS the non-labour half: it is sent as a revision, and the server\'s answer carries it', async () => {
+        // FLIPPED, as the sentence that stood here asked: "the day a task-push path exists this test
+        // fails and someone reads the sentence below". That path is `revise_log_content`. The loss F-1
+        // named (the irrigation edit rebuilt away by the very pull the correction guaranteed) is gone.
         const db = getDatabase();
         const result = await correctBothHalves();
         expect(result.success).toBe(true);
+        expect(result.contentRevisionQueued).toBe(true);
         expect((await repo.getById(LOG))!.irrigation).toHaveLength(1);
 
-        // Fifteen seconds later, the delta the correction caused.
-        await reconcileLogs(db, { dailyLogs: [freshLogDto(6)] } as unknown as SyncPullResponse, new Map(), new Set());
+        // The edit is queued as ONE new record version, made from the version the editor saw.
+        const queued = await db.mutationQueue.where('mutationType').equals(SyncMutationName.ReviseLogContent).toArray();
+        expect(queued).toHaveLength(1);
+        const payload = queued[0].payload as { dailyLogId: string; baseVersion: number; content: Record<string, unknown> };
+        expect(payload.dailyLogId).toBe(LOG);
+        expect(payload.content.irrigation).toEqual([{ id: 'irr-1', method: 'Drip', durationHours: 3 }]);
+        // ...and while it waits, every pull leaves this log alone (the pending guard reads `dailyLogId`).
+        expect(await readPendingLogIds(db)).toContain(LOG);
+
+        // The server accepted it: the delta the correction caused now STATES the details.
+        await reconcileLogs(db, { dailyLogs: [freshLogDto(6, {
+            contentVersion: 3,
+            content: { version: 3, schema: 1, document: payload.content },
+        } as Partial<DailyLogDto>)] } as unknown as SyncPullResponse, new Map(), new Set());
 
         const reloaded = await repo.getById(LOG);
-        // The labour correction survives — it is on the server, and comes back.
         expect(reloaded!.labour[0].count).toBe(6);
-        // The irrigation correction does NOT. `UpdateLog` posts only labour, so
-        // the server's `tasks` never heard about it and `toDailyLog` rebuilds
-        // irrigation from `tasks`. This is the loss F-1 named; it is asserted
-        // here rather than wished away, so that the day a task-push path exists
-        // this test fails and someone reads the sentence below.
-        expect(reloaded!.irrigation).toHaveLength(0);
+        expect(reloaded!.irrigation).toEqual([{ id: 'irr-1', method: 'Drip', durationHours: 3 }]);
+        expect(reloaded!.contentVersion).toBe(3);
+        expect(reloaded!.legacyPartial).toBe(false);
     });
 
-    it('the save flags the half it could not send, so the toast can say it', async () => {
-        // THE GUARD. Without this the farmer gets a green `फोनवर सेव्ह ✓` over an
-        // edit that is half-reverted within the sync interval, which is exactly
-        // what ruling `R19` produced by deleting the caveat.
-        const result = await correctBothHalves();
+    it('lane F1 (review N4) — a second edit before the next pull is made from the version the first one made, never flagged stale', async () => {
+        const db = getDatabase();
+        const first = await correctBothHalves();
+        const base = (await db.mutationQueue.where('mutationType').equals(SyncMutationName.ReviseLogContent).first())!
+            .payload as { baseVersion: number };
+        expect(first.log?.contentVersion).toBe(base.baseVersion + 1);
+        expect((await repo.getById(LOG))!.contentVersion).toBe(base.baseVersion + 1);
 
-        expect(result.persistedLabourCorrections).toBe(1);
+        // The farmer edits again, before any pull has told the phone the server's version.
+        const afterFirst = await repo.getById(LOG) as DailyLog;
+        const second = await updateLog(
+            {
+                logId: LOG,
+                updatedData: { ...afterFirst, irrigation: [{ id: 'irr-1', method: 'Drip', durationHours: 4 }] },
+                actorId: 'mukadam-7',
+                reason: 'पुन्हा पाहिलं',
+            },
+            repo,
+            actor,
+        );
+
+        expect(second.contentRevisionQueued).toBe(true);
+        const queued = await db.mutationQueue.where('mutationType').equals(SyncMutationName.ReviseLogContent).toArray();
+        expect(queued.map(row => (row.payload as { baseVersion: number }).baseVersion))
+            .toEqual([base.baseVersion, base.baseVersion + 1]);
+        expect((await repo.getById(LOG))!.contentVersion).toBe(base.baseVersion + 2);
+    });
+
+    it('the save no longer flags a half it DID send', () => {
+        // THE GUARD, kept: `hasUnsentChanges` stops firing for exactly what the revision carried, and
+        // only for that. (Measured on the function itself: `correct()` above replaces the engagement
+        // object wholesale, which is a labour difference of its own.)
+        const before = makeLog([PLOT_A]);
+        const after = { ...before, irrigation: [{ id: 'irr-1', method: 'Drip', durationHours: 3 }] } as DailyLog;
+
+        expect(hasUnsentChanges(before, after, [], false)).toBe(true);
+        expect(hasUnsentChanges(before, after, [], true)).toBe(false);
+    });
+
+    it('and STILL flags the half it could not send — a document that does not fit the contract', async () => {
+        // Without this the farmer would get a green `फोनवर सेव्ह ✓` over an edit that never left the
+        // phone (ruling `R19`). An item with no id cannot be stored, so nothing is queued and he is told.
+        const db = getDatabase();
+        await repo.batchSave([makeLog([PLOT_A])]);
+        await reconcileLogs(db, { dailyLogs: [logDto(8)] } as unknown as SyncPullResponse, new Map(), new Set());
+        const existing = await repo.getById(LOG) as DailyLog;
+        const result = await correct(
+            { ...existing, irrigation: [{ method: 'Drip', durationHours: 3 }] } as unknown as DailyLog,
+            6,
+        );
+
+        expect(result.contentRevisionQueued).toBe(false);
         expect(result.hasUnsentChanges).toBe(true);
+        expect(await db.mutationQueue.where('mutationType').equals(SyncMutationName.ReviseLogContent).count()).toBe(0);
     });
 
     it('says nothing extra when the whole edit WAS sent', async () => {

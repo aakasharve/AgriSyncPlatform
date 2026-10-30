@@ -332,6 +332,41 @@ describe('VerifyLogV2Payload — PLR-D10 I27 confirmation evidence', () => {
     });
 });
 
+describe('lane F1 — content on CreateDailyLogPayload, and ReviseLogContentPayload', () => {
+    const create = (content: unknown) => payloads.CreateDailyLogPayload.safeParse({
+        dailyLogId: VALID_GUID_A, farmId: VALID_GUID_B, plotId: VALID_GUID_C, cropCycleId: VALID_GUID_D,
+        logDate: VALID_LOG_DATE, content,
+    });
+    const content = {
+        schema: 1,
+        capturedAtUtc: VALID_ISO,
+        fullTranscript: 'आज पाटाने दोन तास पाणी दिले',
+        irrigation: [{ id: 'irr-1', method: 'Flood', source: 'Canal', durationHours: 2, sourceText: 'पाटाने दोन तास', provenanceVerified: true }],
+    };
+
+    it('accepts a create carrying what Sathi understood, and a create without it (every older client)', () => {
+        expect(create(content).success).toBe(true);
+        expect(create(undefined).success).toBe(true);
+    });
+    it('rejects a content document with an unknown key or an item without an id', () => {
+        expect(create({ ...content, guessed: true }).success).toBe(false);
+        expect(create({ schema: 1, irrigation: [{ method: 'Flood' }] }).success).toBe(false);
+    });
+    it('rejects two items sharing an id in one bucket, and allows the same id in two buckets (review N2)', () => {
+        expect(create({ schema: 1, irrigation: [{ id: 'x' }, { id: 'x' }] }).success).toBe(false);
+        expect(create({ schema: 1, irrigation: [{ id: 'x' }], inputs: [{ id: 'x' }] }).success).toBe(true);
+    });
+    it('accepts a revision and rejects one with no base version or no content', () => {
+        const base = { dailyLogId: VALID_GUID_A, baseVersion: 1, content, revisedAtUtc: VALID_ISO };
+        expect(payloads.ReviseLogContentPayload.safeParse(base).success).toBe(true);
+        expect(payloads.ReviseLogContentPayload.safeParse({ ...base, reason: 'दुरुस्ती' }).success).toBe(true);
+        expect(payloads.ReviseLogContentPayload.safeParse({ ...base, baseVersion: 0 }).success).toBe(false);
+        const { content: _omitted, ...withoutContent } = base;
+        expect(payloads.ReviseLogContentPayload.safeParse(withoutContent).success).toBe(false);
+        expect(payloads.ReviseLogContentPayload.safeParse({ ...base, reason: 'x'.repeat(401) }).success).toBe(false);
+    });
+});
+
 describe('AddLogTaskPayload', () => {
     it('accepts a valid payload', () => {
         const r = payloads.AddLogTaskPayload.safeParse({

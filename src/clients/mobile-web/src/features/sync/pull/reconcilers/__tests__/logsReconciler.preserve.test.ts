@@ -257,7 +257,7 @@ describe('reconcileLogs — device-only truth survives a pull', () => {
         expect(after.phaseAtLogTime).toBe('CROP_CYCLE');
         expect(after.dayNumberAtLogTime).toBe(41);
         expect(after.weatherStamp).toEqual(WEATHER_STAMP);
-        expect(after.financialSummary.grandTotal).toBe(1200);
+        expect(after.financialSummary!.grandTotal).toBe(1200);
         // Device-only meta keys survive alongside the server's meta keys.
         expect(after.meta?.deviceId).toBe('device-abc');
         expect(after.meta?.appVersion).toBe('1.4.0');

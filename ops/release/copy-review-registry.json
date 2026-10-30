@@ -51,7 +51,7 @@
     {
       "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ErasureWorker.cs",
       "reviewStatus": "unreviewed",
-      "sha256": "6361903f38f781459f74595a7eefd81a4aaf1ca0fb936ee4890959e2cae1d417"
+      "sha256": "bb4ae1591341ebc9fc6ebf34b07d26dc8f0b0a907a22ee59032ef0dc53aa5718"
     },
     {
       "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ExportWorker.cs",
@@ -116,7 +116,7 @@
     {
       "path": "src/clients/mobile-web/src/features/logs/components/voiceResult/resultCopy.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "6f7a1748563a8210a29cd1ad96dee4e02d0860aef9011a37d4672c69a17cd2a3"
+      "sha256": "461b9ed7d52fc3e127eb2bc7b46d4ba8cf3d366aa94ca1108c6283e8d43eeb0f"
     },
     {
       "path": "src/clients/mobile-web/src/features/profile/team/confirmAccessCopy.ts",

@@ -29,7 +29,9 @@ using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 using ShramSafal.Application.UseCases.Labour;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
+using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
+using ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Tests.RecordTestCollected;
 using ShramSafal.Application.UseCases.Tests.RecordTestResult;
@@ -147,7 +149,9 @@ public sealed class PushSyncBatchHandler(
     // answers HTTP 200 either way, so a rejection was invisible to the server
     // logs, to RequestObservabilityMiddleware (status-code driven) and to every
     // CloudWatch alarm on the account. See LogMutationRejected below.
-    ILogger<PushSyncBatchHandler> logger)
+    ILogger<PushSyncBatchHandler> logger,
+    // spec: plr-d10 (lane F1) — an edit to what Sathi understood (revise_log_content).
+    ReviseLogContentHandler reviseLogContentHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -722,6 +726,8 @@ public sealed class PushSyncBatchHandler(
                 return await HandleCreateDailyLogAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "add_log_task":
                 return await HandleAddLogTaskAsync(clientRequestId, payload, actorUserId, actorRole, ct);
+            case "revise_log_content":
+                return await HandleReviseLogContentAsync(clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
@@ -941,7 +947,8 @@ public sealed class PushSyncBatchHandler(
         // B002 adds "captureScope" (which door captured the record), same lockstep.
         // PLR-D10 I13 adds "autoSavedFromVoice" (saved from a voice parse, never reviewed).
         // PLR-D10 I27 adds "voiceClipId" (the recording this log was saved from).
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope", "autoSavedFromVoice", "voiceClipId"))
+        // PLR-D10 lane F1 adds "content" (what Sathi understood, stored with the log).
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope", "autoSavedFromVoice", "voiceClipId", "content"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -977,6 +984,16 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
                 "create_daily_log autoSavedFromVoice must be a boolean.");
+        }
+
+        // spec: plr-d10 (lane F1) — the content document: same boundary, same posture as the
+        // manual draft above — known structure only, bounded, loud. ABSENT = skipped, which is
+        // what every shipped APK sends. Read RAW: the generated record types it as `object`, and
+        // the document is stored exactly as the phone sent it.
+        var contentJson = ReadContentDocument(payload, "create_daily_log", out var contentFailure);
+        if (contentFailure is not null)
+        {
+            return contentFailure;
         }
 
         var request = DeserializePayload<CreateDailyLogPayload>(payload);
@@ -1113,10 +1130,53 @@ public sealed class PushSyncBatchHandler(
                 // JSON true keeps the log out of the creator's self-attestation. A
                 // non-boolean value was already refused above, before any write.
                 AutoSavedFromVoice: request.AutoSavedFromVoice == true,
-                VoiceClipId: request.VoiceClipId is { } clip && clip != Guid.Empty ? clip : null),
+                VoiceClipId: request.VoiceClipId is { } clip && clip != Guid.Empty ? clip : null,
+                // lane F1 — checked above; null on every older phone (P11).
+                ContentJson: contentJson),
             ct);
 
         return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1) — the optional <c>content</c> document, read RAW and checked with
+    /// <see cref="LogContentDocument.Validate"/> (the same rules the phone's zod schema applies at
+    /// enqueue). Returns the document's JSON text, or <c>null</c> when it is absent; a malformed
+    /// document sets <paramref name="failure"/> and is refused whole, never trimmed.
+    /// </summary>
+    private static string? ReadContentDocument(JsonElement payload, string mutationType, out MutationExecutionOutcome? failure)
+    {
+        failure = null;
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        foreach (var property in payload.EnumerateObject())
+        {
+            // Case-insensitive, like the deserializer: a check casing can steer around is not a boundary.
+            if (!string.Equals(property.Name, "content", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (property.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            if (LogContentDocument.Validate(property.Value) is { } problem)
+            {
+                failure = MutationExecutionOutcome.Failure(
+                    "ShramSafal.SyncInvalidPayload",
+                    $"{mutationType} {problem}");
+                return null;
+            }
+
+            return property.Value.GetRawText();
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1576,6 +1636,79 @@ public sealed class PushSyncBatchHandler(
                 actorUserId,
                 actorRole,
                 clientRequestId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1) — an edit to what Sathi understood. Carries only the log id, so
+    /// the farm is DISCOVERED by a user-scoped read before the tenant scope is set — the same
+    /// two-phase shape as add_log_task. Authority, the version rules and the re-open live in
+    /// <see cref="ReviseLogContentHandler"/>.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleReviseLogContentAsync(
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "dailyLogId", "baseVersion", "content", "reason", "revisedAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "revise_log_content payload contains unsupported fields.");
+        }
+
+        var contentJson = ReadContentDocument(payload, "revise_log_content", out var contentFailure);
+        if (contentFailure is not null)
+        {
+            return contentFailure;
+        }
+
+        if (contentJson is null)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "revise_log_content carries no content.");
+        }
+
+        var request = DeserializePayload<ReviseLogContentPayload>(payload);
+        if (request is null || request.DailyLogId == Guid.Empty || request.BaseVersion < 1)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for revise_log_content.");
+        }
+
+        if (request.Reason is { Length: > 400 })
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "revise_log_content reason exceeds 400 characters.");
+        }
+
+        var dailyLogScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetDailyLogByIdAsync(request.DailyLogId, c),
+            log => (Guid)log.FarmId,
+            Domain.Common.ShramSafalErrors.DailyLogNotFound,
+            ct);
+        if (!dailyLogScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(dailyLogScope.Error.Code, dailyLogScope.Error.Description);
+        }
+
+        var result = await reviseLogContentHandler.HandleAsync(
+            new ReviseLogContentCommand(
+                request.DailyLogId,
+                request.BaseVersion,
+                contentJson,
+                request.Reason,
+                actorUserId,
+                actorRole,
+                clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion),
             ct);
 
         return ToOutcome(result);

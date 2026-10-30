@@ -995,6 +995,19 @@ public sealed partial class PurveshDemoSeeder
             .CountAsync(c => c.FarmId == farmId, cancellationToken);
         var labourCorrections = await _ssfContext.LabourCorrections
             .CountAsync(c => c.FarmId == farmId, cancellationToken);
+        // spec: plr-d10 (lane F1) — content rows (what Sathi understood) are append-only history the
+        // seeder never writes; any on this farm is a real person's record, so the clear refuses too.
+        var contentRows = await _ssfContext.DailyLogContents
+            .CountAsync(c => c.FarmId == farmId, cancellationToken);
+        if (contentRows > 0)
+        {
+            throw new InvalidOperationException(
+                $"{NonSeedFieldOperatorDataMessage} farm {farmId.Value} holds {contentRows} "
+                + "ssf.daily_log_contents row(s): the details of records made or edited in the app. "
+                + "The seeder will never delete them. Use `--reseed-purvesh-demo`, which leaves them "
+                + "untouched, or clear a different database.");
+        }
+
         if (nonSeedAttendanceMarks > 0 || attendanceCorrections > 0 || labourCorrections > 0)
         {
             // The seeder writes no correction rows of either kind (both are

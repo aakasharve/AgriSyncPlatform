@@ -12,6 +12,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
 using ShramSafal.Application.UseCases.Labour;
+using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 
@@ -57,9 +58,16 @@ public sealed class CreateDailyLogHandler(
     // AddScoped<DbContext>). Used ONLY to reach Database.CurrentTransaction so
     // the non-blocking side-car (weather + derivation) can be wrapped in a
     // SAVEPOINT on the SYNC path's ambient transaction — see PersistSideCarAsync.
-    DbContext? dbContext = null)
+    DbContext? dbContext = null,
+    // spec: plr-d10 (lane F1) — stamps schedule compliance on the task lines written from the
+    // content, exactly as AddLogTaskHandler stamps a task. Optional so the direct-construction
+    // unit tests keep compiling; without it a task is recorded with no verdict (null = the
+    // evaluator never ran), never a made-up one.
+    IScheduleComplianceService? complianceService = null)
     : IHandler<CreateDailyLogCommand, DailyLogDto>
 {
+    private static readonly JsonSerializerOptions DraftReadOptions = new(JsonSerializerDefaults.Web);
+
     public async Task<Result<DailyLogDto>> HandleAsync(CreateDailyLogCommand command, CancellationToken ct = default)
     {
         // ── Labour V1 Task 6.1 — the ONLY two ways structured labour may be
@@ -96,6 +104,14 @@ public sealed class CreateDailyLogHandler(
             {
                 return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
             }
+        }
+
+        // ── spec: plr-d10 (lane F1) — the content document, refused BEFORE anything is staged.
+        // The sync boundary has already checked it (PushSyncBatchHandler); this is the same check
+        // for any other caller, placed with the labour guards above so a refusal leaves zero rows.
+        if (command.ContentJson is { } contentJson && !IsAcceptableContent(contentJson))
+        {
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.LogContentInvalid);
         }
 
         var farmId = new FarmId(command.FarmId);
@@ -446,6 +462,12 @@ public sealed class CreateDailyLogHandler(
         // than labour may be recorded from it: the evidence map, the day outcome and
         // the side-car derivation below all read this one flag.
         var labourOnly = command.CaptureScope == DailyLogCaptureScope.Labour;
+        if (labourOnly)
+        {
+            // spec: plr-d10 (lane F1, review N12) — the record remembers its door, before the Phase-1
+            // save, so a later revision of its details can be refused on the server (B002).
+            log.MarkCapturedAtLabourDoor();
+        }
 
         if (sourceJobForEvidence?.NormalizedResultJson is { } normalizedJson
             && !string.IsNullOrWhiteSpace(normalizedJson))
@@ -645,6 +667,43 @@ public sealed class CreateDailyLogHandler(
             }
         }
 
+        // ── spec: plr-d10 (lane F1) — WHAT SATHI UNDERSTOOD IS PHASE-1 DATA ───────────────
+        // The crop work, water, inputs, notes, machinery, expenses, planned work and his words,
+        // as the phone holds them, are what the farmer said — not something the system inferred —
+        // so they are staged HERE, beside the log and before the Phase-1 SaveChangesAsync below,
+        // exactly like labour above (doctrine P1). Never in PersistSideCarAsync: a failure there
+        // is swallowed, and the details would vanish behind a success message. Either the log
+        // AND its details commit, or neither does and the submit fails loudly and is retried.
+        //
+        // The task lines old phones and every server reader of LogTask read are written from the
+        // content in the same unit of work (LogContentStaging), so this log's version stays 1:
+        // the lines ARE the content, not a change to it.
+        string? storedContentOrigin = null;
+        if (ResolveContentForCreate(command, labourOnly, out var contentOrigin) is { } createContent)
+        {
+            await LogContentStaging.StageAsync(
+                repository,
+                complianceService,
+                log,
+                idGenerator.New(),
+                createContent,
+                contentOrigin,
+                baseVersion: null,
+                clock.UtcNow,
+                new ContentAuditStamp(
+                    command.OperatorUserId,
+                    command.ActorRole,
+                    command.ClientRequestId,
+                    stampedAppVersion,
+                    command.AuditDeviceId,
+                    command.AuditIpHash),
+                // A new phone sends no add_log_task, so the server writes every line; an OLDER phone's
+                // draft-as-content gets none — that phone sends its own line for every item.
+                contentOrigin == Domain.Logs.DailyLogContent.OriginCreate ? TaskLines.All : TaskLines.None,
+                ct);
+            storedContentOrigin = contentOrigin;
+        }
+
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real
         // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
@@ -675,7 +734,13 @@ public sealed class CreateDailyLogHandler(
                     log.PlotId,
                     log.CropCycleId,
                     command.LogDate,
-                    command.Location
+                    command.Location,
+                    // spec: plr-d10 (lane F1, review N3) — the record version this create wrote and,
+                    // when it stored what Sathi understood, from where (create / manual_draft).
+                    contentVersion = log.ContentVersion,
+                    contentOrigin = storedContentOrigin,
+                    // Review N12 — the हजेरी door, kept on the log so its details cannot be revised.
+                    captureScope = log.CaptureScope,
                 },
                 farmId: command.FarmId,
                 clientCommandId: command.ClientRequestId,
@@ -906,6 +971,67 @@ public sealed class CreateDailyLogHandler(
             logger.LogWarning(ex,
                 "Side-car (weather/derivation) skipped for daily log {LogId} (non-blocking); log is durable.",
                 log.Id);
+        }
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1) — the content this create stores, and which door it came through:
+    /// the phone's own <c>content</c> (<see cref="Domain.Logs.DailyLogContent.OriginCreate"/>), or
+    /// for an OLDER phone's manual save the buckets of its manual draft — the very arrays it saved
+    /// (<see cref="Domain.Logs.DailyLogContent.OriginManualDraft"/>). Null = nothing to store, which
+    /// is today's path exactly. At the हजेरी door (B002) nothing but labour may be written, so a
+    /// content document there is set aside with a warning, never stored.
+    /// </summary>
+    private string? ResolveContentForCreate(CreateDailyLogCommand command, bool labourOnly, out string origin)
+    {
+        origin = Domain.Logs.DailyLogContent.OriginCreate;
+        if (labourOnly)
+        {
+            if (command.ContentJson is not null)
+            {
+                logger.LogWarning(
+                    "create_daily_log {LogId} at the labour door carried a content document; it is not stored (B002: only labour may be written there).",
+                    command.DailyLogId);
+            }
+
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(command.ContentJson))
+        {
+            return command.ContentJson;
+        }
+
+        if (command.ManualDraft is { } draft)
+        {
+            var fromDraft = LogContentDocument.FromManualDraft(JsonSerializer.SerializeToElement(draft, DraftReadOptions));
+            if (fromDraft is not null)
+            {
+                origin = Domain.Logs.DailyLogContent.OriginManualDraft;
+                return fromDraft;
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsAcceptableContent(string contentJson)
+    {
+        try
+        {
+            using var parsed = JsonDocument.Parse(contentJson);
+            if (LogContentDocument.Validate(parsed.RootElement) is { } problem)
+            {
+                logger.LogWarning("create_daily_log content refused before anything was staged: {Problem}", problem);
+                return false;
+            }
+
+            return true;
+        }
+        catch (JsonException ex)
+        {
+            logger.LogWarning(ex, "create_daily_log content is not JSON; refused before anything was staged.");
+            return false;
         }
     }
 

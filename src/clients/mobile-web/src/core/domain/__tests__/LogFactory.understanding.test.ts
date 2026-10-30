@@ -383,8 +383,8 @@ describe('LogFactory.understanding — regression: existing behaviour unchanged'
         const log = logs[0];
         expect(log.id).toBeTruthy();
         expect(log.date).toBe('2026-06-28');
-        expect(log.financialSummary.totalLabourCost).toBe(2000);
-        expect(log.financialSummary.grandTotal).toBeGreaterThanOrEqual(2000);
+        expect(log.financialSummary!.totalLabourCost).toBe(2000);
+        expect(log.financialSummary!.grandTotal).toBeGreaterThanOrEqual(2000);
     });
 
     it('createFromVoiceResult still produces correct id/date/financials', () => {
@@ -402,7 +402,7 @@ describe('LogFactory.understanding — regression: existing behaviour unchanged'
         expect(logs).toHaveLength(1);
         const log = logs[0];
         expect(log.id).toBeTruthy();
-        expect(log.financialSummary.totalLabourCost).toBe(1500);
+        expect(log.financialSummary!.totalLabourCost).toBe(1500);
     });
 
     it('understanding score is bounded 0-100 or null', () => {

@@ -160,6 +160,13 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
             .HasDefaultValue(1)
             .IsRequired();
 
+        // spec: plr-d10 (lane F1, review N12) — the हजेरी door, when it is the door ("labour").
+        // Additive and NULLABLE with no default and no back-fill: NULL is "another door, or saved
+        // before this was kept" (doctrine P4, E8 — an older binary inserts without it).
+        builder.Property(x => x.CaptureScope)
+            .HasColumnName("capture_scope")
+            .HasMaxLength(16);
+
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasFilter("idempotency_key IS NOT NULL");

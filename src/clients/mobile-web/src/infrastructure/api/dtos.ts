@@ -260,6 +260,27 @@ export interface DailyLogDto {
     /** task-0b (spec 2026-08-28-labour-v2-release-1) — the farmer's OWN statement
      * about the day. Provenance + null-vs-undefined reading: `DayOutcomeDto`. */
     dayOutcome?: DayOutcomeDto | null;
+
+    /**
+     * spec: plr-d10 (lane F1) — the record's version on the server (`DailyLog.ContentVersion`).
+     * Absent on an older server; a confirm sends it back so a changed record is seen first.
+     */
+    contentVersion?: number | null;
+
+    /**
+     * spec: plr-d10 (lane F1) — WHAT SATHI UNDERSTOOD, as stored: the current content row, its
+     * document exactly as the phone sent it. Absent or `null` = this response states NO details
+     * (any response but the pull, an older server, or a record the server holds only as task
+     * lines) — never "the details are empty". `logsReconciler` draws that line.
+     */
+    content?: LogContentDto | null;
+}
+
+/** spec: plr-d10 (lane F1) — one stored content row (`ShramSafal…LogContentDto`). */
+export interface LogContentDto {
+    version: number;
+    schema: number;
+    document: Record<string, unknown>;
 }
 
 export interface CostEntryDto {

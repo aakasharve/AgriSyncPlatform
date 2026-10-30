@@ -195,6 +195,12 @@ export interface SyncTranslations {
      * rest of this block and is the one string here no ruling has yet blessed.
      */
     unsentEditTail: string;
+    /**
+     * spec: plr-d10 (lane F1, review S5) — a save whose details did not fit what the server can keep (over the
+     * size cap, or an item it cannot carry): the record is queued the old way and its details stay on this
+     * phone. Quiet, after the phone claim, never a warning. PROPOSED in both languages, for his review.
+     */
+    detailsKeptOnPhoneTail: string;
 }
 
 /**
@@ -231,6 +237,7 @@ export const syncTranslations: Record<Language, SyncTranslations> = {
         correctionsFiledTailOne: '{count} labour correction reached your farm records.',
         correctionsFiledTailMany: '{count} labour corrections reached your farm records.',
         unsentEditTail: 'The rest of this edit will not reach your farm records.',
+        detailsKeptOnPhoneTail: 'The full details of this entry stay on this phone only.', // PROPOSED (English)
     },
     mr: {
         onPhone: 'लक्षात ठेवलं ✓',
@@ -243,6 +250,7 @@ export const syncTranslations: Record<Language, SyncTranslations> = {
         correctionsFiledTailOne: '{count} दुरुस्ती शेतनोंदीत गेली.',
         correctionsFiledTailMany: '{count} दुरुस्त्या शेतनोंदीत गेल्या.',
         unsentEditTail: 'बाकीचे बदल शेतनोंदीत जाणार नाहीत.',
+        detailsKeptOnPhoneTail: 'या कामाचा पूर्ण तपशील फक्त या फोनवरच राहील.', // PROPOSED (Marathi)
     },
 };
 

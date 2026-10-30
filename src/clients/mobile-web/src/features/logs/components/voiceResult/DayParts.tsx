@@ -56,6 +56,13 @@ export const TypedTag: React.FC<{ testId?: string }> = ({ testId }) => (
     </span>
 );
 
+/** Lane F1 (review N9): a record the server holds only as task lines — some of its details are not available. */
+export const LegacyNote: React.FC<{ testId?: string }> = ({ testId = 'vr-legacy-note' }) => (
+    <div data-testid={testId} className="mt-1 text-[12.5px] font-semibold text-stone-600" style={{ fontFamily: SANS }}>
+        {resultCopy(useOptionalLanguage()?.language).legacyPartial}
+    </div>
+);
+
 /** Lane L6b (design `TypedLog.tsx` TypedNote): stands where the player would be — there is no recording to play. */
 export const TypedNote: React.FC<{ testId?: string }> = ({ testId = 'vr-typed-note' }) => (
     <div data-testid={testId} className="flex items-center gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 p-3" style={{ fontFamily: SANS }}>
@@ -141,6 +148,7 @@ export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; by
                                     {rec && showWho && <WhoChip who={rec.who} />}
                                     {rec?.typed && <TypedTag />}
                                 </div>
+                                {rec?.legacyPartial && <LegacyNote testId={`vr-day-legacy-${e.id}`} />}
                                 {!e.verified && <UnsureFlag testId={`vr-day-unsure-${e.id}`} />}
                                 {e.verified && showsProducts(e.products, language) ? <div className="mt-1"><ProductBoxCard box={e.products} /></div> : (
                                     <>

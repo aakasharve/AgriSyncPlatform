@@ -89,7 +89,13 @@ public sealed record CreateDailyLogCommand(
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I27) — the server (archive) id of
     // the recording this log was saved from, when the phone knows it. Added LAST with the
     // default every existing caller means (null = no recording linked, P11).
-    Guid? VoiceClipId = null)
+    Guid? VoiceClipId = null,
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (lane F1) — WHAT SATHI UNDERSTOOD, as
+    // the phone holds it: the raw content document (`_log_content.zod.ts`), already checked
+    // against LogContentDocument.Validate at the boundary. Stored with the log in the SAME save
+    // (doctrine P1). Added LAST; null = an older phone, whose manual draft (if any) is stored
+    // as the content instead, and otherwise today's path exactly (P11).
+    string? ContentJson = null)
 {
     public string? IdempotencyKey
     {

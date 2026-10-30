@@ -287,25 +287,6 @@ export function blockersOf(log: DailyLog): BlockerEntry[] {
     return out;
 }
 
-/**
- * Lane L6b fix — the recording he JUST made, as this phone wrote it. The first sync pull rebuilds a log's items from
- * the server's flattened tasks (`logsReconciler`: crop work, water, sprays and notes "DELIBERATELY NOT PRESERVED"),
- * which drops every item's own phrase, the amounts and his word for a product: the why-tiles and the product rows
- * vanished seconds after the save (founder's live test, 2026-10-30). So for this screen only, what Sathi understood
- * is read from the phone's own write, and everything else — the confirmation, who, when, the sync — from the current
- * record. An edit never reaches this screen (it returns to the form's flow), so the write is never stale here.
- */
-export function asWritten(current: DailyLog | undefined, written: DailyLog | undefined): DailyLog | undefined {
-    if (!current || !written) return current ?? written;
-    return {
-        ...current,
-        cropActivities: written.cropActivities, irrigation: written.irrigation, labour: written.labour, inputs: written.inputs,
-        machinery: written.machinery, activityExpenses: written.activityExpenses, observations: written.observations,
-        plannedTasks: written.plannedTasks, disturbance: written.disturbance,
-        fullTranscript: written.fullTranscript ?? current.fullTranscript,
-    };
-}
-
 /** "He confirmed it": the same rule the rest of the app uses for a verified log. */
 export const isConfirmed = (log: DailyLog): boolean =>
     log.verification?.status === LogVerificationStatus.VERIFIED || log.verification?.status === LogVerificationStatus.APPROVED;
@@ -375,6 +356,8 @@ export interface RecordingView {
     entries: PartEntry[];
     /** The stoppages it reported. */
     blockers: BlockerEntry[];
+    /** Lane F1 (review N9): rebuilt from the server's task lines only, so some of its details are not available. */
+    legacyPartial: boolean;
 }
 
 /** One recording from the (non-empty) list of logs it became. */
@@ -388,6 +371,7 @@ export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingV
         who: whoSpoke(log, deps),
         confirmed: all.every(isConfirmed),
         typed: all.every(isTyped),
+        legacyPartial: all.some(l => l.legacyPartial === true),
         byForm: all.every(l => l.meta?.provenance?.source === 'manual'),
         transcript: clean(log.fullTranscript),
         entries: all.flatMap(partEntriesOf),

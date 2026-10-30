@@ -80,6 +80,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.consent_grant_events",
         // plr-d10 I25 (founder D-36) — the optional improvement permission, one row per choice.
         "ssf.improvement_permission_events",
+        // plr-d10 lane F1 — what Sathi understood, one unchangeable row per record version.
+        "ssf.daily_log_contents",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -135,6 +137,14 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    check); no table, no policy, no grant, no ledger privilege is touched. Safe to revert
         //    and re-apply mid-proof.
         "20261030022054_AddOwnerConfirmationEvidence",
+
+        // ── Reviewed 2026-10-30 (spec: plr-d10 lane F1); Down() read in full. Down() drops the two
+        //    policies on ssf.daily_log_contents and the table itself (with its two indexes and two
+        //    FKs). Up() only CREATEs that table — FORCE RLS, two policies, SELECT + INSERT for the
+        //    app role and the effective-privilege guard copied from this class's migration. No
+        //    existing table, policy or ledger privilege is touched. Safe to revert and re-apply
+        //    mid-proof (the scratch database holds no content rows).
+        "20261030102448_AddDailyLogContents",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

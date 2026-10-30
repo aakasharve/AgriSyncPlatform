@@ -316,7 +316,12 @@ describe('reconcileLogs — a multi-plot log must come back as the plots the far
         // otherwise it becomes a different bug — one that ignores the server.
         seed(localMultiPlotLog({ cropActivities: [{ id: 'stale', title: 'Stale' }] } as Partial<DailyLog>));
 
-        await run([preScopeDto({ tasks: [{ id: 't1', activityType: 'छाटणी', occurredAtUtc: '2026-08-12T06:00:00.000Z' }] })]);
+        // lane F1 — the crop work is STATED as stored details (`content`); a bare task line is not a
+        // statement of details, so it is no longer what overwrites the local copy (REPRO-A1).
+        await run([preScopeDto({
+            tasks: [{ id: 't1', activityType: 'छाटणी', occurredAtUtc: '2026-08-12T06:00:00.000Z' }],
+            content: { version: 2, schema: 1, document: { schema: 1, cropActivities: [{ id: 't1', title: 'छाटणी' }] } },
+        })]);
 
         expect(written().cropActivities.map(a => a.title)).toEqual(['छाटणी']);
         expect(allPlotIds()).toEqual([PLOT_A, PLOT_B, PLOT_C]);

@@ -74,6 +74,8 @@ import { SyncMutationName } from './SyncMutationCatalog';
  */
 const DAILY_LOG_PARENT_FIELD: Readonly<Record<string, string>> = {
     [SyncMutationName.AddLogTask]: 'dailyLogId',
+    // lane F1 — `revise_log_content.zod.ts`: an edit to what Sathi understood waits for its log.
+    [SyncMutationName.ReviseLogContent]: 'dailyLogId',
     [SyncMutationName.VerifyLog]: 'dailyLogId',
     [SyncMutationName.VerifyLogV2]: 'logId',
     [SyncMutationName.JobcardComplete]: 'dailyLogId',

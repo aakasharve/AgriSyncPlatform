@@ -244,8 +244,10 @@ const generateIrrigationSummary = (log: DailyLog): IrrigationSummary => {
     const successfulCount = countSuccessfulIrrigationEvents(log.irrigation, log.fullTranscript);
 
     return {
+        // lane F1 (doctrine P4): a method he never stated reads "—", never a guessed 'Drip'.
+        // The parser's free-text method already overflowed this union; the cast is unchanged.
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        method: primaryEvent.method as any || 'Drip',
+        method: (primaryEvent.method || '—') as any,
         durationHours: totalDuration,
         source: primaryEvent.source || 'Unknown',
         cost: 0, // Usually free (electricity cost tracked separately)
@@ -325,7 +327,8 @@ const generateInputsSummary = (log: DailyLog): InputsSummary => {
                 items.push({
                     name: mixItem.productName,
                     quantity: mixItem.dose ?? 0,
-                    unit: mixItem.unit,
+                    // lane F1: a unit he never stated stays blank — never the old rebuild's 'unit'.
+                    unit: mixItem.unit ?? '',
                     applicationMethod: inputEvent.method || 'Unknown',
                     individualCost: inputEvent.cost ? (inputEvent.cost / inputEvent.mix.length) : 0,
                     inputType: inputEvent.type || 'unknown'

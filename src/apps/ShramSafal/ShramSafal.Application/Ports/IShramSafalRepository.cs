@@ -1234,6 +1234,47 @@ public interface IShramSafalRepository
         IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<LabourAssignment>>([]);
 
+    // ── spec: plr-d10 (lane F1) — what Sathi understood, one unchangeable row per record
+    // version (ssf.daily_log_contents). Default bodies on purpose (doctrine F7): the in-tree test
+    // doubles keep compiling; production ShramSafalRepository overrides all three.
+
+    /// <summary>
+    /// Stages a content row (no SaveChanges — the caller's own save commits it with its log).
+    /// There is deliberately no update or delete counterpart: a change is a NEW version.
+    /// </summary>
+    Task AddDailyLogContentAsync(DailyLogContent content, CancellationToken ct = default)
+        => Task.CompletedTask;
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1, review N1) — saves a staged content revision. Returns <c>false</c>,
+    /// having discarded everything this unit of work staged, when another writer took the same
+    /// record version first (unique key <c>ux_daily_log_contents_log_version</c>, error 23505): the
+    /// caller re-applies the edit on top of the newer version instead of failing the phone's
+    /// mutation and spending its retry budget. Any other failure is thrown as before.
+    /// </summary>
+    async Task<bool> TrySaveContentRevisionAsync(CancellationToken ct = default)
+    {
+        await SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>The CURRENT content of one log (its highest version), or null when it has none.</summary>
+    Task<DailyLogContent?> GetCurrentDailyLogContentAsync(Guid dailyLogId, CancellationToken ct = default)
+        => Task.FromResult<DailyLogContent?>(null);
+
+    /// <summary>
+    /// The CURRENT content of each log in the set (one row per log that has any) — the pull's
+    /// read. Like <see cref="GetLabourAssignmentsForDailyLogsAsync"/> there is no "changed since"
+    /// here: the parent log's <c>ModifiedAtUtc</c> is the delta, and a revision moves it.
+    /// <para><b>Farm-checked before the newest is picked</b> (doctrine E4, review S4 / N5): only a
+    /// row whose <c>farm_id</c> is its log's own farm counts, so a mismatched row at a higher
+    /// version falls away and the newest legitimate row is returned. One row per log is chosen
+    /// by the database, never by loading every version (review S8).</para>
+    /// </summary>
+    Task<IReadOnlyList<DailyLogContent>> GetCurrentDailyLogContentsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLogContent>>([]);
+
     /// <summary>
     /// The LIVE attribution rows for a set of engagements — the bulk sibling of
     /// <see cref="GetFieldOperatorWorkRowsForAssignmentAsync"/>.

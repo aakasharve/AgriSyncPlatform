@@ -8,9 +8,11 @@
  *   real response → `normalizeParsedLog` (the one reading of a parse) → `LogFactory.createFromVoiceResult` (what the
  *   auto-save writes) → the phone's write in Dexie → the FIRST SYNC PULL (`reconcileLogs`, with the very tasks this
  *   phone sends, `buildTaskPayloads`) → `VoiceResultContainer`.
- * The pull is the step every earlier test skipped: it rebuilds crop work, water, sprays and notes from the server's
- * flattened tasks ("Spray इथरेल", "Weeding") with no phrase and no amount — which is why the why-tiles and the amounts
- * vanished on the real screen. Both field-name variants of the parser are covered.
+ * The pull is the step every earlier test skipped: it USED TO rebuild crop work, water, sprays and notes from the
+ * server's flattened tasks ("Spray इथरेल", "Weeding") with no phrase and no amount — which is why the why-tiles and the
+ * amounts vanished on the real screen. Since lane F1 the server keeps what Sathi understood (`content`) and the pull
+ * hands it back exactly, and the screen reads the RECORD (the L6b `asWritten` work-around is gone): every test here
+ * mounts the PULLED record, never the phone's own write. Both field-name variants of the parser are covered.
  */
 import 'fake-indexeddb/auto';
 import React from 'react';
@@ -38,6 +40,7 @@ import { clearAuthSession, setAuthSession } from '../../../../../infrastructure/
 import { getDatabase, resetDatabase } from '../../../../../infrastructure/storage/DexieDatabase';
 import { reconcileLogs } from '../../../../sync/pull/reconcilers/logsReconciler';
 import { buildTaskPayloads } from '../../../../logs/services/logTaskPayloads';
+import { buildLogContent } from '../../../../logs/services/logContentPayload';
 import type { CropProfile, DailyLog, FarmerProfile, LogScope } from '../../../../../types';
 import { VoiceResultContainer } from '../VoiceResultContainer';
 import { forgetPlayedReveals } from '../RingStage';
@@ -75,15 +78,24 @@ const written = (raw: unknown, typed: boolean): DailyLog[] =>
     LogFactory.createFromVoiceResult(normalizeParsedLog(raw), scope, crops, profile, undefined, undefined, clock)
         .map(l => markAutoSavedFromVoice(l, { typed }));
 
-/** The first sync pull after the save: the server answers with the tasks this phone sent it. */
-async function pulled(logs: DailyLog[]): Promise<DailyLog[]> {
+/**
+ * The first sync pull after the save. lane F1: the server answers with what it stored — the content document this
+ * phone sent (`buildLogContent`, kept verbatim server-side) and the task lines it wrote from it — unless `silent`, an
+ * older server that holds only the task lines and states no details.
+ */
+async function pulled(logs: DailyLog[], { silent = false }: { silent?: boolean } = {}): Promise<DailyLog[]> {
     const db = getDatabase();
     for (const log of logs) await db.logs.put({ id: log.id, schemaVersion: VersionRegistry.DB_SCHEMA_VERSION, log, date: log.date, isDeleted: 0 });
-    const dtos: DailyLogDto[] = logs.map(log => ({
-        id: log.id, farmId: 'farm-1', plotId: 'plot-s1', cropCycleId: 'cycle-1', operatorUserId: ME, logDate: log.date,
-        createdAtUtc: AT, modifiedAtUtc: '2026-10-30T05:00:01.000Z', lastVerificationStatus: 'Draft', verificationEvents: [],
-        tasks: buildTaskPayloads(log).map(t => ({ id: t.logTaskId, activityType: t.activityType, notes: t.notes, occurredAtUtc: AT })),
-    }) as unknown as DailyLogDto);
+    const dtos: DailyLogDto[] = logs.map(log => {
+        const content = buildLogContent(log);
+        return {
+            id: log.id, farmId: 'farm-1', plotId: 'plot-s1', cropCycleId: 'cycle-1', operatorUserId: ME, logDate: log.date,
+            createdAtUtc: AT, modifiedAtUtc: '2026-10-30T05:00:01.000Z', lastVerificationStatus: 'Draft', verificationEvents: [],
+            tasks: buildTaskPayloads(log).map(t => ({ id: t.logTaskId, activityType: t.activityType, notes: t.notes, occurredAtUtc: AT })),
+            contentVersion: 1,
+            ...(!silent && content && { content: { version: 1, schema: 1, document: JSON.parse(JSON.stringify(content)) } }),
+        } as unknown as DailyLogDto;
+    });
     const payload = { serverTimeUtc: AT, nextCursorUtc: AT, farms: [], plots: [], cropCycles: [], dailyLogs: dtos, attachments: [], costEntries: [],
         financeCorrections: [], dayLedgers: [], priceConfigs: [], plannedActivities: [], auditEvents: [] } as unknown as SyncPullResponse;
     await reconcileLogs(db, payload, new Map([['plot-s1', { cropId: 'crop-s', cropName: 'Sugarcane', plotName: 'S1' }]]), new Set<string>());
@@ -107,22 +119,36 @@ beforeEach(async () => {
 afterEach(() => { cleanup(); clearAuthSession(); });
 
 describe('the real typed Marathi entry, after the first sync pull', () => {
-    it('the pull really does drop what Sathi read from his words — the defect, reproduced', async () => {
+    it('lane F1: the pull KEEPS what Sathi read from his words — the defect this file reproduced is gone', async () => {
         const logs = written(TYPED_MARATHI, true);
+        const [before] = logs;
         const [after] = await pulled(logs);
-        expect(after.inputs[0].productName).toBe('Spray इथरेल'); // the sync task's wording, rebuilt
-        expect(after.inputs[0].sourceText).toBeUndefined();
-        expect(after.cropActivities[0].sourceText).toBeUndefined();
-        mount(logs, [after], true, false); // a screen that read the pulled record: the spray and crop tiles are gone
-        // (this pull states no labour, so the phone keeps its own labour row; the real server states it too)
-        expect(screen.queryByTestId('vr-link-inputs')).toBeNull();
-        expect(screen.queryByTestId('vr-link-crop')).toBeNull();
+        // The record after the pull IS the write: his product word, his phrases, the verified flags, the amounts.
+        expect(after.inputs).toEqual(JSON.parse(JSON.stringify(before.inputs)));
+        expect(after.cropActivities).toEqual(JSON.parse(JSON.stringify(before.cropActivities)));
+        expect(after.inputs[0].productName).toBe('इथरेल');
+        expect(after.inputs[0].sourceText).toBe('इथरेल अडीचशे मिली पाचशे लिटर पाण्यात मिसळून फवारणी केली');
+        expect(after.cropActivities[0].sourceText).toBe('पाच बायकांनी खुरपणी केली');
+        expect(after.fullTranscript).toBe(TYPED_MARATHI.fullTranscript);
+        expect(after.contentVersion).toBe(1);
+        expect(after.legacyPartial).toBe(false);
+        mount(logs, [after], true, false); // the screen reads the pulled RECORD, not the write
+        expect(screen.getByTestId('vr-link-inputs')).toBeTruthy();
+        expect(screen.getByTestId('vr-link-crop')).toBeTruthy();
+    });
+
+    it('lane F1: an OLDER server that states no details still leaves this phone\'s own record whole', async () => {
+        const logs = written(TYPED_MARATHI, true);
+        const [after] = await pulled(logs, { silent: true });
+        expect(after.inputs[0].productName).toBe('इथरेल'); // never the task line's "Spray इथरेल"
+        expect(after.inputs[0].sourceText).toBe('इथरेल अडीचशे मिली पाचशे लिटर पाण्यात मिसळून फवारणी केली');
+        expect(after.legacyPartial).toBeUndefined();
     });
 
     it('shows the why-tiles, the product chip and the spray box from HIS words — amounts as he said them', async () => {
         const logs = written(TYPED_MARATHI, true);
         const history = await pulled(logs);
-        const { container } = mount(logs, history, true);
+        const { container } = mount(logs, history, true, false);
 
         // Why-tiles: in the order he said them; the first open; his phrase marked.
         expect(screen.getByTestId('vr-why-heading').textContent).toBe('श्रम साथीला हे का समजले?');
@@ -166,7 +192,7 @@ describe('the real spoken English sample (the other field names)', () => {
         expect(amountText(box.items[0].amount, 'en')).toBe('250 ml');
 
         const history = await pulled(logs);
-        mount(logs, history, false);
+        mount(logs, history, false, false);
         // His words carry a capital letter and a full stop the parser's phrase does not: the tiles still find them.
         expect(screen.getByTestId('vr-why-cue-inputs-0').textContent).toBe('Ethyl 250 milliliters in 500 liters of water');
         expect(within(screen.getByTestId('vr-added-products')).getAllByTestId('vr-product-chip').map(c => c.textContent)).toEqual(['ethyl · 250 मिलीलीटर']);

@@ -1,7 +1,6 @@
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I27) — founder D-31.
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
-using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Privacy.Ports;
@@ -107,10 +106,13 @@ public sealed class GetLogOriginalVoiceHandler(
         }
 
         var speakerUserId = log.OperatorUserId.Value;
-        var mayListen = query.CallerUserId == speakerUserId
-            || role.Value == AppRole.PrimaryOwner
-            || await LabourManagementGate.HasExplicitGrantAsync(
-                repository, farmId, query.CallerUserId, clock.UtcNow, ct);
+        // The ONE rule for who may hear a record's words (also the pull's content filter).
+        var mayListen = await RecordWordsGate.MayHearAsync(
+            query.CallerUserId,
+            speakerUserId,
+            role,
+            () => LabourManagementGate.HasExplicitGrantAsync(
+                repository, farmId, query.CallerUserId, clock.UtcNow, ct));
         if (!mayListen)
         {
             return Result.Failure<LogOriginalVoiceResult>(ShramSafalErrors.ReadNotAllowed);

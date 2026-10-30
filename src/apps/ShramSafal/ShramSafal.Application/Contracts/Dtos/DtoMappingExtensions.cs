@@ -85,7 +85,16 @@ internal static class DtoMappingExtensions
     /// the V1 data-loss bug rebuilt: a client guard keyed on "the response carried
     /// the field" would then wipe local labour on a response that never looked.
     /// </param>
-    public static DailyLogDto ToDto(this DailyLog log, IReadOnlyList<LabourEngagementDto>? labour = null) =>
+    /// <param name="content">
+    /// spec: plr-d10 (lane F1) — the log's CURRENT content row, or <c>null</c>: THIS CALLER MAKES
+    /// NO STATEMENT about the details. Same rule as <paramref name="labour"/>: only the pull loads
+    /// the row, so only the pull passes one; every other caller keeps telling the truth by saying
+    /// nothing, and the device keeps what it holds.
+    /// </param>
+    public static DailyLogDto ToDto(
+        this DailyLog log,
+        IReadOnlyList<LabourEngagementDto>? labour = null,
+        LogContentDto? content = null) =>
         new(
             log.Id,
             log.FarmId,
@@ -127,7 +136,27 @@ internal static class DtoMappingExtensions
             // default, so there is no `??` here to defend against: NULL on
             // the entity produces NULL on the wire, exactly as doctrine P4
             // requires (see the remarks on DailyLogDto.DayOutcome).
-            log.DayOutcome);
+            log.DayOutcome,
+            // lane F1 — the record's version, so a confirm can name what it saw.
+            log.ContentVersion,
+            content);
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1) — a stored content row on the wire, the document VERBATIM. Nothing
+    /// here reads, fills or defaults a field inside it: what the phone sent is what comes back.
+    /// <para><b>His words go only to a reader allowed to hear them</b> (review S1, founder D-31 /
+    /// D-26): with <paramref name="withWords"/> false every
+    /// <see cref="UseCases.Logs.Content.LogContentDocument.WordKeys"/> property is removed and every
+    /// value is kept. The caller decides with <c>RecordWordsGate</c>; this only applies it.</para>
+    /// </summary>
+    public static LogContentDto ToDto(this DailyLogContent content, bool withWords)
+    {
+        var json = withWords
+            ? content.DocumentJson
+            : UseCases.Logs.Content.LogContentDocument.StripWords(content.DocumentJson);
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        return new LogContentDto(content.ContentVersion, content.SchemaVersion, document.RootElement.Clone());
+    }
 
     /// <summary>
     /// spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — the verification history a

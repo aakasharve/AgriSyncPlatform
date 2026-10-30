@@ -2,9 +2,11 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using AgriSync.SharedKernel.Contracts.Roles;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
 using ShramSafal.Application.UseCases.Compliance.GetComplianceSignalsForFarm;
 using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
@@ -101,6 +103,28 @@ public sealed class PullSyncChangesHandler(
                     .Select(a => a.ToDto(
                         attributionsByAssignment.TryGetValue(a.Id, out var rows) ? rows : []))
                     .ToList());
+
+        // ── spec: plr-d10 (lane F1) — what Sathi understood, read back ────────
+        // The current content row of every log in this response. Phase-1 data like labour, so
+        // NOT degrade-and-continue: a failed read fails the pull and the device retries, rather
+        // than being told a log has no details.
+        //
+        // E4 — a row is only trusted when its farm IS the parent log's farm (`farm_id` is its own
+        // column, FK checks bypass RLS, and a member of two farms passes the read policy for
+        // both). That check is made INSIDE the query, BEFORE the newest version is picked
+        // (review S4 / N5): a mismatched row at a higher version can never hide the newest
+        // legitimate one and empty the log.
+        var contentByLogId =
+            (await repository.GetCurrentDailyLogContentsAsync(dailyLogFarmById.Keys.ToList(), ct))
+            .ToDictionary(c => c.DailyLogId);
+
+        // Review S1 (founder D-31 / D-26) — his words only to a reader allowed to hear them: the
+        // speaker, the farm's primary owner, or a member holding the owner's grant
+        // (RecordWordsGate, the rule the original-voice route uses). Everyone else gets the same
+        // document with the words removed and every value kept. Role and grant are read once
+        // per farm, and only for farms this response carries content for.
+        var contentDtoByLogId = await ProjectContentForReaderAsync(
+            query.UserId, dailyLogs, contentByLogId, serverNowUtc, ct);
 
         // NOTE — the cursor is NOT advanced from labour, on purpose.
         // ssf.labour_assignments has no modified_at_utc; the parent log's
@@ -416,7 +440,9 @@ public sealed class PullSyncChangesHandler(
             // none. `null` (the DTO's "this caller made no statement") belongs only
             // to callers that never looked; the pull looked.
             dailyLogs
-                .Select(l => l.ToDto(labourByLogId.TryGetValue(l.Id, out var labour) ? labour : []))
+                .Select(l => l.ToDto(
+                    labourByLogId.TryGetValue(l.Id, out var labour) ? labour : [],
+                    contentDtoByLogId.GetValueOrDefault(l.Id)))
                 .ToList(),
             attachments.Select(a => a.ToDto()).ToList(),
             costEntries.Select(c => c.ToDto()).ToList(),
@@ -443,6 +469,60 @@ public sealed class PullSyncChangesHandler(
             degraded);
 
         return Result.Success(response);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1, review S1) — each log's content as THIS reader may see it.
+    /// </summary>
+    private async Task<Dictionary<Guid, LogContentDto>> ProjectContentForReaderAsync(
+        Guid readerUserId,
+        IReadOnlyList<Domain.Logs.DailyLog> dailyLogs,
+        IReadOnlyDictionary<Guid, Domain.Logs.DailyLogContent> contentByLogId,
+        DateTime nowUtc,
+        CancellationToken ct)
+    {
+        var projected = new Dictionary<Guid, LogContentDto>();
+        if (contentByLogId.Count == 0)
+        {
+            return projected;
+        }
+
+        var roleByFarm = new Dictionary<Guid, AppRole?>();
+        var grantByFarm = new Dictionary<Guid, bool>();
+        foreach (var log in dailyLogs)
+        {
+            if (!contentByLogId.TryGetValue(log.Id, out var content))
+            {
+                continue;
+            }
+
+            var farmId = (Guid)log.FarmId;
+            if (!roleByFarm.TryGetValue(farmId, out var role))
+            {
+                role = await repository.GetUserRoleForFarmAsync(farmId, readerUserId, ct);
+                roleByFarm[farmId] = role;
+            }
+
+            var mayHear = await RecordWordsGate.MayHearAsync(
+                readerUserId,
+                log.OperatorUserId.Value,
+                role,
+                async () =>
+                {
+                    if (!grantByFarm.TryGetValue(farmId, out var grant))
+                    {
+                        grant = await LabourManagementGate.HasExplicitGrantAsync(
+                            repository, farmId, readerUserId, nowUtc, ct);
+                        grantByFarm[farmId] = grant;
+                    }
+
+                    return grant;
+                });
+
+            projected[log.Id] = content.ToDto(withWords: mayHear);
+        }
+
+        return projected;
     }
 
     private static DateTime NormalizeCursor(DateTime rawCursor, DateTime serverNowUtc)

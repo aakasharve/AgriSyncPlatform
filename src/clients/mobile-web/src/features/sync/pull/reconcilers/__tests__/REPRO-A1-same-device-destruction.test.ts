@@ -255,7 +255,7 @@ describe('A1 fixture sanity — the fields the code claims to protect', () => {
     it('sanity_financialSummary_survives_the_first_pull_after_acknowledgement', async () => {
         seed(acknowledgedLocalLog());
         await pullAfterAcknowledgement([dto()]);
-        expect(written().financialSummary.grandTotal).toBe(5217.5);
+        expect(written().financialSummary!.grandTotal).toBe(5217.5);
     });
 
     it('sanity_the_record_was_actually_rewritten_by_this_pull', async () => {

@@ -14,6 +14,7 @@
 // is actually in production.
 import { z } from 'zod';
 import { ZGuid } from './_shared.zod';
+import { LogContentSchema } from './_log_content.zod';
 
 const ZLogDate = z
     .string()
@@ -235,6 +236,18 @@ export const CreateDailyLogPayload = z.object({
     // OPTIONAL, absent = no recording linked, which is what every older client sends (P11).
     // RELEASE GATE: an older server refuses the key (allow-list), so the server ships first.
     voiceClipId: ZGuid.optional(),
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (lane F1) — WHAT SATHI UNDERSTOOD, as this
+    // phone holds it: the crop work, water, inputs, notes, machinery, expenses, planned work, the
+    // disturbance chip and his whole words, each item with its values, units, his phrase and the
+    // verified flag (`_log_content.zod.ts`). The server stores it with the log in the SAME save
+    // (doctrine P1) as record version 1, writes the task lines old phones read from it, and hands it
+    // back on /sync/pull — so no phone rebuilds his record by guessing. When it is present the phone
+    // sends NO add_log_task for this log.
+    //
+    // OPTIONAL, absent = today's path exactly, which is what every older client sends (P11). Never at
+    // the हजेरी door (B002): the farmer confirmed only labour there.
+    // RELEASE GATE: an older server refuses the key (allow-list), so the server ships first.
+    content: LogContentSchema.optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;

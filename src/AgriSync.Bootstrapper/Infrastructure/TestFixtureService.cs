@@ -97,7 +97,10 @@ public sealed class TestFixtureService(
                 }
             default:
                 {
-                    var summary = await DeleteByAllowlistAsync(ssf, ct);
+                    var summary = await DeleteByAllowlistAsync(
+                        ssf,
+                        scope.ServiceProvider.GetService<IAdminDbContextFactory<ShramSafalDbContext>>(),
+                        ct);
                     logger.LogInformation(
                         "TestFixtures {Action} complete: actor={Actor} fixture={Fixture} env={Env} result={Summary}",
                         "reset", "test-fixture-service", fixture, env.EnvironmentName, summary);
@@ -110,12 +113,16 @@ public sealed class TestFixtureService(
     // Repo-truth: LogTask/VerificationEvent (DailyLogId) + FinanceCorrection (CostEntryId) have NO
     // FarmId — reached via Guid parent-id sets. The other six carry a value-object FarmId; compare
     // with single-value `== farmId` (proven-translatable), NEVER List<FarmId>.Contains.
-    private async Task<string> DeleteByAllowlistAsync(ShramSafalDbContext ssf, CancellationToken ct)
+    private async Task<string> DeleteByAllowlistAsync(
+        ShramSafalDbContext ssf,
+        IAdminDbContextFactory<ShramSafalDbContext>? adminFactory,
+        CancellationToken ct)
     {
         var farmCount = 0;
         var total = 0;
         var byTable = new System.Collections.Generic.Dictionary<string, int>
         {
+            ["dailyLogContents"] = 0,
             ["logTasks"] = 0,
             ["verificationEvents"] = 0,
             ["dailyLogs"] = 0,
@@ -144,7 +151,13 @@ public sealed class TestFixtureService(
                 var costIds = await ssf.CostEntries
                     .Where(c => c.FarmId == farmId).Select(c => c.Id).ToListAsync(ct);
 
-                var n = await ssf.LogTasks
+                // spec: plr-d10 (lane F1, review N8) — a log's stored details go BEFORE the log
+                // (their foreign key is RESTRICT: deleting the log first fails with 23503), and
+                // through the admin path, because the app role may only append to that table.
+                var n = await DeleteStoredDetailsAsync(adminFactory, (Guid)farmId, ownerGuid, logIds, ct);
+                byTable["dailyLogContents"] += n; total += n;
+
+                n = await ssf.LogTasks
                     .Where(t => logIds.Contains(t.DailyLogId)).ExecuteDeleteAsync(ct);
                 byTable["logTasks"] += n; total += n;
 
@@ -187,6 +200,47 @@ public sealed class TestFixtureService(
         return farmCount == 0
             ? "no allowlisted test farms found — 0 rows deleted"
             : $"deleted {total} rows across {farmCount} farm(s) [{perTable}]";
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1, review N8) — deletes the stored details (<c>ssf.daily_log_contents</c>)
+    /// of these logs of one allowlisted farm, through the admin context (the migration connection):
+    /// the app role holds no DELETE on that append-only table. The farm is set as the tenant for the
+    /// one transaction, so the table's tenant policy admits exactly this farm's rows even for an
+    /// owner that does not bypass row-level security.
+    /// </summary>
+    private static async Task<int> DeleteStoredDetailsAsync(
+        IAdminDbContextFactory<ShramSafalDbContext>? adminFactory,
+        Guid farmId,
+        Guid ownerAccountId,
+        System.Collections.Generic.List<Guid> logIds,
+        CancellationToken ct)
+    {
+        if (logIds.Count == 0)
+        {
+            return 0;
+        }
+
+        if (adminFactory is null)
+        {
+            throw new System.InvalidOperationException(
+                "Test fixture reset needs the admin database context to remove stored log details before their logs.");
+        }
+
+        await using var admin = await adminFactory.CreateAsync(
+            $"{nameof(TestFixtureService)}.reset.{farmId:N}",
+            AgriSync.BuildingBlocks.Auditing.SystemActor.Worker,
+            ct);
+        // The sanctioned tenant scope (RlsIdentityScope), never a hand-written set_config.
+        return await RlsIdentityScope.RunAsFarmAsync(
+            admin,
+            farmId,
+            ownerAccountId,
+            actorUserId: null,
+            token => admin.DailyLogContents
+                .Where(c => logIds.Contains(c.DailyLogId))
+                .ExecuteDeleteAsync(token),
+            ct);
     }
 
     private async Task<FixtureResult> SeedInternalAsync(string fixture, CancellationToken ct)

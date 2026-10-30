@@ -289,8 +289,8 @@ describe('JOURNEY 8 — 8 workers across A+B+C stay 8 (founder decision O-2)', (
     it('states the money once in its own summary — not three times, not a third each', async () => {
         const [log] = await recordEightWorkersAcrossThreePlots();
 
-        expect(log.financialSummary.totalLabourCost).toBe(4000);
-        expect(log.financialSummary.grandTotal).toBe(4000);
+        expect(log.financialSummary!.totalLabourCost).toBe(4000);
+        expect(log.financialSummary!.grandTotal).toBe(4000);
     });
 });
 

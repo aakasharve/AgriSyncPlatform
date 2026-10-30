@@ -135,25 +135,33 @@ describe('reconcileLogs — pulled logs must not wipe local labour', () => {
     });
 
     it('keeps the local cost totals, which the DTO also has no field for', async () => {
-        seed({ id: LOG_ID, log: localLog() });
+        // lane F1 (review N9) — totals are kept for a log THIS phone made, which every local factory stamps with
+        // `meta.appVersion` (a pulled log's "totals" were the old rebuild's five zeros and are not kept).
+        seed({ id: LOG_ID, log: localLog({ meta: { createdAtISO: '2026-08-11T04:00:00.000Z', appVersion: '1.0.18' } } as Partial<DailyLog>) });
 
         await run([dto()]);
 
         // Zeroing these is the identical false assertion, and preserving only
         // totalLabourCost would leave a grandTotal contradicting its own
         // labour line.
-        expect(written().financialSummary.totalLabourCost).toBe(1600);
-        expect(written().financialSummary.grandTotal).toBe(1600);
+        expect(written().financialSummary!.totalLabourCost).toBe(1600);
+        expect(written().financialSummary!.grandTotal).toBe(1600);
     });
 
     it('still lets everything the server DOES send overwrite the local copy', async () => {
         // Preservation must be scoped to the fields the wire cannot express —
         // otherwise it would be a different bug, one that ignores the server.
+        //
+        // lane F1 — WHICH field states the crop work changed, not the principle. Task lines never
+        // stated it (REPRO-A1: their "overwrite" was the guessed rebuild being locked in); the
+        // stored details do (`DailyLogDto.content`), so the server's statement is sent as content
+        // and must still win over the local copy. A task line alone is pinned in the next test.
         seed({ id: LOG_ID, log: localLog({ cropActivities: [{ id: 'stale', title: 'Stale' }] } as Partial<DailyLog>) });
 
         await run([dto({
             tasks: [{ id: 't1', activityType: 'Pruning', occurredAtUtc: '2026-08-11T06:00:00.000Z' }],
             lastVerificationStatus: 'VERIFIED',
+            content: { version: 2, schema: 1, document: { schema: 1, cropActivities: [{ id: 't1', title: 'Pruning' }] } },
         })]);
 
         expect(written().cropActivities.map(a => a.title)).toEqual(['Pruning']);
@@ -163,16 +171,34 @@ describe('reconcileLogs — pulled logs must not wipe local labour', () => {
         expect(written().labour).toHaveLength(1);
     });
 
+    it('lane F1: a TASK LINE alone never overwrites crop work this phone recorded itself', async () => {
+        // The sibling of the test above. A task line says a job was done, not what it was, so a
+        // server that holds no details makes no statement about them — the phone's own record
+        // (every local factory stamps `meta.appVersion`) is kept, exactly as labour is.
+        seed({ id: LOG_ID, log: localLog({
+            cropActivities: [{ id: 'own', title: 'छाटणी', workTypes: ['Pruning'], quantity: 2, unit: 'acre', sourceText: 'दोन एकर छाटणी' }],
+            meta: { createdAtISO: '2026-08-11T04:00:00.000Z', appVersion: '1.0.18' },
+        } as Partial<DailyLog>) });
+
+        await run([dto({ tasks: [{ id: 't1', activityType: 'Pruning', occurredAtUtc: '2026-08-11T06:00:00.000Z' }] })]);
+
+        expect(written().cropActivities).toEqual([
+            { id: 'own', title: 'छाटणी', workTypes: ['Pruning'], quantity: 2, unit: 'acre', sourceText: 'दोन एकर छाटणी' },
+        ]);
+        expect(written().legacyPartial).toBeUndefined();
+    });
+
     it('a genuinely NEW pulled log still reconciles normally', async () => {
-        // Nothing local to preserve: the empties are honest here, and
-        // `financialSummary` is non-optional on DailyLog and is dereferenced
-        // directly by display code, so it must still be an object.
+        // Nothing local to preserve. lane F1 / REPRO-A1: `financialSummary` is now optional and
+        // every reader says "not stated" for it, so a log this phone has never seen carries NONE —
+        // never five zeros presented as his costs. The task line still arrives as what it says.
         await run([dto({ tasks: [{ id: 't1', activityType: 'Pruning', occurredAtUtc: '2026-08-11T06:00:00.000Z' }] })]);
 
         expect(store.has(LOG_ID)).toBe(true);
         expect(written().labour).toEqual([]);
         expect(written().cropActivities.map(a => a.title)).toEqual(['Pruning']);
-        expect(written().financialSummary.grandTotal).toBe(0);
+        expect(written().financialSummary).toBeUndefined();
+        expect(written().legacyPartial).toBe(true);
     });
 
     it('a legacy local record with no labour array does not break the write', async () => {
@@ -181,7 +207,8 @@ describe('reconcileLogs — pulled logs must not wipe local labour', () => {
         await run([dto()]);
 
         expect(written().labour).toEqual([]);
-        expect(written().financialSummary.grandTotal).toBe(0);
+        // lane F1: a record that never had totals keeps having none — the wire states none either.
+        expect(written().financialSummary).toBeUndefined();
     });
 
     it('leaves a log with pending local mutations alone entirely, as before', async () => {

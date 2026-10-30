@@ -71,13 +71,15 @@ export function useConfirmRecording({ verifierUserId, repository, auditPort, pro
     // React re-renders) must not queue a second verify for the same log.
     const sent = useRef(new Set<string>());
 
-    const confirm = useCallback(async (logId: string, reviewBasis: 'heard' | 'read'): Promise<boolean> => {
+    // lane F1 (founder D-46) — `logVersion` is the record version this screen SHOWED (`DailyLog.contentVersion`,
+    // from the pull); the server refuses a confirm of a version that has since changed. Absent = not yet known.
+    const confirm = useCallback(async (logId: string, reviewBasis: 'heard' | 'read', logVersion?: number): Promise<boolean> => {
         if (!verifierUserId || sent.current.has(logId)) return false;
         sent.current.add(logId);
         setBusy(true);
         setFailed(null);
         try {
-            const result = await verifyLog({ logId, verifierId: verifierUserId, action: 'approve', reviewBasis }, repository, auditPort, profile);
+            const result = await verifyLog({ logId, verifierId: verifierUserId, action: 'approve', reviewBasis, ...(typeof logVersion === 'number' && { logVersion }) }, repository, auditPort, profile);
             if (result.success) setConfirmed(s => new Set(s).add(logId));
             else { sent.current.delete(logId); setFailed(logId); }
             return result.success;

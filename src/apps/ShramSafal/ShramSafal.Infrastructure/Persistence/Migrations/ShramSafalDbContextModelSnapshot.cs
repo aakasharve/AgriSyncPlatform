@@ -3689,6 +3689,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("CaptureScope")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("capture_scope");
+
                     b.Property<int>("ContentVersion")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -3779,6 +3784,76 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("FarmId", "LogDate");
 
                     b.ToTable("daily_logs", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Logs.DailyLogContent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("app_version");
+
+                    b.Property<int?>("BaseVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("base_version");
+
+                    b.Property<string>("ClientRequestId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("client_request_id");
+
+                    b.Property<int>("ContentVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("content_version");
+
+                    b.Property<Guid>("DailyLogId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("daily_log_id");
+
+                    b.Property<string>("DocumentJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("document");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("Origin")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("origin");
+
+                    b.Property<int>("SchemaVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("schema_version");
+
+                    b.Property<DateTime?>("WordsErasedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("words_erased_at_utc");
+
+                    b.Property<DateTime>("WrittenAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("written_at_utc");
+
+                    b.Property<Guid>("WrittenByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("written_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_daily_log_contents_farm_id");
+
+                    b.HasIndex("DailyLogId", "ContentVersion")
+                        .IsUnique()
+                        .HasDatabaseName("ux_daily_log_contents_log_version");
+
+                    b.ToTable("daily_log_contents", "ssf");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Logs.LogTask", b =>
@@ -5912,6 +5987,21 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Navigation("Location");
 
                     b.Navigation("Provenance")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Logs.DailyLogContent", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Logs.DailyLog", null)
+                        .WithMany()
+                        .HasForeignKey("DailyLogId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ShramSafal.Domain.Farms.Farm", null)
+                        .WithMany()
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

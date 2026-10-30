@@ -1,4 +1,4 @@
-// Barrel export for all 33 payload schemas. Imported by the frontend
+// Barrel export for all 34 payload schemas. Imported by the frontend
 // PayloadValidator and any future backend C# code-gen.
 //
 // All 32 are concrete Zod objects after T-IGH-02-PAYLOADS. Wired
@@ -15,6 +15,14 @@ export { CreatePlotPayload } from './create_plot.zod';
 export { CreateCropCyclePayload } from './create_crop_cycle.zod';
 export { CreateDailyLogPayload } from './create_daily_log.zod';
 export { AddLogTaskPayload } from './add_log_task.zod';
+// lane F1 — an edit to what Sathi understood (crop work, water, inputs, notes, …).
+export { ReviseLogContentPayload } from './revise_log_content.zod';
+export {
+    LogContentSchema,
+    LOG_CONTENT_BUCKETS,
+    LOG_CONTENT_MAX_BYTES,
+    LOG_CONTENT_SCHEMA_VERSION,
+} from './_log_content.zod';
 export { VerifyLogPayload } from './verify_log.zod';
 export { VerifyLogV2Payload } from './verify_log_v2.zod';
 export { AddCostEntryPayload, CostCategoryIdEnum } from './add_cost_entry.zod';

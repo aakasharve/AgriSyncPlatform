@@ -333,6 +333,8 @@ describe('reconcileLogs — the server states [] (the trap)', () => {
         await run([dto({
             labour: [],
             tasks: [{ id: 't1', activityType: 'Pruning', occurredAtUtc: '2026-08-13T06:00:00.000Z' }],
+            // lane F1 — the crop work as STATED details; a bare task line no longer overwrites (REPRO-A1).
+            content: { version: 2, schema: 1, document: { schema: 1, cropActivities: [{ id: 't1', title: 'Pruning' }] } },
         })]);
 
         expect(written().cropActivities.map(a => a.title)).toEqual(['Pruning']);
@@ -362,12 +364,13 @@ describe('reconcileLogs — the guards that already existed still hold', () => {
     });
 
     it('the local cost totals, which the wire still cannot express, are still preserved', async () => {
-        seed(localLog());
+        // lane F1 (review N9) — for a log THIS phone made (every local factory stamps `meta.appVersion`).
+        seed(localLog({ meta: { createdAtISO: '2026-08-13T04:00:00.000Z', appVersion: '1.0.18' } } as Partial<DailyLog>));
 
         await run([dto({ labour: [engagement({ workerCount: 6 })] })]);
 
-        expect(written().financialSummary.totalLabourCost).toBe(3200);
-        expect(written().financialSummary.grandTotal).toBe(3200);
+        expect(written().financialSummary!.totalLabourCost).toBe(3200);
+        expect(written().financialSummary!.grandTotal).toBe(3200);
     });
 
     it('a log with no labour anywhere is byte-identical to what it was before Phase 3', async () => {

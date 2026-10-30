@@ -235,12 +235,13 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
         // Try to show Product Names first
         const productNames = main.mix?.map(m => m.productName).filter(Boolean).slice(0, 2).join(', ');
         const extraCount = (main.mix?.length || 0) - 2;
-        const products = productNames ? (extraCount > 0 ? `${productNames} +${extraCount}` : productNames) : s.items(main.mix?.length);
+        // lane F1 (review S7): no named product and no count is '—', never "0 Items" or "undefined Items".
+        const products = productNames ? (extraCount > 0 ? `${productNames} +${extraCount}` : productNames) : s.items(main.mix?.length || undefined);
 
         // Method Suffix
         const method = s.value(main.method === 'Spray' ? (main.carrierType === 'Blower' ? 'Blower' : 'Spray') : main.method);
 
-        return `${products} • ${method}`;
+        return method ? `${products} • ${method}` : products;
     };
 
     return (

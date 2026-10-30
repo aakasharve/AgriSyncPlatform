@@ -1,13 +1,14 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.1.0",
-  "lastUpdated": "2026-09-02",
+  "version": "1.2.0",
+  "lastUpdated": "2026-10-30",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
     { "name": "create_plot",            "ownerAggregate": "Plot",             "sinceVersion": "0.1.0", "payloadSchema": "CreatePlot" },
     { "name": "create_crop_cycle",      "ownerAggregate": "CropCycle",        "sinceVersion": "0.1.0", "payloadSchema": "CreateCropCycle" },
     { "name": "create_daily_log",       "ownerAggregate": "DailyLog",         "sinceVersion": "0.1.0", "payloadSchema": "CreateDailyLog" },
     { "name": "add_log_task",           "ownerAggregate": "DailyLog",         "sinceVersion": "0.1.0", "payloadSchema": "AddLogTask" },
+    { "name": "revise_log_content",     "ownerAggregate": "DailyLog",         "sinceVersion": "1.0.0", "payloadSchema": "ReviseLogContent" },
     { "name": "verify_log",             "ownerAggregate": "DailyLog",         "sinceVersion": "0.1.0", "payloadSchema": "VerifyLog",            "deprecatedBy": "verify_log_v2" },
     { "name": "verify_log_v2",          "ownerAggregate": "DailyLog",         "sinceVersion": "0.7.0", "payloadSchema": "VerifyLogV2" },
     { "name": "add_cost_entry",         "ownerAggregate": "CostEntry",        "sinceVersion": "0.2.0", "payloadSchema": "AddCostEntry" },

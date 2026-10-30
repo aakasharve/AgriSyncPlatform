@@ -619,6 +619,9 @@ public sealed partial class PurveshDemoSeeder
         HashSet<Guid> CorrectedMarkIds,
         int AttendanceCorrectionCount,
         List<Guid> CorrectedAssignmentIds,
+        // spec: plr-d10 (lane F1) — logs whose details (what Sathi understood) were stored or
+        // edited through the app. Content rows are append-only history, never deleted.
+        List<Guid> ContentLogIds,
         List<CostEntry> Costs,
         List<FinanceCorrection> Corrections,
         List<DayLedger> DayLedgers,
@@ -657,6 +660,10 @@ public sealed partial class PurveshDemoSeeder
             .Where(c => c.FarmId == farmId)
             .Select(c => c.LabourAssignmentId)
             .ToListAsync(ct);
+        var contentLogIds = await _ssfContext.DailyLogContents.AsNoTracking()
+            .Where(c => c.FarmId == farmId)
+            .Select(c => c.DailyLogId)
+            .ToListAsync(ct);
 
         var costs = await _ssfContext.CostEntries.Where(c => c.FarmId == farmId).ToListAsync(ct);
         var costIds = costs.Select(c => c.Id).ToList();
@@ -681,7 +688,7 @@ public sealed partial class PurveshDemoSeeder
 
         return new DemoFarmCensus(
             seedLogs, nonSeedLogIds, farmAssignments, workRows, operators, marks,
-            markCorrections.ToHashSet(), markCorrections.Count, labourCorrections,
+            markCorrections.ToHashSet(), markCorrections.Count, labourCorrections, contentLogIds,
             costs, corrections, dayLedgers, planned, seedCycles, attachments);
     }
 
@@ -719,6 +726,17 @@ public sealed partial class PurveshDemoSeeder
             if (assignment is not null && seedLogIds.Contains(assignment.DailyLogId))
             {
                 RetainLog(assignment.DailyLogId, $"its labour engagement {assignmentId} was corrected in the app");
+            }
+        }
+
+        // spec: plr-d10 (lane F1) — the seeder writes no content rows, and they are append-only
+        // history: a seed log whose details somebody stored or edited in the app is retained, the
+        // same way a corrected engagement retains its log.
+        foreach (var logId in census.ContentLogIds.Distinct())
+        {
+            if (seedLogIds.Contains(logId))
+            {
+                RetainLog(logId, "its details were stored or edited in the app");
             }
         }
 
@@ -1124,7 +1142,8 @@ public sealed partial class PurveshDemoSeeder
         }
 
         if (before.AttendanceCorrectionCount != after.AttendanceCorrectionCount
-            || before.CorrectedAssignmentIds.Count != after.CorrectedAssignmentIds.Count)
+            || before.CorrectedAssignmentIds.Count != after.CorrectedAssignmentIds.Count
+            || before.ContentLogIds.Count != after.ContentLogIds.Count)
         {
             throw new InvalidOperationException(
                 "Re-seed safety stop: correction history changed. Rolled back.");

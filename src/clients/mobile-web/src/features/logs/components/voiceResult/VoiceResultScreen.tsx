@@ -31,7 +31,7 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import type { RingNodeData } from '../shramsathi/understandingRing';
 import ClipPlayer from './ClipPlayer';
-import { AddedRow, BlockerRow, DayRow, EarlierRecording, TimePill, TypedNote, TypedTag, WhoChip } from './DayParts';
+import { AddedRow, BlockerRow, DayRow, EarlierRecording, LegacyNote, TimePill, TypedNote, TypedTag, WhoChip } from './DayParts';
 import { PartLinks, Words } from './HisWords';
 import { AddedProducts } from './ProductRows';
 import { showsProducts } from './productModel';
@@ -152,6 +152,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                         : <span className="rounded-full border border-stone-300 bg-stone-50 px-2.5 py-1 text-stone-700" data-testid="vr-not-confirmed-badge">{RESULT_STR.notConfirmed}</span>}
                 </div>
                 {!severalPlots && <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />}
+                {primary.legacyPartial && <LegacyNote />}
 
                 {runs.length > 0 && <Words runs={runs} tags focus={focus} />}
                 <PartLinks runs={runs} entries={addedEntries} focus={focus} onFocus={setFocus} />

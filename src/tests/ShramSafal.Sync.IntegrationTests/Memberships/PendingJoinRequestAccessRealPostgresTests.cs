@@ -342,7 +342,9 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         await MigrateShramSafalToAsync(MigrationBeforeActiveOnly);
         var (openAfterDown, activeAfterDown) = await CountDataPolicyPredicatesAsync();
         output.WriteLine($"[EVIDENCE] after Down(): 'NOT IN (5,6)' policies={openAfterDown}  'status = 3' policies={activeAfterDown}");
-        openAfterDown.Should().Be(activeBefore, "Down() restores the old predicate on exactly the policies Up() narrowed");
+        openAfterDown.Should().Be(activeBefore - PoliciesCreatedAfterActiveOnly.Length,
+            "Down() restores the old predicate on exactly the policies Up() narrowed; the policies of tables "
+            + "a LATER migration created (PoliciesCreatedAfterActiveOnly) are dropped with their tables");
         activeAfterDown.Should().Be(0);
         (await SeatStatusesAsync(Stranger)).Should().Equal(new[] { 5 },
             "Down() ends every waiting typed-code request (Revoked) before it restores the not-ended predicate");
@@ -469,6 +471,24 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // confirmed_log_version / review_basis, daily_logs content_version / voice_clip_id). No
         // policy, no grant, no farm_join_requests object. Re-Up recreates them.
         "20261030022054_AddOwnerConfirmationEvidence",
+
+        // spec plr-d10 lane F1 — Down() read in full: drops the two policies on
+        // ssf.daily_log_contents and the table. Up() creates that table only, with its user-select
+        // policy written ALREADY narrowed (m.status = 3) — see PoliciesCreatedAfterActiveOnly. No
+        // farm_join_requests object, no other policy. Re-Up recreates them.
+        "20261030102448_AddDailyLogContents",
+    ];
+
+    /// <summary>
+    /// <c>p_user_select_*</c> DATA policies a migration AFTER <see cref="ActiveOnlyMigration"/>
+    /// created already narrowed. Migrating down to <see cref="MigrationBeforeActiveOnly"/> drops their
+    /// tables with them, so they are counted before Down() and gone after it — every OTHER narrowed
+    /// policy must come back as "not ended", exactly as before.
+    /// </summary>
+    private static readonly string[] PoliciesCreatedAfterActiveOnly =
+    [
+        // spec plr-d10 lane F1 — 20261030102448_AddDailyLogContents.
+        "p_user_select_daily_log_contents",
     ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —

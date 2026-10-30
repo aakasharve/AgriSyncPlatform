@@ -1270,6 +1270,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    daily_logs.content_version / voice_clip_id. Never touches ssf.audit_events, its
         //    policies or its grants. Safe mid-proof.
         "20261030022054_AddOwnerConfirmationEvidence",
+
+        // ── Reviewed 2026-10-30 (spec: plr-d10 lane F1); Down() read in full: drops the two
+        //    policies on ssf.daily_log_contents and the table. Up() creates only that table (FORCE
+        //    RLS, its own policies and grants). Never touches ssf.audit_events, its policies or its
+        //    grants. Safe mid-proof.
+        "20261030102448_AddDailyLogContents",
     ];
 
     /// <summary>

@@ -1,4 +1,5 @@
 import type { DayOutcome, LogCaptureScope } from '../../../domain/types/log.types';
+import type { LogContentPayloadType as LogContentPayload } from '../../../../../../../sync-contract/schemas/payloads/_log_content.zod';
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
@@ -192,6 +193,10 @@ export interface CreateDailyLogPayload {
      // from, on the log that carries his words only. A pointer, never permission: the server decides
      // who may hear it. Same RELEASE GATE as autoSavedFromVoice (server first).
      voiceClipId?: string;
+     // PLR-D10 lane F1 — WHAT SATHI UNDERSTOOD, as this phone holds it (`buildLogContent`): the
+     // server stores it with the log and writes the task lines itself, so a log that carries it sends
+     // no add_log_task. Same RELEASE GATE as autoSavedFromVoice (server first).
+     content?: LogContentPayload;
 }
 
 export class CreateDailyLogCommand {

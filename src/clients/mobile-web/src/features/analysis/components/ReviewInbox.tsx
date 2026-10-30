@@ -149,10 +149,10 @@ const ReviewInbox: React.FC<ReviewInboxProps> = ({ pendingLogs, operators, onVie
                                                 {log.labour.reduce((s, l) => s + (l.count ?? 0), 0)} Workers
                                             </span>
                                         )}
-                                        {log.financialSummary.grandTotal > 0 && (
+                                        {(log.financialSummary?.grandTotal ?? 0) > 0 && (
                                             <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-100 flex items-center gap-1 font-mono">
                                                 <DollarSign size={10} />
-                                                {log.financialSummary.grandTotal.toLocaleString()}
+                                                {log.financialSummary?.grandTotal.toLocaleString()}
                                             </span>
                                         )}
                                     </div>

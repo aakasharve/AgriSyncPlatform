@@ -26,12 +26,13 @@ import { systemClock } from '../../../../core/domain/services/Clock';
 import { mapLabourEngagements } from '../helpers/mapLabourEngagements';
 import { mapVerificationStatus } from '../helpers/mapVerificationStatus';
 import {
-    isIrrigationActivity,
-    isNutritionActivity,
-    isObservationActivity,
-    isSprayActivity,
-    normalizeTaskActivityType,
-} from '../helpers/normalizeActivityType';
+    detailsFromContent,
+    detailsFromTasks,
+    holdsOwnDetails,
+    LOG_DETAIL_KEYS,
+    serverStatedContent,
+    type LogDetails,
+} from '../helpers/rebuildLogDetails';
 import type { PlotLookupEntry } from './profileAndCropsReconciler';
 
 /**
@@ -113,6 +114,12 @@ export async function reconcileLogs(
     plotLookup: Map<string, PlotLookupEntry>,
     pendingLogIds: Set<string>,
     receivedAtUtc: string = systemClock.nowISO(),
+    /**
+     * Lane F1 (review N9): the one full rebuild (`logsRebuildMarker.ts`) — re-merge every log even when its server
+     * version is one this phone already holds, so a log pulled before this version is rebuilt truthfully. The
+     * pending guard still holds; only the "nothing newer" skip is lifted.
+     */
+    rebuildEveryLog = false,
 ): Promise<number> {
     const logs = payload.dailyLogs.map(log => toDailyLog(log, plotLookup));
 
@@ -120,6 +127,7 @@ export async function reconcileLogs(
     const contextStatedLogIds = new Set<string>();
     const verificationStatedLogIds = new Set<string>();
     const dayOutcomeStatedLogIds = new Set<string>();
+    const contentStatedLogIds = new Set<string>();
     for (const dto of payload.dailyLogs) {
         if (dto.modifiedAtUtc) {
             serverModifiedByLogId.set(dto.id, dto.modifiedAtUtc);
@@ -132,6 +140,9 @@ export async function reconcileLogs(
         }
         if (serverStatedDayOutcome(dto)) {
             dayOutcomeStatedLogIds.add(dto.id);
+        }
+        if (serverStatedContent(dto)) {
+            contentStatedLogIds.add(dto.id);
         }
     }
 
@@ -149,6 +160,7 @@ export async function reconcileLogs(
         const existing = await db.logs.get(log.id);
         const serverModified = serverModifiedByLogId.get(log.id);
         if (
+            !rebuildEveryLog &&
             existing?.serverModifiedAtUtc &&
             serverModified &&
             Date.parse(serverModified) <= Date.parse(existing.serverModifiedAtUtc)
@@ -178,6 +190,7 @@ export async function reconcileLogs(
             contextStatedLogIds.has(log.id),
             verificationStatedLogIds.has(log.id),
             dayOutcomeStatedLogIds.has(log.id),
+            contentStatedLogIds.has(log.id),
         );
 
         await db.logs.put({
@@ -221,9 +234,9 @@ export async function reconcileLogs(
  * preserving only `totalLabourCost` would leave a summary whose `grandTotal`
  * contradicts its own labour line.
  *
- * A genuinely NEW pulled log keeps today's empties: there is no local record to
- * preserve, and `financialSummary` is non-optional on `DailyLog` and is
- * dereferenced directly by display code.
+ * A genuinely NEW pulled log has no local record to preserve. Since lane F1 it
+ * carries NO `financialSummary` at all (the field is optional and every reader
+ * says "not stated"), never five zeros presented as his costs (REPRO-A1).
  *
  * ---------------------------------------------------------------------------
  * LABOUR_PHASE2 Phase 3 — THE WIRE CAN NOW SPEAK, SO THE GUARD BECOMES A
@@ -263,15 +276,25 @@ function preserveLocalOnlyFields(
     serverStatedContext: boolean,
     serverStatedVerification: boolean,
     serverStatedDayOutcome: boolean,
+    serverStatedDetails: boolean,
 ): DailyLog {
     if (!existing) {
         return incoming;
     }
 
+    // lane F1 — WHOSE DETAILS WIN (crop work, water, inputs, notes, machinery, expenses, planned
+    // work, the disturbance chip and his words). See `rebuildLogDetails.ts`: a server statement
+    // wins exactly; a silent server never overwrites a record this phone holds as its own; only a
+    // task-line rebuild is replaced by the next one.
+    const keepOwnDetails = !serverStatedDetails && holdsOwnDetails(existing);
+    const details = pickDetails(keepOwnDetails ? existing : incoming);
+
     return {
         ...incoming,
         labour: resolveLabour(incoming.labour, existing.labour),
-        financialSummary: existing.financialSummary ?? incoming.financialSummary,
+        // Lane F1 (review N9): totals are the phone's own arithmetic over a record it MADE (LogFactory is the only
+        // writer). A log it did not make got its "totals" from the old rebuild — five zeros — so they are not kept.
+        financialSummary: holdsOwnDetails(existing) ? (existing.financialSummary ?? incoming.financialSummary) : incoming.financialSummary,
         context: serverStatedContext ? incoming.context : (existing.context ?? incoming.context),
 
         // ── P0.5 — THE TEN FIELDS THE WIRE HAS NO WORD FOR ──────────────────
@@ -286,11 +309,19 @@ function preserveLocalOnlyFields(
         // `deletion` is the sharpest of them — its loss is what let a log the
         // farmer deleted come back on the next pull. See the index-column note
         // in `reconcileLogs`: preserving it here is only half that fix.
-        machinery: existing.machinery ?? incoming.machinery,
-        activityExpenses: existing.activityExpenses ?? incoming.activityExpenses,
-        plannedTasks: existing.plannedTasks ?? incoming.plannedTasks,
-        disturbance: existing.disturbance ?? incoming.disturbance,
-        fullTranscript: existing.fullTranscript ?? incoming.fullTranscript,
+        // lane F1 — machinery, expenses, planned work, the disturbance chip and his words moved OFF
+        // this list: the wire carries them now (`DailyLogDto.content`), so they follow `details`.
+        ...details,
+        // A record the server holds only as task lines carries NO expenses, planned work, chip or
+        // words, so a rebuild must not erase the ones this phone already shows (the P0.5 rule).
+        ...(!serverStatedDetails && !keepOwnDetails && {
+            activityExpenses: existing.activityExpenses ?? details.activityExpenses,
+            plannedTasks: existing.plannedTasks ?? details.plannedTasks,
+            disturbance: existing.disturbance ?? details.disturbance,
+            fullTranscript: existing.fullTranscript ?? details.fullTranscript,
+        }),
+        contentVersion: incoming.contentVersion ?? existing.contentVersion,
+        legacyPartial: serverStatedDetails ? false : keepOwnDetails ? existing.legacyPartial : true,
         manualTotalCost: existing.manualTotalCost ?? incoming.manualTotalCost,
         understanding: existing.understanding ?? incoming.understanding,
         weatherStamp: existing.weatherStamp ?? incoming.weatherStamp,
@@ -333,49 +364,16 @@ function preserveLocalOnlyFields(
             ? incoming.dayOutcome
             : (existing.dayOutcome ?? incoming.dayOutcome),
 
-        // ── DELIBERATELY NOT PRESERVED HERE: cropActivities, irrigation,
-        //    inputs, observations. THE FABRICATION ON THOSE IS REAL AND STILL
-        //    LIVE — READ THIS BEFORE "FIXING" IT. ──────────────────────────────
+        // ── lane F1 — THE COLLISION THIS BLOCK USED TO NAME IS GONE. ─────────────────────────
         //
-        // The server stores them flattened into `tasks`, and `toDailyLog`
-        // rebuilds them by guessing back the structure it lost: a flood
-        // irrigation from a canal returns as `Drip` from `Field`, a curative
-        // fungicide as a `Preventive` pesticide, an urgent voice observation as
-        // `normal`/`manual`, and every unbucketed task stamped `completed`.
-        // Those are literals, not readings of the wire. `REPRO-A1` reproduces
-        // each one and they are still red.
-        //
-        // THEY ARE NOT FIXED BY PRESERVATION, BECAUSE THIS FILE ALREADY HAS A
-        // CONTRACT THAT SAYS THE OPPOSITE, AND THAT CONTRACT IS DEFENDED BY
-        // TESTS. `logsReconciler.labourPreservation.test.ts:149` states it
-        // outright — *"Preservation must be scoped to the fields the wire cannot
-        // express — otherwise it would be a different bug, one that ignores the
-        // server"* — and asserts that a server-sent task DOES replace the local
-        // `cropActivities`. `logsReconciler.multiPlotRoundTrip`,
-        // `logsReconciler.labourReadBack` and `UpdateLog.convergence` assert the
-        // same boundary. These four are the same read-back the labour work was
-        // built on, and the programme says to protect it, not redesign it.
-        //
-        // So the two rules genuinely collide on exactly these four collections:
-        // the wire CAN say a task happened, and CANNOT say what it was. This
-        // guard therefore stops at the intersection both rules agree on — the
-        // fields the wire has no word for at all — and leaves the four alone.
-        //
-        // A PER-ITEM MERGE BY `task.id` IS NOT THE ESCAPE HATCH, AND IS WORSE
-        // THAN EITHER: the client mints a fresh UUID per payload build for any
-        // non-UUID local id, and the manual-entry surface produces exactly those
-        // (`act_global_daily`, `irr_{timestamp}`), so the join matches nothing
-        // and keeps BOTH rows. Since machinery is sent as a task and rebuilt as
-        // a crop activity, the farmer would see a phantom "Machinery Tractor"
-        // beside his own entry, each carrying its own rental and fuel cost.
-        // That is duplicated rupees, not duplicated rows.
-        //
-        // THE REAL FIX is the one already scheduled: make the CONTRACT carry the
-        // structured values, so the rebuild stops guessing (F1 — "type-level
-        // neutralisation of the fabricated constants", triggered when F1 makes
-        // the fields optional). Until then the fabrication is live, reproduced,
-        // and named — not silently absorbed into a guard that was never designed
-        // to carry it.
+        // It said the wire CAN say a task happened and CANNOT say what it was, so crop work, water,
+        // inputs and notes were rebuilt by guessing (REPRO-A1). The wire now carries what Sathi
+        // understood (`DailyLogDto.content`), and the rule above is the one these tests always
+        // asked for: preservation scoped to what the wire cannot express. A server STATEMENT of the
+        // details replaces the local copy (that is how an edit reaches Phone B); a task line is
+        // NOT a statement of details, so it never overwrites a record this phone holds as its own.
+        // A per-item merge by `task.id` is still not used (the phone's random per-send task ids
+        // would match nothing): the details move WHOLE, from exactly one source.
 
         // See `serverStatedVerification`. Silence is not a downgrade.
         verification: serverStatedVerification
@@ -399,6 +397,15 @@ function preserveLocalOnlyFields(
         // the correction — writing history and destroying it a moment later.
         patches: existing.patches ?? incoming.patches,
     };
+}
+
+/** The detail keys of a log, as one object (see `LOG_DETAIL_KEYS`). */
+function pickDetails(log: DailyLog): LogDetails {
+    const details = {} as Record<string, unknown>;
+    for (const key of LOG_DETAIL_KEYS) {
+        details[key] = log[key];
+    }
+    return details as LogDetails;
 }
 
 /**
@@ -594,90 +601,12 @@ function toDailyLog(
 
     const verificationStatus = mapVerificationStatus(
         source.lastVerificationStatus ?? latestVerification?.status);
-    const cropActivities: DailyLog['cropActivities'] = [];
-    const irrigation: DailyLog['irrigation'] = [];
-    const inputs: DailyLog['inputs'] = [];
-    const observations: DailyLog['observations'] = [];
-
-    source.tasks.forEach(task => {
-        const activityType = normalizeMojibakeText(task.activityType);
-        const taskNotes = task.notes ? normalizeMojibakeText(task.notes) : undefined;
-        const normalizedActivity = normalizeTaskActivityType(activityType);
-        if (isIrrigationActivity(normalizedActivity)) {
-            irrigation.push({
-                id: task.id,
-                method: 'Drip',
-                source: 'Field',
-                notes: taskNotes,
-            });
-            return;
-        }
-
-        if (isSprayActivity(normalizedActivity)) {
-            inputs.push({
-                id: task.id,
-                method: 'Spray',
-                mix: [{
-                    id: `mix_${task.id}`,
-                    productName: activityType,
-                    unit: 'unit',
-                }],
-                reason: 'Preventive',
-                type: 'pesticide',
-                productName: activityType,
-                notes: taskNotes,
-            });
-            return;
-        }
-
-        if (isNutritionActivity(normalizedActivity)) {
-            inputs.push({
-                id: task.id,
-                method: normalizedActivity.includes('fertigation') ? 'Drip' : 'Soil',
-                mix: [{
-                    id: `mix_${task.id}`,
-                    productName: activityType,
-                    unit: 'unit',
-                }],
-                reason: 'Growth',
-                type: 'fertilizer',
-                productName: activityType,
-                notes: taskNotes,
-            });
-            return;
-        }
-
-        if (isObservationActivity(normalizedActivity)) {
-            observations.push({
-                id: task.id,
-                // `ObservationNote.plotId` is non-optional (log.types.ts:372).
-                // A farm-scoped log has no plot, so this uses the encoding the
-                // local write path already uses for exactly this case
-                // (`LogFactory.ts:345`, `plotId: obs.plotId || FARM_GLOBAL_ID`)
-                // rather than a new sentinel or a borrowed plot id. Every
-                // plot-keyed reader — `plotLookup.get`, `selectedPlotIds
-                // .includes` — reads it as "no plot", which is the truth.
-                plotId: plotId ?? FARM_GLOBAL_ID,
-                cropId: plotContext?.cropId,
-                dateKey: source.logDate,
-                timestamp: task.occurredAtUtc,
-                textRaw: taskNotes || activityType,
-                textCleaned: taskNotes,
-                noteType: 'observation',
-                severity: 'normal',
-                source: 'manual',
-            });
-            return;
-        }
-
-        cropActivities.push({
-            id: task.id,
-            title: activityType,
-            workTypes: [activityType],
-            notes: taskNotes,
-            status: 'completed',
-        });
-    });
+    // lane F1 — the stored details when the server states them; otherwise what the task lines
+    // SAY, with nothing made up (`rebuildLogDetails.ts`). Which one won is recorded on the log.
+    const statedDetails = serverStatedContent(source);
+    const details: LogDetails = statedDetails
+        ? detailsFromContent(source.content)
+        : detailsFromTasks(source, plotId, plotContext?.cropId);
 
     return {
         id: source.id,
@@ -724,8 +653,11 @@ function toDailyLog(
         // server's own honest "he did not say" and must land as `null`, not as
         // a fabricated assertion that work happened (doctrine P4).
         dayOutcome: source.dayOutcome ?? null,
-        cropActivities,
-        irrigation,
+        ...details,
+        // lane F1 — the server's record version (sent back by a confirm), and where the details
+        // came from: `false` = the server's stored record, `true` = its task lines only.
+        ...(typeof source.contentVersion === 'number' && { contentVersion: source.contentVersion }),
+        legacyPartial: !statedDetails,
         // LABOUR_PHASE2 Phase 3 — the read-back. `?? []` is NOT a reading of the
         // empty set: an empty set is on-the-wire and flows through
         // `mapLabourEngagements` unchanged. It is reached only when the response
@@ -736,11 +668,6 @@ function toDailyLog(
         // is dereferenced directly, so the empty array is the shape, never
         // `undefined`.
         labour: source.labour ? mapLabourEngagements(source.labour) : [],
-        inputs,
-        machinery: [],
-        activityExpenses: [],
-        observations,
-        plannedTasks: [],
         meta: {
             createdAtISO: source.createdAtUtc,
             createdByOperatorId: source.operatorUserId,
@@ -771,12 +698,8 @@ function toDailyLog(
             verifiedAtISO: latestVerification?.occurredAtUtc,
             notes: latestVerification?.reason,
         },
-        financialSummary: {
-            totalLabourCost: 0,
-            totalInputCost: 0,
-            totalMachineryCost: 0,
-            totalActivityExpenses: 0,
-            grandTotal: 0,
-        },
+        // lane F1 / REPRO-A1 — the wire carries no totals, so a log this device has never seen gets
+        // NONE: five zeros would be presented as his costs (P4). `preserveLocalOnlyFields` keeps a
+        // local summary wherever there is one.
     };
 }

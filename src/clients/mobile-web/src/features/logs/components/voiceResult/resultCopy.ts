@@ -41,6 +41,11 @@ export interface ResultCopy {
     notToldPart: (part: string) => string;
     /** The ring's arrow down to his words, for a typed entry (nothing to listen to). */
     readBelow: string;
+    /**
+     * Lane F1 (review N9): the server holds this record only as its task lines (an older app, or before the server
+     * kept what Sathi understood), so some of its details cannot be shown. Said once, quietly, never a warning.
+     */
+    legacyPartial: string;
 }
 
 const mr: ResultCopy = {
@@ -76,6 +81,8 @@ const mr: ResultCopy = {
     notToldPart: (part: string) => `${part} — ${RESULT_STR.noneYet}. ${RESULT_STR.tellMore}`,
     // PROPOSED (Marathi) — the ring arrow's "खाली वाचा किंवा ऐका" without "ऐका": a typed entry has no recording.
     readBelow: 'खाली वाचा',
+    // PROPOSED (Marathi) — lane F1 review N9. Word-free of "नोंद" (PLR-D5 :65 keeps it off these screens).
+    legacyPartial: 'जुनं काम — काही तपशील उपलब्ध नाहीत',
 };
 
 const en: ResultCopy = {
@@ -98,6 +105,7 @@ const en: ResultCopy = {
     hours: (n: string) => `${n} hours`, // PROPOSED (English)
     notToldPart: (part: string) => `${part} — not told yet. Tap and tell Sathi.`, // PROPOSED (English)
     readBelow: 'Read below', // PROPOSED (English)
+    legacyPartial: 'Older record — some details are not available', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

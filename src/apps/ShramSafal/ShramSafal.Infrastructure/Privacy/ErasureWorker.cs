@@ -271,6 +271,18 @@
 //     parent daily_logs.operator_user_id (→ ErasedFarmer); the reason CONTENT SURVIVES. Rare embedded
 //     third-party PII → future surgical-redaction pass (B-FT1), never a blanket scrub. KEEP — conscious
 //     gate-4 disposition. No scrub action.
+//   - ssf.daily_log_contents — spec: plr-d10 (lane F1). What Sathi understood for a log, one
+//     unchangeable row per record version, APPEND-ONLY BY PRIVILEGE (agrisync_app has no
+//     UPDATE/DELETE/TRUNCATE). It holds HIS WORDS — his whole sentence (fullTranscript), the
+//     phrase behind each item (sourceText), the words behind each number (spokenText), his
+//     notes and the spoken "when" of planned work (dueHint / rawText) — personal data under the
+//     notice. SCRUB those keys (LogContentDocument.StripWords) on every row of every log he
+//     SPOKE (daily_logs.operator_user_id = him, so it MUST run before AnonymizeDailyLogsAsync),
+//     stamp words_erased_at_utc, and replace written_by_user_id with the sentinel on rows he
+//     wrote. The VALUES — what was done, how much, when — SURVIVE (founder ruling 2026-08-27,
+//     DPDP §12), as on every other daily_logs child. Observation textRaw / textCleaned follow
+//     the D-FREETEXT-PRESERVE disposition below and are kept. Runs through THIS admin context
+//     (the migration role), the only role the REVOKE leaves able to rewrite a row.
 //   - ssf.consent_audit / ssf.audit_events — append-only by
 //     privilege; flagged "redacted" at the column level, never
 //     deleted.
@@ -560,7 +572,7 @@ public sealed class ErasureWorker(
         //     the user. ORDER MATTERS: null the LogTask notes FIRST
         //     (joins to daily_logs.operator_user_id with the original
         //     user_id), then scrub the parent daily_logs row.
-        perTableCounts["log_tasks"] = await NullLogTaskNotesAsync(admin, targetUserId, ct).ConfigureAwait(false);
+        perTableCounts["log_tasks"] = await NullLogTaskNotesAsync(admin, targetUserId, nowUtc, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["log_tasks"];
 
         // 2026-07-19 additions (founder Decision 5, spec
@@ -576,6 +588,11 @@ public sealed class ErasureWorker(
 
         perTableCounts["labour_assignments"] = await AnonymizeLabourAssignmentWorkerNamesAsync(admin, targetUserId, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["labour_assignments"];
+
+        // spec: plr-d10 (lane F1) — his words inside what Sathi understood. BEFORE the daily_logs
+        // scrub below, for the same reason as NullLogTaskNotesAsync: the join needs his id.
+        perTableCounts["daily_log_contents"] = await ScrubDailyLogContentWordsAsync(admin, targetUserId, sentinel, nowUtc, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["daily_log_contents"];
 
         perTableCounts["daily_logs"] = await AnonymizeDailyLogsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["daily_logs"];
@@ -999,6 +1016,106 @@ public sealed class ErasureWorker(
     // a couple of columns. The admin context bypasses RLS so the
     // UPDATEs hit every farm the user touched.
 
+    /// <summary>
+    /// spec: plr-d10 (lane F1) — removes HIS WORDS (<see cref="ShramSafal.Application.UseCases.Logs.Content.LogContentDocument.WordKeys"/>)
+    /// from every stored content row of every log he spoke, keeping the values, and replaces
+    /// <c>written_by_user_id</c> with the sentinel on the rows he wrote. Idempotent: a row whose
+    /// words were already removed is skipped. MUST run before <see cref="AnonymizeDailyLogsAsync"/>
+    /// — the join needs the original operator_user_id.
+    /// <para><b>Every phone hears about it (review N6).</b> Each scrubbed log's
+    /// <c>modified_at_utc</c> moves forward in the SAME transaction, so the pull carries the scrubbed
+    /// document to every phone that holds the log and his words leave those phones too.</para>
+    /// <para><b>It fails loudly, never silently (review N7).</b> Both tables are FORCE-RLS: a
+    /// connection that row-level security filters would read none of his rows and report success
+    /// with his words still stored. The guard measures the EFFECT, not the role: the scrub's whole
+    /// transaction runs under <c>SET LOCAL row_security = off</c>, so any statement that row-level
+    /// security WOULD filter raises an error instead (Postgres: "query would be affected by
+    /// row-level security policy"). Whatever makes the connection unfiltered — superuser, BYPASSRLS,
+    /// ownership, or prod's <c>agrisync_admin</c> as a member of <c>rds_superuser</c> (which has
+    /// neither attribute; PROD-CUTOVER plan §0.2, A13) — the scrub proceeds; anything else stops
+    /// it. It then proves it changed every row it read, and that none of his rows still holds
+    /// words; any miss throws, the request is marked failed, and nothing is half-committed.</para>
+    /// </summary>
+    internal static async Task<int> ScrubDailyLogContentWordsAsync(
+        ShramSafalDbContext db, Guid userId, Guid sentinel, DateTime nowUtc, CancellationToken ct)
+    {
+        const string hisRowsWithWords = @"
+SELECT c.*
+  FROM ssf.daily_log_contents AS c
+  JOIN ssf.daily_logs AS l ON l.""Id"" = c.daily_log_id
+ WHERE l.operator_user_id = {0}
+   AND c.words_erased_at_utc IS NULL";
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", ct).ConfigureAwait(false);
+
+        List<ShramSafal.Domain.Logs.DailyLogContent> rows;
+        try
+        {
+            rows = await db.DailyLogContents
+                .FromSqlRaw(hisRowsWithWords, userId)
+                .ToListAsync(ct)
+                .ConfigureAwait(false);
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == Npgsql.PostgresErrorCodes.InsufficientPrivilege)
+        {
+            throw new InvalidOperationException(
+                "Erasure cannot read every farm's stored details on this connection: row-level security would filter "
+                + $"ssf.daily_log_contents / ssf.daily_logs ({ex.MessageText}). It must run on the migration connection "
+                + "(ShramSafalDb_Migration), as an identity row-level security does not filter.",
+                ex);
+        }
+
+        foreach (var row in rows)
+        {
+            row.EraseWords(
+                ShramSafal.Application.UseCases.Logs.Content.LogContentDocument.StripWords(row.DocumentJson),
+                nowUtc);
+        }
+
+        var written = rows.Count > 0 ? await db.SaveChangesAsync(ct).ConfigureAwait(false) : 0;
+        if (written != rows.Count)
+        {
+            throw new InvalidOperationException(
+                $"Erasure read {rows.Count} stored detail rows holding the farmer's words but changed {written}.");
+        }
+
+        var logIds = rows.Select(r => r.DailyLogId).Distinct().ToArray();
+        if (logIds.Length > 0)
+        {
+            var moved = await db.Database.ExecuteSqlRawAsync(
+                @"UPDATE ssf.daily_logs SET modified_at_utc = GREATEST(modified_at_utc, {0}) WHERE ""Id"" = ANY({1})",
+                new object[] { nowUtc, logIds },
+                ct).ConfigureAwait(false);
+            if (moved != logIds.Length)
+            {
+                throw new InvalidOperationException(
+                    $"Erasure scrubbed the details of {logIds.Length} logs but could move only {moved} of them forward for the phones.");
+            }
+        }
+
+        var left = await db.DailyLogContents
+            .FromSqlRaw(hisRowsWithWords, userId)
+            .CountAsync(ct)
+            .ConfigureAwait(false);
+        if (left != 0)
+        {
+            throw new InvalidOperationException(
+                $"Erasure left {left} stored detail rows still holding the farmer's words.");
+        }
+
+        const string reattribute = @"
+UPDATE ssf.daily_log_contents
+   SET written_by_user_id = {0}
+ WHERE written_by_user_id = {1}
+   AND written_by_user_id <> {0};";
+        var reattributed = await db.Database.ExecuteSqlRawAsync(reattribute, new object[] { sentinel, userId }, ct)
+            .ConfigureAwait(false);
+
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        return rows.Count + reattributed;
+    }
+
     private static async Task<int> AnonymizeDailyLogsAsync(
         ShramSafalDbContext db, Guid userId, Guid sentinel, CancellationToken ct)
     {
@@ -1012,12 +1129,32 @@ UPDATE ssf.daily_logs
     }
 
     private static async Task<int> NullLogTaskNotesAsync(
-        ShramSafalDbContext db, Guid userId, CancellationToken ct)
+        ShramSafalDbContext db, Guid userId, DateTime nowUtc, CancellationToken ct)
     {
         // LogTask doesn't carry an actor column; only the notes/deviation_note
         // free-text fields. Scope by the parent daily_log's operator_user_id —
         // anonymizing the operator should also null the personal free-text
         // on the child tasks the operator wrote.
+        //
+        // Callers MUST run NullLogTaskNotesAsync BEFORE AnonymizeDailyLogsAsync
+        // (see ProcessOneAsync ordering): the join needs the original user_id.
+        //
+        // spec: plr-d10 (lane F1, review N6) — and every log whose task notes were
+        // nulled moves its modified_at_utc forward in the SAME transaction, so the
+        // pull carries the scrubbed lines to every phone that holds them; before
+        // this, a phone that already had his notes kept them.
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+
+        var logIds = await db.Database
+            .SqlQueryRaw<Guid>(@"
+SELECT DISTINCT t.daily_log_id AS ""Value""
+  FROM ssf.log_tasks AS t
+  JOIN ssf.daily_logs AS l ON t.daily_log_id = l.""Id""
+ WHERE l.operator_user_id = {0}
+   AND (t.notes IS NOT NULL OR t.deviation_note IS NOT NULL)", userId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
         const string sql = @"
 UPDATE ssf.log_tasks AS t
    SET notes = NULL,
@@ -1026,15 +1163,19 @@ UPDATE ssf.log_tasks AS t
  WHERE t.daily_log_id = l.""Id""
    AND l.operator_user_id = {0}
    AND (t.notes IS NOT NULL OR t.deviation_note IS NOT NULL);";
-        // Note: by the time we run this the daily_logs operator_user_id may
-        // already be the sentinel (the anonymizer above ran first). Use the
-        // sentinel value so we match the already-scrubbed parent rows for
-        // THIS pass. But since the original user_id is no longer present on
-        // those parents, callers MUST run NullLogTaskNotesAsync BEFORE
-        // AnonymizeDailyLogsAsync — see ProcessOneAsync ordering. We pass
-        // the original user_id here.
-        return await db.Database.ExecuteSqlRawAsync(sql, new object[] { userId }, ct)
+        var nulled = await db.Database.ExecuteSqlRawAsync(sql, new object[] { userId }, ct)
             .ConfigureAwait(false);
+
+        if (logIds.Count > 0)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                @"UPDATE ssf.daily_logs SET modified_at_utc = GREATEST(modified_at_utc, {0}) WHERE ""Id"" = ANY({1})",
+                new object[] { nowUtc, logIds.ToArray() },
+                ct).ConfigureAwait(false);
+        }
+
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        return nulled;
     }
 
     /// <summary>

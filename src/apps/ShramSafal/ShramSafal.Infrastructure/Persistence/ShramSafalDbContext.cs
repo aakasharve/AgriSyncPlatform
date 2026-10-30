@@ -158,6 +158,11 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // APPEND-ONLY correction history. LabourAssignment answers "what is true
     // now"; this answers "what did it say before, who changed it, when".
     public DbSet<LabourCorrection> LabourCorrections => Set<LabourCorrection>();
+
+    // spec: plr-d10 (lane F1) — what Sathi understood, one unchangeable row per record version.
+    // APPEND-ONLY by privilege (migration AddDailyLogContents revokes UPDATE/DELETE/TRUNCATE from
+    // the app role); the only rewrite is account erasure's, through the admin context.
+    public DbSet<DailyLogContent> DailyLogContents => Set<DailyLogContent>();
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();

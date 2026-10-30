@@ -25,7 +25,7 @@ const GROUP_ORDER: readonly ObservationNote['noteType'][] = ['issue', 'reminder'
 export const NOTE_KIND_LABEL: Record<ObservationNote['noteType'], string> = {
     issue: 'अडचण', reminder: 'आठवण', observation: 'निरीक्षण', tip: 'सल्ला', unknown: 'नोंद',
 };
-const SEVERITY_LABEL: Partial<Record<ObservationNote['severity'], string>> = { important: 'महत्त्वाचं', urgent: 'तातडीचं' };
+const SEVERITY_LABEL: Partial<Record<NonNullable<ObservationNote['severity']>, string>> = { important: 'महत्त्वाचं', urgent: 'तातडीचं' };
 const MACHINE_WRAPPED_TAGS = ['planned_task', 'manual_task'];
 
 export interface NoteItem {
@@ -67,7 +67,8 @@ export function buildDayNotes({ history, dateKey, scope, crops, operatorNameById
                 place: o.plotId === FARM_GLOBAL ? 'पूर्ण शेत' : plotName.get(o.plotId),
                 by: by ? operatorNameById[by] : undefined,
                 text: (wrapped ? o.textRaw : (o.textCleaned || o.textRaw)) ?? '',
-                severityLabel: SEVERITY_LABEL[o.severity],
+                // lane F1: an unstated severity has no label (never a guessed one).
+                severityLabel: o.severity ? SEVERITY_LABEL[o.severity] : undefined,
                 tags: (o.tags ?? []).filter(t => !MACHINE_WRAPPED_TAGS.includes(t)),
                 at: o.timestamp ?? '',
             };

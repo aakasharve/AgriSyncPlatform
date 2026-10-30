@@ -88,6 +88,29 @@ public static class ShramSafalErrors
         "ShramSafal.LogVersion.Conflict",
         "This record changed after it was opened for review. Look at the new version before confirming it.");
 
+    // spec: plr-d10 (lane F1). The content document (what Sathi understood) does not have the
+    // structure the contract states — a key it does not know, a bucket that is not a list of
+    // items with an id, or more than the size cap. THREE SEGMENTS, tail INVALIDCOMMAND, so a
+    // phone parks the row for the farmer to see (P10) instead of retrying it for ever (P11).
+    // The phone's own enqueue applies the same rules, so a real phone cannot reach this.
+    public static readonly Error LogContentInvalid = Error.Validation(
+        "ShramSafal.LogContent.InvalidCommand",
+        "The details of this record are not in the shape the app sends. Nothing was saved.");
+
+    // spec: plr-d10 (lane F1, review N12). A record saved at the हजेरी door holds labour only
+    // (B002), so what Sathi understood for it is never revised. THREE SEGMENTS, tail
+    // INVALIDCOMMAND: the phone parks the queued edit where the farmer sees it, never drops it.
+    public static readonly Error LabourDoorLogContent = Error.Validation(
+        "ShramSafal.LabourDoorLog.InvalidCommand",
+        "This record was saved at the attendance door and holds labour only; its other details cannot be changed. Nothing was saved.");
+
+    // spec: plr-d10 (lane F1, review N1). Other edits to the same record kept landing first, every
+    // time the server re-applied this one on top. Practically unreachable; THREE SEGMENTS, tail
+    // CONFLICT, so the phone shows it rather than dropping it.
+    public static readonly Error LogContentVersionConflict = Error.Conflict(
+        "ShramSafal.LogContent.Conflict",
+        "This record kept changing while your edit was being saved. Nothing was saved; please try again.");
+
     public static readonly Error LabourAssignmentConflict = Error.Conflict(
         "ShramSafal.LabourAssignment.Conflict",
         "This labour entry is already recorded on another daily log. The same engagement cannot belong to two logs — recording it again would count the same workers twice.");

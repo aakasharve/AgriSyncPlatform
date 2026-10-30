@@ -57,10 +57,9 @@ export interface VoiceResultState {
     /** Lane L6b — he typed it to Sathi: there is no recording behind it. */
     typed?: boolean;
     /**
-     * Lane L6b fix — the logs exactly as this phone wrote them. The first sync pull rebuilds a log's crop work, water,
-     * sprays and notes from the server's flattened tasks and loses what Sathi read from his words (each item's own
-     * phrase, the amounts, his word for a product — `logsReconciler` "DELIBERATELY NOT PRESERVED"). The screen about
-     * the recording he just made reads those items from here (`resultModel.asWritten`).
+     * The logs exactly as this phone wrote them. Since lane F1 the screen reads the saved RECORD (the server keeps
+     * what Sathi understood and a pull hands it back whole); these stand in only until that record reaches the
+     * history, never over it.
      */
     written?: DailyLog[];
 }

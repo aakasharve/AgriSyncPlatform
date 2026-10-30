@@ -194,7 +194,9 @@ public sealed class DailyLogDtoScopeProjectionTests
         var actualJson = JsonSerializer.Serialize(dto, WireOptions);
 
         actualJson.Should().Be(
-            $"{legacyJson[..^1]},\"scope\":\"Plot\",\"plotIds\":[\"{PlotA}\"],\"labour\":null,\"dayOutcome\":null}}",
+            // lane F1 appends two more members, after every earlier one: the record version and the
+            // stored details (null = this response states none — only the pull loads them).
+            $"{legacyJson[..^1]},\"scope\":\"Plot\",\"plotIds\":[\"{PlotA}\"],\"labour\":null,\"dayOutcome\":null,\"contentVersion\":1,\"content\":null}}",
             "additive and inert: every field that shipped before A2a keeps its exact position, name and value, and " +
             "the only difference a shipped client can observe is members it does not yet read");
     }

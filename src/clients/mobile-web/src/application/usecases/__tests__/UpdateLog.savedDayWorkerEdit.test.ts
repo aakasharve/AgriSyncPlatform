@@ -86,6 +86,7 @@ vi.mock('../../../features/logs/services/logSyncMutationService', () => ({
 import { updateLog } from '../UpdateLog';
 import { DexieLogsRepository } from '../../../infrastructure/storage/DexieLogsRepository';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import type { DailyLog, LabourEvent } from '../../../types';
 import type { FarmerProfile } from '../../../domain/types/farm.types';
 
@@ -249,9 +250,21 @@ describe('updateLog reports when the phone will not keep the edit', () => {
             'ठिबक तीन तास',
         );
 
-        // The irrigation half is unsent and the record still stands on the
-        // phone — `hasUnsentChanges` covers that, and the phone claim stays.
-        expect(result.hasUnsentChanges).toBe(true);
+        // lane F1 — the irrigation half now HAS a server path: it is queued as a new record version
+        // (`revise_log_content`), so it is no longer unsent; the record still stands on the phone and
+        // the phone claim stays. The caveat for a document that cannot be built is pinned in
+        // UpdateLog.convergence.test.ts.
+        expect(result.contentRevisionQueued).toBe(true);
+        expect(result.hasUnsentChanges).toBe(false);
         expect(result.labourEngagementSetChanged).toBe(false);
+        expect(mockEnqueue).toHaveBeenCalledWith(
+            SyncMutationName.ReviseLogContent,
+            expect.objectContaining({
+                dailyLogId: LOG,
+                baseVersion: 1,
+                content: expect.objectContaining({ irrigation: [{ id: 'irr-1', method: 'Drip', durationHours: 3 }] }),
+            }),
+            expect.anything(),
+        );
     });
 });

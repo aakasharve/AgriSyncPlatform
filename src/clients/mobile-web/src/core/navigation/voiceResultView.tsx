@@ -23,7 +23,7 @@ import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoo
 import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScreenBack';
 // The model's own rule for "the log that carries his words" (useVoiceAutoSave keeps the same one-liner): it keeps the
 // auto-save hook and its clip store out of the log tab's first load.
-import { asWritten, primaryOf } from '../../features/logs/components/voiceResult/resultModel';
+import { primaryOf } from '../../features/logs/components/voiceResult/resultModel';
 import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStrings';
 import { stashPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
 import { findConfirmableTaskCloses } from '../../features/logs/services/taskAutoClose';
@@ -54,8 +54,9 @@ const placeOf = (logs: readonly DailyLog[]): string => {
 };
 
 export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResultState): React.ReactNode => {
-    // L6b fix — Sathi's question reads the recording as this phone wrote it (a pull drops its items' details).
-    const logs = result.logIds.map(id => asWritten(ctx.history.find(l => l.id === id), result.written?.find(l => l.id === id)))
+    // lane F1 — Sathi's question reads the RECORD (a pull now keeps every item's details); the phone's own write
+    // stands in only while the record has not reached the history yet, never over it.
+    const logs = result.logIds.map(id => ctx.history.find(l => l.id === id) ?? result.written?.find(l => l.id === id))
         .filter((l): l is DailyLog => !!l);
     const savedLog = primaryOf(logs);
     const selection = savedLog?.context?.selection?.[0];

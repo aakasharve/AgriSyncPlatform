@@ -133,4 +133,28 @@ public sealed record DailyLogDto(
     /// <c>null</c> = no declaration (every ordinary work day); otherwise one of
     /// <c>WORK_RECORDED | DISTURBANCE_RECORDED | NO_WORK_PLANNED | IRRELEVANT_INPUT</c>.
     /// </summary>
-    string? DayOutcome = null);
+    string? DayOutcome = null,
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1, founder D-46 §3) — the record's version
+    /// (<c>DailyLog.ContentVersion</c>) as this response shows it. A confirm sends it back, so a
+    /// record that changed since it was shown is seen before it is confirmed. Additive: absent
+    /// on an older server.
+    /// </summary>
+    int? ContentVersion = null,
+
+    /// <summary>
+    /// spec: plr-d10 (lane F1) — WHAT SATHI UNDERSTOOD for this log: the current content row,
+    /// exactly as the phone sent it. <c>null</c> = this response makes no statement about the
+    /// details (every response but the pull, and any log stored before F1 or by an older phone);
+    /// the device then keeps what it holds, or shows the task lines with nothing made up.
+    /// </summary>
+    LogContentDto? Content = null);
+
+/// <summary>
+/// spec: plr-d10 (lane F1) — one stored content row on the wire.
+/// </summary>
+/// <param name="Version">The record version this content was stored at (&lt;= the log's).</param>
+/// <param name="Schema">The document format.</param>
+/// <param name="Document">The document itself, verbatim.</param>
+public sealed record LogContentDto(int Version, int Schema, System.Text.Json.JsonElement Document);

@@ -49,11 +49,11 @@ export interface ObservationNote {
 
     // Classification
     noteType: ObservationNoteType;
-    severity: ObservationSeverity;
+    severity?: ObservationSeverity; // lane F1: absent = not stated (never 'normal')
     tags?: string[];          // e.g., ['leaf curl', 'wind', 'pump', 'weather']
 
     // Metadata
-    source: ObservationSource;
+    source?: ObservationSource; // lane F1: absent = not stated (never 'manual')
     aiConfidence?: number;    // 0-100 (how confident AI was in classification)
 
     // @deprecated TASK TRACKING (TO BE REMOVED - use PlannedTask instead)

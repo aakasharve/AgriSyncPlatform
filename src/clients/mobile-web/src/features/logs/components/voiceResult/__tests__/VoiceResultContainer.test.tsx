@@ -266,6 +266,28 @@ describe('the ONE result screen — what he reads', () => {
         expect(badge?.textContent).toBe('लक्षात ठेवलं ✓ — शेतनोंदीत जाणार नाही');
         expect((container.textContent ?? '').split('नोंद').length - 1).toBe(1);
     });
+
+    // Lane F1 (review N9) — a record the server holds only as task lines says so, once on the screen and in its day
+    // rows; a complete record says nothing. PROPOSED wording, and still no "नोंद" anywhere on the screen (PLR-D5 :65).
+    it('a legacy-partial record says "जुनं काम — काही तपशील उपलब्ध नाहीत" on the screen and in its day row; a complete one does not', async () => {
+        const legacy = HISTORY.map(l => (l.id === NOW ? { ...l, legacyPartial: true } : l)) as DailyLog[];
+        const { container } = mount(props({ history: legacy }));
+        await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy());
+
+        expect(screen.getByTestId('vr-legacy-note').textContent).toBe('जुनं काम — काही तपशील उपलब्ध नाहीत');
+        expect(container.textContent).not.toContain('नोंद');
+        expect(container.textContent).not.toMatch(/[A-Za-z]/);
+        // The water row is open: this recording touched it.
+        expect(screen.getByTestId('vr-day-irrigation').getAttribute('data-open')).toBe('yes');
+        expect(screen.getAllByTestId(/^vr-day-legacy-/).length).toBeGreaterThan(0);
+        expect(container.textContent).not.toMatch(/undefined|NaN/);
+        cleanup();
+
+        mount(props());
+        await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy());
+        expect(screen.queryByTestId('vr-legacy-note')).toBeNull();
+        expect(screen.queryAllByTestId(/^vr-day-legacy-/)).toHaveLength(0);
+    });
 });
 
 describe('the ONE result screen — what his taps do', () => {
@@ -307,6 +329,16 @@ describe('the ONE result screen — what his taps do', () => {
         const rows = await verifyRows();
         expect(rows).toHaveLength(1);
         expect(rows[0].payload).toMatchObject({ logId: NOW, decision: 'verify', reviewBasis: 'read' });
+    });
+
+    it('lane F1 (D-46): the confirm names the record version this screen showed, once the phone knows it', async () => {
+        await getDatabase().voiceClips.clear();
+        mount(props({ history: HISTORY.map(l => (l.id === NOW ? { ...l, contentVersion: 3 } : l)) }));
+        await act(async () => { fireEvent.click(screen.getByTestId('vr-confirm')); });
+        await waitFor(() => expect(screen.getByTestId('vr-confirm-done')).toBeTruthy());
+        const rows = await verifyRows();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].payload).toMatchObject({ logId: NOW, decision: 'verify', reviewBasis: 'read', logVersion: 3 });
     });
 
     it('a farm role that may not verify sees no confirm button at all (P5)', async () => {
