@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    EMPTY_LEDGER, buildInHand, buildSeasonTotals, buildSpend, plotDayMoney, spendRange, topOf,
+    EMPTY_LEDGER, buildInHand, buildSeasonTotals, buildSpend, farmWideDayMoney, plotDayMoney, spendRange, topOf,
     type Ledger, type LedgerEntry, type LedgerGap,
 } from '../overview/moneyModel';
 import { pickCrop, selectAll, togglePlot, toViewScope } from '../overview/reflectSelection';
@@ -26,7 +26,7 @@ const spent = (id: string, amount: number, dateKey: string, plotId?: string, cat
     ({ id, amount, dateKey, direction: 'Expense', category, ...(plotId ? { plotId } : {}) });
 const received = (id: string, amount: number, dateKey: string, plotId?: string): LedgerEntry =>
     ({ id, amount, dateKey, direction: 'Income', category: 'Other', ...(plotId ? { plotId } : {}) });
-const ledgerOf = (entries: LedgerEntry[], gaps: LedgerGap[] = []): Ledger => ({ entries, gaps });
+const ledgerOf = (entries: LedgerEntry[], gaps: LedgerGap[] = [], complete = true): Ledger => ({ entries, gaps, complete });
 
 describe('buildInHand (the in-hand income card) — the ledger\'s income', () => {
     const ledger = ledgerOf([received('s1', 40000, '2026-10-01', 'g1'), received('s2', 90000, '2026-10-02', 'c1'), received('o1', 2500, '2026-10-03')]);
@@ -89,11 +89,14 @@ describe('buildSeasonTotals (आतापर्यंत)', () => {
         const notYet = buildSeasonTotals(ledgerOf([spent('a', 3000, TODAY_KEY, 'g1')], gaps), CROPS, all, noSessions, true);
         expect(notYet.cost).toEqual({ amount: 3000, hidden: false, partial: ['notOnServer'] });
         expect(notYet.income.partial).toEqual([]); // the money not yet on the server was spent, not received
+        expect(notYet.net.partial).toEqual(['notOnServer']); // income − cost inherits the cost's gap
         const unknown: LedgerEntry = { id: 'u', amount: 9999, dateKey: TODAY_KEY, direction: 'Unknown', category: 'Other', plotId: 'g1' };
         const old = buildSeasonTotals(ledgerOf([spent('a', 3000, TODAY_KEY, 'g1'), unknown]), CROPS, all, noSessions, true);
         // an amount that never said which way it went is in NEITHER total — it makes both partial instead
         expect(old.cost).toEqual({ amount: 3000, hidden: false, partial: ['unknownDirection'] });
         expect(old.income.amount).toBeNull();
+        expect(old.income.partial).toEqual(['unknownDirection']); // review B007: income is partial too
+        expect(old.net).toEqual({ amount: null, hidden: false, partial: ['unknownDirection'] });
         // a gap on a plot outside the view does not make the view's total partial
         expect(buildSeasonTotals(ledgerOf([spent('a', 3000, TODAY_KEY, 'g1')], [{ plotId: 'c1', dateKey: TODAY_KEY, direction: 'Expense' }]), CROPS, grapeOnly, noSessions, true).cost.partial).toEqual([]);
     });
@@ -183,6 +186,40 @@ describe('plotDayMoney (a plot card\'s money)', () => {
     it('partial when money told for that plot-day has not reached the ledger; hidden when not his to see', () => {
         expect(plotDayMoney(ledgerOf(ledger.entries as LedgerEntry[], [{ plotId: 'g1', dateKey: TODAY_KEY, direction: 'Expense' }]), 'g1', TODAY_KEY, true).partial).toEqual(['notOnServer']);
         expect(plotDayMoney(ledger, 'g1', TODAY_KEY, false)).toEqual({ amount: null, hidden: true, partial: [] });
+    });
+});
+
+describe('review B003 — a ledger not yet read in full is never presented as complete', () => {
+    const notRead = ledgerOf([spent('a', 1500, TODAY_KEY, 'g1'), spent('f', 800, TODAY_KEY), received('r', 4000, TODAY_KEY, 'g1')], [], false);
+    const week = spendRange('week', TODAY, TODAY);
+
+    it('every figure says "unchecked" — the totals, the week, a plot\'s day, the whole-farm day, the in-hand card', () => {
+        const t = buildSeasonTotals(notRead, CROPS, all, noSessions, true);
+        expect([t.cost, t.income, t.net].map(f => f.partial)).toEqual([['unchecked'], ['unchecked'], ['unchecked']]);
+        expect(buildSpend(notRead, CROPS, all, week, true).total.partial).toEqual(['unchecked']);
+        expect(plotDayMoney(notRead, 'g1', TODAY_KEY, true).partial).toEqual(['unchecked']);
+        expect(farmWideDayMoney(notRead, TODAY_KEY, true).partial).toEqual(['unchecked']);
+        expect(buildInHand(notRead, CROPS, all, true).partial).toEqual(['unchecked']);
+        // the same set, read in full: complete
+        expect(buildSeasonTotals({ ...notRead, complete: true }, CROPS, all, noSessions, true).cost.partial).toEqual([]);
+    });
+
+    it('money he may not see stays hidden, with nothing more said about it', () => {
+        expect(buildSeasonTotals(notRead, CROPS, all, noSessions, false).cost).toEqual({ amount: null, hidden: true, partial: [] });
+    });
+});
+
+describe('farmWideDayMoney (review B004 — the whole-farm panel\'s money)', () => {
+    const ledger = ledgerOf([spent('f1', 800, TODAY_KEY), spent('f2', 200, TODAY_KEY), spent('p', 1500, TODAY_KEY, 'g1'), spent('y', 50, '2026-10-24'), received('r', 900, TODAY_KEY)]);
+
+    it('what the ledger holds as spent that day on no plot — never a plot\'s, never another day\'s, never income', () => {
+        expect(farmWideDayMoney(ledger, TODAY_KEY, true)).toEqual({ amount: 1000, hidden: false, partial: [] });
+    });
+
+    it('nothing spent at farm scope → null ("—"); not his to see → hidden; told but not on the server → partial', () => {
+        expect(farmWideDayMoney(ledgerOf([spent('p', 1500, TODAY_KEY, 'g1')]), TODAY_KEY, true).amount).toBeNull();
+        expect(farmWideDayMoney(ledger, TODAY_KEY, false)).toEqual({ amount: null, hidden: true, partial: [] });
+        expect(farmWideDayMoney(ledgerOf(ledger.entries as LedgerEntry[], [{ dateKey: TODAY_KEY, direction: 'Expense' }]), TODAY_KEY, true).partial).toEqual(['notOnServer']);
     });
 });
 

@@ -44,7 +44,7 @@ export const MoneyNotes: React.FC<{ figures: readonly MoneyFigure[]; testId: str
     if (figures.some(f => f.hidden)) return <span className="block text-[12.5px] font-bold text-stone-600" data-testid={`${testId}-hidden`}>{copy.moneyHidden}</span>;
     // Also when the total is still "—": money he told that has not reached the ledger is why, and he should know.
     const reasons = [...new Set(figures.flatMap(f => f.partial))];
-    const line: Record<PartialReason, string> = { notOnServer: copy.partialNotOnServer, unknownDirection: copy.partialUnknownDirection };
+    const line: Record<PartialReason, string> = { notOnServer: copy.partialNotOnServer, unknownDirection: copy.partialUnknownDirection, unchecked: copy.partialUnchecked };
     return reasons.length > 0
         ? <span className="block space-y-0.5" data-testid={`${testId}-partial`}>{reasons.map(r => <span key={r} className="block text-[12.5px] font-bold text-amber-800" data-testid={`${testId}-partial-${r}`}>{line[r]}</span>)}</span>
         : null;
@@ -53,14 +53,14 @@ export const MoneyNotes: React.FC<{ figures: readonly MoneyFigure[]; testId: str
 /** The old "In hand income" card, in words. Opens उत्पन्न — never for money he may not see. */
 export const InHandCard: React.FC<{ figure: MoneyFigure; onOpen?: () => void }> = ({ figure, onOpen }) => {
     const open = figure.hidden ? undefined : onOpen;
+    const copy = reflectCopy(useOptionalLanguage()?.language);
     return (
         <Tap onClick={open} disabled={!open} data-testid="overview-money"
             className="flex w-full items-center gap-3 rounded-3xl border border-emerald-100 bg-gradient-to-br from-white to-emerald-50 p-3.5 text-left shadow-[0_8px_22px_-14px_rgba(4,120,87,0.5)]">
             <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow"><TrendingUp size={24} aria-hidden="true" /></span>
             <span className="min-w-0 flex-1">
-                {/* PROPOSED (Marathi) — lane RF: "आतापर्यंत" (so far) replaces "या हंगामात": the figure is now the ledger's
-                    income so far, which this page cannot cut to one season. */}
-                <span className="block text-[13px] font-extrabold text-emerald-800">हातात आलेलं उत्पन्न · आतापर्यंत</span>
+                {/* Review B008 — in his language (`reflectCopy.inHandLabel`): the ledger's income so far. */}
+                <span className="block text-[13px] font-extrabold text-emerald-800" data-testid="in-hand-label">{copy.inHandLabel}</span>
                 <span className="block"><Num className="text-[22px] font-extrabold leading-tight text-stone-900" testId="in-hand-amount">{money(figure.amount)}</Num><PartialTag figure={figure} testId="in-hand-partial" /></span>
                 {figure.amount === null && !figure.hidden && <span className="block text-[12.5px] font-semibold text-stone-500">अजून विक्री किंवा उत्पन्न नोंदलेलं नाही</span>}
                 <MoneyNotes figures={[figure]} testId="in-hand" />

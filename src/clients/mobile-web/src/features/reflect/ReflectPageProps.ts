@@ -23,8 +23,12 @@ export interface ReflectPageProps {
     onVerifyLog?: (logId: string, status: LogVerificationStatus, notes?: string) => void;
     currentOperator?: FarmOperator;
     operators?: FarmOperator[];
-    /** Lane RF — ids that mean "the person holding this phone" (active operator, signed-in user): his work reads "तुम्ही". */
-    youIds?: readonly string[];
+    /**
+     * Lane RF (review B001) — the SIGNED-IN user's id (the auth session's), the only id "he said it" is compared with:
+     * his records read "तुम्ही", keep his own amounts, and may offer his original voice. Never the profile's active
+     * operator (on a non-owner's phone the sync sets that to the primary owner's id).
+     */
+    sessionUserId?: string | null;
     /**
      * Lane RF — his role on this farm as the server told this phone (`PrimaryOwner`, …; null = not told yet). It decides
      * whether he sees the farm's money (`mayShowFarmMoney`, founder D-22) and where ▶ may be offered (`listenModel`).

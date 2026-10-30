@@ -36,6 +36,7 @@ const ledger: Ledger = {
         { id: 'u', plotId: 'g1', dateKey: TODAY_KEY, direction: 'Unknown', category: 'Other', amount: 777 },
     ],
     gaps: [{ plotId: 'g1', dateKey: TODAY_KEY, direction: 'Expense' }],
+    complete: true,
 };
 
 const draw = (visible: boolean, onOpenFinance = vi.fn(), onOpenIncome = vi.fn()) => {
@@ -67,6 +68,18 @@ describe.each(['mr', 'en'] as const)('the money section on the ledger (%s)', lan
         for (const amount of ['2,000', '5,000', '777']) expect(text).not.toContain(amount);
     });
 
+    it('review B008: the in-hand card\'s label follows his language', () => {
+        draw(true);
+        expect(screen.getByTestId('in-hand-label')).toHaveTextContent(language === 'en' ? 'Income received · so far' : 'हातात आलेलं उत्पन्न · आतापर्यंत');
+    });
+
+    it('review B003: a ledger not yet read in full says so, in his language', () => {
+        render(<CostSection totals={buildSeasonTotals({ ...ledger, gaps: [], complete: false }, CROPS, all, noSessions, true)}
+            spend={buildSpend({ ...ledger, gaps: [], complete: false }, CROPS, all, range, true)} range={range} />);
+        expect(screen.getByTestId('season-cost-partial')).toHaveTextContent(copy().partialTag);
+        expect(screen.getByTestId('season-partial-unchecked')).toHaveTextContent(copy().partialUnchecked);
+    });
+
     it('a partial set: the figures carry "अपूर्ण" / "partial", and why — each reason once', () => {
         draw(true);
         expect(screen.getByTestId('season-cost')).toHaveTextContent('₹ 2,000');
@@ -80,7 +93,7 @@ describe.each(['mr', 'en'] as const)('the money section on the ledger (%s)', lan
     });
 
     it('money told but not on the server yet, nothing in the ledger: "—", and it says why (never ₹ 0)', () => {
-        const waiting: Ledger = { entries: [], gaps: [{ plotId: 'g1', dateKey: TODAY_KEY, direction: 'Expense' }] };
+        const waiting: Ledger = { entries: [], gaps: [{ plotId: 'g1', dateKey: TODAY_KEY, direction: 'Expense' }], complete: true };
         render(<CostSection totals={buildSeasonTotals(waiting, CROPS, all, noSessions, true)} spend={buildSpend(waiting, CROPS, all, range, true)} range={range} />);
         expect(screen.getByTestId('season-cost')).toHaveTextContent('—');
         expect(screen.queryByTestId('season-cost-partial')).toBeNull(); // no "partial" tag on a dash

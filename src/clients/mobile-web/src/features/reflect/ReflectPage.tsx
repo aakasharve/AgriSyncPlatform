@@ -43,6 +43,7 @@ import { MoneyLensDrawer } from '../finance/components/MoneyLensDrawer';
 import type { FinanceFilters } from '../finance/finance.types';
 import { mayShowFarmMoney } from '../labour/homeAttendanceDoor';
 import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
+import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { emitClosureSummaryViewed, emitNextActionCreated } from '../../core/telemetry/eventEmitters';
@@ -65,7 +66,7 @@ import { buildCalendarDay } from './overview/calendarModel';
 import { CostSection, InHandCard } from './overview/CostSection';
 import { DayBar } from './overview/DayBar';
 import { FarmStatus } from './overview/FarmStatus';
-import { buildInHand, buildSeasonTotals, buildSpend, plotDayMoney, spendRange } from './overview/moneyModel';
+import { buildInHand, buildSeasonTotals, buildSpend, farmWideDayMoney, plotDayMoney, spendRange, type MoneyFigure } from './overview/moneyModel';
 import { buildDayNotes } from './overview/notesModel';
 import { NotesList } from './overview/NotesList';
 import { buildPlotDayCard } from './overview/plotDayModel';
@@ -81,7 +82,6 @@ import { FIXED_FIRST, type SectionId } from './overview/sectionLayout';
 import { LayoutPreviewSwitch } from './overview/LayoutPreviewSwitch';
 import { AttentionStrip } from '../attention/components/AttentionStrip';
 
-const NO_YOU: readonly string[] = [];
 
 /** The edit form's starting point for a plot day nothing was told for (the old drawer's "Add Missing Entry"). */
 const newEntryFor = (ref: PlotRef, dateKey: string): DailyLog => ({
@@ -120,7 +120,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     // Delete both together when approval is re-enabled or retired. spec: owner-oversight-loop
     currentOperator,
     operators = [],
-    youIds = NO_YOU,
+    sessionUserId = null,
     farmRole = null,
     navigate,
     focusPlotId,
@@ -167,15 +167,12 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     // ── who is looking (lane RF): "तुम्ही", his money, his ▶ ────────────────────────────────────
     const moneyVisible = mayShowFarmMoney(farmRole);
-    const youKey = youIds.join(',');
-    const viewer = useMemo<Viewer>(
-        () => ({ youIds: new Set(youKey ? youKey.split(',') : []), farmRole, farmId: currentFarmId ?? null }),
-        [youKey, farmRole, currentFarmId],
-    );
+    // "He said it" is the SIGNED-IN user only (review B001) — never the profile's active operator.
+    const viewer = useMemo<Viewer>(() => ({ sessionUserId, farmRole, farmId: currentFarmId ?? null }), [sessionUserId, farmRole, currentFarmId]);
     const operatorNameById = useMemo(() => Object.fromEntries(operators.map(o => [o.id, o.name])), [operators]);
     const whoDeps = useMemo(() => ({
-        youIds: viewer.youIds, nameOf: (id: string) => operatorNameById[id], youLabel: copy.you, unknownLabel: copy.unknownPerson,
-    }), [viewer, operatorNameById, copy]);
+        youIds: new Set(sessionUserId ? [sessionUserId] : []), nameOf: (id: string) => operatorNameById[id], youLabel: copy.you, unknownLabel: copy.unknownPerson,
+    }), [sessionUserId, operatorNameById, copy]);
     const shown = useCallback((r: DayRecording) => withMoneyShown(r, moneyVisible), [moneyVisible]);
     // The chosen day's recordings, farm-wide (the day's work sheet, the notes' links, the one player).
     const dayRecs = useMemo(() => dayRecordings(history, dateKey, anyLog, whoDeps, crops).map(shown), [history, dateKey, whoDeps, crops, shown]);
@@ -328,7 +325,9 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             {/* LABOUR_PHASE2 P2.4 — the whole-farm day. Only when the chosen day IS today: its line reads "आज: …". */}
             {isToday && (
                 <div className="px-3">
-                    <FarmWideTodayPanel summary={getFarmWideDaySummary(history, dateKey)} />
+                    {/* Review B004 — its money is the server ledger's whole-farm spend that day, for whoever may see
+                        money; "—" otherwise. Never the records' own totals. */}
+                    <FarmWideTodayPanel summary={getFarmWideDaySummary(history, dateKey)} cost={panelCost(farmWideDayMoney(ledger, dateKey, moneyVisible), copy.partialTag)} />
                 </div>
             )}
 
@@ -382,6 +381,13 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         </div>
     );
 };
+
+/** The whole-farm panel's cost, as the ledger has it ("—" when there is none, or it is not his to see). */
+function panelCost(figure: MoneyFigure, partialTag: string): string {
+    if (figure.amount === null) return '—';
+    const amount = formatCurrencyINR(figure.amount);
+    return figure.partial.length > 0 ? `${amount} (${partialTag})` : amount;
+}
 
 /** The day of the plot's season (the old drawer's timeline), when the plot is in one. */
 function seasonDayOf(ref: PlotRef, date: Date, word: (n: number) => string): string | undefined {

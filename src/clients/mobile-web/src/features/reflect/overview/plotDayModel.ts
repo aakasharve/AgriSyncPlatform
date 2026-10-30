@@ -14,6 +14,10 @@
  *     the water plan state (`getIrrigationStatus`), the season day (`getPhaseAndDay`), weather, money, trust.
  * No record for the day means `counts: null` — the card says "नोंद नाही", it does not draw eight zeros (P4).
  *
+ * Review B006: every fact is read from the plot day's NON-DELETED logs, all of them — the same set its day sheet
+ * shows: the buckets count the rows said across them, labour is never summed across recordings, the status is
+ * "worked" when any recording says work was done.
+ *
  * Lane RF: the card's money is the SERVER's ledger for that plot that day (`moneyModel.plotDayMoney`, passed in) —
  * never the log's own total, which a pulled log no longer has (lane F1). Its trust mark is the page's ONE status
  * wording: confirmed only when EVERY recording of the plot's day is; and it says how many times the day was told
@@ -26,7 +30,7 @@ import { countCompletedIrrigationEvents } from '../../logs/services/irrigationCo
 import { sumLabourHeadcount } from '../../../domain/logs/labourHeadcount';
 import { getPhaseAndDay } from '../../../shared/utils/timelineUtils';
 import { formatTemperature } from '../../../shared/utils/weatherFormatter';
-import { getDayStatus, getIrrigationStatus, getLogForDate, getLogForSpecificPlot, getPrimaryLogNote } from '../helpers';
+import { getDayStatus, getIrrigationStatus, getPrimaryLogNote } from '../helpers';
 import type { MoneyFigure } from './moneyModel';
 import type { PlotRef, ViewScope } from './reflectSelection';
 
@@ -59,6 +63,8 @@ export interface PlotDayCard {
     stoppedReason?: string;
     /** `null` = nothing recorded for this plot on this day. A bucket `undefined` = told but not counted (labour). */
     counts: Record<Bucket, number | undefined> | null;
+    /** Labour was told in more than one recording: no one number (never a sum across recordings). */
+    labourSeveral?: boolean;
     /** Irrigation was blocked by the day's disturbance (the water bucket turns amber). */
     waterBlocked: boolean;
     note?: string;
@@ -83,39 +89,72 @@ const dayLabelOf = (phase: CropPhase, day: number | null, hasPlot: boolean): str
     return day == null ? 'जमीन तयारी' : `जमीन तयारी · दिवस ${day}`;
 };
 
-export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], scope: ViewScope, dateKey: string, date: Date, money?: MoneyFigure): PlotDayCard {
-    const logs = history as DailyLog[];
-    const log = ref.plotId
-        ? getLogForSpecificPlot(logs, dateKey, ref.cropId, ref.plotId)
-        : getLogForDate(logs, dateKey, ref.cropId, scope.viewPlots);
+/** When a log was saved (ms); unknown times go last. */
+const savedAt = (log: DailyLog): number => {
+    const ms = Date.parse(log.meta?.createdAtISO ?? '');
+    return Number.isFinite(ms) ? ms : Number.POSITIVE_INFINITY;
+};
+
+/**
+ * Review B006 — every NON-DELETED log of this plot's day, morning first: the SAME set the plot's day sheet shows
+ * (`dayLogsOf` + `plotLogFilter`). It used to be `history.find(...)`: the first match, deleted or not, and only one
+ * of the day's recordings.
+ */
+export const plotDayLogs = (history: readonly DailyLog[], ref: PlotRef, dateKey: string): DailyLog[] =>
+    dayLogsOf(history, dateKey).filter(plotLogFilter(ref)).sort((a, b) => savedAt(a) - savedAt(b));
+
+/**
+ * The labour cell, never summed across recordings (P4, the day sheet's rule): one recording that told labour → its
+ * own headcount (`sumLabourHeadcount`, the app's rule for one record; `undefined` when it gave no number); labour
+ * told in two or more recordings → no number at all (`several`), the day sheet lists each as said.
+ */
+function labourOf(recordings: readonly DailyLog[][]): { count: number | undefined; several: boolean } {
+    const told = recordings.filter(r => r.some(l => (l.labour ?? []).length > 0));
+    if (told.length === 0) return { count: 0, several: false };
+    if (told.length > 1) return { count: undefined, several: true };
+    return { count: sumLabourHeadcount(told[0].flatMap(l => l.labour ?? [])), several: false };
+}
+
+/** Rows of one kind across the day's logs — a count of things said, never a quantity added up. */
+const rows = (logs: readonly DailyLog[], of: (log: DailyLog) => number): number => logs.reduce((n, l) => n + of(l), 0);
+
+export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], _scope: ViewScope, dateKey: string, date: Date, money?: MoneyFigure): PlotDayCard {
+    const logs = plotDayLogs(history, ref, dateKey);
+    const recordings = groupByRecording(logs);
+    const statuses = logs.map(l => getDayStatus(l));
+    // Worked when any recording of the day says work was done; stopped only when none did and one says it stopped.
+    const status: PlotDayCard['status'] = statuses.includes('worked') ? 'worked' : statuses.includes('blocked') ? 'blocked' : 'empty';
+    const stopper = logs.find(l => l.disturbance?.scope === 'FULL_DAY');
     const timelinePlot = ref.plot ?? ref.crop.plots?.[0];
     const timeline = getPhaseAndDay(timelinePlot, date);
-    const water = getIrrigationStatus(date, ref.plot, log);
+    const water = getIrrigationStatus(date, ref.plot, logs.find(l => (l.irrigation ?? []).length > 0) ?? logs[0]);
     const baseline = ref.plot?.baseline;
-    const dayLogs = dayLogsOf(history, dateKey).filter(plotLogFilter(ref));
+    const labour = labourOf(recordings);
+    const weatherLog = logs.find(l => l.weatherSnapshot);
 
     return {
         ref,
-        log,
-        status: getDayStatus(log),
-        stoppedReason: log?.disturbance?.scope === 'FULL_DAY' ? log.disturbance.reason : undefined,
-        counts: log ? {
-            work: log.cropActivities?.length ?? 0,
-            water: countCompletedIrrigationEvents(log.irrigation),
-            labour: sumLabourHeadcount(log.labour),
-            inputs: log.inputs?.length ?? 0,
-            machine: log.machinery?.length ?? 0,
-            cost: log.activityExpenses?.length ?? 0,
-            notes: log.observations?.length ?? 0,
-            reminders: log.observations?.filter(o => o.noteType === 'reminder').length ?? 0,
+        log: logs[0],
+        status,
+        stoppedReason: status === 'blocked' ? stopper?.disturbance?.reason : undefined,
+        counts: logs.length > 0 ? {
+            work: rows(logs, l => l.cropActivities?.length ?? 0),
+            water: rows(logs, l => countCompletedIrrigationEvents(l.irrigation)),
+            labour: labour.count,
+            inputs: rows(logs, l => l.inputs?.length ?? 0),
+            machine: rows(logs, l => l.machinery?.length ?? 0),
+            cost: rows(logs, l => l.activityExpenses?.length ?? 0),
+            notes: rows(logs, l => l.observations?.length ?? 0),
+            reminders: rows(logs, l => l.observations?.filter(o => o.noteType === 'reminder').length ?? 0),
         } : null,
-        waterBlocked: !!log?.disturbance?.blockedSegments?.includes('irrigation'),
-        note: getPrimaryLogNote(log),
+        ...(labour.several ? { labourSeveral: true } : {}),
+        waterBlocked: logs.some(l => !!l.disturbance?.blockedSegments?.includes('irrigation')),
+        note: logs.map(l => getPrimaryLogNote(l)).find(Boolean),
         ...(money && money.amount !== null && !money.hidden ? { money } : {}),
-        ...(dayLogs.length > 0 ? { confirmed: dayLogs.every(isConfirmed) } : {}),
-        recordings: groupByRecording(dayLogs).length,
-        weather: log?.weatherSnapshot
-            ? { temp: formatTemperature(log.weatherSnapshot.current.tempC), condition: log.weatherSnapshot.current.conditionText }
+        ...(logs.length > 0 ? { confirmed: logs.every(isConfirmed) } : {}),
+        recordings: recordings.length,
+        weather: weatherLog?.weatherSnapshot
+            ? { temp: formatTemperature(weatherLog.weatherSnapshot.current.tempC), condition: weatherLog.weatherSnapshot.current.conditionText }
             : undefined,
         area: baseline?.totalArea ? `${baseline.totalArea} ${AREA_UNIT[baseline.unit] ?? baseline.unit}` : undefined,
         dayLabel: dayLabelOf(timeline.phase, timeline.day, !!timelinePlot),

@@ -76,6 +76,16 @@ export const financeSelectors = {
         return applyFilters(enriched, filters);
     },
 
+    /**
+     * spec: plr-d10 lane RF (review B003) — the same effective events (corrections applied by the same rule), read
+     * from the cache as it stands WITHOUT starting a refresh, for a screen that re-reads whenever the cache
+     * announces new data (`financeService.peekMoneyEvents`).
+     */
+    peekEffectiveMoneyEvents(filters?: FinanceFilters): EffectiveMoneyEvent[] {
+        const enriched = enrichWithCorrections(financeService.peekMoneyEvents(), financeService.peekAdjustments());
+        return applyFilters(enriched, filters);
+    },
+
     getTotalCost(filters?: FinanceFilters): number {
         return this.getEffectiveMoneyEvents({ ...filters, type: 'Expense' })
             .reduce((sum, item) => sum + item.effectiveAmount, 0);

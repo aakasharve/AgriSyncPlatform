@@ -123,15 +123,16 @@ export const LabourResultHost: React.FC<{
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
     // Lane RF — the day's work (its button, sheet and glance) is built by the page itself for the day it is on; it
-    // needs to know who is holding this phone ("तुम्ही"), his role (money and ▶, as the server told this phone) and the
-    // result screen's own "बदला" path for a recording.
+    // needs who is signed in ("तुम्ही" — the SESSION's user only, never `activeOperatorId`, which the sync sets to the
+    // primary owner on a non-owner's phone: review B001), his role (money and ▶, as the server told this phone) and
+    // the result screen's own "बदला" path for a recording.
     const openLogToEdit = (log: DailyLog) => {
         ctx.setMainView('log');
         ctx.handleEditLog(log);
     };
     return (
         <ReflectPage
-            youIds={[ctx.farmerProfile?.activeOperatorId, getSessionUserId()].filter((x): x is string => !!x)}
+            sessionUserId={getSessionUserId()}
             farmRole={ctx.farmRole ?? null}
             onOpenLog={openLogToEdit}
             history={ctx.history}

@@ -43,7 +43,7 @@ vi.mock('../../finance/components/MoneyLensDrawer', () => ({
 // lane RF — the server's ledger as this phone holds it (₹ 1,500 spent on सोनाका today), and no player behind ▶.
 const SPENT_TODAY = { id: 'e1', plotId: 'g1', dateKey: '2026-10-25', direction: 'Expense', category: 'Labour', amount: 1500 };
 const ledger = vi.hoisted(() => ({ entries: [] as unknown[] }));
-vi.mock('../overview/useMoneyLedger', () => ({ useMoneyLedger: () => ({ entries: ledger.entries, gaps: [] }) }));
+vi.mock('../overview/useMoneyLedger', () => ({ useMoneyLedger: () => ({ entries: ledger.entries, gaps: [], complete: true }) }));
 vi.mock('../day/useDayListen', () => ({
     useDayListen: () => ({ kindOf: () => 'none', clipOf: () => undefined, playing: () => false, progress: 0, lengthOf: () => null, toggle: () => undefined, stop: () => undefined, farmOf: () => null }),
 }));
@@ -75,7 +75,7 @@ const renderPage = (over: Partial<React.ComponentProps<typeof ReflectPage>> = {}
         history, crops: CROPS,
         tasks: [task('t1', 'फवारणी', { dueDate: TODAY_KEY })],
         onUpdateTask: vi.fn(), onAddTask: vi.fn(), navigate: vi.fn(), onEditLog: vi.fn(), onOpenLog: vi.fn(),
-        youIds: ['me'], farmRole: 'PrimaryOwner',
+        sessionUserId: 'me', farmRole: 'PrimaryOwner',
         operators: [{ id: 'op-sunil', name: 'सुनील' }] as React.ComponentProps<typeof ReflectPage>['operators'],
         ...over,
     };

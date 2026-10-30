@@ -12,13 +12,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const events = vi.hoisted(() => ({ list: [] as unknown[] }));
-vi.mock('../../finance/financeSelectors', () => ({ financeSelectors: { getEffectiveMoneyEvents: () => events.list } }));
+// The non-refreshing read (review B003): reading never asks the cache to refresh itself.
+vi.mock('../../finance/financeSelectors', () => ({ financeSelectors: { peekEffectiveMoneyEvents: () => events.list } }));
+vi.mock('../../finance/financeService', () => ({ financeService: { refreshFromPhone: async () => undefined } }));
 const outbox = vi.hoisted(() => ({ rows: [] as unknown[], held: [] as unknown[], asked: '' }));
-vi.mock('../../../infrastructure/storage/DexieDatabase', () => ({
-    getDatabase: () => ({
-        mutationQueue: { where: () => ({ equals: (name: string) => { outbox.asked = name; return { toArray: async () => outbox.rows }; } }) },
-    }),
+// ONE database object, as the real `getDatabase` returns while the same person is signed in.
+const db = vi.hoisted(() => ({
+    mutationQueue: { where: () => ({ equals: (name: string) => { outbox.asked = name; return { toArray: async () => outbox.rows }; } }) },
 }));
+vi.mock('../../../infrastructure/storage/DexieDatabase', () => ({ getDatabase: () => db }));
 vi.mock('../../finance/heldMoney', () => ({ readHeldMoney: async () => outbox.held }));
 
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';

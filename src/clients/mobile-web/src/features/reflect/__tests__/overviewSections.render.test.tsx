@@ -246,6 +246,7 @@ describe('उत्पन्न आणि खर्च (CostSection + InHandCard
                 { id: 'r', plotId: 'g1', dateKey: TODAY_KEY, direction: 'Income', category: 'Other', amount: 42500 },
             ],
             gaps: [],
+            complete: true,
         };
         const totals = buildSeasonTotals(ledger, CROPS, all, noSessions, true);
         const onOpenFinance = vi.fn();

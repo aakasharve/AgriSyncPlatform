@@ -58,6 +58,12 @@ export interface ReflectCopy {
     partialTag: string;
     partialNotOnServer: string;
     partialUnknownDirection: string;
+    /** Review B003: the ledger is not read in full yet (or could not be). */
+    partialUnchecked: string;
+    /** Review B008: the in-hand card's label. */
+    inHandLabel: string;
+    /** Review B006: the card's labour cell when labour was told in more than one recording (never summed). */
+    labourSeveral: string;
 }
 
 const MONTH_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -111,6 +117,12 @@ const mr: ReflectCopy = {
     partialTag: 'अपूर्ण',
     partialNotOnServer: 'अपूर्ण — काही पैसे अजून सर्व्हरच्या हिशोबात पोचलेले नाहीत',
     partialUnknownDirection: 'अपूर्ण — काही जुन्या रकमा आल्या की गेल्या ते सांगितलेलं नाही, त्या यात मोजल्या नाहीत',
+    // PROPOSED (Marathi)
+    partialUnchecked: 'अपूर्ण — या फोनने अजून सगळा हिशोब तपासलेला नाही',
+    // PROPOSED (Marathi) — the card's old "हातात आलेलं उत्पन्न · या हंगामात"; "आतापर्यंत": the ledger cannot be cut to one season here.
+    inHandLabel: 'हातात आलेलं उत्पन्न · आतापर्यंत',
+    // PROPOSED (Marathi)
+    labourSeveral: 'मजूर वेगवेगळ्या वेळी सांगितले — दिवस उघडा',
 };
 
 const en: ReflectCopy = {
@@ -149,6 +161,9 @@ const en: ReflectCopy = {
     partialTag: 'partial', // PROPOSED (English)
     partialNotOnServer: 'Partial — some money has not reached the farm account on the server yet', // PROPOSED (English)
     partialUnknownDirection: 'Partial — some older amounts do not say whether money came in or went out; they are not counted here', // PROPOSED (English)
+    partialUnchecked: 'Partial — this phone has not finished checking the whole account yet', // PROPOSED (English)
+    inHandLabel: 'Income received · so far', // PROPOSED (English)
+    labourSeveral: 'Labour told at different times — open the day', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

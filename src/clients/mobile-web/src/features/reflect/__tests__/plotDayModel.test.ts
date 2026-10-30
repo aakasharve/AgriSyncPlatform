@@ -11,7 +11,7 @@
  * mark is "confirmed only when every recording of the plot-day is"; and it counts the day's recordings.
  */
 import { describe, expect, it } from 'vitest';
-import { LogVerificationStatus } from '../../../types';
+import { LogVerificationStatus, type DailyLog } from '../../../types';
 import type { MoneyFigure } from '../overview/moneyModel';
 import { buildPlotDayCard } from '../overview/plotDayModel';
 import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
@@ -104,6 +104,40 @@ describe('buildPlotDayCard', () => {
         const guntha = { ...g1, plot: { ...g1.plot!, baseline: { totalArea: 20, unit: 'Guntha' as const } } };
         expect(buildPlotDayCard(guntha, [], scope, TODAY_KEY, TODAY).area).toBe('20 गुंठे');
         expect(buildPlotDayCard(g2, [], scope, TODAY_KEY, TODAY).area).toBeUndefined();
+    });
+
+    describe('review B006 — the card reads the same non-deleted set as its day sheet', () => {
+        const meta = (hhmm: string, who = 'op') => ({ createdAtISO: `2026-10-25T${hhmm}:00.000Z`, createdByOperatorId: who });
+
+        it('a deleted record is never the card\'s: nothing told → no counts, no status', () => {
+            const gone = log({ id: 'gone', plotIds: ['g1'], meta: meta('03:00'), cropActivities: [{ id: 'a', title: 'छाटणी' }], deletion: { deletedAtISO: '2026-10-25T04:00:00.000Z' } as DailyLog['deletion'] });
+            const card = buildPlotDayCard(g1, [gone], scope, TODAY_KEY, TODAY);
+            expect(card).toMatchObject({ status: 'empty', counts: null, recordings: 0 });
+            expect(card.log).toBeUndefined();
+            expect(card.confirmed).toBeUndefined();
+        });
+
+        it('every recording of the day counts its rows; labour told in two recordings is no one number (never 3 + 2)', () => {
+            const morning = log({ id: 'm', plotIds: ['g1'], meta: meta('03:00'), cropActivities: [{ id: 'a', title: 'छाटणी' }], labour: [{ id: 'l1', type: 'HIRED', count: 3 }] });
+            const evening = log({ id: 'e', plotIds: ['g1'], meta: meta('11:00', 'op2'), cropActivities: [{ id: 'b', title: 'खुरपणी' }], labour: [{ id: 'l2', type: 'HIRED', count: 2 }] });
+            const card = buildPlotDayCard(g1, [evening, morning], scope, TODAY_KEY, TODAY);
+            expect(card.counts?.work).toBe(2);
+            expect(card.counts?.labour).toBeUndefined();
+            expect(card.labourSeveral).toBe(true);
+            expect(card.recordings).toBe(2);
+            expect(card.log?.id).toBe('m'); // morning first
+        });
+
+        it('labour told in ONE recording keeps that recording\'s own headcount; worked when any recording worked', () => {
+            const rain = log({ id: 'r', plotIds: ['g1'], meta: meta('02:00'), disturbance: { scope: 'FULL_DAY', group: 'WEATHER', reason: 'पाऊस', blockedSegments: [] } });
+            const work = log({ id: 'w', plotIds: ['g1'], meta: meta('10:00'), labour: [{ id: 'l', type: 'HIRED', count: 4 }] });
+            const card = buildPlotDayCard(g1, [rain, work], scope, TODAY_KEY, TODAY);
+            expect(card.status).toBe('worked');
+            expect(card.stoppedReason).toBeUndefined();
+            expect(card.counts?.labour).toBe(4);
+            expect(card.labourSeveral).toBeUndefined();
+            expect(buildPlotDayCard(g1, [rain], scope, TODAY_KEY, TODAY)).toMatchObject({ status: 'blocked', stoppedReason: 'पाऊस' });
+        });
     });
 
     it('reads only the chosen plot and the chosen day', () => {

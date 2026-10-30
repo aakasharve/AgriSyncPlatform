@@ -20,6 +20,13 @@ import type { ReflectPageProps } from '../../../features/reflect/ReflectPageProp
 import type { PlannedTask } from '../../../types';
 import { renderReflectView } from '../mainView';
 
+// Lane RF (review B001) — the signed-in session, as the auth store reports it.
+const session = vi.hoisted(() => ({ userId: null as string | null }));
+vi.mock('../../../infrastructure/storage/AuthTokenStore', async importOriginal => ({
+    ...(await importOriginal<typeof import('../../../infrastructure/storage/AuthTokenStore')>()),
+    getSessionUserId: () => session.userId,
+}));
+
 const TASKS = [{ id: 't1', title: 'फवारणी', status: 'pending' }] as PlannedTask[];
 
 const ctxFor = (over: Partial<AppRouterContext> = {}) => ({
@@ -84,5 +91,16 @@ describe('renderReflectView — the real doors करायची कामे i
         props.onFocusPlotConsumed!();
         expect(ctx.setReflectFocusPlotId).toHaveBeenCalledWith(null);
         expect(pageProps(ctxFor()).focusPlotId).toBeNull();
+    });
+
+    it("lane RF (review B001): 'he said it' is the SIGNED-IN user, never the profile's active operator (the owner on a worker's phone)", () => {
+        session.userId = 'worker-1';
+        // a worker's phone after its first sync: the profile's active operator is the PRIMARY OWNER's id
+        const props = pageProps(ctxFor({ farmerProfile: { operators: [{ id: 'owner-1', name: 'मालक' }], activeOperatorId: 'owner-1' }, farmRole: 'Worker' } as unknown as Partial<AppRouterContext>));
+        expect(props.sessionUserId).toBe('worker-1');
+        expect(JSON.stringify({ sessionUserId: props.sessionUserId, farmRole: props.farmRole })).not.toContain('owner-1');
+        expect(props.farmRole).toBe('Worker');
+        session.userId = null;
+        expect(pageProps(ctxFor()).sessionUserId).toBeNull(); // nobody signed in: nobody is "you"
     });
 });

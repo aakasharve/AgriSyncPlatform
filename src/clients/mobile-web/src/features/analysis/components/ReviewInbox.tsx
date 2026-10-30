@@ -34,7 +34,7 @@ import { DailyLog, FarmOperator } from '../../../types';
 // `XCircle` and `ChevronRight` were already unused imports before this
 // change (the chevrons below are local inline SVGs); dropped with
 // `CheckCircle2`, which the removed Approve button was the only user of.
-import { Clock, User, Calendar, DollarSign, Leaf } from 'lucide-react';
+import { Clock, User, Calendar, Leaf } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import ApprovalUnavailableNotice from '../../../shared/components/ApprovalUnavailableNotice';
 
@@ -149,12 +149,9 @@ const ReviewInbox: React.FC<ReviewInboxProps> = ({ pendingLogs, operators, onVie
                                                 {log.labour.reduce((s, l) => s + (l.count ?? 0), 0)} Workers
                                             </span>
                                         )}
-                                        {(log.financialSummary?.grandTotal ?? 0) > 0 && (
-                                            <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-100 flex items-center gap-1 font-mono">
-                                                <DollarSign size={10} />
-                                                {log.financialSummary?.grandTotal.toLocaleString()}
-                                            </span>
-                                        )}
+                                        {/* spec: plr-d10 lane RF (review B004) — no record's own money total on आढावा (this
+                                            inbox's only home): a pulled record has none (lane F1) and the farm's money is
+                                            the server ledger's, shown — to whoever may see it — in उत्पन्न आणि खर्च. */}
                                     </div>
 
                                     {/* First Activity Title as context */}

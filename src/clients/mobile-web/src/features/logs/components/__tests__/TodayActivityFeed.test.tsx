@@ -114,7 +114,9 @@ describe('the log page no longer carries the feed', () => {
         // lane RF: आढावा builds the day's work itself, for the day it is on; the reflect view hands it who is holding the
         // phone, his role, and the result screen's "बदला" path — no longer today's entries, ready-made.
         expect(src).not.toContain('activityFeed={activityFeed}');
-        expect(src).toContain('youIds={');
+        // review B001: "he said it" is the signed-in session's user only, never the profile's active operator
+        expect(src).toContain('sessionUserId={getSessionUserId()}');
+        expect(src).not.toContain('activeOperatorId, getSessionUserId()');
         expect(src).toContain('farmRole={ctx.farmRole ?? null}');
         expect(src).toContain('onOpenLog={openLogToEdit}');
     });

@@ -5,32 +5,37 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane RF) — the farm's money as the SERVER's ledger holds it, for
  * आढावा (`moneyModel.ts` turns it into figures):
  *   - entries: the server's cost entries with the finance corrections applied — the finance pages' own read
- *     (`financeSelectors.getEffectiveMoneyEvents`), never a copy of its rules; this farm's only;
+ *     (`financeSelectors.peekEffectiveMoneyEvents`, the same correction rule), never a copy of its rules; this
+ *     farm's only;
  *   - gaps: money told on this phone that the ledger does not hold yet, read from where the money path writes it —
  *     the outbox (`add_cost_entry` rows, any state) and the money kept on this phone (`heldMoney`). An entry the
- *     ledger already holds is not a gap. These make a total say it is partial; they are never added to it.
+ *     ledger already holds is not a gap. These make a total say it is partial; they are never added to it;
+ *   - complete: true only once a FULL read of the phone's copy of the ledger has finished AND the gaps are known.
  *
- * Re-read when the page's records change and when the finance cache announces new data. Every read asks that cache to
- * refresh itself and the refresh announces itself, so an announcement right after this hook's own read is not news
- * (otherwise reading would never stop).
+ * Review B003 — how it settles on the complete ledger, and why it cannot loop:
+ *   1. On opening (and whenever the page's records change) it asks for ONE full read (`refreshFromPhone`) and reads
+ *      the cache when that read has finished, however long it takes. Until then — or if it fails — the ledger is
+ *      not complete, and every total says so.
+ *   2. Whenever the cache announces new data (a pull merged in, a new entry), it reads the cache AS IT STANDS
+ *      (`peek…`): reading never starts another refresh, so an announcement can never cause one.
+ *   3. The outbox is read after every change; until it has been read, or when it cannot be, nothing is complete.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import type { AddCostEntryPayload } from '../../../application/usecases/sync/AddCostEntryCommand';
 import { financeSelectors } from '../../finance/financeSelectors';
+import { financeService } from '../../finance/financeService';
 import { readHeldMoney } from '../../finance/heldMoney';
 import type { Ledger, LedgerEntry, LedgerGap } from './moneyModel';
 
 const CACHE_UPDATED = 'agrisync:finance-cache-updated';
-/** An announcement this soon after our own read is that read's refresh. */
-const OWN_REFRESH_MS = 2000;
 
 const dateKeyOf = (value: string | undefined): string => (value ?? '').slice(0, 10);
 
-/** The ledger entries of this farm (every farm when the farm is not known yet). */
+/** The ledger entries of this farm (every farm when the farm is not known yet), as the cache holds them now. */
 export function readLedgerEntries(farmId: string | null): LedgerEntry[] {
-    return financeSelectors.getEffectiveMoneyEvents()
+    return financeSelectors.peekEffectiveMoneyEvents()
         .filter(e => !farmId || e.farmId === farmId)
         .map(e => ({
             id: e.id,
@@ -42,7 +47,7 @@ export function readLedgerEntries(farmId: string | null): LedgerEntry[] {
         }));
 }
 
-/** Money told on this phone that the ledger does not hold yet. A read that fails claims no gap. */
+/** Money told on this phone that the ledger does not hold yet. Rejects when the outbox cannot be read. */
 export async function readLedgerGaps(known: ReadonlySet<string>, farmId: string | null): Promise<LedgerGap[]> {
     const [rows, held] = await Promise.all([
         getDatabase().mutationQueue.where('mutationType').equals(SyncMutationName.AddCostEntry).toArray(),
@@ -66,28 +71,37 @@ export async function readLedgerGaps(known: ReadonlySet<string>, farmId: string 
 }
 
 export function useMoneyLedger(farmId: string | null, refreshKey: unknown): Ledger {
-    const [version, setVersion] = useState(0);
-    const lastRead = useRef(0);
-    const entries = useMemo(() => {
-        lastRead.current = Date.now();
-        return readLedgerEntries(farmId);
-        // `refreshKey` / `version` only ask for a fresh read.
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [farmId, refreshKey, version]);
+    // What was read, and for which farm: another farm's read is never this farm's (nor complete for it).
+    const [state, setState] = useState(() => ({ farm: farmId, entries: readLedgerEntries(farmId), full: false }));
+    const fallback = useMemo(() => (state.farm === farmId ? null : readLedgerEntries(farmId)), [state.farm, farmId]);
+    const entries = fallback ?? state.entries;
+    const readInFull = state.farm === farmId && state.full;
+
+    // 1. One full read per opening / change of records; complete only once it has finished.
     useEffect(() => {
-        const onUpdated = () => { if (Date.now() - lastRead.current > OWN_REFRESH_MS) setVersion(v => v + 1); };
+        let alive = true;
+        financeService.refreshFromPhone()
+            .then(() => { if (alive) setState({ farm: farmId, entries: readLedgerEntries(farmId), full: true }); })
+            .catch(() => { if (alive) setState({ farm: farmId, entries: readLedgerEntries(farmId), full: false }); });
+        return () => { alive = false; };
+    }, [farmId, refreshKey]);
+
+    // 2. New data in the cache is read as it stands — never a refresh, so never a loop.
+    useEffect(() => {
+        const onUpdated = () => setState(s => ({ farm: farmId, entries: readLedgerEntries(farmId), full: s.farm === farmId && s.full }));
         window.addEventListener(CACHE_UPDATED, onUpdated);
         return () => window.removeEventListener(CACHE_UPDATED, onUpdated);
-    }, []);
+    }, [farmId]);
 
-    const [gaps, setGaps] = useState<LedgerGap[]>([]);
+    // 3. The gaps, after every change; unknown until read, and unknown again if the outbox cannot be read.
+    const [gaps, setGaps] = useState<{ list: LedgerGap[]; known: boolean }>({ list: [], known: false });
     useEffect(() => {
         let alive = true;
         readLedgerGaps(new Set(entries.map(e => e.id)), farmId)
-            .then(g => { if (alive) setGaps(g); })
-            .catch(() => { if (alive) setGaps([]); });
+            .then(list => { if (alive) setGaps({ list, known: true }); })
+            .catch(() => { if (alive) setGaps({ list: [], known: false }); });
         return () => { alive = false; };
     }, [entries, farmId]);
 
-    return useMemo(() => ({ entries, gaps }), [entries, gaps]);
+    return useMemo(() => ({ entries, gaps: gaps.list, complete: readInFull && gaps.known }), [entries, gaps, readInFull]);
 }

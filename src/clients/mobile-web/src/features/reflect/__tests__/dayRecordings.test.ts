@@ -126,6 +126,15 @@ describe('withMoneyShown — money he may not see is "—"', () => {
         expect(JSON.stringify(hidden.view.entries)).not.toContain('900');
     });
 
+    it('review B002: "डिझेल 800 दिले" headlines as "खर्च" once hidden — never "डिझेल · ₹800"', () => {
+        const diesel = said('dz', at('07:00'), 'op-sunil', { activityExpenses: [{ id: 'x', reason: 'डिझेल', totalAmount: 800, items: [] }] } as Partial<DailyLog>);
+        const [rec] = dayRecordings([diesel], TODAY_KEY, anyLog, mr, CROPS);
+        expect(rec.headline).toBe('डिझेल · ₹800'); // the owner (money visible) reads it as said
+        const hidden = withMoneyShown(rec, false);
+        expect(hidden.headline).toBe('खर्च');
+        expect(JSON.stringify({ headline: hidden.headline, entries: hidden.view.entries })).not.toContain('800');
+    });
+
     it('his own recording keeps it (he said it); money he may see is untouched', () => {
         expect(withMoneyShown(recs[1], false).view.entries.find(e => e.part === 'expense')?.value).toBe('मजूर · ₹300');
         expect(withMoneyShown(recs[0], true)).toBe(recs[0]);
@@ -133,7 +142,7 @@ describe('withMoneyShown — money he may not see is "—"', () => {
 });
 
 describe('listenModel — ▶ only where it may be offered', () => {
-    const viewer = (over: Partial<Viewer> = {}): Viewer => ({ youIds: new Set([ME]), farmRole: 'Worker', farmId: 'farm-1', ...over });
+    const viewer = (over: Partial<Viewer> = {}): Viewer => ({ sessionUserId: ME, farmRole: 'Worker', farmId: 'farm-1', ...over });
     const recOf = (l: DailyLog): DayRecording => dayRecordings([l], TODAY_KEY, anyLog, mr, CROPS)[0];
     const spoken = (extra: Partial<DailyLog>) => said('v', at('05:00'), 'op-sunil', { fullTranscript: 'पाणी दिलं', ...extra });
 
@@ -157,6 +166,13 @@ describe('listenModel — ▶ only where it may be offered', () => {
         expect(serverMayPlay(spoken({ legacyPartial: true }), viewer({ farmRole: 'PrimaryOwner' }))).toBe(true);
         expect(serverMayPlay(spoken({ meta: { createdAtISO: at('05:00'), createdByOperatorId: ME } }), viewer())).toBe(true);
         expect(serverMayPlay(spoken({ legacyPartial: true }), viewer({ farmRole: null }))).toBe(false); // role not told yet
+    });
+
+    it('review B001: "he is the speaker" is the signed-in session\'s user only — the owner\'s record is not a worker\'s', () => {
+        const ownersOld = said('ow', at('05:00'), 'owner-1', { legacyPartial: true });
+        expect(serverMayPlay(ownersOld, viewer({ sessionUserId: 'worker-1', farmRole: 'Worker' }))).toBe(false);
+        expect(serverMayPlay(ownersOld, viewer({ sessionUserId: 'owner-1', farmRole: 'Worker' }))).toBe(true);
+        expect(serverMayPlay(ownersOld, viewer({ sessionUserId: null, farmRole: 'Worker' }))).toBe(false);
     });
 
     it('no farm to ask → nothing offered', () => {

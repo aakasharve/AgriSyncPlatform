@@ -19,8 +19,10 @@
  *   - nothing recorded → `amount: null` (the page shows "—"), never ₹ 0; income − spent needs BOTH;
  *   - money this person may not see → `hidden` and no amount (`mayShowFarmMoney`, founder D-22);
  *   - a total made from an INCOMPLETE set says so (`partial`): money told on this phone that is not in the server's
- *     ledger yet (in the outbox, or kept on the phone — `LedgerGap`), or an older amount that never said whether it
- *     came in or went out (direction unknown: it falls out of both totals instead of being guessed into one).
+ *     ledger yet (in the outbox, or kept on the phone — `LedgerGap`), an older amount that never said whether it
+ *     came in or went out (direction unknown: it falls out of both totals instead of being guessed into one), or a
+ *     ledger this phone has not finished reading in full (review B003: before the full read, or when it or the
+ *     outbox could not be read, a total is never presented as complete).
  */
 import type { CropProfile } from '../../../types';
 import type { MoneyCategory, MoneyEventDirection } from '../../finance/finance.types';
@@ -54,12 +56,17 @@ export interface LedgerGap {
 export interface Ledger {
     entries: readonly LedgerEntry[];
     gaps: readonly LedgerGap[];
+    /**
+     * The entries are the COMPLETE ledger as this phone holds it (a full read finished) and the gaps are known (the
+     * outbox was read). `false` → every figure says it is partial.
+     */
+    complete: boolean;
 }
 
-export const EMPTY_LEDGER: Ledger = { entries: [], gaps: [] };
+export const EMPTY_LEDGER: Ledger = { entries: [], gaps: [], complete: true };
 
 /** Why a total is not the whole story. */
-export type PartialReason = 'notOnServer' | 'unknownDirection';
+export type PartialReason = 'notOnServer' | 'unknownDirection' | 'unchecked';
 
 export interface MoneyFigure {
     /** `null` = nothing recorded, or not his to see. */
@@ -95,9 +102,9 @@ const inScopeOf = (crops: readonly CropProfile[], scope: ViewScope) => {
 };
 
 /** One direction's figure over a set: its sum (null when none), and why it is partial. */
-function figureOf(entries: readonly LedgerEntry[], gaps: readonly LedgerGap[], direction: 'Expense' | 'Income'): MoneyFigure {
+function figureOf(entries: readonly LedgerEntry[], gaps: readonly LedgerGap[], direction: 'Expense' | 'Income', complete: boolean): MoneyFigure {
     const own = entries.filter(e => e.direction === direction);
-    const partial: PartialReason[] = [];
+    const partial: PartialReason[] = complete ? [] : ['unchecked'];
     if (gaps.some(g => g.direction === direction || g.direction === 'Unknown')) partial.push('notOnServer');
     if (entries.some(e => e.direction === 'Unknown')) partial.push('unknownDirection');
     return { amount: own.length > 0 ? Math.round(own.reduce((s, e) => s + e.amount, 0)) : null, hidden: false, partial };
@@ -107,7 +114,7 @@ function figureOf(entries: readonly LedgerEntry[], gaps: readonly LedgerGap[], d
 export function buildInHand(ledger: Ledger, crops: readonly CropProfile[], scope: ViewScope, visible: boolean): MoneyFigure {
     if (!visible) return HIDDEN;
     const inScope = inScopeOf(crops, scope);
-    return figureOf(ledger.entries.filter(inScope), ledger.gaps.filter(inScope), 'Income');
+    return figureOf(ledger.entries.filter(inScope), ledger.gaps.filter(inScope), 'Income', ledger.complete);
 }
 
 export interface SeasonTotals {
@@ -142,8 +149,8 @@ export function buildSeasonTotals(
     const inScope = inScopeOf(crops, scope);
     const entries = ledger.entries.filter(inScope);
     const gaps = ledger.gaps.filter(inScope);
-    const cost = figureOf(entries, gaps, 'Expense');
-    const income = figureOf(entries, gaps, 'Income');
+    const cost = figureOf(entries, gaps, 'Expense', ledger.complete);
+    const income = figureOf(entries, gaps, 'Income', ledger.complete);
     return {
         cost,
         income,
@@ -190,7 +197,7 @@ export function buildSpend(ledger: Ledger, crops: readonly CropProfile[], scope:
     const inScope = inScopeOf(crops, scope);
     const entries = ledger.entries.filter(e => inRange(e) && inScope(e));
     const spent = entries.filter(e => e.direction === 'Expense');
-    const total = visible ? figureOf(entries, ledger.gaps.filter(g => inRange(g) && inScope(g)), 'Expense') : HIDDEN;
+    const total = visible ? figureOf(entries, ledger.gaps.filter(g => inRange(g) && inScope(g)), 'Expense', ledger.complete) : HIDDEN;
     const show = visible && total.amount !== null;
 
     const totals = new Map<string, number>();
@@ -236,7 +243,17 @@ export function plotDayMoney(ledger: Ledger, plotId: string | undefined, dateKey
     if (!visible) return HIDDEN;
     if (!plotId) return { amount: null, hidden: false, partial: [] };
     const on = (x: { plotId?: string; dateKey: string }) => x.plotId === plotId && x.dateKey === dateKey;
-    return figureOf(ledger.entries.filter(on), ledger.gaps.filter(on), 'Expense');
+    return figureOf(ledger.entries.filter(on), ledger.gaps.filter(on), 'Expense', ledger.complete);
+}
+
+/**
+ * Review B004 — the whole-farm panel's money for one day: what the ledger holds as spent that day on NO plot (a
+ * whole-farm entry, the scope the farmer stated). Never a log's own total.
+ */
+export function farmWideDayMoney(ledger: Ledger, dateKey: string, visible: boolean): MoneyFigure {
+    if (!visible) return HIDDEN;
+    const on = (x: { plotId?: string; dateKey: string }) => !x.plotId && x.dateKey === dateKey;
+    return figureOf(ledger.entries.filter(on), ledger.gaps.filter(on), 'Expense', ledger.complete);
 }
 
 /** The biggest bar ("सर्वात जास्त खर्च"), or nothing when nothing was spent. */

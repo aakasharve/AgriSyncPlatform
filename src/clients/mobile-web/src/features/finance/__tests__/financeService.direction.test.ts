@@ -26,7 +26,7 @@
  */
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 
 import { financeService } from '../financeService';
 
@@ -66,6 +66,14 @@ function applySnapshot(costEntries: PulledCostEntry[]) {
 }
 
 describe('financeService — a cost entry reads back with the direction it was given', () => {
+    // spec: plr-d10 lane RF (review B003) — a pull now MERGES into the cache (a pull is incremental; replacing the
+    // cache with it dropped every older row). So each case starts on a fresh phone: a full read of the phone's
+    // (empty) tables, the second one waiting out any read the previous case's pull asked for.
+    beforeEach(async () => {
+        await financeService.refreshFromPhone();
+        await financeService.refreshFromPhone();
+    });
+
     it('reads a stated Income as Income', () => {
         const events = applySnapshot([
             { ...base('a1111111-1111-4111-8111-111111111111'), direction: 'Income', amount: 50000 },

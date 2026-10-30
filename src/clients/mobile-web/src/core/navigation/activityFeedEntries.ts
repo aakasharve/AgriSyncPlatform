@@ -21,7 +21,7 @@
 import type { DailyLog } from '../../features/logs/logs.types';
 import type { CropProfile } from '../../types';
 import type { FeedEntry } from '../../features/logs/components/TodayActivityFeed';
-import { blockersOf, partEntriesOf, partMeta } from '../../features/logs/components/voiceResult/resultModel';
+import { blockersOf, partEntriesOf, partMeta, type PartEntry } from '../../features/logs/components/voiceResult/resultModel';
 import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStrings';
 import { formatFarmerLogTime, getVerificationPresentation } from './helpers';
 
@@ -40,11 +40,20 @@ export interface FeedDeps {
  * flagged inside the glance, never as the card's fact.
  */
 export function workDoneOf(log: DailyLog): string {
-    const entries = partEntriesOf(log).filter(e => e.verified);
+    return headlineOf(partEntriesOf(log), blockersOf(log).length > 0);
+}
+
+/**
+ * The same rule over entries already read (lane RF, review B002): आढावा applies it AFTER hiding money the person
+ * may not see, so a headline can never carry an amount the screen hid. An entry with no value (a hidden amount is
+ * one) never headlines with its value — its part's name stands instead.
+ */
+export function headlineOf(all: readonly PartEntry[], hasBlockers: boolean): string {
+    const entries = all.filter(e => e.verified);
     const valued = entries.find(e => e.part === 'crop' && e.value) ?? entries.find(e => e.value);
     if (valued?.value) return valued.value;
     if (entries[0]) return partMeta(entries[0].part).label;
-    return blockersOf(log).length > 0 ? RESULT_STR.blockers : '—';
+    return hasBlockers ? RESULT_STR.blockers : '—';
 }
 
 export function buildFeedEntries(logs: readonly DailyLog[], deps: FeedDeps): FeedEntry[] {

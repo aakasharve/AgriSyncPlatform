@@ -268,6 +268,32 @@ function applyFinanceSnapshot(payload: FinanceSyncPayload): void {
     emitFinanceCacheUpdated();
 }
 
+/** `next` replaces the item of `current` with the same id, or is added; every other item is kept. */
+function upsertById<T extends { id: string }>(current: readonly T[], next: readonly T[]): T[] {
+    const byId = new Map(current.map(item => [item.id, item] as const));
+    for (const item of next) byId.set(item.id, item);
+    return [...byId.values()];
+}
+
+/** A full read from the phone's tables is under way and may have read them before a pull wrote new rows. */
+let rehydrateAfterCurrent = false;
+
+/**
+ * spec: plr-d10 lane RF (review B003) — a PULL's finance rows arrive here. A pull is INCREMENTAL: it carries only
+ * the rows changed since the last one (the reconciler has already written them into the phone's tables). This used
+ * to REPLACE the whole cache with them, so after any later pull the money pages and आढावा summed only the newest
+ * rows — totals shrank and older corrections vanished, with nothing saying so. The rows are now MERGED by id into
+ * what the cache holds; the complete set stays the phone's tables (`hydrateFromDexie`), and a full read that was
+ * already under way when the pull landed is followed by one more, so it cannot leave the newer rows out.
+ */
+function mergeFinanceSnapshot(payload: FinanceSyncPayload): void {
+    cache.events = upsertById(cache.events, asArray<ServerCostEntry>(payload.costEntries).map(mapCostEntryToMoneyEvent));
+    cache.adjustments = upsertById(cache.adjustments, asArray<ServerFinanceCorrection>(payload.corrections).map(mapCorrection));
+    cache.priceBook = upsertById(cache.priceBook, asArray<ServerPriceConfig>(payload.priceConfigs).map(mapPriceConfig));
+    if (cache.hydrating) rehydrateAfterCurrent = true;
+    emitFinanceCacheUpdated();
+}
+
 async function hydrateFromDexie(force = false): Promise<void> {
     if (cache.hydrating) {
         return cache.hydrating;
@@ -321,6 +347,11 @@ async function hydrateFromDexie(force = false): Promise<void> {
         }
     })().finally(() => {
         cache.hydrating = null;
+        // A pull merged rows while this read was running; it may have read the tables before they were written.
+        if (rehydrateAfterCurrent) {
+            rehydrateAfterCurrent = false;
+            hydrateInBackground(true);
+        }
     });
 
     return cache.hydrating;
@@ -352,7 +383,8 @@ if (typeof window !== 'undefined') {
             return;
         }
 
-        applyFinanceSnapshot(detail);
+        // An incremental pull: merged, never a replacement of the whole cache (review B003).
+        mergeFinanceSnapshot(detail);
     });
 }
 
@@ -389,6 +421,29 @@ export const financeService = {
     getAdjustments(): MoneyAdjustment[] {
         refreshInBackground();
         return [...cache.adjustments];
+    },
+
+    // ── spec: plr-d10 lane RF (review B003) — reads that do NOT ask for a refresh ──
+    // `getMoneyEvents` / `getAdjustments` start a full re-read every call, and every re-read announces
+    // `agrisync:finance-cache-updated`; a screen that re-reads on that announcement would never stop. A screen
+    // that listens reads these instead, and asks for a full read only when it chooses (`refreshFromPhone`).
+
+    /** The cache as it stands (same order as `getMoneyEvents`), without starting a re-read. */
+    peekMoneyEvents(): MoneyEvent[] {
+        return [...cache.events].sort((a, b) => new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime());
+    },
+
+    /** The corrections as they stand, without starting a re-read. */
+    peekAdjustments(): MoneyAdjustment[] {
+        return [...cache.adjustments];
+    },
+
+    /**
+     * One full read of the phone's copy of the server's ledger into the cache. Resolves when the cache holds the
+     * COMPLETE set; rejects when it could not be read (the caller must then not present its totals as complete).
+     */
+    refreshFromPhone(): Promise<void> {
+        return hydrateFromDexie(true);
     },
 
     // ── Internal mutation helpers (used by financeCommandService only) ──

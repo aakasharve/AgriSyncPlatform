@@ -165,8 +165,9 @@ export function getFarmWideDaySummary(
     history: DailyLog[],
     dateStr: string,
 ): FarmWideDaySummary {
+    // spec: plr-d10 lane RF (review B004) — a deleted record is not work done that day.
     const dayLogs = history.filter(log =>
-        log.date === dateStr && isFarmWideSelection(log.context?.selection));
+        log.date === dateStr && !log.deletion && isFarmWideSelection(log.context?.selection));
 
     const counts = emptyCounts();
     let statedSpend = 0;

@@ -25,8 +25,12 @@ import type { DayRecording } from './dayRecordings';
 
 /** Who is holding this phone, as the server told it. */
 export interface Viewer {
-    /** Ids that mean "the person holding this phone" (the active operator and the signed-in user). */
-    youIds: ReadonlySet<string>;
+    /**
+     * The SIGNED-IN user (the auth session's id) — the only thing "he is the speaker" is ever compared with. Never the
+     * profile's active operator: on a non-owner's phone the first sync sets that to the primary OWNER's id
+     * (`profileAndCropsReconciler`), so it would make the owner's records read as his own (review B001).
+     */
+    sessionUserId: string | null;
     /** His role on this farm, as the server sent it (`PrimaryOwner`, …); `null` = not told yet. */
     farmRole: string | null;
     /** The farm on screen. */
@@ -45,7 +49,7 @@ export function serverMayPlay(voiceLog: DailyLog, viewer: Viewer): boolean {
     if (!farmOfLog(voiceLog, viewer)) return false;
     if (voiceLog.legacyPartial === false) return !!voiceLog.fullTranscript?.trim();
     const speaker = voiceLog.meta?.createdByOperatorId ?? '';
-    return (!!speaker && viewer.youIds.has(speaker)) || viewer.farmRole === PRIMARY_OWNER;
+    return (!!speaker && speaker === viewer.sessionUserId) || viewer.farmRole === PRIMARY_OWNER;
 }
 
 /** How this recording can be heard here, if at all. */

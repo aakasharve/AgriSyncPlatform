@@ -70,9 +70,15 @@ import type { FarmWideDaySummary } from '../../../app/helpers/appContentDailyCou
 
 interface FarmWideTodayPanelProps {
     summary: FarmWideDaySummary;
+    /**
+     * spec: plr-d10 lane RF (review B004) — the cost to print, already formatted by the caller. आढावा passes the
+     * server ledger's whole-farm spend for the day ("—" when there is none, or it is not his to see), never the
+     * records' own totals. Absent → the stated spend on the records, as the log page has always read it.
+     */
+    cost?: string;
 }
 
-export const FarmWideTodayPanel: React.FC<FarmWideTodayPanelProps> = ({ summary }) => {
+export const FarmWideTodayPanel: React.FC<FarmWideTodayPanelProps> = ({ summary, cost }) => {
     const { language } = useLanguage();
 
     // Nothing recorded at farm level today -> render nothing at all.
@@ -117,7 +123,7 @@ export const FarmWideTodayPanel: React.FC<FarmWideTodayPanelProps> = ({ summary 
                     <p className="text-[13px] font-bold leading-snug text-stone-800">
                         {tf('dfes.todaySummary', language, {
                             activities: activityCount,
-                            cost: formatCurrencyINR(statedSpend),
+                            cost: cost ?? formatCurrencyINR(statedSpend),
                         })}
                     </p>
                 </div>

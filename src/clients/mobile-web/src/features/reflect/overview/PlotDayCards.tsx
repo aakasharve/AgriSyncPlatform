@@ -34,13 +34,15 @@ const ICON: Record<Bucket, React.ReactNode> = {
 };
 const WATER_TONE: Record<WaterState, string> = { ON_TRACK: 'bg-green-100 text-green-800', MISSED: 'bg-orange-100 text-orange-800', EXTRA: 'bg-blue-100 text-blue-800' };
 
-const BucketCell: React.FC<{ b: Bucket; n: number | undefined; amber: boolean }> = ({ b, n, amber }) => {
+/** `several`: labour told in more than one recording — no one number (review B006), and the cell says so. */
+const BucketCell: React.FC<{ b: Bucket; n: number | undefined; amber: boolean; several?: boolean }> = ({ b, n, amber, several }) => {
+    const copy = useReflectCopy();
     const unknown = n === undefined;
     const has = unknown || n > 0;
     const color = !has ? 'bg-stone-50 text-stone-300 ring-stone-100' : amber ? 'bg-amber-50 text-amber-700 ring-amber-200' : BUCKET_COLOR[b];
-    const said = unknown ? 'संख्या सांगितली नाही' : n > 0 ? String(n) : 'नोंद नाही';
+    const said = several ? copy.labourSeveral : unknown ? 'संख्या सांगितली नाही' : n > 0 ? String(n) : 'नोंद नाही';
     return (
-        <span data-bucket={b} data-count={unknown ? 'unknown' : n} aria-label={`${BUCKET_LABEL[b]}: ${said}`} title={BUCKET_LABEL[b]}
+        <span data-bucket={b} data-count={several ? 'several' : unknown ? 'unknown' : n} aria-label={`${BUCKET_LABEL[b]}: ${said}`} title={BUCKET_LABEL[b]}
             className={`flex flex-col items-center gap-0.5 rounded-lg py-1.5 ring-1 ${color}`}>
             {ICON[b]}<Num className="text-[12.5px] font-extrabold leading-none">{!unknown && n > 0 ? n : '—'}</Num>
         </span>
@@ -88,7 +90,7 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
                     <span className="flex items-center justify-center gap-1.5 rounded-lg bg-amber-100 p-2 text-[14px] font-extrabold text-amber-800"><Ban size={16} aria-hidden="true" />काम थांबलं{card.stoppedReason ? `: ${card.stoppedReason}` : ''}</span>
                 ) : card.counts ? (
                     <span className="grid grid-cols-8 gap-1">
-                        {BUCKETS.map(b => <BucketCell key={b} b={b} n={card.counts![b]} amber={b === 'water' && card.waterBlocked} />)}
+                        {BUCKETS.map(b => <BucketCell key={b} b={b} n={card.counts![b]} amber={b === 'water' && card.waterBlocked} several={b === 'labour' && card.labourSeveral} />)}
                     </span>
                 ) : (
                     <span className="block rounded-lg bg-white/70 p-2 text-center text-[13px] font-bold text-stone-500 ring-1 ring-stone-200" data-testid={`plot-empty-${ref.key}`}>{isToday ? 'आज अजून काही सांगितलं नाही' : 'या दिवशी नोंद नाही'}</span>

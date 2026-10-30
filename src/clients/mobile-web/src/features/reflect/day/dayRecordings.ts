@@ -19,7 +19,7 @@
  *   - money the person holding this phone may not see becomes "—" (`withMoneyShown`), unless he said it himself.
  */
 import type { CropProfile, DailyLog } from '../../../types';
-import { workDoneOf } from '../../../core/navigation/activityFeedEntries';
+import { headlineOf } from '../../../core/navigation/activityFeedEntries';
 import {
     PARTS, groupByRecording, primaryOf, recordingKeyOf, recordingOf,
     type PartEntry, type PartKey, type RecordingView, type WhoDeps,
@@ -39,7 +39,10 @@ export interface DayRecording {
     /** The plots it is about, as named on the farm; empty = the whole farm. */
     plotNames: string[];
     cropColor: string;
-    /** The first thing understood (the feed card's own rule, `workDoneOf`); "—" when nothing. */
+    /**
+     * The first thing understood (the feed card's own rule, `headlineOf`), read from `view.entries` — so after
+     * `withMoneyShown` it can never carry a hidden amount (review B002); "—" when nothing.
+     */
     headline: string;
     /** When it was saved (ms), for the day's time order; unknown times go last. */
     at: number;
@@ -111,7 +114,7 @@ export function dayRecordings(
             logs,
             plotNames,
             cropColor: crops.find(c => c.id === cropId)?.color ?? 'bg-slate-400',
-            headline: logs.map(workDoneOf).find(h => h !== '—') ?? '—',
+            headline: headlineOf(base.entries, base.blockers.length > 0),
             at: Math.min(...logs.map(createdMs), createdMs(voiceLog)),
         });
     }
@@ -136,12 +139,17 @@ export const isFarmWide = (log: DailyLog): boolean => log.context?.selection?.[0
 
 /**
  * Money he may not see: every amount becomes "—" and loses its phrase (his phrase would repeat the amount). His own
- * recording keeps it — he said it. Every rupee figure of a recording lives in its खर्च part (`partEntriesOf`).
+ * recording keeps it — he said it (the SIGNED-IN user's own, review B001). Every rupee figure of a recording lives in
+ * its खर्च part (`partEntriesOf`). The headline is read again with the amounts gone (review B002): a recording that
+ * only said "डिझेल 800 दिले" headlines as "खर्च", never "डिझेल · ₹800". His transcript words are not touched here —
+ * who may hear them is the server's D-31 gate.
  */
 export function withMoneyShown(rec: DayRecording, mayShow: boolean): DayRecording {
     if (mayShow || rec.view.who.you) return rec;
-    const hide = (e: PartEntry): PartEntry => (e.part === 'expense' ? { ...e, value: HIDDEN_MONEY, quote: undefined } : e);
-    return { ...rec, view: { ...rec.view, entries: rec.view.entries.map(hide) } };
+    const isMoney = (e: PartEntry) => e.part === 'expense';
+    const entries = rec.view.entries.map(e => (isMoney(e) ? { ...e, value: HIDDEN_MONEY, quote: undefined } : e));
+    const forHeadline = rec.view.entries.map(e => (isMoney(e) ? { ...e, value: null, quote: undefined } : e));
+    return { ...rec, headline: headlineOf(forHeadline, rec.view.blockers.length > 0), view: { ...rec.view, entries } };
 }
 
 /** The day, part by part (the result screen's `DayRow`s): each entry stays tied to its recording, newest first. */
