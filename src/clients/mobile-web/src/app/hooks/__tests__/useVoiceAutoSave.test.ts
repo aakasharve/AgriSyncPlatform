@@ -232,3 +232,32 @@ describe('useVoiceAutoSave — round 2', () => {
         expect(save).not.toHaveBeenCalled();
     });
 });
+
+describe('useVoiceAutoSave — lane L6b: what he TYPES to Sathi', () => {
+    const TYPED = { recordedAtUtc: '2026-10-26T06:00:00.000Z', typed: true as const };
+
+    it('is saved at once like a recording, UNCONFIRMED, marked typed — no recording named, looked for or linked', async () => {
+        const save = writes([savedLog('LOG-T', 'चार मजूर आले')]);
+        const archiveIdOf = vi.fn(async () => 'should-not-be-asked');
+        const { result, linkClip, setStatus } = setup(save, { archiveIdOf });
+        let took = false;
+        await act(async () => { took = await result.current.sink(parse(), undefined, TYPED); });
+        expect(took).toBe(true);
+        const options = save.mock.calls[0][2];
+        // The server keeps an auto-saved capture unconfirmed (its own rule for this flag); the phone marks it typed.
+        expect(options).toMatchObject({ autoSavedFromVoice: true, typedEntry: true });
+        expect(options).not.toHaveProperty('voiceClipId');
+        expect(archiveIdOf).not.toHaveBeenCalled();
+        expect(linkClip).not.toHaveBeenCalled();
+        expect(result.current.voiceResult).toMatchObject({ logIds: ['LOG-T'], clipId: null, typed: true });
+        expect(setStatus).not.toHaveBeenCalled(); // the save itself turns the screen (handleAutoSave), as for a recording
+    });
+
+    it('a recording is never marked typed', async () => {
+        const save = writes([savedLog('LOG-1', 'x')]);
+        const { result } = setup(save, { archiveIdOf: vi.fn(async () => undefined) });
+        await act(async () => { await result.current.sink(parse(), undefined, REC); });
+        expect(save.mock.calls[0][2]).not.toHaveProperty('typedEntry');
+        expect(result.current.voiceResult).not.toHaveProperty('typed');
+    });
+});

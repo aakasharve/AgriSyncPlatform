@@ -62,7 +62,8 @@ const DayClips: React.FC<{ clips: readonly VoiceClipCacheRecord[] }> = ({ clips 
     return <div className="space-y-2">{clips.map(c => <ClipPlayerCard key={c.id} locale="mr-IN" clip={toUnifiedClip(c, granted, since)} />)}</div>;
 };
 
-export const isTyped = (log: DailyLog): boolean => log.meta?.provenance?.source === 'manual';
+// No voice behind it: the hand-filled form, or (PLR-D10 L6b) words typed to Sathi — "लिहिलेलं" there too.
+export const isTyped = (log: DailyLog): boolean => log.meta?.provenance?.source === 'manual' || log.typedEntry === true;
 
 export const ScheduleDaySheet: React.FC<{ day: ScheduleDay; stageName: string | null; clips: readonly VoiceClipCacheRecord[]; onClose: () => void }> = ({ day, stageName, clips, onClose }) => {
     useBackDismiss(true, onClose);

@@ -692,6 +692,8 @@ export interface DailyLog {
     autoSavedFromVoice?: boolean;
     /** PLR-D10 I27 — the server (archive) id of the recording this log was saved from; rides the create, a pull keeps it. */
     voiceClipId?: string;
+    /** PLR-D10 L6b — he TYPED it to Sathi: no recording behind it ("लिहिलेलं"). Phone-only, never on the wire; a pull keeps it. */
+    typedEntry?: boolean;
 
     /**
      * Understanding Meter score — stamped at save time (W1.P3.T1, task 1c).

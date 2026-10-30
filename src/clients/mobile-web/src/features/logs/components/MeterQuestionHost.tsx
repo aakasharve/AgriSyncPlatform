@@ -53,10 +53,12 @@ export interface MeterQuestionHostProps {
      * behaviour unchanged.
      */
     onAnswerBySpeaking?: (pending: PendingQuestionAnswer) => void;
+    /** spec: plr-d10 (lane L6b) — handed to MeterDisplay: 'sathi' = the result screen's designed question card. */
+    look?: 'card' | 'sathi';
 }
 
 export function MeterQuestionHost({
-    farmId, plotId, score, allLogs, engagement, questionInputs, onAnswerBySpeaking,
+    farmId, plotId, score, allLogs, engagement, questionInputs, onAnswerBySpeaking, look,
 }: MeterQuestionHostProps): React.ReactElement | null {
     const enabled = FEATURE_FLAGS.stageQuestions && !!farmId;
     // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — notify the
@@ -113,6 +115,7 @@ export function MeterQuestionHost({
             // With-options tap-choice path (Task 2A, both new).
             onAnswer={handleAnswer}
             onDismiss={() => { void recordOutcome({ skipped: true, dailyLogId: sourceLogId }); }}
+            look={look}
         />
     );
 }

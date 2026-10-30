@@ -302,6 +302,8 @@ function preserveLocalOnlyFields(
         ...(existing.autoSavedFromVoice === true && { autoSavedFromVoice: true }),
         // PLR-D10 I27 — the recording link is not on the wire either; the phone that made it keeps it.
         ...(existing.voiceClipId && { voiceClipId: existing.voiceClipId }),
+        // PLR-D10 L6b — "he typed it to Sathi" (no recording behind it) is not on the wire; this phone keeps it.
+        ...(existing.typedEntry === true && { typedEntry: true }),
 
         // ── P0.5 — `meta` IS MERGED, NOT REPLACED ───────────────────────────
         //

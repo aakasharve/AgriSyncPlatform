@@ -38,12 +38,14 @@ interface Props {
     onMissedTap: (n: RingNodeData) => void;
     onSettled?: () => void;
     onReadMore?: () => void;
+    /** Lane L6b — the arrow's words when there is nothing to listen to (a typed entry); default "read or listen". */
+    readMoreLabel?: string;
     fallback: React.ReactNode;
 }
 type Phase = 'full' | 'shrink' | 'small';
 interface Box { left: number; top: number; width: number }
 
-export const RingStage: React.FC<Props> = ({ score, nodes, variant, saveKey, onMissedTap, onSettled, onReadMore, fallback }) => {
+export const RingStage: React.FC<Props> = ({ score, nodes, variant, saveKey, onMissedTap, onSettled, onReadMore, readMoreLabel, fallback }) => {
     // Already played in this app session when the screen opened (it was opened again): land on the final frame.
     // A NEW recording on the same mounted screen is never "seen before".
     const [opened] = useState(() => ({ key: saveKey, seen: played.has(saveKey) }));
@@ -150,13 +152,13 @@ export const RingStage: React.FC<Props> = ({ score, nodes, variant, saveKey, onM
                         replayKey={saveKey} onMissedTap={onMissedTap} fallback={fallback} />
                 </div>
             </div>
-            {showsScore && phase === 'small' && <RingMessage score={score ?? 0} missed={missed} onReadMore={onReadMore} />}
+            {showsScore && phase === 'small' && <RingMessage score={score ?? 0} missed={missed} onReadMore={onReadMore} readMoreLabel={readMoreLabel} />}
         </>
     );
 };
 
 /** The ring's reward words as page text (the module's own words and rules: never a 0, missing things are an invitation). */
-const RingMessage: React.FC<{ score: number; missed: number; onReadMore?: () => void }> = ({ score, missed, onReadMore }) => {
+const RingMessage: React.FC<{ score: number; missed: number; onReadMore?: () => void; readMoreLabel?: string }> = ({ score, missed, onReadMore, readMoreLabel }) => {
     const [title, sub] = defaultMessage(score, 10, missed);
     const [before, after] = sub.split('{n}');
     return (
@@ -169,7 +171,7 @@ const RingMessage: React.FC<{ score: number; missed: number; onReadMore?: () => 
             </div>
             {onReadMore && (
                 // PROPOSED (Marathi) — the preview's label for the ↓ ("read or listen below").
-                <button type="button" onClick={onReadMore} aria-label="खाली वाचा किंवा ऐका" data-testid="vr-ring-readmore"
+                <button type="button" onClick={onReadMore} aria-label={readMoreLabel ?? 'खाली वाचा किंवा ऐका'} data-testid="vr-ring-readmore"
                     className="grid h-10 w-10 shrink-0 animate-bounce place-items-center rounded-full bg-emerald-700 text-white shadow active:scale-95"><ChevronDown size={26} aria-hidden="true" /></button>
             )}
         </div>

@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — what the log tab shows after a VOICE auto-save:
- * the ONE result screen (`VoiceResultContainer`) instead of the old saved card. The saved card
- * (`savedView.tsx`) stays for typed entries and the हजेरी door.
+ * the ONE result screen (`VoiceResultContainer`) instead of the old saved card. Since lane L6b what he types to
+ * Sathi ("साथीला पाठवा") is auto-saved the same way and lands here too. The saved card (`savedView.tsx`) stays for
+ * the hand-filled form ("किंवा फॉर्ममध्ये स्वतः भरा") and the हजेरी door.
  *
  * Every real piece the saved card had for a voice save is kept here: the meter (now the ring, in the hero),
  * what was understood (now part by part), the "not queued" honesty badge (for EACH plot's log when he named
@@ -106,6 +107,8 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                             savedLog={savedLog}
                             allLogs={ctx.history}
                             weather={ctx.weatherData}
+                            // Lane L6b — the founder's designed amber question card (SathiQuestionCard).
+                            look="sathi"
                             // wave-3.7, founder decision 3 — the tap writes nothing; it stashes the answer and hands
                             // him the SAME microphone (no second recording surface).
                             onAnswerBySpeaking={(pending) => {

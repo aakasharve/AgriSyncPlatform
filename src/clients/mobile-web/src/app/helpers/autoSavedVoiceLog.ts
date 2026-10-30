@@ -30,11 +30,16 @@ export function isAutoSavableVoiceDraft(draft: AgriLogResponse): boolean {
  *     which would show this record as confirmed on his phone until the next pull says otherwise. Only an
  *     authorised confirmation may make it confirmed (spec I27: the primary owner's "save and confirm", or a
  *     review by him or a member holding his grant — never the speaker's own I13 tap).
+ *
+ * Lane L6b — `typed`: he typed it to Sathi in the "लिहून सांगा" sheet. Same capture rule (unconfirmed), and the
+ * phone's copy is also marked `typedEntry`, so it says "लिहिलेलं" wherever it appears: there is no recording.
+ * (An options object: `logs.map(markAutoSavedFromVoice)` no longer type-checks, so an array index can never be a claim.)
  */
-export function markAutoSavedFromVoice(log: DailyLog): DailyLog {
+export function markAutoSavedFromVoice(log: DailyLog, how: { typed?: boolean } = {}): DailyLog {
     return {
         ...log,
         autoSavedFromVoice: true,
+        ...(how.typed === true && { typedEntry: true }),
         verification: { status: LogVerificationStatus.DRAFT, required: true },
     };
 }

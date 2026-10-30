@@ -9,6 +9,8 @@
  * inputs: the SERVER's day score (never computed on the phone) and the ring's own coverage of the plot's day.
  * Behind the existing `understandingMeter` flag, like today's meter: flag off = no ring and no fetch at all.
  * The reveal plays for a NEW recording only.
+ * Lane L6b: the founder's ring mode has no tile grid — the ring's red orbs do that job. The tiles stay only where no
+ * ring is drawn (flag off, no server score yet, a no-work day), and the orbs' tap stays reachable by a screen reader.
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -91,7 +93,44 @@ describe('ResultHero — the meter leads', () => {
         expect(ringKeys.at(-1)).toMatchObject({ key: 'rec-2', settled: false });
     });
 
-    it('lists the parts he did NOT mention in red; tapping one asks him to tell it', () => {
+    it('L6b: with the ring drawn there is NO tile grid (the orbs do it), but each untold part stays a real button', () => {
+        const p = props();
+        render(<ResultHero {...p} />);
+        expect(screen.getByTestId('vr-ring')).toBeTruthy();
+        expect(screen.queryByTestId('vr-parts')).toBeNull();
+        expect(screen.queryByTestId('vr-tell-hint')).toBeNull();
+        // The orbs are drawn on a canvas: a screen reader / keyboard still gets a button per untold part.
+        const machinery = screen.getByTestId('vr-untold-machinery');
+        expect(machinery.tagName).toBe('BUTTON');
+        expect(machinery.className).toContain('sr-only');
+        expect(machinery.textContent).toBe('यंत्र — सांगितलं नाही. दाबा आणि बोला');
+        expect(screen.getByTestId('vr-untold-expense')).toBeTruthy();
+        expect(screen.queryByTestId('vr-untold-crop')).toBeNull();
+        fireEvent.click(machinery);
+        expect(p.onTellMore).toHaveBeenCalledWith('machinery');
+    });
+
+    it('L6b: no ring drawn yet (offline, or the score still on its way): the tiles stand in for it', () => {
+        dayUnderstanding.mockReturnValue({ score: null, classification: null, refresh: vi.fn(), isLoading: true, error: null });
+        render(<ResultHero {...props()} />);
+        expect(screen.getByTestId('vr-parts')).toBeTruthy();
+        expect(screen.queryByTestId('vr-parts-untold')).toBeNull();
+        cleanup();
+        flags.understandingMeter = false; // no ring at all
+        render(<ResultHero {...props()} />);
+        expect(screen.getByTestId('vr-parts')).toBeTruthy();
+    });
+
+    it('L6b: a typed entry\'s ring arrow says "खाली वाचा" — nothing to listen to', () => {
+        render(<ResultHero {...props({ typed: true })} />);
+        expect(screen.getByTestId('vr-ring-readmore').getAttribute('aria-label')).toBe('खाली वाचा');
+        cleanup();
+        render(<ResultHero {...props()} />);
+        expect(screen.getByTestId('vr-ring-readmore').getAttribute('aria-label')).toBe('खाली वाचा किंवा ऐका');
+    });
+
+    it('lists the parts he did NOT mention in red; tapping one asks him to tell it (tiles: no ring drawn)', () => {
+        dayUnderstanding.mockReturnValue({ score: null, classification: null, refresh: vi.fn(), isLoading: false, error: null });
         const p = props();
         render(<ResultHero {...p} />);
         const machinery = screen.getByTestId('vr-part-machinery');
@@ -104,6 +143,7 @@ describe('ResultHero — the meter leads', () => {
     });
 
     it('a part he said but the server could not verify reads "नक्की समजलं नाही" — never "सांगितलं नाही", never a 0 (round 3)', () => {
+        flags.understandingMeter = false;
         const p = props({ missing: ['machinery'], unsure: ['labour'] });
         render(<ResultHero {...p} />);
         const labour = screen.getByTestId('vr-part-labour');

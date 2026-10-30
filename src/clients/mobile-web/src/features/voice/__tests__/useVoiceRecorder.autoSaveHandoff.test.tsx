@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — the recorder hands a parsed RECORDING to the
- * voice auto-save, and only a recording. Typed text keeps today's review form, and so does any parse the
- * auto-save declines (nothing he said is ever lost).
+ * voice auto-save. Lane L6b (founder design `sendTyped`): what he TYPES to Sathi goes there too, marked typed and
+ * carrying no recording. Any parse the auto-save declines keeps today's review form (nothing he said is ever lost).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
@@ -87,15 +87,31 @@ describe('useVoiceRecorder → voice auto-save hand-off', () => {
         expect(result.current.status).toBe('idle');
     });
 
-    it('TYPED text never reaches the auto-save: it keeps the review form', async () => {
+    it('L6b: TYPED text goes to the same auto-save, marked typed, never carrying the last recording', async () => {
         const sink = vi.fn<VoiceDraftSink>(async () => true);
-        const { result } = renderHook(() => useVoiceRecorder(props(sink)));
+        const setMode = vi.fn();
+        const { result } = renderHook(() => useVoiceRecorder(props(sink, setMode)));
         // A recording first, so a stale "last recording" cannot leak into the typed entry.
         await act(async () => { await result.current.handleAudioReady(AUDIO); });
         sink.mockClear();
+        setMode.mockClear();
         await act(async () => { await result.current.handleTextReady('चार मजूर आले'); });
 
-        expect(sink).not.toHaveBeenCalled();
+        expect(sink).toHaveBeenCalledTimes(1);
+        const [draft, , recording] = sink.mock.calls[0];
+        expect(draft.fullTranscript).toBe('चार मजूर आले');
+        expect(recording.typed).toBe(true);
+        expect(recording.clipId).toBeUndefined(); // no recording behind it, so no clip to link
+        expect(recording.recordedAtUtc).not.toBe(AUDIO.recordedAtUtc);
+        expect(result.current.draftLog).toBeNull(); // no review form
+        expect(setMode).not.toHaveBeenCalledWith('manual');
+    });
+
+    it('L6b: a typed parse the auto-save DECLINES still lands in the review form (never lost)', async () => {
+        const sink = vi.fn<VoiceDraftSink>(async () => false);
+        const { result } = renderHook(() => useVoiceRecorder(props(sink)));
+        await act(async () => { await result.current.handleTextReady('चार मजूर आले'); });
+        expect(sink).toHaveBeenCalledTimes(1);
         expect(result.current.draftLog?.fullTranscript).toBe('चार मजूर आले');
     });
 

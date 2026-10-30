@@ -23,6 +23,15 @@
  *   - The day-closure analytics event (`closure.submitted`, method 'voice') is sent once the save is on the
  *     phone, as the review form's Save tap sent it before (DWC v2 §2.8): the admin MIS counts closed days,
  *     action time and repeat use from it, and voice is now the main way a day is closed.
+ *
+ * Lane L6b (founder design `PostVoiceResultPreview.sendTyped` / `TypedLog.tsx`): what he TYPES to Sathi in the
+ * "लिहून सांगा" sheet takes the same path — same waiting screen, same save, same result screen — with the
+ * honest differences of having no recording: no clip is looked for or linked, no recording id rides the create,
+ * and the log is marked typed (`typedEntry`) so every screen says "लिहिलेलं". It is a capture, not a deliberate
+ * confirmation (founder D-44 / D-46), so it rides the create UNCONFIRMED exactly like a spoken auto-save: the
+ * server's `autoSavedFromVoice` means "saved straight from Sathi's parse with no review tap — keep it Draft, no
+ * self-attestation" (DailyLog.AutoSavedFromVoiceReason), and what he typed went through that same parse. The
+ * closure event keeps method 'voice', the method the review form's Save tap sent for a typed Sathi draft before.
  */
 import { useCallback, useRef, useState } from 'react';
 import type { AgriLogResponse } from '../../types';
@@ -45,6 +54,8 @@ export interface VoiceResultState {
     key: string;
     /** Phrases the parse marked unclear, shown as he said them (never placed in a part by guess). */
     unclear: string[];
+    /** Lane L6b — he typed it to Sathi: there is no recording behind it. */
+    typed?: boolean;
 }
 
 export interface UseVoiceAutoSaveProps {
@@ -93,17 +104,20 @@ export function useVoiceAutoSave({
             return true;
         }
         handled.current.set(key, 'saving');
+        // L6b — typed to Sathi: no recording exists, so none is named, looked for or linked.
+        const typed = recording.typed === true;
         try {
             // PLR-D10 I27 — name the recording on the create, so a reviewer allowed to check THIS record can hear it.
-            const voiceClipId = await archiveIdOf(recording).catch(() => undefined);
+            const voiceClipId = typed ? undefined : await archiveIdOf(recording).catch(() => undefined);
             const saved = await handleAutoSave(draft, provenance, {
                 autoSavedFromVoice: true,
+                ...(typed && { typedEntry: true }),
                 ...(voiceClipId && { voiceClipId }),
                 onWritten: async (logs) => {
                     const primary = primaryLogOf(logs);
-                    const clipId = primary ? await linkClip(recording, primary.id).catch(() => null) : null;
+                    const clipId = primary && !typed ? await linkClip(recording, primary.id).catch(() => null) : null;
                     const unclear = (draft.unclearSegments ?? []).map(s => s.rawText?.trim() ?? '').filter(t => t.length > 0);
-                    setVoiceResult({ logIds: logs.map(l => l.id), clipId, key, unclear });
+                    setVoiceResult({ logIds: logs.map(l => l.id), clipId, key, unclear, ...(typed && { typed: true }) });
                 },
             });
             if (saved) {

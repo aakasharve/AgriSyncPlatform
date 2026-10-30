@@ -61,13 +61,24 @@ return events.some(event => {
 export interface VoiceRecordingRef {
     recordedAtUtc: string;
     clipId?: string;
+    /**
+     * spec: plr-d10-redesign-real-integration-2026-10-25 (lane L6b) — he TYPED it in the "लिहून सांगा" sheet
+     * ("साथीला पाठवा"): there is no recording behind it, so no clip and no player, and it is marked "लिहिलेलं".
+     */
+    typed?: true;
 }
 
 /**
+ * Lane L6b (founder design `PostVoiceResultPreview.sendTyped`): what he types to Sathi is saved at once like a
+ * spoken entry, through the same waiting screen to the same result screen. Its "when" is the moment he sent it.
+ */
+export const typedRecordingRef = (): VoiceRecordingRef => ({ recordedAtUtc: new Date().toISOString(), typed: true });
+
+/**
  * PLR-D10 I13 — the voice auto-save hand-off (founder 2026-09-02: auto-save on a successful parse, no
- * review form, no Save tap). Called ONLY with a successful parse of a RECORDING — never typed text, never a
- * one-part re-record. Resolves `true` when the auto-save took the parse and owns the screen from here;
- * `false` keeps today's review form with the parse in it.
+ * review form, no Save tap). Called ONLY with a successful parse of a RECORDING, or (lane L6b) of what he
+ * typed to Sathi (`recording.typed`) — never a one-part re-record. Resolves `true` when the auto-save took the
+ * parse and owns the screen from here; `false` keeps today's review form with the parse in it.
  */
 export type VoiceDraftSink = (
     draft: AgriLogResponse,

@@ -133,6 +133,12 @@ export interface LedgerRecognitionPanelProps {
      * scope keeps the bare-acknowledgement behaviour unchanged.
      */
     onAnswerBySpeaking?: (pending: PendingQuestionAnswer) => void;
+    /**
+     * spec: plr-d10 (lane L6b) — 'sathi' on the ONE result screen: the question takes the founder's designed amber
+     * card, which carries its own heading, so the "साथीला अजून हवं आहे" section frame and its "हे सांगितलं तर आकडा
+     * वाढेल" note are not put around it (founder 2026-10-24: never "the number will rise"). Default: unchanged.
+     */
+    look?: 'card' | 'sathi';
 }
 
 export function LedgerRecognitionPanel({
@@ -145,6 +151,7 @@ export function LedgerRecognitionPanel({
     allLogs = [],
     weather = null,
     onAnswerBySpeaking,
+    look = 'card',
 }: LedgerRecognitionPanelProps): React.ReactElement {
     const { engagement } = useFarmerEngagement(farmId);
     const resolvedDate = todayLocalDate ?? new Date().toISOString().slice(0, 10);
@@ -231,6 +238,7 @@ export function LedgerRecognitionPanel({
             allLogs={allLogs}
             engagement={engagement}
             onAnswerBySpeaking={onAnswerBySpeaking}
+            look={look}
             questionInputs={{
                 crop,
                 todayLocalDate: resolvedDate,
@@ -261,7 +269,7 @@ export function LedgerRecognitionPanel({
 
     return (
         <div data-testid="ledger-recognition-panel">
-            {FEATURE_FLAGS.understandingMeter ? (
+            {FEATURE_FLAGS.understandingMeter && look !== 'sathi' ? (
                 <SurfaceSection tone="ask" labelKey="dfes.sectionAsk" noteKey="dfes.askRaisesScore" testId="section-ask">
                     {question}
                 </SurfaceSection>

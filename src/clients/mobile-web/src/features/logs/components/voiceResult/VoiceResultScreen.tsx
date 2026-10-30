@@ -17,16 +17,24 @@
  *   2. the plot's whole day, one row per part; 3. the day's earlier recordings, newest first;
  *   4. the bottom bar: "मागे" + "आणखी सांगा".
  * One screen for readers and non-readers alike (no mode switch).
+ *
+ * Lane L6b (founder design, `PostVoiceResultPreview.sendTyped` / `TypedLog.tsx`): what he TYPED to Sathi lands on this
+ * same screen, marked "लिहिलेलं", with the design's no-recording note where the player would be (no player, no "ऐका");
+ * the why-tiles are the design's ("श्रम साथीला हे का समजले?"); sprays and fertilisers sit on one chip row; Sathi's
+ * question is the design's amber card (the container's panel, `look="sathi"`).
  */
 import React, { useRef, useState } from 'react';
 import { Check, MapPin, Mic, Pencil } from 'lucide-react';
 import FlowBackButton from '../../../context/components/FlowBackButton';
 import { NotQueuedForServerBadge } from '../../../../core/navigation/mainViewComponents';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import type { RingNodeData } from '../shramsathi/understandingRing';
 import ClipPlayer from './ClipPlayer';
-import { AddedRow, BlockerRow, DayRow, EarlierRecording, TimePill, WhoChip } from './DayParts';
+import { AddedRow, BlockerRow, DayRow, EarlierRecording, TimePill, TypedNote, TypedTag, WhoChip } from './DayParts';
 import { PartLinks, Words } from './HisWords';
+import { AddedProducts } from './ProductRows';
+import { showsProducts } from './productModel';
 import ResultHero from './ResultHero';
 import { PARTS, markTranscript, type DayView, type PartKey, type RecordingView } from './resultModel';
 import { RESULT_STR } from './resultStrings';
@@ -88,6 +96,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const primary: RecordingView | undefined = day.current.find(r => !!r.transcript) ?? day.current[0];
     const [focus, setFocus] = useState<PartKey | null>(null);
     const latest = useRef<HTMLElement>(null);
+    const language = useOptionalLanguage()?.language;
     if (!primary) return null;
 
     const addedEntries = day.current.flatMap(r => r.entries);
@@ -97,9 +106,14 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     // Founder D-44 (amends PLR-D1 round 2): listening is never a compulsory step. He may confirm from his words
     // ("वाचा आणि पक्कं करा", recorded as read-not-heard) or after playing his clip ("ऐका आणि पक्कं करा", heard).
     const nowIds = new Set(day.current.map(r => r.id));
-    // How many times he SPOKE today: one recording, however many plots it named, counted once (the earlier ones
-    // are already one row each); an entry typed on the form is not a time he "said" it.
-    const count = day.earlier.filter(r => !r.typed).length + 1;
+    // How many times he told Sathi today: one recording, however many plots it named, counted once (the earlier ones
+    // are already one row each); an entry filled in on the form is not a time he "said" it (L6b: one TYPED to Sathi is —
+    // the sheet's own words are "लिहून सांगा", and the design counts it).
+    const count = day.earlier.filter(r => !r.byForm).length + 1;
+    // L6b — the design's one compact chip row: the products of every verified spray / fertiliser item of this recording.
+    const boxed = (e: typeof addedEntries[number]) => e.verified && showsProducts(e.products, language);
+    const productBoxes = addedEntries.flatMap(e => (boxed(e) && e.products ? [e.products] : []));
+    const otherEntries = addedEntries.filter(e => !boxed(e));
     const severalPlots = day.current.length > 1;
     // Lands his words below the sticky back bar, never under it (the preview's scrollBelowHeader).
     const toWords = () => scrollBelowHeader(latest.current);
@@ -122,13 +136,14 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
             </div>
 
             <ResultHero farmId={p.farmId} dayDate={primary.log.date} savedLogId={primary.id} recordingKey={p.recordingKey}
-                nodes={p.nodes} missing={day.missing} unsure={day.unsure} onTellMore={p.onTellMore} onReadMore={toWords} />
+                nodes={p.nodes} missing={day.missing} unsure={day.unsure} onTellMore={p.onTellMore} onReadMore={toWords} typed={primary.typed} />
 
             <section ref={latest} className="rounded-3xl border-2 border-emerald-600 bg-white p-3.5" data-testid="vr-latest">
                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px] font-extrabold">
                     <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-white">{RESULT_STR.justNow}</span>
                     <TimePill label={primary.timeLabel} strong />
                     <WhoChip who={primary.who} testId="vr-latest-who" />
+                    {primary.typed && <TypedTag testId="vr-latest-typed" />}
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800" data-testid="vr-remembered">{RESULT_STR.remembered}</span>
                     {p.sync === 'onServer' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-blue-800" data-testid="vr-on-server">{RESULT_STR.onServer}</span>}
                     {p.sync === 'needsFix' && <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-800" data-testid="vr-needs-fix">{RESULT_STR.needsFix}</span>}
@@ -148,7 +163,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     </div>
                 )}
 
-                {clip && (
+                {primary.typed ? <div className="mt-2"><TypedNote /></div> : clip && (
                     <div className="mt-2">
                         <ClipPlayer clipKey={clip.id} durationSec={p.lengthOf(primary.id)} playing={p.playingId === primary.id} progress={p.progress} big
                             onToggle={() => p.onTogglePlay(primary.id)} testId="vr-play" />
@@ -159,7 +174,8 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     <div className="mt-3" data-testid="vr-added">
                         <div className="mb-1.5 text-[13px] font-extrabold text-emerald-800">{RESULT_STR.addedTitle}</div>
                         <div className="space-y-1.5">
-                            {addedEntries.map(e => <AddedRow key={`${e.logId}:${e.id}`} entry={e} />)}
+                            {otherEntries.map(e => <AddedRow key={`${e.logId}:${e.id}`} entry={e} />)}
+                            {productBoxes.length > 0 && <AddedProducts boxes={productBoxes} />}
                             {day.blockersNow.map(b => <BlockerRow key={b.id} entry={b} />)}
                         </div>
                     </div>

@@ -15,7 +15,7 @@ import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
 import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
-import { yieldToPaint, hasSuccessfulIrrigation, bindDraftProvenance, type UseVoiceRecorderProps, type PreprocessedAudioResult, type VoiceRecordingRef } from './useVoiceRecorder.types';
+import { yieldToPaint, hasSuccessfulIrrigation, bindDraftProvenance, typedRecordingRef, type UseVoiceRecorderProps, type PreprocessedAudioResult, type VoiceRecordingRef } from './useVoiceRecorder.types';
 
 export const useVoiceRecorder = ({
     currentLogContext,
@@ -65,7 +65,7 @@ export const useVoiceRecorder = ({
     }
     const lastVoiceSessionMetadataRef = useRef<VoiceSessionMetadata | null>(null);
     const lastVoiceIdempotencySeedRef = useRef<string | null>(null);
-    const lastRecordingRef = useRef<VoiceRecordingRef | null>(null); // PLR-D10 I13 — null for typed text
+    const lastRecordingRef = useRef<VoiceRecordingRef | null>(null); // PLR-D10 I13 (L6b: `typed` for the typed sheet)
     const transcribeConsumerRef = useRef<TranscribeStreamConsumer | null>(null);
     const transcribeAbortRef = useRef<AbortController | null>(null);
     if (!transcribeConsumerRef.current) {
@@ -575,8 +575,8 @@ export const useVoiceRecorder = ({
             return true;
         }
 
-        // PLR-D10 I13 (founder 2026-09-02) — a parse of a RECORDING auto-saves: the sink owns the screen from here. Typed
-        // text, a one-part re-record, and anything the sink declines keep today's ManualEntry review (never lost).
+        // PLR-D10 I13 (founder 2026-09-02) — a parse of a RECORDING, or (L6b) of what he typed to Sathi, auto-saves: the sink
+        // owns the screen from here. A one-part re-record and anything the sink declines keep the ManualEntry review (never lost).
         const recording = lastRecordingRef.current;
         if (!isSegmentUpdate && recording && onVoiceDraft && await onVoiceDraft(bindDraftProvenance(response, prov), prov ?? undefined, recording)) return true;
         if (isSegmentUpdate) {
@@ -644,7 +644,7 @@ export const useVoiceRecorder = ({
     };
 
     const handleTextReady = async (text: string) => {
-        lastRecordingRef.current = null; // typed: the review form, never the voice auto-save
+        lastRecordingRef.current = typedRecordingRef(); // L6b: saved at once like a recording, marked typed (no clip)
         await processInput({ type: 'text', data: text }); // mimeType not needed for text
     };
 

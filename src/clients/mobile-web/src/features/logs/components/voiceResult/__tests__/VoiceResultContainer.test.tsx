@@ -17,6 +17,9 @@
  *   - (round 2) an item the server could not verify is FLAGGED, never a plain fact, and its part stays red;
  *     a recording that named two plots is one recording with a "बदला" and an honest badge per plot; the confirm
  *     goes only to logs on their way to the server.
+ *   - lane L6b (founder design): what he TYPED to Sathi lands here marked "लिहिलेलं", with no player and no "ऐका";
+ *     the why-tiles ("श्रम साथीला हे का समजले?", first open, folded, dimming, his phrase highlighted, no made-up
+ *     reason); sprays on one chip row and in one box, only what was said (no computed water, no identity words).
  */
 import 'fake-indexeddb/auto';
 import React from 'react';
@@ -39,7 +42,8 @@ vi.mock('../../../../../app/providers/DataSourceProvider', () => ({
 // The farmer's language is Marathi; the few existing pieces that read it (the not-queued badge) get the real strings.
 vi.mock('../../../../../i18n/LanguageContext', async () => {
     const { t } = await import('../../../../../i18n/translations');
-    return { useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => t(k, 'mr') }) };
+    const ctx = { language: 'mr', setLanguage: () => undefined, t: (k: string) => t(k, 'mr') };
+    return { useLanguage: () => ctx, useOptionalLanguage: () => ctx };
 });
 vi.mock('../../../../../infrastructure/voice/VoiceClipRetention', async (orig) => ({
     ...(await orig<typeof import('../../../../../infrastructure/voice/VoiceClipRetention')>()),
@@ -434,6 +438,8 @@ describe('the ONE result screen — one recording, several plots; a stoppage; a 
         mount(props({ history: [HISTORY[0], typed] }));
         expect(screen.getByTestId(`vr-earlier-typed-${NOON}`).textContent).toContain('लिहिलेलं');
         expect(screen.queryByTestId(`vr-earlier-play-${NOON}`)).toBeNull();
+        // L6b (design EarlierLog): the no-recording note stands where the player would be.
+        expect(screen.getByTestId(`vr-earlier-typed-note-${NOON}`).textContent).toBe('आवाज रेकॉर्डिंग नाही. हे लिहून सांगितलेलं आहे.');
         expect(screen.queryByTestId(`vr-earlier-typed-${NOW}`)).toBeNull();
         // Round 3 (I13-V2-m5): an entry typed on the form is not a time he SAID it.
         expect(screen.getByTestId('vr-count').textContent).toBe('आज पहिल्यांदा सांगितलं');
@@ -457,5 +463,92 @@ describe('the ONE result screen — one recording, several plots; a stoppage; a 
         expect(screen.queryByTestId('vr-confirm')).toBeNull();
         expect(screen.getByTestId('vr-remembered').textContent).toContain('लक्षात ठेवलं'); // the phone write itself is still true
         expect(await verifyRows()).toHaveLength(0);
+    });
+});
+
+describe('the ONE result screen — lane L6b (founder design)', () => {
+    it('what he TYPED to Sathi: "लिहिलेलं", the no-recording note where the player was, no "ऐका", confirmed by reading', async () => {
+        const typed = log(NOW, {
+            fullTranscript: SAID,
+            irrigation: [{ id: 'irr', durationHours: 2, sourceText: 'दोन तास पाणी' }],
+            meta: { createdAtISO: '2026-10-26T10:00:00.000Z', createdByOperatorId: ME, provenance: { source: 'ai', timestamp: 'T' } },
+            autoSavedFromVoice: true, typedEntry: true,
+        });
+        await getDatabase().voiceClips.clear();
+        const { container } = mount(props({ history: [typed], result: { logIds: [NOW], clipId: null, key: '-|T', unclear: [], typed: true } }));
+        expect(screen.getByTestId('vr-latest-typed').textContent).toBe('लिहिलेलं');
+        expect(screen.getByTestId('vr-typed-note').textContent).toBe('आवाज रेकॉर्डिंग नाही. हे लिहून सांगितलेलं आहे.');
+        expect(screen.queryByTestId('vr-play')).toBeNull();
+        expect(container.textContent).not.toContain('ऐका');
+        expect(container.textContent).not.toMatch(/[A-Za-z]/);
+        // A capture, not a confirmation (D-44 / D-46): "पक्कं नाही" until the primary owner's own "पक्कं आहे".
+        expect(screen.getByTestId('vr-not-confirmed-badge').textContent).toBe('पक्कं नाही');
+        expect(screen.getByTestId('vr-confirm-basis').textContent).toBe('वाचा आणि पक्कं करा');
+        // He told Sathi in writing ("लिहून सांगा"): it counts as a time he told it, as the design counts it.
+        expect(screen.getByTestId('vr-count').textContent).toBe('आज पहिल्यांदा सांगितलं');
+        await act(async () => { fireEvent.click(screen.getByTestId('vr-confirm')); });
+        await waitFor(() => expect(screen.getByTestId('vr-confirm-done')).toBeTruthy());
+        expect((await verifyRows())[0].payload).toMatchObject({ logId: NOW, decision: 'verify', reviewBasis: 'read' });
+    });
+
+    it('why-tiles: heading, the FIRST part open at once, his phrase highlighted, the fixed reason, a fold, and a tap dims the rest', () => {
+        const said = 'छाटणी केली, बांधणी केली, खुडणी केली आणि दोन तास पाणी दिलं';
+        const rec = log(NOW, {
+            fullTranscript: said,
+            cropActivities: [
+                { id: 'c1', title: 'छाटणी', sourceText: 'छाटणी केली' },
+                { id: 'c2', title: 'बांधणी', sourceText: 'बांधणी केली' },
+                { id: 'c3', title: 'खुडणी', sourceText: 'खुडणी केली' },
+            ],
+            irrigation: [{ id: 'irr', durationHours: 2, sourceText: 'दोन तास पाणी' }],
+            meta: { createdAtISO: '2026-10-26T10:00:00.000Z', createdByOperatorId: ME },
+        });
+        mount(props({ history: [rec] }));
+        expect(screen.getByTestId('vr-why-heading').textContent).toBe('श्रम साथीला हे का समजले?');
+        const card = screen.getByTestId('vr-link-card'); // open before any tap: the first part he said
+        expect(card.getAttribute('data-part')).toBe('crop');
+        const cue = screen.getByTestId('vr-why-cue-crop-0');
+        expect(cue.tagName).toBe('MARK');
+        expect(cue.textContent).toBe('छाटणी केली'); // the AI's own sourceText, verified in his words
+        expect(screen.getByTestId('vr-why-reason-crop-0').textContent).toBe('साथीला हे तुमच्या या शब्दांतून समजलं');
+        expect(card.textContent).not.toContain('«'); // never the preview's keyword stand-in (reasons.ts)
+        expect(screen.queryByTestId('vr-link-phrase-crop-2')).toBeNull();
+        expect(screen.getByTestId('vr-why-more').textContent).toBe('आणखी १ दाखवा');
+        fireEvent.click(screen.getByTestId('vr-why-more'));
+        expect(screen.getByTestId('vr-link-phrase-crop-2').textContent).toContain('खुडणी केली');
+        expect(screen.getByTestId('vr-why-more').textContent).toBe('कमी दाखवा');
+        // Nothing dimmed until he taps; a tap keeps only that part bright in his words.
+        const marks = () => [...screen.getByTestId('vr-words').querySelectorAll('mark')];
+        expect(marks().every(m => m.getAttribute('data-dim') === 'no')).toBe(true);
+        fireEvent.click(screen.getByTestId('vr-link-irrigation'));
+        expect(screen.getByTestId('vr-link-card').getAttribute('data-part')).toBe('irrigation');
+        expect(marks().filter(m => m.getAttribute('data-dim') === 'no').map(m => m.textContent)).toEqual(['दोन तास पाणी']);
+    });
+
+    it('products: one chip row, one spray box with HIS words and amounts as said — never computed water, never an identity', () => {
+        const rec = log(NOW, {
+            fullTranscript: 'पाचशे लिटर पाण्यात इथरेल आणि बाविस्तीन फवारलं',
+            inputs: [{
+                id: 'sp', method: 'Spray', sourceText: 'इथरेल आणि बाविस्तीन फवारलं', computedWaterVolume: 9999, carrierCapacity: 777,
+                mix: [
+                    { id: 'm1', productName: 'Ethrel', rawProductName: 'इथरेल', dose: 250, unit: 'ml' },
+                    { id: 'm2', productName: 'Bavistin', rawProductName: 'बाविस्तीन', unit: 'g' },
+                ],
+            }],
+            irrigation: [{ id: 'carrier', role: 'spray-carrier', waterVolumeLitres: 500, sourceText: 'पाचशे लिटर पाण्यात' }],
+            meta: { createdAtISO: '2026-10-26T10:00:00.000Z', createdByOperatorId: ME },
+        });
+        const { container } = mount(props({ history: [rec] }));
+        const chips = within(screen.getByTestId('vr-added-products')).getAllByTestId('vr-product-chip').map(c => c.textContent);
+        expect(chips).toEqual(['इथरेल · 250 मिली', 'बाविस्तीन']); // no amount said for the second: none shown
+        expect(screen.queryByTestId('vr-added-sp')).toBeNull(); // not a second, per-item row
+        const box = screen.getByTestId('vr-product-box-sp'); // the day's औषध / खत row is open: this recording touched it
+        expect(box.getAttribute('data-kind')).toBe('spray');
+        expect(box.textContent).toContain('फवारणी');
+        expect(within(box).getByTestId('vr-product-water').textContent).toBe('पाणी: 500 लिटर');
+        expect(within(box).getAllByTestId('vr-product-row')).toHaveLength(2);
+        expect(container.textContent).not.toMatch(/9999|777/);
+        expect(container.textContent).not.toMatch(/ओळख|कदाचित|मात्रा सांगितली नाही/);
+        expect(container.textContent).not.toMatch(/[A-Za-z]/); // Marathi mode: the units in Marathi, no English labels
     });
 });

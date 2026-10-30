@@ -551,7 +551,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                 // I12 — "आणखी सांगा" and the saved screen's मागे land on the mic of the same plots
                 // (the entry flow), not on an empty hand-filled form.
                 const savedCtx = { ...ctx, handleReset: () => { handleReset(); setMode('voice'); } };
-                // I13 — a VOICE auto-save shows the ONE result screen; typed and हजेरी saves keep the saved card.
+                // I13 — a VOICE (and, L6b, typed-to-Sathi) auto-save shows the ONE result screen; form and हजेरी saves keep the saved card.
                 const voiceResult = currentVoiceResult(ctx);
                 return voiceResult ? renderVoiceResultView(savedCtx, voiceResult) : renderSavedView(savedCtx);
             })()}

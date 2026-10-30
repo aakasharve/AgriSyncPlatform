@@ -39,6 +39,10 @@
       "pattern": "^originalVoiceCopy\\.ts$"
     },
     {
+      "dir": "src/clients/mobile-web/src/features/logs/components/voiceResult",
+      "pattern": "^resultCopy\\.ts$"
+    },
+    {
       "dir": "src/clients/mobile-web/src/features/profile/team",
       "pattern": "^confirmAccessCopy\\.ts$"
     }
@@ -108,6 +112,11 @@
       "path": "src/clients/mobile-web/src/features/logs/components/originalVoice/originalVoiceCopy.ts",
       "reviewStatus": "unreviewed",
       "sha256": "1faf9c1d1154970931ed9045af24afbca4c19ff909a8599a72003b56814ef677"
+    },
+    {
+      "path": "src/clients/mobile-web/src/features/logs/components/voiceResult/resultCopy.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "6f7a1748563a8210a29cd1ad96dee4e02d0860aef9011a37d4672c69a17cd2a3"
     },
     {
       "path": "src/clients/mobile-web/src/features/profile/team/confirmAccessCopy.ts",

@@ -18,13 +18,19 @@
  * flag and is never a row's headline.
  * The preview's change-window label ("बदल करता येतो", LP-15) is left out on purpose: there is no 24-hour
  * change window behind it yet, and a label for a rule the app does not keep would be a P5 control.
+ * Lane L6b: a spray / fertiliser entry of the day reads as the design's product box (`ProductBoxCard`), and the
+ * typed marks follow his language ("लिहिलेलं" / "Typed").
  */
 import React, { useState } from 'react';
 import { ChevronDown, HelpCircle, Keyboard, User } from 'lucide-react';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import { CategoryIcon } from '../shramsathi/understandingRing';
 import ClipPlayer from './ClipPlayer';
 import { PartIcon, Words } from './HisWords';
+import { ProductBoxCard } from './ProductRows';
+import { showsProducts } from './productModel';
+import { resultCopy } from './resultCopy';
 import { markTranscript, partMeta, type BlockerEntry, type PartEntry, type PartKey, type RecordingView, type Who } from './resultModel';
 import { RESULT_STR } from './resultStrings';
 
@@ -43,11 +49,19 @@ export const WhoChip: React.FC<{ who: Who; testId?: string }> = ({ who, testId }
     </span>
 );
 
-/** "लिहिलेलं": an entry filled in by hand, with no recording behind it. */
+/** "लिहिलेलं": an entry with no recording behind it (filled in by hand, or typed to Sathi). */
 export const TypedTag: React.FC<{ testId?: string }> = ({ testId }) => (
     <span data-testid={testId} className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-[12px] font-extrabold text-amber-900">
-        <Keyboard size={12} aria-hidden="true" />{RESULT_STR.typedTag}
+        <Keyboard size={12} aria-hidden="true" />{resultCopy(useOptionalLanguage()?.language).typedTag}
     </span>
+);
+
+/** Lane L6b (design `TypedLog.tsx` TypedNote): stands where the player would be — there is no recording to play. */
+export const TypedNote: React.FC<{ testId?: string }> = ({ testId = 'vr-typed-note' }) => (
+    <div data-testid={testId} className="flex items-center gap-2.5 rounded-2xl border border-amber-300 bg-amber-50 p-3" style={{ fontFamily: SANS }}>
+        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-amber-500 text-white"><Keyboard size={24} aria-hidden="true" /></span>
+        <span className="text-[14px] font-bold leading-snug text-amber-950">{resultCopy(useOptionalLanguage()?.language).typedNote}</span>
+    </div>
 );
 
 /** The approved "not sure I heard this" flag, for an item the server could not find in his words. */
@@ -97,6 +111,7 @@ export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; by
     part, entries, byLog, touched, showWho, nowIds,
 }) => {
     const [open, setOpen] = useState(touched);
+    const language = useOptionalLanguage()?.language;
     const m = partMeta(part);
     // The headline is the latest thing the server could VERIFY; an unsure item is never the headline.
     const last = entries.find(e => e.verified);
@@ -127,8 +142,12 @@ export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; by
                                     {rec?.typed && <TypedTag />}
                                 </div>
                                 {!e.verified && <UnsureFlag testId={`vr-day-unsure-${e.id}`} />}
-                                {e.value && <div className={`leading-tight text-stone-900 ${e.verified ? 'text-[18px] font-extrabold' : 'text-[15px] font-semibold'}`}>{e.value}</div>}
-                                {e.quote && e.quote !== e.value && <div className="mt-0.5 text-[12.5px] text-stone-700"><mark className="rounded px-1 text-inherit" style={{ background: m.tint }}>{e.quote}</mark></div>}
+                                {e.verified && showsProducts(e.products, language) ? <div className="mt-1"><ProductBoxCard box={e.products} /></div> : (
+                                    <>
+                                        {e.value && <div className={`leading-tight text-stone-900 ${e.verified ? 'text-[18px] font-extrabold' : 'text-[15px] font-semibold'}`}>{e.value}</div>}
+                                        {e.quote && e.quote !== e.value && <div className="mt-0.5 text-[12.5px] text-stone-700"><mark className="rounded px-1 text-inherit" style={{ background: m.tint }}>{e.quote}</mark></div>}
+                                    </>
+                                )}
                             </div>
                         );
                     })}
@@ -160,7 +179,9 @@ export const EarlierRecording: React.FC<{
                     {rec.blockers.map(b => <BlockerRow key={b.id} entry={b} />)}
                 </div>
             )}
-            {clip && <ClipPlayer clipKey={clip.id} durationSec={lengthSec} playing={playing} progress={progress} onToggle={onToggle} testId={`vr-earlier-play-${rec.id}`} />}
+            {rec.typed
+                ? <TypedNote testId={`vr-earlier-typed-note-${rec.id}`} />
+                : clip && <ClipPlayer clipKey={clip.id} durationSec={lengthSec} playing={playing} progress={progress} onToggle={onToggle} testId={`vr-earlier-play-${rec.id}`} />}
         </div>
     </details>
 );

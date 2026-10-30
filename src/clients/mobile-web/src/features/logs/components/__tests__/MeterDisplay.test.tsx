@@ -81,9 +81,10 @@ async function loadComponent(understandingMeter: boolean, stageQuestions = false
         isE2EHarnessEnabled: () => false,
         isEnabled: () => understandingMeter,
     }));
-    vi.doMock('../../../../i18n/LanguageContext', () => ({
-        useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (k: string) => translate(k, 'mr') }),
-    }));
+    vi.doMock('../../../../i18n/LanguageContext', () => {
+        const ctx = { language: 'mr', setLanguage: () => undefined, t: (k: string) => translate(k, 'mr') };
+        return { useLanguage: () => ctx, useOptionalLanguage: () => ctx };
+    });
     return import('../MeterDisplay');
 }
 
@@ -305,5 +306,51 @@ describe('MeterDisplay — tap-to-answer (Task 2A)', () => {
         expect(onDismiss).toHaveBeenCalledTimes(1);
         expect(onQuestionInteract).not.toHaveBeenCalled();
         expect(onAnswer).not.toHaveBeenCalled();
+    });
+});
+
+// spec: plr-d10 (lane L6b) — the result screen's question in the founder's designed amber card (SathiQuestion.tsx).
+describe('MeterDisplay — look="sathi" (the designed question card)', () => {
+    it('an open question: the designed heading, MIC FIRST (the route to the microphone), and "नंतर" (the engine\'s skip) — no अंदाजे / आठवत नाही', async () => {
+        const { MeterDisplay } = await loadComponent(true, true);
+        const onAnswerBySpeaking = vi.fn();
+        const onDismiss = vi.fn();
+        const onQuestionInteract = vi.fn();
+        const { getByTestId, queryByTestId, container } = render(
+            <MeterDisplay look="sathi" dfesQuestion={makeSelectedQuestion()} onAnswerBySpeaking={onAnswerBySpeaking}
+                onDismiss={onDismiss} onQuestionInteract={onQuestionInteract} />,
+        );
+        expect(getByTestId('vr-ask-heading').textContent).toBe('तुम्ही अजून उलगडून सांगितलं तर साथी नीट समजून घेऊ शकेल');
+        expect(getByTestId('vr-question-prompt').textContent).toBe('किती मात्रा (डोस) वापरली?');
+        expect(getByTestId('vr-question').className).toContain('amber');
+        expect(container.textContent).not.toMatch(/अंदाजे|आठवत नाही|आकडा वाढेल/);
+        expect(queryByTestId('shramsathi-gap-question')).toBeNull();
+        fireEvent.click(getByTestId('vr-answer-speak'));
+        expect(onAnswerBySpeaking).toHaveBeenCalledTimes(1);
+        expect(onQuestionInteract).not.toHaveBeenCalled(); // the tap writes nothing; he answers by speaking
+        fireEvent.click(getByTestId('vr-later'));
+        expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('a question with choices: one chip per choice and "नंतर"; no mic button', async () => {
+        const { MeterDisplay } = await loadComponent(true, true);
+        const onAnswer = vi.fn();
+        const high = { value: 'high', labelMr: 'जास्त' };
+        const { getAllByTestId, queryByTestId } = render(
+            <MeterDisplay look="sathi" dfesQuestion={makeSelectedQuestion({ answerOptions: [{ value: 'low', labelMr: 'कमी' }, high] })} onAnswer={onAnswer} />,
+        );
+        const chips = getAllByTestId('vr-answer-option');
+        expect(chips.map(c => c.textContent)).toEqual(['कमी', 'जास्त']);
+        fireEvent.click(chips[1]);
+        expect(onAnswer).toHaveBeenCalledWith(high);
+        expect(queryByTestId('vr-answer-speak')).toBeNull();
+        expect(queryByTestId('vr-later')).toBeTruthy();
+    });
+
+    it('an open question with no route to the microphone keeps the old card (never a dead mic button, P5)', async () => {
+        const { MeterDisplay } = await loadComponent(true, true);
+        const { queryByTestId, getByTestId } = render(<MeterDisplay look="sathi" dfesQuestion={makeSelectedQuestion()} />);
+        expect(queryByTestId('vr-answer-speak')).toBeNull();
+        expect(getByTestId('shramsathi-gap-question')).toBeTruthy();
     });
 });

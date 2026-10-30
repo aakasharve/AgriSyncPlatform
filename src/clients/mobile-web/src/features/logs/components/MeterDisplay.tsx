@@ -32,6 +32,7 @@ import type { VlogScore } from '../../../domain/types/log.types';
 import type { FarmerEngagementDto } from '../../../infrastructure/api/resources/DfesResource';
 import type { SelectedQuestion } from '../services/dfesQuestionEngine';
 import type { DfesAnswerOption } from '../services/dfesQuestionBank';
+import { SathiQuestionCard } from './voiceResult/SathiQuestionCard';
 
 // Marathi body text must render with Noto Sans Devanagari (incl. the Devanagari
 // numerals ०-९) — never system-ui / generic fallbacks. See CHARTER §Font rules.
@@ -63,6 +64,12 @@ export interface MeterDisplayProps {
      * behaviour unchanged. This adds a path; it removes none.
      */
     onAnswerBySpeaking?: () => void;
+    /**
+     * spec: plr-d10 (lane L6b) — 'sathi' = the founder's designed amber question card (voiceResult/SathiQuestionCard)
+     * on the ONE result screen. Only the question changes look; the gates, the writes and the no-question path are
+     * the same. Default 'card' (every other surface, unchanged).
+     */
+    look?: 'card' | 'sathi';
 }
 
 export function MeterDisplay({
@@ -74,6 +81,7 @@ export function MeterDisplay({
     onAnswer,
     onDismiss,
     onAnswerBySpeaking,
+    look = 'card',
 }: MeterDisplayProps): React.ReactElement | null {
     const { t } = useLanguage();
 
@@ -104,6 +112,30 @@ export function MeterDisplay({
     // Phase 5: when stageQuestions is ON and a combined question is available,
     // surface it as the single tappable card ahead of the raw placeholder gaps.
     const combinedQuestion = FEATURE_FLAGS.stageQuestions && dfesQuestion ? dfesQuestion : null;
+
+    // Lane L6b — the designed card, for a question it can answer for real: tap choices, or an open question with the
+    // route to the microphone (without that route the old card's bare acknowledgement stays, never a dead mic button).
+    if (look === 'sathi' && combinedQuestion && (combinedQuestion.answerOptions?.length || onAnswerBySpeaking)) {
+        return (
+            <div data-testid="meter-display" data-look="sathi">
+                {!FEATURE_FLAGS.unlockCounterPaused && (
+                    <div data-testid="meter-arrival" className="mb-2 text-xs text-stone-500" style={{ fontFamily: SANS }}>
+                        {t('dfes.meterArrivalProgress')
+                            .replace('{count}', String(arrival.richLogCount))
+                            .replace('{target}', String(arrival.target))}
+                        {arrival.arrived ? t('dfes.meterArrivalArrived') : ''}
+                    </div>
+                )}
+                <SathiQuestionCard
+                    prompt={combinedQuestion.resolvedPromptMr}
+                    options={combinedQuestion.answerOptions}
+                    onAnswer={option => onAnswer?.(option)}
+                    onLater={() => onDismiss?.()}
+                    onSpeak={() => onAnswerBySpeaking?.()}
+                />
+            </div>
+        );
+    }
 
     return (
         <div data-testid="meter-display" className="mt-6 rounded-2xl border border-dashed border-stone-300 p-4 text-left">

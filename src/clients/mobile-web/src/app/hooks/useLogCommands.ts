@@ -334,7 +334,7 @@ export const useLogCommands = ({
                 // loop is on. Flag read stays in the app layer (domain-agnostic).
                 FEATURE_FLAGS.dailyLoop
             );
-            const newLogs = withVoiceClipOnPrimary(options.autoSavedFromVoice ? created.map(markAutoSavedFromVoice) : created, options.voiceClipId);
+            const newLogs = withVoiceClipOnPrimary(options.autoSavedFromVoice ? created.map(l => markAutoSavedFromVoice(l, { typed: options.typedEntry === true })) : created, options.voiceClipId);
             attempted = newLogs;
 
             // Persist (Service handles persistence via injected repo)

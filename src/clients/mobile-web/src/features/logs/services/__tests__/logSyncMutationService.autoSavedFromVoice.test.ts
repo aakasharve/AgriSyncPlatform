@@ -81,6 +81,18 @@ describe('create_daily_log — autoSavedFromVoice on the wire', () => {
         expect(logs[0].verification?.status).toBe(LogVerificationStatus.DRAFT);
     });
 
+    it('L6b: what he TYPED to Sathi rides the SAME unconfirmed create — the typed mark stays on the phone', async () => {
+        const { logs, payloads } = await writeAndQueue(l => markAutoSavedFromVoice(l, { typed: true }));
+        expect(payloads).toHaveLength(1);
+        expect(payloads[0].autoSavedFromVoice).toBe(true); // the server keeps it Draft: no self-attestation, even the owner's
+        // Additive nothing: no new key, no recording named (old servers and every installed phone read it as today).
+        expect(Object.keys(payloads[0])).not.toContain('typedEntry');
+        expect(Object.keys(payloads[0])).not.toContain('voiceClipId');
+        expect(validatePayload(SyncMutationName.CreateDailyLog, payloads[0])).toEqual({ ok: true });
+        expect(logs[0].typedEntry).toBe(true);
+        expect(logs[0].verification?.status).toBe(LogVerificationStatus.DRAFT);
+    });
+
     it('any other save sends NO such key (the payload older servers already accept)', async () => {
         const { payloads } = await writeAndQueue(l => l);
         expect(payloads).toHaveLength(1);

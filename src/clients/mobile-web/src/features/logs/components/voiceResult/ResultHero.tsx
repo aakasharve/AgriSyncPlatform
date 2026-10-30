@@ -11,18 +11,27 @@
  *
  * Then ALL EIGHT parts: the ones the day mentions, and the ones it does NOT in red — each red one a button
  * that opens the mic for the same plot ("आणखी सांगा"). Never a 0, never grey (founder 2026-10-25).
+ *
+ * Lane L6b — the founder's ring mode has NO tile grid under the ring: the ring's red orbs do that job. So the grid
+ * is gone wherever the ring is drawn with its orbs. It stays only where the ring cannot do its job:
+ *   - no ring at all: the meter flag is off, the server's day score has not come (offline, or still on its way),
+ *     or he declared a no-work day — then nothing else on the screen shows the eight parts or offers the red tap;
+ *   - for a screen reader or a keyboard: the orbs are drawn on a canvas, not buttons, so while the ring is drawn
+ *     each untold part is still offered as a real button, visually hidden until it is focused.
  */
 import React, { useEffect, useRef } from 'react';
 import { useSelector } from '@xstate/react';
 import { HelpCircle, X } from 'lucide-react';
 import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { getRootStore } from '../../../../app/state/RootStore';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { useDayUnderstanding } from '../../hooks/useDayUnderstanding';
 import { subscribeDfesAnswered } from '../../services/dfesAnswerSignal';
 import type { RingNodeData } from '../shramsathi/understandingRing';
 import { PartIcon } from './HisWords';
 import RingStage from './RingStage';
-import { PARTS, PART_OF_NODE, type PartKey } from './resultModel';
+import { resultCopy } from './resultCopy';
+import { PARTS, PART_OF_NODE, partMeta, type PartKey } from './resultModel';
 import { RESULT_STR } from './resultStrings';
 import { scrollBelowHeader } from './scrollBelowHeader';
 
@@ -55,40 +64,18 @@ export interface ResultHeroProps {
     unsure?: readonly PartKey[];
     onTellMore: (part: PartKey) => void;
     onReadMore: () => void;
+    /** Lane L6b — he typed it: the ring's "read below" arrow does not offer to listen. */
+    typed?: boolean;
 }
 
-/** The meter (flag-gated). Its own component so a flag-off build mounts no fetch at all. */
-const Meter: React.FC<Omit<ResultHeroProps, 'missing' | 'unsure'>> = ({ farmId, dayDate, savedLogId, recordingKey, nodes, onTellMore, onReadMore }) => {
-    const heroTop = useRef<HTMLDivElement>(null);
-    const lastSyncAtMs = useSelector(getRootStore().sync, s => s.context.lastSyncAtMs);
-    const { score, classification, refresh } = useDayUnderstanding(farmId, dayDate, `${savedLogId ?? ''}:${lastSyncAtMs ?? ''}`);
-    useEffect(() => subscribeDfesAnswered(() => { void refresh(); }), [refresh]);
-    const noWork = classification === DECLARED_NO_WORK_DAY;
-    return (
-        <div ref={heroTop} data-testid="vr-meter">
-            <div className="flex items-center justify-center gap-2.5 pb-1.5">
-                <SathiOrb />
-                <p className="m-0 text-[19px] font-extrabold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RESULT_STR.ringHeading}</p>
-            </div>
-            <RingStage score={noWork ? null : score} nodes={nodes} variant={ringVariant()} saveKey={recordingKey}
-                onSettled={() => scrollBelowHeader(heroTop.current)} onReadMore={onReadMore}
-                onMissedTap={n => { const p = PART_OF_NODE[n.id]; if (p) onTellMore(p); }}
-                fallback={<p className="m-0 text-center text-sm text-stone-600" data-testid="vr-meter-pending">{noWork ? RESULT_STR.noWorkDay : RESULT_STR.meterPending}</p>} />
-        </div>
-    );
-};
+type PartsProps = Pick<ResultHeroProps, 'missing' | 'unsure' | 'onTellMore'>;
 
-export const ResultHero: React.FC<ResultHeroProps> = ({ unsure: unsureParts, ...props }) => {
+/** All eight parts as tiles: what the day tells, what it is unsure of (amber), and the red ones to tell Sathi. */
+const PartsGrid: React.FC<PartsProps> = (props) => {
     const missing = new Set(props.missing);
-    const unsure = new Set(unsureParts ?? []);
+    const unsure = new Set(props.unsure ?? []);
     return (
-        <section className="rounded-3xl border border-white/60 bg-white/85 p-3.5 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)]" data-testid="vr-hero">
-            {FEATURE_FLAGS.understandingMeter ? <Meter {...props} /> : (
-                <div className="flex items-center gap-3">
-                    <SathiOrb />
-                    <p className="m-0 text-[15px] font-bold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RESULT_STR.sathiLine}</p>
-                </div>
-            )}
+        <>
             <div className="mt-3 grid grid-cols-4 gap-1.5" data-testid="vr-parts">
                 {PARTS.map(p => missing.has(p.key) ? (
                     <button key={p.key} type="button" onClick={() => props.onTellMore(p.key)} data-testid={`vr-part-${p.key}`} data-told="no"
@@ -119,8 +106,63 @@ export const ResultHero: React.FC<ResultHeroProps> = ({ unsure: unsureParts, ...
                 ))}
             </div>
             {props.missing.length > 0 && <p className="m-0 mt-1.5 text-center text-[12.5px] font-bold text-red-700" data-testid="vr-tell-hint">{RESULT_STR.tellMore}</p>}
-        </section>
+        </>
     );
 };
+
+/** While the ring is drawn: its red orbs, as real buttons for a screen reader or a keyboard (seen only when focused). */
+const UntoldPartButtons: React.FC<Pick<ResultHeroProps, 'missing' | 'onTellMore'>> = ({ missing, onTellMore }) => {
+    const copy = resultCopy(useOptionalLanguage()?.language);
+    if (missing.length === 0) return null;
+    return (
+        <div data-testid="vr-parts-untold">
+            {missing.map(k => (
+                <button key={k} type="button" onClick={() => onTellMore(k)} data-testid={`vr-untold-${k}`}
+                    className="sr-only focus:not-sr-only focus:mt-2 focus:block focus:w-full focus:rounded-2xl focus:border-2 focus:border-red-300 focus:bg-red-50 focus:p-2 focus:text-[14px] focus:font-extrabold focus:text-red-800">
+                    {copy.notToldPart(partMeta(k).label)}
+                </button>
+            ))}
+        </div>
+    );
+};
+
+/** The meter (flag-gated). Its own component so a flag-off build mounts no fetch at all. */
+const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed }) => {
+    const heroTop = useRef<HTMLDivElement>(null);
+    const language = useOptionalLanguage()?.language;
+    const lastSyncAtMs = useSelector(getRootStore().sync, s => s.context.lastSyncAtMs);
+    const { score, classification, refresh } = useDayUnderstanding(farmId, dayDate, `${savedLogId ?? ''}:${lastSyncAtMs ?? ''}`);
+    useEffect(() => subscribeDfesAnswered(() => { void refresh(); }), [refresh]);
+    const noWork = classification === DECLARED_NO_WORK_DAY;
+    // The ring draws its orbs only with a server score above 0 (RingStage); without one the tiles stand in for it.
+    const ringDrawn = !noWork && score != null && score > 0;
+    return (
+        <div ref={heroTop} data-testid="vr-meter">
+            <div className="flex items-center justify-center gap-2.5 pb-1.5">
+                <SathiOrb />
+                <p className="m-0 text-[19px] font-extrabold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RESULT_STR.ringHeading}</p>
+            </div>
+            <RingStage score={noWork ? null : score} nodes={nodes} variant={ringVariant()} saveKey={recordingKey}
+                onSettled={() => scrollBelowHeader(heroTop.current)} onReadMore={onReadMore} readMoreLabel={typed ? resultCopy(language).readBelow : undefined}
+                onMissedTap={n => { const p = PART_OF_NODE[n.id]; if (p) onTellMore(p); }}
+                fallback={<p className="m-0 text-center text-sm text-stone-600" data-testid="vr-meter-pending">{noWork ? RESULT_STR.noWorkDay : RESULT_STR.meterPending}</p>} />
+            {ringDrawn ? <UntoldPartButtons missing={missing} onTellMore={onTellMore} /> : <PartsGrid missing={missing} unsure={unsure} onTellMore={onTellMore} />}
+        </div>
+    );
+};
+
+export const ResultHero: React.FC<ResultHeroProps> = (props) => (
+    <section className="rounded-3xl border border-white/60 bg-white/85 p-3.5 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)]" data-testid="vr-hero">
+        {FEATURE_FLAGS.understandingMeter ? <Meter {...props} /> : (
+            <>
+                <div className="flex items-center gap-3">
+                    <SathiOrb />
+                    <p className="m-0 text-[15px] font-bold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RESULT_STR.sathiLine}</p>
+                </div>
+                <PartsGrid missing={props.missing} unsure={props.unsure} onTellMore={props.onTellMore} />
+            </>
+        )}
+    </section>
+);
 
 export default ResultHero;

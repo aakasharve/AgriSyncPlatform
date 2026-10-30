@@ -157,6 +157,23 @@ describe('an auto-saved voice log on the phone — captured is not reviewed', ()
         const log = await pullAndRead(db, autoSavedLogAsTheServerSendsIt());
 
         expect(log.autoSavedFromVoice).toBeUndefined();
+        expect(log.typedEntry).toBeUndefined();
+    });
+
+    // PLR-D10 L6b — "he typed it to Sathi" is not on the wire either: the pull must not turn it into a recording.
+    it('keeps the phone\'s typed mark across a pull ("लिहिलेलं" stays)', async () => {
+        await db.logs.put({
+            id: LOG_ID,
+            schemaVersion: VersionRegistry.DB_SCHEMA_VERSION,
+            log: { ...phoneCopyOfHisAutoSave(), typedEntry: true },
+            date: DAY,
+            isDeleted: 0,
+        });
+
+        const log = await pullAndRead(db, autoSavedLogAsTheServerSendsIt());
+
+        expect(log.typedEntry).toBe(true);
+        expect(log.autoSavedFromVoice).toBe(true);
     });
 });
 

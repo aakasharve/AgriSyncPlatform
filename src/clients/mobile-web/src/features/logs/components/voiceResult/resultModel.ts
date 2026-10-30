@@ -32,6 +32,7 @@ import { isCompletedIrrigationEvent } from '../../services/irrigationCompletion'
 import { buildNodes, type CategoryId, type RingNodeData } from '../shramsathi/understandingRing/categories';
 import { dayCategoryStates, type CoverageExtras } from '../shramsathi/understandingRing/dayCategoryCoverage';
 import type { IconName } from '../shramsathi/understandingRing/icons';
+import { productBoxesOf, type ProductBox } from './productModel';
 
 export type PartKey = 'crop' | 'labour' | 'irrigation' | 'inputs' | 'expense' | 'machinery' | 'observation' | 'planned';
 
@@ -69,6 +70,8 @@ export interface PartEntry {
     quote?: string;
     /** False when the server could not find the item's phrase in his words: flagged, never a plain fact. */
     verified: boolean;
+    /** Lane L6b — an input's products as recorded (design ProductCard): the chip row and the spray / drip box. */
+    products?: ProductBox;
 }
 
 /**
@@ -176,11 +179,11 @@ export function partEntriesOf(log: DailyLog): PartEntry[] {
     const transcript = log.fullTranscript;
     const out: PartEntry[] = [];
     const costs: PartEntry[] = [];
-    const add = (part: PartKey, index: number, item: Sourced & { id?: string }, value: string) => {
+    const add = (part: PartKey, index: number, item: Sourced & { id?: string }, value: string, products?: ProductBox) => {
         const quote = verifiedPhrase(item, transcript);
         out.push({
             id: item.id || `${log.id}:${part}:${index}`, logId: log.id, part, value: value || quote || null, quote,
-            verified: item.provenanceVerified !== false,
+            verified: item.provenanceVerified !== false, ...(products && { products }),
         });
     };
     // Money he said on ANOTHER part (a wage, a spray's cost, a machine's rent) is listed under खर्च too, as he said
@@ -206,10 +209,11 @@ export function partEntriesOf(log: DailyLog): PartEntry[] {
             marathiOnly(e.notes),
         ));
     });
+    const boxes = productBoxesOf(log);
     (log.inputs ?? []).forEach((e, i) => {
         const names = (e.mix ?? []).map(m => marathiOnly(m.productName)).filter(Boolean);
         const what = names.length > 0 ? names.join(', ') : marathiOnly(e.productName);
-        add('inputs', i, e, what);
+        add('inputs', i, e, what, boxes[i]);
         addCost('inputs', i, e, what, rupees(e.cost));
     });
     (log.activityExpenses ?? []).forEach((e, i) => add('expense', i, e, join(marathiOnly(e.reason), rupees(e.totalAmount))));
@@ -262,8 +266,11 @@ export function blockersOf(log: DailyLog): BlockerEntry[] {
 export const isConfirmed = (log: DailyLog): boolean =>
     log.verification?.status === LogVerificationStatus.VERIFIED || log.verification?.status === LogVerificationStatus.APPROVED;
 
-/** Filled in by hand on the form (no voice behind it): the preview's "लिहिलेलं". Only a positive claim counts. */
-export const isTyped = (log: DailyLog): boolean => log.meta?.provenance?.source === 'manual';
+/**
+ * No voice behind it: filled in by hand on the form, or (lane L6b) typed to Sathi in the "लिहून सांगा" sheet. The
+ * preview's "लिहिलेलं". Only a positive claim counts.
+ */
+export const isTyped = (log: DailyLog): boolean => log.meta?.provenance?.source === 'manual' || log.typedEntry === true;
 
 export interface Who { name: string; you: boolean }
 
@@ -316,8 +323,10 @@ export interface RecordingView {
     timeLabel: string;
     who: Who;
     confirmed: boolean;
-    /** Filled in by hand: there is no recording behind it. */
+    /** No recording behind it: filled in by hand, or (L6b) typed to Sathi. */
     typed: boolean;
+    /** Filled in on the form (not told to Sathi): not a time he "said" it (L6b: what he TYPED to Sathi is). */
+    byForm: boolean;
     transcript: string;
     entries: PartEntry[];
     /** The stoppages it reported. */
@@ -335,6 +344,7 @@ export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingV
         who: whoSpoke(log, deps),
         confirmed: all.every(isConfirmed),
         typed: all.every(isTyped),
+        byForm: all.every(l => l.meta?.provenance?.source === 'manual'),
         transcript: clean(log.fullTranscript),
         entries: all.flatMap(partEntriesOf),
         blockers: all.flatMap(blockersOf),
@@ -389,7 +399,7 @@ export interface DayView {
     touchedNow: Set<PartKey>;
     /** Stoppages the recording just made reported. */
     blockersNow: BlockerEntry[];
-    /** Who SPOKE today, each counted once per RECORDING (not per plot it named); a typed entry is not "said". */
+    /** Who told Sathi today, each counted once per RECORDING (not per plot it named); a form entry is not "said". */
     speakers: Speaker[];
 }
 
@@ -421,7 +431,7 @@ export function buildDayView(current: readonly DailyLog[], history: readonly Dai
 
     const speakers: Speaker[] = [];
     const nowWho = (now.find(r => !!r.transcript) ?? now[0])?.who;
-    for (const who of [...[...earlier].reverse().filter(r => !r.typed).map(r => r.who), ...(nowWho ? [nowWho] : [])]) {
+    for (const who of [...[...earlier].reverse().filter(r => !r.byForm).map(r => r.who), ...(nowWho ? [nowWho] : [])]) {
         const hit = speakers.find(s => s.name === who.name && s.you === who.you);
         if (hit) hit.times += 1; else speakers.push({ ...who, times: 1 });
     }

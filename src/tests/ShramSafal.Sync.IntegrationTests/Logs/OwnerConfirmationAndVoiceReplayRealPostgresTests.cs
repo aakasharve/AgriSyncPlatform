@@ -611,6 +611,51 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
         (await CanConfirmAsync(CoOwner)).Should().Be(false, "and took it back");
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // 7. LANE L6b — WHAT HE TYPES TO SATHI IS A CAPTURE, NOT A CONFIRMATION
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 (lane L6b; founder D-44 / D-46). The typed sheet's
+    /// "साथीला पाठवा" now saves at once, like a spoken entry, and reaches the server as the auto-save create with
+    /// no recording named. Even from the PRIMARY OWNER — whose typed save from the old review form is confirmed at
+    /// save — it must land UNCONFIRMED, and only his deliberate "पक्कं आहे" (read, never heard) confirms it.
+    /// </summary>
+    [Fact]
+    public async Task A_typed_auto_save_stays_unconfirmed_even_for_the_primary_owner_until_his_own_confirm()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+
+        // Exactly what the L6b phone queues for a typed entry: the auto-save flag, and no voiceClipId key at all.
+        var typedLog = Guid.NewGuid();
+        var typedCreate = CreatePayload(typedLog, Owner, voiceClipId: null);
+        typedCreate.Keys.Should().NotContain("voiceClipId");
+        typedCreate["autoSavedFromVoice"].Should().Be(true);
+        await PushAppliedAsync(Owner, "create_daily_log", "l6b-typed-autosave", typedCreate);
+
+        var typedEvents = await ReadEventsAsync(typedLog);
+        output.WriteLine($"[EVIDENCE] primary owner's typed auto-save: {Describe(typedEvents)}");
+        typedEvents.Select(e => e.Status).Should().Equal(new[] { "Draft" }, "a capture is not a confirmation");
+        typedEvents.Single().Reason.Should().Be("auto-saved-from-voice");
+        (await PullDailyLogAsync(Owner, typedLog)).LastVerificationStatus.Should().Be("Draft", "पक्कं नाही on every phone");
+        (await ScalarOnSuperuserAsync(
+            "SELECT voice_clip_id FROM ssf.daily_logs WHERE \"Id\" = @id", ("id", typedLog))).Should().Be(DBNull.Value, "no recording is behind it");
+
+        // Control: the same owner's typed save from the old review form (an installed phone) IS confirmed at save.
+        var formLog = Guid.NewGuid();
+        await PushAppliedAsync(Owner, "create_daily_log", "l6b-form-save", OldPhoneTypedCreate(formLog, Owner));
+        (await ReadEventsAsync(formLog)).Select(e => e.Status).Should().Equal("Confirmed", "Verified");
+
+        // His "✔ पक्कं आहे" on the result screen — read, there is nothing to hear — confirms it, at version 1.
+        await PushAppliedAsync(Owner, "verify_log_v2", "l6b-typed-confirm", VerifyPayload(typedLog, Owner, "read", logVersion: 1));
+        var confirmed = (await ReadEventsAsync(typedLog)).Single(e => e.Status == "Verified");
+        output.WriteLine($"[EVIDENCE] after his own confirm: {Describe(await ReadEventsAsync(typedLog))}");
+        confirmed.By.Should().Be(Owner);
+        confirmed.Basis.Should().Be("read");
+        confirmed.Version.Should().Be(1);
+        (await PullDailyLogAsync(Owner, typedLog)).LastVerificationStatus.Should().Be("Verified");
+    }
+
     private async Task<bool?> CanConfirmAsync(Guid viewer)
     {
         var result = await RunUnderScopeAsync(viewer, sp => sp.GetRequiredService<IHandler<GetLabourDataQuery, LabourDataDto>>()

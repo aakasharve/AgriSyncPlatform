@@ -240,6 +240,18 @@ describe('LedgerRecognitionPanel (Phase 5, Task 5.9)', () => {
         const { getByTestId } = render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} />);
         expect(getByTestId('ledger-recognition-panel')).toBeTruthy();
     });
+
+    // spec: plr-d10 (lane L6b) — on the result screen the designed card carries its own heading: no section frame
+    // ("साथीला अजून हवं आहे") and no "the number goes up" note around it (founder 2026-10-24).
+    it('look="sathi" puts no "ask" section frame around the question; the default keeps it', async () => {
+        const { LedgerRecognitionPanel } = await loadComponent();
+        const sathi = render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} look="sathi" />);
+        expect(sathi.queryByTestId('section-ask')).toBeNull();
+        expect(sathi.getByTestId('meter-display')).toBeTruthy();
+        cleanup();
+        const card = render(<LedgerRecognitionPanel farmId="farm-1" allLogs={[]} />);
+        expect(card.getByTestId('section-ask')).toBeTruthy();
+    });
 });
 
 describe('LedgerRecognitionPanel — schedule-gap wiring (Task 3B, spec: dfes-companion-2026-07-11)', () => {

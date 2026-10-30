@@ -53,8 +53,8 @@ export function normalizeSuggestedAction(action?: string): 'auto_confirm' | 'man
 // missing, so readers must take an absent list as empty. There is no longer always a human
 // confirm-step: since PLR-D10 I13 a recording's parse is saved at once (founder decision
 // 2026-09-02), and the integrity gate is that it is saved UNCONFIRMED (`autoSavedFromVoice`:
-// a draft until his own "पक्कं आहे") and shown to him on the result screen. Typed text still
-// opens the review form. Does NOT touch the schema (shared contract).
+// a draft until his own "पक्कं आहे") and shown to him on the result screen. Since lane L6b what he
+// types to Sathi is saved the same way (unconfirmed, marked typed). Does NOT touch the schema (shared contract).
 export function normalizeDriftedParsedLog(raw: unknown): unknown {
     if (!raw || typeof raw !== 'object') return raw;
     const genId = (): string =>
