@@ -90,6 +90,17 @@
 /// came in by asking — the typed farm code, or a farm-QR scan after the owner had stopped the
 /// person), as opposed to a direct farm-QR join. Wording only, never authority.
 /// </param>
+/// <param name="CanConfirmRecords">
+/// spec: plr-d10 (I27; founder D-44 §2) — ADDITIVE: this member may give a record the owner's
+/// confirmation ("मालकाकडून खात्री"): the primary owner, or anyone holding the owner's switch — a
+/// co-owner included, but never a co-owner by role alone. <c>null</c> only from an older server.
+/// </param>
+/// <param name="IsConfirmGrantEditable">
+/// spec: plr-d10 (I27) — ADDITIVE: the caller (the primary owner) may give or take back THIS
+/// co-owner's responsibility to confirm records. <c>true</c> only on a co-owner's row, only for the
+/// primary owner. Worker and मुकादम rows keep their one switch (<c>IsGrantEditable</c>), which
+/// covers labour and confirming together, as before. Older phones ignore it.
+/// </param>
 public sealed record LabourPermissionDto(
     Guid UserId,
     string Role,
@@ -106,4 +117,6 @@ public sealed record LabourPermissionDto(
     string? JoinedVia = null,
     DateTime? RequestedAtUtc = null,
     string? PhoneLast4 = null,
-    bool ApprovedByOwner = false);
+    bool ApprovedByOwner = false,
+    bool? CanConfirmRecords = null,
+    bool? IsConfirmGrantEditable = null);

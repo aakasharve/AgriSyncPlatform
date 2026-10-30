@@ -33,6 +33,14 @@
     {
       "dir": "src/clients/mobile-web/src/features/consent/reask",
       "pattern": "^NoticeChangeSheet\\.tsx$"
+    },
+    {
+      "dir": "src/clients/mobile-web/src/features/logs/components/originalVoice",
+      "pattern": "^originalVoiceCopy\\.ts$"
+    },
+    {
+      "dir": "src/clients/mobile-web/src/features/profile/team",
+      "pattern": "^confirmAccessCopy\\.ts$"
     }
   ],
   "files": [
@@ -95,6 +103,16 @@
       "path": "src/clients/mobile-web/src/features/consent/reask/NoticeChangeSheet.tsx",
       "reviewStatus": "unreviewed",
       "sha256": "5b6e69beb8eb79f8e17998e2e0b82795355ff24e173e75710d05ae0e07821875"
+    },
+    {
+      "path": "src/clients/mobile-web/src/features/logs/components/originalVoice/originalVoiceCopy.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "1faf9c1d1154970931ed9045af24afbca4c19ff909a8599a72003b56814ef677"
+    },
+    {
+      "path": "src/clients/mobile-web/src/features/profile/team/confirmAccessCopy.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "4f3c641b2398dcbc6ae81cf0c444b279cbdb01d0fe9d2b0543098eeb72bb356a"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/consentTranslations.ts",

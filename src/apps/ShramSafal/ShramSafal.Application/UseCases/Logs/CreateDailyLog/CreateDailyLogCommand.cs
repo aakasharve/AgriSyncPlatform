@@ -85,7 +85,11 @@ public sealed record CreateDailyLogCommand(
     // tap. When true the creator is NOT self-attested: the log stays Draft with the
     // DailyLog.AutoSavedFromVoiceReason marker until a person's own verify act. Added
     // LAST with the default every existing caller means (false = today's behaviour, P11).
-    bool AutoSavedFromVoice = false)
+    bool AutoSavedFromVoice = false,
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I27) — the server (archive) id of
+    // the recording this log was saved from, when the phone knows it. Added LAST with the
+    // default every existing caller means (null = no recording linked, P11).
+    Guid? VoiceClipId = null)
 {
     public string? IdempotencyKey
     {

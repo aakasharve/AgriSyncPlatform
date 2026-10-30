@@ -469,6 +469,15 @@ public sealed class CreateDailyLogHandler(
         // stamps none: NULL is the honest "he did not say" (P4).
         log.SetDayOutcome(labourOnly ? null : command.ManualDraft?.DayOutcome);
 
+        // spec: plr-d10 (I27) — the recording this log was saved from, as the phone stated
+        // it. Canonical (it is how a reviewer reaches the speaker's own words, D-31), so it
+        // rides the PRIMARY save, never the side-car. Only a pointer: who may hear it is
+        // decided at replay time (GetLogOriginalVoiceHandler).
+        if (command.VoiceClipId is { } voiceClipId && voiceClipId != Guid.Empty)
+        {
+            log.LinkVoiceClip(voiceClipId);
+        }
+
         // ── spec: dfes-companion-2026-07-11 (wave-1.3) ───────────────────────────
         // THE SERVER HALF of the owner-confirm fix. The device stamps the owner's own
         // log approved on save (wave-1.1), but verification is a SERVER-derived value —
@@ -488,6 +497,11 @@ public sealed class CreateDailyLogHandler(
         // Non-owner roles get nothing here: TrySelfVerifyAsCreator refuses any role that
         // does not hold BOTH FSM edges, so a Mukadam's log still lands on Draft and still
         // needs an owner. No FSM edge was added or widened.
+        //
+        // spec: plr-d10 (I27; founder D-44 §2, D-46 §3) — and since I27 it refuses every
+        // role but the PRIMARY OWNER (OwnerConfirmationAuthority.MaySelfAttestAtSave): a
+        // co-owner's, agronomist's or FPC manager's own save stays pending too, old phones
+        // included. A grant holder confirms deliberately in the review sheet instead.
         //
         // ── spec: plr-d10-redesign-real-integration-2026-10-25 (I13) ─────────────────
         // FOUNDER DECISION 2026-09-02: a voice log is saved on a successful parse with no

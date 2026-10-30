@@ -690,6 +690,8 @@ export interface DailyLog {
     captureScope?: LogCaptureScope;
     /** PLR-D10 I13 — saved straight from a voice parse, no review tap: the server keeps it unconfirmed. Rides the create; a pull keeps it. */
     autoSavedFromVoice?: boolean;
+    /** PLR-D10 I27 — the server (archive) id of the recording this log was saved from; rides the create, a pull keeps it. */
+    voiceClipId?: string;
 
     /**
      * Understanding Meter score — stamped at save time (W1.P3.T1, task 1c).

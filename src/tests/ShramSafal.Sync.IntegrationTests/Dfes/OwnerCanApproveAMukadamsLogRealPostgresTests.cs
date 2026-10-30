@@ -746,10 +746,15 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
             "ruling 2 self-attestation is owner-tier only — a granted mukadam's log is NOT verified on save, " +
             "he has to ask for it, and that keeps 'who approved this day' a question with one answer");
 
+        // spec I27 (founder D-44): the deliberate review approval states how he reviewed it. The I13
+        // result-screen tap (no review basis) by the speaker is kept as his mark instead — see
+        // OwnerConfirmationAndVoiceReplayRealPostgresTests. The 2026-08-27 ruling itself is unchanged.
+        var selfApproval = ApprovePayload(dailyLogId, verifierUserIdInPayload: GrantedMukadamUserId);
+        selfApproval["reviewBasis"] = "read";
         var approve = await PushAsync(
             GrantedMukadamUserId, "Mukadam",
             "req-granted-mukadam-selfapproves",
-            "verify_log_v2", ApprovePayload(dailyLogId, verifierUserIdInPayload: GrantedMukadamUserId));
+            "verify_log_v2", selfApproval);
 
         var result = Assert.Single(approve.Value!.Results);
         output.WriteLine($"[EVIDENCE] granted mukadam SELF-approve → status='{result.Status}' " +

@@ -16,5 +16,8 @@ public sealed record VerifyLogV2Payload(
     /// <summary>Allowed values: "confirm", "verify", "dispute", "request_correction".</summary>
     string Decision,
     DateTime DecidedAt,
-    string? Reason = null
+    string? Reason = null,
+    /// <summary>Allowed values: "heard", "read".</summary>
+    string? ReviewBasis = null,
+    int? LogVersion = null
 );

@@ -105,14 +105,29 @@ public sealed class LabourManagementPermissionTests
                 + "is denied before the flag is even consulted");
     }
 
+    /// <summary>
+    /// RE-PINNED 2026-10-30 (spec plr-d10 I27). Was owner-tier (a co-owner could grant). Founder
+    /// D-44 §2, verbatim: "The primary owner may confirm personally or explicitly delegate this
+    /// responsibility … Being appointed मुकादम or co-owner must not automatically grant this
+    /// authority." The switch now also makes confirmers, so only the primary owner moves it.
+    /// </summary>
     [Theory]
     [MemberData(nameof(AllRoles))]
-    public void Only_owner_tier_may_grant_or_revoke(AppRole role)
+    public void Only_the_primary_owner_may_grant_or_revoke(AppRole role)
     {
         LabourManagementPermission.CanGrantOrRevoke(role)
+            .Should().Be(role is AppRole.PrimaryOwner,
+                "D-44: the PRIMARY owner chooses who confirms; O-4: even a member the owner GRANTED "
+                + "may not spread the capability, or the owner's decision stops being the owner's");
+    }
+
+    [Theory]
+    [MemberData(nameof(AllRoles))]
+    public void Owner_tier_may_still_read_the_grant_roster(AppRole role)
+    {
+        LabourManagementPermission.CanViewGrants(role)
             .Should().Be(role is AppRole.PrimaryOwner or AppRole.SecondaryOwner,
-                "O-4: 'the owner decides who is trusted'. Even a member the owner GRANTED may not "
-                + "spread the capability, or the owner's decision stops being the owner's");
+                "reading is not deciding: a co-owner keeps the list he saw before I27");
     }
 
     [Fact]
@@ -121,13 +136,19 @@ public sealed class LabourManagementPermissionTests
         LabourManagementPermission.CanGrantOrRevoke(null).Should().BeFalse();
     }
 
+    /// <summary>
+    /// RE-PINNED 2026-10-30 (spec plr-d10 I27). Was both owner-tier roles. A co-owner's labour
+    /// edits still come with his role (<see cref="LabourManagementPermission.IsCarriedByRole"/>,
+    /// pinned above, unchanged) but confirming does not (D-44 §2), so for him the stored flag is a
+    /// real decision. Only the primary owner, who confirms by role, gains nothing from it.
+    /// </summary>
     [Theory]
     [MemberData(nameof(AllRoles))]
-    public void A_grant_is_redundant_exactly_where_the_role_already_carries_it(AppRole role)
+    public void A_grant_is_redundant_only_for_the_primary_owner(AppRole role)
     {
         LabourManagementPermission.IsRedundantGrantTarget(role)
-            .Should().Be(CarriedByRole.Contains(role),
-                "this is the P5 guard: toggling the stored flag for a role-carried capability would "
-                + "change nothing, so the write path refuses instead of letting a switch pretend");
+            .Should().Be(role is AppRole.PrimaryOwner,
+                "this is the P5 guard: toggling the stored flag where it changes nothing would be a "
+                + "switch that pretends; for a co-owner it now decides whether he confirms records");
     }
 }

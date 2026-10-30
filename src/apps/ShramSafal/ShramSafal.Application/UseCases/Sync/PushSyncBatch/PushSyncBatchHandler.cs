@@ -940,7 +940,8 @@ public sealed class PushSyncBatchHandler(
         // generated CreateDailyLogPayload record.
         // B002 adds "captureScope" (which door captured the record), same lockstep.
         // PLR-D10 I13 adds "autoSavedFromVoice" (saved from a voice parse, never reviewed).
-        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope", "autoSavedFromVoice"))
+        // PLR-D10 I27 adds "voiceClipId" (the recording this log was saved from).
+        if (!PayloadHasOnly(payload, "dailyLogId", "farmId", "scope", "plotIds", "plotId", "cropCycleId", "operatorUserId", "logDate", "location", "weatherStamp", "sourceAiJobId", "labour", "manualDraft", "captureScope", "autoSavedFromVoice", "voiceClipId"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -1111,7 +1112,8 @@ public sealed class PushSyncBatchHandler(
                 // PLR-D10 I13 — absent/false is today's behaviour (P11); only an explicit
                 // JSON true keeps the log out of the creator's self-attestation. A
                 // non-boolean value was already refused above, before any write.
-                AutoSavedFromVoice: request.AutoSavedFromVoice == true),
+                AutoSavedFromVoice: request.AutoSavedFromVoice == true,
+                VoiceClipId: request.VoiceClipId is { } clip && clip != Guid.Empty ? clip : null),
             ct);
 
         return ToOutcome(result);
@@ -1675,7 +1677,8 @@ public sealed class PushSyncBatchHandler(
         string actorRole,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "logId", "verifierUserId", "decision", "reason", "decidedAt"))
+        // PLR-D10 I27 adds "reviewBasis" (heard / read) and "logVersion" (the version he saw).
+        if (!PayloadHasOnly(payload, "logId", "verifierUserId", "decision", "reason", "decidedAt", "reviewBasis", "logVersion"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -1706,6 +1709,16 @@ public sealed class PushSyncBatchHandler(
             return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
         }
 
+        // PLR-D10 I27 — a basis we do not know, or a version below 1, is a malformed payload
+        // (the phone's own schema cannot produce one): refused, never guessed.
+        if (!Domain.Logs.ReviewBasis.TryNormalize(request.ReviewBasis, out var reviewBasis)
+            || request.LogVersion is < 1)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "verify_log_v2 reviewBasis must be heard or read, and logVersion at least 1.");
+        }
+
         var result = await verifyLogHandler.HandleAsync(
             new VerifyLogCommand(
                 request.LogId,
@@ -1714,7 +1727,10 @@ public sealed class PushSyncBatchHandler(
                 actorUserId,
                 VerificationEventId: null,
                 actorRole,
-                clientRequestId),
+                clientRequestId,
+                ReviewBasis: reviewBasis,
+                ExpectedLogVersion: request.LogVersion,
+                ReviewBasisOmittedOnV2: reviewBasis is null),
             ct);
 
         return ToOutcome(result);

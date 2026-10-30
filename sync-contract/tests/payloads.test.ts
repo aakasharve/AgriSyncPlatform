@@ -301,6 +301,35 @@ describe('CreateDailyLogPayload', () => {
             expect(payloads.CreateDailyLogPayload.safeParse(withAutoSave(bad)).success, String(bad)).toBe(false);
         }
     });
+
+    // PLR-D10 I27 (founder D-31) — voiceClipId: the server (archive) id of the recording
+    // this log was saved from. OPTIONAL (every older client omits it); a Guid or nothing.
+    it('accepts a Guid voiceClipId, and a payload without one', () => {
+        expect(payloads.CreateDailyLogPayload.safeParse({ ...withAutoSave(true), voiceClipId: VALID_GUID_E }).success).toBe(true);
+        expect(payloads.CreateDailyLogPayload.safeParse(withAutoSave(true)).success).toBe(true);
+    });
+    it('rejects a voiceClipId that is not a Guid (the phone\'s 64-hex key must be mapped first)', () => {
+        for (const bad of ['ab'.repeat(32), '', 7, null]) {
+            expect(payloads.CreateDailyLogPayload.safeParse({ ...withAutoSave(true), voiceClipId: bad }).success, String(bad)).toBe(false);
+        }
+    });
+});
+
+describe('VerifyLogV2Payload — PLR-D10 I27 confirmation evidence', () => {
+    const base = { logId: VALID_GUID_A, verifierUserId: VALID_GUID_B, decision: 'verify', decidedAt: VALID_ISO };
+    it('accepts heard / read and a version from 1, and neither (every older client)', () => {
+        expect(payloads.VerifyLogV2Payload.safeParse(base).success).toBe(true);
+        expect(payloads.VerifyLogV2Payload.safeParse({ ...base, reviewBasis: 'heard', logVersion: 1 }).success).toBe(true);
+        expect(payloads.VerifyLogV2Payload.safeParse({ ...base, reviewBasis: 'read', logVersion: 12 }).success).toBe(true);
+    });
+    it('rejects any other basis and a version that is not a whole number from 1', () => {
+        for (const bad of ['Heard', 'listened', '', 1]) {
+            expect(payloads.VerifyLogV2Payload.safeParse({ ...base, reviewBasis: bad }).success, String(bad)).toBe(false);
+        }
+        for (const bad of [0, -1, 1.5, '2']) {
+            expect(payloads.VerifyLogV2Payload.safeParse({ ...base, logVersion: bad }).success, String(bad)).toBe(false);
+        }
+    });
 });
 
 describe('AddLogTaskPayload', () => {

@@ -93,25 +93,47 @@ public static class LabourManagementPermission
         role is { } actual && (IsCarriedByRole(actual) || hasExplicitGrant);
 
     /// <summary>
-    /// Who may hand the capability to someone else, or take it back: owner-tier
-    /// only. Even a member the owner granted cannot spread it — O-4 says
+    /// Who may hand the capability to someone else, or take it back: the PRIMARY
+    /// owner only. Even a member the owner granted cannot spread it — O-4 says
     /// <i>"the owner decides who is trusted."</i>
+    ///
+    /// <para><b>spec: plr-d10 (I27) — founder D-44 §2, verbatim:</b> <i>"The primary
+    /// owner may confirm personally or explicitly delegate this responsibility to a
+    /// family member, trusted मुकादम or another selected member. Being appointed
+    /// मुकादम or co-owner must not automatically grant this authority."</i> The switch
+    /// now also decides who confirms records on the owner's behalf, so a co-owner who
+    /// could move it could create confirmers — himself included. Until 2026-10-30 this
+    /// admitted owner-tier (a co-owner too); a co-owner is now refused with the same
+    /// uniform <c>Forbidden</c> every other refusal on the write path returns.</para>
     /// </summary>
     public static bool CanGrantOrRevoke(AppRole? role) =>
+        role is AppRole.PrimaryOwner;
+
+    /// <summary>
+    /// spec: plr-d10 (I27) — who may READ the farm's grant roster (the team screen's
+    /// list): owner-tier, as before. Reading is not deciding; a co-owner keeps seeing
+    /// the roster he saw yesterday, he only no longer moves the switch.
+    /// </summary>
+    public static bool CanViewGrants(AppRole? role) =>
         role is AppRole.PrimaryOwner or AppRole.SecondaryOwner;
 
     /// <summary>
     /// <c>true</c> when toggling the explicit grant on this role would change
     /// nothing, because the role already carries the capability.
     ///
-    /// <para><b>This is a P5 guard, not a micro-optimisation.</b> An owner
-    /// switching the responsibility OFF for a SecondaryOwner would store
-    /// <c>false</c> and the co-owner would carry right on — a control that looks
-    /// functional and does nothing. The handler rejects that request with a
-    /// distinct error instead, so the UI is forced to render those members as
-    /// permanently-on rather than as an interactive switch that lies. A Mukadam
-    /// is NOT a redundant target any more — his switch is real (D5,
-    /// 2026-09-02).</para>
+    /// <para><b>This is a P5 guard, not a micro-optimisation.</b> Storing the flag
+    /// for someone on whom it changes nothing would be a control that looks
+    /// functional and does nothing, so the handler rejects that request with a
+    /// distinct error instead. A Mukadam is NOT a redundant target any more — his
+    /// switch is real (D5, 2026-09-02).</para>
+    ///
+    /// <para><b>spec: plr-d10 (I27), founder D-44 §2 — a co-owner is not a redundant
+    /// target any more either.</b> His labour edits still come with the role
+    /// (<see cref="IsCarriedByRole"/>, unchanged — taking them away is the D-26
+    /// permission system), but confirming records on the owner's behalf does NOT come
+    /// with the role: <c>OwnerConfirmationAuthority</c> reads this stored flag for him.
+    /// So for a co-owner the switch really controls confirming. Only the primary
+    /// owner, who confirms by role, is a target on whom the flag changes nothing.</para>
     /// </summary>
-    public static bool IsRedundantGrantTarget(AppRole role) => IsCarriedByRole(role);
+    public static bool IsRedundantGrantTarget(AppRole role) => role is AppRole.PrimaryOwner;
 }

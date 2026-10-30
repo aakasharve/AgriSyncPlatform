@@ -14,8 +14,9 @@
  *   4. the farm's named workers (no login) — the existing `FarmWorkersCard`, unchanged.
  * Everything comes from the owner-tier server roster; every decision adopts the row the server
  * returns. Founder D-22 (26 Oct): only the PRIMARY owner decides about people — a co-owner sees the
- * roster (and the labour switch the server lets him move) but no request to answer and no choice,
- * pause or removal. Not here (later steps, P5): role band, plot chips, any permission switch, the
+ * roster but no request to answer and no choice, pause or removal. Founder D-44 §2 (spec I27): only the
+ * PRIMARY owner moves a switch — the हजेरी व पक्कं switch on a worker or मुकादम, and, on a co-owner, the switch
+ * for confirming records (his labour edits stay with his role). Not here (later steps, P5): role band, plot chips, any permission switch, the
  * family / co-owner choice (proposed step 2b), invite builder.
  */
 import React from 'react';
@@ -54,6 +55,7 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
     const callerIsRegistrant = roster.rows?.find(r => r.userId === callerUserId)?.isRegistrant;
     const caller = { userId: callerUserId, role: callerRole, isRegistrant: callerIsRegistrant };
     const decidesPeople = isPrimaryOwner(callerRole) && callerIsRegistrant !== false;
+    const grantsSwitches = isPrimaryOwner(callerRole);
     const decisions = useMembershipDecisions(farmId, roster.adoptRow, roster.reload);
     const { requests, people } = splitRoster(roster.rows);
     const busy = (userId: string) => decisions.busyUserId === userId || roster.savingUserId === userId;
@@ -102,7 +104,10 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                         <ul className="m-0 space-y-2.5 p-0">
                             {people.map(row => {
                                 const rights = rightsOver(row, caller);
-                                const mayGrant = ownerTier && row.isGrantEditable && row.userId !== callerUserId;
+                                // PLR-D10 I27 (D-44 §2): the switches are the PRIMARY owner's to move; the server refuses
+                                // anyone else, so nobody else is shown one (P5).
+                                const mayGrant = grantsSwitches && row.isGrantEditable && row.userId !== callerUserId;
+                                const mayGrantConfirm = grantsSwitches && row.isConfirmGrantEditable === true && row.userId !== callerUserId;
                                 return (
                                     <TeamPersonCard key={row.userId} row={row} name={nameFor(row, operators)}
                                         isYou={row.userId === callerUserId} rights={rights} busy={busy(row.userId)}
@@ -112,6 +117,11 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                             saving: roster.savingUserId === row.userId,
                                             expiresAtUtc: row.labourGrantExpiresAtUtc,
                                             onChange: (next, expiresAtUtc) => void roster.setPermission(row.userId, next, expiresAtUtc),
+                                        } : undefined}
+                                        confirmAccess={mayGrantConfirm ? {
+                                            canConfirm: row.canConfirmRecords === true,
+                                            saving: roster.savingUserId === row.userId,
+                                            onChange: next => void roster.setPermission(row.userId, next, null),
                                         } : undefined}
                                         onChangePreset={preset => void decisions.changePreset(row, preset)}
                                         onSuspend={reason => void decisions.suspend(row.userId, reason)}

@@ -103,5 +103,6 @@ public sealed record CreateDailyLogPayload(
     ManualDraftItem? ManualDraft = null,
     /// <summary>Allowed values: "labour".</summary>
     string? CaptureScope = null,
-    bool? AutoSavedFromVoice = null
+    bool? AutoSavedFromVoice = null,
+    Guid? VoiceClipId = null
 );

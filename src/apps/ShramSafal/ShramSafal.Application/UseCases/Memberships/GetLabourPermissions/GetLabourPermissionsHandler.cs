@@ -45,10 +45,14 @@ public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository
         // fail closed on its own — the same posture every labour handler takes.
         var callerRole = await repository.GetUserRoleForFarmAsync(
             query.FarmId.Value, query.CallerUserId.Value, ct);
-        if (!LabourManagementPermission.CanGrantOrRevoke(callerRole))
+        // spec: plr-d10 (I27) — READING the roster stays owner-tier (a co-owner keeps his
+        // list); moving the switch is the primary owner's alone (CanGrantOrRevoke).
+        if (!LabourManagementPermission.CanViewGrants(callerRole))
         {
             return Result.Failure<IReadOnlyList<LabourPermissionDto>>(ShramSafalErrors.Forbidden);
         }
+
+        var callerIsPrimaryOwner = LabourManagementPermission.CanGrantOrRevoke(callerRole);
 
         var memberships = await repository.GetFarmMembershipsAsync(query.FarmId, ct);
 
@@ -100,7 +104,8 @@ public sealed class GetLabourPermissionsHandler(IShramSafalRepository repository
                 now,
                 nameByUser.TryGetValue(m.UserId.Value, out var name) ? name : null,
                 isRegistrant: farm is not null && farm.OwnerUserId == m.UserId,
-                phoneLast4: phoneTails.TryGetValue(m.UserId.Value, out var tail) ? tail : null))
+                phoneLast4: phoneTails.TryGetValue(m.UserId.Value, out var tail) ? tail : null,
+                callerMayGrant: callerIsPrimaryOwner))
             .ToArray();
 
         return Result.Success<IReadOnlyList<LabourPermissionDto>>(rows);

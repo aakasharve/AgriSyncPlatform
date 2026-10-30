@@ -27,8 +27,9 @@ export function isAutoSavableVoiceDraft(draft: AgriLogResponse): boolean {
  * Mark a freshly built voice log as auto-saved. Two things change, both to tell the truth:
  *   - `autoSavedFromVoice: true` rides `create_daily_log`, so the server keeps it unconfirmed;
  *   - the PHONE's own copy starts as a draft too. `LogFactory` stamps an owner's log "approved" at creation,
- *     which would show this record as confirmed on his phone until the next pull says otherwise. Only his
- *     own "पक्कं आहे" (verify) may make it confirmed.
+ *     which would show this record as confirmed on his phone until the next pull says otherwise. Only an
+ *     authorised confirmation may make it confirmed (spec I27: the primary owner's "save and confirm", or a
+ *     review by him or a member holding his grant — never the speaker's own I13 tap).
  */
 export function markAutoSavedFromVoice(log: DailyLog): DailyLog {
     return {
@@ -36,6 +37,20 @@ export function markAutoSavedFromVoice(log: DailyLog): DailyLog {
         autoSavedFromVoice: true,
         verification: { status: LogVerificationStatus.DRAFT, required: true },
     };
+}
+
+/** The log of a recording that carries his words (one record holds the day's facts); else the first. */
+export const primaryLogOf = (logs: readonly DailyLog[]): DailyLog | undefined => logs.find(l => !!l.fullTranscript) ?? logs[0];
+
+/**
+ * PLR-D10 I27 (founder D-31) — stamp the recording's server id on the ONE log that carries his words (the same
+ * log the phone links its clip to). The other plots of the same recording get no link: a reviewer of those may
+ * not hear the whole recording through them. No id = the logs unchanged.
+ */
+export function withVoiceClipOnPrimary(logs: DailyLog[], voiceClipId: string | undefined): DailyLog[] {
+    if (!voiceClipId) return logs;
+    const primary = primaryLogOf(logs);
+    return logs.map(l => (l === primary ? { ...l, voiceClipId } : l));
 }
 
 /**

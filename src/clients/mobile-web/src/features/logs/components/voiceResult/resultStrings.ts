@@ -53,8 +53,7 @@ export const RESULT_STR = {
     tellMore: 'दाबा आणि बोला',
     earlierTitle: 'आधीची बोलणी',
     listenAndConfirm: 'ऐका आणि पक्कं करा',
-    lockedLabel: 'आधी तुमचं बोलणं ऐका 🔊',
-    unlockHint: 'ऐकल्यावर इथे दाबा',
+    // FOUNDER — D-44 ("confirming … by reading = 'वाचा आणि पक्कं करा'"). The lock ("आधी तुमचं बोलणं ऐका") is gone (I27).
     readAndConfirm: 'वाचा आणि पक्कं करा',
     confirmedDone: 'तुम्ही पक्कं केलं',
     play: 'ऐका',

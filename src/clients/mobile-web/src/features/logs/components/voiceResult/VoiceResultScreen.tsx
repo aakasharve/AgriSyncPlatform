@@ -10,7 +10,9 @@
  *   0. the meter + all eight parts, the unmentioned ones in red, each tappable to tell Sathi (ResultHero);
  *   1. the recording he JUST made: "लक्षात ठेवलं" (true: the screen exists only after the phone's durable
  *      write) and the server state honestly; his words colour-marked; a big play button; "यातून काय समजलं";
- *      Sathi's ONE question (the existing panel, flag-gated); "पक्कं आहे", unlocked once he heard his clip;
+ *      Sathi's ONE question (the existing panel, flag-gated); for the PRIMARY OWNER only, "पक्कं आहे" — his "save and
+ *      confirm" (spec I27, founder D-44 / D-46: the speaker is never asked to confirm, and listening is never forced);
+ *      everyone else sees his recording stay "पक्कं नाही" until the owner (or whoever the owner trusts) confirms it;
  *      "बदला" (the existing edit form) — one per plot, each with its own not-queued badge, when he named several;
  *   2. the plot's whole day, one row per part; 3. the day's earlier recordings, newest first;
  *   4. the bottom bar: "मागे" + "आणखी सांगा".
@@ -44,7 +46,7 @@ export interface VoiceResultScreenProps {
     unclear: readonly string[];
     /** Clips on this phone, by log id (this recording's and the earlier ones'). */
     clips: ReadonlyMap<string, VoiceClipCacheRecord>;
-    /** This phone has been asked for the clips: until then "no clip" is unknown, and the confirm stays locked. */
+    /** This phone has been asked for the clips: until then "no clip" is unknown. (I27: the owner's confirm no longer waits on it.) */
     clipsReady: boolean;
     playingId: string | null;
     progress: number;
@@ -55,8 +57,9 @@ export interface VoiceResultScreenProps {
     /** Per log, from the save's enqueue result: false = it will not reach the server (honest badge); null = no claim. */
     syncQueuedOf: (logId: string) => boolean | null | undefined;
     /**
-     * May send the verify the server would accept: the server's verify gate (owner tier, or the owner's labour
-     * grant), a server identity, and at least one of this recording's logs on its way to the server (P5).
+     * Spec I27 (founder D-44 / D-46): ONLY the primary owner confirms his own recording here ("save and confirm"); a
+     * speaker who is not the primary owner is never asked. Also needs a server identity and at least one of this
+     * recording's logs on its way to the server (P5).
      */
     canConfirm: boolean;
     /** He confirmed this recording (in this session, or the log already says so). */
@@ -91,11 +94,8 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const runs = markTranscript(primary.transcript, addedEntries);
     const clip = p.clips.get(primary.id);
     const heard = p.heard.has(primary.id);
-    // Founder PLR-D1 round 2: confirm unlocks once his clip is HEARD. Only when this phone holds no clip of it
-    // (nothing to hear) may he confirm by reading his words instead — and only once that is known. The approved
-    // preview does the same for an entry with no recording behind it (PostVoiceResult.tsx: typed → "वाचा आणि
-    // पक्कं करा"). OPEN for the founder: whether a VOICE recording whose clip is missing may be confirmed by reading.
-    const unlocked = heard || (p.clipsReady && !clip);
+    // Founder D-44 (amends PLR-D1 round 2): listening is never a compulsory step. He may confirm from his words
+    // ("वाचा आणि पक्कं करा", recorded as read-not-heard) or after playing his clip ("ऐका आणि पक्कं करा", heard).
     const nowIds = new Set(day.current.map(r => r.id));
     // How many times he SPOKE today: one recording, however many plots it named, counted once (the earlier ones
     // are already one row each); an entry typed on the form is not a time he "said" it.
@@ -132,7 +132,9 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800" data-testid="vr-remembered">{RESULT_STR.remembered}</span>
                     {p.sync === 'onServer' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-blue-800" data-testid="vr-on-server">{RESULT_STR.onServer}</span>}
                     {p.sync === 'needsFix' && <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-800" data-testid="vr-needs-fix">{RESULT_STR.needsFix}</span>}
-                    {p.confirmed && <span className="rounded-full bg-emerald-900 px-2.5 py-1 text-white" data-testid="vr-confirmed-badge">{RESULT_STR.confirmedBadge}</span>}
+                    {p.confirmed
+                        ? <span className="rounded-full bg-emerald-900 px-2.5 py-1 text-white" data-testid="vr-confirmed-badge">{RESULT_STR.confirmedBadge}</span>
+                        : <span className="rounded-full border border-stone-300 bg-stone-50 px-2.5 py-1 text-stone-700" data-testid="vr-not-confirmed-badge">{RESULT_STR.notConfirmed}</span>}
                 </div>
                 {!severalPlots && <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />}
 
@@ -172,10 +174,10 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     </div>
                 ) : (
                     <div className="mt-3">
-                        <div className="mb-1.5 text-base font-extrabold">{heard ? RESULT_STR.listenAndConfirm : unlocked ? RESULT_STR.readAndConfirm : RESULT_STR.lockedLabel}</div>
-                        <button type="button" onClick={p.onConfirm} disabled={!unlocked} data-testid="vr-confirm"
-                            className="min-h-[62px] w-full rounded-2xl bg-emerald-700 text-xl font-extrabold text-white disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-600">
-                            {unlocked ? `✔ ${RESULT_STR.confirm}` : RESULT_STR.unlockHint}
+                        <div className="mb-1.5 text-base font-extrabold" data-testid="vr-confirm-basis">{heard ? RESULT_STR.listenAndConfirm : RESULT_STR.readAndConfirm}</div>
+                        <button type="button" onClick={p.onConfirm} data-testid="vr-confirm"
+                            className="min-h-[62px] w-full rounded-2xl bg-emerald-700 text-xl font-extrabold text-white">
+                            {`✔ ${RESULT_STR.confirm}`}
                         </button>
                         {p.confirmFailed && <p className="m-0 mt-1 text-[13px] font-bold text-red-700" data-testid="vr-confirm-failed">{RESULT_STR.confirmFailed}</p>}
                     </div>

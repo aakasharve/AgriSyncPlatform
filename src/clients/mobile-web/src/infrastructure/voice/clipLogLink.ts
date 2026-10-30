@@ -14,6 +14,7 @@
 import { getDatabase } from '../storage/DexieDatabase';
 import type { VoiceClipCacheRecord } from '../storage/DexieDatabase';
 import { readVoiceClipPlaintext } from './VoiceClipRetention';
+import { toArchiveClipId } from './archiveClipId';
 
 /** Which recording a parse came from: the clip's key when the recorder knew it, and the moment he spoke. */
 export interface RecordingRef {
@@ -31,6 +32,18 @@ export interface RecordingRef {
  * Two unlinked clips at the same instant are ambiguous, so neither is linked.
  */
 export async function linkClipToLog(ref: RecordingRef, dailyLogId: string): Promise<string | null> {
+    const row = await findClipForRecording(ref);
+    if (!row) return null;
+    await getDatabase().voiceClips.update(row.id, { dailyLogId });
+    return row.id;
+}
+
+/**
+ * The clip row of this recording on this phone, found the same way `linkClipToLog` finds it (its key, else the ONE
+ * unlinked clip at that instant), or undefined. Reads only — PLR-D10 I27 uses it to name the recording on the log's
+ * create before the log exists.
+ */
+export async function findClipForRecording(ref: RecordingRef): Promise<VoiceClipCacheRecord | undefined> {
     const db = getDatabase();
     let row: VoiceClipCacheRecord | undefined = ref.clipId ? await db.voiceClips.get(ref.clipId) : undefined;
     if (!row && ref.recordedAtUtc) {
@@ -39,9 +52,21 @@ export async function linkClipToLog(ref: RecordingRef, dailyLogId: string): Prom
             .toArray();
         row = sameInstant.length === 1 ? sameInstant[0] : undefined;
     }
-    if (!row) return null;
-    await db.voiceClips.update(row.id, { dailyLogId });
-    return row.id;
+    return row;
+}
+
+/**
+ * PLR-D10 I27 — the SERVER id of this recording (the id the archive stores it under, `toArchiveClipId`), or
+ * undefined when this phone holds no such clip. Never throws: a recording that cannot be named is simply not
+ * linked, and the log is saved exactly as before.
+ */
+export async function archiveIdForRecording(ref: RecordingRef): Promise<string | undefined> {
+    try {
+        const row = await findClipForRecording(ref);
+        return row ? toArchiveClipId(row.id) : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 /**

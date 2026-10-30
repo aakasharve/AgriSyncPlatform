@@ -92,10 +92,12 @@ public sealed class SetLabourPermissionHandler(
             return Result.Failure<LabourPermissionDto>(ShramSafalErrors.Forbidden);
         }
 
-        // ── 3. Only an owner may grant or revoke ─────────────────────────────
+        // ── 3. Only the PRIMARY owner may grant or revoke ────────────────────
         // The rule itself lives in the Domain next to the labour predicate it
         // guards, so "who may hand this out" and "what this hands out" cannot
-        // drift apart.
+        // drift apart. spec: plr-d10 (I27), founder D-44 §2: the switch also decides
+        // who confirms records on the owner's behalf, and "the primary owner" chooses
+        // that — a co-owner is refused here with the same uniform Forbidden.
         var callerRole = await repository.GetUserRoleForFarmAsync(
             command.FarmId.Value, command.CallerUserId.Value, ct);
         if (!LabourManagementPermission.CanGrantOrRevoke(callerRole))
@@ -128,9 +130,10 @@ public sealed class SetLabourPermissionHandler(
         }
 
         // ── 5. A grant that would change nothing is refused, not swallowed ───
-        // Owner-tier and Mukadam carry the capability through their role. Storing
-        // `false` for them would leave the owner staring at a switch that did not
-        // work — doctrine P5. Tell them instead.
+        // Only the primary owner carries everything this flag can give (labour edits
+        // and confirming) through his role. Storing it for him would leave a switch
+        // that did not work — doctrine P5. Tell them instead. spec: plr-d10 (I27): for a
+        // co-owner the flag now controls confirming (founder D-44 §2), so it is stored.
         if (LabourManagementPermission.IsRedundantGrantTarget(membership.Role))
         {
             return Result.Failure<LabourPermissionDto>(ShramSafalErrors.LabourManagementCarriedByRole);
@@ -202,6 +205,7 @@ public sealed class SetLabourPermissionHandler(
             await repository.SaveChangesAsync(ct);
         }
 
-        return Result.Success(LabourPermissionProjection.From(membership, now));
+        // Only the primary owner reaches here (step 3), so the switch is his to move.
+        return Result.Success(LabourPermissionProjection.From(membership, now, callerMayGrant: true));
     }
 }

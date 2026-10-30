@@ -149,6 +149,17 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
             .HasColumnName("day_outcome")
             .HasMaxLength(32);
 
+        // spec: plr-d10 (I27) — the recording this log was saved from (additive, nullable:
+        // every older row and every typed entry has none) and the record's version (additive,
+        // NOT NULL DEFAULT 1, so an older server binary inserting without the column still
+        // writes a valid row — doctrine E8).
+        builder.Property(x => x.VoiceClipId)
+            .HasColumnName("voice_clip_id");
+        builder.Property(x => x.ContentVersion)
+            .HasColumnName("content_version")
+            .HasDefaultValue(1)
+            .IsRequired();
+
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasFilter("idempotency_key IS NOT NULL");

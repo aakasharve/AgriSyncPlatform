@@ -710,6 +710,18 @@ public sealed partial class PurveshDemoSeeder
             }
         }
 
+        // spec: plr-d10 (I27) — named FIRST, because a material labour correction now also re-opens a
+        // confirmed log (a verification step): the report must still name the engagement he corrected,
+        // the most specific cause, rather than only "a verification step".
+        foreach (var assignmentId in census.CorrectedAssignmentIds)
+        {
+            var assignment = census.FarmAssignments.FirstOrDefault(a => a.Id == assignmentId);
+            if (assignment is not null && seedLogIds.Contains(assignment.DailyLogId))
+            {
+                RetainLog(assignment.DailyLogId, $"its labour engagement {assignmentId} was corrected in the app");
+            }
+        }
+
         // A seed log is ours only if every child row hanging off it is ours too.
         foreach (var log in census.SeedLogs)
         {
@@ -743,15 +755,6 @@ public sealed partial class PurveshDemoSeeder
             if (!plan.LabourAssignmentIds.Contains(assignment.Id))
             {
                 RetainLog(assignment.DailyLogId, $"holds labour engagement {assignment.Id} the seeder did not write");
-            }
-        }
-
-        foreach (var assignmentId in census.CorrectedAssignmentIds)
-        {
-            var assignment = census.FarmAssignments.FirstOrDefault(a => a.Id == assignmentId);
-            if (assignment is not null && seedLogIds.Contains(assignment.DailyLogId))
-            {
-                RetainLog(assignment.DailyLogId, $"its labour engagement {assignmentId} was corrected in the app");
             }
         }
 

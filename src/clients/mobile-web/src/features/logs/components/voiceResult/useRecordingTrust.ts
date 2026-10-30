@@ -11,10 +11,11 @@
  *    acknowledgement for that log's create (`APPLIED`), the same evidence rule as the header chip
  *    (`syncHonestyState.ts`). A row parked for review is "needs a hand". No row = no server claim at all.
  *
- * 2. HIS CONFIRM (`useConfirmRecording`). "पक्कं आहे" sends the EXISTING verify (`verify_log_v2`, decision
- *    `verify`) for THAT log only. The server walks his auto-saved Draft to Verified as his own act (the I13
- *    server half). Only the owner tier may verify (`VerifyLogAuthorizer`), so the caller shows the button to
- *    them alone (P5). The record counts whether or not he ever confirms (founder 2026-09-02).
+ * 2. THE OWNER'S CONFIRM (`useConfirmRecording`). Spec I27 (founder D-44 / D-46) AMENDS I13: the speaker is
+ *    never asked to confirm his own record. Only the PRIMARY OWNER sees "पक्कं आहे" on his own recording — his
+ *    "save and confirm" — and it sends the EXISTING verify (`verify_log_v2`, decision `verify`) for THAT log only,
+ *    with `reviewBasis` 'heard' when he played his clip and 'read' otherwise (D-44: "noted as read-not-heard").
+ *    The record counts whether or not anyone ever confirms it (founder 2026-09-02).
  *    "तुम्ही पक्कं केलं" states HIS act (queued on this phone), never that the server has accepted it.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -70,13 +71,13 @@ export function useConfirmRecording({ verifierUserId, repository, auditPort, pro
     // React re-renders) must not queue a second verify for the same log.
     const sent = useRef(new Set<string>());
 
-    const confirm = useCallback(async (logId: string): Promise<boolean> => {
+    const confirm = useCallback(async (logId: string, reviewBasis: 'heard' | 'read'): Promise<boolean> => {
         if (!verifierUserId || sent.current.has(logId)) return false;
         sent.current.add(logId);
         setBusy(true);
         setFailed(null);
         try {
-            const result = await verifyLog({ logId, verifierId: verifierUserId, action: 'approve' }, repository, auditPort, profile);
+            const result = await verifyLog({ logId, verifierId: verifierUserId, action: 'approve', reviewBasis }, repository, auditPort, profile);
             if (result.success) setConfirmed(s => new Set(s).add(logId));
             else { sent.current.delete(logId); setFailed(logId); }
             return result.success;

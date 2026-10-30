@@ -78,6 +78,16 @@ public static class ShramSafalErrors
     // ("ShramSafal.LabourAssignmentConflict") would normalize to
     // LABOURASSIGNMENTCONFLICT, miss the set, and keep looping. DO NOT "tidy"
     // this back to two segments without shipping a client first.
+    // spec: plr-d10 I27 (founder D-46 §3: "If someone changes the record while it is being
+    // reviewed, show the updated version before accepting confirmation"). The confirm named the
+    // record version the reviewer saw and the record has changed since: nothing is confirmed, so
+    // he sees the new version first. THREE SEGMENTS for the same reason as LabourAssignmentConflict
+    // below: the tail CONFLICT is PERMANENT on every shipped phone, so the row is parked for him
+    // (P10), never retried for ever (P11). Only phones that send logVersion can reach it.
+    public static readonly Error LogChangedSinceReview = Error.Conflict(
+        "ShramSafal.LogVersion.Conflict",
+        "This record changed after it was opened for review. Look at the new version before confirming it.");
+
     public static readonly Error LabourAssignmentConflict = Error.Conflict(
         "ShramSafal.LabourAssignment.Conflict",
         "This labour entry is already recorded on another daily log. The same engagement cannot belong to two logs — recording it again would count the same workers twice.");

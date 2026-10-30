@@ -87,14 +87,13 @@ public sealed class VerifyLogHandler(
         // The grant is read HERE and passed DOWN: VerificationStateMachine is a Domain
         // type and doctrine E2 forbids it reaching for a repository.
         //
-        // The read is skipped for callers whose ROLE already holds Confirmed->Verified,
-        // which is the traffic that dominates — the same ordering LabourManagementGate
-        // documents, and for the same reason. It is a short-circuit, never a widening:
-        // a caller who fails BOTH the role check and the grant read is refused exactly
-        // as before.
+        // spec: plr-d10 (I27) — the grant is now also what decides who may give the OWNER'S
+        // confirmation (OwnerConfirmationAuthority), and a co-owner's role no longer carries
+        // that, so the read is skipped only for the primary owner (whose role is the whole
+        // answer); it used to be skipped for every owner-tier role. Still the stored,
+        // clock-evaluated flag — never a role tier, never anything from the wire.
         var hasLabourManagementGrant =
-            !VerificationStateMachine.CanTransitionWithRole(
-                VerificationStatus.Confirmed, VerificationStatus.Verified, resolvedCallerRole)
+            resolvedCallerRole != AppRole.PrimaryOwner
             && await LabourManagementGate.HasExplicitGrantAsync(
                 repository, (Guid)log.FarmId, command.VerifiedByUserId, clock.UtcNow, ct);
 
@@ -105,6 +104,49 @@ public sealed class VerifyLogHandler(
         if (gate is not null) return gate;
 
         var priorState = log.CurrentVerificationStatus;
+
+        // ── spec: plr-d10-redesign-real-integration-2026-10-25 (I27) ─────────────────
+        // FOUNDER D-44 / D-46: only an authorised person's deliberate confirmation gives a
+        // record "मालकाकडून खात्री" (Verified) — the primary owner (his own records included:
+        // "save and confirm"), or a member holding the owner's grant (founder 2026-08-27: his
+        // own record too). A co-owner's or मुकादम's role alone no longer carries it.
+        //
+        // Two kinds of request are NOT refused but not counted either — refusing would park the
+        // queue of a phone that has not updated (P11) — and are kept as what they are, a mark
+        // (a Draft event naming itself; the status does not move; never on the wire):
+        //   * a member the approve gate admits who holds no confirm authority (a co-owner);
+        //   * the record's own speaker tapping the I13 result screen's "पक्कं आहे", which
+        //     reached the server as verify_log_v2 with no review basis. I27 amends I13: that tap
+        //     is no longer his verify act (D-44: "the person reporting work must not be forced
+        //     to approve their own recording"). A deliberate confirmation from a build that
+        //     states heard / read still counts for the owner or a granted member.
+        //
+        // A DISPUTE (शंका, -> Disputed) is the same owner's decision, the other way: it takes a
+        // record off its standing, so the same authority gives it (review S2). A member the gate
+        // admits without that authority (a co-owner without the grant, old phones included) is
+        // kept as a mark the same way; the status does not move. Roles the gate refuses (a
+        // worker, an ungranted मुकादम) are refused before this line, exactly as before.
+        var isSpeaker = command.VerifiedByUserId == log.OperatorUserId.Value;
+        var wantsOwnerConfirmation = command.TargetStatus == VerificationStatus.Verified;
+        var wantsOwnerDecision = wantsOwnerConfirmation || command.TargetStatus == VerificationStatus.Disputed;
+        var isOldResultScreenSelfTap = isSpeaker && command.ReviewBasisOmittedOnV2;
+        if ((wantsOwnerConfirmation && isOldResultScreenSelfTap)
+            || (wantsOwnerDecision
+                && !OwnerConfirmationAuthority.MayConfirm(resolvedCallerRole, hasLabourManagementGrant)))
+        {
+            return await RecordMarkWithoutConfirmAuthorityAsync(log, command, resolvedCallerRole, isSpeaker, priorState, ct);
+        }
+
+        // D-46 §3: a confirmation applies to the exact version reviewed. A phone that says which
+        // version it showed is refused when the record has moved on, so the changed record is
+        // seen before it is confirmed. Absent (every older phone) = the version current now.
+        if (wantsOwnerConfirmation
+            && command.ExpectedLogVersion is { } seenVersion
+            && seenVersion != log.ContentVersion)
+        {
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.LogChangedSinceReview);
+        }
+
         VerificationEvent verification;
         try
         {
@@ -135,6 +177,14 @@ public sealed class VerifyLogHandler(
 
             verification = emitted[^1];
 
+            // I27 (D-44 §3): preserve WHICH version was confirmed and whether the confirmer
+            // heard the original voice or read the text. Stamped before the audit rows below
+            // so they carry it too.
+            if (wantsOwnerConfirmation && verification.Status == VerificationStatus.Verified)
+            {
+                log.StampOwnerConfirmation(verification, command.ReviewBasis);
+            }
+
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from
             // AuditEvent.Create (sentinel provenance) to AuditEventFactory.Create
             // with X-Device-Id / IP hash / X-App-Version sourced from the
@@ -154,7 +204,9 @@ public sealed class VerifyLogHandler(
                             verificationId = emittedEvent.Id,
                             status = emittedEvent.Status.ToString(),
                             emittedEvent.Reason,
-                            emittedEvent.OccurredAtUtc
+                            emittedEvent.OccurredAtUtc,
+                            emittedEvent.ConfirmedLogVersion,
+                            emittedEvent.ReviewBasis
                         },
                         farmId: log.FarmId,
                         clientCommandId: command.ClientCommandId,
@@ -201,6 +253,60 @@ public sealed class VerifyLogHandler(
             })
         ), ct);
 
+        return Result.Success(log.ToDto());
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (I27) — the confirm request of someone who may not give the owner's
+    /// confirmation. Written as his mark (see <see cref="DailyLog.RecordMarkWithoutConfirmAuthority"/>):
+    /// the record's status does not move. Audited, and answered with success (the record as it
+    /// stands) so an older phone's queue keeps moving (P11).
+    /// </summary>
+    private async Task<Result<DailyLogDto>> RecordMarkWithoutConfirmAuthorityAsync(
+        DailyLog log,
+        VerifyLogCommand command,
+        AppRole callerRole,
+        bool isSpeaker,
+        VerificationStatus priorState,
+        CancellationToken ct)
+    {
+        var mark = log.RecordMarkWithoutConfirmAuthority(
+            command.VerificationEventId ?? idGenerator.New(),
+            new UserId(command.VerifiedByUserId),
+            clock.UtcNow);
+
+        await repository.AddAuditEventAsync(
+            AuditEventFactory.Create(
+                entityType: "DailyLog",
+                entityId: log.Id,
+                action: "ConfirmRequestNotCounted",
+                actorUserId: command.VerifiedByUserId,
+                actorRole: callerRole.ToString(),
+                payload: new
+                {
+                    logId = log.Id,
+                    markId = mark?.Id,
+                    statusUnchanged = priorState.ToString(),
+                    reason = mark?.Reason ?? (isSpeaker
+                        ? DailyLog.SpeakerOwnMarkReason
+                        : DailyLog.NoConfirmAuthorityMarkReason),
+                    occurredAtUtc = mark?.OccurredAtUtc,
+                    requested = command.TargetStatus.ToString(),
+                    // The words he gave with it (a dispute's reason), kept rather than dropped (P10).
+                    requestedReason = command.Reason,
+                    countedAsOwnerConfirmation = false
+                },
+                farmId: log.FarmId,
+                clientCommandId: command.ClientCommandId,
+                appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : command.ClientAppVersion,
+                deviceId: command.AuditDeviceId,
+                ipHash: command.AuditIpHash,
+                sourceAiJobId: null),
+            ct);
+
+        await repository.SaveChangesAsync(ct);
         return Result.Success(log.ToDto());
     }
 }

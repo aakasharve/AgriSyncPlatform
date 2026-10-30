@@ -21,6 +21,7 @@ import { Chip, Tap } from '../../../shared/components/ui/placeUi';
 import type { LabourPermission } from '../data/labourPermissionsClient';
 import type { ApprovePreset } from '../data/membershipAdminClient';
 import { LabourAccessControl, type LabourAccessView } from '../components/LabourAccessControl';
+import { ConfirmAccessControl, type ConfirmAccessView } from './ConfirmAccessControl';
 import { PRESETS, arrivalLine, doLine, phoneLine, presetOf, roleTone, roleWord, type DecisionRights } from './teamModel';
 import { ReasonStep } from './ReasonStep';
 import { TEAM_COPY } from './teamCopy';
@@ -37,6 +38,11 @@ export interface TeamPersonCardProps {
      * already says हजेरी · पक्कं करणे, and a switch that cannot move is never drawn (P5).
      */
     labourAccess?: LabourAccessView;
+    /**
+     * PLR-D10 I27 (founder D-44 §2) — the primary owner's switch for a CO-OWNER's responsibility to confirm
+     * records, passed ONLY when the server says he may move it for this person.
+     */
+    confirmAccess?: ConfirmAccessView;
     onChangePreset: (preset: ApprovePreset) => void;
     onSuspend: (reason: string) => void;
     onRestore: () => void;
@@ -46,7 +52,7 @@ export interface TeamPersonCardProps {
 type Step = null | 'pause' | 'remove';
 
 export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
-    row, name, isYou, rights, busy, labourAccess, onChangePreset, onSuspend, onRestore, onRemove,
+    row, name, isYou, rights, busy, labourAccess, confirmAccess, onChangePreset, onSuspend, onRestore, onRemove,
 }) => {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<Step>(null);
@@ -55,7 +61,7 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
     const phone = phoneLine(row);
     const arrival = arrivalLine(row);
     const current = presetOf(row.role);
-    const hasChangeable = rights.canDecide || !!labourAccess?.isEditable;
+    const hasChangeable = rights.canDecide || !!labourAccess?.isEditable || !!confirmAccess;
 
     return (
         <li data-testid={`team-person-${row.userId}`} data-status={row.status}
@@ -107,6 +113,7 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
                         </div>
                     )}
                     {labourAccess && <LabourAccessControl memberId={row.userId} memberName={name} access={labourAccess} />}
+                    {confirmAccess && <ConfirmAccessControl memberId={row.userId} access={confirmAccess} />}
 
                     {rights.canDecide && (
                         <details className="pt-1" data-testid={`team-more-${row.userId}`}>

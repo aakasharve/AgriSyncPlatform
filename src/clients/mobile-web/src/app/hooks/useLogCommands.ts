@@ -59,7 +59,7 @@ import { buildDayProgressToast, buildEditSavedMessage, buildQueuedLogToast, buil
 // re-exported here so existing `from './useLogCommands'` imports (and any
 // future ones) keep working.
 import type { AutoSaveOptions, ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
-import { markAutoSavedFromVoice } from '../helpers/autoSavedVoiceLog';
+import { markAutoSavedFromVoice, withVoiceClipOnPrimary } from '../helpers/autoSavedVoiceLog';
 export type { ManualSubmitOutcome, UseLogCommandsResult };
 
 // `UseLogCommandsResult` moved to `useLogCommands.types.ts` for the same
@@ -334,7 +334,7 @@ export const useLogCommands = ({
                 // loop is on. Flag read stays in the app layer (domain-agnostic).
                 FEATURE_FLAGS.dailyLoop
             );
-            const newLogs = options.autoSavedFromVoice ? created.map(markAutoSavedFromVoice) : created;
+            const newLogs = withVoiceClipOnPrimary(options.autoSavedFromVoice ? created.map(markAutoSavedFromVoice) : created, options.voiceClipId);
             attempted = newLogs;
 
             // Persist (Service handles persistence via injected repo)

@@ -6,10 +6,12 @@
  * the saved logs (`history`), the clips on this phone (`db.voiceClips`, linked by the auto-save), the sync
  * queue (server acknowledgement), the existing verify (`verify_log_v2`) and the session's identity.
  *
- * Who sees "पक्कं आहे": whoever the SERVER lets verify — `EnsureCanVerify` is `LabourManagementGate`: the owner
- * tier, or a member the owner granted labour rights (a मुकादम), as the server last told this phone. A worker
- * without that grant, or a role not yet known, never sees a button the server would refuse (P5). A log whose
- * create is not KNOWN to be in the sync queue is not offered either: its verify would be refused as "not found".
+ * Who sees "पक्कं आहे" (spec I27, founder D-44 / D-46 — AMENDS I13): only the PRIMARY OWNER, on his own recording,
+ * as the server last told this phone — his "save and confirm", sent with whether he heard his clip or read his words.
+ * The speaker is never asked to confirm his own record: a worker, a मुकादम (granted or not) and a co-owner see it stay
+ * "पक्कं नाही" until the owner, or someone the owner trusts, confirms it in review. A role not yet known never sees
+ * the button. A log whose create is not KNOWN to be in the sync queue is not offered either: its verify would be
+ * refused as "not found".
  */
 import React, { useMemo } from 'react';
 import type { DailyLog, FarmerProfile } from '../../../../types';
@@ -18,8 +20,6 @@ import type { VoiceResultState } from '../../../../app/hooks/useVoiceAutoSave';
 import { resolveVerifierUserId } from '../../../../core/domain/verifierIdentity';
 import { getSessionUserId } from '../../../../infrastructure/storage/AuthTokenStore';
 import { clipScanFloor } from '../../../../infrastructure/voice/clipLogLink';
-import { isOwnerTierRole } from '../../../profile/helpers/teamRoster';
-import { readCachedLabourGrant } from '../../../labour/homeAttendanceDoor';
 import { buildDayView, isConfirmed, ringNodesForDay, sameDayLogs, type PartKey, type WhoDeps } from './resultModel';
 import { RESULT_STR } from './resultStrings';
 import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './useClipPlayback';
@@ -32,7 +32,7 @@ export interface VoiceResultContainerProps {
     farmerProfile: FarmerProfile;
     operatorNameById: ReadonlyMap<string, string>;
     farmId: string | null;
-    /** The server-told role on this farm: only the owner tier may confirm (verify). */
+    /** The server-told role on this farm: only the primary owner confirms his own recording here (I27). */
     farmRole: string | null | undefined;
     placeLabel: string;
     /** Per log of this recording, from the save's enqueue result (false = will not reach the server). */
@@ -73,10 +73,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const { dataSource, auditPort } = useDataSource();
     const verifierUserId = resolveVerifierUserId(farmerProfile.activeOperatorId, sessionUserId);
     const trust = useConfirmRecording({ verifierUserId, repository: dataSource.logs, auditPort, profile: farmerProfile });
-    const mayVerify = useMemo(
-        () => isOwnerTierRole(farmRole) || readCachedLabourGrant(sessionUserId, farmId) === true,
-        [farmRole, sessionUserId, farmId],
-    );
+    const mayConfirmOwn = farmRole === 'PrimaryOwner';
 
     if (current.length === 0) return null;
     // Only a log KNOWN to be on its way to the server can be verified there. `null` (the write held but the
@@ -85,6 +82,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const confirmable = current.filter(l => syncQueuedById.get(l.id) === true);
     const confirmed = confirmable.length > 0 && confirmable.every(l => trust.confirmed.has(l.id) || isConfirmed(l));
     const primary = current.find(l => !!l.fullTranscript) ?? current[0];
+    // D-44: "whether they listened to the original voice or reviewed the text" — his clip played on this screen, or not.
+    const basis: 'heard' | 'read' = playback.heard.has(primary.id) ? 'heard' : 'read';
     const leave = (then: () => void) => () => { playback.stop(); then(); };
 
     return (
@@ -104,10 +103,10 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             onTogglePlay={id => { const clip = clips.get(id); if (clip) void playback.toggle(id, clip); }}
             sync={sync}
             syncQueuedOf={id => syncQueuedById.get(id)}
-            canConfirm={mayVerify && !!verifierUserId && confirmable.length > 0}
+            canConfirm={mayConfirmOwn && !!verifierUserId && confirmable.length > 0}
             confirmed={confirmed}
             confirmFailed={!!trust.failed}
-            onConfirm={() => { void (async () => { for (const l of confirmable) await trust.confirm(l.id); })(); }}
+            onConfirm={() => { void (async () => { for (const l of confirmable) await trust.confirm(l.id, basis); })(); }}
             onEdit={id => leave(() => onEdit(current.find(l => l.id === id) ?? primary))()}
             onBack={leave(onBack)}
             onAddAnother={leave(onAddAnother)}

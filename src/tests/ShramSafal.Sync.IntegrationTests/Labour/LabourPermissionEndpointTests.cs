@@ -182,37 +182,56 @@ public sealed class LabourPermissionEndpointTests
     }
 
     /// <summary>
-    /// The P5 guard at the wire, owner-tier edition — the pin the inverted fact
-    /// above may not lose. A 409 with a NAMED code is what lets the UI render
-    /// those members as permanently-on instead of shipping a switch that
-    /// silently does nothing.
+    /// RE-PINNED 2026-10-30 (spec plr-d10 I27, founder D-44 §2: "Being appointed मुकादम or
+    /// co-owner must not automatically grant this authority"). This used to answer 409
+    /// CarriedByRole for a co-owner. His labour edits still come with the role, but confirming
+    /// records does not, so the primary owner's switch for him is now stored at the wire and
+    /// reported as the CONFIRMING switch. What every installed phone reads is unchanged (P11):
+    /// <c>isGrantEditable</c> stays false (they render "labour responsibility, permanently on")
+    /// and <c>canManageLabourRecords</c> stays true; the confirming switch rides two additive
+    /// members. The 409 itself still guards a primary-owner target (Domain suite).
     /// </summary>
     [Fact]
-    public async Task Toggling_a_SecondaryOwner_gets_409_with_a_code_the_client_can_branch_on()
+    public async Task The_primary_owner_gives_and_takes_back_a_co_owners_confirming_over_HTTP()
     {
         await using var harness = await TestHarness.CreateAsync();
         var farmId = Guid.NewGuid();
         await PushCreateFarmAsync(harness.Client, "device-perm-5", "req-perm-5", farmId, "Permission Farm 5");
         await harness.SeedFarmMembershipAsync(farmId, CoOwnerUserId, AppRole.SecondaryOwner);
 
-        var response = await harness.Client.PutAsJsonAsync(
+        var give = await harness.Client.PutAsJsonAsync(
+            $"/shramsafal/farms/{farmId}/labour-permissions/{CoOwnerUserId}",
+            new { canManageLabourRecords = true });
+        Assert.Equal(HttpStatusCode.OK, give.StatusCode);
+        using (var doc = JsonDocument.Parse(await give.Content.ReadAsStringAsync()))
+        {
+            Assert.True(doc.RootElement.GetProperty("hasExplicitGrant").GetBoolean());
+            Assert.True(doc.RootElement.GetProperty("canConfirmRecords").GetBoolean());
+            Assert.True(doc.RootElement.GetProperty("isConfirmGrantEditable").GetBoolean());
+        }
+
+        // The roster: unchanged for installed phones, the confirming switch for the new one.
+        var get = await harness.Client.GetAsync($"/shramsafal/farms/{farmId}/labour-permissions");
+        using (var roster = JsonDocument.Parse(await get.Content.ReadAsStringAsync()))
+        {
+            var coOwner = FindMember(roster.RootElement, CoOwnerUserId);
+            Assert.True(coOwner.GetProperty("canManageLabourRecords").GetBoolean());
+            Assert.False(coOwner.GetProperty("isGrantEditable").GetBoolean());
+            Assert.Equal("OwnerTier", coOwner.GetProperty("source").GetString());
+            Assert.True(coOwner.GetProperty("canConfirmRecords").GetBoolean());
+            Assert.True(coOwner.GetProperty("isConfirmGrantEditable").GetBoolean());
+        }
+
+        var takeBack = await harness.Client.PutAsJsonAsync(
             $"/shramsafal/farms/{farmId}/labour-permissions/{CoOwnerUserId}",
             new { canManageLabourRecords = false });
-
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
-        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal(
-            "ShramSafal.LabourManagementCarriedByRole",
-            doc.RootElement.GetProperty("error").GetString());
-
-        // The roster still says the co-owner is allowed, and that the switch
-        // must not be interactive.
-        var get = await harness.Client.GetAsync($"/shramsafal/farms/{farmId}/labour-permissions");
-        using var roster = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
-        var coOwner = FindMember(roster.RootElement, CoOwnerUserId);
-        Assert.True(coOwner.GetProperty("canManageLabourRecords").GetBoolean());
-        Assert.False(coOwner.GetProperty("isGrantEditable").GetBoolean());
-        Assert.Equal("OwnerTier", coOwner.GetProperty("source").GetString());
+        Assert.Equal(HttpStatusCode.OK, takeBack.StatusCode);
+        using (var doc = JsonDocument.Parse(await takeBack.Content.ReadAsStringAsync()))
+        {
+            Assert.False(doc.RootElement.GetProperty("canConfirmRecords").GetBoolean());
+            Assert.True(doc.RootElement.GetProperty("canManageLabourRecords").GetBoolean(),
+                "taking back confirming never takes his labour edits (the D-26 permission system will)");
+        }
     }
 
     /// <summary>

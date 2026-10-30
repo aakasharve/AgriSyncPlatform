@@ -75,6 +75,8 @@ export type ManualSubmitOutcome = 'saved' | 'saved_with_warning' | 'not_saved' |
 export interface AutoSaveOptions {
     /** Stamp the logs "saved from a voice parse, no review" (server keeps them unconfirmed). */
     autoSavedFromVoice?: boolean;
+    /** PLR-D10 I27 — the server (archive) id of the recording; stamped on the log that carries his words. */
+    voiceClipId?: string;
     /**
      * Runs right after the DURABLE phone write and before the screen turns to 'success', so whatever it
      * records (the clip link, the result-screen state) is in place when that screen first reads it.

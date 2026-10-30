@@ -31,4 +31,15 @@ public static class CurrentConsentWording
     /// this version.
     /// </summary>
     public const string ImprovementPermissionVersion = "improve-2026-10-30.1";
+
+    /// <summary>
+    /// spec: plr-d10 (I27; founder D-31) — the words of the "मूळ आवाज जतन करा" switch that
+    /// disclose listening by authorised reviewers on the farm ("Keep my original voice
+    /// recordings so that I and authorized reviewers on this farm can listen to them"). The
+    /// phone sends this string as <c>fullHistoryJournalWordingVersion</c>
+    /// (<c>features/consent/improvement/improvementPermissionCopy.ts</c>
+    /// VOICE_RETENTION_WORDING_VERSION). A reviewer may replay a recording only while the
+    /// speaker's switch is ON under exactly these words.
+    /// </summary>
+    public const string VoiceKeepVersion = "voice-keep-2026-10-30.1";
 }

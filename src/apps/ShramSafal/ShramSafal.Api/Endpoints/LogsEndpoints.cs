@@ -10,6 +10,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
+using ShramSafal.Application.UseCases.Logs.GetLogOriginalVoice;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Domain.Location;
 using ShramSafal.Domain.Logs;
@@ -217,9 +218,15 @@ public static class LogsEndpoints
             var hasLabourManagementGrant = await LabourManagementGate.HasExplicitGrantAsync(
                 repository, (Guid)log.FarmId, callerUserId, clock.UtcNow, ct);
 
+            // spec: plr-d10 (I27, review N4) — the owner's decision (→Verified, →Disputed) is
+            // offered only to someone VerifyLogHandler would count it from. A co-owner without
+            // the grant holds both edges by role, but his tap is kept as a mark, so offering it
+            // here would be a dead button (P5).
             var currentStatus = log.CurrentVerificationStatus;
             var availableTransitions = VerificationStateMachine
                 .GetAvailableTransitions(currentStatus, resolvedCallerRole, hasLabourManagementGrant)
+                .Where(status => OwnerConfirmationAuthority.MayBeOffered(
+                    status, resolvedCallerRole, hasLabourManagementGrant))
                 .Select(status => status.ToString())
                 .ToArray();
 
@@ -230,6 +237,53 @@ public static class LogsEndpoints
             });
         })
         .WithName("GetLogVerificationTransitions")
+        .RequireAuthorization();
+
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (I27; founder D-31) — the
+        // original voice behind ONE record, for a person allowed to review that record. 200
+        // with { available: false, reason } when there is nothing playable (the transcript
+        // stays on screen); 403 for a member who may not review it; 404 for a record the
+        // caller cannot see. Never decrypted here: the phone opens it with the farm's key.
+        group.MapGet("/logs/{id:guid}/original-voice", async (
+            Guid id,
+            ClaimsPrincipal user,
+            GetLogOriginalVoiceHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new GetLogOriginalVoiceQuery(id, callerUserId), ct);
+            if (!result.IsSuccess)
+            {
+                var body = new { error = result.Error.Code, message = result.Error.Description };
+                return result.Error.Kind switch
+                {
+                    ErrorKind.NotFound => Results.NotFound(body),
+                    ErrorKind.Forbidden => Results.Json(body, statusCode: StatusCodes.Status403Forbidden),
+                    _ => Results.BadRequest(body),
+                };
+            }
+
+            var voice = result.Value!;
+            return Results.Ok(new
+            {
+                available = voice.Available,
+                reason = voice.UnavailableReason,
+                clipId = voice.ClipId,
+                recordedAtUtc = voice.RecordedAtUtc,
+                durationSeconds = voice.DurationSeconds,
+                language = voice.Language,
+                dekId = voice.DekId,
+                ivBase64 = voice.IvBase64,
+                authTagBase64 = voice.AuthTagBase64,
+                cipherBase64 = voice.CipherBase64,
+            });
+        })
+        .WithName("GetLogOriginalVoice")
+        .RequireRateLimiting("ai")
         .RequireAuthorization();
 
         return group;

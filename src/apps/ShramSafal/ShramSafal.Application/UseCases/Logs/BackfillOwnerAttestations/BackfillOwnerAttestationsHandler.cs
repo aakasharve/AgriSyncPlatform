@@ -136,7 +136,9 @@ public sealed class BackfillOwnerAttestationsHandler(
             {
                 // The role does not hold both FSM edges — a Mukadam, Worker or Consultant
                 // recorded this day. It stays Draft and keeps waiting for an owner, which
-                // is the entire point of the approval model.
+                // is the entire point of the approval model. spec: plr-d10 (I27) — the same
+                // predicate as the live save path: only the PRIMARY OWNER's own day is
+                // attested; a co-owner's, agronomist's or FPC manager's stays for review.
                 leftForReview++;
                 continue;
             }

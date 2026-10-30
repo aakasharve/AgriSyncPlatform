@@ -181,6 +181,10 @@ export interface LabourReviewItemDto {
     plot: string | null;
     /** Task 20 — `ShramSafal.Domain.Logs.DailyLogScope.ToString()`: "Plot" | "MultiPlot" | "Farm". */
     plotScope: string;
+    /** PLR-D10 I27 — the record version (additive; absent on an older server). */
+    version?: number | null;
+    /** PLR-D10 I27 — a recording is linked (additive; absent on an older server). */
+    hasRecording?: boolean | null;
 }
 
 export interface LabourAttendanceRowDto {
@@ -212,6 +216,8 @@ export interface LabourDataDto {
     view: string;
     // Journey fix 3 - additive and optional: absent/null = unknown (old server).
     canManageLabour?: boolean | null;
+    // PLR-D10 I27 — may give the owner's confirmation here (additive; absent/null = unknown).
+    canConfirm?: boolean | null;
     // D6 — the two money truths + आज कामावर counts. Nulls are blanks (never
     // 0); the server nulls the money members for non-owner views.
     home: { rojandariStated: number | null; ukteAgreed: number | null; onFarmToday: number | null; rojandariToday: number | null; ukteToday: number | null; };
@@ -337,6 +343,9 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
     // (nothing to name → em-dash). Kept as written rather than coerced.
     plot: r.plot ?? null,
     plotScope: mapPlotScope(r.plotScope),
+    // PLR-D10 I27 — only a real value counts; anything else stays absent (never a guessed version or recording).
+    ...(typeof r.version === 'number' && r.version >= 1 && { version: r.version }),
+    ...(r.hasRecording === true && { hasRecording: true }),
 });
 
 /**
@@ -406,6 +415,7 @@ export async function fetchLabourData(
         view: dto.view === 'owner' || dto.view === 'crew' ? dto.view : 'own',
         // Only an explicit boolean counts; absent/null/anything else stays unknown.
         canManageLabour: typeof dto.canManageLabour === 'boolean' ? dto.canManageLabour : undefined,
+        canConfirm: typeof dto.canConfirm === 'boolean' ? dto.canConfirm : undefined,
         // Old-server fallback (deploy skew): a wire without `home` renders
         // all blanks — '—', never a fabricated figure.
         home: dto.home ?? { rojandariStated: null, ukteAgreed: null, onFarmToday: null, rojandariToday: null, ukteToday: null },

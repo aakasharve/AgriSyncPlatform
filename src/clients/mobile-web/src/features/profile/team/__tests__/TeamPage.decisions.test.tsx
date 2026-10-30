@@ -147,13 +147,62 @@ describe('a waiting request', () => {
         expect(screen.queryByTestId('team-requests')).toBeNull();
         expect(screen.queryByTestId('approve-work-sunil')).toBeNull();
         expect(screen.queryByTestId('decline-sunil')).toBeNull();
-        // On a worker he may move only the हजेरी व पक्कं switch the server lets him move: no choice,
-        // no pause, no removal.
-        fireEvent.click(screen.getByTestId('team-change-ramesh'));
+        // RE-PINNED (spec plr-d10 I27, founder D-44 §2: the PRIMARY owner chooses who confirms): he used to be
+        // able to move a worker's हजेरी व पक्कं switch. The server now refuses him, so no switch, no choice, no
+        // pause, no removal — nothing to open on anyone's card.
+        expect(screen.queryByTestId('team-change-ramesh')).toBeNull();
+        expect(screen.queryByTestId('labour-access-ramesh')).toBeNull();
         expect(screen.queryByTestId('team-preset-work-ramesh')).toBeNull();
-        expect(screen.queryByTestId('team-more-ramesh')).toBeNull();
         expect(screen.queryByTestId('team-pause-ramesh')).toBeNull();
         expect(approveMember).not.toHaveBeenCalled();
+        expect(setLabourPermission).not.toHaveBeenCalled();
+    });
+});
+
+describe('a co-owner\'s responsibility to confirm records (PLR-D10 I27, founder D-44 §2)', () => {
+    const ANITA = row({
+        userId: 'anita', role: 'SecondaryOwner', displayName: 'अनिता', canManageLabourRecords: true, isGrantEditable: false,
+        source: 'OwnerTier', canConfirmRecords: false, isConfirmGrantEditable: true,
+    });
+
+    it('the primary owner gives it with the confirming switch, and the card shows the server\'s answer', async () => {
+        fetchLabourPermissions.mockResolvedValue([OWNER, ANITA]);
+        setLabourPermission.mockResolvedValue({ ...ANITA, hasExplicitGrant: true, canConfirmRecords: true });
+        render(<Harness />);
+        fireEvent.click(await screen.findByTestId('team-change-anita'));
+        // His labour line stays "permanently on" (no labour switch is drawn for him); the new switch is about confirming.
+        expect(screen.queryByTestId('labour-access-anita')).toBeNull();
+        const toggle = screen.getByTestId('confirm-access-anita');
+        expect(toggle.textContent).toContain('नोंदी पक्क्या करण्याची जबाबदारी द्या');
+        expect(screen.getByTestId('confirm-access-hint-anita').textContent).toBe('तुम्ही दिलीत तरच हे सहमालक नोंदी पक्क्या करू शकतात.');
+        fireEvent.click(toggle);
+        await waitFor(() => expect(setLabourPermission).toHaveBeenCalledWith('farm-1', 'anita', true, null));
+        await waitFor(() => expect(screen.getByTestId('confirm-access-anita').getAttribute('data-on')).toBe('yes'));
+        expect(screen.getByTestId('confirm-access-anita').textContent).toContain('नोंदी पक्क्या करण्याची जबाबदारी आहे');
+    });
+
+    it('taking it back sends the desired state OFF', async () => {
+        const granted = { ...ANITA, hasExplicitGrant: true, canConfirmRecords: true };
+        fetchLabourPermissions.mockResolvedValue([OWNER, granted]);
+        setLabourPermission.mockResolvedValue(ANITA);
+        render(<Harness />);
+        fireEvent.click(await screen.findByTestId('team-change-anita'));
+        fireEvent.click(screen.getByTestId('confirm-access-anita'));
+        await waitFor(() => expect(setLabourPermission).toHaveBeenCalledWith('farm-1', 'anita', false, null));
+        await waitFor(() => expect(screen.getByTestId('confirm-access-anita').getAttribute('data-on')).toBe('no'));
+    });
+
+    it('no confirming switch when the server does not offer it (an older server, or a co-owner looking)', async () => {
+        fetchLabourPermissions.mockResolvedValue([OWNER, { ...ANITA, isConfirmGrantEditable: undefined }]);
+        render(<Harness />);
+        fireEvent.click(await screen.findByTestId('team-change-anita'));
+        expect(screen.queryByTestId('confirm-access-anita')).toBeNull();
+        cleanup();
+        fetchLabourPermissions.mockResolvedValue([OWNER, ANITA, RAMESH]);
+        render(<Harness role="SecondaryOwner" userId="other" />);
+        await screen.findByTestId('team-person-anita');
+        expect(screen.queryByTestId('team-change-anita')).toBeNull();
+        expect(screen.queryByTestId('confirm-access-anita')).toBeNull();
     });
 });
 

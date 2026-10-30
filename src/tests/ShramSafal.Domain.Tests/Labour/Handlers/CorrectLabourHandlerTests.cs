@@ -337,6 +337,50 @@ public sealed class CorrectLabourHandlerTests
         repo.Corrections.Should().BeEmpty();
     }
 
+    // ── PLR-D10 I27 (founder D-46 §4) — a material correction needs a fresh confirmation ──
+
+    private static (FakeRepo Repo, FakeMutationStore Store, LabourAssignment Assignment, DailyLog Log) ConfirmedScenario()
+    {
+        var (repo, store, assignment) = Scenario(AppRole.PrimaryOwner);
+        var log = repo.GetDailyLogByIdAsync(assignment.DailyLogId).GetAwaiter().GetResult()!;
+        log.VerifyReachingTarget(
+            VerificationStatus.Verified, null, AppRole.PrimaryOwner, new UserId(CallerGuid),
+            LogCreatedAtUtc.AddMinutes(5), Guid.NewGuid(), Guid.NewGuid());
+        return (repo, store, assignment, log);
+    }
+
+    [Fact]
+    public async Task I27_a_headcount_correction_on_a_confirmed_day_moves_its_version_and_reopens_it_keeping_the_history()
+    {
+        var (repo, store, assignment, log) = ConfirmedScenario();
+        log.CurrentVerificationStatus.Should().Be(VerificationStatus.Verified);
+
+        var result = await BuildHandler(repo, store).HandleAsync(
+            Command(assignment.Id, quantity: new LabourQuantityCorrection(6, null, null)));
+
+        result.IsSuccess.Should().BeTrue();
+        log.ContentVersion.Should().Be(2, "what the record says changed");
+        log.CurrentVerificationStatus.Should().Be(VerificationStatus.Draft, "the changed version needs a fresh confirmation");
+        log.VerificationEvents.Should().Contain(e => e.Status == VerificationStatus.Verified,
+            "the earlier confirmation stays in the history, never overwritten");
+        log.VerificationEvents.OrderBy(e => e.OccurredAtUtc).Last().VerifiedByUserId.Should().Be(new UserId(CallerGuid));
+    }
+
+    [Fact]
+    public async Task I27_naming_who_was_in_the_work_is_not_material_and_leaves_the_confirmation_standing()
+    {
+        var (repo, store, assignment, log) = ConfirmedScenario();
+        var ganesh = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        repo.SeedOperator(FieldOperator.Create(ganesh, "गणेश", null, new FarmId(FarmAGuid), new UserId(CallerGuid), Now));
+
+        var result = await BuildHandler(repo, store).HandleAsync(Command(assignment.Id, adds: [ganesh]));
+
+        result.IsSuccess.Should().BeTrue();
+        assignment.WorkerCount.Should().Be(8);
+        log.ContentVersion.Should().Be(1, "attribution never changes the reported quantity (P7)");
+        log.CurrentVerificationStatus.Should().Be(VerificationStatus.Verified);
+    }
+
     // ── Attribution (12b.4) ──────────────────────────────────────────────────
 
     [Fact]

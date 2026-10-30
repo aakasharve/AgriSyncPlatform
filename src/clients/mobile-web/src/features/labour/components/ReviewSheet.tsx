@@ -27,7 +27,9 @@ import type { DailyLog } from '../../../types';
 import { Avatar, HelpNote } from './LabourUiKit';
 import LabourDataPoints, { toMr } from './LabourDataPoints';
 import { WorkAttributionPickers, useWorkAttribution } from './WorkAttribution';
-import { VerifyLogCommand } from '../../../application/usecases/sync/VerifyLogCommand';
+import { VerifyLogCommand, type OwnerConfirmEvidence } from '../../../application/usecases/sync/VerifyLogCommand';
+import OriginalVoiceButton from '../../logs/components/originalVoice/OriginalVoiceButton';
+import { getSessionUserId } from '../../../infrastructure/storage/AuthTokenStore';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { formatReviewDetail } from '../reviewDetailDate';
 import { t as translate } from '../../../i18n/translations';
@@ -121,8 +123,14 @@ async function enqueueVerificationSteps(
     dailyLogId: string,
     currentStatus: ReviewVerificationStatus | undefined,
     finalStatus: 'verified' | 'disputed',
-    reason?: string
+    reason?: string,
+    evidence?: OwnerConfirmEvidence
 ): Promise<void> {
+    // PLR-D10 I27: मंजूर with its D-44 basis and D-46 version goes as ONE verify_log_v2 (the server walks Draft itself).
+    if (finalStatus === 'verified' && evidence) {
+        await VerifyLogCommand.enqueueOwnerConfirmation(dailyLogId, evidence);
+        return;
+    }
     const canGoDirectly = currentStatus === 'Confirmed' || currentStatus === 'Verified';
     if (!canGoDirectly) {
         await VerifyLogCommand.enqueue({ dailyLogId, verificationStatus: 'confirmed' });
@@ -153,15 +161,16 @@ export async function sendVerification(
     dailyLogId: string,
     currentStatus: ReviewVerificationStatus | undefined,
     finalStatus: 'verified' | 'disputed',
-    reason?: string
+    reason?: string,
+    evidence?: OwnerConfirmEvidence
 ): Promise<void> {
-    await enqueueVerificationSteps(dailyLogId, currentStatus, finalStatus, reason);
+    await enqueueVerificationSteps(dailyLogId, currentStatus, finalStatus, reason, evidence);
     await triggerSyncBestEffort();
 }
 
 type ConfirmKind = 'approve' | 'query' | 'approveAll';
 
-interface PendingBatchItem { id: string; status: ReviewVerificationStatus | undefined }
+interface PendingBatchItem { id: string; status: ReviewVerificationStatus | undefined; evidence?: OwnerConfirmEvidence }
 
 interface PendingBatch {
     items: PendingBatchItem[];
@@ -405,7 +414,10 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
     // without labour authority exactly as it refuses मंजूर (VerifyLogAuthorizer runs for every
     // decision; pinned by OwnerCanApproveAMukadamsLogRealPostgresTests proof 3c), so it is
     // offered on the same server-sent flag. Cards stay readable.
-    const mayApprove = data.canManageLabour !== false;
+    // PLR-D10 I27 (founder D-44): मंजूर / शंका only for whoever may give the owner's confirmation — the primary owner
+    // or a member holding his grant (a co-owner's role alone no longer does). Older server: the old flag.
+    const mayApprove = data.canConfirm ?? data.canManageLabour !== false;
+    const [heardIds, setHeardIds] = useState<ReadonlySet<string>>(() => new Set());
 
     /**
      * The ONLY place that actually calls `sendVerification`. Runs either
@@ -448,7 +460,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
             // needs more than one trigger.
             for (const it of batch.items) {
                 try {
-                    await enqueueVerificationSteps(it.id, it.status, batch.finalStatus, batch.reason);
+                    await enqueueVerificationSteps(it.id, it.status, batch.finalStatus, batch.reason, it.evidence);
                 } catch {
                     failedIds.add(it.id);
                 }
@@ -457,7 +469,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
         } else {
             for (const it of batch.items) {
                 try {
-                    await sendVerification(it.id, it.status, batch.finalStatus, batch.reason);
+                    await sendVerification(it.id, it.status, batch.finalStatus, batch.reason, it.evidence);
                 } catch {
                     failedIds.add(it.id);
                 }
@@ -533,7 +545,10 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
         const animMs = prefersReducedMotion() ? 0 : CONFIRM_ANIM_MS;
 
         const batch: PendingBatch = {
-            items: targets.map((t) => ({ id: t.id, status: t.status })),
+            items: targets.map((t) => {
+                const verifierUserId = getSessionUserId();
+                return { id: t.id, status: t.status, ...(finalStatus === 'verified' && verifierUserId && { evidence: { verifierUserId, reviewBasis: heardIds.has(t.id) ? 'heard' as const : 'read' as const, logVersion: t.version } }) };
+            }),
             kind,
             finalStatus,
             reason,
@@ -698,6 +713,7 @@ const ReviewSheet: React.FC<Props> = ({ open, data, onClose, onToast, onApproved
                                         "हजेरी बरोबर / मजुरी बरोबर" card (SeparateConfirm, confirmMode='separate') was
                                         DELETED so that model cannot resurface; money confirmation, when built, is its
                                         own fact on the agreement and never releases money. */}
+                                    {mayApprove && it.hasRecording && farmId && <OriginalVoiceButton dailyLogId={it.id} farmId={farmId} onHeard={(id) => setHeardIds((h) => new Set(h).add(id))} />}
                                     <div className="mt-3 flex gap-3">
                                         {mayApprove && <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> मंजूर</button>}
                                         {mayApprove && <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => query(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> शंका</button>}

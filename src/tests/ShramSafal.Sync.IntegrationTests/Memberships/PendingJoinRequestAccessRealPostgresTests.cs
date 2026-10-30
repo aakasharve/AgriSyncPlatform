@@ -463,6 +463,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // and the nullable column user_consent_state.full_history_journal_wording_version. No farm
         // column, no membership policy, no farm_join_requests object. Re-Up recreates them.
         "20261029224212_AddImprovementPermissionAndVoiceWordingVersion",
+
+        // spec plr-d10 I27 (founder D-44 / D-46 / D-31) — Down() read in full: drops
+        // ck_verification_events_review_basis and four additive columns (verification_events
+        // confirmed_log_version / review_basis, daily_logs content_version / voice_clip_id). No
+        // policy, no grant, no farm_join_requests object. Re-Up recreates them.
+        "20261030022054_AddOwnerConfirmationEvidence",
     ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —

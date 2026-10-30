@@ -390,12 +390,15 @@ public sealed class ManageMembershipHandler(
         var directory = await repository.GetOperatorsByIdsAsync([userId], ct);
         var name = directory.FirstOrDefault(o => o.UserId == userId)?.DisplayName;
         var tails = await repository.GetPhoneLast4ByIdsAsync([userId], ct);
+        // Every decision here is the primary owner's alone (founder D-22, step 3 above), so the
+        // confirming switch on a co-owner's row is his to move (spec: plr-d10 I27, D-44 §2).
         return LabourPermissionProjection.From(
             seat,
             now,
             string.IsNullOrWhiteSpace(name) ? null : name,
             isRegistrant: false,
-            phoneLast4: tails.TryGetValue(userId, out var tail) ? tail : null);
+            phoneLast4: tails.TryGetValue(userId, out var tail) ? tail : null,
+            callerMayGrant: true);
     }
 
     private static bool TryReadRole(ManageMembershipCommand command, out AppRole? role)

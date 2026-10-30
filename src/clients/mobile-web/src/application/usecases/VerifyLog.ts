@@ -15,9 +15,11 @@
  *    single "approve" on a Draft log no longer fails.
  *
  * 2. THE CALLERS. The voice result screen's "पक्कं आहे" (`features/logs/components/voiceResult/
- *    useRecordingTrust.ts`), for a voice log the phone auto-saved as Draft (spec I13: his confirm IS the verify
- *    act), shown only to whoever the server lets verify and only for a log on its way to the server. The labour
- *    review sheet already sent verify into the same server handler.
+ *    useRecordingTrust.ts`) — AMENDED by spec I27 (founder D-44 / D-46): it is the PRIMARY OWNER's "save and
+ *    confirm" of his own recording, never a speaker's self-verify; and the labour review sheet's मंजूर. The server
+ *    gives "मालकाकडून खात्री" only to the primary owner or a member holding the owner's grant (never on his own
+ *    record); anyone else's tap is kept as his mark. `reviewBasis` says whether he heard the original voice or read
+ *    the text (D-44), `logVersion` which version he saw (D-46; the server refuses a stale one).
  *
  * 3. UNCHANGED — "success" HERE MEANS "QUEUED", NOT "ACCEPTED". Both functions return success the moment
  *    `mutationQueue.enqueue` resolves. A caller may render HIS act off it ("तुम्ही पक्कं केलं"), never a server
@@ -46,6 +48,10 @@ export interface VerifyLogInput {
     verifierId: string;
     action: 'approve' | 'dispute';
     note?: string;
+    /** PLR-D10 I27 (D-44) — he played the original voice ('heard') or confirmed from the text ('read'). Approve only. */
+    reviewBasis?: 'heard' | 'read';
+    /** PLR-D10 I27 (D-46) — the record version he saw, when this phone knows it. Approve only. */
+    logVersion?: number;
 }
 
 export interface BatchVerifyInput {
@@ -90,6 +96,8 @@ export async function verifyLog(
             decision,
             reason: input.note,
             decidedAt: systemClock.nowISO(),
+            ...(decision === 'verify' && input.reviewBasis && { reviewBasis: input.reviewBasis }),
+            ...(decision === 'verify' && typeof input.logVersion === 'number' && input.logVersion >= 1 && { logVersion: input.logVersion }),
         });
 
         await auditPort.append({

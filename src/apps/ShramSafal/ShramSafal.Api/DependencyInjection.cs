@@ -271,6 +271,9 @@ public static class DependencyInjection
         // adapter rebind); range query depends only on IRetainedBlobStore.
         services.AddScoped<PersistVoiceClipRetainedHandler>();
         services.AddScoped<GetVoiceDiaryByRangeHandler>();
+        // spec: plr-d10 (I27; founder D-31) — the original voice of ONE record, for a person
+        // allowed to review it. Reads the archive through the same IRetainedBlobStore.
+        services.AddScoped<ShramSafal.Application.UseCases.Logs.GetLogOriginalVoice.GetLogOriginalVoiceHandler>();
 
         // DATA_PRINCIPLE_SPINE 08.2 / 08.3 / 08.5 — DPDP rights surface
         // handlers. All three depend on TimeProvider + IShramSafalRepository.

@@ -144,6 +144,11 @@ public sealed class AddLogTaskHandler(
             command.DeviationReasonCode,
             command.DeviationNote);
 
+        // spec: plr-d10 (I27; founder D-46 §4) — what the record says changed, so its version
+        // moves on. An earlier owner confirmation keeps the version it covered; the re-open
+        // below is what asks for a fresh one.
+        log.NoteContentChanged();
+
         // Phase 3 MIS: stamp compliance on the task inside the same tx (I-17).
         // LABOUR_PHASE2 P2.3 — only when the parent log names a crop cycle.
         // There is no schedule for "the whole farm", so for a plot-less log

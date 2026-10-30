@@ -8,7 +8,10 @@ internal sealed class VerificationEventConfiguration : IEntityTypeConfiguration<
 {
     public void Configure(EntityTypeBuilder<VerificationEvent> builder)
     {
-        builder.ToTable("verification_events");
+        // spec: plr-d10 (I27) — the review basis is one of two words or nothing.
+        builder.ToTable("verification_events", t => t.HasCheckConstraint(
+            "ck_verification_events_review_basis",
+            "review_basis IS NULL OR review_basis IN ('heard', 'read')"));
 
         builder.HasKey(x => x.Id);
 
@@ -37,6 +40,14 @@ internal sealed class VerificationEventConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.OccurredAtUtc)
             .HasColumnName("occurred_at_utc")
             .IsRequired();
+
+        // spec: plr-d10 (I27; founder D-44) — owner-confirmation evidence. Both additive and
+        // nullable: only the Verified event of an owner confirmation carries them.
+        builder.Property(x => x.ConfirmedLogVersion)
+            .HasColumnName("confirmed_log_version");
+        builder.Property(x => x.ReviewBasis)
+            .HasColumnName("review_basis")
+            .HasMaxLength(8);
 
         builder.HasIndex(x => new { x.DailyLogId, x.OccurredAtUtc });
         builder.Ignore(x => x.DomainEvents);

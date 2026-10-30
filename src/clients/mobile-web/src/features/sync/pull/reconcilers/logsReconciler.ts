@@ -300,6 +300,8 @@ function preserveLocalOnlyFields(
         // PLR-D10 I13 — "this phone saved his words with no review tap". The server keeps its own marker off
         // the wire, so without this the first pull would turn his auto-save back into a log awaiting him.
         ...(existing.autoSavedFromVoice === true && { autoSavedFromVoice: true }),
+        // PLR-D10 I27 — the recording link is not on the wire either; the phone that made it keeps it.
+        ...(existing.voiceClipId && { voiceClipId: existing.voiceClipId }),
 
         // ── P0.5 — `meta` IS MERGED, NOT REPLACED ───────────────────────────
         //

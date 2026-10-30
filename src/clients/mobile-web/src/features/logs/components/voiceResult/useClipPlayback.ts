@@ -16,7 +16,7 @@ export interface LogClips {
     clips: ReadonlyMap<string, VoiceClipCacheRecord>;
     /**
      * False until this phone has been asked once. Until then "no clip" is not yet KNOWN, so nothing may act on
-     * it (the confirm stays locked rather than opening for a recording whose clip is still being looked up).
+     * it. (PLR-D10 I27: the owner's confirm no longer waits on it — D-44 never makes listening compulsory.)
      */
     ready: boolean;
 }

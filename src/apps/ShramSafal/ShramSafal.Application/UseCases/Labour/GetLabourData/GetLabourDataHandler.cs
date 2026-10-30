@@ -665,7 +665,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                         Amount: statedCosts.Count > 0 ? statedCosts.Sum() : null,
                         Names: names),
                     Plot: plotNames.Count > 0 ? string.Join(SeparatorMiddot, plotNames) : null,
-                    PlotScope: l.Scope.ToString());
+                    PlotScope: l.Scope.ToString(),
+                    Version: l.ContentVersion,
+                    HasRecording: l.VoiceClipId is not null);
             })
             .ToList();
 
@@ -777,6 +779,10 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // .IsAllowedAsync applies on every governed write (owner-tier by role,
             // everyone else - a Mukadam included - only on a live explicit grant).
             canManageLabour: LabourManagementPermission.IsAllowed(
+                resolvedCallerRole, hasLabourManagementGrant),
+            // spec: plr-d10 (I27; founder D-44) — confirming is the primary owner's, or the
+            // grant's; a co-owner's role alone no longer carries it.
+            canConfirm: OwnerConfirmationAuthority.MayConfirm(
                 resolvedCallerRole, hasLabourManagementGrant)));
     }
 
@@ -1121,7 +1127,8 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         string? ownPersonId = null,
         IReadOnlySet<string>? ownReviewIds = null,
         bool narrowToCaller = false,
-        bool? canManageLabour = null)
+        bool? canManageLabour = null,
+        bool? canConfirm = null)
     {
         if (view == LabourRegisterView.OwnerBook)
         {
@@ -1134,6 +1141,8 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 View = "owner",
                 Dashboard = dto.Dashboard with { Pending = dto.Review.Count },
                 CanManageLabour = true,
+                // plr-d10 I27: a co-owner reads the whole book but does not confirm by role.
+                CanConfirm = canConfirm,
             };
         }
 
@@ -1197,6 +1206,8 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // so he gets false. The `!narrowToCaller` fallback is only for direct
             // callers of this pure function that have no role/grant to hand.
             CanManageLabour = canManageLabour ?? !narrowToCaller,
+            // plr-d10 I27: the owner's-confirmation authority, as the handler resolved it.
+            CanConfirm = canConfirm,
             View = view == LabourRegisterView.CrewAttendance ? "crew" : "own",
             TopLevelIds = topLevelIds,
             People = people,

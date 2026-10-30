@@ -9,12 +9,14 @@
  *   - "लक्षात ठेवलं" (the screen exists only after the write) and NO server claim until the server applied it;
  *   - all eight parts, the unmentioned ones red, tappable, never a 0;
  *   - his words marked ONLY with verified phrases, and a tapped part shows its words;
- *   - "पक्कं आहे" locked until he has HEARD his clip, then it queues the existing verify for THAT log only;
+ *   - spec I27 (founder D-44 / D-46, AMENDS I13): only the PRIMARY OWNER is offered "पक्कं आहे" on his own recording
+ *     ("save and confirm"), never locked behind listening; it queues the existing verify for THAT log only, saying
+ *     whether he heard his clip or read his words. Every other speaker sees it stay "पक्कं नाही";
  *   - the plot's whole day: earlier recordings newest first, ▶ only where the clip is on this phone, who spoke,
  *     confirmed or not; "बदला" opens the edit form; "मागे" + "आणखी सांगा"; no English, no "नोंद".
  *   - (round 2) an item the server could not verify is FLAGGED, never a plain fact, and its part stays red;
  *     a recording that named two plots is one recording with a "बदला" and an honest badge per plot; the confirm
- *     goes to whoever the server lets verify (a मुकादम with the owner's grant too), only for logs on their way.
+ *     goes only to logs on their way to the server.
  */
 import 'fake-indexeddb/auto';
 import React from 'react';
@@ -263,21 +265,21 @@ describe('the ONE result screen — what he reads', () => {
 });
 
 describe('the ONE result screen — what his taps do', () => {
-    it('"पक्कं आहे" stays locked until he has HEARD his clip to the end, then queues the verify for THAT log only', async () => {
+    it('the OWNER is never made to listen: "वाचा आणि पक्कं करा" at once, "ऐका आणि पक्कं करा" once he heard it (D-44)', async () => {
         mount(props());
         await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy());
-        const confirm = screen.getByTestId('vr-confirm') as HTMLButtonElement;
-        expect(confirm.disabled).toBe(true);
+        expect((screen.getByTestId('vr-confirm') as HTMLButtonElement).disabled).toBe(false);
+        expect(screen.getByTestId('vr-confirm-basis').textContent).toBe('वाचा आणि पक्कं करा');
+        expect(screen.getByTestId('vr-not-confirmed-badge').textContent).toBe('पक्कं नाही'); // D-46: until he confirms
 
         expect(screen.queryByTestId('vr-play-electric')).toBeNull(); // the flowing trace only while it plays
         await act(async () => { fireEvent.click(screen.getByTestId('vr-play')); });
         await waitFor(() => expect(audios).toHaveLength(1));
         expect(audios[0].play).toHaveBeenCalled();
-        expect(confirm.disabled).toBe(true); // playing is not yet hearing
         await waitFor(() => expect(screen.getByTestId('vr-play-electric')).toBeTruthy());
 
         act(() => { audios[0].onended?.(); });
-        expect((screen.getByTestId('vr-confirm') as HTMLButtonElement).disabled).toBe(false);
+        expect(screen.getByTestId('vr-confirm-basis').textContent).toBe('ऐका आणि पक्कं करा');
 
         await act(async () => {
             fireEvent.click(screen.getByTestId('vr-confirm'));
@@ -288,16 +290,19 @@ describe('the ONE result screen — what his taps do', () => {
         expect(screen.getByTestId('vr-kept-safe').textContent).toBe('तुमचे शब्द जपले आहेत');
         const rows = await verifyRows();
         expect(rows).toHaveLength(1);
-        expect(rows[0].payload).toMatchObject({ logId: NOW, verifierUserId: ME, decision: 'verify' });
+        expect(rows[0].payload).toMatchObject({ logId: NOW, verifierUserId: ME, decision: 'verify', reviewBasis: 'heard' });
     });
 
-    it('no clip of it on this phone: locked while that is being looked up, then he may confirm by reading', async () => {
+    it('no clip of it on this phone: he confirms by reading, and the verify says so ("read", D-44 read-not-heard)', async () => {
         await getDatabase().voiceClips.clear();
         mount(props());
-        expect((screen.getByTestId('vr-confirm') as HTMLButtonElement).disabled).toBe(true); // not yet KNOWN
-        await waitFor(() => expect((screen.getByTestId('vr-confirm') as HTMLButtonElement).disabled).toBe(false));
         expect(screen.getByTestId('vr-latest').textContent).toContain('वाचा आणि पक्कं करा');
         expect(screen.queryByTestId('vr-play')).toBeNull();
+        await act(async () => { fireEvent.click(screen.getByTestId('vr-confirm')); });
+        await waitFor(() => expect(screen.getByTestId('vr-confirm-done')).toBeTruthy());
+        const rows = await verifyRows();
+        expect(rows).toHaveLength(1);
+        expect(rows[0].payload).toMatchObject({ logId: NOW, decision: 'verify', reviewBasis: 'read' });
     });
 
     it('a farm role that may not verify sees no confirm button at all (P5)', async () => {
@@ -326,16 +331,24 @@ describe('the ONE result screen — what his taps do', () => {
         expect(screen.getByTestId('vr-latest').textContent).not.toContain('जाणार नाही');
     });
 
-    it('a मुकादम the owner granted labour rights sees the confirm (the server lets him verify); without it, not', async () => {
-        grant.value = true;
-        mount(props({ farmRole: 'Mukadam' }));
+    it('the speaker is never asked to confirm his own recording (I27): a granted मुकादम and a co-owner see "पक्कं नाही", no button', async () => {
+        for (const [farmRole, granted] of [['Mukadam', true], ['Mukadam', false], ['SecondaryOwner', undefined]] as const) {
+            grant.value = granted;
+            mount(props({ farmRole }));
+            await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy());
+            expect(screen.queryByTestId('vr-confirm')).toBeNull();
+            expect(screen.getByTestId('vr-not-confirmed-badge').textContent).toBe('पक्कं नाही');
+            cleanup();
+        }
+        expect(await verifyRows()).toHaveLength(0);
+    });
+
+    it('once the owner (or whoever the owner trusts) confirmed it, the speaker sees "पक्कं केलं"', async () => {
+        const confirmed = [{ ...HISTORY[0], verification: { status: LogVerificationStatus.VERIFIED, required: true } } as DailyLog, ...HISTORY.slice(1)];
+        mount(props({ farmRole: 'Worker', history: confirmed }));
         await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy());
-        expect(screen.getByTestId('vr-confirm')).toBeTruthy();
-        cleanup();
-        grant.value = false;
-        mount(props({ farmRole: 'Mukadam' }));
-        await waitFor(() => expect(screen.getByTestId('vr-play')).toBeTruthy());
-        expect(screen.queryByTestId('vr-confirm')).toBeNull();
+        expect(screen.getByTestId('vr-confirmed-badge').textContent).toBe('पक्कं केलं');
+        expect(screen.queryByTestId('vr-not-confirmed-badge')).toBeNull();
     });
 });
 
@@ -379,7 +392,6 @@ describe('the ONE result screen — one recording, several plots; a stoppage; a 
             history: TWO_PLOTS,
             syncQueuedById: new Map([[NOW, true], [PLOT2, false]]),
         }));
-        await waitFor(() => expect((screen.getByTestId('vr-confirm') as HTMLButtonElement).disabled).toBe(false));
         await act(async () => { fireEvent.click(screen.getByTestId('vr-confirm')); });
         await waitFor(() => expect(screen.getByTestId('vr-confirm-done')).toBeTruthy());
         expect((await verifyRows()).map(r => (r.payload as { logId: string }).logId)).toEqual([NOW]);

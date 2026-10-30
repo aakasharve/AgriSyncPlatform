@@ -100,6 +100,29 @@ public sealed class DailyLog : Entity<Guid>
     // future event-sourced migration is non-destructive.
     public string EvidenceSourcesJson { get; private set; } = "[]";
 
+    /// <summary>
+    /// spec: plr-d10 (I27) — the server's id of the recording this log was saved from (the
+    /// archive id <c>ssf.voice_clips_retained.clip_id</c> uses), as the phone stated it when
+    /// it created the log. Null for typed entries, for logs from phones that never send it,
+    /// and for the extra plots of one recording (only the log carrying his words is linked).
+    ///
+    /// <para><b>A pointer, not permission.</b> Whether anyone may hear the recording is
+    /// decided at replay time (<c>GetLogOriginalVoiceHandler</c>): the clip must belong to
+    /// this log's speaker, his "keep original voice" switch must be ON under the current
+    /// words, and the listener must be allowed to review THIS record.</para>
+    /// </summary>
+    public Guid? VoiceClipId { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d10 (I27; founder D-46 §3-4) — the record's version: 1 at creation, +1 for
+    /// every change to what the record says (a task added, a headcount or duration
+    /// corrected). An owner confirmation records the version it covered
+    /// (<see cref="VerificationEvent.ConfirmedLogVersion"/>), so "which version did he
+    /// confirm" is answerable for ever. Verification events do not move it: a confirmation
+    /// is about the record, not part of it.
+    /// </summary>
+    public int ContentVersion { get; private set; } = 1;
+
     public IReadOnlyCollection<LogTask> Tasks => _tasks.AsReadOnly();
     public IReadOnlyCollection<VerificationEvent> VerificationEvents => _verificationEvents.AsReadOnly();
 
@@ -633,6 +656,126 @@ public sealed class DailyLog : Entity<Guid>
     }
 
     /// <summary>
+    /// spec: plr-d10 (I27; founder D-44 §1-2) — the reason on the mark written when the log's OWN
+    /// speaker taps confirm on his own record and he is not the primary owner. Under I13 his
+    /// "पक्कं आहे" was the confirm; D-44 changed that meaning: "The person reporting work must not
+    /// be forced to approve their own recording", and only an authorised person's confirmation gives
+    /// "मालकाकडून खात्री". So an older phone's tap is kept as what it is — his own mark — and never
+    /// counted or shown as the owner's confirmation.
+    ///
+    /// <para>Machine-readable and stable. Do not localise it, do not reword it.</para>
+    /// </summary>
+    public const string SpeakerOwnMarkReason = "speaker-own-mark";
+
+    /// <summary>
+    /// spec: plr-d10 (I27; founder D-44 §2) — the reason on the mark written when a member the old
+    /// approve gate admitted (a co-owner, by role) asks to confirm someone else's record but holds
+    /// no confirm authority under D-44. A review mark, never the owner's confirmation.
+    ///
+    /// <para>Machine-readable and stable. Do not localise it, do not reword it.</para>
+    /// </summary>
+    public const string NoConfirmAuthorityMarkReason = "mark-without-confirm-authority";
+
+    /// <summary>
+    /// spec: plr-d10 (I27) — true for a mark <see cref="RecordMarkWithoutConfirmAuthority"/>
+    /// writes: a <see cref="VerificationStatus.Draft"/> event carrying one of the two mark reasons.
+    /// Kept OFF the wire (<c>DtoMappingExtensions.WireVerificationEvents</c>) for the same reason
+    /// the I13 capture marker is: every phone build stamps "confirmed by X at T" from the latest
+    /// event of any status and the day ring credits that stamp, so a mark sent down would read as
+    /// a confirmation. Hiding a Draft event can only ever make a phone claim LESS.
+    /// </summary>
+    public static bool IsMarkWithoutConfirmAuthority(VerificationEvent verificationEvent) =>
+        verificationEvent.Status == VerificationStatus.Draft
+        && (verificationEvent.Reason == SpeakerOwnMarkReason
+            || verificationEvent.Reason == NoConfirmAuthorityMarkReason);
+
+    /// <summary>
+    /// spec: plr-d10 (I27) — links the recording this log was saved from. Creation-time only
+    /// and set once: which recording a statement came from is a fact about its capture, and
+    /// re-pointing it later would let a log borrow another recording.
+    /// </summary>
+    public void LinkVoiceClip(Guid voiceClipId)
+    {
+        if (voiceClipId == Guid.Empty)
+        {
+            throw new ArgumentException("A voice clip id is required.", nameof(voiceClipId));
+        }
+
+        if (VoiceClipId is { } existing && existing != voiceClipId)
+        {
+            throw new InvalidOperationException("This log is already linked to another recording.");
+        }
+
+        VoiceClipId = voiceClipId;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (I27; founder D-46 §4) — what the record says changed (a task added, a
+    /// headcount or duration corrected): its version moves on. An earlier confirmation keeps
+    /// the version it covered; the caller decides whether the change re-opens the record.
+    /// </summary>
+    public void NoteContentChanged() => ContentVersion++;
+
+    /// <summary>
+    /// spec: plr-d10 (I27) — a confirm request from someone who may not give the owner's
+    /// confirmation (<see cref="OwnerConfirmationAuthority"/>) but whom the old approve gate
+    /// admitted. Nothing is refused (an older phone's queue must keep moving, doctrine P11), and
+    /// nothing about the record's standing moves either. The tap is recorded as what it is:
+    /// <list type="bullet">
+    /// <item>on a <see cref="VerificationStatus.Draft"/> log, ONE Draft event — the status stays
+    /// exactly where it was, the same shape as <see cref="Edit(Guid, UserId, DateTime, string?)"/>
+    /// and the capture marker — credited to the caller, reason <see cref="SpeakerOwnMarkReason"/>
+    /// (his own record) or <see cref="NoConfirmAuthorityMarkReason"/> (someone else's);</item>
+    /// <item>on any other status, nothing: a Draft event there would move the status.</item>
+    /// </list>
+    /// It never reaches Confirmed or Verified, and the owner's later confirmation walks the
+    /// record from Draft as if the mark were not there.
+    /// </summary>
+    /// <returns>The mark written, or null when nothing was written.</returns>
+    public VerificationEvent? RecordMarkWithoutConfirmAuthority(
+        Guid verificationEventId,
+        UserId callerUserId,
+        DateTime occurredAtUtc)
+    {
+        if (CurrentVerificationStatus != VerificationStatus.Draft)
+        {
+            return null;
+        }
+
+        var reason = callerUserId == OperatorUserId ? SpeakerOwnMarkReason : NoConfirmAuthorityMarkReason;
+        var lastEventAtUtc = _verificationEvents.Count == 0
+            ? DateTime.MinValue
+            : _verificationEvents.Max(e => e.OccurredAtUtc);
+        var at = occurredAtUtc > lastEventAtUtc ? occurredAtUtc : lastEventAtUtc.AddMilliseconds(1);
+
+        var mark = new VerificationEvent(verificationEventId, Id, VerificationStatus.Draft, reason, callerUserId, at);
+        _verificationEvents.Add(mark);
+        return mark;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (I27; founder D-44 §3) — stamps the owner confirmation's evidence on the
+    /// <see cref="VerificationStatus.Verified"/> event just written: the record version it
+    /// covered (this log's <see cref="ContentVersion"/> now) and whether the confirmer heard
+    /// the original voice or read the text. Who and when are the event's own columns.
+    /// </summary>
+    public void StampOwnerConfirmation(VerificationEvent verified, string? reviewBasis)
+    {
+        ArgumentNullException.ThrowIfNull(verified);
+        if (!_verificationEvents.Contains(verified))
+        {
+            throw new InvalidOperationException("The confirmation event does not belong to this log.");
+        }
+
+        if (!ReviewBasis.TryNormalize(reviewBasis, out var basis))
+        {
+            throw new ArgumentException("Unknown review basis.", nameof(reviewBasis));
+        }
+
+        verified.RecordConfirmationEvidence(ContentVersion, basis);
+    }
+
+    /// <summary>
     /// spec: dfes-companion-2026-07-11 (wave-1.4) — REACH <paramref name="target"/> BY WALKING
     /// ONLY EDGES <paramref name="callerRole"/> ALREADY HOLDS.
     ///
@@ -775,6 +918,13 @@ public sealed class DailyLog : Entity<Guid>
     /// verification ledger exists to answer. Reversible: it is one argument if the founder
     /// rules otherwise.</para>
     ///
+    /// <para><b>Primary owner only — spec: plr-d10 (I27), founder D-44 §2 / D-46 §3.</b> Ruling 2
+    /// was scoped to owner-tier; I27 narrows it to the PRIMARY OWNER
+    /// (<see cref="OwnerConfirmationAuthority.MaySelfAttestAtSave"/>). A co-owner, agronomist
+    /// or FPC manager still holds both edges by role, but role alone is no longer the owner's
+    /// confirmation, so their own saves stay pending. The Verified event written here records
+    /// the record version it covers (<see cref="ContentVersion"/>) with no review basis.</para>
+    ///
     /// <para><b>Why the 1 ms offset.</b> <see cref="CurrentVerificationStatus"/> resolves by
     /// <c>OrderBy(OccurredAtUtc).Last()</c>. Two events sharing one instant would leave the
     /// fold at the mercy of row order after an EF reload — the log could read back
@@ -842,6 +992,16 @@ public sealed class DailyLog : Entity<Guid>
             return false;
         }
 
+        // spec: plr-d10 (I27; founder D-44 §2, D-46 §3) — only the PRIMARY OWNER's own save
+        // counts as the owner's confirmation. A co-owner, agronomist or FPC manager holds both
+        // FSM edges by role, but "being appointed co-owner must not automatically grant this
+        // authority": their save stays pending, and a grant holder confirms deliberately in the
+        // review sheet instead. Same line for create, add-task re-attest and the backfill.
+        if (!OwnerConfirmationAuthority.MaySelfAttestAtSave(creatorRole))
+        {
+            return false;
+        }
+
         // Authority is asked of the state machine itself, so this can never drift from
         // the roles the machine actually permits.
         var canConfirm = VerificationStateMachine.CanTransitionWithRole(
@@ -854,7 +1014,11 @@ public sealed class DailyLog : Entity<Guid>
         }
 
         Verify(confirmEventId, VerificationStatus.Confirmed, reason, creatorRole, OperatorUserId, occurredAtUtc);
-        Verify(verifyEventId, VerificationStatus.Verified, reason, creatorRole, OperatorUserId, occurredAtUtc.AddMilliseconds(1));
+        var verified = Verify(verifyEventId, VerificationStatus.Verified, reason, creatorRole, OperatorUserId, occurredAtUtc.AddMilliseconds(1));
+
+        // I27 (D-44 §3): the record version this confirmation covers. No review basis — he
+        // wrote it himself, so neither "heard" nor "read" is a true statement of how.
+        verified.RecordConfirmationEvidence(ContentVersion, null);
         return true;
     }
 

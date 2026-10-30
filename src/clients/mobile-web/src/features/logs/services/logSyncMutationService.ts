@@ -737,6 +737,8 @@ export async function enqueueLogsForSync(
             // like `captureScope`; every other save sends no key at all, exactly as before (P11).
             // RELEASE GATE: an older server refuses the key, so the server ships first.
             ...(log.autoSavedFromVoice === true && { autoSavedFromVoice: true }),
+            // PLR-D10 I27 — the recording behind this log (only the log carrying his words has one). Absent = no key.
+            ...(log.voiceClipId && { voiceClipId: log.voiceClipId }),
             // B2.8 / B1d — the weather captured at confirm-time; the rules live with the builder.
             weatherStamp: buildWeatherStampPayload(log.weatherStamp),
             // Labour V1 Task 8.1 — structured labour rides on the SAME payload as

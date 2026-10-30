@@ -289,12 +289,25 @@ public sealed class AutoSavedVoiceLogRealPostgresTests(Xunit.Abstractions.ITestO
         await PushAppliedAsync("create_daily_log", "req-autosave-v2", CreatePayload(logId, autoSavedFromVoice: true));
         (await PullDailyLogAsync(logId)).LastVerificationStatus.Should().Be("Draft");
 
+        // spec I27 (founder D-44 / D-46) AMENDS I13: the I13 result screen's tap (no review basis) by the
+        // record's own speaker is kept as his mark — it no longer verifies. His deliberate "save and
+        // confirm" states whether he heard or read it.
+        await PushAppliedAsync("verify_log_v2", "req-autosave-v2-old-tap", new Dictionary<string, object?>
+        {
+            ["logId"] = logId,
+            ["verifierUserId"] = OwnerUserId,
+            ["decision"] = "verify",
+            ["decidedAt"] = DateTime.UtcNow.ToString("O"),
+        });
+        (await PullDailyLogAsync(logId)).LastVerificationStatus.Should().Be("Draft");
+
         await PushAppliedAsync("verify_log_v2", "req-autosave-v2-verify", new Dictionary<string, object?>
         {
             ["logId"] = logId,
             ["verifierUserId"] = OwnerUserId,
             ["decision"] = "verify",
             ["decidedAt"] = DateTime.UtcNow.ToString("O"),
+            ["reviewBasis"] = "heard",
         });
 
         var pulled = await PullDailyLogAsync(logId);

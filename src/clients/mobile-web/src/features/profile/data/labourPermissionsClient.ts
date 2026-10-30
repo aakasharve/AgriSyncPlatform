@@ -129,6 +129,17 @@ export interface LabourPermission {
     phoneLast4?: string | null;
     /** M-8 — an owner approved this seat (he asked), as opposed to a direct farm-QR join. Wording only. */
     approvedByOwner?: boolean;
+    /**
+     * PLR-D10 I27 (founder D-44 §2) — ADDITIVE: this member may give a record the owner's confirmation (the
+     * primary owner, or anyone holding his switch — a co-owner too, but never by role alone). Absent = older server.
+     */
+    canConfirmRecords?: boolean | null;
+    /**
+     * PLR-D10 I27 — ADDITIVE: the caller (the primary owner) may give or take back THIS co-owner's
+     * responsibility to confirm records. Only on a co-owner's row; `isGrantEditable` stays false for him so
+     * every installed phone keeps showing his labour responsibility as permanently on (P11).
+     */
+    isConfirmGrantEditable?: boolean | null;
 }
 
 /** The server's error code when a role already carries the capability. */

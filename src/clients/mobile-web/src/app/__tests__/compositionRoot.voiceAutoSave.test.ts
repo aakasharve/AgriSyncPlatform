@@ -49,7 +49,11 @@ vi.mock('../../infrastructure/farmGeography', () => ({ BackendFarmGeographyClien
 vi.mock('../../infrastructure/weather/FarmAnchoredWeatherService', () => ({ FarmAnchoredWeatherService: class {} }));
 vi.mock('../../infrastructure/weather/BackendWeatherClient', () => ({ BackendWeatherClient: class {} }));
 vi.mock('../../infrastructure/voice/VoicePreprocessor', () => ({ VoicePreprocessor: class {} }));
-vi.mock('../../infrastructure/voice/clipLogLink', () => ({ linkClipToLog: vi.fn(async () => 'clip-1') }));
+vi.mock('../../infrastructure/voice/clipLogLink', () => ({
+    linkClipToLog: vi.fn(async () => 'clip-1'),
+    // PLR-D10 I27 — the recording's server id, named on the create.
+    archiveIdForRecording: vi.fn(async () => 'a27a27a2-0000-4000-8000-000000000001'),
+}));
 vi.mock('../../core/telemetry/eventEmitters', () => ({ emitClosureSubmitted: (p: unknown) => { h.emitted.push(p); } }));
 
 import { useAgriLogApp } from '../compositionRoot';
@@ -75,7 +79,7 @@ describe('useAgriLogApp — the voice auto-save, wired', () => {
         await act(async () => { took = await h.recorder!.onVoiceDraft!(draft, undefined, recording); });
         expect(took).toBe(true); // the review form is NOT shown
         expect(h.handleAutoSave).toHaveBeenCalledTimes(1);
-        expect(h.handleAutoSave.mock.calls[0][2]).toMatchObject({ autoSavedFromVoice: true });
+        expect(h.handleAutoSave.mock.calls[0][2]).toMatchObject({ autoSavedFromVoice: true, voiceClipId: 'a27a27a2-0000-4000-8000-000000000001' });
         expect(result.current.voice.voiceResult).toMatchObject({ logIds: ['LOG-1'], clipId: 'clip-1' });
         expect(h.emitted).toEqual([expect.objectContaining({ farmId: FARM, logId: 'LOG-1', method: 'voice' })]);
 

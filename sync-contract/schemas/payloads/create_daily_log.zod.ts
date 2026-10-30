@@ -226,6 +226,15 @@ export const CreateDailyLogPayload = z.object({
     // self-verified at creation), which is what every older client gets (P11). A
     // plain boolean: no string or number stand-ins.
     autoSavedFromVoice: z.boolean().optional(),
+    // spec: plr-d10-redesign-real-integration-2026-10-25 (I27), founder D-31 — the server
+    // (archive) id of the recording this log was saved from: the id `/voice-diary/persist`
+    // stores the clip under (`toArchiveClipId`). Sent only on the log that carries his words.
+    // A pointer, never permission: the server decides at replay time who may hear it (the
+    // speaker's "keep original voice" switch, and review rights on THIS record).
+    //
+    // OPTIONAL, absent = no recording linked, which is what every older client sends (P11).
+    // RELEASE GATE: an older server refuses the key (allow-list), so the server ships first.
+    voiceClipId: ZGuid.optional(),
 });
 
 export type CreateDailyLogPayloadType = z.infer<typeof CreateDailyLogPayload>;

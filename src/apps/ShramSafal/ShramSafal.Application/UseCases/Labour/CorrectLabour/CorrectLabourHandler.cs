@@ -378,6 +378,25 @@ public sealed class CorrectLabourHandler(
             dailyLog.MarkLabourCorrected(now);
         }
 
+        // ── 8c. spec: plr-d10 (I27; founder D-46 §4) — A MATERIAL CORRECTION NEEDS A
+        // FRESH CONFIRMATION. A headcount or a duration that moved changes what the record
+        // says, so its version moves on and a confirmed day re-opens (Confirmed/Verified ->
+        // Draft, the same Edit marker AddLogTaskHandler writes). The earlier confirmation
+        // stays in the ledger with the version it covered; nothing is overwritten. Naming WHO
+        // was in the work (attribution) never changes the count (P7), so it is not material
+        // and re-opens nothing.
+        if (corrections.Any(c => c.ChangedField != LabourCorrection.FieldAttribution))
+        {
+            dailyLog.NoteContentChanged();
+            var lastEventAtUtc = dailyLog.VerificationEvents.Count == 0
+                ? DateTime.MinValue
+                : dailyLog.VerificationEvents.Max(e => e.OccurredAtUtc);
+            dailyLog.Edit(
+                idGenerator.New(),
+                command.CallerUserId,
+                now > lastEventAtUtc ? now : lastEventAtUtc.AddMilliseconds(1));
+        }
+
         var result = new CorrectLabourResult(
             assignment.Id,
             assignment.WorkerCount,

@@ -22,16 +22,21 @@ internal static class LabourPermissionProjection
     /// <param name="phoneLast4">spec: plr-d7-m1-multiuser-2026-10-26 (step 2, M-7) — the last four
     /// digits of the member's phone, passed only by the owner-tier roster and the owner's decision
     /// answer (never the grant-write response).</param>
+    /// <param name="callerMayGrant">spec: plr-d10 (I27) — the caller is the primary owner, the only
+    /// person who may move the switch (founder D-44 §2).</param>
     public static LabourPermissionDto From(
         FarmMembership membership, DateTime nowUtc, string? displayName = null, bool isRegistrant = false,
-        string? phoneLast4 = null)
+        string? phoneLast4 = null, bool callerMayGrant = false)
     {
         var carriedByRole = LabourManagementPermission.IsCarriedByRole(membership.Role);
 
-        // For a role-carried capability the stored flag is not consulted at all;
-        // for everyone else the flag counts ONLY while unexpired — the SAME rule
-        // the gate's SQL predicate applies, via the same domain method.
-        var hasEffectiveGrant = !carriedByRole && membership.HasEffectiveLabourGrant(nowUtc);
+        // The stored flag counts ONLY while unexpired — the SAME rule the gate's SQL
+        // predicate applies, via the same domain method. spec: plr-d10 (I27): it is read for
+        // everyone but the primary owner. For a co-owner it no longer adds labour edits (the
+        // role already carries those) but it is what lets him confirm records (D-44 §2).
+        var hasEffectiveGrant = !LabourManagementPermission.IsRedundantGrantTarget(membership.Role)
+            && membership.HasEffectiveLabourGrant(nowUtc);
+        var isCoOwner = membership.Role == AgriSync.SharedKernel.Contracts.Roles.AppRole.SecondaryOwner;
 
         var source = membership.Role switch
         {
@@ -48,6 +53,11 @@ internal static class LabourPermissionProjection
                 membership.Role, hasEffectiveGrant),
             HasExplicitGrant: hasEffectiveGrant,
             Source: source,
+            // UNCHANGED for a co-owner on purpose (P11): every installed phone renders
+            // `isGrantEditable: false` as "labour responsibility, permanently on" and draws its
+            // switch from CanManageLabourRecords — which stays true for a co-owner. Sending true
+            // would hand an older phone a switch stuck ON whose tap silently moves confirming.
+            // The co-owner's confirming switch rides the two additive members below instead.
             IsGrantEditable: !carriedByRole,
             LabourGrantExpiresAtUtc: hasEffectiveGrant ? membership.LabourGrantExpiresAtUtc : null,
             DisplayName: displayName,
@@ -63,6 +73,8 @@ internal static class LabourPermissionProjection
             JoinedVia: membership.JoinedVia.ToString(),
             RequestedAtUtc: membership.GrantedAtUtc,
             PhoneLast4: string.IsNullOrWhiteSpace(phoneLast4) ? null : phoneLast4,
-            ApprovedByOwner: membership.ApprovedByUserId is not null);
+            ApprovedByOwner: membership.ApprovedByUserId is not null,
+            CanConfirmRecords: Domain.Logs.OwnerConfirmationAuthority.MayConfirm(membership.Role, hasEffectiveGrant),
+            IsConfirmGrantEditable: callerMayGrant && isCoOwner);
     }
 }

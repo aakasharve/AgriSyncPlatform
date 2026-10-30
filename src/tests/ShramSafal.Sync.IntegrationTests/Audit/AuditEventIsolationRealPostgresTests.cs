@@ -1263,6 +1263,13 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    user_consent_state.full_history_journal_wording_version. Never touches
         //    ssf.audit_events, its policies or its grants. Safe mid-proof.
         "20261029224212_AddImprovementPermissionAndVoiceWordingVersion",
+
+        // ── Reviewed 2026-10-30 (spec: plr-d10 I27, founder D-44 / D-46 / D-31); Down() read in full:
+        //    drops ck_verification_events_review_basis and the columns
+        //    verification_events.confirmed_log_version / review_basis and
+        //    daily_logs.content_version / voice_clip_id. Never touches ssf.audit_events, its
+        //    policies or its grants. Safe mid-proof.
+        "20261030022054_AddOwnerConfirmationEvidence",
     ];
 
     /// <summary>

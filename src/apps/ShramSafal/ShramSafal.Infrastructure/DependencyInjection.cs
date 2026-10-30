@@ -442,6 +442,10 @@ public static class DependencyInjection
             ShramSafal.Infrastructure.Privacy.ImprovementPermissionStore>();
         services.AddScoped<ShramSafal.Application.Privacy.IImprovementPermissionGate,
             ShramSafal.Application.Privacy.ImprovementPermissionGate>();
+        // spec: plr-d10 (I27) — the same erasure check, asked about the SPEAKER from inside a
+        // reviewer's replay request: run in its own scope (see IsolatedAccountErasureCheck).
+        services.AddScoped<ShramSafal.Application.Privacy.Ports.IAccountErasureCheck,
+            ShramSafal.Infrastructure.Privacy.IsolatedAccountErasureCheck>();
         services.AddScoped<IAiJobRepository, AiJobRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 

@@ -151,8 +151,10 @@ internal static class DtoMappingExtensions
     private static List<VerificationEventDto> WireVerificationEvents(DailyLog log)
     {
         var captureMarkerId = log.AutoSavedFromVoiceMarker?.Id;
+        // plr-d10 (I27): a speaker's own mark, or a review mark by someone without confirm
+        // authority, stays on the server for the same reason (DailyLog.IsMarkWithoutConfirmAuthority).
         return log.VerificationEvents
-            .Where(v => v.Id != captureMarkerId)
+            .Where(v => v.Id != captureMarkerId && !DailyLog.IsMarkWithoutConfirmAuthority(v))
             .OrderBy(v => v.OccurredAtUtc)
             .Select(ToDto)
             .ToList();

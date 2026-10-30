@@ -127,6 +127,14 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    same effective-privilege guard as this migration. Touches none of the other ledgers'
         //    grants. Safe to revert and re-apply mid-proof.
         "20261029224212_AddImprovementPermissionAndVoiceWordingVersion",
+
+        // ── Reviewed 2026-10-30 (spec: plr-d10 I27, founder D-44 / D-46 / D-31); Down() read in full.
+        //    Down() drops the check constraint ck_verification_events_review_basis and four
+        //    columns it added: verification_events.confirmed_log_version / review_basis and
+        //    daily_logs.content_version / voice_clip_id. Up() only ADDs those columns (and the
+        //    check); no table, no policy, no grant, no ledger privilege is touched. Safe to revert
+        //    and re-apply mid-proof.
+        "20261030022054_AddOwnerConfirmationEvidence",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

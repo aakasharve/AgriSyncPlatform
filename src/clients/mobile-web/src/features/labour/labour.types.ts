@@ -198,6 +198,10 @@ export interface ReviewItem {
      */
     plot?: string | null;
     plotScope?: DailyLogScopeWire;
+    /** PLR-D10 I27 (D-46) — the record version this card shows; sent back with मंजूर. Absent on an older server. */
+    version?: number;
+    /** PLR-D10 I27 (D-31) — a recording is linked to this record (whether it may be PLAYED is the server's call). */
+    hasRecording?: boolean;
 }
 
 /** `ShramSafal.Domain.Logs.DailyLogScope.ToString()` — the wire spelling, PascalCase. */
@@ -287,6 +291,8 @@ export interface LabourData {
      * `undefined` = unknown (older server / fixtures): keep today's behaviour.
      */
     canManageLabour?: boolean;
+    /** PLR-D10 I27 (D-44) — may give the owner's confirmation (मंजूर) here. Absent = unknown (older server). */
+    canConfirm?: boolean;
     /** D6 — the two money truths and the आज कामावर counts; see LabourHome. */
     home: LabourHome;
     review: ReviewItem[];

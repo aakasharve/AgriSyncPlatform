@@ -3689,6 +3689,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ContentVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("content_version");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
@@ -3743,6 +3749,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("SourceAiJobId")
                         .HasColumnType("uuid")
                         .HasColumnName("source_ai_job_id");
+
+                    b.Property<Guid?>("VoiceClipId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("voice_clip_id");
 
                     b.PrimitiveCollection<List<Guid>>("_plotIds")
                         .IsRequired()
@@ -3823,6 +3833,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("ConfirmedLogVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("confirmed_log_version");
+
                     b.Property<Guid>("DailyLogId")
                         .HasColumnType("uuid")
                         .HasColumnName("daily_log_id");
@@ -3835,6 +3849,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(400)
                         .HasColumnType("character varying(400)")
                         .HasColumnName("reason");
+
+                    b.Property<string>("ReviewBasis")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("review_basis");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -3850,7 +3869,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DailyLogId", "OccurredAtUtc");
 
-                    b.ToTable("verification_events", "ssf");
+                    b.ToTable("verification_events", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_verification_events_review_basis", "review_basis IS NULL OR review_basis IN ('heard', 'read')");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Organizations.Organization", b =>

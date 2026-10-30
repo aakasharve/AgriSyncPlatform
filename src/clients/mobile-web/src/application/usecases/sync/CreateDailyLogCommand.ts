@@ -188,6 +188,10 @@ export interface CreateDailyLogPayload {
      // than this contract refuses the key (strict allow-list, permanent
      // SyncInvalidPayload), so the server must be deployed BEFORE any build sends it.
      autoSavedFromVoice?: boolean;
+     // PLR-D10 I27 (founder D-31) — the server (archive) id of the recording this log was saved
+     // from, on the log that carries his words only. A pointer, never permission: the server decides
+     // who may hear it. Same RELEASE GATE as autoSavedFromVoice (server first).
+     voiceClipId?: string;
 }
 
 export class CreateDailyLogCommand {

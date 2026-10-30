@@ -47,6 +47,13 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
     public void SetMembership(Guid farmId, Guid userId, AppRole role)
         => _memberships[(farmId, userId)] = role;
 
+    // plr-d10 I27 — the owner's stored grant (जबाबदारी), so a test can prove the GRANT path
+    // rather than pass on the interface's fail-closed default.
+    private readonly HashSet<(Guid farmId, Guid userId)> _labourGrants = new();
+    public void SetLabourGrant(Guid farmId, Guid userId) => _labourGrants.Add((farmId, userId));
+    public Task<bool> GetLabourManagementGrantAsync(Guid farmId, Guid userId, DateTime nowUtc, CancellationToken ct = default)
+        => Task.FromResult(_labourGrants.Contains((farmId, userId)));
+
     public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default)
         => Task.FromResult(_farms.TryGetValue(farmId, out var f) ? f : null);
 

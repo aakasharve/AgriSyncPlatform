@@ -29,7 +29,13 @@ public sealed record LabourDataDto(
     // decision the handler already takes for the register narrowing
     // (hasLabourManagementGrant); it is not a new authority rule. Nullable and
     // additive: absent/null = unknown, and a client then keeps today's behaviour.
-    bool? CanManageLabour = null);
+    bool? CanManageLabour = null,
+    // spec: plr-d10 (I27; founder D-44) — may this caller give the OWNER'S confirmation
+    // (मंजूर) on this farm: the primary owner, or a member holding the owner's grant
+    // (OwnerConfirmationAuthority). Distinct from CanManageLabour on purpose: a co-owner may
+    // still correct labour, but confirming is the owner's to delegate. Additive and nullable:
+    // absent/null = unknown (an older server), and a client then keeps today's behaviour.
+    bool? CanConfirm = null);
 
 public sealed record LabourPersonDto(
     string Id,
@@ -309,7 +315,23 @@ public sealed record LabourReviewItemDto(
     /// farmer's own संपूर्ण शेत assertion, which the card states rather than
     /// blanking.
     /// </summary>
-    string PlotScope);
+    string PlotScope,
+
+    /// <summary>
+    /// spec: plr-d10 (I27; founder D-46 §3) — the record's version
+    /// (<c>DailyLog.ContentVersion</c>) as this card shows it. A confirm sends it back, so a
+    /// record changed since the card was fetched is seen before it is confirmed. Additive:
+    /// null on an older server.
+    /// </summary>
+    int? Version = null,
+
+    /// <summary>
+    /// spec: plr-d10 (I27; founder D-31) — the log carries a link to the recording it was
+    /// saved from. Says nothing about whether it may be PLAYED: that is decided when the
+    /// reviewer asks (<c>GET /logs/{id}/original-voice</c>), against the speaker's "keep
+    /// original voice" switch. Additive: null on an older server.
+    /// </summary>
+    bool? HasRecording = null);
 
 /// <summary>
 /// The labour facts the approval card is judged on. Task 20 (spec:

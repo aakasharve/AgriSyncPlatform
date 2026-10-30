@@ -7,7 +7,8 @@
  * The voice auto-save (founder decision 2026-09-02, PLR-D1 round 1): after a successful parse of a
  * RECORDING the log is saved at once — no review form, no Save tap — through the ONE real save path
  * (`handleAutoSave` → createFromVoice → confirmAndSave → sync queue), stamped `autoSavedFromVoice` so the
- * server keeps it unconfirmed until his own "पक्कं आहे".
+ * server keeps it unconfirmed until an authorised confirmation (spec I27), and naming the recording's server id
+ * (`voiceClipId`) so a reviewer allowed to check THIS record can hear it.
  *
  * What it guarantees:
  *   - ONCE per recording. The same recording handed over twice (a re-render, a re-entry) never writes a
@@ -24,13 +25,13 @@
  *     action time and repeat use from it, and voice is now the main way a day is closed.
  */
 import { useCallback, useRef, useState } from 'react';
-import type { AgriLogResponse, DailyLog } from '../../types';
+import type { AgriLogResponse } from '../../types';
 import type { LogProvenance } from '../../domain/ai/LogProvenance';
 import type { VoiceDraftSink, VoiceRecordingRef } from '../../features/voice/useVoiceRecorder.types';
-import { linkClipToLog } from '../../infrastructure/voice/clipLogLink';
+import { archiveIdForRecording, linkClipToLog } from '../../infrastructure/voice/clipLogLink';
 import { logger } from '../../infrastructure/observability/Logger';
 import { emitClosureSubmitted } from '../../core/telemetry/eventEmitters';
-import { isAutoSavableVoiceDraft } from '../helpers/autoSavedVoiceLog';
+import { isAutoSavableVoiceDraft, primaryLogOf } from '../helpers/autoSavedVoiceLog';
 import type { UseLogCommandsResult } from './useLogCommands.types';
 import type { LogIntent } from './useAppNavigation';
 
@@ -52,6 +53,8 @@ export interface UseVoiceAutoSaveProps {
     setStatus: (status: 'success') => void;
     /** Injected for tests; the real link writes `dailyLogId` on the clip row. */
     linkClip?: (recording: VoiceRecordingRef, dailyLogId: string) => Promise<string | null>;
+    /** PLR-D10 I27 — injected for tests; the real one names the recording's server id (undefined = none here). */
+    archiveIdOf?: (recording: VoiceRecordingRef) => Promise<string | undefined>;
     /** The farm the save is for (the closure event names it; no farm, no event — as the review form did). */
     farmId?: string | null;
     /** Injected for tests; the real one validates and queues the analytics event. */
@@ -68,11 +71,12 @@ const movesThePlot = (d: AgriLogResponse): boolean => !!(d.suggestedContext?.cro
 
 export const recordingKey = (r: VoiceRecordingRef): string => `${r.clipId ?? '-'}|${r.recordedAtUtc}`;
 
-/** The log of a recording that carries his words (one record holds the day's facts); else the first. */
-export const primaryLogOf = (logs: readonly DailyLog[]): DailyLog | undefined => logs.find(l => !!l.fullTranscript) ?? logs[0];
+// The log of a recording that carries his words — moved to the helper (PLR-D10 I27 stamps the recording on it too).
+export { primaryLogOf };
 
 export function useVoiceAutoSave({
-    handleAutoSave, logIntent, setStatus, linkClip = linkClipToLog, farmId = null, emitClosure = emitClosureSubmitted,
+    handleAutoSave, logIntent, setStatus, linkClip = linkClipToLog, archiveIdOf = archiveIdForRecording, farmId = null,
+    emitClosure = emitClosureSubmitted,
 }: UseVoiceAutoSaveProps) {
     const [voiceResult, setVoiceResult] = useState<VoiceResultState | null>(null);
     // 'saving' while a save is in flight, 'saved' once it wrote. Absent = never handled (or wrote nothing).
@@ -90,8 +94,11 @@ export function useVoiceAutoSave({
         }
         handled.current.set(key, 'saving');
         try {
+            // PLR-D10 I27 — name the recording on the create, so a reviewer allowed to check THIS record can hear it.
+            const voiceClipId = await archiveIdOf(recording).catch(() => undefined);
             const saved = await handleAutoSave(draft, provenance, {
                 autoSavedFromVoice: true,
+                ...(voiceClipId && { voiceClipId }),
                 onWritten: async (logs) => {
                     const primary = primaryLogOf(logs);
                     const clipId = primary ? await linkClip(recording, primary.id).catch(() => null) : null;
@@ -122,7 +129,7 @@ export function useVoiceAutoSave({
         }
         handled.current.delete(key);
         return false;
-    }, [handleAutoSave, logIntent, setStatus, linkClip, farmId, emitClosure]);
+    }, [handleAutoSave, logIntent, setStatus, linkClip, archiveIdOf, farmId, emitClosure]);
 
     const clearVoiceResult = useCallback(() => setVoiceResult(null), []);
 

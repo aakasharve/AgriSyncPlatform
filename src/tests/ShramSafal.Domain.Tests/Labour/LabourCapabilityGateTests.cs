@@ -363,27 +363,60 @@ public sealed class LabourCapabilityGateTests
     }
 
     /// <summary>
-    /// The P5 guard on owner-tier, PLUS the Mukadam round-trip — the founder's
-    /// sentence made executable. Storing <c>false</c> for a co-owner would
-    /// leave the owner looking at a switch that did not work, because the role
-    /// carries the capability regardless; a Mukadam's switch is real now (D5).
+    /// The P5 guard, PLUS the Mukadam round-trip — the founder's sentence made executable. A
+    /// Mukadam's switch is real (D5).
+    ///
+    /// <para><b>RE-PINNED 2026-10-30 (spec plr-d10 I27, founder D-44 §2).</b> A co-owner was a
+    /// refused target here (409 CarriedByRole). His labour edits still come with the role, but
+    /// confirming records no longer does, so the primary owner's switch for him is now a real
+    /// decision: stored, reported for confirming, and his labour edits unchanged. The 409 survives
+    /// for a primary-owner target, the one role on whom the flag changes nothing.</para>
     /// </summary>
     [Fact]
-    public async Task Toggling_owner_tier_is_refused_and_a_Mukadam_toggle_now_works()
+    public async Task The_primary_owners_switch_now_decides_a_co_owners_confirming_and_a_Mukadam_toggle_works()
     {
         var repo = new FakeRepo();
         repo.SetRole(FarmA, OwnerA, AppRole.PrimaryOwner);
         repo.AddMembership(FarmA, OwnerA, AppRole.PrimaryOwner);
         var coOwner = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        repo.SetRole(FarmA, coOwner, AppRole.SecondaryOwner);
         var coOwnerMembership = repo.AddMembership(FarmA, coOwner, AppRole.SecondaryOwner);
+        var secondPrimary = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        repo.AddMembership(FarmA, secondPrimary, AppRole.PrimaryOwner);
         var mukadam = repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam);
         var handler = new SetLabourPermissionHandler(repo, new FixedClock(Now));
 
-        // Owner-tier: the P5 refusal survives — that role genuinely carries it.
-        var refused = await handler.HandleAsync(Set(FarmA, coOwner, false, OwnerA));
+        // Co-owner: the switch is stored and it is about CONFIRMING; his labour edits stay by role.
+        var coGranted = await handler.HandleAsync(Set(FarmA, coOwner, true, OwnerA));
+        coGranted.IsSuccess.Should().BeTrue();
+        coOwnerMembership.CanManageLabourRecords.Should().BeTrue("the decision is stored");
+        coGranted.Value!.CanConfirmRecords.Should().Be(true);
+        coGranted.Value!.IsConfirmGrantEditable.Should().Be(true, "the primary owner moves it");
+        coGranted.Value!.IsGrantEditable.Should().BeFalse(
+            "P11: installed phones read false as 'labour responsibility, permanently on' — still true");
+        coGranted.Value!.CanManageLabourRecords.Should().BeTrue();
+        coGranted.Value!.Source.Should().Be("OwnerTier");
+
+        var takenBack = await handler.HandleAsync(Set(FarmA, coOwner, false, OwnerA));
+        takenBack.IsSuccess.Should().BeTrue();
+        takenBack.Value!.CanConfirmRecords.Should().Be(false);
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, coOwner, Now)).Should().BeTrue(
+            "taking back confirming never takes his labour edits — that is the D-26 permission system");
+
+        // A co-owner may not move anybody's switch, his own or another's (D-44: the PRIMARY owner).
+        foreach (var target in new[] { MukadamA, coOwner })
+        {
+            var byCoOwner = await handler.HandleAsync(Set(FarmA, target, true, coOwner));
+            byCoOwner.IsFailure.Should().BeTrue();
+            byCoOwner.Error.Code.Should().Be("ShramSafal.Forbidden");
+        }
+
+        mukadam.CanManageLabourRecords.Should().BeFalse("nothing a co-owner asked for was stored");
+
+        // The P5 refusal survives where the flag changes nothing: a primary owner.
+        var refused = await handler.HandleAsync(Set(FarmA, secondPrimary, true, OwnerA));
         refused.IsFailure.Should().BeTrue();
         refused.Error.Code.Should().Be("ShramSafal.LabourManagementCarriedByRole");
-        coOwnerMembership.CanManageLabourRecords.Should().BeFalse("nothing was stored");
 
         // Mukadam: the refusal is GONE — this is the owner's switch now (D5).
         var granted = await handler.HandleAsync(Set(FarmA, MukadamA, true, OwnerA));
