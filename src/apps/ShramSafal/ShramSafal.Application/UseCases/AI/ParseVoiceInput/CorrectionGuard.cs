@@ -430,7 +430,58 @@ public static partial class CorrectionGuard
                 row.Remove(key);
             }
         }
+
+        if (bucket == "labour")
+        {
+            KeepCountTrue(row, saved);
+        }
     }
+
+    private static readonly string[] GenderCounts = ["maleCount", "femaleCount"];
+
+    /// <summary>
+    /// PLR lane AI-2 fix pass 4 — a labour row never disagrees with itself (P4). <c>count</c> follows the gender counts:
+    /// when he changes one ("5 बायका नाही, 6 बायका होत्या"), the entry's count is NOT an unchanged field. If the entry's
+    /// count was the sum of its gender counts it is worked out again (5+2 → 6+2 gives 8); if it was said on its own,
+    /// the old count is dropped rather than kept beside numbers it contradicts. A new count he said that fits stays.
+    /// </summary>
+    private static void KeepCountTrue(JsonObject row, JsonObject saved)
+    {
+        if (!GenderCounts.Any(k => CountOf(row[k]) != CountOf(saved[k])))
+        {
+            return;
+        }
+
+        var rowCount = CountOf(row["count"]);
+        var savedCount = CountOf(saved["count"]);
+        var newSum = SumOfGenders(row);
+        var stale = rowCount is not null && rowCount == savedCount;
+        var contradicts = rowCount is not null && newSum is not null && rowCount < newSum;
+        if (rowCount is null || (!stale && !contradicts))
+        {
+            return;
+        }
+
+        if (savedCount is not null && savedCount == SumOfGenders(saved) && newSum is { } sum)
+        {
+            row["count"] = decimal.Truncate(sum) == sum ? JsonValue.Create((int)sum) : JsonValue.Create(sum);
+        }
+        else
+        {
+            row.Remove("count");
+        }
+    }
+
+    private static decimal? SumOfGenders(JsonObject row)
+    {
+        var counts = GenderCounts.Select(k => CountOf(row[k])).Where(c => c is not null).ToList();
+        return counts.Count == 0 ? null : counts.Sum(c => c!.Value);
+    }
+
+    private static decimal? CountOf(JsonNode? node) =>
+        node is JsonValue v && v.TryGetValue<decimal>(out var n) ? n
+        : node is JsonValue s && s.TryGetValue<string>(out var text) && decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) ? parsed
+        : null;
 
     /// <summary>(d) for a row that corrects no entry row: never a placeholder, never a row note he did not say.</summary>
     private static void CleanUnmatchedRows(JsonObject answer, string bucket, JsonObject saved, string words)
