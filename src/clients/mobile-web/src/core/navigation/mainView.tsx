@@ -57,12 +57,10 @@ import VoiceSavedReassurance from '../../features/logs/components/shramsathi/Voi
 import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 
 import { AppRouterContext } from './routeContext';
-import { buildFeedEntries } from './activityFeedEntries';
 import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
 import { ReflectPage, ComparePage } from './lazyComponents';
 import { compareTabProps } from './compareTab';
 import { openLogFlow } from './openLogFlow';
-import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 
 /*
  * The four components this module renders live in `./mainViewComponents`.
@@ -124,22 +122,18 @@ export const LabourResultHost: React.FC<{
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
-    // The Activity Feed (today's logs), reached from its own button on this page. Tapping a card opens that
-    // log to edit, exactly as it did on the log page.
+    // Lane RF — the day's work (its button, sheet and glance) is built by the page itself for the day it is on; it
+    // needs to know who is holding this phone ("तुम्ही"), his role (money and ▶, as the server told this phone) and the
+    // result screen's own "बदला" path for a recording.
     const openLogToEdit = (log: DailyLog) => {
         ctx.setMainView('log');
         ctx.handleEditLog(log);
     };
-    const activityFeed = {
-        entries: buildFeedEntries(ctx.todayLogs, {
-            crops: ctx.crops, operatorNameById: ctx.operatorNameById, getLogContextSnapshot: ctx.getLogContextSnapshot, onOpenLog: openLogToEdit,
-            youIds: new Set([ctx.farmerProfile?.activeOperatorId, getSessionUserId()].filter((x): x is string => !!x)),
-        }),
-        dateLabel: new Date().toLocaleDateString('mr-IN', { weekday: 'long', day: 'numeric', month: 'short', timeZone: DISPLAY_TIME_ZONE }),
-    };
     return (
         <ReflectPage
-            activityFeed={activityFeed}
+            youIds={[ctx.farmerProfile?.activeOperatorId, getSessionUserId()].filter((x): x is string => !!x)}
+            farmRole={ctx.farmRole ?? null}
+            onOpenLog={openLogToEdit}
             history={ctx.history}
             crops={ctx.crops}
             ledgerDefaults={ctx.ledgerDefaults}

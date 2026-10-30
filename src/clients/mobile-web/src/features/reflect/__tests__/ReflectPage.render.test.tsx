@@ -3,14 +3,16 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 (I6)
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I6; lane RF)
  *
  * The whole "पूर्ण शेतीचा आढावा" page on real-shaped records: the six sections in their first-use order, folded
  * and ordered as the founder's D-4 asks (remembered on this phone — `useUiPref` is an in-memory store here, so a
  * remount is a reopen), every section fed from the page's real props, and the page's actions wired to the real callbacks
  * (task tick → `onUpdateTask` with the whole task; in-hand card → the income page; the ledger link; a plot card
- * → that day's record or the "add it" view; the money pill → the money lens). Only infrastructure edges are
- * mocked (farm context, harvest storage, Dexie attachment counts, telemetry, the drawers).
+ * → that plot's day sheet; the money pill → the money lens). Lane RF: the day's work follows the chosen day; the
+ * money comes from the server's ledger (`useMoneyLedger`, a fixture here) and is "—" for a role that may not see it;
+ * "बदला" takes the result screen's path; a note opens its recording. Only infrastructure edges are mocked (farm
+ * context, harvest storage, the ledger read, the clip player, Dexie attachment counts, telemetry, the money lens).
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -31,34 +33,40 @@ vi.mock('../../../shared/hooks/useUiPref', async () => {
     };
 });
 vi.mock('../../../services/harvestService', () => ({ getHarvestSessions: () => [], getOtherIncomeEntries: () => [] }));
-vi.mock('../../attachments', () => ({ useAttachmentRetry: () => ({ retryUpload: vi.fn() }) }));
+vi.mock('../../attachments', () => ({ AttachmentList: () => null, useAttachmentRetry: () => ({ retryUpload: vi.fn() }) }));
 vi.mock('../overview/useLogAttachmentCount', () => ({ useLogAttachmentCount: () => 0 }));
 vi.mock('../../../core/telemetry/eventEmitters', () => ({ emitClosureSummaryViewed: vi.fn() }));
 vi.mock('../../logs/components/FarmWideTodayPanel', () => ({ default: () => null }));
 vi.mock('../../finance/components/MoneyLensDrawer', () => ({
     MoneyLensDrawer: ({ isOpen, filters }: { isOpen: boolean; filters: object }) => (isOpen ? <div data-testid="money-lens">{JSON.stringify(filters)}</div> : null),
 }));
-vi.mock('../sections/LogDetailDrawer', () => ({
-    default: ({ selectedLog, emptySelection }: { selectedLog: { id: string } | null; emptySelection: { plotName?: string } | null }) => (
-        <div data-testid="log-drawer">{selectedLog ? `log:${selectedLog.id}` : `empty:${emptySelection?.plotName}`}</div>
-    ),
+// lane RF — the server's ledger as this phone holds it (₹ 1,500 spent on सोनाका today), and no player behind ▶.
+const SPENT_TODAY = { id: 'e1', plotId: 'g1', dateKey: '2026-10-25', direction: 'Expense', category: 'Labour', amount: 1500 };
+const ledger = vi.hoisted(() => ({ entries: [] as unknown[] }));
+vi.mock('../overview/useMoneyLedger', () => ({ useMoneyLedger: () => ({ entries: ledger.entries, gaps: [] }) }));
+vi.mock('../day/useDayListen', () => ({
+    useDayListen: () => ({ kindOf: () => 'none', clipOf: () => undefined, playing: () => false, progress: 0, lengthOf: () => null, toggle: () => undefined, stop: () => undefined, farmOf: () => null }),
 }));
+vi.mock('../../../infrastructure/voice/logOriginalVoice', () => ({ fetchLogOriginalVoice: vi.fn() }));
+vi.mock('../../../infrastructure/sync/PayloadValidator', () => ({ validatePayload: () => ({ ok: true }) }));
 
 import ReflectPage from '../ReflectPage';
 import { CROPS, TODAY_KEY, log, money, task } from './reflectFixtures';
 
 const history = [
     log({
-        id: 'g1-today', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'छाटणी' }], financialSummary: money(1500),
+        id: 'g1-today', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'छाटणी' }], financialSummary: money(9999),
+        meta: { createdAtISO: '2026-10-25T03:40:00.000Z', createdByOperatorId: 'me' },
         observations: [{ id: 'o1', plotId: 'g1', dateKey: TODAY_KEY, timestamp: '2026-10-25T03:40:00.000Z', textRaw: 'कीड दिसली', noteType: 'issue', severity: 'normal', source: 'voice' }],
     }),
-    log({ id: 'c1-old', date: '2026-10-21', cropId: 'cane', plotIds: ['c1'], irrigation: [{ id: 'i', method: 'drip', source: 'Well' }] }),
+    log({ id: 'c1-old', date: '2026-10-21', cropId: 'cane', plotIds: ['c1'], irrigation: [{ id: 'i', method: 'drip', source: 'Well' }], meta: { createdAtISO: '2026-10-21T05:00:00.000Z', createdByOperatorId: 'op-sunil' } }),
 ];
 
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 25, 10, 0, 0));
     prefs.clear();
+    ledger.entries = [SPENT_TODAY];
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -66,7 +74,9 @@ const renderPage = (over: Partial<React.ComponentProps<typeof ReflectPage>> = {}
     const props = {
         history, crops: CROPS,
         tasks: [task('t1', 'फवारणी', { dueDate: TODAY_KEY })],
-        onUpdateTask: vi.fn(), onAddTask: vi.fn(), navigate: vi.fn(),
+        onUpdateTask: vi.fn(), onAddTask: vi.fn(), navigate: vi.fn(), onEditLog: vi.fn(), onOpenLog: vi.fn(),
+        youIds: ['me'], farmRole: 'PrimaryOwner',
+        operators: [{ id: 'op-sunil', name: 'सुनील' }] as React.ComponentProps<typeof ReflectPage>['operators'],
         ...over,
     };
     render(<ReflectPage {...props} />);
@@ -82,6 +92,11 @@ const openAll = () => {
 };
 
 const sectionOrder = () => Array.from(document.querySelectorAll('section[data-testid^="reflect-section-"]')).map(s => s.getAttribute('data-testid'));
+const pickOct21 = () => {
+    // 25 Oct 2026 is a Sunday: the calendar's week (Sunday first) is 25–31; the 21st is one week back
+    fireEvent.click(screen.getByTestId('cal-prev'));
+    fireEvent.click(screen.getByTestId('cal-day-2026-10-21'));
+};
 
 describe('ReflectPage (redesigned, real data)', () => {
     it('six sections in their first-use order; no move buttons until "क्रम बदला" is on', () => {
@@ -154,7 +169,7 @@ describe('ReflectPage (redesigned, real data)', () => {
         expect([expanded('calendar'), expanded('cost')]).toEqual(['false', 'false']);
     });
 
-    it('feeds every section from the real props', () => {
+    it('feeds every section from the real props — the money from the server ledger, never the log\'s own total', () => {
         renderPage();
         openAll();
         expect(screen.getAllByTestId(/^plot-card-/)).toHaveLength(3);
@@ -164,7 +179,10 @@ describe('ReflectPage (redesigned, real data)', () => {
         expect(within(screen.getByTestId('todo-group-today')).getByText('फवारणी')).toBeInTheDocument();
         expect(screen.getByTestId('cal-chip-g1-today')).toBeInTheDocument();
         expect(screen.getByTestId('week-total')).toHaveTextContent('₹ 1,500');
-        // no harvest or other income recorded in the stores: "—", not ₹ 0
+        expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('₹ 1,500');
+        expect(document.body.textContent).not.toContain('9,999'); // the log's own guessed total is gone
+        expect(screen.getByTestId('plot-state-grape:g1')).toHaveTextContent('पक्कं नाही');
+        // no income in the ledger: "—", not ₹ 0
         expect(screen.getByTestId('in-hand-amount')).toHaveTextContent('—');
     });
 
@@ -181,9 +199,7 @@ describe('ReflectPage (redesigned, real data)', () => {
     it('a calendar day shows that day in the plot cards', () => {
         renderPage();
         openAll();
-        // 25 Oct 2026 is a Sunday: the calendar's week (Sunday first) is 25–31; the 21st is one week back
-        fireEvent.click(screen.getByTestId('cal-prev'));
-        fireEvent.click(screen.getByTestId('cal-day-2026-10-21'));
+        pickOct21();
         expect(screen.getByTestId('day-label')).toHaveTextContent('बुधवार, 21 ऑक्टो');
         expect(screen.getByTestId('plot-card-cane:c1')).toHaveAttribute('data-status', 'worked');
         expect(screen.getByTestId('plot-empty-grape:g1')).toHaveTextContent('या दिवशी नोंद नाही');
@@ -206,18 +222,8 @@ describe('ReflectPage (redesigned, real data)', () => {
         expect(props.navigate).toHaveBeenCalledWith('finance-ledger');
     });
 
-    it('a plot card opens its record, or the "nothing recorded" view; the money pill opens the money lens', () => {
-        renderPage();
-        fireEvent.click(screen.getByTestId('plot-card-grape:g1'));
-        expect(screen.getByTestId('log-drawer')).toHaveTextContent('log:g1-today');
-        fireEvent.click(screen.getByTestId('plot-card-grape:g2'));
-        expect(screen.getByTestId('log-drawer')).toHaveTextContent('empty:थॉम्पसन');
-        fireEvent.click(screen.getByTestId('plot-money-grape:g1'));
-        expect(screen.getByTestId('money-lens')).toHaveTextContent('"cropId":"grape"');
-        expect(screen.getByTestId('money-lens')).toHaveTextContent('"plotId":"g1"');
-    });
-
     it('a farm with no crop yet: honest empty lines, no invented figures', () => {
+        ledger.entries = [];
         renderPage({ history: [], crops: [], tasks: [] });
         openAll();
         expect(screen.getByTestId('farm-status-empty')).toBeInTheDocument();
@@ -225,5 +231,91 @@ describe('ReflectPage (redesigned, real data)', () => {
         expect(screen.getByTestId('todo-empty')).toBeInTheDocument();
         expect(screen.getByTestId('season-cost')).toHaveTextContent('—');
         expect(document.body.textContent).not.toContain('₹ 0');
+    });
+});
+
+describe('ReflectPage — lane RF: every piece of work, the result screen\'s way', () => {
+    it('a plot card opens that plot\'s day in Marathi (not the English drawer); बदला takes the result screen\'s path', () => {
+        const props = renderPage();
+        fireEvent.click(screen.getByTestId('plot-card-grape:g1'));
+        expect(screen.getByTestId('rf-day-title')).toHaveTextContent('सोनाका · द्राक्ष');
+        expect(screen.getByTestId('rf-day-date')).toHaveTextContent('आज');
+        expect(screen.getByTestId('rf-day-rec-g1-today-who')).toHaveTextContent('तुम्ही');
+        expect(screen.getByTestId('rf-day')).not.toHaveTextContent('Edit This Log');
+        fireEvent.click(screen.getByTestId('rf-day-rec-g1-today-edit-g1-today'));
+        expect(props.onOpenLog).toHaveBeenCalledWith(expect.objectContaining({ id: 'g1-today' }));
+        expect(props.onEditLog).not.toHaveBeenCalled();
+    });
+
+    it('a plot day nothing was told for says so and starts that day\'s work for that plot', () => {
+        const props = renderPage();
+        fireEvent.click(screen.getByTestId('plot-card-grape:g2'));
+        expect(screen.getByTestId('rf-day-empty')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('rf-day-add'));
+        expect(props.onEditLog).toHaveBeenCalledWith(expect.objectContaining({
+            date: TODAY_KEY,
+            context: { selection: [expect.objectContaining({ cropId: 'grape', selectedPlotIds: ['g2'], selectedPlotNames: ['थॉम्पसन'] })] },
+        }));
+        expect(vi.mocked(props.onEditLog).mock.calls[0][0].financialSummary).toBeUndefined(); // no zeros put in his record
+        expect(screen.queryByTestId('rf-day')).toBeNull();
+    });
+
+    it('the money pill opens the money lens for that plot\'s day, by the plot (the ledger has no phone crop label)', () => {
+        renderPage();
+        fireEvent.click(screen.getByTestId('plot-money-grape:g1'));
+        const lens = JSON.parse(screen.getByTestId('money-lens').textContent ?? '{}');
+        expect(lens).toEqual({ fromDate: TODAY_KEY, toDate: TODAY_KEY, plotId: 'g1' });
+    });
+
+    it('the day\'s work button and its sheet follow the chosen day', () => {
+        renderPage();
+        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('आजचा आढावा');
+        expect(screen.getByTestId('activity-feed-count')).toHaveTextContent('1');
+        fireEvent.click(screen.getByTestId('activity-feed-button'));
+        expect(screen.getByTestId('rf-feed-g1-today')).toBeInTheDocument();
+        expect(screen.queryByTestId('rf-feed-c1-old')).toBeNull();
+        fireEvent.click(screen.getByTestId('rf-feed-back'));
+
+        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
+        pickOct21();
+        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('दिवसाचा आढावा');
+        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('बुधवार, 21 ऑक्टो');
+        fireEvent.click(screen.getByTestId('activity-feed-button'));
+        expect(screen.getByTestId('rf-feed-title')).toHaveTextContent('दिवसाचा आढावा');
+        expect(screen.getByTestId('rf-feed-c1-old')).toBeInTheDocument();
+        expect(screen.getByTestId('rf-feed-c1-old-who')).toHaveTextContent('सुनील');
+        expect(screen.queryByTestId('rf-feed-g1-today')).toBeNull();
+        // a row opens everything understood from that recording
+        fireEvent.click(screen.getByTestId('rf-feed-c1-old-open'));
+        expect(screen.getByTestId('rf-glance')).toBeInTheDocument();
+    });
+
+    it('a note opens the recording it came from', () => {
+        renderPage();
+        fireEvent.click(screen.getByTestId('reflect-section-notes-toggle'));
+        expect(screen.getByTestId('note-o1-who')).toHaveTextContent('तुम्ही');
+        fireEvent.click(screen.getByTestId('note-o1-source'));
+        expect(screen.getByTestId('rf-glance-g1-today')).toBeInTheDocument();
+        expect(screen.queryByTestId('rf-glance-g1-today-play-listen')).toBeNull(); // ▶ only where it may be offered
+    });
+
+    it('money a worker may not see: "—", one line saying why, no money doors anywhere', () => {
+        const props = renderPage({ farmRole: 'Worker' });
+        openAll();
+        expect(screen.getByTestId('season-cost')).toHaveTextContent('—');
+        expect(screen.getByTestId('season-hidden')).toBeInTheDocument();
+        expect(screen.getByTestId('in-hand-amount')).toHaveTextContent('—');
+        expect(screen.queryByTestId('week-total')).toBeNull();
+        expect(screen.queryByTestId('plot-money-grape:g1')).toBeNull();
+        expect(screen.queryByTestId('open-finance')).toBeNull();
+        expect(document.body.textContent).not.toContain('1,500');
+        fireEvent.click(screen.getByTestId('overview-money'));
+        expect(props.navigate).not.toHaveBeenCalled();
+    });
+
+    it('a role the server has not told this phone yet stays closed (never shown money by default)', () => {
+        renderPage({ farmRole: null });
+        openAll();
+        expect(screen.getByTestId('season-hidden')).toBeInTheDocument();
     });
 });

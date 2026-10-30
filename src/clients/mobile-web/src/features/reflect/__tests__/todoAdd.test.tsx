@@ -23,7 +23,9 @@ const emitNextActionCreated = vi.hoisted(() => vi.fn());
 vi.mock('../../../core/telemetry/eventEmitters', () => ({ emitClosureSummaryViewed: vi.fn(), emitNextActionCreated }));
 vi.mock('../../logs/components/FarmWideTodayPanel', () => ({ default: () => null }));
 vi.mock('../../finance/components/MoneyLensDrawer', () => ({ MoneyLensDrawer: () => null }));
-vi.mock('../sections/LogDetailDrawer', () => ({ default: () => null }));
+// lane RF: the page reads the server's money ledger and plays recordings — neither is what these tests are about.
+vi.mock('../overview/useMoneyLedger', () => ({ useMoneyLedger: () => ({ entries: [], gaps: [] }) }));
+vi.mock('../day/useDayListen', () => ({ useDayListen: () => ({ kindOf: () => 'none', clipOf: () => undefined, playing: () => false, progress: 0, lengthOf: () => null, toggle: () => undefined, stop: () => undefined, farmOf: () => null }) }));
 
 import { TodoSection } from '../overview/TodoSection';
 import { buildTodoList, newTodoTask } from '../overview/todoModel';

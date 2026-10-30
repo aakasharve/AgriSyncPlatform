@@ -6,19 +6,30 @@
 import { DailyLog } from '../logs/logs.types';
 import { CropProfile, LedgerDefaults, LogVerificationStatus, FarmOperator } from '../../types';
 import type { PlannedTask } from '../../types';
-import type { FeedEntry } from '../logs/components/TodayActivityFeed';
 
 export interface ReflectPageProps {
     history: DailyLog[];
     crops: CropProfile[];
     ledgerDefaults?: LedgerDefaults; // Optional for now, will use fallback
     onEditLog?: (log: DailyLog) => void; // Callback to navigate to Log page with pre-filled data
+    /**
+     * Lane RF — "बदला" on a recording: the result screen's own edit path (`handleEditLog`). Falls back to
+     * `onEditLog` when absent. `onEditLog` alone still starts a plot day nothing was told for.
+     */
+    onOpenLog?: (log: DailyLog) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing prop shape (not part of the Activity Feed change); typing it is a separate cleanup
     onUpdateNote?: (logId: string, noteId: string, updates: any) => void;
     // Trust Layer
     onVerifyLog?: (logId: string, status: LogVerificationStatus, notes?: string) => void;
     currentOperator?: FarmOperator;
     operators?: FarmOperator[];
+    /** Lane RF — ids that mean "the person holding this phone" (active operator, signed-in user): his work reads "तुम्ही". */
+    youIds?: readonly string[];
+    /**
+     * Lane RF — his role on this farm as the server told this phone (`PrimaryOwner`, …; null = not told yet). It decides
+     * whether he sees the farm's money (`mayShowFarmMoney`, founder D-22) and where ▶ may be offered (`listenModel`).
+     */
+    farmRole?: string | null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing prop shape (not part of the Activity Feed change); typing it is a separate cleanup
     navigate?: (route: any) => void;
     focusLogRequest?: { logId: string; date: string; plotId?: string } | null;
@@ -34,9 +45,6 @@ export interface ReflectPageProps {
      * cannot open its page would be a dead control, P5).
      */
     onOpenAttention?: () => void;
-
-    /** Today's logs for the Activity Feed, behind its own button at the top of this page. Omit to hide the button. */
-    activityFeed?: { entries: readonly FeedEntry[]; dateLabel: string };
 
     // Tasks (already present)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing prop shape (not part of the Activity Feed change); typing it is a separate cleanup

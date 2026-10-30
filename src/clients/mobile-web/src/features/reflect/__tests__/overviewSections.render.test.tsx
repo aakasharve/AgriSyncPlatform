@@ -21,7 +21,7 @@ import { buildCalendarDay } from '../overview/calendarModel';
 import { CostSection, InHandCard } from '../overview/CostSection';
 import { DayBar } from '../overview/DayBar';
 import { FarmStatus } from '../overview/FarmStatus';
-import { buildSeasonTotals, buildSpend, spendRange } from '../overview/moneyModel';
+import { EMPTY_LEDGER, buildInHand, buildSeasonTotals, buildSpend, spendRange, type Ledger } from '../overview/moneyModel';
 import { buildDayNotes } from '../overview/notesModel';
 import { NotesList } from '../overview/NotesList';
 import { buildPlotDayCard } from '../overview/plotDayModel';
@@ -29,7 +29,7 @@ import { BucketKey, PlotDayCards } from '../overview/PlotDayCards';
 import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
 import { buildTodoList } from '../overview/todoModel';
 import { TodoCount, TodoSection } from '../overview/TodoSection';
-import { CROPS, TODAY, TODAY_KEY, log, money, task } from './reflectFixtures';
+import { CROPS, TODAY, TODAY_KEY, log, task } from './reflectFixtures';
 
 afterEach(cleanup);
 const all = toViewScope(CROPS, selectAll(CROPS));
@@ -98,9 +98,10 @@ describe('करायची कामे (TodoSection)', () => {
 
 describe('प्लॉटनिहाय काम (PlotDayCards)', () => {
     const refs = plotRefsInScope(CROPS, all);
-    const worked = log({ id: 'w', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'छाटणी' }], labour: [{ id: 'l', type: 'HIRED' }], financialSummary: money(1500) });
+    const worked = log({ id: 'w', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'छाटणी' }], labour: [{ id: 'l', type: 'HIRED' }] });
     const stopped = log({ id: 's', cropId: 'cane', plotIds: ['c1'], disturbance: { scope: 'FULL_DAY', group: 'WEATHER', reason: 'पाऊस', blockedSegments: [] } });
-    const cards = refs.map(r => buildPlotDayCard(r, [worked, stopped], all, TODAY_KEY, TODAY));
+    // lane RF: the card's money is the server ledger's for that plot-day (here ₹ 1,500 on g1, not all of it on the server yet)
+    const cards = refs.map(r => buildPlotDayCard(r, [worked, stopped], all, TODAY_KEY, TODAY, r.plotId === 'g1' ? { amount: 1500, hidden: false, partial: ['notOnServer'] } : undefined));
 
     it('eight colour-coded counts; "—" where nothing was recorded; unknown labour is "—" in its colour, never 0', () => {
         render(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} onCost={vi.fn()} />);
@@ -126,11 +127,20 @@ describe('प्लॉटनिहाय काम (PlotDayCards)', () => {
         const onOpen = vi.fn();
         const onCost = vi.fn();
         render(<PlotDayCards cards={cards} isToday onOpen={onOpen} onCost={onCost} />);
+        expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('₹ 1,500');
+        expect(screen.getByTestId('plot-money-partial-grape:g1')).toHaveTextContent('अपूर्ण');
         fireEvent.click(screen.getByTestId('plot-money-grape:g1'));
-        expect(onCost).toHaveBeenCalledWith(worked);
+        expect(onCost).toHaveBeenCalledWith(expect.objectContaining({ key: 'grape:g1', plotId: 'g1' }));
         expect(onOpen).not.toHaveBeenCalled();
         fireEvent.click(screen.getByTestId('plot-card-grape:g2'));
         expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ key: 'grape:g2' }));
+    });
+
+    it('lane RF: the ONE status wording on the card; no money door when there is none to open', () => {
+        render(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} />);
+        expect(screen.getByTestId('plot-state-grape:g1')).toHaveTextContent('पक्कं नाही');
+        expect(screen.queryByTestId('plot-state-grape:g2')).toBeNull(); // nothing told: no status at all
+        expect(screen.queryByTestId('plot-money-grape:g1')).toBeNull(); // money he may not see: no door (no onCost)
     });
 
     it('the key under the cards names every colour', () => {
@@ -170,8 +180,8 @@ describe('निरीक्षणं व नोंदी (NotesList)', () => {
         const note = screen.getByTestId('note-o');
         expect(note).toHaveTextContent('अडचण');
         expect(note).toHaveTextContent('सकाळी 9:10 · सोनाका · रमेश');
-        fireEvent.click(note);
-        expect(note).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(screen.getByTestId('note-o-toggle'));
+        expect(screen.getByTestId('note-o-toggle')).toHaveAttribute('aria-expanded', 'true');
     });
 });
 
@@ -209,12 +219,13 @@ describe('कामाचं कॅलेंडर (ActivityCalendar)', () => {
     });
 });
 
-describe('उत्पन्न आणि खर्च (CostSection + InHandCard)', () => {
+describe('उत्पन्न आणि खर्च (CostSection + InHandCard) — the server ledger', () => {
     const range = spendRange('week', TODAY, TODAY);
+    const noSessions = () => [];
 
     it('nothing recorded: "—" everywhere and a line saying why; no ₹ 0', () => {
-        const totals = buildSeasonTotals([], CROPS, all, { sessionsFor: () => [], otherIncome: [] });
-        render(<><InHandCard amount={null} /><CostSection totals={totals} spend={buildSpend([], CROPS, all, range)} range={range} /></>);
+        const totals = buildSeasonTotals(EMPTY_LEDGER, CROPS, all, noSessions, true);
+        render(<><InHandCard figure={buildInHand(EMPTY_LEDGER, CROPS, all, true)} /><CostSection totals={totals} spend={buildSpend(EMPTY_LEDGER, CROPS, all, range, true)} range={range} /></>);
         expect(screen.getByTestId('in-hand-amount')).toHaveTextContent('—');
         expect(screen.getByTestId('season-cost')).toHaveTextContent('—');
         expect(screen.getByTestId('season-income')).toHaveTextContent('—');
@@ -227,11 +238,19 @@ describe('उत्पन्न आणि खर्च (CostSection + InHandCard
     });
 
     it('recorded money: totals, the 7-day chart, by crop with shares, the mix, the finance ledger link', () => {
-        const logs = [log({ id: 'a', plotIds: ['g1'], financialSummary: money(2000, 1000) }), log({ id: 'b', cropId: 'cane', plotIds: ['c1'], financialSummary: money(0, 0, 1000) })];
-        const totals = buildSeasonTotals(logs, CROPS, all, { sessionsFor: () => [], otherIncome: [] });
+        const ledger: Ledger = {
+            entries: [
+                { id: 'a', plotId: 'g1', dateKey: TODAY_KEY, direction: 'Expense', category: 'Labour', amount: 2000 },
+                { id: 'a2', plotId: 'g1', dateKey: TODAY_KEY, direction: 'Expense', category: 'Input', amount: 1000 },
+                { id: 'b', plotId: 'c1', dateKey: TODAY_KEY, direction: 'Expense', category: 'Machinery', amount: 1000 },
+                { id: 'r', plotId: 'g1', dateKey: TODAY_KEY, direction: 'Income', category: 'Other', amount: 42500 },
+            ],
+            gaps: [],
+        };
+        const totals = buildSeasonTotals(ledger, CROPS, all, noSessions, true);
         const onOpenFinance = vi.fn();
         const onOpenIncome = vi.fn();
-        render(<><InHandCard amount={42500} onOpen={onOpenIncome} /><CostSection totals={totals} spend={buildSpend(logs, CROPS, all, range)} range={range} onOpenFinance={onOpenFinance} /></>);
+        render(<><InHandCard figure={buildInHand(ledger, CROPS, all, true)} onOpen={onOpenIncome} /><CostSection totals={totals} spend={buildSpend(ledger, CROPS, all, range, true)} range={range} onOpenFinance={onOpenFinance} /></>);
         expect(screen.getByTestId('in-hand-amount')).toHaveTextContent('₹ 42,500');
         fireEvent.click(screen.getByTestId('overview-money'));
         expect(onOpenIncome).toHaveBeenCalled();
@@ -243,6 +262,7 @@ describe('उत्पन्न आणि खर्च (CostSection + InHandCard
         expect(screen.getByTestId('cost-bars-crop')).toHaveTextContent('₹ 3,000 · 75%');
         expect(screen.getByTestId('cost-mix')).toHaveTextContent('मजुरी ₹ 2,000');
         expect(screen.getByTestId('cost-mix')).toHaveTextContent('इतर —');
+        expect(screen.queryByTestId('season-partial')).toBeNull(); // a complete set says nothing more
         fireEvent.click(screen.getByTestId('open-finance'));
         expect(onOpenFinance).toHaveBeenCalled();
     });

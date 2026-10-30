@@ -13,13 +13,21 @@
  *   - worked / stopped / nothing (`getDayStatus`), the stop reason, the first note (`getPrimaryLogNote`),
  *     the water plan state (`getIrrigationStatus`), the season day (`getPhaseAndDay`), weather, money, trust.
  * No record for the day means `counts: null` — the card says "नोंद नाही", it does not draw eight zeros (P4).
+ *
+ * Lane RF: the card's money is the SERVER's ledger for that plot that day (`moneyModel.plotDayMoney`, passed in) —
+ * never the log's own total, which a pulled log no longer has (lane F1). Its trust mark is the page's ONE status
+ * wording: confirmed only when EVERY recording of the plot's day is; and it says how many times the day was told
+ * (the day sheet lists each of them — its own rows, nothing else counted).
  */
-import type { CropPhase, DailyLog, LogVerificationStatus } from '../../../types';
+import type { CropPhase, DailyLog } from '../../../types';
+import { groupByRecording, isConfirmed } from '../../logs/components/voiceResult/resultModel';
+import { dayLogsOf, plotLogFilter } from '../day/dayRecordings';
 import { countCompletedIrrigationEvents } from '../../logs/services/irrigationCompletion';
 import { sumLabourHeadcount } from '../../../domain/logs/labourHeadcount';
 import { getPhaseAndDay } from '../../../shared/utils/timelineUtils';
 import { formatTemperature } from '../../../shared/utils/weatherFormatter';
 import { getDayStatus, getIrrigationStatus, getLogForDate, getLogForSpecificPlot, getPrimaryLogNote } from '../helpers';
+import type { MoneyFigure } from './moneyModel';
 import type { PlotRef, ViewScope } from './reflectSelection';
 
 export type Bucket = 'work' | 'water' | 'labour' | 'inputs' | 'machine' | 'cost' | 'notes' | 'reminders';
@@ -54,9 +62,12 @@ export interface PlotDayCard {
     /** Irrigation was blocked by the day's disturbance (the water bucket turns amber). */
     waterBlocked: boolean;
     note?: string;
-    /** The record's own total (₹), only when one was recorded. */
-    money?: number;
-    verification?: LogVerificationStatus;
+    /** The ledger's money for this plot that day; absent when there is none to show. */
+    money?: MoneyFigure;
+    /** Every recording of the plot's day is confirmed; absent when nothing was told. */
+    confirmed?: boolean;
+    /** How many recordings the plot's day holds (0 = nothing told). */
+    recordings: number;
     weather?: { temp: string; condition: string };
     /** `2.5 एकर` — only when the plot records its area. */
     area?: string;
@@ -72,7 +83,7 @@ const dayLabelOf = (phase: CropPhase, day: number | null, hasPlot: boolean): str
     return day == null ? 'जमीन तयारी' : `जमीन तयारी · दिवस ${day}`;
 };
 
-export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], scope: ViewScope, dateKey: string, date: Date): PlotDayCard {
+export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], scope: ViewScope, dateKey: string, date: Date, money?: MoneyFigure): PlotDayCard {
     const logs = history as DailyLog[];
     const log = ref.plotId
         ? getLogForSpecificPlot(logs, dateKey, ref.cropId, ref.plotId)
@@ -80,8 +91,8 @@ export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], sco
     const timelinePlot = ref.plot ?? ref.crop.plots?.[0];
     const timeline = getPhaseAndDay(timelinePlot, date);
     const water = getIrrigationStatus(date, ref.plot, log);
-    const grandTotal = log?.financialSummary?.grandTotal ?? 0;
     const baseline = ref.plot?.baseline;
+    const dayLogs = dayLogsOf(history, dateKey).filter(plotLogFilter(ref));
 
     return {
         ref,
@@ -100,8 +111,9 @@ export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], sco
         } : null,
         waterBlocked: !!log?.disturbance?.blockedSegments?.includes('irrigation'),
         note: getPrimaryLogNote(log),
-        money: grandTotal > 0 ? grandTotal : undefined,
-        verification: log?.verification?.status,
+        ...(money && money.amount !== null && !money.hidden ? { money } : {}),
+        ...(dayLogs.length > 0 ? { confirmed: dayLogs.every(isConfirmed) } : {}),
+        recordings: groupByRecording(dayLogs).length,
         weather: log?.weatherSnapshot
             ? { temp: formatTemperature(log.weatherSnapshot.current.tempC), condition: log.weatherSnapshot.current.conditionText }
             : undefined,

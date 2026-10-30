@@ -13,11 +13,14 @@
  *
  * Counts: "—" when nothing was recorded in a bucket; a labour bucket told WITHOUT a number keeps its colour
  * and shows "—" ("we were not told"), never a 0. Every Marathi string is PROPOSED.
+ *
+ * Lane RF: the trust mark is the page's ONE status wording ("पक्कं नाही" / "✔ पक्कं केलं"); the money is the server
+ * ledger's for that plot that day, marked partial when it is; "N वेळा सांगितलं" when the day was told more than once;
+ * tapping the card opens the plot's day sheet (every recording of it).
  */
 import React from 'react';
 import { Ban, Bell, CheckSquare, Droplets, IndianRupee, Package, Paperclip, StickyNote, Thermometer, Tractor, Users } from 'lucide-react';
-import type { DailyLog } from '../../../types';
-import TrustBadge from '../../../shared/components/ui/TrustBadge';
+import { StatusChip, useReflectCopy } from '../day/RecordingParts';
 import { BUCKETS, BUCKET_COLOR, BUCKET_LABEL, WATER_LABEL, type Bucket, type PlotDayCard, type WaterState } from './plotDayModel';
 import { rupees } from './reflectDates';
 import type { PlotRef } from './reflectSelection';
@@ -44,8 +47,9 @@ const BucketCell: React.FC<{ b: Bucket; n: number | undefined; amber: boolean }>
     );
 };
 
-const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (ref: PlotRef) => void; onCost: (log: DailyLog) => void }> = ({ card, isToday, onOpen, onCost }) => {
+const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (ref: PlotRef) => void; onCost?: (ref: PlotRef) => void }> = ({ card, isToday, onOpen, onCost }) => {
     const { ref, log } = card;
+    const copy = useReflectCopy();
     const files = useLogAttachmentCount(log?.id);
     const tint = card.status === 'blocked' ? 'border-amber-200 bg-amber-50' : card.status === 'worked' ? 'border-emerald-200 bg-white' : 'border-stone-200 bg-rose-50/30';
     const open = () => onOpen(ref);
@@ -61,16 +65,20 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
                     <span className="block text-[13px] font-bold text-stone-500">{[ref.cropName, ref.plot?.variety, card.area, ref.plotName ? undefined : 'प्लॉट नाही'].filter(Boolean).join(' · ')}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
-                    {card.verification && <TrustBadge status={card.verification} size="sm" />}
+                    {card.confirmed !== undefined && <StatusChip confirmed={card.confirmed} testId={`plot-state-${ref.key}`} />}
                     {files > 0 && <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[12px] font-bold text-blue-700 ring-1 ring-blue-100" aria-label={`जोडलेल्या फाइल ${files}`} data-testid={`plot-files-${ref.key}`}><Paperclip size={12} aria-hidden="true" /><Num>{files}</Num></span>}
-                    {card.money !== undefined && log && (
-                        <Tap onClick={e => { e.stopPropagation(); onCost(log); }} data-testid={`plot-money-${ref.key}`} aria-label={`या दिवसाचा खर्च ${rupees(card.money)}`}
-                            className="rounded-full bg-emerald-50 px-2 py-1 text-[13px] font-extrabold text-emerald-800 ring-1 ring-emerald-200"><Num>{rupees(card.money)}</Num></Tap>
+                    {card.money?.amount != null && onCost && (
+                        <Tap onClick={e => { e.stopPropagation(); onCost(ref); }} data-testid={`plot-money-${ref.key}`} aria-label={`या दिवसाचा खर्च ${rupees(card.money.amount)}`}
+                            className="rounded-full bg-emerald-50 px-2 py-1 text-[13px] font-extrabold text-emerald-800 ring-1 ring-emerald-200">
+                            <Num>{rupees(card.money.amount)}</Num>
+                            {card.money.partial.length > 0 && <span className="ml-1 text-[11px] text-amber-800" data-testid={`plot-money-partial-${ref.key}`}>· {copy.partialTag}</span>}
+                        </Tap>
                     )}
                 </span>
             </span>
             {card.note && <span className="mt-2 block rounded-lg bg-amber-50 px-2 py-1 text-[13px] font-bold text-amber-800 ring-1 ring-amber-100" data-testid={`plot-note-${ref.key}`}>{card.note}</span>}
             <span className="mt-2 flex flex-wrap gap-1.5">
+                {card.recordings > 1 && <span className="rounded-lg bg-stone-100 px-2 py-1 text-[12.5px] font-extrabold text-stone-700" data-testid={`plot-times-${ref.key}`}>{copy.timesTold(card.recordings)}</span>}
                 {card.dayLabel && <span className={`rounded-lg px-2 py-1 text-[12.5px] font-extrabold ${card.phase === 'CROP_CYCLE' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{card.dayLabel}</span>}
                 {card.water && <span className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] font-extrabold ${WATER_TONE[card.water]}`}><Droplets size={13} aria-hidden="true" />{WATER_LABEL[card.water]}</span>}
                 {card.weather && <span className="flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-[12.5px] font-bold text-sky-800 ring-1 ring-sky-100"><Thermometer size={13} aria-hidden="true" /><Num>{card.weather.temp}</Num> · {card.weather.condition}</span>}
@@ -90,7 +98,7 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
     );
 };
 
-export const PlotDayCards: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onOpen: (ref: PlotRef) => void; onCost: (log: DailyLog) => void }> = ({ cards, isToday, onOpen, onCost }) => (
+export const PlotDayCards: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onOpen: (ref: PlotRef) => void; onCost?: (ref: PlotRef) => void }> = ({ cards, isToday, onOpen, onCost }) => (
     <div className="space-y-2.5" data-testid="plot-day-cards">
         {cards.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} />)}
     </div>

@@ -7,8 +7,12 @@
  * प्लॉटनिहाय काम — one card per plot for the chosen day, built from the real log. The card carries every
  * fact the old CompactCropCard carried (8 buckets, stopped day, note, water state, day of the season,
  * weather, money, trust status). What it must never do: turn "not recorded" into a number (P4).
+ * Lane RF: the money is the server ledger's for that plot-day (passed in), never the log's own total; the trust
+ * mark is "confirmed only when every recording of the plot-day is"; and it counts the day's recordings.
  */
 import { describe, expect, it } from 'vitest';
+import { LogVerificationStatus } from '../../../types';
+import type { MoneyFigure } from '../overview/moneyModel';
 import { buildPlotDayCard } from '../overview/plotDayModel';
 import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
 import { CROPS, TODAY, TODAY_KEY, log, money } from './reflectFixtures';
@@ -44,8 +48,29 @@ describe('buildPlotDayCard', () => {
         const card = buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY);
         expect(card.status).toBe('worked');
         expect(card.counts).toEqual({ work: 1, water: 1, labour: 6, inputs: 2, machine: 1, cost: 1, notes: 2, reminders: 1 });
-        expect(card.money).toBe(2450);
+        // lane RF: the log's own total (2450) is NOT the card's money — the ledger's is, and none was passed
+        expect(card.money).toBeUndefined();
         expect(card.note).toBe('पानं पिवळी');
+    });
+
+    it("lane RF: the money is the ledger's figure for that plot-day; none, or one he may not see, shows no pill", () => {
+        const day = log({ id: 'l5', plotIds: ['g1'], financialSummary: money(9999) });
+        const ledger: MoneyFigure = { amount: 1750, hidden: false, partial: ['notOnServer'] };
+        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, ledger).money).toEqual(ledger);
+        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, { amount: null, hidden: false, partial: [] }).money).toBeUndefined();
+        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, { amount: null, hidden: true, partial: [] }).money).toBeUndefined();
+    });
+
+    it('lane RF: confirmed only when every recording of the plot-day is; how many recordings the day holds', () => {
+        const meta = (iso: string) => ({ createdAtISO: iso, createdByOperatorId: 'op' });
+        const verified = { required: true, status: LogVerificationStatus.VERIFIED };
+        const a = log({ id: 'a', plotIds: ['g1'], meta: meta('2026-10-25T03:00:00.000Z'), verification: verified });
+        const b = log({ id: 'b', plotIds: ['g1'], meta: meta('2026-10-25T08:00:00.000Z') });
+        expect(buildPlotDayCard(g1, [a, b], scope, TODAY_KEY, TODAY)).toMatchObject({ confirmed: false, recordings: 2 });
+        expect(buildPlotDayCard(g1, [a, { ...b, verification: verified }], scope, TODAY_KEY, TODAY).confirmed).toBe(true);
+        const nothing = buildPlotDayCard(g1, [], scope, TODAY_KEY, TODAY);
+        expect(nothing.confirmed).toBeUndefined();
+        expect(nothing.recordings).toBe(0);
     });
 
     it('labour told without a headcount is UNKNOWN, never 0', () => {

@@ -111,7 +111,11 @@ describe('the log page no longer carries the feed', () => {
         expect(src).not.toMatch(/>\s*Activity Feed\s*</); // the old English heading
         expect(src).not.toMatch(/>\s*Today's Timeline/); // the old divider
         expect(src).not.toContain('<DailyLogCard');
-        expect(src).toContain('buildFeedEntries(');
-        expect(src).toContain('activityFeed={activityFeed}');
+        // lane RF: आढावा builds the day's work itself, for the day it is on; the reflect view hands it who is holding the
+        // phone, his role, and the result screen's "बदला" path — no longer today's entries, ready-made.
+        expect(src).not.toContain('activityFeed={activityFeed}');
+        expect(src).toContain('youIds={');
+        expect(src).toContain('farmRole={ctx.farmRole ?? null}');
+        expect(src).toContain('onOpenLog={openLogToEdit}');
     });
 });

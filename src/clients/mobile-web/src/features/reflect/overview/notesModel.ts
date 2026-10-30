@@ -14,9 +14,14 @@
  * One text rule: `LogFactory` wraps the reminders it mirrors from tasks in English ("Reminder: … (Extracted
  * from Voice)", "Planned Task: …") and tags them `planned_task` / `manual_task`; for those the farmer's own
  * words (`textRaw`) are shown instead. Every Marathi string is PROPOSED.
+ *
+ * Lane RF: each note also carries the record it came from (`logId`), who said it the result screen's way (`who`:
+ * "तुम्ही" for the person holding this phone, else the name recorded, else "अज्ञात" — never a guess) and whether that
+ * record is confirmed, so the list can link each note to its recording.
  */
 import type { CropProfile, DailyLog, ObservationNote } from '../../../types';
 import { formatFarmerTime } from '../../../shared/utils/displayTime';
+import { isConfirmed, whoSpoke, type Who, type WhoDeps } from '../../logs/components/voiceResult/resultModel';
 import { isLogInScope, type ViewScope } from './reflectSelection';
 
 const FARM_GLOBAL = 'FARM_GLOBAL';
@@ -30,6 +35,12 @@ const MACHINE_WRAPPED_TAGS = ['planned_task', 'manual_task'];
 
 export interface NoteItem {
     id: string;
+    /** The record (log) the note came from. */
+    logId: string;
+    /** Who said it, when the page knows how to name the person holding this phone. */
+    who?: Who;
+    /** The record it came from is confirmed. */
+    confirmed: boolean;
     kind: ObservationNote['noteType'];
     kindLabel: string;
     /** `सकाळी 9:10`; empty when the note carries no time. */
@@ -47,20 +58,25 @@ interface BuildArgs {
     scope: ViewScope;
     crops: readonly CropProfile[];
     operatorNameById: Readonly<Record<string, string>>;
+    /** Lane RF — names the speaker the result screen's way ("तुम्ही" for the person holding this phone). */
+    whoDeps?: WhoDeps;
 }
 
-export function buildDayNotes({ history, dateKey, scope, crops, operatorNameById }: BuildArgs): NoteItem[] {
+export function buildDayNotes({ history, dateKey, scope, crops, operatorNameById, whoDeps }: BuildArgs): NoteItem[] {
     const plotName = new Map<string, string>();
     for (const c of crops) for (const p of c.plots ?? []) plotName.set(p.id, p.name);
 
     const items = history
-        .filter(l => l.date === dateKey && isLogInScope(l, scope))
-        .flatMap(l => (l.observations ?? []).map(o => ({ o, by: l.meta?.createdByOperatorId })))
-        .map(({ o, by }): NoteItem & { at: string } => {
+        .filter(l => l.date === dateKey && !l.deletion && isLogInScope(l, scope))
+        .flatMap(l => (l.observations ?? []).map(o => ({ o, l, by: l.meta?.createdByOperatorId })))
+        .map(({ o, l, by }): NoteItem & { at: string } => {
             const kind = o.noteType && o.noteType in NOTE_KIND_LABEL ? o.noteType : 'unknown';
             const wrapped = (o.tags ?? []).some(t => MACHINE_WRAPPED_TAGS.includes(t));
             return {
                 id: o.id,
+                logId: l.id,
+                ...(whoDeps ? { who: whoSpoke(l, whoDeps) } : {}),
+                confirmed: isConfirmed(l),
                 kind,
                 kindLabel: NOTE_KIND_LABEL[kind],
                 time: formatFarmerTime(o.timestamp),

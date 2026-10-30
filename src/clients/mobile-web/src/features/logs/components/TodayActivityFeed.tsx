@@ -60,14 +60,17 @@ export const FEED_STR = {
     hint: '▶ दाबा — बोलणं ऐकू येईल · कार्डावर दाबा — त्यातून काय समजलं ते सगळं दिसेल',
 } as const;
 
-/** The one button on "माझं शेत". */
-export const TodayActivityButton: React.FC<{ count: number; countLabel?: string; onClick: () => void }> = ({ count, countLabel, onClick }) => (
+/**
+ * The one button on "माझं शेत". Lane RF: आढावा passes its own `title` / `subtitle` when the page is on another day
+ * (and in English mode); without them the button reads as it always did.
+ */
+export const TodayActivityButton: React.FC<{ count: number; countLabel?: string; title?: string; subtitle?: string; onClick: () => void }> = ({ count, countLabel, title, subtitle, onClick }) => (
     <button type="button" onClick={onClick} data-testid="activity-feed-button"
         className="flex min-h-[64px] w-full items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-left shadow-sm active:scale-[0.98]" style={{ fontFamily: SANS }}>
         <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-emerald-700 text-white"><ListChecks size={24} /></span>
         <span className="min-w-0 flex-1">
-            <span className="block text-[18px] font-extrabold leading-tight text-emerald-950">{FEED_STR.title}</span>
-            <span className="block text-[14px] font-semibold leading-snug text-stone-700">{FEED_STR.subtitle}</span>
+            <span className="block text-[18px] font-extrabold leading-tight text-emerald-950">{title ?? FEED_STR.title}</span>
+            <span className="block text-[14px] font-semibold leading-snug text-stone-700">{subtitle ?? FEED_STR.subtitle}</span>
         </span>
         {count > 0 && <span className="shrink-0 rounded-full bg-emerald-700 px-2.5 py-1 text-[14px] font-extrabold text-white" data-testid="activity-feed-count">{countLabel ?? count}</span>}
         <ChevronRight size={22} className="shrink-0 text-emerald-800" aria-hidden="true" />
