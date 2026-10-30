@@ -259,6 +259,12 @@ public static class DependencyInjection
         services.AddScoped<GetConsentHandler>();
         services.AddScoped<UpdateConsentHandler>();
 
+        // plr-d10 I25 (founder D-36) — the optional improvement permission: its own read /
+        // set handlers. The store and the fail-closed gate are registered by
+        // AddShramSafalInfrastructure.
+        services.AddScoped<ShramSafal.Application.UseCases.Consent.ImprovementPermission.GetImprovementPermissionHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Consent.ImprovementPermission.SetImprovementPermissionHandler>();
+
         // Voice Diary ship (voice-diary-e2e-2026-05-17 §B.9, §B.10) —
         // retained-tier persist + range query. PersistHandler depends on
         // IConsentEnforcer (registered in Bootstrapper alongside the S3

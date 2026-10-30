@@ -466,6 +466,35 @@ internal sealed class ShramSafalRepository(
             .OrderBy(e => e.RecordedAtUtc)
             .FirstOrDefaultAsync(ct);
 
+    // plr-d10 I25 (founder D-13) — the GRANTED notice acceptance that names this person:
+    // his newest acceptance of the notice IN FORCE when there is one, otherwise his newest of
+    // any version. Preferring the current version means a later tick on an old APK (another
+    // phone, older notice) cannot make /consent/me look as if he never accepted the current
+    // notice — which would re-ask him. Runs under the caller's RLS identity (the self-only
+    // policy); the explicit user_id predicate is defence in depth, as above.
+    public async Task<ShramSafal.Domain.Consent.TermsAcceptanceEvent?> GetLatestNoticeAcceptanceAsync(
+        Guid userId, CancellationToken ct = default)
+    {
+        if (userId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var granted = db.TermsAcceptanceEvents
+            .AsNoTracking()
+            .Where(e => e.UserId == userId
+                && e.Status == ShramSafal.Domain.Consent.ConsentRecordStatus.Granted);
+
+        var current = ShramSafal.Domain.Consent.CurrentConsentWording.NoticeVersion;
+        return await granted
+                .Where(e => e.NoticeVersion == current)
+                .OrderByDescending(e => e.RecordedAtUtc)
+                .FirstOrDefaultAsync(ct)
+            ?? await granted
+                .OrderByDescending(e => e.RecordedAtUtc)
+                .FirstOrDefaultAsync(ct);
+    }
+
     public async Task<ShramSafal.Domain.Consent.ConsentGrantEvent?> FindConsentGrantLinkAsync(
         Guid userId, string preRegistrationSessionId, CancellationToken ct = default)
         => await db.ConsentGrantEvents

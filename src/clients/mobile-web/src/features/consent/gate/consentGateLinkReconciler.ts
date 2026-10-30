@@ -97,7 +97,7 @@ export async function rememberConsentGateAcceptanceForLinking(
     }
 }
 
-function buildPendingLink(
+export function buildPendingLink(
     acceptance: ConsentGateAcceptance,
     preRegistrationSessionId: string,
 ): PendingConsentGateLink {

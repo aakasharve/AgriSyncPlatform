@@ -27,6 +27,9 @@ public sealed class UpdateConsentHandler(
     IShramSafalRepository repository,
     TimeProvider clock)
 {
+    /// <summary>Width of <c>user_consent_state.full_history_journal_wording_version</c>.</summary>
+    public const int MaxWordingVersionLength = 60;
+
     public async Task<Result<UpdateConsentResult>> HandleAsync(
         UpdateConsentCommand command,
         CancellationToken ct = default)
@@ -42,6 +45,14 @@ public sealed class UpdateConsentHandler(
         }
 
         if (command.ConsentTextVersion < 1)
+        {
+            return Result.Failure<UpdateConsentResult>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // plr-d10 I25 — a words-version longer than its column is malformed evidence, not an
+        // old phone (old phones never send the field at all).
+        if (command.FullHistoryJournalWordingVersion is { } wording
+            && wording.Trim().Length > MaxWordingVersionLength)
         {
             return Result.Failure<UpdateConsentResult>(ShramSafalErrors.InvalidCommand);
         }
@@ -64,7 +75,8 @@ public sealed class UpdateConsentHandler(
             researchCorpusExport: command.ResearchCorpusExport,
             consentTextVersion: command.ConsentTextVersion,
             currentTokenKid: oldState.CurrentTokenKid, // unchanged here; 06.3 stamps it on token issue
-            nowUtc: nowUtc);
+            nowUtc: nowUtc,
+            fullHistoryJournalWordingVersion: command.FullHistoryJournalWordingVersion);
 
         if (isNewRow)
         {
@@ -108,6 +120,7 @@ public sealed class UpdateConsentHandler(
             ResearchCorpusExport: newState.ResearchCorpusExport,
             Version: newState.Version,
             GrantedAtUtc: newState.GrantedAtUtc,
-            WithdrawnAtUtc: newState.WithdrawnAtUtc));
+            WithdrawnAtUtc: newState.WithdrawnAtUtc,
+            FullHistoryJournalWordingVersion: newState.FullHistoryJournalWordingVersion));
     }
 }

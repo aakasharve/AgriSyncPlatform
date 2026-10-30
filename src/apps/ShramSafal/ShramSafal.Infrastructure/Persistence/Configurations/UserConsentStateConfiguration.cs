@@ -74,5 +74,12 @@ internal sealed class UserConsentStateConfiguration : IEntityTypeConfiguration<U
             .HasColumnName("current_token_kid")
             .HasMaxLength(128)
             .IsRequired(false);
+
+        // plr-d10 I25 (founder D-31) — nullable, no default: every existing row reads as
+        // "made under unknown words", which is the truth.
+        b.Property(x => x.FullHistoryJournalWordingVersion)
+            .HasColumnName("full_history_journal_wording_version")
+            .HasMaxLength(60)
+            .IsRequired(false);
     }
 }

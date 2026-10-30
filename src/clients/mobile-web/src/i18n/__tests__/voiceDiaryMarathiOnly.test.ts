@@ -2,6 +2,7 @@
 // plain Marathi, one language at a time, and call the place by ONE name: the setup hub row's "आवाज नोंदी".
 import { describe, expect, it } from 'vitest';
 import { tVoiceDiary, VOICE_DIARY_BUNDLES } from '../voiceDiaryTranslations';
+import { tConsent } from '../consentTranslations';
 
 const values = (o: unknown, path = ''): Array<[string, string]> =>
     typeof o === 'string'
@@ -37,7 +38,10 @@ describe('voice recordings wording (mr-IN)', () => {
     });
 
     it('the keep switch uses the same words as the consent of the same name on गोपनीयता व संमती', () => {
-        expect(tVoiceDiary('mr-IN', 'consentToggle.title')).toBe('आवाज नोंदी जतन करून ठेवा');
+        // plr-d10 I25: the founder's D-2 title, on both screens.
+        expect(tVoiceDiary('mr-IN', 'consentToggle.title')).toBe('मूळ आवाज जतन करा');
+        expect(tConsent('mr-IN', 'toggles.fullHistoryJournal.title')).toBe(tVoiceDiary('mr-IN', 'consentToggle.title'));
+        expect(tConsent('mr-IN', 'toggles.fullHistoryJournal.meaning')).toBe(tVoiceDiary('mr-IN', 'consentToggle.meaning'));
     });
 
     it('the old name "डायरी" is gone from the recordings screens, and no transliterated English is left', () => {

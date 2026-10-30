@@ -12,8 +12,15 @@
 // without re-flowing the screen.
 //
 // Every legal string surfaces through `tConsent` / the served markdown files.
+//
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I25; founder D-36, D-31) — the three
+// permissions are now: keep my original voice (D-31 words), the OPTIONAL improvement
+// permission (D-36, its own server record), and research. The old "improve the app using my
+// de-identified data" switch (crossFarmAggregation) is no longer drawn: D-36 says an ambiguous
+// old switch must not count as the improvement permission, and nothing reads it. Its stored
+// value is left exactly as it is, and "revoke all" still turns it off.
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { agriSyncClient } from '../../infrastructure/api/AgriSyncClient';
 import {
     toConsentLocale,
@@ -27,6 +34,11 @@ import ConsentToggle, { type ConsentToggleId } from './ConsentToggle';
 import RevokeAllButton from './RevokeAllButton';
 import { APP_VERSION } from '../../infrastructure/api/transport';
 import { PageBar } from '../../shared/components/ui/placeUi';
+import ImprovementPermissionToggle from './improvement/ImprovementPermissionToggle';
+import {
+    IMPROVEMENT_WORDING_VERSION,
+    VOICE_RETENTION_WORDING_VERSION,
+} from './improvement/improvementPermissionCopy';
 
 interface Props {
     onBack?: () => void;
@@ -49,6 +61,14 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale, embedded = false 
     const [loaded, setLoaded] = useState(false);
     const [agreementOpen, setAgreementOpen] = useState(false);
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+    // What the server holds, so a save sends only the choices he actually changed.
+    const stored = useRef<{ fullHistoryJournal: boolean; improvement: boolean }>({
+        fullHistoryJournal: false,
+        improvement: false,
+    });
+    // The improvement permission: ON only when he agreed to THESE words. null = not readable,
+    // so the switch is held (it cannot show the truth).
+    const [improvement, setImprovement] = useState<boolean | null>(null);
 
     // ----- Load current consent state on mount --------------------------
     useEffect(() => {
@@ -65,6 +85,7 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale, embedded = false 
                     acceptedAtUtc: dto.acceptedAtUtc,
                     revokedAtUtc: dto.revokedAtUtc,
                 });
+                stored.current = { ...stored.current, fullHistoryJournal: dto.fullHistoryJournal };
                 setLoaded(true);
             })
             .catch(() => {
@@ -73,6 +94,17 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale, embedded = false 
                 // defaults — all OFF — so the user can submit a fresh
                 // consent decision.
                 if (!cancelled) setLoaded(true);
+            });
+        agriSyncClient
+            .getImprovementPermission()
+            .then((dto) => {
+                if (cancelled) return;
+                const mine = dto.allowed && dto.wordingVersion === IMPROVEMENT_WORDING_VERSION;
+                stored.current = { ...stored.current, improvement: mine };
+                setImprovement(mine);
+            })
+            .catch(() => {
+                // Unreadable: the switch stays held rather than showing an OFF that may be false.
             });
         return () => {
             cancelled = true;
@@ -85,18 +117,40 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale, embedded = false 
     }, []);
 
     const save = useCallback(
-        async (override?: Partial<ConsentState>) => {
+        async (override?: Partial<ConsentState>, improvementOverride?: boolean) => {
             const next = { ...state, ...(override ?? {}) };
+            // An explicit improvementOverride is ALWAYS sent (revoke all); otherwise only a change is.
+            const forceImprovement = improvementOverride !== undefined;
+            const nextImprovement = improvementOverride ?? improvement;
             setSaveStatus('saving');
             try {
+                // D-31: name the words only when the "keep my original voice" choice is being made.
+                const voiceChoiceMade = next.fullHistoryJournal !== stored.current.fullHistoryJournal;
                 const result = await agriSyncClient.updateConsent({
                     fullHistoryJournal: next.fullHistoryJournal,
-                    crossFarmAggregation: next.crossFarmAggregation,
+                    // The retired switch is sent only to turn it OFF (revoke all); otherwise left as is.
+                    ...(override?.crossFarmAggregation === false ? { crossFarmAggregation: false } : {}),
                     researchCorpusExport: next.researchCorpusExport,
                     languageShown: locale,
                     consentTextVersion: next.version,
                     clientAppVersion: APP_VERSION,
+                    ...(voiceChoiceMade ? { fullHistoryJournalWordingVersion: VOICE_RETENTION_WORDING_VERSION } : {}),
                 });
+                stored.current = { ...stored.current, fullHistoryJournal: result.fullHistoryJournal };
+                // D-36: the improvement permission is its own record, sent when it changed — or
+                // always, when the caller forces it. A failed send lands in the catch below: the
+                // success line is never shown for a withdrawal that did not reach the server.
+                if (nextImprovement !== null
+                    && (forceImprovement || nextImprovement !== stored.current.improvement)) {
+                    const saved = await agriSyncClient.setImprovementPermission({
+                        allowed: nextImprovement,
+                        wordingVersion: IMPROVEMENT_WORDING_VERSION,
+                        languageShown: locale === 'mr-IN' ? 'mr' : 'en',
+                    });
+                    const mine = saved.allowed && saved.wordingVersion === IMPROVEMENT_WORDING_VERSION;
+                    stored.current = { ...stored.current, improvement: mine };
+                    setImprovement(mine);
+                }
                 setState({
                     fullHistoryJournal: result.fullHistoryJournal,
                     crossFarmAggregation: result.crossFarmAggregation,
@@ -110,15 +164,21 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale, embedded = false 
                 setSaveStatus('error');
             }
         },
-        [state, locale],
+        [state, locale, improvement],
     );
 
     const onRevokeAll = useCallback(async () => {
-        await save({
-            fullHistoryJournal: false,
-            crossFarmAggregation: false,
-            researchCorpusExport: false,
-        });
+        await save(
+            {
+                fullHistoryJournal: false,
+                crossFarmAggregation: false,
+                researchCorpusExport: false,
+            },
+            // Withdrawing everything includes the improvement permission (D-36: withdrawal
+            // stops future selection). ALWAYS sent — even when the page could not read what the
+            // server holds, because "revoke all" must never leave an ON behind.
+            false,
+        );
     }, [save]);
 
     const saveLabel = tConsent(locale, 'save.button');
@@ -160,15 +220,19 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale, embedded = false 
                 <>
                     <ConsentToggle
                         toggleId="fullHistoryJournal"
+                        meaning={tConsent(locale, 'toggles.fullHistoryJournal.meaning')}
                         value={state.fullHistoryJournal}
                         onChange={(v) => setToggle('fullHistoryJournal', v)}
                         locale={locale}
                     />
-                    <ConsentToggle
-                        toggleId="crossFarmAggregation"
-                        value={state.crossFarmAggregation}
-                        onChange={(v) => setToggle('crossFarmAggregation', v)}
-                        locale={locale}
+                    <ImprovementPermissionToggle
+                        language={locale === 'mr-IN' ? 'mr' : 'en'}
+                        checked={improvement === true}
+                        disabled={improvement === null || saveStatus === 'saving'}
+                        onChange={(v) => {
+                            setImprovement(v);
+                            setSaveStatus('idle');
+                        }}
                     />
                     <ConsentToggle
                         toggleId="researchCorpusExport"

@@ -83,7 +83,7 @@ const isStringArray = (v: unknown): v is string[] =>
  * refused with "incomplete evidence" anyway, so holding it forever would mean retrying a
  * request that can never succeed.
  */
-function isPendingConsentGateLink(value: unknown): value is PendingConsentGateLink {
+export function isPendingConsentGateLink(value: unknown): value is PendingConsentGateLink {
     if (typeof value !== 'object' || value === null) return false;
     const v = value as Record<string, unknown>;
     return isNonEmptyString(v.preRegistrationSessionId)

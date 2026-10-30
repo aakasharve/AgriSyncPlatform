@@ -158,5 +158,8 @@ public sealed class ConsentAuditEntry
         grantedAtUtc = state.GrantedAtUtc,
         withdrawnAtUtc = state.WithdrawnAtUtc,
         currentTokenKid = state.CurrentTokenKid,
+        // plr-d10 I25 (founder D-31) — which words the "keep my original voice" choice was
+        // made under. Additive key: older rows simply do not carry it.
+        fullHistoryJournalWordingVersion = state.FullHistoryJournalWordingVersion,
     };
 }

@@ -265,6 +265,15 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
         Set<ShramSafal.Domain.Consent.TermsAcceptanceEvent>();
 
     /// <summary>
+    /// plr-d10 I25 (founder D-36) — the OPTIONAL improvement permission, one append-only
+    /// row per choice. Mapped to <c>ssf.improvement_permission_events</c>: ENABLE + FORCE
+    /// row-level security with a self-only policy, UPDATE / DELETE / TRUNCATE revoked from
+    /// the app role. Read only through <c>IImprovementPermissionStore</c>.
+    /// </summary>
+    public DbSet<ShramSafal.Domain.Consent.ImprovementPermissionEvent> ImprovementPermissionEvents =>
+        Set<ShramSafal.Domain.Consent.ImprovementPermissionEvent>();
+
+    /// <summary>
     /// spec: dfes-companion-2026-07-11 (wave-4.2) — the DATA-PROTECTION half of the
     /// same tap, and a separate legal record on purpose: withdrawing consent does
     /// not un-accept the Terms. Mapped to <c>ssf.consent_grant_events</c>, same

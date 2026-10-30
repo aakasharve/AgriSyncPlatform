@@ -79,9 +79,11 @@
 // `/legal/terms` and `/legal/privacy`, which did not exist, and a hard `<a href>` would
 // have unloaded the page mid-consent. Nothing here navigates any more.
 //
-// Founder decision 13 scopes the word for "record" (n-o-n-d) to Sathi's own surface. It
-// appears nowhere in the copy below — deliberately spelled out here rather than written,
-// so a grep for the word over this file returns nothing.
+// Founder decision 13 scopes the word for "record" (n-o-n-d) to Sathi's own surface. ONE
+// exception, and it is the founder's own: his D-36 sentence (2026-10-27, given verbatim for
+// this notice) says "...आवाजाच्या नोंदी..." and is used exactly as he wrote it. The later,
+// specific ruling is followed; the overlap is parked for him in the L5 report. Nothing else in
+// the copy below uses the word.
 
 import {
     CORE_DATA_CATEGORY_CODES,
@@ -177,10 +179,32 @@ import {
  * screen, and the Privacy Notice (§2, §2a, §9) spoke of the "first-open" notice that
  * "showed" him its contents. They now describe the tick, so `terms-2026-10-25.1` and
  * `privacy-2026-10-25.1`. Retention is unchanged.
+ *
+ * `notice-2026-10-30.1` - the IMPROVEMENT-PERMISSION pass (founder D-36, option 2, and D-13).
+ * MATERIAL: the absolute promise "we ourselves will not use your voice to train AI models" is
+ * replaced by the founder's sentence - voice recordings are not used to improve ShramSafal's
+ * understanding WITHOUT YOUR SEPARATE PERMISSION - and that separate, optional, default-OFF
+ * permission now exists ("माझ्या अनुभवातून श्रमसफल अधिक सक्षम होऊ द्या", stored on the server
+ * with its own words version). The tick sentence is the founder's D-13 wording. The Privacy
+ * Notice moved with it (§3 and §7 described the old absolute promise), so
+ * `privacy-2026-10-30.1`. A farmer who accepted `.25.1` is asked ONCE, on the phone
+ * (`features/consent/reask`); the server never refuses him for the older acceptance.
  */
-export const NOTICE_VERSION = 'notice-2026-10-25.1';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-25.1';
+export const NOTICE_VERSION = 'notice-2026-10-30.1';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-30.1';
 export const TERMS_VERSION = 'terms-2026-10-25.1';
+
+/**
+ * Founder D-13: "Ask again only when data use or terms materially change. Spelling, formatting
+ * or clearer wording alone should not trigger another tick."
+ *
+ * `NOTICE_VERSION` still moves with EVERY change to the words (the hash and the ledger must
+ * name exactly the text that was shown). This list says which accepted versions still cover
+ * the terms in force, so nobody is re-asked for a typo: a NON-material rewording adds its new
+ * version here and keeps the old ones; a MATERIAL change replaces the list with the new
+ * version alone. `notice-2026-10-30.1` is material, so it stands alone.
+ */
+export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION];
 
 /**
  * The data fiduciary, as registered. One copy, shared by both languages, because a
@@ -344,7 +368,8 @@ const mr: NoticeCopy = {
         items: [
             'तुमची वैयक्तिक माहिती विकणार नाही.',
             'परवानगीशिवाय जाहिरातींसाठी वापरणार नाही.',
-            'आम्ही स्वतः तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.',
+            // Founder D-36, verbatim. Replaces the absolute promise (notice-2026-10-30.1).
+            'तुमच्या स्वतंत्र परवानगीशिवाय तुमच्या आवाजाच्या नोंदी श्रमसफलची भाषा व काम समजण्याची क्षमता सुधारण्यासाठी वापरल्या जाणार नाहीत.',
             'तुमच्या माहितीवरून कर्ज, विमा किंवा बाजाराचे निर्णय घेणार नाही — त्यासाठी वेगळी स्पष्ट परवानगी मागू.',
         ],
     },
@@ -366,10 +391,12 @@ const mr: NoticeCopy = {
         contactLabel: 'संपर्क',
     },
     acceptanceMeaning: 'खूण केल्यावर (१) वापराच्या अटी मान्य होतात, आणि (२) वरच्या कामांपुरतीच माहिती वापरायला तुम्ही स्वतंत्र संमती देता. दोन्ही वेगळ्या साठवल्या जातात आणि तितक्याच सोप्या पद्धतीने मागे घेता येतात.',
+    // Founder D-13, verbatim: the sentence he ticks, with "माहिती वापराची सूचना व अटी" kept as
+    // the link beside it.
     tick: {
-        lead: 'मी ',
+        lead: 'माहितीचा वापर कसा होतो हे मला समजले असून, मला सूचना व अटी मान्य आहेत. माझे वय १८ वर्षे किंवा त्याहून अधिक आहे. ',
         link: 'माहिती वापराची सूचना व अटी',
-        tail: ' वाचल्या आणि मला मान्य आहेत. माझं वय १८ वर्षे किंवा त्याहून जास्त आहे.',
+        tail: '',
     },
     ctaDisabledHint: 'पुढे जाण्यासाठी खूण करा. खूण केल्याशिवाय श्रम सफल वापरता येत नाही; तोपर्यंत तुमची कोणतीही माहिती साठवली जात नाही.',
     links: { terms: 'वापराच्या अटी', privacy: 'गोपनीयता धोरण' },
@@ -428,10 +455,10 @@ const en: NoticeCopy = {
         items: [
             'We will not sell your personal data.',
             'We will not use it for advertising without separate permission.',
-            // ABSOLUTE, and identical to the Marathi line. The qualifier "without separate
-            // permission" was here until notice-2026-08-17.5 and may not come back without
-            // the Marathi moving in the same commit — see the NOTICE_VERSION note.
-            'We ourselves will not use your voice to train AI models.',
+            // PROPOSED (English) rendering of the founder's D-36 Marathi sentence. The two
+            // languages make ONE promise again: the qualifier moved in both in the same
+            // commit (see the NOTICE_VERSION note for notice-2026-10-30.1).
+            'Your voice recordings will not be used to improve how well Shram Safal understands language and work without your separate permission.',
             'We will not make lending, insurance or market decisions from your data — that needs separate, specific consent.',
         ],
     },
@@ -453,10 +480,11 @@ const en: NoticeCopy = {
         contactLabel: 'Contact',
     },
     acceptanceMeaning: 'Ticking the box means (1) you accept the Terms of Use, and (2) you separately consent to use of only the data needed for the purposes above. The two are stored separately and can be withdrawn just as easily.',
+    // PROPOSED (English) rendering of the founder's D-13 tick sentence; the link sits beside it.
     tick: {
-        lead: 'I have read and agree to the ',
-        link: 'data notice and Terms',
-        tail: '. I am 18 years of age or older.',
+        lead: 'I understand how my information is used, and I accept the notice and terms. I am 18 years of age or older. ',
+        link: 'Data notice and Terms',
+        tail: '',
     },
     ctaDisabledHint: 'Tick the box to continue. Shram Safal cannot be used without it; until then nothing about you is saved.',
     links: { terms: 'Terms of Use', privacy: 'Privacy Policy' },

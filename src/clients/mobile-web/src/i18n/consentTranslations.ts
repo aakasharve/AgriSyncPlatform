@@ -29,8 +29,13 @@ export interface ConsentBundle {
         intro: string;
     };
     toggles: {
-        fullHistoryJournal: { title: string; body: string };
-        crossFarmAggregation: { title: string; body: string };
+        /**
+         * plr-d10 I25 (founder D-31, D-2): `meaning` is the switch's meaning, ALWAYS shown
+         * under the title — it names who may listen (him and authorised reviewers on this farm).
+         * The old "improve the app with my de-identified data" switch is gone from this bundle:
+         * its place is taken by the improvement permission (features/consent/improvement).
+         */
+        fullHistoryJournal: { title: string; meaning: string; body: string };
         researchCorpusExport: { title: string; body: string };
         expand: string;
     };
@@ -60,12 +65,13 @@ const mr: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            title: 'आवाज नोंदी जतन करून ठेवा',
-            body: 'होकार दिल्यास नवीन आवाजी नोंदी तुमच्या खात्यात जतन करण्याची सोय सुरू होते. प्रत्येक नोंदीची जतन स्थिती आवाजी डायरीत दिसते. नकार दिल्यास नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत.',
-        },
-        crossFarmAggregation: {
-            title: 'माझ्या डी-आयडेंटिफाईड डेटाने अॅप सुधारा',
-            body: 'तुमच्या नावाशिवाय शिकवण्यासाठी वापरलं जाईल — इतर शेतकर्‍यांसाठी अॅप अधिक चांगलं होईल.',
+            // Founder D-2, verbatim.
+            title: 'मूळ आवाज जतन करा',
+            // PROPOSED (Marathi) rendering of the founder's D-31 meaning ("Keep my original voice
+            // recordings so that I and authorized reviewers on this farm can listen to them.").
+            meaning: 'माझ्या आवाजाच्या मूळ नोंदी जतन करा, म्हणजे त्या मला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येतील.',
+            // Founder D-2 description, verbatim, then the existing "if no" sentence.
+            body: 'श्रमसफलने तुमचे बोलणे समजून घेताना काही चूक केली किंवा माहिती सुटली, तर तुमचा मूळ आवाज पुन्हा ऐकून तुम्ही नेमके काय सांगितले होते ते तपासू शकता. तुमच्या कामाचा संदर्भ टिकून राहण्यासाठी हा आवाज नोंदीसोबत जतन केला जातो. नकार दिल्यास नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत.',
         },
         researchCorpusExport: {
             title: 'संशोधन/निर्यातीसाठी डी-आयडेंटिफाईड वापर',
@@ -93,12 +99,12 @@ const en: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            title: 'Keep voice recordings saved',
-            body: 'If yes, saving of new voice recordings to your account is turned on. Each recording shows its own saving status in the Voice Diary. If no, new voice recordings will not be saved to your account.',
-        },
-        crossFarmAggregation: {
-            title: 'Improve the app using my de-identified data',
-            body: 'Used (without your name) for learning — makes the app better for other farmers.',
+            // PROPOSED (English) rendering of the founder's D-2 title.
+            title: 'Keep original voice',
+            // Founder D-31, verbatim.
+            meaning: 'Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.',
+            // PROPOSED (English) rendering of the founder's D-2 description, then the existing "if no" sentence.
+            body: 'If Shram Safal misunderstands what you said or misses something, you can listen to your original voice again and check exactly what you said. The voice is kept with the record so the context of your work is not lost. If no, new voice recordings will not be saved to your account.',
         },
         researchCorpusExport: {
             title: 'De-identified use for research / export',

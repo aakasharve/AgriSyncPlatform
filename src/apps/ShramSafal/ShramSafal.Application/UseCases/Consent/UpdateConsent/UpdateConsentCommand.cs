@@ -34,4 +34,9 @@ public sealed record UpdateConsentCommand(
     // direct-construction unit tests stay green).
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+
+    // plr-d10 I25 (founder D-31) — ADDITIVE, optional: the version of the words the phone
+    // showed for the "keep my original voice" switch. Older phones never send it; the
+    // choice they make is then stored as made under unknown words (null).
+    string? FullHistoryJournalWordingVersion = null);

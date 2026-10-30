@@ -78,6 +78,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.question_events",
         "ssf.terms_acceptance_events",
         "ssf.consent_grant_events",
+        // plr-d10 I25 (founder D-36) — the optional improvement permission, one row per choice.
+        "ssf.improvement_permission_events",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -116,6 +118,15 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    (its only grant is SELECT on that view). No ssf ledger table, no ledger grant. Safe mid-proof.
         "20261027040015_AddAccessExtensions",
         "20261027040113_AddAccessExtensionProjection",
+
+        // ── Reviewed 2026-10-30 (spec: plr-d10 I25, founder D-36 / D-31); Down() read in full.
+        //    Down() drops policy p_self_improvement_permission_events, the table
+        //    ssf.improvement_permission_events and the nullable column
+        //    user_consent_state.full_history_journal_wording_version — only what Up() added. Up()
+        //    creates the table append-only by privilege (it is on AppendOnlyLedgers above) with the
+        //    same effective-privilege guard as this migration. Touches none of the other ledgers'
+        //    grants. Safe to revert and re-apply mid-proof.
+        "20261029224212_AddImprovementPermissionAndVoiceWordingVersion",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

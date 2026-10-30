@@ -8,7 +8,12 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../infrastructure/api/AgriSyncClient', () => ({
-    agriSyncClient: { getConsent: vi.fn(), updateConsent: vi.fn() },
+    agriSyncClient: {
+        getConsent: vi.fn(), updateConsent: vi.fn(),
+        // plr-d10 I25 (D-36): the improvement permission is read on the same page.
+        getImprovementPermission: vi.fn(() => Promise.reject(new Error('no permission yet'))),
+        setImprovementPermission: vi.fn(),
+    },
 }));
 vi.mock('../../../infrastructure/api/apiFetch', () => ({ apiFetch: vi.fn() }));
 vi.mock('../../../i18n/LanguageContext', () => ({
@@ -47,9 +52,12 @@ describe('PrivacyAndConsentPage — the one गोपनीयता व सं�
 
     it('holds the three consents (all OFF), a copy of my data and erase — every part on one page', async () => {
         render(<PrivacyAndConsentPage onBack={vi.fn()} />);
-        for (const id of ['fullHistoryJournal', 'crossFarmAggregation', 'researchCorpusExport']) {
+        for (const id of ['fullHistoryJournal', 'researchCorpusExport']) {
             expect(await screen.findByTestId(`consent-checkbox-${id}`)).not.toBeChecked();
         }
+        // plr-d10 I25 (D-36): the improvement permission replaced the old ambiguous switch.
+        expect(screen.getByTestId('improvement-permission-checkbox')).not.toBeChecked();
+        expect(screen.queryByTestId('consent-checkbox-crossFarmAggregation')).toBeNull();
         expect(screen.getByText('माझा डेटा')).toBeInTheDocument();
         expect(within(screen.getByTestId('privacy-export')).getByText('माझा डेटा निर्यात करा')).toBeInTheDocument();
         expect(within(screen.getByTestId('privacy-erase')).getByText('माझा डेटा मिटवा')).toBeInTheDocument();

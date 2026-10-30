@@ -16,6 +16,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+    ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT,
     CONSENT_NOTICE,
     DATA_FIDUCIARY,
     NOTICE_DATA_CATEGORY_CODES,
@@ -77,12 +78,20 @@ const RETIRED_COPY: Record<NoticeLanguage, { cta: string; declineLabel: string; 
 describe('NOTICE_VERSION — the words moved, so the version moved', () => {
     it('is a new version, never the one the old full-screen gate recorded', () => {
         expect(NOTICE_VERSION).not.toBe('notice-2026-10-13.2');
-        expect(NOTICE_VERSION).toBe('notice-2026-10-25.1');
+        // D-36 replaced the voice promise: a material change, so the version moved again.
+        expect(NOTICE_VERSION).toBe('notice-2026-10-30.1');
+        expect(NOTICE_VERSION).not.toBe('notice-2026-10-25.1');
+    });
+
+    it('D-13 — only the material version counts as accepted: the older tick is asked once more', () => {
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual([NOTICE_VERSION]);
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-10-25.1');
     });
 
     it('AC18 — the Terms and Privacy versions move too (the documents were reworded for the tick)', () => {
         expect(TERMS_VERSION).toBe('terms-2026-10-25.1');
-        expect(PRIVACY_POLICY_VERSION).toBe('privacy-2026-10-25.1');
+        // D-36: the Privacy Notice's §3 and §7 described the old absolute promise.
+        expect(PRIVACY_POLICY_VERSION).toBe('privacy-2026-10-30.1');
         expect(TERMS_VERSION).not.toBe('terms-2026-08-17.1');
         expect(PRIVACY_POLICY_VERSION).not.toBe('privacy-2026-10-13.2');
     });
@@ -170,19 +179,22 @@ describe('NoticeCopy — the tick replaces the age box, the CTA and the decline'
         expect(`${tick.lead}${tick.link}${tick.tail}`).toContain('मान्य');
     });
 
-    it('AC14 — the 18+ sentence is inside tick.tail in Marathi (what makes ageDeclaredAdult: true honest)', () => {
+    it('D-13 — the Marathi tick is the founder’s sentence, word for word, with the link beside it', () => {
         const { tick } = CONSENT_NOTICE.mr;
-        expect(tick.tail).toContain('माझं वय १८ वर्षे किंवा त्याहून जास्त आहे');
-        // ...and not hidden in the tappable link or in front of it.
-        expect(tick.link).not.toContain('१८');
-        expect(tick.lead).not.toContain('१८');
+        expect(`${tick.lead}${tick.tail}`.trim()).toBe(
+            'माहितीचा वापर कसा होतो हे मला समजले असून, मला सूचना व अटी मान्य आहेत. माझे वय १८ वर्षे किंवा त्याहून अधिक आहे.',
+        );
+        expect(tick.link).toBe('माहिती वापराची सूचना व अटी');
     });
 
-    it('AC14 — the 18+ sentence is inside tick.tail in English', () => {
-        const { tick } = CONSENT_NOTICE.en;
-        expect(tick.tail).toMatch(/\b18\b/);
-        expect(tick.link).not.toMatch(/\b18\b/);
-        expect(tick.lead).not.toMatch(/\b18\b/);
+    it('AC14 — the 18+ sentence is in the words he ticks (what makes ageDeclaredAdult: true honest)', () => {
+        const mr = CONSENT_NOTICE.mr.tick;
+        expect(`${mr.lead}${mr.tail}`).toContain('माझे वय १८ वर्षे किंवा त्याहून अधिक आहे');
+        // ...and never hidden inside the tappable link.
+        expect(mr.link).not.toContain('१८');
+        const en = CONSENT_NOTICE.en.tick;
+        expect(`${en.lead}${en.tail}`).toMatch(/\b18\b/);
+        expect(en.link).not.toMatch(/\b18\b/);
     });
 
     it('rewords acceptanceMeaning and ctaDisabledHint for a tick (no button they describe exists any more)', () => {
@@ -298,8 +310,13 @@ describe('notice content invariants carried over from the deleted gate test', ()
         }
     });
 
-    it('carries no नोंद anywhere in the Marathi copy (founder decision 13)', () => {
-        expect(canonicalNoticeText('mr')).not.toContain('नोंद');
+    it("carries no नोंद in the Marathi copy except the founder's own D-36 sentence (founder decision 13)", () => {
+        // D-36 (2026-10-27) gave this one sentence verbatim and it says "आवाजाच्या नोंदी".
+        // The later, specific ruling is used as written; nothing else may use the word.
+        const d36 = 'तुमच्या स्वतंत्र परवानगीशिवाय तुमच्या आवाजाच्या नोंदी श्रमसफलची भाषा व काम समजण्याची क्षमता सुधारण्यासाठी वापरल्या जाणार नाहीत.';
+        const text = canonicalNoticeText('mr');
+        expect(text).toContain(d36);
+        expect(text.split(d36).join('')).not.toContain('नोंद');
     });
 
     it('still has the five purposes, the Board-complaint right and the one AI promise', () => {
@@ -309,8 +326,17 @@ describe('notice content invariants carried over from the deleted gate test', ()
             expect(c.rights.boardComplaint).toContain('Data Protection Board of India');
             expect(c.rights.boardComplaint).not.toMatch(/https?:\/\//);
         }
-        expect(CONSENT_NOTICE.en.willNotDo.items[2]).toBe('We ourselves will not use your voice to train AI models.');
-        expect(CONSENT_NOTICE.mr.willNotDo.items[2]).toBe('आम्ही स्वतः तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही.');
+        // Founder D-36 (option 2): the absolute promise is replaced in BOTH languages at once,
+        // so the two still make one promise — no voice use for improvement without his
+        // separate permission.
+        expect(CONSENT_NOTICE.mr.willNotDo.items[2]).toBe(
+            'तुमच्या स्वतंत्र परवानगीशिवाय तुमच्या आवाजाच्या नोंदी श्रमसफलची भाषा व काम समजण्याची क्षमता सुधारण्यासाठी वापरल्या जाणार नाहीत.',
+        );
+        expect(CONSENT_NOTICE.en.willNotDo.items[2]).toMatch(/without your separate permission\.$/);
+        for (const language of LANGUAGES) {
+            expect(canonicalNoticeText(language)).not.toContain('will not use your voice to train AI models');
+            expect(canonicalNoticeText(language)).not.toContain('AI मॉडेल शिकवण्यासाठी');
+        }
     });
 
     it('grants exactly the core purposes and nothing optional', () => {

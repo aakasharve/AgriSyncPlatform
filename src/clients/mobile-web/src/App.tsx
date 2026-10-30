@@ -26,6 +26,8 @@ import FirstRunWelcome from './features/onboarding/firstRun/FirstRunWelcome';
 import { hasSeenFirstRunWelcome, markFirstRunWelcomeSeen } from './infrastructure/storage/FirstRunDeviceStore';
 // spec: 2026-08-25-prod-cutover-waves (B1) — the pre-login acceptance gets its owner.
 import { useConsentGateLinkReconciliation } from './features/consent/gate/useConsentGateLink';
+// spec: plr-d10 I25 (founder D-13, D-36) — a signed-in farmer is asked ONCE when the notice changes.
+import NoticeChangeSheet from './features/consent/reask/NoticeChangeSheet';
 import { IS_OVERSIGHT_PREVIEW_ENABLED } from './app/featureFlags';
 
 const hasJoinDeepLink = (): boolean => {
@@ -114,7 +116,12 @@ const AppFrame: React.FC<{
     return (
         <AppShell>
             {isAuthenticated
-                ? <AppContent crops={crops} setCrops={setCrops} />
+                ? (
+                    <>
+                        <AppContent crops={crops} setCrops={setCrops} />
+                        {session?.userId && <NoticeChangeSheet userId={session.userId} />}
+                    </>
+                )
                 : <LoginPage onBack={() => setShowWelcome(true)} />}
         </AppShell>
     );

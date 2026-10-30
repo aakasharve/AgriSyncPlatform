@@ -13,12 +13,18 @@
 
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { withPreLoginDatabase } from '../../../infrastructure/storage/preLoginDatabase';
-import { NOTICE_VERSION } from '../gate/consentNotice';
+import { ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT, NOTICE_VERSION } from '../gate/consentNotice';
 
 /** The device's consent mark. One name, declared once. */
 export const ACCEPTED_NOTICE_PREF_KEY = 'shramsafal_consent_gate_accepted_notice';
 
-const isCurrent = (row: { value?: unknown } | undefined): boolean => row?.value === NOTICE_VERSION;
+// D-13: an acceptance counts while its version still covers the terms in force — the
+// current version, or an earlier one whose change since was only wording (see
+// ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT). A material change re-asks once.
+export const isStillCurrentNoticeVersion = (value: unknown): boolean =>
+    typeof value === 'string' && ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT.includes(value);
+
+const isCurrent = (row: { value?: unknown } | undefined): boolean => isStillCurrentNoticeVersion(row?.value);
 
 /**
  * True only when this device has recorded an acceptance of the CURRENT notice.

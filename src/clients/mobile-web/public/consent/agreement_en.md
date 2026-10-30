@@ -3,14 +3,15 @@
 We ask for three separate permissions to keep your data safe. Each permission is independent —
 you can say yes to one and no to another. You can revoke at any time.
 
-## 1. Keep recordings of my voice saved
+## 1. Keep original voice
 - Default: OFF
+- Meaning: Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.
 - If you say yes: Saving of new voice recordings to your account is turned on. Each recording shows its own saving status in the Voice Diary. Recordings that are saved stay until you erase them or close your account.
 - If you say no: New voice recordings will not be saved to your account.
 
-## 2. Improve the app using my de-identified data
+## 2. Let Shram Safal grow more capable from my experience
 - Default: OFF
-- If you say yes: Your data (without your name) is used for learning — the app gets better for other farmers.
+- Let Shram Safal use my voice recordings, the corrections I make and the related work context to understand farming language and work practices more accurately. This permission is optional. Even if you turn it off, you can keep recording your work and listening to your original voice.
 
 ## 3. De-identified use for research / export
 - Default: OFF

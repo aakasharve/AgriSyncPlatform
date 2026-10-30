@@ -434,6 +434,14 @@ public static class DependencyInjection
         // ICallerUserTenantScope for why this is a distinct port from
         // ICallerFarmTenantScope above.
         services.AddScoped<ICallerUserTenantScope, CallerUserTenantScope>();
+
+        // plr-d10 I25 (founder D-36) — the improvement permission's own store (runs every
+        // read and write as the person the row belongs to) and the ONE fail-closed check any
+        // future improvement-data selection must call.
+        services.AddScoped<ShramSafal.Application.Privacy.Ports.IImprovementPermissionStore,
+            ShramSafal.Infrastructure.Privacy.ImprovementPermissionStore>();
+        services.AddScoped<ShramSafal.Application.Privacy.IImprovementPermissionGate,
+            ShramSafal.Application.Privacy.ImprovementPermissionGate>();
         services.AddScoped<IAiJobRepository, AiJobRepository>();
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 

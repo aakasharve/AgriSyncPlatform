@@ -85,6 +85,11 @@ describe('optional purposes are OFF until he turns them on', () => {
         expect(isOptionalPurposeGranted('PARTNER_SHARING_LENDING_INSURANCE_MARKETPLACE', audioOnly)).toBe(false);
     });
 
+    it('D-36: the old "improve the app" switch never counts as the improvement permission', () => {
+        const oldSwitchOn: ConsentState = { ...ConsentState.default(), crossFarmAggregation: true };
+        expect(isOptionalPurposeGranted('AI_MODEL_IMPROVEMENT', oldSwitchOn)).toBe(false);
+    });
+
     it('a core purpose asked of this function is refused, not helpfully allowed', () => {
         // Core purposes are authorised by the gate. A caller reaching here for one has
         // asked the wrong question, and answering "true" would hide that.

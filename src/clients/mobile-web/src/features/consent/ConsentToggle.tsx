@@ -13,9 +13,10 @@ import {
     tConsent,
 } from '../../i18n/consentTranslations';
 
+// plr-d10 I25: 'crossFarmAggregation' is no longer drawn (founder D-36 — the improvement
+// permission has its own switch, features/consent/improvement).
 export type ConsentToggleId =
     | 'fullHistoryJournal'
-    | 'crossFarmAggregation'
     | 'researchCorpusExport';
 
 interface Props {
@@ -25,9 +26,11 @@ interface Props {
     locale: ConsentLocale;
     /** For test/automation: lets the test query by stable selector. */
     testId?: string;
+    /** plr-d10 I25 (founder D-31): the switch's meaning, always shown under the title. */
+    meaning?: string;
 }
 
-const ConsentToggle: React.FC<Props> = ({ toggleId, value, onChange, locale, testId }) => {
+const ConsentToggle: React.FC<Props> = ({ toggleId, value, onChange, locale, testId, meaning }) => {
     const [expanded, setExpanded] = useState(false);
 
     const title = tConsent(locale, `toggles.${toggleId}.title`);
@@ -47,6 +50,11 @@ const ConsentToggle: React.FC<Props> = ({ toggleId, value, onChange, locale, tes
                 />
                 <div className="flex-1">
                     <div className="font-bold text-stone-800 text-base">{title}</div>
+                    {meaning && (
+                        <p className="mt-1 text-sm font-medium text-stone-700 leading-snug" data-testid={`consent-meaning-${toggleId}`}>
+                            {meaning}
+                        </p>
+                    )}
                     <button
                         type="button"
                         onClick={(e) => {

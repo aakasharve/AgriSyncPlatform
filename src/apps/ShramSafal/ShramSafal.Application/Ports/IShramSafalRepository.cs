@@ -1553,6 +1553,24 @@ public interface IShramSafalRepository
         => Task.FromResult<ShramSafal.Domain.Consent.TermsAcceptanceEvent?>(null);
 
     /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 (I25; founder D-13) — this
+    /// person's granted acceptance of the notice that carries a user id (a linked acceptance,
+    /// or one given while signed in): his newest acceptance of the CURRENT notice version when
+    /// one exists, otherwise his newest of any version — so a later tick on an old APK never
+    /// hides a current acceptance. Read-only; <c>GET /consent/me</c> exposes
+    /// its notice version so a phone can tell whether the notice in force was already
+    /// accepted (on any phone) before asking again.
+    ///
+    /// <para>Must run inside the caller's RLS identity scope: the ledger's self-only policy
+    /// hides every user-bearing row from a session without <c>agrisync.user_id</c>.
+    /// Default body returns null (= "not known"), which a phone treats as "ask" — never as
+    /// "already accepted".</para>
+    /// </summary>
+    Task<ShramSafal.Domain.Consent.TermsAcceptanceEvent?> GetLatestNoticeAcceptanceAsync(
+        Guid userId, CancellationToken ct = default)
+        => Task.FromResult<ShramSafal.Domain.Consent.TermsAcceptanceEvent?>(null);
+
+    /// <summary>
     /// The existing <c>CORE_DPDP_CONSENT_LINKED</c> row for this account and
     /// pre-registration session, if one has already been written. Same contract and same
     /// reason as the terms ledger above; queried separately because the two ledgers are

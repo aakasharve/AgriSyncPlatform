@@ -54,6 +54,10 @@ vi.mock('../features/sync', () => ({ OfflineBanner: () => null }));
 vi.mock('../infrastructure/storage/AiTestModeStore', () => ({ setAiTestModeEnabled: vi.fn(), clearAiTestMode: vi.fn() }));
 vi.mock('../app/components/AppShell', () => ({ default: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock('../features/consent/gate/useConsentGateLink', () => ({ useConsentGateLinkReconciliation: vi.fn() }));
+// plr-d10 I25: the one-time notice-change sheet (own tests in features/consent/reask) — a marker here.
+vi.mock('../features/consent/reask/NoticeChangeSheet', () => ({
+    default: ({ userId }: { userId: string }) => <div data-testid="notice-change-sheet-mount" data-user={userId} />,
+}));
 vi.mock('../app/featureFlags', () => ({ IS_OVERSIGHT_PREVIEW_ENABLED: false }));
 // The three screens are stubbed to the props App gives them; their content has its own suites.
 vi.mock('../pages/LoginPage', () => ({
@@ -128,5 +132,7 @@ describe('App — स्वागत is the first screen', () => {
         render(<App />);
         await waitFor(() => expect(screen.getByTestId('app-content')).toBeInTheDocument());
         expect(screen.queryByTestId('first-run-welcome')).toBeNull();
+        // plr-d10 I25 (D-13): a signed-in person is the one the notice-change question is for.
+        expect(screen.getByTestId('notice-change-sheet-mount')).toHaveAttribute('data-user', 'u-field');
     });
 });

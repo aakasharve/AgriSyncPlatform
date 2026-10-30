@@ -138,6 +138,21 @@ public sealed class UserConsentState
     /// </summary>
     public string? CurrentTokenKid { get; private set; }
 
+    /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 (I25; founder D-31) — the version
+    /// of the words the person was shown the last time he set
+    /// <see cref="FullHistoryJournal"/> (the "keep my original voice" switch). Founder D-31
+    /// widened what that switch means: "so that I and authorized reviewers on this farm can
+    /// listen to them". A choice made against the older words ("only your account can play
+    /// them back") must stay distinguishable from one made against the new words, so a
+    /// reviewer-playback check (lane L6) can honour only consent that disclosed it.
+    ///
+    /// <para><c>null</c> = unknown words: never set, or last changed by a phone that did
+    /// not say which words it showed (every build before this one). Fail-closed readers
+    /// treat null as "not the current words".</para>
+    /// </summary>
+    public string? FullHistoryJournalWordingVersion { get; private set; }
+
     private UserConsentState()
     {
         // EF Core materialisation; do not call.
@@ -174,6 +189,7 @@ public sealed class UserConsentState
             GrantedAtUtc = null,
             WithdrawnAtUtc = null,
             CurrentTokenKid = null,
+            FullHistoryJournalWordingVersion = null,
         };
     }
 
@@ -198,7 +214,8 @@ public sealed class UserConsentState
         bool? researchCorpusExport,
         int consentTextVersion,
         string? currentTokenKid,
-        DateTime nowUtc)
+        DateTime nowUtc,
+        string? fullHistoryJournalWordingVersion = null)
     {
         if (consentTextVersion < 1)
         {
@@ -243,12 +260,32 @@ public sealed class UserConsentState
             nextWithdrawnAt = null;
         }
 
+        // D-31: which words the "keep my original voice" choice was made under.
+        //   • the phone says which words it showed, alongside a value for the switch
+        //     → those words (whether or not the value moved: he re-made the choice);
+        //   • the switch moved and the phone did not say (every older build)
+        //     → unknown (null): a choice made against unknown words cannot vouch for new ones;
+        //   • the switch was not touched → unchanged.
+        var wording = string.IsNullOrWhiteSpace(fullHistoryJournalWordingVersion)
+            ? null
+            : fullHistoryJournalWordingVersion.Trim();
+        var nextFullHistoryWording = FullHistoryJournalWordingVersion;
+        if (fullHistoryJournal.HasValue && wording is not null)
+        {
+            nextFullHistoryWording = wording;
+        }
+        else if (nextFullHistory != FullHistoryJournal)
+        {
+            nextFullHistoryWording = null;
+        }
+
         return new UserConsentState
         {
             UserId = UserId,
             FullHistoryJournal = nextFullHistory,
             CrossFarmAggregation = nextCrossFarm,
             ResearchCorpusExport = nextResearch,
+            FullHistoryJournalWordingVersion = nextFullHistoryWording,
             // SARVAM Task 1.11 — preserve the new toggles unchanged across
             // an Update() call. The existing 3-toggle UpdateConsentHandler
             // intentionally does NOT touch them (Phase 2.11 / 1.12 wire
@@ -306,6 +343,7 @@ public sealed class UserConsentState
             // existing toggles.
             WithdrawnAtUtc = null,
             CurrentTokenKid = CurrentTokenKid,
+            FullHistoryJournalWordingVersion = FullHistoryJournalWordingVersion,
         };
     }
 
@@ -332,6 +370,7 @@ public sealed class UserConsentState
             GrantedAtUtc = GrantedAtUtc,
             WithdrawnAtUtc = nowUtc,
             CurrentTokenKid = CurrentTokenKid,
+            FullHistoryJournalWordingVersion = FullHistoryJournalWordingVersion,
         };
     }
 
@@ -364,6 +403,7 @@ public sealed class UserConsentState
             // the DPDP audit ledger records it.
             WithdrawnAtUtc = nowUtc,
             CurrentTokenKid = CurrentTokenKid,
+            FullHistoryJournalWordingVersion = FullHistoryJournalWordingVersion,
         };
     }
 
@@ -393,6 +433,7 @@ public sealed class UserConsentState
             GrantedAtUtc = GrantedAtUtc ?? nowUtc,
             WithdrawnAtUtc = null,
             CurrentTokenKid = CurrentTokenKid,
+            FullHistoryJournalWordingVersion = FullHistoryJournalWordingVersion,
         };
     }
 
@@ -440,6 +481,8 @@ public sealed class UserConsentState
             // current state of withdrawal).
             WithdrawnAtUtc = LatestOrNull(clientToken.WithdrawnAtUtc, server.WithdrawnAtUtc),
             CurrentTokenKid = server.CurrentTokenKid,
+            // Server is authoritative for which words the stored choice was made under.
+            FullHistoryJournalWordingVersion = server.FullHistoryJournalWordingVersion,
         };
     }
 

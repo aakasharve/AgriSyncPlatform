@@ -47,8 +47,18 @@ export interface VoiceDiaryBundle {
     };
     consentToggle: {
         title: string;
+        /** plr-d10 I25 (founder D-31): who may listen — always shown under the title. */
+        meaning: string;
         helper: string;
         expand: string;
+    };
+    /**
+     * plr-d10 I25 (founder D-31) — words for lane L6's replay. When the speaker did not keep
+     * his original voice, the transcript stays and this line says the recording is not there.
+     * (Replay itself is not built in this lane.)
+     */
+    replay: {
+        originalUnavailable: string;
     };
     firstGrant: {
         headline: string;
@@ -146,22 +156,33 @@ const mr: VoiceDiaryBundle = {
     emptyState: {
         headline: 'अजून आवाजी नोंदी नाहीत',
         // PROPOSED (Marathi): the switch now sits on this page — no "Settings", no English setting name.
-        body: 'आवाजी नोंदी खात्यात जतन करण्यासाठी खालचं "आवाज नोंदी जतन करून ठेवा" चालू करा.',
+        // plr-d10 I25: the switch's name is now the founder's D-2 title.
+        body: 'आवाजी नोंदी खात्यात जतन करण्यासाठी खालचं "मूळ आवाज जतन करा" चालू करा.',
         // the banner's own "चालू करा" (retentionBanner.deniedCta) — the doubled "· Open Settings" is gone
         cta: 'चालू करा',
     },
     consentToggle: {
-        // the गोपनीयता व संमती screen's words for the same consent (consentTranslations fullHistoryJournal.title)
-        title: 'आवाज नोंदी जतन करून ठेवा',
-        helper: 'यामुळे नवीन आवाजी नोंदी खात्यात जतन करण्याची सोय सुरू होते. कधीही बंद करता येते — आधी जतन झालेल्या नोंदी तुम्ही मिटवेपर्यंत राहतील.',
+        // the गोपनीयता व संमती screen's words for the same consent (consentTranslations fullHistoryJournal)
+        // Founder D-2, verbatim.
+        title: 'मूळ आवाज जतन करा',
+        // PROPOSED (Marathi) rendering of the founder's D-31 meaning.
+        meaning: 'माझ्या आवाजाच्या मूळ नोंदी जतन करा, म्हणजे त्या मला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येतील.',
+        // Founder D-2 description, verbatim, then the existing "can be turned off" sentence.
+        helper: 'श्रमसफलने तुमचे बोलणे समजून घेताना काही चूक केली किंवा माहिती सुटली, तर तुमचा मूळ आवाज पुन्हा ऐकून तुम्ही नेमके काय सांगितले होते ते तपासू शकता. तुमच्या कामाचा संदर्भ टिकून राहण्यासाठी हा आवाज नोंदीसोबत जतन केला जातो. कधीही बंद करता येते — आधी जतन झालेल्या नोंदी तुम्ही मिटवेपर्यंत राहतील.',
         expand: '+ अधिक',
+    },
+    replay: {
+        // PROPOSED (Marathi) rendering of the founder's D-31 "Original recording unavailable."
+        originalUnavailable: 'मूळ आवाज उपलब्ध नाही.',
     },
     firstGrant: {
         headline: 'आवाजी नोंदी जतन करण्याची परवानगी',
         // PROPOSED (Marathi): "डायरीत" → the place's one name, "आवाज नोंदी" (V-2). The same old name still
         // sits in the legal agreement and the consent screen's copy of it (consentTranslations): legal text,
         // left for the founder.
-        body: 'नवीन आवाजी नोंदी तुमच्या खात्यात जतन करण्याची सोय सुरू होईल. प्रत्येक नोंदीची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. फक्त तुमच्या खात्यातूनच जतन झालेल्या नोंदी ऐकता येतील.',
+        // PROPOSED (Marathi), plr-d10 I25: the last sentence follows D-31 — saved recordings may be
+        // heard by him AND by authorised reviewers on this farm (it said "only your account").
+        body: 'नवीन आवाजी नोंदी तुमच्या खात्यात जतन करण्याची सोय सुरू होईल. प्रत्येक नोंदीची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. जतन झालेल्या नोंदी तुम्हाला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येतील.',
         bullet1: 'प्रत्येक नोंदीची जतन स्थिती दिसते',
         bullet2: 'कधीही बंद करता येते',
         bullet3: 'तुम्ही नोंदी मिटवायला सांगू शकता',
@@ -218,17 +239,27 @@ const en: VoiceDiaryBundle = {
     },
     emptyState: {
         headline: 'No voice notes yet',
-        body: 'Turn on "Keep voice recordings saved" below to allow saving of recordings to your account.',
+        // plr-d10 I25: the switch's name is now the D-2 title (PROPOSED English).
+        body: 'Turn on "Keep original voice" below to allow saving of recordings to your account.',
         cta: 'Turn on',
     },
     consentToggle: {
-        title: 'Keep voice recordings saved',
-        helper: 'This turns on saving of new voice recordings to your account. You can turn off any time — recordings saved earlier stay until you erase them.',
+        // PROPOSED (English) rendering of the founder's D-2 title.
+        title: 'Keep original voice',
+        // Founder D-31, verbatim.
+        meaning: 'Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.',
+        // PROPOSED (English) rendering of the founder's D-2 description, then the existing sentence.
+        helper: 'If Shram Safal misunderstands what you said or misses something, you can listen to your original voice again and check exactly what you said. The voice is kept with the record so the context of your work is not lost. You can turn off any time — recordings saved earlier stay until you erase them.',
         expand: '+ more',
+    },
+    replay: {
+        // Founder D-31, verbatim.
+        originalUnavailable: 'Original recording unavailable.',
     },
     firstGrant: {
         headline: 'Allow saving of voice recordings',
-        body: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in "Voice notes". Only your account can play saved recordings back in the app.',
+        // PROPOSED (English), plr-d10 I25: the last sentence follows D-31 (it said "only your account").
+        body: 'Saving of new voice recordings to your account will be turned on. Each recording shows its own saving status in "Voice notes". Saved recordings can be played back by you and by authorized reviewers on this farm.',
         bullet1: 'Each recording shows its saving status',
         bullet2: 'Turn off any time',
         bullet3: 'You can ask us to erase them',

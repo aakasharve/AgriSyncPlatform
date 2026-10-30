@@ -79,6 +79,8 @@ import type {
     ConsentStateDto,
     UpdateConsentRequest,
     IssueConsentTokenResponse,
+    ImprovementPermissionDto,
+    SetImprovementPermissionRequest,
 } from './dtos';
 import * as Auth from './resources/AuthResource';
 import * as Sync from './resources/SyncResource';
@@ -167,6 +169,8 @@ export type {
     ConsentStateDto,
     UpdateConsentRequest,
     IssueConsentTokenResponse,
+    ImprovementPermissionDto,
+    SetImprovementPermissionRequest,
 } from './dtos';
 
 // ---------------------------------------------------------------------------
@@ -471,6 +475,15 @@ export class AgriSyncClient implements HttpTransport {
             // marker stays as it was; the uploader re-observes on its next pass
         }
         return result;
+    }
+
+    // plr-d10 I25 (founder D-36) — the optional improvement permission, the caller's own.
+    getImprovementPermission(): Promise<ImprovementPermissionDto> {
+        return Consent.getImprovementPermission(this);
+    }
+
+    setImprovementPermission(request: SetImprovementPermissionRequest): Promise<ImprovementPermissionDto> {
+        return Consent.setImprovementPermission(this, request);
     }
 
     issueConsentToken(): Promise<IssueConsentTokenResponse> {

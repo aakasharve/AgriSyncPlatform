@@ -1257,6 +1257,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    a policy or a ledger grant. Safe mid-proof.
         "20261027040015_AddAccessExtensions",
         "20261027040113_AddAccessExtensionProjection",
+        // ── Reviewed 2026-10-30 (spec: plr-d10 I25, founder D-36 / D-31); Down() read in full:
+        //    drops policy p_self_improvement_permission_events, table
+        //    ssf.improvement_permission_events and the nullable column
+        //    user_consent_state.full_history_journal_wording_version. Never touches
+        //    ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261029224212_AddImprovementPermissionAndVoiceWordingVersion",
     ];
 
     /// <summary>

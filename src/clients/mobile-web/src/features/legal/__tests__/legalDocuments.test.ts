@@ -217,15 +217,40 @@ describe('processors, and the leg outside India', () => {
 });
 
 describe('the promises', () => {
-    it('promises never to train AI on his voice — with no "unless" in either language', () => {
-        // This is the divergence that started the whole exercise. Marathi said never;
-        // English said "without separate permission". The strict promise is the one the
-        // pilot farmers actually read, so the strict promise is the one that binds, and
-        // neither document may reintroduce the qualifier.
-        expect(DOCS.privacyEn).toMatch(/will not use your voice to train AI models\./);
-        expect(DOCS.privacyEn).not.toMatch(/train AI models without separate permission/);
-        expect(DOCS.privacyMr).toContain('तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही');
-        expect(DOCS.privacyMr).not.toContain('परवानगीशिवाय AI');
+    it('makes ONE voice promise in both languages: no improvement use without his separate permission (D-36)', () => {
+        // History: Marathi once said "never" while English said "without separate permission";
+        // both were aligned to the absolute. Founder D-36 (option 2) replaced the absolute in
+        // BOTH languages at once with his own sentence, and built the separate permission. The
+        // two documents must still make the same promise, and the absolute must not linger in
+        // one of them.
+        const d36 = ['तुमच्या स्वतंत्र परवानगीशिवाय तुमच्या आवाजाच्या नोंदी श्रमसफलची भाषा व काम समजण्याची क्षमता',
+            'सुधारण्यासाठी वापरल्या जाणार नाहीत.'];
+        expect(DOCS.privacyMr.replace(/\s+/g, ' ')).toContain(d36.join(' '));
+        expect(DOCS.privacyEn.replace(/\s+/g, ' ')).toContain(
+            'will not be used to improve how well Shram Safal understands language and work without your separate permission.',
+        );
+        expect(DOCS.privacyEn).not.toMatch(/will not use your voice to train AI models/);
+        expect(DOCS.privacyEn).not.toMatch(/No AI model is trained on your voice/);
+        expect(DOCS.privacyMr).not.toContain('तुमचा आवाज AI मॉडेल शिकवण्यासाठी वापरणार नाही');
+        expect(DOCS.privacyMr).not.toContain('कोणतंही AI मॉडेल तुमच्या आवाजावर');
+    });
+
+    it('says plainly what the improvement permission covers: optional, OFF to start, training AND evaluating (D-36)', () => {
+        const en = DOCS.privacyEn.replace(/\s+/g, ' ');
+        expect(en).toContain('Let Shram Safal grow more capable from my experience');
+        expect(en).toMatch(/train and evaluate the systems behind Shram Safal/);
+        expect(en).toMatch(/optional permission and it starts \*\*off\*\*/);
+        expect(en).toMatch(/do not claim a recording is anonymous/);
+        const mr = DOCS.privacyMr.replace(/\s+/g, ' ');
+        expect(mr).toContain('माझ्या अनुभवातून श्रमसफल अधिक सक्षम होऊ द्या');
+        expect(mr).toContain('शिकवण्यासाठी (training) आणि तपासण्यासाठी (evaluation)');
+        expect(mr).toContain('ऐच्छिक परवानगी');
+        expect(mr).toContain('निनावी झालं, असा दावा आम्ही करत नाही');
+    });
+
+    it('names who may listen to a kept original voice (D-31)', () => {
+        expect(DOCS.privacyEn).toContain('Permission to listen: you and authorized reviewers on this farm');
+        expect(DOCS.privacyMr).toContain('ती ऐकण्याची परवानगी: तुम्ही आणि या शेतावरील अधिकृत तपासणारे');
     });
 
     it('closes the under-18 question in the Terms, in both languages', () => {

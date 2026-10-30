@@ -335,6 +335,16 @@
 //     named ON PURPOSE, and it should be read as such.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.improvement_permission_events (plr-d10 I25, founder D-36) — KEEP, for the
+//     same reason as the two consent ledgers above: each row is the evidence of whether
+//     this person allowed improvement use, under which words and when. It holds no
+//     content (user_id, a yes/no, a words version, a language, an app version, a time),
+//     and the app role cannot rewrite it (UPDATE / DELETE / TRUNCATE revoked).
+//     DISCLOSED: like the two ledgers above, an erased subject stays named here. The row
+//     survives; the licence does not — ImprovementPermissionGate answers NO for any
+//     account with an erasure request (any status), whatever its rows say.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a
 //     disposition comment; see step 5 of the delete block in ProcessOneAsync.
 //     This table is not merely adjacent to the ownership link, it IS the

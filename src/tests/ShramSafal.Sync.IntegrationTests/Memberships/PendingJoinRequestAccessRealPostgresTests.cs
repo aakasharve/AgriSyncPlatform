@@ -458,6 +458,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // spec R-11 (b) — Down() read in full: DROP VIEW IF EXISTS ssf.access_extension_projections.
         // A read-only view with no farm column; no policy, no row. Re-Up recreates it and its grant.
         "20261027040113_AddAccessExtensionProjection",
+        // spec plr-d10 I25 (founder D-36 / D-31) — Down() read in full: drops policy
+        // p_self_improvement_permission_events, the user-keyed table ssf.improvement_permission_events
+        // and the nullable column user_consent_state.full_history_journal_wording_version. No farm
+        // column, no membership policy, no farm_join_requests object. Re-Up recreates them.
+        "20261029224212_AddImprovementPermissionAndVoiceWordingVersion",
     ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —

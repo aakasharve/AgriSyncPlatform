@@ -25,6 +25,7 @@ import {
     tVoiceDiary,
 } from '../../i18n/voiceDiaryTranslations';
 import { APP_VERSION } from '../../infrastructure/api/transport';
+import { VOICE_RETENTION_WORDING_VERSION } from './improvement/improvementPermissionCopy';
 import {
     useFullHistoryJournalConsent,
     type UseFullHistoryJournalConsentResult,
@@ -76,6 +77,8 @@ export const VoiceRetainedConsentToggleView: React.FC<Props & {
                     languageShown: locale,
                     consentTextVersion: state.version,
                     clientAppVersion: APP_VERSION,
+                    // plr-d10 I25 (founder D-31): the choice is made against THESE words.
+                    fullHistoryJournalWordingVersion: VOICE_RETENTION_WORDING_VERSION,
                 });
                 await reload();
             } finally {
@@ -148,6 +151,13 @@ export const VoiceRetainedConsentToggleView: React.FC<Props & {
                         <div className="font-['Noto_Sans_Devanagari'] font-bold text-base text-stone-800">
                             {tVoiceDiary(locale, 'consentToggle.title')}
                         </div>
+                        {/* plr-d10 I25 (founder D-31): who may listen, always visible. */}
+                        <p
+                            className="mt-1 font-['Noto_Sans_Devanagari'] text-sm font-medium text-stone-700 leading-snug"
+                            data-testid="voice-retained-consent-meaning"
+                        >
+                            {tVoiceDiary(locale, 'consentToggle.meaning')}
+                        </p>
                         <button
                             type="button"
                             onClick={(e) => {

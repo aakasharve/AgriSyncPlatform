@@ -56,6 +56,10 @@ vi.mock('../app/components/AppShell', () => ({ default: ({ children }: { childre
 vi.mock('../pages/LoginPage', () => ({ default: () => <div data-testid="login-page" /> }));
 vi.mock('../pages/JoinFarmLandingPage', () => ({ default: () => null }));
 vi.mock('../features/consent/gate/useConsentGateLink', () => ({ useConsentGateLinkReconciliation: vi.fn() }));
+// plr-d10 I25: the one-time notice-change sheet (own tests in features/consent/reask) — a marker here.
+vi.mock('../features/consent/reask/NoticeChangeSheet', () => ({
+    default: ({ userId }: { userId: string }) => <div data-testid="notice-change-sheet-mount" data-user={userId} />,
+}));
 vi.mock('../app/featureFlags', () => ({ IS_OVERSIGHT_PREVIEW_ENABLED: false }));
 // spec: plr-d10 I16 — स्वागत now comes before login once per phone. These tests are about the
 // auth gate, so the phone has already passed it (beforeEach); its own tests: App.firstRunOrder.test.tsx.

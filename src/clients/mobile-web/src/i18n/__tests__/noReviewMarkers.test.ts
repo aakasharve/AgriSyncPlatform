@@ -189,6 +189,8 @@ describe('the hashed gate notice and the Voice Diary labels do not overstate', (
         expect(noticeAll).not.toMatch(/under your control|ताब्यात/);
         expect(noticeAll).not.toMatch(/only for that assigned purpose|ठरलेल्या कामापुरतीच/);
         expect(noticeAll).not.toMatch(/download your information/i);
-        expect(CONSENT_NOTICE.en.willNotDo.items[2]).toMatch(/^We ourselves will not/);
+        // plr-d10 I25 (founder D-36): the voice promise is conditional on his separate
+        // permission, and that permission now exists — a promise the code backs.
+        expect(CONSENT_NOTICE.en.willNotDo.items[2]).toMatch(/without your separate permission\.$/);
     });
 });

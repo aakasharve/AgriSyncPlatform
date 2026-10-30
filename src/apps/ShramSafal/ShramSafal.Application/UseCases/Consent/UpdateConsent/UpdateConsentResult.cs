@@ -15,4 +15,7 @@ public sealed record UpdateConsentResult(
     bool ResearchCorpusExport,
     int Version,
     DateTime? GrantedAtUtc,
-    DateTime? WithdrawnAtUtc);
+    DateTime? WithdrawnAtUtc,
+    // ADDITIVE (plr-d10 I25, founder D-31): which words the "keep my original voice"
+    // choice was last made under; null = unknown.
+    string? FullHistoryJournalWordingVersion = null);

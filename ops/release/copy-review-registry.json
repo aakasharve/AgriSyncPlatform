@@ -25,13 +25,21 @@
     {
       "dir": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/Resources",
       "pattern": "\\.txt$"
+    },
+    {
+      "dir": "src/clients/mobile-web/src/features/consent/improvement",
+      "pattern": "^improvementPermissionCopy\\.ts$"
+    },
+    {
+      "dir": "src/clients/mobile-web/src/features/consent/reask",
+      "pattern": "^NoticeChangeSheet\\.tsx$"
     }
   ],
   "files": [
     {
       "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ErasureWorker.cs",
       "reviewStatus": "unreviewed",
-      "sha256": "1f8852d85bcbeea1abb3919580760ef21bb447a292bf991c485c42d292155723"
+      "sha256": "6361903f38f781459f74595a7eefd81a4aaf1ca0fb936ee4890959e2cae1d417"
     },
     {
       "path": "src/apps/ShramSafal/ShramSafal.Infrastructure/Privacy/ExportWorker.cs",
@@ -46,22 +54,22 @@
     {
       "path": "src/clients/mobile-web/public/consent/agreement_en.md",
       "reviewStatus": "unreviewed",
-      "sha256": "2fc074a862e17bda5b80878600828925bbd84ef482da46f3cfbb0e433b527cb7"
+      "sha256": "bf955b709fd04253d1fe4e7179d57f7bf5b0b3dd88a9bb9e405ee2f0d786f880"
     },
     {
       "path": "src/clients/mobile-web/public/consent/agreement_mr.md",
       "reviewStatus": "unreviewed",
-      "sha256": "d030c1a9764b676a311216afd1e9053fa790623453ffbe1917e50ffff9f20990"
+      "sha256": "3271cb75c3284fced0448bbae9942deadd836612b1b059ce17350885c823eaf5"
     },
     {
       "path": "src/clients/mobile-web/public/legal/privacy_en.md",
       "reviewStatus": "unreviewed",
-      "sha256": "4ff13a01a7bb1549ba0de758f785c51207ca88564af17ab712378f15e2cea63b"
+      "sha256": "e017d3e1b53d3c5fe2e62cfc9572fd544ace7992495a2f2a28b39ef3dfa37c7f"
     },
     {
       "path": "src/clients/mobile-web/public/legal/privacy_mr.md",
       "reviewStatus": "unreviewed",
-      "sha256": "48a5434089123f6ac13d8d0b871de28376c84a0f8b2911815a9c55edd94b0dd8"
+      "sha256": "2c758a6db02f2c6749b533b0c1d39a31b7ccdf4c8724faccf5934456a3af98cb"
     },
     {
       "path": "src/clients/mobile-web/public/legal/terms_en.md",
@@ -76,12 +84,22 @@
     {
       "path": "src/clients/mobile-web/src/features/consent/gate/consentNotice.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "c9be65d4ee0ba92f92cf305e311a7459658b4deaa2c25598421852b55c1a8e49"
+      "sha256": "27eeaae8a28704cce98e696de0c1ac826b64226fdcb049ca17c14ace58931aea"
+    },
+    {
+      "path": "src/clients/mobile-web/src/features/consent/improvement/improvementPermissionCopy.ts",
+      "reviewStatus": "unreviewed",
+      "sha256": "c2734ee70733c8cbf6c5ed743fb81336f10a7439b10b6961a643a0b48e46a031"
+    },
+    {
+      "path": "src/clients/mobile-web/src/features/consent/reask/NoticeChangeSheet.tsx",
+      "reviewStatus": "unreviewed",
+      "sha256": "5b6e69beb8eb79f8e17998e2e0b82795355ff24e173e75710d05ae0e07821875"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/consentTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "96753728ac0d3203416b8d7c68b299d87c5ed6f9c5debafe5712389740b36567"
+      "sha256": "c022f38025416cc62a9495fd2f0c397de22a014b54d939e7d8f74e7b46a39586"
     },
     {
       "path": "src/clients/mobile-web/src/i18n/dataRightsTranslations.ts",
@@ -96,7 +114,7 @@
     {
       "path": "src/clients/mobile-web/src/i18n/voiceDiaryTranslations.ts",
       "reviewStatus": "unreviewed",
-      "sha256": "158147ba52e125f62a408c9de62ca33fd40bab8235cf84ac6b06ffe32952662a"
+      "sha256": "e0ea168084fcb24193022cfd5496738cebe97a8a28a8c8f174d8544594df8b2c"
     }
   ]
 }

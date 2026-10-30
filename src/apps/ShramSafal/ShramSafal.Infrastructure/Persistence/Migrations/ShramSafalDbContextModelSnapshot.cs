@@ -1335,6 +1335,49 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("consent_grant_events", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Consent.ImprovementPermissionEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("Allowed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allowed");
+
+                    b.Property<string>("AppVersion")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("app_version");
+
+                    b.Property<DateTime>("ChosenAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("chosen_at_utc");
+
+                    b.Property<string>("LanguageShown")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("language_shown");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("WordingVersion")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("wording_version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ChosenAtUtc")
+                        .HasDatabaseName("ix_improvement_permission_events_user_chosen");
+
+                    b.ToTable("improvement_permission_events", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Consent.TermsAcceptanceEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4505,6 +4548,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<bool>("FullHistoryJournal")
                         .HasColumnType("boolean")
                         .HasColumnName("full_history_journal");
+
+                    b.Property<string>("FullHistoryJournalWordingVersion")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("full_history_journal_wording_version");
 
                     b.Property<DateTime?>("GrantedAtUtc")
                         .HasColumnType("timestamp with time zone")

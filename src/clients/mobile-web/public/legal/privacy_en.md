@@ -18,7 +18,7 @@
 
 # Privacy Notice — Shram Safal
 
-**Version `privacy-2026-10-25.1` · revised 25 October 2026**
+**Version `privacy-2026-10-30.1` · revised 30 October 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It
@@ -89,10 +89,10 @@ lawyer, and it is open. We are not going to pretend it is settled.
 
 - **We will not sell your personal data.**
 - **We will not use it for advertising** without separate permission.
-- **We ourselves will not use your voice to train AI models.** Not with permission, not
-  without — this one has no exception, and it says the same thing in Marathi and in
-  English. We have not verified what our speech and AI providers do under their own terms.
-  (See §7 for what the software can and cannot do here.)
+- **Your voice recordings will not be used to improve how well Shram Safal understands
+  language and work without your separate permission.** That permission is optional and
+  starts switched off (see §7). It is the same promise in Marathi and in English. We have
+  not verified what our speech and AI providers do under their own terms.
 - **We will not make lending, insurance or market decisions from your data** — that would
   need separate, specific consent that we have not asked for.
 
@@ -142,7 +142,7 @@ Version `retention-2026-10-13.1`.
 |---|---|
 | **Voice recording on your phone**, while it is being turned into a record | **Not deleted automatically at present.** It stays on your phone until you clear the app's data or uninstall the app |
 | **Voice recording kept on our servers** as the evidence behind a saved record | **No automatic deletion date.** Kept while your account is open. Deleted when you ask us to |
-| **Voice Diary recordings** — only if you switched "keep my recordings" on | Kept while that setting is on and your account is open. Deleted automatically when you ask us to erase your data |
+| **Voice Diary recordings** — only if you switched "Keep original voice" on. Permission to listen: you and authorized reviewers on this farm | Kept while that setting is on and your account is open. Deleted automatically when you ask us to erase your data |
 | **Farm work records** — logs, labour, costs | Kept while your account is open. If you ask us to erase your data, your name and personal notes are removed and the farm figures are kept **without you attached to them** |
 | **Database backups** | Up to **607 days** (about 20 months), then deleted automatically |
 | **Consent and audit records** | Kept for the life of the service. These record what you were shown and what you agreed to — they are your proof, and the app is technically prevented from editing or deleting them |
@@ -153,7 +153,7 @@ worse than none:
 1. The **no automatic deletion date** on server-held voice recordings is a deliberate
    decision, not an oversight. There is no timer on those files today, and deleting them
    is something a person at ARVE does when you ask.
-2. Switching the optional **"keep my recordings"** setting **off stops new recordings
+2. Switching the optional **"Keep original voice"** setting **off stops new recordings
    being saved, but does not yet delete the ones already saved.** To have those removed,
    ask us to erase your data.
 3. An erasure request today removes your account, your voice diary and your personal
@@ -166,9 +166,23 @@ worse than none:
 ## 7. Artificial intelligence, plainly
 
 - Your voice is **converted to text and structured into a record**. That is the whole job.
-- **No AI model is trained on your voice or your words.** There is no switch in the app
-  that lets you turn that on, and the two background jobs in the code that could ever
-  build a training set are switched off and are not enabled in production.
+- **You decide whether your voice helps improve Shram Safal.** "Let Shram Safal grow more
+  capable from my experience" is a separate, optional permission and it starts **off**. If
+  you turn it on, your voice recordings, the corrections you make and the related work
+  context may be used to **train and evaluate the systems behind Shram Safal**. Your choice,
+  the version of the words you were shown and the time are recorded on our server. Ticking
+  to use the service, "Keep original voice", or any older setting in the app does not count
+  as this permission.
+- **Nothing is used for this today.** No process that selects information for improvement
+  is running yet, and the two background jobs in the code that could ever build a training
+  set are switched off and are not enabled in production. Recordings collected before you
+  give this permission also need it before they can be used.
+- **You can turn it off at any time.** Once off, your information is no longer selected for
+  improvement. Nobody's information has been used this way so far; before any is, this
+  notice will say separately what happens, when you turn it off, to information already
+  used.
+- We **do not claim a recording is anonymous** just because its link to your account was
+  removed — a voice itself can identify a person.
 - The app **does not invent numbers.** If a quantity, a rate or a wage appears in your
   records, it is because you said it or typed it. Where the app is unsure, it asks you.
 - Anything the app suggests is a **suggestion**. You confirm it. A record you have not

@@ -17,6 +17,8 @@ import type {
     ConsentStateDto,
     UpdateConsentRequest,
     IssueConsentTokenResponse,
+    ImprovementPermissionDto,
+    SetImprovementPermissionRequest,
 } from '../dtos';
 
 /**
@@ -43,6 +45,20 @@ export async function updateConsent(
     request: UpdateConsentRequest,
 ): Promise<ConsentStateDto> {
     const response = await t.http.put<ConsentStateDto>('/shramsafal/consent/me', request);
+    return response.data;
+}
+
+// plr-d10 I25 (founder D-36) — the optional improvement permission, the caller's own.
+export async function getImprovementPermission(t: HttpTransport): Promise<ImprovementPermissionDto> {
+    const response = await t.http.get<ImprovementPermissionDto>('/shramsafal/consent/improvement');
+    return response.data;
+}
+
+export async function setImprovementPermission(
+    t: HttpTransport,
+    request: SetImprovementPermissionRequest,
+): Promise<ImprovementPermissionDto> {
+    const response = await t.http.put<ImprovementPermissionDto>('/shramsafal/consent/improvement', request);
     return response.data;
 }
 

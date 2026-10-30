@@ -46,7 +46,12 @@ export const OPTIONAL_PURPOSES: readonly OptionalPurposeDefinition[] = [
     },
     {
         code: 'AI_MODEL_IMPROVEMENT',
-        consentStateField: 'crossFarmAggregation',
+        // plr-d10 I25 (founder D-36): "an ambiguous old switch must not count as this
+        // permission". It used to read crossFarmAggregation. The permission now lives in its
+        // own server record and is decided ONLY by the server's fail-closed check
+        // (ImprovementPermissionGate.MayUseForImprovementAsync), so on the phone it is never
+        // granted — nothing on the phone selects improvement data.
+        consentStateField: null,
         // Nothing he uses stops. Saying "nothing stops" is the honest answer and it is
         // also the one that makes the toggle a real choice rather than a hostage.
         stops: [],

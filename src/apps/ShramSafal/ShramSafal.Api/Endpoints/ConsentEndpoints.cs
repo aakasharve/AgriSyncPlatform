@@ -17,6 +17,7 @@
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.UseCases.Consent.GetConsent;
+using ShramSafal.Application.UseCases.Consent.ImprovementPermission;
 using ShramSafal.Application.UseCases.Consent.UpdateConsent;
 using ShramSafal.Domain.Common;
 
@@ -32,6 +33,16 @@ public static class ConsentEndpoints
 
         group.MapPut("/consent/me", HandleUpdateConsentAsync)
             .WithName("UpdateConsentForCurrentUser")
+            .RequireAuthorization();
+
+        // plr-d10 I25 (founder D-36) — the OPTIONAL improvement permission, the caller's own
+        // only. Same /shramsafal/consent prefix, so the same middleware posture as /consent/me.
+        group.MapGet("/consent/improvement", HandleGetImprovementPermissionAsync)
+            .WithName("GetImprovementPermissionForCurrentUser")
+            .RequireAuthorization();
+
+        group.MapPut("/consent/improvement", HandleSetImprovementPermissionAsync)
+            .WithName("SetImprovementPermissionForCurrentUser")
             .RequireAuthorization();
 
         return group;
@@ -88,7 +99,8 @@ public static class ConsentEndpoints
             ConsentTextVersion: request.ConsentTextVersion ?? 1,
             ClientAppVersion: appVersion,
             AuditDeviceId: deviceId,
-            AuditIpHash: ipHash);
+            AuditIpHash: ipHash,
+            FullHistoryJournalWordingVersion: request.FullHistoryJournalWordingVersion);
 
         var result = await handler.HandleAsync(command, ct);
         if (!result.IsSuccess)
@@ -97,6 +109,51 @@ public static class ConsentEndpoints
         }
 
         return Results.Ok(result.Value);
+    }
+
+    private static async Task<IResult> HandleGetImprovementPermissionAsync(
+        HttpContext httpContext,
+        GetImprovementPermissionHandler handler,
+        CancellationToken ct)
+    {
+        if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId) || userId == Guid.Empty)
+        {
+            return Results.Unauthorized();
+        }
+
+        var result = await handler.HandleAsync(userId, ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+    }
+
+    private static async Task<IResult> HandleSetImprovementPermissionAsync(
+        HttpContext httpContext,
+        SetImprovementPermissionRequest request,
+        SetImprovementPermissionHandler handler,
+        CancellationToken ct)
+    {
+        // From the token, always — a body never names whose permission this is.
+        if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId) || userId == Guid.Empty)
+        {
+            return Results.Unauthorized();
+        }
+
+        if (request is null)
+        {
+            return Results.BadRequest(new
+            {
+                error = ShramSafalErrors.InvalidCommand.Code,
+                message = "Request body is required.",
+            });
+        }
+
+        var result = await handler.HandleAsync(new SetImprovementPermissionCommand(
+            UserId: userId,
+            Allowed: request.Allowed,
+            WordingVersion: request.WordingVersion,
+            LanguageShown: request.LanguageShown,
+            AppVersion: ResolveClientAppVersion(httpContext)), ct);
+
+        return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
     }
 
     // Mirror of SecurityEndpoints.ToErrorResult / ResolveClientAppVersion
@@ -134,4 +191,14 @@ public sealed record UpdateConsentRequest(
     bool? CrossFarmAggregation,
     bool? ResearchCorpusExport,
     string? LanguageShown,
-    int? ConsentTextVersion);
+    int? ConsentTextVersion,
+    // ADDITIVE (plr-d10 I25, founder D-31): the version of the words shown for the
+    // "keep my original voice" switch. Absent on every older phone.
+    string? FullHistoryJournalWordingVersion = null);
+
+// plr-d10 I25 (founder D-36) — PUT /shramsafal/consent/improvement. No user id: it is the
+// caller's. Allowed is required; the words version is stored as sent.
+public sealed record SetImprovementPermissionRequest(
+    bool? Allowed,
+    string? WordingVersion,
+    string? LanguageShown);

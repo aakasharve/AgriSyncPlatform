@@ -89,7 +89,7 @@ describe('VoiceDiaryPage — the आवाज नोंदी place', () => {
         render(<VoiceDiaryPage onBack={() => undefined} />);
         const page = await screen.findByTestId('voice-diary-page', {}, SLOW);
         const keep = within(page).getByTestId('voice-retained-consent-toggle');
-        expect(keep).toHaveTextContent('आवाज नोंदी जतन करून ठेवा');
+        expect(keep).toHaveTextContent('मूळ आवाज जतन करा');
         expect(keep.textContent ?? '').not.toMatch(/[A-Za-z]/);
 
         const cta = await screen.findByTestId('voice-diary-retention-banner-cta', {}, SLOW);

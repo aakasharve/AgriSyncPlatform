@@ -26,9 +26,15 @@ import type { ConsentBeforeOtp } from './useConsentBeforeOtp';
 interface Props {
     consent: ConsentBeforeOtp;
     disabled?: boolean;
+    /**
+     * plr-d10 I25: the one-time notice-change sheet reuses this exact tick (same hashed words)
+     * for a farmer who is ALREADY signed in. The hint's "until then nothing about you is saved"
+     * is true only before sign-in, so that sheet hides it and says its own line.
+     */
+    showHint?: boolean;
 }
 
-const ConsentTick: React.FC<Props> = ({ consent, disabled = false }) => {
+const ConsentTick: React.FC<Props> = ({ consent, disabled = false, showHint = true }) => {
     if (consent.status !== 'required') return null;
     const n = CONSENT_NOTICE[consent.language];
     const held = disabled || consent.recording;
@@ -72,7 +78,7 @@ const ConsentTick: React.FC<Props> = ({ consent, disabled = false }) => {
                     {n.tick.tail}
                 </span>
             </label>
-            {!consent.ticked && (
+            {showHint && !consent.ticked && (
                 <p data-testid="consent-tick-hint" className="px-1 text-[12.5px] font-medium leading-snug text-stone-500">
                     {n.ctaDisabledHint}
                 </p>
