@@ -8,8 +8,8 @@
  * mounts) never stopped — its timer kept the first render's `stopRecording`, which believed nothing was
  * recording, so at 65 s it was still recording under "0 सेकंदात आपोआप थांबेल...".
  *
- * The limit itself stays 60 s until the server can take more (Sarvam speech-to-text: 30 s of audio per request;
- * structurer answer capped at 2048 tokens) — see the comment on `AUTO_STOP_SEC`.
+ * Lane V-1 lifted the limit to 10 minutes (the server now cuts long audio into pieces Sarvam can take, fills the
+ * transcript itself and sends an answer budget) and the countdown to the last 30 seconds — see `AUTO_STOP_SEC`.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -75,9 +75,9 @@ const startSpeaking = async () => { await act(async () => { fireEvent.click(scre
 const wait = async (ms: number) => { await act(async () => { vi.advanceTimersByTime(ms); }); };
 
 describe('the one length limit', () => {
-    it('is one constant, and the countdown is the last 10 seconds before it', () => {
-        expect(AUTO_STOP_SEC).toBe(60);
-        expect(AUTO_STOP_WARN_SEC).toBe(AUTO_STOP_SEC - 10);
+    it('is one constant — 10 minutes — and the countdown is the last 30 seconds before it', () => {
+        expect(AUTO_STOP_SEC).toBe(600);
+        expect(AUTO_STOP_WARN_SEC).toBe(AUTO_STOP_SEC - 30);
     });
 });
 
@@ -94,13 +94,21 @@ describe.each([
         expect(stops()).toBe(0);
     });
 
-    it('counts down in its last 10 seconds, saying exactly how many are left', async () => {
+    it('counts down in its last 30 seconds, saying exactly how many are left', async () => {
         render(mount());
         await startSpeaking();
         await wait(AUTO_STOP_WARN_SEC * 1000);
-        expect(screen.getByTestId('mic-auto-stop')).toHaveTextContent(REC_WORDS.autoStopping(AUTO_STOP_SEC - AUTO_STOP_WARN_SEC));
-        await wait(5000);
+        expect(screen.getByTestId('mic-auto-stop')).toHaveTextContent(REC_WORDS.autoStopping(30));
+        await wait(25_000);
         expect(screen.getByTestId('mic-auto-stop')).toHaveTextContent(REC_WORDS.autoStopping(5));
+    });
+
+    it('says nothing about stopping at one minute any more', async () => {
+        render(mount());
+        await startSpeaking();
+        await wait(61_000);
+        expect(recording()).toBe('yes');
+        expect(screen.queryByTestId('mic-auto-stop')).not.toBeInTheDocument();
     });
 
     it('really stops at the limit — once — as the countdown said', async () => {

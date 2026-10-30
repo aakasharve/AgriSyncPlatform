@@ -86,7 +86,8 @@ internal sealed class AiPromptTemplateRegistry
         string learnedVocabulary,
         string marathiVocab,
         string workerMarkers,
-        string fewShotExamples)
+        string fewShotExamples,
+        string correction = "")
     {
         var bucketRules = string.Join(
             Environment.NewLine + Environment.NewLine,
@@ -131,7 +132,7 @@ internal sealed class AiPromptTemplateRegistry
 
                      FEW SHOT EXAMPLES:
                      {fewShotExamples}
-
+                     {(correction.Length > 0 ? Environment.NewLine + correction + Environment.NewLine : string.Empty)}
                      FINAL RULE:
                      Return minified JSON only.
                      """;

@@ -15,8 +15,9 @@
  *     was (the recorder's own success screen is cleared, his plots there restored); the result screen he started on
  *     shows the new recording, which is "the same screen with what he said applied".
  */
-import type { AgriLogResponse, AppStatus, LogScope } from '../../types';
+import type { AgriLogResponse, AppStatus, DailyLog, LogScope } from '../../types';
 import type { VoiceDraftSink } from '../../features/voice/useVoiceRecorder.types';
+import { correctionEntryForParse } from '../../features/logs/components/correction/correctionEntryForParse';
 import { hasWaitingLogWork } from '../navigation/openLogFlow';
 import { deliverSpoken, speakState, type SpeakLanding, type SpeakPlace, type SpeakRequest, type SpeakReturn } from './speakStore';
 
@@ -109,6 +110,19 @@ export const mayKeepOffline = (): boolean => {
     const purpose = speakState().request?.purpose;
     return !purpose || !KEEPS_UNSAVED.has(purpose);
 };
+
+/**
+ * Lane AI-2 (register F71) — the entry the words spoken NOW change, as the parse should read it: set only while a
+ * "बदला" request (`correctEntry` with its `logId`) is active and that entry is on this phone; `null` for every other
+ * request, which is then parsed exactly as before.
+ */
+export function correctionEntryNow(history: readonly DailyLog[]): Record<string, unknown> | null {
+    const { request } = speakState();
+    const logId = request?.purpose === 'correctEntry' ? request.context.logId : undefined;
+    if (!logId) return null;
+    const log = history.find(l => l.id === logId);
+    return log ? correctionEntryForParse(log) : null;
+}
 
 /**
  * The recorder's hand-off, purpose-aware: for a purpose that keeps his words unsaved (a correction) the parse is held

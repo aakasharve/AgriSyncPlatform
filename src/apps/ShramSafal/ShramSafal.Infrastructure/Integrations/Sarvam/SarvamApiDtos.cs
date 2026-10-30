@@ -42,6 +42,27 @@ internal sealed record SarvamSttResult(
 }
 
 /// <summary>
+/// PLR lane V-1 — one Sarvam REST speech-to-text call, before the caller decides what an empty transcript means
+/// (a whole clip with no words fails; a quiet piece of a long clip is a pause). <see cref="Retryable"/>: a rate limit,
+/// a server error, a timeout or a dropped connection — worth one more try for a piece.
+/// </summary>
+internal sealed record SttCallOutcome(
+    bool IsSuccess,
+    string? Transcript,
+    string? LanguageCode,
+    string? DiarizedTranscriptJson,
+    string? Error,
+    bool Retryable,
+    TimeSpan? RetryAfter)
+{
+    public static SttCallOutcome Succeeded(string transcript, string? languageCode, string? diarizedTranscriptJson) =>
+        new(true, transcript, languageCode, diarizedTranscriptJson, null, false, null);
+
+    public static SttCallOutcome Failed(string error, bool retryable, TimeSpan? retryAfter = null) =>
+        new(false, null, null, null, error, retryable, retryAfter);
+}
+
+/// <summary>
 /// Result envelope returned by <c>SarvamChatClient.CompleteAsync</c>.
 /// Wraps the Sarvam REST <c>POST /v1/chat/completions</c> response: a JSON
 /// object with <c>choices[].message.content</c>. The <c>content</c> is

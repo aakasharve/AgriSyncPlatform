@@ -549,6 +549,29 @@ internal sealed class AiOrchestrator(
             false);
     }
 
+    /// <summary>
+    /// PLR lane V-1 — the streaming parse's final answer carries the transcript the server sent, because the model
+    /// no longer repeats it (the same rule <see cref="AiResponseNormalizer.NormalizeVoiceJson"/> applies on the
+    /// batch path).
+    /// </summary>
+    internal static object? WithServerTranscript(JsonElement? value, string? transcript)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(transcript) ||
+            value.Value.ValueKind != JsonValueKind.Object ||
+            System.Text.Json.Nodes.JsonNode.Parse(value.Value.GetRawText()) is not System.Text.Json.Nodes.JsonObject node)
+        {
+            return value.Value;
+        }
+
+        node["fullTranscript"] = transcript.Trim();
+        return JsonSerializer.SerializeToElement(node);
+    }
+
     private static AiProviderType ParseProviderTypeOrDefault(string? raw, AiProviderType fallback)
     {
         if (string.IsNullOrWhiteSpace(raw))
@@ -668,7 +691,7 @@ internal sealed class AiOrchestrator(
                 case PartialJsonEventType.Complete:
                     pendingEvents.Enqueue(new ParseStreamEvent(
                         Type: "complete",
-                        Payload: evt.Value.HasValue ? (object)evt.Value.Value : null,
+                        Payload: WithServerTranscript(evt.Value, transcript),
                         PromptVersion: promptVersion));
                     break;
             }

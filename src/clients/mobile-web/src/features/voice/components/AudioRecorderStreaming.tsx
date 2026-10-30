@@ -23,7 +23,8 @@ import { AudioData } from '../../../types';
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
-import { AUTO_STOP_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
+import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
+import { startLiveEncoder, type LiveEncoder } from './recorder/liveEncoder';
 import { DEFAULT_VOICE_CONFIG } from '../../../infrastructure/voice/types';
 import { StreamingPcmRecorder } from '../../../infrastructure/voice/StreamingPcmRecorder';
 import { StreamingSilenceTrimmer } from '../../../infrastructure/voice/StreamingSilenceTrimmer';
@@ -101,6 +102,9 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   const preprocessorRef = useRef<VoicePreprocessor | null>(null);
   const timerRef = useRef<number | null>(null);
   const cancelledRef = useRef(false);
+  // Lane V-1 — the same sound encoded while he speaks; a recording longer than LIVE_ENCODE_AFTER_SEC is sent from it.
+  const liveEncoderRef = useRef<LiveEncoder | null>(null);
+  const startedAtRef = useRef(0);
 
   const ensurePreprocessor = (): VoicePreprocessor => {
     if (!preprocessorRef.current) {
@@ -132,8 +136,10 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       setIsRecording(true);
       setLastInputTyped(false);
       setLiveStream(recorder.liveStream ?? null);
+      liveEncoderRef.current = startLiveEncoder(recorder.liveStream);
 
       const startTime = Date.now();
+      startedAtRef.current = startTime;
       timerRef.current = window.setInterval(() => {
         const currentDuration = Math.floor((Date.now() - startTime) / 1000);
         setDuration(currentDuration);
@@ -177,8 +183,13 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
     const recorder = recorderRef.current;
     const trimmer = trimmerRef.current;
     const hasher = hasherRef.current;
+    const liveEncoder = liveEncoderRef.current;
+    liveEncoderRef.current = null;
+    const spokenSec = (Date.now() - startedAtRef.current) / 1000;
 
     try {
+      // Lane V-1 — the live encoding ends first, while the microphone is still open (the recorder's stop closes it).
+      const liveBlob = liveEncoder ? await liveEncoder.stop() : null;
       const recording = await recorder.stop();
 
       if (cancelledRef.current) {
@@ -198,6 +209,20 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       // time. Placed AFTER recorder.stop() so flipping status (which unmounts this
       // recorder block) cannot race the in-flight stop.
       onProcessingStart?.();
+
+      // Lane V-1 — a long recording goes as it was encoded while he spoke: no real-time re-encode after the stop.
+      // When the live encoding failed, it takes today's path below (slow, but nothing is lost).
+      if (liveBlob && spokenSec > LIVE_ENCODE_AFTER_SEC) {
+        const liveBase64 = await blobToBase64NoPrefix(liveBlob);
+        onAudioCaptured({
+          blob: liveBlob,
+          base64: liveBase64,
+          mimeType: 'audio/webm',
+          encodedLive: true,
+          durationMs: Math.round(recording.durationMs || spokenSec * 1000),
+        });
+        return;
+      }
 
       const sessionId = VoiceIdempotency.createSessionId();
       const farmId = 'unknown-farm'; // useVoiceRecorder downstream resolves the real farmId
@@ -250,6 +275,8 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      void liveEncoderRef.current?.stop();
+      liveEncoderRef.current = null;
       // Best-effort cleanup; recorder.stop() is async and we don't await on unmount.
       const r = recorderRef.current;
       if (r) {

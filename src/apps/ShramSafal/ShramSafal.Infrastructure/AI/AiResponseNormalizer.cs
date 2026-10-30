@@ -52,14 +52,26 @@ internal sealed class AiResponseNormalizer
     // rather than being allowed to flag a whole item on their own.
     private const int ProvenanceMinSegmentLength = 4;
 
+    /// <param name="serverTranscript">
+    /// PLR lane V-1 — the words the server already holds (the joined speech-to-text transcript, or the typed text).
+    /// When given, it IS <c>fullTranscript</c>: the model is no longer asked to repeat the transcript (its answer
+    /// must fit the token limit for a 10-minute recording), and the server's own words win over anything the model
+    /// wrote there. The provenance check below then reads the real transcript, not the model's copy of it.
+    /// Absent (audio sent straight to a multimodal model), the model's own transcription stays.
+    /// </param>
     public string NormalizeVoiceJson(
         string rawJson,
         string schemaVersion = "1.0.0",
         string pipelineVersion = "gemini-server-v1",
-        string promptVersion = "2026-02-22")
+        string promptVersion = "2026-02-22",
+        string? serverTranscript = null)
     {
         var root = ParseJsonObject(rawJson);
         PromoteLegacyDailyLogShape(root);
+        if (!string.IsNullOrWhiteSpace(serverTranscript))
+        {
+            root["fullTranscript"] = serverTranscript.Trim();
+        }
 
         // WAVE 2.2 (spec: dfes-companion-2026-07-11) — BLANK, NOT "Log processed.".
         //

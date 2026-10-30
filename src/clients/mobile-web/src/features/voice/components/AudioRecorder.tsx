@@ -19,7 +19,7 @@ import { acquireMicStream } from '../../../infrastructure/voice/acquireMicStream
 import { useMicLevel } from '../hooks/useMicLevel';
 import RecorderFace from './recorder/RecorderFace';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
-import { AUTO_STOP_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
+import { AUTO_STOP_SEC, LIVE_ENCODE_AFTER_SEC, REC_WORDS, readableError } from './recorder/recorderWords';
 
 interface AudioRecorderProps {
   onAudioCaptured: (audioData: AudioData) => void;
@@ -60,6 +60,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
   // so emptying the chunks before stop() did not discard anything: the clip was still emitted.
   // The streaming recorder already guards with the same flag.
   const cancelledRef = useRef(false);
+  const startedAtRef = useRef(0);
 
   const recordingChangeRef = useRef(onRecordingChange);
   recordingChangeRef.current = onRecordingChange;
@@ -113,10 +114,14 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
             try { performance.measure('voice:batch-pipeline', 'voice:processing-start', 'voice:processing-done'); } catch { /* duplicate-name in same session */ }
             try { performance.measure('voice:batch-total', 'voice:stop', 'voice:processing-done'); } catch { /* duplicate-name in same session */ }
 
+            // Lane V-1 — this recorder's sound is already encoded while he speaks: a long recording is sent as
+            // it is (never re-encoded in real time after the stop).
+            const spokenMs = Date.now() - startedAtRef.current;
             onAudioCaptured({
               blob,
               base64,
-              mimeType: 'audio/webm'
+              mimeType: 'audio/webm',
+              ...(spokenMs > LIVE_ENCODE_AFTER_SEC * 1000 && { encodedLive: true, durationMs: spokenMs }),
             });
           };
         }
@@ -136,6 +141,7 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
 
       // Timer
       const startTime = Date.now();
+      startedAtRef.current = startTime;
       timerRef.current = window.setInterval(() => {
         const currentDuration = Math.floor((Date.now() - startTime) / 1000);
         setDuration(currentDuration);

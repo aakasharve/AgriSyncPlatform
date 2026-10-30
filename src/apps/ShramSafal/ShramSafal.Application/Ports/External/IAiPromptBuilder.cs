@@ -46,6 +46,15 @@ public sealed record VoiceParseContext(
     /// absent when no crop cycle is selected or stage is unset.
     /// </summary>
     public string? CropStage { get; init; }
+
+    /// <summary>
+    /// PLR lane AI-2 (register F71) — set only when the farmer is speaking a CHANGE to one saved entry (the "बदला"
+    /// screen): that entry's current parts, in the parse's own bucket shape (<c>{"inputs":[…],"irrigation":[…]}</c>).
+    /// The prompt then reads "X नाही, Y" as "X becomes Y" in the matching part instead of a new observation.
+    /// Sent by the phone inside the existing parse context (<c>context</c> / <c>contextJson</c>) as
+    /// <c>correctionOf</c>; additive and optional — an older app never sends it and is parsed exactly as before.
+    /// </summary>
+    public System.Text.Json.JsonElement? CorrectionOf { get; init; }
 }
 
 public sealed record CropInfo(string Id, string Name, List<PlotInfo> Plots);

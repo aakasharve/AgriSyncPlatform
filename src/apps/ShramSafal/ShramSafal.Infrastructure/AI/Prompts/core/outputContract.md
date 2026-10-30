@@ -17,7 +17,7 @@ Return this JSON shape exactly:
   "questionsForUser": [],
   "fieldConfidences": {},
   "confidence": 0.0,
-  "fullTranscript": "verbatim transcript",
+  "fullTranscript": "AUDIO input only (omit it for a text transcript; the server attaches it)",
   "english": "string",
   "english_redacted": "string",
   "referenced_date": "YYYY-MM-DD",

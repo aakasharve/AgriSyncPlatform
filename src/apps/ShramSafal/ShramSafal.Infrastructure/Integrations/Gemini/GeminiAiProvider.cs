@@ -170,7 +170,9 @@ internal sealed class GeminiAiProvider : IAiProvider
 
             var cleaned = GeminiJsonCleaner.Clean(generated.Content!);
             var promptVersion = AiPromptLineage.ResolvePromptVersion(systemPrompt);
-            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion);
+            // PLR lane V-1 — for a text input the server holds the transcript and the model no longer repeats it;
+            // for audio (rawTranscript null) the model's own transcription stays.
+            var normalized = responseNormalizer.NormalizeVoiceJson(cleaned, promptVersion: promptVersion, serverTranscript: rawTranscript);
             var confidence = TryExtractConfidence(normalized) ?? 0.75m;
             rawTranscript ??= TryExtractString(normalized, "fullTranscript");
 

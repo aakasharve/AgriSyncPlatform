@@ -535,6 +535,9 @@ public static class DependencyInjection
         // (Task 2.3) can pipe browser audio → PCM → Sarvam without the
         // transcriber adapter inspecting MIME types.
         services.AddSingleton<IAudioTranscoder, FfmpegAudioTranscoder>();
+        // PLR lane V-1 (register F67) — cuts a recording longer than 28 s into pieces Sarvam's
+        // speech-to-text REST call can take (30 s each); used by SarvamSttClient.
+        services.AddSingleton<AudioSplitter>();
 
         services.AddScoped<IAiOrchestrator, AiOrchestrator>();
         // DISABLED (CTO ops-hardening): ExtractionVerificationWorker threw every cycle
@@ -640,7 +643,11 @@ public static class DependencyInjection
             .ConfigureHttpClient((sp, client) =>
             {
                 var sarvamOptions = sp.GetRequiredService<IOptions<SarvamOptions>>().Value;
-                var timeout = sarvamOptions.TimeoutSeconds <= 0 ? 45 : sarvamOptions.TimeoutSeconds;
+                // PLR lane V-1 — one client serves speech-to-text (TimeoutSeconds per piece) and the structurer
+                // (ChatTimeoutSeconds); each call sets its own deadline, so the client allows the longer one.
+                var timeout = Math.Max(
+                    sarvamOptions.TimeoutSeconds <= 0 ? 45 : sarvamOptions.TimeoutSeconds,
+                    sarvamOptions.ChatTimeoutSeconds <= 0 ? 45 : sarvamOptions.ChatTimeoutSeconds);
                 client.Timeout = TimeSpan.FromSeconds(timeout);
             });
 

@@ -1,15 +1,30 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ShramSafal.Infrastructure.Audio;
 
 namespace ShramSafal.Infrastructure.Integrations.Sarvam;
 
+/// <summary>
+/// Sarvam REST speech-to-text. PLR lane V-1 (register F67): Sarvam takes at most 30 s of audio per request, so a
+/// longer clip is cut by <see cref="AudioSplitter"/> into pieces of at most 25 s, the pieces are transcribed (two at a
+/// time) and their words joined in order. ALL OR NOTHING: if any piece fails, the whole transcription fails through
+/// the existing failure / fallback path — a partial transcript is never returned as success. A clip of 28 s or less,
+/// one that cannot be decoded, and a diarization request go exactly as before (the original bytes, one request).
+/// </summary>
 internal sealed class SarvamSttClient(
     IOptions<SarvamOptions> optionsAccessor,
     IHttpClientFactory httpClientFactory,
-    ILogger<SarvamSttClient> logger)
+    ILogger<SarvamSttClient> logger,
+    AudioSplitter? splitter = null)
 {
+    private const string NoTranscriptError = "Sarvam STT did not return a transcript.";
+    private const int PieceAttempts = 2;
+    private static readonly TimeSpan PieceRetryDelay = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan PieceRetryDelayCap = TimeSpan.FromSeconds(5);
+
     private readonly SarvamOptions _options = optionsAccessor.Value;
 
     public async Task<SarvamSttResult> TranscribeAsync(
@@ -74,7 +89,174 @@ internal sealed class SarvamSttClient(
                 return SarvamSttResult.Failure("Audio payload is empty.");
             }
 
-            using var timeout = CreateTimeoutToken(ct, _options.TimeoutSeconds);
+            var language = string.IsNullOrWhiteSpace(languageHint) ? _options.SttLanguage : languageHint.Trim();
+
+            // PLR lane V-1 — a clip longer than Sarvam's 30 s goes in pieces. Diarization keeps one request: speaker
+            // labels from separate pieces cannot be joined (the worker that asks for it is off by default).
+            if (!withDiarization && splitter is not null)
+            {
+                var split = await splitter.SplitAsync(payload, mimeType, ct).ConfigureAwait(false);
+                if (split.IsTooLong)
+                {
+                    return SarvamSttResult.Failure(
+                        $"Audio is longer than {AudioSplitter.MaxSplitSeconds / 60:0} minutes; it was not transcribed.");
+                }
+
+                if (split.IsSplit)
+                {
+                    return await TranscribePiecesAsync(
+                        split.Pieces,
+                        (piece, pieceCt) => TranscribePieceWithRetryAsync(piece, language, pieceCt),
+                        _options.SttMaxParallelPieces,
+                        logger,
+                        ct).ConfigureAwait(false);
+                }
+            }
+
+            var once = await SendOnceAsync(payload, mimeType, "audio.webm", language, withDiarization, ct).ConfigureAwait(false);
+            if (!once.IsSuccess)
+            {
+                return SarvamSttResult.Failure(once.Error ?? "Sarvam STT call failed.");
+            }
+
+            return string.IsNullOrWhiteSpace(once.Transcript)
+                ? SarvamSttResult.Failure(NoTranscriptError)
+                : SarvamSttResult.Success(once.Transcript, once.LanguageCode, once.DiarizedTranscriptJson);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Sarvam STT call failed.");
+            return SarvamSttResult.Failure(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// PLR lane V-1 — the pieces of one clip, transcribed with at most <paramref name="maxParallel"/> in flight and
+    /// joined in their order. ALL OR NOTHING: the first piece that fails stops the rest and fails the whole clip; a
+    /// piece that comes back with no words fails it too, unless the piece is a pause (<see cref="AudioPiece.IsQuiet"/>).
+    /// Pure orchestration (the piece call is passed in), so a test can fake speech-to-text.
+    /// </summary>
+    internal static async Task<SarvamSttResult> TranscribePiecesAsync(
+        IReadOnlyList<AudioPiece> pieces,
+        Func<AudioPiece, CancellationToken, Task<SttCallOutcome>> transcribePiece,
+        int maxParallel,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        var texts = new string?[pieces.Count];
+        string? language = null;
+        string? failure = null;
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using var gate = new SemaphoreSlim(Math.Max(1, maxParallel));
+
+        void Fail(string reason)
+        {
+            if (Interlocked.CompareExchange(ref failure, reason, null) is null)
+            {
+                stop.Cancel();
+            }
+        }
+
+        async Task RunAsync(AudioPiece piece)
+        {
+            await gate.WaitAsync(stop.Token).ConfigureAwait(false);
+            try
+            {
+                stop.Token.ThrowIfCancellationRequested();
+                var outcome = await transcribePiece(piece, stop.Token).ConfigureAwait(false);
+                var label = $"part {piece.Index + 1} of {pieces.Count}";
+                if (!outcome.IsSuccess)
+                {
+                    Fail($"Sarvam STT failed on {label}: {outcome.Error ?? "unknown error"}");
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(outcome.Transcript) && !piece.IsQuiet)
+                {
+                    Fail($"Sarvam STT returned no words for {label}, which is not a pause.");
+                    return;
+                }
+
+                texts[piece.Index] = outcome.Transcript?.Trim() ?? string.Empty;
+                Interlocked.CompareExchange(ref language, outcome.LanguageCode, null);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                Fail($"Sarvam STT failed on part {piece.Index + 1} of {pieces.Count}: {ex.Message}");
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+
+        try
+        {
+            await Task.WhenAll(pieces.Select(RunAsync)).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && failure is not null)
+        {
+            // A piece failed and stopped the others; the failure below says which.
+        }
+
+        ct.ThrowIfCancellationRequested();
+        if (failure is not null)
+        {
+            logger.LogWarning("Sarvam STT split transcription failed: {Failure}", failure);
+            return SarvamSttResult.Failure(failure);
+        }
+
+        var joined = string.Join(" ", texts.Where(t => !string.IsNullOrWhiteSpace(t)));
+        if (string.IsNullOrWhiteSpace(joined))
+        {
+            return SarvamSttResult.Failure(NoTranscriptError);
+        }
+
+        logger.LogInformation("Sarvam STT transcribed {Count} pieces of one clip.", pieces.Count);
+        return SarvamSttResult.Success(joined, language);
+    }
+
+    /// <summary>One piece, with one more try after a rate limit, a server error or a timeout.</summary>
+    private async Task<SttCallOutcome> TranscribePieceWithRetryAsync(AudioPiece piece, string language, CancellationToken ct)
+    {
+        SttCallOutcome outcome = SttCallOutcome.Failed("not attempted", retryable: false);
+        for (var attempt = 1; attempt <= PieceAttempts; attempt++)
+        {
+            outcome = await SendOnceAsync(piece.Wav, "audio/wav", "audio.wav", language, withDiarization: false, ct).ConfigureAwait(false);
+            if (outcome.IsSuccess || !outcome.Retryable || attempt == PieceAttempts)
+            {
+                break;
+            }
+
+            var delay = outcome.RetryAfter is { } after && after > TimeSpan.Zero
+                ? (after < PieceRetryDelayCap ? after : PieceRetryDelayCap)
+                : PieceRetryDelay;
+            logger.LogInformation(
+                "Sarvam STT piece {Index} failed ({Error}); one more try after {Delay} ms.",
+                piece.Index + 1,
+                outcome.Error,
+                delay.TotalMilliseconds);
+            await Task.Delay(delay, ct).ConfigureAwait(false);
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// One Sarvam REST call. An empty transcript is reported as such (not as a failure): the caller decides —
+    /// a whole clip with no words fails as before, a quiet piece of a long clip is a pause.
+    /// </summary>
+    private async Task<SttCallOutcome> SendOnceAsync(
+        byte[] payload,
+        string mimeType,
+        string fileName,
+        string language,
+        bool withDiarization,
+        CancellationToken ct)
+    {
+        using var timeout = CreateTimeoutToken(ct, _options.TimeoutSeconds);
+        try
+        {
             var client = httpClientFactory.CreateClient("SarvamAiProvider");
 
             using var multipart = new MultipartFormDataContent();
@@ -84,9 +266,9 @@ internal sealed class SarvamSttClient(
             if (semicolonIndex > 0) normalizedMimeType = normalizedMimeType[..semicolonIndex];
             fileContent.Headers.ContentType = new MediaTypeHeaderValue(normalizedMimeType);
 
-            multipart.Add(fileContent, "file", "audio.webm");
+            multipart.Add(fileContent, "file", fileName);
             multipart.Add(new StringContent(_options.SttModel), "model");
-            multipart.Add(new StringContent(string.IsNullOrWhiteSpace(languageHint) ? _options.SttLanguage : languageHint.Trim()), "language_code");
+            multipart.Add(new StringContent(language), "language_code");
             multipart.Add(new StringContent(_options.SttMode), "mode");
 
             if (withDiarization)
@@ -104,33 +286,36 @@ internal sealed class SarvamSttClient(
             };
             request.Headers.TryAddWithoutValidation("api-subscription-key", _options.ApiSubscriptionKey);
 
-            using var response = await client.SendAsync(request, timeout.Token);
-            var body = await response.Content.ReadAsStringAsync(timeout.Token);
+            using var response = await client.SendAsync(request, timeout.Token).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 var providerError = TryExtractProviderError(body) ??
                                     $"Sarvam STT call failed with status {(int)response.StatusCode}.";
-                return SarvamSttResult.Failure(providerError);
+                var status = (int)response.StatusCode;
+                return SttCallOutcome.Failed(
+                    providerError,
+                    retryable: response.StatusCode == HttpStatusCode.TooManyRequests || status >= 500,
+                    response.Headers.RetryAfter?.Delta);
             }
 
-            if (!TryExtractTranscript(body, out var transcript, out var languageCode) ||
-                string.IsNullOrWhiteSpace(transcript))
+            if (!TryExtractTranscript(body, out var transcript, out var languageCode))
             {
-                return SarvamSttResult.Failure("Sarvam STT did not return a transcript.");
+                // No transcript field at all, or an empty one: no words heard.
+                return SttCallOutcome.Succeeded(string.Empty, languageCode, null);
             }
 
-            string? diarizedJson = null;
-            if (withDiarization)
-            {
-                diarizedJson = TryExtractDiarizedTranscriptJson(body);
-            }
-
-            return SarvamSttResult.Success(transcript, languageCode, diarizedJson);
+            var diarizedJson = withDiarization ? TryExtractDiarizedTranscriptJson(body) : null;
+            return SttCallOutcome.Succeeded(transcript, languageCode, diarizedJson);
         }
-        catch (Exception ex)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return SttCallOutcome.Failed($"Sarvam STT call timed out after {TimeoutOf(_options.TimeoutSeconds)} s.", retryable: true);
+        }
+        catch (HttpRequestException ex)
         {
             logger.LogWarning(ex, "Sarvam STT call failed.");
-            return SarvamSttResult.Failure(ex.Message);
+            return SttCallOutcome.Failed(ex.Message, retryable: true);
         }
     }
 
@@ -268,9 +453,11 @@ internal sealed class SarvamSttClient(
         return null;
     }
 
+    private static int TimeoutOf(int timeoutSeconds) => timeoutSeconds <= 0 ? 45 : timeoutSeconds;
+
     private static CancellationTokenSource CreateTimeoutToken(CancellationToken ct, int timeoutSeconds)
     {
-        var timeout = timeoutSeconds <= 0 ? 45 : timeoutSeconds;
+        var timeout = TimeoutOf(timeoutSeconds);
         var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
         linked.CancelAfter(TimeSpan.FromSeconds(timeout));
         return linked;

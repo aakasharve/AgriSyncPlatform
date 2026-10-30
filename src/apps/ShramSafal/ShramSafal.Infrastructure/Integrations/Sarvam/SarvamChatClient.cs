@@ -24,31 +24,13 @@ internal sealed class SarvamChatClient(
 
         try
         {
-            using var timeout = CreateTimeoutToken(ct, _options.TimeoutSeconds);
+            // PLR lane V-1 — the structurer writes a long recording's answer within its own, longer, timeout.
+            using var timeout = CreateTimeoutToken(ct, _options.ChatTimeoutSeconds);
             var client = httpClientFactory.CreateClient("SarvamAiProvider");
-
-            var requestBody = new
-            {
-                model = _options.ChatModel,
-                messages = new object[]
-                {
-                    new
-                    {
-                        role = "system",
-                        content = systemPrompt
-                    },
-                    new
-                    {
-                        role = "user",
-                        content = userMessage
-                    }
-                },
-                temperature = _options.ChatTemperature
-            };
 
             using var request = new HttpRequestMessage(HttpMethod.Post, _options.ChatEndpoint)
             {
-                Content = JsonContent.Create(requestBody)
+                Content = JsonContent.Create(BuildRequestBody(systemPrompt, userMessage))
             };
             request.Headers.TryAddWithoutValidation("api-subscription-key", _options.ApiSubscriptionKey);
 
@@ -62,7 +44,7 @@ internal sealed class SarvamChatClient(
             }
 
             // PLR V-1 (lane AI-1) — the answer was CUT OFF at the model's output-token limit (Sarvam's default
-            // max_tokens is 2048 and this client sends none). Cut-off JSON does not parse, and the normalizer turns
+            // max_tokens is 2048; lane V-1 now sends ChatMaxTokens). Cut-off JSON does not parse, and the normalizer turns
             // an unparseable answer into an EMPTY "successful" parse: the farmer's words silently become nothing.
             // A cut-off answer is a failure, said out loud, so the orchestrator's fallback or the error path runs.
             if (WasCutOff(body))
@@ -84,6 +66,30 @@ internal sealed class SarvamChatClient(
             logger.LogWarning(ex, "Sarvam chat call failed.");
             return SarvamChatResult.Failure(ex.Message);
         }
+    }
+
+    /// <summary>
+    /// The chat request body. PLR lane V-1: an explicit <c>max_tokens</c> (<see cref="SarvamOptions.ChatMaxTokens"/>)
+    /// replaces Sarvam's silent 2048 default; 0 or less sends none.
+    /// </summary>
+    internal Dictionary<string, object> BuildRequestBody(string systemPrompt, string userMessage)
+    {
+        var body = new Dictionary<string, object>
+        {
+            ["model"] = _options.ChatModel,
+            ["messages"] = new object[]
+            {
+                new { role = "system", content = systemPrompt },
+                new { role = "user", content = userMessage },
+            },
+            ["temperature"] = _options.ChatTemperature,
+        };
+        if (_options.ChatMaxTokens > 0)
+        {
+            body["max_tokens"] = _options.ChatMaxTokens;
+        }
+
+        return body;
     }
 
     internal const string CutOffError =

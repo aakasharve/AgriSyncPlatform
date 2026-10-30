@@ -9,6 +9,7 @@ import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/F
 import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
 import { resolveApiBaseUrl } from '../api/transport';
 import { OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, offlineVoiceQueueAllowed } from './offlineVoiceQueue';
+import { correctionParseContext } from './correctionParseContext';
 import { parseStreamConsumer } from './ParseStreamConsumer';
 import type { ParseStreamEvent } from '../../domain/ai/contracts/ParseStreamEvent';
 // spec: voice-diary-e2e-2026-05-17 (D.15) — internal pass-throughs to the
@@ -39,6 +40,12 @@ import {
 
 // Re-exported for the existing __tests__/safeTrim.test.ts import path.
 export { safeTrim } from './BackendAiClient.helpers';
+
+/** Lane AI-2 — `{ correctionOf }` while a correction is spoken, else nothing (the context is sent as before). */
+const withCorrectionOf = (): { correctionOf?: Record<string, unknown> } => {
+    const correctionOf = correctionParseContext();
+    return correctionOf ? { correctionOf } : {};
+};
 
 export class BackendAiClient implements VoiceParserPort {
     async parseInput(
@@ -403,8 +410,11 @@ export class BackendAiClient implements VoiceParserPort {
         scope: LogScope,
     ) {
         const transcript = safeTrim(input.content, 'input.content');
+        // Lane AI-2 — the same words typed as a change to two different entries are two different requests: the
+        // server returns a stored answer for a repeated key, so the entry being corrected is part of the hash.
+        const correctionOf = (parseContext as { correctionOf?: unknown }).correctionOf;
         const requestPayloadHash = input.requestPayloadHash
-            ?? await IdempotencyKeyFactory.hashString(transcript);
+            ?? await IdempotencyKeyFactory.hashString(correctionOf ? `${transcript}\u0000correctionOf:${JSON.stringify(correctionOf)}` : transcript);
 
         const keyMaterial = input.idempotencyKey
             ? { idempotencyKey: input.idempotencyKey, deterministicSeed: '' }
@@ -681,6 +691,8 @@ export class BackendAiClient implements VoiceParserPort {
             farmContext: { selection },
             focusCategory: options?.focusCategory ?? null,
             vocabDb: null,
+            // Lane AI-2 — only while a "बदला" correction is spoken: the entry it changes (absent otherwise).
+            ...withCorrectionOf(),
         };
     }
 }

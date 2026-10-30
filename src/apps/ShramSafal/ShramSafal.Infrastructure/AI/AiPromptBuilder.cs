@@ -30,6 +30,8 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
         var learnedVocabulary = BuildLearnedVocabulary(context);
         var marathiVocab = MarathiPromptData.BuildVocabListing();
         var fewShotExamples = string.Join(Environment.NewLine + Environment.NewLine, MarathiPromptData.FewShotExamples);
+        // PLR lane AI-2 — only when the farmer is speaking a change to one saved entry ("बदला"); empty otherwise.
+        var correction = CorrectionPromptData.BuildBlock(context.CorrectionOf);
 
         if (_options.UseModularPrompt)
         {
@@ -40,7 +42,8 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                 learnedVocabulary,
                 marathiVocab,
                 string.Join(", ", MarathiPromptData.WorkerMarkers),
-                fewShotExamples);
+                fewShotExamples,
+                correction);
         }
 
         var template = """
@@ -68,7 +71,7 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        Then:
                        - set dayOutcome = "IRRELEVANT_INPUT"
                        - set summary to a polite "no actionable work" message in the same language as transcript
-                       - keep fullTranscript exact
+                       - fullTranscript: as the REQUIRED TRANSCRIPT section below says
                        - keep all operational arrays empty
 
                        --- ATTENDANCE IS A RECORD (हजेरी) ---
@@ -134,8 +137,10 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                        - "sulphur आणायचं" is procurement plannedTask, not inputs execution.
 
                        --- REQUIRED TRANSCRIPT POLICY ---
-                       - fullTranscript must preserve full verbatim speech (dialect, fillers, mixed language).
-                       - Never sanitize or summarize fullTranscript.
+                       - When you are given a written TRANSCRIPT (text), do NOT write fullTranscript and never repeat
+                         the transcript: the server attaches the exact transcript itself.
+                       - Only when you are given AUDIO, write fullTranscript as the full verbatim speech (dialect,
+                         fillers, mixed language). Never sanitize or summarize it.
 
                        --- EXPLAINABILITY POLICY ---
                        For each extracted entity include:
@@ -210,7 +215,7 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
                          "questionsForUser": [],
                          "fieldConfidences": {},
                          "confidence": 0.0,
-                         "fullTranscript": "verbatim text"
+                         "fullTranscript": "AUDIO input only (omit it for a text transcript)"
                        }
 
                        --- MARATHI VOCABULARY MAPPINGS ---
@@ -218,7 +223,7 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
 
                        --- FEW SHOT EXAMPLES ---
                        {{FEW_SHOTS}}
-
+                       {{CORRECTION}}
                        --- FINAL RULE ---
                        Output minified JSON only.
                        """;
@@ -229,7 +234,8 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
             .Replace("{{LEARNED_VOCAB}}", learnedVocabulary, StringComparison.Ordinal)
             .Replace("{{WORKER_MARKERS}}", string.Join(", ", MarathiPromptData.WorkerMarkers), StringComparison.Ordinal)
             .Replace("{{MARATHI_VOCAB}}", marathiVocab, StringComparison.Ordinal)
-            .Replace("{{FEW_SHOTS}}", fewShotExamples, StringComparison.Ordinal);
+            .Replace("{{FEW_SHOTS}}", fewShotExamples, StringComparison.Ordinal)
+            .Replace("{{CORRECTION}}", correction.Length > 0 ? Environment.NewLine + correction + Environment.NewLine : string.Empty, StringComparison.Ordinal);
     }
 
     public string BuildReceiptExtractionPrompt()

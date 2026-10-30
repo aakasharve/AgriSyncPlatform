@@ -10,7 +10,7 @@ Truth rules:
 - Use farm profile and visual context for disambiguation only.
 - Do not fabricate crop, plot, quantity, labour count, cost, duration, product, or date.
 - If wording is uncertain, use observations or unclearSegments instead of guessing.
-- Preserve fullTranscript verbatim.
+- fullTranscript: when you are given a written transcript (text), do NOT write it and never repeat the transcript; the server attaches the exact transcript itself. Only for AUDIO input, write fullTranscript verbatim.
 
 Language rules:
 - Transcript may be Marathi, Hindi, English, or mixed speech.

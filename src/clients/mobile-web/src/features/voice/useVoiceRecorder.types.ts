@@ -108,3 +108,6 @@ export type PreprocessedAudioResult = {
     idempotencyKey?: string;
     requestPayloadHash?: string;
 };
+
+// Lane V-1 — re-exported for the hook (its file may not grow; see scripts/check-file-sizes.mjs QUARANTINE).
+export { liveEncodedUpload } from './liveEncodedUpload';

@@ -49,13 +49,21 @@ export const STOP_HINT_FOR_SEC = 16;
  * The recorder's ONE length limit, read by both recorders (`AudioRecorder`, `AudioRecorderStreaming`), and the
  * countdown that announces it. The countdown says "{n} सेकंदात आपोआप थांबेल", so the stop must be real (P5).
  *
- * Register F18 / lane V-1: the founder wants "a minute to as long as you want". It stays 60 s FOR NOW because the
- * path behind the mic cannot yet take more: Sarvam's speech-to-text REST call (both server voice paths) accepts
- * 30 s of audio per request, and the structurer's answer is capped at 2048 tokens by default. Lifting this is one
- * constant once the server transcribes in chunks and the answer fits (lane V-1 plan in the PLR register).
+ * Register F18 / lane V-1: the founder wants "a minute to as long as you want" — 10 minutes now. The path behind the
+ * mic takes it: the server cuts a recording longer than 28 s into pieces of at most 25 s for Sarvam's speech-to-text
+ * (30 s per request), all or nothing; it writes the transcript itself instead of asking the structurer to repeat it,
+ * and sends an explicit answer budget. The countdown shows only in the last 30 seconds.
  */
-export const AUTO_STOP_SEC = 60;
-export const AUTO_STOP_WARN_SEC = AUTO_STOP_SEC - 10;
+export const AUTO_STOP_SEC = 600;
+export const AUTO_STOP_WARN_SEC = AUTO_STOP_SEC - 30;
+
+/**
+ * Lane V-1 — a recording LONGER than this is uploaded as the recorder encoded it while he spoke (`encodedLive`), not
+ * re-encoded after stop. The re-encode plays the sound through the browser in real time (`SegmentCompressor`), so a
+ * 10-minute recording would wait about 10 minutes after the stop — twice over, once more in the upload preparation —
+ * and a phone that sleeps meanwhile could cut it short. Up to this length nothing changes from what is in use today.
+ */
+export const LIVE_ENCODE_AFTER_SEC = 60;
 
 /**
  * Lane RF2 fix pass (review B004) — the two offline outcomes the parse reports as stable codes, in his language (the

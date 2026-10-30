@@ -15,7 +15,7 @@ import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
 import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
-import { yieldToPaint, hasSuccessfulIrrigation, bindDraftProvenance, typedRecordingRef, type UseVoiceRecorderProps, type PreprocessedAudioResult, type VoiceRecordingRef } from './useVoiceRecorder.types';
+import { yieldToPaint, hasSuccessfulIrrigation, bindDraftProvenance, typedRecordingRef, liveEncodedUpload, type UseVoiceRecorderProps, type PreprocessedAudioResult, type VoiceRecordingRef } from './useVoiceRecorder.types';
 
 export const useVoiceRecorder = ({
     currentLogContext,
@@ -79,10 +79,7 @@ export const useVoiceRecorder = ({
         return farmId ?? 'unknown-farm';
     };
 
-    const resolveUserId = (): string => {
-        const userId = farmerProfile.activeOperatorId?.trim();
-        return userId && userId.length > 0 ? userId : 'unknown-user';
-    };
+    const resolveUserId = (): string => farmerProfile.activeOperatorId?.trim() || 'unknown-user';
 
     const blobToBase64 = async (blob: Blob): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -100,13 +97,15 @@ export const useVoiceRecorder = ({
         });
     };
 
-
     const preprocessAudio = async (audioData: AudioData): Promise<PreprocessedAudioResult> => {
         const farmId = resolveFarmId();
         const userId = resolveUserId();
         const sessionId = VoiceIdempotency.createSessionId();
 
         try {
+            // Lane V-1: a long recording comes already encoded (`liveEncodedUpload`) — never re-encoded in real time.
+            const live = audioData.encodedLive ? await liveEncodedUpload(audioData, { userId, farmId, sessionId }) : null;
+            if (live) { lastVoiceSessionMetadataRef.current = live.metadata; lastVoiceIdempotencySeedRef.current = live.deterministicSeed; return live.result; }
             const pipelineOutput = await voicePreprocessor.processBlobAsSingleBlob(
                 audioData.blob,
                 sessionId,
