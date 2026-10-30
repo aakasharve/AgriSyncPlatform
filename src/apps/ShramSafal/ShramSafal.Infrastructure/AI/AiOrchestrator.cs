@@ -1392,7 +1392,22 @@ internal sealed class AiOrchestrator(
                 return VoiceAttemptExecution.Failed(provider.ProviderType, failureClass, result.Error, attempt);
             }
 
-            if (result.OverallConfidence < config.VoiceConfidenceThreshold)
+            // PLR lane V-1 fix pass 3: a COMPLETE answer for a long recording (structured in parts) is kept with its
+            // low-confidence marks — the result screen shows the "not sure" items. Measured live 2026-10-31: six good
+            // Sarvam parts at confidence 0.5 went to the Gemini fallback, whose one-call answer for a 10-minute
+            // transcript was cut off at its token limit → HTTP 400, and the farmer lost the whole recording.
+            if (result.OverallConfidence < config.VoiceConfidenceThreshold && result.StructuredParts > 1)
+            {
+                logger.LogInformation(
+                    "AI provider {ProviderType} returned low confidence for {Operation} job {JobId} ({Confidence} < {Threshold}); kept: a long recording structured in {Parts} parts is never handed to a fallback that cannot take it.",
+                    provider.ProviderType,
+                    AiOperationType.VoiceToStructuredLog,
+                    job.Id,
+                    result.OverallConfidence,
+                    config.VoiceConfidenceThreshold,
+                    result.StructuredParts);
+            }
+            else if (result.OverallConfidence < config.VoiceConfidenceThreshold)
             {
                 attempt.RecordFailure(
                     AiFailureClass.LowConfidence,

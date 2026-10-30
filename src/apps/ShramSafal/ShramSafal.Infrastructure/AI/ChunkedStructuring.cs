@@ -399,7 +399,9 @@ internal static class ChunkedStructuring
     ///   <item><c>dayOutcome</c>: the strongest said (work &gt; stoppage &gt; nothing planned &gt; irrelevant);</item>
     ///   <item><c>missingSegments</c>: only what EVERY segment says is missing (one segment's silence is not the day's);</item>
     ///   <item><c>disturbance</c>: the first, with every segment's blocked parts, notes and highest severity;</item>
-    ///   <item><c>confidence</c> / <c>fieldConfidences</c>: the lowest (the answer is as sure as its least sure part);</item>
+    ///   <item><c>confidence</c>: the mean of the segments' scores weighted by how many rows each extracted (fix
+    ///   pass 3: the lowest of six parts was biased low and threw a whole good recording away); <c>fieldConfidences</c>:
+    ///   the lowest per field, so every "not sure" mark a part made stays on the merged answer;</item>
     ///   <item><c>summary</c>, <c>english</c>, <c>english_redacted</c>: each segment's text, joined in order;</item>
     ///   <item><c>referenced_date</c> (+ its confidence and reason): the first segment that states one;</item>
     ///   <item><c>fullTranscript</c>: dropped — the server writes the whole transcript;</item>
@@ -457,10 +459,13 @@ internal static class ChunkedStructuring
             merged["disturbance"] = disturbance;
         }
 
-        var confidences = answers.Select(a => Number(a["confidence"])).Where(c => c is not null).Select(c => c!.Value).ToList();
-        if (confidences.Count > 0)
+        var scored = answers
+            .Select(a => (Score: Number(a["confidence"]), Rows: Math.Max(1, RowBuckets.Sum(b => a[b] is JsonArray list ? list.Count : 0))))
+            .Where(x => x.Score is not null)
+            .ToList();
+        if (scored.Count > 0)
         {
-            merged["confidence"] = confidences.Min();
+            merged["confidence"] = Math.Round(scored.Sum(x => x.Score!.Value * x.Rows) / scored.Sum(x => x.Rows), 3);
         }
 
         merged["fieldConfidences"] = LowestFieldConfidences(answers);
@@ -618,24 +623,26 @@ internal static class ChunkedStructuring
 }
 
 /// <summary>
-/// PLR lane V-1 fix pass (B001, re-planned in fix pass 2) — how much transcript one structurer answer can carry.
+/// PLR lane V-1 fix pass (B001, re-planned in fix passes 2 and 3) — how much transcript one structurer answer can carry.
 ///
 /// <para>
 /// The model's answer for a transcript is about <see cref="AnswerTokensPerSpokenToken"/> tokens per (estimated)
 /// transcript token plus <see cref="AnswerOverheadTokens"/> for the JSON frame. MEASURED live 2026-10-31 (real Sarvam,
 /// :5048): a segment of ~547 estimated transcript tokens produced 3721 completion tokens and was still cut off — a
-/// ratio of at least 6.8, not the 3.0 first planned. The plan now uses 8.0, and sizes a segment so its predicted
-/// answer is <see cref="PlannedShareOfAnswer"/> of the limit: with 4096 that is about 257 transcript tokens a
-/// segment, which stays under the 3721 tokens the live answer reached for any real ratio up to about 12.7. A segment
-/// whose answer is cut off anyway is split in half (<see cref="ChunkedStructuring.MaxBisectDepth"/>), so a wrong ratio
-/// costs extra calls, never the recording. Each answer's usage is logged as the API returns it.
+/// ratio of at least 6.8, not the 3.0 first planned. MEASURED again on fix pass 2 (the 619 s clip, six complete
+/// segments of ≤ 257 estimated tokens): 8.6 / 11.5 / 11.0 / 10.3 / 8.5 / 12.9 (3183 completion tokens for ~246). The
+/// plan now uses 11.0 and sizes a segment so its predicted answer is <see cref="PlannedShareOfAnswer"/> of the limit:
+/// with 4096 that is 187 transcript tokens a segment, whose answer at the worst ratio seen (12.9) is about 2810 tokens
+/// — cut off only above a ratio of about 19.8. A segment whose answer is cut off anyway is split in half
+/// (<see cref="ChunkedStructuring.MaxBisectDepth"/>), so a wrong ratio costs extra calls, never the recording. Each
+/// answer's usage is logged as the API returns it.
 /// </para>
 /// </summary>
 internal readonly record struct StructuringBudget(int MaxAnswerTokens)
 {
     public const double PlannedShareOfAnswer = 0.6;
     public const int AnswerOverheadTokens = 400;
-    public const double AnswerTokensPerSpokenToken = 8.0;
+    public const double AnswerTokensPerSpokenToken = 11.0;
     public const int MinSegmentTokens = 100;
 
     /// <summary>The most transcript tokens one segment may carry.</summary>

@@ -143,7 +143,8 @@ internal sealed class SarvamAiProvider(
                 PromptVersion = promptVersion,
                 RawTranscript = transcript,
                 NormalizedJson = normalized,
-                OverallConfidence = confidence
+                OverallConfidence = confidence,
+                StructuredParts = structured.Segments,
             };
         }
         catch (Exception ex)

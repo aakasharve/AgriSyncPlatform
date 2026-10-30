@@ -218,7 +218,7 @@ public sealed class PlrV1FixPassTests(Xunit.Abstractions.ITestOutputHelper outpu
         Assert.Equal(new[] { 3, 5 }, merged["labour"]!.AsArray().Select(r => r!["count"]!.GetValue<int>()).ToArray());
         Assert.Equal(new[] { "l1", "l1-p2" }, merged["labour"]!.AsArray().Select(r => r!["id"]!.GetValue<string>()).ToArray());
         Assert.Empty(merged["missingSegments"]!.AsArray()); // the third segment does not say irrigation was missing
-        Assert.Equal(0.7, merged["confidence"]!.GetValue<double>());
+        Assert.Equal(0.8, merged["confidence"]!.GetValue<double>()); // fix pass 3: row-weighted mean (1 row each), not the lowest
         Assert.Equal(0.8, merged["fieldConfidences"]!["labour"]!.GetValue<double>());
         Assert.False(merged.ContainsKey("fullTranscript"));
         Assert.Equal("2026-10-30", merged["referenced_date"]!.GetValue<string>());

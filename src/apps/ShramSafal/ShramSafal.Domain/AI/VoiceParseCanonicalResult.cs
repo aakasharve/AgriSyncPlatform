@@ -29,6 +29,14 @@ public sealed record VoiceParseCanonicalResult
     public string? RawTranscript { get; init; }
 
     public decimal OverallConfidence { get; init; }
+
+    /// <summary>
+    /// PLR lane V-1 fix pass 3 — how many separately structured parts this answer was merged from (1 = one call).
+    /// A long recording's transcript is structured in parts; such a complete answer is never thrown away for a
+    /// fallback that cannot take a long input, low confidence or not (the orchestrator keeps it with its marks).
+    /// </summary>
+    public int StructuredParts { get; init; } = 1;
+
     public List<string> Warnings { get; init; } = [];
     public string? Error { get; init; }
 

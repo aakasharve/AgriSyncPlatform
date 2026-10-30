@@ -55,6 +55,33 @@ public sealed record VoiceParseContext(
     /// <c>correctionOf</c>; additive and optional — an older app never sends it and is parsed exactly as before.
     /// </summary>
     public System.Text.Json.JsonElement? CorrectionOf { get; init; }
+
+    /// <summary>
+    /// PLR lane V-1 fix pass 3 (register F74) — the same context with every list present and no null item. A context
+    /// read from a phone's JSON can leave out any part (an older app, a partial profile — <c>"profile": {}</c>), and
+    /// <c>System.Text.Json</c> then leaves those lists null although they are declared non-null; reading them
+    /// crashed the parse with HTTP 500. Absent reads as empty ("not provided" in the prompt), never as an error.
+    /// </summary>
+    public VoiceParseContext WithoutNulls() => this with
+    {
+        AvailableCrops = Present(AvailableCrops).Select(c => c with { Plots = Present(c.Plots) }).ToList(),
+        Profile = Profile is null
+            ? new FarmerProfileInfo([], [], [], null)
+            : Profile with
+            {
+                Motors = Present(Profile.Motors),
+                WaterResources = Present(Profile.WaterResources),
+                Machineries = Present(Profile.Machineries),
+            },
+        FarmContext = FarmContext is null
+            ? null
+            : new FarmContextInfo(Present(FarmContext.Selection)
+                .Select(s => s with { SelectedPlotIds = Present(s.SelectedPlotIds), SelectedPlotNames = Present(s.SelectedPlotNames) })
+                .ToList()),
+        VocabDb = VocabDb is null ? null : new VocabDatabaseInfo(Present(VocabDb.Mappings)),
+    };
+
+    private static List<T> Present<T>(List<T>? items) => items is null ? [] : items.Where(x => x is not null).ToList();
 }
 
 public sealed record CropInfo(string Id, string Name, List<PlotInfo> Plots);

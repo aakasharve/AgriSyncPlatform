@@ -529,23 +529,29 @@ public sealed class ParseVoiceInputHandler(
         return new MemoryStream(textBytes, writable: false);
     }
 
-    private static VoiceParseContext BuildPromptContext(
+    internal static VoiceParseContext BuildPromptContext(
         string? contextJson,
         string farmName,
         string? plotName,
         string? cropName,
         string? cropStage = null)
     {
+        // PLR lane V-1 fix pass 3 (F74): when the phone's context cannot be used, the server builds the farm context
+        // itself — and still keeps the phone's correctionOf, so a "बदला" correction is read as a change, not a new day.
+        JsonElement? correctionOf = null;
         if (!string.IsNullOrWhiteSpace(contextJson))
         {
             try
             {
                 var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-                var parsed = JsonSerializer.Deserialize<VoiceParseContext>(contextJson, options);
-                if (parsed is not null
-                    && parsed.AvailableCrops is not null
-                    && parsed.Profile is not null)
+                var deserialized = JsonSerializer.Deserialize<VoiceParseContext>(contextJson, options);
+                correctionOf = deserialized?.CorrectionOf;
+                if (deserialized is not null
+                    && deserialized.AvailableCrops is not null
+                    && deserialized.Profile is not null)
                 {
+                    // A partial profile ("profile": {}) or a list with a null item is usable: absent reads as empty.
+                    var parsed = deserialized.WithoutNulls();
                     // AI_INTELLIGENCE_PLAN_2026-06-25 W1.P0 C8 — when the
                     // caller supplies a cropStage from the confirmed
                     // CropCycle.Stage, inject it as a soft prior even when
@@ -577,6 +583,8 @@ public sealed class ParseVoiceInputHandler(
                     }));
                 // Fall through to the minimal-context fallback below.
             }
+
+            correctionOf ??= ReadCorrectionOf(contextJson);
         }
 
         var selection = new SelectedCropContext(
@@ -593,7 +601,37 @@ public sealed class ParseVoiceInputHandler(
             VocabDb: null)
         {
             CropStage = cropStage,
+            CorrectionOf = correctionOf is { ValueKind: JsonValueKind.Object } ? correctionOf : null,
         };
+    }
+
+    /// <summary>The phone's <c>correctionOf</c> read on its own, from a context whose other parts did not parse.</summary>
+    private static JsonElement? ReadCorrectionOf(string contextJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(contextJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (string.Equals(property.Name, "correctionOf", StringComparison.OrdinalIgnoreCase)
+                    && property.Value.ValueKind == JsonValueKind.Object)
+                {
+                    return property.Value.Clone();
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            // Not JSON at all: there is no correction to keep. Leave a trace (no silent swallow).
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent("ParseVoice.CorrectionOfUnreadable"));
+        }
+
+        return null;
     }
 
     private static string BuildIdempotencyKey(

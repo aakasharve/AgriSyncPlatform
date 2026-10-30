@@ -25,6 +25,9 @@ internal sealed class AiPromptBuilder : IAiPromptBuilder
 
     public string BuildVoiceParsingPrompt(VoiceParseContext context)
     {
+        // PLR lane V-1 fix pass 3 (F74): every caller's context — the phone's JSON on /ai/voice-parse, the streaming
+        // and eval endpoints' bound bodies — may leave lists out ("profile": {}); absent is "not provided", never a 500.
+        context = context.WithoutNulls();
         var farmKnowledge = BuildFarmKnowledge(context);
         var visualContext = BuildVisualContext(context);
         var learnedVocabulary = BuildLearnedVocabulary(context);

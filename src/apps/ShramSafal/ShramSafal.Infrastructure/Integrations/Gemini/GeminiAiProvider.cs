@@ -159,6 +159,7 @@ internal sealed class GeminiAiProvider : IAiProvider
                 : ResolveStructurerModelId();
 
             string? content;
+            var structuredParts = 1;
             if (rawTranscript is not null)
             {
                 // PLR lane V-1 fix pass (B001) — a long TEXT is structured in segments, all or nothing (the same rule
@@ -192,6 +193,7 @@ internal sealed class GeminiAiProvider : IAiProvider
                 }
 
                 content = structured.Content;
+                structuredParts = structured.Segments;
             }
             else
             {
@@ -247,7 +249,8 @@ internal sealed class GeminiAiProvider : IAiProvider
                 PromptVersion = promptVersion,
                 NormalizedJson = normalized,
                 RawTranscript = rawTranscript,
-                OverallConfidence = confidence
+                OverallConfidence = confidence,
+                StructuredParts = structuredParts,
             };
         }
         catch (Exception ex)

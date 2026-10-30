@@ -100,14 +100,16 @@ public sealed class PlrV1FixPass2Tests
     public async Task Splitting_stops_at_depth_three_and_then_the_whole_parse_fails_never_partly()
     {
         var transcript = PlrV1FixPassTests.TenMinuteTranscript();
-        var segments = ChunkedStructuring.Segment(transcript, new StructuringBudget(4096).SegmentTokens);
+        // Segments as big as the first live plan (549): big enough that three splits come before the 60-token floor.
+        const int bigSegments = 549;
+        var segments = ChunkedStructuring.Segment(transcript, bigSegments);
         var fourth = segments[3].Trim();
         // A sentence said only once (the fixture repeats its plain sentences every minute): any piece holding it is
         // always cut off, however small.
         var poison = Sentences(fourth).First(s => transcript.Split(s).Length == 2);
         var chat = new BudgetChat(LiveRatio, LiveCap, alwaysCutOff: text => text.Contains(poison, StringComparison.Ordinal));
 
-        var result = await ChunkedStructuring.StructureAsync(transcript, new StructuringBudget(4096).SegmentTokens, chat.AnswerAsync, NullLogger.Instance, CancellationToken.None);
+        var result = await ChunkedStructuring.StructureAsync(transcript, bigSegments, chat.AnswerAsync, NullLogger.Instance, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Null(result.Content);
@@ -182,7 +184,7 @@ public sealed class PlrV1FixPass2Tests
     [Fact]
     public void The_plan_uses_the_measured_ratio_and_fits_under_the_live_cut_off()
     {
-        Assert.Equal(8.0, StructuringBudget.AnswerTokensPerSpokenToken);
+        Assert.True(StructuringBudget.AnswerTokensPerSpokenToken >= 8.0); // 11.0 since fix pass 3 (PlrV1FixPass3Tests)
         var segment = new StructuringBudget(4096).SegmentTokens;
         Assert.True(StructuringBudget.PredictedAnswerTokens(segment) <= LiveCap);
         // Even at the ratio actually seen live (about 7, itself cut off) a planned segment's answer fits.
