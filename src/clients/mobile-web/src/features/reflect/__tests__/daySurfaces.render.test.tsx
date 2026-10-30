@@ -3,14 +3,16 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 (lane RF)
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lanes RF, RF2)
  *
- * The day's work on आढावा, drawn: one recording (the glance and each recording of a plot's day), the day's work sheet
- * that follows the chosen day, the plot's day sheet (in place of the English drawer), and the notes' link to their
- * recording — in Marathi AND in English (one language at a time). What the farmer must read: what / who / when, the
- * ONE status wording, "लिहिलेलं" + the no-recording note for a typed entry, product boxes from the stored content,
- * the old-entry line (and nothing invented) for an older record, ▶ only where it may be offered, "—" for money he
- * may not see, and no number summed across recordings.
+ * The day's work on आढावा, drawn — in Marathi AND in English (one language at a time). Lane RF2 (the founder's screen
+ * 1): a plot card opens the plot's day — all its work sorted into the result screen's buckets, each value with the time
+ * it was told; under them the time chips (a green dot when confirmed), each opening its recording INLINE with one small
+ * line (who · status · ▶ where allowed) and "बदला"; no "यातून काय समजलं" source panel; "आणखी सांगा" only today. The
+ * day's feed sheet and the glance are retired. The notes keep their link to the recording. What the farmer must read:
+ * the ONE status wording, "लिहिलेलं" for a typed entry, product boxes from the stored content, the old-entry line (and
+ * nothing invented) for an older record, ▶ only where it may be offered, "—" for money he may not see, and no number
+ * summed across recordings.
  */
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,11 +35,9 @@ vi.mock('../../../infrastructure/sync/PayloadValidator', () => ({ validatePayloa
 
 import { LogVerificationStatus, type DailyLog } from '../../../types';
 import { resultCopy } from '../../logs/components/voiceResult/resultCopy';
-import { TYPED_WORDS } from '../../voice/components/recorder/TypedEntry';
 import { anyLog, dayRecordings, plotLogFilter, withMoneyShown, type DayRecording } from '../day/dayRecordings';
-import { DayFeedSheet, GlanceSheet, PlotDaySheet } from '../day/DaySheets';
+import { PlotDayView } from '../day/DaySheets';
 import type { ListenKind } from '../day/listenModel';
-import { RecordingCard, RecordingRow } from '../day/RecordingCard';
 import type { DayListen } from '../day/useDayListen';
 import { buildDayNotes } from '../overview/notesModel';
 import { NotesList } from '../overview/NotesList';
@@ -68,11 +68,6 @@ const listenWith = (kind: ListenKind): DayListen => ({
 
 const recsOf = (logs: DailyLog[], filter: (l: DailyLog) => boolean = anyLog) => dayRecordings(logs, TODAY_KEY, filter, depsFor(), CROPS);
 
-const pruning = () => said('m', at('03:40'), ME, {
-    fullTranscript: 'छाटणी केली, दोन मजूर चारशे रुपये',
-    cropActivities: [{ id: 'a1', title: 'छाटणी', sourceText: 'छाटणी केली' }],
-    labour: [{ id: 'l1', type: 'HIRED', count: 2, totalCost: 400 }],
-});
 const spray = () => said('s', at('07:00'), 'op-sunil', {
     fullTranscript: 'इथरेल फवारलं',
     inputs: [{ id: 'i1', method: 'Spray', mix: [{ id: 'mx', productName: 'इथरेल' }], productName: 'इथरेल', sourceText: 'इथरेल फवारलं' }],
@@ -88,161 +83,131 @@ const legacy = () => said('old', at('05:00'), 'op-sunil', {
 beforeEach(() => { lang.value = 'mr'; emitClosureSummaryViewed.mockClear(); });
 afterEach(cleanup);
 
-describe.each(['mr', 'en'] as const)('RecordingCard — one recording, the result screen\'s way (%s)', language => {
-    beforeEach(() => { lang.value = language; });
-    const copy = () => reflectCopy(language);
+const view = (recordings: DayRecording[], over: Partial<React.ComponentProps<typeof PlotDayView>> = {}) => (
+    <PlotDayView title="सोनाका · द्राक्ष" dayLabel="x" dateKey={TODAY_KEY} isToday recordings={recordings} listen={listenWith('none')} onClose={vi.fn()} {...over} />
+);
 
-    it('what, who ("तुम्ही" / "You"), when, the ONE status wording; his words; बदला opens that log', () => {
-        const onEdit = vi.fn();
-        const [rec] = recsOf([pruning()]);
-        render(<RecordingCard rec={rec} listen={listenWith('none')} testId="rc" onEdit={onEdit} />);
-        const card = screen.getByTestId('rc');
-        expect(card).toHaveTextContent('सकाळी 9:10');
-        expect(screen.getByTestId('rc-who')).toHaveTextContent(copy().you);
-        expect(screen.getByTestId('rc-who')).toHaveAttribute('data-you', 'yes');
-        expect(screen.getByTestId('rc-state')).toHaveTextContent(copy().notConfirmed);
-        expect(screen.getByTestId('rc-words')).toHaveTextContent('छाटणी केली');
-        expect(within(screen.getByTestId('rc-understood')).getByText('छाटणी')).toBeInTheDocument();
-        expect(screen.getByTestId('rc-understood')).toHaveTextContent(copy().understood);
-        fireEvent.click(screen.getByTestId('rc-edit-m'));
-        expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'm' }));
-    });
-
-    it('confirmed reads "✔ पक्कं केलं" / "✔ Confirmed"; a spray is its product box, from the stored content', () => {
-        const [rec] = recsOf([spray()]);
-        render(<RecordingCard rec={rec} listen={listenWith('none')} testId="rc" />);
-        expect(screen.getByTestId('rc-state')).toHaveTextContent(copy().confirmed);
-        expect(screen.getByTestId('rc-who')).toHaveTextContent('सुनील');
-        expect(screen.getByTestId('vr-product-box-i1')).toHaveTextContent('इथरेल');
-    });
-
-    it('a typed entry: "लिहिलेलं" / "Typed" and the no-recording note where the player would be — no ▶', () => {
-        const [rec] = recsOf([typed()]);
-        render(<RecordingCard rec={rec} listen={listenWith('clip')} testId="rc" />);
-        expect(screen.getByTestId('rc-typed')).toHaveTextContent(resultCopy(language).typedTag);
-        expect(screen.getByTestId('rc-typed-note')).toHaveTextContent(language === 'en' ? resultCopy('en').typedNote : TYPED_WORDS.noAudio);
-        expect(screen.queryByTestId('rc-play-listen')).toBeNull();
-    });
-
-    it('an older record: the old-entry line, word for word, and nothing invented', () => {
-        const [rec] = recsOf([legacy()]);
-        render(<RecordingCard rec={rec} listen={listenWith('none')} testId="rc" />);
-        expect(screen.getByTestId('rc-legacy')).toHaveTextContent(resultCopy(language).legacyPartial);
-        if (language === 'mr') expect(screen.getByTestId('rc-legacy').textContent).toBe('जुनं काम — काही तपशील उपलब्ध नाहीत');
-        const card = screen.getByTestId('rc').textContent ?? '';
-        for (const invented of ['₹', 'तास', 'Drip', 'Spraying', 'अडथळे']) expect(card).not.toContain(invented);
-    });
-
-    it('▶ only where it may be offered: none → nothing; the clip on this phone → its player; the server → "मूळ आवाज ऐका"', () => {
-        const [rec] = recsOf([spray()]);
-        const { unmount } = render(<RecordingCard rec={rec} listen={listenWith('none')} testId="rc" />);
-        expect(screen.queryByTestId('rc-play-listen')).toBeNull();
-        expect(screen.queryByTestId('ov-play-s')).toBeNull();
-        unmount();
-        const clip = render(<RecordingCard rec={rec} listen={listenWith('clip')} testId="rc" />);
-        expect(screen.getByTestId('rc-play-listen')).toHaveAttribute('data-listen', 'clip');
-        expect(screen.getByTestId('rc-play')).toBeInTheDocument();
-        clip.unmount();
-        render(<RecordingCard rec={rec} listen={listenWith('server')} testId="rc" />);
-        expect(screen.getByTestId('rc-play-listen')).toHaveAttribute('data-listen', 'server');
-        expect(screen.getByTestId('ov-play-s')).toHaveTextContent(language === 'en' ? 'Play original voice' : 'मूळ आवाज ऐका');
-    });
-
-    it('money he may not see is "—" (another person\'s recording); his own keeps it', () => {
-        const other = said('o', at('06:00'), 'op-sunil', { labour: [{ id: 'l', type: 'HIRED', count: 3, totalCost: 900 }] });
-        const [rec] = recsOf([other]).map(r => withMoneyShown(r, false));
-        render(<RecordingCard rec={rec} listen={listenWith('none')} testId="rc" />);
-        expect(screen.getByTestId('rc').textContent).not.toContain('900');
-        expect(screen.getByTestId('rc-understood')).toHaveTextContent('—');
-    });
-});
-
-describe.each(['mr', 'en'] as const)('PlotDaySheet — a plot\'s day replaces the English drawer (%s)', language => {
+describe.each(['mr', 'en'] as const)('PlotDayView — the plot day, the founder screen 1 (%s)', language => {
     beforeEach(() => { lang.value = language; });
     const copy = () => reflectCopy(language);
     const first = () => said('r1', at('03:00'), ME, { fullTranscript: 'दोन मजूर', labour: [{ id: 'l1', type: 'HIRED', count: 2, totalCost: 400 }] });
     const second = () => said('r2', at('08:00'), 'op-sunil', { fullTranscript: 'तीन मजूर', labour: [{ id: 'l2', type: 'HIRED', count: 3, totalCost: 600 }] });
 
-    it('the day part by part, then EVERY recording in time order with what / who / when; nothing summed', () => {
+    it('all the work in the result screen buckets, open, each value beside its time; never a sum across recordings', () => {
         const recs = recsOf([second(), first()], plotLogFilter({ cropId: 'grape', plotId: 'g1' }));
-        render(<PlotDaySheet title="सोनाका · द्राक्ष" dayLabel={copy().dayName(new Date(2026, 9, 25, 12))} dateKey={TODAY_KEY} recordings={recs}
-            listen={listenWith('none')} onClose={vi.fn()} />);
+        render(view(recs));
         expect(screen.getByTestId('rf-day-title')).toHaveTextContent('सोनाका · द्राक्ष');
-        expect(screen.getByTestId('rf-day-parts')).toHaveTextContent(copy().dayWork);
-        expect(screen.getByTestId('rf-day-count')).toHaveTextContent(copy().timesTold(2));
-        expect(screen.getByTestId('vr-day-labour')).toBeInTheDocument();
-        const order = within(screen.getByTestId('rf-day-recordings')).getAllByTestId(/^rf-day-rec-[^-]+$/).map(e => e.getAttribute('data-testid'));
-        expect(order).toEqual(['rf-day-rec-r1', 'rf-day-rec-r2']); // morning first
-        expect(screen.getByTestId('rf-day-rec-r1-who')).toHaveTextContent(copy().you);
-        expect(screen.getByTestId('rf-day-rec-r2-who')).toHaveTextContent('सुनील');
+        expect(screen.getByTestId('rf-day-parts')).toHaveTextContent(copy().dayViewHint(true));
+        expect(screen.getByTestId('vr-day-labour')).toHaveAttribute('data-open', 'yes');
+        const history = within(screen.getByTestId('vr-day-history-labour'));
+        expect(history.getByText('2 जण')).toBeInTheDocument();
+        expect(history.getByText('3 जण')).toBeInTheDocument();
+        expect(screen.getByTestId('vr-day-history-labour')).toHaveTextContent('सकाळी 8:30');
+        expect(screen.getByTestId('vr-day-history-labour')).toHaveTextContent('दुपारी 1:30');
         const text = screen.getByTestId('rf-day').textContent ?? '';
-        expect(text).toContain('₹400');
-        expect(text).toContain('₹600');
-        expect(text).not.toContain('1000');
         expect(text).not.toContain('5 जण');
+        expect(text).not.toContain('1000');
+        // no "यातून काय समजलं / कोणत्या शब्दांतून" source panel here, and none of his marked words
+        expect(text).not.toContain('यातून काय समजलं');
+        expect(screen.queryByTestId('vr-words')).toBeNull();
         expect(emitClosureSummaryViewed).toHaveBeenCalledWith(expect.objectContaining({ farmId: 'farm-1', dateKey: TODAY_KEY, logsCount: 2, source: 'drawer_open' }));
     });
 
-    it('nothing told: says so and offers to add the day\'s work (the old "Add Missing Entry"); back closes', () => {
-        const onAdd = vi.fn();
+    it('the time chips: morning first, a green dot when confirmed; a tap shows that recording INLINE (who, status, बदला); a second tap closes it', () => {
+        const onEdit = vi.fn();
+        const confirmed = { ...second(), verification: { required: true, status: LogVerificationStatus.VERIFIED } } as DailyLog;
+        const recs = recsOf([confirmed, first()]);
+        render(view(recs, { onEdit }));
+        const chips = within(screen.getByTestId('rf-day-times')).getAllByRole('button').map(b => b.getAttribute('data-testid'));
+        expect(chips).toEqual(['rf-time-r1', 'rf-time-r2']);
+        expect(screen.getByTestId('rf-time-r1')).toHaveAttribute('data-confirmed', 'no');
+        expect(screen.getByTestId('rf-time-r2')).toHaveAttribute('data-confirmed', 'yes');
+        expect(screen.getByTestId('rf-day-times')).toHaveTextContent(copy().timesKey);
+        expect(screen.queryByTestId('rf-rec-r2')).toBeNull();
+        fireEvent.click(screen.getByTestId('rf-time-r2'));
+        expect(screen.getByTestId('rf-time-r2')).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId('rf-rec-r2-who')).toHaveTextContent('सुनील');
+        expect(screen.getByTestId('rf-rec-r2-state')).toHaveTextContent(copy().confirmed);
+        expect(screen.getByTestId('rf-rec-r2-parts')).toHaveTextContent('3 जण');
+        fireEvent.click(screen.getByTestId('rf-rec-r2-edit-r2'));
+        expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: 'r2' }));
+        fireEvent.click(screen.getByTestId('rf-time-r1'));
+        expect(screen.queryByTestId('rf-rec-r2')).toBeNull();
+        expect(screen.getByTestId('rf-rec-r1-who')).toHaveTextContent(copy().you);
+        fireEvent.click(screen.getByTestId('rf-time-r1'));
+        expect(screen.queryByTestId('rf-rec-r1')).toBeNull();
+    });
+
+    it('a note link lands with its recording already open', () => {
+        const recs = recsOf([second(), first()]);
+        render(view(recs, { openKey: recs[1].key }));
+        expect(screen.getByTestId('rf-rec-r2')).toBeInTheDocument();
+    });
+
+    it('a typed entry: "लिहिलेलं" / "Typed", and no ▶ even where a clip could be', () => {
+        const recs = recsOf([typed()]);
+        render(view(recs, { listen: listenWith('clip') }));
+        fireEvent.click(screen.getByTestId('rf-time-t'));
+        expect(screen.getByTestId('rf-rec-t-typed')).toHaveTextContent(resultCopy(language).typedTag);
+        expect(screen.queryByTestId('rf-rec-t-play-listen')).toBeNull();
+    });
+
+    it('an older record: the old-entry line, word for word, and nothing invented', () => {
+        const recs = recsOf([legacy()]);
+        render(view(recs));
+        fireEvent.click(screen.getByTestId('rf-time-old'));
+        expect(screen.getByTestId('rf-rec-old-legacy')).toHaveTextContent(resultCopy(language).legacyPartial);
+        const inline = screen.getByTestId('rf-rec-old').textContent ?? '';
+        for (const invented of ['₹', 'तास', 'Drip', 'Spraying', 'अडथळे']) expect(inline).not.toContain(invented);
+    });
+
+    it('▶ only where it may be offered (RF rules): none → nothing; the clip → its player; the server → "मूळ आवाज ऐका"', () => {
+        const recs = recsOf([spray()]);
+        const none = render(view(recs));
+        fireEvent.click(screen.getByTestId('rf-time-s'));
+        expect(screen.queryByTestId('rf-rec-s-play-listen')).toBeNull();
+        none.unmount();
+        const clip = render(view(recs, { listen: listenWith('clip') }));
+        fireEvent.click(screen.getByTestId('rf-time-s'));
+        expect(screen.getByTestId('rf-rec-s-play-listen')).toHaveAttribute('data-listen', 'clip');
+        clip.unmount();
+        render(view(recs, { listen: listenWith('server') }));
+        fireEvent.click(screen.getByTestId('rf-time-s'));
+        expect(screen.getByTestId('rf-rec-s-play-listen')).toHaveAttribute('data-listen', 'server');
+        expect(screen.getByTestId('ov-play-s')).toHaveTextContent(language === 'en' ? 'Play original voice' : 'मूळ आवाज ऐका');
+        // a spray is its product box, from the stored content
+        expect(screen.getAllByTestId('vr-product-box-i1')[0]).toHaveTextContent('इथरेल');
+    });
+
+    it('money he may not see is "—" (another person recording); never his amount', () => {
+        const other = said('o', at('06:00'), 'op-sunil', { labour: [{ id: 'l', type: 'HIRED', count: 3, totalCost: 900 }] });
+        const recs = recsOf([other]).map(r => withMoneyShown(r, false));
+        render(view(recs));
+        fireEvent.click(screen.getByTestId('rf-time-o'));
+        expect(screen.getByTestId('rf-day').textContent).not.toContain('900');
+        expect(screen.getByTestId('rf-rec-o-parts')).toHaveTextContent('—');
+    });
+
+    it('"आणखी सांगा" only today (a recording is always today): it asks the ONE mic; new work is highlighted on return', () => {
+        const onTellMore = vi.fn();
+        const recs = recsOf([second(), first()]);
+        render(view(recs, { onTellMore, fresh: new Set(['r2']) }));
+        fireEvent.click(screen.getByTestId('rf-day-tell'));
+        expect(onTellMore).toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('rf-day-tell')).toHaveTextContent(copy().tellMore);
+        expect(screen.getByTestId('vr-day-labour')).toHaveAttribute('data-touched', 'yes');
+        cleanup();
+        render(view(recs, { isToday: false }));
+        expect(screen.queryByTestId('rf-day-tell')).toBeNull();
+    });
+
+    it('nothing told: says so plainly; back closes', () => {
         const onClose = vi.fn();
-        render(<PlotDaySheet title="थॉम्पसन" dayLabel="x" dateKey={TODAY_KEY} recordings={[]} listen={listenWith('none')} onAdd={onAdd} onClose={onClose} />);
-        expect(screen.getByTestId('rf-day-empty')).toHaveTextContent(copy().dayEmpty);
-        fireEvent.click(screen.getByTestId('rf-day-add'));
-        expect(onAdd).toHaveBeenCalled();
-        expect(screen.getByTestId('rf-day-add')).toHaveTextContent(copy().addWork);
+        render(view([], { onClose, isToday: false }));
+        expect(screen.getByTestId('rf-day-empty')).toHaveTextContent(copy().nothingTold(false));
         fireEvent.click(screen.getByTestId('rf-day-back'));
         expect(onClose).toHaveBeenCalled();
         expect(screen.getByTestId('rf-day-back')).toHaveTextContent(copy().back);
-    });
-});
-
-describe.each(['mr', 'en'] as const)('DayFeedSheet and its rows — the day\'s work (%s)', language => {
-    beforeEach(() => { lang.value = language; });
-    const copy = () => reflectCopy(language);
-
-    it('today: one row per recording with when / who / typed / status / what / where; products as chips; a row opens its glance', () => {
-        const onOpen = vi.fn();
-        const recs = recsOf([typed(), pruning(), spray()]);
-        render(<DayFeedSheet recordings={recs} isToday dayLabel="today" listen={listenWith('none')} onOpen={onOpen} onClose={vi.fn()} />);
-        expect(screen.getByTestId('rf-feed-title')).toHaveTextContent(copy().feedTitle(true));
-        expect(screen.getAllByTestId(/^rf-feed-[a-z0-9]+$/).map(e => e.getAttribute('data-testid')).filter(id => ['rf-feed-m', 'rf-feed-s', 'rf-feed-t'].includes(id ?? '')))
-            .toEqual(['rf-feed-m', 'rf-feed-s', 'rf-feed-t']);
-        expect(screen.getByTestId('rf-feed-t-typed')).toHaveTextContent(resultCopy(language).typedTag);
-        expect(screen.getByTestId('rf-feed-s-state')).toHaveTextContent(copy().confirmed);
-        expect(screen.getByTestId('rf-feed-m-state')).toHaveTextContent(copy().notConfirmed);
-        expect(screen.getByTestId('rf-feed-m-who')).toHaveTextContent(copy().you);
-        expect(screen.getByTestId('rf-feed-m-work')).toHaveTextContent('छाटणी');
-        expect(within(screen.getByTestId('rf-feed-s')).getByTestId('vr-product-chip')).toHaveTextContent('इथरेल');
-        fireEvent.click(screen.getByTestId('rf-feed-s-open'));
-        expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ key: recs[1].key }));
-    });
-
-    it('another day: its own title and empty line (never "today")', () => {
-        render(<DayFeedSheet recordings={[]} isToday={false} dayLabel={copy().dayName(new Date(2026, 9, 21, 12), new Date(2026, 9, 25, 12))} listen={listenWith('none')} onOpen={vi.fn()} onClose={vi.fn()} />);
-        expect(screen.getByTestId('rf-feed-title')).toHaveTextContent(copy().feedTitle(false));
-        expect(screen.getByTestId('rf-feed-empty')).toHaveTextContent(copy().feedEmpty(false));
-        expect(screen.getByTestId('rf-feed-date')).toHaveTextContent(language === 'en' ? 'Wednesday, 21 Oct' : 'बुधवार, 21 ऑक्टो');
-    });
-
-    it('the row\'s ▶ only for the clip on this phone; an older record keeps its old-entry line', () => {
-        const [legacyRec] = recsOf([legacy()]);
-        const { unmount } = render(<RecordingRow rec={legacyRec} listen={listenWith('none')} testId="row" onOpen={vi.fn()} />);
-        expect(screen.getByTestId('row-legacy')).toHaveTextContent(resultCopy(language).legacyPartial);
-        expect(screen.queryByTestId('row-play-listen')).toBeNull();
-        unmount();
-        render(<RecordingRow rec={recsOf([pruning()])[0]} listen={listenWith('clip')} testId="row" onOpen={vi.fn()} />);
-        expect(screen.getByTestId('row-play-listen')).toBeInTheDocument();
-    });
-
-    it('the glance: everything understood from one recording, in his language, with back', () => {
-        const onClose = vi.fn();
-        const [rec] = recsOf([pruning()]);
-        render(<GlanceSheet rec={rec} listen={listenWith('none')} onClose={onClose} />);
-        expect(screen.getByTestId('rf-glance-m-understood')).toHaveTextContent('छाटणी');
-        expect(screen.getByTestId('rf-glance-m-place')).toHaveTextContent('g1');
-        fireEvent.click(screen.getByTestId('rf-glance-back'));
-        expect(onClose).toHaveBeenCalled();
     });
 });
 

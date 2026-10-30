@@ -113,11 +113,14 @@ export const BlockerRow: React.FC<{ entry: BlockerEntry }> = ({ entry }) => (
     </div>
 );
 
-/** One glanceable line per part for the whole day; open when this recording touched it, else one tap away. */
-export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; byLog: ReadonlyMap<string, RecordingView>; touched: boolean; showWho: boolean; nowIds: ReadonlySet<string> }> = ({
-    part, entries, byLog, touched, showWho, nowIds,
+/**
+ * One glanceable line per part for the whole day; open when this recording touched it, else one tap away. Lane RF2:
+ * `defaultOpen` — आढावा's plot-day view opens every part, so each value shows beside the time it was told.
+ */
+export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; byLog: ReadonlyMap<string, RecordingView>; touched: boolean; showWho: boolean; nowIds: ReadonlySet<string>; defaultOpen?: boolean }> = ({
+    part, entries, byLog, touched, showWho, nowIds, defaultOpen = false,
 }) => {
-    const [open, setOpen] = useState(touched);
+    const [open, setOpen] = useState(touched || defaultOpen);
     const language = useOptionalLanguage()?.language;
     const m = partMeta(part);
     // The headline is the latest thing the server could VERIFY; an unsure item is never the headline.

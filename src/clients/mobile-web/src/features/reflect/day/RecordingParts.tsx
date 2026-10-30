@@ -3,14 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane RF) — the small pieces every आढावा view of a recording
- * shares, so the feed, the glance, the plot's day sheet and the notes say the same thing the same way:
+ * shares, so the plot's day view and the notes say the same thing the same way:
  *   - the ONE status wording ("पक्कं नाही" / "✔ पक्कं केलं"),
  *   - ▶ only where it may be offered (`listenModel.ts`): the clip on this phone, or the server's original voice,
  *   - the photos attached to a log (the old drawer's and feed card's attachments, kept).
  * Built from the result screen's own parts (`DayParts`, `ClipPlayer`) and `OriginalVoiceButton`; nothing copied.
  */
 import React, { useState } from 'react';
-import { MapPin } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { AttachmentList, useAttachmentRetry } from '../../attachments';
 import OriginalVoiceButton from '../../logs/components/originalVoice/OriginalVoiceButton';
@@ -30,17 +29,6 @@ export const StatusChip: React.FC<{ confirmed: boolean; testId?: string }> = ({ 
         <span data-testid={testId} data-confirmed={confirmed ? 'yes' : 'no'}
             className={`shrink-0 text-[12px] font-extrabold ${confirmed ? 'text-emerald-700' : 'text-stone-600'}`}>
             {confirmed ? copy.confirmed : copy.notConfirmed}
-        </span>
-    );
-};
-
-/** Where it was: the plots it named, or the whole farm. */
-export const PlaceLine: React.FC<{ rec: DayRecording; testId?: string }> = ({ rec, testId }) => {
-    const copy = useReflectCopy();
-    return (
-        <span className="inline-flex min-w-0 items-center gap-1 text-[13px] font-bold text-stone-800" data-testid={testId}>
-            <MapPin size={14} className="shrink-0 text-emerald-700" aria-hidden="true" />
-            <span className="truncate">{rec.plotNames.length > 0 ? rec.plotNames.join(', ') : copy.wholeFarm}</span>
         </span>
     );
 };

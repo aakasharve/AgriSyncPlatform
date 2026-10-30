@@ -2,147 +2,159 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 (I6)
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I6; lane RF2 — the founder's screen 1)
  *
- * प्लॉटनिहाय काम — one card per plot for the chosen day, built from the real log. The card carries every
- * fact the old CompactCropCard carried (8 buckets, stopped day, note, water state, day of the season,
- * weather, money, trust status). What it must never do: turn "not recorded" into a number (P4).
- * Lane RF: the money is the server ledger's for that plot-day (passed in), never the log's own total; the trust
- * mark is "confirmed only when every recording of the plot-day is"; and it counts the day's recordings.
+ * प्लॉटनिहाय काम — one card per plot for the chosen day, built from the real log. Lane RF2: the eight numbered squares
+ * are gone; the card shows ONLY what happened, as chips in the result screen's parts, values as said, never a number
+ * summed across recordings (P4), never the record's own money (the server ledger's figure is passed in). It keeps the
+ * status (confirmed only when every recording is), how many times the day was told, the plot's identity and the
+ * same non-deleted set of logs the day view shows (review B006).
  */
 import { describe, expect, it } from 'vitest';
 import { LogVerificationStatus, type DailyLog } from '../../../types';
 import type { MoneyFigure } from '../overview/moneyModel';
-import { buildPlotDayCard } from '../overview/plotDayModel';
+import { buildDayCardCore, buildPlotDayCard, dayChipsOf, placeDayLogs } from '../overview/plotDayModel';
+import { farmLogFilter } from '../day/dayRecordings';
 import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
-import { CROPS, TODAY, TODAY_KEY, log, money } from './reflectFixtures';
+import { CROPS, TODAY, TODAY_KEY, farmLog, log, money } from './reflectFixtures';
 
 const scope = toViewScope(CROPS, selectAll(CROPS));
 const [g1, g2] = plotRefsInScope(CROPS, scope);
+const meta = (hhmm: string, who = 'op') => ({ createdAtISO: `2026-10-25T${hhmm}:00.000Z`, createdByOperatorId: who });
+const kinds = (chips: { kind: string }[]) => chips.map(c => c.kind);
+const textsOf = (chips: { kind: string; text: string }[], kind: string) => chips.filter(c => c.kind === kind).map(c => c.text);
 
-describe('buildPlotDayCard', () => {
-    it('no record for the day: no counts, no money — the card says so instead of showing zeros', () => {
+describe('buildPlotDayCard — only what happened, as chips', () => {
+    it('no record for the day: no chips, no money, no status — the card says so instead of showing zeros', () => {
         const card = buildPlotDayCard(g1, [], scope, TODAY_KEY, TODAY);
         expect(card.log).toBeUndefined();
         expect(card.status).toBe('empty');
-        expect(card.counts).toBeNull();
+        expect(card.chips).toEqual([]);
+        expect(card.recordings).toBe(0);
         expect(card.money).toBeUndefined();
+        expect(card.confirmed).toBeUndefined();
     });
 
-    it('counts the eight buckets from the log', () => {
+    it('one recording: a chip per part it told, in the result screen order, values as said; no part it did not tell', () => {
         const day = log({
-            id: 'l1',
-            plotIds: ['g1'],
+            id: 'l1', meta: meta('03:00'),
             cropActivities: [{ id: 'a', title: 'छाटणी' }],
             irrigation: [{ id: 'i', method: 'drip', source: 'Well', durationHours: 2 }],
             labour: [{ id: 'lb', type: 'HIRED', count: 6 }],
-            inputs: [{ id: 'in' } as never, { id: 'in2' } as never],
-            machinery: [{ id: 'm', type: 'tractor', ownership: 'owned' }],
-            activityExpenses: [{ id: 'e', reason: 'diesel', items: [] }],
+            machinery: [{ id: 'm', type: 'tractor', ownership: 'owned', hoursUsed: 3 }],
             observations: [
                 { id: 'o1', plotId: 'g1', dateKey: TODAY_KEY, timestamp: '', textRaw: 'पानं पिवळी', noteType: 'observation', severity: 'normal', source: 'voice' },
-                { id: 'o2', plotId: 'g1', dateKey: TODAY_KEY, timestamp: '', textRaw: 'उद्या फवारणी', noteType: 'reminder', severity: 'normal', source: 'voice' },
             ],
-            financialSummary: money(1800, 650),
-        });
+            financialSummary: money(1800),
+        } as Partial<DailyLog> & { id: string });
         const card = buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY);
         expect(card.status).toBe('worked');
-        expect(card.counts).toEqual({ work: 1, water: 1, labour: 6, inputs: 2, machine: 1, cost: 1, notes: 2, reminders: 1 });
-        // lane RF: the log's own total (2450) is NOT the card's money — the ledger's is, and none was passed
+        expect(kinds(card.chips)).toEqual(['crop', 'labour', 'irrigation', 'machinery', 'observation']);
+        expect(textsOf(card.chips, 'crop')).toEqual(['छाटणी']);
+        expect(textsOf(card.chips, 'labour')).toEqual(['6 जण']);
+        expect(textsOf(card.chips, 'irrigation')).toEqual(['2 तास']);
+        expect(textsOf(card.chips, 'machinery')).toEqual(['ट्रॅक्टर · 3 तास']);
+        // the farmer's note is an "निरीक्षण" chip, not an amber box
+        expect(textsOf(card.chips, 'observation')).toEqual(['पानं पिवळी']);
+        // the record's own money (₹1800) is never a chip: the ledger's figure is, and none was passed
+        expect(card.chips.some(c => c.kind === 'expense')).toBe(false);
         expect(card.money).toBeUndefined();
-        expect(card.note).toBe('पानं पिवळी');
     });
 
-    it("lane RF: the money is the ledger's figure for that plot-day; none, or one he may not see, shows no pill", () => {
-        const day = log({ id: 'l5', plotIds: ['g1'], financialSummary: money(9999) });
-        const ledger: MoneyFigure = { amount: 1750, hidden: false, partial: ['notOnServer'] };
-        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, ledger).money).toEqual(ledger);
-        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, { amount: null, hidden: false, partial: [] }).money).toBeUndefined();
-        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, { amount: null, hidden: true, partial: [] }).money).toBeUndefined();
+    it('P4 — labour told in two recordings is TWO chips, each as said; never one summed number (never 3 + 2)', () => {
+        const morning = log({ id: 'm', meta: meta('03:00'), labour: [{ id: 'l1', type: 'HIRED', femaleCount: 5, maleCount: 2 }] });
+        const evening = log({ id: 'e', meta: meta('11:00', 'op2'), labour: [{ id: 'l2', type: 'HIRED', count: 10 }] });
+        const card = buildPlotDayCard(g1, [evening, morning], scope, TODAY_KEY, TODAY);
+        const labour = card.chips.filter(c => c.kind === 'labour');
+        expect(labour).toHaveLength(2);
+        expect(labour.map(c => c.text)).toEqual([expect.stringContaining('5'), '10 जण']);
+        expect(JSON.stringify(card.chips)).not.toContain('17');
+        expect(new Set(labour.map(c => c.recordingKey)).size).toBe(2);
+        expect(card.recordings).toBe(2);
+        expect(card.log?.id).toBe('m'); // morning first
     });
 
-    it('lane RF: confirmed only when every recording of the plot-day is; how many recordings the day holds', () => {
-        const meta = (iso: string) => ({ createdAtISO: iso, createdByOperatorId: 'op' });
-        const verified = { required: true, status: LogVerificationStatus.VERIFIED };
-        const a = log({ id: 'a', plotIds: ['g1'], meta: meta('2026-10-25T03:00:00.000Z'), verification: verified });
-        const b = log({ id: 'b', plotIds: ['g1'], meta: meta('2026-10-25T08:00:00.000Z') });
-        expect(buildPlotDayCard(g1, [a, b], scope, TODAY_KEY, TODAY)).toMatchObject({ confirmed: false, recordings: 2 });
-        expect(buildPlotDayCard(g1, [a, { ...b, verification: verified }], scope, TODAY_KEY, TODAY).confirmed).toBe(true);
-        const nothing = buildPlotDayCard(g1, [], scope, TODAY_KEY, TODAY);
-        expect(nothing.confirmed).toBeUndefined();
-        expect(nothing.recordings).toBe(0);
+    it('crop work is names, not amounts: the day\'s work names share ONE chip, each name once', () => {
+        const a = log({ id: 'a', meta: meta('03:00'), cropActivities: [{ id: 'x', title: 'छाटणी' }] });
+        const b = log({ id: 'b', meta: meta('08:00'), cropActivities: [{ id: 'y', title: 'फवारणी' }, { id: 'z', title: 'छाटणी' }] });
+        const card = buildPlotDayCard(g1, [a, b], scope, TODAY_KEY, TODAY);
+        expect(textsOf(card.chips, 'crop')).toEqual(['छाटणी · फवारणी']);
     });
 
-    it('labour told without a headcount is UNKNOWN, never 0', () => {
-        const day = log({ id: 'l2', plotIds: ['g1'], labour: [{ id: 'lb', type: 'HIRED' }] });
-        const card = buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY);
-        expect(card.counts?.labour).toBeUndefined();
-        expect(card.status).toBe('worked');
+    it('an item the server could not verify keeps its mark; it is never folded into a verified chip', () => {
+        const day = log({ id: 'u', meta: meta('03:00'), labour: [{ id: 'l1', type: 'HIRED', count: 4 }, { id: 'l2', type: 'HIRED', count: 2, provenanceVerified: false }] });
+        const labour = buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY).chips.filter(c => c.kind === 'labour');
+        expect(labour.map(c => [c.text, c.verified])).toEqual([['4 जण', true], ['2 जण', false]]);
     });
 
-    it('a whole-day stop shows the reason instead of the buckets', () => {
-        const day = log({ id: 'l3', plotIds: ['g1'], disturbance: { scope: 'FULL_DAY', group: 'WEATHER', reason: 'पाऊस', blockedSegments: ['irrigation'] } });
+    it('a stoppage is a chip of its own; a whole-day stop marks the card stopped', () => {
+        const day = log({ id: 'l3', meta: meta('03:00'), disturbance: { scope: 'FULL_DAY', group: 'WEATHER', reason: 'पाऊस', blockedSegments: ['irrigation'] } });
         const card = buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY);
         expect(card.status).toBe('blocked');
         expect(card.stoppedReason).toBe('पाऊस');
+        expect(card.chips).toEqual([expect.objectContaining({ kind: 'blocker', text: 'पाऊस' })]);
     });
 
-    it('a record with no cost carries no money pill', () => {
-        const day = log({ id: 'l4', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'खुरपणी' }] });
-        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY).money).toBeUndefined();
+    it("lane RF: the money is the ledger's figure for that plot-day; none, or one he may not see, shows nothing", () => {
+        const day = log({ id: 'l5', financialSummary: money(9999), cropActivities: [{ id: 'a', title: 'खुरपणी' }] });
+        const ledger: MoneyFigure = { amount: 1750, hidden: false, partial: ['notOnServer'] };
+        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, ledger).money).toEqual(ledger);
+        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, { amount: null, hidden: false, partial: [] }).money).toBeUndefined();
+        // hidden money stays hidden: no figure reaches the card at all
+        expect(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, { amount: null, hidden: true, partial: [] }).money).toBeUndefined();
+        expect(JSON.stringify(buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY, { amount: null, hidden: true, partial: [] }).chips)).not.toContain('9999');
     });
 
-    it('day of the season comes from the plot start date, in Marathi', () => {
+    it('lane RF: confirmed only when every recording of the plot-day is', () => {
+        const verified = { required: true, status: LogVerificationStatus.VERIFIED };
+        const a = log({ id: 'a', meta: meta('03:00'), verification: verified });
+        const b = log({ id: 'b', meta: meta('08:00') });
+        expect(buildPlotDayCard(g1, [a, b], scope, TODAY_KEY, TODAY)).toMatchObject({ confirmed: false, recordings: 2 });
+        expect(buildPlotDayCard(g1, [a, { ...b, verification: verified }], scope, TODAY_KEY, TODAY).confirmed).toBe(true);
+    });
+
+    it("review B006: a deleted record is never the card's — nothing told, no chips, no status", () => {
+        const gone = log({ id: 'gone', meta: meta('03:00'), cropActivities: [{ id: 'a', title: 'छाटणी' }], deletion: { deletedAtISO: '2026-10-25T04:00:00.000Z' } as DailyLog['deletion'] });
+        expect(buildPlotDayCard(g1, [gone], scope, TODAY_KEY, TODAY)).toMatchObject({ status: 'empty', chips: [], recordings: 0 });
+    });
+
+    it('day of the season and the area, as before', () => {
         expect(buildPlotDayCard(g1, [], scope, TODAY_KEY, TODAY).dayLabel).toBe('दिवस 25');
-        // no start date and no prep date: the season day is not known — say "जमीन तयारी", invent no day number
         expect(buildPlotDayCard(g2, [], scope, TODAY_KEY, TODAY).dayLabel).toBe('जमीन तयारी');
-    });
-
-    it('the plot\'s area when the plot records one, in its own unit; nothing when it does not', () => {
         const withArea = { ...g1, plot: { ...g1.plot!, baseline: { totalArea: 2.5, unit: 'Acre' as const } } };
         expect(buildPlotDayCard(withArea, [], scope, TODAY_KEY, TODAY).area).toBe('2.5 एकर');
-        const guntha = { ...g1, plot: { ...g1.plot!, baseline: { totalArea: 20, unit: 'Guntha' as const } } };
-        expect(buildPlotDayCard(guntha, [], scope, TODAY_KEY, TODAY).area).toBe('20 गुंठे');
-        expect(buildPlotDayCard(g2, [], scope, TODAY_KEY, TODAY).area).toBeUndefined();
-    });
-
-    describe('review B006 — the card reads the same non-deleted set as its day sheet', () => {
-        const meta = (hhmm: string, who = 'op') => ({ createdAtISO: `2026-10-25T${hhmm}:00.000Z`, createdByOperatorId: who });
-
-        it('a deleted record is never the card\'s: nothing told → no counts, no status', () => {
-            const gone = log({ id: 'gone', plotIds: ['g1'], meta: meta('03:00'), cropActivities: [{ id: 'a', title: 'छाटणी' }], deletion: { deletedAtISO: '2026-10-25T04:00:00.000Z' } as DailyLog['deletion'] });
-            const card = buildPlotDayCard(g1, [gone], scope, TODAY_KEY, TODAY);
-            expect(card).toMatchObject({ status: 'empty', counts: null, recordings: 0 });
-            expect(card.log).toBeUndefined();
-            expect(card.confirmed).toBeUndefined();
-        });
-
-        it('every recording of the day counts its rows; labour told in two recordings is no one number (never 3 + 2)', () => {
-            const morning = log({ id: 'm', plotIds: ['g1'], meta: meta('03:00'), cropActivities: [{ id: 'a', title: 'छाटणी' }], labour: [{ id: 'l1', type: 'HIRED', count: 3 }] });
-            const evening = log({ id: 'e', plotIds: ['g1'], meta: meta('11:00', 'op2'), cropActivities: [{ id: 'b', title: 'खुरपणी' }], labour: [{ id: 'l2', type: 'HIRED', count: 2 }] });
-            const card = buildPlotDayCard(g1, [evening, morning], scope, TODAY_KEY, TODAY);
-            expect(card.counts?.work).toBe(2);
-            expect(card.counts?.labour).toBeUndefined();
-            expect(card.labourSeveral).toBe(true);
-            expect(card.recordings).toBe(2);
-            expect(card.log?.id).toBe('m'); // morning first
-        });
-
-        it('labour told in ONE recording keeps that recording\'s own headcount; worked when any recording worked', () => {
-            const rain = log({ id: 'r', plotIds: ['g1'], meta: meta('02:00'), disturbance: { scope: 'FULL_DAY', group: 'WEATHER', reason: 'पाऊस', blockedSegments: [] } });
-            const work = log({ id: 'w', plotIds: ['g1'], meta: meta('10:00'), labour: [{ id: 'l', type: 'HIRED', count: 4 }] });
-            const card = buildPlotDayCard(g1, [rain, work], scope, TODAY_KEY, TODAY);
-            expect(card.status).toBe('worked');
-            expect(card.stoppedReason).toBeUndefined();
-            expect(card.counts?.labour).toBe(4);
-            expect(card.labourSeveral).toBeUndefined();
-            expect(buildPlotDayCard(g1, [rain], scope, TODAY_KEY, TODAY)).toMatchObject({ status: 'blocked', stoppedReason: 'पाऊस' });
-        });
     });
 
     it('reads only the chosen plot and the chosen day', () => {
         const other = log({ id: 'other', plotIds: ['g2'], cropActivities: [{ id: 'a', title: 'x' }] });
         const yesterday = log({ id: 'y', date: '2026-10-24', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'x' }] });
-        expect(buildPlotDayCard(g1, [other, yesterday], scope, TODAY_KEY, TODAY).log).toBeUndefined();
+        expect(buildPlotDayCard(g1, [other, yesterday], scope, TODAY_KEY, TODAY).chips).toEqual([]);
+    });
+});
+
+describe('the "संपूर्ण शेत" card (lane RF2) — whole-farm work has a home', () => {
+    it('takes the day\'s whole-farm logs, never a plot\'s', () => {
+        const farm = farmLog({ id: 'f', meta: meta('04:00'), activityExpenses: [{ id: 'e', reason: 'डिझेल', totalAmount: 800, items: [] }], labour: [{ id: 'l', type: 'HIRED', count: 3 }] } as never);
+        const plotDay = log({ id: 'p', meta: meta('05:00'), labour: [{ id: 'l2', type: 'HIRED', count: 9 }] });
+        const logs = placeDayLogs([farm, plotDay], TODAY_KEY, farmLogFilter(new Set()));
+        expect(logs.map(l => l.id)).toEqual(['f']);
+        const card = buildDayCardCore(logs);
+        expect(textsOf(card.chips, 'labour')).toEqual(['3 जण']);
+        expect(card.chips.some(c => c.kind === 'expense')).toBe(false); // money: the ledger's only
+        expect(card.recordings).toBe(1);
+    });
+
+    it('a crop that has no plot keeps its own logs on its own card', () => {
+        const cropLevel = log({ id: 'c', cropId: 'flowers', plotIds: [] });
+        expect(placeDayLogs([cropLevel], TODAY_KEY, farmLogFilter(new Set(['flowers'])))).toEqual([]);
+        expect(placeDayLogs([cropLevel], TODAY_KEY, farmLogFilter(new Set()))).toHaveLength(1);
+    });
+});
+
+describe.each(['mr', 'en'] as const)('dayChipsOf — a spray keeps its amount as said (%s)', language => {
+    it('the product with its dose, in the language\'s unit word', () => {
+        const day = log({ id: 's', meta: meta('03:00'), inputs: [{ id: 'in', method: 'Spray', productName: 'इथरेल', quantity: 300, unit: 'ml' } as never] });
+        const [chip] = dayChipsOf([day], language).filter(c => c.kind === 'inputs');
+        expect(chip.text).toBe(language === 'en' ? 'इथरेल 300 ml' : 'इथरेल 300 मिली');
     });
 });

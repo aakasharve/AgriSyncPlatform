@@ -5,7 +5,8 @@
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — the आजची कामे tab on real data:
  * work home (one or two doors by role) -> crop -> that crop's plots -> mic; one-step back; the tab
- * tap returns home fresh; the hand-filled form is tagged "लिहिलेलं"; no dead "श्रम साथीशी बोला".
+ * tap returns home fresh; no dead "श्रम साथीशी बोला". Lane E1: no hand-filled form step any more. Lane MIC-1: the ONE
+ * mic can open this flow on the crop question (`startAt="entry"`), with its band above the mic and its own exit.
  */
 import '@testing-library/jest-dom/vitest';
 import React, { useState } from 'react';
@@ -22,12 +23,11 @@ const crop = (id: string, name: string, iconName: string, plots: string[]) =>
 const CROPS = [crop('cane', 'ऊस', 'Sugarcane', ['ऊस १', 'ऊस २']), crop('grape', 'द्राक्ष', 'Grape', ['सोनाका', 'थॉम्पसन'])];
 const EMPTY: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
 
-/** Stands in for the real recorder: it reports recording on/off and can open the form, like the real one. */
+/** Stands in for the real recorder: it reports recording on/off, like the real one. */
 const FakeRecorder: React.FC<{ hooks: RecorderHooks }> = ({ hooks }) => (
     <div data-testid="fake-recorder">
         <button type="button" data-testid="fake-start" onClick={() => hooks.onRecordingChange(true)}>start</button>
         <button type="button" data-testid="fake-stop" onClick={() => hooks.onRecordingChange(false)}>stop</button>
-        <button type="button" data-testid="fake-open-form" onClick={hooks.onOpenForm}>form</button>
     </div>
 );
 
@@ -43,7 +43,6 @@ const Harness: React.FC<HarnessProps> = ({ initialScope = EMPTY, role = 'Primary
                 onOpenAttendance={mayOpenAttendanceFromHome(role, cachedGrant) ? vi.fn() : undefined}
                 cost={isWorkerRole(role) ? undefined : { today: 1200, yesterday: 0, soFar: 45000, scopeLabel: 'संपूर्ण शेत' }}
                 renderRecorder={hooks => <FakeRecorder hooks={hooks} />}
-                renderForm={() => <div data-testid="the-form" />}
                 {...over}
             />
             <output data-testid="scope">{JSON.stringify(scope)}</output>
@@ -287,19 +286,29 @@ describe('tapping the आजची कामे tab again returns to the work ho
     });
 });
 
-describe('typing by hand is tagged "लिहिलेलं" (LP-06)', () => {
-    it('the hand-filled form step carries the tag, leaves speaking, and "मागे" returns to the mic', () => {
-        const onLeaveVoice = vi.fn();
-        render(<Harness onLeaveVoice={onLeaveVoice} />);
+describe('lane E1 — the old hand-filled form is not a step of this flow any more', () => {
+    it('from the mic there is no way into a form: the flow is home → crop → plots + mic only', () => {
+        render(<Harness />);
         fireEvent.click(screen.getByTestId('home-tell'));
         fireEvent.click(screen.getByTestId('flow-crop-cane'));
         fireEvent.click(screen.getByTestId('flow-plot-cane-1'));
-        fireEvent.click(screen.getByTestId('fake-open-form'));
-        expect(onLeaveVoice).toHaveBeenCalledTimes(1);
-        expect(screen.getByTestId('the-form')).toBeInTheDocument();
-        expect(screen.getByTestId('form-typed-tag')).toHaveTextContent('लिहिलेलं');
-        expect(screen.getByTestId('form-typed-tag').querySelector('audio')).toBeNull();
-        fireEvent.click(screen.getByTestId('form-back'));
+        expect(screen.getByTestId('fake-recorder')).toBeInTheDocument();
+        expect(screen.queryByTestId('form-typed-tag')).toBeNull();
+        expect(screen.queryByTestId('log-entry-flow')?.getAttribute('data-step')).not.toBe('form');
+    });
+});
+
+describe('lane MIC-1 — the ONE mic opens this flow when the place is not known', () => {
+    it('starts on the crop question (no work home), shows its band above the mic, and its back leaves the flow', () => {
+        const onExit = vi.fn();
+        render(<Harness startAt="entry" onExit={onExit} micLead={<div data-testid="the-band">band</div>} />);
+        expect(screen.queryByTestId('home-tell')).toBeNull();
+        expect(screen.getByTestId('log-entry-flow')).toHaveAttribute('data-step', 'crop');
+        fireEvent.click(screen.getByTestId('entry-back-home'));
+        expect(onExit).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByTestId('flow-crop-cane'));
+        fireEvent.click(screen.getByTestId('flow-plot-cane-1'));
+        expect(screen.getByTestId('the-band')).toBeInTheDocument();
         expect(screen.getByTestId('fake-recorder')).toBeInTheDocument();
     });
 });

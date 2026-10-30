@@ -4,7 +4,7 @@
 // stays small.
 
 import React from 'react';
-import { LogSegment, type BucketIssueType } from '../../types';
+import type { BucketIssueType } from '../../types';
 import { TaskCreationSheet, ReviewInboxSheet, QuickLogSheet } from './lazyComponents';
 import { AppRouterContext } from './routeContext';
 import { ConflictBadge } from '../../features/sync/conflict/ConflictBadge';
@@ -17,7 +17,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
         crops, farmerProfile,
         showReviewInbox, setShowReviewInbox, history,
         showQuickLog, setShowQuickLog,
-        setMode, setStatus, setRecordingSegment,
+        setMode, setStatus,
         currentRoute, setCurrentRoute, mainView, status, recordingSegment, hasActiveLogContext, logIntent,
         showNoWorkReason, setShowNoWorkReason, handleManualSubmit, todayDateKey
     } = ctx;
@@ -89,17 +89,11 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                     setStatus('idle');
                 }}
                 onTypeSelect={(type) => {
+                    // wave-3.10 — "आज काम नाही" leads to a real declaration. Lane E1: it is the sheet's only
+                    // choice now; the hand-filled chips that opened the old form are gone.
                     if (type === 'no_work') {
-                        // wave-3.10 — this branch used to merely open a blank manual-entry
-                        // screen, and NOTHING recorded a typed no-work day: the declared-
-                        // no-work acknowledgement was live for voice days only. It now
-                        // leads to a real declaration.
                         setShowQuickLog(false);
                         setShowNoWorkReason(true);
-                    } else {
-                        setMode('manual');
-                        setStatus('idle');
-                        setRecordingSegment(type as LogSegment);
                     }
                 }}
             />

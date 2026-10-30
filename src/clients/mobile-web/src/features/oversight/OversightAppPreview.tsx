@@ -75,6 +75,7 @@ import ActionToast from '../../shared/components/ui/ActionToast';
 import AppHeader from '../context/components/AppHeader';
 import BottomNavigation from '../context/components/BottomNavigation';
 import { renderCompareView, renderLogView, renderReflectView } from '../../core/navigation/mainView';
+import { SpeakHost } from '../../core/speak/SpeakHost';
 import { RouteLoader, ReviewInboxSheet } from '../../core/navigation/lazyComponents';
 import { SIMPLE_ROUTE_RENDERERS } from '../../core/navigation/simpleRoutes';
 import MainViewTransition from '../../core/navigation/MainViewTransition';
@@ -293,6 +294,8 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                             {renderCompareView(ctx)}
                             {renderLogView(ctx)}
                         </MainViewTransition>
+                        {/* Lanes MIC-1 + E1 — the same ONE mic and "बदला" screen the app mounts (no save in a preview). */}
+                        <SpeakHost ctx={ctx} />
                     </Suspense>
                 )}
             </main>

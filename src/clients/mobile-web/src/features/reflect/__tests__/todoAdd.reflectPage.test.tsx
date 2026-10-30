@@ -47,7 +47,7 @@ describe('ReflectPage — the in-place add reaches the task store', () => {
     it('saves a whole-farm to-do through onSaveTask and emits next_action.created, like the sheet did', () => {
         const onSaveTask = vi.fn();
         const onAddTask = vi.fn();
-        render(<ReflectPage history={[]} crops={CROPS} tasks={[]} onUpdateTask={vi.fn()} onAddTask={onAddTask} onSaveTask={onSaveTask} onTellTodo={vi.fn()} />);
+        render(<ReflectPage history={[]} crops={CROPS} tasks={[]} onUpdateTask={vi.fn()} onAddTask={onAddTask} onSaveTask={onSaveTask} onSpeak={vi.fn()} />);
         fireEvent.click(screen.getByTestId('todo-add'));
         fireEvent.change(screen.getByTestId('todo-input'), { target: { value: 'खत आणायचं' } });
         fireEvent.click(screen.getByTestId('todo-save'));
@@ -59,11 +59,23 @@ describe('ReflectPage — the in-place add reaches the task store', () => {
         expect(emitNextActionCreated).toHaveBeenCalledWith({ farmId: 'farm-1', taskId: saved.id });
     });
 
-    it('"बोलून सांगा" opens the voice path the page was given', () => {
-        const onTellTodo = vi.fn();
-        render(<ReflectPage history={[]} crops={CROPS} tasks={[]} onUpdateTask={vi.fn()} onSaveTask={vi.fn()} onTellTodo={onTellTodo} />);
+    it('lane MIC-1: "बोलून सांगा" asks THE ONE mic for a to-do, for the whole farm (the typed to-do\'s own place)', () => {
+        const onSpeak = vi.fn();
+        render(<ReflectPage history={[]} crops={CROPS} tasks={[]} onUpdateTask={vi.fn()} onSaveTask={vi.fn()} onSpeak={onSpeak} />);
         fireEvent.click(screen.getByTestId('todo-tell'));
-        expect(onTellTodo).toHaveBeenCalled();
+        expect(onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addTodo', context: { place: { cropId: 'FARM_GLOBAL' } } }));
+    });
+
+    it('lane MIC-1: narrowed to ONE plot, the spoken to-do is for that plot', () => {
+        const onSpeak = vi.fn();
+        render(<ReflectPage history={[]} crops={CROPS} tasks={[]} onUpdateTask={vi.fn()} onSaveTask={vi.fn()} onSpeak={onSpeak} focusPlotId="g2" />);
+        fireEvent.click(screen.getByTestId('todo-tell'));
+        expect(onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addTodo', context: { place: { cropId: 'grape', plotId: 'g2' } } }));
+    });
+
+    it('no mic wired: no "बोलून सांगा" at all (never a dead button, P5)', () => {
+        render(<ReflectPage history={[]} crops={CROPS} tasks={[]} onUpdateTask={vi.fn()} onSaveTask={vi.fn()} />);
+        expect(screen.queryByTestId('todo-tell')).toBeNull();
     });
 
     it('what "आठवण जोडा" saved shows in the list as an आठवण, never as a "काम" (I14-V2-02)', () => {
@@ -99,12 +111,13 @@ describe('ReflectPage — opened on ONE plot (लक्ष द्या "तु�
     it('a plot this phone does not hold leaves the whole farm (and is still read once)', () => {
         const consumed = vi.fn();
         render(<ReflectPage history={[]} crops={CROPS} tasks={[]} focusPlotId="not-here" onFocusPlotConsumed={consumed} />);
-        expect(cards()).toEqual(['plot-card-grape:g1', 'plot-card-grape:g2', 'plot-card-cane:c1']);
+        // every plot, and the whole farm's own card (lane RF2)
+        expect(cards()).toEqual(['plot-card-grape:g1', 'plot-card-grape:g2', 'plot-card-cane:c1', 'plot-card-farm']);
         expect(consumed).toHaveBeenCalledTimes(1);
     });
 
     it('with no plot asked for, the page opens on the whole farm', () => {
         render(<ReflectPage history={[]} crops={CROPS} tasks={[]} />);
-        expect(cards()).toHaveLength(3);
+        expect(cards()).toHaveLength(4); // three plots and the whole farm's card
     });
 });

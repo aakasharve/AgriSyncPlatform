@@ -2,9 +2,10 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 (lane RF) — the words lane RF adds to आढावा: the day's work
- * (the feed), one recording at a glance, the plot's day sheet, the notes' link to their recording, and the money
- * section's "—" / "partial" lines. One language at a time: Marathi mode shows only Marathi, English mode only
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lanes RF, RF2) — the words lanes RF and RF2 add to आढावा: the
+ * plot cards' chips line, the plot's day view (its buckets, its time chips, "आणखी सांगा"), the notes' link to their
+ * recording, and the money section's "—" / "partial" lines. Lane RF2 retired the day's feed button and its sheet and
+ * the one-recording glance (the plot cards replace them), and their words with them. One language at a time: Marathi mode shows only Marathi, English mode only
  * English (founder 2026-10-26). Each line says where it comes from:
  *   - REUSED: an existing app string, read from where it lives (never re-typed);
  *   - PROPOSED (Marathi) / PROPOSED (English): new wording, waiting for his review.
@@ -13,7 +14,6 @@
  * Known gap, inherited and not patched here: the result-screen parts this page reuses (`DayParts`, the part names
  * of `resultModel`, the time words of `formatFarmerLogTime`) are Marathi in both languages — spec I18 owns them.
  */
-import { FEED_STR } from '../logs/components/TodayActivityFeed';
 import { resultCopy } from '../logs/components/voiceResult/resultCopy';
 import { RESULT_STR } from '../logs/components/voiceResult/resultStrings';
 import { offsetOf, relLabel } from './overview/reflectDates';
@@ -30,23 +30,24 @@ export interface ReflectCopy {
     legacyPartial: string;
     back: string;
     edit: string;
-    /** The day's work (the feed): its button, sheet and empty line follow the chosen day. */
-    feedTitle: (isToday: boolean) => string;
-    feedSubtitle: (isToday: boolean, day: string) => string;
-    feedEmpty: (isToday: boolean) => string;
-    feedHint: string;
     /** आज / काल / … or the weekday and date, in this language. */
     dayName: (date: Date, today?: Date) => string;
-    understood: string;
     nothingUnderstood: string;
-    /** The plot's day sheet. */
-    dayWork: string;
-    dayWorkHint: string;
-    allRecordings: string;
-    dayEmpty: string;
-    addWork: string;
-    /** How many times the plot's day was told (the sheet counts its own rows, nothing else). */
-    timesTold: (n: number) => string;
+    /** Lane RF2 — a card or day view with nothing told ("आज अजून काही सांगितलं नाही"). */
+    nothingTold: (isToday: boolean) => string;
+    /** Lane RF2 — how many times the day was told ("आज 4 वेळा सांगितलं"): its own recordings counted, nothing else. */
+    timesTold: (n: number, isToday: boolean) => string;
+    /** Lane RF2 — the card's way into its day. */
+    seeAll: string;
+    /** Lane RF2 — the "संपूर्ण शेत" card's line. */
+    farmCardLine: string;
+    /** Lane RF2 — the plot's day view: the buckets' line, the time chips' title and key, "आणखी सांगा". */
+    dayViewHint: (isToday: boolean) => string;
+    timesTitle: string;
+    timesKey: string;
+    tellMore: string;
+    /** A chip the server could not find in his words. */
+    unsure: string;
     /** "दिवस 25" of the plot's season. */
     seasonDay: (n: number) => string;
     /** A note's link to the recording it came from. */
@@ -62,8 +63,6 @@ export interface ReflectCopy {
     partialUnchecked: string;
     /** Review B008: the in-hand card's label. */
     inHandLabel: string;
-    /** Review B006: the card's labour cell when labour was told in more than one recording (never summed). */
-    labourSeveral: string;
 }
 
 const MONTH_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -82,29 +81,27 @@ const mr: ReflectCopy = {
     // REUSED — RESULT_STR.back / edit (the app's approved common.back / confirmation.edit).
     back: RESULT_STR.back,
     edit: RESULT_STR.edit,
-    // REUSED for today (FEED_STR.title / subtitle / empty / hint); PROPOSED (Marathi) for any other day.
-    feedTitle: (isToday: boolean) => (isToday ? FEED_STR.title : 'दिवसाचा आढावा'),
-    feedSubtitle: (isToday: boolean, day: string) => (isToday ? FEED_STR.subtitle : `${day} — कोणी काय केलं ते पाहा`),
-    feedEmpty: (isToday: boolean) => (isToday ? FEED_STR.empty : 'या दिवशी काहीही सांगितलं नाही'),
-    feedHint: FEED_STR.hint,
     // REUSED — reflectDates.relLabel (आज / काल / परवा / उद्या, else "बुधवार, 21 ऑक्टो").
     dayName: (date: Date, today?: Date) => relLabel(date, today),
-    // REUSED — RESULT_STR.addedTitle.
-    understood: RESULT_STR.addedTitle,
     // PROPOSED (Marathi) — the same words ClipGlance shows for this case (its constant is not exported).
     nothingUnderstood: 'या बोलण्यातून अजून काही समजलं नाही',
+    // PROPOSED (Marathi) — today's: the founder's screen 1 (and lane RF's card); another day's: new.
+    nothingTold: (isToday: boolean) => (isToday ? 'आज अजून काही सांगितलं नाही' : 'या दिवशी काही सांगितलं नाही'),
+    // REUSED for today (RESULT_STR.todayCount, the founder's screen 1); PROPOSED (Marathi) for another day.
+    timesTold: (n: number, isToday: boolean) => (isToday ? RESULT_STR.todayCount(n) : `${RESULT_STR.times(n)} सांगितलं`),
+    // PROPOSED (Marathi) — the founder's screen 1.
+    seeAll: 'सगळं बघा',
     // PROPOSED (Marathi)
-    dayWork: 'या दिवसाचं काम',
-    // PROPOSED (Marathi) — the result screen's RESULT_STR.tapForHistory without "आधी".
-    dayWorkHint: 'दाबा — कोणी, कधी काय सांगितलं ते दिसेल',
-    // PROPOSED (Marathi) — "बोलणी" is the result screen's word for recordings (RESULT_STR.earlierTitle).
-    allRecordings: 'या दिवसाची सगळी बोलणी — वेळेनुसार',
-    // PROPOSED (Marathi)
-    dayEmpty: 'या दिवशी इथे काहीही सांगितलं नाही',
-    // PROPOSED (Marathi) — replaces the old drawer's English "Add Missing Entry".
-    addWork: 'या दिवसाचं काम जोडा',
-    // PROPOSED (Marathi) — built on RESULT_STR.times ("3 वेळा").
-    timesTold: (n: number) => `${RESULT_STR.times(n)} सांगितलं`,
+    farmCardLine: 'कोणत्याही एका प्लॉटचं नसलेलं काम',
+    // PROPOSED (Marathi) — today's: the founder's screen 1; another day's: new.
+    dayViewHint: (isToday: boolean) => (isToday ? 'आजचं सगळं काम — बोलल्याप्रमाणे विभागून' : 'या दिवसाचं सगळं काम — बोलल्याप्रमाणे विभागून'),
+    // PROPOSED (Marathi) — the founder's screen 1.
+    timesTitle: 'कोणत्या वेळी काय सांगितलं',
+    timesKey: 'हिरवा ठिपका = पक्कं केलं · राखाडी = पक्कं नाही',
+    // REUSED — RESULT_STR.addAnother ("आणखी सांगा", PLR-D5 :65).
+    tellMore: RESULT_STR.addAnother,
+    // REUSED — RESULT_STR.unsurePart.
+    unsure: RESULT_STR.unsurePart,
     // REUSED — the plot card's own words for a season day (plotDayModel dayLabelOf, "दिवस 25").
     seasonDay: (n: number) => `दिवस ${n}`,
     // PROPOSED (Marathi)
@@ -121,8 +118,6 @@ const mr: ReflectCopy = {
     partialUnchecked: 'अपूर्ण — या फोनने अजून सगळा हिशोब तपासलेला नाही',
     // PROPOSED (Marathi) — the card's old "हातात आलेलं उत्पन्न · या हंगामात"; "आतापर्यंत": the ledger cannot be cut to one season here.
     inHandLabel: 'हातात आलेलं उत्पन्न · आतापर्यंत',
-    // PROPOSED (Marathi)
-    labourSeveral: 'मजूर वेगवेगळ्या वेळी सांगितले — दिवस उघडा',
 };
 
 const en: ReflectCopy = {
@@ -135,10 +130,6 @@ const en: ReflectCopy = {
     legacyPartial: resultCopy('en').legacyPartial,
     back: 'Back', // PROPOSED (English)
     edit: 'Change', // PROPOSED (English)
-    feedTitle: (isToday: boolean) => (isToday ? "Today's work" : "The day's work"), // PROPOSED (English)
-    feedSubtitle: (isToday: boolean, day: string) => (isToday ? 'See who did what today' : `${day} — see who did what`), // PROPOSED (English)
-    feedEmpty: (isToday: boolean) => (isToday ? 'Nothing has been told today yet' : 'Nothing was told on this day'), // PROPOSED (English)
-    feedHint: 'Press ▶ to hear it · press a card to see everything understood from it', // PROPOSED (English)
     dayName: (date: Date, today: Date = new Date()) => {
         const o = offsetOf(date, today);
         if (o === 0) return 'Today'; // PROPOSED (English)
@@ -146,14 +137,16 @@ const en: ReflectCopy = {
         if (o === 1) return 'Tomorrow'; // PROPOSED (English)
         return `${WEEKDAY_EN[date.getDay()]}, ${date.getDate()} ${MONTH_EN[date.getMonth()]}`;
     },
-    understood: 'What was understood from it', // PROPOSED (English)
     nothingUnderstood: 'Nothing has been understood from this yet', // PROPOSED (English)
-    dayWork: "This day's work", // PROPOSED (English)
-    dayWorkHint: 'Press — see who told what, and when', // PROPOSED (English)
-    allRecordings: 'Everything told this day — in time order', // PROPOSED (English)
-    dayEmpty: 'Nothing was told here on this day', // PROPOSED (English)
-    addWork: "Add this day's work", // PROPOSED (English)
-    timesTold: (n: number) => `Told ${n} ${n === 1 ? 'time' : 'times'}`, // PROPOSED (English)
+    nothingTold: (isToday: boolean) => (isToday ? 'Nothing told yet today' : 'Nothing told on this day'), // PROPOSED (English)
+    timesTold: (n: number, isToday: boolean) => `Told ${n} ${n === 1 ? 'time' : 'times'}${isToday ? ' today' : ''}`, // PROPOSED (English)
+    seeAll: 'See all', // PROPOSED (English)
+    farmCardLine: 'Work not for any one plot', // PROPOSED (English)
+    dayViewHint: (isToday: boolean) => (isToday ? "All of today's work — sorted as it was told" : "All of this day's work — sorted as it was told"), // PROPOSED (English)
+    timesTitle: 'What was told when', // PROPOSED (English)
+    timesKey: 'Green dot = confirmed · grey = not confirmed', // PROPOSED (English)
+    tellMore: 'Tell more', // PROPOSED (English)
+    unsure: 'Not sure', // PROPOSED (English)
     seasonDay: (n: number) => `Day ${n}`, // PROPOSED (English)
     noteSource: 'See where it came from', // PROPOSED (English)
     photos: (n: number) => `Photos attached ${n}`, // PROPOSED (English)
@@ -163,7 +156,6 @@ const en: ReflectCopy = {
     partialUnknownDirection: 'Partial — some older amounts do not say whether money came in or went out; they are not counted here', // PROPOSED (English)
     partialUnchecked: 'Partial — this phone has not finished checking the whole account yet', // PROPOSED (English)
     inHandLabel: 'Income received · so far', // PROPOSED (English)
-    labourSeveral: 'Labour told at different times — open the day', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

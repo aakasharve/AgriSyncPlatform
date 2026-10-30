@@ -49,6 +49,7 @@
  * available here", never a fake success toast).
  */
 import { useCallback, useState } from 'react';
+import { openCorrection } from '../../../core/speak/speakStore';
 
 import { useLogContext } from '../../../app/context/LogContext';
 import type { ManualSubmitOutcome } from '../../../app/hooks/useLogCommands.types';
@@ -206,40 +207,9 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         selectedPlotIds: selectedScopePlotIds,
     });
 
-    // Mirrors AppRouter.tsx's own handleEditLog (same UX: tapping a
-    // today's-activity card loads it back into the manual editor) — saving
-    // it still routes through the honest `handleManualSubmit` stub above,
-    // so "editing" here can never silently persist anything.
-    const handleEditLog = useCallback((log: DailyLog) => {
-        navigation.setMainView('log');
-        const ctxSel = log.context.selection[0];
-        context.setLogScope({
-            selectedCropIds: [ctxSel.cropId],
-            selectedPlotIds: ctxSel.selectedPlotIds,
-            mode: 'single',
-            applyPolicy: 'broadcast',
-        });
-        setMode('manual');
-        setStatus('idle');
-        setDraftLog({
-            // task-0b — `log.dayOutcome` is `DayOutcome | null`; `draftLog`'s
-            // shape (`AgriLogResponse`) is unchanged and still required, so
-            // this falls back exactly as this preview edit-draft conversion
-            // already did for every pulled log before task-0b.
-            dayOutcome: log.dayOutcome ?? 'WORK_RECORDED',
-            cropActivities: log.cropActivities || [],
-            irrigation: log.irrigation || [],
-            labour: log.labour || [],
-            inputs: log.inputs || [],
-            machinery: log.machinery || [],
-            activityExpenses: log.activityExpenses || [],
-            disturbance: log.disturbance,
-            questionsForUser: [],
-            summary: '',
-            missingSegments: [],
-            originalLogId: log.id,
-        });
-    }, [navigation, context]);
+    // Mirrors AppRouter.tsx's own handleEditLog — lane E1: "बदला" opens the speak-the-change screen (the preview mounts
+    // the same `SpeakHost`); nothing here can persist (no save is given to it).
+    const handleEditLog = useCallback((log: DailyLog) => { openCorrection(log.id); }, []);
 
     const getTodayCounts = useCallback(
         (plotId: string, dateStr: string) => deriveTodayCounts(data.history, plotId, dateStr),

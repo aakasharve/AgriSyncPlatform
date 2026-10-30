@@ -6,17 +6,23 @@
 import { DailyLog } from '../logs/logs.types';
 import { CropProfile, LedgerDefaults, LogVerificationStatus, FarmOperator } from '../../types';
 import type { PlannedTask } from '../../types';
+import type { SpeakRequestInput } from '../../core/speak/speakStore';
 
 export interface ReflectPageProps {
     history: DailyLog[];
     crops: CropProfile[];
     ledgerDefaults?: LedgerDefaults; // Optional for now, will use fallback
-    onEditLog?: (log: DailyLog) => void; // Callback to navigate to Log page with pre-filled data
     /**
-     * Lane RF — "बदला" on a recording: the result screen's own edit path (`handleEditLog`). Falls back to
-     * `onEditLog` when absent. `onEditLog` alone still starts a plot day nothing was told for.
+     * Lane RF / E1 — "बदला" on a recording: the speak-the-change screen (`handleEditLog`). The old hand-filled form is
+     * no longer reached from this page (lane E1).
      */
     onOpenLog?: (log: DailyLog) => void;
+    /**
+     * Lane MIC-1 — THE ONE mic, for this page's speak buttons (the plot day's "आणखी सांगा", करायची कामे's "बोलून सांगा").
+     * The page names the purpose, the place and what to do on landing; the router adds where to come back to. Omit →
+     * no speak button is drawn (never a dead one, P5).
+     */
+    onSpeak?: (request: Omit<SpeakRequestInput, 'returnTo'>) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing prop shape (not part of the Activity Feed change); typing it is a separate cleanup
     onUpdateNote?: (logId: string, noteId: string, updates: any) => void;
     // Trust Layer
@@ -58,6 +64,4 @@ export interface ReflectPageProps {
     onAddTask?: () => void;
     /** spec plr-d10 (I14, T2) — save a to-do typed in place ("आठवण जोडा") to the task store. Preferred over `onAddTask`. */
     onSaveTask?: (task: PlannedTask) => void;
-    /** spec plr-d10 (I14, T2) — "बोलून सांगा": open the real voice log flow (a spoken reminder becomes a to-do). */
-    onTellTodo?: () => void;
 }

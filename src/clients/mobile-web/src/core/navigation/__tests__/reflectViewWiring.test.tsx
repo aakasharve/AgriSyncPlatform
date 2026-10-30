@@ -9,7 +9,8 @@
  * kind of check `compareTabProps` and `renderAttentionRoute` have (I14 verifier I14-V2F-02). Without these
  * props "आठवण जोडा" and "बोलून सांगा" vanish from करायची कामे while every page-level test stays green:
  *   - "आठवण जोडा" saves through the app's task store (`handleSaveTask`), not the English "Add New Task" sheet;
- *   - "बोलून सांगा" opens the voice log flow through the one door (`openLogFlow.ts`);
+ *   - "बोलून सांगा" and the plot day's "आणखी सांगा" go through THE ONE mic (`onSpeak` → `requestSpeak`, lane MIC-1);
+ *   - "बदला" opens the speak-the-change screen (`handleEditLog`, lane E1) — never the old hand-filled form;
  *   - a tick goes through `handleUpdateTask` (the same store लक्ष द्या ticks);
  *   - लक्ष द्या's "तुकडा पहा" plot reaches the page, and reading it clears it.
  */
@@ -19,6 +20,7 @@ import type { AppRouterContext } from '../routeContext';
 import type { ReflectPageProps } from '../../../features/reflect/ReflectPageProps';
 import type { PlannedTask } from '../../../types';
 import { renderReflectView } from '../mainView';
+import { resetSpeakStoreForTests, speakState } from '../../speak/speakStore';
 
 // Lane RF (review B001) — the signed-in session, as the auth store reports it.
 const session = vi.hoisted(() => ({ userId: null as string | null }));
@@ -62,19 +64,22 @@ describe('renderReflectView — the real doors करायची कामे i
         expect(ctx.setShowTaskCreationSheet).not.toHaveBeenCalled();
     });
 
-    it('"बोलून सांगा" opens the voice log flow (voice, the log tab)', () => {
+    it('a speak button on the page asks THE ONE mic and comes back to the overview (MIC-1); nothing else moves', () => {
+        resetSpeakStoreForTests();
         const ctx = ctxFor();
-        pageProps(ctx).onTellTodo!();
-        expect(ctx.setMode).toHaveBeenCalledWith('voice');
-        expect(ctx.setMainView).toHaveBeenCalledWith('log');
-    });
-
-    it('"बोलून सांगा" with a parsed draft waiting shows that draft and changes nothing', () => {
-        const ctx = ctxFor({ draftLog: { summary: 'x' } } as unknown as Partial<AppRouterContext>);
-        pageProps(ctx).onTellTodo!();
-        expect(ctx.setMainView).toHaveBeenCalledWith('log');
+        pageProps(ctx).onSpeak!({ purpose: 'addTodo', context: { place: { cropId: 'FARM_GLOBAL' } } });
+        expect(speakState().request).toMatchObject({ purpose: 'addTodo', returnTo: { route: 'main', mainView: 'reflect' } });
+        expect(ctx.setMainView).not.toHaveBeenCalled();
         expect(ctx.setMode).not.toHaveBeenCalled();
         expect(ctx.handleReset).not.toHaveBeenCalled();
+        resetSpeakStoreForTests();
+    });
+
+    it('"बदला" is the speak-the-change screen (handleEditLog), never the old form (E1)', () => {
+        const ctx = ctxFor();
+        const props = pageProps(ctx);
+        expect(props.onOpenLog).toBe(ctx.handleEditLog);
+        expect((props as unknown as Record<string, unknown>).onEditLog).toBeUndefined();
     });
 
     it('a tick goes through the same update लक्ष द्या uses', () => {

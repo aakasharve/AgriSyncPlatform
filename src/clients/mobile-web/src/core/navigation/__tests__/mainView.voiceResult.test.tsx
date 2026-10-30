@@ -7,8 +7,9 @@
  *
  *   - a VOICE auto-save shows the ONE result screen (never the old saved card), with the sticky back;
  *   - it is shown only while it IS the latest save: a typed save afterwards gets the saved card (no stale screen);
- *   - "मागे", "आणखी सांगा" and a red part all land on the mic of the same plot (reset + voice mode);
- *   - "बदला" opens the existing edit form for that log; Sathi's ONE question panel stays on the screen.
+ *   - "मागे" lands on the mic of the same plot (reset + voice mode); lane MIC-1: "आणखी सांगा", a red part and Sathi's
+ *     question open THE ONE mic (`requestSpeak`) for the same plots and come back to this tab;
+ *   - "बदला" opens the speak-the-change screen (`handleEditLog`, lane E1); Sathi's ONE question panel stays on the screen.
  * The result screen itself is tested in voiceResult/__tests__; here it is a recording stub of its props.
  */
 import React from 'react';
@@ -110,20 +111,29 @@ describe('the आजची कामे tab after a save', { timeout: 60_000 }, 
         expect(screen.getByTestId('saved-to-ledger')).toBeTruthy();
     });
 
-    it('मागे / आणखी सांगा / a red part all land on the mic of the same plot', async () => {
+    it('मागे lands on the mic of the same plot; आणखी सांगा and a red part open THE ONE mic for the same plots (MIC-1)', async () => {
         const { renderLogView } = await load();
+        const store = await import('../../speak/speakStore');
+        store.resetSpeakStoreForTests();
         const c = ctx();
         render(<>{renderLogView(c)}</>);
         await screen.findByTestId('voice-result-stub');
-        (seen.props?.onAddAnother as () => void)();
         (seen.props?.onBack as () => void)();
-        expect(c.handleReset).toHaveBeenCalledTimes(2);
+        expect(c.handleReset).toHaveBeenCalledTimes(1);
         expect(c.setMode).toHaveBeenCalledWith('voice');
         fireEvent.click(screen.getByTestId('saved-back'));
-        expect(c.handleReset).toHaveBeenCalledTimes(3);
+        expect(c.handleReset).toHaveBeenCalledTimes(2);
+
+        (seen.props?.onAddAnother as () => void)();
+        expect(store.speakState().request).toMatchObject({ purpose: 'addToDay', context: { place: 'current' }, returnTo: { route: 'main', mainView: 'log' } });
+        (seen.props?.onTellMore as (p: string) => void)('labour');
+        expect(store.speakState().request).toMatchObject({ purpose: 'fillPart', context: { place: 'current', part: 'labour' }, returnTo: { route: 'main', mainView: 'log' } });
+        // neither one resets the flow under him: the result screen stays until the new save replaces it
+        expect(c.handleReset).toHaveBeenCalledTimes(2);
+        store.resetSpeakStoreForTests();
     });
 
-    it('"बदला" opens the existing edit form for that log', async () => {
+    it('"बदला" goes through handleEditLog (the speak-the-change screen, lane E1)', async () => {
         const { renderLogView } = await load();
         const c = ctx();
         render(<>{renderLogView(c)}</>);

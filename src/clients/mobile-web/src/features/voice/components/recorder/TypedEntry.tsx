@@ -10,8 +10,8 @@
  * appears in this flow, and has no player, because there is no voice recording behind it.
  *
  * REAL, not a preview: the words he types go to the SAME `onTextCaptured` the old type box used
- * (`useVoiceRecorder.handleTextReady` -> the same parse and review). `onOpenForm` (optional) opens the
- * real hand-filled form (the old "हाताने" mode), which also works with no network.
+ * (`useVoiceRecorder.handleTextReady` -> the same parse and review). Lane E1 (founder 2026-10-30: "I don't want this
+ * [old] UI anywhere in the app"): the sheet no longer offers the old hand-filled form ("किंवा फॉर्ममध्ये स्वतः भरा").
  *
  * Every Marathi string here is PROPOSED except the tag word "लिहिलेलं".
  */
@@ -37,7 +37,6 @@ export const TYPED_WORDS = {
     send: 'साथीला पाठवा',
     close: 'बंद करा',
     noAudio: 'आवाज रेकॉर्डिंग नाही. हे लिहून सांगितलेलं आहे.',
-    form: 'किंवा फॉर्ममध्ये स्वतः भरा',
 } as const;
 
 /** Fewer letters than this is not an entry yet. */
@@ -67,8 +66,8 @@ export const TypedLink: React.FC<{ onClick: () => void; strong?: boolean }> = ({
     </button>
 );
 
-/** A bottom sheet in the phone column: when to use it, how, the box to type in, and (optional) the hand-filled form. */
-export const TypedSheet: React.FC<{ onSend: (text: string) => void; onClose: () => void; onOpenForm?: () => void }> = ({ onSend, onClose, onOpenForm }) => {
+/** A bottom sheet in the phone column: when to use it, how, and the box to type in. */
+export const TypedSheet: React.FC<{ onSend: (text: string) => void; onClose: () => void }> = ({ onSend, onClose }) => {
     const [text, setText] = useState('');
     const ready = text.trim().length >= TYPED_MIN_CHARS;
     useBackDismiss(true, onClose);
@@ -91,12 +90,6 @@ export const TypedSheet: React.FC<{ onSend: (text: string) => void; onClose: () 
                     className="mt-3 min-h-[56px] w-full rounded-2xl bg-emerald-700 text-[18px] font-extrabold text-white disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500 active:scale-[0.98]">
                     {TYPED_WORDS.send}
                 </button>
-                {onOpenForm && (
-                    <button type="button" onClick={onOpenForm} data-testid="typed-open-form"
-                        className="mt-2 min-h-[48px] w-full rounded-2xl text-[15px] font-bold text-stone-600 underline-offset-4 active:underline">
-                        {TYPED_WORDS.form}
-                    </button>
-                )}
             </div>
         </div>
     );

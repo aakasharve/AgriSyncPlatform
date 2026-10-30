@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CropProfile, InputMode } from '../types';
 import type { VoiceDraftSink } from '../features/voice/useVoiceRecorder.types';
 import { useVoiceAutoSave } from './hooks/useVoiceAutoSave';
+// Lane MIC-1 — a parse spoken for a purpose that keeps it unsaved (a correction) goes back to that screen, not to the auto-save.
+import { withSpeakPurpose } from '../core/speak/speakFlow';
 
 // Feature Controllers
 import { useAppNavigation } from './hooks/useAppNavigation';
@@ -28,7 +30,8 @@ export interface AgriLogAppConfig {
 }
 
 const GLOBAL_TOAST_EVENT = 'agrisync:toast';
-type GlobalToastDetail = { message: string; type: 'success' | 'error' };
+// Lane E1 — 'partial' too: the "बदला" screen's save says what reached no server in the same colour the old form did.
+type GlobalToastDetail = { message: string; type: 'success' | 'error' | 'partial' };
 
 export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: AgriLogAppConfig) => {
     // --- 0. UI GLOBAL STATE (Hoisted) ---
@@ -134,7 +137,8 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         setStatus: voice.setStatus,
         farmId: currentFarmId ?? null,
     });
-    useEffect(() => { voiceDraftSink.current = autoSave.sink; }, [autoSave.sink]);
+    const { setStatus: setVoiceStatus } = voice;
+    useEffect(() => { voiceDraftSink.current = withSpeakPurpose(autoSave.sink, { setStatus: setVoiceStatus }); }, [autoSave.sink, setVoiceStatus]);
     const { clearVoiceResult } = autoSave;
     // Leaving the result (मागे, आणखी सांगा, a new recording) drops it, so it can never stand in for a later save.
     const handleReset = () => { voice.handleResetVoice(); clearVoiceResult(); };
@@ -146,7 +150,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
                 return;
             }
 
-            if (detail.type !== 'success' && detail.type !== 'error') {
+            if (detail.type !== 'success' && detail.type !== 'error' && detail.type !== 'partial') {
                 return;
             }
 

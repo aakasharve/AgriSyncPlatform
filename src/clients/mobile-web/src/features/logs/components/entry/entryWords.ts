@@ -8,7 +8,6 @@
  * marked `// PROPOSED (Marathi)` and listed in the I12 report for his ruling.
  */
 import type { LogSegment } from '../../../../domain/types/log.types';
-import { t } from '../../../../i18n/translations';
 import { resolveOversightString } from '../../../../i18n/oversightTranslations';
 
 /** Sathi's two questions — dictated by the founder 2026-10-24, spelled "झालं" by his ruling (PLR-D5 :35). */
@@ -97,9 +96,4 @@ export const SEGMENT_WORDS = {
     hint: (segment: LogSegment): string => (segment === 'labour' ? 'किती जण आले आणि किती वेळ काम केलं ते सांगा' : 'सविस्तर आणि स्पष्ट सांगा'),
     // PROPOSED (Marathi) — replaces "Cancel & Go Back".
     cancel: 'रद्द करा आणि मागे जा',
-} as const;
-
-/** The form typed by hand (the old "हाताने" mode), reached from the typing sheet: its existing name. */
-export const FORM_WORDS = {
-    title: t('logPage.manualMode', 'mr'),
 } as const;

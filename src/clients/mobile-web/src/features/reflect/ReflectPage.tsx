@@ -24,13 +24,17 @@
  * live in `./overview/*Model.ts`.
  *
  * Lane RF (founder 2026-10-30: "a clarity of what work has been done, who has done it, when it was done, where you
- * can listen") — every piece of work on this page now reads the way the voice result screen reads it
- * (`./day/*`): the day's work button and its sheet FOLLOW THE CHOSEN DAY; each recording shows what was understood,
- * who ("तुम्ही" for the person holding this phone), when, typed or spoken, the ONE status wording, and ▶ only where it
- * may be offered; a note links to its recording; a plot card opens that plot's day in his language (the day part by
- * part, then every recording of it in time order — never a number summed across recordings), replacing the English
- * log drawer. The money section reads the SERVER's cost ledger (`overview/useMoneyLedger.ts`), never a log's own
- * total; money this person may not see is "—" (founder D-22), and a total made from an incomplete set says so.
+ * can listen") — every piece of work on this page reads the way the voice result screen reads it (`./day/*`): who
+ * ("तुम्ही" for the person holding this phone), when, typed or spoken, the ONE status wording, ▶ only where it may be
+ * offered. The money section reads the SERVER's cost ledger (`overview/useMoneyLedger.ts`), never a log's own total;
+ * money this person may not see is "—" (founder D-22), and a total made from an incomplete set says so.
+ *
+ * Lane RF2 (the founder's screen 1, 2026-10-30): the plot cards show only what happened, as chips in the result
+ * screen's colours (no numbered squares, no colour key), plus a "संपूर्ण शेत" card for whole-farm work; a card opens
+ * the plot's day (`day/DaySheets.PlotDayView`: buckets, then the time chips, each opening its recording inline). The
+ * day's feed button, its sheet and the one-recording glance are RETIRED — the cards replace them; a note opens its
+ * recording through the same plot-day view. "बदला" opens the speak-the-change screen (lane E1); "आणखी सांगा" and
+ * करायची कामे's "बोलून सांगा" go through THE ONE mic and come back here, the new work highlighted (lane MIC-1).
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CalendarRange, LayoutGrid, ListChecks, PieChart, StickyNote } from 'lucide-react';
@@ -48,7 +52,6 @@ import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmContext } from '../../core/session/FarmContext';
 import { emitClosureSummaryViewed, emitNextActionCreated } from '../../core/telemetry/eventEmitters';
 import FarmWideTodayPanel from '../logs/components/FarmWideTodayPanel';
-import { TodayActivityButton } from '../logs/components/TodayActivityFeed';
 import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // The stylesheet this page has always loaded (the analysis cards are styled by it). Kept: lane RF only replaced the
 // English log drawer, and nothing here proves no other analysis card still needs it.
@@ -56,8 +59,8 @@ import '../analysis/components/DailyWorkSummary.css';
 
 import type { ReflectPageProps } from './ReflectPageProps';
 import DwcReminderChip from './components/DwcReminderChip';
-import { anyLog, dayRecordings, plotLogFilter, recordingOfLog, withMoneyShown, type DayRecording } from './day/dayRecordings';
-import { DayFeedSheet, GlanceSheet, PlotDaySheet } from './day/DaySheets';
+import { anyLog, dayRecordings, farmLogFilter, plotLogFilter, recordingOfLog, withMoneyShown, type DayRecording } from './day/dayRecordings';
+import { PlotDayView } from './day/DaySheets';
 import type { Viewer } from './day/listenModel';
 import { useReflectCopy } from './day/RecordingParts';
 import { useDayListen } from './day/useDayListen';
@@ -69,8 +72,8 @@ import { FarmStatus } from './overview/FarmStatus';
 import { buildInHand, buildSeasonTotals, buildSpend, farmWideDayMoney, plotDayMoney, spendRange, type MoneyFigure } from './overview/moneyModel';
 import { buildDayNotes } from './overview/notesModel';
 import { NotesList } from './overview/NotesList';
-import { buildPlotDayCard } from './overview/plotDayModel';
-import { BucketKey, PlotDayCards } from './overview/PlotDayCards';
+import { buildDayCardCore, buildPlotDayCard, placeDayLogs } from './overview/plotDayModel';
+import { PlotDayCards } from './overview/PlotDayCards';
 import { atNoon, fromDateKey, relLabel } from './overview/reflectDates';
 import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
 import { buildTodoList, mergeTasks, newTodoTask, toggledTask, type NewTodo, type TodoItem } from './overview/todoModel';
@@ -81,39 +84,24 @@ import { useSectionLayout } from './overview/useSectionLayout';
 import { FIXED_FIRST, type SectionId } from './overview/sectionLayout';
 import { LayoutPreviewSwitch } from './overview/LayoutPreviewSwitch';
 import { AttentionStrip } from '../attention/components/AttentionStrip';
+import { useOptionalLanguage } from '../../i18n/LanguageContext';
+import { cropNameIn } from '../logs/components/voiceResult/partNames';
 
 
-/** The edit form's starting point for a plot day nothing was told for (the old drawer's "Add Missing Entry"). */
-const newEntryFor = (ref: PlotRef, dateKey: string): DailyLog => ({
-    id: `new_${Date.now()}`,
-    date: dateKey,
-    context: {
-        selection: [{
-            cropId: ref.cropId,
-            cropName: ref.cropName,
-            selectedPlotIds: ref.plotId ? [ref.plotId] : [],
-            selectedPlotNames: ref.plotName ? [ref.plotName] : [],
-        }],
-    },
-    dayOutcome: 'WORK_RECORDED',
-    cropActivities: [],
-    irrigation: [],
-    labour: [],
-    inputs: [],
-    machinery: [],
-    activityExpenses: [],
-});
+const FARM_GLOBAL = 'FARM_GLOBAL';
+
+/** Which day view is open: a plot card's, or the whole farm's. */
+type DayPlace = { ref: PlotRef } | { farm: true };
 
 const ReflectPage: React.FC<ReflectPageProps> = ({
     history,
     crops,
-    onEditLog,
     onOpenLog,
+    onSpeak,
     tasks,
     onUpdateTask,
     onAddTask,
     onSaveTask,
-    onTellTodo,
     // `onVerifyLog` is still declared on `ReflectPageProps` and still passed by `core/navigation/mainView.tsx`,
     // but nothing on this page calls it: its only consumer was `ReviewInbox`'s Approve button, removed because it
     // enqueued `verify_log_v2`, which the server answers with MUTATION_TYPE_UNIMPLEMENTED (see `ReviewInbox.tsx`).
@@ -129,15 +117,18 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 }) => {
     const { currentFarmId } = useFarmContext();
     const copy = useReflectCopy();
+    const language = useOptionalLanguage()?.language;
 
     // ── page state ──────────────────────────────────────────────────────────────────────────────
     const [sel, setSel] = useState<ReflectSelection | null>(null); // null = every crop, every plot
     const [date, setDate] = useState<Date>(() => atNoon(new Date()));
     const [calView, setCalView] = useState<Date>(() => atNoon(new Date()));
     const [calMode, setCalMode] = useState<CalendarMode>('week');
-    const [feedOpen, setFeedOpen] = useState(false);
-    const [glanceKey, setGlanceKey] = useState<string | null>(null);
-    const [dayRef, setDayRef] = useState<PlotRef | null>(null);
+    // Lane RF2 — the open day view (a plot card's, or the whole farm's), the recording it opens on (a note's), and the
+    // logs just told through the ONE mic from it (highlighted on landing).
+    const [dayPlace, setDayPlace] = useState<DayPlace | null>(null);
+    const [openKey, setOpenKey] = useState<string | null>(null);
+    const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
     const [moneyLensOpen, setMoneyLensOpen] = useState(false);
     const [moneyLensFilters, setMoneyLensFilters] = useState<FinanceFilters>({});
     const layout = useSectionLayout();
@@ -174,14 +165,9 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         youIds: new Set(sessionUserId ? [sessionUserId] : []), nameOf: (id: string) => operatorNameById[id], youLabel: copy.you, unknownLabel: copy.unknownPerson,
     }), [sessionUserId, operatorNameById, copy]);
     const shown = useCallback((r: DayRecording) => withMoneyShown(r, moneyVisible), [moneyVisible]);
-    // The chosen day's recordings, farm-wide (the day's work sheet, the notes' links, the one player).
+    // The chosen day's recordings, farm-wide (the notes' links, the one player).
     const dayRecs = useMemo(() => dayRecordings(history, dateKey, anyLog, whoDeps, crops).map(shown), [history, dateKey, whoDeps, crops, shown]);
     const listen = useDayListen(dayRecs, viewer);
-    const plotRecs = useMemo(
-        () => (dayRef ? dayRecordings(history, dateKey, plotLogFilter(dayRef), whoDeps, crops).map(shown) : []),
-        [dayRef, history, dateKey, whoDeps, crops, shown],
-    );
-    const glance = glanceKey ? dayRecs.find(r => r.key === glanceKey) : undefined;
 
     // ── money: the server's ledger (lane RF) ──────────────────────────────────────────────────
     const ledger = useMoneyLedger(currentFarmId ?? null, history);
@@ -195,10 +181,22 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         };
     }, [ledger, crops, scope, calMode, date, calView, moneyVisible]);
 
+    const refs = useMemo(() => plotRefsInScope(crops, scope), [crops, scope]);
     const cards = useMemo(
-        () => plotRefsInScope(crops, scope).map(ref => buildPlotDayCard(ref, history, scope, dateKey, date, plotDayMoney(ledger, ref.plotId, dateKey, moneyVisible))),
-        [crops, scope, history, dateKey, date, ledger, moneyVisible],
+        () => refs.map(ref => buildPlotDayCard(ref, history, scope, dateKey, date, plotDayMoney(ledger, ref.plotId, dateKey, moneyVisible), language)),
+        [refs, history, scope, dateKey, date, ledger, moneyVisible, language],
     );
+    // Lane RF2 — whole-farm work (no plot card takes it) gets its own card, when the page shows the whole farm.
+    const farmFilter = useMemo(() => farmLogFilter(new Set(crops.filter(c => (c.plots ?? []).length === 0).map(c => c.id))), [crops]);
+    const farmCard = useMemo(
+        () => (wholeFarm ? buildDayCardCore(placeDayLogs(history, dateKey, farmFilter), farmWideDayMoney(ledger, dateKey, moneyVisible), language) : undefined),
+        [wholeFarm, history, dateKey, farmFilter, ledger, moneyVisible, language],
+    );
+    const placeRecs = useMemo(() => {
+        if (!dayPlace) return [];
+        const inView = 'farm' in dayPlace ? farmFilter : plotLogFilter(dayPlace.ref);
+        return dayRecordings(history, dateKey, inView, whoDeps, crops).map(shown);
+    }, [dayPlace, farmFilter, history, dateKey, whoDeps, crops, shown]);
     const notes = useMemo(
         () => buildDayNotes({ history, dateKey, scope, crops, operatorNameById, whoDeps }),
         [history, dateKey, scope, crops, operatorNameById, whoDeps],
@@ -242,8 +240,32 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         setMoneyLensFilters({ fromDate: dateKey, toDate: dateKey, ...(ref.plotId ? { plotId: ref.plotId } : {}) });
         setMoneyLensOpen(true);
     } : undefined;
-    const openLog = (log: DailyLog) => { listen.stop(); (onOpenLog ?? onEditLog)?.(log); };
-    const openGlance = (rec: DayRecording) => { listen.stop(); setGlanceKey(rec.key); };
+    // The whole farm's money that day (the same lens, the day alone).
+    const openFarmMoney = moneyVisible ? () => { setMoneyLensFilters({ fromDate: dateKey, toDate: dateKey }); setMoneyLensOpen(true); } : undefined;
+    const openLog = (log: DailyLog) => { listen.stop(); onOpenLog?.(log); };
+    const openPlace = (place: DayPlace, recordingKey: string | null = null) => { listen.stop(); setFresh(new Set()); setOpenKey(recordingKey); setDayPlace(place); };
+    // A note opens its recording through the same plot-day view: its plot's card (in view), else the whole farm's.
+    const openNoteRecording = (rec: DayRecording) => {
+        const plotIds = rec.logs.flatMap(l => l.context?.selection?.flatMap(s => s.selectedPlotIds ?? []) ?? []);
+        const ref = refs.find(r => (r.plotId ? plotIds.includes(r.plotId) : rec.logs.some(plotLogFilter(r))));
+        openPlace(ref ? { ref } : { farm: true }, rec.key);
+    };
+    // "आणखी सांगा" from a day view: THE ONE mic for that place (a recording is always today's: today only), landing back
+    // on this view with the new work highlighted.
+    const tellMoreFor = (place: DayPlace): (() => void) | undefined => (isToday && onSpeak ? () => {
+        listen.stop();
+        onSpeak({
+            purpose: 'addToDay',
+            context: { place: 'farm' in place ? { cropId: FARM_GLOBAL } : { cropId: place.ref.cropId, plotId: place.ref.plotId } },
+            onLanded: landing => { if (landing.kind === 'saved') setFresh(new Set(landing.logIds)); },
+        });
+    } : undefined);
+    // करायची कामे's "बोलून सांगा": THE ONE mic, for the one plot the page is narrowed to, else the whole farm (the same
+    // place a typed to-do gets); a spoken reminder becomes a to-do there (LogFactory).
+    const tellTodo = onSpeak ? () => {
+        const only = !wholeFarm && refs.length === 1 && refs[0].plotId ? refs[0] : undefined;
+        onSpeak({ purpose: 'addTodo', context: { place: only ? { cropId: only.cropId, plotId: only.plotId } : { cropId: FARM_GLOBAL } } });
+    } : undefined;
     const dayLabel = copy.dayName(date);
 
     const legendCrops = crops.filter(c => scope.viewCrops.includes(c.id)).map(c => ({ id: c.id, name: c.name, color: c.color }));
@@ -265,7 +287,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 return (
                     <SectionBlock id="todo" title="करायची कामे" icon={<ListChecks size={22} aria-hidden="true" />} tone="amber"
                         hint="कामं आणि आठवणी — वेळ उलटली की लाल" count={<TodoCount list={todoList} />} {...fold}>
-                        <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} onAddTodo={addTodo} onTell={onTellTodo} />
+                        <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} onAddTodo={addTodo} onTell={tellTodo} />
                     </SectionBlock>
                 );
             case 'day':
@@ -277,17 +299,17 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                             {currentFarmId && <DwcReminderChip farmId={currentFarmId} history={history} />}
                             <DayBar date={date} onDate={pickDay} />
                             {cards.length > 0
-                                ? <PlotDayCards cards={cards} isToday={isToday} onOpen={ref => { listen.stop(); setDayRef(ref); }} onCost={openPlotMoney} />
+                                ? <PlotDayCards cards={cards} farm={farmCard} isToday={isToday} onOpen={ref => openPlace({ ref })} onOpenFarm={() => openPlace({ farm: true })}
+                                    onCost={openPlotMoney} onFarmCost={openFarmMoney} />
                                 : <p className="m-0 rounded-2xl bg-stone-50 p-3 text-center text-[14.5px] font-bold text-stone-600" data-testid="plot-cards-empty">पीक आणि प्लॉट जोडले की इथे रोजचं काम दिसेल.</p>}
                         </div>
-                        <BucketKey />
                     </SectionBlock>
                 );
             case 'notes':
                 return (
                     <SectionBlock id="notes" title="निरीक्षणं व नोंदी" icon={<StickyNote size={22} aria-hidden="true" />} tone="violet" hint={relLabel(date)}
                         count={countBadge(notes.length, 'bg-violet-100 text-violet-800', 'notes-count')} {...fold}>
-                        <NotesList notes={notes} sources={{ recordingOf: logId => recordingOfLog(dayRecs, logId), listen, onOpen: openGlance }} />
+                        <NotesList notes={notes} sources={{ recordingOf: logId => recordingOfLog(dayRecs, logId), listen, onOpen: openNoteRecording }} />
                     </SectionBlock>
                 );
             case 'calendar':
@@ -307,13 +329,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     return (
         <div className="space-y-3 pb-20" style={{ fontFamily: SANS }} data-testid="reflect-page">
-            {/* THE DAY'S WORK — one button; it follows the day the page is on (lane RF). */}
-            <div className="px-3 pt-4">
-                <TodayActivityButton count={dayRecs.length} title={copy.feedTitle(isToday)} subtitle={copy.feedSubtitle(isToday, dayLabel)} onClick={() => setFeedOpen(true)} />
-            </div>
-            {feedOpen && (
-                <DayFeedSheet recordings={dayRecs} isToday={isToday} dayLabel={dayLabel} listen={listen} onOpen={openGlance} onClose={() => setFeedOpen(false)} />
-            )}
+            {/* Lane RF2 — the day's feed button and sheet are retired: the plot cards (and the whole farm's) replace them. */}
+            <div className="pt-1" />
 
             {/* REVIEW INBOX (Trust Layer 2) — a read surface; visible only to a verifier when something waits. */}
             {showInbox && (
@@ -359,23 +376,23 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 )}
             </div>
 
-            {/* A PLOT'S DAY (lane RF) — replaces the English log drawer. */}
-            {dayRef && (
-                <PlotDaySheet
-                    title={[dayRef.plotName, dayRef.cropName].filter(Boolean).join(' · ')}
-                    subtitle={seasonDayOf(dayRef, date, copy.seasonDay)}
+            {/* A PLACE'S DAY (lanes RF, RF2) — a plot card's, the whole farm's, or a note's recording. */}
+            {dayPlace && (
+                <PlotDayView
+                    title={'farm' in dayPlace ? copy.wholeFarm : [dayPlace.ref.plotName, cropNameIn(dayPlace.ref.cropName, language)].filter(Boolean).join(' · ')}
+                    subtitle={'farm' in dayPlace ? undefined : seasonDayOf(dayPlace.ref, date, copy.seasonDay)}
                     dayLabel={dayLabel}
                     dateKey={dateKey}
-                    recordings={plotRecs}
+                    isToday={isToday}
+                    recordings={placeRecs}
                     listen={listen}
-                    onEdit={onOpenLog || onEditLog ? openLog : undefined}
-                    onAdd={onEditLog ? () => { setDayRef(null); onEditLog(newEntryFor(dayRef, dateKey)); } : undefined}
-                    onClose={() => setDayRef(null)}
+                    openKey={openKey}
+                    fresh={fresh}
+                    onEdit={onOpenLog ? openLog : undefined}
+                    onTellMore={tellMoreFor(dayPlace)}
+                    onClose={() => { setDayPlace(null); setOpenKey(null); setFresh(new Set()); }}
                 />
             )}
-
-            {/* ONE RECORDING (the feed's and the notes' glance). */}
-            {glance && <GlanceSheet rec={glance} listen={listen} onEdit={onOpenLog || onEditLog ? openLog : undefined} onClose={() => setGlanceKey(null)} />}
 
             <MoneyLensDrawer isOpen={moneyLensOpen} onClose={() => setMoneyLensOpen(false)} filters={moneyLensFilters} />
         </div>

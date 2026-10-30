@@ -53,8 +53,6 @@ export interface RecorderFaceProps {
     onRequestContextSelection?: () => void;
     /** The real typed entry (same parse as speaking). Absent = no typing way in. */
     onTextCaptured?: (text: string) => void;
-    /** The real hand-filled form (optional). */
-    onOpenForm?: () => void;
 }
 
 const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void; onCancel: () => void }> = ({ seconds, level, onStop, onCancel }) => {
@@ -103,7 +101,7 @@ const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void;
 
 export const RecorderFace: React.FC<RecorderFaceProps> = ({
     isRecording, seconds, level, disabled, suggest, error, errorCode, transcript, lastInputTyped, micRefused,
-    onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured, onOpenForm,
+    onStart, onStop, onCancel, onRequestContextSelection, onTextCaptured,
 }) => {
     const [typedOpen, setTypedOpen] = useState(false);
     const [justCancelled, setJustCancelled] = useState(false);
@@ -160,7 +158,6 @@ export const RecorderFace: React.FC<RecorderFaceProps> = ({
                 <TypedSheet
                     onClose={() => setTypedOpen(false)}
                     onSend={(text) => { setTypedOpen(false); if (!disabled) onTextCaptured(text); }}
-                    onOpenForm={onOpenForm ? () => { setTypedOpen(false); onOpenForm(); } : undefined}
                 />
             )}
         </div>

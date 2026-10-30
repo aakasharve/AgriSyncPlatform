@@ -2,116 +2,161 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: plr-d10-redesign-real-integration-2026-10-25 (I6, WP-3)
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (I6, WP-3; lane RF2 — the founder's screen 1, 2026-10-30)
  *
- * प्लॉटनिहाय काम — one wide card per picked plot for the chosen day (on a phone, two side by side cut the
- * plot's name short). Every fact the old CompactCropCard carried is here (see `plotDayModel.ts`): the crop
- * colour on the edge, crop + plot, the trust mark, attached files, the day's money (tap → that day's money
- * lens), the first note, weather, the season day, the water state, the stop reason, and the EIGHT
- * colour-coded counts — now each with a word in the key under the cards. Tapping a card opens that day's
- * record (or the "nothing recorded — add it" view), as before.
- *
- * Counts: "—" when nothing was recorded in a bucket; a labour bucket told WITHOUT a number keeps its colour
- * and shows "—" ("we were not told"), never a 0. Every Marathi string is PROPOSED.
- *
- * Lane RF: the trust mark is the page's ONE status wording ("पक्कं नाही" / "✔ पक्कं केलं"); the money is the server
- * ledger's for that plot that day, marked partial when it is; "N वेळा सांगितलं" when the day was told more than once;
- * tapping the card opens the plot's day sheet (every recording of it).
+ * प्लॉटनिहाय काम — one wide card per picked plot for the chosen day, and (whole farm view) one "संपूर्ण शेत" card for
+ * the work no plot card takes. Lane RF2: the eight numbered squares and their colour key are gone; each card shows ONLY
+ * what actually happened that day, as chips in the result screen's part colours with each part's own icon
+ * (`plotDayModel.dayChipsOf`), the money as one chip from the server ledger (tap → that day's money lens), and keeps
+ * the plot's identity, the ONE status wording, "आज N वेळा सांगितलं", the water state and weather. An empty day says
+ * "आज अजून काही सांगितलं नाही". Tapping a card opens the plot's day (`day/DaySheets.PlotDayView`).
  */
 import React from 'react';
-import { Ban, Bell, CheckSquare, Droplets, IndianRupee, Package, Paperclip, StickyNote, Thermometer, Tractor, Users } from 'lucide-react';
+import { ChevronRight, Droplets, HelpCircle, IndianRupee, Map as MapIcon, Paperclip, Thermometer } from 'lucide-react';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { CategoryIcon } from '../../logs/components/shramsathi/understandingRing';
+import { PartIcon } from '../../logs/components/voiceResult/HisWords';
+import { cropNameIn, partNameIn } from '../../logs/components/voiceResult/partNames';
+import { partMeta } from '../../logs/components/voiceResult/resultModel';
 import { StatusChip, useReflectCopy } from '../day/RecordingParts';
-import { BUCKETS, BUCKET_COLOR, BUCKET_LABEL, WATER_LABEL, type Bucket, type PlotDayCard, type WaterState } from './plotDayModel';
+import { WATER_LABEL, type DayCardCore, type DayChip, type PlotDayCard, type WaterState } from './plotDayModel';
 import { rupees } from './reflectDates';
 import type { PlotRef } from './reflectSelection';
 import { CropPhoto, Num, Tap } from './ui';
 import { useLogAttachmentCount } from './useLogAttachmentCount';
 
-const ICON: Record<Bucket, React.ReactNode> = {
-    work: <CheckSquare size={15} aria-hidden="true" />, water: <Droplets size={15} aria-hidden="true" />, labour: <Users size={15} aria-hidden="true" />,
-    inputs: <Package size={15} aria-hidden="true" />, machine: <Tractor size={15} aria-hidden="true" />, cost: <IndianRupee size={15} aria-hidden="true" />,
-    notes: <StickyNote size={15} aria-hidden="true" />, reminders: <Bell size={15} aria-hidden="true" />,
-};
 const WATER_TONE: Record<WaterState, string> = { ON_TRACK: 'bg-green-100 text-green-800', MISSED: 'bg-orange-100 text-orange-800', EXTRA: 'bg-blue-100 text-blue-800' };
+/** The result screen's खर्च colour, for the ledger's money chip. */
+const MONEY_TINT = partMeta('expense').tint;
 
-/** `several`: labour told in more than one recording — no one number (review B006), and the cell says so. */
-const BucketCell: React.FC<{ b: Bucket; n: number | undefined; amber: boolean; several?: boolean }> = ({ b, n, amber, several }) => {
+/** One thing that happened: its part's colour and icon, as said; an unsure one keeps its mark. */
+export const Chip: React.FC<{ chip: DayChip }> = ({ chip }) => {
+    const language = useOptionalLanguage()?.language;
     const copy = useReflectCopy();
-    const unknown = n === undefined;
-    const has = unknown || n > 0;
-    const color = !has ? 'bg-stone-50 text-stone-300 ring-stone-100' : amber ? 'bg-amber-50 text-amber-700 ring-amber-200' : BUCKET_COLOR[b];
-    const said = several ? copy.labourSeveral : unknown ? 'संख्या सांगितली नाही' : n > 0 ? String(n) : 'नोंद नाही';
+    const blocker = chip.kind === 'blocker';
+    const name = blocker ? '' : partNameIn(chip.kind as Exclude<DayChip['kind'], 'blocker'>, language);
+    const text = chip.text || name;
     return (
-        <span data-bucket={b} data-count={several ? 'several' : unknown ? 'unknown' : n} aria-label={`${BUCKET_LABEL[b]}: ${said}`} title={BUCKET_LABEL[b]}
-            className={`flex flex-col items-center gap-0.5 rounded-lg py-1.5 ring-1 ${color}`}>
-            {ICON[b]}<Num className="text-[12.5px] font-extrabold leading-none">{!unknown && n > 0 ? n : '—'}</Num>
+        <span data-testid={`chip-${chip.id}`} data-kind={chip.kind} data-verified={chip.verified ? 'yes' : 'no'}
+            aria-label={[name, text, chip.verified ? '' : copy.unsure].filter(Boolean).join(': ')}
+            className={`inline-flex max-w-full items-center gap-1.5 rounded-xl px-2 py-1 text-[14.5px] font-extrabold text-stone-900 ${blocker ? 'bg-orange-50 ring-1 ring-orange-300' : ''} ${chip.verified ? '' : 'border border-dashed border-amber-500'}`}
+            style={blocker ? undefined : { background: partMeta(chip.kind as Exclude<DayChip['kind'], 'blocker'>).tint }}>
+            <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-lg bg-white/65">
+                {blocker ? <CategoryIcon name="blockers" size={18} /> : <PartIcon part={chip.kind as Exclude<DayChip['kind'], 'blocker'>} size={18} />}
+            </span>
+            <span className="min-w-0 line-clamp-2 leading-snug">{text}</span>
+            {!chip.verified && <HelpCircle size={14} className="shrink-0 text-amber-600" aria-hidden="true" />}
         </span>
+    );
+};
+
+/** The chips of a day, the ledger's money last (tap → the money lens, only for money he may see). */
+const Chips: React.FC<{ card: DayCardCore; testKey: string; onCost?: () => void }> = ({ card, testKey, onCost }) => {
+    const copy = useReflectCopy();
+    const language = useOptionalLanguage()?.language;
+    return (
+        <span className="mt-2.5 flex flex-wrap gap-1.5" data-testid={`plot-chips-${testKey}`}>
+            {card.chips.map(c => <Chip key={c.id} chip={c} />)}
+            {card.money?.amount != null && (onCost ? (
+                <Tap onClick={e => { e.stopPropagation(); onCost(); }} data-testid={`plot-money-${testKey}`} aria-label={`${partNameIn('expense', language)} ${rupees(card.money.amount)}`}
+                    className="inline-flex items-center gap-1.5 rounded-xl px-2 py-1 text-[14.5px] font-extrabold text-stone-900" style={{ background: MONEY_TINT }}>
+                    <span className="grid h-[26px] w-[26px] place-items-center rounded-lg bg-white/65"><IndianRupee size={16} aria-hidden="true" /></span>
+                    <Num>{rupees(card.money.amount)}</Num>
+                    {card.money.partial.length > 0 && <span className="text-[11px] text-amber-800" data-testid={`plot-money-partial-${testKey}`}>· {copy.partialTag}</span>}
+                </Tap>
+            ) : null)}
+        </span>
+    );
+};
+
+/** "आज N वेळा सांगितलं" and the way into the day — or what an empty day says. */
+const Foot: React.FC<{ card: DayCardCore; isToday: boolean; testKey: string }> = ({ card, isToday, testKey }) => {
+    const copy = useReflectCopy();
+    if (card.recordings === 0) {
+        return <span className="mt-2.5 block text-[14px] font-bold text-stone-500" data-testid={`plot-empty-${testKey}`}>{copy.nothingTold(isToday)}</span>;
+    }
+    return (
+        <span className="mt-2.5 flex items-center justify-between gap-2 text-[13px] font-bold text-stone-600">
+            <span data-testid={`plot-times-${testKey}`}>{copy.timesTold(card.recordings, isToday)}</span>
+            <span className="inline-flex items-center gap-0.5 font-extrabold text-emerald-700">{copy.seeAll}<ChevronRight size={16} aria-hidden="true" /></span>
+        </span>
+    );
+};
+
+/** A whole card is the button into its day (Enter / Space too). */
+const CardButton: React.FC<{ testId: string; status: DayCardCore['status']; onOpen: () => void; children: React.ReactNode; edge?: string }> = ({ testId, status, onOpen, children, edge }) => {
+    const tint = status === 'blocked' ? 'border-amber-200 bg-amber-50' : status === 'worked' ? 'border-emerald-200 bg-white' : 'border-stone-200 bg-white';
+    return (
+        <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+            data-testid={testId} data-status={status}
+            className={`relative block w-full cursor-pointer rounded-[18px] border-2 p-3 pl-4 text-left transition-transform active:scale-[0.99] ${tint}`}>
+            {edge && <span className={`absolute inset-y-0 left-0 w-1.5 rounded-l-[18px] ${edge}`} aria-hidden="true" />}
+            {children}
+        </div>
     );
 };
 
 const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (ref: PlotRef) => void; onCost?: (ref: PlotRef) => void }> = ({ card, isToday, onOpen, onCost }) => {
     const { ref, log } = card;
-    const copy = useReflectCopy();
+    const language = useOptionalLanguage()?.language;
     const files = useLogAttachmentCount(log?.id);
-    const tint = card.status === 'blocked' ? 'border-amber-200 bg-amber-50' : card.status === 'worked' ? 'border-emerald-200 bg-white' : 'border-stone-200 bg-rose-50/30';
-    const open = () => onOpen(ref);
+    const cropName = cropNameIn(ref.cropName, language);
     return (
-        <div role="button" tabIndex={0} onClick={open} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
-            data-testid={`plot-card-${ref.key}`} data-status={card.status}
-            className={`relative block w-full cursor-pointer rounded-2xl border-2 p-3 pl-4 text-left transition-transform active:scale-[0.99] ${tint}`}>
-            <span className={`absolute inset-y-0 left-0 w-1.5 rounded-l-2xl ${ref.cropColor}`} aria-hidden="true" />
+        <CardButton testId={`plot-card-${ref.key}`} status={card.status} onOpen={() => onOpen(ref)} edge={ref.cropColor}>
             <span className="flex items-center gap-2.5">
                 <CropPhoto iconName={ref.crop.iconName} name={ref.cropName} px={44} />
                 <span className="min-w-0 flex-1">
-                    <span className="block text-[17px] font-extrabold leading-tight text-stone-900">{ref.plotName ?? ref.cropName}</span>
-                    <span className="block text-[13px] font-bold text-stone-500">{[ref.cropName, ref.plot?.variety, card.area, ref.plotName ? undefined : 'प्लॉट नाही'].filter(Boolean).join(' · ')}</span>
+                    <span className="block text-[18px] font-extrabold leading-tight text-stone-900">{ref.plotName ?? (cropName || ref.cropName)}</span>
+                    <span className="block text-[13px] font-bold text-stone-500">{[cropName, ref.plot?.variety, card.area, card.dayLabel].filter(Boolean).join(' · ')}</span>
                 </span>
-                <span className="flex shrink-0 items-center gap-1.5">
+                <span className="flex shrink-0 flex-col items-end gap-1">
                     {card.confirmed !== undefined && <StatusChip confirmed={card.confirmed} testId={`plot-state-${ref.key}`} />}
                     {files > 0 && <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[12px] font-bold text-blue-700 ring-1 ring-blue-100" aria-label={`जोडलेल्या फाइल ${files}`} data-testid={`plot-files-${ref.key}`}><Paperclip size={12} aria-hidden="true" /><Num>{files}</Num></span>}
-                    {card.money?.amount != null && onCost && (
-                        <Tap onClick={e => { e.stopPropagation(); onCost(ref); }} data-testid={`plot-money-${ref.key}`} aria-label={`या दिवसाचा खर्च ${rupees(card.money.amount)}`}
-                            className="rounded-full bg-emerald-50 px-2 py-1 text-[13px] font-extrabold text-emerald-800 ring-1 ring-emerald-200">
-                            <Num>{rupees(card.money.amount)}</Num>
-                            {card.money.partial.length > 0 && <span className="ml-1 text-[11px] text-amber-800" data-testid={`plot-money-partial-${ref.key}`}>· {copy.partialTag}</span>}
-                        </Tap>
-                    )}
                 </span>
             </span>
-            {card.note && <span className="mt-2 block rounded-lg bg-amber-50 px-2 py-1 text-[13px] font-bold text-amber-800 ring-1 ring-amber-100" data-testid={`plot-note-${ref.key}`}>{card.note}</span>}
-            <span className="mt-2 flex flex-wrap gap-1.5">
-                {card.recordings > 1 && <span className="rounded-lg bg-stone-100 px-2 py-1 text-[12.5px] font-extrabold text-stone-700" data-testid={`plot-times-${ref.key}`}>{copy.timesTold(card.recordings)}</span>}
-                {card.dayLabel && <span className={`rounded-lg px-2 py-1 text-[12.5px] font-extrabold ${card.phase === 'CROP_CYCLE' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{card.dayLabel}</span>}
-                {card.water && <span className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] font-extrabold ${WATER_TONE[card.water]}`}><Droplets size={13} aria-hidden="true" />{WATER_LABEL[card.water]}</span>}
-                {card.weather && <span className="flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-[12.5px] font-bold text-sky-800 ring-1 ring-sky-100"><Thermometer size={13} aria-hidden="true" /><Num>{card.weather.temp}</Num> · {card.weather.condition}</span>}
-            </span>
-            <span className="mt-2.5 block">
-                {card.status === 'blocked' ? (
-                    <span className="flex items-center justify-center gap-1.5 rounded-lg bg-amber-100 p-2 text-[14px] font-extrabold text-amber-800"><Ban size={16} aria-hidden="true" />काम थांबलं{card.stoppedReason ? `: ${card.stoppedReason}` : ''}</span>
-                ) : card.counts ? (
-                    <span className="grid grid-cols-8 gap-1">
-                        {BUCKETS.map(b => <BucketCell key={b} b={b} n={card.counts![b]} amber={b === 'water' && card.waterBlocked} several={b === 'labour' && card.labourSeveral} />)}
-                    </span>
-                ) : (
-                    <span className="block rounded-lg bg-white/70 p-2 text-center text-[13px] font-bold text-stone-500 ring-1 ring-stone-200" data-testid={`plot-empty-${ref.key}`}>{isToday ? 'आज अजून काही सांगितलं नाही' : 'या दिवशी नोंद नाही'}</span>
-                )}
-            </span>
-        </div>
+            <Chips card={card} testKey={ref.key} onCost={onCost ? () => onCost(ref) : undefined} />
+            {(card.water || card.weather) && (
+                <span className="mt-2 flex flex-wrap gap-1.5">
+                    {card.water && <span className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] font-extrabold ${WATER_TONE[card.water]}`}><Droplets size={13} aria-hidden="true" />{WATER_LABEL[card.water]}</span>}
+                    {card.weather && <span className="flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-[12.5px] font-bold text-sky-800 ring-1 ring-sky-100"><Thermometer size={13} aria-hidden="true" /><Num>{card.weather.temp}</Num> · {card.weather.condition}</span>}
+                </span>
+            )}
+            <Foot card={card} isToday={isToday} testKey={ref.key} />
+        </CardButton>
     );
 };
 
-export const PlotDayCards: React.FC<{ cards: readonly PlotDayCard[]; isToday: boolean; onOpen: (ref: PlotRef) => void; onCost?: (ref: PlotRef) => void }> = ({ cards, isToday, onOpen, onCost }) => (
+/** The "संपूर्ण शेत" card — whole-farm work, the same look. */
+export const FarmDayCardView: React.FC<{ card: DayCardCore; isToday: boolean; onOpen: () => void; onCost?: () => void }> = ({ card, isToday, onOpen, onCost }) => {
+    const copy = useReflectCopy();
+    return (
+        <CardButton testId="plot-card-farm" status={card.status} onOpen={onOpen} edge="bg-emerald-700">
+            <span className="flex items-center gap-2.5">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-800" aria-hidden="true"><MapIcon size={22} /></span>
+                <span className="min-w-0 flex-1">
+                    <span className="block text-[18px] font-extrabold leading-tight text-stone-900">{copy.wholeFarm}</span>
+                    <span className="block text-[13px] font-bold text-stone-500">{copy.farmCardLine}</span>
+                </span>
+                {card.confirmed !== undefined && <StatusChip confirmed={card.confirmed} testId="plot-state-farm" />}
+            </span>
+            <Chips card={card} testKey="farm" onCost={onCost} />
+            <Foot card={card} isToday={isToday} testKey="farm" />
+        </CardButton>
+    );
+};
+
+export const PlotDayCards: React.FC<{
+    cards: readonly PlotDayCard[];
+    /** The whole farm's card (only when the page shows the whole farm). */
+    farm?: DayCardCore;
+    isToday: boolean;
+    onOpen: (ref: PlotRef) => void;
+    onOpenFarm?: () => void;
+    onCost?: (ref: PlotRef) => void;
+    onFarmCost?: () => void;
+}> = ({ cards, farm, isToday, onOpen, onOpenFarm, onCost, onFarmCost }) => (
     <div className="space-y-2.5" data-testid="plot-day-cards">
         {cards.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} />)}
-    </div>
-);
-
-/** Which colour is which: the old cards had icons only. */
-export const BucketKey: React.FC = () => (
-    <div className="mt-2.5 flex flex-wrap gap-1.5" data-testid="bucket-key">
-        {BUCKETS.map(b => (
-            <span key={b} className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[12px] font-extrabold ring-1 ${BUCKET_COLOR[b]}`}>{ICON[b]}{BUCKET_LABEL[b]}</span>
-        ))}
-        <span className="inline-flex items-center gap-1 rounded-full bg-stone-50 px-2 py-1 text-[12px] font-extrabold text-stone-500 ring-1 ring-stone-200">— = नोंद नाही</span>
+        {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} onCost={onFarmCost} />}
     </div>
 );

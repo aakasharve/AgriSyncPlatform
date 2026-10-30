@@ -118,6 +118,7 @@ describe('the log page no longer carries the feed', () => {
         expect(src).toContain('sessionUserId={getSessionUserId()}');
         expect(src).not.toContain('activeOperatorId, getSessionUserId()');
         expect(src).toContain('farmRole={ctx.farmRole ?? null}');
-        expect(src).toContain('onOpenLog={openLogToEdit}');
+        // lane E1: "बदला" is the speak-the-change screen (`handleEditLog` opens it over the page).
+        expect(src).toContain('onOpenLog={ctx.handleEditLog}');
     });
 });

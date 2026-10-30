@@ -44,8 +44,6 @@ interface AudioRecorderStreamingProps {
   onProcessingStart?: () => void;
   /** Told when the mic starts / stops listening (the entry flow hides its choices meanwhile). */
   onRecordingChange?: (recording: boolean) => void;
-  /** The real hand-filled form, offered quietly in the typing sheet. */
-  onOpenForm?: () => void;
 }
 
 async function blobToBase64NoPrefix(blob: Blob): Promise<string> {
@@ -75,7 +73,6 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
   onRequestContextSelection,
   onProcessingStart,
   onRecordingChange,
-  onOpenForm,
 }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -281,7 +278,6 @@ const AudioRecorderStreaming: React.FC<AudioRecorderStreamingProps> = ({
       onCancel={cancelRecording}
       onRequestContextSelection={onRequestContextSelection}
       onTextCaptured={onTextCaptured ? sendTyped : undefined}
-      onOpenForm={onOpenForm}
     />
   );
 };

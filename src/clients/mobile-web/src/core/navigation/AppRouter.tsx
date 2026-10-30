@@ -1,7 +1,5 @@
 import React from 'react';
-import {
-    AgriLogResponse, DailyLog,
-} from '../../types';
+import type { DailyLog } from '../../types';
 import {
     useAppCommandsState,
     useAppDataState,
@@ -36,6 +34,9 @@ import FirstRunWait from '../../features/onboarding/firstRun/FirstRunWait';
 // spec: plr-d10 (I14, CMP-3) — the one role → hidden-tab rule (a worker gets no तुलना).
 import { hiddenMainViewsFor } from './hiddenViews';
 import { useHomeAttendanceDoor } from '../../features/labour/useHomeAttendanceDoor';
+// Lanes MIC-1 + E1 — the ONE mic and the "बदला" screen, over every screen.
+import { SpeakHost, type CorrectionSaveDeps } from '../speak/SpeakHost';
+import { openCorrection } from '../speak/speakStore';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -163,38 +164,17 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     // spec: plr-d10 (I14, H16) — लक्ष द्या's "तुकडा पहा" opens the overview on that plot.
     const [reflectFocusPlotId, setReflectFocusPlotId] = React.useState<string | null>(null);
 
-    // Convert a DailyLog to an editable AgriLogResponse (manual ledger edit flow).
-    const handleEditLog = (log: DailyLog) => {
-        setMainView('log');
-        const ctxSel = log.context.selection[0];
-        setLogScope({
-            selectedCropIds: [ctxSel.cropId],
-            selectedPlotIds: ctxSel.selectedPlotIds,
-            mode: 'single',
-            applyPolicy: 'broadcast',
-        });
-        setMode('manual');
-        setStatus('idle');
-
-        const agriLogFormat: AgriLogResponse = {
-            // task-0b — `log.dayOutcome` is `DayOutcome | null`; the editable
-            // draft's shape (`AgriLogResponse.dayOutcome`) is unchanged and
-            // still required, so this falls back exactly as this edit-draft
-            // conversion already did for every pulled log before task-0b.
-            dayOutcome: log.dayOutcome ?? 'WORK_RECORDED',
-            cropActivities: log.cropActivities || [],
-            irrigation: log.irrigation || [],
-            labour: log.labour || [],
-            inputs: log.inputs || [],
-            machinery: log.machinery || [],
-            activityExpenses: log.activityExpenses || [],
-            disturbance: log.disturbance,
-            questionsForUser: [],
-            summary: '',
-            missingSegments: [],
-            originalLogId: log.id,
-        };
-        setDraftLog(agriLogFormat);
+    // Lane E1 (founder 2026-10-30: "I don't want this [old] UI anywhere in the app") — "बदला" on any saved entry (the
+    // result screen, आढावा, the saved card) opens the speak-the-change screen over the screen he is on
+    // (`core/speak/SpeakHost`). The English MULCHING / PRUNING form (`ManualEntry` in 'manual' mode) is no longer
+    // reached from here.
+    const handleEditLog = (log: DailyLog) => { openCorrection(log.id); };
+    // What "जतन करा" on that screen saves through: the old form's own edit path (new content version, P3).
+    const correctionSave: CorrectionSaveDeps = {
+        updateLog: (logId, updates, profile, reason) => commands.service.updateLog(logId, updates, profile, reason),
+        setHistory: data.setHistory,
+        profile: farmerProfile,
+        toast: (message, type) => window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message, type } })),
     };
 
     const selectedScopeCropIds = React.useMemo(
@@ -365,6 +345,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
                 </MainViewTransition>
 
                 {renderGlobalSheets(ctx)}
+                <SpeakHost ctx={ctx} save={correctionSave} />
             </div>
         </React.Suspense>
     );

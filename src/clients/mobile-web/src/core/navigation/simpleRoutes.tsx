@@ -7,7 +7,7 @@
 import React from 'react';
 import type { PageView } from '../../types';
 import { AppRouterContext } from './routeContext';
-import { openLogFlow } from './openLogFlow';
+import { requestSpeak } from '../speak/speakStore';
 import {
     ProfilePage,
     SettingsPage,
@@ -241,12 +241,13 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
 export const renderProcurementRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'procurement') return null;
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — the redesigned खरेदी: one मागे,
-    // "बोलून सांगा / हाताने लिहा" open the day's log, and a row into पैसे व हिशोब.
+    // "बोलून सांगा / हाताने लिहा" open THE ONE mic (lane MIC-1: he picks the crop and plot there, may type in its
+    // "बोलता येत नसेल तर इथे लिहा" sheet, and lands back here), and a row into पैसे व हिशोब.
     return (
         <ProcurementPage
             crops={ctx.crops}
             onBack={() => ctx.goBackOr('main')}
-            onTell={() => { ctx.setMainView('log'); ctx.setCurrentRoute('main'); }}
+            onTell={() => { requestSpeak({ purpose: 'addToDay', returnTo: { route: 'procurement', mainView: ctx.mainView } }); }}
             onGo={(route) => ctx.setCurrentRoute(route)}
         />
     );
@@ -360,13 +361,16 @@ export const renderAttentionRoute = (ctx: AppRouterContext): React.ReactNode => 
                 crops={ctx.crops}
                 onUpdateTask={(task) => ctx.handleUpdateTask(task.id, task)}
                 onOpenTodos={() => openView('reflect')}
-                // spec: plr-d10 (I22, D-1) — "काम नोंदवा": the recorder on that step's plot, through the one door
-                // (`openLogFlow.ts`: a waiting draft is never moved). A plot this phone does not hold opens the
-                // recorder without one. Opening it clears nothing on लक्ष द्या.
+                // spec: plr-d10 (I22, D-1) — "काम नोंदवा": lane MIC-1 — THE ONE mic on that step's plot (no pickers), and
+                // back to लक्ष द्या after; a waiting draft is never moved (`speakFlow.startDecision`). A plot this phone does
+                // not hold opens the mic with the crop → plot choice. Opening it clears nothing on लक्ष द्या.
                 onRecordWork={(step) => {
                     const crop = ctx.crops.find(c => (c.plots ?? []).some(p => p.id === step.plotId));
-                    openLogFlow(ctx, crop ? { cropId: crop.id, plotId: step.plotId } : undefined);
-                    ctx.setCurrentRoute('main');
+                    requestSpeak({
+                        purpose: 'attention',
+                        context: crop ? { place: { cropId: crop.id, plotId: step.plotId } } : {},
+                        returnTo: { route: 'attention', mainView: ctx.mainView },
+                    });
                 }}
                 // "पुढे ठरवा" — the primary owner only (founder D-22: planning authority starts there; the
                 // server's own check still applies).
@@ -380,11 +384,12 @@ export const renderTestsRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'tests') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            {/* spec: plr-d10-redesign-real-integration-2026-10-25 (WP-5 places) — one मागे, and "सांगा" opens the day's log. */}
+            {/* spec: plr-d10-redesign-real-integration-2026-10-25 (WP-5 places) — one मागे, and "सांगा" opens THE ONE mic
+                (lane MIC-1: crop → plot there, then back here). */}
             <TestQueuePage
                 onNavigate={ctx.setCurrentRoute}
                 onBack={() => ctx.goBackOr('main')}
-                onTell={() => { ctx.setMainView('log'); ctx.setCurrentRoute('main'); }}
+                onTell={() => { requestSpeak({ purpose: 'addToDay', returnTo: { route: 'tests', mainView: ctx.mainView } }); }}
             />
         </div>
     );

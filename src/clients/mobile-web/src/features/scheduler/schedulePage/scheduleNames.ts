@@ -25,6 +25,9 @@ const CROP_MR: Readonly<Record<string, string>> = {
     onion: 'कांदा', // PROPOSED (Marathi)
 };
 
+/** The Marathi word for a crop the app ships or seeds ("Grapes" → "द्राक्ष"); undefined for any other name. */
+export const cropWordMr = (name: string): string | undefined => CROP_MR[norm(name)];
+
 /** What follows "Crop - " in a shipped schedule's name. */
 const SCHEDULE_KIND_MR: Readonly<Record<string, string>> = {
     'standard seasonal template': 'हंगामी शेड्यूल', // PROPOSED (Marathi)

@@ -72,7 +72,11 @@ const renderAs = (who: 'worker' | 'owner') => render(
         sessionUserId={who === 'worker' ? WORKER : OWNER} farmRole={who === 'worker' ? 'Worker' : 'PrimaryOwner'}
         operators={[{ id: OWNER, name: 'मालक' }] as React.ComponentProps<typeof ReflectPage>['operators']} />,
 );
-const openFeed = () => fireEvent.click(screen.getByTestId('activity-feed-button'));
+/** Lane RF2 — a recording is opened from its plot's card: the plot day, then its time chip. */
+const openRecording = (cardKey: string, logId: string) => {
+    fireEvent.click(screen.getByTestId(`plot-card-${cardKey}`));
+    fireEvent.click(screen.getByTestId(`rf-time-${logId}`));
+};
 
 beforeEach(() => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -82,27 +86,34 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('a WORKER\'s phone (review B001, B002)', () => {
-    it('the owner\'s records are the owner\'s: never "तुम्ही", never his amounts — the diesel row headlines "खर्च"', () => {
+    it('the owner\'s records are the owner\'s: never "तुम्ही", never his amounts — on the card and in the plot day', () => {
         renderAs('worker');
-        openFeed();
-        const feed = screen.getByTestId('rf-feed');
-        expect(screen.getByTestId('rf-feed-dz-who')).toHaveTextContent('मालक');
-        expect(screen.getByTestId('rf-feed-dz-who')).toHaveAttribute('data-you', 'no');
-        expect(screen.getByTestId('rf-feed-old-who')).toHaveTextContent('मालक');
-        expect(feed).not.toHaveTextContent('तुम्ही');
-        expect(screen.getByTestId('rf-feed-dz-work')).toHaveTextContent('खर्च');
-        expect(feed.textContent).not.toContain('800');
-        fireEvent.click(screen.getByTestId('rf-feed-dz-open'));
-        expect(screen.getByTestId('rf-glance').textContent).not.toContain('800');
-        expect(within(screen.getByTestId('rf-glance-dz-understood')).getByText('—')).toBeInTheDocument();
+        // the card: what happened, never the owner's money (no ledger figure he may see, no record amount)
+        expect(screen.getByTestId('plot-card-grape:g1').textContent).not.toContain('800');
+        openRecording('grape:g1', 'dz');
+        const day = screen.getByTestId('rf-day');
+        expect(screen.getByTestId('rf-rec-dz-who')).toHaveTextContent('मालक');
+        expect(screen.getByTestId('rf-rec-dz-who')).toHaveAttribute('data-you', 'no');
+        expect(day).not.toHaveTextContent('तुम्ही');
+        expect(day.textContent).not.toContain('800');
+        expect(within(screen.getByTestId('rf-rec-dz-parts')).getByText('—')).toBeInTheDocument();
     });
 
     it('no server voice on the owner\'s older record (the server would refuse him)', () => {
         renderAs('worker');
-        openFeed();
-        fireEvent.click(screen.getByTestId('rf-feed-old-open'));
-        expect(screen.queryByTestId('rf-glance-old-play-listen')).toBeNull();
+        openRecording('grape:g2', 'old');
+        expect(screen.getByTestId('rf-rec-old-who')).toHaveTextContent('मालक');
+        expect(screen.queryByTestId('rf-rec-old-play-listen')).toBeNull();
         expect(screen.queryByTestId('ov-play-old')).toBeNull();
+    });
+
+    it('lane RF2: the whole farm\'s card holds the whole-farm work — no money chip for him, the deleted record not counted', () => {
+        renderAs('worker');
+        const farm = screen.getByTestId('plot-card-farm');
+        expect(farm.querySelector('[data-kind="labour"]')).toHaveTextContent('2 जण');
+        expect(screen.getByTestId('plot-times-farm')).toHaveTextContent('आज 1 वेळा सांगितलं');
+        expect(screen.queryByTestId('plot-money-farm')).toBeNull();
+        expect(farm.textContent).not.toContain('खुरपणी');
     });
 
     it('the whole-farm panel: "—" for money he may not see; the deleted record is not counted; no record\'s own total', () => {
@@ -118,12 +129,19 @@ describe('a WORKER\'s phone (review B001, B002)', () => {
 describe('the OWNER\'s phone, the same day', () => {
     it('his own records read "तुम्ही" with his amounts; his older record offers "मूळ आवाज ऐका"', () => {
         renderAs('owner');
-        openFeed();
-        expect(screen.getByTestId('rf-feed-dz-who')).toHaveTextContent('तुम्ही');
-        expect(screen.getByTestId('rf-feed-dz-work')).toHaveTextContent('डिझेल · ₹800');
-        fireEvent.click(screen.getByTestId('rf-feed-old-open'));
-        expect(screen.getByTestId('rf-glance-old-play-listen')).toHaveAttribute('data-listen', 'server');
+        openRecording('grape:g1', 'dz');
+        expect(screen.getByTestId('rf-rec-dz-who')).toHaveTextContent('तुम्ही');
+        expect(screen.getByTestId('rf-rec-dz-parts')).toHaveTextContent('डिझेल · ₹800');
+        fireEvent.click(screen.getByTestId('rf-day-back'));
+        openRecording('grape:g2', 'old');
+        expect(screen.getByTestId('rf-rec-old-play-listen')).toHaveAttribute('data-listen', 'server');
         expect(screen.getByTestId('ov-play-old')).toBeInTheDocument();
+    });
+
+    it('lane RF2: the whole farm\'s card shows the LEDGER\'s whole-farm money as its chip, never a record\'s own total', () => {
+        renderAs('owner');
+        expect(screen.getByTestId('plot-money-farm')).toHaveTextContent('800');
+        expect(screen.getByTestId('plot-card-farm').textContent).not.toContain('9,999');
     });
 
     it('the whole-farm panel shows the LEDGER\'s whole-farm spend (800), never the records\' own totals', () => {

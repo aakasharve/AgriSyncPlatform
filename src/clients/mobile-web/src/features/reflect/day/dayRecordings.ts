@@ -109,6 +109,17 @@ export const plotLogFilter = (ref: Pick<PlotRef, 'cropId' | 'plotId'>) => (log: 
     return selection.some(s => s.cropId === ref.cropId && (s.selectedPlotIds ?? []).length === 0);
 };
 
+/**
+ * Lane RF2 — the "संपूर्ण शेत" card's view: every log of the day that no plot card takes (it names no plot, and it is
+ * not the own log of a crop that has no plot — that crop has its own card). With the day's feed retired, this is where
+ * whole-farm recordings live.
+ */
+export const farmLogFilter = (cropsWithOwnCard: ReadonlySet<string>) => (log: DailyLog): boolean => {
+    const selection = log.context?.selection ?? [];
+    if (selection.some(s => (s.selectedPlotIds ?? []).length > 0)) return false;
+    return !selection.some(s => cropsWithOwnCard.has(s.cropId));
+};
+
 /** The page's narrowed view (शेताची स्थिती), for the notes. */
 export const scopeLogFilter = (scope: ViewScope) => (log: DailyLog): boolean => isLogInScope(log, scope);
 

@@ -10,11 +10,17 @@
  * where nothing was recorded, never a 0 (P4).
  */
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 
 vi.mock('../overview/useLogAttachmentCount', () => ({ useLogAttachmentCount: () => 0 }));
+const lang = vi.hoisted(() => ({ value: 'mr' as 'mr' | 'en' }));
+vi.mock('../../../i18n/LanguageContext', async () => {
+    const { t } = await import('../../../i18n/translations');
+    const ctx = () => ({ language: lang.value, setLanguage: () => undefined, t: (k: string) => t(k, lang.value) });
+    return { useLanguage: ctx, useOptionalLanguage: ctx };
+});
 
 import { ActivityCalendar } from '../overview/ActivityCalendar';
 import { buildCalendarDay } from '../overview/calendarModel';
@@ -25,7 +31,7 @@ import { EMPTY_LEDGER, buildInHand, buildSeasonTotals, buildSpend, spendRange, t
 import { buildDayNotes } from '../overview/notesModel';
 import { NotesList } from '../overview/NotesList';
 import { buildPlotDayCard } from '../overview/plotDayModel';
-import { BucketKey, PlotDayCards } from '../overview/PlotDayCards';
+import { PlotDayCards } from '../overview/PlotDayCards';
 import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
 import { buildTodoList } from '../overview/todoModel';
 import { TodoCount, TodoSection } from '../overview/TodoSection';
@@ -96,39 +102,50 @@ describe('करायची कामे (TodoSection)', () => {
     });
 });
 
-describe('प्लॉटनिहाय काम (PlotDayCards)', () => {
+describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (PlotDayCards) — lane RF2, the founder screen 1 (%s)', language => {
     const refs = plotRefsInScope(CROPS, all);
-    const worked = log({ id: 'w', plotIds: ['g1'], cropActivities: [{ id: 'a', title: 'छाटणी' }], labour: [{ id: 'l', type: 'HIRED' }] });
+    const meta = (hhmm: string) => ({ createdAtISO: `2026-10-25T${hhmm}:00.000Z`, createdByOperatorId: 'op' });
+    const worked = log({ id: 'w', plotIds: ['g1'], meta: meta('03:00'), cropActivities: [{ id: 'a', title: 'छाटणी' }], labour: [{ id: 'l', type: 'HIRED', count: 5 }] });
+    const later = log({ id: 'w2', plotIds: ['g1'], meta: meta('09:00'), labour: [{ id: 'l2', type: 'HIRED', count: 10 }],
+        observations: [{ id: 'o', plotId: 'g1', dateKey: TODAY_KEY, timestamp: '', textRaw: 'पानं पिवळी', noteType: 'observation', severity: 'normal', source: 'voice' }] });
     const stopped = log({ id: 's', cropId: 'cane', plotIds: ['c1'], disturbance: { scope: 'FULL_DAY', group: 'WEATHER', reason: 'पाऊस', blockedSegments: [] } });
     // lane RF: the card's money is the server ledger's for that plot-day (here ₹ 1,500 on g1, not all of it on the server yet)
-    const cards = refs.map(r => buildPlotDayCard(r, [worked, stopped], all, TODAY_KEY, TODAY, r.plotId === 'g1' ? { amount: 1500, hidden: false, partial: ['notOnServer'] } : undefined));
+    const cards = refs.map(r => buildPlotDayCard(r, [worked, later, stopped], all, TODAY_KEY, TODAY, r.plotId === 'g1' ? { amount: 1500, hidden: false, partial: ['notOnServer'] } : undefined, language));
+    const wrap = (ui: React.ReactElement) => ui;
+    beforeEach(() => { lang.value = language; });
+    afterEach(() => { lang.value = 'mr'; });
 
-    it('eight colour-coded counts; "—" where nothing was recorded; unknown labour is "—" in its colour, never 0', () => {
-        render(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} onCost={vi.fn()} />);
+    it('no numbered squares and no colour key: only what happened, as chips in the part colours; two labour chips, never summed', () => {
+        render(wrap(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} onCost={vi.fn()} />));
         const card = screen.getByTestId('plot-card-grape:g1');
-        const cells = card.querySelectorAll('[data-bucket]');
-        expect(cells).toHaveLength(8);
-        expect(card.querySelector('[data-bucket="work"]')).toHaveTextContent('1');
-        const labour = card.querySelector('[data-bucket="labour"]')!;
-        expect(labour).toHaveAttribute('data-count', 'unknown');
-        expect(labour).toHaveTextContent('—');
-        expect(labour.className).toContain('bg-orange-50');
-        expect(card.querySelector('[data-bucket="water"]')).toHaveTextContent('—');
-        expect(card).toHaveTextContent('दिवस 25');
+        expect(card.querySelectorAll('[data-bucket]')).toHaveLength(0);
+        expect(screen.queryByTestId('bucket-key')).toBeNull();
+        const chips = [...card.querySelectorAll('[data-kind]')].map(c => c.getAttribute('data-kind'));
+        expect(chips).toEqual(['crop', 'labour', 'labour', 'observation']);
+        const labour = [...card.querySelectorAll('[data-kind="labour"]')].map(c => c.textContent);
+        expect(labour).toEqual(['5 जण', '10 जण']);
+        expect(card.textContent).not.toContain('15');
+        // the farmer's note is an "निरीक्षण" chip, not the amber box
+        expect(card.querySelector('[data-kind="observation"]')).toHaveTextContent('पानं पिवळी');
+        expect(screen.queryByTestId('plot-note-grape:g1')).toBeNull();
+        // each chip carries its part's icon (the result screen's) and colour
+        expect(card.querySelector('[data-kind="crop"] [data-icon="work"]')).not.toBeNull();
+        expect((card.querySelector('[data-kind="crop"]') as HTMLElement).style.background).not.toBe('');
+        expect(card).toHaveTextContent(language === 'en' ? 'Told 2 times today' : 'आज 2 वेळा सांगितलं');
     });
 
-    it('no record: the card says so instead of eight zeros; a stopped day shows the reason', () => {
-        render(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} onCost={vi.fn()} />);
-        expect(screen.getByTestId('plot-empty-grape:g2')).toHaveTextContent('आज अजून काही सांगितलं नाही');
-        expect(screen.getByTestId('plot-card-cane:c1')).toHaveTextContent('काम थांबलं: पाऊस');
+    it('an empty day says so plainly; a stopped day shows its stoppage chip', () => {
+        render(wrap(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} onCost={vi.fn()} />));
+        expect(screen.getByTestId('plot-empty-grape:g2')).toHaveTextContent(language === 'en' ? 'Nothing told yet today' : 'आज अजून काही सांगितलं नाही');
+        expect(screen.getByTestId('plot-card-cane:c1').querySelector('[data-kind="blocker"]')).toHaveTextContent('पाऊस');
     });
 
-    it('tapping the card opens the day; tapping the money opens the money lens only', () => {
+    it('tapping the card opens the day; tapping the money chip opens the money lens only', () => {
         const onOpen = vi.fn();
         const onCost = vi.fn();
-        render(<PlotDayCards cards={cards} isToday onOpen={onOpen} onCost={onCost} />);
-        expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('₹ 1,500');
-        expect(screen.getByTestId('plot-money-partial-grape:g1')).toHaveTextContent('अपूर्ण');
+        render(wrap(<PlotDayCards cards={cards} isToday onOpen={onOpen} onCost={onCost} />));
+        expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('1,500');
+        expect(screen.getByTestId('plot-money-partial-grape:g1')).toHaveTextContent(language === 'en' ? 'partial' : 'अपूर्ण');
         fireEvent.click(screen.getByTestId('plot-money-grape:g1'));
         expect(onCost).toHaveBeenCalledWith(expect.objectContaining({ key: 'grape:g1', plotId: 'g1' }));
         expect(onOpen).not.toHaveBeenCalled();
@@ -136,18 +153,27 @@ describe('प्लॉटनिहाय काम (PlotDayCards)', () => {
         expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ key: 'grape:g2' }));
     });
 
-    it('lane RF: the ONE status wording on the card; no money door when there is none to open', () => {
-        render(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} />);
-        expect(screen.getByTestId('plot-state-grape:g1')).toHaveTextContent('पक्कं नाही');
+    it('lane RF: the ONE status wording on the card; hidden money stays hidden (no chip, no door)', () => {
+        render(wrap(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} />));
+        expect(screen.getByTestId('plot-state-grape:g1')).toHaveTextContent(language === 'en' ? 'Not confirmed' : 'पक्कं नाही');
         expect(screen.queryByTestId('plot-state-grape:g2')).toBeNull(); // nothing told: no status at all
-        expect(screen.queryByTestId('plot-money-grape:g1')).toBeNull(); // money he may not see: no door (no onCost)
+        expect(screen.queryByTestId('plot-money-grape:g1')).toBeNull(); // money he may not see: no chip
+        const hidden = refs.map(r => buildPlotDayCard(r, [worked], all, TODAY_KEY, TODAY, { amount: null, hidden: true, partial: [] }, language));
+        cleanup();
+        render(wrap(<PlotDayCards cards={hidden} isToday onOpen={vi.fn()} onCost={vi.fn()} />));
+        expect(screen.queryByTestId('plot-money-grape:g1')).toBeNull();
+        expect(screen.getByTestId('plot-card-grape:g1').textContent).not.toMatch(/₹/);
     });
 
-    it('the key under the cards names every colour', () => {
-        render(<BucketKey />);
-        for (const word of ['काम', 'पाणी', 'मजूर', 'खत-औषध', 'यंत्र', 'खर्च', 'नोंद', 'आठवण']) {
-            expect(within(screen.getByTestId('bucket-key')).getByText(word)).toBeInTheDocument();
-        }
+    it('the "संपूर्ण शेत" card: whole-farm work in the same style, its own door', () => {
+        const onOpenFarm = vi.fn();
+        const farm = { chips: [{ id: 'x', kind: 'labour' as const, text: '3 जण', verified: true }], status: 'worked' as const, recordings: 1, confirmed: false };
+        render(wrap(<PlotDayCards cards={cards} farm={farm} isToday onOpen={vi.fn()} onOpenFarm={onOpenFarm} />));
+        const card = screen.getByTestId('plot-card-farm');
+        expect(card).toHaveTextContent(language === 'en' ? 'Whole farm' : 'संपूर्ण शेत');
+        expect(card.querySelector('[data-kind="labour"]')).toHaveTextContent('3 जण');
+        fireEvent.click(card);
+        expect(onOpenFarm).toHaveBeenCalledTimes(1);
     });
 });
 

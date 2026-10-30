@@ -30,11 +30,9 @@ interface AudioRecorderProps {
   onRequestContextSelection?: () => void;
   /** Told when the mic starts / stops listening (the entry flow hides its choices meanwhile). */
   onRecordingChange?: (recording: boolean) => void;
-  /** The real hand-filled form, offered quietly in the typing sheet. */
-  onOpenForm?: () => void;
 }
 
-const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCaptured, disabled, externalError, transcript, suggestInteraction, onRequestContextSelection, onRecordingChange, onOpenForm }) => {
+const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCaptured, disabled, externalError, transcript, suggestInteraction, onRequestContextSelection, onRecordingChange }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   // I12-V1-m3 — the mic's own failure, in Marathi whatever the app language; its technical cause
@@ -231,7 +229,6 @@ const AudioRecorder: React.FC<AudioRecorderProps> = ({ onAudioCaptured, onTextCa
       onCancel={cancelRecording}
       onRequestContextSelection={onRequestContextSelection}
       onTextCaptured={onTextCaptured ? sendTyped : undefined}
-      onOpenForm={onOpenForm}
     />
   );
 };

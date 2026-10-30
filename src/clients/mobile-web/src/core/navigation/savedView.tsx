@@ -59,6 +59,7 @@ import TaskCloseConfirm from '../../features/logs/components/shramsathi/TaskClos
 import { logger } from '../../infrastructure/observability/Logger';
 
 import { AppRouterContext } from './routeContext';
+import { requestSpeak } from '../speak/speakStore';
 // Task 5 (spec: dfes-companion-2026-07-11) — thin per-candidate wrapper so
 // नाही ("hide it for this render") can use real React state. `renderLogView`
 // below is a plain function invoked directly inside AppRouter's JSX (see
@@ -91,7 +92,7 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
         // removed that component (see its former render site below); the field
         // itself stays because those two other readers still need it.
         weatherData, todayDayState,
-        crops, setMode, setStatus,
+        crops,
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
         plannedTasks, handleUpdateTask,
         history, handleEditLog,
@@ -295,14 +296,16 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                                     // speaks". The tap writes NOTHING (question_events is
                                     // append-only, so a row written now could never
                                     // acquire his answer); it stashes the pending answer
-                                    // and hands him the SAME microphone entry point
-                                    // globalSheets' QuickLogSheet uses. Do not build a
-                                    // second recording surface.
+                                    // and hands him the SAME microphone — lane MIC-1: THE ONE
+                                    // mic, the question kept in sight. Do not build a second
+                                    // recording surface.
                                     onAnswerBySpeaking={(pending) => {
                                         stashPendingQuestionAnswer(pending);
-                                        setStatus('idle');
-                                        setMode('voice');
-                                        setMainView('log');
+                                        requestSpeak({
+                                            purpose: 'answerQuestion',
+                                            context: { place: 'current', question: pending.selected.resolvedPromptMr },
+                                            returnTo: { route: 'main', mainView: 'log' },
+                                        });
                                     }}
                                 />
                             );
@@ -359,37 +362,26 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                         })()}
 
                         <div className="flex flex-col gap-3">
-                            {/* Review Details Button (New) */}
-                            {lastSavedLogIds && lastSavedLogIds.length > 0 && (
-                                <button
-                                    onClick={() => {
-                                        if (lastSavedLogIds.length > 1) {
-                                            setStatus('idle');
-                                            setMode('manual');
-                                            setMainView('log');
-                                            return;
-                                        }
-                                        const logId = lastSavedLogIds[0];
-                                        const logToEdit = history.find(l => l.id === logId) || mockHistory.find(l => l.id === logId);
-                                        if (logToEdit) {
-                                            // Trigger Edit Logic (Copied from ReflectPage onEditLog)
-                                            handleEditLog(logToEdit);
-                                        }
-                                    }}
-                                    className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold text-lg hover:bg-emerald-50 transition-colors mb-1"
-                                >
-                                    {/* PLR-D10 I13 (LP-22) — no "नोंद" on the screens after he saves: the approved
-                                        "बदला" (confirmation.edit) opens the same edit form; for several plots,
-                                        PROPOSED (Marathi) "सर्व पाहा". */}
-                                    {lastSavedLogIds.length > 1 ? 'सर्व पाहा' : 'बदला'}
-                                </button>
-                            )}
+                            {/* "बदला" — lane E1: the speak-the-change screen for each saved log (one per plot when he named
+                                several), never the old hand-filled form. PLR-D10 I13 (LP-22): no "नोंद" here; the approved
+                                "बदला" (confirmation.edit), with the plot's own name when there are several. */}
+                            {(lastSavedLogIds ?? []).map(logId => {
+                                const logToEdit = history.find(l => l.id === logId) || mockHistory.find(l => l.id === logId);
+                                if (!logToEdit) return null;
+                                const plotName = (logToEdit.context?.selection ?? []).flatMap(s => s.selectedPlotNames ?? []).filter(Boolean).join(', ');
+                                return (
+                                    <button key={logId} type="button" onClick={() => handleEditLog(logToEdit)} data-testid={`saved-edit-${logId}`}
+                                        className="w-full bg-white text-emerald-700 border border-emerald-200 py-4 rounded-xl font-bold text-lg hover:bg-emerald-50 transition-colors mb-1">
+                                        {lastSavedLogIds.length > 1 && plotName ? `बदला · ${plotName}` : 'बदला'}
+                                    </button>
+                                );
+                            })}
 
                             <button onClick={() => setMainView('reflect')} className="w-full bg-stone-100 text-stone-700 py-4 rounded-xl font-bold text-lg hover:bg-stone-200 transition-colors">
                                 कामाचा नकाशा
                             </button>
-                            {/* PLR-D5 :65 — "आणखी सांगा" replaces "आणखी नोंद करा" (same reset, same mic). */}
-                            <button onClick={handleReset} className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-emerald-800 transition-colors shadow-lg shadow-emerald-900/20">
+                            {/* PLR-D5 :65 — "आणखी सांगा" replaces "आणखी नोंद करा". Lane MIC-1: THE ONE mic, for the same plots. */}
+                            <button onClick={() => requestSpeak({ purpose: 'addToDay', context: { place: 'current' }, returnTo: { route: 'main', mainView: 'log' } })} className="w-full bg-stone-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-emerald-800 transition-colors shadow-lg shadow-emerald-900/20">
                                 आणखी सांगा
                             </button>
                         </div>

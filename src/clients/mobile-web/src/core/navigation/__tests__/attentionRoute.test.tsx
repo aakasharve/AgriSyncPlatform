@@ -12,6 +12,7 @@ import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { AppRouterContext } from '../routeContext';
 import { renderAttentionRoute } from '../simpleRoutes';
+import { resetSpeakStoreForTests, speakState } from '../../speak/speakStore';
 import type { AttentionPageProps } from '../../../features/attention/pages/AttentionPage';
 import type { PlannedTask } from '../../../types';
 
@@ -78,13 +79,21 @@ describe('the लक्ष द्या route', () => {
     });
 
     // spec: plr-d10 (I22, founder D-1 / D-22)
-    it('"काम नोंदवा" opens the recorder on THAT step plot (the one door), then home', () => {
+    it('"काम नोंदवा" opens THE ONE mic on THAT step plot (no pickers) and comes back to लक्ष द्या (MIC-1)', () => {
+        resetSpeakStoreForTests();
         const ctx = ctxFor();
         pageOf(ctx).onRecordWork!({ plotId: 'g1' } as never);
-        expect(ctx.setLogScope).toHaveBeenCalledWith(expect.objectContaining({ selectedCropIds: ['grape'], selectedPlotIds: ['g1'] }));
-        expect(ctx.setMode).toHaveBeenCalledWith('voice');
-        expect(ctx.setMainView).toHaveBeenCalledWith('log');
-        expect(ctx.setCurrentRoute).toHaveBeenCalledWith('main');
+        expect(speakState().request).toMatchObject({
+            purpose: 'attention',
+            context: { place: { cropId: 'grape', plotId: 'g1' } },
+            returnTo: { route: 'attention' },
+        });
+        // the page is not left: the mic opens over it
+        expect(ctx.setCurrentRoute).not.toHaveBeenCalled();
+        // a plot this phone does not hold: the mic asks for the crop and plot
+        pageOf(ctx).onRecordWork!({ plotId: 'elsewhere' } as never);
+        expect(speakState().request?.context.place).toBeUndefined();
+        resetSpeakStoreForTests();
     });
 
     it('"पुढे ठरवा" is for the primary owner alone (D-22)', () => {

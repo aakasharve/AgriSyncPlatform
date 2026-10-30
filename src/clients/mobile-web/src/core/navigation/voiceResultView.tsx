@@ -11,8 +11,8 @@
  * what was understood (now part by part), the "not queued" honesty badge (for EACH plot's log when he named
  * several, as the saved card listed them), Sathi's ONE question
  * (`LedgerRecognitionPanel`, flag-gated inside, remounted per save so a spoken answer settles), the daily
- * clarity line (`dailyLoop`), the conservative task close (`taskCloseConfirm`), "बदला" (was "नोंद पाहा":
- * the same edit form) and the way back to the mic of the same plot. "कामाचा नकाशा" is the आढावा tab, one tap
+ * clarity line (`dailyLoop`), the conservative task close (`taskCloseConfirm`), "बदला" (lane E1: the speak-the-change
+ * screen, no longer the old form) and the way back to the mic of the same plot. "कामाचा नकाशा" is the आढावा tab, one tap
  * away in the page switcher; it is not repeated on this screen.
  */
 import React from 'react';
@@ -26,6 +26,7 @@ import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScre
 import { primaryOf } from '../../features/logs/components/voiceResult/resultModel';
 import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStrings';
 import { stashPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
+import { requestSpeak, type SpeakRequestInput } from '../speak/speakStore';
 import { findConfirmableTaskCloses } from '../../features/logs/services/taskAutoClose';
 import { logger } from '../../infrastructure/observability/Logger';
 import type { DailyLog } from '../../types';
@@ -51,6 +52,15 @@ const placeOf = (logs: readonly DailyLog[]): string => {
     const crops = [...new Set(sel.map(s => s.cropName).filter(Boolean))];
     const plots = [...new Set(sel.flatMap(s => s.selectedPlotNames ?? []).filter(Boolean))];
     return [crops.join(', '), plots.join(', ')].filter(Boolean).join(' · ');
+};
+
+/**
+ * Lane MIC-1 — every speak button on this screen opens THE ONE mic for the plots of this recording (no pickers) and
+ * lands back on this screen, which then shows the new recording with the day: "आणखी सांगा", a part not told yet ("…
+ * सांगितलं नाही. दाबा आणि बोला"), and Sathi's question answered by speaking.
+ */
+const speakHere = (input: Omit<SpeakRequestInput, 'returnTo'>): void => {
+    requestSpeak({ ...input, returnTo: { route: 'main', mainView: 'log' } });
 };
 
 export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResultState): React.ReactNode => {
@@ -98,7 +108,8 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     syncQueuedById={new Map(ctx.lastSavedLogSummary.map(s => [s.logId, s.syncQueued] as const))}
                     onEdit={ctx.handleEditLog}
                     onBack={ctx.handleReset}
-                    onAddAnother={ctx.handleReset}
+                    onAddAnother={() => speakHere({ purpose: 'addToDay', context: { place: 'current' } })}
+                    onTellMore={part => speakHere({ purpose: 'fillPart', context: { place: 'current', part } })}
                     questionPanel={savedLog ? (
                         <LedgerRecognitionPanel
                             key={savedLog.id}
@@ -113,12 +124,11 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                             // Lane L6b — the founder's designed amber question card (SathiQuestionCard).
                             look="sathi"
                             // wave-3.7, founder decision 3 — the tap writes nothing; it stashes the answer and hands
-                            // him the SAME microphone (no second recording surface).
+                            // him the SAME microphone (no second recording surface) — lane MIC-1: the ONE mic, with
+                            // the question kept in sight; the next result screen settles the answer.
                             onAnswerBySpeaking={(pending) => {
                                 stashPendingQuestionAnswer(pending);
-                                ctx.setStatus('idle');
-                                ctx.setMode('voice');
-                                ctx.setMainView('log');
+                                speakHere({ purpose: 'answerQuestion', context: { place: 'current', question: pending.selected.resolvedPromptMr } });
                             }}
                         />
                     ) : undefined}

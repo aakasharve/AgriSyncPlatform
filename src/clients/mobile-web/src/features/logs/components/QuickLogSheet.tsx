@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
-import { QuickLogChip } from '../../../shared/components/ui/QuickLogChip';
 import { SchedulePickerModal } from '../../scheduler/components/SchedulePickerModal';
 import { AlertCircle } from 'lucide-react';
 import { emitClosureStarted } from '../../../core/telemetry/eventEmitters';
@@ -159,46 +158,9 @@ export const QuickLogSheet: React.FC<QuickLogSheetProps> = ({
                     <span className={`font-semibold ${language === 'mr' ? 'text-base' : 'text-lg'}`}>{t('logPage.startRecording')}</span>
                 </button>
 
-                {/* Quick Chips Grid */}
-                <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide px-1">
-                        {t('logPage.manualMode')}
-                    </h3>
-
-                    <div className="flex flex-wrap gap-3">
-                        <QuickLogChip
-                            label={t('workSummary.irrigation')}
-                            category="irrigation"
-                            onClick={() => handleTypeSelect('irrigation')}
-                            testId="quick-log-chip-irrigation"
-                        />
-                        <QuickLogChip
-                            label={t('workSummary.labour')}
-                            category="labour"
-                            onClick={() => handleTypeSelect('labour')}
-                            testId="quick-log-chip-labour"
-                        />
-                        <QuickLogChip
-                            label={t('workSummary.inputs')}
-                            category="input"
-                            onClick={() => handleTypeSelect('inputs')}
-                            testId="quick-log-chip-inputs"
-                        />
-                        <QuickLogChip
-                            label="Harvest"
-                            category="activity"
-                            onClick={() => handleTypeSelect('harvest')}
-                            testId="quick-log-chip-harvest"
-                        />
-                        <QuickLogChip
-                            label="Scouting"
-                            category="activity"
-                            onClick={() => handleTypeSelect('scouting')}
-                            testId="quick-log-chip-scouting"
-                        />
-                    </div>
-                </div>
-
+                {/* Lane E1 (founder 2026-10-30: "I don't want this [old] UI anywhere in the app") — the hand-filled chips
+                    (पाणी / मजूर / खत-औषध / "Harvest" / "Scouting") opened the old form and are gone. Speaking (above) and
+                    "आज काम नाही" (below, a real declaration) stay. */}
                 {/* No Work Today Option */}
                 <div className="mt-6 pt-4 border-t border-gray-100">
                     <button

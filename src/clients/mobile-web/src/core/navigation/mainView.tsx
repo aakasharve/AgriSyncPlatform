@@ -4,18 +4,8 @@
 // orchestrator stays small.
 
 import React from 'react';
-import {
-    AgriLogResponse, DailyLog
-} from '../../types';
 import type { TodayCounts } from '../../domain/types/farm.types';
-import AudioRecorder from '../../features/voice/components/AudioRecorder';
-import AudioRecorderStreaming from '../../features/voice/components/AudioRecorderStreaming';
-import LiveCaption from '../../features/voice/components/LiveCaption';
-import { DEFAULT_VOICE_CONFIG } from '../../infrastructure/voice/types';
 import ManualEntry from '../../features/logs/components/ManualEntry';
-// `ArrowLeft` left with `LabourLogBanner`, its only consumer. `Users` stays —
-// the success card's bucket chips still use it.
-import { Leaf } from 'lucide-react';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
@@ -44,23 +34,17 @@ import type { LogProvenance } from '../../domain/ai/LogProvenance';
 // renders against. The invoking feature owns the meaning of a labour parse.
 import AttendanceResult from '../../features/labour/components/AttendanceResult';
 import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
-import {
-    LabourLogBanner,
-    // main's is the processing <h3> LINE; dfes's (imported above) is
-    // the full video-character screen. Different components, one name.
-    ShramSathiUnderstanding as ShramSathiUnderstandingLine,
-} from './mainViewComponents';
-import {
-    abandonPendingQuestionAnswer, readPendingQuestionAnswer,
-} from '../../features/logs/services/pendingQuestionAnswer';
+import { LabourLogBanner } from './mainViewComponents';
+import { readPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
 import VoiceSavedReassurance from '../../features/logs/components/shramsathi/VoiceSavedReassurance';
-import { ShramSathiUnderstanding } from '../../features/logs/components/shramsathi/ShramSathiUnderstanding';
+// lane MIC-1 — THE recorder and THE waiting screen, shared with every other speak entry point (`core/speak`).
+import { renderLogRecorder, renderProcessingScreen } from './logRecorder';
 
 import { AppRouterContext } from './routeContext';
 import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
 import { ReflectPage, ComparePage } from './lazyComponents';
 import { compareTabProps } from './compareTab';
-import { openLogFlow } from './openLogFlow';
+import { requestSpeak } from '../speak/speakStore';
 
 /*
  * The four components this module renders live in `./mainViewComponents`.
@@ -122,63 +106,29 @@ export const LabourResultHost: React.FC<{
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'main' || ctx.mainView !== 'reflect') return null;
-    // Lane RF — the day's work (its button, sheet and glance) is built by the page itself for the day it is on; it
-    // needs who is signed in ("तुम्ही" — the SESSION's user only, never `activeOperatorId`, which the sync sets to the
-    // primary owner on a non-owner's phone: review B001), his role (money and ▶, as the server told this phone) and
-    // the result screen's own "बदला" path for a recording.
-    const openLogToEdit = (log: DailyLog) => {
-        ctx.setMainView('log');
-        ctx.handleEditLog(log);
-    };
+    // Lane RF — the day's work is built by the page itself for the day it is on; it needs who is signed in ("तुम्ही" —
+    // the SESSION's user only, never `activeOperatorId`, which the sync sets to the primary owner on a non-owner's
+    // phone: review B001) and his role (money and ▶, as the server told this phone).
+    // Lane RF2 / E1 — "बदला" on a recording opens the speak-the-change screen over this page (`handleEditLog`); the old
+    // hand-filled form is no longer reached from here (the plot day's "add" speaks instead).
+    // Lane MIC-1 — every speak button on the page (the plot day's "आणखी सांगा", करायची कामे's "बोलून सांगा") goes
+    // through the ONE mic (`requestSpeak`) and comes back to this page.
     return (
         <ReflectPage
             sessionUserId={getSessionUserId()}
             farmRole={ctx.farmRole ?? null}
-            onOpenLog={openLogToEdit}
+            onOpenLog={ctx.handleEditLog}
+            onSpeak={(request) => { requestSpeak({ ...request, returnTo: { route: 'main', mainView: 'reflect' } }); }}
             history={ctx.history}
             crops={ctx.crops}
             ledgerDefaults={ctx.ledgerDefaults}
             tasks={ctx.plannedTasks}
             onUpdateTask={(task) => ctx.handleUpdateTask(task.id, task)}
             // spec: plr-d10 (I14, T2) — a to-do is added in place, in Marathi ("आठवण जोडा"), into the SAME
-            // task store the English "Add New Task" sheet wrote; "बोलून सांगा" opens the voice log flow, where a
-            // spoken reminder already becomes a to-do (LogFactory), through the one door (`openLogFlow.ts`).
-            // This list was the sheet's ONLY opener (`SchedulerPage` takes `onOpenTaskCreator` but never calls
-            // it), so the sheet — and its "Assign to" chips, whose `assigneeId` nothing ever reads — is no
-            // longer reachable (P5; reported, not hidden).
+            // task store the English "Add New Task" sheet wrote. This list was the sheet's ONLY opener
+            // (`SchedulerPage` takes `onOpenTaskCreator` but never calls it), so the sheet — and its "Assign to"
+            // chips, whose `assigneeId` nothing ever reads — is no longer reachable (P5; reported, not hidden).
             onSaveTask={ctx.handleSaveTask}
-            onTellTodo={() => { openLogFlow(ctx); }}
-            onEditLog={(log: DailyLog) => {
-                ctx.setMainView('log');
-                const context = log.context.selection[0];
-                ctx.setLogScope({
-                    selectedCropIds: [context.cropId],
-                    selectedPlotIds: context.selectedPlotIds,
-                    mode: 'single',
-                    applyPolicy: 'broadcast'
-                });
-                ctx.setMode('manual');
-                ctx.setStatus('idle');
-                const agriLogFormat: AgriLogResponse = {
-                    // task-0b — `log.dayOutcome` is `DayOutcome | null`;
-                    // `AgriLogResponse.dayOutcome` is unchanged and still
-                    // required, so this falls back exactly as this edit-draft
-                    // conversion already did for every pulled log before task-0b.
-                    dayOutcome: log.dayOutcome ?? 'WORK_RECORDED',
-                    cropActivities: log.cropActivities || [],
-                    irrigation: log.irrigation || [],
-                    labour: log.labour || [],
-                    inputs: log.inputs || [],
-                    machinery: log.machinery || [],
-                    activityExpenses: log.activityExpenses || [],
-                    disturbance: log.disturbance,
-                    questionsForUser: [],
-                    summary: '', // Missing in DailyLog
-                    missingSegments: []
-                };
-                // Note: We might need a better adapter here, checking types
-                ctx.setDraftLog(agriLogFormat);
-            }}
             onUpdateNote={ctx.handleUpdateNote}
             onVerifyLog={ctx.handleVerifyLog}
             currentOperator={ctx.farmerProfile.operators.find(op => op.id === ctx.farmerProfile.activeOperatorId)}
@@ -214,13 +164,11 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         // ALSO read by `DailyLoopHero` until the founder's 2026-08-29 ruling
         // removed that component (see its former render site below); the field
         // itself stays because those two other readers still need it.
-        crops, logScope, setLogScope, setMode, setStatus,
-        hasActiveLogContext, isContextReady, error, errorTranscript,
-        handleAudioReady, handleTextReady, handleManualSubmit,
+        crops, logScope, setLogScope, setMode,
+        hasActiveLogContext, isContextReady,
+        handleManualSubmit,
         currentLogContext, ledgerDefaults, farmerProfile,
         draftLog, setDraftLog, provenance,
-        // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
-        voiceStreamingPhase, liveCaption,
         continuityLevel, savedPendingCaptureId,
         getTodayCounts, getContextColorIndicator,
         history,
@@ -229,17 +177,6 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         handleReset,
         logIntent
     } = ctx;
-
-    // The recorder's own "choose a plot first" nudge: scroll to (and briefly ring)
-    // the crop/plot choice. Same scroll+ring pattern as before.
-    const focusRecorder = () => {
-        const el = document.getElementById('crop-selector-container');
-        if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.classList.add('ring-4', 'ring-emerald-200', 'rounded-xl');
-            setTimeout(() => el.classList.remove('ring-4', 'ring-emerald-200', 'rounded-xl'), 1500);
-        }
-    };
 
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — THE आजची कामे TAB IS NOW TWO THINGS.
     //   1. The REVIEW of a parsed entry / a log being corrected: shown exactly when the old screen
@@ -437,86 +374,17 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             // wave-3.7, founder decision 3 — the question stays VISIBLE while he answers it.
                             // Read straight from the stash, so it survives a reload.
                             pinnedQuestion={mode === 'voice' ? readPendingQuestionAnswer()?.selected.resolvedPromptMr ?? null : null}
-                            // wave-3.7 — leaving the mic for the hand-filled form records the SKIP honestly;
-                            // never an invented answer (P4). Fire-and-forget.
-                            onLeaveVoice={() => { void abandonPendingQuestionAnswer(); }}
-                            renderForm={() => renderManualEntry()}
-                            renderRecorder={({ onRecordingChange, onOpenForm }) => (
-                                <>
-                                    {DEFAULT_VOICE_CONFIG.streamingPcm.enabled ? (
-                                        <AudioRecorderStreaming
-                                            onAudioCaptured={handleAudioReady}
-                                            onProcessingStart={() => setStatus('processing')}
-                                            onTextCaptured={handleTextReady}
-                                            disabled={!isContextReady}
-                                            externalError={error}
-                                            transcript={errorTranscript}
-                                            suggestInteraction={isContextReady}
-                                            onRequestContextSelection={focusRecorder}
-                                            onRecordingChange={onRecordingChange}
-                                            onOpenForm={onOpenForm}
-                                        />
-                                    ) : (
-                                        <AudioRecorder
-                                            onAudioCaptured={handleAudioReady}
-                                            onTextCaptured={handleTextReady}
-                                            disabled={!isContextReady}
-                                            externalError={error}
-                                            transcript={errorTranscript}
-                                            suggestInteraction={isContextReady}
-                                            onRequestContextSelection={focusRecorder}
-                                            onRecordingChange={onRecordingChange}
-                                            onOpenForm={onOpenForm}
-                                        />
-                                    )}
-                                    {/* SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
-                                        Cost-safe: consumes the same Sarvam transcribe-stream that
-                                        useVoiceRecorder.runTranscribeStage already opened; no
-                                        additional Sarvam call. Self-hides when there are no
-                                        partials AND the stream isn't open. */}
-                                    <LiveCaption
-                                        text={liveCaption}
-                                        isTranscribing={voiceStreamingPhase === 'transcribing'}
-                                    />
-                                </>
-                            )}
+                            // lane MIC-1 — THE log recorder (`logRecorder.tsx`), the same one every speak entry point opens.
+                            // Lane E1 — the typing sheet no longer offers the old hand-filled form ("किंवा फॉर्ममध्ये स्वतः भरा").
+                            renderRecorder={({ onRecordingChange }) => renderLogRecorder(ctx, { onRecordingChange })}
                         />
                     )}
                 </>
             )}
 
             {/* PROCESSING / CONFIRM / SUCCESS */}
-            {status === 'processing' && (
-                FEATURE_FLAGS.dailyLoop ? (
-                    /* dfes-companion loop v1 (spec: dfes-companion-2026-07-11) —
-                       founder-approved श्रम साथी video-character processing screen.
-                       Flag-gated: dailyLoop OFF renders the exact legacy spinner
-                       below (byte-equivalent no-op). */
-                    <ShramSathiUnderstanding />
-                ) : (
-                <div className="bg-white rounded-3xl shadow-xl shadow-stone-200/50 border border-stone-100 p-16 text-center">
-                    <div className="flex justify-center mb-8">
-                        <div className="relative">
-                            <div className="w-24 h-24 border-4 border-stone-100 border-t-emerald-500 rounded-full animate-spin"></div>
-                            <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center"><Leaf size={32} className="text-emerald-600 animate-pulse" /></div>
-                        </div>
-                    </div>
-                    <ShramSathiUnderstandingLine />
-                    {/* SARVAM_PRIMARY_VOICE_PIPELINE — live transcript, placed right below the
-                        recorder/banner so the farmer sees their words appear as Sarvam transcribes
-                        the clip (post-Stop, cost-safe: reuses the single transcribe-stream that
-                        runTranscribeStage already opened; no extra Sarvam call). Self-hides when
-                        empty; the static placeholder below shows only until the first words land. */}
-                    <LiveCaption
-                        text={liveCaption}
-                        isTranscribing={voiceStreamingPhase === 'transcribing'}
-                    />
-                    {!liveCaption && voiceStreamingPhase !== 'transcribing' && (
-                        <div className="text-sm text-stone-400 max-w-xs mx-auto mt-2 italic">श्रम साथी तुम्ही जे बोललात ते समजून घेत आहे</div>
-                    )}
-                </div>
-                )
-            )}
+            {/* lane MIC-1 — THE waiting screen (`logRecorder.tsx`), shared with every other speak entry point. */}
+            {status === 'processing' && renderProcessingScreen(ctx)}
 
             {/* dfes-companion Phase 4 — voice-continuity degraded terminal surface.
                 Renders only when the ladder produced a durable-but-unstructured

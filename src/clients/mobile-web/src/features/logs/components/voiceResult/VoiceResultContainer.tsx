@@ -40,6 +40,8 @@ export interface VoiceResultContainerProps {
     onEdit: (log: DailyLog) => void;
     onBack: () => void;
     onAddAnother: () => void;
+    /** Lane MIC-1 — "… सांगितलं नाही. दाबा आणि बोला": the ONE mic for that part. Absent = the same as "आणखी सांगा". */
+    onTellMore?: (part: PartKey) => void;
     questionPanel?: React.ReactNode;
     extras?: React.ReactNode;
     /** Test seam for the audio element. */
@@ -48,7 +50,7 @@ export interface VoiceResultContainerProps {
 
 export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     result, history, farmerProfile, operatorNameById, farmId, farmRole, placeLabel, syncQueuedById,
-    onEdit, onBack, onAddAnother, questionPanel, extras, createAudio,
+    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio,
 }) => {
     const sessionUserId = getSessionUserId();
     // lane F1 — the screen reads the RECORD. The L6b work-around that read this phone's own write instead
@@ -113,7 +115,7 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             onEdit={id => leave(() => onEdit(current.find(l => l.id === id) ?? primary))()}
             onBack={leave(onBack)}
             onAddAnother={leave(onAddAnother)}
-            onTellMore={(_part: PartKey) => leave(onAddAnother)()}
+            onTellMore={(part: PartKey) => leave(() => (onTellMore ? onTellMore(part) : onAddAnother()))()}
             questionPanel={questionPanel}
             extras={extras}
         />

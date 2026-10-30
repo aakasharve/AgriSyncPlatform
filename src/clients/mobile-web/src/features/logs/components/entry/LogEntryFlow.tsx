@@ -9,8 +9,13 @@
  *
  * Built from the founder-approved preview (PLR-D5, PLR-D6 :13-16, PLR-D7 §2b, PLR-D9 §6) but wired to
  * the real stores: the selection IS the app's `logScope` (several crops and selected plots allowed,
- * as the real `CropSelector` contract allows), the mic IS the real recorder (passed in by the router),
- * the typed form IS the real `ManualEntry`. Nothing here is sample data.
+ * as the real `CropSelector` contract allows), the mic IS the real recorder (passed in by the router).
+ * Nothing here is sample data.
+ *
+ * Lane E1 (founder 2026-10-30: "I don't want this [old] UI anywhere in the app") — the hand-filled form step is gone:
+ * the typing sheet's "किंवा फॉर्ममध्ये स्वतः भरा" no longer leads anywhere; typed entry stays through the recorder's
+ * "बोलता येत नसेल तर इथे लिहा" sheet. Lane MIC-1 — the ONE mic (`core/speak`) opens this same crop → plot → mic flow
+ * when it does not know the place yet (`startAt="entry"`, `onExit`: back from the crop question leaves it).
  *
  * Back is ONE step on a big labelled "मागे" and never leaves the app: mic/plots -> crop -> home
  * (the हजेरी arrival goes back to हजेरी, where it came from). Android hardware Back follows the same
@@ -23,23 +28,20 @@ import CropSelector from '../../../context/components/CropSelector';
 import type { StepperStep } from '../../../context/components/CropPlotStepper';
 import FlowBackButton from '../../../context/components/FlowBackButton';
 import { useBackDismiss } from '../../../../core/navigation/useBackDismiss';
-import { TypedTag } from '../../../voice/components/recorder/TypedEntry';
 import { SathiAskBand } from './SathiAskBand';
 import { WorkHome } from './WorkHome';
 import type { RunningCost } from './RunningCostCard';
 import { SegmentBanner, SegmentCancel } from './SegmentBanner';
-import { FORM_WORDS, STEPPER_LABELS } from './entryWords';
+import { STEPPER_LABELS } from './entryWords';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const EMPTY_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
 
-export type FlowStep = 'home' | 'entry' | 'form';
+export type FlowStep = 'home' | 'entry';
 
 export interface RecorderHooks {
     /** The recorder says when it starts and stops listening (the choices hide while it listens). */
     onRecordingChange: (recording: boolean) => void;
-    /** Opens the hand-filled form step (from the typing sheet). */
-    onOpenForm: () => void;
 }
 
 export interface LogEntryFlowProps {
@@ -64,10 +66,12 @@ export interface LogEntryFlowProps {
     cost?: RunningCost;
     /** Sathi's question he chose to answer by speaking (wave-3.7) — stays visible above the mic. */
     pinnedQuestion?: string | null;
+    /** Lane MIC-1 — why he is speaking (the ONE mic's band), shown above the mic. */
+    micLead?: React.ReactNode;
     renderRecorder: (hooks: RecorderHooks) => React.ReactNode;
-    renderForm: () => React.ReactNode;
-    /** Called when he leaves speaking for the hand-filled form. */
-    onLeaveVoice?: () => void;
+    /** Lane MIC-1 — start on the crop question (no work home), and leave the flow by this instead of going home. */
+    startAt?: 'entry';
+    onExit?: () => void;
 }
 
 /** The app's flat scope as the selector's crop -> plots map (the same mapping the old screen used). */
@@ -83,10 +87,10 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const {
         crops, logScope, setLogScope, onChooseVoice, labourIntent, onBackToLabour, onClearLabourIntent,
         recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, cost,
-        pinnedQuestion, renderRecorder, renderForm, onLeaveVoice,
+        pinnedQuestion, micLead, renderRecorder, startAt, onExit,
     } = props;
     const hasSelection = logScope.selectedCropIds.length > 0;
-    const [step, setStep] = useState<FlowStep>(() => (homeRequested || (!labourIntent && !hasSelection) ? 'home' : 'entry'));
+    const [step, setStep] = useState<FlowStep>(() => (startAt ?? (homeRequested || (!labourIntent && !hasSelection) ? 'home' : 'entry')));
     const [entryStep, setEntryStep] = useState<StepperStep>(() => (hasSelection && !homeRequested ? 'plot' : 'crop'));
     const [recording, setRecording] = useState(false);
 
@@ -96,9 +100,8 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
         setStep('home');
         if (labourIntent) onClearLabourIntent();
     };
-    const backFromCrop = () => (labourIntent ? onBackToLabour() : goHome());
+    const backFromCrop = () => (onExit ? onExit() : labourIntent ? onBackToLabour() : goHome());
     const backOneStep = () => {
-        if (step === 'form') { setStep('entry'); return; }
         if (entryStep === 'plot') { setLogScope(EMPTY_SCOPE); setEntryStep('crop'); return; }
         backFromCrop();
     };
@@ -126,10 +129,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
         micAnchor.current?.scrollIntoView?.({ block: recording ? 'start' : 'nearest', behavior: reduce ? 'auto' : 'smooth' });
     }, [step, ready, recording]);
 
-    const hooks: RecorderHooks = {
-        onRecordingChange: setRecording,
-        onOpenForm: () => { onLeaveVoice?.(); setStep('form'); },
-    };
+    const hooks: RecorderHooks = { onRecordingChange: setRecording };
 
     if (recordingSegment) {
         return (
@@ -145,19 +145,6 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
         return (
             <div data-testid="log-entry-flow" data-step="home">
                 <WorkHome onTell={() => { setLogScope(EMPTY_SCOPE); setEntryStep('crop'); setStep('entry'); }} onAttendance={onOpenAttendance} cost={cost} />
-            </div>
-        );
-    }
-
-    if (step === 'form') {
-        return (
-            <div className="px-1 pt-2" data-testid="log-entry-flow" data-step="form" style={{ fontFamily: SANS }}>
-                <div className="mb-3 flex items-center gap-2 px-2">
-                    <FlowBackButton onClick={() => setStep('entry')} testId="form-back" />
-                    <h2 className="m-0 min-w-0 flex-1 truncate text-[20px] font-extrabold text-stone-900">{FORM_WORDS.title}</h2>
-                    <TypedTag testId="form-typed-tag" />
-                </div>
-                {renderForm()}
             </div>
         );
     }
@@ -188,6 +175,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
                         footer: () => (
                             // scroll margins keep the card clear of the bottom bar (nav ~84px) and of the top edge
                             <div ref={micAnchor} className="scroll-mb-28 scroll-mt-2" data-testid="flow-mic-anchor">
+                                {micLead}
                                 {pinnedQuestion && (
                                     <div data-testid="shramsathi-pinned-question" className="mb-3 rounded-xl border px-4 py-3 text-[16px] font-medium"
                                         style={{ fontFamily: SANS, backgroundColor: '#FEF8EF', borderColor: '#F6E3C4', color: '#B4650F' }}>

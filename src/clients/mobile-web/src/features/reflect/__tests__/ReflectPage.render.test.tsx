@@ -11,7 +11,10 @@
  * (task tick → `onUpdateTask` with the whole task; in-hand card → the income page; the ledger link; a plot card
  * → that plot's day sheet; the money pill → the money lens). Lane RF: the day's work follows the chosen day; the
  * money comes from the server's ledger (`useMoneyLedger`, a fixture here) and is "—" for a role that may not see it;
- * "बदला" takes the result screen's path; a note opens its recording. Only infrastructure edges are mocked (farm
+ * "बदला" takes the result screen's path; a note opens its recording. Lane RF2: the plot cards show only what happened
+ * (chips), a "संपूर्ण शेत" card holds whole-farm work, the day's feed button and sheet are retired, a card opens the
+ * plot's day (buckets + time chips that open a recording inline), and "आणखी सांगा" asks THE ONE mic (`onSpeak`), the
+ * new work highlighted when it lands. Only infrastructure edges are mocked (farm
  * context, harvest storage, the ledger read, the clip player, Dexie attachment counts, telemetry, the money lens).
  */
 import React from 'react';
@@ -74,7 +77,7 @@ const renderPage = (over: Partial<React.ComponentProps<typeof ReflectPage>> = {}
     const props = {
         history, crops: CROPS,
         tasks: [task('t1', 'फवारणी', { dueDate: TODAY_KEY })],
-        onUpdateTask: vi.fn(), onAddTask: vi.fn(), navigate: vi.fn(), onEditLog: vi.fn(), onOpenLog: vi.fn(),
+        onUpdateTask: vi.fn(), onAddTask: vi.fn(), navigate: vi.fn(), onOpenLog: vi.fn(), onSpeak: vi.fn(),
         sessionUserId: 'me', farmRole: 'PrimaryOwner',
         operators: [{ id: 'op-sunil', name: 'सुनील' }] as React.ComponentProps<typeof ReflectPage>['operators'],
         ...over,
@@ -172,8 +175,10 @@ describe('ReflectPage (redesigned, real data)', () => {
     it('feeds every section from the real props — the money from the server ledger, never the log\'s own total', () => {
         renderPage();
         openAll();
-        expect(screen.getAllByTestId(/^plot-card-/)).toHaveLength(3);
+        // three plots, and the whole farm's own card (lane RF2)
+        expect(screen.getAllByTestId(/^plot-card-/).map(c => c.getAttribute('data-testid'))).toEqual(['plot-card-grape:g1', 'plot-card-grape:g2', 'plot-card-cane:c1', 'plot-card-farm']);
         expect(screen.getByTestId('plot-card-grape:g1')).toHaveAttribute('data-status', 'worked');
+        expect(screen.getByTestId('plot-card-grape:g1').querySelector('[data-kind="crop"]')).toHaveTextContent('छाटणी');
         expect(screen.getByTestId('notes-count')).toHaveTextContent('1');
         expect(within(screen.getByTestId('notes-list')).getByText('कीड दिसली')).toBeInTheDocument();
         expect(within(screen.getByTestId('todo-group-today')).getByText('फवारणी')).toBeInTheDocument();
@@ -202,7 +207,8 @@ describe('ReflectPage (redesigned, real data)', () => {
         pickOct21();
         expect(screen.getByTestId('day-label')).toHaveTextContent('बुधवार, 21 ऑक्टो');
         expect(screen.getByTestId('plot-card-cane:c1')).toHaveAttribute('data-status', 'worked');
-        expect(screen.getByTestId('plot-empty-grape:g1')).toHaveTextContent('या दिवशी नोंद नाही');
+        expect(screen.getByTestId('plot-empty-grape:g1')).toHaveTextContent('या दिवशी काही सांगितलं नाही');
+        expect(screen.getByTestId('plot-empty-grape:g1').textContent).not.toContain('नोंद');
     });
 
     it('ticking a to-do hands the whole updated task to onUpdateTask (what the app\'s task store expects)', () => {
@@ -235,29 +241,35 @@ describe('ReflectPage (redesigned, real data)', () => {
 });
 
 describe('ReflectPage — lane RF: every piece of work, the result screen\'s way', () => {
-    it('a plot card opens that plot\'s day in Marathi (not the English drawer); बदला takes the result screen\'s path', () => {
+    it('a plot card opens that plot day: buckets, then the time chips; a chip opens its recording inline; बदला takes the result screen path', () => {
         const props = renderPage();
         fireEvent.click(screen.getByTestId('plot-card-grape:g1'));
         expect(screen.getByTestId('rf-day-title')).toHaveTextContent('सोनाका · द्राक्ष');
         expect(screen.getByTestId('rf-day-date')).toHaveTextContent('आज');
-        expect(screen.getByTestId('rf-day-rec-g1-today-who')).toHaveTextContent('तुम्ही');
+        expect(screen.getByTestId('vr-day-crop')).toHaveAttribute('data-open', 'yes');
         expect(screen.getByTestId('rf-day')).not.toHaveTextContent('Edit This Log');
-        fireEvent.click(screen.getByTestId('rf-day-rec-g1-today-edit-g1-today'));
+        fireEvent.click(screen.getByTestId('rf-time-g1-today'));
+        expect(screen.getByTestId('rf-rec-g1-today-who')).toHaveTextContent('तुम्ही');
+        fireEvent.click(screen.getByTestId('rf-rec-g1-today-edit-g1-today'));
         expect(props.onOpenLog).toHaveBeenCalledWith(expect.objectContaining({ id: 'g1-today' }));
-        expect(props.onEditLog).not.toHaveBeenCalled();
     });
 
-    it('a plot day nothing was told for says so and starts that day\'s work for that plot', () => {
+    it('a plot day nothing was told for says so; "आणखी सांगा" asks THE ONE mic for that plot, and the new work is highlighted when it lands', () => {
         const props = renderPage();
         fireEvent.click(screen.getByTestId('plot-card-grape:g2'));
-        expect(screen.getByTestId('rf-day-empty')).toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('rf-day-add'));
-        expect(props.onEditLog).toHaveBeenCalledWith(expect.objectContaining({
-            date: TODAY_KEY,
-            context: { selection: [expect.objectContaining({ cropId: 'grape', selectedPlotIds: ['g2'], selectedPlotNames: ['थॉम्पसन'] })] },
-        }));
-        expect(vi.mocked(props.onEditLog).mock.calls[0][0].financialSummary).toBeUndefined(); // no zeros put in his record
-        expect(screen.queryByTestId('rf-day')).toBeNull();
+        expect(screen.getByTestId('rf-day-empty')).toHaveTextContent('आज अजून काही सांगितलं नाही');
+        expect(screen.queryByTestId('rf-day-add')).toBeNull(); // the old hand-filled "add" is gone (lane E1)
+        fireEvent.click(screen.getByTestId('rf-day-tell'));
+        expect(props.onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addToDay', context: { place: { cropId: 'grape', plotId: 'g2' } } }));
+        expect(screen.getByTestId('rf-day')).toBeInTheDocument(); // he stays on this plot day
+    });
+
+    it('a past day offers no "आणखी सांगा" (a recording is always today): no dead button', () => {
+        renderPage();
+        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
+        pickOct21();
+        fireEvent.click(screen.getByTestId('plot-card-cane:c1'));
+        expect(screen.queryByTestId('rf-day-tell')).toBeNull();
     });
 
     it('the money pill opens the money lens for that plot\'s day, by the plot (the ledger has no phone crop label)', () => {
@@ -267,36 +279,30 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         expect(lens).toEqual({ fromDate: TODAY_KEY, toDate: TODAY_KEY, plotId: 'g1' });
     });
 
-    it('the day\'s work button and its sheet follow the chosen day', () => {
-        renderPage();
-        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('आजचा आढावा');
-        expect(screen.getByTestId('activity-feed-count')).toHaveTextContent('1');
-        fireEvent.click(screen.getByTestId('activity-feed-button'));
-        expect(screen.getByTestId('rf-feed-g1-today')).toBeInTheDocument();
-        expect(screen.queryByTestId('rf-feed-c1-old')).toBeNull();
-        fireEvent.click(screen.getByTestId('rf-feed-back'));
-
-        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
-        pickOct21();
-        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('दिवसाचा आढावा');
-        expect(screen.getByTestId('activity-feed-button')).toHaveTextContent('बुधवार, 21 ऑक्टो');
-        fireEvent.click(screen.getByTestId('activity-feed-button'));
-        expect(screen.getByTestId('rf-feed-title')).toHaveTextContent('दिवसाचा आढावा');
-        expect(screen.getByTestId('rf-feed-c1-old')).toBeInTheDocument();
-        expect(screen.getByTestId('rf-feed-c1-old-who')).toHaveTextContent('सुनील');
-        expect(screen.queryByTestId('rf-feed-g1-today')).toBeNull();
-        // a row opens everything understood from that recording
-        fireEvent.click(screen.getByTestId('rf-feed-c1-old-open'));
-        expect(screen.getByTestId('rf-glance')).toBeInTheDocument();
+    it('lane RF2: the day feed button and its sheet are retired; whole-farm work lives on the "संपूर्ण शेत" card', () => {
+        const farmWide = log({ id: 'farm-today', cropId: 'FARM_GLOBAL', plotIds: [], labour: [{ id: 'l', type: 'HIRED', count: 3 }],
+            meta: { createdAtISO: '2026-10-25T04:00:00.000Z', createdByOperatorId: 'op-sunil' } });
+        renderPage({ history: [...history, farmWide] });
+        expect(screen.queryByTestId('activity-feed-button')).toBeNull();
+        expect(screen.queryByTestId('rf-feed')).toBeNull();
+        const farmCard = screen.getByTestId('plot-card-farm');
+        expect(farmCard.querySelector('[data-kind="labour"]')).toHaveTextContent('3 जण');
+        expect(screen.getByTestId('plot-card-grape:g1').querySelector('[data-kind="labour"]')).toBeNull();
+        fireEvent.click(farmCard);
+        expect(screen.getByTestId('rf-day-title')).toHaveTextContent('संपूर्ण शेत');
+        fireEvent.click(screen.getByTestId('rf-time-farm-today'));
+        expect(screen.getByTestId('rf-rec-farm-today-who')).toHaveTextContent('सुनील');
     });
 
-    it('a note opens the recording it came from', () => {
+    it('a note opens its recording through the same plot-day view', () => {
         renderPage();
         fireEvent.click(screen.getByTestId('reflect-section-notes-toggle'));
         expect(screen.getByTestId('note-o1-who')).toHaveTextContent('तुम्ही');
         fireEvent.click(screen.getByTestId('note-o1-source'));
-        expect(screen.getByTestId('rf-glance-g1-today')).toBeInTheDocument();
-        expect(screen.queryByTestId('rf-glance-g1-today-play-listen')).toBeNull(); // ▶ only where it may be offered
+        expect(screen.getByTestId('rf-day-title')).toHaveTextContent('सोनाका');
+        expect(screen.getByTestId('rf-rec-g1-today')).toBeInTheDocument();
+        expect(screen.queryByTestId('rf-glance')).toBeNull();
+        expect(screen.queryByTestId('rf-rec-g1-today-play-listen')).toBeNull(); // ▶ only where it may be offered
     });
 
     it('money a worker may not see: "—", one line saying why, no money doors anywhere', () => {
