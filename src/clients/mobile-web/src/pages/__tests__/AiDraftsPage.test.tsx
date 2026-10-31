@@ -12,7 +12,7 @@
  *   - a removal is his explicit decision, with the right noun and gender, and only a "yes" marks it reviewed;
  *   - the row's time comes from the SAME instant the rest of the app dates the note from (`resolveRecordedInstant`);
  *   - one title bar named like the hub row, one मागे; plain Marathi only.
- * And the new rule: nothing of the old form is reachable from here.
+ * The old form itself is deleted (founder D-63), so nothing of it can be reached from here.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -29,8 +29,6 @@ vi.mock('../../infrastructure/sync/PendingAiResultsReader', () => ({
     markAiResultReviewed: (...args: unknown[]) => mockMarkAiResultReviewed(...args),
     resolveRecordedInstant: (...args: unknown[]) => mockResolveRecordedInstant(...args),
 }));
-const manualEntryMounted = vi.fn();
-vi.mock('../../features/logs/components/ManualEntry', () => ({ default: () => { manualEntryMounted(); return null; } }));
 
 import AiDraftsPage from '../AiDraftsPage';
 
@@ -60,7 +58,7 @@ afterEach(() => {
 });
 
 describe('AiDraftsPage — lane OF (D-59): bill / slip photos only; voice lives in आवाज नोंदी', () => {
-    it('lists the bill and the slip photo, never the voice recording, and nothing opens the old form', async () => {
+    it('lists the bill and the slip photo, never the voice recording, and offers no "open" button', async () => {
         render(<AiDraftsPage onBack={vi.fn()} />);
         expect(await screen.findByTestId('ai-draft-row-9')).toBeInTheDocument();
         expect(screen.getByTestId('ai-draft-row-11')).toBeInTheDocument();
@@ -69,7 +67,6 @@ describe('AiDraftsPage — lane OF (D-59): bill / slip photos only; voice lives 
         expect(screen.getByTestId('ai-drafts-list')).toHaveTextContent('पट्टीचा फोटो');
         expect(screen.getByTestId('ai-drafts-list')).not.toHaveTextContent('आवाज नोंद');
         expect(screen.queryByRole('button', { name: 'उघडा' })).toBeNull();
-        expect(manualEntryMounted).not.toHaveBeenCalled();
     });
 
     it('only voice waiting: the page says nothing of photos is left (the voice is counted in आवाज नोंदी)', async () => {

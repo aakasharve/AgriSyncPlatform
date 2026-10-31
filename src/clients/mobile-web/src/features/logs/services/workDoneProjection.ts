@@ -37,9 +37,9 @@ const GENERIC_WORK_TITLES = new Set(['Crop Activity', 'Log Entry', 'Field Work',
 
 /**
  * The words the "work done" rows are built with (PLR-D10 I13, LP-27). The default is the English the rows have
- * always had, so every existing caller (the closure receipt, the bucket derivation) is byte-identical; the review
- * form's activity card passes Marathi for a Marathi user (activity-card/activityCardStrings.ts). `value` shows a
- * stored fixed value (a method, a unit, a labour kind, an ownership) in that language.
+ * always had, so every existing caller (the closure receipt, the bucket derivation) is byte-identical. (The one
+ * caller that passed Marathi, the old review form's activity card, was deleted with that form under founder D-63.)
+ * `value` shows a stored fixed value (a method, a unit, a labour kind, an ownership) in that language.
  */
 export interface WorkDoneLabels {
     irrigationDone: string;

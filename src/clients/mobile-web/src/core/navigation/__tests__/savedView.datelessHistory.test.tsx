@@ -77,7 +77,6 @@ async function loadSavedPath() {
     vi.doMock('../../../features/voice/components/AudioRecorder', () => stub('audio'));
     vi.doMock('../../../features/voice/components/AudioRecorderStreaming', () => stub('audio-streaming'));
     vi.doMock('../../../features/voice/components/LiveCaption', () => stub('live-caption'));
-    vi.doMock('../../../features/logs/components/ManualEntry', () => stub('manual-entry'));
     vi.doMock('../../../features/logs/components/shramsathi/VoiceSavedReassurance', () => stub('voice-saved'));
 
     // The REAL recognition panel (it is where the crash lives). Only its server

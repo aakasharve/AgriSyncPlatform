@@ -70,14 +70,12 @@ const ROUTED: Array<{ id: string; button: string; wiredIn: string; purpose: Spea
 ];
 
 /** NOT ROUTED, and why. Each named file is checked to NOT call the ONE mic (its meaning is its own). */
-const NOT_ROUTED: Array<{ id: string; file: string; why: 'the recorder itself' | 'हजेरी (same recorder, meaning unchanged)' | 'inside the residual old form' | 'excluded: तुलना' | 'not speak-to-log' | 'admin' | 'icon, not a control' }> = [
+const NOT_ROUTED: Array<{ id: string; file: string; why: 'the recorder itself' | 'हजेरी (same recorder, meaning unchanged)' | 'excluded: तुलना' | 'not speak-to-log' | 'admin' | 'icon, not a control' }> = [
     { id: 'work-home-tell', file: 'features/logs/components/entry/WorkHome.tsx', why: 'the recorder itself' },
     { id: 'quick-sheet-voice', file: 'features/logs/components/QuickLogSheet.tsx', why: 'the recorder itself' },
     { id: 'labour-hub-speak', file: 'features/labour/components/LabourHub.tsx', why: 'हजेरी (same recorder, meaning unchanged)' },
     { id: 'attendance-result-speak', file: 'features/labour/components/AttendanceResult.tsx', why: 'हजेरी (same recorder, meaning unchanged)' },
-    { id: 'form-unclear-again', file: 'shared/components/ui/UnclearSegmentCard.tsx', why: 'inside the residual old form' },
-    { id: 'form-refine-by-voice', file: 'features/logs/components/activity-card/ActivityCard.tsx', why: 'inside the residual old form' },
-    { id: 'form-observation-hub', file: 'features/logs/components/ObservationHubSheet.tsx', why: 'inside the residual old form' },
+    // D-63 (2026-10-31): the old form's three mics left with the form — it and its own parts are deleted.
     { id: 'compare-tell', file: 'features/compare/ComparePage.tsx', why: 'excluded: तुलना' },
     { id: 'compare-plot-tell', file: 'features/compare/ComparePlotCard.tsx', why: 'excluded: तुलना' },
     { id: 'consent-toggle', file: 'features/consent/VoiceRetainedConsentToggle.tsx', why: 'not speak-to-log' },
@@ -171,7 +169,6 @@ describe('E1 — the old hand-filled form (ManualEntry) inventory', () => {
                 if (!/\.tsx?$/.test(e.name)) continue;
                 const file = join(dir, e.name);
                 const rel = relative(SRC, file).replace(/\\/g, '/');
-                if (rel === 'features/logs/components/ManualEntry.tsx') continue; // the re-export shim itself
                 if (IMPORTS_FORM.test(readFileSync(file, 'utf-8'))) importers.push(rel);
             }
         };

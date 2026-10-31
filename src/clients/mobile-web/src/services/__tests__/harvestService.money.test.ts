@@ -4,8 +4,9 @@
  *   - no payment mode unless stated (it was 'Cash' on every other-income entry and every harvest sale);
  *   - no ₹0 rate when a sale line gives none;
  *   - an income entry saved twice under the id its sheet minted is ONE entry and ONE money source.
- * Both copies of the harvest service are checked (the legacy `services/` one the sheets use, and
- * `features/finance/`). The money service is mocked; the stores are real (localStorage).
+ * The live copy is checked (`services/harvestService`, the one the income sheets use); the second copy under
+ * `features/finance/` was reachable only from the old income page and is deleted with it (founder D-63, 2026-10-31).
+ * The money service is mocked; the stores are real (localStorage).
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,7 +16,6 @@ vi.mock('../../features/finance/financeCommandService', () => ({
 }));
 
 import * as legacy from '../harvestService';
-import * as feature from '../../features/finance/harvestService';
 import type { HarvestSession } from '../../features/logs/harvest.types';
 
 const income = { amount: 1200, source: 'OTHER' as const, description: 'भंगार', date: '2026-10-20' };
@@ -33,7 +33,7 @@ function session(pricePerUnit: number): HarvestSession {
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.clearAllMocks());
 
-describe.each([['services/harvestService', legacy], ['features/finance/harvestService', feature]])('%s', (_name, svc) => {
+describe.each([['services/harvestService', legacy]])('%s', (_name, svc) => {
     it('other income: no payment mode — the farmer did not say how he was paid', () => {
         svc.addOtherIncomeEntry(income);
         const [payload] = createMoneyEventFromSource.mock.calls[0];

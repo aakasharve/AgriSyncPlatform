@@ -39,17 +39,17 @@ const AUTHORITY_SURFACES = [
 ];
 
 /*
- * The three farmer-reachable surfaces that name this subsystem from OUTSIDE
- * `features/labour/` — the Setup Hub door, the log-page banner, and the
- * manual-entry pre-save panel. Every one of them said "Labour" in English
- * until 2026-09-03. They are scanned for the Labour ban ONLY, not for the
- * permission ban: D5's handover copy is scoped to the authority surfaces
- * above, and widening THAT scope is founder decision N10, not this release.
+ * The farmer-reachable surfaces that name this subsystem from OUTSIDE
+ * `features/labour/` — the Setup Hub door and the log-page banner. Both
+ * said "Labour" in English until 2026-09-03 (so did the old form's pre-save
+ * panel, deleted with that form under founder D-63, 2026-10-31). They are
+ * scanned for the Labour ban ONLY, not for the permission ban: D5's handover
+ * copy is scoped to the authority surfaces above, and widening THAT scope is
+ * founder decision N10, not this release.
  */
 const SUBSYSTEM_DOORS = [
     join(ROOT, 'src', 'features', 'profile', 'components', 'SetupHubMenu.tsx'),
     join(ROOT, 'src', 'core', 'navigation', 'mainViewComponents.tsx'),
-    join(ROOT, 'src', 'features', 'logs', 'components', 'manual-entry', 'components', 'LabourReview.tsx'),
 ];
 
 const PERMISSION_VOCAB = /\b(permissions?|grants?|granted|roles?|claims?|polic(?:y|ies)|access)\b/i;
@@ -143,7 +143,7 @@ describe('farmer-facing labour vocabulary (D5: no permission words, no English O
      * three places a farmer could reach: the Setup Hub row
      * ("कामगार व्यवस्थापन · Labour"), the log-page banner's aria-label
      * ("back to Labour Management"), and the manual-entry eyebrow
-     * ("Labour Review").
+     * ("Labour Review" — that form is deleted, founder D-63).
      *
      * The Marathi half of the same problem — `कामगार व्यवस्थापन`, which is
      * both "Labour Management" AND a class of person — is deliberately NOT

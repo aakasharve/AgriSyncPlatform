@@ -41,7 +41,6 @@ async function loadRenderLogView(dailyLoop: boolean) {
     vi.doMock('../../../features/voice/components/AudioRecorder', () => stub('audio'));
     vi.doMock('../../../features/voice/components/AudioRecorderStreaming', () => stub('audio-streaming'));
     vi.doMock('../../../features/voice/components/LiveCaption', () => stub('live-caption'));
-    vi.doMock('../../../features/logs/components/ManualEntry', () => stub('manual-entry'));
     // Recognition panel → recognizable marker so we can assert the clarity line
     // renders ABOVE it. An empty marker also models the graceful "no question"
     // day (decision 3B): the panel is present but yields nothing.

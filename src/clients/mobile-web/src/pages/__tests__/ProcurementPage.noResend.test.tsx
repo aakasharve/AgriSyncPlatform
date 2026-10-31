@@ -10,7 +10,6 @@ import React from 'react';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../features/context/components/SlidingCropSelector', () => ({ default: () => null }));
 vi.mock('../../features/procurement/components/ExpenseSummaryCards', () => ({ ExpenseSummaryCards: () => null }));
 vi.mock('../../features/procurement/components/ExpenseCard', () => ({ ExpenseCard: () => null }));
 vi.mock('../../features/procurement/components/ReceiptCaptureSheet', () => ({ ReceiptCaptureSheet: () => null }));

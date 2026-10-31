@@ -39,7 +39,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderLogView } from '../mainView';
 import type { AppRouterContext } from '../routeContext';
 import AttendanceResult, { type AttendanceResultProps } from '../../../features/labour/components/AttendanceResult';
-import ManualEntry from '../../../features/logs/components/ManualEntry';
 import { CheckSaveHost } from '../checkSaveView';
 import { bindDraftProvenance } from '../../../features/voice/draftProvenance';
 import { LogFactory } from '../../domain/LogFactory';
@@ -279,9 +278,8 @@ describe('R2 → lane OF: the labour door has no hand-filled form any more', () 
         expect('renderEditSurface' in (props as object)).toBe(false);
     });
 
-    it('the ordinary log door shows "तपासा आणि जतन करा" for a parse, never the old form', () => {
+    it('the ordinary log door shows "तपासा आणि जतन करा" for a parse (the old form itself is deleted, D-63)', () => {
         const node = renderLogView(labourDoorCtx(parse(), vi.fn(), { logIntent: null }));
-        expect(findByType(node, ManualEntry)).toBeNull();
         expect(findByType(node, CheckSaveHost)).not.toBeNull();
     });
 });

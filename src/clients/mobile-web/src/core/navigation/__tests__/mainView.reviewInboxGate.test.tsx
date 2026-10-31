@@ -85,7 +85,6 @@ async function loadRenderLogView() {
     vi.doMock('../../../features/voice/components/AudioRecorder', () => stub('audio'));
     vi.doMock('../../../features/voice/components/AudioRecorderStreaming', () => stub('audio-streaming'));
     vi.doMock('../../../features/voice/components/LiveCaption', () => stub('live-caption'));
-    vi.doMock('../../../features/logs/components/ManualEntry', () => stub('manual-entry'));
     vi.doMock('../../../features/logs/components/LedgerRecognitionPanel', () => ({
         LedgerRecognitionPanel: () => null,
     }));

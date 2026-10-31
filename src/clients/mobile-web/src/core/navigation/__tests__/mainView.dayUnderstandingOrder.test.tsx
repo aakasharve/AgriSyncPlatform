@@ -51,7 +51,6 @@ async function loadRenderLogView(understandingMeter: boolean, dayScore: number |
     vi.doMock('../../../features/voice/components/AudioRecorder', () => stub('audio'));
     vi.doMock('../../../features/voice/components/AudioRecorderStreaming', () => stub('audio-streaming'));
     vi.doMock('../../../features/voice/components/LiveCaption', () => stub('live-caption'));
-    vi.doMock('../../../features/logs/components/ManualEntry', () => stub('manual-entry'));
     if (stubPanel) {
         // Recognition panel → marker only; we assert the score card renders ABOVE it.
         vi.doMock('../../../features/logs/components/LedgerRecognitionPanel', () => ({
