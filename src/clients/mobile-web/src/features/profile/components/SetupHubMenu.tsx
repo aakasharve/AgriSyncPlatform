@@ -21,6 +21,7 @@ import { FarmSwitcherSheet } from '../../context/components/FarmContextSwitcher'
 import FarmsSection from './FarmsSection';
 import { Chip, GlassCard, PageBar, RowLink, SANS, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
 import { TEAM_COPY } from '../team/teamCopy';
+import { AppVersionRow } from '../../appUpdate/AppVersionRow';
 
 export interface SetupHelp {
     what: string;
@@ -221,14 +222,14 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                     </div>
                 )}
 
-                {settingsItems && settingsItems.length > 0 && (
-                    <div className="space-y-2" data-testid="hub-app">
-                        <SectionHead title="अ‍ॅप" />
-                        {settingsItems.map(it => (
-                            <RowLink key={it.id} testId={`hub-settings-${it.id}`} icon={it.icon} tone="stone" title={it.label} line={it.subtitle} badge={it.badge} onClick={() => onSelectExtra?.(it.id)} />
-                        ))}
-                    </div>
-                )}
+                {/* Lane UPD-1 (D-53): the group always shows, because the installed app version always does. */}
+                <div className="space-y-2" data-testid="hub-app">
+                    <SectionHead title="अ‍ॅप" />
+                    {settingsItems?.map(it => (
+                        <RowLink key={it.id} testId={`hub-settings-${it.id}`} icon={it.icon} tone="stone" title={it.label} line={it.subtitle} badge={it.badge} onClick={() => onSelectExtra?.(it.id)} />
+                    ))}
+                    <AppVersionRow language={language ?? 'mr'} />
+                </div>
 
                 <Tap onClick={logout} data-testid="hub-logout" rippleColor="rgba(225,29,72,0.15)"
                     className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full border border-rose-200 bg-white text-[16px] font-extrabold text-rose-700">

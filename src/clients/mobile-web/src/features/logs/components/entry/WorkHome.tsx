@@ -17,10 +17,14 @@
  * would promise what the server cannot keep. It comes when that model exists.
  *
  * Below the doors, the running-cost card that sat on the old log screen (re-homed, not dropped).
+ *
+ * Lane UPD-1 (D-53): above the title, the calm "नवीन आवृत्ती आली आहे" card — drawn only when the server
+ * names a newer app version than this one (`features/appUpdate`); otherwise nothing at all.
  */
 import React from 'react';
 import { ChevronRight, Hand, Mic } from 'lucide-react';
 import { SANS, Tap } from '../../../../shared/components/ui/placeUi';
+import { AppUpdateCard } from '../../../appUpdate/AppUpdateCard';
 import { HOME_WORDS } from './entryWords';
 import { RunningCostCard, type RunningCost } from './RunningCostCard';
 
@@ -34,6 +38,7 @@ export interface WorkHomeProps {
 
 export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, cost }) => (
     <div className="space-y-3 px-3 pb-6 pt-3" style={{ fontFamily: SANS }} data-testid="work-home">
+        <AppUpdateCard />
         <div className="relative flex min-h-[88px] items-center overflow-visible rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 pl-[26%] pr-3">
             <img src="/images/sathi/sathi-points-down-both.png" alt="" width={1086} height={1448}
                 className="pointer-events-none absolute bottom-0 left-1 top-[-8px] h-[calc(100%+8px)] w-[24%] object-contain object-bottom" />

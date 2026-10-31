@@ -72,6 +72,22 @@ OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector.agrisync.internal:4317"
 OTel__ServiceName="agrisync-prod"
 ```
 
+## App release (the phone's "new version available" card)
+
+Served anonymously at `GET /version/app`. Not secrets. Leave `LatestVersion` empty and phones show
+nothing. Set it only AFTER the new version is really downloadable (Play listing live and/or the APK on
+shramsafal.in/apk), or farmers are sent to a version they cannot get yet.
+
+```bash
+AppRelease__LatestVersion="1.0.18"
+# Optional: phones below this see a card they cannot dismiss ("may stop working soon"); the app is never blocked.
+AppRelease__MinimumVersion=""
+# Defaults live in appsettings.json; override only if the places move. The phone opens only
+# play.google.com (for com.agrisync.shramsafal) and https://shramsafal.in — anything else is ignored.
+AppRelease__PlayStoreUrl="https://play.google.com/store/apps/details?id=com.agrisync.shramsafal"
+AppRelease__ApkUrl="https://shramsafal.in/apk"
+```
+
 ## Notes
 
 - `secrets/local/credentials.json` is a local-development convenience file only. It must not exist on EC2.

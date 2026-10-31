@@ -100,6 +100,8 @@ async function loadRenderLogView(dailyLoop: boolean) {
     // Bind the real DailyLoopHero's copy without the async LanguageProvider.
     vi.doMock('../../../i18n/LanguageContext', () => ({
         useLanguage: () => ({ language: 'mr', setLanguage: () => {}, t: (k: string) => k }),
+        // lane UPD-1: the work home's "new version" card reads the language this way (no provider here).
+        useOptionalLanguage: () => undefined,
     }));
 
     vi.doMock('../../../app/featureFlags', () => ({

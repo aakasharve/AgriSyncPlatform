@@ -52,6 +52,8 @@ async function loadRenderLogView() {
             setLanguage: () => {},
             t: (k: string) => k,
         }),
+        // lane UPD-1: the work home's "new version" card reads the language this way (no provider here).
+        useOptionalLanguage: () => undefined,
     }));
 
     vi.doMock('../../../app/featureFlags', () => ({

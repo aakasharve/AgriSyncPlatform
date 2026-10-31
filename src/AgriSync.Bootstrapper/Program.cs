@@ -486,6 +486,8 @@ try
         .Bind(builder.Configuration.GetSection(AgriSync.Bootstrapper.Infrastructure.TestFixtureOptions.SectionName));
     builder.Services.AddTransient<AgriSync.Bootstrapper.Infrastructure.TestFixtureService>();
     builder.Services.AddTransient<ShramSafal.Infrastructure.Persistence.Seeding.TestProtocolSeed>();
+    // Lane UPD-1 (D-53) — the newest app version the phone announces (AppRelease:*; config/env only).
+    builder.Services.AddAppReleaseOptions(builder.Configuration);
 
     // Sub-plan 05 Task 2: Playwright E2E control plane. Registered only when the
     // ALLOW_E2E_SEED env flag is set to "true". The toggle singleton is also
@@ -667,6 +669,9 @@ try
     .WithName("GetVersion")
     .WithTags("System")
     .AllowAnonymous();
+
+    // Lane UPD-1 (D-53, P11) — GET /version/app: the newest phone-app version, anonymous, no database.
+    app.MapAppRelease();
 
     // T-IGH-05-PROMETHEUS-EXPORTER: /metrics scraping endpoint (anonymous, same
     // posture as /health). The Prometheus exporter is registered in

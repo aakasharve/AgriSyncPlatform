@@ -112,6 +112,11 @@ vi.mock('../../../features/profile/components/ElectricityTimingConfigurator', ()
 vi.mock('../../../features/context/components/VarietySelector', () => ({
     VarietySelector: () => <div data-testid="mock-variety-selector">[mock VarietySelector]</div>,
 }));
+// Lane UPD-1: the hub's "ॲपची आवृत्ती" row prints the build's APP_VERSION, which every release bumps — in
+// this snapshot it would break the test on each release for no behaviour change. Covered by AppVersionRow.test.tsx.
+vi.mock('../../../features/appUpdate/AppVersionRow', () => ({
+    AppVersionRow: () => null,
+}));
 
 // Imports come AFTER vi.mock so hoisted mocks register first.
 import { render } from '@testing-library/react';

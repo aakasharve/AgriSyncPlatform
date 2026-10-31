@@ -93,6 +93,8 @@ async function loadRenderLogView() {
 
     vi.doMock('../../../i18n/LanguageContext', () => ({
         useLanguage: () => ({ language: 'mr', setLanguage: () => {}, t: (k: string) => k }),
+        // lane UPD-1: the work home's "new version" card reads the language this way (no provider here).
+        useOptionalLanguage: () => undefined,
     }));
 
     // dailyLoop OFF — irrelevant to the 3 sites under test (none are gated by
