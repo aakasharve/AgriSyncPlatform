@@ -141,9 +141,11 @@ describe('a waiting request', () => {
         const anita = row({ userId: 'fam', role: 'SecondaryOwner', displayName: 'अनिता', canManageLabourRecords: true, isGrantEditable: false, source: 'OwnerTier' });
         fetchLabourPermissions.mockResolvedValue([OWNER, anita, REQUEST, RAMESH]);
         render(<Harness role="SecondaryOwner" userId="fam" />);
-        // The roster is real for him (the server lets the owner tier read it)...
-        expect(await screen.findByTestId('team-person-ramesh')).toBeTruthy();
-        // ...but no request to answer, no approve, no नको.
+        // lane 2b (founder D-26): the roster is the primary account holder's alone — a सहमालक sees the
+        // view-only list, never the people's cards…
+        expect(await screen.findByTestId('team-view-only')).toBeTruthy();
+        expect(screen.queryByTestId('team-person-ramesh')).toBeNull();
+        // …and no request to answer, no approve, no नको.
         expect(screen.queryByTestId('team-requests')).toBeNull();
         expect(screen.queryByTestId('approve-work-sunil')).toBeNull();
         expect(screen.queryByTestId('decline-sunil')).toBeNull();
@@ -200,7 +202,8 @@ describe('a co-owner\'s responsibility to confirm records (PLR-D10 I27, founder 
         cleanup();
         fetchLabourPermissions.mockResolvedValue([OWNER, ANITA, RAMESH]);
         render(<Harness role="SecondaryOwner" userId="other" />);
-        await screen.findByTestId('team-person-anita');
+        // lane 2b: a सहमालक looking sees the view-only list — no card, so no switch on it.
+        await screen.findByTestId('team-view-only');
         expect(screen.queryByTestId('team-change-anita')).toBeNull();
         expect(screen.queryByTestId('confirm-access-anita')).toBeNull();
     });
@@ -376,7 +379,7 @@ describe('a मुकादम looks at his crew (view only)', () => {
     it('lists the people this phone knows with their role, never himself or a phone-only entry, and says only the owner adds', () => {
         const roster = {
             rows: null, loading: false, loadFailed: false, savingUserId: null, error: null,
-            reload: vi.fn(async () => undefined), setPermission: vi.fn(async () => undefined), dismissError: vi.fn(), adoptRow: vi.fn(),
+            reload: vi.fn(async () => undefined), setPermission: vi.fn(async () => undefined), setAuthorities: vi.fn(async () => undefined), dismissError: vi.fn(), adoptRow: vi.fn(),
         };
         render(
             <TeamPage farmId="farm-1" farmCode="K7M2QP" callerRole="Mukadam" callerUserId="m1" roster={roster}

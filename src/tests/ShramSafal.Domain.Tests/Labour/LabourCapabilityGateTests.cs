@@ -386,22 +386,25 @@ public sealed class LabourCapabilityGateTests
         var mukadam = repo.AddMembership(FarmA, MukadamA, AppRole.Mukadam);
         var handler = new SetLabourPermissionHandler(repo, new FixedClock(Now));
 
-        // Co-owner: the switch is stored and it is about CONFIRMING; his labour edits stay by role.
+        // lane 2b (founder D-22 / D-26): a co-owner label carries nothing. The one switch an
+        // installed phone knows ("हजेरी व पक्कं") is a real switch on his row now, and it keeps
+        // meaning BOTH take हजेरी and confirm records (P11).
         var coGranted = await handler.HandleAsync(Set(FarmA, coOwner, true, OwnerA));
         coGranted.IsSuccess.Should().BeTrue();
         coOwnerMembership.CanManageLabourRecords.Should().BeTrue("the decision is stored");
+        coOwnerMembership.StoresAuthority(FarmAuthority.ConfirmRecords).Should().BeTrue();
         coGranted.Value!.CanConfirmRecords.Should().Be(true);
-        coGranted.Value!.IsConfirmGrantEditable.Should().Be(true, "the primary owner moves it");
-        coGranted.Value!.IsGrantEditable.Should().BeFalse(
-            "P11: installed phones read false as 'labour responsibility, permanently on' — still true");
+        coGranted.Value!.IsConfirmGrantEditable.Should().Be(false, "replaced by one switch per authority");
+        coGranted.Value!.IsGrantEditable.Should().BeTrue("a सहमालक's हजेरी is the owner's switch now");
         coGranted.Value!.CanManageLabourRecords.Should().BeTrue();
-        coGranted.Value!.Source.Should().Be("OwnerTier");
+        coGranted.Value!.Source.Should().Be("ExplicitGrant");
+        coGranted.Value!.CanEditAuthorities.Should().BeTrue();
 
         var takenBack = await handler.HandleAsync(Set(FarmA, coOwner, false, OwnerA));
         takenBack.IsSuccess.Should().BeTrue();
         takenBack.Value!.CanConfirmRecords.Should().Be(false);
-        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, coOwner, Now)).Should().BeTrue(
-            "taking back confirming never takes his labour edits — that is the D-26 permission system");
+        (await LabourManagementGate.IsAllowedAsync(repo, FarmA, coOwner, Now)).Should().BeFalse(
+            "lane 2b: taken back is taken back — the label keeps nothing");
 
         // A co-owner may not move anybody's switch, his own or another's (D-44: the PRIMARY owner).
         foreach (var target in new[] { MukadamA, coOwner })

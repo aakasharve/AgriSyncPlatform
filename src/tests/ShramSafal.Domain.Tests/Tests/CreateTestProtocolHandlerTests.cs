@@ -51,6 +51,11 @@ public sealed class CreateTestProtocolHandlerTests
         var handler = CreateHandler(out var protoRepo, out var auditRepo);
 
         var caller = UserId.New();
+        var farm = Guid.NewGuid();
+        // lane 2b — authorised by the lab-records authority of the caller's seat on the farm he names.
+        auditRepo.Seat(farm, caller.Value, new ShramSafal.Application.Services.FarmAccess(
+            AppRole.Agronomist, ShramSafal.Domain.Farms.MembershipStatus.Active, IsRegistrant: false,
+            ShramSafal.Domain.Farms.FarmPermission.AddTestRecord));
 
         var result = await handler.HandleAsync(new CreateTestProtocolCommand(
             Name: "Grape petiole — veraison",
@@ -61,7 +66,8 @@ public sealed class CreateTestProtocolHandlerTests
             StageNames: new[] { "Veraison", "Flowering" },
             ParameterCodes: new[] { "K", "N" },
             CallerUserId: caller,
-            CallerRole: AppRole.Agronomist));
+            CallerRole: AppRole.Agronomist,
+            FarmId: farm));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().NotBe(Guid.Empty);

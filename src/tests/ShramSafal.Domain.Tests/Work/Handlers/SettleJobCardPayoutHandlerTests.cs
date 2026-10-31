@@ -42,7 +42,7 @@ public sealed class SettleJobCardPayoutHandlerTests
         log.AddTask(Guid.NewGuid(), "spray", null, Now);
         // Draft -> Confirmed -> Verified (two-step state machine)
         log.Verify(Guid.NewGuid(), VerificationStatus.Confirmed, null, AppRole.Agronomist, AgronomistUserId, Now.AddMinutes(30));
-        log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, AgronomistUserId, Now.AddHours(1));
+        log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, AgronomistUserId, Now.AddHours(1), hasConfirmAuthority: true);
 
         job.CompleteWithLog(log.Id, WorkerUserId, Now.AddHours(2));
         job.MarkVerifiedForPayout(VerificationStatus.Verified, AgronomistUserId, AppRole.Agronomist, Now.AddHours(3));

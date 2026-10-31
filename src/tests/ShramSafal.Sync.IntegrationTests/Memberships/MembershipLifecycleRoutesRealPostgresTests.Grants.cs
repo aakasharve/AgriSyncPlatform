@@ -23,6 +23,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Infrastructure.Persistence;
 using User.Application.Ports;
 using User.Application.UseCases.Users.GetMeContext;
@@ -159,15 +160,27 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         (await MeContextAsync(Worker, includePending: false)).Should().BeEmpty("an older app sees Active seats only");
 
         var owner = (await MeContextAsync(Owner, includePending: true)).Single(f => f.FarmId == Farm);
-        owner.Permissions.Should().BeEquivalentTo(new[] { "SeeMoney", "SeeWages", "AddCost", "PlanWork", "Invite", "AddTestRecord" });
+        // lane 2b: the primary owner holds every grantable authority; Invite is retired (D-26).
+        owner.Permissions.Should().BeEquivalentTo(new[]
+        {
+            "SeeMoney", "SeeWages", "AddCost", "PlanWork", "AddTestRecord",
+            "AssignWork", "ConfirmRecords", "EditFarmSetup", "ManageScheduleTemplates",
+        });
+        owner.Authorities!.Select(a => a.Name).Should().BeEquivalentTo(FarmAuthorities.All.Select(FarmAuthorities.NameOf));
+        owner.Authorities!.Should().OnlyContain(a => a.ExpiresAtUtc == null);
         owner.Capabilities.CanInvite.Should().BeTrue();
 
+        // Exactly what the primary owner stored (D-22) — reviewing money brings seeing money (2b, §11.1).
         var coOwner = (await MeContextAsync(Family, includePending: true)).Single(f => f.FarmId == Farm);
-        coOwner.Permissions.Should().Equal(new[] { "AddCost" }, "exactly what the primary owner stored (D-22)");
+        coOwner.Permissions.Should().Equal(new[] { "SeeMoney", "AddCost" }, "what the primary owner stored, with what it needs");
+        coOwner.Authorities!.Select(a => a.Name).Should().BeEquivalentTo(new[] { "SeeMoney", "ReviewMoney" });
+        coOwner.Capabilities.CanInvite.Should().BeFalse("people and permissions are the primary account holder's (D-26)");
 
         var crew = (await MeContextAsync(Worker3, includePending: true)).Single(f => f.FarmId == Farm);
         crew.Role.Should().Be("Mukadam");
-        crew.Permissions.Should().BeEmpty("a मुकादम label grants no money power");
+        crew.Permissions.Should().Equal(new[] { "ConfirmRecords" },
+            "the one हजेरी व पक्कं switch is हजेरी + confirm records (2b); a मुकादम label gives no money power");
+        crew.Authorities!.Select(a => a.Name).Should().BeEquivalentTo(new[] { "TakeAttendance", "ConfirmRecords" });
         crew.Capabilities.CanVerify.Should().BeTrue("the हजेरी व पक्कं grant is on");
         crew.Capabilities.CanAddCost.Should().BeTrue("every Active member records a purchase (M-5)");
         crew.StatusReason.Should().BeNull();
@@ -303,7 +316,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         var handler = new GetMeContextHandler(
             new OneUser(user),
             new NoAccounts(),
-            new FarmMembershipSnapshotReader(ssf, accounts),
+            new FarmMembershipSnapshotReader(ssf, accounts, new UtcClock()),
             new NoAffiliation(),
             new UtcClock());
 

@@ -57,6 +57,12 @@ interface IdentitySectionProps {
     handleConnectWeather: () => void;
     setShowFarmBoundary: (v: boolean) => void;
     /**
+     * lane 2b (D-15 via D-26) — the server lets this person change the farm's setup (the boundary
+     * is "edit farm setup"). False: no draw / redraw door, since the server would refuse it (P5).
+     * Absent = true (callers from before 2b).
+     */
+    canEditFarmSetup?: boolean;
+    /**
      * spec: plr-d7-m1-multiuser-2026-10-26 (step 2, P-4 / MU-10) — the team moved to its own page
      * (सेट-अप केंद्र → माणसं → माझी टीम), where the farm QR now opens. Kept so older callers still
      * type-check; this page no longer reads it.
@@ -85,6 +91,7 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
     connectError,
     handleConnectWeather,
     setShowFarmBoundary,
+    canEditFarmSetup = true,
     onOpenTeam,
     nonExitableFarmIds,
     handleExitMembership,
@@ -278,6 +285,9 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                     {myFarm && (() => {
                         const hasBoundary = !!(farmDetails?.canonicalCentreLat != null && farmDetails?.canonicalCentreLng != null);
                         const acres = farmDetails?.totalMappedAreaAcres;
+                        // lane 2b: drawing the boundary is edit-farm-setup; without it only the
+                        // finished state is shown, and with no redraw door.
+                        if (!canEditFarmSetup && !(hasBoundary && weatherConnected)) return null;
 
                         // STATE C — boundary drawn AND weather connected
                         if (hasBoundary && weatherConnected) {
@@ -295,13 +305,15 @@ const IdentitySection: React.FC<IdentitySectionProps> = ({
                                                 {acres != null ? `${Number(acres).toFixed(2)} acres mapped · ` : ''}Live weather is on your daily log.
                                             </p>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowFarmBoundary(true)}
-                                            className="text-xs font-semibold text-emerald-700 underline hover:text-emerald-900 flex-shrink-0"
-                                        >
-                                            Redraw
-                                        </button>
+                                        {canEditFarmSetup && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowFarmBoundary(true)}
+                                                className="text-xs font-semibold text-emerald-700 underline hover:text-emerald-900 flex-shrink-0"
+                                            >
+                                                Redraw
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             );

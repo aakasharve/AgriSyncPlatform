@@ -109,7 +109,8 @@ public sealed class AccountsSnapshotReader(AccountsDbContext accountsDb) : IAcco
 /// </summary>
 public sealed class FarmMembershipSnapshotReader(
     ShramSafalDbContext ssfDb,
-    AccountsDbContext accountsDb) : IFarmMembershipSnapshotReader
+    AccountsDbContext accountsDb,
+    AgriSync.BuildingBlocks.Abstractions.IClock clock) : IFarmMembershipSnapshotReader
 {
     public async Task<IReadOnlyList<FarmMembershipSnapshot>> GetForUserAsync(UserId userId, CancellationToken ct = default)
     {
@@ -160,6 +161,8 @@ public sealed class FarmMembershipSnapshotReader(
                     x.m.StatusReason,
                     x.m.CanManageLabourRecords,
                     x.m.LabourGrantExpiresAtUtc,
+                    // lane 2b — the per-authority ends.
+                    x.m.AuthorityExpiresAtJson,
                     IsRegistrant = x.f.OwnerUserId == userId,
                 })
                 .ToListAsync(token),
@@ -192,8 +195,28 @@ public sealed class FarmMembershipSnapshotReader(
             .GroupBy(s => s.OwnerAccountId)
             .ToDictionary(g => g.Key, g => g.First());
 
+        var nowUtc = clock.UtcNow;
         return rows.Select(r =>
         {
+            // lane 2b — ShramSafal's ONE authority rule, at this clock: nothing unless Active, every
+            // authority for the primary account holder (the registrant, or a PrimaryOwner seat),
+            // otherwise exactly what is stored and not yet ended. The label grants nothing.
+            var active = r.Status == ShramSafal.Domain.Farms.MembershipStatus.Active;
+            var primary = active
+                && (r.IsRegistrant || r.Role == AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner);
+            var expiries = ShramSafal.Domain.Farms.FarmAuthorities.ParseExpiries(r.AuthorityExpiresAtJson);
+            var held = active
+                ? ShramSafal.Domain.Farms.FarmAuthorities.All
+                    .Where(a => primary || ShramSafal.Domain.Farms.FarmAuthorities.IsHeld(
+                        r.Role, r.Permissions, r.CanManageLabourRecords, r.LabourGrantExpiresAtUtc,
+                        r.AuthorityExpiresAtJson, a, nowUtc))
+                    .Select(a => new KeyValuePair<ShramSafal.Domain.Farms.FarmAuthority, DateTime?>(
+                        a,
+                        primary ? null : ShramSafal.Domain.Farms.FarmAuthorities.ExpiryOf(
+                            r.Permissions, r.CanManageLabourRecords, r.LabourGrantExpiresAtUtc, expiries, a)))
+                    .ToList()
+                : new List<KeyValuePair<ShramSafal.Domain.Farms.FarmAuthority, DateTime?>>();
+
             SubscriptionSnapshot? sub = null;
             if (subByOwner.TryGetValue(r.OwnerAccountId, out var s))
             {
@@ -217,18 +240,30 @@ public sealed class FarmMembershipSnapshotReader(
                 // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — ShramSafal's ONE effective rule:
                 // nothing unless Active, everything for the registrant, else role defaults merged
                 // with the owner's stored choice.
-                Permissions: ShramSafal.Domain.Farms.FarmPermissionDefaults.Names(
-                    r.Status != ShramSafal.Domain.Farms.MembershipStatus.Active
-                        ? ShramSafal.Domain.Farms.FarmPermission.None
-                        : r.IsRegistrant
-                            ? ShramSafal.Domain.Farms.FarmPermissionDefaults.All
-                            : ShramSafal.Domain.Farms.FarmPermissionDefaults.Effective(r.Role, r.Permissions)),
+                // lane 2b: the stored bits HELD now (ends and "needs see money" applied).
+                Permissions: ShramSafal.Domain.Farms.FarmPermissionDefaults.Names(HeldBits(held)),
                 StatusReason: r.StatusReason,
                 HasLabourGrant: r.CanManageLabourRecords,
-                LabourGrantExpiresAtUtc: r.LabourGrantExpiresAtUtc);
+                LabourGrantExpiresAtUtc: r.LabourGrantExpiresAtUtc,
+                Authorities: held
+                    .Select(a => new MeAuthoritySnapshot(a.Key.ToString(), a.Value))
+                    .ToList(),
+                IsPrimaryAccountHolder: primary);
         }).ToList();
     }
 
+
+    private static ShramSafal.Domain.Farms.FarmPermission HeldBits(
+        IEnumerable<KeyValuePair<ShramSafal.Domain.Farms.FarmAuthority, DateTime?>> held)
+    {
+        var bits = ShramSafal.Domain.Farms.FarmPermission.None;
+        foreach (var authority in held)
+        {
+            bits |= ShramSafal.Domain.Farms.FarmAuthorities.BitOf(authority.Key);
+        }
+
+        return bits;
+    }
 }
 
 public sealed class AffiliationSnapshotReader(AccountsDbContext accountsDb) : IAffiliationSnapshotReader

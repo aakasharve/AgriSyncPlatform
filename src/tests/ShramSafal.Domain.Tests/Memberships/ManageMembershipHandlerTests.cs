@@ -40,12 +40,16 @@ public sealed class ManageMembershipHandlerTests
         Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
         Assert.Equal(MembershipStatus.Active, seat.Status);
         Assert.Equal(expectedRole, seat.Role);
-        Assert.Null(seat.Permissions);
-        Assert.Equal(FarmPermission.None, seat.EffectivePermissions);
+        // lane 2b (P11): the "काम + हजेरी" choice is the one switch every installed phone knows —
+        // take हजेरी AND confirm records; "काम सांगणे" stores nothing.
+        var expectedBits = expectedGrant ? FarmPermission.ConfirmRecords : FarmPermission.None;
+        Assert.Equal(expectedGrant ? FarmPermission.ConfirmRecords : (FarmPermission?)null, seat.Permissions);
+        Assert.Equal(expectedBits, seat.EffectivePermissions);
         Assert.Equal(expectedGrant, seat.CanManageLabourRecords);
+        Assert.Equal(expectedGrant, seat.StoresAuthority(FarmAuthority.ConfirmRecords));
         Assert.Equal("Active", result.Value!.Status);
         Assert.Equal(expectedRole.ToString(), result.Value.Role);
-        Assert.Empty(result.Value.Permissions!);
+        Assert.Equal(FarmPermissionDefaults.Names(expectedBits), result.Value.Permissions!);
         Assert.True(result.Value.ApprovedByOwner);
 
         var audit = Assert.Single(repo.Audits);
@@ -86,8 +90,10 @@ public sealed class ManageMembershipHandlerTests
         var result = await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Mukadam", Permissions = ["AddCost"] });
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(FarmPermission.AddCost, seat.Permissions);
-        Assert.Equal(new[] { "AddCost" }, result.Value!.Permissions!);
+        // lane 2b (§11.1): review money needs see money, so choosing it stores see money with it
+        // (as the 2b migration and the phone's switch do) — never a power that silently means nothing.
+        Assert.Equal(FarmPermission.SeeMoney | FarmPermission.AddCost, seat.Permissions);
+        Assert.Equal(new[] { "SeeMoney", "AddCost" }, result.Value!.Permissions!);
     }
 
     [Fact]
@@ -364,7 +370,7 @@ public sealed class ManageMembershipHandlerTests
             Role = "Mukadam",
             Permissions = ["AddCost", "PlanWork"],
         })).IsSuccess);
-        Assert.Equal(FarmPermission.AddCost | FarmPermission.PlanWork, seat.Permissions);
+        Assert.Equal(FarmPermission.SeeMoney | FarmPermission.AddCost | FarmPermission.PlanWork, seat.Permissions);
 
         var demoted = await Handle(repo, Decision(MembershipDecision.SetAccess, trusted) with { Role = "Worker" });
 
@@ -385,9 +391,10 @@ public sealed class ManageMembershipHandlerTests
         // CONTROL: the same body that NAMES permissions keeps exactly those.
         Assert.True((await Handle(repo, Decision(MembershipDecision.SetAccess, crew) with { Role = "Mukadam", Permissions = ["PlanWork"] })).IsSuccess);
         Assert.Equal(FarmPermission.PlanWork, crewSeat.EffectivePermissions);
-        // CONTROL: on an unchanged role an absent permissions field keeps the stored choice.
+        // CONTROL: on an unchanged role an absent permissions field keeps the stored choice (and the
+        // legacy हजेरी व पक्कं switch adds confirm records beside it, lane 2b).
         Assert.True((await Handle(repo, Decision(MembershipDecision.SetAccess, crew) with { LabourGrant = true })).IsSuccess);
-        Assert.Equal(FarmPermission.PlanWork, crewSeat.EffectivePermissions);
+        Assert.Equal(FarmPermission.PlanWork | FarmPermission.ConfirmRecords, crewSeat.EffectivePermissions);
         Assert.True(crewSeat.CanManageLabourRecords);
     }
 

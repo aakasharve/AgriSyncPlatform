@@ -136,7 +136,7 @@ public sealed class SettleJobCardPayoutPipelineTests
     public async Task Authorizer_returns_JobCardNotFound_when_id_resolves_to_nothing()
     {
         var repo = new InMemoryJobCardSettleRepo();
-        var a = new SettleJobCardPayoutAuthorizer(repo);
+        var a = new SettleJobCardPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new SettleJobCardPayoutCommand(
             JobCardId: Guid.NewGuid(),
@@ -158,7 +158,7 @@ public sealed class SettleJobCardPayoutPipelineTests
         var repo = new InMemoryJobCardSettleRepo();
         repo.SeedJobCard(job);
         // Owner is not a member.
-        var a = new SettleJobCardPayoutAuthorizer(repo);
+        var a = new SettleJobCardPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new SettleJobCardPayoutCommand(
             JobCardId: job.Id,
@@ -180,7 +180,7 @@ public sealed class SettleJobCardPayoutPipelineTests
         var repo = new InMemoryJobCardSettleRepo();
         repo.SeedJobCard(job);
         repo.SetMembership(Farm.Value, Mukadam.Value, AppRole.Mukadam);
-        var a = new SettleJobCardPayoutAuthorizer(repo);
+        var a = new SettleJobCardPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new SettleJobCardPayoutCommand(
             JobCardId: job.Id,
@@ -202,7 +202,7 @@ public sealed class SettleJobCardPayoutPipelineTests
         var repo = new InMemoryJobCardSettleRepo();
         repo.SeedJobCard(job);
         repo.SetMembership(Farm.Value, Owner.Value, AppRole.PrimaryOwner);
-        var a = new SettleJobCardPayoutAuthorizer(repo);
+        var a = new SettleJobCardPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new SettleJobCardPayoutCommand(
             JobCardId: job.Id,
@@ -222,7 +222,7 @@ public sealed class SettleJobCardPayoutPipelineTests
         var repo = new InMemoryJobCardSettleRepo();
         repo.SeedJobCard(job);
         repo.SetMembership(Farm.Value, Owner.Value, AppRole.SecondaryOwner);
-        var a = new SettleJobCardPayoutAuthorizer(repo);
+        var a = new SettleJobCardPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new SettleJobCardPayoutCommand(
             JobCardId: job.Id,
@@ -366,7 +366,7 @@ public sealed class SettleJobCardPayoutPipelineTests
             Worker, new DateOnly(2026, 4, 21), null, null, Now);
         log.AddTask(Guid.NewGuid(), "spray", null, Now);
         log.Verify(Guid.NewGuid(), VerificationStatus.Confirmed, null, AppRole.Agronomist, Agronomist, Now.AddMinutes(30));
-        log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, Agronomist, Now.AddHours(1));
+        log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, Agronomist, Now.AddHours(1), hasConfirmAuthority: true);
 
         job.CompleteWithLog(log.Id, Worker, Now.AddHours(2));
         job.MarkVerifiedForPayout(VerificationStatus.Verified, Agronomist, AppRole.Agronomist, Now.AddHours(3));
@@ -400,7 +400,7 @@ public sealed class SettleJobCardPayoutPipelineTests
         var rawHandler = new SettleJobCardPayoutHandler(repo, idGen, clock);
 
         var validator = new SettleJobCardPayoutValidator();
-        var authorizer = new SettleJobCardPayoutAuthorizer(repo);
+        var authorizer = new SettleJobCardPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var pipeline = HandlerPipeline.Build(
             rawHandler,

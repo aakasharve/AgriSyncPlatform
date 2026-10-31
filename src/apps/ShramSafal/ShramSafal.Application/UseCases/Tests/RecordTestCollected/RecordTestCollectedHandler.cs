@@ -6,6 +6,8 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Tests;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Tests.RecordTestCollected;
 
@@ -20,13 +22,6 @@ public sealed class RecordTestCollectedHandler(
     IShramSafalRepository repository,
     IClock clock)
 {
-    private static readonly HashSet<AppRole> AllowedRoles =
-    [
-        AppRole.LabOperator,
-        AppRole.SecondaryOwner,
-        AppRole.Mukadam
-    ];
-
     public async Task<Result<TestInstanceDto>> HandleAsync(
         RecordTestCollectedCommand command,
         CancellationToken ct = default)
@@ -38,15 +33,22 @@ public sealed class RecordTestCollectedHandler(
             return Result.Failure<TestInstanceDto>(ShramSafalErrors.InvalidCommand);
         }
 
-        if (!AllowedRoles.Contains(command.CallerRole))
-        {
-            return Result.Failure<TestInstanceDto>(ShramSafalErrors.TestRoleNotAllowed);
-        }
-
         var instance = await testInstanceRepository.GetByIdAsync(command.TestInstanceId, ct);
         if (instance is null)
         {
             return Result.Failure<TestInstanceDto>(ShramSafalErrors.TestInstanceNotFound);
+        }
+
+        // lane 2b (founder D-22 / D-26; D-20) — lab records is an authority of the caller's seat on
+        // THIS test's farm (the primary account holder always), never the account's global role:
+        // the role list that stood here refused the farm's own owner and admitted any account
+        // whose sign-up role matched, on any farm. Checked after the read so the farm is known;
+        // a test on a farm the caller cannot see is NotFound under its own row policy.
+        if (!await FarmAuthorityGate.HoldsAsync(
+                repository, instance.FarmId.Value, command.CallerUserId.Value, FarmAuthority.LabRecords,
+                clock.UtcNow, ct))
+        {
+            return Result.Failure<TestInstanceDto>(ShramSafalErrors.TestRoleNotAllowed);
         }
 
         var now = clock.UtcNow;

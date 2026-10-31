@@ -105,6 +105,15 @@ public sealed class FarmMembership : Entity<Guid>
     public FarmPermission? Permissions { get; private set; }
 
     /// <summary>
+    /// lane 2b (MU design §11.2) — when each STORED authority stops, as one JSON document
+    /// (<c>ssf.farm_memberships.authority_expires_at</c>, <c>jsonb</c>; format in
+    /// <see cref="FarmAuthorities"/>). <c>null</c> = nothing has an end ("कायम"). An expiry belongs to
+    /// ONE authority; take हजेरी keeps its end in <see cref="LabourGrantExpiresAtUtc"/>. Read it
+    /// through <see cref="ExpiryOf"/> / <see cref="Holds"/>, never on its own.
+    /// </summary>
+    public string? AuthorityExpiresAtJson { get; private set; }
+
+    /// <summary>
     /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner's written reason for the last
     /// status decision (pause, removal, decline). A PAUSED person is shown it ("काम थांबवलं —
     /// कारण…"); a decline or removal reason is kept as history only — the ended seat is no longer
@@ -142,6 +151,53 @@ public sealed class FarmMembership : Entity<Guid>
             : FarmPermission.None;
 
     /// <summary>
+    /// lane 2b — does THIS seat hold <paramref name="authority"/> at <paramref name="atUtc"/>? Only an
+    /// Active seat holds anything (a waiting request, a pause or an ended seat holds nothing). The
+    /// primary owner's seat holds every authority. Any other seat — whatever its label — holds an
+    /// authority only when it is STORED, not yet ended (strict <c>atUtc &lt; expiry</c>), and the
+    /// authority it needs (wages / review money need see money) is held too.
+    ///
+    /// <para><b>Not the whole answer for a farm.</b> The farm's registrant may have no seat row; the
+    /// application's <c>FarmAccessPolicy</c> applies the registrant shortcut and then this rule.</para>
+    /// </summary>
+    public bool Holds(FarmAuthority authority, DateTime atUtc)
+    {
+        if (Status != MembershipStatus.Active)
+        {
+            return false;
+        }
+
+        return HoldsIgnoringStatus(authority, atUtc);
+    }
+
+    /// <summary>
+    /// lane 2b — <see cref="Holds"/> without the Active check: was the authority stored and unexpired
+    /// at <paramref name="atUtc"/>, whatever the seat's status now. Used only to decide whether late
+    /// offline work happened while the authority was alive; it never admits a write by itself.
+    /// </summary>
+    public bool HoldsIgnoringStatus(FarmAuthority authority, DateTime atUtc) =>
+        FarmAuthorities.IsHeld(
+            Role, Permissions, CanManageLabourRecords, LabourGrantExpiresAtUtc, AuthorityExpiresAtJson,
+            authority, atUtc);
+
+    /// <summary>lane 2b — the primary account holder stored <paramref name="authority"/> for this seat (ended or not).</summary>
+    public bool StoresAuthority(FarmAuthority authority) =>
+        FarmAuthorities.IsStored(Permissions, CanManageLabourRecords, authority);
+
+    /// <summary>lane 2b — when a STORED authority stops; <c>null</c> for कायम or when it is not stored.</summary>
+    public DateTime? ExpiryOf(FarmAuthority authority) =>
+        FarmAuthorities.ExpiryOf(
+            Permissions, CanManageLabourRecords, LabourGrantExpiresAtUtc,
+            FarmAuthorities.ParseExpiries(AuthorityExpiresAtJson), authority);
+
+    /// <summary>lane 2b — every STORED authority with its end (<c>null</c> = कायम), in the wire order.</summary>
+    public IReadOnlyList<KeyValuePair<FarmAuthority, DateTime?>> StoredAuthorities() =>
+        FarmAuthorities.All
+            .Where(StoresAuthority)
+            .Select(a => new KeyValuePair<FarmAuthority, DateTime?>(a, ExpiryOf(a)))
+            .ToList();
+
+    /// <summary>
     /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — this seat ended because the OWNER
     /// stopped it: removed or declined (<see cref="MembershipStatus.Revoked"/>), or the person left
     /// while PAUSED (an exit keeps the owner's pause as the last decision). A person whose last seat
@@ -162,6 +218,20 @@ public sealed class FarmMembership : Entity<Guid>
     /// </summary>
     public bool WasLetInByOwner =>
         ApprovedByUserId is not null
+        || JoinedVia is JoinedVia.OwnerManualAdd or JoinedVia.PrimaryOwnerBootstrap;
+
+    /// <summary>
+    /// lane 2b (MU design §11.2) — this seat once worked on the farm: it is working or paused now,
+    /// or, ended, it had been let in (approved, added by the owner, or claimed and seen at work). A
+    /// request that was only ever waiting is not. Late offline work refused from such a seat is
+    /// KEPT for the owner as a mark (P9 / P10: nothing is dropped); work from someone who was never
+    /// let in is refused plainly — he never held the farm's records, and a stranger must not be
+    /// able to write into the owner's history. Pure: no I/O.
+    /// </summary>
+    public bool WasEverLetIn =>
+        Status is MembershipStatus.Active or MembershipStatus.Suspended
+        || ApprovedByUserId is not null
+        || LastSeenAtUtc is not null
         || JoinedVia is JoinedVia.OwnerManualAdd or JoinedVia.PrimaryOwnerBootstrap;
 
     /// <summary>
@@ -378,6 +448,7 @@ public sealed class FarmMembership : Entity<Guid>
         CanManageLabourRecords = false;
         LabourGrantExpiresAtUtc = null;
         Permissions = null;
+        AuthorityExpiresAtJson = null;
         ModifiedAtUtc = utcNow;
         LastSeenAtUtc = utcNow;
     }
@@ -415,6 +486,9 @@ public sealed class FarmMembership : Entity<Guid>
         Status = MembershipStatus.Active;
         Role = role;
         Permissions = permissions;
+        // lane 2b — an approval chooses the authorities afresh, permanent; no end date survives
+        // from the waiting request.
+        AuthorityExpiresAtJson = null;
         ApprovedByUserId = approverUserId;
         RecordDecision(approverUserId, reason: null, utcNow);
     }
@@ -532,9 +606,168 @@ public sealed class FarmMembership : Entity<Guid>
 
         Role = role;
         Permissions = permissions;
+        // lane 2b — an end date belongs to ONE stored authority: drop the ends of bits no longer stored.
+        AuthorityExpiresAtJson = PruneExpiries(AuthorityExpiresAtJson, permissions ?? FarmPermission.None);
         ModifiedAtUtc = utcNow;
         AccessChangedAtUtc = utcNow;
         return true;
+    }
+
+    /// <summary>
+    /// lane 2b (MU design §2, §11.1; founder D-26) — the primary account holder sets EXACTLY which
+    /// authorities this person holds on this farm, each <c>null</c> (कायम) or until an instant.
+    /// <paramref name="desired"/> is the whole new set: an authority absent from it is taken back.
+    /// Returns <c>true</c> only when something stored actually moved (a re-sent request writes no
+    /// history). The label (<see cref="Role"/>) is untouched — it grants nothing.
+    ///
+    /// <para><b>Refused (never silently trimmed):</b> an end at or before <paramref name="utcNow"/>
+    /// (a switch that looks ON and answers OFF, P5); see wages or review money without see money
+    /// (they mean nothing without it, §11.1); an ended seat (<see cref="InvalidOperationException"/>).
+    /// A waiting request and the primary owner's own seat are the caller's to refuse (who a waiting
+    /// person becomes is the approval; the primary owner holds everything by role).</para>
+    /// </summary>
+    public bool SetAuthorities(IReadOnlyDictionary<FarmAuthority, DateTime?> desired, DateTime utcNow)
+    {
+        ArgumentNullException.ThrowIfNull(desired);
+        if (IsTerminal)
+        {
+            throw new InvalidOperationException(
+                $"Cannot change the authorities of a {Status} membership.");
+        }
+
+        foreach (var (authority, end) in desired)
+        {
+            if (!Enum.IsDefined(authority))
+            {
+                throw new ArgumentException("Unknown authority.", nameof(desired));
+            }
+
+            if (end is { } instant && instant <= utcNow)
+            {
+                throw new ArgumentException(
+                    "An end in the past grants nothing — refusing rather than storing a switch "
+                    + "that looks ON and answers OFF.", nameof(desired));
+            }
+
+            if (FarmAuthorities.RequiredBy(authority) is { } needed && !desired.ContainsKey(needed))
+            {
+                throw new ArgumentException($"{authority} needs {needed}.", nameof(desired));
+            }
+        }
+
+        var bits = FarmPermission.None;
+        var expiries = new Dictionary<FarmPermission, DateTime>();
+        foreach (var (authority, end) in desired)
+        {
+            var bit = FarmAuthorities.BitOf(authority);
+            if (bit == FarmPermission.None)
+            {
+                continue;
+            }
+
+            bits |= bit;
+            if (end is { } instant)
+            {
+                expiries[bit] = DateTime.SpecifyKind(instant, DateTimeKind.Utc);
+            }
+        }
+
+        var labour = desired.TryGetValue(FarmAuthority.TakeAttendance, out var labourEnd);
+        var newLabourExpiry = labour ? labourEnd : null;
+        var newExpiriesJson = FarmAuthorities.SerializeExpiries(expiries);
+
+        // null and "no bits" both mean "nothing stored" since 2b: an unchanged set never turns one into
+        // the other (so a re-sent approval still reads as the decision already landed).
+        var bitsMoved = ((Permissions ?? FarmPermission.None) & FarmPermissionDefaults.Known) != bits;
+        if (!bitsMoved
+            && FarmAuthorities.SameExpiries(AuthorityExpiresAtJson, newExpiriesJson)
+            && CanManageLabourRecords == labour
+            && LabourGrantExpiresAtUtc == newLabourExpiry)
+        {
+            return false;
+        }
+
+        if (bitsMoved)
+        {
+            Permissions = bits;
+        }
+
+        AuthorityExpiresAtJson = newExpiriesJson;
+        CanManageLabourRecords = labour;
+        LabourGrantExpiresAtUtc = newLabourExpiry;
+        ModifiedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// lane 2b (P11) — the ONE switch older phones know, "हजेरी व पक्कं करणे": until 2b it opened
+    /// labour AND confirming together, so for the phone that still sends it, it keeps meaning both —
+    /// <see cref="FarmAuthority.TakeAttendance"/> and <see cref="FarmAuthority.ConfirmRecords"/>, same
+    /// end — and leaves every other stored authority exactly as it is. Desired state, both ways.
+    /// </summary>
+    public bool SetLegacyLabourSwitch(bool allowed, DateTime? expiresAtUtc, DateTime utcNow)
+    {
+        if (IsTerminal)
+        {
+            throw new InvalidOperationException(
+                $"Cannot change labour-record management on a {Status} membership.");
+        }
+
+        var end = allowed ? expiresAtUtc : null;
+        if (end is { } instant && instant <= utcNow)
+        {
+            throw new ArgumentException(
+                "An expiry in the past grants nothing — refusing rather than storing a switch "
+                + "that looks ON and answers OFF.", nameof(expiresAtUtc));
+        }
+
+        // Only the two authorities this switch has always meant; every other stored choice (and
+        // its end) is left exactly as it is, consistent or not — this is not the place to judge it.
+        var bits = Permissions ?? FarmPermission.None;
+        var newBits = allowed ? bits | FarmPermission.ConfirmRecords : bits & ~FarmPermission.ConfirmRecords;
+        var expiries = FarmAuthorities.ParseExpiries(AuthorityExpiresAtJson)
+            .ToDictionary(e => e.Key, e => e.Value);
+        expiries.Remove(FarmPermission.ConfirmRecords);
+        if (end is { } confirmEnd)
+        {
+            expiries[FarmPermission.ConfirmRecords] = DateTime.SpecifyKind(confirmEnd, DateTimeKind.Utc);
+        }
+
+        var newJson = FarmAuthorities.SerializeExpiries(expiries);
+        var bitsMoved = newBits != bits;
+        if (!bitsMoved
+            && FarmAuthorities.SameExpiries(AuthorityExpiresAtJson, newJson)
+            && CanManageLabourRecords == allowed
+            && LabourGrantExpiresAtUtc == end)
+        {
+            return false;
+        }
+
+        if (bitsMoved)
+        {
+            Permissions = newBits;
+        }
+
+        AuthorityExpiresAtJson = newJson;
+        CanManageLabourRecords = allowed;
+        LabourGrantExpiresAtUtc = end;
+        ModifiedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
+        return true;
+    }
+
+    private static string? PruneExpiries(string? json, FarmPermission stored)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        var kept = FarmAuthorities.ParseExpiries(json)
+            .Where(e => e.Key != FarmPermission.None && (stored & e.Key) == e.Key)
+            .ToDictionary(e => e.Key, e => e.Value);
+        return FarmAuthorities.SerializeExpiries(kept);
     }
 
     /// <param name="reason">Already passed through <see cref="NormalizeReason"/> BEFORE the status

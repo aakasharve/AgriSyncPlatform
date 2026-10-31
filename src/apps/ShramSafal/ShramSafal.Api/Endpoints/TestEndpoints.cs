@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.AspNetCore.Mvc;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Tests.CreateTestProtocol;
 using ShramSafal.Application.UseCases.Tests.GetMissingTestsForFarm;
 using ShramSafal.Application.UseCases.Tests.GetTestQueueForCycle;
@@ -26,14 +27,28 @@ public static class TestEndpoints
         // ----------------------------------------------------------------- Protocols
         group.MapPost("/test-protocols", async (
             CreateTestProtocolRequest request,
+            Guid? farmId,
             HttpContext httpContext,
             ClaimsPrincipal user,
             CreateTestProtocolHandler handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane 2b (founder D-26; MU design §2) — authority comes from a FARM SEAT, never the
+            // account's global role. A protocol is not on a farm, so the caller names the farm whose
+            // seat authorises him (?farmId=…, lab records there); its scope is set for that read.
+            if (farmId is { } namedFarm)
+            {
+                var protocolScope = await scope.EstablishForCallerAsync(namedFarm, actorUserId, ct);
+                if (!protocolScope.IsSuccess)
+                {
+                    return ToErrorResult(protocolScope.Error);
+                }
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -53,7 +68,8 @@ public static class TestEndpoints
                 CallerRole: EndpointActorContext.GetActorRoleEnum(user),
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                FarmId: farmId);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess

@@ -58,9 +58,12 @@ public static class ReviewBasis
 ///   agronomist, worker) by role alone     must not automatically grant this authority"
 /// </code>
 ///
-/// <para><b>The grant</b> is the EXISTING owner switch (जबाबदारी, stored as
-/// <c>can_manage_labour_records</c>, clock-evaluated by <c>LabourManagementGate</c>). It is
-/// passed in, never looked up: the Domain has no database (doctrine E2).</para>
+/// <para><b>The grant</b> — lane 2b (D-26 "recording attendance does not mean approving it";
+/// D-44): the CONFIRM-RECORDS authority (<c>FarmAuthority.ConfirmRecords</c>), clock-evaluated by
+/// <c>FarmAuthorityGate</c>, separate from take हजेरी. Until 2b it was the labour grant; the 2b
+/// migration copied every stored labour grant into confirm-records with the same end, so nobody
+/// who confirmed yesterday is refused today (P11). It is passed in, never looked up: the Domain
+/// has no database (doctrine E2).</para>
 ///
 /// <para><b>"The speaker is never asked to confirm his own record"</b> (D-44) is a rule about
 /// ASKING, kept where asking happens: the result screen offers "save and confirm" to the primary
@@ -73,8 +76,8 @@ public static class ReviewBasis
 /// </summary>
 public static class OwnerConfirmationAuthority
 {
-    public static bool MayConfirm(AppRole role, bool hasExplicitGrant) =>
-        role == AppRole.PrimaryOwner || hasExplicitGrant;
+    public static bool MayConfirm(AppRole role, bool hasConfirmAuthority) =>
+        role == AppRole.PrimaryOwner || hasConfirmAuthority;
 
     /// <summary>
     /// spec: plr-d10 (I27; founder D-44 §2, D-46 §3) — whose OWN save the server may record as
@@ -95,7 +98,7 @@ public static class OwnerConfirmationAuthority
     /// <c>VerifyLogHandler</c> counts it from; anyone else's tap is kept as a mark, so offering
     /// it would be a control that does nothing (P5). Every other edge is unchanged.
     /// </summary>
-    public static bool MayBeOffered(VerificationStatus to, AppRole role, bool hasExplicitGrant) =>
+    public static bool MayBeOffered(VerificationStatus to, AppRole role, bool hasConfirmAuthority) =>
         (to != VerificationStatus.Verified && to != VerificationStatus.Disputed)
-        || MayConfirm(role, hasExplicitGrant);
+        || MayConfirm(role, hasConfirmAuthority);
 }

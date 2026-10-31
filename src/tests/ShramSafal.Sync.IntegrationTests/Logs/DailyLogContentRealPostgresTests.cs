@@ -24,6 +24,7 @@ using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Infrastructure.Persistence.Repositories;
+using ShramSafal.Sync.IntegrationTests.Memberships;
 using Xunit;
 
 namespace ShramSafal.Sync.IntegrationTests.Logs;
@@ -146,6 +147,10 @@ public sealed class DailyLogContentRealPostgresTests(Xunit.Abstractions.ITestOut
                 ("coOwnerA", CoOwnerA), ("workerA", WorkerA),
                 ("speakerA", SpeakerA), ("mukadamA", MukadamA), ("dualAB", DualAB),
                 ("farmB", FarmB), ("ownerB", OwnerB), ("accountB", AccountB), ("plotB", PlotB), ("cycleB", CycleB));
+
+            // lane 2b (P11) - the seats as they stand on an UPGRADED farm: the सहमालक keeps हजेरी; the
+            // granted मुकादम's one switch becomes हजेरी + confirm records.
+            await UpgradedSeats.CarryAsync(raw, FarmA);
         }
 
         var services = new ServiceCollection();

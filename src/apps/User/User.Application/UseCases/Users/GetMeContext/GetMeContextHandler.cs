@@ -117,7 +117,8 @@ public sealed class GetMeContextHandler(
                 // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — nothing is granted, and a paused
                 // person is told why.
                 Permissions: Array.Empty<string>(),
-                StatusReason: m.StatusReason);
+                StatusReason: m.StatusReason,
+                Authorities: Array.Empty<MeAuthorityDto>());
         }
 
         var plan = ResolvePlan(m.Subscription);
@@ -137,7 +138,10 @@ public sealed class GetMeContextHandler(
             PlanValidUntilUtc: validUntil,
             Capabilities: ResolveCapabilities(m, callerIsPrimaryOwner, utcNow),
             Permissions: m.Permissions ?? Array.Empty<string>(),
-            StatusReason: m.StatusReason);
+            StatusReason: m.StatusReason,
+            Authorities: (m.Authorities ?? Array.Empty<MeAuthoritySnapshot>())
+                .Select(a => new MeAuthorityDto(a.Name, a.ExpiresAtUtc))
+                .ToList());
     }
 
     private static string ResolvePlan(SubscriptionSnapshot? sub)
@@ -158,9 +162,11 @@ public sealed class GetMeContextHandler(
     /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the flags say what the SERVER will allow,
     /// never more (plan §4: fixed before any screen reads them).
     /// <list type="bullet">
-    /// <item><c>canInvite</c> — owner tier (the QR routes are owner-only).</item>
-    /// <item><c>canVerify</c> — owner tier, or an unexpired labour grant (the verify gate is that
-    /// one rule). An un-granted Mukadam used to read <c>true</c> here and was refused.</item>
+    /// <item><c>canInvite</c> — lane 2b: the PRIMARY account holder only (people and permissions,
+    /// D-26; the QR routes refuse a सहमालक now).</item>
+    /// <item><c>canVerify</c> — lane 2b: the primary account holder, or a seat holding take हजेरी or
+    /// confirm records now (the verify door admits exactly those; whether a tap COUNTS is confirm
+    /// records). A label grants nothing.</item>
     /// <item><c>canAddCost</c> — <c>true</c> for every Active seat: recording a purchase is open to
     /// every Active member on the server (AddCostEntry; founder D-24d / D-12, alignment M-5). It
     /// used to say owner-only while the server let every member in. Correcting money is the
@@ -171,12 +177,16 @@ public sealed class GetMeContextHandler(
     private static MeCapabilitiesDto ResolveCapabilities(FarmMembershipSnapshot m, bool callerIsPrimaryOwner, DateTime utcNow)
     {
         var role = m.Role;
-        var ownerTier = role is "PrimaryOwner" or "SecondaryOwner";
-        var hasLiveLabourGrant = m.HasLabourGrant
-            && (m.LabourGrantExpiresAtUtc is null || utcNow < m.LabourGrantExpiresAtUtc);
-        var canInvite = ownerTier;
+        var primary = m.IsPrimaryAccountHolder || role == "PrimaryOwner";
+        // The reader already applied ShramSafal's rule (ends included) to Authorities; when an older
+        // reader sent none, the stored labour grant is read with this handler's clock, as before.
+        var held = m.Authorities?.Select(a => a.Name).ToHashSet(StringComparer.Ordinal);
+        var hasLiveLabourGrant = held?.Contains("TakeAttendance")
+            ?? (m.HasLabourGrant && (m.LabourGrantExpiresAtUtc is null || utcNow < m.LabourGrantExpiresAtUtc));
+        var confirms = held?.Contains("ConfirmRecords") ?? hasLiveLabourGrant;
+        var canInvite = primary;
         const bool canAddCost = true;
-        var canVerify = ownerTier || hasLiveLabourGrant;
+        var canVerify = primary || hasLiveLabourGrant || confirms;
         var canSeeBilling = role == "PrimaryOwner" && callerIsPrimaryOwner;
 
         return new MeCapabilitiesDto(

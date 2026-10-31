@@ -24,7 +24,7 @@
  * TRANSPORT: the app's one shared HTTP client (token, device id, one refresh-and-replay on 401).
  */
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
-import type { LabourPermission } from './labourPermissionsClient';
+import type { AuthorityGrant, LabourPermission } from './labourPermissionsClient';
 
 /**
  * The primary owner's two choices when he lets a waiting person in (PLR-D7 M1 plan step 2, founder
@@ -112,6 +112,22 @@ export function presetAccessBody(preset: ApprovePreset): SetAccessBody {
 /** DESIRED state (role, labour grant), so a retry on a bad line converges. */
 export async function setMemberAccess(farmId: string, userId: string, body: SetAccessBody): Promise<LabourPermission> {
     const response = await agriSyncClient.http.put<LabourPermission>(`${membershipPath(farmId, userId)}/access`, body);
+    return response.data;
+}
+
+/**
+ * lane 2b (MU design §2, §11.1) — the primary account holder sets EXACTLY which authorities this
+ * person holds, each permanent (`expiresAtUtc: null`) or until an instant. The WHOLE desired set
+ * travels (an authority left out is taken back), so a retry on a bad line converges; the server's
+ * row is adopted, never assumed.
+ */
+export async function setMemberAuthorities(
+    farmId: string,
+    userId: string,
+    authorities: readonly AuthorityGrant[],
+): Promise<LabourPermission> {
+    const response = await agriSyncClient.http.put<LabourPermission>(
+        `${membershipPath(farmId, userId)}/authorities`, { authorities });
     return response.data;
 }
 

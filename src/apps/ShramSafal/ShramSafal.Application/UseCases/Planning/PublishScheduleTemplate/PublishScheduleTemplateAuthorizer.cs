@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning;
 using ShramSafal.Domain.Common;
+using AgriSync.BuildingBlocks.Abstractions;
 
 namespace ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate;
 
@@ -37,10 +38,12 @@ namespace ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate;
 public sealed class PublishScheduleTemplateAuthorizer : IAuthorizationCheck<PublishScheduleTemplateCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly IClock _clock;
 
-    public PublishScheduleTemplateAuthorizer(IShramSafalRepository repository)
+    public PublishScheduleTemplateAuthorizer(IShramSafalRepository repository, IClock clock)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(PublishScheduleTemplateCommand command, CancellationToken ct)
@@ -59,7 +62,8 @@ public sealed class PublishScheduleTemplateAuthorizer : IAuthorizationCheck<Publ
 
         // Scope role gate (CEI Phase 2 §4.7). Publishing to Licensed /
         // Team scopes requires the matching role set.
-        if (!ScopeRoleGate.IsAllowed(template.TenantScope, command.CallerRole))
+        if (!await ScopeRoleGate.IsAllowedAsync(
+                _repository, template.TenantScope, command.FarmId, command.CallerUserId, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

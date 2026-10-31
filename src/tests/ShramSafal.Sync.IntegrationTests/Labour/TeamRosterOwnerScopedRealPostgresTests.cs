@@ -164,13 +164,13 @@ public sealed class TeamRosterOwnerScopedRealPostgresTests : IAsyncLifetime
         }
     }
 
-    [Theory]
-    [InlineData("owner")]
-    [InlineData("coowner")]
-    public async Task Owner_tier_receives_every_member_with_real_role_and_name(string caller)
+    // lane 2b (founder D-26) — the team list is the PRIMARY account holder's; a सहमालक label (with
+    // or without authorities) no longer opens it (see the 403 theory below).
+    [Fact]
+    public async Task The_primary_owner_receives_every_member_with_real_role_and_name()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        var callerId = caller == "owner" ? OwnerA : CoOwnerA;
+        var callerId = OwnerA;
 
         using var response = await SendAsync(RosterUrl(FarmA), callerId);
         var body = await response.Content.ReadAsStringAsync();
@@ -194,15 +194,17 @@ public sealed class TeamRosterOwnerScopedRealPostgresTests : IAsyncLifetime
     }
 
     [Theory]
+    [InlineData("coowner")]
     [InlineData("mukadam")]
     [InlineData("worker")]
     [InlineData("grantedworker")]
     [InlineData("farmBowner")]
-    public async Task Everyone_who_is_not_owner_tier_of_this_farm_gets_403_and_not_one_name(string caller)
+    public async Task Everyone_who_is_not_the_primary_owner_of_this_farm_gets_403_and_not_one_name(string caller)
     {
         await AssertAppRoleIsNotVacuousAsync();
         var callerId = caller switch
         {
+            "coowner" => CoOwnerA,
             "mukadam" => MukadamA,
             "worker" => WorkerA,
             "grantedworker" => GrantedWorkerA,

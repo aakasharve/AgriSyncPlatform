@@ -477,6 +477,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // policy written ALREADY narrowed (m.status = 3) — see PoliciesCreatedAfterActiveOnly. No
         // farm_join_requests object, no other policy. Re-Up recreates them.
         "20261030102448_AddDailyLogContents",
+
+        // spec pre-launch repair lane 2b (MU design §11.1) — Down() read in full: collapses the
+        // split authority bits / labour grant VALUES on let-in and waiting farm_memberships rows
+        // and drops the nullable jsonb column authority_expires_at. No policy, no grant, no
+        // farm_join_requests object; a waiting seat's status is never touched. Re-Up re-adds them.
+        "20261031021129_SplitFarmAuthorities",
     ];
 
     /// <summary>

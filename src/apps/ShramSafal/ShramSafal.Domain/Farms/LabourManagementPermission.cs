@@ -80,8 +80,14 @@ public static class LabourManagementPermission
     /// <c>OwnerCanApproveAMukadamsLogRealPostgresTests</c> — one granted Mukadam
     /// approves, three ungranted callers are refused.</para>
     /// </summary>
+    ///
+    /// <para><b>lane 2b (founder D-22 / D-26, 2026-10-31) — the PRIMARY owner only.</b> A सहमालक /
+    /// कुटुंब label no longer carries labour edits: "neither automatically grants operational …
+    /// powers". Every existing co-owner seat kept them through the 2b migration, which stored the
+    /// grant explicitly (P11); a new co-owner holds them only when the primary owner switches
+    /// "हजेरी" on.</para>
     public static bool IsCarriedByRole(AppRole role) =>
-        role is AppRole.PrimaryOwner or AppRole.SecondaryOwner;
+        role is AppRole.PrimaryOwner;
 
     /// <summary>
     /// The effective decision. <paramref name="role"/> is <c>null</c> when the
@@ -114,8 +120,12 @@ public static class LabourManagementPermission
     /// list): owner-tier, as before. Reading is not deciding; a co-owner keeps seeing
     /// the roster he saw yesterday, he only no longer moves the switch.
     /// </summary>
+    ///
+    /// <para><b>lane 2b — the PRIMARY owner only.</b> The roster of who may do what is "people and
+    /// permissions", which D-26 gives the primary account holder alone; a co-owner label no longer
+    /// reads it (listed as one of the co-owner's primary-owner-only removals).</para>
     public static bool CanViewGrants(AppRole? role) =>
-        role is AppRole.PrimaryOwner or AppRole.SecondaryOwner;
+        role is AppRole.PrimaryOwner;
 
     /// <summary>
     /// <c>true</c> when toggling the explicit grant on this role would change

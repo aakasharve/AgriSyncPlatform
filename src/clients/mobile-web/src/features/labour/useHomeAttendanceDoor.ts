@@ -5,7 +5,7 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I12, H10 / H-13; I12-V1-M2) — may the work home
  * show the "आजची हजेरी" door to THIS person, now?
  *
- *   - owner tier (PrimaryOwner / SecondaryOwner, the server-told role): yes;
+ *   - the primary owner (the server-told role): yes (lane 2b: a सहमालक is asked like anyone else);
  *   - a worker, or a role the server has not told this phone yet: no;
  *   - anyone else (a मुकादम…): only with the owner's labour grant, as the SERVER answers it.
  *
@@ -21,7 +21,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOptionalAuth } from '../../app/providers/AuthProvider';
 import { isFarmAccessRefused, purgeLabourCachesForFarm } from '../../infrastructure/storage/labourFarmAccess';
-import { isOwnerTierRole } from '../profile/helpers/teamRoster';
 import { fetchLabourData } from './data/labourClient';
 import { saveLabourReadout } from './data/labourReadout';
 import { isWorkerRole, readCachedLabourGrant } from './homeAttendanceDoor';
@@ -48,7 +47,9 @@ export function useHomeAttendanceDoor({ role, userId: userIdIn, farmId, active }
     const userId = auth?.session?.userId ?? userIdIn ?? null;
     // No AuthProvider above (tests, preview shells): nothing to wait for.
     const hasToken = auth === null || Boolean(auth.session?.accessToken);
-    const ownerTier = isOwnerTierRole(role);
+    // lane 2b (D-22 / D-26): only the primary owner holds हजेरी by label; a सहमालक is asked like
+    // anyone else (the server's take-हजेरी answer).
+    const ownerTier = role === 'PrimaryOwner';
     const mustAsk = active && !ownerTier && !!role && !isWorkerRole(role) && !!userId && !!farmId;
     const key = `${userId ?? ''}|${farmId ?? ''}`;
 

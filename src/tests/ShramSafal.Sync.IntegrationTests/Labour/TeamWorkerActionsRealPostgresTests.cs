@@ -18,6 +18,7 @@ using ShramSafal.Application.UseCases.Labour.GetFieldOperators;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Infrastructure;
 using ShramSafal.Infrastructure.Persistence;
+using ShramSafal.Sync.IntegrationTests.Memberships;
 using Xunit;
 
 namespace ShramSafal.Sync.IntegrationTests.Labour;
@@ -104,6 +105,9 @@ public sealed class TeamWorkerActionsRealPostgresTests(Xunit.Abstractions.ITestO
             await SeedMembershipAsync(raw, FarmA, AccountA, WorkerA, "Worker", grant: false);
             await SeedMembershipAsync(raw, FarmA, AccountA, GrantedWorkerA, "Worker", grant: true);
             await SeedMembershipAsync(raw, FarmB, AccountB, OwnerB, "PrimaryOwner", grant: false);
+
+            // lane 2b (P11) — the seats as they stand on an UPGRADED farm: the सहमालक keeps हजेरी.
+            await UpgradedSeats.CarryAsync(raw, FarmA);
 
             await SeedOperatorAsync(raw, HistoricOperator, "Ganesh-History", FarmA, OwnerA);
             await SeedOperatorAsync(raw, FarmBOperator, "Farm-B-Person", FarmB, OwnerB);

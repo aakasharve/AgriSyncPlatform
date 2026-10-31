@@ -9,6 +9,11 @@
  * हजेरी), the real हजेरी व पक्कं switch, and — folded under "आणखी" — pause / restore / remove with a
  * reason.
  *
+ * lane 2b (MU design §2, §11.1): when the server sends the person's authorities and says the caller
+ * may set them (`canEditAuthorities`), the card shows ONE switch per enforced responsibility
+ * (`AuthoritySwitches`) in place of the old हजेरी व पक्कं switch and the co-owner confirm switch; an
+ * older server keeps the old switches.
+ *
  * Real data only (spec: plr-d7-m1-multiuser-2026-10-26, step 2, MU-10). NOT here on purpose (P5,
  * plan §4, founder D-22 / D-24 of 26 Oct): plot chips (step 4b), any permission switch (money,
  * planning — no switch until the step whose server rule it would control exists), the family /
@@ -22,6 +27,7 @@ import type { LabourPermission } from '../data/labourPermissionsClient';
 import type { ApprovePreset } from '../data/membershipAdminClient';
 import { LabourAccessControl, type LabourAccessView } from '../components/LabourAccessControl';
 import { ConfirmAccessControl, type ConfirmAccessView } from './ConfirmAccessControl';
+import { AuthoritySwitches, type AuthorityAccessView } from './AuthoritySwitches';
 import { PRESETS, arrivalLine, doLine, phoneLine, presetOf, roleTone, roleWord, type DecisionRights } from './teamModel';
 import { ReasonStep } from './ReasonStep';
 import { TEAM_COPY } from './teamCopy';
@@ -43,6 +49,12 @@ export interface TeamPersonCardProps {
      * records, passed ONLY when the server says he may move it for this person.
      */
     confirmAccess?: ConfirmAccessView;
+    /**
+     * lane 2b — the primary owner's per-responsibility switches, passed ONLY when the server sent this
+     * person's authorities and says the caller may set them. When present, the two older switches
+     * above are not drawn.
+     */
+    authorityAccess?: AuthorityAccessView;
     onChangePreset: (preset: ApprovePreset) => void;
     onSuspend: (reason: string) => void;
     onRestore: () => void;
@@ -52,7 +64,7 @@ export interface TeamPersonCardProps {
 type Step = null | 'pause' | 'remove';
 
 export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
-    row, name, isYou, rights, busy, labourAccess, confirmAccess, onChangePreset, onSuspend, onRestore, onRemove,
+    row, name, isYou, rights, busy, labourAccess, confirmAccess, authorityAccess, onChangePreset, onSuspend, onRestore, onRemove,
 }) => {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<Step>(null);
@@ -61,7 +73,7 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
     const phone = phoneLine(row);
     const arrival = arrivalLine(row);
     const current = presetOf(row.role);
-    const hasChangeable = rights.canDecide || !!labourAccess?.isEditable || !!confirmAccess;
+    const hasChangeable = rights.canDecide || !!labourAccess?.isEditable || !!confirmAccess || !!authorityAccess;
 
     return (
         <li data-testid={`team-person-${row.userId}`} data-status={row.status}
@@ -112,8 +124,14 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
                             </div>
                         </div>
                     )}
-                    {labourAccess && <LabourAccessControl memberId={row.userId} memberName={name} access={labourAccess} />}
-                    {confirmAccess && <ConfirmAccessControl memberId={row.userId} access={confirmAccess} />}
+                    {authorityAccess
+                        ? <AuthoritySwitches memberId={row.userId} access={authorityAccess} />
+                        : (
+                            <>
+                                {labourAccess && <LabourAccessControl memberId={row.userId} memberName={name} access={labourAccess} />}
+                                {confirmAccess && <ConfirmAccessControl memberId={row.userId} access={confirmAccess} />}
+                            </>
+                        )}
 
                     {rights.canDecide && (
                         <details className="pt-1" data-testid={`team-more-${row.userId}`}>

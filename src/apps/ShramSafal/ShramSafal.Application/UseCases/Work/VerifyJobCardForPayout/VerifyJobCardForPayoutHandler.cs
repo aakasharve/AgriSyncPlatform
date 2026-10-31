@@ -5,6 +5,8 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 
@@ -43,7 +45,8 @@ public sealed class VerifyJobCardForPayoutHandler(
         if (callerRole is null)
             return Result.Failure<VerifyJobCardForPayoutResult>(ShramSafalErrors.Forbidden);
 
-        if (!IsEligibleToVerify(callerRole.Value))
+        if (!await FarmAuthorityGate.HoldsAsync(
+                repository, jobCard.FarmId.Value, command.CallerUserId.Value, FarmAuthority.ReviewMoney, clock.UtcNow, ct))
             return Result.Failure<VerifyJobCardForPayoutResult>(ShramSafalErrors.JobCardRoleNotAllowed);
 
         // 4. Domain transition — enforces CEI-I9 (linked log must be Verified).
@@ -87,10 +90,4 @@ public sealed class VerifyJobCardForPayoutHandler(
 
         return Result.Success(new VerifyJobCardForPayoutResult(jobCard.Id));
     }
-
-    private static bool IsEligibleToVerify(AppRole role) =>
-        role is AppRole.PrimaryOwner
-            or AppRole.SecondaryOwner
-            or AppRole.Agronomist
-            or AppRole.FpcTechnicalManager;
 }

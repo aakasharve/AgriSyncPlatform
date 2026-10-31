@@ -18,6 +18,10 @@
  * PRIMARY owner moves a switch — the हजेरी व पक्कं switch on a worker or मुकादम, and, on a co-owner, the switch
  * for confirming records (his labour edits stay with his role). Not here (later steps, P5): role band, plot chips, any permission switch, the
  * family / co-owner choice (proposed step 2b), invite builder.
+ *
+ * lane 2b (founder D-22 / D-26): the roster, the farm QR and every switch are the PRIMARY account
+ * holder's alone — the server now refuses a सहमालक all three, so a सहमालक sees the same view-only list
+ * a मुकादम sees. Each let-in person's card carries one switch per enforced responsibility.
  */
 import React from 'react';
 import type { FarmOperator } from '../../../types';
@@ -31,7 +35,7 @@ import { JoinRequestCard } from './JoinRequestCard';
 import { TeamPersonCard } from './TeamPersonCard';
 import { TEAM_COPY } from './teamCopy';
 import {
-    isOwnerTier, isPrimaryOwner, nameFor, rightsOver, roleTone, roleWord, serverRoleOf, splitRoster,
+    isPrimaryOwner, nameFor, rightsOver, roleTone, roleWord, serverRoleOf, splitRoster,
 } from './teamModel';
 
 export interface TeamPageProps {
@@ -49,7 +53,9 @@ export interface TeamPageProps {
 }
 
 export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole, callerUserId, operators = [], roster, onShowQr }) => {
-    const ownerTier = isOwnerTier(callerRole);
+    // lane 2b: the roster and the farm QR are people and permissions — the primary account
+    // holder's alone (D-26); the server refuses anyone else, so nobody else is shown them (P5).
+    const ownerTier = isPrimaryOwner(callerRole);
     // The roster's own row for the caller says whether he is the farm's registrant — the primary
     // owner for now (verifier SEC-MU2-6); a seat-less registrant has no row and reads by role.
     const callerIsRegistrant = roster.rows?.find(r => r.userId === callerUserId)?.isRegistrant;
@@ -108,6 +114,9 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                 // anyone else, so nobody else is shown one (P5).
                                 const mayGrant = grantsSwitches && row.isGrantEditable && row.userId !== callerUserId;
                                 const mayGrantConfirm = grantsSwitches && row.isConfirmGrantEditable === true && row.userId !== callerUserId;
+                                // lane 2b: one switch per enforced responsibility, when the server sent them.
+                                const maySetAuthorities = grantsSwitches && row.canEditAuthorities === true
+                                    && Array.isArray(row.authorities) && row.userId !== callerUserId;
                                 return (
                                     <TeamPersonCard key={row.userId} row={row} name={nameFor(row, operators)}
                                         isYou={row.userId === callerUserId} rights={rights} busy={busy(row.userId)}
@@ -122,6 +131,11 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                             canConfirm: row.canConfirmRecords === true,
                                             saving: roster.savingUserId === row.userId,
                                             onChange: next => void roster.setPermission(row.userId, next, null),
+                                        } : undefined}
+                                        authorityAccess={maySetAuthorities ? {
+                                            authorities: row.authorities ?? [],
+                                            saving: roster.savingUserId === row.userId,
+                                            onChange: next => void roster.setAuthorities(row.userId, next),
                                         } : undefined}
                                         onChangePreset={preset => void decisions.changePreset(row, preset)}
                                         onSuspend={reason => void decisions.suspend(row.userId, reason)}
@@ -153,7 +167,7 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                 </section>
             )}
 
-            {/* Named workers (no login): owner / co-owner only, as told by the server-sent role. */}
+            {/* Named workers (no login): the primary account holder's team screen (lane 2b). */}
             {ownerTier && farmId && <FarmWorkersCard farmId={farmId} />}
         </div>
     );

@@ -929,12 +929,15 @@ public sealed class OwnerCanApproveAMukadamsLogRealPostgresTests(Xunit.Abstracti
     private static async Task SeedFarmMembershipAsync(
         NpgsqlConnection db, Guid userId, string role, bool canManageLabourRecords = false)
     {
+        // lane 2b: the owner's one हजेरी व पक्कं switch is stored as the labour grant PLUS the confirm-records
+        // bit (128) - exactly what FarmMembership.SetLegacyLabourSwitch writes.
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
             INSERT INTO ssf.farm_memberships
                 ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status,
-                 can_manage_labour_records)
-            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, 3, @grant);
+                 can_manage_labour_records, permissions)
+            VALUES (@id, @farm, @user, @role, NOW(), NOW(), @account, 3, @grant,
+                    CASE WHEN @grant THEN 128 END);
             """;
         cmd.Parameters.AddWithValue("id", Guid.NewGuid());
         cmd.Parameters.AddWithValue("farm", FarmId);

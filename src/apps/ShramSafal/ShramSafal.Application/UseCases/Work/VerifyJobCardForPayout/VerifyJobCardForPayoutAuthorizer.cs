@@ -1,8 +1,10 @@
 using AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 using AgriSync.BuildingBlocks.Results;
-using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Common;
+using AgriSync.BuildingBlocks.Abstractions;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 
@@ -53,10 +55,12 @@ namespace ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 public sealed class VerifyJobCardForPayoutAuthorizer : IAuthorizationCheck<VerifyJobCardForPayoutCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly IClock _clock;
 
-    public VerifyJobCardForPayoutAuthorizer(IShramSafalRepository repository)
+    public VerifyJobCardForPayoutAuthorizer(IShramSafalRepository repository, IClock clock)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(VerifyJobCardForPayoutCommand command, CancellationToken ct)
@@ -74,17 +78,14 @@ public sealed class VerifyJobCardForPayoutAuthorizer : IAuthorizationCheck<Verif
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
-        if (!IsEligibleToVerify(role.Value))
+        // lane 2b (founder D-22 / D-26) — verifying a job card for payout is reviewing money entries (it needs see money). A label grants
+        // nothing; the refusal keeps its old code, which every installed phone parks visibly.
+        if (!await FarmAuthorityGate.HoldsAsync(
+                _repository, jobCard.FarmId.Value, command.CallerUserId.Value, FarmAuthority.ReviewMoney, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.JobCardRoleNotAllowed);
         }
 
         return Result.Success();
     }
-
-    private static bool IsEligibleToVerify(AppRole role) =>
-        role is AppRole.PrimaryOwner
-            or AppRole.SecondaryOwner
-            or AppRole.Agronomist
-            or AppRole.FpcTechnicalManager;
 }

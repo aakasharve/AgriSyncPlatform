@@ -36,15 +36,15 @@ public sealed class TestInstanceTests
     }
 
     [Fact]
-    public void TestInstance_MarkCollected_ByWorker_Throws_RoleDenied()
+    public void TestInstance_MarkCollected_ReadsNoLabel_WhoMayCollectIsTheApplicationsSeatAuthority()
     {
+        // lane 2b (founder D-26): the entity no longer reads the role for permission — the lab-records
+        // authority of the caller's farm seat is checked by the handler (RecordTestCollectedHandlerTests).
         var instance = NewDueInstance();
 
-        FluentActions.Invoking(() => instance.MarkCollected(
-                UserId.New(), AppRole.Worker, DateTime.UtcNow))
-            .Should().Throw<InvalidOperationException>();
+        instance.MarkCollected(UserId.New(), AppRole.Worker, DateTime.UtcNow);
 
-        instance.Status.Should().Be(TestInstanceStatus.Due);
+        instance.Status.Should().Be(TestInstanceStatus.Collected);
     }
 
     [Fact]
@@ -110,18 +110,20 @@ public sealed class TestInstanceTests
     }
 
     [Fact]
-    public void TestInstance_RecordResult_NonLabOperator_Throws()
+    public void TestInstance_RecordResult_ReadsNoLabel_TheOwnerMayRecordAResult()
     {
+        // lane 2b (D-20 "the owner may do both"): no role list in the entity any more.
         var instance = NewDueInstance();
         instance.MarkCollected(UserId.New(), AppRole.Mukadam, DateTime.UtcNow);
 
-        FluentActions.Invoking(() => instance.RecordResult(
-                UserId.New(),
-                AppRole.SecondaryOwner,  // not LabOperator
-                new[] { new TestResult("pH", "6.5", "pH", 6.0m, 7.5m) },
-                new[] { Guid.NewGuid() },
-                DateTime.UtcNow))
-            .Should().Throw<InvalidOperationException>();
+        instance.RecordResult(
+            UserId.New(),
+            AppRole.PrimaryOwner,
+            new[] { new TestResult("pH", "6.5", "pH", 6.0m, 7.5m) },
+            new[] { Guid.NewGuid() },
+            DateTime.UtcNow);
+
+        instance.Status.Should().Be(TestInstanceStatus.Reported);
     }
 
     [Fact]
@@ -158,14 +160,12 @@ public sealed class TestInstanceTests
     }
 
     [Fact]
-    public void TestInstance_Waive_Worker_Throws_Agronomist_OK_PrimaryOwner_OK_ReasonRequired()
+    public void TestInstance_Waive_ReadsNoLabel_Agronomist_OK_PrimaryOwner_OK_ReasonRequired()
     {
-        // Worker cannot waive
+        // lane 2b: who may waive is the handler's seat authority (lab records), not a label here.
         var inst1 = NewDueInstance();
-        FluentActions.Invoking(() => inst1.Waive(
-                UserId.New(), AppRole.Worker, "too wet", DateTime.UtcNow))
-            .Should().Throw<InvalidOperationException>();
-        inst1.Status.Should().Be(TestInstanceStatus.Due);
+        inst1.Waive(UserId.New(), AppRole.Worker, "too wet", DateTime.UtcNow);
+        inst1.Status.Should().Be(TestInstanceStatus.Waived);
 
         // Agronomist OK
         var inst2 = NewDueInstance();

@@ -40,10 +40,20 @@ afterEach(() => {
 });
 
 describe('useHomeAttendanceDoor', () => {
-    it('owner tier: the door, without asking the server', () => {
+    it('the primary owner: the door, without asking the server', () => {
         expect(door({ ...MUKADAM, role: 'PrimaryOwner' }).result.current).toBe(true);
-        expect(door({ ...MUKADAM, role: 'SecondaryOwner' }).result.current).toBe(true);
         expect(h.fetchLabourData).not.toHaveBeenCalled();
+    });
+
+    it('lane 2b — a co-owner label carries no हजेरी: the door waits for the server answer', async () => {
+        let answer!: (d: LabourData) => void;
+        h.fetchLabourData.mockReturnValue(new Promise<LabourData>((res) => { answer = res; }));
+        const { result } = door({ ...MUKADAM, role: 'SecondaryOwner' });
+        expect(result.current).toBe(false);
+        expect(h.fetchLabourData).toHaveBeenCalledWith('f1', HOME_GRANT_WINDOW);
+        answer(readout(false));
+        await waitFor(() => expect(readCachedLabourGrant('u1', 'f1')).toBe(false));
+        expect(result.current).toBe(false);
     });
 
     it('a worker never gets it — not even with a cached "yes" — and nothing is asked', () => {

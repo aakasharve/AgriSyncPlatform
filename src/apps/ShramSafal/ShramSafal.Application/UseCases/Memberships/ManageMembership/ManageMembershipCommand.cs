@@ -28,6 +28,12 @@ public enum MembershipDecision
 
     /// <summary>Change the role and / or the stored permission choice of a let-in person.</summary>
     SetAccess,
+
+    /// <summary>
+    /// lane 2b (MU design §2, §11.1) — set EXACTLY which authorities a let-in person holds, each
+    /// permanent or until an instant. The label is untouched (it grants nothing).
+    /// </summary>
+    SetAuthorities,
 }
 
 /// <param name="FarmId">The farm.</param>
@@ -47,6 +53,9 @@ public enum MembershipDecision
 /// <param name="LabourGrant">SetAccess only: the हजेरी व पक्कं switch as DESIRED state (no end
 /// date). Absent = keep on an unchanged role, OFF on a role change (the new role's default).</param>
 /// <param name="Reason">Decline / Suspend / Remove: the owner's words, at most 500 characters.</param>
+/// <param name="Authorities">SetAuthorities only (lane 2b): the WHOLE desired set — each a
+/// <c>FarmAuthority</c> name and its end as a UTC instant, or <c>null</c> for कायम. Required there,
+/// refused on every other decision.</param>
 public sealed record ManageMembershipCommand(
     FarmId FarmId,
     UserId TargetUserId,
@@ -60,4 +69,5 @@ public sealed record ManageMembershipCommand(
     string? Reason = null,
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+    IReadOnlyList<ShramSafal.Application.Contracts.Dtos.AuthorityGrantDto>? Authorities = null);

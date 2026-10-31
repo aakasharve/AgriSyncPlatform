@@ -111,14 +111,17 @@ public sealed class FarmMembershipAuthorizationBaselineTests
         Assert.Equal(ShramSafalErrors.Forbidden, verifyCheck.Error);
     }
 
-    [Fact(DisplayName = "A SecondaryOwner can perform owner-only actions on their assigned farm")]
-    public async Task SecondaryOwner_CanPerformOwnerOnlyActions()
+    // lane 2b (founder D-22 / D-26): "owner" is the PRIMARY account holder. A सहमालक label is a
+    // member, never an owner tier: people and permissions are refused to him, and with no stored
+    // authority the verify door refuses him like any member.
+    [Fact(DisplayName = "A SecondaryOwner label is a member, never an owner, and opens no door by itself")]
+    public async Task SecondaryOwner_IsAMemberButNotAnOwner()
     {
         var (enforcer, repo) = CreateSubject();
         repo.AddMembership(FarmA, SecondaryOwnerOfA, AppRole.SecondaryOwner);
 
         Assert.True((await enforcer.EnsureIsFarmMember(SecondaryOwnerOfA, FarmA)).IsSuccess);
-        Assert.True((await enforcer.EnsureIsOwner(SecondaryOwnerOfA, FarmA)).IsSuccess);
+        Assert.False((await enforcer.EnsureIsOwner(SecondaryOwnerOfA, FarmA)).IsSuccess);
 
         var log = DailyLog.Create(
             id: Guid.NewGuid(),
@@ -132,6 +135,6 @@ public sealed class FarmMembershipAuthorizationBaselineTests
             createdAtUtc: DateTime.UtcNow);
         repo.AddLog(log);
 
-        Assert.True((await enforcer.EnsureCanVerify(SecondaryOwnerOfA, log.Id)).IsSuccess);
+        Assert.False((await enforcer.EnsureCanVerify(SecondaryOwnerOfA, log.Id)).IsSuccess);
     }
 }

@@ -85,6 +85,12 @@ public sealed class ManageMembershipHandler(
             return Invalid();
         }
 
+        // lane 2b — the authority set belongs to its own decision, and that decision needs one.
+        if (!TryReadAuthorities(command, out var requestedAuthorities))
+        {
+            return Invalid();
+        }
+
         if (command.Decision == MembershipDecision.SetAccess
             && requestedRole is null && command.Permissions is null && !command.ResetPermissions
             && command.LabourGrant is null)
@@ -144,6 +150,21 @@ public sealed class ManageMembershipHandler(
             }
         }
 
+        // ── 6b. lane 2b — authorities are set on a person who was let in (working or paused) and
+        //        who does not hold everything by label. A waiting request is answered by approval.
+        if (command.Decision == MembershipDecision.SetAuthorities)
+        {
+            if (seat.Status is not (MembershipStatus.Active or MembershipStatus.Suspended))
+            {
+                return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipWrongStatus);
+            }
+
+            if (LabourManagementPermission.IsRedundantGrantTarget(seat.Role))
+            {
+                return Result.Failure<LabourPermissionDto>(ShramSafalErrors.LabourManagementCarriedByRole);
+            }
+        }
+
         // ── 7. What the seat becomes (approve / change). Only the primary owner gets here, and he
         //       holds every power, so nothing he gives is a power he lacks (no re-delegation exists).
         var target = ResolveAccess(command, seat, requestedRole, requestedPermissions);
@@ -155,11 +176,12 @@ public sealed class ManageMembershipHandler(
         }
 
         // ── 9. Apply ─────────────────────────────────────────────────────────
-        var before = new SeatSnapshot(seat.Status, seat.Role, seat.EffectivePermissions, seat.CanManageLabourRecords);
+        var before = new SeatSnapshot(
+            seat.Status, seat.Role, seat.EffectivePermissions, seat.CanManageLabourRecords, AuthorityList(seat));
         bool changed;
         try
         {
-            changed = Apply(command, seat, target, reason, isLastActivePrimaryOwner, now);
+            changed = Apply(command, seat, target, reason, requestedAuthorities, isLastActivePrimaryOwner, now);
         }
         catch (LastPrimaryOwnerRevocationException)
         {
@@ -249,7 +271,11 @@ public sealed class ManageMembershipHandler(
                 && seat.ApprovedByUserId is not null
                 && target is not null
                 && seat.Role == target.Role
-                && seat.Permissions == target.Permissions
+                // lane 2b: the "काम + हजेरी" switch also stores confirm records, so the landed
+                // decision holds the chosen bits plus that one when the switch was on.
+                && (seat.Permissions ?? FarmPermission.None)
+                    == ((target.Permissions ?? FarmPermission.None)
+                        | (target.LabourGrant == true ? FarmPermission.ConfirmRecords : FarmPermission.None))
                 && (target.LabourGrant is not { } grant || seat.CanManageLabourRecords == grant),
             MembershipDecision.Suspend => seat.Status == MembershipStatus.Suspended,
             MembershipDecision.Restore => seat.Status == MembershipStatus.Active,
@@ -261,6 +287,7 @@ public sealed class ManageMembershipHandler(
         FarmMembership seat,
         AccessTarget? target,
         string? reason,
+        IReadOnlyDictionary<FarmAuthority, DateTime?>? authorities,
         bool isLastActivePrimaryOwner,
         DateTime now)
     {
@@ -271,7 +298,9 @@ public sealed class ManageMembershipHandler(
                 if (target.LabourGrant is { } approvedGrant)
                 {
                     // Desired state, both ways: a grant left on the waiting seat is turned OFF here.
-                    seat.SetLabourRecordManagement(approvedGrant, expiresAtUtc: null, now);
+                    // lane 2b (P11): the "काम + हजेरी" choice is the one switch every installed phone
+                    // knows — take हजेरी AND confirm records, as it meant until 2b.
+                    seat.SetLegacyLabourSwitch(approvedGrant, expiresAtUtc: null, now);
                 }
 
                 return true;
@@ -295,9 +324,13 @@ public sealed class ManageMembershipHandler(
             case MembershipDecision.SetAccess:
                 // Both writes, always (no short-circuit): either may be the only real change.
                 var accessMoved = seat.SetAccess(target!.Role, target.Permissions, command.CallerUserId, now);
+                // lane 2b (P11): the legacy switch keeps meaning take हजेरी AND confirm records.
                 var grantMoved = target.LabourGrant is { } grant
-                    && seat.SetLabourRecordManagement(grant, expiresAtUtc: null, now);
+                    && seat.SetLegacyLabourSwitch(grant, expiresAtUtc: null, now);
                 return accessMoved | grantMoved;
+
+            case MembershipDecision.SetAuthorities:
+                return seat.SetAuthorities(authorities!, now);
 
             default:
                 // Unreachable: HandleAsync refuses an undefined decision first.
@@ -350,6 +383,7 @@ public sealed class ManageMembershipHandler(
                 MembershipDecision.Suspend => "MemberSuspended",
                 MembershipDecision.Restore => "MemberRestored",
                 MembershipDecision.Remove => "MemberRemoved",
+                MembershipDecision.SetAuthorities => "MemberAuthoritiesChanged",
                 _ => "MemberAccessChanged",
             },
             actorUserId: command.CallerUserId.Value,
@@ -370,6 +404,10 @@ public sealed class ManageMembershipHandler(
                 storedPermissions = seat.Permissions is { } stored ? FarmPermissionDefaults.Names(stored) : null,
                 labourGrantBefore = before.LabourGrant,
                 labourGrant = seat.CanManageLabourRecords,
+                // lane 2b — every stored authority with its end, before and after (P3: "until the
+                // 4th" and "permanently" are different decisions).
+                authoritiesBefore = before.Authorities,
+                authorities = AuthorityList(seat),
                 reason = seat.StatusReason,
             },
             farmId: command.FarmId.Value,
@@ -437,7 +475,8 @@ public sealed class ManageMembershipHandler(
             return false;
         }
 
-        permissions = parsed;
+        // lane 2b — a stored see wages / review money brings see money (it means nothing without it).
+        permissions = FarmAuthorities.WithWhatTheyNeed(parsed);
         return true;
     }
 
@@ -450,13 +489,57 @@ public sealed class ManageMembershipHandler(
         return reason is null || reason.Length <= FarmMembership.MaxStatusReasonLength;
     }
 
+    /// <summary>
+    /// lane 2b — reads the requested authority set: only on <see cref="MembershipDecision.SetAuthorities"/>
+    /// (required there), every name known, no name twice, every end a UTC instant (an ISO string with
+    /// an offset or no zone is refused, never reinterpreted — the labour route's rule). Ends in the
+    /// past and "wages / review money without see money" are refused by the domain.
+    /// </summary>
+    private static bool TryReadAuthorities(
+        ManageMembershipCommand command, out IReadOnlyDictionary<FarmAuthority, DateTime?>? authorities)
+    {
+        authorities = null;
+        if (command.Decision != MembershipDecision.SetAuthorities)
+        {
+            return command.Authorities is null;
+        }
+
+        if (command.Authorities is null)
+        {
+            return false;
+        }
+
+        var parsed = new Dictionary<FarmAuthority, DateTime?>();
+        foreach (var item in command.Authorities)
+        {
+            if (item is null
+                || !FarmAuthorities.TryParse(item.Name, out var authority)
+                || parsed.ContainsKey(authority)
+                || item.ExpiresAtUtc is { Kind: not DateTimeKind.Utc })
+            {
+                return false;
+            }
+
+            parsed[authority] = item.ExpiresAtUtc;
+        }
+
+        authorities = parsed;
+        return true;
+    }
+
+    private static IReadOnlyList<object> AuthorityList(FarmMembership seat) =>
+        seat.StoredAuthorities()
+            .Select(a => (object)new { name = FarmAuthorities.NameOf(a.Key), expiresAtUtc = a.Value })
+            .ToList();
+
     private static Result<LabourPermissionDto> Invalid() =>
         Result.Failure<LabourPermissionDto>(ShramSafalErrors.InvalidCommand);
 
     private static Result<LabourPermissionDto> Forbidden() =>
         Result.Failure<LabourPermissionDto>(ShramSafalErrors.Forbidden);
 
-    private sealed record SeatSnapshot(MembershipStatus Status, AppRole Role, FarmPermission Permissions, bool LabourGrant);
+    private sealed record SeatSnapshot(
+        MembershipStatus Status, AppRole Role, FarmPermission Permissions, bool LabourGrant, IReadOnlyList<object> Authorities);
 
     private sealed record AccessTarget(AppRole Role, FarmPermission? Permissions, bool? LabourGrant);
 }

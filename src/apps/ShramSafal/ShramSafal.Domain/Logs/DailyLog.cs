@@ -463,7 +463,7 @@ public sealed class DailyLog : Entity<Guid>
         return editMarker;
     }
 
-    /// <param name="hasLabourManagementGrant">
+    /// <param name="hasConfirmAuthority">
     /// spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27,
     /// <i>"if the owner has given that access to him then yes"</i>. The caller's
     /// EXPLICIT <c>can_manage_labour_records</c> grant on this log's farm, resolved by
@@ -483,11 +483,11 @@ public sealed class DailyLog : Entity<Guid>
         AppRole callerRole,
         UserId verifiedByUserId,
         DateTime occurredAtUtc,
-        bool hasLabourManagementGrant = false)
+        bool hasConfirmAuthority = false)
     {
         var currentStatus = CurrentVerificationStatus;
         if (!VerificationStateMachine.CanTransitionWithRole(
-                currentStatus, status, callerRole, hasLabourManagementGrant))
+                currentStatus, status, callerRole, hasConfirmAuthority))
         {
             throw new InvalidOperationException("Transition not allowed for role.");
         }
@@ -853,7 +853,7 @@ public sealed class DailyLog : Entity<Guid>
     /// <exception cref="ArgumentException">
     /// <paramref name="target"/> is <see cref="VerificationStatus.Disputed"/> with no reason.
     /// </exception>
-    /// <param name="hasLabourManagementGrant">
+    /// <param name="hasConfirmAuthority">
     /// spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27. See the same
     /// parameter on <see cref="Verify"/>. It is applied to BOTH hops of the walk, so a
     /// granted member reaches <c>Verified</c> from <c>Draft</c> by the identical
@@ -868,17 +868,17 @@ public sealed class DailyLog : Entity<Guid>
         DateTime occurredAtUtc,
         Guid targetEventId,
         Guid enRouteEventId,
-        bool hasLabourManagementGrant = false)
+        bool hasConfirmAuthority = false)
     {
         var current = CurrentVerificationStatus;
 
         if (VerificationStateMachine.CanTransitionWithRole(
-                current, target, callerRole, hasLabourManagementGrant))
+                current, target, callerRole, hasConfirmAuthority))
         {
             return
             [
                 Verify(targetEventId, target, reason, callerRole, verifiedByUserId, occurredAtUtc,
-                    hasLabourManagementGrant)
+                    hasConfirmAuthority)
             ];
         }
 
@@ -887,9 +887,9 @@ public sealed class DailyLog : Entity<Guid>
             current == VerificationStatus.Draft
             && target != VerificationStatus.Confirmed
             && VerificationStateMachine.CanTransitionWithRole(
-                VerificationStatus.Draft, VerificationStatus.Confirmed, callerRole, hasLabourManagementGrant)
+                VerificationStatus.Draft, VerificationStatus.Confirmed, callerRole, hasConfirmAuthority)
             && VerificationStateMachine.CanTransitionWithRole(
-                VerificationStatus.Confirmed, target, callerRole, hasLabourManagementGrant);
+                VerificationStatus.Confirmed, target, callerRole, hasConfirmAuthority);
 
         if (!canWalkViaConfirmed)
         {
@@ -908,10 +908,10 @@ public sealed class DailyLog : Entity<Guid>
 
         var enRoute = Verify(
             enRouteEventId, VerificationStatus.Confirmed, EnRouteConfirmReason,
-            callerRole, verifiedByUserId, occurredAtUtc, hasLabourManagementGrant);
+            callerRole, verifiedByUserId, occurredAtUtc, hasConfirmAuthority);
         var arrived = Verify(
             targetEventId, target, reason,
-            callerRole, verifiedByUserId, occurredAtUtc.AddMilliseconds(1), hasLabourManagementGrant);
+            callerRole, verifiedByUserId, occurredAtUtc.AddMilliseconds(1), hasConfirmAuthority);
 
         return [enRoute, arrived];
     }

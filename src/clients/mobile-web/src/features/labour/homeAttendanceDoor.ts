@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I12, H10 / H-13) — who sees the "आजची हजेरी"
- * door on the work home. ONLY someone who may manage labour (PLR-D9 §6, PLR-D7 §2b): the owner tier
- * (PrimaryOwner / SecondaryOwner, as the SERVER told the phone in /me/context), or a member the owner
+ * door on the work home. ONLY someone who may manage labour (PLR-D9 §6, PLR-D7 §2b): the primary owner
+ * (lane 2b: a सहमालक label no longer carries it, D-26), as the SERVER told the phone in /me/context, or a member the owner
  * granted labour rights to (`canManageLabour`, the server's own last answer, cached by the हजेरी
  * screen). A worker never gets it. Unknown stays closed — the safe default is hidden, exactly like
  * `attendanceDoor.ts`. The client never decides a grant itself.
@@ -13,7 +13,6 @@
  * server for the read-out when the tab opens online and caches it the same way the हजेरी screen does;
  * until that answer arrives the door stays hidden.
  */
-import { isOwnerTierRole } from '../profile/helpers/teamRoster';
 import { loadLabourReadout } from './data/labourReadout';
 import { LABOUR_WINDOW_ORDER } from './labourWindow';
 
@@ -33,8 +32,12 @@ export function readCachedLabourGrant(userId: string | null | undefined, farmId:
     return newest?.grant;
 }
 
+/**
+ * lane 2b (founder D-22 / D-26): only the PRIMARY owner holds हजेरी by label. Everyone else — a सहमालक
+ * included — opens the door only on the server's own answer for take हजेरी (`canManageLabour`).
+ */
 export function mayOpenAttendanceFromHome(role: string | null | undefined, cachedGrant: boolean | null | undefined): boolean {
-    return isOwnerTierRole(role) || cachedGrant === true;
+    return role === 'PrimaryOwner' || cachedGrant === true;
 }
 
 /** A plain worker: the role the server gave him on this farm. */

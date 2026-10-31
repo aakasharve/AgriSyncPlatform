@@ -27,4 +27,8 @@ public sealed record VerifyLogCommand(
     // the shape of the I13 result screen's "पक्कं आहे". From the record's own speaker that tap
     // meant "I confirm my own words" (I13); D-44 changed the meaning, so it is kept as his mark.
     // Every build from I27 on states the basis on a confirmation. False on every other path.
-    bool ReviewBasisOmittedOnV2 = false);
+    bool ReviewBasisOmittedOnV2 = false,
+    // lane 2b (MU design §11.2) — when the phone says the decision was made (verify_log_v2
+    // "decidedAt"); null on every other path. Read only to decide whether a decision that arrives
+    // after the confirm-records authority ended was made while it was alive (accepted + flagged).
+    DateTime? DecidedAtUtc = null);

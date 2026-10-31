@@ -159,7 +159,8 @@ public sealed class ReviseLogContentHandler(
                 command.ActorUserId,
                 log.OperatorUserId.Value,
                 actorRole,
-                () => LabourManagementGate.HasExplicitGrantAsync(repository, farmId, command.ActorUserId, now, ct)))
+                () => FarmAuthorityGate.HoldsAsync(
+                    repository, farmId, command.ActorUserId, Domain.Farms.FarmAuthority.ConfirmRecords, now, ct)))
         {
             documentJson = LogContentDocument.CarryWordsForward(current.DocumentJson, command.ContentJson);
             if (Problem(documentJson) is { } carried)

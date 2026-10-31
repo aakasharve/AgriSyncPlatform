@@ -50,7 +50,8 @@ internal sealed class FakeAuthorizationRepository : IShramSafalRepository
             return Task.FromResult(false);
         }
 
-        return Task.FromResult(role is AppRole.PrimaryOwner or AppRole.SecondaryOwner);
+        // lane 2b: mirrors production — "owner" is the PRIMARY account holder only.
+        return Task.FromResult(role is AppRole.PrimaryOwner);
     }
 
     public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)

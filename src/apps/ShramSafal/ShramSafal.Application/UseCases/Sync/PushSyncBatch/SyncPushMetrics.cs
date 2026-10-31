@@ -70,6 +70,14 @@ public static class SyncPushMetrics
     public const string ObservabilityEmitFailedInstrumentName =
         "agrisync.shramsafal.sync.observability_emit_failed";
 
+    /// <summary>
+    /// lane 2b (MU design §11.2) — OpenTelemetry instrument name for "a refused mutation from a
+    /// person who once worked on the farm could not be kept for the owner". The refusal still
+    /// reached the phone (parked, visible); non-zero means a server copy is missing.
+    /// </summary>
+    public const string RefusedWorkNotKeptInstrumentName =
+        "agrisync.shramsafal.sync.refused_work_not_kept";
+
     private static readonly Meter SyncMeter = new(MeterName, "1.0.0");
 
     // No `unit:` on either instrument on purpose: the Prometheus exporter
@@ -86,6 +94,20 @@ public static class SyncPushMetrics
             ObservabilityEmitFailedInstrumentName,
             description: "Failures of the sync rejection observability emit itself. "
                 + "Non-zero means mutation_rejected is under-reporting.");
+
+    private static readonly Counter<long> RefusedWorkNotKeptCounter =
+        SyncMeter.CreateCounter<long>(
+            RefusedWorkNotKeptInstrumentName,
+            description: "Refused sync mutations from a former or current member that could not be "
+                + "kept for the farm's owner. Each increment is a missing server copy.");
+
+    /// <summary>lane 2b — records one refused mutation that could not be kept (exception TYPE only).</summary>
+    public static void RecordRefusedWorkNotKept(string exceptionType)
+    {
+        RefusedWorkNotKeptCounter.Add(
+            1,
+            new KeyValuePair<string, object?>("exception_type", exceptionType));
+    }
 
     /// <summary>
     /// Records one rejected sync mutation.

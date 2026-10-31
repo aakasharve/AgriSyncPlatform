@@ -64,7 +64,17 @@ public sealed record FarmMembershipSnapshot(
     string? StatusReason = null,
     // The labour grant (hajeri / pakka) as stored; the handler evaluates the end date with its clock.
     bool HasLabourGrant = false,
-    DateTime? LabourGrantExpiresAtUtc = null);
+    DateTime? LabourGrantExpiresAtUtc = null,
+    // lane 2b (MU design §2, §6, §11.1) — ADDITIVE. The authorities this seat HOLDS now (names of
+    // ShramSafal's FarmAuthority, each with its end; null = कायम), computed by the composition-root
+    // reader with ShramSafal's one rule (FarmAuthorities.IsHeld; empty unless Active, every one for
+    // the primary account holder) — this context never re-derives another context's rule.
+    IReadOnlyList<MeAuthoritySnapshot>? Authorities = null,
+    // lane 2b — the person is this farm's primary account holder (people and permissions, D-26).
+    bool IsPrimaryAccountHolder = false);
+
+/// <summary>lane 2b — one authority a seat holds now, and when it ends (null = कायम).</summary>
+public sealed record MeAuthoritySnapshot(string Name, DateTime? ExpiresAtUtc);
 
 public sealed record AffiliationSnapshot(
     string? ReferralCode,

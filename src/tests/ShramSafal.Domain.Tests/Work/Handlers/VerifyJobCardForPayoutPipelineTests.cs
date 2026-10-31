@@ -91,7 +91,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
     public async Task Authorizer_returns_JobCardNotFound_when_id_resolves_to_nothing()
     {
         var repo = new InMemoryJobCardVerifyRepo();
-        var a = new VerifyJobCardForPayoutAuthorizer(repo);
+        var a = new VerifyJobCardForPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new VerifyJobCardForPayoutCommand(
             JobCardId: Guid.NewGuid(),
@@ -109,7 +109,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         var (job, _) = BuildCompletedJobCardWithLog(logVerified: true);
         var repo = new InMemoryJobCardVerifyRepo();
         repo.SeedJobCard(job);
-        var a = new VerifyJobCardForPayoutAuthorizer(repo);
+        var a = new VerifyJobCardForPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new VerifyJobCardForPayoutCommand(
             JobCardId: job.Id,
@@ -128,7 +128,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         var repo = new InMemoryJobCardVerifyRepo();
         repo.SeedJobCard(job);
         repo.SetMembership(Farm.Value, Worker.Value, AppRole.Worker);
-        var a = new VerifyJobCardForPayoutAuthorizer(repo);
+        var a = new VerifyJobCardForPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new VerifyJobCardForPayoutCommand(
             JobCardId: job.Id,
@@ -150,7 +150,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         var repo = new InMemoryJobCardVerifyRepo();
         repo.SeedJobCard(job);
         repo.SetMembership(Farm.Value, Mukadam.Value, AppRole.Mukadam);
-        var a = new VerifyJobCardForPayoutAuthorizer(repo);
+        var a = new VerifyJobCardForPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new VerifyJobCardForPayoutCommand(
             JobCardId: job.Id,
@@ -172,7 +172,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         var repo = new InMemoryJobCardVerifyRepo();
         repo.SeedJobCard(job);
         repo.SetMembership(Farm.Value, Caller.Value, role);
-        var a = new VerifyJobCardForPayoutAuthorizer(repo);
+        var a = new VerifyJobCardForPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new VerifyJobCardForPayoutCommand(
             JobCardId: job.Id,
@@ -308,7 +308,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         {
             // Draft -> Confirmed -> Verified (state machine requires two steps)
             log.Verify(Guid.NewGuid(), VerificationStatus.Confirmed, null, AppRole.Agronomist, Agronomist, Now.AddHours(2));
-            log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, Agronomist, Now.AddHours(3));
+            log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, Agronomist, Now.AddHours(3), hasConfirmAuthority: true);
         }
 
         return (job, log);
@@ -326,7 +326,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         var rawHandler = new VerifyJobCardForPayoutHandler(repo, clock);
 
         var validator = new VerifyJobCardForPayoutValidator();
-        var authorizer = new VerifyJobCardForPayoutAuthorizer(repo);
+        var authorizer = new VerifyJobCardForPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var pipeline = HandlerPipeline.Build(
             rawHandler,

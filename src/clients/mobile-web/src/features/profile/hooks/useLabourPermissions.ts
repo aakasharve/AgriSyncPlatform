@@ -37,8 +37,10 @@ import {
     fetchLabourPermissions,
     isCarriedByRoleError,
     setLabourPermission,
+    type AuthorityGrant,
     type LabourPermission,
 } from '../data/labourPermissionsClient';
+import { setMemberAuthorities } from '../data/membershipAdminClient';
 
 /**
  * FARMER-FACING COPY, ENGLISH ONLY, AND DELIBERATELY SO.
@@ -77,6 +79,11 @@ export interface UseLabourPermissionsResult {
         labourGrantExpiresAtUtc?: string | null,
     ) => Promise<void>;
     dismissError: () => void;
+    /**
+     * lane 2b — the primary account holder's authority switches: the WHOLE desired set for one
+     * member (desired state, so a retry converges); the server's row is adopted, never assumed.
+     */
+    setAuthorities: (targetUserId: string, authorities: readonly AuthorityGrant[]) => Promise<void>;
     /**
      * spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — adopt ONE row the server returned from an
      * owner decision (approve / decline / pause / restore / remove / change). Replaces that
@@ -163,6 +170,27 @@ export function useLabourPermissions(farmId: string | null | undefined): UseLabo
         }
     }, [farmId, load]);
 
+    const setAuthorities = useCallback(async (targetUserId: string, authorities: readonly AuthorityGrant[]) => {
+        if (!farmId) return;
+
+        setSavingUserId(targetUserId);
+        setError(null);
+        try {
+            const updated = await setMemberAuthorities(farmId, targetUserId, authorities);
+            if (!mountedRef.current) return;
+            setRows(current => (current ?? []).map(
+                row => (row.userId === updated.userId ? updated : row),
+            ));
+        } catch {
+            if (!mountedRef.current) return;
+            // A refusal is said, never swallowed, and the switches go back to the server's truth.
+            setError(LABOUR_PERMISSION_MESSAGES.changeFailed);
+            await load();
+        } finally {
+            if (mountedRef.current) setSavingUserId(null);
+        }
+    }, [farmId, load]);
+
     const dismissError = useCallback(() => setError(null), []);
 
     const adoptRow = useCallback((row: LabourPermission) => {
@@ -182,6 +210,7 @@ export function useLabourPermissions(farmId: string | null | undefined): UseLabo
         error,
         reload: load,
         setPermission,
+        setAuthorities,
         dismissError,
         adoptRow,
     };

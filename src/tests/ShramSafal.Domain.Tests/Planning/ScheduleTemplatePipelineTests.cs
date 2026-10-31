@@ -25,6 +25,8 @@ namespace ShramSafal.Domain.Tests.Planning;
 /// </summary>
 public sealed class ScheduleTemplatePipelineTests
 {
+    private static readonly Guid TemplateFarm = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+
     private static readonly DateTime Now = new(2026, 4, 21, 10, 0, 0, DateTimeKind.Utc);
     private static readonly Guid AuthorId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static readonly Guid OtherId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
@@ -84,7 +86,7 @@ public sealed class ScheduleTemplatePipelineTests
     public async Task CloneAuthorizer_returns_ScheduleTemplateNotFound_when_source_missing()
     {
         var repo = new InMemoryScheduleTemplateRepo();
-        var a = new CloneScheduleTemplateAuthorizer(repo);
+        var a = new CloneScheduleTemplateAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var r = await a.AuthorizeAsync(new CloneScheduleTemplateCommand(
             SourceTemplateId: Guid.NewGuid(),
@@ -106,7 +108,7 @@ public sealed class ScheduleTemplatePipelineTests
         var template = MakeTemplate(AuthorId, TenantScope.Private);
         var repo = new InMemoryScheduleTemplateRepo();
         repo.Seed(template);
-        var a = new CloneScheduleTemplateAuthorizer(repo);
+        var a = new CloneScheduleTemplateAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         // Cloning to Licensed scope requires PrimaryOwner/SecondaryOwner/
         // Agronomist/Consultant. Worker is not allowed.
@@ -230,7 +232,7 @@ public sealed class ScheduleTemplatePipelineTests
     {
         // NotFound
         var repo = new InMemoryScheduleTemplateRepo();
-        var a = new EditScheduleTemplateAuthorizer(repo);
+        var a = new EditScheduleTemplateAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
         var r1 = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
             SourceTemplateId: Guid.NewGuid(),
             NewTemplateId: Guid.NewGuid(),
@@ -261,13 +263,15 @@ public sealed class ScheduleTemplatePipelineTests
             NewName: null, NewStage: null, ClientCommandId: null), default);
         Assert.Equal(ShramSafalErrors.Forbidden, r3.Error);
 
-        // Non-Private + role gate passes => Success
+        // Non-Private + a farm seat holding schedule templates => Success (lane 2b: the seat the
+        // caller names, never his global role — the farm's primary owner here)
+        repo.SeatPrimaryOwner(TemplateFarm, OtherId);
         var r4 = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
             SourceTemplateId: licensedTpl.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: OtherId,
-            CallerRole: AppRole.PrimaryOwner,
-            NewName: null, NewStage: null, ClientCommandId: null), default);
+            CallerRole: AppRole.Worker,
+            NewName: null, NewStage: null, ClientCommandId: null, FarmId: TemplateFarm), default);
         Assert.True(r4.IsSuccess);
     }
 
@@ -317,7 +321,7 @@ public sealed class ScheduleTemplatePipelineTests
     public async Task PublishAuthorizer_NotFound_then_NonAuthor_then_role_gate()
     {
         var repo = new InMemoryScheduleTemplateRepo();
-        var a = new PublishScheduleTemplateAuthorizer(repo);
+        var a = new PublishScheduleTemplateAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         // NotFound
         var r1 = await a.AuthorizeAsync(new PublishScheduleTemplateCommand(
@@ -345,12 +349,14 @@ public sealed class ScheduleTemplatePipelineTests
             ClientCommandId: null), default);
         Assert.Equal(ShramSafalErrors.Forbidden, r3.Error);
 
-        // Author with sufficient role => Success
+        // Author whose named farm seat holds schedule templates => Success (lane 2b)
+        repo.SeatPrimaryOwner(TemplateFarm, AuthorId);
         var r4 = await a.AuthorizeAsync(new PublishScheduleTemplateCommand(
             TemplateId: template.Id,
             CallerUserId: AuthorId,
-            CallerRole: AppRole.PrimaryOwner,
-            ClientCommandId: null), default);
+            CallerRole: AppRole.Worker,
+            ClientCommandId: null,
+            FarmId: TemplateFarm), default);
         Assert.True(r4.IsSuccess);
     }
 
@@ -375,12 +381,14 @@ public sealed class ScheduleTemplatePipelineTests
     {
         var template = MakeTemplate(AuthorId, TenantScope.Licensed);
         var (pipeline, repo) = BuildPublishPipeline(template);
+        repo.SeatPrimaryOwner(TemplateFarm, AuthorId);
 
         var r = await pipeline.HandleAsync(new PublishScheduleTemplateCommand(
             TemplateId: template.Id,
             CallerUserId: AuthorId,
             CallerRole: AppRole.PrimaryOwner,
-            ClientCommandId: null));
+            ClientCommandId: null,
+            FarmId: TemplateFarm));
 
         Assert.True(r.IsSuccess);
         Assert.NotNull(template.PublishedAtUtc);
@@ -421,7 +429,7 @@ public sealed class ScheduleTemplatePipelineTests
             new ValidationBehavior<CloneScheduleTemplateCommand, CloneScheduleTemplateResult>(
                 new IValidator<CloneScheduleTemplateCommand>[] { new CloneScheduleTemplateValidator() }),
             new AuthorizationBehavior<CloneScheduleTemplateCommand, CloneScheduleTemplateResult>(
-                new IAuthorizationCheck<CloneScheduleTemplateCommand>[] { new CloneScheduleTemplateAuthorizer(repo) }));
+                new IAuthorizationCheck<CloneScheduleTemplateCommand>[] { new CloneScheduleTemplateAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock()) }));
         return (pipeline, repo);
     }
 
@@ -443,7 +451,7 @@ public sealed class ScheduleTemplatePipelineTests
             new ValidationBehavior<EditScheduleTemplateCommand, EditScheduleTemplateResult>(
                 new IValidator<EditScheduleTemplateCommand>[] { new EditScheduleTemplateValidator() }),
             new AuthorizationBehavior<EditScheduleTemplateCommand, EditScheduleTemplateResult>(
-                new IAuthorizationCheck<EditScheduleTemplateCommand>[] { new EditScheduleTemplateAuthorizer(repo) }));
+                new IAuthorizationCheck<EditScheduleTemplateCommand>[] { new EditScheduleTemplateAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock()) }));
         return (pipeline, repo);
     }
 
@@ -465,7 +473,7 @@ public sealed class ScheduleTemplatePipelineTests
             new ValidationBehavior<PublishScheduleTemplateCommand, PublishScheduleTemplateResult>(
                 new IValidator<PublishScheduleTemplateCommand>[] { new PublishScheduleTemplateValidator() }),
             new AuthorizationBehavior<PublishScheduleTemplateCommand, PublishScheduleTemplateResult>(
-                new IAuthorizationCheck<PublishScheduleTemplateCommand>[] { new PublishScheduleTemplateAuthorizer(repo) }));
+                new IAuthorizationCheck<PublishScheduleTemplateCommand>[] { new PublishScheduleTemplateAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock()) }));
         return (pipeline, repo);
     }
 
@@ -490,6 +498,14 @@ public sealed class ScheduleTemplatePipelineTests
         public List<AuditEvent> AuditEvents { get; } = new();
 
         public void Seed(ScheduleTemplate t) => _templates[t.Id] = t;
+
+        // lane 2b — who is the primary owner of which farm (the schedule-templates authority).
+        private readonly HashSet<(Guid, Guid)> _primaryOwners = new();
+
+        public void SeatPrimaryOwner(Guid farmId, Guid userId) => _primaryOwners.Add((farmId, userId));
+
+        public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(_primaryOwners.Contains((farmId, userId)) ? AppRole.PrimaryOwner : (AppRole?)null);
 
         public override Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default)
             => Task.FromResult(_templates.TryGetValue(templateId, out var t) ? t : null);

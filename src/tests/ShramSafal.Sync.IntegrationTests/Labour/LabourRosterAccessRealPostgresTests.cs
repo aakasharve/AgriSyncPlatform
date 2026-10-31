@@ -15,6 +15,7 @@ using ShramSafal.Application.UseCases.Labour.GetFieldOperators;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Infrastructure;
 using ShramSafal.Infrastructure.Persistence;
+using ShramSafal.Sync.IntegrationTests.Memberships;
 using Xunit;
 
 namespace ShramSafal.Sync.IntegrationTests.Labour;
@@ -100,6 +101,9 @@ public sealed class LabourRosterAccessRealPostgresTests(Xunit.Abstractions.ITest
             await SeedMembershipAsync(raw, PlainWorker, "Worker", grant: false);
             await SeedMembershipAsync(raw, OtherWorker, "Worker", grant: false);
             await SeedMembershipAsync(raw, GrantedWorker, "Worker", grant: true);
+            // lane 2b (P11) — the seats as they stand on an UPGRADED farm (the सहमालक keeps हजेरी and
+            // the money book; the granted worker's one switch becomes हजेरी + confirm records).
+            await UpgradedSeats.CarryAsync(raw, Farm);
             // A populated farm: Draft logs by three different people, all older
             // than any "today"/"week" window so a date filter cannot hide them.
             for (var i = 0; i < 3; i++) await SeedDraftLogAsync(raw, PlainWorker, i + 1);

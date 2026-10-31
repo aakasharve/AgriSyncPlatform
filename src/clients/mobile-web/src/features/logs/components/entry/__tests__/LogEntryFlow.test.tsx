@@ -83,7 +83,10 @@ describe('work home — the tab opens on the doors (H08, H10)', () => {
         cleanup();
         render(<Harness role="Mukadam" cachedGrant />);
         expect(screen.getByTestId('home-attendance')).toBeInTheDocument();
-        expect(mayOpenAttendanceFromHome('SecondaryOwner', undefined)).toBe(true);
+        // lane 2b (D-22 / D-26): only the PRIMARY owner's label opens it; a सहमालक waits for the server.
+        expect(mayOpenAttendanceFromHome('PrimaryOwner', undefined)).toBe(true);
+        expect(mayOpenAttendanceFromHome('SecondaryOwner', undefined)).toBe(false);
+        expect(mayOpenAttendanceFromHome('SecondaryOwner', true)).toBe(true);
         expect(mayOpenAttendanceFromHome(null, undefined)).toBe(false);
         expect(mayOpenAttendanceFromHome('Worker', false)).toBe(false);
     });

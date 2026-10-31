@@ -183,6 +183,17 @@ internal sealed class FakeAuditOnlyRepository : IShramSafalRepository
     public List<AuditEvent> AuditEvents { get; } = new();
     public int SaveCalls { get; private set; }
 
+    // lane 2b — the caller's standing on a farm (the lab-records authority is a SEAT's, never the
+    // account's global role). Nobody stands anywhere unless a test says so.
+    private readonly Dictionary<(Guid FarmId, Guid UserId), ShramSafal.Application.Services.FarmAccess> _access = new();
+
+    public void Seat(Guid farmId, Guid userId, ShramSafal.Application.Services.FarmAccess access) =>
+        _access[(farmId, userId)] = access;
+
+    public Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+        Guid farmId, Guid userId, CancellationToken ct = default) =>
+        Task.FromResult(_access.TryGetValue((farmId, userId), out var access) ? access : null);
+
     public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)
     {
         AuditEvents.Add(auditEvent);

@@ -116,6 +116,7 @@ public sealed class JobCard : Entity<Guid>
 
     /// <summary>
     /// Assign the job card to a worker. Assigner must have at least Mukadam role.
+    /// (lane 2b: the assign-work authority is STORED only until L8 enforces it — this rule stays.)
     /// </summary>
     public void Assign(UserId workerUserId, UserId assignerUserId, AppRole assignerRole, DateTime occurredAtUtc)
     {
@@ -191,7 +192,8 @@ public sealed class JobCard : Entity<Guid>
     /// <summary>
     /// CEI-I9: Mark the job card as verified for payout.
     /// Requires Status = Completed and linkedLogStatus = Verified.
-    /// Verifier role must be PrimaryOwner, SecondaryOwner, Agronomist, or FpcTechnicalManager.
+    /// lane 2b: WHO may verify for payout is the review-money authority of the caller's farm seat,
+    /// resolved by the application layer; <paramref name="verifierRole"/> is the event's audit label.
     /// </summary>
     public void MarkVerifiedForPayout(
         VerificationStatus linkedLogStatus,
@@ -207,10 +209,6 @@ public sealed class JobCard : Entity<Guid>
             throw new InvalidOperationException(
                 "Daily log must have status Verified before this job card can be marked as VerifiedForPayout. " +
                 "Verified status is required.");
-
-        if (!IsEligibleToVerifyForPayout(verifierRole))
-            throw new InvalidOperationException(
-                $"Role {verifierRole} is not permitted to verify job cards for payout.");
 
         Status = JobCardStatus.VerifiedForPayout;
         ModifiedAtUtc = occurredAtUtc;
@@ -246,6 +244,7 @@ public sealed class JobCard : Entity<Guid>
     /// Two-tier role guard:
     ///   - Draft | Assigned | InProgress: Mukadam, PrimaryOwner, or SecondaryOwner
     ///   - Completed: PrimaryOwner or SecondaryOwner only
+    /// (lane 2b: plan / assign work are STORED only until L8 enforces them — this rule stays.)
     /// </summary>
     public void Cancel(UserId cancellerUserId, AppRole cancellerRole, string reason, DateTime occurredAtUtc)
     {
@@ -302,12 +301,6 @@ public sealed class JobCard : Entity<Guid>
         role is AppRole.Mukadam
             or AppRole.PrimaryOwner
             or AppRole.SecondaryOwner;
-
-    private static bool IsEligibleToVerifyForPayout(AppRole role) =>
-        role is AppRole.PrimaryOwner
-            or AppRole.SecondaryOwner
-            or AppRole.Agronomist
-            or AppRole.FpcTechnicalManager;
 
     private static bool IsEligibleToCancelInProgress(AppRole role) =>
         role is AppRole.Mukadam

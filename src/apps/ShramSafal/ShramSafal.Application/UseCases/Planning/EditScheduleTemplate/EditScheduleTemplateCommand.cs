@@ -20,4 +20,6 @@ public sealed record EditScheduleTemplateCommand(
     // unit tests stay green.
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+    // lane 2b — the farm whose seat authorises a Team / Licensed write (schedule templates).
+    Guid? FarmId = null);

@@ -1,7 +1,10 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary;
 
@@ -34,10 +37,12 @@ namespace ShramSafal.Application.UseCases.Farms.UpdateFarmBoundary;
 public sealed class UpdateFarmBoundaryAuthorizer : IAuthorizationCheck<UpdateFarmBoundaryCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly IClock _clock;
 
-    public UpdateFarmBoundaryAuthorizer(IShramSafalRepository repository)
+    public UpdateFarmBoundaryAuthorizer(IShramSafalRepository repository, IClock clock)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(UpdateFarmBoundaryCommand command, CancellationToken ct)
@@ -48,8 +53,10 @@ public sealed class UpdateFarmBoundaryAuthorizer : IAuthorizationCheck<UpdateFar
             return Result.Failure(ShramSafalErrors.FarmNotFound);
         }
 
-        var isOwner = await _repository.IsUserOwnerOfFarmAsync(command.FarmId, command.ActorUserId, ct);
-        if (!isOwner)
+        // lane 2b (D-15 via D-26) — the boundary is farm setup: the edit-farm-setup authority of
+        // the caller's seat on THIS farm (the primary account holder always), never the label.
+        if (!await FarmAuthorityGate.HoldsAsync(
+                _repository, command.FarmId, command.ActorUserId, FarmAuthority.EditFarmSetup, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

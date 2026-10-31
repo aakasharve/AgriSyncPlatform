@@ -21,6 +21,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using ShramSafal.Api;
 using ShramSafal.Sync.IntegrationTests.Dfes;
+using ShramSafal.Sync.IntegrationTests.Memberships;
 using Xunit;
 
 namespace ShramSafal.Sync.IntegrationTests.Labour;
@@ -106,6 +107,9 @@ public sealed class TeamWorkerRoutesRealPostgresTests : IAsyncLifetime
             await SeedMembershipAsync(raw, FarmA, AccountA, WorkerA, "Worker", false);
             await SeedMembershipAsync(raw, FarmA, AccountA, GrantedWorkerA, "Worker", true);
             await SeedMembershipAsync(raw, FarmB, AccountB, OwnerB, "PrimaryOwner", false);
+
+            // lane 2b (P11) — the seats as they stand on an UPGRADED farm: the सहमालक keeps हजेरी.
+            await UpgradedSeats.CarryAsync(raw, FarmA);
         }
 
         _app = await BuildHostAsync(_appConn);

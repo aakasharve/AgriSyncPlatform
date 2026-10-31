@@ -30,23 +30,11 @@ public sealed class TestInstance : Entity<Guid>
     private readonly List<Guid> _attachmentIds = [];
     private readonly List<TestResult> _results = [];
 
-    private static readonly HashSet<AppRole> CollectorRoles =
-    [
-        AppRole.LabOperator,
-        AppRole.SecondaryOwner,
-        AppRole.Mukadam
-    ];
-
-    private static readonly HashSet<AppRole> ReporterRoles =
-    [
-        AppRole.LabOperator
-    ];
-
-    private static readonly HashSet<AppRole> WaiverRoles =
-    [
-        AppRole.PrimaryOwner,
-        AppRole.Agronomist
-    ];
+    // lane 2b (founder D-22 / D-26; MU design §11.1): WHO may record a sample, a result or a waiver
+    // is the lab-records authority of the caller's seat on THIS test's farm, resolved by the
+    // application layer. The three role lists that lived here read the account's GLOBAL role and
+    // refused the farm's own primary owner (D-20); a label grants nothing, so the role parameters
+    // below are kept for call-site stability and are no longer read for permission.
 
     private TestInstance() : base(Guid.Empty) { } // EF Core
 
@@ -175,13 +163,6 @@ public sealed class TestInstance : Entity<Guid>
                 $"TestInstance {Id} must be in Due to be collected (was {Status}).");
         }
 
-        if (!CollectorRoles.Contains(callerRole))
-        {
-            throw new InvalidOperationException(
-                $"Role {callerRole} is not allowed to collect a test. " +
-                $"Allowed: LabOperator, SecondaryOwner, Mukadam.");
-        }
-
         Status = TestInstanceStatus.Collected;
         CollectedByUserId = collectorUserId;
         CollectedAtUtc = occurredAtUtc;
@@ -205,12 +186,6 @@ public sealed class TestInstance : Entity<Guid>
         {
             throw new InvalidOperationException(
                 $"TestInstance {Id} must be Collected before results can be recorded (was {Status}).");
-        }
-
-        if (!ReporterRoles.Contains(callerRole))
-        {
-            throw new InvalidOperationException(
-                $"Role {callerRole} is not allowed to report results. Allowed: LabOperator.");
         }
 
         if (results is null || results.Count == 0)
@@ -285,13 +260,6 @@ public sealed class TestInstance : Entity<Guid>
             throw new InvalidOperationException(
                 $"TestInstance {Id} cannot be waived from state {Status}. " +
                 $"Waive is only valid from Due or Overdue.");
-        }
-
-        if (!WaiverRoles.Contains(callerRole))
-        {
-            throw new InvalidOperationException(
-                $"Role {callerRole} is not allowed to waive a test. " +
-                $"Allowed: PrimaryOwner, Agronomist.");
         }
 
         if (string.IsNullOrWhiteSpace(reason))

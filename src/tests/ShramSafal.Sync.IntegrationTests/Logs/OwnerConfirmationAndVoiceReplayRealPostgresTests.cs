@@ -26,12 +26,14 @@ using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Application.UseCases.Logs.GetLogOriginalVoice;
 using ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
+using ShramSafal.Application.UseCases.Memberships.ManageMembership;
 using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 using ShramSafal.Domain.Privacy;
 using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Infrastructure.Privacy;
+using ShramSafal.Sync.IntegrationTests.Memberships;
 using Xunit;
 
 namespace ShramSafal.Sync.IntegrationTests.Logs;
@@ -142,6 +144,10 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
             await ExecAsync(raw,
                 "UPDATE ssf.farm_memberships SET can_manage_labour_records = true WHERE farm_id = @farm AND user_id = @user",
                 ("farm", FarmA), ("user", Mukadam));
+
+            // lane 2b (P11) — the seats as they stand on an UPGRADED farm: the मुकादम's switch is
+            // हजेरी + confirm records; the सहमालक keeps हजेरी (no confirming: he had no switch).
+            await UpgradedSeats.CarryAsync(raw, FarmA);
         }
 
         var services = new ServiceCollection();
@@ -408,7 +414,9 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
         var given = await SetPermissionAsync(Owner, CoOwner, allowed: true);
         given.IsSuccess.Should().BeTrue(given.Error?.ToString());
         given.Value!.CanConfirmRecords.Should().Be(true);
-        given.Value!.IsGrantEditable.Should().BeFalse("installed phones keep 'labour, permanently on' (P11)");
+        // lane 2b (D-22 / D-26): a सहमालक's हजेरी is a real switch now, so an installed phone gets a
+        // working "हजेरी व पक्कं" switch for him (its PUT keeps meaning both).
+        given.Value!.IsGrantEditable.Should().BeTrue("a co-owner label carries nothing; his switch is real (lane 2b)");
         (await GrantFlagAsync(CoOwner)).Should().BeTrue("stored, as the app role");
 
         var first = Guid.NewGuid();
@@ -419,8 +427,14 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
         confirmed.By.Should().Be(CoOwner);
         confirmed.Basis.Should().Be("read");
 
-        // (2) The primary owner takes it back: the co-owner's next confirm is only his mark.
-        var takenBack = await SetPermissionAsync(Owner, CoOwner, allowed: false);
+        // (2) The primary owner takes back CONFIRMING only (lane 2b: the one owner route, the
+        // whole desired set without ConfirmRecords): the co-owner's next confirm is only his mark.
+        var current = given.Value!.Authorities!;
+        var takenBack = await RunUnderScopeAsync(Owner, sp => new ManageMembershipHandler(
+                sp.GetRequiredService<IShramSafalRepository>(), sp.GetRequiredService<IClock>())
+            .HandleAsync(new ManageMembershipCommand(
+                new FarmId(FarmA), new UserId(CoOwner), new UserId(Owner), MembershipDecision.SetAuthorities,
+                Authorities: current.Where(a => a.Name != "ConfirmRecords").ToList())));
         takenBack.IsSuccess.Should().BeTrue(takenBack.Error?.ToString());
         takenBack.Value!.CanConfirmRecords.Should().Be(false);
         var second = Guid.NewGuid();
@@ -431,7 +445,7 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
         marked.Should().NotContain(e => e.Status == "Verified");
         marked[^1].Reason.Should().Be("mark-without-confirm-authority");
 
-        // His labour edits never depended on the switch (the D-26 permission system will decide those).
+        // His हजेरी is a separate authority the owner left ON (lane 2b) — not his label.
         (await RunUnderScopeAsync(CoOwner, sp => LabourManagementGate.IsAllowedAsync(
             sp.GetRequiredService<IShramSafalRepository>(), FarmA, CoOwner, DateTime.UtcNow))).Should().BeTrue();
 
@@ -439,19 +453,30 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
         // and nothing is stored.
         foreach (var target in new[] { UngrantedWorker, CoOwner })
         {
+            var before = await GrantFlagAsync(target);
             var refused = await SetPermissionAsync(CoOwner, target, allowed: true);
             output.WriteLine($"[EVIDENCE] co-owner grants {target} -> {refused.Error?.Code}");
             refused.IsSuccess.Should().BeFalse();
             refused.Error.Code.Should().Be("ShramSafal.Forbidden");
-            (await GrantFlagAsync(target)).Should().BeFalse();
+            // Nothing moved (the co-owner's OWN हजेरी is the primary owner's earlier choice).
+            (await GrantFlagAsync(target)).Should().Be(before);
         }
+        (await GrantFlagAsync(UngrantedWorker)).Should().BeFalse();
 
-        // (4) He still reads the roster, but no switch on it is his to move.
+        // (4) lane 2b (D-26): the team list is the primary owner's — a co-owner is refused it.
         var roster = await RunUnderScopeAsync(CoOwner, sp => new GetLabourPermissionsHandler(
                 sp.GetRequiredService<IShramSafalRepository>(), sp.GetRequiredService<IClock>())
             .HandleAsync(new GetLabourPermissionsQuery(new FarmId(FarmA), new UserId(CoOwner))));
-        roster.IsSuccess.Should().BeTrue(roster.Error?.ToString());
-        roster.Value!.Should().OnlyContain(r => r.IsConfirmGrantEditable != true);
+        roster.IsSuccess.Should().BeFalse();
+        roster.Error.Code.Should().Be("ShramSafal.Forbidden");
+
+        // (5) An installed phone's one switch, turned OFF, takes both हजेरी and confirming (P11).
+        var oldPhoneOff = await SetPermissionAsync(Owner, CoOwner, allowed: false);
+        oldPhoneOff.IsSuccess.Should().BeTrue(oldPhoneOff.Error?.ToString());
+        oldPhoneOff.Value!.CanManageLabourRecords.Should().BeFalse();
+        oldPhoneOff.Value!.CanConfirmRecords.Should().Be(false);
+        (await RunUnderScopeAsync(CoOwner, sp => LabourManagementGate.IsAllowedAsync(
+            sp.GetRequiredService<IShramSafalRepository>(), FarmA, CoOwner, DateTime.UtcNow))).Should().BeFalse();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

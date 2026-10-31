@@ -110,15 +110,13 @@ public sealed class VerificationStateMachineTests
     // ---------------------------------------------------------------------------
 
     [Fact]
-    public void VerificationStateMachine_Agronomist_CanVerifyConfirmed()
+    public void VerificationStateMachine_Agronomist_VerifiesConfirmed_OnlyWithTheConfirmAuthority()
     {
-        // Agronomist must be able to transition Confirmed → Verified.
-        var allowed = VerificationStateMachine.CanTransitionWithRole(
-            VerificationStatus.Confirmed,
-            VerificationStatus.Verified,
-            AppRole.Agronomist);
-
-        Assert.True(allowed);
+        // lane 2b: the agronomist label alone no longer holds the owner's edge.
+        Assert.False(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed, VerificationStatus.Verified, AppRole.Agronomist));
+        Assert.True(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed, VerificationStatus.Verified, AppRole.Agronomist, hasConfirmAuthority: true));
     }
 
     [Fact]
@@ -146,15 +144,19 @@ public sealed class VerificationStateMachineTests
     }
 
     [Fact]
-    public void VerificationStateMachine_FpcManager_CanVerifyConfirmed_OnScopedFarm()
+    public void VerificationStateMachine_CoOwnerAndFpcManager_VerifyConfirmed_OnlyWithTheConfirmAuthority()
     {
-        // FpcTechnicalManager is treated as equivalent to SecondaryOwner for verification.
-        var allowed = VerificationStateMachine.CanTransitionWithRole(
-            VerificationStatus.Confirmed,
-            VerificationStatus.Verified,
-            AppRole.FpcTechnicalManager);
+        // lane 2b (D-22 / D-26): neither the सहमालक nor the FPC label reaches the owner's decision.
+        foreach (var role in new[] { AppRole.SecondaryOwner, AppRole.FpcTechnicalManager })
+        {
+            Assert.False(VerificationStateMachine.CanTransitionWithRole(
+                VerificationStatus.Confirmed, VerificationStatus.Verified, role));
+            Assert.True(VerificationStateMachine.CanTransitionWithRole(
+                VerificationStatus.Confirmed, VerificationStatus.Verified, role, hasConfirmAuthority: true));
+        }
 
-        Assert.True(allowed);
+        Assert.True(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed, VerificationStatus.Verified, AppRole.PrimaryOwner));
     }
 
     [Fact]
@@ -170,15 +172,13 @@ public sealed class VerificationStateMachineTests
     }
 
     [Fact]
-    public void VerificationStateMachine_Agronomist_CanDisputeVerified()
+    public void VerificationStateMachine_Agronomist_DisputesVerified_OnlyWithTheConfirmAuthority()
     {
-        // Agronomist shares the OwnerRoles set so may dispute a Verified log.
-        var allowed = VerificationStateMachine.CanTransitionWithRole(
-            VerificationStatus.Verified,
-            VerificationStatus.Disputed,
-            AppRole.Agronomist);
-
-        Assert.True(allowed);
+        // lane 2b (D-22 / D-26): a label grants nothing — the agronomist label left OwnerRoles.
+        Assert.False(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Verified, VerificationStatus.Disputed, AppRole.Agronomist));
+        Assert.True(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Verified, VerificationStatus.Disputed, AppRole.Agronomist, hasConfirmAuthority: true));
     }
 
     // ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ public sealed class VerificationStateMachineTests
             VerificationStatus.Confirmed,
             VerificationStatus.Verified,
             AppRole.Mukadam,
-            hasLabourManagementGrant: false);
+            hasConfirmAuthority: false);
 
         Assert.False(allowed);
     }
@@ -225,7 +225,7 @@ public sealed class VerificationStateMachineTests
             VerificationStatus.Confirmed,
             VerificationStatus.Verified,
             AppRole.Mukadam,
-            hasLabourManagementGrant: true);
+            hasConfirmAuthority: true);
 
         Assert.True(allowed);
     }
@@ -240,36 +240,30 @@ public sealed class VerificationStateMachineTests
             VerificationStatus.Confirmed,
             VerificationStatus.Verified,
             AppRole.Worker,
-            hasLabourManagementGrant: true);
+            hasConfirmAuthority: true);
 
         Assert.True(allowed);
     }
 
     [Fact]
-    public void ConfirmedToDisputed_WithGrant_IsStillRejected()
+    public void ConfirmedToDisputed_WithConfirmAuthority_IsAllowed_AndWithoutItRefused()
     {
-        // ONE edge. The founder ruled on approving a day; disputing one — and the
-        // correction cycle that opens — was not ruled on and stays owner-tier.
-        var allowed = VerificationStateMachine.CanTransitionWithRole(
-            VerificationStatus.Confirmed,
-            VerificationStatus.Disputed,
-            AppRole.Mukadam,
-            hasLabourManagementGrant: true);
-
-        Assert.False(allowed);
+        // lane 2b (MU design §11.1: confirm records = "log मंजूर / शंका"; D-44): शंका is the same
+        // authority's decision as मंजूर. Without the authority a मुकादम label holds no such edge.
+        Assert.True(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed, VerificationStatus.Disputed, AppRole.Mukadam, hasConfirmAuthority: true));
+        Assert.False(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Confirmed, VerificationStatus.Disputed, AppRole.Mukadam, hasConfirmAuthority: false));
     }
 
     [Fact]
-    public void VerifiedToDisputed_WithGrant_IsStillRejected()
+    public void VerifiedToDisputed_WithConfirmAuthority_IsAllowed_AndWithoutItRefused()
     {
-        // Re-opening a day an owner already vouched for is not a delegated act.
-        var allowed = VerificationStateMachine.CanTransitionWithRole(
-            VerificationStatus.Verified,
-            VerificationStatus.Disputed,
-            AppRole.Mukadam,
-            hasLabourManagementGrant: true);
-
-        Assert.False(allowed);
+        // lane 2b: re-opening a confirmed day with a शंका is the confirm-records authority's act.
+        Assert.True(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Verified, VerificationStatus.Disputed, AppRole.Mukadam, hasConfirmAuthority: true));
+        Assert.False(VerificationStateMachine.CanTransitionWithRole(
+            VerificationStatus.Verified, VerificationStatus.Disputed, AppRole.Mukadam, hasConfirmAuthority: false));
     }
 
     [Fact]
@@ -282,7 +276,7 @@ public sealed class VerificationStateMachineTests
             VerificationStatus.Draft,
             VerificationStatus.Confirmed,
             AppRole.FieldScout,
-            hasLabourManagementGrant: true);
+            hasConfirmAuthority: true);
 
         Assert.False(allowed);
     }
@@ -291,23 +285,24 @@ public sealed class VerificationStateMachineTests
     public void GetAvailableTransitions_ForUngrantedMukadamOnConfirmed_OffersNothing()
     {
         var available = VerificationStateMachine.GetAvailableTransitions(
-            VerificationStatus.Confirmed, AppRole.Mukadam, hasLabourManagementGrant: false);
+            VerificationStatus.Confirmed, AppRole.Mukadam, hasConfirmAuthority: false);
 
         Assert.Empty(available);
     }
 
     [Fact]
-    public void GetAvailableTransitions_ForGrantedMukadamOnConfirmed_OffersVerifiedOnly()
+    public void GetAvailableTransitions_ForAConfirmerOnConfirmed_OffersVerifiedAndDisputed()
     {
+        // lane 2b: the confirm-records authority opens both of the owner's decisions.
         // The read surfaces (verification-transitions endpoint, labour review inbox)
         // render from this list. It must offer exactly what the decision path would
         // honour: Verified yes, Disputed no. A list that under-reports hides a button
         // the server would have accepted; one that over-reports offers a button that
         // fails.
         var available = VerificationStateMachine.GetAvailableTransitions(
-            VerificationStatus.Confirmed, AppRole.Mukadam, hasLabourManagementGrant: true);
+            VerificationStatus.Confirmed, AppRole.Mukadam, hasConfirmAuthority: true);
 
-        Assert.Equal([VerificationStatus.Verified], available);
+        Assert.Equal([VerificationStatus.Verified, VerificationStatus.Disputed], available);
     }
 
     [Fact]
@@ -329,7 +324,7 @@ public sealed class VerificationStateMachineTests
             now,
             targetEventId: Guid.NewGuid(),
             enRouteEventId: Guid.NewGuid(),
-            hasLabourManagementGrant: true);
+            hasConfirmAuthority: true);
 
         Assert.Equal(2, emitted.Count);
         Assert.Equal(VerificationStatus.Confirmed, emitted[0].Status);
@@ -355,7 +350,7 @@ public sealed class VerificationStateMachineTests
             now,
             targetEventId: Guid.NewGuid(),
             enRouteEventId: Guid.NewGuid(),
-            hasLabourManagementGrant: false));
+            hasConfirmAuthority: false));
 
         Assert.Empty(log.VerificationEvents);
         Assert.Equal(VerificationStatus.Draft, log.CurrentVerificationStatus);

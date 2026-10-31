@@ -105,10 +105,14 @@ internal sealed class ShramSafalRepository(
         return membership;
     }
 
+    // lane 2b (founder D-22 / D-26) — "owner" means the PRIMARY account holder: a सहमालक / कुटुंब
+    // label is not an owner tier any more. Its production caller (EnsureIsOwner) guards people and
+    // permissions, which are the primary account holder's alone; farm setup asks the edit-farm-setup
+    // authority instead.
     public async Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
     {
         var role = await GetUserRoleForFarmAsync(farmId, userId, ct);
-        return role is AppRole.PrimaryOwner or AppRole.SecondaryOwner;
+        return role is AppRole.PrimaryOwner;
     }
 
     public async Task AddPlotAsync(Plot plot, CancellationToken ct = default)
@@ -2176,12 +2180,29 @@ internal sealed class ShramSafalRepository(
             .AsNoTracking()
             .Where(m => m.FarmId == typedFarmId && m.UserId == typedUserId
                 && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
-            .Select(m => new { m.Role, m.Status, m.Permissions })
+            .Select(m => new
+            {
+                m.Role,
+                m.Status,
+                m.Permissions,
+                m.CanManageLabourRecords,
+                m.LabourGrantExpiresAtUtc,
+                m.AuthorityExpiresAtJson,
+            })
             .FirstOrDefaultAsync(ct);
 
+        // lane 2b — the whole stored decision (bits, the labour grant and every end), so the policy
+        // evaluates each authority at the caller's clock; nothing is pre-decided here.
         return seat is null
             ? null
-            : new ShramSafal.Application.Services.FarmAccess(seat.Role, seat.Status, IsRegistrant: false, seat.Permissions);
+            : new ShramSafal.Application.Services.FarmAccess(
+                seat.Role,
+                seat.Status,
+                IsRegistrant: false,
+                seat.Permissions,
+                seat.CanManageLabourRecords,
+                seat.LabourGrantExpiresAtUtc,
+                seat.AuthorityExpiresAtJson);
     }
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — see the port. Newest ended seat by its

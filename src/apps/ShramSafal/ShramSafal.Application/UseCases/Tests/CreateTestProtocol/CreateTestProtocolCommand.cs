@@ -24,4 +24,7 @@ public sealed record CreateTestProtocolCommand(
     // unit tests stay green.
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+    // lane 2b — the farm whose seat authorises the caller (lab records). A protocol is not on a
+    // farm; without one named, nobody is authorised.
+    Guid? FarmId = null);

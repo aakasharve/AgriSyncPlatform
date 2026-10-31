@@ -6,6 +6,8 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Tests;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Tests.WaiveTestInstance;
 
@@ -19,12 +21,6 @@ public sealed class WaiveTestInstanceHandler(
     IShramSafalRepository repository,
     IClock clock) : IHandler<WaiveTestInstanceCommand>
 {
-    private static readonly HashSet<AppRole> AllowedRoles =
-    [
-        AppRole.PrimaryOwner,
-        AppRole.Agronomist
-    ];
-
     public async Task<Result> HandleAsync(
         WaiveTestInstanceCommand command,
         CancellationToken ct = default)
@@ -37,15 +33,22 @@ public sealed class WaiveTestInstanceHandler(
             return Result.Failure(ShramSafalErrors.InvalidCommand);
         }
 
-        if (!AllowedRoles.Contains(command.CallerRole))
-        {
-            return Result.Failure(ShramSafalErrors.TestRoleNotAllowed);
-        }
-
         var instance = await testInstanceRepository.GetByIdAsync(command.TestInstanceId, ct);
         if (instance is null)
         {
             return Result.Failure(ShramSafalErrors.TestInstanceNotFound);
+        }
+
+        // lane 2b (founder D-22 / D-26; D-20) — lab records is an authority of the caller's seat on
+        // THIS test's farm (the primary account holder always), never the account's global role:
+        // the role list that stood here refused the farm's own owner and admitted any account
+        // whose sign-up role matched, on any farm. Checked after the read so the farm is known;
+        // a test on a farm the caller cannot see is NotFound under its own row policy.
+        if (!await FarmAuthorityGate.HoldsAsync(
+                repository, instance.FarmId.Value, command.CallerUserId.Value, FarmAuthority.LabRecords,
+                clock.UtcNow, ct))
+        {
+            return Result.Failure(ShramSafalErrors.TestRoleNotAllowed);
         }
 
         var now = clock.UtcNow;

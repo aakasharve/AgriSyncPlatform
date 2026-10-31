@@ -6,8 +6,10 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Farms.CreatePlot;
 
@@ -56,8 +58,12 @@ public sealed class CreatePlotHandler(
             return Result.Failure<PlotDto>(ShramSafalErrors.FarmNotFound);
         }
 
+        // lane 2b (D-15 via D-26) — adding a plot is "edit farm setup": the primary account holder,
+        // or a seat he gave it to. The label is read for the audit row only.
         var actorRole = await repository.GetUserRoleForFarmAsync(command.FarmId, command.ActorUserId, ct);
-        if (actorRole is not AppRole.PrimaryOwner and not AppRole.SecondaryOwner)
+        if (actorRole is null
+            || !await FarmAuthorityGate.HoldsAsync(
+                repository, command.FarmId, command.ActorUserId, FarmAuthority.EditFarmSetup, clock.UtcNow, ct))
         {
             return Result.Failure<PlotDto>(ShramSafalErrors.Forbidden);
         }

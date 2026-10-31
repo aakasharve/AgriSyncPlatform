@@ -9,6 +9,14 @@ namespace ShramSafal.Domain.Tests.Tests;
 
 public sealed class RecordTestResultHandlerTests
 {
+    private static readonly UserId LabCaller = UserId.New();
+
+    // lane 2b — lab records is a SEAT's authority on the test's farm (stored as AddTestRecord).
+    private static ShramSafal.Application.Services.FarmAccess LabSeat(
+        AppRole role = AppRole.Worker,
+        ShramSafal.Domain.Farms.FarmPermission bits = ShramSafal.Domain.Farms.FarmPermission.AddTestRecord) =>
+        new(role, ShramSafal.Domain.Farms.MembershipStatus.Active, IsRegistrant: false, bits);
+
     private static readonly DateTime Now = new(2026, 4, 21, 10, 0, 0, DateTimeKind.Utc);
 
     private static RecordTestResultHandler CreateHandler(
@@ -21,6 +29,7 @@ public sealed class RecordTestResultHandlerTests
         instanceRepo.Seed(instance);
         recRepo = new FakeTestRecommendationRepository();
         auditRepo = new FakeAuditOnlyRepository();
+        auditRepo.Seat(instance.FarmId.Value, LabCaller.Value, LabSeat());
         return new RecordTestResultHandler(instanceRepo, recRepo, auditRepo, new FakeClock(Now));
     }
 
@@ -57,7 +66,7 @@ public sealed class RecordTestResultHandlerTests
             TestInstanceId: instance.Id,
             Results: results,
             AttachmentIds: attachments,
-            CallerUserId: UserId.New(),
+            CallerUserId: LabCaller,
             CallerRole: AppRole.LabOperator,
             ClientCommandId: "cmd-1"));
 
@@ -90,7 +99,7 @@ public sealed class RecordTestResultHandlerTests
             TestInstanceId: instance.Id,
             Results: results,
             AttachmentIds: new[] { Guid.NewGuid() },
-            CallerUserId: UserId.New(),
+            CallerUserId: LabCaller,
             CallerRole: AppRole.LabOperator,
             ClientCommandId: null));
 
@@ -116,7 +125,7 @@ public sealed class RecordTestResultHandlerTests
             TestInstanceId: instance.Id,
             Results: results,
             AttachmentIds: Array.Empty<Guid>(),
-            CallerUserId: UserId.New(),
+            CallerUserId: LabCaller,
             CallerRole: AppRole.LabOperator,
             ClientCommandId: null));
 

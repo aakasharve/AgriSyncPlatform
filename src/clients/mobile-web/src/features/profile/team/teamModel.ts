@@ -130,8 +130,13 @@ export function roleTone(role: string): Tone {
 export function doLine(row: LabourPermission): string {
     if (row.status !== 'Active') return '';
     const words: string[] = [DO_WORDS.tellWork, DO_WORDS.addCost];
-    if (row.canManageLabourRecords) words.push(DO_WORDS.attendance, DO_WORDS.verify);
-    if (isOwnerTier(row.role)) words.push(DO_WORDS.invite);
+    // lane 2b: हजेरी and पक्कं करणे are two separate responsibilities (D-26, D-44), read from the
+    // server's authorities; an older server sends one switch for both.
+    const held = Array.isArray(row.authorities) ? row.authorities.map(a => a.name) : null;
+    if (held ? held.includes('TakeAttendance') : row.canManageLabourRecords) words.push(DO_WORDS.attendance);
+    if (held ? held.includes('ConfirmRecords') : row.canManageLabourRecords) words.push(DO_WORDS.verify);
+    // Bringing people in is the primary account holder's alone (D-26); a सहमालक label no longer does.
+    if (held ? isPrimaryOwner(row.role) || row.isRegistrant === true : isOwnerTier(row.role)) words.push(DO_WORDS.invite);
     return words.join(' · ');
 }
 

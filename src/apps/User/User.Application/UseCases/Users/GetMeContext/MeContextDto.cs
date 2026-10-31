@@ -36,7 +36,14 @@ public sealed record MeFarmDto(
     // the seat's effective permission names ("AddCost", "PlanWork", ...; empty unless Active) and
     // the owner's reason for a pause.
     IReadOnlyList<string>? Permissions = null,
-    string? StatusReason = null);
+    string? StatusReason = null,
+    // lane 2b (MU design §2, §6) — ADDITIVE, last: every authority this seat holds now on this
+    // farm (the label grants none), each with its end (null = कायम); empty unless Active. The
+    // phone reads its doors from this, never from the label.
+    IReadOnlyList<MeAuthorityDto>? Authorities = null);
+
+/// <summary>lane 2b — one authority on the wire: the FarmAuthority NAME and its end (null = कायम).</summary>
+public sealed record MeAuthorityDto(string Name, DateTime? ExpiresAtUtc);
 
 public sealed record MeCapabilitiesDto(
     bool CanInvite,

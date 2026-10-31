@@ -35,6 +35,7 @@ import { useBackDismiss } from '../../core/navigation/useBackDismiss';
 import { Chip, PageBar, SANS, Tap } from '../../shared/components/ui/placeUi';
 import { useLabourPermissions } from './hooks/useLabourPermissions';
 import { isOwnerTierRole } from './helpers/teamRoster';
+import { AUTHORITY, holdsAuthority, isPrimaryAccountHolderRole } from '../../core/session/farmAuthorities';
 import { TeamPage } from './team/TeamPage';
 import { TEAM_COPY } from './team/teamCopy';
 import { splitRoster } from './team/teamModel';
@@ -149,7 +150,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
 
     // CEI Phase 4 §4.8 — show own reliability score if user is a Worker or
     // Mukadam on any farm.
-    const { currentFarmId: profileFarmId, switchFarm } = useFarmContext();
+    const { currentFarmId: profileFarmId, switchFarm, farms: meFarms } = useFarmContext();
     const isWorkerOnAnyFarm = farmAdmin.myMemberships.some(m => m.role === 'Worker' || m.role === 'Mukadam');
     const { profile: workerProfile } = useWorkerProfile(
         isWorkerOnAnyFarm ? (authSession?.userId ?? null) : null,
@@ -210,8 +211,15 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // Asked only when the SERVER says this person is owner tier on the farm (the route refuses
     // anyone else), so no one else's phone makes a refused call.
     const teamFarmId = farmAdmin.myFarm?.farmId ?? null;
-    const callerIsOwnerTier = isOwnerTierRole(farmAdmin.myFarm?.role);
-    const teamRoster = useLabourPermissions(callerIsOwnerTier ? teamFarmId : null);
+    // lane 2b (founder D-26): the roster is people and permissions — the PRIMARY account holder's
+    // alone; the server refuses a सहमालक now, so his phone never asks.
+    const callerIsPrimary = isPrimaryAccountHolderRole(farmAdmin.myFarm?.role);
+    const teamRoster = useLabourPermissions(callerIsPrimary ? teamFarmId : null);
+    // lane 2b (D-15 via D-26) — adding a plot and drawing the boundary are "edit farm setup", read
+    // from this seat's /me/context authorities on THIS farm (unknown → the pre-2b owner-tier rule).
+    const setupFarm = meFarms.find(f => f.farmId === teamFarmId)
+        ?? (farmAdmin.myFarm ? { role: farmAdmin.myFarm.role, authorities: undefined } : null);
+    const canEditFarmSetup = holdsAuthority(setupFarm, AUTHORITY.editFarmSetup);
     // Founder D-22 (26 Oct): only the PRIMARY owner answers a request, so only his hub counts them.
     const teamRequestCount = farmAdmin.myFarm?.role === 'PrimaryOwner'
         ? splitRoster(teamRoster.rows).requests.length
@@ -219,7 +227,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const teamFarmCode = farmAdmin.myMemberships.find(m => m.farmId === teamFarmId)?.farmCode ?? null;
     // The approved hub (PLR-D9 preview): the owner tier manages the team; a मुकादम looks at his crew;
     // a worker's hub has no team row.
-    const canOpenTeam = callerIsOwnerTier || farmAdmin.myFarm?.role === 'Mukadam';
+    // A सहमालक / मुकादम opens the team page to LOOK (the view-only list); only the primary owner manages it.
+    const canOpenTeam = isOwnerTierRole(farmAdmin.myFarm?.role) || farmAdmin.myFarm?.role === 'Mukadam';
     const openTeam = canOpenTeam ? () => setActiveTab('team') : undefined;
 
     return (
@@ -295,6 +304,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 connectError={farmAdmin.connectError}
                                 handleConnectWeather={farmAdmin.handleConnectWeather}
                                 setShowFarmBoundary={farmAdmin.setShowFarmBoundary}
+                                canEditFarmSetup={canEditFarmSetup}
                                 onOpenTeam={openTeam}
                                 nonExitableFarmIds={nonExitableFarmIds}
                                 handleExitMembership={farmAdmin.handleExitMembership}
@@ -323,6 +333,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                                 setMappingPlotId={cropPlot.setMappingPlotId}
                                 deletePlot={cropPlot.deletePlot}
                                 setWizardCropId={cropPlot.setWizardCropId}
+                                canAddPlot={canEditFarmSetup}
                                 onOpenScheduleLibrary={onOpenScheduleLibrary}
                             />
                         ),
@@ -471,7 +482,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             onOpenLabour={onOpenLabour}
                             farmCode={teamFarmCode}
                             onOpenTeam={openTeam}
-                            teamViewOnly={!callerIsOwnerTier}
+                            teamViewOnly={!callerIsPrimary}
                             teamRequestCount={teamRequestCount}
                             settingsItems={settingsItems}
                             onSelectExtra={handleSelectExtra}

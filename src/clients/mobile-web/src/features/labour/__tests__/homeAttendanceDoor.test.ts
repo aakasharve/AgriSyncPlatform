@@ -27,9 +27,10 @@ const readout = (canManageLabour?: boolean): LabourData => ({
 afterEach(() => { localStorage.clear(); sessionStorage.clear(); vi.useRealTimers(); });
 
 describe('mayOpenAttendanceFromHome', () => {
-    it('owner tier opens it; unknown, worker and mukadam without a grant do not', () => {
+    it('the primary owner opens it; a co-owner, worker or mukadam only on the server हजेरी answer (lane 2b)', () => {
         expect(mayOpenAttendanceFromHome('PrimaryOwner', undefined)).toBe(true);
-        expect(mayOpenAttendanceFromHome('SecondaryOwner', false)).toBe(true);
+        expect(mayOpenAttendanceFromHome('SecondaryOwner', false)).toBe(false);
+        expect(mayOpenAttendanceFromHome('SecondaryOwner', true)).toBe(true);
         expect(mayOpenAttendanceFromHome('Mukadam', undefined)).toBe(false);
         expect(mayOpenAttendanceFromHome(null, undefined)).toBe(false);
         expect(mayOpenAttendanceFromHome('Mukadam', true)).toBe(true);

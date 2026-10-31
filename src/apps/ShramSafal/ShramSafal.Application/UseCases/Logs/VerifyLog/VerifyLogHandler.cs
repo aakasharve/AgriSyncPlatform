@@ -10,6 +10,7 @@ using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Work.Handlers;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Logs.VerifyLog;
@@ -92,10 +93,25 @@ public sealed class VerifyLogHandler(
         // that, so the read is skipped only for the primary owner (whose role is the whole
         // answer); it used to be skipped for every owner-tier role. Still the stored,
         // clock-evaluated flag — never a role tier, never anything from the wire.
-        var hasLabourManagementGrant =
+        //
+        // lane 2b (founder D-26 "recording attendance does not mean approving it"; D-44) — the
+        // input is now the CONFIRM-RECORDS authority of THIS farm's seat, separate from take
+        // हजेरी. MU design §11.2: a confirmation made OFFLINE while the authority was alive, which
+        // reaches the server after it ended, still counts — and is flagged for the owner. The
+        // moment it was made is the phone's own statement (verify_log_v2 "decidedAt"), trusted
+        // only inside [the record's creation, now]; anything else is "now". A confirmation made
+        // after the end is kept as a mark below (the L6 pattern); nothing is dropped.
+        var nowUtc = clock.UtcNow;
+        var decidedAtUtc = BoundedDecisionTime(command.DecidedAtUtc, log.CreatedAtUtc, nowUtc);
+        var (confirmStanding, confirmEndedAtUtc) = resolvedCallerRole == AppRole.PrimaryOwner
+            ? (AuthorityStanding.HeldNow, (DateTime?)null)
+            : await FarmAuthorityGate.StandingAsync(
+                repository, (Guid)log.FarmId, command.VerifiedByUserId, FarmAuthority.ConfirmRecords,
+                nowUtc, decidedAtUtc, ct);
+        var hasConfirmAuthority =
             resolvedCallerRole != AppRole.PrimaryOwner
-            && await LabourManagementGate.HasExplicitGrantAsync(
-                repository, (Guid)log.FarmId, command.VerifiedByUserId, clock.UtcNow, ct);
+            && confirmStanding != AuthorityStanding.NotHeld;
+        var acceptedAfterAuthorityEnded = confirmStanding == AuthorityStanding.HeldWhenItHappened;
 
         // Phase 5 entitlement gate (PaidFeature.RunVerification).
         var gate = await EntitlementGate.CheckAsync<DailyLogDto>(
@@ -132,7 +148,7 @@ public sealed class VerifyLogHandler(
         var isOldResultScreenSelfTap = isSpeaker && command.ReviewBasisOmittedOnV2;
         if ((wantsOwnerConfirmation && isOldResultScreenSelfTap)
             || (wantsOwnerDecision
-                && !OwnerConfirmationAuthority.MayConfirm(resolvedCallerRole, hasLabourManagementGrant)))
+                && !OwnerConfirmationAuthority.MayConfirm(resolvedCallerRole, hasConfirmAuthority)))
         {
             return await RecordMarkWithoutConfirmAuthorityAsync(log, command, resolvedCallerRole, isSpeaker, priorState, ct);
         }
@@ -173,7 +189,7 @@ public sealed class VerifyLogHandler(
                 clock.UtcNow,
                 targetEventId: command.VerificationEventId ?? idGenerator.New(),
                 enRouteEventId: idGenerator.New(),
-                hasLabourManagementGrant: hasLabourManagementGrant);
+                hasConfirmAuthority: hasConfirmAuthority);
 
             verification = emitted[^1];
 
@@ -207,6 +223,39 @@ public sealed class VerifyLogHandler(
                             emittedEvent.OccurredAtUtc,
                             emittedEvent.ConfirmedLogVersion,
                             emittedEvent.ReviewBasis
+                        },
+                        farmId: log.FarmId,
+                        clientCommandId: command.ClientCommandId,
+                        appVersion: string.IsNullOrWhiteSpace(command.ClientAppVersion)
+                            ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                            : command.ClientAppVersion,
+                        deviceId: command.AuditDeviceId,
+                        ipHash: command.AuditIpHash,
+                        sourceAiJobId: null),
+                    ct);
+            }
+
+            // lane 2b (MU design §11.2) — the owner's decision was made while the confirm-records
+            // authority was alive and reached the server after it ended: it counts, and the owner
+            // is told so ("जबाबदारी संपल्यानंतर पोहोचलं", PROPOSED on the phone).
+            if (acceptedAfterAuthorityEnded && wantsOwnerDecision)
+            {
+                await repository.AddAuditEventAsync(
+                    AuditEventFactory.Create(
+                        entityType: "DailyLog",
+                        entityId: log.Id,
+                        action: LateAuthorityAudit.AcceptedAfterEnd,
+                        actorUserId: command.VerifiedByUserId,
+                        actorRole: resolvedCallerRole.ToString(),
+                        payload: new
+                        {
+                            logId = log.Id,
+                            authority = FarmAuthorities.NameOf(FarmAuthority.ConfirmRecords),
+                            requested = command.TargetStatus.ToString(),
+                            verificationId = verification.Id,
+                            happenedAtUtc = decidedAtUtc,
+                            authorityEndedAtUtc = confirmEndedAtUtc,
+                            receivedAtUtc = nowUtc,
                         },
                         farmId: log.FarmId,
                         clientCommandId: command.ClientCommandId,
@@ -308,5 +357,28 @@ public sealed class VerifyLogHandler(
 
         await repository.SaveChangesAsync(ct);
         return Result.Success(log.ToDto());
+    }
+
+    /// <summary>
+    /// lane 2b (MU design §11.2) — when the phone says the decision was made. It is the phone's
+    /// own statement, so it is believed only inside [the record's creation, now]: a decision
+    /// cannot precede the record it decides, nor lie in the future. Outside that, or absent (every
+    /// path but verify_log_v2), the decision is taken as made now — the fail-closed reading.
+    /// </summary>
+    internal static DateTime? BoundedDecisionTime(DateTime? stated, DateTime recordCreatedAtUtc, DateTime nowUtc)
+    {
+        if (stated is not { } value)
+        {
+            return null;
+        }
+
+        var utc = value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+        };
+
+        return utc >= recordCreatedAtUtc && utc <= nowUtc ? utc : null;
     }
 }

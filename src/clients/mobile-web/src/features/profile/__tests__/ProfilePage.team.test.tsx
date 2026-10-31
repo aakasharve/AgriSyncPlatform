@@ -97,15 +97,17 @@ describe('ProfilePage — माणसं → माझी टीम', () => {
         ]);
         mount();
 
+        // lane 2b (founder D-26): the roster is people and permissions — the PRIMARY account holder's
+        // alone. The server refuses a सहमालक now, so his phone never asks; he looks at the team view-only.
         const row = await screen.findByTestId('hub-team');
-        await vi.waitFor(() => expect(h.fetchLabourPermissions).toHaveBeenCalledWith('farm-1'));
-        expect(row).toHaveTextContent('कोण, कोणती भूमिका');
         expect(row).not.toHaveTextContent('आत येऊ इच्छि');
         fireEvent.click(row);
         expect(screen.getByTestId('page-title')).toHaveTextContent('माझी टीम');
-        expect(await screen.findByTestId('team-people')).toBeInTheDocument();
+        expect(await screen.findByTestId('team-view-only')).toBeInTheDocument();
+        expect(screen.queryByTestId('team-people')).toBeNull();
         expect(screen.queryByTestId('team-requests')).toBeNull();
         expect(screen.queryByText('सुनील आत येऊ इच्छितात')).toBeNull();
+        expect(h.fetchLabourPermissions).not.toHaveBeenCalled();
     });
 
     it('a मुकादम gets a view-only team row and never asks the owner-only roster', async () => {

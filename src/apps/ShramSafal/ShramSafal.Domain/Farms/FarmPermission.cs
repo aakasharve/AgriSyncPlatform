@@ -1,42 +1,61 @@
 namespace ShramSafal.Domain.Farms;
 
 /// <summary>
-/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — what the OWNER switched on for one person on
-/// one farm, beside their role (PLR-D7 §2: role · scope · permissions). Stored as a nullable
-/// bitmask on <c>ssf.farm_memberships.permissions</c>: <c>null</c> = the role's defaults
-/// (<see cref="FarmPermissionDefaults"/>), so every row written before step 2 keeps answering
-/// exactly what its role answers (doctrine P11).
+/// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) and lane 2b (MU design §2, §11.1) — the STORED
+/// bitmask of what the primary account holder switched on for one person on one farm
+/// (<c>ssf.farm_memberships.permissions</c>). Each bit is one authority of
+/// <see cref="FarmAuthority"/>; the label on the seat (<c>role</c>) grants none of them (founder
+/// D-22 / D-26: "सहमालक and कुटुंब … neither automatically grants operational, financial, approval,
+/// setup, or administrative powers").
 ///
-/// <para><b>Values are persisted — never renumber.</b> Add a new flag on a new bit only.</para>
+/// <para><b>Values are persisted — never renumber.</b> Add a new flag on a new bit only. Lane 2b
+/// added bits 6–9; bits 0–5 are step 2's, unchanged.</para>
 ///
-/// <para><b>Not here, on purpose:</b> the labour-record grant ("हजेरी व पक्कं करणे",
-/// <see cref="FarmMembership.CanManageLabourRecords"/>). It stays the ONE owner switch it already
-/// is (founder D5, 2026-09-02) — duplicating it as a flag would give the owner two switches for one
-/// power, which is how they drift apart.</para>
+/// <para><b>Not here, on purpose:</b> "take हजेरी" (<see cref="FarmAuthority.TakeAttendance"/>). It is
+/// the existing labour grant (<see cref="FarmMembership.CanManageLabourRecords"/> +
+/// <see cref="FarmMembership.LabourGrantExpiresAtUtc"/>), kept as THE one store for it — two stores
+/// for one power is how they drift apart.</para>
 ///
-/// <para><b>Which flags the server ENFORCES in step 2:</b> only <see cref="AddCost"/>, and only on
-/// CHANGING money — correcting a cost and allocating a whole-farm cost. RECORDING a purchase stays
-/// open to every Active member (founder D-24d / D-12; M-5 of the 27 Oct alignment).
-/// <b>Despite its name (kept: it is the plan's and the spec's word, and the wire name), AddCost
-/// means "may change money already recorded"</b>, and both gates read it the same way: without
-/// the bit, refused. Correcting a cost keeps, in addition, its older floor (owner tier, the rule
-/// before step 2), so a bit stored for a worker or मुकादम lets him split a whole-farm bill but
-/// not correct one. No phone switch stores the bit in step 2 (only the primary owner holds it);
-/// the phone hides the bill-split step from a seat whose <c>/me/context</c> permissions lack it.
-/// <see cref="PlanWork"/> means D-24 "plan and assign tasks" and is enforced by nothing until the
-/// planned-work store exists (the crop-schedule edits keep their own rule, role >= Mukadam: the
-/// schedule ↔ planning integration is on hold, D-24e2). The others are recorded for the steps that
-/// enforce them (SeeMoney / SeeWages: the role-scoped download, step 4). None of them is offered to
-/// the owner as a switch before its step (P5, plan §4).</para>
+/// <para><b>Meaning of the step-2 names (the wire keeps the names, P11):</b>
+/// <see cref="AddCost"/> is "review money entries" (correct a cost, split a whole-farm cost,
+/// job-card payout verify / settle) and requires <see cref="SeeMoney"/>;
+/// <see cref="AddTestRecord"/> is "lab records". <see cref="Invite"/> is RETIRED: inviting,
+/// approving, changing authorities, pausing and removing belong to the primary account holder only
+/// (D-26 "Manage people and permissions: primary account holder only"); the bit is kept so no value
+/// is ever reused, and is never granted and never read.</para>
 /// </summary>
 [Flags]
 public enum FarmPermission
 {
     None = 0,
+
+    /// <summary>See money: costs, bills, ledgers, payouts, totals. Stored and reported; the download filter is lane MU-3.</summary>
     SeeMoney = 1 << 0,
+
+    /// <summary>See per-person wages. Requires <see cref="SeeMoney"/>. Stored and reported; filter is MU-3.</summary>
     SeeWages = 1 << 1,
+
+    /// <summary>Review money entries (wire name kept): correct a cost, split a whole-farm cost, job-card payout verify / settle. Requires <see cref="SeeMoney"/>.</summary>
     AddCost = 1 << 2,
+
+    /// <summary>Plan work: create or change work plans (job cards, the crop-schedule steps). STORED only: L8 enforces it; until then today's label rule still decides (lane 2b brief).</summary>
     PlanWork = 1 << 3,
+
+    /// <summary>RETIRED — never granted, never read (people and permissions are the primary account holder's alone).</summary>
     Invite = 1 << 4,
+
+    /// <summary>Lab records (wire name kept): a test's sample taken, its result, waiving it, a test protocol.</summary>
     AddTestRecord = 1 << 5,
+
+    /// <summary>lane 2b — Assign work to another person (D-26 "plan ≠ assign"). STORED only: L8 enforces it; until then today's label rule still decides.</summary>
+    AssignWork = 1 << 6,
+
+    /// <summary>lane 2b — Confirm records: a log's मंजूर / शंका, a compliance warning; never money (D-24d, D-44).</summary>
+    ConfirmRecords = 1 << 7,
+
+    /// <summary>lane 2b — Edit farm setup: add a plot, the boundary, motors, water (D-15 via D-26).</summary>
+    EditFarmSetup = 1 << 8,
+
+    /// <summary>lane 2b — Schedule templates: write a Team / Licensed template (replaces the global-role gate).</summary>
+    ManageScheduleTemplates = 1 << 9,
 }

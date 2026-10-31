@@ -111,8 +111,9 @@ public sealed class GetLogOriginalVoiceHandler(
             query.CallerUserId,
             speakerUserId,
             role,
-            () => LabourManagementGate.HasExplicitGrantAsync(
-                repository, farmId, query.CallerUserId, clock.UtcNow, ct));
+            // lane 2b (D-31 "authorised approvers"; D-44) — the confirm-records authority.
+            () => FarmAuthorityGate.HoldsAsync(
+                repository, farmId, query.CallerUserId, Domain.Farms.FarmAuthority.ConfirmRecords, clock.UtcNow, ct));
         if (!mayListen)
         {
             return Result.Failure<LogOriginalVoiceResult>(ShramSafalErrors.ReadNotAllowed);

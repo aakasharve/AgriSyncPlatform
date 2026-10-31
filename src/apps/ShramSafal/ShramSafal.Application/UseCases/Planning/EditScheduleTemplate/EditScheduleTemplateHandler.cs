@@ -63,7 +63,8 @@ public sealed class EditScheduleTemplateHandler(
         else
         {
             // Non-private: apply the scope/role gate (CEI Phase 2 §4.7)
-            if (!ScopeRoleGate.IsAllowed(source.TenantScope, command.CallerRole))
+            if (!await ScopeRoleGate.IsAllowedAsync(
+                repository, source.TenantScope, command.FarmId, command.CallerUserId, clock.UtcNow, ct))
             {
                 return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.Forbidden);
             }

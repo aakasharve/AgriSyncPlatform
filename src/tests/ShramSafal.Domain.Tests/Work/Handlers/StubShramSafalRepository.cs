@@ -28,17 +28,23 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
     public virtual Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult<FarmMembership?>(null);
     public virtual Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult<AppRole?>(null);
 
-    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the permission gate's read. Re-declared
+    // spec: plr-d7-m1-multiuser-2026-10-26 (step 2), lane 2b — the authority gate's read. Re-declared
     // `virtual` (see the Task 11 note below: a fake cannot override an interface default through
-    // this class otherwise), with the interface default's own rule: the role this stub answers,
-    // Active, the role's default permissions.
+    // this class otherwise). lane 2b: the role this stub answers stands for an EXISTING seat after
+    // the upgrade — Active, holding exactly what the 2b migration wrote for that label (P11), plus
+    // confirm records when the stub reports a labour grant. A stub that needs a bare label (no
+    // authorities) overrides this member.
     public virtual async Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
         Guid farmId, Guid userId, CancellationToken ct = default)
     {
         var role = await GetUserRoleForFarmAsync(farmId, userId, ct);
-        return role is null
-            ? null
-            : new ShramSafal.Application.Services.FarmAccess(role.Value, MembershipStatus.Active, IsRegistrant: false, StoredPermissions: null);
+        if (role is null)
+        {
+            return null;
+        }
+
+        var grant = await GetLabourManagementGrantAsync(farmId, userId, DateTime.UtcNow, ct);
+        return ShramSafal.Domain.Tests.Auth.MigratedSeatAuthorities.AccessFor(role.Value, grant);
     }
     public virtual Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult(false);
     public virtual Task AddPlotAsync(Plot plot, CancellationToken ct = default) => throw new NotSupportedException();

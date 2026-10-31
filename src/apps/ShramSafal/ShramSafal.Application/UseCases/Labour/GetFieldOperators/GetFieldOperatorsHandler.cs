@@ -6,6 +6,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Labour.GetFieldOperators;
 
@@ -55,9 +56,15 @@ public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, I
         // crew — owners and Mukadam — or a member the owner explicitly GRANTED
         // labour management may read it; a plain Worker (and any other
         // own-row role) is refused with a READ Forbidden and no body.
-        if (GetLabourDataHandler.ResolveRegisterView(callerRole.Value) == LabourRegisterView.OwnRow
-            && !await LabourManagementGate.HasExplicitGrantAsync(
-                repository, query.FarmId.Value, query.CallerUserId.Value, clock.UtcNow, ct))
+        // lane 2b — the same authorities GetLabourData reads (see wages, take हजेरी, confirm records).
+        var access = await repository.GetFarmAccessForUserAsync(query.FarmId.Value, query.CallerUserId.Value, ct);
+        var now = clock.UtcNow;
+        var holdsTakeAttendance = FarmAccessPolicy.Holds(access, FarmAuthority.TakeAttendance, now);
+        if (GetLabourDataHandler.ResolveRegisterView(
+                callerRole.Value, FarmAccessPolicy.Holds(access, FarmAuthority.SeeWages, now))
+                == LabourRegisterView.OwnRow
+            && !holdsTakeAttendance
+            && !FarmAccessPolicy.Holds(access, FarmAuthority.ConfirmRecords, now))
         {
             return Result.Failure<IReadOnlyList<FieldOperatorSummaryDto>>(ShramSafalErrors.ReadNotAllowed);
         }

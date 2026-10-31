@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Audit;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.GetScheduleLineage;
@@ -16,14 +17,28 @@ public static class ScheduleTemplateEndpoints
         group.MapPost("/schedule-templates/{id}/clone", async (
             Guid id,
             CloneScheduleTemplateRequest request,
+            Guid? farmId,
             HttpContext httpContext,
             ClaimsPrincipal user,
             CloneScheduleTemplateHandler handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane 2b (founder D-26; MU design §2) — a Team / Licensed write is authorised by a FARM
+            // SEAT (schedule templates), never the account's global role: the caller names the farm
+            // (?farmId=…) and its scope is set for that read. A Private write needs no farm.
+            if (farmId is { } namedFarm)
+            {
+                var farmScope = await scope.EstablishForCallerAsync(namedFarm, actorUserId, ct);
+                if (!farmScope.IsSuccess)
+                {
+                    return Results.Forbid();
+                }
             }
 
             var newTemplateId = request.NewId ?? Guid.NewGuid();
@@ -43,7 +58,8 @@ public static class ScheduleTemplateEndpoints
                 ClientCommandId: request.ClientCommandId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                FarmId: farmId);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -55,14 +71,28 @@ public static class ScheduleTemplateEndpoints
         group.MapPost("/schedule-templates/{id}/edit", async (
             Guid id,
             EditScheduleTemplateRequest request,
+            Guid? farmId,
             HttpContext httpContext,
             ClaimsPrincipal user,
             EditScheduleTemplateHandler handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane 2b (founder D-26; MU design §2) — a Team / Licensed write is authorised by a FARM
+            // SEAT (schedule templates), never the account's global role: the caller names the farm
+            // (?farmId=…) and its scope is set for that read. A Private write needs no farm.
+            if (farmId is { } namedFarm)
+            {
+                var farmScope = await scope.EstablishForCallerAsync(namedFarm, actorUserId, ct);
+                if (!farmScope.IsSuccess)
+                {
+                    return Results.Forbid();
+                }
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -80,7 +110,8 @@ public static class ScheduleTemplateEndpoints
                 ClientCommandId: request.ClientCommandId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                FarmId: farmId);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -92,14 +123,28 @@ public static class ScheduleTemplateEndpoints
         group.MapPost("/schedule-templates/{id}/publish", async (
             Guid id,
             PublishScheduleTemplateRequest request,
+            Guid? farmId,
             HttpContext httpContext,
             ClaimsPrincipal user,
             PublishScheduleTemplateHandler handler,
+            ICallerFarmTenantScope scope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane 2b (founder D-26; MU design §2) — a Team / Licensed write is authorised by a FARM
+            // SEAT (schedule templates), never the account's global role: the caller names the farm
+            // (?farmId=…) and its scope is set for that read. A Private write needs no farm.
+            if (farmId is { } namedFarm)
+            {
+                var farmScope = await scope.EstablishForCallerAsync(namedFarm, actorUserId, ct);
+                if (!farmScope.IsSuccess)
+                {
+                    return Results.Forbid();
+                }
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -114,7 +159,8 @@ public static class ScheduleTemplateEndpoints
                 ClientCommandId: request.ClientCommandId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                FarmId: farmId);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);

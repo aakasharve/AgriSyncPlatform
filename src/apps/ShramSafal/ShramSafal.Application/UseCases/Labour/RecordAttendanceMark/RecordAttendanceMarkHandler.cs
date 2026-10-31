@@ -72,9 +72,28 @@ public sealed class RecordAttendanceMarkHandler(
         // NotFound (LabourManagementGate.cs:50-53).
         var allowed = await LabourManagementGate.IsAllowedAsync(
             repository, command.FarmId, command.RecordedByUserId, now, ct);
+
+        // 2b — lane 2b (MU design §11.2): हजेरी taken OFFLINE while the person was responsible, that
+        // reaches the server after his take-हजेरी authority ended, still counts — and is flagged for
+        // the owner ("जबाबदारी संपल्यानंतर पोहोचलं", PROPOSED). The day it is FOR is the only time
+        // the wire carries: the farm-day's start (India time) must lie before the end. Only a seat
+        // that is still working qualifies (FarmAuthorityGate.StandingAsync); anything else is
+        // refused here and kept whole for the owner by the sync layer (nothing is dropped).
+        var acceptedAfterAuthorityEnded = false;
+        DateTime? authorityEndedAtUtc = null;
         if (!allowed)
         {
-            return Result.Failure<RecordAttendanceMarkResult>(ShramSafalErrors.Forbidden);
+            var dayStartUtc = FarmLocalDay.UtcWindow(command.WorkDate).StartUtc;
+            var (standing, endedAt) = await FarmAuthorityGate.StandingAsync(
+                repository, command.FarmId, command.RecordedByUserId, FarmAuthority.TakeAttendance,
+                now, dayStartUtc, ct);
+            if (standing != AuthorityStanding.HeldWhenItHappened)
+            {
+                return Result.Failure<RecordAttendanceMarkResult>(ShramSafalErrors.Forbidden);
+            }
+
+            acceptedAfterAuthorityEnded = true;
+            authorityEndedAtUtc = endedAt;
         }
 
         // 3 — the subject originated on THIS farm (AttachFieldOperatorHandler:113-118
@@ -159,6 +178,11 @@ public sealed class RecordAttendanceMarkHandler(
             }
 
             await repository.AddAttendanceMarkAsync(mark, ct);
+            if (acceptedAfterAuthorityEnded)
+            {
+                await FlagAcceptedAfterAuthorityEndedAsync(command, mark.Id, authorityEndedAtUtc, now, ct);
+            }
+
             await repository.SaveChangesAsync(ct);
             return Result.Success(new RecordAttendanceMarkResult(
                 AttendanceDayOutcome.Recorded, mark.Id, Contradiction: null));
@@ -208,10 +232,47 @@ public sealed class RecordAttendanceMarkHandler(
         {
             await repository.AddAttendanceMarkCorrectionAsync(row, ct);
         }
+
+        if (acceptedAfterAuthorityEnded)
+        {
+            await FlagAcceptedAfterAuthorityEndedAsync(command, existing.Id, authorityEndedAtUtc, now, ct);
+        }
+
         await repository.SaveChangesAsync(ct);
         return Result.Success(new RecordAttendanceMarkResult(
             AttendanceDayOutcome.Recorded, existing.Id, Contradiction: null));
     }
+
+    /// <summary>
+    /// lane 2b (MU design §11.2) — the owner's flag on हजेरी that arrived after the recorder's
+    /// take-हजेरी authority ended: who, for which person and day, when it ended, when it arrived.
+    /// Staged in the SAME unit of work as the mark, so the flag can never exist without the record
+    /// it flags (or the record without its flag).
+    /// </summary>
+    private Task FlagAcceptedAfterAuthorityEndedAsync(
+        RecordAttendanceMarkCommand command, Guid markId, DateTime? endedAtUtc, DateTime now, CancellationToken ct) =>
+        repository.AddAuditEventAsync(
+            Domain.Audit.AuditEventFactory.Create(
+                entityType: "AttendanceMark",
+                entityId: markId,
+                action: LateAuthorityAudit.AcceptedAfterEnd,
+                actorUserId: command.RecordedByUserId,
+                actorRole: "member",
+                payload: new
+                {
+                    attendanceMarkId = markId,
+                    fieldOperatorId = command.FieldOperatorId,
+                    workDate = command.WorkDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                    authority = FarmAuthorities.NameOf(FarmAuthority.TakeAttendance),
+                    authorityEndedAtUtc = endedAtUtc,
+                    receivedAtUtc = now,
+                },
+                farmId: command.FarmId,
+                clientCommandId: null,
+                appVersion: AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current,
+                deviceId: "unknown",
+                ipHash: "sha256:unknown"),
+            ct);
 
     // Correction rows are built from the EFFECTIVE facts (carried halves
     // included), so a half the door did not speak — carried forward equal to

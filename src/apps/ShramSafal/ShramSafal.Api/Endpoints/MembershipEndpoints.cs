@@ -566,6 +566,32 @@ public static class MembershipEndpoints
         })
         .WithName("SetFarmMemberAccess");
 
+        // lane 2b (MU design §2, §11.1; founder D-26) — the PRIMARY account holder sets exactly which
+        // authorities one person holds on this farm, each permanent or until an instant. The body is
+        // the whole desired set ({ authorities: [{ name, expiresAtUtc }] }); an authority absent from
+        // it is taken back. Refused for anyone else (403), audited once per real change. The label
+        // is untouched — it grants nothing.
+        group.MapPut("/farms/{farmId:guid}/memberships/{targetUserId:guid}/authorities", async Task<IResult> (
+            Guid farmId, Guid targetUserId, SetMemberAuthoritiesRequest? request, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.SetAuthorities, httpContext, handler, ct,
+                authorities: request?.Authorities);
+        })
+        .WithName("SetFarmMemberAuthorities");
+
         // Minimal "my farms" list so the frontend can resolve the real farmId.
         //
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, P11) — `?includePending=true` (sent by this
@@ -612,7 +638,8 @@ public static class MembershipEndpoints
         bool grantLabour = false,
         bool resetPermissions = false,
         string? reason = null,
-        bool? labourGrant = null)
+        bool? labourGrant = null,
+        IReadOnlyList<AuthorityGrantDto>? authorities = null)
     {
         var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
         var result = await handler.HandleAsync(
@@ -627,6 +654,7 @@ public static class MembershipEndpoints
                 GrantLabour: grantLabour,
                 LabourGrant: labourGrant,
                 Reason: reason,
+                Authorities: authorities,
                 ClientAppVersion: ResolveClientAppVersion(httpContext),
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash),
@@ -753,3 +781,11 @@ public sealed record SetMemberAccessRequest(
     IReadOnlyList<string>? Permissions = null,
     bool? ResetPermissions = null,
     bool? LabourGrant = null);
+
+/// <summary>
+/// lane 2b (MU design §2, §11.1) — body of <c>PUT farms/{farmId}/memberships/{userId}/authorities</c>:
+/// the WHOLE desired authority set for one person, each item a <c>FarmAuthority</c> name and its
+/// end as a UTC instant ("...Z"), or <c>null</c> for कायम. An authority absent from the list is
+/// taken back.
+/// </summary>
+public sealed record SetMemberAuthoritiesRequest(IReadOnlyList<AuthorityGrantDto>? Authorities = null);

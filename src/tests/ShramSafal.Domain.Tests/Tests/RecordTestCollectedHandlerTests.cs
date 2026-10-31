@@ -9,6 +9,12 @@ namespace ShramSafal.Domain.Tests.Tests;
 
 public sealed class RecordTestCollectedHandlerTests
 {
+    // lane 2b — lab records is a SEAT's authority on the test's farm (stored as AddTestRecord).
+    private static ShramSafal.Application.Services.FarmAccess LabSeat(
+        AppRole role = AppRole.Worker,
+        ShramSafal.Domain.Farms.FarmPermission bits = ShramSafal.Domain.Farms.FarmPermission.AddTestRecord) =>
+        new(role, ShramSafal.Domain.Farms.MembershipStatus.Active, IsRegistrant: false, bits);
+
     private static readonly DateTime Now = new(2026, 4, 21, 10, 0, 0, DateTimeKind.Utc);
 
     private static RecordTestCollectedHandler CreateHandler(
@@ -58,6 +64,44 @@ public sealed class RecordTestCollectedHandlerTests
         instanceRepo.SaveCalls.Should().Be(0);
     }
 
+    // lane 2b (founder D-26, D-20; MU design §2) — the account's GLOBAL role decides nothing: a
+    // sign-up role of LabOperator with no seat on the test's farm is refused; a seat on ANOTHER farm
+    // is refused; the farm's primary owner may (D-20 "the owner may do both").
+    [Fact]
+    public async Task RecordTestCollected_GlobalRoleWithoutASeat_And_AnotherFarmsSeat_AreRefused()
+    {
+        var instance = NewDueInstance(Guid.NewGuid());
+        var handler = CreateHandler(instance, null, out var instanceRepo, out var auditRepo);
+        var caller = UserId.New();
+        auditRepo.Seat(Guid.NewGuid(), caller.Value, LabSeat(bits: ShramSafal.Domain.Farms.FarmPermissionDefaults.All));
+
+        var result = await handler.HandleAsync(new RecordTestCollectedCommand(
+            TestInstanceId: instance.Id,
+            CallerUserId: caller,
+            CallerRole: AppRole.LabOperator));
+
+        result.Error.Code.Should().Be("ShramSafal.TestRoleNotAllowed");
+        instance.Status.Should().Be(TestInstanceStatus.Due);
+        instanceRepo.SaveCalls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RecordTestCollected_TheFarmsPrimaryOwner_Succeeds_WithoutAnyStoredBit()
+    {
+        var instance = NewDueInstance(Guid.NewGuid());
+        var handler = CreateHandler(instance, null, out _, out var auditRepo);
+        var owner = UserId.New();
+        auditRepo.Seat(instance.FarmId.Value, owner.Value, LabSeat(AppRole.PrimaryOwner, ShramSafal.Domain.Farms.FarmPermission.None));
+
+        var result = await handler.HandleAsync(new RecordTestCollectedCommand(
+            TestInstanceId: instance.Id,
+            CallerUserId: owner,
+            CallerRole: AppRole.Worker));
+
+        Assert.True(result.IsSuccess);
+        instance.Status.Should().Be(TestInstanceStatus.Collected);
+    }
+
     [Fact]
     public async Task RecordTestCollected_LabOperator_Succeeds()
     {
@@ -68,6 +112,7 @@ public sealed class RecordTestCollectedHandlerTests
         var instance = NewDueInstance(proto.Id);
         var handler = CreateHandler(instance, proto, out var instanceRepo, out var auditRepo);
         var caller = UserId.New();
+        auditRepo.Seat(instance.FarmId.Value, caller.Value, LabSeat());
 
         var result = await handler.HandleAsync(new RecordTestCollectedCommand(
             TestInstanceId: instance.Id,

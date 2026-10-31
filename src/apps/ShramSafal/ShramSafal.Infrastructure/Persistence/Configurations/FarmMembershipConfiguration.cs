@@ -149,6 +149,15 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
         builder.Property(x => x.AccessChangedAtUtc)
             .HasColumnName("access_changed_at_utc");
 
+        // lane 2b (MU design §11.2) — migration SplitFarmAuthorities. When each STORED authority
+        // ends, one jsonb document keyed by the authority's persisted bit value (format in
+        // FarmAuthorities). NULLABLE, no default: NULL = nothing has an end. No index (read only
+        // beside (farm_id, user_id), covered by ix_farm_memberships_farm_user_nonterminal) and no
+        // RLS change (p_tenant_farm_memberships names the row, not the column).
+        builder.Property(x => x.AuthorityExpiresAtJson)
+            .HasColumnName("authority_expires_at")
+            .HasColumnType("jsonb");
+
         builder.Ignore(x => x.EffectivePermissions);
         builder.Ignore(x => x.EndedAfterOwnerStop);
         builder.Ignore(x => x.WasLetInByOwner);

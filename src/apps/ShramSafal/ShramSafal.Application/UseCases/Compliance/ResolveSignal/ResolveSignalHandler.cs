@@ -5,27 +5,20 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Compliance.ResolveSignal;
 
 /// <summary>
 /// CEI Phase 3 §4.6 — resolves an open compliance signal with a required note.
-/// Allowed roles: PrimaryOwner, SecondaryOwner, Agronomist, Consultant, FpcTechnicalManager.
+/// lane 2b: allowed to the confirm-records authority of the signal's farm seat.
 /// </summary>
 public sealed class ResolveSignalHandler(
     IComplianceSignalRepository signalRepository,
     IShramSafalRepository repository,
     IClock clock) : IHandler<ResolveSignalCommand>
 {
-    private static readonly HashSet<AppRole> AllowedRoles =
-    [
-        AppRole.PrimaryOwner,
-        AppRole.SecondaryOwner,
-        AppRole.Agronomist,
-        AppRole.Consultant,
-        AppRole.FpcTechnicalManager
-    ];
-
     public async Task<Result> HandleAsync(ResolveSignalCommand command, CancellationToken ct = default)
     {
         if (command is null || command.SignalId == Guid.Empty || command.CallerUserId.IsEmpty)
@@ -34,12 +27,19 @@ public sealed class ResolveSignalHandler(
         if (string.IsNullOrWhiteSpace(command.Note) || command.Note.Trim().Length < 3)
             return Result.Failure(ShramSafalErrors.ComplianceSignalNoteRequired);
 
-        if (!AllowedRoles.Contains(command.CallerRole))
-            return Result.Failure(ShramSafalErrors.ComplianceSignalRoleNotAllowed);
-
         var signal = await signalRepository.GetByIdAsync(command.SignalId, ct);
         if (signal is null)
             return Result.Failure(ShramSafalErrors.ComplianceSignalNotFound);
+
+        // lane 2b (founder D-26; MU design §2, §11.1) — handling a compliance warning is reviewing the
+        // farm's records: the confirm-records authority of the caller's seat on THIS signal's farm
+        // (the primary account holder always). The account's global role used to decide this — any
+        // account whose sign-up role matched, on any farm whose row it could read; it decides nothing
+        // now. The refusal keeps its old code, which every installed phone parks visibly.
+        if (!await FarmAuthorityGate.HoldsAsync(
+                repository, signal.FarmId.Value, command.CallerUserId.Value, FarmAuthority.ConfirmRecords,
+                clock.UtcNow, ct))
+            return Result.Failure(ShramSafalErrors.ComplianceSignalRoleNotAllowed);
 
         var now = clock.UtcNow;
 

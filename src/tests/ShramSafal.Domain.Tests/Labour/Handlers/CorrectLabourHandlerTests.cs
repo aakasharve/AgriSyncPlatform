@@ -88,7 +88,10 @@ public sealed class CorrectLabourHandlerTests
         // so this suite's acting foreman is a GRANTED one — the owner's switch
         // is ON. The grant is READ from the fake, so these allow-cases prove
         // the gate genuinely consults it. Pass granted: false for the denial.
-        if (granted ?? role == AppRole.Mukadam)
+        // lane 2b (D-22 / D-26): a सहमालक label no longer carries labour edits either — an existing
+        // co-owner seat holds them because the 2b migration stored the grant (P11), so the
+        // co-owner acting here is a granted one too.
+        if (granted ?? role is AppRole.Mukadam or AppRole.SecondaryOwner)
         {
             repo.GrantLabour(FarmAGuid, CallerGuid);
         }
@@ -125,6 +128,20 @@ public sealed class CorrectLabourHandlerTests
     /// with the owner's switch OFF is refused, and the refusal stages nothing —
     /// the role alone no longer opens any of the five governed actions.
     /// </summary>
+    /// <summary>lane 2b — a सहमालक label with NO stored हजेरी is refused like any member.</summary>
+    [Fact]
+    public async Task A_co_owner_label_without_the_grant_is_Forbidden()
+    {
+        var (repo, store, assignment) = Scenario(AppRole.SecondaryOwner, granted: false);
+
+        var result = await BuildHandler(repo, store).HandleAsync(
+            Command(assignment.Id, quantity: new LabourQuantityCorrection(6, null, null)));
+
+        result.IsSuccess.Should().BeFalse();
+        result.Error.Code.Should().Be("ShramSafal.Forbidden");
+        assignment.WorkerCount.Should().Be(8);
+    }
+
     [Fact]
     public async Task An_ungranted_Mukadam_is_Forbidden_with_zero_mutation()
     {

@@ -3,12 +3,13 @@ using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
-using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Compliance.AcknowledgeSignal;
 using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
 using ShramSafal.Application.UseCases.Compliance.GetComplianceSignalsForFarm;
 using ShramSafal.Application.UseCases.Compliance.ResolveSignal;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -17,14 +18,6 @@ namespace ShramSafal.Api.Endpoints;
 /// </summary>
 public static class ComplianceEndpoints
 {
-    private static readonly HashSet<AppRole> EvaluateAllowedRoles =
-    [
-        AppRole.PrimaryOwner,
-        AppRole.Agronomist,
-        AppRole.Consultant,
-        AppRole.FpcTechnicalManager
-    ];
-
     public static RouteGroupBuilder MapComplianceEndpoints(this RouteGroupBuilder group)
     {
         // GET /farms/{farmId}/compliance — list signals for a farm
@@ -130,20 +123,17 @@ public static class ComplianceEndpoints
             ClaimsPrincipal user,
             IHandler<EvaluateComplianceCommand, EvaluateComplianceResult> handler,
             ICallerFarmTenantScope scope,
+            IShramSafalRepository repository,
+            AgriSync.BuildingBlocks.Abstractions.IClock clock,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
-            // The role comes from the JWT `membership` claim. That claim used to
-            // be MISSING from every password-login token: public.memberships is
-            // FORCE-RLS keyed on agrisync.user_id, the whole /user/auth surface
-            // is admin-elevated (no GUC), so the auto-included membership join
-            // matched nothing and GetActorRoleEnum fell back to AppRole.Worker —
-            // 403 for the farm's own PrimaryOwner. Fixed in UserRepository.
-            var callerRole = EndpointActorContext.GetActorRoleEnum(user);
-            if (!EvaluateAllowedRoles.Contains(callerRole))
-                return Results.Forbid();
+            // lane 2b (founder D-26; MU design §2, §11.1) — re-evaluating a farm's warnings is
+            // reviewing its records: the confirm-records authority of the caller's seat on THIS farm
+            // (the primary account holder always), checked after the farm scope is set below. The
+            // JWT's sign-up role (`membership` claim) used to decide this; it decides nothing now.
 
             // EvaluateComplianceHandler reads ssf.plots / daily_logs /
             // crop_cycles / test_instances and WRITES ssf.compliance_signals +
@@ -155,6 +145,10 @@ public static class ComplianceEndpoints
             var evaluateScope = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
             if (!evaluateScope.IsSuccess)
                 return ToErrorResult(evaluateScope.Error);
+
+            if (!await FarmAuthorityGate.HoldsAsync(
+                    repository, farmId, actorUserId, FarmAuthority.ConfirmRecords, clock.UtcNow, ct))
+                return Results.Forbid();
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent rows emitted per signal.

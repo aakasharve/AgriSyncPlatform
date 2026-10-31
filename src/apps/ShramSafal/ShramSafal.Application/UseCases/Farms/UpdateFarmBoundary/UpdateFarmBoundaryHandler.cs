@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using System.Text.Json;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
@@ -55,7 +56,9 @@ public sealed class UpdateFarmBoundaryHandler(
             return Result.Failure<FarmDto>(ShramSafalErrors.FarmNotFound);
         }
 
-        if (!await repository.IsUserOwnerOfFarmAsync(command.FarmId, command.ActorUserId, ct))
+        // lane 2b (D-15 via D-26) — edit farm setup, from THIS farm's seat; a label grants nothing.
+        if (!await FarmAuthorityGate.HoldsAsync(
+                repository, command.FarmId, command.ActorUserId, FarmAuthority.EditFarmSetup, clock.UtcNow, ct))
         {
             return Result.Failure<FarmDto>(ShramSafalErrors.Forbidden);
         }
@@ -72,7 +75,7 @@ public sealed class UpdateFarmBoundaryHandler(
         // claim carries ONE role per account, so an owner of another farm acting here was
         // recorded as an owner here.
         //
-        // This is the same resolver IsUserOwnerOfFarmAsync just used above
+        // This is the same resolver the authority gate just used above
         // (ShramSafalRepository.cs:92-96 delegates straight to it), so the audit trail and
         // the access decision cannot disagree. Null is therefore unreachable here by
         // construction; "unknown" exists to prevent a fabricated role, never as a normal

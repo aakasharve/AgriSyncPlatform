@@ -477,7 +477,7 @@ public sealed class PushSyncBatchHandler(
         // because the pre-execution dedup check inside the helper catches a
         // retry whose first attempt had already committed.
         var strategy = dbContext.Database.CreateExecutionStrategy();
-        return await strategy.ExecuteAsync(
+        var outcome = await strategy.ExecuteAsync(
             async innerCt =>
             {
                 var result = await ExecuteMutationInTransactionAsync(
@@ -510,6 +510,215 @@ public sealed class PushSyncBatchHandler(
                     : result;
             },
             ct);
+
+        // lane 2b (MU design §11.2; P9 / P10) — work refused for want of an authority, or of a
+        // working seat, is not dropped: when the sender once worked on the farm, the server keeps
+        // the whole mutation for the owner before answering. The refusal itself is unchanged (same
+        // code, so every installed phone still parks it visibly; never a silent drop).
+        if (string.Equals(outcome.Status, RejectedStatus, StringComparison.Ordinal)
+            && IsAuthorityRefusal(outcome.ErrorCode))
+        {
+            await KeepRefusedWorkForOwnerAsync(
+                deviceId, clientRequestId, mutationType, mutation.Payload, actorUserId, outcome.ErrorCode, appVersion, ct);
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
+    /// lane 2b — the refusal codes that mean "this person may not do this here (any more)": the
+    /// uniform Forbidden and the four role-shaped codes the job-card, test, compliance and
+    /// verification gates still answer with (their wire codes are kept for the installed phones).
+    /// </summary>
+    private static bool IsAuthorityRefusal(string? errorCode) =>
+        errorCode is "ShramSafal.Forbidden"
+            or "ShramSafal.JobCardRoleNotAllowed"
+            or "ShramSafal.TestRoleNotAllowed"
+            or "ShramSafal.ComplianceSignalRoleNotAllowed"
+            or "ShramSafal.VerificationTransitionNotAllowedForRole";
+
+    /// <summary>The audit entity type of a refused mutation kept for the owner.</summary>
+    internal const string KeptMutationEntityType = "RefusedSyncMutation";
+
+    /// <summary>
+    /// lane 2b (MU design §11.2) — keep a refused mutation whole for the farm's owner, as ONE audit
+    /// row (<see cref="Services.LateAuthorityAudit.KeptForOwner"/>) holding the mutation exactly as it
+    /// arrived. Only for a sender who once worked on the farm (<see cref="Domain.Farms.FarmMembership.WasEverLetIn"/>):
+    /// a stranger's refusal is not written into anyone's history. Idempotent per (device, request):
+    /// a re-send keeps no second copy. Runs in its OWN transaction after the refused one rolled
+    /// back, so nothing of the refused write survives — only the record that it was refused.
+    ///
+    /// <para><b>Which farm.</b> The payload's <c>farmId</c>, else the farm of the record it names
+    /// (log, cost, test, job card, warning) read under the sender's own row policies — so a sender
+    /// who is no longer let in, and whose mutation names only a record, cannot be placed: that
+    /// refusal stays on his phone, parked and visible (unsynchronised intent, P10).</para>
+    ///
+    /// <para><b>Never fatal, never silent.</b> A failure to keep is logged and counted; the refusal
+    /// the phone gets is the same either way.</para>
+    /// </summary>
+    private async Task KeepRefusedWorkForOwnerAsync(
+        string deviceId,
+        string clientRequestId,
+        string mutationType,
+        JsonElement payload,
+        Guid actorUserId,
+        string? refusalCode,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        try
+        {
+            var strategy = dbContext.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(
+                async innerCt =>
+                {
+                    await using var transaction = await BeginTransactionIfSupportedAsync(innerCt);
+                    try
+                    {
+                        if (dbContext.Database.IsRelational())
+                        {
+                            await SetUserScopedReadGucsAsync(actorUserId, innerCt);
+                        }
+
+                        var farmId = TryExtractFarmId(payload)
+                            ?? await ResolveFarmOfNamedRecordAsync(payload, innerCt);
+                        if (farmId is not { } farm)
+                        {
+                            await RollbackAsync(transaction, innerCt);
+                            return;
+                        }
+
+                        var history = await repository.GetFarmMembershipHistoryAsync(farm, actorUserId, innerCt);
+                        var seat = history.LastOrDefault(m => m.FarmId == new FarmId(farm) && m.WasEverLetIn);
+                        if (seat is null)
+                        {
+                            await RollbackAsync(transaction, innerCt);
+                            return;
+                        }
+
+                        if (dbContext.Database.IsRelational())
+                        {
+                            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                                $"SELECT set_config('agrisync.farm_id', {farm.ToString()}, true)", innerCt);
+                        }
+
+                        var keyId = KeptMutationKey(deviceId, clientRequestId);
+                        var already = await repository.GetAuditEventsForEntityAsync(keyId, KeptMutationEntityType, innerCt);
+                        if (already.Any(a => a.Action == Services.LateAuthorityAudit.KeptForOwner))
+                        {
+                            await RollbackAsync(transaction, innerCt);
+                            return;
+                        }
+
+                        await repository.AddAuditEventAsync(
+                            Domain.Audit.AuditEventFactory.Create(
+                                entityType: KeptMutationEntityType,
+                                entityId: keyId,
+                                action: Services.LateAuthorityAudit.KeptForOwner,
+                                actorUserId: actorUserId,
+                                actorRole: seat.Role.ToString(),
+                                payload: new
+                                {
+                                    mutationType,
+                                    clientRequestId,
+                                    deviceId,
+                                    refusal = refusalCode,
+                                    seatStatus = seat.Status.ToString(),
+                                    receivedAtUtc = clock.UtcNow,
+                                    // The work exactly as it arrived (P10: nothing is dropped).
+                                    mutation = payload,
+                                },
+                                farmId: farm,
+                                clientCommandId: clientRequestId,
+                                appVersion: string.IsNullOrWhiteSpace(appVersion)
+                                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                                    : appVersion,
+                                deviceId: deviceId,
+                                ipHash: "sha256:unknown"),
+                            innerCt);
+                        await repository.SaveChangesAsync(innerCt);
+                        if (transaction is not null)
+                        {
+                            await transaction.CommitAsync(innerCt);
+                        }
+                    }
+                    finally
+                    {
+                        dbContext.ChangeTracker.Clear();
+                    }
+                },
+                ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Named landing place: the refusal still reaches the phone (parked, visible); this line
+            // and the counter are how an operator learns the server copy was not kept.
+            SyncPushMetrics.RecordRefusedWorkNotKept(ex.GetType().Name);
+            logger.LogWarning(
+                "SyncRefusedWorkNotKept: mutationType={MutationType} device={DeviceId} clientRequestId={ClientRequestId} exception={ExceptionType}",
+                LogSafe.Text(mutationType),
+                LogSafe.Text(deviceId),
+                LogSafe.Text(clientRequestId),
+                ex.GetType().Name);
+        }
+    }
+
+    /// <summary>
+    /// lane 2b — the farm of the record a refused mutation names, read under the sender's own row
+    /// policies (so only a farm he can still read resolves). <c>null</c> when nothing resolves.
+    /// </summary>
+    private async Task<Guid?> ResolveFarmOfNamedRecordAsync(JsonElement payload, CancellationToken ct)
+    {
+        if (payload.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        Guid? Id(string name) =>
+            payload.TryGetProperty(name, out var element)
+            && element.ValueKind == JsonValueKind.String
+            && element.TryGetGuid(out var id)
+                ? id
+                : null;
+
+        if ((Id("dailyLogId") ?? Id("logId")) is { } logId)
+        {
+            return (await repository.GetDailyLogByIdAsync(logId, ct))?.FarmId.Value;
+        }
+
+        if (Id("costEntryId") is { } costEntryId)
+        {
+            return (await repository.GetCostEntryByIdAsync(costEntryId, ct))?.FarmId.Value;
+        }
+
+        if (Id("testInstanceId") is { } testInstanceId)
+        {
+            return (await testInstanceRepository.GetByIdAsync(testInstanceId, ct))?.FarmId.Value;
+        }
+
+        if (Id("jobCardId") is { } jobCardId)
+        {
+            return (await repository.GetJobCardByIdAsync(jobCardId, ct))?.FarmId.Value;
+        }
+
+        if (Id("signalId") is { } signalId)
+        {
+            return (await complianceSignalRepository.GetByIdAsync(signalId, ct))?.FarmId.Value;
+        }
+
+        return null;
+    }
+
+    /// <summary>A stable id for one (device, request) pair, so a re-sent refusal is kept once.</summary>
+    internal static Guid KeptMutationKey(string deviceId, string clientRequestId)
+    {
+        var hash = System.Security.Cryptography.SHA256.HashData(
+            Encoding.UTF8.GetBytes($"kept-for-owner|{deviceId}|{clientRequestId}"));
+        return new Guid(hash.AsSpan(0, 16));
     }
 
     /// <summary>
@@ -1863,7 +2072,10 @@ public sealed class PushSyncBatchHandler(
                 clientRequestId,
                 ReviewBasis: reviewBasis,
                 ExpectedLogVersion: request.LogVersion,
-                ReviewBasisOmittedOnV2: reviewBasis is null),
+                ReviewBasisOmittedOnV2: reviewBasis is null,
+                // lane 2b (MU design §11.2) — when the phone says he decided, so a decision made
+                // offline while his confirm-records authority was alive still counts (flagged).
+                DecidedAtUtc: request.DecidedAt),
             ct);
 
         return ToOutcome(result);

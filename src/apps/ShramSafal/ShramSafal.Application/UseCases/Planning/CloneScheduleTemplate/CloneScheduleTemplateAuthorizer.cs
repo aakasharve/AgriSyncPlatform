@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning;
 using ShramSafal.Domain.Common;
+using AgriSync.BuildingBlocks.Abstractions;
 
 namespace ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 
@@ -35,10 +36,12 @@ namespace ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 public sealed class CloneScheduleTemplateAuthorizer : IAuthorizationCheck<CloneScheduleTemplateCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly IClock _clock;
 
-    public CloneScheduleTemplateAuthorizer(IShramSafalRepository repository)
+    public CloneScheduleTemplateAuthorizer(IShramSafalRepository repository, IClock clock)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(CloneScheduleTemplateCommand command, CancellationToken ct)
@@ -49,7 +52,8 @@ public sealed class CloneScheduleTemplateAuthorizer : IAuthorizationCheck<CloneS
             return Result.Failure(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
-        if (!ScopeRoleGate.IsAllowed(command.NewScope, command.CallerRole))
+        if (!await ScopeRoleGate.IsAllowedAsync(
+                _repository, command.NewScope, command.FarmId, command.CallerUserId, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

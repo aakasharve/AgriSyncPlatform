@@ -54,7 +54,9 @@ public sealed class AllocateGlobalExpenseHandler(
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — spreading a whole-farm cost over plots is
         // CHANGING money: the AddCost permission (the primary owner, or someone he stored it for).
         // Recording a cost stays open to every Active member (AddCostEntry).
-        if (!await FarmPermissionGate.HasAsync(repository, (Guid)costEntry.FarmId, command.CreatedByUserId, FarmPermission.AddCost, ct))
+        // lane 2b — the review-money-entries authority (stored as AddCost; needs see money), at this moment.
+        if (!await FarmAuthorityGate.HoldsAsync(
+                repository, (Guid)costEntry.FarmId, command.CreatedByUserId, FarmAuthority.ReviewMoney, clock.UtcNow, ct))
         {
             return Result.Failure<DayLedgerDto>(ShramSafalErrors.Forbidden);
         }

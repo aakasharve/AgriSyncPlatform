@@ -13,7 +13,7 @@ namespace ShramSafal.Application.Services;
 ///
 /// <para><b>The rule.</b> A member of the record's farm may hear the words when he IS the speaker
 /// (the log's <c>OperatorUserId</c>), or he is the farm's primary owner, or he holds the owner's
-/// grant (<see cref="LabourManagementGate.HasExplicitGrantAsync"/>, the confirm authority). Anyone
+/// grant (lane 2b: the confirm-records authority, <see cref="FarmAuthorityGate.HoldsAsync"/>). Anyone
 /// else on the farm gets the record's values without the words. A caller with no membership
 /// (<paramref name="callerRole"/> null) hears nothing.</para>
 ///

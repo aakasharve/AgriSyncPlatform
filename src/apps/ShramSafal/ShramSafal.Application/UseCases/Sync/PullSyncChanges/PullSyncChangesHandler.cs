@@ -511,8 +511,9 @@ public sealed class PullSyncChangesHandler(
                 {
                     if (!grantByFarm.TryGetValue(farmId, out var grant))
                     {
-                        grant = await LabourManagementGate.HasExplicitGrantAsync(
-                            repository, farmId, readerUserId, nowUtc, ct);
+                        // lane 2b (D-31 "authorised approvers"; D-44) — the confirm-records authority.
+                        grant = await FarmAuthorityGate.HoldsAsync(
+                            repository, farmId, readerUserId, Domain.Farms.FarmAuthority.ConfirmRecords, nowUtc, ct);
                         grantByFarm[farmId] = grant;
                     }
 

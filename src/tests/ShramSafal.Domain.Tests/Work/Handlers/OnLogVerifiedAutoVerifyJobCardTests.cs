@@ -33,7 +33,7 @@ public sealed class OnLogVerifiedAutoVerifyJobCardTests
         log.AddTask(Guid.NewGuid(), "spray", null, Now);
         // Draft -> Confirmed -> Verified
         log.Verify(Guid.NewGuid(), VerificationStatus.Confirmed, null, AppRole.Agronomist, AgronomistUserId, Now.AddMinutes(30));
-        log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, AgronomistUserId, Now.AddHours(1));
+        log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, AgronomistUserId, Now.AddHours(1), hasConfirmAuthority: true);
 
         var job = JobCard.CreateDraft(
             Guid.NewGuid(), FarmId, PlotGuid, null, MukadamUserId,

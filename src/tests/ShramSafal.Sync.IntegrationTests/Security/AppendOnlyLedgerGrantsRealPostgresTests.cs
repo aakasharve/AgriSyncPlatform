@@ -145,6 +145,14 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    existing table, policy or ledger privilege is touched. Safe to revert and re-apply
         //    mid-proof (the scratch database holds no content rows).
         "20261030102448_AddDailyLogContents",
+
+        // ── Reviewed 2026-10-31 (spec: pre-launch repair lane 2b, MU design §11.1); Down() read in
+        //    full. Up() ADDs one nullable jsonb column (farm_memberships.authority_expires_at) and
+        //    rewrites the permissions / labour-grant VALUES of let-in non-primary seats; Down()
+        //    collapses those values back and drops the column. Row values on farm_memberships
+        //    only: no table, no policy, no grant, no ledger privilege. Safe to revert and re-apply
+        //    mid-proof.
+        "20261031021129_SplitFarmAuthorities",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

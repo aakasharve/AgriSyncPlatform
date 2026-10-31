@@ -20,10 +20,11 @@ namespace ShramSafal.Domain.Tests.Labour;
 /// </summary>
 public sealed class LabourManagementPermissionTests
 {
-    /// <summary>The two roles that carry the capability outright — owner-tier ONLY
-    /// (founder master review 2026-09-02, D5; supersedes O-4's Mukadam entry).</summary>
+    /// <summary>The ONE role that carries the capability outright — the primary owner (lane 2b,
+    /// founder D-22 / D-26: a सहमालक label no longer carries labour edits; the 2b migration stored the
+    /// grant for every existing co-owner seat instead). Was owner-tier (D5, 2026-09-02).</summary>
     private static readonly AppRole[] CarriedByRole =
-        [AppRole.PrimaryOwner, AppRole.SecondaryOwner];
+        [AppRole.PrimaryOwner];
 
     public static TheoryData<AppRole> AllRoles()
     {
@@ -123,11 +124,11 @@ public sealed class LabourManagementPermissionTests
 
     [Theory]
     [MemberData(nameof(AllRoles))]
-    public void Owner_tier_may_still_read_the_grant_roster(AppRole role)
+    public void Only_the_primary_owner_reads_the_grant_roster(AppRole role)
     {
         LabourManagementPermission.CanViewGrants(role)
-            .Should().Be(role is AppRole.PrimaryOwner or AppRole.SecondaryOwner,
-                "reading is not deciding: a co-owner keeps the list he saw before I27");
+            .Should().Be(role is AppRole.PrimaryOwner,
+                "lane 2b: the roster of who may do what is people and permissions — the primary account holder's alone (D-26)");
     }
 
     [Fact]

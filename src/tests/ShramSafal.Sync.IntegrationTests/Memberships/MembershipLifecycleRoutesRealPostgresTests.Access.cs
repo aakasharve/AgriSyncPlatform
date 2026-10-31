@@ -89,7 +89,8 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         await DecideOkAsync(HttpMethod.Post, $"{Joiner}/approve", Owner, new { role = "Mukadam", grantLabour = true });
         (await LiveSeatAsync(Farm, Joiner))!.LabourGrant.Should().BeTrue("arrange: काम + हजेरी");
         await DecideOkAsync(HttpMethod.Put, $"{Joiner}/access", Owner, new { permissions = new[] { "AddCost" } });
-        (await LiveSeatAsync(Farm, Joiner))!.Permissions.Should().Be(4, "arrange: the primary owner's explicit choice is stored");
+        // lane 2b: the named set is the whole stored set; reviewing money brings seeing money (§11.1).
+        (await LiveSeatAsync(Farm, Joiner))!.Permissions.Should().Be(1 | 4, "arrange: the primary owner's explicit choice is stored");
 
         using (var doc = await DecideOkAsync(HttpMethod.Put, $"{Joiner}/access", Owner,
                    new { role = "Worker", resetPermissions = true, labourGrant = false }))
@@ -112,7 +113,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         // An older body that names ONLY the role (the shape that kept every power before the fix).
         await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { role = "Mukadam", resetPermissions = true, labourGrant = true });
         await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { permissions = new[] { "AddCost" } });
-        (await LiveSeatAsync(Farm, Worker3))!.Permissions.Should().Be(4);
+        (await LiveSeatAsync(Farm, Worker3))!.Permissions.Should().Be(1 | 4, "review money brings see money (2b)");
         await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { role = "Worker" });
         var plain = await LiveSeatAsync(Farm, Worker3);
         plain!.Role.Should().Be("Worker");
@@ -171,7 +172,9 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         (await PlannedActivityExistsAsync(refusedId)).Should().BeFalse();
 
         await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { role = "Mukadam", resetPermissions = true, labourGrant = true });
-        (await LiveSeatAsync(Farm, Worker3))!.Permissions.Should().BeNull("no PlanWork is stored for him");
+        // lane 2b: plan work is STORED only (L8 enforces it) - none is stored for him, and today's
+        // rule still lets him plan. (The switch stores confirm records, 128, nothing else.)
+        ((await LiveSeatAsync(Farm, Worker3))!.Permissions ?? 0).Should().Be(128, "no PlanWork is stored for him");
         foreach (var who in new[] { Worker3, Owner })
         {
             var id = Guid.NewGuid();

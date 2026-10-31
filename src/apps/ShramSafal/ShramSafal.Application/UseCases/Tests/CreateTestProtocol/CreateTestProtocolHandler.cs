@@ -5,6 +5,8 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Tests;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Tests.CreateTestProtocol;
 
@@ -20,14 +22,6 @@ public sealed class CreateTestProtocolHandler(
     IIdGenerator idGenerator,
     IClock clock)
 {
-    private static readonly HashSet<AppRole> AllowedRoles =
-    [
-        AppRole.PrimaryOwner,
-        AppRole.SecondaryOwner,
-        AppRole.Agronomist,
-        AppRole.Consultant
-    ];
-
     public async Task<Result<Guid>> HandleAsync(
         CreateTestProtocolCommand command,
         CancellationToken ct = default)
@@ -37,7 +31,12 @@ public sealed class CreateTestProtocolHandler(
             return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
         }
 
-        if (!AllowedRoles.Contains(command.CallerRole))
+        // lane 2b (founder D-26; MU design §2) — a protocol is not on a farm, so the caller names
+        // the farm whose seat authorises him (lab records on THAT farm; its primary account holder
+        // always). The account's global role used to decide this; it decides nothing now.
+        if (command.FarmId is not { } farmId
+            || !await FarmAuthorityGate.HoldsAsync(
+                repository, farmId, command.CallerUserId.Value, FarmAuthority.LabRecords, clock.UtcNow, ct))
         {
             return Result.Failure<Guid>(ShramSafalErrors.TestRoleNotAllowed);
         }

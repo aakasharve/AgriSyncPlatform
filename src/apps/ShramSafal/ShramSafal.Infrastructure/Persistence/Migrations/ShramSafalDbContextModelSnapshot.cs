@@ -2304,6 +2304,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("approved_by_user_id");
 
+                    b.Property<string>("AuthorityExpiresAtJson")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("authority_expires_at");
+
                     b.Property<bool>("CanManageLabourRecords")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

@@ -100,6 +100,19 @@
 /// co-owner's responsibility to confirm records. <c>true</c> only on a co-owner's row, only for the
 /// primary owner. Worker and मुकादम rows keep their one switch (<c>IsGrantEditable</c>), which
 /// covers labour and confirming together, as before. Older phones ignore it.
+/// lane 2b: always <c>false</c> — the co-owner-only confirming switch is replaced by one switch
+/// per authority (<paramref name="Authorities"/>, <paramref name="CanEditAuthorities"/>).
+/// </param>
+/// <param name="Authorities">
+/// lane 2b (MU design §2, §11.1) — ADDITIVE: every authority this member holds on this farm — the
+/// label grants none — each with its end (<c>null</c> = कायम). Stored and not yet ended, whatever
+/// the seat's status (a paused person's card still shows what comes back on restore). The primary
+/// account holder lists every authority, with no end. <c>null</c> only from an older server.
+/// </param>
+/// <param name="CanEditAuthorities">
+/// lane 2b — ADDITIVE: the caller (the primary account holder) may set THIS member's authorities
+/// (<c>PUT farms/{farmId}/memberships/{userId}/authorities</c>). Never on the primary account
+/// holder's own row, never for anyone but the primary account holder (D-26). Older phones ignore it.
 /// </param>
 public sealed record LabourPermissionDto(
     Guid UserId,
@@ -119,4 +132,14 @@ public sealed record LabourPermissionDto(
     string? PhoneLast4 = null,
     bool ApprovedByOwner = false,
     bool? CanConfirmRecords = null,
-    bool? IsConfirmGrantEditable = null);
+    bool? IsConfirmGrantEditable = null,
+    IReadOnlyList<AuthorityGrantDto>? Authorities = null,
+    bool CanEditAuthorities = false);
+
+/// <summary>
+/// lane 2b (MU design §2, §11.1) — one authority a member holds on one farm, as the wire carries it:
+/// the <c>FarmAuthority</c> NAME ("TakeAttendance", "ConfirmRecords", "SeeMoney", "SeeWages",
+/// "ReviewMoney", "PlanWork", "AssignWork", "EditFarmSetup", "LabRecords", "ScheduleTemplates") and
+/// the UTC instant it ends (<c>null</c> = कायम). Also the request item of the owner's authorities route.
+/// </summary>
+public sealed record AuthorityGrantDto(string Name, DateTime? ExpiresAtUtc);

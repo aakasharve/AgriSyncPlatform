@@ -77,8 +77,10 @@ public sealed class CEIPhase2EndToEnd
         // Ramu is already owner via create_farm. Sushma (Agronomist) and
         // Vikram (LabOperator) are seeded directly — this keeps the scenario
         // focused on the test stack, not the invite/QR flow.
-        await harness.SeedFarmMembershipAsync(farmId, SushmaUserId, AppRole.Agronomist);
-        await harness.SeedFarmMembershipAsync(farmId, VikramUserId, AppRole.LabOperator);
+        // lane 2b (MU design §11.1): lab records are an authority the primary owner gives on THIS
+        // farm's seat — no longer the account's global sign-up role.
+        await harness.SeedFarmMembershipAsync(farmId, SushmaUserId, AppRole.Agronomist, FarmAuthority.LabRecords);
+        await harness.SeedFarmMembershipAsync(farmId, VikramUserId, AppRole.LabOperator, FarmAuthority.LabRecords);
 
         // -------------------------- plot + crop cycle pushed as Ramu (owner)
         var pushPlotAndCycle = await harness.Client.PostAsJsonAsync("/sync/push", new
@@ -120,7 +122,7 @@ public sealed class CEIPhase2EndToEnd
         // -------------------------------- 3) Sushma creates a TestProtocol
         using var createProtocolRequest = CreateJsonRequest(
             HttpMethod.Post,
-            "/shramsafal/test-protocols",
+            $"/shramsafal/test-protocols?farmId={farmId}",
             new
             {
                 name = "Grape Soil Basic",
@@ -136,7 +138,7 @@ public sealed class CEIPhase2EndToEnd
 
         var createProtocolResponse = await harness.Client.SendAsync(createProtocolRequest);
         createProtocolResponse.StatusCode.Should().Be(HttpStatusCode.Created,
-            "Agronomist is allowed to create test protocols (CEI §4.5)");
+            "the farm's lab-records authority lets her create test protocols (CEI §4.5, lane 2b)");
 
         // --------------------- 4) Ramu schedules TestInstances for the cycle
         // Two stages: the first is deep in the past (so MarkOverdueInstancesHandler
@@ -479,16 +481,23 @@ public sealed class CEIPhase2EndToEnd
             return new TestHarness(app, client, storageDirectory);
         }
 
-        public async Task SeedFarmMembershipAsync(Guid farmId, Guid userId, AppRole role)
+        public async Task SeedFarmMembershipAsync(Guid farmId, Guid userId, AppRole role, params FarmAuthority[] authorities)
         {
             await using var scope = app.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
-            db.FarmMemberships.Add(FarmMembership.Create(
+            var membership = FarmMembership.Create(
                 Guid.NewGuid(),
                 new FarmId(farmId),
                 new UserId(userId),
                 role,
-                DateTime.UtcNow));
+                DateTime.UtcNow);
+            if (authorities.Length > 0)
+            {
+                // lane 2b — what the primary owner switched on for this seat, each permanent.
+                membership.SetAuthorities(authorities.ToDictionary(a => a, _ => (DateTime?)null), DateTime.UtcNow);
+            }
+
+            db.FarmMemberships.Add(membership);
             await db.SaveChangesAsync();
         }
 

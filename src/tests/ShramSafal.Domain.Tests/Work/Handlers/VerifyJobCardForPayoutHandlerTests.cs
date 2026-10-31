@@ -55,7 +55,7 @@ public sealed class VerifyJobCardForPayoutHandlerTests
         {
             // Draft -> Confirmed -> Verified (state machine requires two steps)
             log.Verify(Guid.NewGuid(), VerificationStatus.Confirmed, null, AppRole.Agronomist, AgronomistUserId, Now.AddHours(2));
-            log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, AgronomistUserId, Now.AddHours(3));
+            log.Verify(Guid.NewGuid(), VerificationStatus.Verified, null, AppRole.Agronomist, AgronomistUserId, Now.AddHours(3), hasConfirmAuthority: true);
         }
 
         return (job, log);

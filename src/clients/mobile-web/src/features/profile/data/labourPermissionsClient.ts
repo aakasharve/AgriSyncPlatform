@@ -140,6 +140,22 @@ export interface LabourPermission {
      * every installed phone keeps showing his labour responsibility as permanently on (P11).
      */
     isConfirmGrantEditable?: boolean | null;
+    /**
+     * lane 2b (MU design §2, §11.1) — ADDITIVE: every authority this member holds on this farm (the
+     * label grants none), each with its end (null = कायम). Absent = older server.
+     */
+    authorities?: AuthorityGrant[] | null;
+    /**
+     * lane 2b — ADDITIVE: the caller (the primary account holder) may set THIS member's authorities.
+     * Never on the primary account holder's own row. Absent = older server.
+     */
+    canEditAuthorities?: boolean;
+}
+
+/** lane 2b — one authority on the wire: the server's name and its end (ISO UTC, null = कायम). */
+export interface AuthorityGrant {
+    name: string;
+    expiresAtUtc: string | null;
 }
 
 /** The server's error code when a role already carries the capability. */

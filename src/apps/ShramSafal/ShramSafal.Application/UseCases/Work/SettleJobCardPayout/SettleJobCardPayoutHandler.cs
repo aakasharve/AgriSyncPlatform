@@ -9,6 +9,8 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Work;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 
@@ -57,7 +59,8 @@ public sealed class SettleJobCardPayoutHandler(
         if (callerRole is null)
             return Result.Failure<SettleJobCardPayoutResult>(ShramSafalErrors.Forbidden);
 
-        if (!IsEligibleToSettle(callerRole.Value))
+        if (!await FarmAuthorityGate.HoldsAsync(
+                repository, jobCard.FarmId.Value, command.CallerUserId.Value, FarmAuthority.ReviewMoney, clock.UtcNow, ct))
             return Result.Failure<SettleJobCardPayoutResult>(ShramSafalErrors.JobCardRoleNotAllowed);
 
         // 4. Create the CostEntry for the labour payout.
@@ -130,7 +133,4 @@ public sealed class SettleJobCardPayoutHandler(
 
         return Result.Success(new SettleJobCardPayoutResult(costEntry.Id, JobCardStatus.PaidOut));
     }
-
-    private static bool IsEligibleToSettle(AppRole role) =>
-        role is AppRole.PrimaryOwner or AppRole.SecondaryOwner;
 }

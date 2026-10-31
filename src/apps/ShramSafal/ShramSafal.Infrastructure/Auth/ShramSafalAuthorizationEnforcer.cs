@@ -6,6 +6,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Infrastructure.Auth;
 
@@ -169,7 +170,22 @@ internal sealed class ShramSafalAuthorizationEnforcer(
         // Nothing else about this method moved: a missing log is still
         // DailyLogNotFound, a non-member is still Forbidden, and the tenant
         // claim is still published only after the decision is Success.
-        if (!await LabourManagementGate.IsAllowedAsync(repository, log.FarmId.Value, userId.Value, clock.UtcNow))
+        // ── lane 2b (founder D-26 "recording attendance does not mean approving it"; D-44) ──
+        // Who may come THROUGH this door: the primary account holder, a seat holding take हजेरी
+        // or confirm records now, or an Active seat whose confirm-records authority is stored but
+        // has ended. The door is not the decision: VerifyLogHandler decides whether the request
+        // counts as the owner's confirmation (confirm records, at the moment it was made) or is
+        // kept as a mark for the owner (the L6 pattern) — so a confirmer whose time ran out while
+        // offline is kept, never refused and never dropped (MU design §11.2). A label grants
+        // nothing: a सहमालक with no authority is refused here like any member.
+        var access = await repository.GetFarmAccessForUserAsync(log.FarmId.Value, userId.Value);
+        var now = clock.UtcNow;
+        var admitted = FarmAccessPolicy.IsPrimaryAccountHolder(access)
+            || FarmAccessPolicy.Holds(access, FarmAuthority.TakeAttendance, now)
+            || FarmAccessPolicy.Holds(access, FarmAuthority.ConfirmRecords, now)
+            || (access is { Status: MembershipStatus.Active }
+                && FarmAuthorities.IsStored(access.StoredPermissions, access.LabourGrant, FarmAuthority.ConfirmRecords));
+        if (!admitted)
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

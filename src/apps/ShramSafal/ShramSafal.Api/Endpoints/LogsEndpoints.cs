@@ -215,8 +215,11 @@ public static class LogsEndpoints
             // on role alone it would omit "Verified" for a member the owner explicitly
             // granted approval authority, and the device would hide a button the server
             // would have honoured. Same stored grant the decision path reads.
-            var hasLabourManagementGrant = await LabourManagementGate.HasExplicitGrantAsync(
-                repository, (Guid)log.FarmId, callerUserId, clock.UtcNow, ct);
+            // lane 2b (D-26 / D-44) — the confirm-records authority of this farm's seat, at this
+            // moment: the same input VerifyLogHandler decides with.
+            var hasConfirmAuthority = await FarmAuthorityGate.HoldsAsync(
+                repository, (Guid)log.FarmId, callerUserId, ShramSafal.Domain.Farms.FarmAuthority.ConfirmRecords,
+                clock.UtcNow, ct);
 
             // spec: plr-d10 (I27, review N4) — the owner's decision (→Verified, →Disputed) is
             // offered only to someone VerifyLogHandler would count it from. A co-owner without
@@ -224,9 +227,9 @@ public static class LogsEndpoints
             // here would be a dead button (P5).
             var currentStatus = log.CurrentVerificationStatus;
             var availableTransitions = VerificationStateMachine
-                .GetAvailableTransitions(currentStatus, resolvedCallerRole, hasLabourManagementGrant)
+                .GetAvailableTransitions(currentStatus, resolvedCallerRole, hasConfirmAuthority)
                 .Where(status => OwnerConfirmationAuthority.MayBeOffered(
-                    status, resolvedCallerRole, hasLabourManagementGrant))
+                    status, resolvedCallerRole, hasConfirmAuthority))
                 .Select(status => status.ToString())
                 .ToArray();
 

@@ -48,10 +48,10 @@ public sealed class OwnerConfirmationTests
     [Fact]
     public void A_co_owner_and_a_mukadam_get_nothing_from_their_role_alone()
     {
-        Assert.False(OwnerConfirmationAuthority.MayConfirm(AppRole.SecondaryOwner, hasExplicitGrant: false));
-        Assert.False(OwnerConfirmationAuthority.MayConfirm(AppRole.Mukadam, hasExplicitGrant: false));
-        Assert.True(OwnerConfirmationAuthority.MayConfirm(AppRole.Mukadam, hasExplicitGrant: true));
-        Assert.True(OwnerConfirmationAuthority.MayConfirm(AppRole.PrimaryOwner, hasExplicitGrant: false));
+        Assert.False(OwnerConfirmationAuthority.MayConfirm(AppRole.SecondaryOwner, hasConfirmAuthority: false));
+        Assert.False(OwnerConfirmationAuthority.MayConfirm(AppRole.Mukadam, hasConfirmAuthority: false));
+        Assert.True(OwnerConfirmationAuthority.MayConfirm(AppRole.Mukadam, hasConfirmAuthority: true));
+        Assert.True(OwnerConfirmationAuthority.MayConfirm(AppRole.PrimaryOwner, hasConfirmAuthority: false));
     }
 
     [Theory]
@@ -298,10 +298,13 @@ public sealed class OwnerConfirmationTests
     [InlineData(AppRole.SecondaryOwner)]
     [InlineData(AppRole.Agronomist)]
     [InlineData(AppRole.FpcTechnicalManager)]
-    public void Roles_that_hold_both_FSM_edges_still_do_not_self_attest_their_own_save(AppRole role)
+    public void Labels_that_once_held_the_FSM_edges_hold_none_now_and_never_self_attest(AppRole role)
     {
+        // lane 2b (D-22 / D-26): these labels reach the owner's decision only with the
+        // confirm-records authority, and none of them self-attests a save either way.
         Assert.True(VerificationStateMachine.CanTransitionWithRole(VerificationStatus.Draft, VerificationStatus.Confirmed, role));
-        Assert.True(VerificationStateMachine.CanTransitionWithRole(VerificationStatus.Confirmed, VerificationStatus.Verified, role));
+        Assert.False(VerificationStateMachine.CanTransitionWithRole(VerificationStatus.Confirmed, VerificationStatus.Verified, role));
+        Assert.True(VerificationStateMachine.CanTransitionWithRole(VerificationStatus.Confirmed, VerificationStatus.Verified, role, hasConfirmAuthority: true));
 
         var log = NewLog(CoOwner);
         Assert.False(log.TrySelfVerifyAsCreator(Guid.NewGuid(), Guid.NewGuid(), role, Created));

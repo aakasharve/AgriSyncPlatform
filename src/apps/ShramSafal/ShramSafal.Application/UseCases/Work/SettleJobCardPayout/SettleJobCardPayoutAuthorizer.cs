@@ -1,8 +1,10 @@
 using AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 using AgriSync.BuildingBlocks.Results;
-using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Common;
+using AgriSync.BuildingBlocks.Abstractions;
+using ShramSafal.Application.Services;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 
@@ -38,10 +40,12 @@ namespace ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 public sealed class SettleJobCardPayoutAuthorizer : IAuthorizationCheck<SettleJobCardPayoutCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly IClock _clock;
 
-    public SettleJobCardPayoutAuthorizer(IShramSafalRepository repository)
+    public SettleJobCardPayoutAuthorizer(IShramSafalRepository repository, IClock clock)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(SettleJobCardPayoutCommand command, CancellationToken ct)
@@ -59,7 +63,10 @@ public sealed class SettleJobCardPayoutAuthorizer : IAuthorizationCheck<SettleJo
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
-        if (role.Value is not AppRole.PrimaryOwner and not AppRole.SecondaryOwner)
+        // lane 2b (founder D-22 / D-26) — settling a job-card payout is reviewing money entries (it needs see money). A label grants
+        // nothing; the refusal keeps its old code, which every installed phone parks visibly.
+        if (!await FarmAuthorityGate.HoldsAsync(
+                _repository, jobCard.FarmId.Value, command.CallerUserId.Value, FarmAuthority.ReviewMoney, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.JobCardRoleNotAllowed);
         }

@@ -1980,7 +1980,10 @@ public sealed class SyncEndpointsTests
 
         await PushCreateFarmAsync(harness.Client, "device-role", "req-farm-role", farmId, "Role Farm");
         await harness.SeedFarmMembershipAsync(farmId, WorkerUserId, AppRole.Worker);
-        await harness.SeedFarmMembershipAsync(farmId, SecondaryOwnerUserId, AppRole.SecondaryOwner);
+        // lane 2b (D-15 via D-26): adding a plot is the EDIT FARM SETUP authority, not the सहमालक label —
+        // every upgraded co-owner seat carries it (SplitFarmAuthorities); a bare label is refused
+        // (FarmAuthoritiesRealPostgresTests).
+        await harness.SeedFarmMembershipAsync(farmId, SecondaryOwnerUserId, AppRole.SecondaryOwner, FarmAuthority.EditFarmSetup);
 
         using (var workerCreatePlot = CreateJsonRequest(
                    HttpMethod.Post,
@@ -2487,16 +2490,23 @@ public sealed class SyncEndpointsTests
             return new TestHarness(app, client, storageDirectory);
         }
 
-        public async Task SeedFarmMembershipAsync(Guid farmId, Guid userId, AppRole role)
+        public async Task SeedFarmMembershipAsync(Guid farmId, Guid userId, AppRole role, params FarmAuthority[] authorities)
         {
             await using var scope = app.Services.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
-            db.FarmMemberships.Add(FarmMembership.Create(
+            var membership = FarmMembership.Create(
                 Guid.NewGuid(),
                 new FarmId(farmId),
                 new UserId(userId),
                 role,
-                DateTime.UtcNow));
+                DateTime.UtcNow);
+            if (authorities.Length > 0)
+            {
+                // lane 2b — what the primary owner switched on for this seat, each permanent.
+                membership.SetAuthorities(authorities.ToDictionary(a => a, _ => (DateTime?)null), DateTime.UtcNow);
+            }
+
+            db.FarmMemberships.Add(membership);
             await db.SaveChangesAsync();
         }
 

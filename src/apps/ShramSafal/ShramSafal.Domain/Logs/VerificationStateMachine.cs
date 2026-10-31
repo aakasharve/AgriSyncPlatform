@@ -15,13 +15,16 @@ public static class VerificationStateMachine
     /// Mukadam on every farm forever, with no owner in the loop and no way to take it
     /// back. See the four-argument
     /// <see cref="CanTransitionWithRole(VerificationStatus, VerificationStatus, AppRole, bool)"/>.</para>
+    ///
+    /// <para><b>lane 2b (founder D-22 / D-26, 2026-10-31) — the PRIMARY owner only.</b> A label
+    /// grants nothing: a सहमालक, agronomist or FPC manager reaches the owner's decision only through
+    /// the confirm-records authority, never by role. (Since I27 their role edge was already
+    /// unreachable in practice — <c>VerifyLogHandler</c> kept their request as a mark — so this
+    /// removes a dormant label grant, not a working path.)</para>
     /// </summary>
     private static readonly HashSet<AppRole> OwnerRoles =
     [
-        AppRole.PrimaryOwner,
-        AppRole.SecondaryOwner,
-        AppRole.Agronomist,
-        AppRole.FpcTechnicalManager
+        AppRole.PrimaryOwner
     ];
 
     /// <summary>
@@ -77,7 +80,7 @@ public static class VerificationStateMachine
 
     /// <summary>
     /// The ROLE-ONLY decision — identical to what this machine has always answered.
-    /// Equivalent to the four-argument overload with <c>hasLabourManagementGrant: false</c>.
+    /// Equivalent to the four-argument overload with <c>hasConfirmAuthority: false</c>.
     ///
     /// <para>Callers that have not resolved the grant must use this form, and it is the
     /// correct form for callers that cannot — the Domain has no database. Answering
@@ -85,7 +88,7 @@ public static class VerificationStateMachine
     /// FAIL-CLOSED direction: a refusal is recoverable, a wrongly-approved day is not.</para>
     /// </summary>
     public static bool CanTransitionWithRole(VerificationStatus from, VerificationStatus to, AppRole role) =>
-        CanTransitionWithRole(from, to, role, hasLabourManagementGrant: false);
+        CanTransitionWithRole(from, to, role, hasConfirmAuthority: false);
 
     /// <summary>
     /// spec: 2026-08-25-prod-cutover-waves — FOUNDER RULING 2026-08-27, verbatim:
@@ -122,7 +125,7 @@ public static class VerificationStateMachine
     /// Mukadam by role alone (founder decision O-4), and feeding it in here would let
     /// EVERY Mukadam approve — the exact reading the 2026-08-27 ruling corrected.</para>
     /// </summary>
-    /// <param name="hasLabourManagementGrant">
+    /// <param name="hasConfirmAuthority">
     /// The owner's explicit <c>can_manage_labour_records</c> grant for this caller on
     /// THIS farm. Never a role tier, and never anything the client put on the wire.
     /// </param>
@@ -130,7 +133,7 @@ public static class VerificationStateMachine
         VerificationStatus from,
         VerificationStatus to,
         AppRole role,
-        bool hasLabourManagementGrant)
+        bool hasConfirmAuthority)
     {
         if (!Transitions.TryGetValue(from, out var rules))
         {
@@ -142,7 +145,7 @@ public static class VerificationStateMachine
             return true;
         }
 
-        return hasLabourManagementGrant && IsOpenedByLabourManagementGrant(from, to);
+        return hasConfirmAuthority && IsOpenedByConfirmAuthority(from, to);
     }
 
     public static VerificationStatus GetNextStatusForEdit(VerificationStatus current)
@@ -160,7 +163,7 @@ public static class VerificationStateMachine
     /// <see cref="CanTransitionWithRole(VerificationStatus, VerificationStatus, AppRole)"/>.
     /// </summary>
     public static VerificationStatus[] GetAvailableTransitions(VerificationStatus from, AppRole role) =>
-        GetAvailableTransitions(from, role, hasLabourManagementGrant: false);
+        GetAvailableTransitions(from, role, hasConfirmAuthority: false);
 
     /// <summary>
     /// What this caller may actually do next, grant included.
@@ -176,7 +179,7 @@ public static class VerificationStateMachine
     public static VerificationStatus[] GetAvailableTransitions(
         VerificationStatus from,
         AppRole role,
-        bool hasLabourManagementGrant)
+        bool hasConfirmAuthority)
     {
         if (!Transitions.TryGetValue(from, out var rules))
         {
@@ -185,19 +188,24 @@ public static class VerificationStateMachine
 
         return rules
             .Where(r => r.AllowedRoles.Contains(role)
-                || (hasLabourManagementGrant && IsOpenedByLabourManagementGrant(from, r.To)))
+                || (hasConfirmAuthority && IsOpenedByConfirmAuthority(from, r.To)))
             .Select(r => r.To)
             .ToArray();
     }
 
     /// <summary>
-    /// THE entire surface of founder ruling 2026-08-27: one edge, named in one place,
-    /// so "honour the grant" can never quietly spread to a second transition. Approving
-    /// a day is the act an owner delegates. DISPUTING one — and the correction cycle
-    /// that opens — is not, and was not ruled on.
+    /// The edges the confirm-records authority opens, named in one place so it can never quietly
+    /// spread to another transition. Founder ruling 2026-08-27 opened approving a day
+    /// (Confirmed → Verified). lane 2b (MU design §11.1: "confirm records (log मंजूर / शंका …)";
+    /// D-44: "the primary owner chooses who confirms") adds the owner's other decision, शंका:
+    /// Confirmed → Disputed and Verified → Disputed. <c>VerifyLogHandler</c> already treated a
+    /// dispute as the same authority's decision (review S2) and kept anyone else's as a mark; a
+    /// confirmer it admitted was then refused here, so his शंका could never land. The correction
+    /// cycle (Disputed → CorrectionPending → Draft) stays open to every role, as before.
     /// </summary>
-    private static bool IsOpenedByLabourManagementGrant(VerificationStatus from, VerificationStatus to) =>
-        from == VerificationStatus.Confirmed && to == VerificationStatus.Verified;
+    private static bool IsOpenedByConfirmAuthority(VerificationStatus from, VerificationStatus to) =>
+        (from == VerificationStatus.Confirmed && to is VerificationStatus.Verified or VerificationStatus.Disputed)
+        || (from == VerificationStatus.Verified && to == VerificationStatus.Disputed);
 
     private sealed record TransitionRule(VerificationStatus To, IReadOnlySet<AppRole> AllowedRoles);
 }

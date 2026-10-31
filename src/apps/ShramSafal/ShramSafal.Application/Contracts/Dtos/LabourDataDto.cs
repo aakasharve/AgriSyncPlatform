@@ -27,7 +27,7 @@ public sealed record LabourDataDto(
     // effective explicit grant); false = an own-row caller WITHOUT an effective
     // grant (plain Worker, or an expired/revoked grant). It restates the same
     // decision the handler already takes for the register narrowing
-    // (hasLabourManagementGrant); it is not a new authority rule. Nullable and
+    // (hasConfirmAuthority); it is not a new authority rule. Nullable and
     // additive: absent/null = unknown, and a client then keeps today's behaviour.
     bool? CanManageLabour = null,
     // spec: plr-d10 (I27; founder D-44) — may this caller give the OWNER'S confirmation

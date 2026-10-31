@@ -37,6 +37,20 @@ export interface MeFarm {
     permissions?: string[] | null;
     /** The owner's written reason for a pause ("काम थांबवलं — कारण…"), or null. */
     statusReason?: string | null;
+    /**
+     * lane 2b (MU design §2, §6) — ADDITIVE (absent from an older server): every authority this
+     * seat HOLDS now on this farm, each with its end (`null` = कायम); empty unless Active. The label
+     * (`role`) grants none — the phone reads its doors from this, never from the label.
+     */
+    authorities?: MeAuthority[] | null;
+}
+
+/** lane 2b — one authority the server says this seat holds, and when it ends. */
+export interface MeAuthority {
+    /** The server's `FarmAuthority` name ("TakeAttendance", "ConfirmRecords", "EditFarmSetup", …). */
+    name: string;
+    /** ISO UTC instant it ends, or null for कायम. */
+    expiresAtUtc: string | null;
 }
 
 export interface MeIdentity {

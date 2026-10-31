@@ -60,14 +60,21 @@ public sealed class LabourRegisterViewTests
         Attendance: new LabourAttendanceDraftDto("", null, [], ""),
         View: "owner", Home: new LabourHomeDto(1200m, 12000m, 12, 4, 8));
 
+    /// <summary>
+    /// lane 2b (founder D-22 / D-26) — the book follows AUTHORITIES, not the label: the primary
+    /// owner, or a seat holding see wages, gets the whole book; a सहमालक label with nothing gets its
+    /// own row. Take हजेरी widens what he may DO, never his view (as the labour grant never did).
+    /// (The मुकादम label still opens the crew READ — the role-filtered reads are lane MU-3's.)
+    /// </summary>
     [Fact]
-    public void RolesResolveToTheThreeViews()
+    public void AuthoritiesResolveToTheThreeViews()
     {
-        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.PrimaryOwner));
-        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.SecondaryOwner));
-        Assert.Equal(LabourRegisterView.CrewAttendance, GetLabourDataHandler.ResolveRegisterView(AppRole.Mukadam));
-        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Worker));
-        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Agronomist));
+        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.PrimaryOwner, false));
+        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.SecondaryOwner, holdsSeeWages: true));
+        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.SecondaryOwner, false));
+        Assert.Equal(LabourRegisterView.CrewAttendance, GetLabourDataHandler.ResolveRegisterView(AppRole.Mukadam, false));
+        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Worker, false));
+        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Agronomist, false));
     }
 
     /// <summary>The owner's book is untouched — his record, every rupee.</summary>

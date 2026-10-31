@@ -1397,15 +1397,29 @@ public interface IShramSafalRepository
     /// their live seat (any status, so the policy itself refuses a waiting or paused one) with its
     /// role and stored permission choice; <c>null</c> when neither exists.
     /// Default body (F7): built from <see cref="GetUserRoleForFarmAsync"/> — the Active-only role —
-    /// with the role's default permissions, so a test double answers what its role answers.
+    /// and <see cref="GetLabourManagementGrantAsync"/>, so a test double answers what its role and
+    /// its labour grant answer. lane 2b: a double's labour grant reads as take हजेरी AND confirm
+    /// records — exactly what the 2b migration wrote for every stored grant (the one switch meant
+    /// both until 2b) — and nothing else is stored. Production overrides with the real row
+    /// (per-authority ends included). The double has no clock of its own, so its grant is read at
+    /// the wall clock; a double that needs another instant overrides this member.
     /// </summary>
     async Task<Services.FarmAccess?> GetFarmAccessForUserAsync(
         Guid farmId, Guid userId, CancellationToken ct = default)
     {
         var role = await GetUserRoleForFarmAsync(farmId, userId, ct);
-        return role is null
-            ? null
-            : new Services.FarmAccess(role.Value, MembershipStatus.Active, IsRegistrant: false, StoredPermissions: null);
+        if (role is null)
+        {
+            return null;
+        }
+
+        var grant = await GetLabourManagementGrantAsync(farmId, userId, DateTime.UtcNow, ct);
+        return new Services.FarmAccess(
+            role.Value,
+            MembershipStatus.Active,
+            IsRegistrant: false,
+            StoredPermissions: grant ? FarmPermission.ConfirmRecords : null,
+            LabourGrant: grant);
     }
 
     /// <summary>

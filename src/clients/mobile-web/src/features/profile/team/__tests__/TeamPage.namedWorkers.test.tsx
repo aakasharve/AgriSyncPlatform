@@ -41,7 +41,7 @@ const op = (id: string, displayName: string, isActive = true) => ({ id, displayN
 
 const roster = (rows: LabourPermission[] | null = []): UseLabourPermissionsResult => ({
     rows, loading: false, loadFailed: false, savingUserId: null, error: null,
-    reload: vi.fn(async () => undefined), setPermission: vi.fn(async () => undefined), dismissError: vi.fn(), adoptRow: vi.fn(),
+    reload: vi.fn(async () => undefined), setPermission: vi.fn(async () => undefined), setAuthorities: vi.fn(async () => undefined), dismissError: vi.fn(), adoptRow: vi.fn(),
 });
 
 const linked = (userId: string, displayName: string, role = 'SecondaryOwner'): LabourPermission => ({
@@ -77,7 +77,7 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe.each([['PrimaryOwner'], ['SecondaryOwner']])('Team page as %s', (role) => {
+describe.each([['PrimaryOwner']])('Team page as %s', (role) => {
     it("lists the farm's named workers from the SERVER and offers Add", async () => {
         mount(role);
         expect(await screen.findByText('Ganesh')).toBeTruthy();
@@ -199,7 +199,9 @@ describe.each([['PrimaryOwner'], ['SecondaryOwner']])('Team page as %s', (role) 
     });
 });
 
-describe.each([['Mukadam'], ['Worker']])('Team page as %s', (role) => {
+// lane 2b (founder D-26): a सहमालक no longer manages the named workers here — the team screen is the
+// primary account holder's; a co-owner reaches named workers through हजेरी when he holds it.
+describe.each([['SecondaryOwner'], ['Mukadam'], ['Worker']])('Team page as %s', (role) => {
     it('offers no Add, no Remove, no worker list, and asks the roster nothing', async () => {
         mount(role);
         await new Promise((r) => setTimeout(r, 20));

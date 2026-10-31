@@ -45,6 +45,11 @@ interface StructureSectionProps {
     setMappingPlotId: (v: { cropId: string, plotId: string } | null) => void;
     deletePlot: (cId: string, pId: string) => void;
     setWizardCropId: (id: string | null) => void;
+    /**
+     * lane 2b (D-15 via D-26) — the server lets this person add a plot ("edit farm setup"). False:
+     * no add-plot door, since the server would refuse the plot (P5). Absent = true.
+     */
+    canAddPlot?: boolean;
     onOpenScheduleLibrary?: (cropId?: string) => void;
 }
 
@@ -100,7 +105,7 @@ const ScheduleBox: React.FC<{ crop: CropProfile; onOpen: () => void }> = ({ crop
 const StructureSection: React.FC<StructureSectionProps> = ({
     crops, isAddingCrop, setIsAddingCrop, newCropData, setNewCropData, cropNameError, setCropNameError,
     normalizedNewCropName, isDuplicateCropName, handleAddCrop,
-    setMappingPlotId, deletePlot, setWizardCropId, onOpenScheduleLibrary,
+    setMappingPlotId, deletePlot, setWizardCropId, onOpenScheduleLibrary, canAddPlot = true,
 }) => {
     const [confirmPlot, setConfirmPlot] = useState<string | null>(null);
 
@@ -210,10 +215,12 @@ const StructureSection: React.FC<StructureSectionProps> = ({
                                 </div>
                             );
                         })}
-                        <Tap onClick={() => setWizardCropId(crop.id)} data-testid={`plot-add-${crop.id}`}
-                            className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full border-2 border-dashed border-emerald-400 text-[15px] font-extrabold text-emerald-800">
-                            <Plus size={18} aria-hidden="true" />या पिकात प्लॉट जोडा
-                        </Tap>
+                        {canAddPlot && (
+                            <Tap onClick={() => setWizardCropId(crop.id)} data-testid={`plot-add-${crop.id}`}
+                                className="flex min-h-[48px] w-full items-center justify-center gap-1.5 rounded-full border-2 border-dashed border-emerald-400 text-[15px] font-extrabold text-emerald-800">
+                                <Plus size={18} aria-hidden="true" />या पिकात प्लॉट जोडा
+                            </Tap>
+                        )}
                     </div>
                 </GlassCard>
             ))}

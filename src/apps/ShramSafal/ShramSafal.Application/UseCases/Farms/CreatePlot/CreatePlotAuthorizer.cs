@@ -1,8 +1,10 @@
 using AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 using AgriSync.BuildingBlocks.Results;
-using AgriSync.SharedKernel.Contracts.Roles;
+using AgriSync.BuildingBlocks.Abstractions;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
 
 namespace ShramSafal.Application.UseCases.Farms.CreatePlot;
 
@@ -26,18 +28,21 @@ namespace ShramSafal.Application.UseCases.Farms.CreatePlot;
 /// <list type="bullet">
 /// <item><see cref="ShramSafalErrors.FarmNotFound"/> when the farm id
 /// resolves to nothing.</item>
-/// <item><see cref="ShramSafalErrors.Forbidden"/> when the actor's role
-/// on the farm is not PrimaryOwner or SecondaryOwner.</item>
+/// <item><see cref="ShramSafalErrors.Forbidden"/> when the actor's seat on
+/// the farm does not hold the edit-farm-setup authority (lane 2b; founder D-15 answered by D-26:
+/// a label — सहमालक included — grants nothing; the primary account holder holds it always).</item>
 /// </list>
 /// </para>
 /// </summary>
 public sealed class CreatePlotAuthorizer : IAuthorizationCheck<CreatePlotCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly IClock _clock;
 
-    public CreatePlotAuthorizer(IShramSafalRepository repository)
+    public CreatePlotAuthorizer(IShramSafalRepository repository, IClock clock)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(CreatePlotCommand command, CancellationToken ct)
@@ -48,8 +53,8 @@ public sealed class CreatePlotAuthorizer : IAuthorizationCheck<CreatePlotCommand
             return Result.Failure(ShramSafalErrors.FarmNotFound);
         }
 
-        var role = await _repository.GetUserRoleForFarmAsync(command.FarmId, command.ActorUserId, ct);
-        if (role is not AppRole.PrimaryOwner and not AppRole.SecondaryOwner)
+        if (!await FarmAuthorityGate.HoldsAsync(
+                _repository, command.FarmId, command.ActorUserId, FarmAuthority.EditFarmSetup, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

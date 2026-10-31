@@ -144,7 +144,10 @@ public sealed class SetLabourPermissionHandler(
         bool changed;
         try
         {
-            changed = membership.SetLabourRecordManagement(
+            // lane 2b (P11) — this route is the one switch every installed phone knows, "हजेरी व
+            // पक्कं करणे": it keeps meaning take हजेरी AND confirm records together, same end. The
+            // split authorities are set one by one on PUT …/memberships/{userId}/authorities.
+            changed = membership.SetLegacyLabourSwitch(
                 command.CanManageLabourRecords, command.LabourGrantExpiresAtUtc, now);
         }
         catch (InvalidOperationException)
@@ -191,6 +194,10 @@ public sealed class SetLabourPermissionHandler(
                         // auditing the sent date would put an instant into
                         // history that the store never held (2.2 review, M1).
                         labourGrantExpiresAtUtc = membership.LabourGrantExpiresAtUtc,
+                        // lane 2b — the same switch also set confirm records, with the same end.
+                        authorities = membership.StoredAuthorities()
+                            .Select(a => new { name = a.Key.ToString(), expiresAtUtc = a.Value })
+                            .ToList(),
                     },
                     farmId: command.FarmId.Value,
                     clientCommandId: null,

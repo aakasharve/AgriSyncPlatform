@@ -205,7 +205,11 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests(ITestOutp
             doc.RootElement.GetProperty("role").GetString().Should().Be(role);
             doc.RootElement.GetProperty("status").GetString().Should().Be("Active");
             doc.RootElement.GetProperty("canManageLabourRecords").GetBoolean().Should().Be(grantLabour);
-            doc.RootElement.GetProperty("permissions").GetArrayLength().Should().Be(0, "a label grants no power (D-22)");
+            // A label grants no power (D-22); the one हजेरी व पक्कं switch is हजेरी + confirm records (2b).
+            doc.RootElement.GetProperty("permissions").EnumerateArray().Select(p => p.GetString())
+                .Should().Equal(grantLabour ? new[] { "ConfirmRecords" } : Array.Empty<string>());
+            doc.RootElement.GetProperty("authorities").EnumerateArray().Select(a => a.GetProperty("name").GetString())
+                .Should().BeEquivalentTo(grantLabour ? new[] { "TakeAttendance", "ConfirmRecords" } : Array.Empty<string>());
             doc.RootElement.GetProperty("phoneLast4").GetString().Should().Be(JoinerPhoneLast4, "M-7: who is really asking");
             doc.RootElement.GetProperty("approvedByOwner").GetBoolean().Should().BeTrue();
         }
@@ -214,7 +218,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests(ITestOutp
         seat.Should().NotBeNull();
         seat!.Role.Should().Be(role);
         seat.Status.Should().Be(3);
-        seat.Permissions.Should().BeNull("the role's defaults: nothing beyond the role");
+        seat.Permissions.Should().Be(grantLabour ? 128 : null, "nothing beyond what he chose: the switch's confirm-records bit (2b)");
         seat.LabourGrant.Should().Be(grantLabour, "only काम + हजेरी stores the हजेरी व पक्कं grant");
         seat.ApprovedBy.Should().Be(Owner);
         seat.ChangedBy.Should().Be(Owner);

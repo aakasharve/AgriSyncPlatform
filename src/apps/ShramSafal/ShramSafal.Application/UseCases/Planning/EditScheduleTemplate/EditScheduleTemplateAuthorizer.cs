@@ -4,6 +4,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Planning;
+using AgriSync.BuildingBlocks.Abstractions;
 
 namespace ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
 
@@ -33,10 +34,12 @@ namespace ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
 public sealed class EditScheduleTemplateAuthorizer : IAuthorizationCheck<EditScheduleTemplateCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly IClock _clock;
 
-    public EditScheduleTemplateAuthorizer(IShramSafalRepository repository)
+    public EditScheduleTemplateAuthorizer(IShramSafalRepository repository, IClock clock)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(EditScheduleTemplateCommand command, CancellationToken ct)
@@ -58,7 +61,8 @@ public sealed class EditScheduleTemplateAuthorizer : IAuthorizationCheck<EditSch
         else
         {
             // Non-private: apply the scope/role gate (CEI Phase 2 §4.7).
-            if (!ScopeRoleGate.IsAllowed(source.TenantScope, command.CallerRole))
+            if (!await ScopeRoleGate.IsAllowedAsync(
+                _repository, source.TenantScope, command.FarmId, command.CallerUserId, _clock.UtcNow, ct))
             {
                 return Result.Failure(ShramSafalErrors.Forbidden);
             }
