@@ -13,20 +13,15 @@
  * PROPOSED (Marathi) unless marked as an app word.
  */
 import { CATEGORY_LABEL_MR } from '../../logs/services/dfesScheduleWindow';
+import { cropByName } from '../../../domain/crops/cropMaster';
 
 const norm = (s: string): string => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
-/** The crops the shipped schedules are for (the demo farm's own plot names use द्राक्ष / ऊस). */
-const CROP_MR: Readonly<Record<string, string>> = {
-    grape: 'द्राक्ष', // PROPOSED (Marathi) — the demo farm's plot word
-    grapes: 'द्राक्ष', // PROPOSED (Marathi)
-    pomegranate: 'डाळिंब', // PROPOSED (Marathi)
-    sugarcane: 'ऊस', // PROPOSED (Marathi) — the demo farm's plot word
-    onion: 'कांदा', // PROPOSED (Marathi)
-};
-
-/** The Marathi word for a crop the app ships or seeds ("Grapes" → "द्राक्ष"); undefined for any other name. */
-export const cropWordMr = (name: string): string | undefined => CROP_MR[norm(name)];
+/**
+ * The Marathi word for a crop ("Grapes" → "द्राक्ष") — spec I18: read from the founder's crop master (any of its
+ * names, either language), not from a list kept here; undefined for a name the master does not know.
+ */
+export const cropWordMr = (name: string): string | undefined => cropByName(name)?.mr || undefined;
 
 /** What follows "Crop - " in a shipped schedule's name. */
 const SCHEDULE_KIND_MR: Readonly<Record<string, string>> = {
@@ -45,7 +40,7 @@ const SCHEDULE_KIND_MR: Readonly<Record<string, string>> = {
 export function scheduleNameMr(name: string): string {
     const parts = name.split(' - ');
     if (parts.length !== 2) return name;
-    const crop = CROP_MR[norm(parts[0])];
+    const crop = cropWordMr(parts[0]);
     const kind = SCHEDULE_KIND_MR[norm(parts[1])];
     return crop && kind ? `${crop} — ${kind}` : name;
 }

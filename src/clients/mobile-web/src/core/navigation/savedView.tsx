@@ -60,6 +60,7 @@ import { logger } from '../../infrastructure/observability/Logger';
 
 import { AppRouterContext } from './routeContext';
 import { requestSpeak } from '../speak/speakStore';
+import { cropNameIn } from '../../shared/names/namesIn';
 // Task 5 (spec: dfes-companion-2026-07-11) — thin per-candidate wrapper so
 // नाही ("hide it for this render") can use real React state. `renderLogView`
 // below is a plain function invoked directly inside AppRouter's JSX (see
@@ -197,7 +198,8 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                                                             shows it and still bounds a pathological
                                                             selection. */}
                                                         <p className="line-clamp-2 break-words text-base font-black leading-snug text-stone-900">
-                                                            {item.cropName} • {item.plotName}
+                                                            {/* spec I18 — this card's words are Marathi ("कुठे"): the crop in Marathi too, never "Grapes". */}
+                                                            {cropNameIn(item.cropName, 'mr', crop?.masterId)} • {item.plotName}
                                                         </p>
                                                         <NotQueuedForServerBadge syncQueued={item.syncQueued} />
                                                     </div>

@@ -19,6 +19,8 @@ import { Bell, ChevronLeft, ChevronRight, CloudRain, Grid3X3, LayoutList } from 
 import type { CalendarDay } from './calendarModel';
 import { WEEKDAY_SHORT_LIST, addDays, dateLabel, monthGridOf, monthLabel, sameDay, weekOf, weekdayShortOf } from './reflectDates';
 import { Num, Tap } from './ui';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 export type CalendarMode = 'week' | 'month';
 
@@ -34,6 +36,7 @@ interface Props {
 }
 
 export const ActivityCalendar: React.FC<Props> = ({ date, onDate, mode, onMode, view, onView, dayOf, legendCrops }) => {
+    const language = useOptionalLanguage()?.language ?? 'mr'; // spec I18 — crop names in his language
     const move = (n: number) => onView(mode === 'week' ? addDays(view, 7 * n) : new Date(view.getFullYear(), view.getMonth() + n, 1, 12));
     const week = weekOf(view);
     // "19–25 ऑक्टो" in one line; the month is named twice only when the week crosses into the next one
@@ -127,7 +130,7 @@ export const ActivityCalendar: React.FC<Props> = ({ date, onDate, mode, onMode, 
 
             <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5 border-t border-stone-100 pt-2.5 text-[12px] font-extrabold text-stone-600" data-testid="cal-key">
                 {legendCrops.map(c => (
-                    <span key={c.id} className="inline-flex items-center gap-1"><span className={`h-2.5 w-2.5 rounded-full ${c.color}`} />{c.name}</span>
+                    <span key={c.id} className="inline-flex items-center gap-1"><span className={`h-2.5 w-2.5 rounded-full ${c.color}`} />{cropNameIn(c.name, language)}</span>
                 ))}
                 <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-stone-400" />पूर्ण शेत</span>
                 <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />काम थांबलं</span>

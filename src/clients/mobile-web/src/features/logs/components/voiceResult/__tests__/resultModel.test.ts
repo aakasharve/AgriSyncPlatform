@@ -80,18 +80,22 @@ describe('partEntriesOf — what was understood, as recorded, in Marathi only', 
         expect(JSON.stringify(entry)).not.toMatch(/\b0\b/);
     });
 
-    it('an English label written by the parser is NOT shown: his verified phrase stands in, else nothing', () => {
+    it('an English label written by the parser is NOT shown: a known work type is said in Marathi (spec I18), else his verified phrase stands in, else nothing', () => {
         const l = log('L1', {
             fullTranscript: 'आज छाटणी केली',
             cropActivities: [
                 { id: 'a1', title: 'Pruning', sourceText: 'छाटणी केली' },
                 { id: 'a2', title: 'Weeding' },
+                { id: 'a3', title: 'Canopy management', sourceText: 'छाटणी केली' },
+                { id: 'a4', title: 'Canopy management' },
             ],
             inputs: [{ id: 'i1', productName: 'Bavistin' }],
         });
         const entries = partEntriesOf(l);
-        expect(entries.find(e => e.id === 'a1')?.value).toBe('छाटणी केली');
-        expect(entries.find(e => e.id === 'a2')?.value).toBeNull();
+        expect(entries.find(e => e.id === 'a1')?.value).toBe('छाटणी');
+        expect(entries.find(e => e.id === 'a2')?.value).toBe('खुरपणी');
+        expect(entries.find(e => e.id === 'a3')?.value).toBe('छाटणी केली');
+        expect(entries.find(e => e.id === 'a4')?.value).toBeNull();
         expect(entries.find(e => e.id === 'i1')?.value).toBeNull();
         expect(entries.map(e => e.value ?? '').join(' ')).not.toMatch(/[A-Za-z]/);
     });

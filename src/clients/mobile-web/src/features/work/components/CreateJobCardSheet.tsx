@@ -12,10 +12,12 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { JobCardLineItem } from '../../../domain/work/JobCard';
 import type { CreateJobCardRequest } from '../data/jobCardsClient';
 import { createJobCard } from '../data/jobCardsClient';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { errorTextIn } from '../../../shared/names/namesIn';
+import { workTypeNameIn } from '../../../shared/names/namesIn';
 
 interface PlotOption {
     id: string;
@@ -64,6 +66,8 @@ const CreateJobCardSheet: React.FC<CreateJobCardSheetProps> = ({
     const [lineItems, setLineItems] = useState<JobCardLineItem[]>([emptyLineItem()]);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // spec I18 — a failure in his language, read by its code; never the server's English sentence.
+    const language = useOptionalLanguage()?.language ?? 'mr';
 
     const selectedPlot = plots.find(p => p.id === plotId);
 
@@ -101,7 +105,7 @@ const CreateJobCardSheet: React.FC<CreateJobCardSheetProps> = ({
             }
             onClose();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to create job card');
+            setError(errorTextIn(err, language));
         } finally {
             setIsSaving(false);
         }
@@ -236,7 +240,7 @@ const CreateJobCardSheet: React.FC<CreateJobCardSheetProps> = ({
                                                 }`}
                                             style={{ fontFamily: "'DM Sans', sans-serif" }}
                                         >
-                                            {at}
+                                            {workTypeNameIn(at, language)}
                                         </button>
                                     ))}
                                 </div>

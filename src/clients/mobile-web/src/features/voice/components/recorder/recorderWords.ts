@@ -12,6 +12,7 @@
  */
 import { t } from '../../../../i18n/translations';
 import { OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE } from '../../../../infrastructure/ai/offlineVoiceQueue';
+import { ERROR_WORDS, errorKindOf } from '../../../../shared/names/errorWords';
 
 /** The founder's own sentence for the idle mic (2026-10-24). It replaces "नोंद सुरू करा" on this screen. */
 export const MIC_INSTRUCTION = 'हिरव्या रंगाचा माइक चे बटन एकदा दाबून बोलायला सुरवात करा';
@@ -81,11 +82,28 @@ const OFFLINE_WORDS: Record<string, { mr: string; en: string }> = {
 };
 
 const DEVANAGARI = /[ऀ-ॿ]/;
-/** An error the farmer can read: the offline outcomes in his language, Marathi as it is, anything else the plain Marathi line. */
+// PROPOSED (English) — the English twin of REC_WORDS.genericError (spec I18: no Marathi line in English mode).
+const GENERIC_ERROR_EN = 'Something went wrong. Speak again or type it.';
+/**
+ * An error the farmer can read, in his language (spec I18 — no server English in Marathi mode, no Marathi in English
+ * mode): the offline outcomes; a known error CODE as its plain sentence (`shared/names/errorWords`); a Marathi
+ * message as it is in Marathi mode; anything else the plain line for the recorder.
+ */
 export const readableError = (message: string, language?: string | null): string => {
     const offline = OFFLINE_WORDS[message];
-    if (offline) return language === 'en' ? offline.en : offline.mr;
-    return DEVANAGARI.test(message) ? message : REC_WORDS.genericError;
+    const en = language === 'en';
+    if (offline) return en ? offline.en : offline.mr;
+    const kind = errorKindOf(message);
+    if (kind !== 'generic') return ERROR_WORDS[kind][en ? 'en' : 'mr'];
+    if (!en && DEVANAGARI.test(message)) return message;
+    return en ? GENERIC_ERROR_EN : REC_WORDS.genericError;
 };
+
+/**
+ * spec I18 — the countdown in his language (the approved `voice.autoStopping` in both): "30 सेकंदात आपोआप थांबेल…" /
+ * "Auto-stopping in 30s…". `REC_WORDS.autoStopping` stays the Marathi line.
+ */
+export const autoStoppingIn = (secondsLeft: number, language?: string | null): string =>
+    t('voice.autoStopping', language === 'en' ? 'en' : 'mr').replace('{seconds}', String(secondsLeft));
 
 export const formatClock = (s: number): string => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;

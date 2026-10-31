@@ -123,7 +123,8 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
         const chips = [...card.querySelectorAll('[data-kind]')].map(c => c.getAttribute('data-kind'));
         expect(chips).toEqual(['crop', 'labour', 'labour', 'observation']);
         const labour = [...card.querySelectorAll('[data-kind="labour"]')].map(c => c.textContent);
-        expect(labour).toEqual(['5 जण', '10 जण']);
+        // spec I18 — the counts in his language.
+        expect(labour).toEqual(language === 'en' ? ['5 people', '10 people'] : ['5 जण', '10 जण']);
         expect(card.textContent).not.toContain('15');
         // the farmer's note is an "निरीक्षण" chip, not the amber box
         expect(card.querySelector('[data-kind="observation"]')).toHaveTextContent('पानं पिवळी');
@@ -137,7 +138,10 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
     it('an empty day says so plainly; a stopped day shows its stoppage chip', () => {
         render(wrap(<PlotDayCards cards={cards} isToday onOpen={vi.fn()} onCost={vi.fn()} />));
         expect(screen.getByTestId('plot-empty-grape:g2')).toHaveTextContent(language === 'en' ? 'Nothing told yet today' : 'आज अजून काही सांगितलं नाही');
-        expect(screen.getByTestId('plot-card-cane:c1').querySelector('[data-kind="blocker"]')).toHaveTextContent('पाऊस');
+        const blocker = screen.getByTestId('plot-card-cane:c1').querySelector('[data-kind="blocker"]') as HTMLElement;
+        // spec I18 — the parser's Marathi reason in Marathi mode; in English mode no Marathi (the stoppage word stands).
+        if (language === 'en') expect(blocker.textContent).not.toMatch(/[ऀ-ॿ]/);
+        else expect(blocker).toHaveTextContent('पाऊस');
     });
 
     it('tapping the card opens the day; tapping the money chip opens the money lens only', () => {

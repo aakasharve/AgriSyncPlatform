@@ -13,8 +13,12 @@ import { Check, MapPin } from 'lucide-react';
 import type { CropProfile } from '../../../types';
 import { pickCrop, togglePlot, type ReflectSelection } from './reflectSelection';
 import { CropPhoto, Num, Tap } from './ui';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 export const FarmStatus: React.FC<{ crops: readonly CropProfile[]; sel: ReflectSelection; onSel: (s: ReflectSelection) => void }> = ({ crops, sel, onSel }) => {
+    // spec I18 — crop names in his language (the server's "Grapes" is "द्राक्ष" in Marathi mode), never rewritten.
+    const language = useOptionalLanguage()?.language ?? 'mr';
     if (crops.length === 0) {
         return <p className="m-0 rounded-2xl bg-stone-50 p-3 text-center text-[14.5px] font-bold text-stone-600" data-testid="farm-status-empty">अजून पीक जोडलेलं नाही — शेत सेटअपमध्ये पीक आणि प्लॉट जोडा.</p>;
     }
@@ -22,8 +26,8 @@ export const FarmStatus: React.FC<{ crops: readonly CropProfile[]; sel: ReflectS
     const pickedCount = (key: 'all' | string) => crops.filter(c => key === 'all' || c.id === key)
         .reduce((n, c) => n + (c.plots ?? []).filter(p => sel.plotIds.includes(p.id)).length, 0);
     const tiles: { key: 'all' | string; name: string; crop?: CropProfile }[] = [
-        ...(crops.length > 1 ? [{ key: 'all' as const, name: 'सर्व पिकं' }] : []),
-        ...crops.map(c => ({ key: c.id, name: c.name, crop: c })),
+        ...(crops.length > 1 ? [{ key: 'all' as const, name: language === 'en' ? 'All crops' /* PROPOSED (English) */ : 'सर्व पिकं' }] : []),
+        ...crops.map(c => ({ key: c.id, name: cropNameIn(c.name, language, c.masterId), crop: c })),
     ];
     const plotsShown = crops.filter(c => sel.crop === 'all' || c.id === sel.crop).flatMap(c => (c.plots ?? []).map(p => ({ p, c })));
 

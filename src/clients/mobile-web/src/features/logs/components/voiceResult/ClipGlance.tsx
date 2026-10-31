@@ -24,8 +24,9 @@ import ClipPlayer, { mmss } from './ClipPlayer';
 import { AddedRow, BlockerRow, TimePill, WhoChip } from './DayParts';
 import { Words } from './HisWords';
 import { blockersOf, groupByRecording, isConfirmed, markTranscript, partEntriesOf, primaryOf, type BlockerEntry } from './resultModel';
-import { RESULT_STR } from './resultStrings';
+import { useResultStr } from './resultStrings';
 import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './useClipPlayback';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
@@ -47,10 +48,12 @@ interface GlanceProps {
 
 /** Full-screen: one recording, its words, its player, and everything understood from it. */
 export const ClipGlanceSheet: React.FC<GlanceProps> = ({ entry, recording, clip, playing, progress, lengthSec, onToggle, onEdit, onClose }) => {
+    const RS = useResultStr();
+    const language = useOptionalLanguage()?.language;
     const logs = recording && recording.length > 0 ? recording : entry.log ? [entry.log] : [];
     const said = primaryOf(logs)?.fullTranscript?.trim() ?? '';
-    const entries = logs.flatMap(partEntriesOf);
-    const blockers: BlockerEntry[] = logs.flatMap(blockersOf);
+    const entries = logs.flatMap(l => partEntriesOf(l, language));
+    const blockers: BlockerEntry[] = logs.flatMap(l => blockersOf(l, language));
     const words = said ? markTranscript(said, entries) : [];
     const confirmed = logs.length > 0 && logs.every(isConfirmed);
     return (
@@ -60,20 +63,20 @@ export const ClipGlanceSheet: React.FC<GlanceProps> = ({ entry, recording, clip,
                     <button type="button" onClick={onClose} data-testid="clip-glance-back"
                         className="inline-flex min-h-[52px] items-center gap-2 rounded-full border border-stone-300 bg-white pl-2 pr-5 text-stone-800 shadow-sm active:scale-95">
                         <span className="grid h-9 w-9 place-items-center rounded-full bg-stone-100"><ArrowLeft size={22} strokeWidth={2.75} /></span>
-                        <span className="text-[17px] font-extrabold">{RESULT_STR.back}</span>
+                        <span className="text-[17px] font-extrabold">{RS.back}</span>
                     </button>
                     <TimePill label={entry.timeLabel} strong />
                     {/* Who spoke it, the result screen's way: "तुम्ही" for the person holding this phone. */}
-                    <WhoChip who={{ name: entry.byYou ? RESULT_STR.you : entry.loggedBy, you: !!entry.byYou }} testId="clip-glance-who" />
+                    <WhoChip who={{ name: entry.byYou ? RS.you : entry.loggedBy, you: !!entry.byYou }} testId="clip-glance-who" />
                     <span className={`text-[12px] font-extrabold ${confirmed ? 'text-emerald-700' : 'text-stone-600'}`} data-testid="clip-glance-state">
-                        {confirmed ? `✔ ${RESULT_STR.confirmedBadge}` : RESULT_STR.notConfirmed}
+                        {confirmed ? `✔ ${RS.confirmedBadge}` : RS.notConfirmed}
                     </span>
                 </div>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-24 pt-3">
                     {words.length > 0 && <Words runs={words} testId="clip-glance-words" />}
                     {clip && <ClipPlayer clipKey={clip.id} durationSec={lengthSec} playing={playing} progress={progress} big onToggle={onToggle} testId="clip-glance-play" />}
                     <div data-testid="clip-glance-understood">
-                        <div className="mb-1.5 text-[13px] font-extrabold text-emerald-800">{RESULT_STR.addedTitle}</div>
+                        <div className="mb-1.5 text-[13px] font-extrabold text-emerald-800">{RS.addedTitle}</div>
                         {entries.length === 0 && blockers.length === 0 && <p className="m-0 text-[14px] font-semibold text-stone-600" data-testid="clip-glance-nothing">{NOTHING}</p>}
                         <div className="space-y-1.5">
                             {entries.map(e => <AddedRow key={e.id} entry={e} />)}
@@ -82,7 +85,7 @@ export const ClipGlanceSheet: React.FC<GlanceProps> = ({ entry, recording, clip,
                     </div>
                     <button type="button" onClick={onEdit} data-testid="clip-glance-edit"
                         className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-stone-300 bg-white text-base font-extrabold text-stone-700">
-                        <Pencil size={18} aria-hidden="true" /> {RESULT_STR.edit}
+                        <Pencil size={18} aria-hidden="true" /> {RS.edit}
                     </button>
                 </div>
             </div>

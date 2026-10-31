@@ -73,6 +73,8 @@ export function useCropPlotState({ crops, onUpdateCrops }: UseCropPlotStateInput
         const newCrop: CropProfile = {
             id: `c_${idGenerator.generate()}`,
             name: trimmedName,
+            // spec I18 — a crop chosen from the founder's crop master keeps its MHCR id (display + picture).
+            ...(newCropData.masterId ? { masterId: newCropData.masterId } : {}),
             iconName: newCropData.iconName!,
             color: autoColor,
             plots: [],

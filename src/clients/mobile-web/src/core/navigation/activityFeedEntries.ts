@@ -21,9 +21,10 @@
 import type { DailyLog } from '../../features/logs/logs.types';
 import type { CropProfile } from '../../types';
 import type { FeedEntry } from '../../features/logs/components/TodayActivityFeed';
-import { blockersOf, partEntriesOf, partMeta, type PartEntry } from '../../features/logs/components/voiceResult/resultModel';
-import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStrings';
+import { PART_LABEL_EN, blockersOf, partEntriesOf, partMeta, type PartEntry } from '../../features/logs/components/voiceResult/resultModel';
+import { resultStr } from '../../features/logs/components/voiceResult/resultStrings';
 import { formatFarmerLogTime, getVerificationPresentation } from './helpers';
+import { cropNameIn } from '../../shared/names/namesIn';
 
 export interface FeedDeps {
     crops: readonly CropProfile[];
@@ -32,6 +33,8 @@ export interface FeedDeps {
     onOpenLog: (log: DailyLog) => void;
     /** Ids that mean "the person holding this phone" (active operator, signed-in user). */
     youIds?: ReadonlySet<string>;
+    /** spec I18 — the language of the card's words (default Marathi). */
+    language?: string;
 }
 
 /**
@@ -39,8 +42,8 @@ export interface FeedDeps {
  * Only what the server could VERIFY in his words may headline a card: an item it could not find there is shown
  * flagged inside the glance, never as the card's fact.
  */
-export function workDoneOf(log: DailyLog): string {
-    return headlineOf(partEntriesOf(log), blockersOf(log).length > 0);
+export function workDoneOf(log: DailyLog, language: string | null | undefined = 'mr'): string {
+    return headlineOf(partEntriesOf(log, language), blockersOf(log, language).length > 0, language);
 }
 
 /**
@@ -48,12 +51,13 @@ export function workDoneOf(log: DailyLog): string {
  * may not see, so a headline can never carry an amount the screen hid. An entry with no value (a hidden amount is
  * one) never headlines with its value — its part's name stands instead.
  */
-export function headlineOf(all: readonly PartEntry[], hasBlockers: boolean): string {
+export function headlineOf(all: readonly PartEntry[], hasBlockers: boolean, language: string | null | undefined = 'mr'): string {
     const entries = all.filter(e => e.verified);
     const valued = entries.find(e => e.part === 'crop' && e.value) ?? entries.find(e => e.value);
     if (valued?.value) return valued.value;
-    if (entries[0]) return partMeta(entries[0].part).label;
-    return hasBlockers ? RESULT_STR.blockers : '—';
+    // spec I18 — the part's name and the stoppage word in his language.
+    if (entries[0]) return language === 'en' ? PART_LABEL_EN[entries[0].part] : partMeta(entries[0].part).label;
+    return hasBlockers ? resultStr(language).blockers : '—';
 }
 
 export function buildFeedEntries(logs: readonly DailyLog[], deps: FeedDeps): FeedEntry[] {
@@ -63,7 +67,7 @@ export function buildFeedEntries(logs: readonly DailyLog[], deps: FeedDeps): Fee
         const createdById = log.meta?.createdByOperatorId || '';
         // Truth audit T1.12b, finding 4: a record nobody was recorded as making is NEVER attributed to a
         // real person by name. `अज्ञात` is the word the app already uses for "no identity" (P4/P7).
-        const loggedBy = deps.operatorNameById.get(createdById) || 'अज्ञात';
+        const loggedBy = deps.operatorNameById.get(createdById) || resultStr(deps.language).unknownPerson;
         const primaryCropId = log.context.selection[0]?.cropId;
         const cropColor = deps.crops.find(crop => crop.id === primaryCropId)?.color || 'bg-slate-400';
         const snippet = log.fullTranscript?.trim();
@@ -72,9 +76,9 @@ export function buildFeedEntries(logs: readonly DailyLog[], deps: FeedDeps): Fee
             logId: log.id,
             log,
             byYou: !!createdById && !!deps.youIds?.has(createdById),
-            workDone: workDoneOf(log),
+            workDone: workDoneOf(log, deps.language),
             plotName: contextDetails.plotName,
-            cropName: contextDetails.cropName,
+            cropName: cropNameIn(contextDetails.cropName, deps.language),
             cropColor,
             loggedBy,
             // In his words ("सकाळी 10:30"), as the result screen reads the same recording; '' when no time was captured.

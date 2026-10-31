@@ -14,6 +14,8 @@ import React, { useState } from 'react';
 import { LogOut, Sprout, Dot, X, AlertTriangle } from 'lucide-react';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { errorTextIn } from '../../../shared/names/namesIn';
 
 interface MembershipsListProps {
     farms: MyFarmDto[];
@@ -26,6 +28,8 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
     const [confirmFarm, setConfirmFarm] = useState<MyFarmDto | null>(null);
     const [isExiting, setIsExiting] = useState(false);
     const [exitError, setExitError] = useState<string | null>(null);
+    // spec I18 — a failure in his language, read by its code; never the server's English sentence.
+    const language = useOptionalLanguage()?.language ?? 'mr';
 
     const handleConfirmedExit = async () => {
         if (!confirmFarm) return;
@@ -35,7 +39,7 @@ const MembershipsList: React.FC<MembershipsListProps> = ({ farms, nonExitableFar
             await onExit(confirmFarm.farmId, confirmFarm.name);
             setConfirmFarm(null);
         } catch (err) {
-            setExitError(err instanceof Error ? err.message : 'Exit failed.');
+            setExitError(errorTextIn(err, language));
         } finally {
             setIsExiting(false);
         }

@@ -13,6 +13,7 @@ import { resolveOversightString } from '../../../i18n/oversightTranslations';
 import { toMarathiNumber } from '../../logs/services/disciplineRecognition';
 import { cropImageUrl } from './cropImage';
 import CropPlotStepper, { type StepperExtras } from './CropPlotStepper';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 // Same font-selection convention every oversight component uses (root
 // CLAUDE.md Font Rules) — only used below when `hideGlobalCard` opts a
@@ -497,7 +498,7 @@ const CropSelector: React.FC<CropSelectorProps> = ({
                             {/* Text Container */}
                             <div className="flex flex-col items-center gap-1 w-full relative z-10">
                                 <span className={`font-black ${fontSize} leading-tight text-center transition-colors duration-300 ${isSelected ? theme.text : 'text-slate-700'}`}>
-                                    {crop.name}
+                                    {cropNameIn(crop.name, language, crop.masterId)}
                                 </span>
 
                                 {!compact && (() => {

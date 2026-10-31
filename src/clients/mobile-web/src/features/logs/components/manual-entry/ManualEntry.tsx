@@ -31,6 +31,7 @@ import { isFarmWideSelection } from '../../../../app/helpers/appContentDailyCoun
 import { emitClosureSubmitted } from '../../../../core/telemetry/eventEmitters';
 import { useFarmContext } from '../../../../core/session/FarmContext';
 import { useReviewFormStrings } from './reviewFormStrings';
+import { workTypeNameIn } from '../../../../shared/names/namesIn';
 
 const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, profile, onSubmit, initialData, provenance, onDataConsumed, todayCountsMap, farmWideToday, transcriptEntries = [], todayLogs = [], onLogSelect, recordedDateKey, attendanceOnly = false, captureScope }) => {
 
@@ -414,11 +415,15 @@ const ManualEntry: React.FC<ManualEntryProps> = ({ context, crops, defaults, pro
         onSubmit(userDraft);
     };
 
+    const sameWork = (stored: string | undefined, shown: string): boolean =>
+        !!stored && (stored === shown || workTypeNameIn(stored, 'mr') === shown || workTypeNameIn(stored, 'en') === shown);
     const handleRefineWorkType = (oldType: string, newType: string, mode: 'manual' | 'voice') => {
         if (mode === 'manual') {
             setCropActivities(prev => prev.map(act => ({
                 ...act,
-                workTypes: act.workTypes?.map(w => w === oldType ? newType : w) || (act.title === oldType ? [newType] : [])
+                // spec I18 — the card shows a work type in his language ("फवारणी" for a stored "Spraying"): the shown name
+                // and the stored one are the same work.
+                workTypes: act.workTypes?.map(w => sameWork(w, oldType) ? newType : w) || (sameWork(act.title, oldType) ? [newType] : [])
             })));
         } else {
             // mode === 'voice' - simplified for now, usually would trigger a global "Clarification" mic session

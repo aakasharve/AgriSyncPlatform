@@ -256,9 +256,10 @@ const ActivityCard: React.FC<ActivityCardProps> = ({
                     <div className="flex flex-col items-start gap-1">
                         <div className="flex items-center gap-2">
                             <h4 className="text-lg font-bold text-slate-800 leading-tight">
+                                {/* spec I18 — a work type / title in his language ("Spraying" ↔ "फवारणी"), his own words as written. */}
                                 {activity.title === 'Crop Activity' && activity.workTypes && activity.workTypes.length > 0
-                                    ? activity.workTypes[0]
-                                    : ['Crop Activity', 'Log Entry', 'Field Work'].includes(activity.title) ? s.genericTitle(activity.title) : activity.title
+                                    ? s.value(activity.workTypes[0])
+                                    : ['Crop Activity', 'Log Entry', 'Field Work'].includes(activity.title) ? s.genericTitle(activity.title) : s.value(activity.title)
                                 }
                             </h4>
                             {verificationStatus && <TrustBadge status={verificationStatus} size="sm" />}

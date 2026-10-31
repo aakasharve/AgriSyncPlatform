@@ -91,7 +91,10 @@ describe('the आजची कामे tab after a save', { timeout: 60_000 }, 
         expect(await screen.findByTestId('voice-result-stub')).toBeTruthy();
         expect(screen.queryByTestId('saved-to-ledger')).toBeNull();
         expect(screen.getByTestId('saved-back')).toBeTruthy();
-        expect(seen.props).toMatchObject({ result: VOICE_RESULT, farmId: 'farm-1', farmRole: 'PrimaryOwner', placeLabel: 'द्राक्ष · सोनाका' });
+        expect(seen.props).toMatchObject({ result: VOICE_RESULT, farmId: 'farm-1', farmRole: 'PrimaryOwner' });
+        // spec I18 — the place is built in the screen's language (crop names follow it).
+        const placeLabel = seen.props?.placeLabel as (language: string | undefined) => string;
+        expect(placeLabel('mr')).toBe('द्राक्ष · सोनाका');
         // The enqueue result travels per log, so each plot's log of a recording can say if it will not reach the server.
         expect([...(seen.props?.syncQueuedById as Map<string, boolean | null>)]).toEqual([['LOG-1', true]]);
     });

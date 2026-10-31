@@ -24,6 +24,7 @@ import { reflectCopy } from '../reflectCopy';
 import { topOf, type MoneyFigure, type PartialReason, type SeasonTotals, type Spend, type SpendBar, type SpendPoint, type SpendRange } from './moneyModel';
 import { rupees } from './reflectDates';
 import { Num, Tap } from './ui';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 const DASH = '—';
 const money = (n: number | null) => (n === null ? DASH : rupees(n));
@@ -123,6 +124,7 @@ export const CostSection: React.FC<{ totals: SeasonTotals; spend: Spend; range: 
     const weekly = range.bucket === 'weekly';
     const active: readonly SpendPoint[] = view === 'crop' ? spend.byCrop : view === 'plot' ? spend.byPlot : spend.points;
     const top = topOf(active);
+    const language = useOptionalLanguage()?.language ?? 'mr'; // spec I18 — crop names in his language
     const mix = spend.mix;
     // Money he may not see: "—" and one line saying why; no chart, no mix, no door into the money pages (D-22).
     const hidden = totals.cost.hidden || spend.total.hidden;
@@ -150,7 +152,7 @@ export const CostSection: React.FC<{ totals: SeasonTotals; spend: Spend; range: 
                     <p className="m-0 mb-1.5 text-[13.5px] font-extrabold text-stone-800">काढणी कुठवर</p>
                     {totals.harvest.map(h => (
                         <p key={h.cropId} className="m-0 flex items-center gap-2 py-0.5 text-[14px] font-bold text-stone-700">
-                            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${h.color}`} />{h.cropName}: {h.entries > 0 ? <><Num>{h.entries}</Num> काढणी नोंदी</> : 'काढणी नोंद नाही'}
+                            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${h.color}`} />{cropNameIn(h.cropName, language)}: {h.entries > 0 ? <><Num>{h.entries}</Num> काढणी नोंदी</> : 'काढणी नोंद नाही'}
                         </p>
                     ))}
                 </div>

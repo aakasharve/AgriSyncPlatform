@@ -50,6 +50,18 @@ const NAME_MR: Record<string, string> = {
     'early stage': 'सुरुवातीचा टप्पा',
     'mid stage': 'मधला टप्पा',
     'late stage': 'शेवटचा टप्पा',
+    // I18 — the schedule page's own stage words (were a second table in scheduleCopy.ts), now here once.
+    pruning: 'छाटणी',
+    planting: 'लागवड',
+    sowing: 'पेरणी',
+    'sprouting phase': 'फूट येण्याची अवस्था',
+    'pre flowering': 'फुलोऱ्यापूर्वी',
+    // I18 — the test protocols' stage names (`TestProtocolSeed.cs`), shown on चाचण्या. PROPOSED (Marathi)
+    flowering: 'फुलोरा',
+    'fruit set': 'फळधारणा',
+    veraison: 'मणी रंग बदलण्याची अवस्था',
+    'pre plantation': 'लागवडीपूर्वी',
+    harvest: 'काढणी',
 };
 
 // The stage's kind (`StageCode`, `summary.types.ts`) → Marathi. CUSTOM says nothing. PROPOSED (Marathi)
@@ -75,4 +87,28 @@ export function stageNameMr(name: string | null | undefined, code?: string | nul
         if (known) return known;
     }
     return code ? CODE_MR[keyOf(code)] ?? null : null;
+}
+
+/** The stage's kind in English (I18 — English mode). PROPOSED (English). */
+const CODE_EN: Record<string, string> = {
+    establishment: 'Establishment',
+    'early growth': 'Early growth',
+    vegetative: 'Vegetative growth',
+    'flowering fruit set': 'Flowering & fruit set',
+    'fruit growth': 'Fruit growth',
+    'fruit maturity': 'Maturity & harvest',
+};
+
+/**
+ * spec I18 — the stage name for English mode: a known English name as the schedule writes it, else the stage's
+ * kind in English, else null. A sentinel ("unstated", "unknown") is never a stage (P4); a name written in Marathi
+ * has no English here (the caller decides).
+ */
+export function stageNameEn(name: string | null | undefined, code?: string | null): string | null {
+    const raw = (name ?? '').trim();
+    const key = keyOf(raw);
+    if (raw && !SENTINELS.has(key) && !DEVANAGARI.test(raw) && (NAME_MR[key] || CODE_MR[key])) {
+        return CODE_EN[key] ?? raw;
+    }
+    return code ? CODE_EN[keyOf(code)] ?? null : null;
 }

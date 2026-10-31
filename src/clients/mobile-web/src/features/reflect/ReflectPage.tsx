@@ -167,8 +167,9 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const operatorNameById = useMemo(() => Object.fromEntries(operators.map(o => [o.id, o.name])), [operators]);
     const whoDeps = useMemo(() => ({
         youIds: new Set(sessionUserId ? [sessionUserId] : []), nameOf: (id: string) => operatorNameById[id], youLabel: copy.you, unknownLabel: copy.unknownPerson,
-    }), [sessionUserId, operatorNameById, copy]);
-    const shown = useCallback((r: DayRecording) => withMoneyShown(r, moneyVisible), [moneyVisible]);
+        language: language ?? undefined, // spec I18 — what was understood, in his language
+    }), [sessionUserId, operatorNameById, copy, language]);
+    const shown = useCallback((r: DayRecording) => withMoneyShown(r, moneyVisible, language), [moneyVisible, language]);
     // The chosen day's recordings, farm-wide (the notes' links, the one player).
     const dayRecs = useMemo(() => dayRecordings(history, dateKey, anyLog, whoDeps, crops).map(shown), [history, dateKey, whoDeps, crops, shown]);
     const listen = useDayListen(dayRecs, viewer);
@@ -224,8 +225,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const todoList = useMemo(() => {
         const store = tasks ?? [];
         const fromLogs = history.filter(l => l.date === dateKey && isLogInScope(l, scope)).flatMap(l => l.plannedTasks ?? []);
-        return buildTodoList({ tasks: mergeTasks(store, fromLogs), storeIds: new Set(store.map(t => t.id)), crops, scope, wholeFarm, todayKey });
-    }, [tasks, history, dateKey, scope, crops, wholeFarm, todayKey]);
+        return buildTodoList({ tasks: mergeTasks(store, fromLogs), storeIds: new Set(store.map(t => t.id)), crops, scope, wholeFarm, todayKey, language });
+    }, [tasks, history, dateKey, scope, crops, wholeFarm, todayKey, language]);
     const openTasks = useMemo(() => [...todoList.late, ...todoList.today, ...todoList.later].map(i => i.task), [todoList]);
     const dayOf = useCallback((d: Date) => buildCalendarDay({ date: d, history, crops, scope, dueTasks: openTasks }), [history, crops, scope, openTasks]);
 

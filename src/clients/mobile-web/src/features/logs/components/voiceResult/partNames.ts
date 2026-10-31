@@ -13,24 +13,12 @@
  * Lane RF2 fix pass (D4): the RF2 surfaces show what was understood, never his quoted source words ("“इथरेल 300 मिली
  * फवारणी केली”") — `withoutQuotes` drops them before the shared result-screen rows draw an entry.
  */
-import { cropWordMr } from '../../../scheduler/schedulePage/scheduleNames';
 import { amountText, nameIsPhrase, productName, showsProducts } from './productModel';
-import { partMeta, type BlockerEntry, type PartEntry, type PartKey } from './resultModel';
-
-const EN: Record<PartKey, string> = {
-    crop: 'Crop work', // PROPOSED (English)
-    labour: 'Labour', // PROPOSED (English)
-    irrigation: 'Water', // PROPOSED (English)
-    inputs: 'Sprays / fertiliser', // PROPOSED (English)
-    expense: 'Expenses', // PROPOSED (English)
-    machinery: 'Machines', // PROPOSED (English)
-    observation: 'Observation', // PROPOSED (English)
-    planned: 'Planned work', // PROPOSED (English)
-};
+import { PART_LABEL_EN, partMeta, type BlockerEntry, type PartEntry, type PartKey } from './resultModel';
 
 /** The part's name in this language (Marathi: the result screen's own word). */
 export const partNameIn = (part: PartKey, language: string | null | undefined): string =>
-    (language === 'en' ? EN[part] : partMeta(part).label);
+    (language === 'en' ? PART_LABEL_EN[part] : partMeta(part).label);
 
 /**
  * What one entry says, as recorded: a spray / fertiliser's products with their amounts when they can be shown in this
@@ -46,21 +34,12 @@ export function entryText(e: PartEntry, language: string | null | undefined): st
     return e.value ?? e.quote ?? '';
 }
 
-const LATIN = /[A-Za-z]/;
-const DEVANAGARI = /[ऀ-ॿ]/;
-
 /**
- * A crop's name in this language, strictly (founder rule: Marathi mode = Marathi only). The server keeps crop names in
- * English: Marathi mode shows the app's Marathi word for a crop it ships ("Grapes" → "द्राक्ष"), a name already in
- * Marathi as written, and otherwise nothing (the plot's own name says where). English mode shows a name in English
- * letters, and nothing for one in Marathi only.
+ * A crop's name in this language, strictly (founder rule: Marathi mode = Marathi only). spec I18: ONE helper for the
+ * whole app — `shared/names/namesIn.cropNameIn` (the founder's crop master: the server's English "Grapes" reads
+ * "द्राक्ष" in Marathi mode and "Grapes" in English mode; a name the master does not know is shown as entered).
  */
-export function cropNameIn(name: string | undefined, language: string | null | undefined): string {
-    const n = (name ?? '').trim();
-    if (!n) return '';
-    if (language === 'en') return LATIN.test(n) ? n : '';
-    return cropWordMr(n) ?? (DEVANAGARI.test(n) ? n : '');
-}
+export { cropNameIn } from '../../../../shared/names/namesIn';
 
 /** The entries without his quoted source words (the RF2 surfaces show what was understood, not the quote). */
 export const withoutQuotes = <T extends PartEntry | BlockerEntry>(entries: readonly T[]): T[] => entries.map(e => (e.quote ? { ...e, quote: undefined } : e));

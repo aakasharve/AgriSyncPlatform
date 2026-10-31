@@ -101,12 +101,6 @@ export interface MoneyAdjustment {
     correctedAt: string;
 }
 
-export interface FinanceSettings {
-    highAmountThreshold: number;
-    duplicateWindowMinutes: number;
-    gstEnabled: boolean;
-}
-
 export interface FinanceFilters {
     fromDate?: string;
     toDate?: string;

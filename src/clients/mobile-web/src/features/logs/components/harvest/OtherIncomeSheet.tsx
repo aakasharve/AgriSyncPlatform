@@ -20,6 +20,7 @@ import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { idGenerator } from '../../../../core/domain/services/IdGenerator';
 import { BigButton, ChoiceChips, SANS, TextField } from '../../../../shared/components/ui/placeUi';
 import { OTHER_INCOME_SOURCE_LABEL } from './otherIncomeLabels';
+import { cropNameIn } from '../../../../shared/names/namesIn';
 
 interface OtherIncomeSheetProps {
     crops: CropProfile[]; // For linking to crop
@@ -98,7 +99,7 @@ const OtherIncomeSheet: React.FC<OtherIncomeSheetProps> = ({ crops, onClose, onS
                         >
                             <option value="">सर्व शेताचं उत्पन्न</option>
                             {crops.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
+                                <option key={c.id} value={c.id}>{cropNameIn(c.name, 'mr', c.masterId)}</option>
                             ))}
                         </select>
                     </label>

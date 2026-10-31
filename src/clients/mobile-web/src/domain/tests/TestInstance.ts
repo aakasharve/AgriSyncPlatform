@@ -47,6 +47,8 @@ export const TestProtocolKind = {
     Tissue: 2,
     Residue: 3,
     Other: 4,
+    /** D-38 (founder 2026-10-27) — the grape petiole test ("PTOL"), no longer folded into "Other". */
+    Petiole: 5,
 } as const;
 
 export type TestProtocolKind = typeof TestProtocolKind[keyof typeof TestProtocolKind];

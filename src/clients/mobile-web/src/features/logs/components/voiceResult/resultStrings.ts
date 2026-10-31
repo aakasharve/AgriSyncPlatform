@@ -10,12 +10,13 @@
  *   - PROPOSED (Marathi): the preview's own wording or new wording, waiting for his review.
  * The word "नोंद" is not used on these screens (PLR-D5 :65); the waiting screen keeps its own quotes.
  *
- * KNOWN GAP (spec I18, language-strict): this screen is Marathi in BOTH languages (the preview it ports, the ring's
- * own words and the eight part names exist only in Marathi). An English-mode user sees Marathi here, beside the
- * few embedded pieces that follow his language (the not-queued badge, Sathi's question). Carried to I18, which
- * owns the one language-aware label helper; not patched here string by string.
+ * spec I18 (language-strict, founder 2026-10-26): `RESULT_STR` is the Marathi; `RESULT_STR_EN` is its English twin,
+ * key for key — APPROVED where the app already has the English (`t(key, 'en')`), else PROPOSED (English). The screen
+ * reads the one for the app's language through `useResultStr()` / `resultStr(language)`. Other modules that build
+ * their own Marathi from these lines keep reading `RESULT_STR`.
  */
 import { t } from '../../../../i18n/translations';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 
 export const RESULT_STR = {
     // APPROVED — the phone-side claim (sync.onPhone), the server-acknowledged claim (sync.onServerFull) and
@@ -79,3 +80,61 @@ export const RESULT_STR = {
     // PROPOSED (Marathi) — a part he mentioned that the server could not find in his words: "not sure", never "not said".
     unsurePart: 'नक्की समजलं नाही',
 } as const;
+
+/** The same lines, widened (a function stays a function). */
+export type ResultStr = { [K in keyof typeof RESULT_STR]: (typeof RESULT_STR)[K] extends (n: number) => string ? (n: number) => string : string };
+
+/** spec I18 — the English twin of `RESULT_STR`, key for key. */
+export const RESULT_STR_EN: ResultStr = {
+    // APPROVED — the same app strings in English.
+    remembered: t('sync.onPhone', 'en'),
+    onServer: t('sync.onServerFull', 'en'),
+    needsFix: t('sync.needsFix', 'en'),
+    sathiLine: t('dfes.sathiSaidLine', 'en'),
+    meterPending: t('dfes.dayUnderstandingPending', 'en'),
+    noWorkDay: t('dfes.noWorkDayAcknowledged', 'en'),
+    edit: t('confirmation.edit', 'en'),
+    back: t('common.back', 'en'),
+    unsure: t('voice.unverifiedSourceLabel', 'en'),
+    // PROPOSED (English) — everything below.
+    addAnother: 'Say more',
+    blockers: 'Stoppages / problems',
+    ringHeading: 'How much Shram Sathi understood',
+    addedTitle: 'What was understood',
+    confirm: 'It is right',
+    justNow: 'Just now',
+    todayCount: (n: number) => `Told ${n} times today`,
+    firstToday: 'First time today',
+    confirmedBadge: 'Confirmed',
+    notConfirmed: 'Not confirmed',
+    dayTitle: 'Today so far',
+    tapForHistory: 'Tap — see what was told earlier',
+    noneYet: 'Not told',
+    tellMore: 'Tap and speak',
+    earlierTitle: 'Earlier today',
+    listenAndConfirm: 'Listen and confirm',
+    readAndConfirm: 'Read and confirm',
+    confirmedDone: 'You confirmed it',
+    play: 'Listen',
+    stop: 'Stop',
+    you: 'You',
+    unknownPerson: 'Unknown',
+    todayWho: 'Who told today',
+    times: (n: number) => `${n} times`,
+    foot: 'What was told earlier stays as it is. What you say now is added to it.',
+    linksSub: 'Tap a part — see which words it came from',
+    wrote: 'Shram Sathi wrote',
+    newTag: 'New',
+    typedTag: 'Typed',
+    keptSafe: 'Your words are kept',
+    unclearTitle: 'Sathi did not understand this well',
+    confirmFailed: 'Could not confirm just now — tap again',
+    wholeFarm: 'Whole farm',
+    unsurePart: 'Not sure',
+};
+
+/** The result screen's lines in this language (Marathi unless the app is in English). */
+export const resultStr = (language: string | null | undefined): ResultStr => (language === 'en' ? RESULT_STR_EN : RESULT_STR);
+
+/** The result screen's lines in the app's language. */
+export const useResultStr = (): ResultStr => resultStr(useOptionalLanguage()?.language);

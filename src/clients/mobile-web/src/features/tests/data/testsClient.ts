@@ -157,6 +157,7 @@ const mapKindString = (k: string): number => {
         case 'Water': return 1;
         case 'Tissue': return 2;
         case 'Residue': return 3;
+        case 'Petiole': return 5; // D-38: its own name, never "इतर तपासणी"
         default: return 4;
     }
 };

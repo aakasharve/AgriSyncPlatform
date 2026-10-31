@@ -17,10 +17,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, Mic, X } from 'lucide-react';
 import { hapticFeedback } from '../../../../shared/utils/haptics';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { VoiceLevelRing } from './VoiceLevelRing';
 import { TypedLink, TypedSheet, TypedTag } from './TypedEntry';
 import {
-    AUTO_STOP_SEC, AUTO_STOP_WARN_SEC, MIC_INSTRUCTION, REC_WORDS, STOP_HINT_AFTER_SEC, STOP_HINT_FOR_SEC, formatClock,
+    AUTO_STOP_SEC, AUTO_STOP_WARN_SEC, MIC_INSTRUCTION, REC_WORDS, autoStoppingIn, STOP_HINT_AFTER_SEC, STOP_HINT_FOR_SEC, formatClock,
 } from './recorderWords';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
@@ -57,6 +58,7 @@ export interface RecorderFaceProps {
 
 const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void; onCancel: () => void }> = ({ seconds, level, onStop, onCancel }) => {
     const [hintDismissed, setHintDismissed] = useState(false);
+    const language = useOptionalLanguage()?.language;
     const hintOn = !hintDismissed && seconds >= STOP_HINT_AFTER_SEC && seconds < STOP_HINT_AFTER_SEC + STOP_HINT_FOR_SEC;
     return (
         <div data-testid="mic-ui" data-recording="yes" style={{ fontFamily: SANS }}
@@ -87,7 +89,7 @@ const Recording: React.FC<{ seconds: number; level?: number; onStop: () => void;
                 </div>
             )}
             {seconds >= AUTO_STOP_WARN_SEC && (
-                <p className="relative m-0 mt-1 text-[16px] font-bold text-amber-700" data-testid="mic-auto-stop">{REC_WORDS.autoStopping(Math.max(0, AUTO_STOP_SEC - seconds))}</p>
+                <p className="relative m-0 mt-1 text-[16px] font-bold text-amber-700" data-testid="mic-auto-stop">{autoStoppingIn(Math.max(0, AUTO_STOP_SEC - seconds), language)}</p>
             )}
 
             {/* Set apart from stop on purpose, drawn as a real button, in the founder's words. */}

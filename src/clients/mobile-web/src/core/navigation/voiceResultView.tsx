@@ -24,7 +24,8 @@ import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScre
 // The model's own rule for "the log that carries his words" (useVoiceAutoSave keeps the same one-liner): it keeps the
 // auto-save hook and its clip store out of the log tab's first load.
 import { primaryOf } from '../../features/logs/components/voiceResult/resultModel';
-import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStrings';
+import { resultStr } from '../../features/logs/components/voiceResult/resultStrings';
+import { cropNameIn } from '../../shared/names/namesIn';
 import { stashPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
 import { requestSpeak, type SpeakRequestInput } from '../speak/speakStore';
 import { findConfirmableTaskCloses } from '../../features/logs/services/taskAutoClose';
@@ -42,14 +43,14 @@ export const currentVoiceResult = (ctx: AppRouterContext): VoiceResultState | nu
 };
 
 /**
- * "Crop · plot, plot" as named on the farm; the whole farm by its own name.
- * KNOWN GAP (spec I18): `cropName` is stored as the server sent it, and the server keeps crop names in English
- * only, so a Marathi screen can read "Grapes · …" until I18's language-aware crop helper lands.
+ * "Crop · plot, plot" in the app's language; the whole farm by its own name. spec I18: `cropName` is stored as the
+ * server sent it (English only) and is SHOWN through the one crop-name helper ("Grapes" → "द्राक्ष" in Marathi mode);
+ * the plot names are his own words, as written.
  */
-const placeOf = (logs: readonly DailyLog[]): string => {
+export const placeOf = (logs: readonly DailyLog[], language?: string): string => {
     const sel = logs.flatMap(l => l.context?.selection ?? []);
-    if (sel.length === 0 || sel.every(s => s.cropId === 'FARM_GLOBAL')) return RESULT_STR.wholeFarm;
-    const crops = [...new Set(sel.map(s => s.cropName).filter(Boolean))];
+    if (sel.length === 0 || sel.every(s => s.cropId === 'FARM_GLOBAL')) return resultStr(language).wholeFarm;
+    const crops = [...new Set(sel.map(s => cropNameIn(s.cropName, language)).filter(Boolean))];
     const plots = [...new Set(sel.flatMap(s => s.selectedPlotNames ?? []).filter(Boolean))];
     return [crops.join(', '), plots.join(', ')].filter(Boolean).join(' · ');
 };
@@ -104,7 +105,7 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     operatorNameById={ctx.operatorNameById}
                     farmId={farmId}
                     farmRole={ctx.farmRole}
-                    placeLabel={placeOf(logs)}
+                    placeLabel={language => placeOf(logs, language)}
                     syncQueuedById={new Map(ctx.lastSavedLogSummary.map(s => [s.logId, s.syncQueued] as const))}
                     onEdit={ctx.handleEditLog}
                     onBack={ctx.handleReset}

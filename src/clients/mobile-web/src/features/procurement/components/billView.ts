@@ -13,6 +13,7 @@
  * when the photo suggested a crop, so reading `cropId` alone would drop most plot bills from their crop.
  */
 import type { CropProfile, ExpenseScope, ProcurementExpense } from '../../../types';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 /** Font rule: figures in DM Sans, Marathi in Noto Sans Devanagari. */
 export const NUM = "'DM Sans', sans-serif";
@@ -74,7 +75,7 @@ export function placeOf(e: ProcurementExpense, crops: readonly CropProfile[]): s
     if (e.scope === 'PLOT') return crops.flatMap(c => c.plots).find(p => p.id === e.plotId)?.name ?? '';
     if (e.scope === 'CROP') {
         const crop = crops.find(c => c.id === e.cropId);
-        return crop ? `सर्व ${crop.name}` : '';
+        return crop ? `सर्व ${cropNameIn(crop.name, 'mr', crop.masterId)}` : '';
     }
     return '';
 }
@@ -84,5 +85,7 @@ export function pickLabel(crops: readonly CropProfile[], pick: BillPick): string
     const crop = crops.find(c => c.id === pick.cropId);
     if (!crop) return 'सगळं शेत';
     const plot = crop.plots.find(p => p.id === pick.plotId);
-    return plot ? `${plot.name} (${crop.name})` : `सर्व ${crop.name}`;
+    // spec I18 — these lines are Marathi, so the crop is said in Marathi (the server keeps "Grapes").
+    const cropMr = cropNameIn(crop.name, 'mr', crop.masterId);
+    return plot ? `${plot.name} (${cropMr})` : `सर्व ${cropMr}`;
 }

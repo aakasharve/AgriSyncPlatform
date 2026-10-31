@@ -37,6 +37,8 @@ import { SC } from '../features/scheduler/schedulePage/scheduleCopy';
 import { buildScheduleModel, dueTodayCount } from '../features/scheduler/schedulePage/scheduleModel';
 import { adoptForCrop, applyEditorChoice, resolvePlotSchedule, type EditorChoice } from '../features/scheduler/schedulePage/resolveSchedule';
 import { usePlotClips } from '../features/scheduler/schedulePage/usePlotClips';
+import { useOptionalLanguage } from '../i18n/LanguageContext';
+import { cropNameIn } from '../shared/names/namesIn';
 
 interface SchedulerPageProps {
     crops: CropProfile[];
@@ -59,6 +61,9 @@ interface SchedulerPageProps {
 type View = 'HOME' | 'LIBRARY' | 'EDITOR' | 'GRID';
 
 const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack }) => {
+    // spec I18 — a crop's name in his language (the server's "Grapes" is "द्राक्ष" in Marathi mode).
+    const language = useOptionalLanguage()?.language ?? 'mr';
+    const nameOf = (c: { name: string; masterId?: string }): string => cropNameIn(c.name, language, c.masterId);
     const [cropId, setCropId] = useState('');
     const [plotId, setPlotId] = useState('');
     const [view, setView] = useState<View>('HOME');
@@ -120,7 +125,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
 
     const handleAdopt = (templateId: string) => {
         if (!crop) return;
-        const ok = typeof window !== 'undefined' ? window.confirm(SC.adoptConfirm(crop.name)) : true;
+        const ok = typeof window !== 'undefined' ? window.confirm(SC.adoptConfirm(cropNameIn(crop.name, 'mr', crop.masterId))) : true;
         if (!ok) return;
         saveCrops(adoptForCrop(crops, crop.id, templateId, todayKey));
     };
@@ -137,7 +142,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const cropChips = crops.length > 1 && (
         <div className="space-y-1" data-testid="crop-pick">
             <p className="m-0 px-1 text-[13.5px] font-extrabold text-stone-600">{SC.cropPick}</p>
-            <ChoiceChips items={crops.map(c => [c.id, c.name] as const)} value={cropId} onPick={pick} testId="pick-crop" />
+            <ChoiceChips items={crops.map(c => [c.id, nameOf(c)] as const)} value={cropId} onPick={pick} testId="pick-crop" />
         </div>
     );
 
@@ -182,7 +187,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     if (view === 'GRID' && model && plot) {
         return shell(SC.grid, () => setView('HOME'), (
             <>
-                <p className="m-0 px-1 text-[16px] font-extrabold text-stone-800" data-testid="grid-plot">{crop?.name} · {plot.name}</p>
+                <p className="m-0 px-1 text-[16px] font-extrabold text-stone-800" data-testid="grid-plot">{crop ? nameOf(crop) : ''} · {plot.name}</p>
                 <SchedulerTimeline model={model} onOpenDay={setOpenDayKey} />
                 {sheet}
             </>
@@ -201,13 +206,13 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
             {crop && !plot && <GlassCard testId="sched-no-plot"><p className="m-0 text-[17px] font-black text-stone-900">{SC.noPlots}</p></GlassCard>}
             {crop && plot && !resolved && (
                 <GlassCard testId="sched-no-schedule">
-                    <p className="m-0 text-[18px] font-black text-stone-900">{crop.name} · {plot.name}</p>
+                    <p className="m-0 text-[18px] font-black text-stone-900">{nameOf(crop)} · {plot.name}</p>
                     <p className="m-0 mt-1 text-[17px] font-extrabold text-stone-900">{SC.noSchedule}</p>
                     <p className="m-0 mt-1 text-[15px] font-bold text-stone-600">{SC.noScheduleHint}</p>
                 </GlassCard>
             )}
             {crop && plot && resolved && model && (
-                <PlotScheduleHome cropName={crop.name} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips}
+                <PlotScheduleHome cropName={nameOf(crop)} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips}
                     tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => setView('LIBRARY')} />
             )}
             <ScheduleTools

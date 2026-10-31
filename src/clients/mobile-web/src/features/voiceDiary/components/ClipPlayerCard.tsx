@@ -23,6 +23,7 @@ import {
     tVoiceDiary,
 } from '../../../i18n/voiceDiaryTranslations';
 import { formatDisplayTime, formatFarmerTime } from '../../../shared/utils/displayTime';
+import { errorTextIn } from '../../../shared/names/namesIn';
 
 /**
  * Unified clip projection consumed by the player. Either a local Dexie
@@ -333,7 +334,8 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
                 )}
                 {clip.lastError && !fetchError && (
                     <p className="mt-1 text-xs font-['DM_Sans'] text-rose-600 whitespace-normal break-words">
-                        {clip.lastError}
+                        {/* spec I18 — the stored failure is a code or the server's English: said in his language. */}
+                        {errorTextIn(clip.lastError, locale === 'mr-IN' ? 'mr' : 'en')}
                     </p>
                 )}
             </div>

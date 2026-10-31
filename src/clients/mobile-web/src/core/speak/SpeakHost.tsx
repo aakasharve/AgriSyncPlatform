@@ -105,7 +105,7 @@ const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: CorrectionSe
     // "आत्ता जे आहे": each value as the result screen reads it ("इथरेल · 300 मिली"), never his quoted words (fix pass D3, D4).
     const current = useMemo(() => {
         if (!log) return { entries: [] as PartEntry[], blockers: [] };
-        const view = withoutInventedStoppage(recordingOf([log], NO_WHO), [log]);
+        const view = withoutInventedStoppage(recordingOf([log], { ...NO_WHO, language }), [log]);
         const entries = withoutQuotes(view.entries).map(e => (hideMoney && e.part === 'expense'
             ? { ...e, value: HIDDEN_MONEY }
             : { ...e, value: entryText(e, language) || e.value }));
@@ -120,7 +120,7 @@ const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: CorrectionSe
     if (!log) return null;
 
     const rows = merged ? correctionRows(log, merged.after, { hideMoney, language }) : [];
-    const blockers = merged ? blockerChange(log, merged.after) : { before: [], after: [], gone: [], changed: false };
+    const blockers = merged ? blockerChange(log, merged.after, language) : { before: [], after: [], gone: [], changed: false };
     const nothing = !proposal || !merged || !saysAnything(proposal.draft) || (!rows.some(r => r.changed) && !blockers.changed);
     const speak = () => {
         setFailed(null);

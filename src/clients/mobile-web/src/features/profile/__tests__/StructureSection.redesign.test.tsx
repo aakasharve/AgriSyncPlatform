@@ -41,17 +41,40 @@ const props = (over: Partial<React.ComponentProps<typeof StructureSection>> = {}
 describe('StructureSection (redesigned)', () => {
     afterEach(() => cleanup());
 
-    it('opens the add-crop form and saves through handleAddCrop', () => {
+    it('opens the add-crop form: the crop is chosen from the crop master, then saved through handleAddCrop', () => {
         const p = props();
         const { rerender } = render(<StructureSection {...p} />);
         fireEvent.click(screen.getByTestId('crop-add'));
         expect(p.setIsAddingCrop).toHaveBeenCalledWith(true);
-        const adding = props({ isAddingCrop: true, newCropData: { name: 'ऊस' }, normalizedNewCropName: 'ऊस' });
+        // spec I18 — the picker: found by its Marathi name, stored by its English name with its MHCR id.
+        const adding = props({ isAddingCrop: true });
         rerender(<StructureSection {...adding} />);
-        fireEvent.change(screen.getByTestId('crop-name'), { target: { value: 'ऊस ' } });
-        expect(adding.setNewCropData).toHaveBeenCalledWith({ name: 'ऊस ' });
+        fireEvent.change(screen.getByTestId('crop-search'), { target: { value: 'ऊस' } });
+        fireEvent.click(screen.getByTestId('crop-result-MHCR-0045'));
+        expect(adding.setNewCropData).toHaveBeenCalledWith({ name: 'Sugarcane', masterId: 'MHCR-0045' });
+        const chosen = props({ isAddingCrop: true, newCropData: { name: 'Sugarcane', masterId: 'MHCR-0045' }, normalizedNewCropName: 'sugarcane' });
+        rerender(<StructureSection {...chosen} />);
+        expect(screen.getByTestId('crop-chosen-name')).toHaveTextContent('ऊस');
         fireEvent.click(screen.getByTestId('crop-save'));
-        expect(adding.handleAddCrop).toHaveBeenCalledTimes(1);
+        expect(chosen.handleAddCrop).toHaveBeenCalledTimes(1);
+    });
+
+    it('a crop already on the farm cannot be chosen again; a crop the list lacks can be added as typed', () => {
+        const p = props({ isAddingCrop: true });
+        render(<StructureSection {...p} />);
+        fireEvent.change(screen.getByTestId('crop-search'), { target: { value: 'grape' } });
+        expect(screen.getByTestId('crop-result-MHCR-0116')).toBeDisabled(); // "Grapes" is on the farm
+        fireEvent.change(screen.getByTestId('crop-search'), { target: { value: 'माझं खास पीक' } });
+        fireEvent.click(screen.getByTestId('crop-add-typed'));
+        expect(p.setNewCropData).toHaveBeenCalledWith({ name: 'माझं खास पीक', masterId: undefined });
+    });
+
+    it('the stored crop name is shown in Marathi and never rewritten', () => {
+        const before = JSON.stringify(crops);
+        render(<StructureSection {...props()} />);
+        expect(screen.getByTestId('crop-name-c1')).toHaveTextContent('द्राक्ष');
+        expect(screen.queryByText('Grapes')).toBeNull();
+        expect(JSON.stringify(crops)).toBe(before);
     });
 
     it('a duplicate crop name shows a Marathi reason and cannot be saved', () => {

@@ -25,7 +25,10 @@ describe('states', () => {
     });
 
     it('a test is named by the server, else by its kind in Marathi', () => {
-        expect(testName(row('a', 0, { testProtocolName: 'Soil NPK' }))).toBe('Soil NPK');
+        // spec I18: the server's English name never shows in Marathi mode — the kind in Marathi stands; English mode keeps it.
+        expect(testName(row('a', 0, { testProtocolName: 'Soil NPK' }))).toBe('मातीची तपासणी');
+        expect(testName(row('a', 0, { testProtocolName: 'Soil NPK' }), undefined, 'en')).toBe('Soil NPK');
+        expect(testName(row('a', 0, { testProtocolName: 'मातीतील नत्र' }))).toBe('मातीतील नत्र');
         expect(testName(row('a', 0, { protocolKind: 2 }))).toBe('पानांची तपासणी');
         expect(testName(row('a', 0, { protocolKind: 77 }))).toBe('इतर तपासणी');
     });

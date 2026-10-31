@@ -69,11 +69,11 @@ describe('crop and plot pick', () => {
         expect(screen.getByTestId('crop-pick')).toHaveTextContent('पीक');
         expect(screen.getByTestId('pick-crop-crop-1')).toHaveAttribute('aria-pressed', 'true');
         expect(screen.getByTestId('pick-plot-plot-1')).toHaveAttribute('aria-pressed', 'true');
-        expect(text('sched-crop-plot')).toBe('Grapes · A');
+        expect(text('sched-crop-plot')).toBe('द्राक्ष · A'); // spec I18: the server's "Grapes" in Marathi
         expect(text('day-now')).toBe('9');
 
         fireEvent.click(screen.getByTestId('pick-plot-plot-2'));
-        expect(text('sched-crop-plot')).toBe('Grapes · B');
+        expect(text('sched-crop-plot')).toBe('द्राक्ष · B');
         expect(text('day-now')).toBe('6');
         expect(screen.getByTestId('pick-plot-plot-2')).toHaveAttribute('aria-pressed', 'true');
 
@@ -257,7 +257,7 @@ describe('library + adopt', () => {
         const p = mount();
         fireEvent.click(screen.getByTestId('open-library'));
         fireEvent.click(screen.getByTestId(`library-adopt-${SPRAY_TEMPLATE_ID}`));
-        expect(confirm).toHaveBeenCalledWith('Grapes साठी हे शेड्यूल वापरायचं?');
+        expect(confirm).toHaveBeenCalledWith('द्राक्ष साठी हे शेड्यूल वापरायचं?');
         const saved = p.onUpdateCrops.mock.calls[0][0] as CropProfile[];
         expect(saved[0].activeScheduleId).toBe(SPRAY_TEMPLATE_ID);
         expect(saved[0].plots[0].schedule).toMatchObject({ templateId: SPRAY_TEMPLATE_ID, referenceDate: REF, stageOverrides: [], expectationOverrides: [] });
@@ -271,7 +271,7 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         mount();
         fireEvent.click(screen.getByTestId('open-editor'));
         expect(text('page-title')).toBe('शेड्यूल बदला');
-        expect(text('editor-plot-name')).toBe('Grapes · A');
+        expect(text('editor-plot-name')).toBe('द्राक्ष · A');
         expect(screen.getByTestId(`editor-schedule-${TEMPLATE_ID}`)).toHaveAttribute('aria-pressed', 'true');
         expect(text(`editor-schedule-${TEMPLATE_ID}`)).toContain('द्राक्ष — हंगामी शेड्यूल');
         expect(text(`editor-schedule-${TEMPLATE_ID}`)).toContain('एकूण दिवस 40 · स्टेज 2');
@@ -308,9 +308,9 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         fireEvent.click(screen.getByTestId('open-editor'));
         expect(screen.queryByTestId('editor-all-plots')).toBeNull();
         fireEvent.click(screen.getByTestId('editor-plot-plot-2'));
-        expect(text('editor-plot-name')).toBe('Grapes · B');
+        expect(text('editor-plot-name')).toBe('द्राक्ष · B');
         fireEvent.click(screen.getByTestId(`editor-schedule-${SPRAY_TEMPLATE_ID}`));
-        expect(text('editor-all-plots')).toBe('हे शेड्यूल Grapes च्या सगळ्या 2 प्लॉटसाठी लागू होईल');
+        expect(text('editor-all-plots')).toBe('हे शेड्यूल द्राक्ष च्या सगळ्या 2 प्लॉटसाठी लागू होईल');
     });
 });
 

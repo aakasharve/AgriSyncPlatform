@@ -121,7 +121,8 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         const { deps } = realSave();
         render(<Harness start={[ENTRY]} save={deps} />);
         act(() => openCorrection('log-1'));
-        expect(screen.getByTestId('corr-now')).toHaveTextContent('फवारणी');
+        // spec I18: the work in his language ("फवारणी" is "Spraying" in English mode).
+        expect(screen.getByTestId('corr-now')).toHaveTextContent(language === 'en' ? 'Spraying' : 'फवारणी');
         expect(screen.getByTestId('corr-mic')).toBeInTheDocument();
         expect(screen.getByTestId('corr-prompt')).toHaveTextContent(language === 'en' ? 'Say what should change' : 'जे बदलायचं ते बोलून सांगा');
         expect(screen.getByTestId('corr-examples')).toHaveTextContent('350');

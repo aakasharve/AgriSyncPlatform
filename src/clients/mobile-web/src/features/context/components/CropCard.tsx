@@ -33,17 +33,19 @@ export interface CropCardProps {
     delay?: number;
     /** Photos below the first screen load lazily. */
     lazy?: boolean;
+    /** The photo failed to load: the caller offers the next picture (spec I18), or none. */
+    onImageError?: () => void;
     onClick: () => void;
 }
 
-export const CropCard: React.FC<CropCardProps> = ({ testId, name, sub, imageSrc, focus, disabled, wide, delay = 0, lazy, onClick }) => (
+export const CropCard: React.FC<CropCardProps> = ({ testId, name, sub, imageSrc, focus, disabled, wide, delay = 0, lazy, onImageError, onClick }) => (
     <button type="button" disabled={disabled} onClick={onClick} data-testid={testId} aria-label={`${name} — ${sub}`}
         style={{ animationDelay: `${delay}ms`, fontFamily: SANS }}
         className={`group flex w-full flex-col overflow-hidden rounded-[22px] border border-emerald-100 bg-[#FBFDF9] text-left shadow-md transition-transform duration-150 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-400 disabled:opacity-60 motion-safe:animate-plr-rise ${wide ? 'min-[480px]:col-span-2' : ''}`}>
         {/* Zone A — the photograph, and nothing else */}
         <span className="relative block h-[140px] w-full overflow-hidden bg-emerald-50 [@media(max-height:720px)]:h-[108px] min-[480px]:h-[190px]" data-testid={`${testId}-photo`}>
             {imageSrc
-                ? <img src={imageSrc} alt="" width={640} height={320} loading={lazy ? 'lazy' : 'eager'} decoding="async" draggable={false}
+                ? <img src={imageSrc} alt="" width={640} height={320} loading={lazy ? 'lazy' : 'eager'} decoding="async" draggable={false} onError={onImageError}
                     className="absolute inset-0 h-full w-full select-none object-cover" style={{ objectPosition: focus ?? '50% 50%' }} />
                 : <span className="absolute inset-0 grid place-items-center bg-gradient-to-br from-emerald-200 to-lime-200 text-emerald-800"><Sprout size={44} strokeWidth={2} /></span>}
         </span>

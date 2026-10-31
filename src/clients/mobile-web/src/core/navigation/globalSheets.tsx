@@ -10,6 +10,33 @@ import { AppRouterContext } from './routeContext';
 import { ConflictBadge } from '../../features/sync/conflict/ConflictBadge';
 import { NoWorkReasonSheet } from '../../features/logs/components/NoWorkReasonSheet';
 import { buildNoWorkDayPayload } from './noWorkDay';
+import { t } from '../../i18n/translations';
+import { useOptionalLanguage } from '../../i18n/LanguageContext';
+
+/**
+ * spec I18 — the "+" button's spoken name, in his language: the sheet's own approved question ("आज काय काम झालं?" /
+ * "What work happened today?"), never the English "Quick Log" in Marathi mode.
+ */
+export const quickLogLabel = (language: string | null | undefined): string => t('dfes.whatWorkToday', language === 'en' ? 'en' : 'mr');
+
+/** DFES: the "+" that opens QuickLogSheet, named in his language (spec I18). */
+export const QuickLogFab: React.FC<{ onOpen: () => void; 'data-testid'?: string }> = ({ onOpen, 'data-testid': testId = 'add-log-fab' }) => (
+    <button
+        onClick={onOpen}
+        data-testid={testId}
+        className="fixed z-40 w-14 h-14 bg-white text-emerald-600 rounded-full shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center active:scale-95 transition-transform"
+        style={{
+            bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
+            left: 'max(1rem, var(--safe-area-inset-left, env(safe-area-inset-left, 0px)))'
+        }}
+        aria-label={quickLogLabel(useOptionalLanguage()?.language)}
+    >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+    </button>
+);
 
 export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
     const {
@@ -111,21 +138,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                 other buckets, which that door must not (founder ruling 2026-08-31). */}
             {
                 currentRoute === 'main' && mainView === 'log' && status === 'idle' && !recordingSegment && hasActiveLogContext && logIntent !== 'labour' && (
-                    <button
-                        onClick={() => setShowQuickLog(true)}
-                        data-testid="add-log-fab"
-                        className="fixed z-40 w-14 h-14 bg-white text-emerald-600 rounded-full shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center active:scale-95 transition-transform"
-                        style={{
-                            bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
-                            left: 'max(1rem, var(--safe-area-inset-left, env(safe-area-inset-left, 0px)))'
-                        }}
-                        aria-label="Quick Log"
-                    >
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="12" y1="5" x2="12" y2="19" />
-                            <line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
-                    </button>
+                    <QuickLogFab data-testid="add-log-fab" onOpen={() => setShowQuickLog(true)} />
                 )
             }
         </>

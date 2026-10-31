@@ -11,7 +11,7 @@
  */
 import React from 'react';
 import { Pause, Play } from 'lucide-react';
-import { RESULT_STR } from './resultStrings';
+import { useResultStr } from './resultStrings';
 
 const WAVE_BARS = 64;
 const WAVE_GREEN = 'rgb(34, 176, 72)';
@@ -91,13 +91,14 @@ export interface ClipPlayerProps {
 }
 
 export const ClipPlayer: React.FC<ClipPlayerProps> = ({ clipKey, durationSec, playing, progress, big, onToggle, testId }) => {
+    const RS = useResultStr();
     const env = React.useMemo(() => envelopeOf(clipKey, WAVE_BARS), [clipKey]);
     const colours = React.useMemo(() => colourRuns(clipKey, WAVE_BARS), [clipKey]);
     const prog = playing ? progress : 0;
     const lit = Math.round(prog * WAVE_BARS);
     return (
         <div className="relative flex items-center gap-2.5 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-2" data-testid={`${testId}-wave`}>
-            <button type="button" onClick={onToggle} aria-label={playing ? RESULT_STR.stop : RESULT_STR.play} data-testid={testId} data-playing={playing ? 'yes' : 'no'}
+            <button type="button" onClick={onToggle} aria-label={playing ? RS.stop : RS.play} data-testid={testId} data-playing={playing ? 'yes' : 'no'}
                 className={`${big ? 'h-16 w-16' : 'h-11 w-11'} relative z-10 grid shrink-0 place-items-center rounded-full bg-[#1448E6] text-white shadow-[0_6px_16px_rgba(20,72,230,0.38)] ring-4 ring-white active:scale-95`}>
                 {playing ? <Pause size={big ? 26 : 18} fill="currentColor" /> : <Play size={big ? 26 : 18} fill="currentColor" className="ml-0.5" />}
             </button>

@@ -14,6 +14,8 @@
 import React from 'react';
 import type { JobCard } from '../../../domain/work/JobCard';
 import PayoutEligibilityStrip from './PayoutEligibilityStrip';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { workTypeNameIn } from '../../../shared/names/namesIn';
 
 interface JobCardRowProps {
     card: JobCard;
@@ -54,6 +56,8 @@ const getPrimaryAction = (card: JobCard): { label: string; labelMr: string; acti
 };
 
 const JobCardRow: React.FC<JobCardRowProps> = ({ card, onAction, onPress }) => {
+    // spec I18 — a work type in his language ("Spraying" ↔ "फवारणी"), never uppercase English in Marathi mode.
+    const language = useOptionalLanguage()?.language ?? 'mr';
     const action = getPrimaryAction(card);
     const workerName = card.assignedWorkerDisplayName ?? 'Unassigned';
     const initials = card.assignedWorkerDisplayName
@@ -95,7 +99,7 @@ const JobCardRow: React.FC<JobCardRowProps> = ({ card, onAction, onPress }) => {
                             className="text-[9px] font-bold bg-stone-100 text-stone-600 rounded-full px-2 py-0.5"
                             style={{ fontFamily: "'DM Sans', sans-serif" }}
                         >
-                            {item.activityType}
+                            {workTypeNameIn(item.activityType, language)}
                         </span>
                     ))}
                     {card.lineItems.length > 3 && (

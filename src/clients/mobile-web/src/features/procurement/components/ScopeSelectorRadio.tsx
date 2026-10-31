@@ -7,6 +7,7 @@ import React from 'react';
 import { ExpenseScope } from '../../../types';
 import { Sprout, MapPin, Warehouse } from 'lucide-react';
 import { SCOPE_LABEL } from './billView';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 interface Props {
     value: ExpenseScope;
@@ -52,7 +53,7 @@ export const ScopeSelectorRadio: React.FC<Props> = ({ value, onChange, plotName,
                 >
                     <Sprout size={24} className="mb-2" aria-hidden="true" />
                     <span className="font-extrabold text-[15px]">{SCOPE_LABEL.CROP}</span>
-                    {cropName && <span className="text-[13px] font-semibold opacity-80 mt-1">सर्व {cropName}</span>}
+                    {cropName && <span className="text-[13px] font-semibold opacity-80 mt-1">सर्व {cropNameIn(cropName, 'mr')}</span>}
                     {value === 'CROP' && <div className="absolute top-2 right-2 w-3 h-3 bg-blue-500 rounded-full" />}
                 </button>
 

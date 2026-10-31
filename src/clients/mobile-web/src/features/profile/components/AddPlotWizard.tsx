@@ -23,6 +23,7 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { VarietySelector } from '../../context/components/VarietySelector';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 interface PlotWizardProps {
     crop: CropProfile;
@@ -32,7 +33,7 @@ interface PlotWizardProps {
 }
 
 const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCancel }) => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const [step, setStep] = useState(1);
 
     // --- FORM STATE ---
@@ -179,7 +180,7 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                     <div className="flex items-center gap-3">
                         <button onClick={onCancel} className="p-2 hover:bg-slate-200 rounded-full"><X size={20} className="text-slate-500" /></button>
                         <div>
-                            <h3 className="font-bold text-slate-800">{t('profile.addPlotTo')} {crop.name}</h3>
+                            <h3 className="font-bold text-slate-800">{t('profile.addPlotTo')} {cropNameIn(crop.name, language, crop.masterId)}</h3>
                             <div className="flex gap-1 mt-1">
                                 {[1, 2, 3].map(s => (
                                     <div key={s} className={`h-1.5 w-8 rounded-full ${s <= step ? 'bg-emerald-500' : 'bg-slate-200'}`} />

@@ -21,10 +21,11 @@ import { resolveVerifierUserId } from '../../../../core/domain/verifierIdentity'
 import { getSessionUserId } from '../../../../infrastructure/storage/AuthTokenStore';
 import { clipScanFloor } from '../../../../infrastructure/voice/clipLogLink';
 import { buildDayView, isConfirmed, ringNodesForDay, sameDayLogs, type PartKey, type WhoDeps } from './resultModel';
-import { RESULT_STR } from './resultStrings';
+import { useResultStr } from './resultStrings';
 import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './useClipPlayback';
 import { useConfirmRecording, useLogSyncState } from './useRecordingTrust';
 import VoiceResultScreen from './VoiceResultScreen';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 
 export interface VoiceResultContainerProps {
     result: VoiceResultState;
@@ -34,7 +35,7 @@ export interface VoiceResultContainerProps {
     farmId: string | null;
     /** The server-told role on this farm: only the primary owner confirms his own recording here (I27). */
     farmRole: string | null | undefined;
-    placeLabel: string;
+    placeLabel: string | ((language: string | undefined) => string);
     /** Per log of this recording, from the save's enqueue result (false = will not reach the server). */
     syncQueuedById: ReadonlyMap<string, boolean | null>;
     onEdit: (log: DailyLog) => void;
@@ -53,6 +54,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio,
 }) => {
     const sessionUserId = getSessionUserId();
+    const RS = useResultStr();
+    const language = useOptionalLanguage()?.language;
     // lane F1 — the screen reads the RECORD. The L6b work-around that read this phone's own write instead
     // (`asWritten`) is gone: the server now keeps what Sathi understood and the pull hands it back exactly, so
     // the record after a pull is the write, his phrases and amounts included.
@@ -63,9 +66,10 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const deps: WhoDeps = useMemo(() => ({
         youIds: new Set([farmerProfile.activeOperatorId, sessionUserId].filter((x): x is string => !!x)),
         nameOf: id => operatorNameById.get(id),
-        youLabel: RESULT_STR.you,
-        unknownLabel: RESULT_STR.unknownPerson,
-    }), [farmerProfile.activeOperatorId, sessionUserId, operatorNameById]);
+        youLabel: RS.you,
+        unknownLabel: RS.unknownPerson,
+        language,
+    }), [farmerProfile.activeOperatorId, sessionUserId, operatorNameById, RS, language]);
     const day = useMemo(() => buildDayView(current, history, deps), [current, history, deps]);
     const dayLogs = useMemo(() => sameDayLogs(current, history), [current, history]);
     const nodes = useMemo(() => ringNodesForDay(dayLogs, current[0]?.date), [dayLogs, current]);

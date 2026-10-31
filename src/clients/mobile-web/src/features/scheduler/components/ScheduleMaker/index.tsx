@@ -31,6 +31,8 @@ import { scheduleNameMr } from '../../schedulePage/scheduleNames';
 import { daysBetween, toDayKey } from '../../schedulePage/scheduleDates';
 import { resolvePlotSchedule, type EditorChoice } from '../../schedulePage/resolveSchedule';
 import { shiftDaysUpTo } from '../../schedulePage/scheduleModel';
+import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
+import { cropNameIn } from '../../../../shared/names/namesIn';
 
 interface ScheduleMakerProps {
     crops: CropProfile[];
@@ -59,6 +61,7 @@ function startingPoint(crop: CropProfile | undefined, plotId: string, todayKey: 
 }
 
 const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, initialPlotId, todayKey, onSave }) => {
+    const language = useOptionalLanguage()?.language ?? 'mr'; // spec I18 — the crop in his language, never "Grapes" in Marathi mode
     const [cropId, setCropId] = useState(() => (crops.some(c => c.id === initialCropId) ? initialCropId! : crops[0]?.id ?? ''));
     const crop = crops.find(c => c.id === cropId);
     const [plotId, setPlotId] = useState(() => (crop?.plots.some(p => p.id === initialPlotId) ? initialPlotId! : crop?.plots[0]?.id ?? ''));
@@ -93,9 +96,9 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
         <div className="space-y-4" style={{ fontFamily: SANS }} data-testid="schedule-editor">
             <GlassCard testId="editor-plot-card">
                 <SectionHead title={SC.edPlot} />
-                {crops.length > 1 && <div className="mt-2"><ChoiceChips items={crops.map(c => [c.id, c.name] as const)} value={cropId} onPick={pickCrop} testId="editor-crop" /></div>}
+                {crops.length > 1 && <div className="mt-2"><ChoiceChips items={crops.map(c => [c.id, cropNameIn(c.name, language, c.masterId)] as const)} value={cropId} onPick={pickCrop} testId="editor-crop" /></div>}
                 {crop && crop.plots.length > 1 && <div className="mt-2"><ChoiceChips items={crop.plots.map(p => [p.id, p.name] as const)} value={plotId} onPick={setPlotId} testId="editor-plot" /></div>}
-                <p className="m-0 mt-2 px-1 text-[17px] font-black text-stone-900" data-testid="editor-plot-name">{crop?.name ?? '—'} · {plot?.name ?? SC.noPlots}</p>
+                <p className="m-0 mt-2 px-1 text-[17px] font-black text-stone-900" data-testid="editor-plot-name">{crop ? cropNameIn(crop.name, language, crop.masterId) : '—'} · {plot?.name ?? SC.noPlots}</p>
             </GlassCard>
 
             {plot && (
@@ -118,7 +121,7 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
                             );
                         })}
                     </div>
-                    {forAllPlots && <p className="m-0 mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[14.5px] font-bold text-amber-900 ring-1 ring-amber-200" data-testid="editor-all-plots">{SC.edAllPlots(crop!.name, crop!.plots.length)}</p>}
+                    {forAllPlots && <p className="m-0 mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[14.5px] font-bold text-amber-900 ring-1 ring-amber-200" data-testid="editor-all-plots">{SC.edAllPlots(cropNameIn(crop!.name, 'mr', crop!.masterId), crop!.plots.length)}</p>}
                 </GlassCard>
             )}
 

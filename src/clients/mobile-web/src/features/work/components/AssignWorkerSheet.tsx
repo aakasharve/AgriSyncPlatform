@@ -10,6 +10,8 @@ import React, { useState } from 'react';
 import type { JobCard } from '../../../domain/work/JobCard';
 import type { AssignWorkerRequest } from '../data/jobCardsClient';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { errorTextIn } from '../../../shared/names/namesIn';
 
 interface FarmMember {
     userId: string;
@@ -47,6 +49,8 @@ const AssignWorkerSheet: React.FC<AssignWorkerSheetProps> = ({
     const [selectedUserId, setSelectedUserId] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // spec I18 — a failure in his language, read by its code; never the server's English sentence.
+    const language = useOptionalLanguage()?.language ?? 'mr';
 
     const assignableMembers = members.filter(m => ASSIGNABLE_ROLES.includes(m.role));
 
@@ -57,7 +61,7 @@ const AssignWorkerSheet: React.FC<AssignWorkerSheetProps> = ({
         try {
             await onAssigned({ workerUserId: selectedUserId });
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to assign');
+            setError(errorTextIn(err, language));
             setIsSaving(false);
         }
     };

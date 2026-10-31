@@ -81,7 +81,8 @@ describe('the feed cards built from real logs', () => {
         const [here, elsewhere] = entriesFor(vi.fn());
         expect(here.workDone).toBe('4 जण');
         expect(here.snippet).toBe(SAID);
-        expect(elsewhere.workDone).toBe('पीक काम'); // the parser's English "Spraying" never reaches his screen
+        // spec I18: the parser's English "Spraying" never reaches his screen — it is now said in Marathi (the work-type helper).
+        expect(elsewhere.workDone).toBe('फवारणी');
         expect(`${here.workDone} ${elsewhere.workDone}`).not.toMatch(/[A-Za-z]/);
     });
 });

@@ -127,7 +127,7 @@ export function dayChipsOf(logs: readonly DailyLog[], language?: string | null):
         byPart.get(part)!.push({ id: `chip:label:${id}`, kind: part, text: '', verified, ...(key && { recordingKey: key }) });
     };
     for (const group of groupByRecording(logs)) {
-        const view = withoutInventedStoppage(recordingOf(group, NO_WHO), group);
+        const view = withoutInventedStoppage(recordingOf(group, { ...NO_WHO, language: language ?? undefined }), group);
         const key = recordingKeyOf(view.log);
         const legacy = view.legacyPartial;
         const textOf = (e: PartEntry): string => (legacy ? '' : entryText(e, language));

@@ -25,6 +25,7 @@
 import type { CropProfile, PlannedTask } from '../../../types';
 import { dateLabel, fromDateKey, offsetOf, weekdayOf } from './reflectDates';
 import type { ViewScope } from './reflectSelection';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 const FARM_GLOBAL = 'FARM_GLOBAL';
 
@@ -140,9 +141,11 @@ interface BuildArgs {
     /** Nothing narrowed: every task shows, as the old block showed every task. */
     wholeFarm: boolean;
     todayKey: string;
+    /** spec I18 — the language crop names are shown in (default Marathi, the screen's language). */
+    language?: string;
 }
 
-export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayKey }: BuildArgs): TodoList {
+export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayKey, language = 'mr' }: BuildArgs): TodoList {
     const plotOwner = new Map<string, CropProfile>();
     for (const c of crops) for (const p of c.plots ?? []) plotOwner.set(p.id, c);
 
@@ -161,9 +164,10 @@ export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayK
     const placeOf = (t: PlannedTask): TodoItem['place'] => {
         if (isFarmWide(t)) return { label: 'पूर्ण शेत' };
         const owner = t.plotId ? plotOwner.get(t.plotId) : undefined;
-        if (owner) return { label: `${owner.plots.find(p => p.id === t.plotId)!.name} · ${owner.name}`, color: owner.color };
+        // spec I18 — the crop in his language; the plot's own name as he wrote it.
+        if (owner) return { label: `${owner.plots.find(p => p.id === t.plotId)!.name} · ${cropNameIn(owner.name, language, owner.masterId)}`, color: owner.color };
         const cropOf = crops.find(c => c.id === t.cropId);
-        return cropOf ? { label: cropOf.name, color: cropOf.color } : undefined;
+        return cropOf ? { label: cropNameIn(cropOf.name, language, cropOf.masterId), color: cropOf.color } : undefined;
     };
 
     const today = fromDateKey(todayKey);

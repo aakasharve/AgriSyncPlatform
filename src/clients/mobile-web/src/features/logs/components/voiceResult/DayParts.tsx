@@ -32,7 +32,8 @@ import { ProductBoxCard } from './ProductRows';
 import { showsProducts } from './productModel';
 import { resultCopy } from './resultCopy';
 import { markTranscript, partMeta, type BlockerEntry, type PartEntry, type PartKey, type RecordingView, type Who } from './resultModel';
-import { RESULT_STR } from './resultStrings';
+import { useResultStr } from './resultStrings';
+import { partNameIn } from './partNames';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const SERIF = "'Noto Serif Devanagari', serif";
@@ -72,22 +73,26 @@ export const TypedNote: React.FC<{ testId?: string }> = ({ testId = 'vr-typed-no
 );
 
 /** The approved "not sure I heard this" flag, for an item the server could not find in his words. */
-export const UnsureFlag: React.FC<{ testId?: string }> = ({ testId }) => (
+export const UnsureFlag: React.FC<{ testId?: string }> = ({ testId }) => {
+    const RS = useResultStr();
+    return (
     <div data-testid={testId} className="mb-1 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1">
         <HelpCircle size={14} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
-        <span className="text-[12.5px] font-bold leading-snug text-amber-800" style={{ fontFamily: SANS }}>{RESULT_STR.unsure}</span>
+        <span className="text-[12.5px] font-bold leading-snug text-amber-800" style={{ fontFamily: SANS }}>{RS.unsure}</span>
     </div>
-);
+    );
+};
 
 /** One thing this recording added. An unverified one is flagged and set in plain weight, never as a fact. */
 export const AddedRow: React.FC<{ entry: PartEntry }> = ({ entry }) => {
     const m = partMeta(entry.part);
+    const language = useOptionalLanguage()?.language;
     return (
         <div data-testid={`vr-added-${entry.id}`} data-part={entry.part} data-verified={entry.verified ? 'yes' : 'no'}
             className={`flex items-start gap-2.5 rounded-xl border-l-4 p-2.5 ${entry.verified ? 'border-emerald-600 bg-emerald-50' : 'border-amber-400 bg-white'}`}>
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ background: m.tint }}><PartIcon part={entry.part} size={24} /></span>
             <div className="min-w-0 flex-1">
-                <div className="text-[12px] font-extrabold text-stone-600">{m.label}</div>
+                <div className="text-[12px] font-extrabold text-stone-600">{partNameIn(entry.part, language)}</div>
                 {!entry.verified && <UnsureFlag testId={`vr-unsure-${entry.id}`} />}
                 {entry.value && (
                     <div className={`leading-tight text-stone-900 ${entry.verified ? 'text-[20px] font-extrabold' : 'text-[16px] font-semibold'}`} style={{ fontFamily: SANS }}>{entry.value}</div>
@@ -101,17 +106,20 @@ export const AddedRow: React.FC<{ entry: PartEntry }> = ({ entry }) => {
 };
 
 /** A stoppage this recording reported ("अडथळे / अडचणी", the ring's own word for it). */
-export const BlockerRow: React.FC<{ entry: BlockerEntry }> = ({ entry }) => (
+export const BlockerRow: React.FC<{ entry: BlockerEntry }> = ({ entry }) => {
+    const RS = useResultStr();
+    return (
     <div data-testid={`vr-blocker-${entry.id}`} className="flex items-start gap-2.5 rounded-xl border-l-4 border-orange-500 bg-orange-50 p-2.5">
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-orange-100"><CategoryIcon name="blockers" size={24} /></span>
         <div className="min-w-0 flex-1">
-            <div className="text-[12px] font-extrabold text-stone-600">{RESULT_STR.blockers}</div>
+            <div className="text-[12px] font-extrabold text-stone-600">{RS.blockers}</div>
             {!entry.verified && <UnsureFlag testId={`vr-blocker-unsure-${entry.id}`} />}
             {entry.value && <div className="text-[18px] font-extrabold leading-tight text-stone-900" style={{ fontFamily: SANS }}>{entry.value}</div>}
             {entry.quote && entry.quote !== entry.value && <div className="mt-0.5 text-[13px] text-stone-700">“{entry.quote}”</div>}
         </div>
     </div>
-);
+    );
+};
 
 /**
  * One glanceable line per part for the whole day; open when this recording touched it, else one tap away. Lane RF2:
@@ -120,6 +128,7 @@ export const BlockerRow: React.FC<{ entry: BlockerEntry }> = ({ entry }) => (
 export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; byLog: ReadonlyMap<string, RecordingView>; touched: boolean; showWho: boolean; nowIds: ReadonlySet<string>; defaultOpen?: boolean }> = ({
     part, entries, byLog, touched, showWho, nowIds, defaultOpen = false,
 }) => {
+    const RS = useResultStr();
     const [open, setOpen] = useState(touched || defaultOpen);
     const language = useOptionalLanguage()?.language;
     const m = partMeta(part);
@@ -131,12 +140,12 @@ export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; by
             <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} data-testid={`vr-day-row-${part}`} className="flex w-full items-center gap-2.5 p-2.5 text-left">
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: m.tint }}><PartIcon part={part} size={22} /></span>
                 <span className="min-w-0 flex-1">
-                    <span className="block text-[12px] font-extrabold text-stone-600">{m.label}</span>
+                    <span className="block text-[12px] font-extrabold text-stone-600">{partNameIn(part, language)}</span>
                     <span className="block truncate text-[16px] font-extrabold text-stone-900" data-testid={`vr-day-head-${part}`}>
-                        {last ? (last.value ?? last.quote ?? '') : <span className="text-[13px] font-bold text-amber-800">{RESULT_STR.unsure}</span>}
+                        {last ? (last.value ?? last.quote ?? '') : <span className="text-[13px] font-bold text-amber-800">{RS.unsure}</span>}
                     </span>
                 </span>
-                {touched && <span className="rounded-full bg-emerald-700 px-1.5 py-0.5 text-[12px] font-extrabold text-white">{RESULT_STR.newTag}</span>}
+                {touched && <span className="rounded-full bg-emerald-700 px-1.5 py-0.5 text-[12px] font-extrabold text-white">{RS.newTag}</span>}
                 <ChevronDown size={18} className={`shrink-0 text-stone-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
             </button>
             {open && (
@@ -171,7 +180,9 @@ export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; by
 /** One of the day's earlier recordings: time, who, confirmed or not, his words, and ▶ when its clip is on this phone. */
 export const EarlierRecording: React.FC<{
     rec: RecordingView; clip?: VoiceClipCacheRecord; playing: boolean; progress: number; lengthSec: number | null; onToggle: () => void;
-}> = ({ rec, clip, playing, progress, lengthSec, onToggle }) => (
+}> = ({ rec, clip, playing, progress, lengthSec, onToggle }) => {
+    const RS = useResultStr();
+    return (
     <details data-testid={`vr-earlier-${rec.id}`} className="rounded-2xl border border-stone-200 bg-white p-2.5">
         <summary className="flex cursor-pointer list-none items-center gap-2">
             <TimePill label={rec.timeLabel} />
@@ -179,7 +190,7 @@ export const EarlierRecording: React.FC<{
             {rec.typed && <TypedTag testId={`vr-earlier-typed-${rec.id}`} />}
             <span className="min-w-0 flex-1 truncate text-sm text-stone-700" style={{ fontFamily: SERIF }}>{rec.transcript}</span>
             <span className={`shrink-0 text-[12px] font-extrabold ${rec.confirmed ? 'text-emerald-700' : 'text-stone-600'}`} data-testid={`vr-earlier-state-${rec.id}`}>
-                {rec.confirmed ? `✔ ${RESULT_STR.confirmedBadge}` : RESULT_STR.notConfirmed}
+                {rec.confirmed ? `✔ ${RS.confirmedBadge}` : RS.notConfirmed}
             </span>
         </summary>
         <div className="mt-2">
@@ -195,4 +206,5 @@ export const EarlierRecording: React.FC<{
                 : clip && <ClipPlayer clipKey={clip.id} durationSec={lengthSec} playing={playing} progress={progress} onToggle={onToggle} testId={`vr-earlier-play-${rec.id}`} />}
         </div>
     </details>
-);
+    );
+};

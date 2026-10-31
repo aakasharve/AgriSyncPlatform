@@ -16,6 +16,7 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { CategoryIcon } from '../shramsathi/understandingRing';
 import { resultCopy } from './resultCopy';
 import { partMeta, phrasesByPart, type PartEntry, type PartKey, type WordRun } from './resultModel';
+import { partNameIn } from './partNames';
 
 const SERIF = "'Noto Serif Devanagari', serif";
 
@@ -59,7 +60,8 @@ export const SHOWN_PHRASES = 2;
 export const PartLinks: React.FC<{ runs: readonly WordRun[]; entries: readonly PartEntry[]; focus: PartKey | null; onFocus: (p: PartKey | null) => void }> = ({
     runs, entries, focus, onFocus,
 }) => {
-    const copy = resultCopy(useOptionalLanguage()?.language);
+    const language = useOptionalLanguage()?.language;
+    const copy = resultCopy(language);
     const groups = phrasesByPart(runs);
     const [open, setOpen] = useState<PartKey | null>(null);
     const [all, setAll] = useState<Partial<Record<PartKey, boolean>>>({});
@@ -85,7 +87,7 @@ export const PartLinks: React.FC<{ runs: readonly WordRun[]; entries: readonly P
                             className={`flex min-h-[72px] flex-col items-center justify-center gap-1 rounded-2xl border-2 px-1 py-1.5 text-center active:scale-95 ${sel ? 'border-stone-800 shadow-md' : 'border-transparent'}`}
                             style={{ background: m.tint }}>
                             <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/80"><PartIcon part={g.part} size={26} /></span>
-                            <span className="text-[12.5px] font-extrabold leading-tight text-stone-900">{m.label}</span>
+                            <span className="text-[12.5px] font-extrabold leading-tight text-stone-900">{partNameIn(g.part, language)}</span>
                         </button>
                     );
                 })}

@@ -121,7 +121,8 @@ export function buildWorkDoneProjection(log: WorkDoneProjectionInput, L: WorkDon
             id: `cropActivities:${activity.id || index}`,
             sourceBucket: 'cropActivities',
             sourceId: activity.id,
-            title,
+            // spec I18 — the work type in his language through the labels' `value` (identity for the English default).
+            title: L.value(title) || title,
             detail: joinDetail([
                 activity.status && activity.status !== 'completed' ? L.value(activity.status) : undefined,
                 activity.quantity !== undefined ? compact([activity.quantity, activity.unit]) : undefined,
@@ -166,7 +167,7 @@ export function buildWorkDoneProjection(log: WorkDoneProjectionInput, L: WorkDon
             id: `labour:${labour.id || index}`,
             sourceBucket: 'labour',
             sourceId: labour.id,
-            title: labour.activity || L.labourDone,
+            title: (labour.activity && (L.value(labour.activity) || labour.activity)) || L.labourDone,
             detail: joinDetail([
                 totalWorkers ? L.workers(totalWorkers) : undefined,
                 L.value(labour.type),

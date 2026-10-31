@@ -10,11 +10,6 @@ import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import {
-    readFinanceSettingsRaw,
-    writeFinanceSettingsRaw,
-} from '../../infrastructure/storage/FinanceLegacyStore';
-import {
-    FinanceSettings,
     MoneyAdjustment,
     MoneyCategory,
     MoneyEvent,
@@ -22,11 +17,6 @@ import {
     PriceBookItem,
 } from './finance.types';
 
-const DEFAULT_SETTINGS: FinanceSettings = {
-    highAmountThreshold: 25000,
-    duplicateWindowMinutes: 120,
-    gstEnabled: false
-};
 
 type ServerCostEntry = {
     id?: string;
@@ -391,20 +381,9 @@ if (typeof window !== 'undefined') {
 // ── Public API: Dexie reads + settings ─────────────────────────────────
 
 export const financeService = {
-    // ── Settings (localStorage) ────────────────────────────────────────
-
-    getSettings(): FinanceSettings {
-        try {
-            const raw = readFinanceSettingsRaw();
-            return raw ? JSON.parse(raw) as FinanceSettings : DEFAULT_SETTINGS;
-        } catch {
-            return DEFAULT_SETTINGS;
-        }
-    },
-
-    saveSettings(settings: FinanceSettings): void {
-        writeFinanceSettingsRaw(JSON.stringify(settings));
-    },
+    // D-18 (founder 2026-10-26, CHANGE): the "large amount" limit and the "duplicate window" settings are REMOVED —
+    // the server never read them (it keeps its own fixed rules), so they did nothing (P5). Their page went with
+    // lane L2a; the last read / write of them is gone here. Duplicate detection itself is unchanged.
 
     // ── Raw reads from Dexie cache ─────────────────────────────────────
 

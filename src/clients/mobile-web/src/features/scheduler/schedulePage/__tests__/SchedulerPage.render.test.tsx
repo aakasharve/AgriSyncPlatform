@@ -75,7 +75,7 @@ describe('शेड्यूल — where you are, in Marathi (S2, S3, S15)', ()
         expect(text('page-title')).toBe('शेड्यूल');
         fireEvent.click(screen.getByTestId('page-back'));
         expect(p.onBack).toHaveBeenCalledTimes(1);
-        expect(text('sched-crop-plot')).toBe('Grapes · A');
+        expect(text('sched-crop-plot')).toBe('द्राक्ष · A'); // spec I18: never "Grapes" in Marathi mode
         expect(text('sched-name')).toBe('द्राक्ष — हंगामी शेड्यूल');
         expect(text('sched-owner')).toContain('कोणी बनवलं: ॲपमधलं मूळ शेड्यूल');
         expect(text('day-now')).toBe('9');

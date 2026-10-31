@@ -37,7 +37,7 @@ import { AddedProducts } from './ProductRows';
 import { showsProducts } from './productModel';
 import ResultHero from './ResultHero';
 import { PARTS, markTranscript, type DayView, type PartKey, type RecordingView } from './resultModel';
-import { RESULT_STR } from './resultStrings';
+import { useResultStr, type ResultStr } from './resultStrings';
 import { scrollBelowHeader } from './scrollBelowHeader';
 import type { LogSyncState } from './useRecordingTrust';
 
@@ -47,7 +47,8 @@ export interface VoiceResultScreenProps {
     day: DayView;
     recordingKey: string;
     /** The plot(s) this recording is about, as named on the farm. */
-    placeLabel: string;
+    /** Where: a fixed label, or one built in the app's language (spec I18: crop names follow the language). */
+    placeLabel: string | ((language: string | undefined) => string);
     farmId: string | null;
     nodes: RingNodeData[];
     /** Phrases the parse could not place, shown as he said them. */
@@ -86,9 +87,9 @@ export interface VoiceResultScreenProps {
 }
 
 /** The plots one log of this recording is about, as named on the farm (his own words for them). */
-const plotsOf = (r: RecordingView): string => {
+const plotsOf = (r: RecordingView, RS: ResultStr): string => {
     const names = (r.log.context?.selection ?? []).flatMap(s => s.selectedPlotNames ?? []).filter(Boolean);
-    return names.length > 0 ? names.join(', ') : RESULT_STR.wholeFarm;
+    return names.length > 0 ? names.join(', ') : RS.wholeFarm;
 };
 
 export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
@@ -97,6 +98,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const [focus, setFocus] = useState<PartKey | null>(null);
     const latest = useRef<HTMLElement>(null);
     const language = useOptionalLanguage()?.language;
+    const RS = useResultStr();
     if (!primary) return null;
 
     const addedEntries = day.current.flatMap(r => r.entries);
@@ -121,16 +123,16 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     return (
         <div className="space-y-3 pb-6 pt-1" style={{ fontFamily: SANS }} data-testid="voice-result">
             <div className="flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr-place"><MapPin size={16} aria-hidden="true" />{p.placeLabel}</span>
-                <span className="text-xs font-bold text-stone-600" data-testid="vr-count">{count > 1 ? RESULT_STR.todayCount(count) : RESULT_STR.firstToday}</span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr-place"><MapPin size={16} aria-hidden="true" />{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
+                <span className="text-xs font-bold text-stone-600" data-testid="vr-count">{count > 1 ? RS.todayCount(count) : RS.firstToday}</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-2.5 py-1.5" data-testid="vr-speakers">
-                <span className="text-[12px] font-extrabold text-stone-700">{RESULT_STR.todayWho}:</span>
+                <span className="text-[12px] font-extrabold text-stone-700">{RS.todayWho}:</span>
                 {day.speakers.map(s => (
                     <span key={`${s.you}-${s.name}`} data-you={s.you ? 'yes' : 'no'}
                         className={`rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${s.you ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-blue-300 bg-blue-50 text-blue-900'}`}>
-                        {s.name} · {RESULT_STR.times(s.times)}
+                        {s.name} · {RS.times(s.times)}
                     </span>
                 ))}
             </div>
@@ -140,16 +142,16 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
             <section ref={latest} className="rounded-3xl border-2 border-emerald-600 bg-white p-3.5" data-testid="vr-latest">
                 <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[12px] font-extrabold">
-                    <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-white">{RESULT_STR.justNow}</span>
+                    <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-white">{RS.justNow}</span>
                     <TimePill label={primary.timeLabel} strong />
                     <WhoChip who={primary.who} testId="vr-latest-who" />
                     {primary.typed && <TypedTag testId="vr-latest-typed" />}
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800" data-testid="vr-remembered">{RESULT_STR.remembered}</span>
-                    {p.sync === 'onServer' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-blue-800" data-testid="vr-on-server">{RESULT_STR.onServer}</span>}
-                    {p.sync === 'needsFix' && <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-800" data-testid="vr-needs-fix">{RESULT_STR.needsFix}</span>}
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-emerald-800" data-testid="vr-remembered">{RS.remembered}</span>
+                    {p.sync === 'onServer' && <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-blue-800" data-testid="vr-on-server">{RS.onServer}</span>}
+                    {p.sync === 'needsFix' && <span className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-amber-800" data-testid="vr-needs-fix">{RS.needsFix}</span>}
                     {p.confirmed
-                        ? <span className="rounded-full bg-emerald-900 px-2.5 py-1 text-white" data-testid="vr-confirmed-badge">{RESULT_STR.confirmedBadge}</span>
-                        : <span className="rounded-full border border-stone-300 bg-stone-50 px-2.5 py-1 text-stone-700" data-testid="vr-not-confirmed-badge">{RESULT_STR.notConfirmed}</span>}
+                        ? <span className="rounded-full bg-emerald-900 px-2.5 py-1 text-white" data-testid="vr-confirmed-badge">{RS.confirmedBadge}</span>
+                        : <span className="rounded-full border border-stone-300 bg-stone-50 px-2.5 py-1 text-stone-700" data-testid="vr-not-confirmed-badge">{RS.notConfirmed}</span>}
                 </div>
                 {!severalPlots && <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />}
                 {primary.legacyPartial && <LegacyNote />}
@@ -159,7 +161,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
                 {p.unclear.length > 0 && (
                     <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-2.5" data-testid="vr-unclear">
-                        <div className="mb-1 text-[12.5px] font-extrabold text-amber-900">{RESULT_STR.unclearTitle}</div>
+                        <div className="mb-1 text-[12.5px] font-extrabold text-amber-900">{RS.unclearTitle}</div>
                         {p.unclear.map((u, i) => <div key={i} className="text-[15px] font-semibold text-stone-800">“{u}”</div>)}
                     </div>
                 )}
@@ -173,7 +175,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
                 {(addedEntries.length > 0 || day.blockersNow.length > 0) && (
                     <div className="mt-3" data-testid="vr-added">
-                        <div className="mb-1.5 text-[13px] font-extrabold text-emerald-800">{RESULT_STR.addedTitle}</div>
+                        <div className="mb-1.5 text-[13px] font-extrabold text-emerald-800">{RS.addedTitle}</div>
                         <div className="space-y-1.5">
                             {otherEntries.map(e => <AddedRow key={`${e.logId}:${e.id}`} entry={e} />)}
                             {productBoxes.length > 0 && <AddedProducts boxes={productBoxes} />}
@@ -186,17 +188,17 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
                 {p.canConfirm && (p.confirmed ? (
                     <div className="mt-3 rounded-2xl border-2 border-emerald-900 bg-emerald-50 p-3 text-center font-extrabold text-emerald-900" data-testid="vr-confirm-done">
-                        <Check className="mx-auto mb-0.5" size={22} aria-hidden="true" /> {RESULT_STR.confirmedDone}
-                        <div className="mt-0.5 text-[13px] font-bold text-emerald-800" data-testid="vr-kept-safe">{RESULT_STR.keptSafe}</div>
+                        <Check className="mx-auto mb-0.5" size={22} aria-hidden="true" /> {RS.confirmedDone}
+                        <div className="mt-0.5 text-[13px] font-bold text-emerald-800" data-testid="vr-kept-safe">{RS.keptSafe}</div>
                     </div>
                 ) : (
                     <div className="mt-3">
-                        <div className="mb-1.5 text-base font-extrabold" data-testid="vr-confirm-basis">{heard ? RESULT_STR.listenAndConfirm : RESULT_STR.readAndConfirm}</div>
+                        <div className="mb-1.5 text-base font-extrabold" data-testid="vr-confirm-basis">{heard ? RS.listenAndConfirm : RS.readAndConfirm}</div>
                         <button type="button" onClick={p.onConfirm} data-testid="vr-confirm"
                             className="min-h-[62px] w-full rounded-2xl bg-emerald-700 text-xl font-extrabold text-white">
-                            {`✔ ${RESULT_STR.confirm}`}
+                            {`✔ ${RS.confirm}`}
                         </button>
-                        {p.confirmFailed && <p className="m-0 mt-1 text-[13px] font-bold text-red-700" data-testid="vr-confirm-failed">{RESULT_STR.confirmFailed}</p>}
+                        {p.confirmFailed && <p className="m-0 mt-1 text-[13px] font-bold text-red-700" data-testid="vr-confirm-failed">{RS.confirmFailed}</p>}
                     </div>
                 ))}
 
@@ -208,7 +210,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                                 <button type="button" onClick={() => p.onEdit(r.id)} data-testid={`vr-edit-${r.id}`}
                                     className="flex min-h-[48px] w-full items-center gap-2 rounded-xl px-2 text-left text-base font-extrabold text-stone-700">
                                     <Pencil size={18} aria-hidden="true" />
-                                    <span className="min-w-0 flex-1 truncate">{RESULT_STR.edit} · {plotsOf(r)}</span>
+                                    <span className="min-w-0 flex-1 truncate">{RS.edit} · {plotsOf(r, RS)}</span>
                                 </button>
                                 <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(r.id)} />
                             </div>
@@ -217,7 +219,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 ) : (
                     <button type="button" onClick={() => p.onEdit(primary.id)} data-testid="vr-edit"
                         className="mt-2 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl border border-stone-300 bg-white text-base font-extrabold text-stone-700">
-                        <Pencil size={18} aria-hidden="true" /> {RESULT_STR.edit}
+                        <Pencil size={18} aria-hidden="true" /> {RS.edit}
                     </button>
                 )}
             </section>
@@ -225,8 +227,8 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
             {p.extras}
 
             <div>
-                <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700" data-testid="vr-day-title">{RESULT_STR.dayTitle}</h3>
-                <p className="m-0 mb-2 text-[12px] text-stone-600">{RESULT_STR.tapForHistory}</p>
+                <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700" data-testid="vr-day-title">{RS.dayTitle}</h3>
+                <p className="m-0 mb-2 text-[12px] text-stone-600">{RS.tapForHistory}</p>
                 <div className="space-y-2">
                     {PARTS.filter(m => day.byPart[m.key].length > 0).map(m => (
                         <DayRow key={m.key} part={m.key} entries={day.byPart[m.key]} byLog={day.recordingByLog} touched={day.touchedNow.has(m.key)}
@@ -237,20 +239,20 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
             {day.earlier.length > 0 && (
                 <div className="space-y-2" data-testid="vr-earlier">
-                    <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700">{RESULT_STR.earlierTitle}</h3>
+                    <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700">{RS.earlierTitle}</h3>
                     {day.earlier.map(r => (
                         <EarlierRecording key={r.id} rec={r} clip={p.clips.get(r.id)} playing={p.playingId === r.id} progress={p.progress}
                             lengthSec={p.lengthOf(r.id)} onToggle={() => p.onTogglePlay(r.id)} />
                     ))}
                 </div>
             )}
-            <p className="px-1.5 text-center text-xs leading-relaxed text-stone-600">{RESULT_STR.foot}</p>
+            <p className="px-1.5 text-center text-xs leading-relaxed text-stone-600">{RS.foot}</p>
 
             <div className="flex items-center gap-2 pt-1" data-testid="vr-actionbar">
                 <FlowBackButton onClick={p.onBack} testId="vr-back" />
                 <button type="button" onClick={p.onAddAnother} data-testid="vr-add-another"
                     className="flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-700 text-[17px] font-extrabold text-white active:scale-95">
-                    <Mic size={20} aria-hidden="true" /> {RESULT_STR.addAnother}
+                    <Mic size={20} aria-hidden="true" /> {RS.addAnother}
                 </button>
             </div>
         </div>

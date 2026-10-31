@@ -202,8 +202,8 @@ const masked = (entries: PartEntry[], hideMoney: boolean): PartEntry[] =>
 
 /** The entry part by part, before and after, in the result screen's order; only parts that say something. */
 export function correctionRows(before: DailyLog, after: DailyLog, opts: { hideMoney?: boolean; language?: string | null } = {}): CorrectionRow[] {
-    const b = masked(partEntriesOf(before), !!opts.hideMoney);
-    const a = masked(partEntriesOf(after), !!opts.hideMoney);
+    const b = masked(partEntriesOf(before, opts.language), !!opts.hideMoney);
+    const a = masked(partEntriesOf(after, opts.language), !!opts.hideMoney);
     return PARTS.map(m => {
         const was = b.filter(e => e.part === m.key);
         const now = a.filter(e => e.part === m.key);
@@ -212,9 +212,9 @@ export function correctionRows(before: DailyLog, after: DailyLog, opts: { hideMo
 }
 
 /** The entry's stoppages, before and after, and those his words removed (shown struck through, review B003). */
-export function blockerChange(before: DailyLog, after: DailyLog): { before: BlockerEntry[]; after: BlockerEntry[]; gone: BlockerEntry[]; changed: boolean } {
-    const was = blockersOf(before);
-    const now = blockersOf(after);
+export function blockerChange(before: DailyLog, after: DailyLog, language?: string | null): { before: BlockerEntry[]; after: BlockerEntry[]; gone: BlockerEntry[]; changed: boolean } {
+    const was = blockersOf(before, language);
+    const now = blockersOf(after, language);
     const key = (xs: BlockerEntry[]) => JSON.stringify(xs.map(x => x.value));
     const kept = new Set(now.map(x => x.value));
     return { before: was, after: now, gone: was.filter(x => !kept.has(x.value)), changed: key(was) !== key(now) };

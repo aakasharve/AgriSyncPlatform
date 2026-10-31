@@ -16,6 +16,8 @@
 import React, { useState } from 'react';
 import type { JobCard } from '../../../domain/work/JobCard';
 import type { SettleJobCardRequest } from '../data/jobCardsClient';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { errorTextIn } from '../../../shared/names/namesIn';
 
 interface PayoutConfirmationSheetProps {
     card: JobCard;
@@ -34,6 +36,8 @@ const PayoutConfirmationSheet: React.FC<PayoutConfirmationSheetProps> = ({
     const [settlementNote, setSettlementNote] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // spec I18 — a failure in his language, read by its code; never the server's English sentence.
+    const language = useOptionalLanguage()?.language ?? 'mr';
     const [showConfirmDialog, setShowConfirmDialog] = useState(false);
     const [settled, setSettled] = useState(false);
 
@@ -51,7 +55,7 @@ const PayoutConfirmationSheet: React.FC<PayoutConfirmationSheetProps> = ({
             });
             setSettled(true);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Settlement failed');
+            setError(errorTextIn(err, language));
         } finally {
             setIsSaving(false);
             setShowConfirmDialog(false);

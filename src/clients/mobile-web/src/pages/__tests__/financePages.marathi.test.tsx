@@ -37,8 +37,6 @@ vi.mock('../../features/finance/financeSelectors', () => ({
 vi.mock('../../features/finance/financeService', () => ({
     financeService: {
         getPriceBook: () => h.rates,
-        getSettings: () => ({ highAmountThreshold: 25000, duplicateWindowMinutes: 120, gstEnabled: false }),
-        saveSettings: vi.fn(),
     },
 }));
 vi.mock('../../features/finance/financeCommandService', () => ({

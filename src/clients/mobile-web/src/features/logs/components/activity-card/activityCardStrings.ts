@@ -21,6 +21,7 @@ import type { Language } from '../../../../i18n/language';
 // The ring's labels by file, not its barrel: the review form loads with the log tab, the canvas engines need not.
 import { CATEGORY_META, type CategoryId } from '../shramsathi/understandingRing/categories';
 import { ENGLISH_WORK_DONE_LABELS, type WorkDoneLabels } from '../../services/workDoneProjection';
+import { workTypeNameIn } from '../../../../shared/names/namesIn';
 
 /** FOUNDER — a label of the founder's ring, on one line. */
 const ring = (id: CategoryId): string => CATEGORY_META[id].label.replace(/<br\s*\/?>/g, ' ');
@@ -53,12 +54,15 @@ const MR_VALUES: Record<string, string> = {
     well: 'विहीर', unknown: '',
 };
 
-/** A stored value in his language: Marathi for the app's fixed English values; anything else as it is. */
+/**
+ * A stored value in his language: Marathi for the app's fixed English values; a work type through the one name helper
+ * (spec I18: "Spraying" ↔ "फवारणी" both ways, `workTypeNameIn`); anything else (a name he typed) as it is.
+ */
 export const valueIn = (language: Language) => (value: string | number | undefined | null): string => {
     const v = value == null ? '' : String(value);
-    if (language === 'en') return v;
+    if (language === 'en') return workTypeNameIn(v, 'en');
     const hit = MR_VALUES[v.trim().toLowerCase()];
-    return hit ?? v;
+    return hit ?? workTypeNameIn(v, 'mr');
 };
 
 /** Machine explanations ("systemInterpretation") are shown only when they read in his language. */

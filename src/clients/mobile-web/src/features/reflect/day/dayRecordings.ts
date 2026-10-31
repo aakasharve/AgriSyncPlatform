@@ -92,7 +92,7 @@ export function dayRecordings(
             logs,
             plotNames,
             cropColor: crops.find(c => c.id === cropId)?.color ?? 'bg-slate-400',
-            headline: headlineOf(base.entries, base.blockers.length > 0),
+            headline: headlineOf(base.entries, base.blockers.length > 0, deps.language),
             at: Math.min(...logs.map(createdMs), createdMs(voiceLog)),
         });
     }
@@ -133,12 +133,12 @@ export const isFarmWide = (log: DailyLog): boolean => log.context?.selection?.[0
  * only said "डिझेल 800 दिले" headlines as "खर्च", never "डिझेल · ₹800". His transcript words are not touched here —
  * who may hear them is the server's D-31 gate.
  */
-export function withMoneyShown(rec: DayRecording, mayShow: boolean): DayRecording {
+export function withMoneyShown(rec: DayRecording, mayShow: boolean, language?: string | null): DayRecording {
     if (mayShow || rec.view.who.you) return rec;
     const isMoney = (e: PartEntry) => e.part === 'expense';
     const entries = rec.view.entries.map(e => (isMoney(e) ? { ...e, value: HIDDEN_MONEY, quote: undefined } : e));
     const forHeadline = rec.view.entries.map(e => (isMoney(e) ? { ...e, value: null, quote: undefined } : e));
-    return { ...rec, headline: headlineOf(forHeadline, rec.view.blockers.length > 0), view: { ...rec.view, entries } };
+    return { ...rec, headline: headlineOf(forHeadline, rec.view.blockers.length > 0, language), view: { ...rec.view, entries } };
 }
 
 /** The day, part by part (the result screen's `DayRow`s): each entry stays tied to its recording, newest first. */

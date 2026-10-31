@@ -31,9 +31,10 @@ import type { RingNodeData } from '../shramsathi/understandingRing';
 import { PartIcon } from './HisWords';
 import RingStage from './RingStage';
 import { resultCopy } from './resultCopy';
-import { PARTS, PART_OF_NODE, partMeta, type PartKey } from './resultModel';
-import { RESULT_STR } from './resultStrings';
+import { PARTS, PART_OF_NODE, type PartKey } from './resultModel';
+import { useResultStr } from './resultStrings';
 import { scrollBelowHeader } from './scrollBelowHeader';
+import { partNameIn } from './partNames';
 
 const SERIF = "'Noto Serif Devanagari', serif";
 /** The server's stored classification for a day he said had no work (DayUnderstandingCard). Compared, never computed. */
@@ -72,6 +73,9 @@ type PartsProps = Pick<ResultHeroProps, 'missing' | 'unsure' | 'onTellMore'>;
 
 /** All eight parts as tiles: what the day tells, what it is unsure of (amber), and the red ones to tell Sathi. */
 const PartsGrid: React.FC<PartsProps> = (props) => {
+    const RS = useResultStr();
+    const language = useOptionalLanguage()?.language;
+    const label = (key: PartKey): string => partNameIn(key, language);
     const missing = new Set(props.missing);
     const unsure = new Set(props.unsure ?? []);
     return (
@@ -79,12 +83,12 @@ const PartsGrid: React.FC<PartsProps> = (props) => {
             <div className="mt-3 grid grid-cols-4 gap-1.5" data-testid="vr-parts">
                 {PARTS.map(p => missing.has(p.key) ? (
                     <button key={p.key} type="button" onClick={() => props.onTellMore(p.key)} data-testid={`vr-part-${p.key}`} data-told="no"
-                        aria-label={`${p.label} — ${RESULT_STR.noneYet}. ${RESULT_STR.tellMore}`}
+                        aria-label={`${label(p.key)} — ${RS.noneYet}. ${RS.tellMore}`}
                         className="relative flex min-h-[78px] flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-red-300 bg-red-50 px-1 py-1.5 text-center active:scale-95">
                         <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-red-600 text-white"><X size={13} strokeWidth={3} aria-hidden="true" /></span>
                         <PartIcon part={p.key} size={26} />
-                        <span className="text-[12px] font-extrabold leading-tight text-red-800">{p.label}</span>
-                        <span className="text-[11.5px] font-bold leading-tight text-red-700">{RESULT_STR.noneYet}</span>
+                        <span className="text-[12px] font-extrabold leading-tight text-red-800">{label(p.key)}</span>
+                        <span className="text-[11.5px] font-bold leading-tight text-red-700">{RS.noneYet}</span>
                     </button>
                 ) : unsure.has(p.key) ? (
                     // He said something here, but the server could not find it in his words: the flagged item is listed
@@ -93,33 +97,34 @@ const PartsGrid: React.FC<PartsProps> = (props) => {
                         className="relative flex min-h-[78px] flex-col items-center justify-center gap-0.5 rounded-2xl border-2 border-amber-300 bg-amber-50 px-1 py-1.5 text-center">
                         <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-amber-500 text-white"><HelpCircle size={13} strokeWidth={3} aria-hidden="true" /></span>
                         <PartIcon part={p.key} size={26} />
-                        <span className="text-[12px] font-extrabold leading-tight text-amber-900">{p.label}</span>
-                        <span className="text-[11.5px] font-bold leading-tight text-amber-800">{RESULT_STR.unsurePart}</span>
+                        <span className="text-[12px] font-extrabold leading-tight text-amber-900">{label(p.key)}</span>
+                        <span className="text-[11.5px] font-bold leading-tight text-amber-800">{RS.unsurePart}</span>
                     </span>
                 ) : (
                     <span key={p.key} data-testid={`vr-part-${p.key}`} data-told="yes"
                         className="flex min-h-[78px] flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-center" style={{ background: p.tint }}>
                         <PartIcon part={p.key} size={26} />
-                        <span className="text-[12px] font-extrabold leading-tight text-stone-900">{p.label}</span>
+                        <span className="text-[12px] font-extrabold leading-tight text-stone-900">{label(p.key)}</span>
                         <span className="text-[13px] font-extrabold leading-none text-emerald-700" aria-hidden="true">✓</span>
                     </span>
                 ))}
             </div>
-            {props.missing.length > 0 && <p className="m-0 mt-1.5 text-center text-[12.5px] font-bold text-red-700" data-testid="vr-tell-hint">{RESULT_STR.tellMore}</p>}
+            {props.missing.length > 0 && <p className="m-0 mt-1.5 text-center text-[12.5px] font-bold text-red-700" data-testid="vr-tell-hint">{RS.tellMore}</p>}
         </>
     );
 };
 
 /** While the ring is drawn: its red orbs, as real buttons for a screen reader or a keyboard (seen only when focused). */
 const UntoldPartButtons: React.FC<Pick<ResultHeroProps, 'missing' | 'onTellMore'>> = ({ missing, onTellMore }) => {
-    const copy = resultCopy(useOptionalLanguage()?.language);
+    const language = useOptionalLanguage()?.language;
+    const copy = resultCopy(language);
     if (missing.length === 0) return null;
     return (
         <div data-testid="vr-parts-untold">
             {missing.map(k => (
                 <button key={k} type="button" onClick={() => onTellMore(k)} data-testid={`vr-untold-${k}`}
                     className="sr-only focus:not-sr-only focus:mt-2 focus:block focus:w-full focus:rounded-2xl focus:border-2 focus:border-red-300 focus:bg-red-50 focus:p-2 focus:text-[14px] focus:font-extrabold focus:text-red-800">
-                    {copy.notToldPart(partMeta(k).label)}
+                    {copy.notToldPart(partNameIn(k, language))}
                 </button>
             ))}
         </div>
@@ -128,6 +133,7 @@ const UntoldPartButtons: React.FC<Pick<ResultHeroProps, 'missing' | 'onTellMore'
 
 /** The meter (flag-gated). Its own component so a flag-off build mounts no fetch at all. */
 const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed }) => {
+    const RS = useResultStr();
     const heroTop = useRef<HTMLDivElement>(null);
     const language = useOptionalLanguage()?.language;
     const lastSyncAtMs = useSelector(getRootStore().sync, s => s.context.lastSyncAtMs);
@@ -140,29 +146,32 @@ const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, savedLogId, recordi
         <div ref={heroTop} data-testid="vr-meter">
             <div className="flex items-center justify-center gap-2.5 pb-1.5">
                 <SathiOrb />
-                <p className="m-0 text-[19px] font-extrabold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RESULT_STR.ringHeading}</p>
+                <p className="m-0 text-[19px] font-extrabold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RS.ringHeading}</p>
             </div>
             <RingStage score={noWork ? null : score} nodes={nodes} variant={ringVariant()} saveKey={recordingKey}
                 onSettled={() => scrollBelowHeader(heroTop.current)} onReadMore={onReadMore} readMoreLabel={typed ? resultCopy(language).readBelow : undefined}
                 onMissedTap={n => { const p = PART_OF_NODE[n.id]; if (p) onTellMore(p); }}
-                fallback={<p className="m-0 text-center text-sm text-stone-600" data-testid="vr-meter-pending">{noWork ? RESULT_STR.noWorkDay : RESULT_STR.meterPending}</p>} />
+                fallback={<p className="m-0 text-center text-sm text-stone-600" data-testid="vr-meter-pending">{noWork ? RS.noWorkDay : RS.meterPending}</p>} />
             {ringDrawn ? <UntoldPartButtons missing={missing} onTellMore={onTellMore} /> : <PartsGrid missing={missing} unsure={unsure} onTellMore={onTellMore} />}
         </div>
     );
 };
 
-export const ResultHero: React.FC<ResultHeroProps> = (props) => (
+export const ResultHero: React.FC<ResultHeroProps> = (props) => {
+    const RS = useResultStr();
+    return (
     <section className="rounded-3xl border border-white/60 bg-white/85 p-3.5 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)]" data-testid="vr-hero">
         {FEATURE_FLAGS.understandingMeter ? <Meter {...props} /> : (
             <>
                 <div className="flex items-center gap-3">
                     <SathiOrb />
-                    <p className="m-0 text-[15px] font-bold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RESULT_STR.sathiLine}</p>
+                    <p className="m-0 text-[15px] font-bold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RS.sathiLine}</p>
                 </div>
                 <PartsGrid missing={props.missing} unsure={props.unsure} onTellMore={props.onTellMore} />
             </>
         )}
     </section>
-);
+    );
+};
 
 export default ResultHero;

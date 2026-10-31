@@ -14,6 +14,7 @@
  *     I15 report for the founder.
  */
 import type { ScheduleOwnerType } from '../scheduler.types';
+import { stageNameMr as sharedStageNameMr } from '../../../shared/utils/stageNameMr';
 
 export const SC = {
     // FOUNDER / INVENTORY
@@ -162,34 +163,11 @@ const OP_NAME_MR: Readonly<Record<string, string>> = {
 export const opNameMr = (opId: string): string | undefined => OP_NAME_MR[opId];
 
 /**
- * The reference schedules' stage names (server `ReferenceDataCatalog` seeds + `GetScheduleTemplatesHandler`
- * stage hints) in Marathi. Grapes' five are the preview's own words; the rest are PROPOSED. A name not listed
- * here is the schedule's own data and is shown as it is.
+ * The reference schedules' stage names in Marathi — spec I18: ONE table for the whole app (`shared/utils/stageNameMr`,
+ * which now holds the words this file used to keep). A name it does not know is the schedule's own data and is
+ * shown as it is.
  */
-const STAGE_NAME_MR: Readonly<Record<string, string>> = {
-    'post pruning': 'छाटणीनंतर', // preview word
-    'canopy build': 'फूट वाढ', // preview word
-    'flowering & fruit set': 'फुलोरा ते फळधारणा', // preview word
-    'berry development': 'फळवाढ', // preview word
-    'maturity & harvest': 'पक्वता व काढणी', // preview word
-    'bahar treatment': 'बहार धरणे', // PROPOSED (Marathi)
-    'vegetative growth': 'शाखीय वाढ', // PROPOSED (Marathi)
-    'fruit development': 'फळवाढ', // preview word (same as berry development)
-    'germination': 'उगवण', // PROPOSED (Marathi)
-    'tillering': 'फुटवे येणे', // PROPOSED (Marathi)
-    'grand growth': 'जोमदार वाढ', // PROPOSED (Marathi)
-    'maturity': 'पक्वता', // PROPOSED (Marathi)
-    'transplant establishment': 'लागवडीनंतर रुजणे', // PROPOSED (Marathi)
-    'bulb initiation': 'कांदा धरायला सुरुवात', // PROPOSED (Marathi)
-    'bulb development': 'कांदा पोसणे', // PROPOSED (Marathi)
-    'pruning': 'छाटणी', // PROPOSED (Marathi)
-    'planting': 'लागवड', // PROPOSED (Marathi)
-    'sowing': 'पेरणी', // PROPOSED (Marathi)
-    'sprouting phase': 'फूट येण्याची अवस्था', // PROPOSED (Marathi)
-    'pre-flowering': 'फुलोऱ्यापूर्वी', // PROPOSED (Marathi)
-};
-
-export const stageNameMr = (name: string): string => STAGE_NAME_MR[name.trim().toLowerCase()] ?? name;
+export const stageNameMr = (name: string): string => sharedStageNameMr(name) ?? name;
 
 /** "दर 3 दिवसांनी" / "आठवड्यातून 2 वेळा" — the preview's own phrasing of how often. */
 export const frequencyMr = (mode: string, value: number): string =>

@@ -156,7 +156,10 @@ export interface SeedInfo {
  */
 export interface CropProfile {
     id: string;
+    /** The crop's name as stored (never rewritten; shown through `shared/names/namesIn.cropNameIn`). */
     name: string;
+    /** spec I18 — the founder's crop master id (MHCR-0001…) when the crop was chosen from it. */
+    masterId?: string;
     iconName: string;
     color: string;
     plots: Plot[];

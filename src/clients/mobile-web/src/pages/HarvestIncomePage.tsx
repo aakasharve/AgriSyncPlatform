@@ -41,6 +41,7 @@ import OtherIncomeSheet from '../features/logs/components/harvest/OtherIncomeShe
 import { OTHER_INCOME_KINDS, OTHER_INCOME_SOURCE_LABEL, type OtherIncomeKind } from '../features/logs/components/harvest/otherIncomeLabels';
 import { fromDateKey, relLabel, rupees } from '../features/reflect/overview/reflectDates';
 import { Chip, GlassCard, PageBar, RowLink, SANS, SectionHead, Tap } from '../shared/components/ui/placeUi';
+import { cropNameIn } from '../shared/names/namesIn';
 
 /** Font rule: figures in DM Sans. */
 const NUM = "'DM Sans', sans-serif";
@@ -73,7 +74,11 @@ const HarvestIncomePage: React.FC<HarvestIncomePageProps> = ({ crops, onBack, on
     const [otherIncome, setOtherIncome] = useState<OtherIncomeEntry[]>(() => getOtherIncomeEntries());
 
     const otherTotal = otherIncome.reduce((s, o) => s + o.amount, 0);
-    const cropName = (id?: string) => (id ? crops.find(c => c.id === id)?.name : undefined);
+    // spec I18 — the line is Marathi: the crop in Marathi (never the server's "Grapes").
+    const cropName = (id?: string) => {
+        const crop = id ? crops.find(c => c.id === id) : undefined;
+        return crop ? cropNameIn(crop.name, 'mr', crop.masterId) : undefined;
+    };
 
     return (
         <div className="pb-24 animate-in fade-in max-w-4xl mx-auto px-4 sm:px-6" style={{ fontFamily: SANS }} data-testid="income-page">

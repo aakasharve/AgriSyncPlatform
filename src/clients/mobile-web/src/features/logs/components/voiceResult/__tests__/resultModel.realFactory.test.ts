@@ -75,17 +75,19 @@ describe('real voice logs — what the result screen says Sathi understood', () 
         expect(workDoneOf(log)).toBe('फवारणी'); // the feed card's headline too
     });
 
-    it('a title in English only falls back to Marathi work types, else to his verified phrase, else to nothing', () => {
+    it('a title in English only is said in Marathi when it is a known work type (spec I18), else his verified phrase, else nothing', () => {
         const [log] = fromVoice(voice({
             fullTranscript: 'आज छाटणी केली',
             cropActivities: [
                 { id: 'a1', title: 'Pruning', workTypes: ['छाटणी'] },
                 { id: 'a2', title: 'Pruning', workTypes: ['Pruning'], sourceText: 'छाटणी केली' },
                 { id: 'a3', title: 'Weeding', workTypes: ['Weeding'] },
+                { id: 'a4', title: 'Canopy management', workTypes: ['Canopy management'], sourceText: 'छाटणी केली' },
+                { id: 'a5', title: 'Canopy management', workTypes: ['Canopy management'] },
             ] as unknown as AgriLogResponse['cropActivities'],
         }));
         const values = partEntriesOf(log).filter(e => e.part === 'crop').map(e => e.value);
-        expect(values).toEqual(['छाटणी', 'छाटणी केली', null]);
+        expect(values).toEqual(['छाटणी', 'छाटणी', 'खुरपणी', 'छाटणी केली', null]);
     });
 
     it('his own words keep a brand name written in Latin letters; a label with no Marathi at all is dropped', () => {

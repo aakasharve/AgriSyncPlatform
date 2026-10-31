@@ -101,7 +101,8 @@ describe('an older record kept only as task lines (lane F1 legacyPartial) invent
         const [rec] = dayRecordings([legacy], TODAY_KEY, anyLog, mr, CROPS);
         expect(rec.view.legacyPartial).toBe(true);
         expect(rec.view.blockers).toEqual([]);
-        expect(rec.view.entries.map(e => [e.part, e.value])).toEqual([['crop', null], ['irrigation', null], ['inputs', 'इथरेल']]);
+        // spec I18: the record's own work type "Spraying" is said in Marathi (not invented — it is on the record).
+        expect(rec.view.entries.map(e => [e.part, e.value])).toEqual([['crop', 'फवारणी'], ['irrigation', null], ['inputs', 'इथरेल']]);
         const shown = JSON.stringify(rec.view.entries.map(e => e.value));
         for (const invented of ['₹', 'तास', 'लिटर', 'Drip', 'Spray']) expect(shown).not.toContain(invented);
     });

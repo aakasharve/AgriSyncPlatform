@@ -24,7 +24,8 @@ import React, { useState } from 'react';
 import { Check, Plus, Sprout } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { resolveOversightString } from '../../../i18n/oversightTranslations';
-import { ENTIRE_FARM_FOCUS, ENTIRE_FARM_IMAGE, cropImageFocus, cropImageUrl } from './cropImage';
+import { ENTIRE_FARM_FOCUS, ENTIRE_FARM_IMAGE, cropImageFocus, useCropPicture } from './cropImage';
+import { cropNameIn } from '../../../shared/names/namesIn';
 import CropCard from './CropCard';
 import FlowBackButton from './FlowBackButton';
 import {
@@ -81,16 +82,26 @@ export interface CropPlotStepperProps extends StepperExtras {
 
 /** A round crop photo (emoji-free fallback: a sprout), sized in px. */
 const RoundCrop: React.FC<{ iconName: string; name: string; px: number }> = ({ iconName, name, px }) => {
-    const src = cropImageUrl(iconName);
+    const { src, onError } = useCropPicture({ name, iconName }, 480);
     return src
-        ? <img src={src} alt={name} width={px} height={px} style={{ width: px, height: px }} className="select-none rounded-full object-cover" draggable={false} />
+        ? <img src={src} alt={name} width={px} height={px} style={{ width: px, height: px }} className="select-none rounded-full object-cover" draggable={false} loading="lazy" onError={onError} />
         : <span className="grid place-items-center rounded-full bg-emerald-100 text-emerald-700" style={{ width: px, height: px }}><Sprout size={Math.round(px * 0.6)} /></span>;
 };
 
+/** A crop's photo card: its picture by the crop master (spec I18), falling back to the app's photo, then a plain mark. */
+const CropPhotoCard: React.FC<Omit<React.ComponentProps<typeof CropCard>, 'imageSrc' | 'onImageError'> & { iconName: string }> = ({ iconName, ...card }) => {
+    const { src, onError } = useCropPicture({ name: card.name, iconName }, 960);
+    return <CropCard {...card} imageSrc={src} onImageError={onError} />;
+};
+
 export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
-    crops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false,
+    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false,
 }) => {
-    const language = useOptionalLanguage()?.language ?? 'en';
+    const languageContext = useOptionalLanguage();
+    const language = languageContext?.language ?? 'en';
+    // spec I18 — every crop name in his language (the founder's crop master); the stored name is never changed.
+    // Outside the language provider (tests, previews) the app's own default, Marathi.
+    const crops = storedCrops.map(c => ({ ...c, name: cropNameIn(c.name, languageContext?.language ?? 'mr') }));
     const sel: Selection = { crops: [...selectedCrops], plots: selectedPlots };
     const global = isGlobal(sel);
     const [innerStep, setInnerStep] = useState<StepperStep>(sel.crops.length > 0 ? 'plot' : 'crop');
@@ -113,8 +124,8 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                 {renderLead([])}
                 <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2" data-testid="flow-crop-grid">
                     {crops.map((c, i) => (
-                        <CropCard key={c.id} testId={`flow-crop-${c.id}`} name={c.name} sub={c.plots.map(p => p.name).join(' · ')}
-                            imageSrc={cropImageUrl(c.iconName)} focus={cropImageFocus(c.iconName)} disabled={disabled} delay={i * 80} lazy={i >= 2}
+                        <CropPhotoCard key={c.id} testId={`flow-crop-${c.id}`} name={c.name} sub={c.plots.map(p => p.name).join(' · ')}
+                            iconName={c.iconName} focus={cropImageFocus(c.iconName)} disabled={disabled} delay={i * 80} lazy={i >= 2}
                             onClick={() => { emit(sel.crops.includes(c.id) ? sel : toggleCrop(sel, c)); go('plot'); }} />
                     ))}
                     {/* The whole-farm card keeps its meaning short here; the full sentence is on the next screen. */}

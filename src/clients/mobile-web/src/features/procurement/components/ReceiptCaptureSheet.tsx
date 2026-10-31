@@ -36,6 +36,7 @@ import AttachmentStatusBadge from '../../attachments/components/AttachmentStatus
 import { useMoneyEvidence } from '../../finance/moneyEntryState';
 import { billMoneyLines, billPaymentMode, isGivenAmount } from '../billMoney';
 import { SANS } from '../../../shared/components/ui/placeUi';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 /** Shown while a photo taken offline waits to be read (the reader's own message is English). */
 const QUEUED_OFFLINE_MR = 'बिलाचा फोटो फोनवर ठेवला आहे. इंटरनेट आल्यावर वाचला जाईल.';
@@ -538,7 +539,7 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                                                 >
                                                     <option value="">— पीक निवडा —</option>
                                                     {crops.map(c => (
-                                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                                        <option key={c.id} value={c.id}>{cropNameIn(c.name, 'mr', c.masterId)}</option>
                                                     ))}
                                                 </select>
                                             </div>

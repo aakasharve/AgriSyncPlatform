@@ -33,6 +33,7 @@ import { buildNodes, type CategoryId, type RingNodeData } from '../shramsathi/un
 import { dayCategoryStates, type CoverageExtras } from '../shramsathi/understandingRing/dayCategoryCoverage';
 import type { IconName } from '../shramsathi/understandingRing/icons';
 import { productBoxesOf, withoutTaskPrefix, type ProductBox } from './productModel';
+import { workTypeNameIn } from '../../../../shared/names/namesIn';
 
 export type PartKey = 'crop' | 'labour' | 'irrigation' | 'inputs' | 'expense' | 'machinery' | 'observation' | 'planned';
 
@@ -58,6 +59,19 @@ export const PARTS: readonly PartMeta[] = [
 ];
 
 export const partMeta = (key: PartKey): PartMeta => PARTS.find(p => p.key === key) ?? PARTS[0];
+
+/** spec I18 — the eight part names in English (PROPOSED (English)); `partNames.partNameIn` reads both. */
+export const PART_LABEL_EN: Readonly<Record<PartKey, string>> = {
+    crop: 'Crop work', // PROPOSED (English)
+    labour: 'Labour', // PROPOSED (English)
+    irrigation: 'Water', // PROPOSED (English)
+    inputs: 'Sprays / fertiliser', // PROPOSED (English)
+    expense: 'Expenses', // PROPOSED (English)
+    machinery: 'Machines', // PROPOSED (English)
+    observation: 'Observation', // PROPOSED (English)
+    planned: 'Planned work', // PROPOSED (English)
+};
+const partLabelIn = (key: PartKey, language: string): string => (language === 'en' ? PART_LABEL_EN[key] : partMeta(key).label);
 
 /** One thing Sathi understood, tied to the log (recording) it came from. */
 export interface PartEntry {
@@ -128,12 +142,33 @@ const marathiOnly = (text: string | undefined | null): string => {
     const s = clean(text);
     return LATIN.test(s) && !DEVANAGARI.test(s) ? '' : s;
 };
-/** The first of these labels that can be shown in Marathi. */
-const firstMarathi = (...texts: Array<string | undefined | null>): string => texts.map(marathiOnly).find(Boolean) ?? '';
+/** spec I18 — English mode: a label the parser wrote, only when it has no Marathi in it (the mirror of `marathiOnly`). */
+const englishOnly = (text: string | undefined | null): string => {
+    const s = clean(text);
+    return DEVANAGARI.test(s) ? '' : s;
+};
+/** A parser label in this language (Marathi mode: Marathi only; English mode: English only). */
+const labelIn = (language: string) => (text: string | undefined | null): string => (language === 'en' ? englishOnly(text) : marathiOnly(text));
+const firstIn = (language: string, ...texts: Array<string | undefined | null>): string => texts.map(labelIn(language)).find(Boolean) ?? '';
+/**
+ * His own words kept on the record (an observation's `textRaw`, a stoppage's note): Marathi mode keeps the Marathi rule
+ * (`marathiOnly`); English mode shows them as he said them — they are his words, not a label (spec I18 "as entered").
+ */
+const saidIn = (language: string) => (text: string | undefined | null): string => (language === 'en' ? clean(text) : marathiOnly(text));
+/**
+ * A work type / work title in this language: the app's own work words first ("फवारणी" ↔ "Spraying", `workTypeNameIn`),
+ * then the label itself when it is written in this language.
+ */
+const workIn = (language: string, ...texts: Array<string | undefined | null>): string =>
+    texts.map(t => workTypeNameIn(t, language, { strict: true })).find(Boolean) ?? '';
 
 // PROPOSED (Marathi) — machine names for the parser's machine types.
 const MACHINE: Partial<Record<string, string>> = {
     tractor: 'ट्रॅक्टर', tiller: 'टिलर', harvester: 'हार्वेस्टर', drone: 'ड्रोन', sprayer: 'फवारणी यंत्र',
+};
+// PROPOSED (English) — the same machines in English mode (spec I18).
+const MACHINE_EN: Partial<Record<string, string>> = {
+    tractor: 'Tractor', tiller: 'Tiller', harvester: 'Harvester', drone: 'Drone', sprayer: 'Sprayer',
 };
 // APPROVED — the app's words for the two halves of a labour split (workSummary), for money on a machine
 // (workSummary.rentalCost / fuelCost) and for a day's typed total (reflectPage.totalCost).
@@ -148,6 +183,17 @@ const HOURS = 'तास'; // PROPOSED (Marathi) — "2 तास"
 const LITRES = 'लिटर'; // PROPOSED (Marathi) — "600 लिटर"
 const EACH = 'प्रत्येकी'; // PROPOSED (Marathi) — a wage per person, "₹400 प्रत्येकी"
 const RATE = 'दर'; // PROPOSED (Marathi) — a rate he stated, "₹30 दर"
+
+/** spec I18 — the unit words of this screen per language (English: APPROVED where the app has them, else PROPOSED (English)). */
+interface Units { male: string; female: string; rent: string; fuel: string; dayTotal: string; people: string; hours: string; litres: string; each: string; rate: string; machine: Partial<Record<string, string>> }
+const UNITS_MR: Units = { male: MALE, female: FEMALE, rent: RENT, fuel: FUEL, dayTotal: DAY_TOTAL, people: PEOPLE, hours: HOURS, litres: LITRES, each: EACH, rate: RATE, machine: MACHINE };
+const UNITS_EN: Units = {
+    male: t('workSummary.maleWorkers', 'en'), female: t('workSummary.femaleWorkers', 'en'), // APPROVED
+    rent: t('workSummary.rentalCost', 'en'), fuel: t('workSummary.fuelCost', 'en'), dayTotal: t('reflectPage.totalCost', 'en'), // APPROVED
+    people: 'people', hours: 'hours', litres: 'litres', each: 'each', rate: 'rate', // PROPOSED (English)
+    machine: MACHINE_EN,
+};
+const unitsIn = (language: string): Units => (language === 'en' ? UNITS_EN : UNITS_MR);
 
 const join = (...parts: Array<string | null | undefined>): string => parts.map(clean).filter(Boolean).join(' · ');
 const positive = (n: number | undefined): n is number => typeof n === 'number' && n > 0;
@@ -164,19 +210,20 @@ const rupees = (n: number | undefined, unit = ''): string => (positive(n) ? `₹
  * understood" (the server now removes it at the source); "nobody came" is an observation, not a labour row. So a 0
  * reads like silence: the task, else his own words (the entry's quote).
  */
-const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: number; activity?: string }): string => {
-    const split = join(positive(e.maleCount) ? `${asRecorded(e.maleCount)} ${MALE}` : '', positive(e.femaleCount) ? `${asRecorded(e.femaleCount)} ${FEMALE}` : '');
+const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: number; activity?: string }, language = 'mr'): string => {
+    const u = unitsIn(language);
+    const split = join(positive(e.maleCount) ? `${asRecorded(e.maleCount)} ${u.male}` : '', positive(e.femaleCount) ? `${asRecorded(e.femaleCount)} ${u.female}` : '');
     if (positive(e.count)) {
-        if (!split) return `${asRecorded(e.count)} ${PEOPLE}`;
+        if (!split) return `${asRecorded(e.count)} ${u.people}`;
         // Compared, never shown: is the split the same people as his total?
-        return (e.maleCount ?? 0) + (e.femaleCount ?? 0) === e.count ? split : join(`${asRecorded(e.count)} ${PEOPLE}`, split);
+        return (e.maleCount ?? 0) + (e.femaleCount ?? 0) === e.count ? split : join(`${asRecorded(e.count)} ${u.people}`, split);
     }
-    return split || marathiOnly(e.activity);
+    return split || workIn(language, e.activity) || labelIn(language)(e.activity);
 };
 
 /** The money he said on a labour row, as said: the total, the wage per person, a rate. */
-const labourMoney = (e: { totalCost?: number; wagePerPerson?: number; rate?: number }): string =>
-    join(rupees(e.totalCost), rupees(e.wagePerPerson, EACH), e.rate !== e.wagePerPerson ? rupees(e.rate, RATE) : '');
+const labourMoney = (e: { totalCost?: number; wagePerPerson?: number; rate?: number }, language = 'mr'): string =>
+    join(rupees(e.totalCost), rupees(e.wagePerPerson, unitsIn(language).each), e.rate !== e.wagePerPerson ? rupees(e.rate, unitsIn(language).rate) : '');
 
 /** Water actually given, by the app's own rule; a spray tank's water belongs to the spray, not to पाणी. */
 const isGivenWater = (e: IrrigationEvent): boolean => e.role !== 'spray-carrier' && isCompletedIrrigationEvent(e);
@@ -200,8 +247,14 @@ function plannedOnce(log: DailyLog): { observations: ObservationNote[]; tasks: P
     return { observations, tasks };
 }
 
-/** Everything understood from ONE log, part by part, in the parts' order. */
-export function partEntriesOf(log: DailyLog): PartEntry[] {
+/**
+ * Everything understood from ONE log, part by part, in the parts' order — its words in `language` (spec I18: Marathi
+ * mode Marathi only, English mode English only; his own quoted words stay as he said them).
+ */
+export function partEntriesOf(log: DailyLog, language: string | null | undefined = 'mr'): PartEntry[] {
+    const lang = language === 'en' ? 'en' : 'mr';
+    const u = unitsIn(lang);
+    const inLang = labelIn(lang);
     const transcript = log.fullTranscript;
     const out: PartEntry[] = [];
     const costs: PartEntry[] = [];
@@ -216,75 +269,81 @@ export function partEntriesOf(log: DailyLog): PartEntry[] {
     // it and named by what it paid for. Without its phrase: that phrase already marks the other part in his words.
     const addCost = (src: PartKey, index: number, item: Sourced & { id?: string }, what: string, money: string) => {
         if (!money) return;
-        costs.push({ id: `${item.id || `${log.id}:${src}:${index}`}:cost`, logId: log.id, part: 'expense', value: join(what || partMeta(src).label, money), verified: item.provenanceVerified !== false });
+        costs.push({ id: `${item.id || `${log.id}:${src}:${index}`}:cost`, logId: log.id, part: 'expense', value: join(what || partLabelIn(src, lang), money), verified: item.provenanceVerified !== false });
     };
 
     // The parser writes the Marathi title beside English work types ({title:'फवारणी', workTypes:['Spraying']}).
     // A free note on the work or on the water is shown with it when it reads in Marathi (the feed card's old
     // "Note:" line, I13 round 3); an English note stays in the record ("बदला").
-    (log.cropActivities ?? []).forEach((a, i) => add('crop', i, a, join(firstMarathi(a.title, a.workTypes?.filter(Boolean).join(', ')), marathiOnly(a.notes))));
+    (log.cropActivities ?? []).forEach((a, i) => add('crop', i, a, join(
+        workIn(lang, a.title, ...(a.workTypes ?? [])) || firstIn(lang, a.title, a.workTypes?.filter(Boolean).join(', ')),
+        inLang(a.notes),
+    )));
     (log.labour ?? []).forEach((e, i) => {
-        add('labour', i, e, labourValue(e));
-        addCost('labour', i, e, '', labourMoney(e));
+        add('labour', i, e, labourValue(e, lang));
+        addCost('labour', i, e, '', labourMoney(e, lang));
     });
     (log.irrigation ?? []).forEach((e, i) => {
         if (!isGivenWater(e)) return; // not given: a stoppage (blockersOf); a spray's water: the spray's
         add('irrigation', i, e, join(
-            positive(e.durationHours) ? `${asRecorded(e.durationHours)} ${HOURS}` : '',
-            positive(e.waterVolumeLitres) ? `${asRecorded(e.waterVolumeLitres)} ${LITRES}` : '',
-            marathiOnly(e.notes),
+            positive(e.durationHours) ? `${asRecorded(e.durationHours)} ${u.hours}` : '',
+            positive(e.waterVolumeLitres) ? `${asRecorded(e.waterVolumeLitres)} ${u.litres}` : '',
+            inLang(e.notes),
         ));
     });
     const boxes = productBoxesOf(log);
     (log.inputs ?? []).forEach((e, i) => {
         // Never the sync task's "Spray …" / "Fertilizer …" wording a pulled log carries (L6b fix).
-        const names = (e.mix ?? []).map(m => marathiOnly(withoutTaskPrefix(m.productName))).filter(Boolean);
-        const what = names.length > 0 ? names.join(', ') : marathiOnly(withoutTaskPrefix(e.productName));
+        const names = (e.mix ?? []).map(m => inLang(withoutTaskPrefix(m.productName))).filter(Boolean);
+        const what = names.length > 0 ? names.join(', ') : inLang(withoutTaskPrefix(e.productName));
         add('inputs', i, e, what, boxes[i]);
         addCost('inputs', i, e, what, rupees(e.cost));
     });
-    (log.activityExpenses ?? []).forEach((e, i) => add('expense', i, e, join(marathiOnly(e.reason), rupees(e.totalAmount))));
+    (log.activityExpenses ?? []).forEach((e, i) => add('expense', i, e, join(inLang(e.reason), rupees(e.totalAmount))));
     (log.machinery ?? []).forEach((e, i) => {
-        add('machinery', i, e, join(MACHINE[e.type], positive(e.hoursUsed) ? `${asRecorded(e.hoursUsed)} ${HOURS}` : ''));
-        addCost('machinery', i, e, MACHINE[e.type] ?? '', join(rupees(e.rentalCost) && `${RENT} ${rupees(e.rentalCost)}`, rupees(e.fuelCost) && `${FUEL} ${rupees(e.fuelCost)}`));
+        add('machinery', i, e, join(u.machine[e.type], positive(e.hoursUsed) ? `${asRecorded(e.hoursUsed)} ${u.hours}` : ''));
+        addCost('machinery', i, e, u.machine[e.type] ?? '', join(rupees(e.rentalCost) && `${u.rent} ${rupees(e.rentalCost)}`, rupees(e.fuelCost) && `${u.fuel} ${rupees(e.fuelCost)}`));
     });
     // A day total he typed on the form (no voice behind it): shown as typed, under its approved name.
-    if (positive(log.manualTotalCost)) costs.push({ id: `${log.id}:manualTotal`, logId: log.id, part: 'expense', value: `${DAY_TOTAL} ${rupees(log.manualTotalCost)}`, verified: true });
+    if (positive(log.manualTotalCost)) costs.push({ id: `${log.id}:manualTotal`, logId: log.id, part: 'expense', value: `${u.dayTotal} ${rupees(log.manualTotalCost)}`, verified: true });
     const { observations, tasks } = plannedOnce(log);
     // An "issue" note is a stoppage (blockersOf), as the ring reads it.
-    observations.forEach((o, i) => { if (o.noteType !== 'issue') add(o.noteType === 'reminder' ? 'planned' : 'observation', i, o, marathiOnly(o.textRaw)); });
-    tasks.forEach((task, i) => add('planned', i, task, marathiOnly(task.title)));
+    observations.forEach((o, i) => { if (o.noteType !== 'issue') add(o.noteType === 'reminder' ? 'planned' : 'observation', i, o, saidIn(lang)(o.textRaw)); });
+    tasks.forEach((task, i) => add('planned', i, task, inLang(task.title)));
 
     const order = new Map(PARTS.map((p, i) => [p.key, i]));
     return [...out, ...costs].sort((a, b) => (order.get(a.part) ?? 0) - (order.get(b.part) ?? 0));
 }
 
 /** The stoppage the log's day-level disturbance records, as he said it; null when there is none. */
-export function blockerOf(log: DailyLog): BlockerEntry | null {
+export function blockerOf(log: DailyLog, language: string | null | undefined = 'mr'): BlockerEntry | null {
     const d = log.disturbance;
     if (!d) return null;
     const quote = verifiedPhrase(d, log.fullTranscript);
-    return { id: `${log.id}:blocker`, logId: log.id, value: firstMarathi(d.reason, d.note, d.impact) || quote || null, quote, verified: true };
+    const lang = language === 'en' ? 'en' : 'mr';
+    const value = lang === 'en' ? englishOnly(d.reason) || saidIn(lang)(d.note) || englishOnly(d.impact) : firstIn(lang, d.reason, d.note, d.impact);
+    return { id: `${log.id}:blocker`, logId: log.id, value: value || quote || null, quote, verified: true };
 }
 
 /** Every stoppage in a log, as the ring reads them: its disturbance, water that was not given, an "issue" note. */
-export function blockersOf(log: DailyLog): BlockerEntry[] {
+export function blockersOf(log: DailyLog, language: string | null | undefined = 'mr'): BlockerEntry[] {
+    const lang = language === 'en' ? 'en' : 'mr';
     const transcript = log.fullTranscript;
     const out: BlockerEntry[] = [];
-    const day = blockerOf(log);
+    const day = blockerOf(log, lang);
     if (day) out.push(day);
     (log.irrigation ?? []).forEach((e, i) => {
         if (!isWaterStoppage(e)) return;
         const quote = verifiedPhrase(e, transcript);
         out.push({
             id: `${e.id || `${log.id}:irrigation:${i}`}:stopped`, logId: log.id, quote, verified: e.provenanceVerified !== false,
-            value: join(partMeta('irrigation').label, firstMarathi(e.issue?.reason, e.issue?.note, e.notes)),
+            value: join(partLabelIn('irrigation', lang), firstIn(lang, e.issue?.reason, e.issue?.note, e.notes)),
         });
     });
     (log.observations ?? []).forEach((o, i) => {
         if (o.noteType !== 'issue') return;
         const quote = verifiedPhrase(o, transcript);
-        out.push({ id: `${o.id || `${log.id}:issue:${i}`}:issue`, logId: log.id, value: marathiOnly(o.textRaw) || quote || null, quote, verified: o.provenanceVerified !== false });
+        out.push({ id: `${o.id || `${log.id}:issue:${i}`}:issue`, logId: log.id, value: saidIn(lang)(o.textRaw) || quote || null, quote, verified: o.provenanceVerified !== false });
     });
     return out;
 }
@@ -309,6 +368,8 @@ export interface WhoDeps {
     youLabel: string;
     /** Shown when nobody was recorded as speaking it (never a guessed name). */
     unknownLabel: string;
+    /** spec I18 — the language the entries' words are built in (default Marathi). */
+    language?: string;
 }
 
 export const whoSpoke = (log: DailyLog, deps: WhoDeps): Who => {
@@ -376,8 +437,8 @@ export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingV
         legacyPartial: all.some(l => l.legacyPartial === true),
         byForm: all.every(l => l.meta?.provenance?.source === 'manual'),
         transcript: clean(log.fullTranscript),
-        entries: all.flatMap(partEntriesOf),
-        blockers: all.flatMap(blockersOf),
+        entries: all.flatMap(l => partEntriesOf(l, deps.language)),
+        blockers: all.flatMap(l => blockersOf(l, deps.language)),
     };
 };
 

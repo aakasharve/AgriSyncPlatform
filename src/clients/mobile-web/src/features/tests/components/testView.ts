@@ -19,6 +19,7 @@ import { TestInstanceStatus } from '../../../domain/tests/TestInstance';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { MARATHI_MONTHS } from '../../labour/marathiDate';
 import type { Tone } from '../../../shared/components/ui/placeUi';
+import { stageNameIn } from '../../../shared/names/namesIn';
 
 export const TESTS_TITLE = 'चाचण्या';
 export const TESTS_EXPLAINER = 'माती, पाणी आणि पानांच्या तपासण्या — काय करायचं, कोणता नमुना घेतला, काय निकाल आला.';
@@ -55,18 +56,53 @@ export const ACTION_LABEL: Partial<Record<TestState, string>> = {
     reported: 'निकाल पहा',
 };
 
+/** FOUNDER (D-38, 2026-10-27): the grape petiole test ("PTOL", the server's "Petiole monthly") in the farmer's words. */
+export const PETIOLE_TEST_MR = 'पानांच्या देठाची तपासणी';
+/** D-38 "Petiole alongside": the English-mode name. PROPOSED (English). */
+export const PETIOLE_TEST_EN = 'Petiole test';
+
 const KIND_LABEL: Record<number, string> = {
     0: 'मातीची तपासणी',
     1: 'पाण्याची तपासणी',
     2: 'पानांची तपासणी',
     3: 'औषध-अवशेष तपासणी',
     4: 'इतर तपासणी',
+    5: PETIOLE_TEST_MR,
 };
-export const kindLabel = (kind: number): string => KIND_LABEL[kind] ?? KIND_LABEL[4];
+// PROPOSED (English) — the kinds in English mode (spec I18).
+const KIND_LABEL_EN: Record<number, string> = {
+    0: 'Soil test', 1: 'Water test', 2: 'Leaf test', 3: 'Residue test', 4: 'Other test', 5: PETIOLE_TEST_EN,
+};
+export const kindLabel = (kind: number, language: string | null | undefined = 'mr'): string =>
+    (language === 'en' ? KIND_LABEL_EN[kind] ?? KIND_LABEL_EN[4] : KIND_LABEL[kind] ?? KIND_LABEL[4]);
 
-/** What the test is: the server's protocol name as it comes (it can be English), else the kind in Marathi. */
-export const testName = (instance: DexieTestInstance, protocol?: DexieTestProtocol): string =>
-    instance.testProtocolName?.trim() || protocol?.name?.trim() || kindLabel(instance.protocolKind);
+/**
+ * The server's seeded protocol names (`TestProtocolSeed.cs`) in the farmer's words. PROPOSED (Marathi) / PROPOSED
+ * (English) except the petiole test (FOUNDER, D-38).
+ */
+const PROTOCOL_NAMES: Readonly<Record<string, { mr: string; en: string }>> = {
+    'petiole monthly': { mr: PETIOLE_TEST_MR, en: PETIOLE_TEST_EN },
+    ptol: { mr: PETIOLE_TEST_MR, en: PETIOLE_TEST_EN },
+    'soil basic': { mr: 'मातीची तपासणी', en: 'Soil test' },
+    'residue pre-harvest': { mr: 'काढणीपूर्वी औषध-अवशेष तपासणी', en: 'Residue test before harvest' },
+    'drainage pre-cycle': { mr: 'पाण्याचा निचरा तपासणी', en: 'Drainage test' },
+};
+const LATIN = /[A-Za-z]/;
+const DEVANAGARI = /[ऀ-ॿ]/;
+
+/**
+ * What the test is, in his language (spec I18 + D-38): a protocol the app knows by its farmer name; a name written
+ * by a person in his language's script as written; otherwise the kind ("पानांच्या देठाची तपासणी") — never the
+ * server's English name in Marathi mode. Reminders and every test card read this one name.
+ */
+export function testName(instance: DexieTestInstance, protocol?: DexieTestProtocol, language: string | null | undefined = 'mr'): string {
+    const raw = instance.testProtocolName?.trim() || protocol?.name?.trim() || '';
+    const en = language === 'en';
+    const known = PROTOCOL_NAMES[raw.toLowerCase().replace(/\s+/g, ' ')];
+    if (known) return en ? known.en : known.mr;
+    if (raw && (en ? !DEVANAGARI.test(raw) : !(LATIN.test(raw) && !DEVANAGARI.test(raw)))) return raw;
+    return kindLabel(instance.protocolKind, language);
+}
 
 /**
  * The kind under the name, only when it adds something. The client maps every server kind it does not know
@@ -80,7 +116,8 @@ export const kindLine = (instance: DexieTestInstance, name: string): string => {
 
 /** Where: the farm's own plot name and the server's stage name, whichever are known. */
 export const whereLine = (instance: DexieTestInstance, plotName?: string): string =>
-    [plotName, instance.stageName].map(s => s?.trim()).filter(Boolean).join(' · ');
+    // spec I18 — the server's stage ("Vegetative", "Fruit set") in Marathi, or not at all (never the English).
+    [plotName, stageNameIn(instance.stageName, 'mr')].map(s => s?.trim()).filter(Boolean).join(' · ');
 
 // ---------------------------------------------------------------- dates
 

@@ -15,6 +15,8 @@ import React, { useEffect, useState } from 'react';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { JobCard, JobCardStatus } from '../../../domain/work/JobCard';
 import PayoutEligibilityStrip from '../components/PayoutEligibilityStrip';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { workTypeNameIn } from '../../../shared/names/namesIn';
 
 interface JobCardDetailPageProps {
     jobCardId: string;
@@ -63,6 +65,7 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
 }) => {
     const [card, setCard] = useState<JobCard | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const language = useOptionalLanguage()?.language ?? 'mr'; // spec I18 — work types in his language
 
     useEffect(() => {
         let cancelled = false;
@@ -108,9 +111,6 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
 
     const statusColor = STATUS_COLORS[card.status] ?? 'bg-stone-100 text-stone-600';
     const statusLabel = STATUS_LABELS[card.status] ?? { en: card.status, mr: card.status };
-    const totalLineItemAmount = card.lineItems.reduce(
-        (sum, item) => sum + item.expectedHours * item.ratePerHourAmount, 0
-    );
 
     const timelineStep = (status: JobCardStatus, idx: number) => {
         const currentIdx = STATUS_TIMELINE.indexOf(card.status);
@@ -258,7 +258,7 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
                                         className="text-sm font-semibold text-stone-800"
                                         style={{ fontFamily: "'DM Sans', sans-serif" }}
                                     >
-                                        {item.activityType}
+                                        {workTypeNameIn(item.activityType, language)}
                                     </p>
                                     <p
                                         className="text-xs text-stone-400"
