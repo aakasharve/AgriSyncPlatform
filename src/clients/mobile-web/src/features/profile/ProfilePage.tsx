@@ -31,6 +31,9 @@ import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
 import { buildSettingsExtraIds, OFFLINE_NOTES_TITLE, PRIVACY_TITLE } from './settingsItems';
 import { useWaitingDraftCount } from './hooks/useWaitingDraftCount';
+import { useWaitingVoiceNotes } from '../voiceDiary/waiting/useWaitingVoiceNotes';
+import { voiceNotesWords } from '../voiceDiary/waiting/voiceNotesWords';
+import { waitingCounts } from '../../infrastructure/sync/waitingVoiceNotes';
 import { useBackDismiss } from '../../core/navigation/useBackDismiss';
 import { Chip, PageBar, SANS, Tap } from '../../shared/components/ui/placeUi';
 import { useLabourPermissions } from './hooks/useLabourPermissions';
@@ -124,6 +127,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // exactly like the page's मागे (it used to leave the hub altogether).
     useBackDismiss(activeTab !== null || activeExtra !== null, () => { setActiveTab(null); setActiveExtra(null); });
     const waitingDrafts = useWaitingDraftCount();
+    const { notes: waitingVoice } = useWaitingVoiceNotes();
 
     const cropPlot = useCropPlotState({ crops, onUpdateCrops });
     const farmAdmin = useFarmAdminState();
@@ -393,14 +397,20 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 // Plain Marathi only (founder T1–T3: no English doubling). Every new string is PROPOSED.
                 const settingsMeta: Record<string, { label: string; icon: React.ReactNode; subtitle?: string; badge?: React.ReactNode }> = {
                     language: { label: 'भाषा', icon: <Globe size={22} />, subtitle: langLabel },
-                    'voice-diary': { label: 'आवाज नोंदी', icon: <BookOpen size={22} />, subtitle: 'तुम्ही बोललेल्या नोंदी — दिवसानुसार ऐका' },
+                    // Lane OF (founder D-59) — recordings not saved yet live here: the row says how many (THE one reader,
+                    // the same number as on the gear and the page).
+                    'voice-diary': {
+                        label: 'आवाज नोंदी', icon: <BookOpen size={22} />,
+                        subtitle: voiceNotesWords(language).rowLine(waitingCounts(waitingVoice), 'तुम्ही बोललेल्या नोंदी — दिवसानुसार ऐका'),
+                        ...(waitingVoice.length > 0 && { badge: <span data-testid="voice-notes-row-count"><Chip tone="amber">{waitingVoice.length}</Chip></span> }),
+                    },
                     // PROPOSED (Marathi): "परवानग्या · माझा डेटा" (the preview's line; copy + erase now live inside).
                     consent: { label: PRIVACY_TITLE, icon: <Shield size={22} />, subtitle: 'परवानग्या · माझा डेटा' },
                     billing: { label: 'बिलिंग', icon: <CreditCard size={22} />, subtitle: 'तुमचा प्लॅन' },
-                    // PROPOSED (Marathi): one name with its page (OFFLINE_NOTES_TITLE) — it lists voice notes AND
-                    // bill / slip photos, so the count is not called "voice notes"; the line says what to do.
+                    // PROPOSED (Marathi): one name with its page (OFFLINE_NOTES_TITLE). Lane OF (D-59): voice recordings moved
+                    // to आवाज नोंदी; this row now counts only bill / sale-slip photos made without internet.
                     'ai-drafts': {
-                        label: OFFLINE_NOTES_TITLE, icon: <Mic size={22} />, subtitle: 'उघडून जतन करा, किंवा काढून टाका',
+                        label: OFFLINE_NOTES_TITLE, icon: <Mic size={22} />, subtitle: 'बिलाचे / पट्टीचे फोटो', // PROPOSED (Marathi) — lane OF
                         badge: <Chip tone="amber">{waitingDrafts}</Chip>,
                     },
                 };

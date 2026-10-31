@@ -34,3 +34,23 @@ export function offlineVoiceQueueAllowed(): boolean {
         return true;
     }
 }
+
+/**
+ * Lane OF (founder D-60) — the past day (`yyyy-MM-dd`) the words spoken NOW are for, when he chose one before speaking.
+ * Kept on the offline job, so the recording is saved on that day once it is understood. Undefined = today.
+ */
+let dayNow: () => string | undefined = () => undefined;
+
+export function setOfflineVoiceDayProvider(provider: () => string | undefined): void {
+    dayNow = provider;
+}
+
+/** The chosen day for words spoken now, or undefined (a failing provider never blocks keeping his words). */
+export function offlineVoiceDay(): string | undefined {
+    try {
+        const day = dayNow();
+        return typeof day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : undefined;
+    } catch {
+        return undefined;
+    }
+}

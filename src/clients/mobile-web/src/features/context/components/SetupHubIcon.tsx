@@ -18,10 +18,20 @@ import { Settings } from 'lucide-react';
 interface Props {
   /** Goes up by one on every tap; 0 = never tapped. Each change replays the effect. */
   tap: number;
+  /** Lane OF (founder D-59) — recordings not saved yet; a number on the gear when above 0. */
+  count?: number;
+  /** The number's words for a screen reader. */
+  countLabel?: string;
 }
 
-export const SetupHubIcon: React.FC<Props> = ({ tap }) => (
+export const SetupHubIcon: React.FC<Props> = ({ tap, count = 0, countLabel }) => (
   <span className="relative block h-[50px] w-[50px]" data-testid="setup-hub-icon" data-tap={tap}>
+    {count > 0 && (
+      <span data-testid="setup-hub-count" aria-label={countLabel}
+        className="absolute -right-1 -top-1 z-10 grid h-[22px] min-w-[22px] place-items-center rounded-full bg-red-600 px-1 text-[12px] font-extrabold leading-none text-white ring-2 ring-white">
+        {count}
+      </span>
+    )}
     {tap > 0 && (
       <>
         <span key={`r1-${tap}`} data-testid="setup-hub-ripple" aria-hidden="true"

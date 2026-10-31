@@ -63,7 +63,8 @@ import ReviewSheet from './ReviewSheet';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 import { BOTTOM_BAR_CLEARANCE } from '../../../shared/utils/bottomBar';
 import { canTakeManualAttendance } from '../attendanceDoor';
-import { clearLabourOpening, peekLabourOpening } from '../labourOpening';
+import { clearLabourOpening, dayOpening, peekLabourOpening } from '../labourOpening';
+import HajeriDayEdit from './HajeriDayEdit';
 
 /**
  * Labour V2 R1 Task 3.5c — the honest offline vocabulary for a queued mark,
@@ -82,7 +83,7 @@ function staleAgeLabel(savedAtUtc: string): string {
 
 const ON_PHONE_MR = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, 'mr');
 
-type ScreenName = 'hub' | 'mukadam' | 'person' | 'attendance' | 'dashboard' | 'ledger';
+type ScreenName = 'hub' | 'mukadam' | 'person' | 'attendance' | 'dashboard' | 'ledger' | 'day';
 interface ScreenState { name: ScreenName; id?: string; mode?: 'normal' | 'no-work' }
 
 const TITLES: Record<ScreenName, string> = {
@@ -118,6 +119,8 @@ const TITLES: Record<ScreenName, string> = {
      */
     dashboard: 'आढावा',
     ledger: 'हजेरी वही',
+    // Lane OF (founder D-57) — one day of the वही, opened by "बदला" on a हजेरी-door record.
+    day: 'हजेरी वही',
 };
 
 export const LabourFeature: React.FC<{
@@ -155,7 +158,9 @@ export const LabourFeature: React.FC<{
     const farmCtx = useOptionalFarmContext();
     const farm = farmCtx?.currentFarm ?? null;
     const [inviteOpen, setInviteOpen] = useState(false);
-    const [stack, setStack] = useState<ScreenState[]>([{ name: 'hub' }]);
+    // Lane OF (founder D-57) — "बदला" on a हजेरी-door record opens THAT DAY in the वही, over the hub (मागे steps back to it).
+    const [hajeriDay, setHajeriDay] = useState<string>(() => dayOpening(peekLabourOpening()) ?? getDateKey());
+    const [stack, setStack] = useState<ScreenState[]>(() => (dayOpening(peekLabourOpening()) ? [{ name: 'hub' }, { name: 'day' }] : [{ name: 'hub' }]));
     const [reviewOpen, setReviewOpen] = useState(false);
     // I23 — the day travels WITH the cell: a paged वही page is not the feature's own read-out, so the
     // detail must not look its date up in `data.ledger.days`.
@@ -335,7 +340,7 @@ export const LabourFeature: React.FC<{
     const settledRef = useRef<() => void>(() => {});
     settledRef.current = () => { if (farm) { refresh(); void loadParkedQuestions(); } };
     const onAttendanceScreenRef = useRef(false);
-    onAttendanceScreenRef.current = cur.name === 'attendance';
+    onAttendanceScreenRef.current = cur.name === 'attendance' || cur.name === 'day';
     const refreshOwedRef = useRef(false);
     useEffect(() => {
         const sync = getRootStore().sync;
@@ -401,6 +406,31 @@ export const LabourFeature: React.FC<{
         // AFTER the queue rows exist, so the register composes the new marks
         // (attendanceOverlay); offline the refetch fails into the local-plane
         // register with the marks intact.
+        refresh();
+        void loadParkedQuestions();
+    };
+
+    /**
+     * Lane OF (founder D-57) — the वही's day, changed by tapping: one `attendance.mark` per person changed, for THAT day,
+     * queued on the phone (P10: "लक्षात ठेवलं", never "saved"). The screen stays on the day; the register is read again.
+     */
+    const saveDayMarks = async (marks: ManualAttendanceMark[], workDate: string): Promise<void> => {
+        if (!farmId) throw new Error('no farm context');
+        try {
+            await Promise.all(marks.map(({ fieldOperatorId, ...facts }) => MarkAttendanceCommand.enqueue({
+                attendanceMarkId: crypto.randomUUID(), farmId, fieldOperatorId, workDate, ...facts,
+            })));
+        } catch (error: unknown) {
+            console.error(JSON.stringify({
+                component: 'LabourFeature',
+                action: 'attendance_day_mark_enqueue_failed',
+                reason: error instanceof Error ? error.message : String(error),
+            }));
+            showToast('पुन्हा प्रयत्न करा');
+            throw error;
+        }
+        void Promise.resolve().then(() => backgroundSyncWorker.triggerNow()).catch(() => { /* queued either way */ });
+        showToast(ON_PHONE_MR);
         refresh();
         void loadParkedQuestions();
     };
@@ -559,6 +589,19 @@ export const LabourFeature: React.FC<{
                             />
                         )}
                         {cur.name === 'attendance' && attendanceScreen}
+                        {cur.name === 'day' && (
+                            <HajeriDayEdit
+                                data={data}
+                                farmId={farmId}
+                                day={hajeriDay}
+                                onDay={setHajeriDay}
+                                allowed={canTakeManualAttendance(data.canManageLabour)}
+                                // A past day only when every mark of it is on screen (`attendanceDay.ts`); today always.
+                                safe={hajeriDay === getDateKey() || (!error && !staleSinceIso && data.view === 'owner' && timeWindow === 'alltime')}
+                                onSave={saveDayMarks}
+                                onToast={showToast}
+                            />
+                        )}
                         {cur.name === 'dashboard' && (
                             <WeeklyDashboard
                                 data={data}

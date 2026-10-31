@@ -71,6 +71,7 @@ import { ActivityCalendar, type CalendarMode } from './overview/ActivityCalendar
 import { buildCalendarDay } from './overview/calendarModel';
 import { CostSection, InHandCard } from './overview/CostSection';
 import { DayBar } from './overview/DayBar';
+import { PastDayTell } from './overview/PastDayTell';
 import { FarmStatus } from './overview/FarmStatus';
 import { buildInHand, buildSeasonTotals, buildSpend, farmWideDayMoney, plotDayMoney, spendRange, type MoneyFigure } from './overview/moneyModel';
 import { buildDayNotes } from './overview/notesModel';
@@ -290,6 +291,12 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
         const only = !wholeFarm && refs.length === 1 && refs[0].plotId ? refs[0] : undefined;
         onSpeak({ purpose: 'addTodo', context: { place: only ? { cropId: only.cropId, plotId: only.plotId } : { cropId: FARM_GLOBAL } } });
     } : undefined;
+    // Lane OF (founder D-60) — a past day: "त्या दिवसाचं काम सांगा" opens the normal crop → plot steps with that date in
+    // the question, then THE one mic; what he says is saved on that day (never today's).
+    const tellPastDay = !isToday && onSpeak ? () => {
+        listen.stop();
+        onSpeak({ purpose: 'addToDay', context: { date: dateKey }, onLanded: landing => { if (landing.kind === 'saved') setFresh(new Set(landing.logIds)); } });
+    } : undefined;
     const dayLabel = copy.dayName(date);
 
     const legendCrops = crops.filter(c => scope.viewCrops.includes(c.id)).map(c => ({ id: c.id, name: c.name, color: c.color }));
@@ -322,6 +329,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                             {/* DWC v2 §2.9 — renders nothing unless FEATURE_FLAGS.DwcChip is on. */}
                             {currentFarmId && <DwcReminderChip farmId={currentFarmId} history={history} />}
                             <DayBar date={date} onDate={pickDay} />
+                            {tellPastDay && <PastDayTell dateKey={dateKey} onTell={tellPastDay} />}
                             {cards.length > 0
                                 ? <PlotDayCards cards={cards} farm={farmCard} isToday={isToday} onOpen={ref => openPlace({ ref })} onOpenFarm={() => openPlace({ farm: true })}
                                     onCost={openPlotMoney} />
@@ -340,6 +348,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 return (
                     <SectionBlock id="calendar" title="कामाचं कॅलेंडर" icon={<CalendarRange size={22} aria-hidden="true" />} tone="green" hint="आठवडा किंवा महिना — रंग म्हणजे पीक" {...fold}>
                         <ActivityCalendar date={date} onDate={d => setDate(atNoon(d))} mode={calMode} onMode={setCalMode} view={calView} onView={setCalView} dayOf={dayOf} legendCrops={legendCrops} />
+                        {tellPastDay && <div className="mt-3"><PastDayTell dateKey={dateKey} onTell={tellPastDay} testId="past-day-tell-cal" /></div>}
                     </SectionBlock>
                 );
             case 'cost':

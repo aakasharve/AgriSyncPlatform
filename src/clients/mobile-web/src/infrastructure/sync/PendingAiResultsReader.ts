@@ -175,12 +175,10 @@ export function buildAiDraftForReview(job: UnreviewedAiResult, crops: CropProfil
         return null;
     }
 
-    const payload = job.result.payload as Record<string, unknown> | undefined;
-    const rawParsedLog = payload && typeof payload === 'object' ? payload['parsedLog'] : undefined;
-    if (!rawParsedLog || typeof rawParsedLog !== 'object') {
+    const agriLog = parsedLogOf(job);
+    if (!agriLog) {
         return null;
     }
-    const agriLog = normalizeParsedLog(rawParsedLog);
 
     const recordedDateKey = getDateKey(resolveRecordedInstant(job));
 
@@ -193,6 +191,28 @@ export function buildAiDraftForReview(job: UnreviewedAiResult, crops: CropProfil
         }],
     };
 
+    return { context, agriLog, provenance: provenanceOf(job, agriLog), recordedDateKey };
+}
+
+/**
+ * Lane OF (founder D-59) — what Sathi understood from a completed voice job, read through the live path's own
+ * normaliser, or `null` when the job carries no `parsedLog` object (refused, never fabricated: see above).
+ */
+export function parsedLogOf(job: UnreviewedAiResult): AgriLogResponse | null {
+    if (job.operationType !== 'voice_parse') {
+        return null;
+    }
+    const payload = job.result.payload as Record<string, unknown> | undefined;
+    const rawParsedLog = payload && typeof payload === 'object' ? payload['parsedLog'] : undefined;
+    if (!rawParsedLog || typeof rawParsedLog !== 'object') {
+        return null;
+    }
+    return normalizeParsedLog(rawParsedLog) ?? null;
+}
+
+/** The parse's provenance, as the live path records it (model, prompt, the job's own id, his words). */
+export function provenanceOf(job: UnreviewedAiResult, agriLog: AgriLogResponse): LogProvenance {
+    const payload = job.result.payload as Record<string, unknown> | undefined;
     const rawTranscript = typeof agriLog.fullTranscript === 'string'
         ? agriLog.fullTranscript
         : job.context.textTranscript;
@@ -212,6 +232,5 @@ export function buildAiDraftForReview(job: UnreviewedAiResult, crops: CropProfil
         processingTimeMs: readNumber(payload, 'latencyMs'),
         timestamp: job.result.receivedAtUtc,
     };
-
-    return { context, agriLog, provenance, recordedDateKey };
+    return provenance;
 }

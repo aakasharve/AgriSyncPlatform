@@ -7,6 +7,8 @@ import { useSyncQueueStatus, useUnqueueableLogCount } from '../hooks/useSyncQueu
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { voiceNotesWords } from '../../voiceDiary/waiting/voiceNotesWords';
 
 interface Props {
      isOpen: boolean;
@@ -28,6 +30,7 @@ interface Props {
  */
 const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts }) => {
      const status = useSyncQueueStatus();
+     const language = useOptionalLanguage()?.language;
      /**
       * FINAL REVIEW F-2 — records this session knows reached NO queue.
       *
@@ -220,7 +223,8 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                    <div className="text-[10px] text-amber-600 font-medium space-x-3">
                                         {status.pendingCount > 0 && <span>{status.pendingCount} mutations</span>}
                                         {status.pendingUploads > 0 && <span>{status.pendingUploads} uploads</span>}
-                                        {status.pendingAiJobs > 0 && <span>{status.pendingAiJobs} AI jobs</span>}
+                                        {/* Lane OF (founder 2026-10-31, register F77): never "AI" — plain words. */}
+                                        {status.pendingAiJobs > 0 && <span data-testid="sync-waiting-recordings">{voiceNotesWords(language).syncLine(status.pendingAiJobs)}</span>}
                                    </div>
                               </div>
                          )}
@@ -350,7 +354,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                               <div className="flex items-center gap-3 p-3 rounded-xl bg-purple-50 border border-purple-200">
                                    <Cpu size={14} className="text-purple-600" />
                                    <span className="text-sm font-medium text-purple-700">
-                                        {aiStatusParts.join(' â€¢ ')}
+                                        {aiStatusParts.join(' • ')}
                                    </span>
                               </div>
                          )}

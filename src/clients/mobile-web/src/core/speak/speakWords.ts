@@ -17,13 +17,15 @@ export interface SpeakBand { title: string; hint?: string }
 export interface SpeakWords {
     back: string;
     wholeFarm: string;
-    band: (purpose: SpeakPurpose, extra: { part?: PartKey; question?: string }) => SpeakBand;
+    band: (purpose: SpeakPurpose, extra: { part?: PartKey; question?: string; day?: string }) => SpeakBand;
 }
 
 const mr: SpeakWords = {
     back: RESULT_STR.back, // REUSED — common.back
     wholeFarm: RESULT_STR.wholeFarm, // REUSED
-    band: (purpose, { part, question }) => {
+    band: (purpose, { part, question, day }) => {
+        // Lane OF (D-60) — work for a past day he chose: the working phones' "त्या दिवसाचं काम सांगा". PROPOSED (Marathi)
+        if (day && (purpose === 'addToDay' || purpose === 'fillPart')) return { title: 'त्या दिवसाचं काम सांगा', hint: `${day} साठी` };
         switch (purpose) {
             case 'fillPart':
                 // PROPOSED (Marathi)
@@ -51,7 +53,8 @@ const mr: SpeakWords = {
 const en: SpeakWords = {
     back: 'Back', // PROPOSED (English)
     wholeFarm: 'Whole farm', // PROPOSED (English)
-    band: (purpose, { part }) => {
+    band: (purpose, { part, day }) => {
+        if (day && (purpose === 'addToDay' || purpose === 'fillPart')) return { title: "Tell that day's work", hint: `For ${day}` }; // PROPOSED (English)
         switch (purpose) {
             case 'fillPart':
                 return part ? { title: `Tell the ${partNameIn(part, 'en').toLowerCase()}`, hint: 'Say just that' } : { title: 'Tell more' }; // PROPOSED (English)

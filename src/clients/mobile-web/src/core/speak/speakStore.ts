@@ -49,6 +49,16 @@ export interface SpeakContext {
     logId?: string;
     /** `answerQuestion` — Sathi's question, kept in sight above the mic. */
     question?: string;
+    /**
+     * Lane OF (founder D-60) — a PAST day (`yyyy-MM-dd`) he chose before speaking ("त्या दिवसाचं काम सांगा"): the crop →
+     * plot steps say the date, and what he says is saved on that day. Absent = today, as always.
+     */
+    date?: string;
+    /**
+     * Lane OF (rule TAP-1) — what he TYPED instead of speaking ("बोलता येत नसेल तर इथे लिहा"): sent to the same
+     * understanding as soon as the mic's place is set, exactly as the recorder's own typing sheet sends it.
+     */
+    typed?: string;
 }
 
 /** The screen he started on; he lands back on it. */
@@ -101,6 +111,9 @@ const set = (next: SpeakState): void => {
 };
 
 export const speakState = (): SpeakState => state;
+
+/** Lane OF (D-60) — the past day the active request is for (`yyyy-MM-dd`), or undefined (today). */
+export const speakDayNow = (): string | undefined => state.request?.context.date;
 
 export function subscribeSpeak(listener: () => void): () => void {
     listeners.add(listener);

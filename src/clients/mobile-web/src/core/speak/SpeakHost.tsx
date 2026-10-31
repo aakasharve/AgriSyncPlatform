@@ -12,33 +12,22 @@
  *   - THE "बदला" SCREEN (`CorrectionHost`), opened by `openCorrection(logId)` from the result screen, आढावा and the saved
  *     card: speak the change, see before → after, save a new version.
  */
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { AppStatus, DailyLog, LogScope } from '../../types';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { AppStatus, LogScope } from '../../types';
 import { useOptionalLanguage } from '../../i18n/LanguageContext';
-import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
-import { mayShowFarmMoney } from '../../features/labour/homeAttendanceDoor';
 import { LogEntryFlow } from '../../features/logs/components/entry/LogEntryFlow';
 import { abandonPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
-import CorrectionScreen from '../../features/logs/components/correction/CorrectionScreen';
-import { correctionWords } from '../../features/logs/components/correction/correctionWords';
-import {
-    blockerChange, correctionRows, isLabourDoorLog, mergeCorrection, revisionUpdates, saysAnything, spokenAsLog, HIDDEN_MONEY,
-} from '../../features/logs/components/correction/correctionModel';
-import { saveSpokenCorrection, type SaveCorrectionDeps, type SaveOutcome } from '../../features/logs/components/correction/saveCorrection';
-import { readRefusedRevision, useRefusedRevision } from '../../features/logs/components/correction/refusedRevision';
-import { cropNameIn, entryText, withoutQuotes } from '../../features/logs/components/voiceResult/partNames';
-import { isConfirmed, recordingOf, withoutInventedStoppage, type PartEntry } from '../../features/logs/components/voiceResult/resultModel';
-import { formatFarmerLogTime } from '../navigation/helpers';
+import { readRefusedRevision } from '../../features/logs/components/correction/refusedRevision';
+import { cropNameIn } from '../../features/logs/components/voiceResult/partNames';
 import { renderLogRecorder, renderProcessingScreen } from '../navigation/logRecorder';
 import type { AppRouterContext } from '../navigation/routeContext';
 import { useBackDismiss } from '../navigation/useBackDismiss';
 import { FARM_GLOBAL, afterLanding, landingAfter, scopeForRequest, startDecision } from './speakFlow';
-import {
-    closeCorrection, landSpeak, requestSpeak, setCorrectionProposal, useSpeakState,
-    type CorrectionSession, type SpeakLanding, type SpeakPlace, type SpeakRequest,
-} from './speakStore';
+import { landSpeak, useSpeakState, type SpeakLanding, type SpeakRequest } from './speakStore';
 import { SpeakBandView, SpeakScreen } from './SpeakScreen';
 import { speakWords } from './speakWords';
+import { dayShort } from '../../features/logs/components/dayPick/dayWords';
+import { CorrectionHost, type CorrectionSaveDeps } from './CorrectionHost';
 
 /** "No delay": what can be made ready ahead is asked for the first time the mic opens (the result screen's code). */
 let warmed = false;
@@ -62,117 +51,14 @@ export function placeLabelOf(scope: LogScope, crops: AppRouterContext['crops'], 
     return [cropNameIn(crop.name, language), plots.join(', ')].filter(Boolean).join(' · ') || undefined;
 }
 
-/**
- * The entry's own place, for the mic that speaks its change: its plot, else the whole farm — the recorder works on a
- * plot or the whole farm only, so a crop-level entry is spoken in the whole farm's context (review B006: never a mic
- * that cannot start). Its words are read for that one entry either way.
- */
-export function placeOfLog(log: DailyLog): SpeakPlace {
-    const sel = log.context?.selection?.[0];
-    const plotId = sel?.selectedPlotIds?.[0];
-    if (!sel || sel.cropId === FARM_GLOBAL || !plotId) return { cropId: FARM_GLOBAL };
-    return { cropId: sel.cropId, plotId };
-}
+interface Session { id: string; prevScope: LogScope | null; spoke: boolean; savedAtStart: string | undefined; statusAtStart: AppStatus; typedSent?: boolean }
 
-/** Where the entry is, as the record names it ("द्राक्ष · सोनाका"; the crop alone for a crop-level entry). */
-const entryPlaceLabel = (log: DailyLog, crops: AppRouterContext['crops'], language: string | null | undefined, wholeFarm: string): string => {
-    const sel = log.context?.selection?.[0];
-    if (!sel || sel.cropId === FARM_GLOBAL) return wholeFarm;
-    const crop = crops.find(c => c.id === sel.cropId);
-    return [cropNameIn(crop?.name ?? sel.cropName, language), (sel.selectedPlotNames ?? []).join(', ')].filter(Boolean).join(' · ');
-};
+const sameScope = (a: LogScope, b: LogScope): boolean =>
+    a.selectedCropIds.join('|') === b.selectedCropIds.join('|') && a.selectedPlotIds.join('|') === b.selectedPlotIds.join('|');
 
-interface Session { id: string; prevScope: LogScope | null; spoke: boolean; savedAtStart: string | undefined; statusAtStart: AppStatus }
 
-const NO_WHO = { youIds: new Set<string>(), nameOf: () => undefined, youLabel: '', unknownLabel: '' };
-
-/** What the router gives the "बदला" screen to save with (the language is the screen's own). */
-export type CorrectionSaveDeps = Omit<SaveCorrectionDeps, 'language'>;
-
-const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: CorrectionSession; speaking: boolean; save: CorrectionSaveDeps | null; readRefused: (logId: string) => Promise<boolean> }> = ({ ctx, correction, speaking, save, readRefused }) => {
-    const language = useOptionalLanguage()?.language;
-    const log = ctx.history.find(l => l.id === correction.logId);
-    const [saving, setSaving] = useState(false);
-    const [failed, setFailed] = useState<'labour' | 'other' | null>(null);
-    const [offline, setOffline] = useState(false);
-    const serverRefused = useRefusedRevision(log?.id, readRefused);
-    // A record that is no longer here (deleted meanwhile) has nothing to change: the screen closes.
-    useEffect(() => { if (!log) closeCorrection(); }, [log]);
-    useBackDismiss(!!log && !speaking && !saving, closeCorrection);
-
-    const sessionUserId = getSessionUserId();
-    const hideMoney = !mayShowFarmMoney(ctx.farmRole) && !(log?.meta?.createdByOperatorId && log.meta.createdByOperatorId === sessionUserId);
-    // "आत्ता जे आहे": each value as the result screen reads it ("इथरेल · 300 मिली"), never his quoted words (fix pass D3, D4).
-    const current = useMemo(() => {
-        if (!log) return { entries: [] as PartEntry[], blockers: [] };
-        const view = withoutInventedStoppage(recordingOf([log], { ...NO_WHO, language }), [log]);
-        const entries = withoutQuotes(view.entries).map(e => (hideMoney && e.part === 'expense'
-            ? { ...e, value: HIDDEN_MONEY }
-            : { ...e, value: entryText(e, language) || e.value }));
-        return { entries, blockers: withoutQuotes(view.blockers) };
-    }, [log, hideMoney, language]);
-    const proposal = correction.proposal;
-    const merged = useMemo(() => {
-        if (!log || !proposal) return null;
-        const fresh = spokenAsLog(proposal.draft, log, { crops: ctx.crops, profile: ctx.farmerProfile });
-        return fresh ? mergeCorrection(log, proposal.draft, fresh) : null;
-    }, [log, proposal, ctx.crops, ctx.farmerProfile]);
-    if (!log) return null;
-
-    const rows = merged ? correctionRows(log, merged.after, { hideMoney, language }) : [];
-    const blockers = merged ? blockerChange(log, merged.after, language) : { before: [], after: [], gone: [], changed: false };
-    const nothing = !proposal || !merged || !saysAnything(proposal.draft) || (!rows.some(r => r.changed) && !blockers.changed);
-    const speak = () => {
-        setFailed(null);
-        // Review B004: a change needs the internet — offline the mic does not record, and nothing is kept.
-        if (typeof navigator !== 'undefined' && navigator.onLine === false) { setOffline(true); return; }
-        setOffline(false);
-        requestSpeak({
-            purpose: 'correctEntry',
-            context: { place: placeOfLog(log), logId: log.id },
-            returnTo: { route: ctx.currentRoute, mainView: ctx.mainView },
-            onLanded: (landing: SpeakLanding) => {
-                if (landing.kind === 'parsed') setCorrectionProposal({ draft: landing.draft, typed: landing.typed });
-                // Something already waited on the log tab and he was taken to it: this screen steps aside (nothing saved).
-                if (landing.kind === 'handedOver') closeCorrection();
-            },
-        });
-    };
-    const words = correctionWords(language);
-    return (
-        <CorrectionScreen
-            timeLabel={formatFarmerLogTime(log.meta?.createdAtISO)}
-            placeLabel={entryPlaceLabel(log, ctx.crops, language, words.wholeFarm)}
-            confirmed={isConfirmed(log)}
-            current={current}
-            proposal={proposal ? { transcript: (proposal.draft.fullTranscript ?? '').trim(), typed: proposal.typed, rows, blockers, nothing, labourNotChanged: merged?.labourNotChanged } : undefined}
-            refused={isLabourDoorLog(log)}
-            saving={saving}
-            saveFailed={failed !== null}
-            saveFailedReason={failed ?? undefined}
-            offline={offline}
-            serverRefused={serverRefused}
-            onSpeak={speak}
-            // "पुन्हा सांगा": what he said is forgotten (nothing saved) and the mic opens again.
-            onAgain={() => { setCorrectionProposal(null); speak(); }}
-            onSave={() => {
-                if (!merged || nothing || saving) return;
-                if (!save) { setFailed('other'); return; } // a preview: nothing can be saved, and it says so
-                setSaving(true);
-                setFailed(null);
-                // A failed save keeps the before → after on screen, so he can press again.
-                void saveSpokenCorrection({ ...save, language: language === 'en' ? 'en' : 'mr' }, log, revisionUpdates(log, merged))
-                    .catch((): SaveOutcome => ({ ok: false, reason: 'other' }))
-                    .then(outcome => { setSaving(false); if (outcome.ok) closeCorrection(); else setFailed(outcome.reason); });
-            }}
-            // Back: nothing is saved.
-            onBack={() => { if (!saving) closeCorrection(); }}
-            onOpenAttendance={ctx.canOpenAttendanceFromHome
-                ? () => { closeCorrection(); if (ctx.openPlace) ctx.openPlace('labour'); else ctx.setCurrentRoute('labour'); }
-                : undefined}
-        />
-    );
-};
+// The "बदला" screen moved to its own file (lane OF); these stay importable from here.
+export { placeOfLog, type CorrectionSaveDeps } from './CorrectionHost';
 
 export const SpeakHost: React.FC<{
     ctx: AppRouterContext;
@@ -227,6 +113,18 @@ export const SpeakHost: React.FC<{
         warmRecorder();
     }, [request]);
 
+    // Lane OF (rule TAP-1) — what he TYPED ("बोलता येत नसेल तर इथे लिहा") goes to the same understanding as speech, once,
+    // as soon as the mic's place is set (the recorder's own typing sheet sends it the same way).
+    useEffect(() => {
+        const s = session.current;
+        const text = request?.context.typed;
+        if (!request || !text || !s || s.id !== request.id || s.typedSent) return;
+        const want = scopeForRequest(request);
+        if (want && !sameScope(want, ctx.logScope)) return;
+        s.typedSent = true;
+        void ctx.handleTextReady(text);
+    });
+
     // His words went to Sathi for THIS request (the waiting screen showed).
     useEffect(() => {
         if (request && session.current?.id === request.id && ctx.status === 'processing') session.current.spoke = true;
@@ -250,7 +148,9 @@ export const SpeakHost: React.FC<{
     useBackDismiss(active && known && !recording && !processing, cancel);
 
     const words = speakWords(language);
-    const band = request ? words.band(request.purpose, { part: request.context.part, question: request.context.question }) : { title: '' };
+    // Lane OF (D-60) — a past day he chose is named on the band and in the crop → plot questions.
+    const forDay = request?.context.date ? dayShort(request.context.date, language) : undefined;
+    const band = request ? words.band(request.purpose, { part: request.context.part, question: request.context.question, day: forDay }) : { title: '' };
     const onRecordingChange = (r: boolean) => setRecording(r);
     // On the log tab the waiting screen is already drawn by the tab itself (`renderLogView`): one, not two — unless the
     // "बदला" screen sits over it, which the mic's own waiting screen must then cover.
@@ -283,6 +183,7 @@ export const SpeakHost: React.FC<{
                             onCancelSegment={() => undefined}
                             startAt="entry"
                             onExit={cancel}
+                            forDay={forDay}
                             micLead={<SpeakBandView band={band} />}
                             renderRecorder={hooks => renderLogRecorder(ctx, { onRecordingChange: r => { onRecordingChange(r); hooks.onRecordingChange(r); } })}
                         />

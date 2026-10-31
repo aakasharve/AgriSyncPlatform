@@ -3,570 +3,148 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix rounds 1-4.
+ * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix rounds 1-4; plr-d10 (I17); lane OF (founder D-59).
  *
- * Independent review found that the reader-level tests proved
- * `PendingAiResultsReader` is called correctly, but nothing proved
- * `AiDraftsPage` — the CALLER — uses it correctly. This file is that missing
- * layer. It stubs the heavy `ManualEntry` component (already covered
- * elsewhere) and the app-feature-context hooks, and drives the page's own
- * wiring:
- *
- *   - CRITICAL 1/2 — tapping "Review" must set the app-level `logScope` to
- *     the DRAFT's crop/plot before `ManualEntry` mounts.
- *   - CRITICAL 3 — the embedded `ManualEntry` must receive a real
- *     `todayCountsMap`, not the all-zero default.
- *   - IMPORTANT 4 — the job's recorded date reaches `ManualEntry`.
- *   - NEW 1 (round 2) — the app-level `logScope` this page overwrites for
- *     review MUST be restored — backing out of review, or the page
- *     unmounting, must not leave the rest of the app pointed at the draft's
- *     plot for the remainder of the session.
- *   - NEW 2 (round 2) — `handleManualSubmit`'s outcome is a 3-way signal, not
- *     a boolean: `'saved'` marks reviewed, `'not_saved'` alerts and does NOT
- *     mark reviewed, `'already_saving'` (the losing tap of a double-tap) is
- *     SILENT — no alert, no mark — because the winning call is the one
- *     actually saving.
- *   - NEW 4 (round 2) — a successful save must reset the app-level `status`
- *     back to `'idle'`, so the farmer's next visit to the live capture
- *     screen does not land on a stale "Saved to Ledger" panel for a save
- *     made on this page.
- *   - NEW (round 3) — a write that succeeds but whose post-write step (sync
- *     enqueue) fails is its OWN outcome, `'saved_with_warning'`: this page
- *     must tell the farmer plainly (`useLogCommands.ts`'s own `setError`
- *     reaches no mounted surface on this path — see round 4 below), never
- *     suggest a retry, and still mark the draft reviewed (the record IS
- *     saved). The list row's displayed timestamp must also come from the SAME
- *     instant the review screen dates the log from (`resolveRecordedInstant`),
- *     not from `job.result.receivedAtUtc` directly — round 2 fixed the SAVED
- *     date but left the LIST showing a different one for the same note.
- *   - N1 (round 4) — WHAT that alert actually SAYS is now pinned positively.
- *     Round 3 shipped "Saved, but not sent yet. It will send automatically
- *     once you are back online." — a promise no code path in this system can
- *     keep, and a cause (connectivity) that is not the documented trigger.
- *     The only assertion guarding the sentence was `not.toContain('try
- *     again')`, which that false promise passed. Asserting the ABSENCE of one
- *     bad word cannot catch a bad claim; the suite now asserts the honest
- *     claim itself, so the next false promise fails here.
+ * "नेट नसताना केलेल्या नोंदी" after lane OF: VOICE recordings no longer live here (they wait in सेट-अप केंद्र › आवाज
+ * नोंदी and open "तपासा आणि जतन करा" — never the old hand-filled form this page used to open). What stays is the bill /
+ * sale-slip photos made without internet. The honesty rules the earlier rounds pinned on this page carry over:
+ *   - a photo cannot be opened here yet: the row says so plainly and that it is kept (no dead "open" button);
+ *   - a removal is his explicit decision, with the right noun and gender, and only a "yes" marks it reviewed;
+ *   - the row's time comes from the SAME instant the rest of the app dates the note from (`resolveRecordedInstant`);
+ *   - one title bar named like the hub row, one मागे; plain Marathi only.
+ * And the new rule: nothing of the old form is reachable from here.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import type { CropProfile } from '../../types';
-import type { UnreviewedAiResult, AiDraftForReview } from '../../infrastructure/sync/PendingAiResultsReader';
-
-// The scope active BEFORE this page ever touches it — distinct from the
-// draft's own plot ('plot-a') so a restore is verifiably distinguishable
-// from "never changed" and from "left on the draft's plot".
-const ORIGINAL_SCOPE = {
-    selectedCropIds: ['crop-existing'],
-    selectedPlotIds: ['plot-existing'],
-    mode: 'single' as const,
-    applyPolicy: 'broadcast' as const,
-};
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let currentLogScope: any = ORIGINAL_SCOPE;
-const mockSetLogScope = vi.fn((scope: unknown) => { currentLogScope = scope; });
-const mockGetTodayCounts = vi.fn((plotId: string) => ({
-    cropActivities: 1, irrigation: 0, labour: 3, inputs: 0, machinery: 0,
-    disturbance: 0, observations: 0, activityExpenses: 0, reminders: 0, harvest: 0,
-    _plotId: plotId,
-}));
-const mockHandleManualSubmit = vi.fn();
-const mockSetStatus = vi.fn();
-
-vi.mock('../../app/context/AppFeatureContexts', () => ({
-    useAppDataState: () => ({ crops: MOCK_CROPS, farmerProfile: { motors: [], waterResources: [], machineries: [] }, ledgerDefaults: undefined }),
-    useAppCommandsState: () => ({ handleManualSubmit: mockHandleManualSubmit }),
-    useAppLogState: () => ({ logScope: currentLogScope, setLogScope: mockSetLogScope }),
-    useAppViewHelpers: () => ({ getTodayCounts: mockGetTodayCounts }),
-    useAppVoiceState: () => ({ setStatus: mockSetStatus }),
-}));
+import type { UnreviewedAiResult } from '../../infrastructure/sync/PendingAiResultsReader';
 
 const mockListUnreviewedAiResults = vi.fn();
 const mockMarkAiResultReviewed = vi.fn();
-const mockBuildAiDraftForReview = vi.fn();
-// round 3 — distinct from DRAFT_JOB.result.receivedAtUtc ('2026-08-14T19:00')
-// on purpose, so a test can prove the list row renders THIS value and not
-// job.result.receivedAtUtc directly.
 const mockResolveRecordedInstant = vi.fn((..._args: unknown[]) => '2026-08-13T15:00:00.000Z');
 
 vi.mock('../../infrastructure/sync/PendingAiResultsReader', () => ({
     listUnreviewedAiResults: (...args: unknown[]) => mockListUnreviewedAiResults(...args),
     markAiResultReviewed: (...args: unknown[]) => mockMarkAiResultReviewed(...args),
-    buildAiDraftForReview: (...args: unknown[]) => mockBuildAiDraftForReview(...args),
     resolveRecordedInstant: (...args: unknown[]) => mockResolveRecordedInstant(...args),
 }));
-
-// Heavy component, already covered by its own tests elsewhere. Stubbed to a
-// thin control surface: a Save button that calls the real onSubmit prop, and
-// a data dump of the props this task's fix rounds care about.
-vi.mock('../../features/logs/components/ManualEntry', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    default: (props: any) => (
-        <div data-testid="manual-entry-stub">
-            <div data-testid="today-counts-map">{JSON.stringify(props.todayCountsMap)}</div>
-            <div data-testid="recorded-date-key">{props.recordedDateKey}</div>
-            <button type="button" onClick={() => props.onSubmit({ cropActivities: [] })}>Save</button>
-        </div>
-    ),
-}));
+const manualEntryMounted = vi.fn();
+vi.mock('../../features/logs/components/ManualEntry', () => ({ default: () => { manualEntryMounted(); return null; } }));
 
 import AiDraftsPage from '../AiDraftsPage';
 
-// plr-d10 (I17, PLR-D9 T1-T3): the page speaks plain Marathi now. The button that opens a note in the
-// save form ("Review" before) says उघडा; every honesty rule below is unchanged, only its language.
-const OPEN = 'उघडा';
-/** The approved phone claim (`sync.onPhone`, mr) — the same string the header chip uses. */
-const PHONE_CLAIM_MR = 'लक्षात ठेवलं ✓';
-
-const MOCK_CROPS: CropProfile[] = [{
-    id: 'crop-grapes',
-    name: 'Grapes',
-    plots: [{ id: 'plot-a', name: 'Plot A' }],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} as any];
-
-const DRAFT_JOB = {
-    id: 7,
-    operationType: 'voice_parse',
-    context: { farmId: 'farm-1', userId: 'user-1', operation: 'voice', plotId: 'plot-a' },
+const job = (id: number, operationType: string): UnreviewedAiResult => ({
+    id,
+    operationType,
+    context: { farmId: 'farm-1', userId: 'user-1', operation: operationType === 'voice_parse' ? 'voice' : 'receipt', plotId: 'plot-a' },
     status: 'completed',
     createdAt: '2026-08-14T18:30:00.000Z',
     updatedAt: '2026-08-14T18:31:00.000Z',
     retryCount: 0,
-    result: { operationType: 'voice_parse', receivedAtUtc: '2026-08-14T19:00:00.000Z', payload: {} },
-} as unknown as UnreviewedAiResult;
+    result: { operationType, receivedAtUtc: '2026-08-14T19:00:00.000Z', payload: {} },
+} as unknown as UnreviewedAiResult);
 
-const BUILT_DRAFT: AiDraftForReview = {
-    context: { selection: [{ cropId: 'crop-grapes', cropName: 'Grapes', selectedPlotIds: ['plot-a'], selectedPlotNames: ['Plot A'] }] },
-    agriLog: {
-        summary: '', dayOutcome: 'WORK_RECORDED', cropActivities: [], irrigation: [], labour: [],
-        inputs: [], machinery: [], activityExpenses: [], questionsForUser: [], missingSegments: [],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any,
-    provenance: { source: 'ai', timestamp: '2026-08-14T19:00:00.000Z' },
-    recordedDateKey: '2026-08-13',
-};
-
-async function openReview() {
-    const rendered = render(<AiDraftsPage onBack={vi.fn()} />);
-    await waitFor(() => {
-        expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole('button', { name: OPEN }));
-    await waitFor(() => {
-        expect(screen.getByTestId('manual-entry-stub')).toBeInTheDocument();
-    });
-    return rendered;
-}
+const VOICE = job(7, 'voice_parse');
+const BILL = job(9, 'receipt_extract');
+const SLIP = job(11, 'patti_extract');
 
 beforeEach(() => {
     vi.clearAllMocks();
-    currentLogScope = ORIGINAL_SCOPE;
-    mockListUnreviewedAiResults.mockResolvedValue([DRAFT_JOB]);
+    mockListUnreviewedAiResults.mockResolvedValue([VOICE, BILL, SLIP]);
     mockMarkAiResultReviewed.mockResolvedValue(undefined);
-    mockBuildAiDraftForReview.mockReturnValue(BUILT_DRAFT);
 });
 
 afterEach(() => {
     cleanup();
 });
 
-describe('AiDraftsPage — Review opens the draft with a correct app-level scope (CRITICAL 1/2)', () => {
-    it('sets logScope to the draft\'s crop/plot BEFORE ManualEntry mounts', async () => {
-        await openReview();
-
-        expect(mockSetLogScope).toHaveBeenCalledWith({
-            selectedCropIds: ['crop-grapes'],
-            selectedPlotIds: ['plot-a'],
-            mode: 'single',
-            applyPolicy: 'broadcast',
-        });
-    });
-});
-
-describe('AiDraftsPage — today\'s counts are real, not a fabricated zero (CRITICAL 3)', () => {
-    it('passes a non-empty todayCountsMap keyed by the draft\'s plot', async () => {
-        await openReview();
-
-        expect(mockGetTodayCounts).toHaveBeenCalledWith('plot-a', expect.any(String));
-        const rendered = screen.getByTestId('today-counts-map').textContent ?? '';
-        expect(rendered).toContain('plot-a');
-        expect(rendered).not.toBe('{}');
-    });
-});
-
-describe('AiDraftsPage — the recorded date reaches ManualEntry (IMPORTANT 4)', () => {
-    it('passes the draft\'s recordedDateKey through, not left undefined', async () => {
-        await openReview();
-
-        expect(screen.getByTestId('recorded-date-key').textContent).toBe('2026-08-13');
-    });
-});
-
-describe('AiDraftsPage — the app-level scope this page overwrites is always restored (NEW 1)', () => {
-    it('restores the original logScope when the farmer backs out of review without saving', async () => {
-        await openReview();
-        expect(currentLogScope).toEqual({
-            selectedCropIds: ['crop-grapes'], selectedPlotIds: ['plot-a'], mode: 'single', applyPolicy: 'broadcast',
-        });
-
-        // plr-d10 (I17, H19): the one title bar's मागे closes the review (it was an English "Back to Drafts").
-        expect(screen.getByTestId('page-back')).toHaveTextContent('मागे');
-        fireEvent.click(screen.getByTestId('page-back'));
-
-        await waitFor(() => {
-            expect(screen.queryByTestId('manual-entry-stub')).not.toBeInTheDocument();
-        });
-        expect(currentLogScope).toEqual(ORIGINAL_SCOPE);
-    });
-
-    it('restores the original logScope when the page unmounts while still reviewing', async () => {
-        const { unmount } = await openReview();
-        expect(currentLogScope).not.toEqual(ORIGINAL_SCOPE);
-
-        unmount();
-
-        expect(currentLogScope).toEqual(ORIGINAL_SCOPE);
-    });
-
-    it('restores the original logScope after a successful save', async () => {
-        mockHandleManualSubmit.mockResolvedValue('saved');
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(mockMarkAiResultReviewed).toHaveBeenCalled();
-        });
-        expect(currentLogScope).toEqual(ORIGINAL_SCOPE);
-    });
-});
-
-describe('AiDraftsPage — handleManualSubmit\'s 3-way outcome is read correctly (NEW 2, was IMPORTANT 3)', () => {
-    it('does NOT call markAiResultReviewed and DOES alert when the outcome is not_saved', async () => {
-        mockHandleManualSubmit.mockResolvedValue('not_saved');
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(mockHandleManualSubmit).toHaveBeenCalledTimes(1);
-        });
-        expect(alertSpy).toHaveBeenCalledTimes(1);
-        expect(mockMarkAiResultReviewed).not.toHaveBeenCalled();
-        // The review screen must still be showing — the note is not lost.
-        expect(screen.getByTestId('manual-entry-stub')).toBeInTheDocument();
-        alertSpy.mockRestore();
-    });
-
-    it('stays completely silent (no alert, no mark) when the outcome is already_saving — the losing tap of a double-tap', async () => {
-        mockHandleManualSubmit.mockResolvedValue('already_saving');
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(mockHandleManualSubmit).toHaveBeenCalledTimes(1);
-        });
-        expect(alertSpy).not.toHaveBeenCalled();
-        expect(mockMarkAiResultReviewed).not.toHaveBeenCalled();
-        alertSpy.mockRestore();
-    });
-
-    it('DOES call markAiResultReviewed(jobId) once handleManualSubmit resolves saved', async () => {
-        mockHandleManualSubmit.mockResolvedValue('saved');
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(mockMarkAiResultReviewed).toHaveBeenCalledWith(7);
-        });
-    });
-
-    // round 3 — the record IS saved on this outcome (a step AFTER the write
-    // failed, e.g. sync enqueue), so it must still be marked reviewed. But
-    // useLogCommands.ts's own error surface is mounted nowhere at that moment
-    // (round 4 / N2), so THIS page must say something — and never suggest a
-    // retry, since the record already exists and a retry would duplicate it.
-    it('alerts (without suggesting a retry) AND marks reviewed when the outcome is saved_with_warning', async () => {
-        mockHandleManualSubmit.mockResolvedValue('saved_with_warning');
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(mockMarkAiResultReviewed).toHaveBeenCalledWith(7);
-        });
-        expect(alertSpy).toHaveBeenCalledTimes(1);
-        const [alertMessage] = alertSpy.mock.calls[0] as [string];
-        // "पुन्हा प्रयत्न करा" is "try again"
-        expect(alertMessage).not.toMatch(/पुन्हा|प्रयत्न/);
-        alertSpy.mockRestore();
-    });
-});
-
-/**
- * N1 (round 4) — THE SENTENCE ITSELF, pinned positively.
- *
- * The round-3 sentence ("Saved, but not sent yet. It will send automatically
- * once you are back online.") was false on the one path that shows it, and it
- * sailed through the only guard the suite had — `not.toContain('try again')`.
- * A negative assertion about one forbidden word cannot detect a forbidden
- * CLAIM, so these tests assert what the sentence must say, not merely what it
- * must not.
- *
- * The rules come from `src/app/helpers/saveToastMessages.ts`, which already
- * carries them in prose for the toast path:
- *   - the phone claim comes FIRST (a farmer who reads "gone" re-records, and
- *     the record genuinely IS on the handset);
- *   - never "not yet", and never a promise of a later send — on the trigger
- *     this outcome documents, `MutationQueue.enqueue` threw and no mutation
- *     row exists, so no worker can ever pick it up;
- *   - and the cause is payload validation, not connectivity, so the copy must
- *     not send the farmer off to wait for a network that was never the point.
- */
-describe('AiDraftsPage — the saved_with_warning sentence tells the truth (N1, round 4)', () => {
-    const captureAlert = async (): Promise<string> => {
-        mockHandleManualSubmit.mockResolvedValue('saved_with_warning');
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(alertSpy).toHaveBeenCalledTimes(1);
-        });
-        const [message] = alertSpy.mock.calls[0] as [string];
-        alertSpy.mockRestore();
-        return message;
-    };
-
-    // plr-d10 (I17): the same six rules, asserted on the Marathi sentence.
-    it('leads with the phone claim — the record is asserted SAFE before any bad news', async () => {
-        const message = await captureAlert();
-        // `startsWith`, not `contains` — same rule every caller-side test of
-        // `saveToastMessages` holds. Reassurance last is how duplicates start.
-        expect(message.startsWith(PHONE_CLAIM_MR)).toBe(true);
-        // and it is Marathi only: no English sentence left on this path
-        expect(message).not.toMatch(/[A-Za-z]/);
-    });
-
-    it('states positively that the record is NOT in the farm records', async () => {
-        const message = await captureAlert();
-        // "has not reached the farm records" — present perfect, the approved "शेतनोंदी" word
-        expect(message).toContain('ही नोंद शेतनोंदीत पोचलेली नाही');
-    });
-
-    it('says a step after the save failed — the farmer is told something went wrong', async () => {
-        const message = await captureAlert();
-        expect(message).toContain('जतन झाल्यानंतरची एक पायरी चुकली');
-    });
-
-    it('promises no later send: no "not yet", no "will send", no "automatically"', async () => {
-        const message = await captureAlert();
-        // The exact shape `saveToastMessages.ts` forbids in writing. A promise
-        // of a retry that no code path can keep is the defect this phase
-        // exists to remove, and it is what round 3 shipped here.
-        // अजून = yet · जाईल / होईल / पाठव… = will (be) sent · आपोआप = automatically · लवकरच / थोड्या वेळाने = soon
-        expect(message).not.toMatch(/अजून|जाईल|होईल|पाठव|आपोआप|लवकरच|थोड्या वेळाने|नंतर पाठ/);
-    });
-
-    it('never blames connectivity — the documented trigger is payload validation, not being offline', async () => {
-        const message = await captureAlert();
-        expect(message).not.toMatch(/नेट|इंटरनेट|ऑनलाइन|ऑफलाइन|कनेक्शन|सिग्नल|रेंज/);
-    });
-
-    it('never asks for a retry — the record exists and a retry would mint a duplicate', async () => {
-        const message = await captureAlert();
-        // पुन्हा / परत = again · प्रयत्न = try
-        expect(message).not.toMatch(/पुन्हा|परत|प्रयत्न/);
-    });
-});
-
-describe('AiDraftsPage — a stale "Saved to Ledger" panel is never left behind (NEW 4)', () => {
-    it('resets the app-level status to idle after a successful save', async () => {
-        mockHandleManualSubmit.mockResolvedValue('saved');
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(mockSetStatus).toHaveBeenCalledWith('idle');
-        });
-    });
-
-    it('resets status to idle for saved_with_warning too — the record is still saved', async () => {
-        mockHandleManualSubmit.mockResolvedValue('saved_with_warning');
-        vi.spyOn(window, 'alert').mockImplementation(() => {});
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(mockSetStatus).toHaveBeenCalledWith('idle');
-        });
-    });
-
-    it('does NOT touch status when the outcome is not_saved or already_saving', async () => {
-        mockHandleManualSubmit.mockResolvedValue('not_saved');
-        vi.spyOn(window, 'alert').mockImplementation(() => {});
-        await openReview();
-
-        fireEvent.click(screen.getByText('Save'));
-
-        await waitFor(() => {
-            expect(mockHandleManualSubmit).toHaveBeenCalledTimes(1);
-        });
-        expect(mockSetStatus).not.toHaveBeenCalled();
-    });
-});
-
-describe('AiDraftsPage — non-reviewable rows (IMPORTANT 2)', () => {
-    it('shows the explainer line and no Review button for a receipt_extract row', async () => {
-        const receiptJob = {
-            ...DRAFT_JOB,
-            id: 9,
-            operationType: 'receipt_extract',
-            result: { operationType: 'receipt_extract', receivedAtUtc: '2026-08-14T19:00:00.000Z', payload: {} },
-        } as unknown as UnreviewedAiResult;
-        mockListUnreviewedAiResults.mockResolvedValue([receiptJob]);
-
+describe('AiDraftsPage — lane OF (D-59): bill / slip photos only; voice lives in आवाज नोंदी', () => {
+    it('lists the bill and the slip photo, never the voice recording, and nothing opens the old form', async () => {
         render(<AiDraftsPage onBack={vi.fn()} />);
+        expect(await screen.findByTestId('ai-draft-row-9')).toBeInTheDocument();
+        expect(screen.getByTestId('ai-draft-row-11')).toBeInTheDocument();
+        expect(screen.queryByTestId('ai-draft-row-7')).toBeNull();
+        expect(screen.getByTestId('ai-drafts-list')).toHaveTextContent('बिलाचा फोटो');
+        expect(screen.getByTestId('ai-drafts-list')).toHaveTextContent('पट्टीचा फोटो');
+        expect(screen.getByTestId('ai-drafts-list')).not.toHaveTextContent('आवाज नोंद');
+        expect(screen.queryByRole('button', { name: 'उघडा' })).toBeNull();
+        expect(manualEntryMounted).not.toHaveBeenCalled();
+    });
 
-        // "this photo cannot be opened here yet — discard it, or leave it here" (kept, not lost)
+    it('only voice waiting: the page says nothing of photos is left (the voice is counted in आवाज नोंदी)', async () => {
+        mockListUnreviewedAiResults.mockResolvedValue([VOICE]);
+        render(<AiDraftsPage onBack={vi.fn()} />);
+        expect(await screen.findByTestId('ai-drafts-empty')).toBeInTheDocument();
+    });
+});
+
+describe('AiDraftsPage — a photo row (IMPORTANT 2)', () => {
+    it('says plainly it cannot be opened here yet, and that it is kept', async () => {
+        render(<AiDraftsPage onBack={vi.fn()} />);
         expect(await screen.findByTestId('ai-draft-not-openable-9')).toHaveTextContent(
             'हा फोटो इथे अजून उघडता येत नाही. काढून टाका, किंवा इथेच राहू द्या.',
         );
-        expect(screen.queryByRole('button', { name: OPEN })).not.toBeInTheDocument();
-        // the row names what it is: a bill photo, not a voice note
-        expect(screen.getByTestId('ai-drafts-list')).toHaveTextContent('बिलाचा फोटो');
     });
 
-    it('uses operation-correct discard copy for a receipt scan, not "voice note"', async () => {
-        const receiptJob = {
-            ...DRAFT_JOB,
-            id: 9,
-            operationType: 'receipt_extract',
-            result: { operationType: 'receipt_extract', receivedAtUtc: '2026-08-14T19:00:00.000Z', payload: {} },
-        } as unknown as UnreviewedAiResult;
-        mockListUnreviewedAiResults.mockResolvedValue([receiptJob]);
+    it('a removal asks with the right noun ("this bill photo", masculine); a "no" marks nothing', async () => {
+        mockListUnreviewedAiResults.mockResolvedValue([BILL]);
         const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-
         render(<AiDraftsPage onBack={vi.fn()} />);
-        await waitFor(() => {
-            expect(screen.getByTitle('काढून टाका')).toBeInTheDocument();
-        });
-        fireEvent.click(screen.getByTitle('काढून टाका'));
-
-        expect(confirmSpy).toHaveBeenCalledTimes(1);
-        const [confirmMessage] = confirmSpy.mock.calls[0];
-        // "discard this bill photo? it will not go into the farm records" — masculine, for a photo
-        expect(confirmMessage).toBe('हा बिलाचा फोटो काढून टाकायचा? तो शेतनोंदीत जाणार नाही.');
-        expect(confirmMessage).not.toContain('आवाज नोंद');
-        // declined: nothing was marked
+        fireEvent.click(await screen.findByTitle('काढून टाका'));
+        expect(confirmSpy.mock.calls[0][0]).toBe('हा बिलाचा फोटो काढून टाकायचा? तो शेतनोंदीत जाणार नाही.');
         expect(mockMarkAiResultReviewed).not.toHaveBeenCalled();
         confirmSpy.mockRestore();
     });
 
-    it('a voice note\'s discard confirm names a voice note (feminine), and a yes marks it reviewed', async () => {
+    it('a "yes" marks it reviewed and the list is read again', async () => {
+        mockListUnreviewedAiResults.mockResolvedValueOnce([BILL]).mockResolvedValueOnce([]);
         const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
         render(<AiDraftsPage onBack={vi.fn()} />);
         fireEvent.click(await screen.findByTitle('काढून टाका'));
-        expect(confirmSpy.mock.calls[0][0]).toBe('ही आवाज नोंद काढून टाकायची? ती शेतनोंदीत जाणार नाही.');
-        await waitFor(() => expect(mockMarkAiResultReviewed).toHaveBeenCalledWith(7));
+        await waitFor(() => expect(mockMarkAiResultReviewed).toHaveBeenCalledWith(9));
+        expect(await screen.findByTestId('ai-drafts-empty')).toBeInTheDocument();
         confirmSpy.mockRestore();
     });
-});
 
-describe('AiDraftsPage — the list row and the review screen agree on the note\'s date (round 3)', () => {
-    it('formats the list row from resolveRecordedInstant, not job.result.receivedAtUtc directly', async () => {
+    it('formats the row from resolveRecordedInstant, not job.result.receivedAtUtc directly (round 3)', async () => {
+        mockListUnreviewedAiResults.mockResolvedValue([BILL]);
         render(<AiDraftsPage onBack={vi.fn()} />);
-
-        await waitFor(() => {
-            expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument();
-        });
-
-        expect(mockResolveRecordedInstant).toHaveBeenCalledWith(DRAFT_JOB);
-        // mockResolveRecordedInstant returns '2026-08-13T15:00:00.000Z' —
-        // deliberately a DIFFERENT day than DRAFT_JOB.result.receivedAtUtc
-        // ('2026-08-14T19:00:00.000Z'). If the list ever regresses to reading
-        // receivedAtUtc directly, this fails on the wrong day showing.
-        // plr-d10 (I17): in his words — the farm's (IST) day in Marathi and the part of the day, not
-        // "13 Aug, 8:30 PM" (15:00 UTC is 20:30 IST: रात्री).
+        await screen.findByTestId('ai-draft-row-9');
+        expect(mockResolveRecordedInstant).toHaveBeenCalledWith(BILL);
+        // 15:00 UTC is 20:30 IST: रात्री, on the 13th — never the drain day (14th) or English.
         expect(screen.getByText('13 ऑग, रात्री 8:30')).toBeInTheDocument();
         expect(screen.queryByText(/14 ऑग|Aug|AM|PM/)).not.toBeInTheDocument();
     });
 });
 
-// spec: plr-d10-redesign-real-integration-2026-10-25 (I17, H19) — the hub row's own words on the one title
-// bar with one big मागे; the two English "Back" buttons and the "AI Drafts" title are gone.
-describe('AiDraftsPage — one title bar with मागे', () => {
+describe('AiDraftsPage — one title bar with मागे, plain Marathi', () => {
     it('the list is titled like the hub row, and मागे goes back', async () => {
         const onBack = vi.fn();
         render(<AiDraftsPage onBack={onBack} />);
-        await waitFor(() => expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument());
-        // the setup hub row's own name (one name for the place)
+        await screen.findByTestId('ai-draft-row-9');
         expect(screen.getByTestId('page-title')).toHaveTextContent('नेट नसताना केलेल्या नोंदी');
         expect(screen.getAllByTestId('page-back')).toHaveLength(1);
-        expect(screen.queryByText('AI Drafts')).toBeNull();
-        expect(screen.queryByText(/^Back$/)).toBeNull();
         fireEvent.click(screen.getByTestId('page-back'));
         expect(onBack).toHaveBeenCalledTimes(1);
     });
 
-    it('the whole list page is plain Marathi: no English word a farmer would see', async () => {
-        mockListUnreviewedAiResults.mockResolvedValue([DRAFT_JOB, {
-            ...DRAFT_JOB, id: 9, operationType: 'patti_extract',
-            result: { operationType: 'patti_extract', receivedAtUtc: '2026-08-14T19:00:00.000Z', payload: {} },
-        } as unknown as UnreviewedAiResult]);
+    it('the whole list page is plain Marathi: no English word a farmer would see, never "AI" or "draft"', async () => {
         render(<AiDraftsPage onBack={vi.fn()} />);
-        await screen.findByRole('button', { name: OPEN });
+        await screen.findByTestId('ai-draft-row-9');
         const page = screen.getByTestId('ai-drafts-list');
-        // visible text, and the labels a screen reader would say
         expect(page.textContent ?? '').not.toMatch(/[A-Za-z]/);
         for (const el of Array.from(page.querySelectorAll('[title],[aria-label]'))) {
             expect(`${el.getAttribute('title') ?? ''}${el.getAttribute('aria-label') ?? ''}`).not.toMatch(/[A-Za-z]/);
         }
-        // a voice note with no words read out yet is called a voice note; the sale slip a slip photo
-        expect(page).toHaveTextContent('आवाज नोंद');
-        expect(page).toHaveTextContent('पट्टीचा फोटो');
+        expect(page.textContent ?? '').not.toMatch(/ड्राफ्ट/);
     });
 
-    it('nothing waiting: says so in Marathi (it said "All caught up!")', async () => {
+    it('nothing waiting: says so in Marathi', async () => {
         mockListUnreviewedAiResults.mockResolvedValue([]);
         render(<AiDraftsPage onBack={vi.fn()} />);
         const empty = await screen.findByTestId('ai-drafts-empty');
         expect(empty).toHaveTextContent('सगळ्या नोंदी पाहून झाल्या');
         expect(empty).toHaveTextContent('नेट नसताना केलेली एकही नोंद बाकी नाही.');
-        expect(screen.getByTestId('ai-drafts-list').textContent ?? '').not.toMatch(/[A-Za-z]/);
-    });
-
-    it('an unsaved note says so in Marathi and asks him to try again (nothing was written)', async () => {
-        mockHandleManualSubmit.mockResolvedValue('not_saved');
-        const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
-        await openReview();
-        fireEvent.click(screen.getByText('Save'));
-        await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('ही नोंद जतन झाली नाही. पुन्हा प्रयत्न करा.'));
-        alertSpy.mockRestore();
-    });
-
-    it('in review the title bar\'s मागे closes the review and does NOT leave the page', async () => {
-        const onBack = vi.fn();
-        render(<AiDraftsPage onBack={onBack} />);
-        await waitFor(() => expect(screen.getByRole('button', { name: OPEN })).toBeInTheDocument());
-        fireEvent.click(screen.getByRole('button', { name: OPEN }));
-        await waitFor(() => expect(screen.getByTestId('manual-entry-stub')).toBeInTheDocument());
-        expect(screen.getAllByTestId('page-back')).toHaveLength(1);
-        fireEvent.click(screen.getByTestId('page-back'));
-        await waitFor(() => expect(screen.queryByTestId('manual-entry-stub')).toBeNull());
-        expect(screen.getByTestId('ai-drafts-list')).toBeInTheDocument();
-        expect(onBack).not.toHaveBeenCalled();
     });
 });

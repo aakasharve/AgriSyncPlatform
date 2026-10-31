@@ -40,7 +40,7 @@ import { renderLogView } from '../mainView';
 import type { AppRouterContext } from '../routeContext';
 import AttendanceResult, { type AttendanceResultProps } from '../../../features/labour/components/AttendanceResult';
 import ManualEntry from '../../../features/logs/components/ManualEntry';
-import { LabourResultHost } from '../mainView';
+import { CheckSaveHost } from '../checkSaveView';
 import { bindDraftProvenance } from '../../../features/voice/draftProvenance';
 import { LogFactory } from '../../domain/LogFactory';
 import { getDateKey } from '../../domain/services/DateKeyService';
@@ -247,7 +247,6 @@ describe('बरोबर on the labour door (APK 1.0.14 report + PR #82 review)
 });
 
 // ─── PR #82 re-review follow-ups (R1, R2) ──────────────────────────────────
-type ManualEntryElementProps = { provenance?: LogProvenance | null; captureScope?: string; recordedDateKey?: string; attendanceOnly?: boolean };
 
 function confirmCard(draftLog: AgriLogResponse, extra: Record<string, unknown> = {}): AttendanceResultProps {
     const node = renderLogView(labourDoorCtx(draftLog, vi.fn(), extra));
@@ -274,35 +273,15 @@ describe("R1: the confirm card compares against the CAPTURE day's record", () =>
     });
 });
 
-describe('R2: the बदल करा edit form on the labour door', () => {
-    it("takes THIS draft's own provenance, the capture day, and captureScope 'labour'", () => {
-        const edit = findByType(confirmCard(parsedDraft()).renderEditSurface(), ManualEntry) as React.ReactElement<ManualEntryElementProps> | null;
-        expect(edit).not.toBeNull();
-        expect(edit!.props.attendanceOnly).toBe(true);
-        expect(edit!.props.provenance).toEqual(OWN);
-        expect(edit!.props.recordedDateKey).toBe(CAPTURE_DAY);
-        expect(edit!.props.captureScope).toBe('labour');
+describe('R2 → lane OF: the labour door has no hand-filled form any more', () => {
+    it('the confirm card is the only surface: no edit-surface render prop (बदल करा taps the people on the card)', () => {
+        const props = confirmCard(parsedDraft());
+        expect('renderEditSurface' in (props as object)).toBe(false);
     });
 
-    it("a draft no parse produced (opened from Reflect) gets NO provenance, never the voice state's stale one", () => {
-        const edit = findByType(confirmCard(parse()).renderEditSurface(), ManualEntry) as React.ReactElement<ManualEntryElementProps> | null;
-        expect(edit!.props.provenance).toBeUndefined();
-        expect(edit!.props.captureScope).toBe('labour');
-    });
-
-    it("the labour door's fall-through form (no labour heard) is labour-scoped too", () => {
-        const node = renderLogView(labourDoorCtx({ ...parse(), labour: [] }, vi.fn()));
-        const host = findByType(node, LabourResultHost) as React.ReactElement<{ renderManualEntry: () => React.ReactNode }> | null;
-        const form = findByType(host!.props.renderManualEntry(), ManualEntry) as React.ReactElement<ManualEntryElementProps> | null;
-        expect(form!.props.captureScope).toBe('labour');
-    });
-
-    it('the ordinary log door is unchanged: shared provenance, no scope, no date override', () => {
+    it('the ordinary log door shows "तपासा आणि जतन करा" for a parse, never the old form', () => {
         const node = renderLogView(labourDoorCtx(parse(), vi.fn(), { logIntent: null }));
-        const form = findByType(node, ManualEntry) as React.ReactElement<ManualEntryElementProps> | null;
-        expect(form).not.toBeNull();
-        expect(form!.props.provenance).toEqual(STALE); // the ctx value, exactly as before
-        expect(form!.props.captureScope).toBeUndefined();
-        expect(form!.props.recordedDateKey).toBeUndefined();
+        expect(findByType(node, ManualEntry)).toBeNull();
+        expect(findByType(node, CheckSaveHost)).not.toBeNull();
     });
 });

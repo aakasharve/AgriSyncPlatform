@@ -9,8 +9,10 @@
  * `speakHost.test.tsx` proves the return for every purpose). Not every mic is one: the recorder's own door, the हजेरी
  * flows (already the same recorder; their meaning is not changed), तुलना (excluded: being redesigned), consent /
  * permissions / settings / admin, and icons that are not controls are classified, not routed.
- * E1: the old form is no longer reached from "बदला", आढावा's plot day, the typing sheet or the quick sheet's chips. It
- * is still rendered where it has NO new home yet — each listed below and reported to the founder (never removed silently).
+ * E1: the old form is no longer reached from "बदला", आढावा's plot day, the typing sheet or the quick sheet's chips.
+ * Lane OF (founder D-57 … D-61, 2026-10-31): its last five uses got their homes, so it is rendered NOWHERE for a farmer —
+ * the हजेरी door's edit (tap on the result; the वही's day), a parse the auto-save declined ("तपासा आणि जतन करा"), offline
+ * voice (आवाज नोंदी), a past day (आढावा → crop → plot → mic), removing a part / changing the plot (the बदला screen's taps).
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -43,8 +45,18 @@ const ROUTED: Array<{ id: string; button: string; wiredIn: string; purpose: Spea
         site: /onAnswerBySpeaking=\{\(pending\) => \{\s*stashPendingQuestionAnswer\(pending\);\s*requestSpeak\(\{\s*purpose: 'answerQuestion'/ },
     { id: 'saved-add-another', button: 'saved card "आणखी सांगा"', wiredIn: 'core/navigation/savedView.tsx', purpose: 'addToDay', place: 'current',
         site: /<button onClick=\{\(\) => requestSpeak\(\{ purpose: 'addToDay', context: \{ place: 'current' \}/ },
-    { id: 'correction-mic', button: '"बदला" screen big mic + "पुन्हा सांगा"', wiredIn: 'core/speak/SpeakHost.tsx', purpose: 'correctEntry', place: 'known',
-        site: /const speak = \(\) => \{[\s\S]*?requestSpeak\(\{\s*purpose: 'correctEntry'[\s\S]*onSpeak=\{speak\}[\s\S]*onAgain=\{\(\) => \{ setCorrectionProposal\(null\); speak\(\); \}\}/ },
+    // Lane OF (TAP-1): the big mic first, then typing right under it — both THE one mic, for this entry.
+    { id: 'correction-mic', button: '"बदला" screen big mic + "बोलता येत नसेल तर इथे लिहा"', wiredIn: 'core/speak/CorrectionHost.tsx', purpose: 'correctEntry', place: 'known',
+        site: /const speak = \(typed\?: string\) => \{[\s\S]*?requestSpeak\(\{\s*purpose: 'correctEntry'[\s\S]*onSpeak=\{\(\) => speak\(\)\}[\s\S]*onSend=\{text => \{ setSheet\(null\); speak\(text\); \}\}/ },
+    // Lane OF (D-58): "तपासा आणि जतन करा" — "पुन्हा सांगा" (and typing) on the same plots, the parse put down first.
+    { id: 'check-save-again', button: '"तपासा आणि जतन करा" "पुन्हा सांगा" / "इथे लिहा"', wiredIn: 'core/navigation/checkSaveView.tsx', purpose: 'addToDay', place: 'current',
+        site: /requestSpeak\(\{\s*purpose: 'addToDay',\s*context: \{ place: 'current'/ },
+    // Lane OF (D-60): a past day in आढावा — no place: the crop → plot steps with the date, then the mic.
+    { id: 'reflect-past-day', button: 'आढावा past day "त्या दिवसाचं काम सांगा"', wiredIn: 'features/reflect/ReflectPage.tsx', purpose: 'addToDay', place: 'unknown',
+        site: /const tellPastDay = [\s\S]*?onSpeak\(\{ purpose: 'addToDay', context: \{ date: dateKey \}/ },
+    // Lane OF (D-59): an offline recording with nothing understood in it — said again for its own place and day.
+    { id: 'voice-note-again', button: 'आवाज नोंदी "पुन्हा सांगा"', wiredIn: 'features/voiceDiary/waiting/WaitingVoiceNotes.tsx', purpose: 'addToDay', place: 'known',
+        site: /requestSpeak\(\{\s*purpose: 'addToDay',\s*context: \{ \.\.\.\(place && \{ place \}\)/ },
     { id: 'reflect-plot-day-tell', button: 'आढावा plot day "आणखी सांगा"', wiredIn: 'features/reflect/ReflectPage.tsx', purpose: 'addToDay', place: 'known',
         site: /onTellMore=\{tellMoreFor\(dayPlace\)\}/ },
     { id: 'reflect-todo-tell', button: 'आढावा करायची कामे "बोलून सांगा"', wiredIn: 'features/reflect/ReflectPage.tsx', purpose: 'addTodo', place: 'known',
@@ -150,7 +162,7 @@ describe('E1 — the old hand-filled form (ManualEntry) inventory', () => {
         expect(read('core/navigation/savedView.tsx')).not.toContain("setMode('manual')");
     });
 
-    it('where the form is STILL rendered: only the places with no new home yet (static, dynamic and React.lazy imports all counted)', () => {
+    it('lane OF: the form is rendered NOWHERE for a farmer (static, dynamic and React.lazy imports all counted)', () => {
         const importers: string[] = [];
         const IMPORTS_FORM = /(?:from\s+'[^']*\/ManualEntry'|import\(\s*'[^']*\/ManualEntry'\s*\))/;
         const walk = (dir: string) => {
@@ -164,29 +176,34 @@ describe('E1 — the old hand-filled form (ManualEntry) inventory', () => {
             }
         };
         walk(SRC);
-        // the log tab's one call (the हजेरी door's edit surface; a parse the voice auto-save declined) and the AI-drafts
-        // review page (opened from the profile, loaded with React.lazy by the route table) — nothing else
-        expect(importers.sort()).toEqual(['core/navigation/mainView.tsx', 'pages/AiDraftsPage.tsx']);
-        expect(read('core/navigation/lazyComponents.ts')).toMatch(/AiDraftsPage = React\.lazy\(\(\) => import\('\.\.\/\.\.\/pages\/AiDraftsPage'\)\)/);
+        expect(importers).toEqual([]);
+        // what stands where it used to be rendered
         const main = read('core/navigation/mainView.tsx');
-        expect(main).not.toContain('renderForm');
-        expect(main).toContain('renderManualEntry({ provenance: ownProvenance, recordedDateKey: captureDay })');
+        expect(main).not.toContain('renderManualEntry');
+        expect(main).toContain('return <CheckSaveHost ctx={ctx} />;'); // D-58: a parse the auto-save declined
+        expect(main).toMatch(/renderEmpty=\{\(\) => <AttendanceNotHeard /); // D-57: the हजेरी door heard no हजेरी
+        expect(read('features/labour/components/AttendanceResult.tsx')).not.toContain('renderEditSurface'); // D-57: tap on the result
+        expect(read('pages/AiDraftsPage.tsx')).toContain('isPhotoResult'); // D-59: voice moved to आवाज नोंदी
     });
 
     /**
-     * Review B005 — capabilities lost with NO home yet. Not built in this lane on purpose: they go to the founder as visual
-     * options, together with the kept old-form uses above. Each is pinned so it cannot be "fixed" silently.
+     * Review B005 — the two capabilities that had no home: lane OF gave each one (founder D-61 = 5A + TAP-1). A spoken
+     * change still keeps nothing offline (it would come back as a new log); the TAP change is the offline way.
      */
     it.each([
-        { gap: 'remove a wrong item, or a whole part, by speaking', proof: () => {
-            // a part he does not mention stays exactly as it was: there is no spoken way to say "remove it"
+        { gap: 'remove a wrong item, or a whole part', proof: () => {
+            // still no spoken "remove it" (a part he does not mention stays as it was) …
             expect(saysAnything({ summary: '', dayOutcome: 'WORK_RECORDED', cropActivities: [], irrigation: [], labour: [], inputs: [], machinery: [], activityExpenses: [], missingSegments: [] })).toBe(false);
+            // … so the बदला screen has "काढा" / "परत आणा" by tapping (correctionFlow.test.tsx proves it end to end)
+            expect(read('features/logs/components/correction/CorrectionScreen.tsx')).toContain('data-testid={`corr-toggle-${row.id}`}');
         } },
-        { gap: 'record a change offline straight away (it needs the internet; nothing is kept)', proof: () => {
+        { gap: 'make a change offline straight away', proof: () => {
             requestSpeak({ purpose: 'correctEntry', context: { place: { cropId: 'FARM_GLOBAL' } }, returnTo: { route: 'main', mainView: 'reflect' } });
-            expect(mayKeepOffline()).toBe(false);
+            expect(mayKeepOffline()).toBe(false); // a SPOKEN change is never kept offline …
             resetSpeakStoreForTests();
             expect(mayKeepOffline()).toBe(true);
+            // … a TAP change is queued like any other edit (`revise_log_content`)
+            expect(read('core/speak/CorrectionHost.tsx')).toContain('saveSpokenCorrection(');
         } },
-    ])('no home yet (B005): $gap', ({ proof }) => { proof(); });
+    ])('B005 home found (lane OF): $gap', ({ proof }) => { proof(); });
 });

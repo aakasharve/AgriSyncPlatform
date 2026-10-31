@@ -6,8 +6,12 @@
  * the ShramSathi processing screen stay shared (mainView renders them); this
  * screen owns only the MEANING of a labour parse and its confirm. बरोबर is
  * the ONLY save event in this flow (trust rule 5; pre-save honesty line is
- * founder copy). बदल करा renders the existing ManualEntry(attendanceOnly)
- * branch — the old landing became the edit surface.
+ * founder copy).
+ *
+ * Lane OF (founder D-57 + rule TAP-1, 2026-10-31) — बदल करा no longer opens the old hand-filled form. Voice first: "बोलून
+ * बदला" (the same हजेरी mic); then, by tapping, each name he said that the farm's list knows becomes a button — हजर →
+ * अर्धा → नाही — and बरोबर (still the ONLY save) marks each person as he left it. The names stay as he said them, and
+ * the count stays what he said (P7: naming or un-marking people never changes the reported number).
  *
  * Money never appears here (state A "must not": no ₹, no rate, no wage).
  */
@@ -24,6 +28,7 @@ import { MarkAttendanceCommand } from '../../../application/usecases/sync/MarkAt
 import { fetchFieldOperators, type FieldOperator } from '../data/fieldOperatorClient';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import HeadcountDisagreementCard from './HeadcountDisagreementCard';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 export interface AttendanceResultProps {
     /** Attendance-only draft (labour.length > 0) — toAttendanceOnlyDraft output. */
@@ -35,18 +40,30 @@ export interface AttendanceResultProps {
     workDate?: string;
     /** THE only save. Wired to useLogCommands.handleManualSubmit. */
     onConfirm: (draft: AgriLogResponse) => void;
-    /** बदल करा → the existing ManualEntry(attendanceOnly) branch. */
-    renderEditSurface: () => React.ReactNode;
     /** Rungs 2/3 "speak" → setRecordingSegment('labour'); setMode('voice'). */
     onSpeakMore: () => void;
 }
 
 const shiftWord = (s: DayShift): string => COPY.markWord[s];
 
+/** Lane OF — a person's day as he taps it on बदल करा (the working phones' words). */
+export type TapMark = 'Full' | 'Half' | 'Absent';
+const NEXT_MARK: Record<TapMark, TapMark> = { Full: 'Half', Half: 'Absent', Absent: 'Full' };
+const TAP_WORDS = {
+    // PROPOSED (Marathi) — the working phones (1A).
+    mr: { Full: 'हजर', Half: 'अर्धा', Absent: 'नाही', hint: 'नावावर दाबा: हजर → अर्धा → नाही', speak: 'बोलून बदला', none: 'ही नावं आत्ता हजेरीच्या यादीत जुळली नाहीत — पुन्हा बोलून सांगा.' },
+    // PROPOSED (English)
+    en: { Full: 'Present', Half: 'Half', Absent: 'Absent', hint: 'Tap a name: Present → Half → Absent', speak: 'Change by speaking', none: 'These names do not match the attendance list right now — say it again.' },
+} as const;
+
 const AttendanceResult: React.FC<AttendanceResultProps> = ({
-    draft, anchor, farmId, workDate, onConfirm, renderEditSurface, onSpeakMore,
+    draft, anchor, farmId, workDate, onConfirm, onSpeakMore,
 }) => {
+    const language = useOptionalLanguage()?.language;
+    const tapWords = language === 'en' ? TAP_WORDS.en : TAP_WORDS.mr;
     const [editing, setEditing] = React.useState(false);
+    // Lane OF — each person's day as he tapped it (absent = as said: an unqualified "आले" is हजर).
+    const [tapMarks, setTapMarks] = React.useState<Record<string, TapMark>>({});
     // Task 3.5c — the farm's FieldOperator roster, fetched for name→identity
     // resolution at confirm. Offline / unfetchable ⇒ stays null ⇒ NO marks are
     // written and no false "marked" claim is rendered — the statement save
@@ -102,7 +119,13 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     const contradictions: DayContradiction[] = findDayContradictions(draft.labour)
         .filter((c) => rulings[c.name] == null);
 
-    if (editing) return <>{renderEditSurface()}</>;
+    // The one farm person each said name resolves to (rule 10: exactly one match, else nobody — never merged).
+    const personOf = (name: string): FieldOperator | undefined => {
+        if (!roster) return undefined;
+        const matches = roster.filter((o) => o.isActive && o.displayName.trim() === name);
+        return matches.length === 1 ? matches[0] : undefined;
+    };
+    const tappable = displayNames.filter((n) => personOf(n) !== undefined);
 
     const question = rung === 2 && knownCount != null ? COPY.rungWho(knownCount)
         : rung === 3 ? COPY.rungRemainder
@@ -143,10 +166,28 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                     </div>
                 )}
                 {displayNames.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                        {displayNames.map((name) => (
-                            <span key={name} className="rounded-lg bg-slate-100 px-2.5 py-1 text-[13px] font-bold text-slate-800">{name}</span>
-                        ))}
+                    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="attendance-names">
+                        {displayNames.map((name) => {
+                            const mark = tapMarks[name] ?? 'Full';
+                            return editing && personOf(name) ? (
+                                <button key={name} type="button" data-testid={`attendance-tap-${name}`} data-mark={mark}
+                                    onClick={() => setTapMarks((m) => ({ ...m, [name]: NEXT_MARK[m[name] ?? 'Full'] }))}
+                                    className={`min-h-[44px] rounded-lg border-2 px-2.5 py-1 text-[14px] font-extrabold ${mark === 'Full' ? 'border-emerald-500 bg-emerald-50 text-emerald-800' : mark === 'Half' ? 'border-amber-400 bg-amber-50 text-amber-800' : 'border-slate-300 bg-slate-100 text-slate-500 line-through'}`}>
+                                    {name} · {tapWords[mark]}
+                                </button>
+                            ) : (
+                                <span key={name} className="rounded-lg bg-slate-100 px-2.5 py-1 text-[13px] font-bold text-slate-800">{name}{tapMarks[name] ? ` · ${tapWords[tapMarks[name]]}` : ''}</span>
+                            );
+                        })}
+                    </div>
+                )}
+                {editing && (
+                    <div className="mt-2.5 space-y-2 border-t border-slate-100 pt-2.5" data-testid="attendance-edit">
+                        <button type="button" onClick={onSpeakMore} data-testid="attendance-edit-speak"
+                            className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 p-3 text-[15px] font-extrabold text-white active:scale-[0.98]">
+                            <Mic size={18} /> {tapWords.speak}
+                        </button>
+                        <p className="m-0 text-[13px] font-bold text-slate-600" data-testid="attendance-edit-hint">{tappable.length > 0 ? tapWords.hint : tapWords.none}</p>
                     </div>
                 )}
                 {/* D9.5 — sourceText first, then the reading taken. Settled by
@@ -229,14 +270,17 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                                 const matches = byName.get(name) ?? [];
                                 if (matches.length !== 1) return [];
                                 const ruling = rulings[name];
+                                const tapped = tapMarks[name];
                                 // An unqualified "आले" writes dayMark:'Full' — the register's own
                                 // approved vocabulary (हिरवा = आला = ✓ पूर्ण, state A frame 4 /
                                 // D-H3); the voice pipeline cannot state Half today (C4), so
-                                // nothing invented can leak.
+                                // nothing invented can leak. Lane OF: what he TAPPED on बदल करा
+                                // is what he stated, and wins.
                                 return [MarkAttendanceCommand.enqueue({
                                     attendanceMarkId: crypto.randomUUID(),
                                     farmId, fieldOperatorId: matches[0].id, workDate: markDate,
-                                    ...(ruling === 'half' ? { dayMark: 'Half' as const }
+                                    ...(tapped ? { dayMark: tapped }
+                                        : ruling === 'half' ? { dayMark: 'Half' as const }
                                         : ruling === 'night' ? { nightMark: 'Worked' as const }
                                         : { dayMark: 'Full' as const }),
                                 })];
@@ -257,10 +301,12 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                     className={`flex flex-[2] items-center justify-center gap-2 rounded-[14px] py-3.5 text-[16px] font-extrabold text-white transition-transform active:scale-[0.98] ${contradictions.length > 0 ? 'bg-slate-300' : 'bg-emerald-600'}`}>
                     <Check size={18} /> {COPY.confirmButton}
                 </button>
-                <button type="button" onClick={() => setEditing(true)}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-white py-3.5 text-[15px] font-extrabold text-slate-700 active:scale-[0.98]">
-                    <Pencil size={16} /> {COPY.editButton}
-                </button>
+                {!editing && (
+                    <button type="button" onClick={() => setEditing(true)} data-testid="attendance-edit-open"
+                        className="flex flex-1 items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-white py-3.5 text-[15px] font-extrabold text-slate-700 active:scale-[0.98]">
+                        <Pencil size={16} /> {COPY.editButton}
+                    </button>
+                )}
             </div>
         </div>
     );

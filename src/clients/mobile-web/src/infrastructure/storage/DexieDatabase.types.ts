@@ -217,6 +217,7 @@ export interface PendingAiJobContext {
     // returns), the original recording instant is what's posted as
     // `recorded_at` — not the queue-drain wall clock.
     recordedAtUtc?: string;
+    scopeCropIds?: string[]; scopePlotIds?: string[]; dateKey?: string; // lane OF (D-59/D-60): all he picked + his past day (non-indexed)
 }
 
 export interface PendingAiJobRecord {

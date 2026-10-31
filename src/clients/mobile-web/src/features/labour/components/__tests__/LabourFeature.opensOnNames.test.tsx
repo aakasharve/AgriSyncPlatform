@@ -43,6 +43,7 @@ import { LABOUR_MOCK } from '../../labourMock';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { resetRootStore } from '../../../../app/state/RootStore';
 import { clearLabourOpening, peekLabourOpening, requestLabourOpening } from '../../labourOpening';
+import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 
 configure({ asyncUtilTimeout: 6000 });
 
@@ -106,5 +107,26 @@ describe('FX-1 — the ready हजेरी card opens the names', () => {
         mount();
         await waitFor(() => expect(screen.getByText('हजेरी वही')).toBeInTheDocument());
         expect(screen.queryByTestId('attendance-screen')).toBeNull();
+    });
+});
+
+describe('lane OF (founder D-57) — "बदला" on a हजेरी-door record opens THAT DAY in the हजेरी वही', () => {
+    it('opens on the day (over the hub: मागे steps back to it), and a tapped person is marked for THAT day, queued on the phone', async () => {
+        // one person on the register, with the server's own (GUID) identity
+        const row = { personId: `op:${OP_A.id}`, fieldOperatorId: OP_A.id, name: OP_A.displayName, initial: 'र', tone: 'emerald', cells: [null] };
+        mockFetchLabourData.mockResolvedValue({ ...LABOUR_MOCK, canManageLabour: true, view: 'owner', ledger: { ...LABOUR_MOCK.ledger, days: ['2026-10-29'], rows: [row], crewRows: [] } });
+        requestLabourOpening({ screen: 'day', date: '2026-10-29' });
+        mount();
+        await waitFor(() => expect(screen.getByTestId('hajeri-day')).toBeInTheDocument());
+        expect(peekLabourOpening()).toBeNull(); // read once
+        expect(screen.getByTestId('hajeri-day-date')).toHaveTextContent('29 ऑक्टो');
+        fireEvent.click(screen.getByTestId(`hajeri-day-cell-${OP_A.id}`));
+        fireEvent.click(screen.getByTestId('hajeri-day-save'));
+        await waitFor(async () => {
+            const rows = await getDatabase().mutationQueue.toArray();
+            expect(rows.some(r => r.mutationType === SyncMutationName.AttendanceMark && (r.payload as { workDate?: string }).workDate === '2026-10-29')).toBe(true);
+        });
+        fireEvent.click(screen.getByRole('button', { name: /मागे/ }));
+        await waitFor(() => expect(screen.queryByTestId('hajeri-day')).toBeNull());
     });
 });

@@ -19,6 +19,8 @@ import { harvestAvailabilityTranslations } from '../../i18n/harvestAvailabilityT
 
 vi.mock('../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (key: string) => key }),
+    // lane OF (CTX-1): the canonical crop → plot steps read the language softly
+    useOptionalLanguage: () => ({ language: 'mr', setLanguage: () => undefined, t: (key: string) => key }),
 }));
 const createMoneyEventFromSource = vi.fn();
 vi.mock('../../features/finance/financeCommandService', () => ({
@@ -28,7 +30,7 @@ vi.mock('../../features/finance/financeCommandService', () => ({
 import HarvestIncomePage from '../HarvestIncomePage';
 import { readOtherIncomeRaw } from '../../infrastructure/storage/HarvestLegacyStore';
 
-const CROPS = [{ id: 'c1', name: 'द्राक्ष', plots: [] }] as unknown as CropProfile[];
+const CROPS = [{ id: 'c1', name: 'द्राक्ष', iconName: 'Grapes', plots: [{ id: 'p1', name: 'खालचा' }, { id: 'p2', name: 'वरचा' }] }] as unknown as CropProfile[];
 
 function latinLeftovers(): string[] {
     const found: string[] = [...((document.body.textContent ?? '').match(/[A-Za-z]+/g) ?? [])];
@@ -98,17 +100,27 @@ describe('उत्पन्न — other income saves through the real service'
         expect(screen.getByTestId('income-sales')).not.toHaveTextContent('₹');
     });
 
-    it('saves the source and crop the farmer picked', () => {
+    it('saves the source and the crop / plot the farmer picked — in the ONE canonical crop → plot steps (CTX-1), nothing pre-picked', () => {
         render(<HarvestIncomePage crops={CROPS} />);
         fireEvent.click(screen.getByTestId('income-kind-other'));
         fireEvent.change(screen.getByTestId('other-income-what'), { target: { value: 'रोपं विकली' } });
         fireEvent.click(screen.getByTestId('other-income-source-PLANT_SALE'));
-        fireEvent.change(screen.getByTestId('other-income-crop'), { target: { value: 'c1' } });
+        // nothing chosen for him: the whole farm's income until he picks
+        expect(screen.getByTestId('other-income-place')).toHaveTextContent('सर्व शेताचं उत्पन्न');
+        fireEvent.click(screen.getByTestId('other-income-crop'));
+        expect(screen.getByTestId('flow-sathi-question')).toHaveTextContent('कोणत्या पिकाचं उत्पन्न ?');
+        expect(screen.queryByTestId('place-picker-choose')).toBeNull(); // nothing to choose until a plot is picked
+        fireEvent.click(screen.getByTestId('flow-crop-c1'));
+        expect(screen.getByTestId('flow-plot-p1')).toHaveAttribute('aria-pressed', 'false'); // not pre-picked
+        fireEvent.click(screen.getByTestId('flow-plot-p1'));
+        fireEvent.click(screen.getByTestId('place-picker-choose'));
+        expect(screen.queryByTestId('place-picker')).toBeNull();
+        expect(screen.getByTestId('other-income-place')).toHaveTextContent('खालचा');
         fireEvent.change(screen.getByTestId('other-income-amount'), { target: { value: '2400' } });
         fireEvent.click(screen.getByTestId('other-income-save'));
 
         const [entry] = JSON.parse(readOtherIncomeRaw() ?? '[]');
-        expect(entry).toMatchObject({ amount: 2400, description: 'रोपं विकली', source: 'PLANT_SALE', cropId: 'c1' });
+        expect(entry).toMatchObject({ amount: 2400, description: 'रोपं विकली', source: 'PLANT_SALE', cropId: 'c1', plotId: 'p1' });
         expect(screen.getByTestId(`other-income-${entry.id}`)).toHaveTextContent('रोपांची विक्री');
         expect(screen.getByTestId(`other-income-${entry.id}`)).toHaveTextContent('द्राक्ष');
     });

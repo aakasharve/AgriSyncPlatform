@@ -4,7 +4,8 @@ import type { VoiceDraftSink } from '../features/voice/useVoiceRecorder.types';
 import { useVoiceAutoSave } from './hooks/useVoiceAutoSave';
 // Lane MIC-1 — a parse spoken for a purpose that keeps it unsaved (a correction) goes back to that screen, not to the auto-save.
 import { correctionEntryNow, mayKeepOffline, withSpeakPurpose } from '../core/speak/speakFlow';
-import { setOfflineVoiceQueueGate } from '../infrastructure/ai/offlineVoiceQueue';
+import { setOfflineVoiceDayProvider, setOfflineVoiceQueueGate } from '../infrastructure/ai/offlineVoiceQueue';
+import { speakDayNow } from '../core/speak/speakStore';
 import { setCorrectionParseContext } from '../infrastructure/ai/correctionParseContext';
 
 // Feature Controllers
@@ -143,6 +144,8 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
     useEffect(() => { voiceDraftSink.current = withSpeakPurpose(autoSave.sink, { setStatus: setVoiceStatus }); }, [autoSave.sink, setVoiceStatus]);
     // Lane RF2 fix pass (review B004) — a correction's words are never kept offline (they would come back as a new log).
     useEffect(() => { setOfflineVoiceQueueGate(mayKeepOffline); }, []);
+    // Lane OF (D-60) — words kept offline remember the past day he chose, so they are saved on it later.
+    useEffect(() => { setOfflineVoiceDayProvider(speakDayNow); }, []);
     // Lane AI-2 (F71) — a correction's words are parsed against the entry they change ("X नाही, Y" = X becomes Y).
     const historyRef = useRef(appData.history);
     historyRef.current = appData.history;
@@ -229,7 +232,7 @@ export const useAgriLogApp = ({ initialCrops, currentFarmId, currentFarmName }: 
         navigation,
         context,
         data: appData,
-        voice: { ...voice, mode, setMode, voiceResult: autoSave.voiceResult },
+        voice: { ...voice, mode, setMode, voiceResult: autoSave.voiceResult, saveCheckedDraft: autoSave.saveChecked },
         weather,
         commands,
         trust,

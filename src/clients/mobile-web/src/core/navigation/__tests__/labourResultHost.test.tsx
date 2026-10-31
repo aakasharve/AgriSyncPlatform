@@ -42,7 +42,7 @@ const Probe: React.FC<{ onMount?: () => void }> = ({ onMount }) => {
 const Harness: React.FC<{ consumeOnMount: boolean }> = ({ consumeOnMount }) => {
     const [draft, setDraft] = React.useState<string | null>('the-parse');
     return (
-        <LabourResultHost renderManualEntry={() => <div data-testid="bare-fallthrough" />}>
+        <LabourResultHost renderEmpty={() => <div data-testid="bare-fallthrough" />}>
             {draft != null ? (
                 <Probe onMount={consumeOnMount ? () => setDraft(null) : undefined} />
             ) : null}
@@ -64,9 +64,9 @@ describe('LabourResultHost — the consumed draft does not unmount the standing 
         expect(screen.getByTestId('typed')).toHaveTextContent('edited-by-farmer');
         expect(counters.mounts).toBe(1);
     });
-    it('with no draft ever present, the frame falls through to the ManualEntry render', () => {
+    it('with no draft ever present, the frame falls through to the empty case (AttendanceNotHeard in the app)', () => {
         render(
-            <LabourResultHost renderManualEntry={() => <div data-testid="bare-fallthrough" />}>
+            <LabourResultHost renderEmpty={() => <div data-testid="bare-fallthrough" />}>
                 {null}
             </LabourResultHost>,
         );

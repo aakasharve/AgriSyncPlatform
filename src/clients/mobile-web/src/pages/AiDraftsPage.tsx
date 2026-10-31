@@ -2,151 +2,68 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Lists the offline voice notes waiting for the farmer's review
- * (`pendingAiJobs.result`, unread since `27e55ce7` landed the write half of
- * this fix) and routes "Review" into the EXISTING `ManualEntry` confirm
- * surface — the same component the live voice-parse path and the
- * edit-existing-log path already use. A draft is an offer, never a record:
- * this page never creates a `DailyLog` and never marks anything confirmed on
- * its own — `ManualEntry`'s own Save button does that, through the app's
- * normal submit path.
+ * "नेट नसताना केलेल्या नोंदी" — the bill / sale-slip photos made without internet whose answer has come back and that he
+ * has not acted on yet (`pendingAiJobs.result`).
+ *
+ * Lane OF (founder D-59 = 3A, 2026-10-31): VOICE recordings no longer live here. A recording not understood yet, or
+ * understood and not saved, lives in सेट-अप केंद्र › आवाज नोंदी with a number on the gear and on that row, and an
+ * understood one opens "तपासा आणि जतन करा" — never the old hand-filled form, which this page used to open. A bill or slip
+ * photo is not voice, so it keeps this page: it cannot be opened here yet (that surface is not built), the row says so
+ * plainly, and it is kept until he removes it. A removal is his explicit decision (`markAiResultReviewed`), never a
+ * glance.
  *
  * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Receipt, Trash2 } from 'lucide-react';
 import { PageBar } from '../shared/components/ui/placeUi';
-import { useBackDismiss } from '../core/navigation/useBackDismiss';
-import { useAppDataState, useAppCommandsState, useAppLogState, useAppViewHelpers, useAppVoiceState } from '../app/context/AppFeatureContexts';
-import { getDateKey } from '../core/domain/services/DateKeyService';
-import type { TodayCounts } from '../domain/types/farm.types';
-import ManualEntry from '../features/logs/components/ManualEntry';
-import type { ManualEntryProps } from '../features/logs/components/manual-entry/types';
 import {
     listUnreviewedAiResults,
     markAiResultReviewed,
-    buildAiDraftForReview,
     resolveRecordedInstant,
     type UnreviewedAiResult,
-    type AiDraftForReview,
 } from '../infrastructure/sync/PendingAiResultsReader';
-// spec: plr-d10-redesign-real-integration-2026-10-25 (I17, H19 + PLR-D9 T1-T3) — one title bar with one
-// big मागे (it had two English "Back" buttons), and every line in plain Marathi (it was English). The
-// setup hub shows this place's row only while something waits. The words live in one module.
-//
-// IMPORTANT 2 (fix round 1) — the discard confirm is operation-correct, not hardcoded to "voice note".
-// NEW (fix round 3) — the row's date comes from `resolveRecordedInstant(job)` (the same capture-preferring
-// instant `buildAiDraftForReview` dates the saved log from), never `job.result.receivedAtUtc` (the DRAIN
-// instant): one note, one date, on one screen.
+import { logger } from '../infrastructure/observability/Logger';
 import {
-    DRAFTS_CANNOT_OPEN,
     DRAFTS_DISCARD,
     DRAFTS_EMPTY_LINE,
     DRAFTS_EMPTY_TITLE,
     DRAFTS_LINE,
     DRAFTS_LOADING,
     DRAFTS_NOT_OPENABLE,
-    DRAFTS_NOT_SAVED,
-    DRAFTS_OPEN,
     DRAFTS_TITLE,
     discardConfirmMessage,
     formatRecordedAt,
     previewLabel,
-    savedWithWarningMessage,
 } from './aiDraftsCopy';
 
 interface AiDraftsPageProps {
     onBack: () => void;
 }
 
-type ReviewingDraft = { job: UnreviewedAiResult } & AiDraftForReview;
+/** Only what is not voice: a bill or a sale-slip photo (voice lives in आवाज नोंदी). */
+export const isPhotoResult = (job: UnreviewedAiResult): boolean => job.operationType !== 'voice_parse';
 
 const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
-    const { crops, farmerProfile, ledgerDefaults } = useAppDataState();
-    const { handleManualSubmit } = useAppCommandsState();
-    // CRITICAL 1 & 2 (fix round 1) — `handleManualSubmit` attributes and gates
-    // the save on the APP-LEVEL `logScope` (`useLogCommands.ts`), not on the
-    // `context` prop this page hands to `ManualEntry` for rendering. Those are
-    // two different pieces of state. Without `setLogScope` here, either
-    // `hasActiveLogContext` is false (nothing farmer ever selected elsewhere)
-    // and the save silently no-ops, or a stale scope from something else the
-    // farmer looked at earlier is still selected and the log lands on THAT
-    // plot instead of the one this draft was recorded on. `AppRouter.tsx`'s
-    // `handleEditLog` sets `logScope` before mounting `ManualEntry` for the
-    // exact same reason; this page must do the same for the same reason.
-    const { logScope, setLogScope } = useAppLogState();
-    const { getTodayCounts } = useAppViewHelpers();
-    // NEW 4 (fix round 2) — a successful draft save runs handleManualSubmit's
-    // own success path, which sets the app-level `status` to `'success'` (the
-    // trigger for mainView's full-screen "Saved to Ledger" panel). Nothing
-    // resets it on route change, so without this the farmer's NEXT visit to
-    // main/log would land on a stale panel for a save made on THIS screen.
-    const { setStatus } = useAppVoiceState();
-
-    // NEW 1 (fix round 2) — `setLogScope` in `handleReview` overwrites the
-    // APP-LEVEL scope for the rest of the session unless something restores
-    // it. `LogContext.resetScope` has no production caller, so this page must
-    // do its own bookkeeping: snapshot whatever scope was active before this
-    // page ever touched it (captured ONCE, on first mount — `useRef`'s
-    // initial-value argument is ignored on every render after the first),
-    // and hand it back whenever review closes or this page unmounts. Without
-    // this, merely tapping Review and backing out leaves `hasActiveLogContext`
-    // true for the draft's plot, and the farmer's NEXT voice/manual capture on
-    // the main log screen — unrelated to this draft — lands there instead.
-    const originalLogScopeRef = useRef(logScope);
-    const restoreLogScope = useCallback(() => {
-        setLogScope(originalLogScopeRef.current);
-    }, [setLogScope]);
-    useEffect(() => {
-        return () => {
-            restoreLogScope();
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
     const [drafts, setDrafts] = useState<UnreviewedAiResult[]>([]);
     const [loading, setLoading] = useState(true);
-    const [reviewing, setReviewing] = useState<ReviewingDraft | null>(null);
     const [busyJobId, setBusyJobId] = useState<number | null>(null);
 
     const refresh = useCallback(async () => {
         setLoading(true);
-        const results = await listUnreviewedAiResults();
-        setDrafts(results);
-        setLoading(false);
+        try {
+            setDrafts((await listUnreviewedAiResults()).filter(isPhotoResult));
+        } catch (error) {
+            logger.warn('offline photo results could not be read', { error: String(error) });
+            setDrafts([]);
+        } finally {
+            setLoading(false);
+        }
     }, []);
 
     useEffect(() => {
         void refresh();
     }, [refresh]);
-
-    // Leaves the review screen and restores the app-level scope, whether the
-    // farmer backed out or just finished a successful save. The ONE place
-    // `reviewing` is cleared, so the restore can never be forgotten on a path
-    // that adds a new way to leave.
-    const closeReview = useCallback(() => {
-        restoreLogScope();
-        setReviewing(null);
-    }, [restoreLogScope]);
-    // plr-d10 (I17): the phone's own Back closes the review first, exactly like the title bar's मागे.
-    useBackDismiss(reviewing !== null, closeReview);
-
-    const handleReview = (job: UnreviewedAiResult) => {
-        const built = buildAiDraftForReview(job, crops);
-        if (!built) {
-            window.alert(DRAFTS_CANNOT_OPEN);
-            return;
-        }
-
-        const primarySelection = built.context.selection[0];
-        setLogScope({
-            selectedCropIds: [primarySelection.cropId],
-            selectedPlotIds: primarySelection.selectedPlotIds,
-            mode: 'single',
-            applyPolicy: 'broadcast',
-        });
-        setReviewing({ job, ...built });
-    };
 
     const handleDiscard = async (job: UnreviewedAiResult) => {
         if (!window.confirm(discardConfirmMessage(job))) {
@@ -161,151 +78,6 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
         }
     };
 
-    // The ONLY place this page marks a draft reviewed on the confirm path —
-    // and only after `handleManualSubmit` (the farmer's real save action)
-    // ACTUALLY SAVED something, not merely resolved. Scoped to this closure
-    // alone: there is no shared mutable "which job am I reviewing" state
-    // outside this component, so there is nothing here that can leak into an
-    // unrelated later save.
-    //
-    // IMPORTANT 3 (fix round 1) — `handleManualSubmit` always resolves, even
-    // on a no-op or a caught save failure; "the promise resolved" was never
-    // proof a log was written.
-    //
-    // NEW 2 (fix round 2) — a plain boolean was not enough: it collapsed "the
-    // losing tap of a double-tap" (a save that IS happening, via the OTHER
-    // call — must stay silent, per `useLogCommands.ts`'s own "Silent by
-    // design" comment) into the same `false` as a genuine no-op.
-    //
-    // NEW (fix round 3) — `'saved'` was still collapsing two outcomes: a
-    // clean save, and a save where the write succeeded but a LATER step
-    // (sync enqueue) failed. Treating that as plain `'saved'` meant this
-    // page told the farmer nothing, marked the draft reviewed, and refreshed
-    // — the row vanished with the log sitting in Dexie and nothing queued to
-    // sync. `'saved_with_warning'` is its own outcome so this page can say so
-    // on ITS OWN surface, using the `window.alert` it already has below —
-    // BEFORE marking reviewed, never suggesting a retry (the record is safe;
-    // retrying would duplicate it).
-    //
-    // ROUND 4 (N2) — a sentence has been deleted from the paragraph above.
-    // It said `useLogCommands.ts`'s `setError` "renders on exactly one
-    // surface — the main log screen's `AudioRecorder`". It renders on NO
-    // surface for this outcome: `mainView.tsx:388`/`:405` pass `error` as
-    // `externalError` to `AudioRecorder`/`AudioRecorderStreaming`, and both
-    // are mounted only when `mode === 'voice'`, whereas `ManualEntry` — the
-    // only caller of `handleManualSubmit` — is the other branch. What this
-    // page says below is therefore not a second copy of a message shown
-    // elsewhere; it is the only place the farmer is told at all.
-    const handleSubmit: ManualEntryProps['onSubmit'] = async (data) => {
-        const outcome = await handleManualSubmit(data);
-
-        if (outcome === 'already_saving') {
-            // The losing tap of a double-tap. The WINNING call is doing (or
-            // has done) the save; alerting here would contradict a save that
-            // is succeeding. Do nothing — matches the silent design at
-            // useLogCommands.ts's saveLock guard.
-            return;
-        }
-
-        if (outcome === 'not_saved') {
-            // Genuinely nothing was written. Do NOT mark the draft reviewed —
-            // Step 4 of the brief is "only after the farmer acts", and a
-            // no-op is not an act. Stay on the review screen so the note is
-            // not lost.
-            window.alert(DRAFTS_NOT_SAVED);
-            return;
-        }
-
-        if (outcome === 'saved_with_warning') {
-            // ROUND 4 (N1) — this said "Saved, but not sent yet. It will send
-            // automatically once you are back online." Both halves were false
-            // on the exact path that shows it, and `saveToastMessages.ts`
-            // already forbids the shape in writing: "never 'not yet' … a
-            // promise of a retry that no code path can keep".
-            //   - The documented trigger is `MutationQueue.enqueue` throwing
-            //     on payload validation, NOT being offline. Blaming
-            //     connectivity points the farmer at a cause he can "fix" by
-            //     waiting, which does nothing.
-            //   - `enqueueLogsForSync` has no try/catch, so on that trigger no
-            //     mutation row was ever written: nothing is queued for a
-            //     worker to pick up, `noteUnqueueableLogs` never ran so not
-            //     even the session honesty registry learned, and
-            //     `logSyncMutationService.ts` states there is no backfill job
-            //     in this system. On the EDIT branch nothing is enqueued at
-            //     all, ever. Nothing will "send automatically".
-            //
-            // The replacement claims only what this code can prove, in the
-            // order `saveToastMessages.ts` established: the phone claim FIRST
-            // (true, and saying it is what stops the farmer re-recording a
-            // record that already exists), then the failure, then the
-            // present-perfect fact that it is not in the farm records.
-            //
-            // IT MAKES NO CLAIM ABOUT THE FUTURE, deliberately. "will not
-            // reach your farm records" is the honest tense for a KNOWN-skipped
-            // record (`buildSkippedSyncToast`), but this one outcome also
-            // covers a throw from a step that runs AFTER a SUCCESSFUL enqueue
-            // (`calculateLogSummary`, `computeClosureDelta`), where a queued
-            // row does exist and the worker will carry it. The catch block
-            // cannot tell those apart, so promising either direction would
-            // swap one false claim for another. `buildEditSavedMessage`'s zero
-            // branch is the precedent: no claim beats a claim with no use.
-            //
-            // plr-d10 (I17): now in Marathi, same three claims in the same
-            // order — the approved phone claim first (`onPhoneClaim`).
-            window.alert(savedWithWarningMessage());
-        }
-
-        // outcome is 'saved' or 'saved_with_warning' — either way the record
-        // is durably in the ledger, so it is safe to mark this draft reviewed.
-        //
-        // NEW 4 (fix round 2) — undo handleManualSubmit's own `setStatus(
-        // 'success')`. That status exists to trigger mainView's full-screen
-        // "Saved to Ledger" panel on the LIVE capture screen; left standing,
-        // the farmer's next visit to main/log would show that panel for a
-        // save made here instead.
-        setStatus('idle');
-
-        if (reviewing) {
-            await markAiResultReviewed(reviewing.job.id);
-        }
-        closeReview();
-        await refresh();
-    };
-
-    if (reviewing) {
-        // CRITICAL 3 (fix round 1) — built the same way `mainView.tsx` builds
-        // it for the live path. Omitting this prop falls back to all-zero
-        // counts (`ManualEntry.tsx`'s `zeroTodayCounts`), which reads as "you
-        // have logged nothing today" even when the farmer already has —a
-        // fabricated number standing in for an unknown.
-        const todayCountsMap: Record<string, TodayCounts> = {};
-        const todayStr = getDateKey();
-        const plotIdsInScope = new Set<string>();
-        reviewing.context.selection.forEach(selection => selection.selectedPlotIds.forEach(id => plotIdsInScope.add(id)));
-        plotIdsInScope.forEach(plotId => {
-            todayCountsMap[plotId] = getTodayCounts(plotId, todayStr);
-        });
-
-        return (
-            <div className="pb-24 min-h-screen" data-testid="ai-drafts-review">
-                {/* मागे closes the review and returns to the list (restoring the log scope, as before). */}
-                <PageBar title={DRAFTS_TITLE} onBack={closeReview} />
-                <ManualEntry
-                    context={reviewing.context}
-                    crops={crops}
-                    defaults={ledgerDefaults}
-                    profile={farmerProfile}
-                    onSubmit={handleSubmit}
-                    initialData={reviewing.agriLog}
-                    provenance={reviewing.provenance}
-                    onDataConsumed={() => {}}
-                    todayCountsMap={todayCountsMap}
-                    recordedDateKey={reviewing.recordedDateKey}
-                />
-            </div>
-        );
-    }
-
     return (
         <div className="pb-24 min-h-screen" data-testid="ai-drafts-list">
             <PageBar title={DRAFTS_TITLE} onBack={onBack} />
@@ -316,7 +88,7 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
             {!loading && drafts.length === 0 && (
                 <div className="rounded-3xl border border-dashed border-slate-200 p-12 text-center bg-white/50" data-testid="ai-drafts-empty">
                     <div className="w-16 h-16 bg-emerald-50 text-emerald-300 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <Mic size={32} />
+                        <Receipt size={32} />
                     </div>
                     <h3 className="font-bold text-slate-500 text-lg">{DRAFTS_EMPTY_TITLE}</h3>
                     <p className="text-sm text-slate-500 mt-1">{DRAFTS_EMPTY_LINE}</p>
@@ -324,52 +96,33 @@ const AiDraftsPage: React.FC<AiDraftsPageProps> = ({ onBack }) => {
             )}
 
             <div className="space-y-3">
-                {drafts.map(job => {
-                    const reviewable = job.operationType === 'voice_parse';
-                    return (
-                        <div key={job.id} className="glass-panel p-4 rounded-2xl flex items-start justify-between gap-3">
-                            <div className="flex items-start gap-3 min-w-0">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">
-                                    <Mic size={18} />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="text-xs font-bold text-slate-400">{formatRecordedAt(resolveRecordedInstant(job))}</p>
-                                    <p className="text-sm text-slate-700 line-clamp-2">{previewLabel(job)}</p>
-                                    {/* IMPORTANT 2 (fix round 1) — a row with only a Discard
-                                        affordance and no explanation reads as a dead end. Say
-                                        plainly that review isn't built for this yet, and that
-                                        the row is kept, not lost, if the farmer does nothing. */}
-                                    {!reviewable && (
-                                        <p className="text-xs text-amber-700 mt-1" data-testid={`ai-draft-not-openable-${job.id}`}>{DRAFTS_NOT_OPENABLE}</p>
-                                    )}
-                                </div>
+                {drafts.map(job => (
+                    <div key={job.id} className="glass-panel p-4 rounded-2xl flex items-start justify-between gap-3" data-testid={`ai-draft-row-${job.id}`}>
+                        <div className="flex items-start gap-3 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">
+                                <Receipt size={18} />
                             </div>
-                            <div className="flex flex-col items-end gap-2 shrink-0">
-                                {reviewable && (
-                                    <button
-                                        type="button"
-                                        onClick={() => handleReview(job)}
-                                        className="min-h-[44px] rounded-full bg-emerald-600 text-white px-4 py-1.5 text-sm font-bold"
-                                        data-testid={`ai-draft-open-${job.id}`}
-                                    >
-                                        {DRAFTS_OPEN}
-                                    </button>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={() => handleDiscard(job)}
-                                    disabled={busyJobId === job.id}
-                                    className="p-2 rounded-lg bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-600 disabled:opacity-50"
-                                    title={DRAFTS_DISCARD}
-                                    aria-label={DRAFTS_DISCARD}
-                                    data-testid={`ai-draft-discard-${job.id}`}
-                                >
-                                    <Trash2 size={16} />
-                                </button>
+                            <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-400">{formatRecordedAt(resolveRecordedInstant(job))}</p>
+                                <p className="text-sm text-slate-700 line-clamp-2">{previewLabel(job)}</p>
+                                {/* A row with only a Discard affordance and no explanation reads as a dead end: say plainly that it
+                                    cannot be opened here yet, and that it is kept, not lost, if he does nothing. */}
+                                <p className="text-xs text-amber-700 mt-1" data-testid={`ai-draft-not-openable-${job.id}`}>{DRAFTS_NOT_OPENABLE}</p>
                             </div>
                         </div>
-                    );
-                })}
+                        <button
+                            type="button"
+                            onClick={() => handleDiscard(job)}
+                            disabled={busyJobId === job.id}
+                            className="shrink-0 p-2 rounded-lg bg-slate-100 text-slate-400 hover:bg-rose-100 hover:text-rose-600 disabled:opacity-50"
+                            title={DRAFTS_DISCARD}
+                            aria-label={DRAFTS_DISCARD}
+                            data-testid={`ai-draft-discard-${job.id}`}
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                ))}
             </div>
         </div>
     );

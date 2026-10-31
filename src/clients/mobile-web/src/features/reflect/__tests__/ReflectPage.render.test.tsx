@@ -363,3 +363,31 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         expect(screen.getByTestId('season-hidden')).toBeInTheDocument();
     });
 });
+
+describe('ReflectPage — lane OF (founder D-60 = 4A): any past day can be filled', () => {
+    it('today: no "त्या दिवसाचं काम सांगा" (today\'s work is told from the home page)', () => {
+        renderPage();
+        openAll();
+        expect(screen.queryByTestId('past-day-tell')).toBeNull();
+        expect(screen.queryByTestId('past-day-tell-cal')).toBeNull();
+    });
+
+    it('a past day reached through "कामाचं कॅलेंडर": "त्या दिवसाचं काम सांगा · <date>" asks THE ONE mic for THAT day, with no place (crop → plot first)', () => {
+        const props = renderPage();
+        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
+        pickOct21();
+        const tell = screen.getByTestId('past-day-tell-cal');
+        expect(tell).toHaveTextContent('त्या दिवसाचं काम सांगा');
+        expect(screen.getByTestId('past-day-tell-cal-day')).toHaveTextContent('21 ऑक्टो');
+        fireEvent.click(tell);
+        expect(props.onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addToDay', context: { date: '2026-10-21' } }));
+    });
+
+    it('a past day reached through the day bar shows it there too', () => {
+        const props = renderPage();
+        openAll();
+        fireEvent.click(screen.getByTestId('day-prev'));
+        fireEvent.click(screen.getByTestId('past-day-tell'));
+        expect(props.onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addToDay', context: { date: '2026-10-24' } }));
+    });
+});

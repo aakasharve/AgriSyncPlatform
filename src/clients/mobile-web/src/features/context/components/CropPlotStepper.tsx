@@ -71,6 +71,11 @@ export interface StepperExtras {
      * recording screen fits (PLR-D5: recording replaces the choices). Default false.
      */
     focusFooter?: boolean;
+    /**
+     * Lane OF (rule CTX-1) — plots to mark with a short tag (Sathi's guess, or the plot the entry is on now). Marked,
+     * never chosen for him: the same steps, nothing pre-picked.
+     */
+    marked?: { plotIds: readonly string[]; label: string };
 }
 export interface CropPlotStepperProps extends StepperExtras {
     crops: readonly StepperCrop[];
@@ -95,7 +100,7 @@ const CropPhotoCard: React.FC<Omit<React.ComponentProps<typeof CropCard>, 'image
 };
 
 export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
-    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false,
+    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked,
 }) => {
     const languageContext = useOptionalLanguage();
     const language = languageContext?.language ?? 'en';
@@ -246,6 +251,9 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                                         {on && <Check size={multiCrop ? 14 : 20} strokeWidth={4} />}
                                     </span>
                                     <span className="min-w-0 truncate">{plot.name}</span>
+                                    {marked?.plotIds.includes(plot.id) && (
+                                        <span data-testid={`flow-plot-mark-${plot.id}`} className="absolute -right-1 -top-2 rounded-full border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-extrabold leading-none text-amber-900">{marked.label}</span>
+                                    )}
                                 </button>
                             );
                         })}

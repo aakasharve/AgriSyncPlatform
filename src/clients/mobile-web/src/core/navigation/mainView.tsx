@@ -4,10 +4,6 @@
 // orchestrator stays small.
 
 import React from 'react';
-import type { TodayCounts } from '../../domain/types/farm.types';
-import ManualEntry from '../../features/logs/components/ManualEntry';
-import { getDateKey } from '../domain/services/DateKeyService';
-import { buildTimelineEntries } from '../../services/transcriptTimelineService';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
 // `MeterDisplay` is NOT imported here any more. main rendered it directly on the
 // success card; dfes-companion moved that score block INTO
@@ -15,10 +11,6 @@ import { FEATURE_FLAGS } from '../../app/featureFlags';
 // `mainView.dayUnderstandingOrder.test.tsx` asserts it renders EXACTLY ONCE with
 // the real panel mounted — so a second, direct render here would be the copy that
 // test exists to forbid.
-// Only the SUMMARY is needed here — `mainView` hands it to `ManualEntry`,
-// which owns the decision to render the panel (it is the component that knows
-// whether the farmer's context is the whole farm).
-import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — the आजची कामे tab's entry flow (work
 // home -> crop -> plots + mic) and the band for saying one part again. They REPLACE the owner-oversight
 // SathiGuideCard + HelpBar on this screen (the guide's question is now Sathi's, in the founder's words;
@@ -30,8 +22,8 @@ import { todayAttendance } from '../../features/logs/components/entry/todayAtten
 import { requestLabourOpening } from '../../features/labour/labourOpening';
 import { mayShowFarmMoney } from '../../features/labour/homeAttendanceDoor';
 import { toAttendanceOnlyDraft, toAttendanceSubmission, attendanceCaptureDay } from '../../features/logs/attendanceDraft';
+import AttendanceNotHeard from '../../features/labour/components/AttendanceNotHeard';
 import { draftProvenance } from '../../features/voice/draftProvenance';
-import type { LogProvenance } from '../../domain/ai/LogProvenance';
 // Labour V2 R1 Task 3.4b — the Labour-owned result surface + the anchor it
 // renders against. The invoking feature owns the meaning of a labour parse.
 import AttendanceResult from '../../features/labour/components/AttendanceResult';
@@ -67,43 +59,30 @@ import { requestSpeak } from '../speak/speakStore';
 // It is one — `notQueuedBadge.test.tsx` binds to exactly this path.
 export { NotQueuedForServerBadge, LabourLogBanner } from './mainViewComponents';
 import { renderSavedView } from './savedView';
+import { CheckSaveHost } from './checkSaveView';
 import { currentVoiceResult, renderVoiceResultView } from './voiceResultView';
 
 // `TaskCloseConfirmSlot` moved to `savedView.tsx` with the branch that was
 // its only consumer.
 
 // Labour V2 R1 Task 3.4b — the labour door's stable frame. `renderLogView`
-// is a plain function (no hooks — see TaskCloseConfirmSlot above), so the one
-// piece of memory this branch needs lives here instead.
+// is a plain function (no hooks), so the one piece of memory this branch needs lives here instead.
 //
-// WHY MEMORY IS NEEDED AT ALL: the बदल करा edit surface is the byte-for-byte
-// ManualEntry(attendanceOnly) call, and that call CONSUMES the draft on mount
-// (useManualEntryHydration → onDataConsumed → setDraftLog(null)). If the
-// landing decision read the live draftLog alone, that consumption would flip
-// the branch from <AttendanceResult> to a bare <ManualEntry> one commit after
-// बदल करा — React replaces the subtree on the type change, the freshly
-// hydrated form remounts EMPTY (initialData is null by then, and the parse is
-// in no saved log to rehydrate from), and the farmer's spoken हजेरी silently
-// evaporates on the CORRECTION button — a rule-1 / D9.6 violation. The latch
-// keeps the LAST result element standing once the draft is consumed, so
-// AttendanceResult — and the ManualEntry instance it hosts — stay mounted
-// until the save routes away (useLogCommands routes logIntent==='labour' back
-// to Labour, which unmounts this frame). While the draft is alive the
-// children are fresh each render; the frozen element only takes over after
-// consumption, when the edit surface is deliberately running on its own
-// internal state anyway (useManualEntryHydration's re-run guard).
-// Exported for labourResultOwnership.test.tsx's plain-node assertions (the
-// same reason NotQueuedForServerBadge/LabourLogBanner are re-exported above:
-// identity checks need THIS component, not a copy).
+// The latch keeps the LAST result element standing once the draft is gone (the confirm clears it just before the save
+// routes away to हजेरी), so the screen never flashes to the empty case in between. Lane OF (founder D-57): the old
+// hand-filled form that used to be this frame's fallback and its "बदल करा" surface is gone — a parse with no हजेरी in
+// it says so with his words and "पुन्हा सांगा" (`AttendanceNotHeard`), and the people are changed by tapping on the
+// result itself.
+// Exported for labourResultOwnership.test.tsx's plain-node assertions (identity checks need THIS component).
 export const LabourResultHost: React.FC<{
-    renderManualEntry: () => React.ReactNode;
+    renderEmpty: () => React.ReactNode;
     children: React.ReactNode;
-}> = ({ renderManualEntry, children }) => {
+}> = ({ renderEmpty, children }) => {
     const lastResult = React.useRef<React.ReactNode>(null);
     // Ref write during render: idempotent (same element object on a
     // StrictMode double-render), and its only reader is this render path.
     if (children != null) lastResult.current = children;
-    return <>{children ?? lastResult.current ?? renderManualEntry()}</>;
+    return <>{children ?? lastResult.current ?? renderEmpty()}</>;
 };
 
 export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
@@ -169,10 +148,10 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
         crops, logScope, setLogScope, setMode,
         hasActiveLogContext, isContextReady,
         handleManualSubmit,
-        currentLogContext, ledgerDefaults, farmerProfile,
-        draftLog, setDraftLog, provenance,
+        currentLogContext,
+        draftLog, setDraftLog,
         continuityLevel, savedPendingCaptureId,
-        getTodayCounts, getContextColorIndicator,
+        getContextColorIndicator,
         history,
         costSnapshot, yesterdayCost,
         setRecordingSegment,
@@ -194,7 +173,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
     //      help lives in सेट-अप केंद्र), the dark running-cost card (re-homed on the work home), the
     //      voice/manual InputMethodToggle (now the quiet "type instead" line + the hand-filled form),
     //      and the English "Recording…", "Select a plot to continue..." and "Cancel & Go Back".
-    const showReview = mode !== 'voice' && hasActiveLogContext;
+    // Lane OF — a review needs something to review: a parse, or the labour door's result (which keeps its own latch).
+    // An idle 'manual' flow with no parse shows the entry flow (it was an EMPTY old form).
+    const showReview = mode !== 'voice' && hasActiveLogContext && (draftLog !== null || logIntent === 'labour');
 
     // Saying one part again is cancelled back to the review it belongs to. It used to set the
     // status 'confirming', which nothing renders — the farmer was left on a blank screen.
@@ -208,86 +189,6 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
 
     // H10 / lane FX-1 — the हजेरी place, opened as a PLACE over the home tabs (merge-review m1: its मागे lands on home).
     const openLabourPlace = () => (ctx.openPlace ? ctx.openPlace('labour') : setCurrentRoute('labour'));
-
-    // Labour V2 R1 Task 3.4b — the ONE ManualEntry call, moved up (not modified) so the review below
-    // and the entry flow's hand-filled form use the same form. `labourEdit`: the बदल करा surface of
-    // the labour door's confirm card. It takes THAT draft's own parse provenance (never the voice
-    // state's last one) and its capture day.
-    const renderManualEntry = (labourEdit?: { provenance: LogProvenance | undefined; recordedDateKey: string }) => (
-        <ManualEntry
-            context={currentLogContext}
-            crops={crops}
-            defaults={ledgerDefaults}
-            profile={farmerProfile}
-            onSubmit={handleManualSubmit}
-            disabled={false}
-            // FOUNDER RULING 2026-08-31 — the labour
-            // door writes only हजेरी. Filtered HERE,
-            // at the form's entrance, so the other
-            // buckets never enter the draft the
-            // farmer edits and therefore can never
-            // be saved from this door. Any task he
-            // stated survives on the labour row
-            // itself — see attendanceDraft.ts.
-            initialData={logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : draftLog}
-            attendanceOnly={logIntent === 'labour'}
-            provenance={labourEdit ? labourEdit.provenance : provenance}
-            recordedDateKey={labourEdit?.recordedDateKey}
-            // Labour door: the server takes only labour from the voice job.
-            captureScope={logIntent === 'labour' ? 'labour' : undefined}
-            onDataConsumed={() => setDraftLog(null)}
-            todayCountsMap={(() => {
-                const map: Record<string, TodayCounts> = {};
-                if (currentLogContext) {
-                    const todayStr = getDateKey();
-                    const pids = new Set<string>();
-                    currentLogContext.selection.forEach(s => s.selectedPlotIds.forEach(p => pids.add(p)));
-                    pids.forEach(pid => {
-                        map[pid] = getTodayCounts(pid, todayStr);
-                    });
-                }
-                return map;
-            })()}
-            /* LABOUR_PHASE2 P2.4 — the farm-wide half of the
-               day, carried SEPARATELY. A farm-wide context
-               yields no plot ids, so the map above is
-               legitimately `{}` and ManualEntry showed zeros
-               for a day the farmer HAD recorded work in. The
-               fix is NOT to fold farm-wide logs into that map:
-               `R24` measured that its consumer sums it across
-               the plots in context, turning a plot's 3 labour
-               entries into 11. No plot key here, so the two can
-               never be added. */
-            farmWideToday={getFarmWideDaySummary(history, getDateKey())}
-            transcriptEntries={(() => {
-                // Build timeline entries for today's logs in current context
-                const todayStr = getDateKey();
-                const contextPlotIds = new Set<string>();
-                currentLogContext?.selection.forEach(s => s.selectedPlotIds.forEach(p => contextPlotIds.add(p)));
-
-                const todayLogsLocal = history.filter(log =>
-                    log.date === todayStr &&
-                    log.context?.selection?.some((sel: { selectedPlotIds?: readonly string[] }) =>
-                        sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
-                    )
-                );
-                return buildTimelineEntries(todayLogsLocal, crops);
-            })()}
-            todayLogs={(() => {
-                // Full log objects for loading into editor
-                const todayStr = getDateKey();
-                const contextPlotIds = new Set<string>();
-                currentLogContext?.selection.forEach(s => s.selectedPlotIds.forEach(p => contextPlotIds.add(p)));
-
-                return history.filter(log =>
-                    log.date === todayStr &&
-                    log.context?.selection?.some((sel: { selectedPlotIds?: readonly string[] }) =>
-                        sel.selectedPlotIds?.some((pid: string) => contextPlotIds.has(pid))
-                    )
-                );
-            })()}
-        />
-    );
 
     return (
         <>
@@ -311,15 +212,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                 {getContextColorIndicator()}
                                 <div className={`transition-all duration-500 ${!isContextReady ? 'opacity-90' : ''}`}>
                                     {(() => {
-                                        // Labour V2 R1 Task 3.4b — the invoking feature owns the
-                                        // result surface. The generic ManualEntry(attendanceOnly)
-                                        // branch is KEPT as the बदल करा edit surface.
+                                        // Labour V2 R1 Task 3.4b — the invoking feature owns the result surface.
                                         const attendanceDraft = logIntent === 'labour' ? toAttendanceOnlyDraft(draftLog) : null;
+                                        const speakAttendanceAgain = () => { setRecordingSegment('labour'); setMode('voice'); };
                                         if (logIntent === 'labour') {
-                                            // The labour door lands on the Labour-owned screen. A
-                                            // draft with no labour rows falls through to the empty
-                                            // ManualEntry — "he said something this door cannot
-                                            // record… He sees it and decides" survives as behaviour.
+                                            // The labour door lands on the Labour-owned screen. A draft with no labour rows
+                                            // says so, with his words and "पुन्हा सांगा" (lane OF — never the old form).
                                             // Only THIS draft's parse provenance (bound when the parse
                                             // arrived), never the voice state's last one; and the day he
                                             // spoke, which the record, its marks and the anchor all use.
@@ -328,7 +226,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                             const anchorForDraft = resolveLabourAnchor(history, captureDay);
                                             const anchorLog = history.find((l) => anchorForDraft.state === 'anchored' && l.id === anchorForDraft.logId);
                                             return (
-                                                <LabourResultHost renderManualEntry={renderManualEntry}>
+                                                <LabourResultHost renderEmpty={() => <AttendanceNotHeard transcript={draftLog?.fullTranscript ?? ''} onSpeakAgain={speakAttendanceAgain} />}>
                                                     {attendanceDraft && attendanceDraft.labour.length > 0 ? (
                                                         <AttendanceResult
                                                             draft={attendanceDraft}
@@ -337,14 +235,15 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                                                             workDate={captureDay}
                                                             // Labour only, dated and attributed (see toAttendanceSubmission).
                                                             onConfirm={(d) => { void handleManualSubmit(toAttendanceSubmission(d, ownProvenance)); setDraftLog(null); }}
-                                                            renderEditSurface={() => renderManualEntry({ provenance: ownProvenance, recordedDateKey: captureDay })}
-                                                            onSpeakMore={() => { setRecordingSegment('labour'); setMode('voice'); }}
+                                                            onSpeakMore={speakAttendanceAgain}
                                                         />
                                                     ) : null}
                                                 </LabourResultHost>
                                             );
                                         }
-                                        return renderManualEntry();
+                                        // Lane OF (founder D-58 = 2A) — a parse the voice auto-save did not save by itself:
+                                        // "तपासा आणि जतन करा", saying what is unclear (never the old hand-filled form).
+                                        return <CheckSaveHost ctx={ctx} />;
                                     })()}
                                 </div>
                                 {recordingSegment && <SegmentCancel onCancel={cancelSegment} />}

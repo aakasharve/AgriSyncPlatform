@@ -24,7 +24,9 @@
  * question is the design's amber card (the container's panel, `look="sathi"`).
  */
 import React, { useRef, useState } from 'react';
-import { Check, MapPin, Mic, Pencil } from 'lucide-react';
+import { CalendarDays, Check, MapPin, Mic, Pencil } from 'lucide-react';
+import { getDateKey } from '../../../../core/domain/services/DateKeyService';
+import { dayRel } from '../dayPick/dayWords';
 import FlowBackButton from '../../../context/components/FlowBackButton';
 import { NotQueuedForServerBadge } from '../../../../core/navigation/mainViewComponents';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
@@ -84,6 +86,12 @@ export interface VoiceResultScreenProps {
     questionPanel?: React.ReactNode;
     /** The other existing post-save surfaces the container keeps (clarity line, task close). */
     extras?: React.ReactNode;
+    /**
+     * Lane OF (rule TAP-1, item 6) — the day chip opens the calendar to put this SAVED recording on another day. Only
+     * once the server can move a saved entry (`correctionCapabilities.canMoveSavedEntry`, lane OF-S); until then the day
+     * is shown and not offered as a button (P5).
+     */
+    onChangeDay?: () => void;
 }
 
 /** The plots one log of this recording is about, as named on the farm (his own words for them). */
@@ -124,6 +132,11 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
         <div className="space-y-3 pb-6 pt-1" style={{ fontFamily: SANS }} data-testid="voice-result">
             <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr-place"><MapPin size={16} aria-hidden="true" />{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
+                {p.onChangeDay ? (
+                    <button type="button" onClick={p.onChangeDay} data-testid="vr-day" className="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800"><CalendarDays size={16} aria-hidden="true" />{dayRel(primary.log.date, getDateKey(), language)}</button>
+                ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm font-extrabold text-stone-700" data-testid="vr-day"><CalendarDays size={16} aria-hidden="true" />{dayRel(primary.log.date, getDateKey(), language)}</span>
+                )}
                 <span className="text-xs font-bold text-stone-600" data-testid="vr-count">{count > 1 ? RS.todayCount(count) : RS.firstToday}</span>
             </div>
 

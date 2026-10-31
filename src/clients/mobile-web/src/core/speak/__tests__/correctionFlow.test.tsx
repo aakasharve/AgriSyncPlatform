@@ -7,8 +7,13 @@
  * app: the entry's current parts → the big mic (THE ONE mic) → his words understood, NOT saved → back on the screen,
  * before → after (the changed part outlined and tagged, the old value struck through) → "जतन करा" saves a new content
  * version through lane F1's `revise_log_content` (the REAL `UpdateLog` use case; only its queue is a spy) with the merged
- * buckets — every part he did not mention exactly as it was. Nothing is saved on "पुन्हा सांगा" or on back. A record
- * the हजेरी door saved is refused politely. In Marathi and in English.
+ * buckets — every part he did not mention exactly as it was. Nothing is saved by speaking or on back. A record
+ * the हजेरी door saved is refused politely (and, for someone who may open हजेरी, opens that day in the हजेरी वही).
+ * In Marathi and in English.
+ *
+ * Lane OF (founder D-61 = 5A + rule TAP-1): voice first, then typing right under the mic, then "किंवा दाबून बदला" — a
+ * tap change, a typed change, remove + undo, add, the plot and the day (read-only until the server can move a saved
+ * entry), an offline tap change queued, and the last part that cannot be removed.
  */
 import '@testing-library/jest-dom/vitest';
 import React, { useState } from 'react';
@@ -32,6 +37,8 @@ vi.mock('../../navigation/logRecorder', () => ({
 vi.mock('../../../features/logs/components/entry/LogEntryFlow', () => ({ LogEntryFlow: () => null }));
 vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({ getSessionUserId: () => 'me' }));
 vi.mock('../../../features/logs/services/pendingQuestionAnswer', () => ({ abandonPendingQuestionAnswer: vi.fn() }));
+const labourOpening = vi.hoisted(() => vi.fn());
+vi.mock('../../../features/labour/labourOpening', () => ({ requestLabourOpening: labourOpening }));
 
 import { LogVerificationStatus, type AgriLogResponse, type AppStatus, type DailyLog, type FarmerProfile, type LogScope } from '../../../types';
 import { updateLog } from '../../../application/usecases/UpdateLog';
@@ -68,16 +75,19 @@ const SAID: AgriLogResponse = {
     inputs: [{ id: 'x', method: 'Spray', mix: [], productName: 'इथरेल', quantity: 350, unit: 'ml' }],
 };
 
-let drive: { set: (st: AppStatus) => void; history: () => DailyLog[] } = { set: () => undefined, history: () => [] };
-const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean }> = ({ start, save, refused = false }) => {
+let drive: { set: (st: AppStatus) => void; history: () => DailyLog[]; text: (t: string) => void } = { set: () => undefined, history: () => [], text: () => undefined };
+const openPlace = vi.fn();
+const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean; hajeri?: boolean }> = ({ start, save, refused = false, hajeri = false }) => {
     const [history, setHistory] = useState<DailyLog[]>(start);
     const [status, setStatus] = useState<AppStatus>('idle');
     const [logScope, setLogScope] = useState<LogScope>(EMPTY);
-    drive = { set: setStatus, history: () => history };
+    const handleTextReady = vi.fn(async (t: string) => { drive.text(t); });
+    drive = { set: setStatus, history: () => history, text: drive.text };
     const ctx = {
         status, draftLog: null, lastSavedLogIds: [], logScope, crops: CROPS, history, farmerProfile: PROFILE, farmRole: 'PrimaryOwner',
         currentRoute: 'main', mainView: 'reflect', isContextReady: logScope.selectedCropIds.length > 0,
         handleReset: vi.fn(), setMode: vi.fn(), setStatus, setLogScope, setCurrentRoute: vi.fn(), setMainView: vi.fn(),
+        handleTextReady, canOpenAttendanceFromHome: hajeri, openPlace,
     } as unknown as AppRouterContext;
     return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} readRefused={async () => refused} />;
 };
@@ -100,7 +110,7 @@ const realSave = () => {
 
 /** He speaks the change: the waiting screen, then the recorder's purpose-aware hand-off (never the auto-save). */
 const speak = async (words: AgriLogResponse) => {
-    fireEvent.click(screen.getByTestId(screen.queryByTestId('corr-mic') ? 'corr-mic' : 'corr-again'));
+    fireEvent.click(screen.getByTestId('corr-mic'));
     expect(speakState().request?.purpose).toBe('correctEntry');
     expect(screen.getByTestId('the-recorder')).toBeInTheDocument();
     act(() => drive.set('processing'));
@@ -110,19 +120,32 @@ const speak = async (words: AgriLogResponse) => {
     expect(autoSave).not.toHaveBeenCalled();
 };
 
-beforeEach(() => { resetSpeakStoreForTests(); enqueue.mockClear(); postLabourCorrection.mockClear(); });
+beforeEach(() => { resetSpeakStoreForTests(); enqueue.mockClear(); postLabourCorrection.mockClear(); labourOpening.mockClear(); openPlace.mockClear(); });
+
+/** The row of one part (by its part key; the first, or the one that is not struck through). */
+const rowOf = (part: string): HTMLElement => {
+    const rows = screen.getAllByTestId(/^corr-row-/).filter(el => el.getAttribute('data-part') === part);
+    return rows.find(el => !el.className.includes('opacity-80')) ?? rows[0];
+};
+const idOf = (row: HTMLElement): string => row.getAttribute('data-testid')!.replace('corr-row-', '');
 afterEach(() => { cleanup(); resetSpeakStoreForTests(); lang.value = 'mr'; });
 
 describe.each(['mr', 'en'] as const)('"बदला" → speak → before / after → save (%s)', language => {
     beforeEach(() => { lang.value = language; });
     const ml = language === 'en' ? 'ml' : 'मिली';
 
-    it('the screen: the entry as it is now, one big mic and the example lines; no pencil, no form', () => {
+    it('the screen: voice first (one big mic and the example lines), typing right under it, then the parts to tap', () => {
         const { deps } = realSave();
         render(<Harness start={[ENTRY]} save={deps} />);
         act(() => openCorrection('log-1'));
         // spec I18: the work in his language ("फवारणी" is "Spraying" in English mode).
-        expect(screen.getByTestId('corr-now')).toHaveTextContent(language === 'en' ? 'Spraying' : 'फवारणी');
+        expect(screen.getByTestId('corr-rows')).toHaveTextContent(language === 'en' ? 'Spraying' : 'फवारणी');
+        // TAP-1 order: the mic, then typing, then "किंवा दाबून बदला"
+        const order = ['corr-mic', 'corr-type', 'corr-or-tap', 'corr-plot-row', 'corr-day-row', 'corr-rows', 'corr-add', 'corr-save'].map(id => screen.getByTestId(id));
+        order.reduce((a, b) => { expect(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); return b; });
+        expect(screen.getByTestId('corr-type')).toHaveTextContent(language === 'en' ? 'If you cannot speak, type here' : 'बोलता येत नसेल तर इथे लिहा');
+        expect(screen.getByTestId('corr-or-tap')).toHaveTextContent(language === 'en' ? 'Or change by tapping' : 'किंवा दाबून बदला');
+        expect(screen.getByTestId('corr-save')).toBeDisabled(); // nothing changed yet
         expect(screen.getByTestId('corr-mic')).toBeInTheDocument();
         expect(screen.getByTestId('corr-prompt')).toHaveTextContent(language === 'en' ? 'Say what should change' : 'जे बदलायचं ते बोलून सांगा');
         expect(screen.getByTestId('corr-examples')).toHaveTextContent('350');
@@ -137,14 +160,15 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         await speak(SAID);
         expect(speakState().request).toBeNull();
         expect(screen.getByTestId('corr-said')).toHaveTextContent('इथरेल 300 नाही, 350 मिली');
-        const inputs = screen.getByTestId('corr-part-inputs');
+        const inputs = rowOf('inputs');
+        const id = idOf(inputs);
         expect(inputs).toHaveAttribute('data-changed', 'yes');
-        expect(within(inputs).getByTestId('corr-changed-inputs')).toHaveTextContent(language === 'en' ? 'Changed' : 'बदललं');
-        expect(within(inputs).getByTestId('corr-old-inputs')).toHaveTextContent(`इथरेल · 300 ${ml}`);
-        expect(within(inputs).getByTestId('corr-old-inputs').className).toContain('line-through');
-        expect(within(inputs).getByTestId('corr-new-inputs')).toHaveTextContent(`इथरेल · 350 ${ml}`);
-        expect(screen.getByTestId('corr-part-irrigation')).toHaveAttribute('data-changed', 'no');
-        expect(screen.getByTestId('corr-part-crop')).toHaveAttribute('data-changed', 'no');
+        expect(within(inputs).getByTestId(`corr-tag-${id}`)).toHaveTextContent(language === 'en' ? 'Changed' : 'बदललं');
+        expect(within(inputs).getByTestId(`corr-old-${id}`)).toHaveTextContent(`इथरेल · 300 ${ml}`);
+        expect(within(inputs).getByTestId(`corr-old-${id}`).className).toContain('line-through');
+        expect(within(inputs).getByTestId(`corr-value-${id}`)).toHaveTextContent(`इथरेल · 350 ${ml}`);
+        expect(rowOf('irrigation')).toHaveAttribute('data-changed', 'no');
+        expect(rowOf('crop')).toHaveAttribute('data-changed', 'no');
         // it was confirmed: the new version's true status is said before he saves
         expect(screen.getByTestId('corr-reconfirm')).toBeInTheDocument();
         expect(enqueue).not.toHaveBeenCalled(); // nothing saved by speaking
@@ -165,18 +189,18 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         expect(screen.queryByTestId('corr-screen')).toBeNull();
     });
 
-    it('"पुन्हा सांगा" forgets what he said (nothing saved) and opens the mic again', async () => {
+    it('the mic again after speaking: going back from it changes nothing; nothing is saved by speaking', async () => {
         const { deps, saved } = realSave();
         render(<Harness start={[ENTRY]} save={deps} />);
         act(() => openCorrection('log-1'));
         await speak(SAID);
-        expect(screen.getByTestId('corr-after')).toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('corr-again'));
-        expect(speakState().correction?.proposal).toBeNull();
+        expect(rowOf('inputs')).toHaveAttribute('data-changed', 'yes');
+        fireEvent.click(screen.getByTestId('corr-mic'));
         expect(speakState().request?.purpose).toBe('correctEntry');
-        // he goes back from the mic without speaking: the screen is as it was before he spoke
+        // he goes back from the mic without speaking: the screen is as it was (his change still shown, not saved)
         fireEvent.click(screen.getByTestId('speak-back'));
         expect(screen.getByTestId('corr-mic')).toBeInTheDocument();
+        expect(rowOf('inputs')).toHaveAttribute('data-changed', 'yes');
         expect(enqueue).not.toHaveBeenCalled();
         expect(saved).toHaveLength(0);
     });
@@ -198,7 +222,7 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         act(() => openCorrection('log-1'));
         await speak({ ...SAID, inputs: [] });
         expect(screen.getByTestId('corr-nothing')).toBeInTheDocument();
-        expect(screen.queryByTestId('corr-save')).toBeNull();
+        expect(screen.getByTestId('corr-save')).toBeDisabled();
     });
 
     it('D3 + D4: "आत्ता जे आहे" reads as the result screen ("इथरेल · 300 मिली"), never his quoted words', () => {
@@ -206,8 +230,8 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         const quoted = { ...ENTRY, inputs: [{ ...ENTRY.inputs[0], sourceText: 'इथरेल 300 मिली फवारलं' }] } as DailyLog;
         render(<Harness start={[quoted]} save={deps} />);
         act(() => openCorrection('log-1'));
-        expect(screen.getByTestId('corr-now')).toHaveTextContent(`इथरेल · 300 ${ml}`);
-        expect(screen.getByTestId('corr-now').textContent).not.toContain('“');
+        expect(screen.getByTestId('corr-rows')).toHaveTextContent(`इथरेल · 300 ${ml}`);
+        expect(screen.getByTestId('corr-rows').textContent).not.toContain('“');
     });
 
     it('B004: offline, the mic does not record — it says a change needs the internet, and nothing is asked of the recorder', () => {
@@ -230,7 +254,7 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         await speak({ ...SAID, inputs: [], labour: [{ id: 'x', type: 'HIRED', workerNames: ['गणेश'] }] });
         expect(screen.getByTestId('corr-labour-hajeri')).toHaveTextContent(language === 'en' ? 'attendance' : 'हजेरी');
         expect(screen.queryByTestId('corr-nothing')).toBeNull();
-        expect(screen.queryByTestId('corr-save')).toBeNull();
+        expect(screen.getByTestId('corr-save')).toBeDisabled();
         expect(postLabourCorrection).not.toHaveBeenCalled();
         expect(saved).toHaveLength(0);
     });
@@ -251,7 +275,8 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         await act(async () => { fireEvent.click(screen.getByTestId('corr-save')); });
         await act(async () => { await Promise.resolve(); });
         expect(screen.getByTestId('corr-save-failed')).toHaveTextContent(language === 'en' ? 'Nothing changed on this phone' : 'या फोनवर काहीही बदललं नाही');
-        expect(screen.getByTestId('corr-after')).toBeInTheDocument(); // still there: he can press again
+        expect(screen.getByTestId('corr-rows')).toBeInTheDocument(); // still there: he can press again
+        expect(screen.getByTestId('corr-save')).toBeEnabled();
         expect(repoSave).toHaveLength(0);
         expect(enqueue).not.toHaveBeenCalled();
     });
@@ -263,12 +288,157 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         expect(await screen.findByTestId('corr-server-refused')).toHaveTextContent(language === 'en' ? 'only on this phone' : 'फक्त या फोनवर');
     });
 
-    it('a हजेरी-door record is refused politely (lane F1): no mic, no save', () => {
+    it('a हजेरी-door record, for someone who may not open हजेरी, is refused politely (lane F1): no mic, no save', () => {
         const { deps } = realSave();
         render(<Harness start={[{ ...ENTRY, captureScope: 'labour' }]} save={deps} />);
         act(() => openCorrection('log-1'));
         expect(screen.getByTestId('corr-refused')).toHaveTextContent(language === 'en' ? 'attendance page' : 'हजेरी');
         expect(screen.queryByTestId('corr-mic')).toBeNull();
         expect(screen.queryByTestId('corr-save')).toBeNull();
+    });
+});
+
+describe.each(['mr', 'en'] as const)('lane OF — "किंवा दाबून बदला" and typing on the बदला screen (%s)', language => {
+    beforeEach(() => { lang.value = language; });
+    const open = () => {
+        const { deps, saved } = realSave();
+        render(<Harness start={[ENTRY]} save={deps} />);
+        act(() => openCorrection('log-1'));
+        return saved;
+    };
+    const saveNow = async () => {
+        await act(async () => { fireEvent.click(screen.getByTestId('corr-save')); });
+        await act(async () => { await Promise.resolve(); });
+    };
+
+    it('a tap change: the amount of a product, before → after, saved as a new version with only that change', async () => {
+        open();
+        fireEvent.click(screen.getByTestId('corr-edit-in'));
+        fireEvent.change(screen.getByTestId('tap-product-qty'), { target: { value: '350' } });
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        expect(screen.getByTestId('corr-row-in')).toHaveAttribute('data-changed', 'yes');
+        expect(screen.getByTestId('corr-tag-in')).toHaveTextContent(language === 'en' ? 'Changed' : 'बदललं');
+        expect(screen.getByTestId('corr-old-in')).toHaveTextContent('इथरेल · 300');
+        expect(screen.getByTestId('corr-value-in')).toHaveTextContent('इथरेल · 350');
+        await saveNow();
+        expect(enqueue).toHaveBeenCalledTimes(1);
+        const payload = enqueue.mock.calls[0][0] as { content: Record<string, unknown> };
+        expect(payload.content.inputs).toEqual([expect.objectContaining({ productName: 'इथरेल', quantity: 350 })]);
+        expect(payload.content.irrigation).toEqual(ENTRY.irrigation);
+        expect(screen.queryByTestId('corr-screen')).toBeNull();
+    });
+
+    it('a typed change goes to the same understanding as speech (the ONE mic, with what he typed)', async () => {
+        const sent: string[] = [];
+        drive.text = t => { sent.push(t); };
+        open();
+        fireEvent.click(screen.getByTestId('corr-type'));
+        fireEvent.change(screen.getByTestId('tap-type-input'), { target: { value: 'इथरेल 300 नाही, 350 मिली' } });
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        expect(speakState().request?.purpose).toBe('correctEntry');
+        expect(speakState().request?.context.typed).toBe('इथरेल 300 नाही, 350 मिली');
+        await act(async () => { await Promise.resolve(); });
+        expect(sent).toEqual(['इथरेल 300 नाही, 350 मिली']);
+        drive.text = () => undefined;
+    });
+
+    it('remove + undo: "काढा" strikes the part through, "परत आणा" brings it back; nothing to save once it is back', () => {
+        open();
+        fireEvent.click(screen.getByTestId('corr-toggle-a'));
+        expect(screen.getByTestId('corr-tag-a')).toHaveTextContent(language === 'en' ? 'Removed' : 'काढलं');
+        expect(screen.getByTestId('corr-save')).toBeEnabled();
+        fireEvent.click(screen.getByTestId('corr-toggle-a'));
+        expect(screen.queryByTestId('corr-tag-a')).toBeNull();
+        expect(screen.getByTestId('corr-save')).toBeDisabled();
+    });
+
+    it('the last part cannot be removed ("एक तरी भाग राहू द्या")', () => {
+        const { deps } = realSave();
+        const one = { ...ENTRY, cropActivities: [], irrigation: [] } as DailyLog;
+        render(<Harness start={[one]} save={deps} />);
+        act(() => openCorrection('log-1'));
+        fireEvent.click(screen.getByTestId('corr-toggle-in'));
+        expect(screen.getByTestId('corr-keep-one')).toHaveTextContent(language === 'en' ? 'Keep at least one part' : 'एक तरी भाग राहू द्या');
+        expect(screen.queryByTestId('corr-tag-in')).toBeNull();
+        expect(screen.getByTestId('corr-save')).toBeDisabled();
+    });
+
+    it('"+ आणखी जोडा": water added by tapping (method and hours), shown "नवीन", saved with the rest', async () => {
+        open();
+        fireEvent.click(screen.getByTestId('corr-add'));
+        expect(screen.queryByTestId('tap-add-labour')).toBeNull(); // no route can add an engagement: not offered
+        fireEvent.click(screen.getByTestId('tap-add-irrigation'));
+        fireEvent.click(screen.getByTestId('tap-method-Flood'));
+        fireEvent.click(screen.getByTestId('tap-hours-plus'));
+        fireEvent.click(screen.getByTestId('tap-hours-plus'));
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        const added = screen.getAllByTestId(/^corr-tag-/).find(el => el.textContent === (language === 'en' ? 'New' : 'नवीन'));
+        expect(added).toBeTruthy();
+        await saveNow();
+        const payload = enqueue.mock.calls[0][0] as { content: { irrigation: Array<{ method?: string; durationHours?: number }> } };
+        expect(payload.content.irrigation).toHaveLength(2);
+        expect(payload.content.irrigation[1]).toMatchObject({ method: 'Flood', durationHours: 1 });
+    });
+
+    it('a part he started to add and cancelled is not kept', () => {
+        open();
+        fireEvent.click(screen.getByTestId('corr-add'));
+        fireEvent.click(screen.getByTestId('tap-add-inputs'));
+        fireEvent.click(screen.getByTestId('tap-sheet-cancel'));
+        expect(screen.queryAllByTestId(/^corr-tag-/)).toHaveLength(0);
+        expect(screen.getByTestId('corr-save')).toBeDisabled();
+    });
+
+    it('the plot and the day of a SAVED entry are shown, read-only, with one plain line (no dead button) until the server can move it', () => {
+        open();
+        expect(screen.getByTestId('corr-plot-row')).toHaveTextContent('सोनाका');
+        expect(screen.getByTestId('corr-day-row')).toHaveTextContent(language === 'en' ? '25 Oct' : '25 ऑक्टो');
+        expect(screen.queryByTestId('corr-change-plot')).toBeNull();
+        expect(screen.queryByTestId('corr-change-day')).toBeNull();
+        expect(screen.getByTestId('corr-move-not-yet')).toBeInTheDocument();
+    });
+
+    it('offline, a tap change still saves: it is queued like any other change (P10)', async () => {
+        const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        open();
+        fireEvent.click(screen.getByTestId('corr-edit-a'));
+        fireEvent.click(screen.getByTestId('tap-work-Weeding'));
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        expect(screen.getByTestId('corr-value-a')).toHaveTextContent(language === 'en' ? 'Weeding' : 'खुरपणी');
+        await saveNow();
+        expect(enqueue).toHaveBeenCalledTimes(1);
+        const payload = enqueue.mock.calls[0][0] as { content: { cropActivities: Array<{ title: string; workTypes: string[] }> } };
+        expect(payload.content.cropActivities[0]).toMatchObject({ title: 'खुरपणी', workTypes: ['Weeding'] });
+        expect(screen.queryByTestId('corr-screen')).toBeNull();
+        online.mockRestore();
+    });
+
+    it('offline, a worker count says plainly it needs the internet, and nothing is sent or written', async () => {
+        const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        const { deps, saved } = realSave();
+        render(<Harness start={[{ ...ENTRY, labour: [{ id: 'lb', type: 'HIRED', count: 5, labourAssignmentId: 'asg-1' }] } as DailyLog]} save={deps} />);
+        act(() => openCorrection('log-1'));
+        expect(screen.queryByTestId('corr-toggle-lb')).toBeNull(); // an engagement is never removed here
+        fireEvent.click(screen.getByTestId('corr-edit-lb'));
+        expect(screen.getByTestId('tap-labour-needs-net')).toHaveTextContent(language === 'en' ? 'needs the internet' : 'इंटरनेट लागतं');
+        fireEvent.click(screen.getByTestId('tap-count-plus'));
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        expect(screen.getByTestId('corr-value-lb')).toHaveTextContent('6');
+        await saveNow();
+        expect(screen.getByTestId('corr-save-failed')).toBeInTheDocument();
+        expect(postLabourCorrection).not.toHaveBeenCalled();
+        expect(enqueue).not.toHaveBeenCalled();
+        expect(saved).toHaveLength(0);
+        online.mockRestore();
+    });
+
+    it('D-57: "बदला" on a हजेरी-door record, for someone who may open हजेरी, opens THAT DAY in the हजेरी वही', () => {
+        const { deps } = realSave();
+        render(<Harness start={[{ ...ENTRY, captureScope: 'labour' }]} save={deps} hajeri />);
+        act(() => openCorrection('log-1'));
+        expect(screen.queryByTestId('corr-screen')).toBeNull();
+        expect(labourOpening).toHaveBeenCalledWith({ screen: 'day', date: '2026-10-25' });
+        expect(openPlace).toHaveBeenCalledWith('labour');
+        expect(speakState().correction).toBeNull();
     });
 });

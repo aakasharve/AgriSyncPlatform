@@ -8,7 +8,8 @@ import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
 import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
 import { resolveApiBaseUrl } from '../api/transport';
-import { OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, offlineVoiceQueueAllowed } from './offlineVoiceQueue';
+import { OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, offlineVoiceDay, offlineVoiceQueueAllowed } from './offlineVoiceQueue';
+import { noteVoiceNotesChanged } from '../sync/waitingVoiceNotes';
 import { correctionParseContext } from './correctionParseContext';
 import { parseStreamConsumer } from './ParseStreamConsumer';
 import type { ParseStreamEvent } from '../../domain/ai/contracts/ParseStreamEvent';
@@ -496,12 +497,17 @@ export class BackendAiClient implements VoiceParserPort {
     ): Promise<void> {
         const db = getDatabase();
         const nowIso = new Date().toISOString();
+        const day = offlineVoiceDay();
         const baseContext: PendingAiJobContext = {
             farmId,
             userId,
             plotId: scope.selectedPlotIds[0],
             cropCycleId: undefined,
             parseContext,
+            // Lane OF (D-59 / D-60) — where and when he meant it, for the save once it is understood.
+            scopeCropIds: [...scope.selectedCropIds],
+            scopePlotIds: [...scope.selectedPlotIds],
+            ...(day && { dateKey: day }),
         };
 
         if (input.type === 'audio') {
@@ -532,6 +538,7 @@ export class BackendAiClient implements VoiceParserPort {
                 retryCount: 0,
             });
             await this.persistProcessingVoiceClip(material, farmId, scope, 'queued', pendingJobId);
+            noteVoiceNotesChanged(); // lane OF (D-59): the gear's number goes up at once
             return;
         }
 
@@ -561,6 +568,7 @@ export class BackendAiClient implements VoiceParserPort {
             updatedAt: nowIso,
             retryCount: 0,
         });
+        noteVoiceNotesChanged(); // lane OF (D-59)
     }
 
     private async persistProcessingVoiceClip(

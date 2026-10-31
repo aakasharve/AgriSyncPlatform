@@ -19,7 +19,8 @@ const STATE_CONFIG: Record<VerificationState, { color: string; Icon: React.FC<{ 
      draft: {
           color: 'bg-slate-100 text-slate-600 border-slate-200',
           Icon: PenLine,
-          label: 'Draft',
+          // Lane OF (founder 2026-10-31): never the word "draft" on a screen — the app's own "Not confirmed" (पक्कं नाही).
+          label: 'Not confirmed',
      },
      confirmed: {
           color: 'bg-blue-50 text-blue-700 border-blue-200',

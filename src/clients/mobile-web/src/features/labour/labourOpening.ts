@@ -8,7 +8,14 @@
  * mounts and forgets it at once, so the next ordinary visit (सेट-अप केंद्र, the "हजेरी वही बघा" link) opens the hub as
  * always. State only, like the ONE mic's store: no React, no storage.
  */
-export type LabourOpening = 'names';
+export type LabourOpening = 'names' | { screen: 'day'; date: string };
+
+/**
+ * Lane OF (founder D-57 = 1A) — "बदला" on a हजेरी-door record opens THAT DAY in the हजेरी वही (the day highlighted, its
+ * people changed by tapping). The day travels the same one-shot way as the names screen.
+ */
+export const dayOpening = (opening: LabourOpening | null): string | null =>
+    opening !== null && typeof opening === 'object' && opening.screen === 'day' ? opening.date : null;
 
 let pending: LabourOpening | null = null;
 

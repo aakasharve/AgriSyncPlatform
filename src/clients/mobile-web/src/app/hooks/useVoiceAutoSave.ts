@@ -34,13 +34,14 @@
  * closure event keeps method 'voice', the method the review form's Save tap sent for a typed Sathi draft before.
  */
 import { useCallback, useRef, useState } from 'react';
-import type { AgriLogResponse, DailyLog } from '../../types';
+import type { AgriLogResponse, DailyLog, LogScope } from '../../types';
 import type { LogProvenance } from '../../domain/ai/LogProvenance';
 import type { VoiceDraftSink, VoiceRecordingRef } from '../../features/voice/useVoiceRecorder.types';
 import { archiveIdForRecording, linkClipToLog } from '../../infrastructure/voice/clipLogLink';
 import { logger } from '../../infrastructure/observability/Logger';
 import { emitClosureSubmitted } from '../../core/telemetry/eventEmitters';
 import { isAutoSavableVoiceDraft, primaryLogOf } from '../helpers/autoSavedVoiceLog';
+import { bindDraftDecline, draftDay } from '../../features/voice/draftFacts';
 import type { UseLogCommandsResult } from './useLogCommands.types';
 import type { LogIntent } from './useAppNavigation';
 
@@ -62,6 +63,18 @@ export interface VoiceResultState {
      * history, never over it.
      */
     written?: DailyLog[];
+}
+
+/** Lane OF — how a parse he checked on "तपासा आणि जतन करा" is saved. */
+export interface CheckedSave {
+    /** Where he chose (the canonical crop → plot steps), or the plots it was spoken for. */
+    scope: LogScope;
+    /** The day he chose (`yyyy-MM-dd`); absent = today. */
+    dateKey?: string;
+    /** The recording it came from (named on the create and linked to the log), when there was one. */
+    recording?: VoiceRecordingRef;
+    /** Saved from आवाज नोंदी: the log tab is left as it was. */
+    stayOnScreen?: boolean;
 }
 
 export interface UseVoiceAutoSaveProps {
@@ -100,7 +113,10 @@ export function useVoiceAutoSave({
     const handled = useRef(new Map<string, 'saving' | 'saved'>());
 
     const sink: VoiceDraftSink = useCallback(async (draft: AgriLogResponse, provenance: LogProvenance | undefined, recording: VoiceRecordingRef) => {
-        if (logIntent === 'labour' || !isAutoSavableVoiceDraft(draft) || movesThePlot(draft)) return false;
+        if (logIntent === 'labour') return false;
+        // Lane OF (D-58) — handed back, the screen that shows it says why (his words and what was understood stay).
+        if (!isAutoSavableVoiceDraft(draft)) { bindDraftDecline(draft, 'unclear', recording); return false; }
+        if (movesThePlot(draft)) { bindDraftDecline(draft, 'otherPlot', recording); return false; }
         const startedAt = Date.now();
         const key = recordingKey(recording);
         const seen = handled.current.get(key);
@@ -115,10 +131,12 @@ export function useVoiceAutoSave({
         try {
             // PLR-D10 I27 — name the recording on the create, so a reviewer allowed to check THIS record can hear it.
             const voiceClipId = typed ? undefined : await archiveIdOf(recording).catch(() => undefined);
+            const dateKey = draftDay(draft);
             const saved = await handleAutoSave(draft, provenance, {
                 autoSavedFromVoice: true,
                 ...(typed && { typedEntry: true }),
                 ...(voiceClipId && { voiceClipId }),
+                ...(dateKey && { dateKey }),
                 onWritten: async (logs) => {
                     const primary = primaryLogOf(logs);
                     const clipId = primary && !typed ? await linkClip(recording, primary.id).catch(() => null) : null;
@@ -148,10 +166,45 @@ export function useVoiceAutoSave({
             logger.error('Voice auto-save hand-off failed', error);
         }
         handled.current.delete(key);
+        bindDraftDecline(draft, 'notWritten', recording);
         return false;
     }, [handleAutoSave, logIntent, setStatus, linkClip, archiveIdOf, farmId, emitClosure]);
 
+    /**
+     * Lane OF (D-58 / D-59) — "जतन करा" on the "तपासा आणि जतन करा" screen: the parse he looked at, saved through the
+     * SAME save (same unconfirmed capture, same clip link, same result screen), on the place and the day he chose there.
+     * It is still a capture, not his confirmation (founder D-44 / D-46): only the primary owner confirms, on the result
+     * screen. Resolves the logs once they are on the phone, or null when nothing was written (he can press again).
+     */
+    const saveChecked = useCallback(async (draft: AgriLogResponse, provenance: LogProvenance | undefined, how: CheckedSave): Promise<DailyLog[] | null> => {
+        const recording = how.recording;
+        const typed = recording?.typed === true;
+        try {
+            const voiceClipId = recording && !typed ? await archiveIdOf(recording).catch(() => undefined) : undefined;
+            // A plot Sathi only suggested is never where it lands: the place he chose is (CTX-1).
+            const { suggestedContext: _suggested, ...chosen } = draft;
+            return await handleAutoSave(chosen as AgriLogResponse, provenance, {
+                autoSavedFromVoice: true,
+                ...(typed && { typedEntry: true }),
+                ...(voiceClipId && { voiceClipId }),
+                scope: how.scope,
+                ...(how.dateKey && { dateKey: how.dateKey }),
+                ...(how.stayOnScreen && { stayOnScreen: true }),
+                onWritten: async (logs) => {
+                    const primary = primaryLogOf(logs);
+                    const clipId = primary && recording && !typed ? await linkClip(recording, primary.id).catch(() => null) : null;
+                    if (how.stayOnScreen) return;
+                    const unclear = (draft.unclearSegments ?? []).map(s => s.rawText?.trim() ?? '').filter(t => t.length > 0);
+                    setVoiceResult({ logIds: logs.map(l => l.id), clipId, key: recording ? recordingKey(recording) : `checked|${Date.now()}`, unclear, written: logs, ...(typed && { typed: true }) });
+                },
+            });
+        } catch (error) {
+            logger.error('Checked voice save failed', error);
+            return null;
+        }
+    }, [handleAutoSave, linkClip, archiveIdOf]);
+
     const clearVoiceResult = useCallback(() => setVoiceResult(null), []);
 
-    return { sink, voiceResult, clearVoiceResult };
+    return { sink, voiceResult, clearVoiceResult, saveChecked };
 }

@@ -165,6 +165,8 @@ export interface AppRouterContext {
      * while it is the latest save (`lastSavedLogIds`). Optional so older context builders compile.
      */
     voiceResult?: VoiceState['voiceResult'];
+    /** Lane OF (D-58 / D-59) — save a parse he checked on "तपासा आणि जतन करा" (absent in previews: nothing saves). */
+    saveCheckedDraft?: VoiceState['saveCheckedDraft'];
 
     // weather
     weatherData: WeatherState['weatherData'];

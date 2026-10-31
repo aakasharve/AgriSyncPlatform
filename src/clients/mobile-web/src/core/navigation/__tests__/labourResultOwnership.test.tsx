@@ -38,7 +38,7 @@ vi.mock('../../../app/featureFlags', () => ({
 import { renderLogView, LabourResultHost } from '../mainView';
 import type { AppRouterContext } from '../routeContext';
 import AttendanceResult, { type AttendanceResultProps } from '../../../features/labour/components/AttendanceResult';
-import ManualEntry from '../../../features/logs/components/ManualEntry';
+import AttendanceNotHeard from '../../../features/labour/components/AttendanceNotHeard';
 import { ShramSathiUnderstanding } from '../../../features/logs/components/shramsathi/ShramSathiUnderstanding';
 
 function findByType(node: React.ReactNode, type: unknown): React.ReactElement | null {
@@ -98,40 +98,34 @@ describe('Task 3.4b — Labour owns the parse result', () => {
     });
 });
 
-// ─── Implementer additions (Task 3.4b, beyond the doc's three pins) ─────────
+// ─── Lane OF (founder D-57) — the old hand-filled form is gone from the labour door ─────────
 //
-// D9.6: बदल करा corrects; nothing is rebuilt. These pins assert — still with
-// plain-node traversal, no mount — that the edit surface AttendanceResult
-// offers is the SAME ManualEntry(attendanceOnly) call that used to be the
-// landing (moved, not modified), fed the attendance-only view of the draft.
-describe('Task 3.4b — the edit surface is the moved ManualEntry, not a rebuild', () => {
-    it('renderEditSurface yields ManualEntry with attendanceOnly and the labour-only draft', () => {
+// बदल करा changes the people by tapping on the result itself (AttendanceResult), and a parse with no हजेरी in it says
+// so with his words and "पुन्हा सांगा" (AttendanceNotHeard) — still plain-node traversal, no mount.
+describe('lane OF — the labour door without the old form', () => {
+    it('the result is fed the attendance-only view of the draft and has no edit-surface render prop', () => {
         const node = renderLogView(ctx({ logIntent: 'labour', draftLog: labourDraft }));
         const result = findByType(node, AttendanceResult) as React.ReactElement<AttendanceResultProps> | null;
         expect(result).not.toBeNull();
-        const manual = findByType(result!.props.renderEditSurface(), ManualEntry);
-        expect(manual).not.toBeNull();
-        const props = manual!.props as {
-            attendanceOnly?: boolean;
-            initialData?: { labour: unknown[]; cropActivities: unknown[]; irrigation: unknown[] };
-        };
-        expect(props.attendanceOnly).toBe(true);
-        // toAttendanceOnlyDraft's view: labour kept, the other door's buckets emptied.
-        expect(props.initialData?.labour).toHaveLength(1);
-        expect(props.initialData?.cropActivities).toHaveLength(0);
-        expect(props.initialData?.irrigation).toHaveLength(0);
+        expect(result!.props.draft.labour).toHaveLength(1);
+        expect(result!.props.draft.cropActivities).toHaveLength(0);
+        expect('renderEditSurface' in (result!.props as object)).toBe(false);
     });
-    it('a labour draft with no labour rows falls through to the plain ManualEntry landing', () => {
-        const node = renderLogView(ctx({ logIntent: 'labour', draftLog: { ...labourDraft, labour: [] } }));
+    it('a labour draft with no labour rows lands on "यात हजेरी समजली नाही" with "पुन्हा सांगा" (the हजेरी mic)', () => {
+        const setRecordingSegment = vi.fn();
+        const setMode = vi.fn();
+        const node = renderLogView(ctx({ logIntent: 'labour', draftLog: { ...labourDraft, labour: [], fullTranscript: 'आज काम झालं' }, setRecordingSegment, setMode }));
         expect(findByType(node, AttendanceResult)).toBeNull();
-        // The frame is there, empty; its fall-through renders the byte-for-byte
-        // ManualEntry (invisible to plain-node traversal until the frame runs,
-        // so it is asserted through the frame's own render prop).
         const host = findByType(node, LabourResultHost) as React.ReactElement<{
-            children?: React.ReactNode; renderManualEntry: () => React.ReactNode;
+            children?: React.ReactNode; renderEmpty: () => React.ReactNode;
         }> | null;
         expect(host).not.toBeNull();
         expect(host!.props.children ?? null).toBeNull();
-        expect(findByType(host!.props.renderManualEntry(), ManualEntry)).not.toBeNull();
+        const empty = findByType(host!.props.renderEmpty(), AttendanceNotHeard) as React.ReactElement<{ transcript: string; onSpeakAgain: () => void }> | null;
+        expect(empty).not.toBeNull();
+        expect(empty!.props.transcript).toBe('आज काम झालं');
+        empty!.props.onSpeakAgain();
+        expect(setRecordingSegment).toHaveBeenCalledWith('labour');
+        expect(setMode).toHaveBeenCalledWith('voice');
     });
 });

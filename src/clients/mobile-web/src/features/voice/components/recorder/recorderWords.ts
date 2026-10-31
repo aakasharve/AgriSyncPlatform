@@ -72,8 +72,9 @@ export const LIVE_ENCODE_AFTER_SEC = 60;
  */
 const OFFLINE_WORDS: Record<string, { mr: string; en: string }> = {
     [OFFLINE_SAVED_MESSAGE]: {
-        mr: 'इंटरनेट नाही. तुमचं बोलणं फोनवर ठेवलं आहे — इंटरनेट आलं की समजून घेतलं जाईल.', // PROPOSED (Marathi)
-        en: 'No internet. Your words are kept on this phone and will be understood when you are online.', // PROPOSED (English)
+        // Lane OF (founder D-59) — and where it now waits, with a number: सेट-अप केंद्र › आवाज नोंदी.
+        mr: 'आवाज फोनमध्ये सुरक्षित आहे. अजून समजलेलं नाही — चांगलं इंटरनेट मिळाल्यावर साथी समजून घेईल. सेट-अप केंद्र › आवाज नोंदी इथे दिसेल.', // PROPOSED (Marathi)
+        en: 'Your voice is safe on this phone. It is not understood yet — Sathi will understand it once the internet is good. It waits in Setup › Voice notes.', // PROPOSED (English)
     },
     [OFFLINE_NOT_KEPT_MESSAGE]: {
         mr: 'बदल सांगायला इंटरनेट लागतं. आत्ता काहीही ठेवलं नाही — इंटरनेट आलं की पुन्हा सांगा.', // PROPOSED (Marathi)

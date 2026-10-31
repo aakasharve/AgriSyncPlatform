@@ -165,7 +165,18 @@ export const renderVoiceDiaryRoute = (ctx: AppRouterContext): React.ReactNode =>
     if (ctx.currentRoute !== 'voiceDiary') return null;
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-            <VoiceDiaryPage onBack={() => ctx.goBackOr('profile')} />
+            <VoiceDiaryPage
+                onBack={() => ctx.goBackOr('profile')}
+                // Lane OF (founder D-59) — an understood recording is checked and saved here, through the voice save.
+                waiting={ctx.saveCheckedDraft ? {
+                    crops: ctx.crops,
+                    profile: ctx.farmerProfile,
+                    history: ctx.history,
+                    save: ctx.saveCheckedDraft,
+                    returnTo: { route: 'voiceDiary', mainView: ctx.mainView },
+                    toast: message => window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message, type: 'success' } })),
+                } : undefined}
+            />
         </div>
     );
 };

@@ -16,7 +16,7 @@
  *
  * spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
  */
-import type { AgriLogResponse, DailyLog } from '../../types';
+import type { AgriLogResponse, DailyLog, LogScope } from '../../types';
 import type { LogProvenance } from '../../domain/ai/LogProvenance';
 import type { LogCommandServiceImpl } from '../../application/services/LogCommandService';
 
@@ -84,6 +84,21 @@ export interface AutoSaveOptions {
      * records (the clip link, the result-screen state) is in place when that screen first reads it.
      */
     onWritten?: (logs: DailyLog[]) => Promise<void>;
+    /**
+     * Lane OF (D-58 / D-59) — the place he chose on the "तपासा आणि जतन करा" screen (the canonical crop → plot steps):
+     * saved there, never on a plot Sathi only suggested. Absent = the log tab's own plots, as before.
+     */
+    scope?: LogScope;
+    /**
+     * Lane OF (D-60, TAP-1) — the day the entry is for (`yyyy-MM-dd`): the logs' own `date` (the server's `logDate`).
+     * The time stays the moment it was saved; nothing is invented. Absent = today.
+     */
+    dateKey?: string;
+    /**
+     * Lane OF (D-59) — saved from सेट-अप केंद्र › आवाज नोंदी: the log tab is left exactly as it was (no result screen
+     * there, its status untouched); the page he is on says it was saved.
+     */
+    stayOnScreen?: boolean;
 }
 
 export interface UseLogCommandsResult {

@@ -59,7 +59,7 @@ import { buildDayProgressToast, buildEditSavedMessage, buildQueuedLogToast, buil
 // re-exported here so existing `from './useLogCommands'` imports (and any
 // future ones) keep working.
 import type { AutoSaveOptions, ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
-import { markAutoSavedFromVoice, withVoiceClipOnPrimary } from '../helpers/autoSavedVoiceLog';
+import { asAutoSaved } from '../helpers/autoSavedVoiceLog';
 export type { ManualSubmitOutcome, UseLogCommandsResult };
 
 // `UseLogCommandsResult` moved to `useLogCommands.types.ts` for the same
@@ -290,11 +290,10 @@ export const useLogCommands = ({
     // in the review form). A step that fails AFTER the write still shows the saved record: a retry would mint
     // a second copy. No English toast on failure any more: the review form with his parse IS the message.
     const handleAutoSave = useCallback(async (logData: AgriLogResponse, provenance?: LogProvenance, options: AutoSaveOptions = {}): Promise<DailyLog[] | null> => {
+        // PHASE 25: Context Switching & Global Voice. Lane OF (D-58 / D-59): a place he chose himself wins over everything.
+        let effectiveScope = options.scope ?? logScope;
 
-        // PHASE 25: Context Switching & Global Voice
-        let effectiveScope = logScope;
-
-        if (logData.suggestedContext) {
+        if (!options.scope && logData.suggestedContext) {
             const { cropId, plotId } = logData.suggestedContext;
             if (cropId && plotId) {
                 // Construct new scope for the log
@@ -312,7 +311,7 @@ export const useLogCommands = ({
         }
 
         // Safety check: Must have effective scope or active context
-        if (!hasActiveLogContext && !logData.suggestedContext) {
+        if (!options.scope && !hasActiveLogContext && !logData.suggestedContext) {
             logger.warn("Auto-save blocked: No context");
             return null;
         }
@@ -334,7 +333,7 @@ export const useLogCommands = ({
                 // loop is on. Flag read stays in the app layer (domain-agnostic).
                 FEATURE_FLAGS.dailyLoop
             );
-            const newLogs = withVoiceClipOnPrimary(options.autoSavedFromVoice ? created.map(l => markAutoSavedFromVoice(l, { typed: options.typedEntry === true })) : created, options.voiceClipId);
+            const newLogs = asAutoSaved(created, options); // + lane OF (D-60, TAP-1): on the day he chose, never a new time
             attempted = newLogs;
 
             // Persist (Service handles persistence via injected repo)
@@ -353,7 +352,7 @@ export const useLogCommands = ({
             if (newTasks.length > 0) {
                 setPlannedTasks(prev => mergeUniqueTasks(prev, newTasks));
             }
-
+            if (options.stayOnScreen) return newLogs; // lane OF (D-59): saved from आवाज नोंदी — the log tab stays as it was
             // Calculate Summary for Feedback
             calculateLogSummary(newLogs, syncOutcome);
             setLastSavedLogIds(newLogs.map(l => l.id));
@@ -380,7 +379,7 @@ export const useLogCommands = ({
                 if (ghostIds.size > 0) setHistory(prev => prev.filter(l => !ghostIds.has(l.id)));
                 return null;
             }
-            calculateLogSummary(written, null); // no evidence either way about the server: no claim
+            if (options.stayOnScreen) return written; else calculateLogSummary(written, null); // no evidence about the server: no claim
             setLastSavedLogIds(written.map(l => l.id));
             setStatus('success');
             setMode('manual');

@@ -19,6 +19,41 @@ export const FOUNDER_ASK = {
 } as const;
 
 /**
+ * Lane OF (founder D-60) — the same two questions for a PAST day he chose ("<date> ला कोणत्या पिकावर काम झालं ?", the
+ * working phones `OLDFORM-leftovers`), and (rule CTX-1) the same steps asking where an income came from. Unlike the
+ * founder's own lines above, these follow the app language: Marathi mode Marathi only, English mode English only.
+ */
+export const DATED_ASK = {
+    mr: {
+        // PROPOSED (Marathi) — the working phones' words.
+        cropQuestion: (day: string) => `${day} ला कोणत्या पिकावर काम झालं ?`,
+        plotQuestion: (cropNames: string, day: string) => `${cropNames} मधील ${day} ला कोणत्या प्लॉट वर काम झालं ?`,
+        dayChip: (day: string) => `${day} साठी`,
+    },
+    en: {
+        // PROPOSED (English)
+        cropQuestion: (day: string) => `Which crop was worked on ${day}?`,
+        plotQuestion: (cropNames: string, day: string) => `Which ${cropNames} plot was worked on ${day}?`,
+        dayChip: (day: string) => `For ${day}`,
+    },
+} as const;
+
+export const INCOME_ASK = {
+    mr: {
+        // PROPOSED (Marathi)
+        cropQuestion: 'कोणत्या पिकाचं उत्पन्न ?',
+        plotQuestion: (cropNames: string) => `${cropNames} मधील कोणत्या प्लॉटचं उत्पन्न ?`,
+        hint: 'सर्व शेताचं असेल तर "संपूर्ण शेत" निवडा',
+    },
+    en: {
+        // PROPOSED (English)
+        cropQuestion: 'Which crop is this income from?',
+        plotQuestion: (cropNames: string) => `Which ${cropNames} plot is this income from?`,
+        hint: 'For the whole farm, choose "Whole farm"',
+    },
+} as const;
+
+/**
  * Arriving from हजेरी (logIntent 'labour'): the founder's 2026-08-31 ruling for this door, kept on the
  * PLOT step in place of the generic plot question (existing approved strings, read in Marathi). The
  * old guide card's other line ("labourGuideLine1": regular workers or a mukadam's people) is not

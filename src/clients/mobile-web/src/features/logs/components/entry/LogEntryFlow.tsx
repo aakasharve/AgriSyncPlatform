@@ -78,6 +78,8 @@ export interface LogEntryFlowProps {
     /** Lane MIC-1 — start on the crop question (no work home), and leave the flow by this instead of going home. */
     startAt?: 'entry';
     onExit?: () => void;
+    /** Lane OF (D-60) — a past day he chose ("30 ऑक्टो"): the crop and plot questions name it. */
+    forDay?: string;
 }
 
 /** The app's flat scope as the selector's crop -> plots map (the same mapping the old screen used). */
@@ -93,7 +95,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const {
         crops, logScope, setLogScope, onChooseVoice, labourIntent, onBackToLabour, onClearLabourIntent,
         recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, attendance, onOpenAttendanceNames, cost,
-        pinnedQuestion, micLead, renderRecorder, startAt, onExit,
+        pinnedQuestion, micLead, renderRecorder, startAt, onExit, forDay,
     } = props;
     const hasSelection = logScope.selectedCropIds.length > 0;
     const [step, setStep] = useState<FlowStep>(() => (startAt ?? (homeRequested || (!labourIntent && !hasSelection) ? 'home' : 'entry')));
@@ -177,7 +179,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
                     stepper={{
                         step: entryStep,
                         onStepChange: setEntryStep,
-                        lead: ctx => <SathiAskBand {...ctx} labour={labourIntent} />,
+                        lead: ctx => <SathiAskBand {...ctx} labour={labourIntent} forDay={forDay} />,
                         labels: STEPPER_LABELS,
                         focusFooter: recording,
                         footer: () => (

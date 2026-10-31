@@ -19,8 +19,8 @@ import { OFFLINE_NOTES_TITLE } from '../features/profile/settingsItems';
 
 /** The page and its setup-hub row share this one name (PROPOSED Marathi, defined with the row). */
 export const DRAFTS_TITLE = OFFLINE_NOTES_TITLE;
-// PROPOSED (Marathi)
-export const DRAFTS_LINE = 'प्रत्येक नोंद उघडून जतन करा, किंवा काढून टाका.';
+// PROPOSED (Marathi) — lane OF (D-59): voice recordings live in आवाज नोंदी now; this page keeps the bill / slip photos.
+export const DRAFTS_LINE = 'नेट नसताना काढलेले बिलाचे आणि पट्टीचे फोटो. काढून टाका, किंवा इथेच राहू द्या.';
 // PROPOSED (Marathi)
 export const DRAFTS_LOADING = 'उघडत आहे…';
 // PROPOSED (Marathi)

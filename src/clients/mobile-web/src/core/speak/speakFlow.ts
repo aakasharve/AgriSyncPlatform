@@ -17,6 +17,7 @@
  */
 import type { AgriLogResponse, AppStatus, DailyLog, LogScope } from '../../types';
 import type { VoiceDraftSink } from '../../features/voice/useVoiceRecorder.types';
+import { bindDraftDay } from '../../features/voice/draftFacts';
 import { correctionEntryForParse } from '../../features/logs/components/correction/correctionEntryForParse';
 import { hasWaitingLogWork } from '../navigation/openLogFlow';
 import { deliverSpoken, speakState, type SpeakLanding, type SpeakPlace, type SpeakRequest, type SpeakReturn } from './speakStore';
@@ -136,6 +137,9 @@ export function withSpeakPurpose(sink: VoiceDraftSink, deps: { setStatus: (statu
             deps.setStatus('idle');
             return true;
         }
+        // Lane OF (D-60) — a past day he chose travels with this parse: saved on that day, and kept with it if the
+        // auto-save hands it back to the "तपासा आणि जतन करा" screen.
+        bindDraftDay(draft, request?.context.date);
         return sink(draft, provenance, recording);
     };
 }

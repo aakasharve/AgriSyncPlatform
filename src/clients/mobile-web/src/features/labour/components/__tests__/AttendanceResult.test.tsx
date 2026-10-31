@@ -42,7 +42,7 @@ const anchor = { state: 'anchored', headcount: 12, logId: 'log-1' } as const;
 function drawWithAnchor(a: LabourAnchor, labour: AgriLogResponse['labour'], onConfirm = vi.fn()) {
     render(<AttendanceResult
         draft={{ ...base, labour }} anchor={a} farmId={undefined}
-        onConfirm={onConfirm} renderEditSurface={() => <div data-testid="edit-surface" />}
+        onConfirm={onConfirm}
         onSpeakMore={vi.fn()} />);
     return onConfirm;
 }
@@ -116,10 +116,17 @@ describe('AttendanceResult — the Task 1.1 panel-2 screen', () => {
         expect(screen.getByRole('button', { name: 'आला' })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'अर्धा' })).toBeInTheDocument();
     });
-    it('बदल करा switches to the edit surface', () => {
-        draw([{ id: 'l1', type: 'hired', count: 2, workerNames: ['गणेश', 'शंकर'] } as unknown as AgriLogResponse['labour'][number]]);
+    it('lane OF — बदल करा opens no form: voice first ("बोलून बदला"), the names stay on the card', () => {
+        const onSpeakMore = vi.fn();
+        render(<AttendanceResult draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 2, workerNames: ['गणेश', 'शंकर'] } as unknown as AgriLogResponse['labour'][number]] }}
+            anchor={anchor} farmId={undefined} onConfirm={vi.fn()} onSpeakMore={onSpeakMore} />);
         fireEvent.click(screen.getByRole('button', { name: 'बदल करा' }));
-        expect(screen.getByTestId('edit-surface')).toBeInTheDocument();
+        expect(screen.queryByTestId('edit-surface')).toBeNull();
+        expect(screen.getByTestId('attendance-names')).toHaveTextContent('गणेश');
+        fireEvent.click(screen.getByTestId('attendance-edit-speak'));
+        expect(onSpeakMore).toHaveBeenCalledTimes(1);
+        // no list to match the names against (offline): said plainly, nothing to tap
+        expect(screen.getByTestId('attendance-edit-hint')).toHaveTextContent('पुन्हा बोलून सांगा');
     });
 });
 
@@ -190,7 +197,7 @@ describe('AttendanceResult — 3.5c: बरोबर enqueues marks for uniquely
         const onConfirm = vi.fn();
         render(<AttendanceResult
             draft={{ ...base, labour }} anchor={anchor} farmId={FARM}
-            onConfirm={onConfirm} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onConfirm={onConfirm}
             onSpeakMore={vi.fn()} />);
         await waitFor(() => expect(mockFetchOperators).toHaveBeenCalledWith(FARM));
         return onConfirm;
@@ -218,13 +225,44 @@ describe('AttendanceResult — 3.5c: बरोबर enqueues marks for uniquely
         expect(payload.hoursWorked).toBeUndefined();
     });
 
+    it('lane OF (D-57) — बदल करा: each known name is tapped हजर → अर्धा → नाही; बरोबर writes what he tapped; the count stays as said (P7)', async () => {
+        mockEnqueue.mockClear();
+        mockFetchOperators.mockClear();
+        mockFetchOperators.mockResolvedValueOnce([
+            { id: 'op-1', displayName: 'गणेश', isActive: true },
+            { id: 'op-2', displayName: 'शंकर', isActive: true },
+        ]);
+        const onConfirm = vi.fn();
+        render(<AttendanceResult
+            draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 5, workerNames: ['गणेश', 'शंकर', 'नवीन'] } as unknown as AgriLogResponse['labour'][number]] }}
+            anchor={anchor} farmId={FARM} onConfirm={onConfirm} onSpeakMore={vi.fn()} />);
+        await waitFor(() => expect(mockFetchOperators).toHaveBeenCalledWith(FARM));
+        fireEvent.click(screen.getByTestId('attendance-edit-open'));
+        await waitFor(() => expect(screen.getByTestId('attendance-tap-गणेश')).toBeInTheDocument());
+        expect(screen.queryByTestId('attendance-tap-नवीन')).toBeNull(); // a name the list does not know: never guessed
+        expect(screen.getByTestId('attendance-tap-गणेश')).toHaveAttribute('data-mark', 'Full');
+        fireEvent.click(screen.getByTestId('attendance-tap-गणेश'));
+        expect(screen.getByTestId('attendance-tap-गणेश')).toHaveAttribute('data-mark', 'Half');
+        fireEvent.click(screen.getByTestId('attendance-tap-शंकर'));
+        fireEvent.click(screen.getByTestId('attendance-tap-शंकर'));
+        expect(screen.getByTestId('attendance-tap-शंकर')).toHaveAttribute('data-mark', 'Absent');
+        fireEvent.click(screen.getByRole('button', { name: 'बरोबर' }));
+        expect(onConfirm).toHaveBeenCalledTimes(1);
+        const saved = onConfirm.mock.calls[0][0] as AgriLogResponse;
+        expect(saved.labour[0].count).toBe(5); // un-marking a person never changes the number he said
+        const byOp = Object.fromEntries(mockEnqueue.mock.calls.map(c => [(c[0] as { fieldOperatorId: string }).fieldOperatorId, c[0] as { dayMark?: string }]));
+        expect(byOp['op-1'].dayMark).toBe('Half');
+        expect(byOp['op-2'].dayMark).toBe('Absent');
+        expect(mockEnqueue).toHaveBeenCalledTimes(2);
+    });
+
     it('offline (roster never arrived): no marks, the statement still saves', () => {
         mockEnqueue.mockClear();
         const onConfirm = vi.fn();
         render(<AttendanceResult
             draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 1, workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number]] }}
             anchor={anchor} farmId={undefined}
-            onConfirm={onConfirm} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onConfirm={onConfirm}
             onSpeakMore={vi.fn()} />);
         fireEvent.click(screen.getByRole('button', { name: 'बरोबर' }));
         expect(onConfirm).toHaveBeenCalledTimes(1);
@@ -244,7 +282,7 @@ describe('AttendanceResult — the buttons clear the bottom bar', () => {
         const { container } = render(<AttendanceResult
             draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 1, workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number]] }}
             anchor={anchor} farmId={undefined}
-            onConfirm={vi.fn()} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onConfirm={vi.fn()}
             onSpeakMore={vi.fn()} />);
         const root = container.firstElementChild;
         expect(root?.contains(screen.getByRole('button', { name: 'बरोबर' }))).toBe(true);
@@ -264,7 +302,7 @@ describe('AttendanceResult — marks are for the record\'s day', () => {
         render(<AttendanceResult
             draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 1, workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number]] }}
             anchor={anchor} farmId={FARM} workDate={workDate}
-            onConfirm={vi.fn()} renderEditSurface={() => <div data-testid="edit-surface" />}
+            onConfirm={vi.fn()}
             onSpeakMore={vi.fn()} />);
         await waitFor(() => expect(mockFetchOperators).toHaveBeenCalledWith(FARM));
         // The roster resolves in a microtask after the fetch is called.

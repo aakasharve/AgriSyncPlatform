@@ -32,7 +32,11 @@ import CropSelector from '../../../features/context/components/CropSelector';
 import SathiGuideCard from '../../../features/oversight/components/SathiGuideCard';
 import HelpBar from '../../../features/oversight/components/HelpBar';
 import InputMethodToggle from '../../../shared/components/ui/InputMethodToggle';
-import ManualEntry from '../../../features/logs/components/ManualEntry';
+import { CheckSaveHost } from '../checkSaveView';
+import type { AgriLogResponse } from '../../../types';
+
+/** A parse waiting for review (lane OF: the review needs one). */
+const PARSE = { summary: '', dayOutcome: 'WORK_RECORDED', fullTranscript: 'खुरपणी केली', cropActivities: [{ id: 'a', title: 'खुरपणी' }], irrigation: [], labour: [], inputs: [], machinery: [], activityExpenses: [], missingSegments: [] } as unknown as AgriLogResponse;
 import SavedScreenBack from '../../../features/logs/components/shramsathi/SavedScreenBack';
 import { LogEntryFlow, type LogEntryFlowProps } from '../../../features/logs/components/entry/LogEntryFlow';
 import { ReviewBackBar } from '../../../features/logs/components/entry/ReviewBackBar';
@@ -230,10 +234,15 @@ describe('renderLogView — the आजची कामे tab opens on the work 
         expect(flow.props.onHomeRequestHandled).toBe(consumeLogHome);
     });
 
-    it('the review of a parsed entry is NOT the flow: manual mode with a plot chosen still shows ManualEntry', () => {
-        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true }));
+    it('the review of a parsed entry is NOT the flow: a parse in manual mode shows "तपासा आणि जतन करा" (lane OF, never the old form)', () => {
+        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true, draftLog: PARSE }));
         expect(flowOf(tree)).toBeUndefined();
-        expect(flattenElements(tree).some((el) => el.type === ManualEntry)).toBe(true);
+        expect(flattenElements(tree).some((el) => el.type === CheckSaveHost)).toBe(true);
+    });
+
+    it('lane OF: an idle manual flow with NO parse shows the entry flow (it used to be an empty old form)', () => {
+        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true, draftLog: null }));
+        expect(flowOf(tree)).toBeDefined();
     });
 
     // I12-V1-M1 — the review used to be a dead end (no मागे; the tab tap ignores it; Save was the only exit).
@@ -244,11 +253,11 @@ describe('renderLogView — the आजची कामे tab opens on the work 
         const setMode = vi.fn();
         const setDraftLog = vi.fn();
         const setLogScope = vi.fn();
-        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true, setMode, setDraftLog, setLogScope }));
+        const tree = renderLogView(makeLogViewCtx({ mode: 'manual', hasActiveLogContext: true, isContextReady: true, setMode, setDraftLog, setLogScope, draftLog: PARSE }));
         const elements = flattenElements(tree);
         const bar = backBarOf(tree);
         expect(bar).toBeDefined();
-        expect(elements.indexOf(bar!)).toBeLessThan(elements.findIndex((el) => el.type === ManualEntry));
+        expect(elements.indexOf(bar!)).toBeLessThan(elements.findIndex((el) => el.type === CheckSaveHost));
         bar!.props.onBack();
         // back to the mic (voice mode) — the scope is NOT cleared, so the flow opens on that plot's mic
         expect(setMode).toHaveBeenCalledWith('voice');

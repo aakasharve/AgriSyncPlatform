@@ -9,11 +9,16 @@ import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const h = vi.hoisted(() => ({ logout: vi.fn(), setLanguage: vi.fn(), waiting: [] as unknown[] }));
+const h = vi.hoisted(() => ({ logout: vi.fn(), setLanguage: vi.fn(), waiting: [] as unknown[], voice: [] as unknown[] }));
 
 // plr-d10 (I17): the offline-notes row is drawn only while a note waits for review.
 vi.mock('../../../infrastructure/sync/PendingAiResultsReader', () => ({
     listUnreviewedAiResults: () => Promise.resolve(h.waiting),
+}));
+// lane OF (D-59): the recordings not saved yet — THE one reader (the gear, this row, the page).
+vi.mock('../../../infrastructure/sync/waitingVoiceNotes', async (orig) => ({
+    ...(await orig<typeof import('../../../infrastructure/sync/waitingVoiceNotes')>()),
+    listWaitingVoiceNotes: () => Promise.resolve(h.voice),
 }));
 
 vi.mock('../../../i18n/LanguageContext', () => ({
@@ -136,18 +141,36 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
         expect(screen.queryByTestId('hub-settings-ai-drafts')).toBeNull();
     });
 
-    it('the offline-notes row appears, with how many wait, while notes wait — and opens the review page', async () => {
-        // a voice note AND a bill photo: the row's name covers both, so the "2" is not called voice notes
+    it('lane OF (D-59): the offline-notes row counts only the bill photo; the voice recording waits in आवाज नोंदी with its number', async () => {
         h.waiting = [{ id: 1, operationType: 'voice_parse' }, { id: 2, operationType: 'receipt_extract' }];
+        h.voice = [{ jobId: 1, state: 'understood', spokenAtUtc: '2026-10-31T10:00:00.000Z', job: { id: 1 } }];
         const hs = mount();
-        // the waiting list is read from the phone after the first paint: slow on a busy machine
+        // the waiting lists are read from the phone after the first paint: slow on a busy machine
         const row = await screen.findByTestId('hub-settings-ai-drafts', {}, { timeout: 20_000 });
         expect(row).toHaveTextContent('नेट नसताना केलेल्या नोंदी');
         expect(row).not.toHaveTextContent('आवाज नोंदी');
-        expect(row).toHaveTextContent('2');
+        expect(row).toHaveTextContent('1');
+        expect(row).not.toHaveTextContent('2');
         expect(row.textContent ?? '').not.toMatch(/[A-Za-z]/);
+        const voice = await screen.findByTestId('voice-notes-row-count', {}, { timeout: 20_000 });
+        expect(voice).toHaveTextContent('1');
+        expect(screen.getByTestId('hub-settings-voice-diary')).toHaveTextContent('1 नोंद समजली — बघून जतन करा');
         fireEvent.click(row);
         expect(hs.onOpenAiDrafts).toHaveBeenCalledTimes(1);
+        h.voice = [];
+    }, 60_000);
+
+    it('lane OF (D-59): a recording not understood yet says so on the आवाज नोंदी row; a bill photo alone is not counted there', async () => {
+        h.waiting = [{ id: 2, operationType: 'receipt_extract' }];
+        h.voice = [
+            { jobId: 3, state: 'pending', spokenAtUtc: '2026-10-31T10:00:00.000Z', job: { id: 3 } },
+            { jobId: 4, state: 'working', spokenAtUtc: '2026-10-31T10:05:00.000Z', job: { id: 4 } },
+        ];
+        mount();
+        const voice = await screen.findByTestId('voice-notes-row-count', {}, { timeout: 20_000 });
+        expect(voice).toHaveTextContent('2');
+        expect(screen.getByTestId('hub-settings-voice-diary')).toHaveTextContent('2 नोंदी अजून समजलेल्या नाहीत');
+        h.voice = [];
     }, 60_000);
 
     it('the phone\'s own Back on a hub page returns to the hub, like the page\'s मागे', () => {

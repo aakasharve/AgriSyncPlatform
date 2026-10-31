@@ -133,7 +133,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-28 — LiveCaption Way-2.
         voiceStreamingPhase, liveCaption,
         continuityLevel, savedPendingCaptureId,
-        voiceResult,
+        voiceResult, saveCheckedDraft,
     } = voice;
 
     const weatherData = weather.weatherData;
@@ -293,7 +293,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         draftLog, setDraftLog, provenance,
         voiceStreamingPhase, liveCaption,
         continuityLevel, savedPendingCaptureId,
-        voiceResult,
+        voiceResult, saveCheckedDraft,
         weatherData,
         weatherStatus,
         boundaryUnset,

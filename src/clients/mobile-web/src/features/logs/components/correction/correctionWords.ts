@@ -7,6 +7,7 @@
  * (waiting for his review) unless it says REUSED. The word "नोंद" is kept off this screen.
  */
 import { RESULT_STR } from '../voiceResult/resultStrings';
+import { TYPED_WORDS } from '../../../voice/components/recorder/TypedEntry';
 
 export interface CorrectionWords {
     title: string;
@@ -37,6 +38,37 @@ export interface CorrectionWords {
     confirmed: string;
     notConfirmed: string;
     wholeFarm: string;
+    // Lane OF (founder D-61 = 5A + rule TAP-1): typing and tapping under the mic.
+    typeInstead: string;
+    typeTitle: string;
+    typeNote: string;
+    orTap: string;
+    changePlot: string;
+    changeDay: string;
+    /** The plot / day of a SAVED entry cannot be moved yet (server route pending, `correctionCapabilities`). */
+    moveNotYet: string;
+    remove: string;
+    restore: string;
+    removedTag: string;
+    newTag: string;
+    was: string;
+    add: string;
+    addWhat: string;
+    keepOne: string;
+    editTitle: (part: string) => string;
+    whatWork: string;
+    productName: string;
+    amount: string;
+    unit: string;
+    waterHow: string;
+    hours: string;
+    people: string;
+    cancel: string;
+    ok: string;
+    nameNeeded: string;
+    /** A worker count needs the internet (until the queued route exists). */
+    labourNeedsNet: string;
+    heard: string;
 }
 
 const mr: CorrectionWords = {
@@ -68,6 +100,35 @@ const mr: CorrectionWords = {
     confirmed: `✔ ${RESULT_STR.confirmedBadge}`,
     notConfirmed: RESULT_STR.notConfirmed,
     wholeFarm: RESULT_STR.wholeFarm, // REUSED
+    // PROPOSED (Marathi) — the working phones (5A + TAP-1), unless REUSED.
+    typeInstead: TYPED_WORDS.link, // REUSED — the recorder's typing line
+    typeTitle: 'जे बदलायचं ते लिहा',
+    typeNote: 'साथी हे समजून घेईल — बोलल्यासारखंच.',
+    orTap: 'किंवा दाबून बदला',
+    changePlot: 'प्लॉट बदला',
+    changeDay: 'दिवस बदला',
+    moveNotYet: 'जतन झालेल्या कामाचा प्लॉट किंवा दिवस अजून इथून बदलता येत नाही.',
+    remove: 'काढा',
+    restore: 'परत आणा',
+    removedTag: 'काढलं',
+    newTag: 'नवीन',
+    was: 'आधी',
+    add: 'आणखी जोडा',
+    addWhat: 'काय जोडायचं?',
+    keepOne: 'एक तरी भाग राहू द्या',
+    editTitle: part => `${part} — दाबून बदला`,
+    whatWork: 'काय काम?',
+    productName: 'औषध / खताचं नाव',
+    amount: 'मात्रा',
+    unit: 'एकक',
+    waterHow: 'कसं पाणी?',
+    hours: 'किती तास?',
+    people: 'किती जण?',
+    cancel: 'रद्द',
+    ok: 'ठीक',
+    nameNeeded: 'नाव लिहा',
+    labourNeedsNet: 'मजुरांची संख्या बदलायला इंटरनेट लागतं. इंटरनेट आल्यावर जतन करा.',
+    heard: 'बदल ऐकला — बघा आणि जतन करा',
 };
 
 const en: CorrectionWords = {
@@ -95,6 +156,35 @@ const en: CorrectionWords = {
     confirmed: '✔ Confirmed', // PROPOSED (English)
     notConfirmed: 'Not confirmed', // PROPOSED (English)
     wholeFarm: 'Whole farm', // PROPOSED (English)
+    // PROPOSED (English) — every line below.
+    typeInstead: 'If you cannot speak, type here',
+    typeTitle: 'Type what should change',
+    typeNote: 'Sathi reads this just like speech.',
+    orTap: 'Or change by tapping',
+    changePlot: 'Change plot',
+    changeDay: 'Change day',
+    moveNotYet: 'The plot or day of saved work cannot be changed here yet.',
+    remove: 'Remove',
+    restore: 'Bring back',
+    removedTag: 'Removed',
+    newTag: 'New',
+    was: 'Was',
+    add: 'Add more',
+    addWhat: 'What to add?',
+    keepOne: 'Keep at least one part',
+    editTitle: part => `${part} — change by tapping`,
+    whatWork: 'What work?',
+    productName: 'Product name',
+    amount: 'Amount',
+    unit: 'Unit',
+    waterHow: 'How was it watered?',
+    hours: 'How many hours?',
+    people: 'How many people?',
+    cancel: 'Cancel',
+    ok: 'OK',
+    nameNeeded: 'Write the name',
+    labourNeedsNet: 'Changing the number of workers needs the internet. Save when you are online.',
+    heard: 'Change heard — check and save',
 };
 
 /** English only for 'en'; every other language reads Marathi. */

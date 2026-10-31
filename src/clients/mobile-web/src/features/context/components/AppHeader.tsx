@@ -6,6 +6,8 @@
 import React from 'react';
 import { User2 } from 'lucide-react';
 import SetupHubIcon from './SetupHubIcon';
+import { useWaitingVoiceNotes } from '../../voiceDiary/waiting/useWaitingVoiceNotes';
+import { voiceNotesWords } from '../../voiceDiary/waiting/voiceNotesWords';
 import { AppRoute, PageView, DetailedWeather } from '../../../types';
 import { useLanguage } from '../../../i18n/LanguageContext';
 
@@ -204,6 +206,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   useOpenSurfaceRequest(OPEN_WAITING_DRAWER_EVENT, () => setIsWaitingDrawerOpen(true));
 
   const [hubTap, setHubTap] = React.useState(0);
+  const { notes: waitingVoice } = useWaitingVoiceNotes();
 
   // OVERSIGHT LOOP (spec §2/§3) — the awareness checkpoint is read/written
   // through the local adapter directly, unconditionally, the same way
@@ -431,7 +434,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             title={t('profile.setupHub')}
           >
             {/* Founder, 2026-10-25: the Setup Hub's own picture, as a small sibling of the nameboard, with a tap effect (SetupHubIcon). */}
-            <SetupHubIcon tap={hubTap} />
+            {/* Lane OF (founder D-59) — the number of recordings not saved yet (THE one reader, as the आवाज नोंदी row). */}
+            <SetupHubIcon tap={hubTap} count={waitingVoice.length} countLabel={voiceNotesWords(language).badge(waitingVoice.length)} />
             <span
               className="max-w-[60px] whitespace-nowrap text-center text-[10px] font-extrabold leading-[12px] text-emerald-900"
               style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}

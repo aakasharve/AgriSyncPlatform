@@ -50,9 +50,15 @@ import type { UnifiedClip } from '../components/ClipPlayerCard';
 import { useFullHistoryJournalConsent } from '../hooks/useFullHistoryJournalConsent';
 import { VoiceRetainedConsentToggleView } from '../../consent/VoiceRetainedConsentToggle';
 import { PageBar } from '../../../shared/components/ui/placeUi';
+import { WaitingVoiceNotes, type VoiceNoteCheckDeps } from '../waiting/WaitingVoiceNotes';
 
 interface VoiceDiaryPageProps {
     onBack: () => void;
+    /**
+     * Lane OF (founder D-59) — what opening and saving an understood recording needs. Absent (a bare mount, the tests):
+     * the recordings not saved yet are still listed, just not opened (no button that cannot do its job, P5).
+     */
+    waiting?: VoiceNoteCheckDeps;
     /** Test seam — lets the spec inject a deterministic locale. */
     forceLocale?: VoiceDiaryLocale;
 }
@@ -71,6 +77,7 @@ async function readLocalClips(): Promise<VoiceClipCacheRecord[]> {
 const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     onBack,
     forceLocale,
+    waiting,
 }) => {
     const { language } = useLanguage();
     const locale: VoiceDiaryLocale = forceLocale ?? toVoiceDiaryLocale(language);
@@ -306,6 +313,9 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                     </button>
                 )}
             />
+
+            {/* Lane OF (founder D-59) — recordings not saved yet: "अजून समजलं नाही" → "समजलं — दाबा, बघून जतन करा". */}
+            <WaitingVoiceNotes deps={waiting} language={language} />
 
             <RetentionBanner
                 locale={locale}

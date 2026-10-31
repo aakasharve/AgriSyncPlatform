@@ -8,6 +8,7 @@
  * Two pure rules the voice auto-save leans on, kept out of the hooks so they can be read and tested alone.
  */
 import { LogVerificationStatus, type AgriLogResponse, type DailyLog } from '../../types';
+import { onDay } from './onDay';
 
 /**
  * Is this parse worth saving without a review? Only when Sathi understood SOMETHING of the day: at least
@@ -71,4 +72,18 @@ export function withVoiceClipOnPrimary(logs: DailyLog[], voiceClipId: string | u
 export function isOwnAutoSavedVoiceLog(log: DailyLog, youIds: ReadonlySet<string>): boolean {
     const creator = log.meta?.createdByOperatorId;
     return log.autoSavedFromVoice === true && !!creator && youIds.has(creator);
+}
+
+/**
+ * The logs a voice save writes, as `handleAutoSave` is asked to write them: marked auto-saved (and typed) when it is one,
+ * the recording named on the log that carries his words, and — lane OF (founder D-60, rule TAP-1) — on the DAY he chose
+ * (the logs' own `date`, the server's `logDate`; the time stays the moment he spoke).
+ */
+export function asAutoSaved(
+    created: DailyLog[],
+    options: { autoSavedFromVoice?: boolean; typedEntry?: boolean; voiceClipId?: string; dateKey?: string },
+): DailyLog[] {
+    const marked = withVoiceClipOnPrimary(options.autoSavedFromVoice ? created.map(l => markAutoSavedFromVoice(l, { typed: options.typedEntry === true })) : created, options.voiceClipId);
+    const day = options.dateKey;
+    return day ? marked.map(l => onDay(l, day)) : marked;
 }
