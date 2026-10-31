@@ -30,6 +30,19 @@ const enqueue = vi.hoisted(() => vi.fn(async (_payload: unknown) => 'mut-1'));
 vi.mock('../../../application/usecases/sync/ReviseLogContentCommand', () => ({ ReviseLogContentCommand: { enqueue } }));
 const postLabourCorrection = vi.hoisted(() => vi.fn(async () => ({})));
 vi.mock('../../../features/labour/data/labourCorrectionsClient', () => ({ postLabourCorrection }));
+// Lane OF-S — the two queued routes (a move, a worker count) are spies; the entry's current copy is read from the phone.
+const moveEnqueue = vi.hoisted(() => vi.fn(async (_payload: unknown) => 'move-1'));
+vi.mock('../../../application/usecases/sync/MoveDailyLogCommand', () => ({ MoveDailyLogCommand: { enqueue: moveEnqueue } }));
+const labourEnqueue = vi.hoisted(() => vi.fn(async (_payload: unknown, _seenVersion: number) => 'labour-1'));
+vi.mock('../../../application/usecases/sync/CorrectLabourAssignmentCommand', () => ({ CorrectLabourAssignmentCommand: { enqueue: labourEnqueue } }));
+vi.mock('../../../features/logs/services/logSyncMutationService', async (orig) => ({
+    ...(await orig<typeof import('../../../features/logs/services/logSyncMutationService')>()),
+    resolveLogFarmId: async () => 'farm-1',
+}));
+vi.mock('../../../infrastructure/storage/DexieDatabase', async (orig) => ({
+    ...(await orig<typeof import('../../../infrastructure/storage/DexieDatabase')>()),
+    getDatabase: () => ({ logs: { get: async () => undefined } }),
+}));
 vi.mock('../../navigation/logRecorder', () => ({
     renderLogRecorder: () => <div data-testid="the-recorder" />,
     renderProcessingScreen: () => <div data-testid="the-waiting-screen" />,
@@ -45,6 +58,7 @@ import { updateLog } from '../../../application/usecases/UpdateLog';
 import type { LogsRepository } from '../../../application/ports';
 import type { AppRouterContext } from '../../navigation/routeContext';
 import { SpeakHost, type CorrectionSaveDeps } from '../SpeakHost';
+import type { RefusedChange } from '../../../features/logs/components/correction/refusedRevision';
 import { correctionEntryNow, withSpeakPurpose } from '../speakFlow';
 import { openCorrection, resetSpeakStoreForTests, speakState } from '../speakStore';
 
@@ -77,7 +91,7 @@ const SAID: AgriLogResponse = {
 
 let drive: { set: (st: AppStatus) => void; history: () => DailyLog[]; text: (t: string) => void } = { set: () => undefined, history: () => [], text: () => undefined };
 const openPlace = vi.fn();
-const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean; hajeri?: boolean }> = ({ start, save, refused = false, hajeri = false }) => {
+const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean | RefusedChange; hajeri?: boolean }> = ({ start, save, refused = false, hajeri = false }) => {
     const [history, setHistory] = useState<DailyLog[]>(start);
     const [status, setStatus] = useState<AppStatus>('idle');
     const [logScope, setLogScope] = useState<LogScope>(EMPTY);
@@ -89,7 +103,8 @@ const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?:
         handleReset: vi.fn(), setMode: vi.fn(), setStatus, setLogScope, setCurrentRoute: vi.fn(), setMainView: vi.fn(),
         handleTextReady, canOpenAttendanceFromHome: hajeri, openPlace,
     } as unknown as AppRouterContext;
-    return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} readRefused={async () => refused} />;
+    const refusal: RefusedChange | null = refused === true ? { kind: 'revision', reason: 'other' } : refused || null;
+    return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} readRefused={async () => refusal} />;
 };
 
 /** The real F1 path: `UpdateLog` with a phone store that holds the entry. */
@@ -120,7 +135,7 @@ const speak = async (words: AgriLogResponse) => {
     expect(autoSave).not.toHaveBeenCalled();
 };
 
-beforeEach(() => { resetSpeakStoreForTests(); enqueue.mockClear(); postLabourCorrection.mockClear(); labourOpening.mockClear(); openPlace.mockClear(); });
+beforeEach(() => { resetSpeakStoreForTests(); enqueue.mockClear(); postLabourCorrection.mockClear(); moveEnqueue.mockClear(); labourEnqueue.mockClear(); labourOpening.mockClear(); openPlace.mockClear(); });
 
 /** The row of one part (by its part key; the first, or the one that is not struck through). */
 const rowOf = (part: string): HTMLElement => {
@@ -259,7 +274,7 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         expect(saved).toHaveLength(0);
     });
 
-    it('offline labour save: says plainly what was and was not saved, and keeps the before / after on screen to retry', async () => {
+    it('lane OF-S: a spoken worker count is QUEUED (sent later), never posted — even when posting would fail; saved on this phone', async () => {
         const { deps } = realSave();
         postLabourCorrection.mockRejectedValueOnce(new Error('Network Error'));
         const withLabour = { ...ENTRY, labour: [{ id: 'lb', type: 'HIRED', count: 5, labourAssignmentId: 'asg-1' }] } as DailyLog;
@@ -274,11 +289,13 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         await speak({ ...SAID, inputs: [], labour: [{ id: 'x', type: 'HIRED', count: 8 }] });
         await act(async () => { fireEvent.click(screen.getByTestId('corr-save')); });
         await act(async () => { await Promise.resolve(); });
-        expect(screen.getByTestId('corr-save-failed')).toHaveTextContent(language === 'en' ? 'Nothing changed on this phone' : 'या फोनवर काहीही बदललं नाही');
-        expect(screen.getByTestId('corr-rows')).toBeInTheDocument(); // still there: he can press again
-        expect(screen.getByTestId('corr-save')).toBeEnabled();
-        expect(repoSave).toHaveLength(0);
-        expect(enqueue).not.toHaveBeenCalled();
+        expect(postLabourCorrection).not.toHaveBeenCalled();
+        expect(labourEnqueue).toHaveBeenCalledTimes(1);
+        expect(labourEnqueue.mock.calls[0][0]).toMatchObject({ labourAssignmentId: 'asg-1', dailyLogId: 'log-1', quantity: { workerCount: 8 }, seen: { workerCount: 5 } });
+        expect(repoSave).toHaveLength(1);
+        expect(repoSave[0].labour[0].count).toBe(8);
+        expect(screen.queryByTestId('corr-save-failed')).toBeNull();
+        expect(screen.queryByTestId('corr-screen')).toBeNull();
     });
 
     it('B002: a change saved earlier that the server refused is said plainly — only on this phone, never "sent"', async () => {
@@ -389,13 +406,53 @@ describe.each(['mr', 'en'] as const)('lane OF — "किंवा दाबू�
         expect(screen.getByTestId('corr-save')).toBeDisabled();
     });
 
-    it('the plot and the day of a SAVED entry are shown, read-only, with one plain line (no dead button) until the server can move it', () => {
-        open();
+    it('lane OF-S: the plot and the day of a SAVED entry are offered; a new day is queued as a move and shows on the entry', async () => {
+        const saved = open();
         expect(screen.getByTestId('corr-plot-row')).toHaveTextContent('सोनाका');
         expect(screen.getByTestId('corr-day-row')).toHaveTextContent(language === 'en' ? '25 Oct' : '25 ऑक्टो');
-        expect(screen.queryByTestId('corr-change-plot')).toBeNull();
-        expect(screen.queryByTestId('corr-change-day')).toBeNull();
-        expect(screen.getByTestId('corr-move-not-yet')).toBeInTheDocument();
+        expect(screen.getByTestId('corr-change-plot')).toHaveTextContent(language === 'en' ? 'Change plot' : 'प्लॉट बदला');
+        expect(screen.queryByTestId('corr-move-not-yet')).toBeNull();
+        fireEvent.click(screen.getByTestId('corr-change-day'));
+        fireEvent.click(screen.getByTestId('day-pick-2026-10-24'));
+        expect(screen.getByTestId('corr-day-row')).toHaveTextContent(language === 'en' ? '24 Oct' : '24 ऑक्टो');
+        await saveNow();
+        expect(moveEnqueue).toHaveBeenCalledTimes(1);
+        expect(moveEnqueue.mock.calls[0][0]).toMatchObject({ dailyLogId: 'log-1', baseVersion: 3, newLogDate: '2026-10-24' });
+        expect(enqueue).not.toHaveBeenCalled(); // nothing else changed: no content version
+        expect(saved).toHaveLength(1);
+        expect(saved[0]).toMatchObject({ date: '2026-10-24', contentVersion: 4 });
+        expect(screen.queryByTestId('corr-screen')).toBeNull();
+    });
+
+    it('lane OF-S: offline, "दिवस बदला" still saves — the move is queued like any other change (P10)', async () => {
+        const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+        try {
+            open();
+            fireEvent.click(screen.getByTestId('corr-change-day'));
+            fireEvent.click(screen.getByTestId('day-pick-2026-10-23'));
+            await saveNow();
+            expect(moveEnqueue).toHaveBeenCalledTimes(1);
+            expect(screen.queryByTestId('corr-screen')).toBeNull();
+        } finally { online.mockRestore(); }
+    });
+
+    it('lane OF-S: a refused move is said in plain words on that entry — put back as the server has it, and why', async () => {
+        const { deps } = realSave();
+        render(<Harness start={[ENTRY]} save={deps} refused={{ kind: 'move', reason: 'linked' }} />);
+        act(() => openCorrection('log-1'));
+        const banner = await screen.findByTestId('corr-server-refused');
+        expect(banner).toHaveTextContent(language === 'en' ? 'The plot / day was not changed — it is kept as the server has it.' : 'प्लॉट / दिवस बदलला नाही — सर्व्हरवर आहे तसंच ठेवलं.');
+        expect(banner).toHaveTextContent(language === 'en' ? 'Attendance or money is linked to this work — change those first.' : 'या कामावर हजेरी / पैसे जोडलेले आहेत — आधी ते बदला.');
+        expect(banner).not.toHaveTextContent(language === 'en' ? 'only on this phone' : 'फक्त या फोनवर');
+    });
+
+    it('lane OF-S: a refused worker count (someone changed it meanwhile) is said the same way', async () => {
+        const { deps } = realSave();
+        render(<Harness start={[ENTRY]} save={deps} refused={{ kind: 'workers', reason: 'stale' }} />);
+        act(() => openCorrection('log-1'));
+        const banner = await screen.findByTestId('corr-server-refused');
+        expect(banner).toHaveTextContent(language === 'en' ? 'The workers change was not made' : 'मजुरांचा बदल झाला नाही');
+        expect(banner).toHaveTextContent(language === 'en' ? 'Someone changed this after you saw it.' : 'तुम्ही पाहिल्यानंतर दुसऱ्या कोणी हे बदललं.');
     });
 
     it('offline, a tap change still saves: it is queued like any other change (P10)', async () => {
@@ -413,23 +470,33 @@ describe.each(['mr', 'en'] as const)('lane OF — "किंवा दाबू�
         online.mockRestore();
     });
 
-    it('offline, a worker count says plainly it needs the internet, and nothing is sent or written', async () => {
+    it('lane OF-S: offline, a worker count is queued like any other change (P10) — no "needs the internet"', async () => {
         const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
-        const { deps, saved } = realSave();
-        render(<Harness start={[{ ...ENTRY, labour: [{ id: 'lb', type: 'HIRED', count: 5, labourAssignmentId: 'asg-1' }] } as DailyLog]} save={deps} />);
+        const withLabour = { ...ENTRY, labour: [{ id: 'lb', type: 'HIRED', count: 5, labourAssignmentId: 'asg-1' }] } as DailyLog;
+        const saved: DailyLog[] = [];
+        const deps: CorrectionSaveDeps = {
+            ...realSave().deps,
+            updateLog: (logId, updates, profile, reason) => updateLog({ logId, updatedData: updates, actorId: 'me', reason },
+                { getById: async () => withLabour, save: async (l: DailyLog) => { saved.push(l); } } as unknown as LogsRepository, profile),
+        };
+        try {
+        render(<Harness start={[withLabour]} save={deps} />);
         act(() => openCorrection('log-1'));
         expect(screen.queryByTestId('corr-toggle-lb')).toBeNull(); // an engagement is never removed here
         fireEvent.click(screen.getByTestId('corr-edit-lb'));
-        expect(screen.getByTestId('tap-labour-needs-net')).toHaveTextContent(language === 'en' ? 'needs the internet' : 'इंटरनेट लागतं');
+        expect(screen.queryByTestId('tap-labour-needs-net')).toBeNull();
         fireEvent.click(screen.getByTestId('tap-count-plus'));
         fireEvent.click(screen.getByTestId('tap-sheet-ok'));
         expect(screen.getByTestId('corr-value-lb')).toHaveTextContent('6');
         await saveNow();
-        expect(screen.getByTestId('corr-save-failed')).toBeInTheDocument();
+        expect(screen.queryByTestId('corr-save-failed')).toBeNull();
         expect(postLabourCorrection).not.toHaveBeenCalled();
+        expect(labourEnqueue).toHaveBeenCalledTimes(1);
+        expect(labourEnqueue.mock.calls[0][0]).toMatchObject({ quantity: { workerCount: 6 }, seen: { workerCount: 5 } });
         expect(enqueue).not.toHaveBeenCalled();
-        expect(saved).toHaveLength(0);
-        online.mockRestore();
+        expect(saved).toHaveLength(1);
+        expect(saved[0].labour[0].count).toBe(6);
+        } finally { online.mockRestore(); }
     });
 
     it('D-57: "बदला" on a हजेरी-door record, for someone who may open हजेरी, opens THAT DAY in the हजेरी वही', () => {
@@ -582,6 +649,7 @@ describe.each(['mr', 'en'] as const)('lane OF fix 1 — the बदला screen 
         openWith(named);
         const crop = language === 'en' ? 'Grapes' : 'द्राक्ष';
         expect(screen.getByTestId('corr-title').textContent).not.toContain(`${crop} · ${crop}`);
-        expect(screen.getByTestId('corr-plot-row').textContent).toBe(`${crop} G1`);
+        // Lane OF-S: the row now also carries "प्लॉट बदला" — the PLACE words are what this checks.
+        expect(screen.getByTestId('corr-plot-row').querySelector('span')?.textContent).toBe(`${crop} G1`);
     });
 });

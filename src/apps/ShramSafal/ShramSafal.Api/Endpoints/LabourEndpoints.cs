@@ -296,7 +296,11 @@ public static class LabourEndpoints
                 request.Quantity,
                 request.DurationHours,
                 request.AttributionAdds,
-                request.AttributionRemovals);
+                request.AttributionRemovals)
+            {
+                // lane OF-S — what the reviewer saw; absent on every installed phone (no check, as before).
+                Seen = request.Seen,
+            };
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -356,4 +360,5 @@ public sealed record CorrectLabourRequest(
     LabourQuantityCorrection? Quantity,
     decimal? DurationHours,
     IReadOnlyList<Guid>? AttributionAdds,
-    IReadOnlyList<Guid>? AttributionRemovals);
+    IReadOnlyList<Guid>? AttributionRemovals,
+    LabourCorrectionSeen? Seen = null);

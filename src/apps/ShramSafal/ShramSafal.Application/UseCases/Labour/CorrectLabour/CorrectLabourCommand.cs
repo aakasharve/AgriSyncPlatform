@@ -34,7 +34,36 @@ public sealed record CorrectLabourCommand(
     LabourQuantityCorrection? Quantity,
     decimal? DurationHours,
     IReadOnlyList<Guid>? AttributionAdds,
-    IReadOnlyList<Guid>? AttributionRemovals);
+    IReadOnlyList<Guid>? AttributionRemovals)
+{
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S) — the record the caller believes this engagement belongs to. When stated, an
+    /// engagement on any other log is refused (<c>Forbidden</c>), exactly like one on another farm. Null (every
+    /// caller before lane OF-S) = not checked.
+    /// </summary>
+    public Guid? DailyLogId { get; init; }
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S) — what the reviewer SAW before changing it. When stated, a correction whose section
+    /// no longer matches the engagement (someone corrected it meanwhile) is refused as stale, never written over the
+    /// newer correction. Null (every installed phone's online POST) = not checked, exactly as before (P11).
+    /// </summary>
+    public LabourCorrectionSeen? Seen { get; init; }
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S) — <c>true</c> when the CALLER owns the (device, request) idempotency key: the queued
+    /// path, where <c>/sync/push</c> dedupes every mutation and stores the key in the same transaction. The handler
+    /// then neither replays nor stores its own key (two owners would burn two keys for one action) and saves its
+    /// changes itself. <c>false</c> (the online route) = the handler's own replay + store, unchanged.
+    /// </summary>
+    public bool IdempotencyStoredByCaller { get; init; }
+}
+
+/// <summary>
+/// spec: plr-d10 (lane OF-S) — the engagement's values as the reviewer's phone showed them before his change. Each is
+/// optional: a value his phone did not know is left out and not compared (never guessed).
+/// </summary>
+public sealed record LabourCorrectionSeen(int? WorkerCount, int? MaleCount, int? FemaleCount, decimal? DurationHours);
 
 /// <summary>
 /// The three headcount numbers TOGETHER (Task 12b.2). They travel as one value

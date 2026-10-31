@@ -99,6 +99,15 @@ public interface IShramSafalRepository
     Task AddWeatherStampAsync(WeatherStamp stamp, CancellationToken ct = default)
         => Task.CompletedTask;
     Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default);
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S) — the log, read for a CHANGE that must not race another one (a move of its place or
+    /// day): the row is held (<c>SELECT … FOR UPDATE</c>) for the rest of the caller's transaction and the record is
+    /// re-read after the hold, so its version is the one a second writer cannot move underneath this change. The
+    /// default (an in-memory or test repository, no row locks) is the ordinary read.
+    /// </summary>
+    Task<DailyLog?> GetDailyLogForChangeAsync(Guid dailyLogId, CancellationToken ct = default)
+        => GetDailyLogByIdAsync(dailyLogId, ct);
     Task<DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default);
 
     /// <summary>

@@ -16,6 +16,7 @@
  * reconciled; a pull that fails, or that skips the logs, leaves it unwritten and the next pull tries again.
  */
 import type { AgriLogDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
 /** `appMeta` key. Bump the suffix only if a later version needs one more full rebuild. */
 export const LOGS_REBUILD_MARKER_KEY = 'f1.logsRebuiltFromServer.v1';
@@ -40,4 +41,23 @@ export async function isLogsRebuildDue(db: AgriLogDatabase): Promise<boolean> {
 /** Records that the rebuild ran. Called inside the reconcile transaction (it includes `appMeta`). */
 export async function markLogsRebuilt(db: AgriLogDatabase, atIso: string): Promise<void> {
     await db.appMeta.put({ key: LOGS_REBUILD_MARKER_KEY, value: { rebuiltAtUtc: atIso }, updatedAt: atIso });
+}
+
+/**
+ * spec: plr-d10 (lane OF-S) — the queued changes whose REFUSAL means "the server's version stands" (a move of a saved
+ * entry's plot / day, a worker-count correction), and the request that brings that version back.
+ *
+ * The server REFUSED a queued move / worker-count change of an entry, so the entry must show
+ * the server's version again. The pull is a delta and this phone's cursor has already gone past that version (its pull
+ * was held off the entry while the change waited), so the ONE full rebuild above is asked for once more: the next pull
+ * (in the same sync cycle) starts from the beginning and re-merges every entry that holds no unsent change. Rare by
+ * nature (a refusal), and the marker is written again by that pull.
+ */
+export const REFUSAL_RESTORES_SERVER_VERSION: ReadonlySet<string> = new Set([
+    SyncMutationName.MoveDailyLog,
+    SyncMutationName.CorrectLabourAssignment,
+]);
+
+export async function requestLogsRebuild(db: AgriLogDatabase): Promise<void> {
+    await db.appMeta.delete(LOGS_REBUILD_MARKER_KEY);
 }

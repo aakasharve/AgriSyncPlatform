@@ -28,9 +28,11 @@ using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 using ShramSafal.Application.UseCases.Labour;
+using ShramSafal.Application.UseCases.Labour.CorrectLabour;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
+using ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 using ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Tests.RecordTestCollected;
@@ -151,7 +153,12 @@ public sealed class PushSyncBatchHandler(
     // CloudWatch alarm on the account. See LogMutationRejected below.
     ILogger<PushSyncBatchHandler> logger,
     // spec: plr-d10 (lane F1) — an edit to what Sathi understood (revise_log_content).
-    ReviseLogContentHandler reviseLogContentHandler)
+    ReviseLogContentHandler reviseLogContentHandler,
+    // spec: plr-d10 (lane OF-S) — a saved record moved to another place / day (move_daily_log).
+    MoveDailyLogHandler moveDailyLogHandler,
+    // spec: plr-d10 (lane OF-S) — a worker-count / hours correction sent later (correct_labour_assignment). The SAME
+    // handler the online route (POST …/labour/assignments/{id}/corrections) resolves — never a copy of its rule.
+    IHandler<CorrectLabourCommand, CorrectLabourResult> correctLabourHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1034,6 +1041,10 @@ public sealed class PushSyncBatchHandler(
                 return await HandleAddLogTaskAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "revise_log_content":
                 return await HandleReviseLogContentAsync(clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "move_daily_log":
+                return await HandleMoveDailyLogAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "correct_labour_assignment":
+                return await HandleCorrectLabourAssignmentAsync(deviceId, clientRequestId, payload, actorUserId, ct);
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
@@ -2015,6 +2026,138 @@ public sealed class PushSyncBatchHandler(
                 actorRole,
                 clientRequestId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S) — a saved record moved to another place and/or day. Carries only the log id, so the
+    /// farm is DISCOVERED by a user-scoped read before the tenant scope is set (the add_log_task / revise shape).
+    /// Who may, where, when, the stale rule and what is tied to the record live in <see cref="MoveDailyLogHandler"/>.
+    /// The device + request id dedupe is this class's, like every mutation: a replay answers from the stored result.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleMoveDailyLogAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "dailyLogId", "baseVersion", "newPlotIds", "wholeFarm", "newLogDate", "reason", "revisedAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "move_daily_log payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<MoveDailyLogPayload>(payload);
+        if (request is null || request.DailyLogId == Guid.Empty || request.BaseVersion < 1)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for move_daily_log.");
+        }
+
+        if (request.Reason is { Length: > 400 })
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "move_daily_log reason exceeds 400 characters.");
+        }
+
+        var dailyLogScope = await EstablishFarmScopeForOwnedEntityAsync(
+            actorUserId,
+            c => repository.GetDailyLogByIdAsync(request.DailyLogId, c),
+            log => (Guid)log.FarmId,
+            Domain.Common.ShramSafalErrors.DailyLogNotFound,
+            ct);
+        if (!dailyLogScope.IsSuccess)
+        {
+            return MutationExecutionOutcome.Failure(dailyLogScope.Error.Code, dailyLogScope.Error.Description);
+        }
+
+        var result = await moveDailyLogHandler.HandleAsync(
+            new MoveDailyLogCommand(
+                request.DailyLogId,
+                request.BaseVersion,
+                request.NewPlotIds,
+                request.WholeFarm == true,
+                request.NewLogDate,
+                request.Reason,
+                request.RevisedAtUtc == default ? null : request.RevisedAtUtc,
+                actorUserId,
+                actorRole,
+                clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S) — a worker-count / hours correction made with no internet. The farm is named in the
+    /// payload, so its membership-validated scope is set first (the online route's <c>EstablishForCallerAsync</c>);
+    /// then the SAME <see cref="CorrectLabourHandler"/> the online route uses runs it: labour authority, the engagement
+    /// belonging to this farm AND this log, the stale check against what he saw, the history rows. Idempotency is
+    /// this class's (device + request id), so the handler is told not to store its own key — two owners would burn
+    /// two keys for one action.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleCorrectLabourAssignmentAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "labourAssignmentId", "dailyLogId", "farmId", "quantity", "durationHours", "seen", "reason", "correctedAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "correct_labour_assignment payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<CorrectLabourAssignmentPayload>(payload);
+        if (request is null || request.LabourAssignmentId == Guid.Empty || request.DailyLogId == Guid.Empty
+            || request.FarmId == Guid.Empty || request.Seen is null)
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload", "Invalid payload for correct_labour_assignment.");
+        }
+
+        if (request.Reason is { Length: > 400 })
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "correct_labour_assignment reason exceeds 400 characters.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(
+                Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await correctLabourHandler.HandleAsync(
+            new CorrectLabourCommand(
+                new FarmId(request.FarmId),
+                request.LabourAssignmentId,
+                new UserId(actorUserId),
+                deviceId,
+                clientRequestId,
+                request.Reason,
+                request.Quantity is { } q ? new LabourQuantityCorrection(q.WorkerCount, q.MaleCount, q.FemaleCount) : null,
+                request.DurationHours,
+                AttributionAdds: null,
+                AttributionRemovals: null)
+            {
+                DailyLogId = request.DailyLogId,
+                Seen = new LabourCorrectionSeen(
+                    request.Seen.WorkerCount, request.Seen.MaleCount, request.Seen.FemaleCount, request.Seen.DurationHours),
+                IdempotencyStoredByCaller = true,
+            },
             ct);
 
         return ToOutcome(result);

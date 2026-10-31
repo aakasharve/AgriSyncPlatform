@@ -13,6 +13,8 @@ import {
 } from '../../features/labour/data/labourCorrectionsClient';
 import { buildLogContent } from '../../features/logs/services/logContentPayload';
 import { ReviseLogContentCommand } from './sync/ReviseLogContentCommand';
+import { CorrectLabourAssignmentCommand, type CorrectLabourAssignmentPayload } from './sync/CorrectLabourAssignmentCommand';
+import { canQueueLabourCountOffline } from '../../features/logs/components/correction/correctionCapabilities';
 // import { AuditLogRepository } from '../../infrastructure/storage/AuditLogRepository'; // Deprecated Fix-07
 
 interface UpdateLogRequest {
@@ -216,6 +218,39 @@ export function buildLabourCorrections(
     }
 
     return corrections;
+}
+
+/**
+ * spec: plr-d10 (lane OF-S) — one correction as the QUEUED mutation carries it: the same sections the online route takes
+ * (`quantity`, `durationHours`; silence stays silence), plus what his phone SAW before his change — only the values it
+ * knew — so the server refuses it when someone changed them meanwhile, instead of writing over the newer correction.
+ */
+function toQueuedLabourCorrection(
+    existingLog: DailyLog,
+    farmId: string,
+    correction: PendingLabourCorrection,
+): CorrectLabourAssignmentPayload {
+    const original = (existingLog.labour || []).find(e => e.labourAssignmentId === correction.labourAssignmentId);
+    const workerCount = wholeOrOmitted(original?.count);
+    const maleCount = wholeOrOmitted(original?.maleCount);
+    const femaleCount = wholeOrOmitted(original?.femaleCount);
+    const hours = finiteOrOmitted(original?.durationHours);
+    const { request } = correction;
+    return {
+        labourAssignmentId: correction.labourAssignmentId,
+        dailyLogId: existingLog.id,
+        farmId,
+        ...(request.quantity && { quantity: request.quantity }),
+        ...(request.durationHours !== undefined && { durationHours: request.durationHours }),
+        seen: {
+            ...(workerCount !== undefined && { workerCount }),
+            ...(maleCount !== undefined && { maleCount }),
+            ...(femaleCount !== undefined && { femaleCount }),
+            ...(hours !== undefined && hours > 0 && { durationHours: hours }),
+        },
+        ...(request.reason && { reason: request.reason.slice(0, 400) }),
+        correctedAtUtc: new Date().toISOString(),
+    };
 }
 
 /**
@@ -427,7 +462,12 @@ export function changesLogContent(existingLog: DailyLog, finalLog: DailyLog): bo
  * Returns whether a revision was queued: `false` when nothing in the document changed, or when
  * the document does not fit the contract (then the edit stays on this phone, and is said to).
  */
-async function queueContentRevision(existingLog: DailyLog, finalLog: DailyLog, reason: string | undefined): Promise<boolean> {
+async function queueContentRevision(
+    existingLog: DailyLog,
+    finalLog: DailyLog,
+    reason: string | undefined,
+    baseVersion: number = existingLog.contentVersion ?? 1,
+): Promise<boolean> {
     if (!changesLogContent(existingLog, finalLog)) {
         return false;
     }
@@ -438,8 +478,9 @@ async function queueContentRevision(existingLog: DailyLog, finalLog: DailyLog, r
     }
     await ReviseLogContentCommand.enqueue({
         dailyLogId: finalLog.id,
-        // The version the editor saw; 1 for a log this phone has not yet heard a version for.
-        baseVersion: existingLog.contentVersion ?? 1,
+        // The version the editor saw (after the changes queued before it); 1 for a log this phone has not yet heard a
+        // version for.
+        baseVersion,
         content,
         ...(reason && reason.trim().length > 0 && { reason: reason.trim().slice(0, 400) }),
         revisedAtUtc: new Date().toISOString(),
@@ -582,6 +623,8 @@ export const updateLog = async (
         //    plot-scoped one does. Nothing in this file changed to allow it —
         //    that is the point of a single choke point.
         const corrections = buildLabourCorrections(existingLog, finalLog, request.reason);
+        const queueLabour = canQueueLabourCountOffline();
+        const baseVersion = existingLog.contentVersion ?? 1;
         if (corrections.length > 0) {
             const farmId = await resolveLogFarmId(existingLog);
             if (!farmId) {
@@ -597,10 +640,21 @@ export const updateLog = async (
                 };
             }
 
-            for (const correction of corrections) {
-                await postLabourCorrection(farmId, correction.labourAssignmentId, correction.request);
+            for (const [index, correction] of corrections.entries()) {
+                if (queueLabour) {
+                    // lane OF-S — QUEUED (sent later), never POSTed now: a count change works with no internet (P10).
+                    // Each one is a material change the server answers with a new record version, so the version
+                    // he "saw" for the next one counts the ones queued before it.
+                    await CorrectLabourAssignmentCommand.enqueue(
+                        toQueuedLabourCorrection(existingLog, farmId, correction), baseVersion + index);
+                } else {
+                    await postLabourCorrection(farmId, correction.labourAssignmentId, correction.request);
+                }
             }
         }
+        // lane OF-S — the record versions the queued corrections will add on the server (none when POSTed: the next
+        // pull states the server's own version, as before).
+        const labourVersionSteps = queueLabour ? corrections.length : 0;
 
         // 5. LABOUR_PHASE2 PHASE 4 — THE EDIT REACHES THE LOCAL LEDGER.
         //
@@ -626,13 +680,16 @@ export const updateLog = async (
         //     between (`readPendingLogIds`): the local edit can never be overwritten by the old
         //     version while its revision waits. A queue that refuses it throws into the catch
         //     below — reported, never swallowed.
-        const contentRevisionQueued = await queueContentRevision(existingLog, finalLog, request.reason);
+        const contentRevisionQueued = await queueContentRevision(
+            existingLog, finalLog, request.reason, baseVersion + labourVersionSteps);
 
         // 5b. lane F1 (review N4) — the version this phone now expects the record to be at. A second edit made
         //     before the next pull names THIS version as its base, so it is not mistaken for an edit made from an
         //     older one (staleBase). The next pull states the server's own version, and that wins.
-        const savedLog: DailyLog = contentRevisionQueued
-            ? { ...finalLog, contentVersion: (existingLog.contentVersion ?? 1) + 1 }
+        //     Lane OF-S: queued count corrections move it too (one version each, as the server does).
+        const versionSteps = labourVersionSteps + (contentRevisionQueued ? 1 : 0);
+        const savedLog: DailyLog = versionSteps > 0
+            ? { ...finalLog, contentVersion: baseVersion + versionSteps }
             : finalLog;
 
         await repo.save(savedLog, {
@@ -651,7 +708,9 @@ export const updateLog = async (
         return {
             success: true,
             log: savedLog,
-            persistedLabourCorrections: corrections.length,
+            // Lane OF-S — a QUEUED correction has not been accepted by any server yet, so it is not counted as one
+            // that "reached your farm records" (P10: until the server answers it is intent kept on this phone).
+            persistedLabourCorrections: queueLabour ? 0 : corrections.length,
             hasUnsentChanges: hasUnsentChanges(existingLog, finalLog, corrections, contentRevisionQueued),
             contentRevisionQueued,
             // Task 23 — the sharper half of the same question. Computed from the

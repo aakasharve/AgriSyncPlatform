@@ -3,7 +3,7 @@ import { systemClock } from '../../core/domain/services/Clock';
 import { agriSyncClient, type SyncMutationType } from '../api/AgriSyncClient';
 import { getAuthSession } from '../storage/AuthTokenStore';
 import { reconcileSyncPull } from '../../features/sync/pull/SyncPullReconciler';
-import { isLogsRebuildDue } from '../../features/sync/pull/logsRebuildMarker';
+import { isLogsRebuildDue, REFUSAL_RESTORES_SERVER_VERSION, requestLogsRebuild } from '../../features/sync/pull/logsRebuildMarker';
 import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType } from './SyncMutationCatalog';
@@ -515,6 +515,14 @@ export class BackgroundSyncWorker {
                         mutationId: mutation.clientRequestId,
                         reason: result.errorCode ?? errorMessage,
                     });
+                    // spec: plr-d10 (lane OF-S) — a refused move / worker count leaves the server's version standing:
+                    // ask for it again, so the pull at the end of this cycle puts the entry back (the refused row no
+                    // longer holds it, `pendingMutations.ts`); the बदला screen says why (`refusedRevision.ts`).
+                    if (REFUSAL_RESTORES_SERVER_VERSION.has(mutation.mutationType)) {
+                        await requestLogsRebuild(getDatabase()).catch((error: unknown) => {
+                            console.error('BackgroundSyncWorker: could not ask for the server version again', error);
+                        });
+                    }
                 } else {
                     // The server read this row and refused it, just not
                     // permanently enough to need the farmer yet. A verdict all

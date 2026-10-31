@@ -36,6 +36,7 @@ import { hiddenMainViewsFor } from './hiddenViews';
 import { useHomeAttendanceDoor } from '../../features/labour/useHomeAttendanceDoor';
 // Lanes MIC-1 + E1 — the ONE mic and the "बदला" screen, over every screen.
 import { SpeakHost, type CorrectionSaveDeps } from '../speak/SpeakHost';
+import { queueSavedEntryMove } from '../../features/logs/components/correction/correctionCapabilities';
 import { openCorrection } from '../speak/speakStore';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
@@ -175,6 +176,12 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         setHistory: data.setHistory,
         profile: farmerProfile,
         toast: (message, type) => window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message, type } })),
+    };
+    // Lane OF-S — the result screen's day chip moves the recording's entries through the SAME queued move as "दिवस बदला".
+    const moveSavedDay = async (logs: readonly DailyLog[], dateKey: string): Promise<void> => {
+        for (const log of logs) {
+            await queueSavedEntryMove(log, { dateKey }, { crops, updateLog: correctionSave.updateLog, setHistory: correctionSave.setHistory, profile: farmerProfile });
+        }
     };
 
     const selectedScopeCropIds = React.useMemo(
@@ -316,6 +323,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         costSnapshot: derivations.costSnapshot,
         yesterdayCost: derivations.yesterdayCost,
         handleEditLog,
+        moveSavedDay,
         getLogContextSnapshot: derivations.getLogContextSnapshot,
     };
 

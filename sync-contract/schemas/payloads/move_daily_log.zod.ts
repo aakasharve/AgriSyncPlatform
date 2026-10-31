@@ -1,0 +1,35 @@
+// spec: plr-d10-redesign-real-integration-2026-10-25 (lane OF-S; founder TAP-1 + D-61 = 5A) — move a SAVED
+// entry to another place ("प्लॉट बदला") and/or another day ("दिवस बदला"), queued like every other change so it
+// works with no internet and reaches the server (doctrine P10).
+//
+// THE NEW PLACE is ONE of:
+//   - `newPlotIds`: the plot(s) he chose in the one crop → plot selector (one plot, or several), or
+//   - `wholeFarm: true`: संपूर्ण शेत.
+// Absent both = the place does not change. `newLogDate` absent = the day does not change. At least one of the
+// three must be present (the server and the phone both refuse an empty move).
+//
+// `dailyLogId` is the key the pull guard reads (`pendingMutations.readPendingLogIds`), so the moved entry is
+// left alone by every pull until the server has answered. `baseVersion` is the record version he saw: unlike
+// a content revision, a move made from an OLDER version is REFUSED (never applied over a newer change), and
+// the phone puts the entry back to the server's version with the reason shown.
+//
+// The idempotency key is the envelope's `clientRequestId` (the server dedupes every mutation on device +
+// request id); it is not repeated here, so the two can never disagree.
+import { z } from 'zod';
+import { ZGuid, ZIsoDate } from './_shared.zod';
+
+const ZLogDate = z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
+
+export const MoveDailyLogPayload = z.object({
+    dailyLogId: ZGuid,
+    baseVersion: z.number().int().min(1),
+    newPlotIds: z.array(ZGuid).min(1).max(50).optional(),
+    wholeFarm: z.boolean().optional(),
+    newLogDate: ZLogDate.optional(),
+    reason: z.string().max(400).optional(),
+    revisedAtUtc: ZIsoDate,
+});
+
+export type MoveDailyLogPayloadType = z.infer<typeof MoveDailyLogPayload>;

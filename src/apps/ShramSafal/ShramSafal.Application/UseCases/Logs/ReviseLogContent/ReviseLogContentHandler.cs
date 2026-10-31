@@ -125,29 +125,19 @@ public sealed class ReviseLogContentHandler(
 
         // E4 — the farm is the LOG's farm, read here; nothing in the payload names one.
         var farmId = (Guid)log.FarmId;
-        if (!await repository.IsUserMemberOfFarmAsync(farmId, command.ActorUserId, ct))
-        {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
-        }
-
-        var gate = await EntitlementGate.CheckAsync<DailyLogDto>(
-            entitlementPolicy, new UserId(command.ActorUserId), new FarmId(farmId),
-            PaidFeature.WriteDailyLog, ct);
-        if (gate is not null) return gate;
-
         var now = clock.UtcNow;
         var isCreator = command.ActorUserId == log.OperatorUserId.Value;
-        if (!isCreator && !await LabourManagementGate.IsAllowedAsync(
-                repository, farmId, command.ActorUserId, now, ct))
-        {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
-        }
 
-        if (log.WasCapturedAtLabourDoor)
+        // Who may: the ONE rule for changing a saved record, shared with move_daily_log (lane OF-S).
+        if (await LogEditGate.CheckAsync(repository, entitlementPolicy, log, command.ActorUserId, now, ct) is { } refusal)
         {
-            logger.LogWarning(
-                "revise_log_content for {LogId} refused: the record was saved at the labour door (B002).", log.Id);
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.LabourDoorLogContent);
+            if (refusal.Code == ShramSafalErrors.LabourDoorLogContent.Code)
+            {
+                logger.LogWarning(
+                    "revise_log_content for {LogId} refused: the record was saved at the labour door (B002).", log.Id);
+            }
+
+            return Result.Failure<DailyLogDto>(refusal);
         }
 
         // Authority and the words rule read the role from the DATABASE, never from command.ActorRole.
@@ -208,31 +198,9 @@ public sealed class ReviseLogContentHandler(
             TaskLines.NewSince(current?.DocumentJson),
             ct);
 
-        // ── lane L6 — a material change re-opens a confirmed day ─────────────────────────────
-        var priorStatus = log.CurrentVerificationStatus;
-        VerificationEvent? reOpen = null;
-        var reAttested = false;
-        string? reAttestedRole = null;
-        if (priorStatus != VerificationStatus.Draft)
-        {
-            // Every event written here is strictly LATER than everything on the log (the status
-            // fold is OrderBy(OccurredAtUtc).Last()), the same 1 ms rule as AddLogTaskHandler.
-            var lastEventAtUtc = log.VerificationEvents.Count == 0
-                ? DateTime.MinValue
-                : log.VerificationEvents.Max(e => e.OccurredAtUtc);
-            var reOpenAtUtc = now > lastEventAtUtc ? now : lastEventAtUtc.AddMilliseconds(1);
-
-            reOpen = log.Edit(idGenerator.New(), new UserId(command.ActorUserId), reOpenAtUtc);
-
-            if (reOpen is not null && isCreator
-                && actorRole is { } role
-                && log.TrySelfVerifyAsCreator(
-                    idGenerator.New(), idGenerator.New(), role, reOpenAtUtc.AddMilliseconds(1)))
-            {
-                reAttested = true;
-                reAttestedRole = role.ToString();
-            }
-        }
+        // ── lane L6 — a material change re-opens a confirmed day (shared with move_daily_log) ─
+        var (priorStatus, reOpen, reAttested, reAttestedRole) =
+            MaterialChangeReopen.Apply(log, command.ActorUserId, actorRole, isCreator, now, idGenerator);
 
         await repository.AddAuditEventAsync(
             AuditEventFactory.Create(

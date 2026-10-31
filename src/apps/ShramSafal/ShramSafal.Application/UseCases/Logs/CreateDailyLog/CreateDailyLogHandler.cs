@@ -283,6 +283,17 @@ public sealed class CreateDailyLogHandler(
             }
         }
 
+        // ── spec: plr-d10 (lane OF-S; review of lane OF, H1) — no record of done work on a day that has not
+        // happened. THE one server rule (LogDayRule: the farm's India day, with a minutes-wide clock-skew margin so an
+        // installed phone that records on its own day is never refused). Placed AFTER the idempotency return, so a
+        // resend of a record the server already holds is still answered as saved, and before anything is staged.
+        if (Domain.Logs.LogDayRule.IsInFuture(command.LogDate, clock.UtcNow))
+        {
+            logger.LogWarning(
+                "CreateDailyLog refused for farm {FarmId}: {LogDate} is after the farm's today.", command.FarmId, command.LogDate);
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.LogDateInFuture);
+        }
+
         // -- Labour V1 Task 6.1, THIRD gate (2026-08-27 prod incident) ----------
         // A labourAssignmentId is that row's PRIMARY KEY, it is CLIENT-MINTED
         // (LabourAssignmentConfiguration, ValueGeneratedNever), and it is unique

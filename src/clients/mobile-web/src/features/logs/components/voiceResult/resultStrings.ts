@@ -77,6 +77,8 @@ export const RESULT_STR = {
     unclearTitle: 'हे साथीला नीट समजलं नाही',
     confirmFailed: 'आत्ता पक्कं करता आलं नाही — पुन्हा दाबा',
     wholeFarm: 'संपूर्ण शेत',
+    // PROPOSED (Marathi) — lane OF-S: the day chip's move could not be made (pressing again is safe).
+    dayNotMoved: 'दिवस आत्ता बदलता आला नाही — पुन्हा दाबा.',
     // PROPOSED (Marathi) — a part he mentioned that the server could not find in his words: "not sure", never "not said".
     unsurePart: 'नक्की समजलं नाही',
 } as const;
@@ -130,6 +132,7 @@ export const RESULT_STR_EN: ResultStr = {
     unclearTitle: 'Sathi did not understand this well',
     confirmFailed: 'Could not confirm just now — tap again',
     wholeFarm: 'Whole farm',
+    dayNotMoved: 'Could not change the day just now — press again.', // PROPOSED (English) — lane OF-S
     unsurePart: 'Not sure',
 };
 

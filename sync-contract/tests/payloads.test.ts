@@ -367,6 +367,42 @@ describe('lane F1 — content on CreateDailyLogPayload, and ReviseLogContentPayl
     });
 });
 
+describe('lane OF-S — MoveDailyLogPayload and CorrectLabourAssignmentPayload', () => {
+    const move = { dailyLogId: VALID_GUID_A, baseVersion: 2, revisedAtUtc: VALID_ISO };
+    it('accepts a move of the place, of the day, of both, and to the whole farm', () => {
+        expect(payloads.MoveDailyLogPayload.safeParse({ ...move, newPlotIds: [VALID_GUID_B] }).success).toBe(true);
+        expect(payloads.MoveDailyLogPayload.safeParse({ ...move, newPlotIds: [VALID_GUID_B, VALID_GUID_C] }).success).toBe(true);
+        expect(payloads.MoveDailyLogPayload.safeParse({ ...move, newLogDate: VALID_LOG_DATE }).success).toBe(true);
+        expect(payloads.MoveDailyLogPayload.safeParse({ ...move, newPlotIds: [VALID_GUID_B], newLogDate: VALID_LOG_DATE, reason: 'चुकीचा प्लॉट' }).success).toBe(true);
+        expect(payloads.MoveDailyLogPayload.safeParse({ ...move, wholeFarm: true }).success).toBe(true);
+    });
+    it('rejects a move with no base version, an empty plot list, a malformed day or an unknown key', () => {
+        const { baseVersion: _b, ...noBase } = { ...move, newLogDate: VALID_LOG_DATE };
+        expect(payloads.MoveDailyLogPayload.safeParse(noBase).success).toBe(false);
+        expect(payloads.MoveDailyLogPayload.safeParse({ ...move, newPlotIds: [] }).success).toBe(false);
+        expect(payloads.MoveDailyLogPayload.safeParse({ ...move, newLogDate: '30-10-2026' }).success).toBe(false);
+        expect(payloads.MoveDailyLogPayload.safeParse({ ...move, reason: 'x'.repeat(401) }).success).toBe(false);
+    });
+    const correction = {
+        labourAssignmentId: VALID_GUID_A, dailyLogId: VALID_GUID_B, farmId: VALID_GUID_C,
+        quantity: { workerCount: 6 }, seen: { workerCount: 8 }, correctedAtUtc: VALID_ISO,
+    };
+    it('accepts a queued count / hours correction with what he saw', () => {
+        expect(payloads.CorrectLabourAssignmentPayload.safeParse(correction).success).toBe(true);
+        expect(payloads.CorrectLabourAssignmentPayload.safeParse({ ...correction, quantity: undefined, durationHours: 4.5, seen: { durationHours: 8 } }).success).toBe(true);
+        expect(payloads.CorrectLabourAssignmentPayload.safeParse({ ...correction, seen: {} }).success).toBe(true);
+    });
+    it('rejects one without what he saw, without its log, or with a fractional or negative count', () => {
+        const { seen: _s, ...noSeen } = correction;
+        expect(payloads.CorrectLabourAssignmentPayload.safeParse(noSeen).success).toBe(false);
+        const { dailyLogId: _d, ...noLog } = correction;
+        expect(payloads.CorrectLabourAssignmentPayload.safeParse(noLog).success).toBe(false);
+        expect(payloads.CorrectLabourAssignmentPayload.safeParse({ ...correction, quantity: { workerCount: 2.5 } }).success).toBe(false);
+        expect(payloads.CorrectLabourAssignmentPayload.safeParse({ ...correction, quantity: { workerCount: -1 } }).success).toBe(false);
+        expect(payloads.CorrectLabourAssignmentPayload.safeParse({ ...correction, durationHours: 0 }).success).toBe(false);
+    });
+});
+
 describe('AddLogTaskPayload', () => {
     it('accepts a valid payload', () => {
         const r = payloads.AddLogTaskPayload.safeParse({

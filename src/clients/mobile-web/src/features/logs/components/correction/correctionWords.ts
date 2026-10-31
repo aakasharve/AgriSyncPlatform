@@ -8,6 +8,7 @@
  */
 import { RESULT_STR } from '../voiceResult/resultStrings';
 import { TYPED_WORDS } from '../../../voice/components/recorder/TypedEntry';
+import type { RefusedReason } from './refusedRevision';
 
 export interface CorrectionWords {
     title: string;
@@ -31,6 +32,12 @@ export interface CorrectionWords {
     offline: string;
     /** Review B002: a change he saved earlier was refused by the server — it is only on this phone. */
     serverRefused: string;
+    /** Lane OF-S: a move of the plot / day was refused; the entry was put back as the server has it. */
+    refusedMove: string;
+    /** Lane OF-S: a worker-count change was refused; the entry was put back as the server has it. */
+    refusedWorkers: string;
+    /** Lane OF-S: why the server refused it, in plain words ('' = the server gave no reason we can say). */
+    refusedReason: Readonly<Record<RefusedReason, string>>;
     versionNote: string;
     reconfirm: string;
     labourDoor: string;
@@ -95,6 +102,17 @@ const mr: CorrectionWords = {
     labourInHajeri: 'मजुरांबद्दल जे सांगितलं ते इथे बदललं नाही. या कामातले मजुरांचे बदल हजेरीत करा.', // PROPOSED (Marathi)
     offline: 'बदल सांगायला इंटरनेट लागतं. आत्ता काहीही रेकॉर्ड केलं नाही — इंटरनेट आलं की पुन्हा दाबा.', // PROPOSED (Marathi)
     serverRefused: 'आधी जतन केलेला बदल सर्व्हरने घेतला नाही. तो फक्त या फोनवर आहे.', // PROPOSED (Marathi)
+    // PROPOSED (Marathi) — lane OF-S. "नोंद" stays off this screen, so the brief's "या नोंदीवर" reads "या कामावर".
+    refusedMove: 'प्लॉट / दिवस बदलला नाही — सर्व्हरवर आहे तसंच ठेवलं.',
+    refusedWorkers: 'मजुरांचा बदल झाला नाही — सर्व्हरवर आहे तसंच ठेवलं.',
+    refusedReason: {
+        stale: 'तुम्ही पाहिल्यानंतर दुसऱ्या कोणी हे बदललं.',
+        futureDay: 'तो दिवस अजून आलेला नाही.',
+        noSeason: 'त्या दिवशी त्या प्लॉटवर कोणतंही पीक नव्हतं.',
+        linked: 'या कामावर हजेरी / पैसे जोडलेले आहेत — आधी ते बदला.',
+        notAllowed: 'हे तुम्हाला बदलता येत नाही — मालकाला सांगा.',
+        other: '',
+    },
     nothingChanged: 'यातून बदलायचं काही समजलं नाही. पुन्हा सांगा.', // PROPOSED (Marathi)
     versionNote: 'जतन केल्यावर नवीन आवृत्ती ठेवली जाते — आधीचं पण सर्व्हरवर राहतं.', // PROPOSED (Marathi) — screen 3's note
     reconfirm: 'हे आधी पक्कं केलं होतं. जतन केल्यावर नवीन आवृत्ती "पक्कं नाही" राहील, पुन्हा पक्कं होईपर्यंत.', // PROPOSED (Marathi)
@@ -154,6 +172,17 @@ const en: CorrectionWords = {
     labourInHajeri: 'What you said about workers was not changed here. Worker changes for this entry are made in attendance.', // PROPOSED (English)
     offline: 'A change needs the internet. Nothing was recorded — press again when you are online.', // PROPOSED (English)
     serverRefused: 'The server did not accept the change saved earlier. It is only on this phone.', // PROPOSED (English)
+    // PROPOSED (English) — lane OF-S.
+    refusedMove: 'The plot / day was not changed — it is kept as the server has it.',
+    refusedWorkers: 'The workers change was not made — it is kept as the server has it.',
+    refusedReason: {
+        stale: 'Someone changed this after you saw it.',
+        futureDay: 'That day has not come yet.',
+        noSeason: 'No crop was on that plot on that day.',
+        linked: 'Attendance or money is linked to this work — change those first.',
+        notAllowed: 'You cannot change this — tell the owner.',
+        other: '',
+    },
     nothingChanged: 'Nothing to change was understood from this. Say it again.', // PROPOSED (English)
     versionNote: 'Saving keeps a new version — the earlier one stays on the server too.', // PROPOSED (English)
     reconfirm: 'This was confirmed. After saving, the new version stays "Not confirmed" until it is confirmed again.', // PROPOSED (English)

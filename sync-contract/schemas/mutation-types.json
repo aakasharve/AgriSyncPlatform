@@ -1,7 +1,7 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.2.0",
-  "lastUpdated": "2026-10-30",
+  "version": "1.3.0",
+  "lastUpdated": "2026-10-31",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
     { "name": "create_plot",            "ownerAggregate": "Plot",             "sinceVersion": "0.1.0", "payloadSchema": "CreatePlot" },
@@ -36,6 +36,8 @@
     { "name": "jobcard.complete",       "ownerAggregate": "JobCard",          "sinceVersion": "1.0.0", "payloadSchema": "JobCardComplete" },
     { "name": "jobcard.settle",         "ownerAggregate": "JobCard",          "sinceVersion": "1.0.0", "payloadSchema": "JobCardSettle" },
     { "name": "jobcard.cancel",         "ownerAggregate": "JobCard",          "sinceVersion": "1.0.0", "payloadSchema": "JobCardCancel" },
-    { "name": "attendance.mark",        "ownerAggregate": "AttendanceMark",   "sinceVersion": "0.9.0", "payloadSchema": "AttendanceMark" }
+    { "name": "attendance.mark",        "ownerAggregate": "AttendanceMark",   "sinceVersion": "0.9.0", "payloadSchema": "AttendanceMark" },
+    { "name": "move_daily_log",         "ownerAggregate": "DailyLog",         "sinceVersion": "1.0.0", "payloadSchema": "MoveDailyLog" },
+    { "name": "correct_labour_assignment", "ownerAggregate": "LabourAssignment", "sinceVersion": "1.0.0", "payloadSchema": "CorrectLabourAssignment" }
   ]
 }

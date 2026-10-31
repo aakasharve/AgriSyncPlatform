@@ -13,7 +13,7 @@
  * the button. A log whose create is not KNOWN to be in the sync queue is not offered either: its verify would be
  * refused as "not found".
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { DailyLog, FarmerProfile } from '../../../../types';
 import { useDataSource } from '../../../../app/providers/DataSourceProvider';
 import type { VoiceResultState } from '../../../../app/hooks/useVoiceAutoSave';
@@ -26,6 +26,8 @@ import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './
 import { useConfirmRecording, useLogSyncState } from './useRecordingTrust';
 import VoiceResultScreen from './VoiceResultScreen';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
+import { canMoveSavedEntry } from '../correction/correctionCapabilities';
+import { DayPickSheet } from '../dayPick/DayPickSheet';
 
 export interface VoiceResultContainerProps {
     result: VoiceResultState;
@@ -47,12 +49,18 @@ export interface VoiceResultContainerProps {
     extras?: React.ReactNode;
     /** Test seam for the audio element. */
     createAudio?: AudioFactory;
+    /**
+     * Lane OF-S (rule TAP-1, item 6) — put this SAVED recording on another day: the day chip opens the calendar and the
+     * chosen day is queued as a move of each of its entries (`queueSavedEntryMove`). Absent = the day is shown, not offered.
+     */
+    onMoveDay?: (logs: readonly DailyLog[], dateKey: string) => Promise<void>;
 }
 
 export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     result, history, farmerProfile, operatorNameById, farmId, farmRole, placeLabel, syncQueuedById,
-    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio,
+    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay,
 }) => {
+    const [pickingDay, setPickingDay] = useState(false);
     const sessionUserId = getSessionUserId();
     const RS = useResultStr();
     const language = useOptionalLanguage()?.language;
@@ -95,7 +103,10 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const basis: 'heard' | 'read' = playback.heard.has(primary.id) ? 'heard' : 'read';
     const leave = (then: () => void) => () => { playback.stop(); then(); };
 
+    const moveDay = canMoveSavedEntry() && onMoveDay ? onMoveDay : undefined;
+
     return (
+        <>
         <VoiceResultScreen
             day={day}
             recordingKey={result.key}
@@ -122,7 +133,25 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             onTellMore={(part: PartKey) => leave(() => (onTellMore ? onTellMore(part) : onAddAnother()))()}
             questionPanel={questionPanel}
             extras={extras}
+            onChangeDay={moveDay ? () => setPickingDay(true) : undefined}
         />
+        {moveDay && pickingDay && (
+            <DayPickSheet
+                value={primary.date}
+                onPick={key => {
+                    setPickingDay(false);
+                    if (key === primary.date) return;
+                    void moveDay(current, key).catch((error: unknown) => {
+                        // Never silent: he is told the day did not change (pressing again is safe — the same move is
+                        // queued once, `MoveDailyLogCommand`), and what failed is kept in the log.
+                        console.error('VoiceResultContainer: the day could not be changed', error);
+                        window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message: RS.dayNotMoved, type: 'error' } }));
+                    });
+                }}
+                onClose={() => setPickingDay(false)}
+            />
+        )}
+        </>
     );
 };
 

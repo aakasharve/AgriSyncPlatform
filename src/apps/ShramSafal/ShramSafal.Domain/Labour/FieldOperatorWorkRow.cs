@@ -113,4 +113,13 @@ public sealed class FieldOperatorWorkRow : Entity<Guid>
             recordedByUserId,
             createdAtUtc);
     }
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S) — the record this person's work belongs to was moved to another day
+    /// ("दिवस बदला"). <see cref="WorkDate"/> is a copy of the parent log's day taken at attach time, so it
+    /// follows the record: the person worked the SAME engagement, which now says it happened on
+    /// <paramref name="workDate"/>. Nothing else on the row moves (the name snapshot stays as it was).
+    /// The caller refuses the move instead when a हजेरी ruling for this person sits on the old day.
+    /// </summary>
+    public void FollowEngagementToDay(DateOnly workDate) => WorkDate = workDate;
 }

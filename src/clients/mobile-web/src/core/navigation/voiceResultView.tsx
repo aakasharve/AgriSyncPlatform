@@ -124,6 +124,7 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
                     placeLabel={language => placeOf(logs, language)}
                     syncQueuedById={new Map(ctx.lastSavedLogSummary.map(s => [s.logId, s.syncQueued] as const))}
                     onEdit={ctx.handleEditLog}
+                    onMoveDay={ctx.moveSavedDay}
                     onBack={ctx.handleReset}
                     onAddAnother={() => speakHere({ purpose: 'addToDay', context: { place: 'current' } })}
                     onTellMore={part => speakHere({ purpose: 'fillPart', context: { place: 'current', part } })}

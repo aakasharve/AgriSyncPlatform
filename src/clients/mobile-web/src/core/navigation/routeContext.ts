@@ -228,5 +228,10 @@ export interface AppRouterContext {
 
     // log-card helpers (kept here so MainLogView doesn't redefine them)
     handleEditLog: (log: DailyLog) => void;
+    /**
+     * Lane OF-S (rule TAP-1) — the result screen's day chip: the recording's SAVED entries moved to another day, queued
+     * like every other change (offline-safe). Throws when nothing could be written. Absent = the day is not offered.
+     */
+    moveSavedDay?: (logs: readonly DailyLog[], dateKey: string) => Promise<void>;
     getLogContextSnapshot: (log: DailyLog) => { cropName: string; plotName: string; plotId?: string };
 }

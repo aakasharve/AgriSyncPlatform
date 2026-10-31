@@ -49,7 +49,9 @@ const HANDLER_PATH = resolve(
 // fourteenth allow-list exists and its parity now holds; lowering it, or
 // deleting the assertion, would be the exact "green check becomes
 // meaningless" failure the comment below names.
-const EXPECTED_ALLOWLIST_COUNT = 16;
+// 16 -> 18 on 2026-10-31 (lane OF-S): move_daily_log and correct_labour_assignment are two NEW
+// server-side key contracts, each guarded by its own PayloadHasOnly and named below.
+const EXPECTED_ALLOWLIST_COUNT = 18;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -63,6 +65,9 @@ const EXPECTED_GUARDED_MUTATIONS = [
     'create_daily_log',
     'add_log_task',
     'revise_log_content',
+    // lane OF-S — a saved record moved to another place / day, and a queued worker-count correction.
+    'move_daily_log',
+    'correct_labour_assignment',
     'verify_log',
     // Wired by feat/dfes-companion. On `main` this mutation dispatches to a
     // stub that returns MUTATION_TYPE_UNIMPLEMENTED and has no allow-list, so

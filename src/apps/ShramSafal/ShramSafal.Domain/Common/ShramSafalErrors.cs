@@ -189,6 +189,37 @@ public static class ShramSafalErrors
         "ShramSafal.AttendanceFutureDate.InvalidCommand",
         "Attendance cannot be recorded for a day that has not happened yet. Future work belongs in planning.");
 
+    // spec: plr-d10 (lane OF-S; review of lane OF, H1) — no record of done work on a day that has not happened
+    // (the farm's India day, LogDayRule). Create and move both refuse it. THREE SEGMENTS, tail InvalidCommand: every
+    // shipped phone parks it for the farmer (P10/P11); the middle segment lets a new phone say why.
+    public static readonly Error LogDateInFuture = Error.Validation(
+        "ShramSafal.LogDateInFuture.InvalidCommand",
+        "Work cannot be recorded on a day that has not happened yet. Nothing was saved.");
+
+    // spec: plr-d10 (lane OF-S) — a move made from an older record version: someone changed the record after he
+    // saw it. Refused, never applied over the newer change. Tail CONFLICT: parked on every shipped phone.
+    public static readonly Error LogMoveStale = Error.Conflict(
+        "ShramSafal.LogMove.Conflict",
+        "This record was changed after you saw it. The move was not made; the record is as it was.");
+
+    // spec: plr-d10 (lane OF-S) — a single-plot record must carry the season it belongs to, and no season on the
+    // chosen plot covers the chosen day. Refused; the record stays where it was.
+    public static readonly Error LogMoveNoCropCycle = Error.Validation(
+        "ShramSafal.LogMoveNoCropCycle.InvalidCommand",
+        "No crop season on that plot covers that day. The move was not made.");
+
+    // spec: plr-d10 (lane OF-S; CTO call) — moving the record would leave हजेरी rulings or money already tied to it
+    // on the old day / place without their record. Refused whole; nothing changes.
+    public static readonly Error LogMoveLinkedRecords = Error.Conflict(
+        "ShramSafal.LogMoveLinkedRecords.Conflict",
+        "Attendance or money is linked to this record. Change those first; the move was not made.");
+
+    // spec: plr-d10 (lane OF-S) — a worker-count / hours correction made against values the engagement no longer
+    // holds (someone corrected it meanwhile). Refused, never written over the newer correction.
+    public static readonly Error LabourCorrectionStale = Error.Conflict(
+        "ShramSafal.LabourCorrection.Conflict",
+        "These workers were changed after you saw them. Your change was not made; the record is as it was.");
+
     // 2026-08-28. POST /shramsafal/corrections passed three client-supplied
     // strings straight into length-capped columns with no bound anywhere on the
     // path; CorrectionEvent.Record only checks non-blank. An over-long value

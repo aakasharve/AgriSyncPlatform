@@ -24,7 +24,7 @@ import {
     blockerChange, isLabourDoorLog, mergeCorrection, revisionUpdates, saysAnything, spokenAsLog,
 } from '../../features/logs/components/correction/correctionModel';
 import { saveSpokenCorrection, type SaveCorrectionDeps, type SaveOutcome } from '../../features/logs/components/correction/saveCorrection';
-import { useRefusedRevision } from '../../features/logs/components/correction/refusedRevision';
+import { useRefusedChange, type RefusedChange } from '../../features/logs/components/correction/refusedRevision';
 import {
     afterOf, canRemove, newItem, partnersOf, tapRows, tapUpdates, withItem, withNew, withRestored, withoutItem, type AddKind, type TapBucket, type TapRow,
 } from '../../features/logs/components/correction/tapEdit';
@@ -70,7 +70,14 @@ const isOffline = (): boolean => typeof navigator !== 'undefined' && navigator.o
 
 type Sheet = { kind: 'edit'; bucket: TapBucket; id: string; added?: boolean } | { kind: 'add' } | { kind: 'type' } | { kind: 'plot' } | { kind: 'day' } | null;
 
-export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: CorrectionSession; speaking: boolean; save: CorrectionSaveDeps | null; readRefused: (logId: string) => Promise<boolean> }> = ({ ctx, correction, speaking, save, readRefused }) => {
+/** Lane OF-S — the plain lines for a refused move / worker count (the content-change words stay the screen's own). */
+const refusedLines = (refused: RefusedChange | null, words: ReturnType<typeof correctionWords>): string[] | undefined => {
+    if (!refused || refused.kind === 'revision') return undefined;
+    const head = refused.kind === 'move' ? words.refusedMove : words.refusedWorkers;
+    return [head, words.refusedReason[refused.reason]].filter(line => line.length > 0);
+};
+
+export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: CorrectionSession; speaking: boolean; save: CorrectionSaveDeps | null; readRefused: (logId: string) => Promise<RefusedChange | null> }> = ({ ctx, correction, speaking, save, readRefused }) => {
     const language = useOptionalLanguage()?.language;
     const log = ctx.history.find(l => l.id === correction.logId);
     const [saving, setSaving] = useState(false);
@@ -83,7 +90,7 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
     const [move, setMove] = useState<SavedEntryMove>({});
     const [spoken, setSpoken] = useState<{ transcript: string; typed: boolean; nothing: boolean; labourNotChanged?: boolean } | undefined>(undefined);
     const applied = useRef<CorrectionSession['proposal']>(null);
-    const serverRefused = useRefusedRevision(log?.id, readRefused);
+    const serverRefused = useRefusedChange(log?.id, readRefused);
     // A record that is no longer here (deleted meanwhile) has nothing to change: the screen closes.
     useEffect(() => { if (!log) closeCorrection(); }, [log]);
     // Lane OF (D-57) — a हजेरी-door record: that day in the हजेरी वही, for someone who may open हजेरी.
@@ -190,7 +197,8 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
     const doSave = () => {
         if (!changed || saving) return;
         if (!save) { setFailed('other'); return; } // a preview: nothing can be saved, and it says so
-        // A worker count goes as a labour correction, posted now: with no internet it cannot go yet (until OF-S).
+        // A worker count goes as a labour correction: queued since lane OF-S; posted now (needs the internet) only if
+        // that switch is ever turned back off.
         if (updates.labour && isOffline() && !canQueueLabourCountOffline()) { setFailed('labour'); return; }
         setSaving(true);
         setFailed(null);
@@ -201,10 +209,15 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
         void content
             .then(async (outcome): Promise<SaveOutcome> => {
                 if (!outcome.ok || !moving) return outcome;
-                await queueSavedEntryMove(log, move);
+                // Lane OF-S — queued like every other change; written on this phone through the same edit path.
+                await queueSavedEntryMove(log, move, { crops: ctx.crops, updateLog: save.updateLog, setHistory: save.setHistory, profile: save.profile });
                 return outcome;
             })
-            .catch((): SaveOutcome => ({ ok: false, reason: 'other' }))
+            .catch((error: unknown): SaveOutcome => {
+                // Never silent: what failed is kept in the log; he is told it was not saved and can press again.
+                console.error('CorrectionHost: the change could not be saved', error);
+                return { ok: false, reason: 'other' };
+            })
             .then(outcome => { setSaving(false); if (outcome.ok) closeCorrection(); else setFailed(outcome.reason); });
     };
 
@@ -232,7 +245,8 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
                 saveFailed={failed !== null}
                 saveFailedReason={failed ?? undefined}
                 offline={offline}
-                serverRefused={serverRefused}
+                serverRefused={!!serverRefused}
+                serverRefusedLines={refusedLines(serverRefused, words)}
                 canMove={canMove}
                 onSpeak={() => speak()}
                 onType={() => { if (isOffline()) { setOffline(true); return; } setSheet({ kind: 'type' }); }}

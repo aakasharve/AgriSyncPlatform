@@ -170,6 +170,27 @@ internal sealed class ShramSafalRepository(
             .FirstOrDefaultAsync(l => l.Id == dailyLogId, ct);
     }
 
+    public async Task<DailyLog?> GetDailyLogForChangeAsync(Guid dailyLogId, CancellationToken ct = default)
+    {
+        if (db.Database.IsRelational())
+        {
+            // Hold the row for the rest of this transaction: a second change to this log waits here, and reads the
+            // version THIS change leaves behind. RLS still applies (the caller has set the farm scope).
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM ssf.daily_logs WHERE \"Id\" = {dailyLogId} FOR UPDATE", ct);
+
+            // A copy read before the hold may be stale: re-read its columns now (the Include below adds any
+            // verification event another writer appended meanwhile — they are append-only).
+            var tracked = db.ChangeTracker.Entries<DailyLog>().FirstOrDefault(e => e.Entity.Id == dailyLogId);
+            if (tracked is not null)
+            {
+                await tracked.ReloadAsync(ct);
+            }
+        }
+
+        return await GetDailyLogByIdAsync(dailyLogId, ct);
+    }
+
     public async Task<DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default)
     {
         return await db.DailyLogs

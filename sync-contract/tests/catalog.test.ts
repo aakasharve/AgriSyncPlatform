@@ -23,8 +23,9 @@ const json = JSON.parse(
 };
 
 describe('mutation-types.json', () => {
-  it('declares 34 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(34);
+  // 34 -> 36 on 2026-10-31 (lane OF-S): move_daily_log + correct_labour_assignment.
+  it('declares 36 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(36);
   });
 
   it('has unique mutation names', () => {

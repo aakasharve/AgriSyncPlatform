@@ -10,6 +10,7 @@
  */
 
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
+import { REFUSAL_RESTORES_SERVER_VERSION } from '../logsRebuildMarker';
 
 /**
  * P0.5 — the statuses that mean "this device still holds unresolved intent for
@@ -28,6 +29,17 @@ const UNRESOLVED_LOCAL_INTENT = [
     'FAILED',
     'REJECTED_USER_REVIEW',
 ] as const;
+
+/**
+ * spec: plr-d10 (lane OF-S) — the queued changes whose REFUSAL means "the server's version stands": a move of a saved
+ * entry's plot / day and a worker-count correction. Once the server has refused one of these, there is no intent left to
+ * protect — the phone puts the entry back to the server's version (the worker asks for it, `logsRebuildMarker.ts`) and
+ * says why (`refusedRevision.ts`). So a refused one does NOT hold the entry from the pull, unlike a refused content
+ * change, which stays on this phone for him to decide. The set lives with the request that brings the version back.
+ * Answers: does this row still hold its entry from the pull?
+ */
+const holdsEntry = (mutation: { mutationType: string; status: string }): boolean =>
+    !(mutation.status === 'REJECTED_USER_REVIEW' && REFUSAL_RESTORES_SERVER_VERSION.has(mutation.mutationType));
 
 /**
  * Thrown when the queue cannot be read. `reconcileSyncPull` must treat this as
@@ -49,6 +61,7 @@ export async function readPendingLogIds(db: AgriLogDatabase): Promise<Set<string
             .anyOf([...UNRESOLVED_LOCAL_INTENT])
             .toArray();
         for (const mutation of pending) {
+            if (!holdsEntry(mutation)) continue;
             const payloadObj = mutation.payload as
                 | { dailyLogId?: string; logId?: string; id?: string }
                 | null

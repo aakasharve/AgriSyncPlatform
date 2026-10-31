@@ -57,6 +57,11 @@ export interface CorrectionScreenProps {
     /** No internet: speaking / typing a change does not work (it needs the understanding). */
     offline?: boolean;
     serverRefused?: boolean;
+    /**
+     * Lane OF-S — the plain words for WHAT was refused and why (a move or a worker count, put back as the server has
+     * it). Absent = the content-change words (`serverRefused`: it stays on this phone only).
+     */
+    serverRefusedLines?: readonly string[];
     /** The server can move a saved entry's plot / day (`correctionCapabilities`). */
     canMove: boolean;
     onSpeak: () => void;
@@ -129,7 +134,11 @@ export const CorrectionScreen: React.FC<CorrectionScreenProps> = (p) => {
                     </span>
                 </div>
                 <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-24 pt-3">
-                    {p.serverRefused && <p className="m-0 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="corr-server-refused">{words.serverRefused}</p>}
+                    {p.serverRefused && (
+                        <div className="m-0 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="corr-server-refused">
+                            {(p.serverRefusedLines?.length ? p.serverRefusedLines : [words.serverRefused]).map(line => <p key={line} className="m-0">{line}</p>)}
+                        </div>
+                    )}
 
                     {p.refused ? (
                         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[15px] font-bold leading-snug text-amber-950" data-testid="corr-refused">

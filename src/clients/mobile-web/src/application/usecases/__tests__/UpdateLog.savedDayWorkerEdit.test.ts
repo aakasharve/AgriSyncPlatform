@@ -67,6 +67,8 @@ const mockPostCorrection = vi.fn();
 vi.mock('../../../features/labour/data/labourCorrectionsClient', () => ({
     postLabourCorrection: (...args: unknown[]) => mockPostCorrection(...args),
 }));
+// Lane OF-S turned the queued route on; THIS file pins the online route (the switch's fallback), which stays as it was.
+vi.mock('../../../features/logs/components/correction/correctionCapabilities', () => ({ canQueueLabourCountOffline: () => false }));
 
 // The SAME three-function stub `UpdateLog.test.ts` uses, and for the same
 // reason: the real module reaches the `sync-contract` package, whose `zod`

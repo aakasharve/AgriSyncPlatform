@@ -17,6 +17,9 @@ export { CreateDailyLogPayload } from './create_daily_log.zod';
 export { AddLogTaskPayload } from './add_log_task.zod';
 // lane F1 — an edit to what Sathi understood (crop work, water, inputs, notes, …).
 export { ReviseLogContentPayload } from './revise_log_content.zod';
+// lane OF-S — move a saved entry's place / day, and a queued worker-count correction.
+export { MoveDailyLogPayload } from './move_daily_log.zod';
+export { CorrectLabourAssignmentPayload } from './correct_labour_assignment.zod';
 export {
     LogContentSchema,
     LOG_CONTENT_BUCKETS,

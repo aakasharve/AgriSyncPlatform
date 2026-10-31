@@ -433,6 +433,51 @@ public sealed class DailyLog : Entity<Guid>
         }
     }
 
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S; founder TAP-1, D-61 = 5A) — the farmer moved this SAVED record to another place
+    /// and/or another day ("प्लॉट बदला" / "दिवस बदला"). The record stays ONE record: the same id, so every part
+    /// that hangs off it by <c>daily_log_id</c> (task lines, the content versions, labour engagements, verification
+    /// history) moves with it without being touched.
+    ///
+    /// <para><b>The scope invariant holds here exactly as at creation</b> (<see cref="EnsureScopeInvariant"/>): a
+    /// plot-scoped record must carry its crop cycle, a multi-plot or farm-wide one carries none. The caller resolves
+    /// the cycle (the season on the target plot that covers the day); this method never invents one.</para>
+    ///
+    /// <para><b>A change to what the record says.</b> Its version moves on (<see cref="NoteContentChanged"/>) so a
+    /// second move made from the older version is recognisably stale, and the caller re-opens a confirmed day the
+    /// same way a content revision does. The clock only moves forward (the pull is a delta on it).</para>
+    /// </summary>
+    public void MoveTo(
+        DailyLogScope scope,
+        IReadOnlyCollection<Guid> plotIds,
+        Guid? plotId,
+        Guid? cropCycleId,
+        DateOnly logDate,
+        DateTime movedAtUtc)
+    {
+        EnsureScopeInvariant(scope, plotIds, plotId, cropCycleId);
+
+        Scope = scope;
+        _plotIds.Clear();
+        _plotIds.AddRange(plotIds);
+        PlotId = plotId;
+        CropCycleId = cropCycleId;
+        LogDate = logDate;
+        NoteContentChanged();
+        if (movedAtUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = movedAtUtc;
+        }
+    }
+
+    /// <summary>True when the record already sits exactly here: this scope, these plots, this cycle and this day.</summary>
+    public bool IsPlacedAt(DailyLogScope scope, IReadOnlyCollection<Guid> plotIds, Guid? cropCycleId, DateOnly logDate) =>
+        Scope == scope
+        && CropCycleId == cropCycleId
+        && LogDate == logDate
+        && _plotIds.Count == plotIds.Count
+        && _plotIds.All(plotIds.Contains);
+
     public void AttachLocation(LocationSnapshot location)
     {
         if (Location is not null)

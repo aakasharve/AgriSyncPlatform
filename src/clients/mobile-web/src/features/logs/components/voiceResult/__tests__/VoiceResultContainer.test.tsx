@@ -611,3 +611,49 @@ describe('lane OF fix 1 (L2) — a recording saved for a PAST day never says "�
         expect(screen.getByTestId('voice-result').textContent).not.toMatch(w.today);
     });
 });
+
+describe('lane OF-S (rule TAP-1, item 6) — the day chip of a SAVED recording moves it to another day', () => {
+    afterEach(() => { lng.v = 'mr'; });
+    it.each(['mr', 'en'] as const)('the chip opens the calendar; a past day moves every entry of the recording (%s)', async (language) => {
+        lng.v = language;
+        const onMoveDay = vi.fn(async () => undefined);
+        mount(props({ onMoveDay }));
+        fireEvent.click(screen.getByTestId('vr-day'));
+        fireEvent.click(screen.getByTestId('day-pick-2026-10-24'));
+        await waitFor(() => expect(onMoveDay).toHaveBeenCalledTimes(1));
+        const [logs, day] = onMoveDay.mock.calls[0] as unknown as [DailyLog[], string];
+        expect(logs.map(l => l.id)).toEqual([NOW]);
+        expect(day).toBe('2026-10-24');
+        expect(screen.queryByTestId('day-pick-future-2026-10-27')).toBeNull(); // the sheet closed
+    });
+
+    it('a day that has not come yet cannot be chosen, and the same day moves nothing', async () => {
+        const onMoveDay = vi.fn(async () => undefined);
+        mount(props({ onMoveDay }));
+        fireEvent.click(screen.getByTestId('vr-day'));
+        expect(screen.getByTestId('day-pick-future-2026-10-27').tagName).toBe('SPAN'); // shown, never a button
+        fireEvent.click(screen.getByTestId('day-pick-2026-10-26'));
+        await act(async () => { await Promise.resolve(); });
+        expect(onMoveDay).not.toHaveBeenCalled();
+    });
+
+    it.each(['mr', 'en'] as const)('a move that could not be made is said plainly, never silently (%s)', async (language) => {
+        lng.v = language;
+        const toasts: string[] = [];
+        const listen = (e: Event) => { toasts.push((e as CustomEvent<{ message: string }>).detail.message); };
+        window.addEventListener('agrisync:toast', listen);
+        const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        mount(props({ onMoveDay: vi.fn(async () => { throw new Error('queue refused'); }) }));
+        fireEvent.click(screen.getByTestId('vr-day'));
+        fireEvent.click(screen.getByTestId('day-pick-2026-10-24'));
+        await waitFor(() => expect(toasts).toHaveLength(1));
+        expect(toasts[0]).toBe(language === 'en' ? 'Could not change the day just now — press again.' : 'दिवस आत्ता बदलता आला नाही — पुन्हा दाबा.');
+        window.removeEventListener('agrisync:toast', listen);
+        err.mockRestore();
+    });
+
+    it('without a way to move it, the day is shown and not offered (P5)', () => {
+        mount(props());
+        expect(screen.getByTestId('vr-day').tagName).not.toBe('BUTTON');
+    });
+});

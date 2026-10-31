@@ -179,16 +179,39 @@ public sealed class CorrectLabourHandler(
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 (lane OF-S) — the queued path also names the RECORD; an engagement of any other log is
+        // refused exactly like one of another farm (Forbidden, never NotFound: no probing by id).
+        if (command.DailyLogId is { } statedLogId && assignment.DailyLogId != statedLogId)
+        {
+            return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
+        }
+
         var liveRows = await repository.GetFieldOperatorWorkRowsForAssignmentAsync(assignment.Id, ct);
 
         // ── 4. Idempotency — replay BEFORE writing, and only once authorized ──
         // Deliberately after the authorization + farm checks: a replay must not
         // be a way to read another farm's corrected state by guessing a
-        // (deviceId, clientRequestId) pair.
-        var alreadyApplied = await syncMutationStore.GetAsync(command.DeviceId, command.ClientRequestId, ct);
-        if (alreadyApplied is not null)
+        // (deviceId, clientRequestId) pair. On the queued path /sync/push has
+        // already answered a replay from ITS store before reaching here.
+        if (!command.IdempotencyStoredByCaller)
         {
-            return Result.Success(Replay(alreadyApplied.ResponsePayloadJson, assignment, liveRows));
+            var alreadyApplied = await syncMutationStore.GetAsync(command.DeviceId, command.ClientRequestId, ct);
+            if (alreadyApplied is not null)
+            {
+                return Result.Success(Replay(alreadyApplied.ResponsePayloadJson, assignment, liveRows));
+            }
+        }
+
+        // ── 4b. spec: plr-d10 (lane OF-S) — never over a newer correction. When the reviewer says what he
+        // saw, a section he corrects must still say that; otherwise someone changed it meanwhile and his
+        // change is refused (the phone puts the entry back and says why). Only the sections he corrects are
+        // compared, and only the values his phone knew. Still ZERO writes staged.
+        if (command.Seen is { } seen && IsStale(assignment, seen, quantity, command.DurationHours))
+        {
+            logger.LogInformation(
+                "Labour correction for assignment {LabourAssignmentId} refused as stale: the engagement changed after it was seen.",
+                assignment.Id);
+            return Result.Failure<CorrectLabourResult>(ShramSafalErrors.LabourCorrectionStale);
         }
 
         // ── 5. Remaining validation. Still ZERO writes staged at this point. ──
@@ -408,6 +431,14 @@ public sealed class CorrectLabourHandler(
             corrections.Count,
             AlreadyApplied: false);
 
+        // ── 9a. spec: plr-d10 (lane OF-S) — the queued path: /sync/push owns the key and stores it in
+        // the SAME transaction right after this save, so a replay is answered there, never re-applied.
+        if (command.IdempotencyStoredByCaller)
+        {
+            await repository.SaveChangesAsync(ct);
+            return Result.Success(result);
+        }
+
         // ── 9. THE COMMIT POINT (12b.6) ──────────────────────────────────────
         // TryStoreSuccessAsync is called BEFORE anything is persisted, and it is
         // what persists it: the store shares this request's scoped DbContext, so
@@ -479,6 +510,30 @@ public sealed class CorrectLabourHandler(
                 liveRows.Select(r => r.FieldOperatorId).Order().ToArray(),
                 CorrectionsRecorded: 0,
                 AlreadyApplied: true);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S) — does a section being corrected no longer say what the reviewer saw? Counts are
+    /// compared as the engagement stores them (a null stays null); hours to the stored hours. A value he did not
+    /// see (left out of <paramref name="seen"/>) is not compared.
+    /// </summary>
+    private static bool IsStale(
+        LabourAssignment assignment,
+        LabourCorrectionSeen seen,
+        LabourQuantityCorrection? quantity,
+        decimal? durationHours)
+    {
+        if (quantity is not null
+            && ((seen.WorkerCount is { } w && assignment.WorkerCount != w)
+                || (seen.MaleCount is { } m && assignment.MaleCount != m)
+                || (seen.FemaleCount is { } f && assignment.FemaleCount != f)))
+        {
+            return true;
+        }
+
+        return durationHours is not null
+               && seen.DurationHours is { } hours
+               && assignment.DurationHours != hours;
     }
 
     /// <summary>
