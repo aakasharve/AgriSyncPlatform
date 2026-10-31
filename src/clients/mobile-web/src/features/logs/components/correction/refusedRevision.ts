@@ -15,6 +15,8 @@
 import { useEffect, useState } from 'react';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { MAX_AUTO_RETRY_COUNT } from '../../../../infrastructure/sync/retryCap';
+import { moneyParentsOf } from '../../../../infrastructure/sync/MutationDependency';
+import { readHeldMoney } from '../../../finance/heldMoney';
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 import { correctionWords } from './correctionWords';
 
@@ -27,7 +29,10 @@ export type RefusedKind = 'revision' | 'move' | 'workers';
  * of them tells him to change something first when nothing he can do would change it.
  */
 export type RefusedReason =
-    | 'stale' | 'futureDay' | 'noSeason' | 'attendance' | 'jobCard' | 'moneyShared' | 'moneyNotFound' | 'notAllowed' | 'other';
+    | 'stale' | 'futureDay' | 'noSeason' | 'attendance' | 'jobCard' | 'moneyShared' | 'moneyNotFound' | 'notAllowed' | 'other'
+    // fix pass 3 (R2-3) — money not found, said as it really stands on THIS phone: kept here (and how to send it, or that
+    // there is no way), or removed for good. (R2-1) — details the server never held and this phone does not hold.
+    | 'moneyKept' | 'moneyKeptStuck' | 'moneyRemoved' | 'detailsNotHere';
 
 /** `at` — when the refused change was made (its queue row's time), so the most recent of several can be shown. */
 export interface RefusedChange { kind: RefusedKind; reason: RefusedReason; at?: string }
@@ -57,6 +62,8 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
             return 'moneyShared';
         case 'ShramSafal.LogMoveMoneyNotFound.Conflict':
             return 'moneyNotFound';
+        case 'ShramSafal.LogMoveDetailsNotHeld.Conflict':
+            return 'detailsNotHere';
         case 'ShramSafal.Forbidden':
             return 'notAllowed';
         default:
@@ -91,6 +98,41 @@ export function refusalHint(mutationType: string, errorCode: string | undefined,
     return undefined;
 }
 
+/** One refused queue row, as much of it as the reason needs. */
+interface RefusedRow { mutationType: string; errorCode?: string; payload: unknown }
+
+/**
+ * Lane OF-S fix pass 3 (R2-3) — the reason for a refused row as it REALLY stands. A move refused because its money was
+ * not found is looked up in this phone's own money rows: a money row discarded or refused for good → it can never move;
+ * money kept on this phone → where to send it (or, its plot not on the server, that it cannot be moved); otherwise the
+ * server's own words.
+ */
+export async function refusalReasonForRow(row: RefusedRow): Promise<RefusedReason> {
+    const reason = refusalReasonOf(row.errorCode);
+    if (reason !== 'moneyNotFound' || row.mutationType !== SyncMutationName.MoveDailyLog) return reason;
+    const parents = moneyParentsOf(row.mutationType, row.payload);
+    if (parents.length === 0) return reason;
+    const keys = new Set(parents.map(parent => parent.clientRequestId));
+    const ids = new Set(parents.map(parent => parent.id));
+    const [rows, held] = await Promise.all([
+        getDatabase().mutationQueue.where('mutationType').equals(SyncMutationName.AddCostEntry).toArray(),
+        readHeldMoney(),
+    ]);
+    if (rows.some(r => keys.has(r.clientRequestId) && (r.status === 'REJECTED_DROPPED' || r.status === 'REJECTED_USER_REVIEW'))) {
+        return 'moneyRemoved';
+    }
+    const kept = held.filter(record => ids.has(record.costEntryId));
+    if (kept.some(record => record.reason === 'plot-not-on-server')) return 'moneyKeptStuck';
+    return kept.length > 0 ? 'moneyKept' : reason;
+}
+
+/** `refusalHint` for one refused row, its reason read as it really stands (`refusalReasonForRow`). */
+export async function refusalHintForRow(row: RefusedRow, language: string | null | undefined): Promise<string | undefined> {
+    const kind = KIND_OF[row.mutationType];
+    if (kind !== 'move') return refusalHint(row.mutationType, row.errorCode, language);
+    return refusalLines({ kind, reason: await refusalReasonForRow(row) }, language).join(' ');
+}
+
 /**
  * A change to this entry the server refused, and that is not since replaced by an accepted change OF THE SAME KIND.
  * The most recent such refusal when there are several. `null` = none.
@@ -109,7 +151,7 @@ export async function readRefusedChange(logId: string): Promise<RefusedChange | 
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
             .at(-1);
         return refused
-            ? { kind: KIND_OF[refused.mutationType], reason: refusalReasonOf(refused.errorCode), at: refused.createdAt }
+            ? { kind: KIND_OF[refused.mutationType], reason: await refusalReasonForRow(refused), at: refused.createdAt }
             : null;
     } catch (error) {
         // No evidence either way: no claim — but never silently (the queue could not be read).

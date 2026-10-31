@@ -164,6 +164,12 @@ public sealed class PushSyncBatchHandler(
     {
         PropertyNameCaseInsensitive = true
     };
+
+    // spec: plr-d10 (lane OF-S fix pass 3, R2-2) — the answer of a MOVE is stored in the shape it is first sent in
+    // (camelCase, ASP.NET's web defaults), so a repeated request answers `{ log, moneyMoved }` exactly as the first one
+    // did and the phone writes the same money. Every other mutation's stored answer keeps its shape: released phones
+    // read those as they are.
+    private static readonly JsonSerializerOptions MoveAnswerOptions = new(JsonSerializerDefaults.Web);
     // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the buckets a
     // manual draft may carry. Deliberately the SAME eight names as
     // CreateDailyLogHandler.EvidenceArrayKeys and the canonical zod schema
@@ -895,7 +901,9 @@ public sealed class PushSyncBatchHandler(
                 return CreateFailedResult(clientRequestId, mutationType, execution.ErrorCode, execution.ErrorMessage);
             }
 
-            var responsePayloadJson = JsonSerializer.Serialize(execution.Data, SerializerOptions);
+            var responsePayloadJson = JsonSerializer.Serialize(
+                execution.Data,
+                string.Equals(mutationType, "move_daily_log", StringComparison.Ordinal) ? MoveAnswerOptions : SerializerOptions);
             var stored = await syncMutationStore.TryStoreSuccessAsync(
                 deviceId,
                 clientRequestId,
@@ -2046,7 +2054,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "dailyLogId", "baseVersion", "newPlotIds", "wholeFarm", "newLogDate", "reason", "revisedAtUtc", "moneyLines"))
+        if (!PayloadHasOnly(payload, "dailyLogId", "baseVersion", "newPlotIds", "wholeFarm", "newLogDate", "reason", "revisedAtUtc", "moneyLines", "moneyLinesComplete"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -2093,7 +2101,9 @@ public sealed class PushSyncBatchHandler(
                 AuditDeviceId: deviceId,
                 // fix pass 2 — the lines that stated an amount on his phone (each must be found, or the move is refused).
                 // A malformed (null) line becomes an empty one, which the handler refuses as an invalid command.
-                MoneyLines: request.MoneyLines?.Select(line => new MoveMoneyLine(line?.Kind ?? string.Empty, line?.LineId ?? string.Empty)).ToList()),
+                MoneyLines: request.MoneyLines?.Select(line => new MoveMoneyLine(line?.Kind ?? string.Empty, line?.LineId ?? string.Empty)).ToList(),
+                // fix pass 3 (R2-1) — the phone holds the record's details and named every priced line in them.
+                MoneyLinesComplete: request.MoneyLinesComplete == true),
             ct);
 
         return ToOutcome(result);

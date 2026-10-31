@@ -16,6 +16,7 @@ vi.mock('../../../../app/state/RootStore', () => ({ getRootStore: () => ({ sync:
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 import { ConflictResolutionService } from '../ConflictResolutionService';
+import { moneyEntryIdFor } from '../../../finance/moneyEntryIdentity';
 
 const NOW = '2026-10-31T00:00:00.000Z';
 const park = (mutationType: string, errorCode: string) => getDatabase().mutationQueue.add({
@@ -44,5 +45,22 @@ describe('lane OF-S — the plain reason on the conflict page', () => {
         await park(mutationType, code);
         expect((await ConflictResolutionService.list('mr'))[0].hint).toBe(mr);
         expect((await ConflictResolutionService.list('en'))[0].hint).toBe(en);
+    });
+});
+
+describe('lane OF-S fix pass 3 (R2-3) — the conflict page says the real state of the money', () => {
+    it('a move refused for money that is kept on this phone points him to खरेदी', async () => {
+        await getDatabase().mutationQueue.add({
+            deviceId: 'd', clientRequestId: 'move_daily_log:kept', clientCommandId: 'move_daily_log:kept',
+            mutationType: SyncMutationName.MoveDailyLog, status: 'REJECTED_USER_REVIEW', createdAt: NOW, updatedAt: NOW, retryCount: 1,
+            lastError: 'refused', errorCode: 'ShramSafal.LogMoveMoneyNotFound.Conflict',
+            payload: { dailyLogId: 'log-1', moneyLines: [{ kind: 'activity-expense', lineId: 'exp-1' }] },
+        });
+        await getDatabase().uiPrefs.put({
+            key: 'agrisync_held_money_v1',
+            value: [{ costEntryId: moneyEntryIdFor('log-1:activity-expense:exp-1'), payload: {}, reason: 'no-farm', heldAt: NOW }],
+        } as never);
+        expect((await ConflictResolutionService.list('mr'))[0].hint).toContain('खरेदी');
+        expect((await ConflictResolutionService.list('en'))[0].hint).toContain('Procure');
     });
 });

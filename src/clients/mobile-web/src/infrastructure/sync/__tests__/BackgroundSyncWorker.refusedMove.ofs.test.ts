@@ -252,3 +252,46 @@ describe('lane OF-S fix pass 2 — the money follows the server\'s answer at onc
         expect(await readPendingLogIds(getDatabase())).not.toContain(LOG);
     });
 });
+
+describe('lane OF-S fix pass 3 (R2-2) — a repeated move answers the same, and an answer with no money list is said', () => {
+    const MONEY = moneyEntryIdFor(`${LOG}:input:in-1`);
+    const MOVE = {
+        dailyLogId: LOG, baseVersion: 2, newPlotIds: [PLOT], moneyLines: [{ kind: 'input', lineId: 'in-1' }],
+        revisedAtUtc: '2026-10-31T10:00:00.000Z',
+    } as never;
+    const answerWith = (status: 'applied' | 'duplicate', data: unknown) => pushBatchMock.mockImplementation(async (request: PushRequest) => ({
+        serverTimeUtc: '2026-10-31T12:00:00.000Z',
+        results: request.mutations.map(m => ({ clientRequestId: m.clientRequestId, mutationType: m.mutationType, status, data })),
+    }));
+
+    beforeEach(async () => {
+        try { await getDatabase().delete(); } catch { /* first run */ }
+        await resetDatabase();
+        pushBatchMock.mockReset();
+        await mutationQueue.setCursor('2026-10-30T00:00:00.000Z');
+        await markRebuilt();
+    });
+
+    it('a REPEATED move (the server answers "duplicate") writes the money it names, exactly like the first answer', async () => {
+        await MoveDailyLogCommand.enqueue(MOVE);
+        answerWith('duplicate', {
+            log: { id: LOG },
+            moneyMoved: [{ id: MONEY, farmId: 'farm-1', plotId: PLOT, entryDate: '2026-10-30', amount: 500, categoryId: 'other' }],
+        });
+        await backgroundSyncWorker.triggerNow();
+        expect((await getDatabase().costEntries.get(MONEY))?.payload).toMatchObject({ plotId: PLOT, amount: 500 });
+    });
+
+    it.each(['applied', 'duplicate'] as const)('an %s move whose answer has no readable money list is said, never dropped silently', async (status) => {
+        const said = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        try {
+            await MoveDailyLogCommand.enqueue(MOVE);
+            answerWith(status, { Log: { Id: LOG }, MoneyMoved: [{ Id: MONEY, FarmId: 'farm-1' }] });
+            await backgroundSyncWorker.triggerNow();
+            expect(await getDatabase().costEntries.get(MONEY)).toBeUndefined();
+            expect(said.mock.calls.some(call => String(call[0]).includes('no money list'))).toBe(true);
+        } finally {
+            said.mockRestore();
+        }
+    });
+});

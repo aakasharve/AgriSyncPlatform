@@ -805,6 +805,78 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         (await ReadPlacementAsync(MoneyLog)).PlotId.Should().Be(PlotA1);
     }
 
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+    // fix pass 3 (FIX-3.md) — R2-1 details the server never held; R2-2 a repeated move answers in the same shape.
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task R2_1_a_record_whose_details_the_server_never_held_is_refused_when_the_moving_phone_does_not_hold_them_either()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        // Details withheld or saved by an old phone: no content on the server, and an expense makes no old-style line.
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-r21-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay));
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-r21-money", CostPayload(DetailsExpenseMoney, "transport", 200m));
+
+        // Another phone (it holds no details of this record): it cannot vouch that it named every priced line.
+        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-r21-other-phone",
+            MovePayload(DetailsLog, 1, plots: [PlotA2], complete: false));
+        refused.ErrorCode.Should().Be("ShramSafal.LogMoveDetailsNotHeld.Conflict");
+        (await ReadPlacementAsync(DetailsLog)).PlotId.Should().Be(PlotA1, "nothing changed");
+        (await ReadMoneyAsync(DetailsExpenseMoney)).PlotId.Should().Be(PlotA1, "the expense never stays behind silently");
+        (await ReadAuditPayloadsAsync(DetailsLog, "LogMoved")).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task R2_1_moved_from_the_same_phone_an_old_phones_random_id_expense_refuses_the_move()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-r21-old-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay));
+        // 1.0.15–1.0.17 saved the expense's money under a RANDOM id.
+        var oldPhoneMoney = Guid.NewGuid();
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-r21-old-money", CostPayload(oldPhoneMoney, "transport", 200m));
+
+        // The phone that holds the details names every priced line, the expense included, and vouches for the list.
+        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-r21-same-phone", MovePayload(DetailsLog, 1, plots: [PlotA2],
+            moneyLines: [new { kind = "activity-expense", lineId = "exp-1" }]));
+        refused.ErrorCode.Should().Be("ShramSafal.LogMoveMoneyNotFound.Conflict");
+        (await ReadPlacementAsync(DetailsLog)).PlotId.Should().Be(PlotA1);
+        (await ReadMoneyAsync(oldPhoneMoney)).PlotId.Should().Be(PlotA1);
+    }
+
+    [Fact]
+    public async Task R2_1_a_record_the_server_holds_is_unchanged_it_moves_without_the_phones_word()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateMoneyLogAsync(); // create-time details on the server
+
+        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-r21-held", MovePayload(MoneyLog, 1, plots: [PlotA2], complete: false));
+        (await ReadMoneyAsync(InputMoney)).PlotId.Should().Be(PlotA2);
+        (await ReadMoneyAsync(LabourMoney)).PlotId.Should().Be(PlotA2);
+    }
+
+    [Fact]
+    public async Task R2_2_a_repeated_move_answers_in_the_same_shape_with_the_same_money()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateMoneyLogAsync();
+        var move = MovePayload(MoneyLog, 1, plots: [PlotA2], complete: false); // the server holds its details
+
+        var first = await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-r22-move", move);
+        var again = await PushAsync(OwnerA, "move_daily_log", "req-ofs-r22-move", move);
+        var replay = Assert.Single(again.Value!.Results);
+        replay.Status.Should().Be("duplicate");
+
+        var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var firstData = JsonSerializer.SerializeToElement(first.Data, web);
+        var replayData = JsonSerializer.SerializeToElement(replay.Data, web);
+        output.WriteLine($"[EVIDENCE] repeated move answer keys: {string.Join(",", replayData.EnumerateObject().Select(p => p.Name))}");
+        replayData.GetProperty("moneyMoved").GetArrayLength().Should().Be(2, "a repeat answers {{ log, moneyMoved }} exactly as the first answer did");
+        replayData.GetProperty("moneyMoved")[0].GetProperty("id").GetGuid()
+            .Should().Be(firstData.GetProperty("moneyMoved")[0].GetProperty("id").GetGuid());
+        replayData.GetProperty("moneyMoved")[0].GetProperty("plotId").GetGuid().Should().Be(PlotA2);
+        replayData.GetProperty("log").GetProperty("id").GetGuid().Should().Be(MoneyLog);
+    }
+
     private async Task<long> DayAggregatesAsync(string day) =>
         (long)(await ScalarTextAsync(
             "SELECT COUNT(*) FROM ssf.daily_richness_aggregates WHERE farm_id = '0f5e0000-0000-4000-8000-0000000000a1' AND local_date = @id::date",
@@ -894,7 +966,7 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
 
     private static Dictionary<string, object?> MovePayload(
         Guid dailyLogId, int baseVersion, Guid[]? plots = null, bool wholeFarm = false, string? day = null, string? reason = null,
-        object[]? moneyLines = null)
+        object[]? moneyLines = null, bool complete = true)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -907,6 +979,8 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         if (day is not null) payload["newLogDate"] = day;
         if (reason is not null) payload["reason"] = reason;
         if (moneyLines is not null) payload["moneyLines"] = moneyLines;
+        // fix pass 3 (R2-1) — the phone that made the record holds its details and names every priced line in them.
+        if (complete) payload["moneyLinesComplete"] = true;
         return payload;
     }
 

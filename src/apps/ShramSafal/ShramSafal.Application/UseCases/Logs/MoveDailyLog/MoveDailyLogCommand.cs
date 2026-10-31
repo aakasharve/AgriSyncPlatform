@@ -19,6 +19,10 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// rule for making money from a line). Each names its money by (kind, line id); the server derives the id under THIS
 /// record's id, so a line can never name another record's money. Every one must be found, or the move is refused.
 /// </param>
+/// <param name="MoneyLinesComplete">
+/// fix pass 3 (R2-1) — the moving phone HOLDS the record's details and <paramref name="MoneyLines"/> names every line in
+/// them that stated an amount. Without it, a record whose create-time details the server never held is refused.
+/// </param>
 public sealed record MoveDailyLogCommand(
     Guid DailyLogId,
     int BaseVersion,
@@ -33,7 +37,8 @@ public sealed record MoveDailyLogCommand(
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
     string AuditIpHash = "sha256:unknown",
-    IReadOnlyList<MoveMoneyLine>? MoneyLines = null);
+    IReadOnlyList<MoveMoneyLine>? MoneyLines = null,
+    bool MoneyLinesComplete = false);
 
 /// <summary>One line of the record that stated an amount: its kind (<c>MoneyEntryIdentity</c> kinds) and its line id.</summary>
 public sealed record MoveMoneyLine(string Kind, string LineId);

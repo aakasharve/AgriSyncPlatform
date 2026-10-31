@@ -64,6 +64,9 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// moving phone names (those whose money it holds, has queued or kept: details it alone may hold); and, for a record whose details the server never held, any old-style line whose notes state
 /// money in the phone's own fixed words — its money cannot be found by id at all. A line with no stated amount expects
 /// no money and never blocks;</item>
+/// <item>the server never held the record's details as it was created and the moving phone does not vouch that it named
+/// every priced line in them (<see cref="ShramSafalErrors.LogMoveDetailsNotHeld"/>; fix pass 3, R2-1): an expense makes
+/// no old-style line, so nobody could show its money follows;</item>
 /// <item>its money already shared out across plots by an allocation (<see cref="ShramSafalErrors.LogMoveMoneyShared"/>);</item>
 /// <item>a हजेरी ruling on the OLD day for a person named on this record's labour, or an ABSENT ruling on the NEW day
 /// for one (<see cref="ShramSafalErrors.LogMoveAttendance"/>). A place-only move is not stopped by हजेरी: a ruling is
@@ -216,6 +219,16 @@ public sealed class MoveDailyLogHandler(
         // Its money (fix 1, B002; fix 2, orchestrator call): every entry made from its lines, found by derived id — and
         // every line that STATED an amount must have one, or the record does not move without it (P4).
         var lines = await MoneyLinesOfAsync(log, command.MoneyLines, ct);
+
+        // fix 3 (R2-1, orchestrator call) — the server never held the record's details as it was created, and the moving
+        // phone does not vouch that it named every priced line in them: an expense makes no old-style line, so nobody
+        // could show its money follows. Refused whole rather than leave money behind without a word.
+        if (!lines.HeldFromCreate && !command.MoneyLinesComplete)
+        {
+            logger.LogWarning("move_daily_log for {LogId} refused: its details were never held and the phone did not name all its priced lines.", log.Id);
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveDetailsNotHeld);
+        }
+
         if (lines.Unfindable)
         {
             logger.LogWarning("move_daily_log for {LogId} refused: its details were never sent and an old-style line states money.", log.Id);
@@ -464,10 +477,11 @@ public sealed class MoveDailyLogHandler(
         }
 
         var unfindable = unreadableCreate || (!heldFromCreate && log.Tasks.Any(StatesMoneyTheOldWay));
-        return new RecordMoneyLines(lookFor, stated, unfindable);
+        return new RecordMoneyLines(lookFor, stated, unfindable, heldFromCreate);
     }
 
-    private sealed record RecordMoneyLines(IReadOnlyCollection<Guid> LookFor, IReadOnlyCollection<Guid> Stated, bool Unfindable);
+    private sealed record RecordMoneyLines(
+        IReadOnlyCollection<Guid> LookFor, IReadOnlyCollection<Guid> Stated, bool Unfindable, bool HeldFromCreate);
 
     private static void AddLines(
         Guid logId, JsonElement root, string bucket, string kind, bool atCreate, HashSet<Guid> lookFor, HashSet<Guid> stated)

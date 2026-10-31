@@ -23,7 +23,7 @@ import { getRootStore } from '../../../app/state/RootStore';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { getEditSurface } from './EditSurfaceRegistry';
-import { refusalHint } from '../../logs/components/correction/refusedRevision';
+import { refusalHintForRow } from '../../logs/components/correction/refusedRevision';
 import {
     DEPENDENCY_PARENT_UNRESOLVED_CODE,
     DEPENDENCY_PLOT_UNRESOLVED_CODE,
@@ -69,9 +69,11 @@ export class ConflictResolutionService {
             mutationQueue.getCapExhaustedFailed(),
         ]);
 
-        return [...rejected, ...capExhausted]
-            .sort((left, right) => (left.id ?? 0) - (right.id ?? 0))
-            .map(r => {
+        const rows = [...rejected, ...capExhausted].sort((left, right) => (left.id ?? 0) - (right.id ?? 0));
+        // Lane OF-S fix pass 3 (R2-3) — a refused move's reason is read as it really stands on this phone (its money).
+        const hints = await Promise.all(rows.map(r => refusalHintForRow(r, language)));
+        return rows
+            .map((r, index) => {
                 const payloadJson = (() => {
                     try {
                         return JSON.stringify(r.payload);
@@ -86,8 +88,7 @@ export class ConflictResolutionService {
                     reason: r.lastError ?? 'UNKNOWN',
                     // Lane OF-S fix 1 (B011): a refused move / worker count / future-day create says why in plain
                     // words, in his language; every other row keeps the hints below.
-                    hint: refusalHint(r.mutationType, r.errorCode, language)
-                        ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode),
+                    hint: hints[index] ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode),
                     payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
                 };
             });

@@ -267,3 +267,38 @@ describe('lane OF-S fix pass 2 — the money of the entry: the server finds it, 
         }
     });
 });
+
+describe('lane OF-S fix pass 3 (R2-1) — the phone vouches for its list of priced lines only when it holds the details', () => {
+    const ASSIGNMENT = '0f5e2000-0000-4000-8000-0000000000d1';
+    const PRICED = {
+        ...ENTRY,
+        labour: [{ id: 'crew-line-1', labourAssignmentId: ASSIGNMENT, type: 'HIRED', count: 8, totalCost: 2800 }],
+        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }, { id: 'in-2', productName: 'युरिया' }],
+        machinery: [{ id: 'm-1', type: 'tractor', rentalCost: 300 }],
+        activityExpenses: [{ id: 'exp-1', category: 'Transport', totalAmount: 200 }],
+    } as unknown as DailyLog;
+
+    it('the phone that made the entry names EVERY priced line in its details, known money or not, and says the list is whole', async () => {
+        const made = { ...PRICED, meta: { appVersion: '1.0.18' } } as unknown as DailyLog;
+        const { d } = deps();
+        await queueSavedEntryMove(made, { scope: scope([S1], ['cane']) }, d);
+        const [move] = await moves();
+        expect(move.payload).toMatchObject({
+            moneyLinesComplete: true,
+            moneyLines: [
+                { kind: 'labour', lineId: ASSIGNMENT },
+                { kind: 'input', lineId: 'in-1' },
+                { kind: 'machinery', lineId: 'm-1' },
+                { kind: 'activity-expense', lineId: 'exp-1' },
+            ],
+        });
+    });
+
+    it('a phone that holds only a task-line rebuild of the entry does not vouch: no "whole list" word', async () => {
+        const rebuilt = { ...PRICED, legacyPartial: true } as unknown as DailyLog;
+        const { d } = deps();
+        await queueSavedEntryMove(rebuilt, { scope: scope([S1], ['cane']) }, d);
+        const [move] = await moves();
+        expect(move.payload).not.toHaveProperty('moneyLinesComplete');
+    });
+});

@@ -115,6 +115,11 @@ const mr: CorrectionWords = {
         jobCard: 'या कामाला काम कार्ड जोडलेलं आहे, त्यामुळे हे काम हलवता येत नाही.',
         moneyShared: 'या कामाचे पैसे आधीच प्लॉटमध्ये वाटले आहेत, त्यामुळे हे काम हलवता येत नाही.',
         moneyNotFound: 'या कामाचे पैसे जुन्या पद्धतीने जतन झाले आहेत किंवा अजून पोहोचले नाहीत, त्यामुळे हे काम हलवता येत नाही.',
+        // Lane OF-S fix pass 3 (R2-3, R2-1) — the real state of the money on this phone; details not here. PROPOSED (Marathi).
+        moneyKept: 'या कामाचे पैसे अजून या फोनवरच आहेत. ते "खरेदी" मधून पाठवा, मग हे काम हलवा.',
+        moneyKeptStuck: 'या कामाचे पैसे या फोनवरच आहेत आणि त्यांचा प्लॉट अजून सर्व्हरवर नाही, त्यामुळे हे काम हलवता येत नाही.',
+        moneyRemoved: 'या कामाचे पैसे काढून टाकले आहेत, त्यामुळे हे काम कधीच हलवता येणार नाही.',
+        detailsNotHere: 'या कामाचा पूर्ण तपशील या फोनवर नाही, त्यामुळे इथून हे काम हलवता येत नाही.',
         notAllowed: 'हे तुम्हाला बदलता येत नाही — मालकाला सांगा.',
         other: '',
     },
@@ -189,6 +194,11 @@ const en: CorrectionWords = {
         jobCard: 'A job card is linked to this work, so it cannot be moved.',
         moneyShared: 'This work\'s money is already shared out across plots, so it cannot be moved.',
         moneyNotFound: 'This work\'s money was saved the old way or has not arrived yet, so it cannot be moved.',
+        // Lane OF-S fix pass 3 (R2-3, R2-1). PROPOSED (English).
+        moneyKept: 'This work\'s money is still only on this phone. Send it from Procure, then move this work.',
+        moneyKeptStuck: 'This work\'s money is kept on this phone and its plot is not on the server yet, so this work cannot be moved.',
+        moneyRemoved: 'This work\'s money was removed, so this work can never be moved.',
+        detailsNotHere: 'This work\'s full details are not on this phone, so it cannot be moved from here.',
         notAllowed: 'You cannot change this — tell the owner.',
         other: '',
     },

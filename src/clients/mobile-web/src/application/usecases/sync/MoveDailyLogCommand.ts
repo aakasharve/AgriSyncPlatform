@@ -26,6 +26,11 @@ export interface MoveDailyLogPayload {
      * one's money or refuses the whole move. Not part of the request id: the same move made again keeps its id.
      */
     moneyLines?: Array<{ kind: 'labour' | 'input' | 'machinery' | 'activity-expense'; lineId: string }>;
+    /**
+     * fix pass 3 (R2-1) — this phone holds the entry's details and `moneyLines` names EVERY priced line in them. Without
+     * it the server refuses a record whose details it never held. Not part of the request id.
+     */
+    moneyLinesComplete?: true;
 }
 
 /** NEVER CHANGE: every queued move's request id is derived under it. */

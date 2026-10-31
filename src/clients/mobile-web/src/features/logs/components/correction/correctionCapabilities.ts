@@ -26,6 +26,7 @@ import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCa
 import { moneyEntryIdFor } from '../../../finance/moneyEntryIdentity';
 import { readHeldMoney } from '../../../finance/heldMoney';
 import { recordMoneyLines, recordMoneySourceKey, type RecordMoneyLine } from '../../../finance/recordMoneyLines';
+import { holdsOwnDetails } from '../../../sync/pull/helpers/rebuildLogDetails';
 
 const SWITCHES = {
     /** OF-S: a queued, offline-safe "move a saved log's plot / date" mutation exists (`move_daily_log`). */
@@ -152,7 +153,14 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
     const plotIds = scope?.selectedPlotIds ?? [];
     // fix pass 2 (orchestrator call, N1) — every line that made money, by the rule the save made it with: the server must
     // find each one's money or the whole move is refused (nothing left behind on the old plot / day).
-    const moneyLines = await moneyLinesToName(current);
+    // fix pass 3 (R2-1, orchestrator call) — a phone that HOLDS the entry's details (it made it, or took the server's
+    // stored document) names EVERY line in them that stated an amount, known money or not, and says its list is whole;
+    // without that word the server refuses a record whose details it never held. This phone cannot tell a line priced at
+    // the save from one priced by a later edit (it keeps no copy of the first version), so it names the CURRENT priced
+    // lines: a line priced only by an edit (which makes no money) refuses the move — the honest side, until edits make
+    // money (F89). A phone holding only a task-line rebuild names the lines whose money it knows, and does not vouch.
+    const vouches = holdsOwnDetails(current);
+    const moneyLines = vouches ? recordMoneyLines(current) : await moneyLinesToName(current);
     await MoveDailyLogCommand.enqueue({
         dailyLogId: log.id,
         baseVersion,
@@ -161,6 +169,7 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
         reason: MOVE_REASON,
         revisedAtUtc: new Date().toISOString(),
         ...(moneyLines.length > 0 && { moneyLines }),
+        ...(vouches && { moneyLinesComplete: true as const }),
     });
 
     const result = await deps.updateLog(log.id, {

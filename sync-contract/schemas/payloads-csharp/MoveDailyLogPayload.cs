@@ -24,5 +24,6 @@ public sealed record MoveDailyLogPayload(
     bool? WholeFarm = null,
     DateOnly? NewLogDate = null,
     string? Reason = null,
-    IReadOnlyList<MoneyLinesItem>? MoneyLines = null
+    IReadOnlyList<MoneyLinesItem>? MoneyLines = null,
+    bool? MoneyLinesComplete = null
 );

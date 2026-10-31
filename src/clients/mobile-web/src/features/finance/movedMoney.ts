@@ -19,11 +19,14 @@ import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 /** One money entry as the server sends it (the fields this module relies on; the rest is kept as sent). */
 interface MovedCostEntry { id: string; farmId: string; [field: string]: unknown }
 
-/** The money entries a move's answer names, or none when the answer names none (or is not a move's answer). */
-export function movedMoneyOf(data: unknown): MovedCostEntry[] {
-    if (typeof data !== 'object' || data === null) return [];
+/**
+ * The money entries a move's answer names (`[]` = it moved none), or `null` when the answer carries no readable money
+ * list at all — not the move answer's shape (fix pass 3, R2-2: a repeat once came back in another casing).
+ */
+export function movedMoneyOf(data: unknown): MovedCostEntry[] | null {
+    if (typeof data !== 'object' || data === null) return null;
     const moved = (data as { moneyMoved?: unknown }).moneyMoved;
-    if (!Array.isArray(moved)) return [];
+    if (!Array.isArray(moved)) return null;
     return moved.filter((row): row is MovedCostEntry =>
         typeof row === 'object' && row !== null
         && typeof (row as { id?: unknown }).id === 'string' && typeof (row as { farmId?: unknown }).farmId === 'string');
@@ -32,6 +35,13 @@ export function movedMoneyOf(data: unknown): MovedCostEntry[] {
 /** Write the money a move took into this phone's ledger copy and money book. Returns how many entries were written. */
 export async function takeMovedMoney(data: unknown): Promise<number> {
     const moved = movedMoneyOf(data);
+    if (moved === null) {
+        // Never a silent drop: the answer is not the shape this phone reads. Nothing is written here; the pull at the end
+        // of the cycle carries the same rows (the server moved their clock forward).
+        const shape = typeof data === 'object' && data !== null ? Object.keys(data).join(',') : typeof data;
+        console.error(`[movedMoney] a move answer has no money list (keys: ${shape}); its money comes with the next pull`);
+        return 0;
+    }
     if (moved.length === 0) return 0;
     const at = new Date().toISOString();
     await getDatabase().costEntries.bulkPut(moved.map(entry => ({ id: entry.id, farmId: entry.farmId, payload: entry, updatedAt: at })));

@@ -14,6 +14,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { getDatabase, resetDatabase } from '../../../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../../../infrastructure/sync/SyncMutationCatalog';
 import { readRefusedChange, refusalLines, refusalReasonOf, useRefusedChangeOf, type RefusedReason } from '../refusedRevision';
+import { moneyEntryIdFor } from '../../../../finance/moneyEntryIdentity';
 
 const LOG = 'log-ofs-1';
 let n = 0;
@@ -96,5 +97,70 @@ describe('lane OF-S fix pass 2 — a plain reason per cause (item 9), and the mo
         const { result } = renderHook(() => useRefusedChangeOf(['log-first', 'log-second']));
         await waitFor(() => expect(result.current).not.toBeNull());
         expect(result.current).toMatchObject({ kind: 'move', reason: 'jobCard' });
+    });
+});
+
+describe('lane OF-S fix pass 3 — words that match the real state of the money (R2-3), and details not held (R2-1)', () => {
+    const LINES = [{ kind: 'input', lineId: 'in-1' }, { kind: 'activity-expense', lineId: 'exp-1' }];
+    const inputMoney = moneyEntryIdFor(`${LOG}:input:in-1`);
+    const expenseMoney = moneyEntryIdFor(`${LOG}:activity-expense:exp-1`);
+    const refusedMove = () => getDatabase().mutationQueue.add({
+        ...row(SyncMutationName.MoveDailyLog, 'REJECTED_USER_REVIEW', 'ShramSafal.LogMoveMoneyNotFound.Conflict'),
+        payload: { dailyLogId: LOG, moneyLines: LINES },
+    } as never);
+    const moneyRow = (id: string, status: string) => getDatabase().mutationQueue.add({
+        deviceId: 'd', clientRequestId: `${SyncMutationName.AddCostEntry}:${id}`, clientCommandId: `${SyncMutationName.AddCostEntry}:${id}`,
+        mutationType: SyncMutationName.AddCostEntry, payload: { costEntryId: id }, status, createdAt: '2026-10-31T09:00:00.000Z',
+        updatedAt: 'T', retryCount: 0,
+    } as never);
+    const kept = (id: string, reason: string) => getDatabase().uiPrefs.put({
+        key: 'agrisync_held_money_v1', value: [{ costEntryId: id, payload: {}, reason, heldAt: 'T' }],
+    } as never);
+
+    it('its money kept on this phone, and a way to send it exists: he is told where to send it', async () => {
+        await refusedMove();
+        await kept(expenseMoney, 'no-farm');
+        expect(await readRefusedChange(LOG)).toMatchObject({ kind: 'move', reason: 'moneyKept' });
+        expect(refusalLines({ kind: 'move', reason: 'moneyKept' }, 'mr')[1]).toContain('खरेदी');
+        expect(refusalLines({ kind: 'move', reason: 'moneyKept' }, 'en')[1]).toContain('Procure');
+    });
+
+    it('its money kept on this phone with no way to send it (its plot is not on the server): said plainly it cannot be moved', async () => {
+        await refusedMove();
+        await kept(expenseMoney, 'plot-not-on-server');
+        expect(await readRefusedChange(LOG)).toMatchObject({ reason: 'moneyKeptStuck' });
+        expect(refusalLines({ kind: 'move', reason: 'moneyKeptStuck' }, 'en')[1]).toContain('cannot be moved');
+    });
+
+    it.each(['REJECTED_DROPPED', 'REJECTED_USER_REVIEW'])('its money row %s: this work can never be moved, never "not arrived yet"', async (status) => {
+        await refusedMove();
+        await moneyRow(inputMoney, status);
+        expect(await readRefusedChange(LOG)).toMatchObject({ reason: 'moneyRemoved' });
+        const en = refusalLines({ kind: 'move', reason: 'moneyRemoved' }, 'en')[1];
+        const mr = refusalLines({ kind: 'move', reason: 'moneyRemoved' }, 'mr')[1];
+        expect(en).toContain('can never be moved');
+        expect(en).not.toMatch(/arrived/);
+        expect(mr).not.toContain('पोहोचले');
+    });
+
+    it('otherwise the server\'s own words stand', async () => {
+        await refusedMove();
+        await moneyRow(inputMoney, 'APPLIED');
+        expect(await readRefusedChange(LOG)).toMatchObject({ reason: 'moneyNotFound' });
+    });
+
+    it('details the server never held and this phone does not hold: their own plain reason', () => {
+        expect(refusalReasonOf('ShramSafal.LogMoveDetailsNotHeld.Conflict')).toBe('detailsNotHere');
+        expect(refusalLines({ kind: 'move', reason: 'detailsNotHere' }, 'en')[1]).toContain('not on this phone');
+        expect(refusalLines({ kind: 'move', reason: 'detailsNotHere' }, 'mr')[1]).toContain('या फोनवर नाही');
+    });
+
+    it('no new reason carries Latin letters in Marathi or Devanagari in English, nor the forbidden words', () => {
+        for (const reason of ['moneyKept', 'moneyKeptStuck', 'moneyRemoved', 'detailsNotHere'] as RefusedReason[]) {
+            expect(refusalLines({ kind: 'move', reason }, 'mr').join(' ')).not.toMatch(/[A-Za-z]/);
+            const en = refusalLines({ kind: 'move', reason }, 'en').join(' ');
+            expect(en.replace('खरेदी', '')).not.toMatch(/[\u0900-\u097F]/);
+            expect(en).not.toMatch(/\b(AI|draft|policy|permission|grant|role|claim|access)\b/i);
+        }
     });
 });
