@@ -22,6 +22,10 @@ public static class MoneyEntryIdentity
     public const string Machinery = "machinery";
     public const string ActivityExpense = "activity-expense";
 
+    /// <summary>Is this one of the four kinds above (exactly as the phone writes it)?</summary>
+    public static bool IsKind(string? kind) =>
+        kind is Labour or Input or Machinery or ActivityExpense;
+
     /// <summary>The money entry id of one record line.</summary>
     public static Guid ForRecordLine(Guid dailyLogId, string kind, string lineId) =>
         V5(Namespace, $"{dailyLogId:D}:{kind}:{lineId}");

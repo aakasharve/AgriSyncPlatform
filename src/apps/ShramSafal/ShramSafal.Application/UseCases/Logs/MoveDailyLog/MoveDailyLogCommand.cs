@@ -14,6 +14,11 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// <param name="ActorUserId">Who sent it (the authenticated caller, never a payload claim).</param>
 /// <param name="ActorRole">The role the caller CLAIMED — recorded, never trusted for authority.</param>
 /// <param name="ClientRequestId">The phone's request id for this mutation.</param>
+/// <param name="MoneyLines">
+/// fix pass 2 (orchestrator call) — the lines of the record that STATED an amount on the moving phone (the phone's own
+/// rule for making money from a line). Each names its money by (kind, line id); the server derives the id under THIS
+/// record's id, so a line can never name another record's money. Every one must be found, or the move is refused.
+/// </param>
 public sealed record MoveDailyLogCommand(
     Guid DailyLogId,
     int BaseVersion,
@@ -27,4 +32,8 @@ public sealed record MoveDailyLogCommand(
     string? ClientRequestId = null,
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+    IReadOnlyList<MoveMoneyLine>? MoneyLines = null);
+
+/// <summary>One line of the record that stated an amount: its kind (<c>MoneyEntryIdentity</c> kinds) and its line id.</summary>
+public sealed record MoveMoneyLine(string Kind, string LineId);

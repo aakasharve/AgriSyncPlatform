@@ -17,6 +17,9 @@ import { systemClock } from '../../core/domain/services/Clock';
 import { getWeatherForLocation } from '../usecases/AttachWeatherSnapshot';
 import { financeCommandService } from '../../features/finance/financeCommandService';
 import { MoneyCategory } from '../../features/finance/finance.types';
+import {
+    labourMoneyLineId, recordMoneySourceKey, statedExpenseAmount, statedInputAmount, statedLabourAmount, statedMachineryAmount,
+} from '../../features/finance/recordMoneyLines';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { resolveLogFarmId } from '../../features/logs/services/logSyncMutationService';
 // Labour Phase 2 / T2 — the use case's own response type, so the additive
@@ -427,14 +430,16 @@ export class LogCommandServiceImpl implements LogCommandService {
             // are fixed — reintroducing, in the finance ledger, the exact
             // number the farmer never said. If no total was stated, there is
             // nothing to record yet (voice review shows "—", not a guess).
-            const amount = entry.totalCost;
+            // Lane OF-S fix pass 2 — "stated amount" and the source key are the ONE rule a move of this record also
+            // reads (`recordMoneyLines.ts`), so the server is told exactly the lines that made money here.
+            const amount = statedLabourAmount(entry);
             if (!amount) return;
             financeCommandService.createMoneyEventFromSource({
                 type: 'VoiceLog',
                 // Lane OF-S fix 1 (B002) — keyed by the ENGAGEMENT id (minted above, before this runs): the id the server
                 // holds and a pulled entry shows, so a move of the entry can find this money on the server and on any
                 // phone. A crew with no engagement id yet keeps its line id.
-                sourceId: `${log.id}:labour:${entry.labourAssignmentId ?? entry.id}`,
+                sourceId: recordMoneySourceKey(log.id, 'labour', labourMoneyLineId(entry)),
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category: 'Labour',
@@ -452,11 +457,11 @@ export class LogCommandServiceImpl implements LogCommandService {
         });
 
         log.inputs.forEach((entry) => {
-            const amount = entry.cost;
+            const amount = statedInputAmount(entry);
             if (!amount) return;
             financeCommandService.createMoneyEventFromSource({
                 type: 'VoiceLog',
-                sourceId: `${log.id}:input:${entry.id}`,
+                sourceId: recordMoneySourceKey(log.id, 'input', `${entry.id}`),
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category: 'Input',
@@ -473,11 +478,11 @@ export class LogCommandServiceImpl implements LogCommandService {
         });
 
         log.machinery.forEach((entry) => {
-            const amount = (entry.rentalCost || 0) + (entry.fuelCost || 0);
+            const amount = statedMachineryAmount(entry);
             if (!amount) return;
             financeCommandService.createMoneyEventFromSource({
                 type: 'VoiceLog',
-                sourceId: `${log.id}:machinery:${entry.id}`,
+                sourceId: recordMoneySourceKey(log.id, 'machinery', `${entry.id}`),
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category: 'Machinery',
@@ -495,11 +500,11 @@ export class LogCommandServiceImpl implements LogCommandService {
 
         (log.activityExpenses || []).forEach((entry) => {
             const category = this.mapActivityExpenseCategory(entry.category);
-            const amount = entry.totalAmount || 0;
+            const amount = statedExpenseAmount(entry);
             if (!amount) return;
             financeCommandService.createMoneyEventFromSource({
                 type: 'Manual',
-                sourceId: `${log.id}:activity-expense:${entry.id}`,
+                sourceId: recordMoneySourceKey(log.id, 'activity-expense', `${entry.id}`),
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category,

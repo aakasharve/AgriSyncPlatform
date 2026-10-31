@@ -208,11 +208,33 @@ public static class ShramSafalErrors
         "ShramSafal.LogMoveNoCropCycle.InvalidCommand",
         "No crop season on that plot covers that day. The move was not made.");
 
-    // spec: plr-d10 (lane OF-S; CTO call) — moving the record would leave हजेरी rulings or money already tied to it
-    // on the old day / place without their record. Refused whole; nothing changes.
-    public static readonly Error LogMoveLinkedRecords = Error.Conflict(
-        "ShramSafal.LogMoveLinkedRecords.Conflict",
-        "Attendance or money is linked to this record. Change those first; the move was not made.");
+    // spec: plr-d10 (lane OF-S; CTO call; fix pass 2 item 9 — one plain reason per cause, never "change those first"
+    // where nothing he can do changes it). Each refuses the move WHOLE; nothing changes. Tail CONFLICT: parked on every
+    // shipped phone; the middle segment lets a new phone say why.
+    //
+    // A हजेरी ruling names a person on this record on the old day, or marks one absent on the new day.
+    public static readonly Error LogMoveAttendance = Error.Conflict(
+        "ShramSafal.LogMoveAttendance.Conflict",
+        "People on this entry are in that day's attendance, so it cannot be moved. Nothing was changed.");
+
+    // A job card is linked to the record (or its money is a card's payout). No screen cancels a card, and a verified or
+    // paid card can never be cancelled (JobCard.Cancel), so there is nothing for him to change first.
+    public static readonly Error LogMoveJobCard = Error.Conflict(
+        "ShramSafal.LogMoveJobCard.Conflict",
+        "A job card is linked to this entry, so it cannot be moved. Nothing was changed.");
+
+    // Its money was already shared out across plots (a day ledger allocation). An allocation is never undone (no
+    // command removes a DayLedger), so there is nothing for him to change first.
+    public static readonly Error LogMoveMoneyShared = Error.Conflict(
+        "ShramSafal.LogMoveMoneyShared.Conflict",
+        "This entry's money is already shared out across plots, so it cannot be moved. Nothing was changed.");
+
+    // spec: plr-d10 (lane OF-S fix pass 2; orchestrator call) — a line of the record STATES an amount but the money made
+    // from it cannot be found by its derived id: saved the old way (1.0.15–1.0.17 random ids, a pre-fix key), kept on
+    // the phone, or not arrived yet. Moving the record without it would leave a false number on the old plot (P4).
+    public static readonly Error LogMoveMoneyNotFound = Error.Conflict(
+        "ShramSafal.LogMoveMoneyNotFound.Conflict",
+        "This entry's money was saved the old way or has not arrived yet, so it cannot be moved. Nothing was changed.");
 
     // spec: plr-d10 (lane OF-S) — a worker-count / hours correction made against values the engagement no longer
     // holds (someone corrected it meanwhile). Refused, never written over the newer correction.

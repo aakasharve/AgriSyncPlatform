@@ -48,6 +48,9 @@ import { CorrectLabourAssignmentCommand } from '../../../application/usecases/sy
 import { ReviseLogContentCommand } from '../../../application/usecases/sync/ReviseLogContentCommand';
 import { parentClientRequestIdForDailyLog } from '../MutationDependency';
 import { SyncMutationName } from '../SyncMutationCatalog';
+import { financeService } from '../../../features/finance/financeService';
+import { financeCommandService } from '../../../features/finance/financeCommandService';
+import { moneyEntryIdFor } from '../../../features/finance/moneyEntryIdentity';
 
 type PushRequest = { mutations: Array<{ clientRequestId: string; mutationType: string }> };
 const LOG = '0f5e0000-0000-4000-8000-0000000000c1';
@@ -85,13 +88,13 @@ describe('lane OF-S — a refused move / worker count puts the entry back to the
             dailyLogId: LOG, baseVersion: 2, newPlotIds: [PLOT], revisedAtUtc: '2026-10-31T10:00:00.000Z',
         });
         expect(await readPendingLogIds(getDatabase())).toContain(LOG); // waiting: it holds the entry
-        refuseWith('ShramSafal.LogMoveLinkedRecords.Conflict');
+        refuseWith('ShramSafal.LogMoveAttendance.Conflict');
 
         await backgroundSyncWorker.triggerNow();
 
         const row = (await getDatabase().mutationQueue.toArray()).find(r => r.clientRequestId === id);
         expect(row?.status).toBe('REJECTED_USER_REVIEW'); // never silently dropped (P9)
-        expect(row?.errorCode).toBe('ShramSafal.LogMoveLinkedRecords.Conflict');
+        expect(row?.errorCode).toBe('ShramSafal.LogMoveAttendance.Conflict');
         expect(await readPendingLogIds(getDatabase())).not.toContain(LOG);
         expect(await getDatabase().appMeta.get(LOGS_REBUILD_MARKER_KEY)).toBeUndefined();
         expect(lastPullCursor()).toBe('0'); // the server's version comes down in this very cycle
@@ -158,5 +161,94 @@ describe('lane OF-S fix 1 (B004) — a move / worker count sent before the creat
         const row = await childRow(id);
         expect(row?.status).toBe('FAILED');
         expect(row?.retryCount).toBe(0);
+    });
+});
+
+describe('lane OF-S fix pass 2 — the money follows the server\'s answer at once (N1, N3); a move waits for its money (N4)', () => {
+    const FARM = '0f5e0000-0000-4000-8000-0000000000c5';
+    const MONEY = moneyEntryIdFor(`${LOG}:input:in-1`); // just saved: in the money book, not pulled yet
+    const OLD_KEY = moneyEntryIdFor(`${LOG}:labour:crew-line-1`); // the record's money saved the old way
+    const MOVE = {
+        dailyLogId: LOG, baseVersion: 2, newPlotIds: [PLOT], newLogDate: '2026-10-24',
+        moneyLines: [{ kind: 'input', lineId: 'in-1' }], revisedAtUtc: '2026-10-31T10:00:00.000Z',
+    } as never;
+    const rowOf = async (id: string) => (await getDatabase().mutationQueue.toArray()).find(r => r.clientRequestId === id);
+
+    beforeEach(async () => {
+        try { await getDatabase().delete(); } catch { /* first run */ }
+        await resetDatabase();
+        pushBatchMock.mockReset();
+        pullChangesMock.mockClear();
+        await mutationQueue.setCursor('2026-10-30T00:00:00.000Z');
+        await markRebuilt();
+    });
+
+    it('save, then move at once: the money book shows the new place as soon as the move applies, without waiting for a pull', async () => {
+        await financeService.refreshFromPhone();
+        await getDatabase().costEntries.put({
+            id: OLD_KEY, farmId: FARM, updatedAt: 'T',
+            payload: { id: OLD_KEY, farmId: FARM, plotId: 'plot-old', entryDate: '2026-10-25', amount: 2800, categoryId: 'labour_misc' },
+        } as never);
+        const moved = {
+            id: MONEY, farmId: FARM, plotId: PLOT, cropCycleId: 'cycle-new', categoryId: 'other', description: 'from the record',
+            amount: 500, currencyCode: 'INR', entryDate: '2026-10-24', createdByUserId: 'me', createdAtUtc: '2026-10-31T06:00:00Z',
+            modifiedAtUtc: '2026-10-31T12:00:00Z', isCorrected: false, direction: 'Expense',
+        };
+        pushBatchMock.mockImplementation(async (request: PushRequest) => ({
+            serverTimeUtc: '2026-10-31T12:00:00.000Z',
+            results: request.mutations.map(m => ({
+                clientRequestId: m.clientRequestId, mutationType: m.mutationType, status: 'applied' as const,
+                ...(m.mutationType === SyncMutationName.MoveDailyLog && { data: { log: { id: LOG }, moneyMoved: [moved] } }),
+            })),
+        }));
+
+        // Save: the record's money, made exactly as the save makes it (in the money book at once, queued for the server).
+        financeCommandService.createMoneyEventFromSource({
+            type: 'VoiceLog', sourceId: `${LOG}:input:in-1`, dateTime: '2026-10-31T06:00:00Z', eventType: 'Expense',
+            category: 'Input', farmId: FARM, logId: LOG, amount: 500, createdByUserId: 'me',
+        });
+        await vi.waitFor(async () => expect(await rowOf(`${SyncMutationName.AddCostEntry}:${MONEY}`)).toBeDefined());
+        expect(financeService.peekMoneyEvents().find(e => e.id === MONEY)?.plotId).toBeUndefined();
+
+        // Move at once.
+        await MoveDailyLogCommand.enqueue(MOVE);
+        await backgroundSyncWorker.triggerNow();
+
+        expect((await getDatabase().costEntries.get(MONEY))?.payload).toMatchObject({ plotId: PLOT, entryDate: '2026-10-24', amount: 500 });
+        const inBook = financeService.peekMoneyEvents().find(e => e.id === MONEY);
+        expect(inBook).toMatchObject({ plotId: PLOT, amount: 500 });
+        expect(inBook?.dateTime).toMatch(/^2026-10-24/);
+        // Money the server did not name stays exactly as it was (the phone never moves money on its own).
+        expect((await getDatabase().costEntries.get(OLD_KEY))?.payload).toMatchObject({ plotId: 'plot-old', entryDate: '2026-10-25' });
+    });
+
+    it('refused because its money has not arrived while that money is still on its way from this phone: it waits, uncharged', async () => {
+        await getDatabase().mutationQueue.add({
+            deviceId: mutationQueue.getDeviceId(), clientRequestId: `${SyncMutationName.AddCostEntry}:${MONEY}`,
+            clientCommandId: `${SyncMutationName.AddCostEntry}:${MONEY}`, mutationType: SyncMutationName.AddCostEntry,
+            payload: { costEntryId: MONEY }, status: 'FAILED', createdAt: '2026-10-31T09:00:00.000Z', updatedAt: '2026-10-31T09:00:00.000Z',
+            retryCount: 1, nextRetryAfterMs: Date.now() + 3_600_000,
+        } as never);
+        const id = await MoveDailyLogCommand.enqueue(MOVE);
+        refuseWith('ShramSafal.LogMoveMoneyNotFound.Conflict');
+
+        await backgroundSyncWorker.triggerNow();
+
+        const row = await rowOf(id);
+        expect(row?.status).toBe('FAILED');
+        expect(row?.retryCount).toBe(0);
+        expect(await readPendingLogIds(getDatabase())).toContain(LOG);
+    });
+
+    it('refused because its money has not arrived and none is on its way: the refusal stands with its plain reason', async () => {
+        const id = await MoveDailyLogCommand.enqueue(MOVE);
+        refuseWith('ShramSafal.LogMoveMoneyNotFound.Conflict');
+
+        await backgroundSyncWorker.triggerNow();
+
+        const row = await rowOf(id);
+        expect(row?.status).toBe('REJECTED_USER_REVIEW');
+        expect(row?.errorCode).toBe('ShramSafal.LogMoveMoneyNotFound.Conflict');
+        expect(await readPendingLogIds(getDatabase())).not.toContain(LOG);
     });
 });

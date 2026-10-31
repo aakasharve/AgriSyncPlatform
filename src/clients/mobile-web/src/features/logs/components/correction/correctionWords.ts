@@ -109,7 +109,12 @@ const mr: CorrectionWords = {
         stale: 'तुम्ही पाहिल्यानंतर दुसऱ्या कोणी हे बदललं.',
         futureDay: 'तो दिवस अजून आलेला नाही.',
         noSeason: 'त्या दिवशी त्या प्लॉटवर कोणतंही पीक नव्हतं.',
-        linked: 'या कामावर हजेरी / पैसे जोडलेले आहेत — आधी ते बदला.',
+        // Lane OF-S fix pass 2 (item 9) — one plain reason per cause, none says "change it first" (nothing he can do
+        // changes these). PROPOSED (Marathi).
+        attendance: 'या दिवसाच्या हजेरीत यातील लोक आहेत, त्यामुळे हे काम हलवता येत नाही.',
+        jobCard: 'या कामाला काम कार्ड जोडलेलं आहे, त्यामुळे हे काम हलवता येत नाही.',
+        moneyShared: 'या कामाचे पैसे आधीच प्लॉटमध्ये वाटले आहेत, त्यामुळे हे काम हलवता येत नाही.',
+        moneyNotFound: 'या कामाचे पैसे जुन्या पद्धतीने जतन झाले आहेत किंवा अजून पोहोचले नाहीत, त्यामुळे हे काम हलवता येत नाही.',
         notAllowed: 'हे तुम्हाला बदलता येत नाही — मालकाला सांगा.',
         other: '',
     },
@@ -179,7 +184,11 @@ const en: CorrectionWords = {
         stale: 'Someone changed this after you saw it.',
         futureDay: 'That day has not come yet.',
         noSeason: 'No crop was on that plot on that day.',
-        linked: 'Attendance or money is linked to this work — change those first.',
+        // Lane OF-S fix pass 2 (item 9). PROPOSED (English).
+        attendance: 'People on this work are in that day\'s attendance, so it cannot be moved.',
+        jobCard: 'A job card is linked to this work, so it cannot be moved.',
+        moneyShared: 'This work\'s money is already shared out across plots, so it cannot be moved.',
+        moneyNotFound: 'This work\'s money was saved the old way or has not arrived yet, so it cannot be moved.',
         notAllowed: 'You cannot change this — tell the owner.',
         other: '',
     },

@@ -28,9 +28,13 @@ beforeEach(async () => { await getDatabase().mutationQueue.clear(); });
 
 describe('lane OF-S — the plain reason on the conflict page', () => {
     it.each([
-        [SyncMutationName.MoveDailyLog, 'ShramSafal.LogMoveLinkedRecords.Conflict',
-            'प्लॉट / दिवस बदलला नाही — सर्व्हरवर आहे तसंच ठेवलं. या कामावर हजेरी / पैसे जोडलेले आहेत — आधी ते बदला.',
-            'The plot / day was not changed — it is kept as the server has it. Attendance or money is linked to this work — change those first.'],
+        [SyncMutationName.MoveDailyLog, 'ShramSafal.LogMoveAttendance.Conflict',
+            'प्लॉट / दिवस बदलला नाही — सर्व्हरवर आहे तसंच ठेवलं. या दिवसाच्या हजेरीत यातील लोक आहेत, त्यामुळे हे काम हलवता येत नाही.',
+            'The plot / day was not changed — it is kept as the server has it. People on this work are in that day\'s attendance, so it cannot be moved.'],
+        // fix pass 2 (orchestrator call) — money saved the old way, kept on the phone, or not arrived.
+        [SyncMutationName.MoveDailyLog, 'ShramSafal.LogMoveMoneyNotFound.Conflict',
+            'प्लॉट / दिवस बदलला नाही — सर्व्हरवर आहे तसंच ठेवलं. या कामाचे पैसे जुन्या पद्धतीने जतन झाले आहेत किंवा अजून पोहोचले नाहीत, त्यामुळे हे काम हलवता येत नाही.',
+            'The plot / day was not changed — it is kept as the server has it. This work\'s money was saved the old way or has not arrived yet, so it cannot be moved.'],
         [SyncMutationName.CorrectLabourAssignment, 'ShramSafal.LabourCorrection.Conflict',
             'मजुरांचा बदल झाला नाही — सर्व्हरवर आहे तसंच ठेवलं. तुम्ही पाहिल्यानंतर दुसऱ्या कोणी हे बदललं.',
             'The workers change was not made — it is kept as the server has it. Someone changed this after you saw it.'],

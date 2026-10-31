@@ -6,22 +6,25 @@ import { reconcileSyncPull } from '../../features/sync/pull/SyncPullReconciler';
 import { isLogsRebuildDue, REFUSAL_RESTORES_SERVER_VERSION, requestLogsRebuild } from '../../features/sync/pull/logsRebuildMarker';
 import { getDatabase } from '../storage/DexieDatabase';
 import { AiJobWorker } from './AiJobWorker';
-import { isSyncMutationType } from './SyncMutationCatalog';
+import { isSyncMutationType, SyncMutationName } from './SyncMutationCatalog';
 import { getRootStore } from '../../app/state/RootStore';
 import {
     categorizePushFailure,
     categorizeRejection,
     isDependencyPendingRejection,
     isEntitlementHeldRejection,
+    isMoneyDependencyRejection,
     isPlotDependencyRejection,
 } from './RejectionPolicy';
 import {
     describeDependencyRejection,
     describeDependencyWait,
     resolveDailyLogDependency,
+    resolveMoneyDependency,
     resolvePlotDependency,
 } from './MutationDependency';
 import { resetFailedUploadsToPending } from './UploadQueueRetry';
+import { takeMovedMoney } from '../../features/finance/movedMoney';
 
 // Sub-plan 04 Task 4 — bridge worker → syncMachine. Wrapped so the worker
 // never crashes if the root store hasn't been instantiated (e.g., during
@@ -409,6 +412,14 @@ export class BackgroundSyncWorker {
 
                 if (result.status === 'applied' || result.status === 'duplicate') {
                     await mutationQueue.markApplied(mutationId);
+                    // spec: plr-d10 (lane OF-S fix pass 2, N1/N3) — a move answers with exactly the money it took along:
+                    // written here at once (no waiting for a pull), and nothing else is moved on this phone. A failure is
+                    // said, never swallowed; the pull at the end of the cycle carries the same rows.
+                    if (mutation.mutationType === SyncMutationName.MoveDailyLog) {
+                        await takeMovedMoney(result.data).catch((error: unknown) => {
+                            console.error('BackgroundSyncWorker: the money a move took could not be written on this phone yet', error);
+                        });
+                    }
                     // §P0.7 review B002 — A ROW THE SERVER HAS ACCEPTED IS NOT A
                     // CONFLICT, AND THE BADGE MUST STOP SAYING IT IS.
                     //
@@ -456,9 +467,12 @@ export class BackgroundSyncWorker {
                     continue;
                 }
 
+                // spec: plr-d10 (lane OF-S fix pass 2, N4) — a move refused because its record's money has not arrived
+                // waits (uncharged) while that money is still on its way from THIS phone; otherwise the refusal stands.
                 const resolveDependency = isDependencyPendingRejection(rejection)
                     ? resolveDailyLogDependency
-                    : isPlotDependencyRejection(rejection) ? resolvePlotDependency : null;
+                    : isPlotDependencyRejection(rejection) ? resolvePlotDependency
+                        : isMoneyDependencyRejection(rejection) ? resolveMoneyDependency : null;
                 if (resolveDependency) {
                     const verdict = await resolveDependency(
                         mutationQueue.getDeviceId(),

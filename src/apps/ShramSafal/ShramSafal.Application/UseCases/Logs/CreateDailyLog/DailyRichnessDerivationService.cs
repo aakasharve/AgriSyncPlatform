@@ -19,7 +19,15 @@ public sealed class DailyRichnessDerivationService(
         var logs = await repository.GetDailyLogsForFarmDateAsync(farmId, localDate, ct);
         if (logs.Count == 0)
         {
-            return; // nothing recorded for the day → no aggregate (Phase 3 folds absence as neutral)
+            // Nothing recorded for the day → no aggregate (Phase 3 folds absence as neutral). spec: plr-d10 (lane OF-S fix
+            // pass 2, N5) — a day LEFT empty (its only record moved to another day) keeps no old score or day type either:
+            // its row goes, so every reader (day understanding, farmer engagement) sees it exactly as a day never recorded.
+            if (await repository.GetDailyRichnessAggregateForUpdateAsync(farmId, localDate, ct) is { } emptied)
+            {
+                repository.RemoveDailyRichnessAggregate(emptied);
+            }
+
+            return;
         }
 
         // Gather the day's persisted signals.

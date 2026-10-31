@@ -62,6 +62,7 @@
 import { getDatabase, type MutationQueueStatus } from '../storage/DexieDatabase';
 import { MAX_AUTO_RETRY_COUNT } from './retryCap';
 import { SyncMutationName } from './SyncMutationCatalog';
+import { moneyEntryIdFor } from '../../features/finance/moneyEntryIdentity';
 
 /**
  * Where the parent daily-log id lives inside each child mutation's payload.
@@ -148,7 +149,7 @@ export type DependencyDisposition =
 export interface DependencyVerdict {
     disposition: DependencyDisposition;
     /** What the parent is — absent means a daily log, the original and commonest case. */
-    parentKind?: 'plot' | 'crop cycle';
+    parentKind?: 'plot' | 'crop cycle' | 'money entry';
     /** The parent plot / crop-cycle id, when `parentKind` is set. */
     parentId?: string;
     /** The parent daily-log id, when one could be read off the payload. */
@@ -287,7 +288,7 @@ export async function resolveDailyLogDependency(
  * farm), so the ordinary classification stands.
  */
 interface QueuedParent {
-    kind: 'plot' | 'crop cycle';
+    kind: 'plot' | 'crop cycle' | 'money entry';
     id: string;
     clientRequestId: string;
 }
@@ -383,6 +384,65 @@ export async function resolvePlotDependency(
     }
 
     return waiting ?? { disposition: 'NOT_A_DEPENDENCY' };
+}
+
+// ---------------------------------------------------------------------------
+// spec: plr-d10 (lane OF-S fix pass 2, N4) — the MONEY a move of a saved record needs on the server first.
+// ---------------------------------------------------------------------------
+
+/**
+ * PURE — the money rows a `move_daily_log` names: one per line that stated an amount (`moneyLines`), keyed the
+ * derivable way `AddCostEntryCommand` keys them (`add_cost_entry:{costEntryId}`, the id derived from the line's source
+ * key exactly as the save derived it). Any other mutation names none.
+ */
+export function moneyParentsOf(mutationType: string, payload: unknown): QueuedParent[] {
+    if (mutationType !== SyncMutationName.MoveDailyLog) {
+        return [];
+    }
+    const dailyLogId = readStringField(payload, 'dailyLogId');
+    const lines = typeof payload === 'object' && payload !== null
+        ? (payload as Record<string, unknown>).moneyLines
+        : undefined;
+    if (!dailyLogId || !Array.isArray(lines)) {
+        return [];
+    }
+
+    const parents: QueuedParent[] = [];
+    for (const line of lines) {
+        const kind = readStringField(line, 'kind');
+        const lineId = readStringField(line, 'lineId');
+        if (kind && lineId) {
+            const costEntryId = moneyEntryIdFor(`${dailyLogId}:${kind}:${lineId}`);
+            parents.push({ kind: 'money entry', id: costEntryId, clientRequestId: `${SyncMutationName.AddCostEntry}:${costEntryId}` });
+        }
+    }
+    return parents;
+}
+
+/**
+ * A move the server refused because a stated line's money is not there: if that money is still on its way from THIS
+ * phone (its row is waiting, sending, or failed below the cap), the move waits for it — uncharged, never parked. Any
+ * other state (no row here: saved the old way or kept on the phone; a row refused or out of retries) is not a wait:
+ * the refusal stands, with its own plain reason, and the farmer is told.
+ */
+export async function resolveMoneyDependency(
+    deviceId: string,
+    mutationType: string,
+    payload: unknown,
+): Promise<DependencyVerdict> {
+    for (const parent of moneyParentsOf(mutationType, payload)) {
+        const row = await findQueuedRow(deviceId, parent.clientRequestId);
+        if (row && classifyParentStatus(row.status, row.retryCount) === 'PARENT_IN_PROGRESS') {
+            return {
+                disposition: 'PARENT_IN_PROGRESS',
+                parentKind: parent.kind,
+                parentId: parent.id,
+                parentClientRequestId: parent.clientRequestId,
+                parentStatus: row.status,
+            };
+        }
+    }
+    return { disposition: 'NOT_A_DEPENDENCY' };
 }
 
 /**

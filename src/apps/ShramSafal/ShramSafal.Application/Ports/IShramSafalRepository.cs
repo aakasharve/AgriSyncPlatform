@@ -1107,6 +1107,15 @@ public interface IShramSafalRepository
     Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default)
         => Task.FromResult<LabourAssignment?>(null);
 
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S fix pass 2, N6) — the engagement read AGAIN for a change, after the caller has taken its
+    /// record's row hold (<see cref="GetDailyLogForChangeAsync"/>): a copy read before the hold may be stale (another
+    /// correction may have changed it and let go), so its columns are re-read from the database. Same scoping caveat as
+    /// <see cref="GetLabourAssignmentByIdAsync"/>. The default (no row locks) is the ordinary read.
+    /// </summary>
+    Task<LabourAssignment?> GetLabourAssignmentForChangeAsync(Guid id, CancellationToken ct = default)
+        => GetLabourAssignmentByIdAsync(id, ct);
+
     /// <summary>All active-or-not <see cref="FieldOperator"/> identities originated on a farm, for the field-operator list read.</summary>
     Task<IReadOnlyList<FieldOperator>> GetFieldOperatorsForFarmAsync(FarmId farmId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<FieldOperator>>([]);
@@ -1599,6 +1608,15 @@ public interface IShramSafalRepository
     Task AddDailyRichnessAggregateAsync(
         ShramSafal.Domain.Dfes.DailyRichnessAggregate aggregate, CancellationToken ct = default)
         => Task.CompletedTask;
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S fix pass 2, N5) — stage the removal of a day's aggregate: a day left with no record (its
+    /// only record moved away) must look exactly like a day that never had one, which is NO row (the create path writes
+    /// one only for a day with records). The aggregate is derived only — nothing else writes it — so nothing is lost.
+    /// The default throws: a repository that cannot remove it must not pretend it did.
+    /// </summary>
+    void RemoveDailyRichnessAggregate(ShramSafal.Domain.Dfes.DailyRichnessAggregate aggregate)
+        => throw new NotSupportedException("This repository cannot remove a day aggregate.");
 
     // ── DFES Phase 5 — question-engine telemetry (append-only ssf.question_events) ──
     /// <summary>

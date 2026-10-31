@@ -169,6 +169,10 @@ public sealed class QueuedLabourCorrectionRealPostgresTests(Xunit.Abstractions.I
         history.Should().Equal("WorkerCount:8->6");
         (await ScalarAsync("SELECT content_version FROM ssf.daily_logs WHERE \"Id\" = @id", logId)).Should().Be(2,
             "a headcount that moved is a material change, exactly as on the online route");
+        // fix pass 2 (N7) — one replay record for the request, however often it is sent.
+        var stored = await ScalarTextAsync("SELECT COUNT(*) FROM ssf.sync_mutations WHERE client_request_id = @id", "req-ofs-labour-1");
+        output.WriteLine($"[EVIDENCE] sync_mutations rows for the replayed request: {stored}");
+        stored.Should().Be(1L);
     }
 
     [Fact]
@@ -350,6 +354,54 @@ public sealed class QueuedLabourCorrectionRealPostgresTests(Xunit.Abstractions.I
         var version = await ScalarAsync("SELECT content_version FROM ssf.daily_logs WHERE \"Id\" = @id", logId);
         output.WriteLine($"[EVIDENCE] version after the held change (+1) and the correction (+1): {version}");
         version.Should().Be(3, "neither bump is lost: the correction read the record only after the other change let go");
+    }
+
+    [Fact]
+    public async Task N6_a_correction_reads_the_workers_only_after_the_hold_so_a_racing_correction_is_never_overwritten_unseen()
+    {
+        await AssertRunsAsNonSuperuserAsync();
+        var (logId, assignmentId) = await PlantEngagementAsync(FarmA, PlotA, CycleA, workerCount: 8);
+
+        // Another correction (from another phone) holds the record and is changing the same crew 8 -> 7.
+        await using var other = new NpgsqlConnection(_superuserConn);
+        await other.OpenAsync();
+        await using var tx = await other.BeginTransactionAsync();
+        await using (var hold = new NpgsqlCommand("SELECT 1 FROM ssf.daily_logs WHERE \"Id\" = @id FOR UPDATE", other, tx))
+        {
+            hold.Parameters.AddWithValue("id", logId);
+            await hold.ExecuteNonQueryAsync();
+        }
+
+        // His phone saw 8 and asks for 6. It reads the crew, then waits on the hold.
+        var mine = PushAsync(MukadamA, "req-ofs-n6-race", CorrectionPayload(assignmentId, logId, FarmA, newCount: 6, seenCount: 8));
+        await Task.Delay(1500);
+        await using (var first = new NpgsqlCommand("""
+            UPDATE ssf.labour_assignments SET worker_count = 7 WHERE "Id" = @aid;
+            UPDATE ssf.daily_logs SET content_version = content_version + 1 WHERE "Id" = @id;
+            """, other, tx))
+        {
+            first.Parameters.AddWithValue("aid", assignmentId);
+            first.Parameters.AddWithValue("id", logId);
+            await first.ExecuteNonQueryAsync();
+        }
+
+        await tx.CommitAsync();
+        var answer = await mine;
+        output.WriteLine($"[EVIDENCE] the second correction after the first let go -> {answer.Status} {answer.ErrorCode}; " +
+            $"worker_count={await ScalarAsync("SELECT worker_count FROM ssf.labour_assignments WHERE \"Id\" = @id", assignmentId)}");
+        answer.ErrorCode.Should().Be("ShramSafal.LabourCorrection.Conflict",
+            "he saw 8, the crew is now 7: his change is refused, never written over the other one unseen");
+        (await ReadEngagementAsync(assignmentId)).WorkerCount.Should().Be(7);
+    }
+
+    private async Task<object?> ScalarTextAsync(string sql, string id)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.AddWithValue("id", id);
+        return await cmd.ExecuteScalarAsync();
     }
 
     private async Task ExecOnSuperuserAsync(string sql, params (string Name, object Value)[] args)

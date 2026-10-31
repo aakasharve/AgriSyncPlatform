@@ -138,14 +138,14 @@ describe('lane OF-S — moving a saved entry, offline', () => {
 describe('lane OF-S fix 1 — a refused change can be made again (B001), a same-place pick changes nothing (B006)', () => {
     const refuse = async (mutationType: string) => {
         const row = (await getDatabase().mutationQueue.toArray()).find(r => r.mutationType === mutationType)!;
-        await getDatabase().mutationQueue.update(row.id!, { status: 'REJECTED_USER_REVIEW', errorCode: 'ShramSafal.LogMoveLinkedRecords.Conflict', lastError: 'refused' });
+        await getDatabase().mutationQueue.update(row.id!, { status: 'REJECTED_USER_REVIEW', errorCode: 'ShramSafal.LogMoveAttendance.Conflict', lastError: 'refused' });
     };
 
     it('the same move made again AFTER a refusal is queued again — never shown moved with nothing on its way', async () => {
         const { d } = deps();
         await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d);
         await refuse(SyncMutationName.MoveDailyLog);
-        expect(await readRefusedChange(LOG)).toEqual({ kind: 'move', reason: 'linked' });
+        expect(await readRefusedChange(LOG)).toMatchObject({ kind: 'move', reason: 'attendance' });
 
         // He clears the हजेरी ruling, the server's version comes back (version 3 again), and he makes the same move.
         await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d);
@@ -203,41 +203,67 @@ describe('lane OF-S fix 1 — a refused change can be made again (B001), a same-
     });
 });
 
-describe('lane OF-S fix 1 — the money of the entry follows it on this phone too (B002)', () => {
+describe('lane OF-S fix pass 2 — the money of the entry: the server finds it, the phone moves none on its own (N1)', () => {
     const ASSIGNMENT = '0f5e2000-0000-4000-8000-0000000000d1';
+    const CREW_LINE = 'crew-line-1';
     const WITH_MONEY = {
         ...ENTRY,
-        labour: [{ id: ASSIGNMENT, labourAssignmentId: ASSIGNMENT, type: 'HIRED', count: 8, totalCost: 2800 }],
-        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }],
-        machinery: [], activityExpenses: [],
+        labour: [{ id: CREW_LINE, labourAssignmentId: ASSIGNMENT, type: 'HIRED', count: 8, totalCost: 2800 },
+            { id: 'crew-unpaid', labourAssignmentId: '0f5e2000-0000-4000-8000-0000000000d2', type: 'HIRED', count: 2 }],
+        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }, { id: 'in-2', productName: 'युरिया' }],
+        machinery: [{ id: 'm-1', type: 'tractor', rentalCost: 300 }, { id: 'm-2', type: 'sprayer', fuelCost: 0 }],
+        activityExpenses: [{ id: 'exp-1', category: 'Transport', totalAmount: 200 }],
     } as unknown as DailyLog;
-    const labourMoney = moneyEntryIdFor(`${LOG}:labour:${ASSIGNMENT}`);
-    const inputMoney = moneyEntryIdFor(`${LOG}:input:in-1`);
-    const otherMoney = moneyEntryIdFor('bill-9:line-1');
     const row = (id: string, amount: number) => ({
         id, farmId: 'farm-1', updatedAt: 'T',
         payload: { id, farmId: 'farm-1', plotId: G1, cropCycleId: 'cycle-g1', amount, entryDate: '2026-10-25', categoryId: 'other' },
     });
     const payloadOf = async (id: string) => (await getDatabase().costEntries.get(id))?.payload as Record<string, unknown>;
 
-    it('its money entries on this phone take the new plot and day, keeping their amounts; other money stays', async () => {
-        await getDatabase().costEntries.bulkPut([row(labourMoney, 2800), row(inputMoney, 500), row(otherMoney, 90)]);
+    it('the move names every line that stated an amount and made money this phone knows of — pulled, queued or kept', async () => {
+        const idOf = (key: string) => moneyEntryIdFor(`${LOG}:${key}`);
+        // The crew's money came back in a pull; the input's is still in the outbox; the expense's was kept on this phone.
+        await getDatabase().costEntries.bulkPut([row(idOf(`labour:${ASSIGNMENT}`), 2800)]);
+        await getDatabase().mutationQueue.add({
+            deviceId: 'd', clientRequestId: `${SyncMutationName.AddCostEntry}:${idOf('input:in-1')}`,
+            clientCommandId: `${SyncMutationName.AddCostEntry}:${idOf('input:in-1')}`, mutationType: SyncMutationName.AddCostEntry,
+            payload: {}, status: 'PENDING', createdAt: '2026-10-31T09:00:00.000Z', updatedAt: 'T', retryCount: 0,
+        } as never);
+        await getDatabase().uiPrefs.put({
+            key: 'agrisync_held_money_v1',
+            value: [{ costEntryId: idOf('activity-expense:exp-1'), payload: {}, reason: 'no-farm', heldAt: 'T' }],
+        } as never);
         const { d } = deps();
-        await queueSavedEntryMove(WITH_MONEY, { scope: scope([S1], ['cane']), dateKey: '2026-10-24' }, d);
 
-        expect(await payloadOf(labourMoney)).toMatchObject({ plotId: S1, entryDate: '2026-10-24', amount: 2800 });
-        expect(await payloadOf(inputMoney)).toMatchObject({ plotId: S1, entryDate: '2026-10-24', amount: 500 });
-        expect((await payloadOf(labourMoney)).cropCycleId).not.toBe('cycle-g1'); // never the old plot's season
-        expect(await payloadOf(otherMoney)).toMatchObject({ plotId: G1, entryDate: '2026-10-25' });
+        await queueSavedEntryMove(WITH_MONEY, { scope: scope([S1], ['cane']) }, d);
+
+        const move = (await moves())[0];
+        expect((move.payload as { moneyLines?: unknown }).moneyLines).toEqual([
+            { kind: 'labour', lineId: ASSIGNMENT },
+            { kind: 'input', lineId: 'in-1' },
+            { kind: 'activity-expense', lineId: 'exp-1' },
+        ]); // the tractor's ₹300 was priced by a later edit: no money was ever made for it, so it is not named
     });
 
-    it('to the whole farm: its money names no plot and no season', async () => {
-        await getDatabase().costEntries.bulkPut([row(inputMoney, 500)]);
+    it('an entry that stated no amount sends no list at all', async () => {
         const { d } = deps();
-        await queueSavedEntryMove(WITH_MONEY, { scope: scope([], ['FARM_GLOBAL']) }, d);
-        const payload = await payloadOf(inputMoney);
-        expect(payload.plotId).toBeUndefined();
-        expect(payload.cropCycleId).toBeUndefined();
-        expect(payload.entryDate).toBe('2026-10-25');
+        await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d);
+        const [move] = await moves();
+        expect(move.payload).not.toHaveProperty('moneyLines');
+    });
+
+    it('money saved under the OLD key and money of withheld details: nothing on this phone moves when the move is queued', async () => {
+        // The crew's money as a build before fix 1 keyed it (its local line id), and an expense the server never saw.
+        const oldKeyLabour = moneyEntryIdFor(`${LOG}:labour:${CREW_LINE}`);
+        const keptExpense = moneyEntryIdFor(`${LOG}:activity-expense:exp-1`);
+        const inputMoney = moneyEntryIdFor(`${LOG}:input:in-1`);
+        await getDatabase().costEntries.bulkPut([row(oldKeyLabour, 2800), row(keptExpense, 200), row(inputMoney, 500)]);
+        const { d } = deps();
+
+        await queueSavedEntryMove(WITH_MONEY, { scope: scope([S1], ['cane']), dateKey: '2026-10-24' }, d);
+
+        for (const id of [oldKeyLabour, keptExpense, inputMoney]) {
+            expect(await payloadOf(id)).toMatchObject({ plotId: G1, cropCycleId: 'cycle-g1', entryDate: '2026-10-25' });
+        }
     });
 });

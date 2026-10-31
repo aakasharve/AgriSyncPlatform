@@ -38,8 +38,13 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// machinery, disturbance rows) moves without being touched. The COPIES of its place or day that follow it: a named
 /// person's work row (<see cref="FieldOperatorWorkRow.WorkDate"/>), the plot on an observation made from it
 /// (<see cref="Domain.Farms.ObservationEvent.PlotId"/>), and the money entries the phone made from its lines
-/// (<see cref="CostEntry"/>: plot, season and day; the amount never changes, P7) — found by recomputing their ids from
-/// this record's id and the line ids the server holds (<see cref="MoneyEntryIdentity"/>), never by matching amounts.</item>
+/// (<see cref="CostEntry"/>; the amount never changes, P7) — found by recomputing their ids from this record's id and
+/// the line ids the server holds or the phone names (<see cref="MoneyEntryIdentity"/>), never by matching amounts. A
+/// money entry takes the new plot (none for several plots / the whole farm) only when the PLACE changes, and the new
+/// day only when the day changes AND it was dated on the record's old day (fix pass 2, N2: the phone dates a record's
+/// money on the day it was SAVED, which is often not the record's day); its season is the one season on its plot that
+/// covers its own day (the phone's rule, <c>resolveMoneyPlace</c>). The answer lists exactly the money moved
+/// (<see cref="MoveDailyLogResultDto"/>), and the phone moves nothing else (N1).</item>
 /// <item><b>Copies left as they were, on purpose</b> (fix pass 1, B010) — the typed ledger rows derived at capture
 /// (<c>farm_operations</c>: their identity, <c>DerivedEventKey</c>, contains the capture plot, so rewriting it would make
 /// a later re-confirm of the same capture duplicate instead of supersede); the weather reading (<c>weather_stamps</c>: a
@@ -47,12 +52,23 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// asked, about which plot, when); a task line's compliance verdict (immutable once stamped, I-17); the routine pattern
 /// (a count with no link back to which record fed it). None of them is read by a farmer screen or the pull, and the DFES
 /// day totals rebuilt below read the record's children by <c>daily_log_id</c> — never a copied day.</item>
-/// <item><b>What refuses a move</b> (CTO call, lane OF-S; widened in fix pass 1) — a हजेरी ruling on the OLD day for a
-/// person named on this record's labour, an ABSENT ruling on the NEW day for one (a work row there would contradict
-/// it); ANY live job card linked to the record (every one, never the first found); and money from its lines that can
-/// no longer move by itself (tied to a job card's payout, or split across plots by an allocation). Refused whole:
-/// nothing changes (<see cref="ShramSafalErrors.LogMoveLinkedRecords"/>). A place-only move is not stopped by हजेरी: a
-/// ruling is about a person on a DAY and names no plot.</item>
+/// <item><b>What refuses a move</b> (CTO call, lane OF-S; widened in fix passes 1 and 2), each with its own plain
+/// reason (item 9) and each refusing it WHOLE — nothing changes:
+/// <list type="bullet">
+/// <item>ANY live job card linked to the record (every one, never the first found), or its money being a card's payout
+/// (<see cref="ShramSafalErrors.LogMoveJobCard"/>);</item>
+/// <item>a line that STATED an amount whose money cannot be found by its derived id — saved the old way, kept on the
+/// phone, or not arrived yet (<see cref="ShramSafalErrors.LogMoveMoneyNotFound"/>; orchestrator call, fix pass 2). The
+/// stated lines are: a crew with a stated total; an input, machinery or expense line with an amount in the details as
+/// the record was CREATED (money is made only at the create; a line added by a later edit made none); every line the
+/// moving phone names (those whose money it holds, has queued or kept: details it alone may hold); and, for a record whose details the server never held, any old-style line whose notes state
+/// money in the phone's own fixed words — its money cannot be found by id at all. A line with no stated amount expects
+/// no money and never blocks;</item>
+/// <item>its money already shared out across plots by an allocation (<see cref="ShramSafalErrors.LogMoveMoneyShared"/>);</item>
+/// <item>a हजेरी ruling on the OLD day for a person named on this record's labour, or an ABSENT ruling on the NEW day
+/// for one (<see cref="ShramSafalErrors.LogMoveAttendance"/>). A place-only move is not stopped by हजेरी: a ruling is
+/// about a person on a DAY and names no plot.</item>
+/// </list></item>
 /// <item><b>History, never silent mutation (P3)</b> — current truth is the record row; the move is kept as ONE
 /// append-only audit row (<c>DailyLog</c> / <c>LogMoved</c>: old place and day → new, who, when, why, versions). The
 /// AI-parse correction ledger (<c>CorrectionEvent</c>) is deliberately NOT used: it is keyed on a parse, scoped to a
@@ -72,12 +88,27 @@ public sealed class MoveDailyLogHandler(
     // side-car the create path runs. Optional so direct-construction tests compile; without it nothing is recomputed.
     IDailyRichnessDerivationService? dailyRichnessDerivation = null,
     DbContext? dbContext = null)
-    : IHandler<MoveDailyLogCommand, DailyLogDto>
+    : IHandler<MoveDailyLogCommand, MoveDailyLogResultDto>
 {
     /// <summary>The audit action of the one ledger row a move writes.</summary>
     public const string MovedAction = "LogMoved";
 
-    public async Task<Result<DailyLogDto>> HandleAsync(MoveDailyLogCommand command, CancellationToken ct = default)
+    /// <summary>The most money lines one move may name (a real record has a handful).</summary>
+    public const int MaxMoneyLines = 500;
+
+    /// <summary>The longest line id the content document allows (<c>LogContentDocument</c>, 128).</summary>
+    public const int MaxLineIdLength = 128;
+
+    /// <summary>
+    /// The labels the phone's OLD path writes for a line that can carry money (<c>logTaskPayloads.ts</c>,
+    /// <c>buildTaskPayloads</c>, the same in 1.0.15–1.0.17): "Spray X" / "Fertilizer X" for an input, "Machinery X".
+    /// </summary>
+    private static readonly string[] OldMoneyLineLabels = ["Spray ", "Fertilizer ", "Machinery "];
+
+    /// <summary>The phone's own fixed words for a stated amount in an old-style line's notes ("Cost: ₹500").</summary>
+    private static readonly string[] OldMoneyWords = ["Cost: ", "Rent: ", "Fuel: "];
+
+    public async Task<Result<MoveDailyLogResultDto>> HandleAsync(MoveDailyLogCommand command, CancellationToken ct = default)
     {
         // ── 1. Shape. Nothing is read yet. ─────────────────────────────────────────────────────
         var newPlotIds = command.NewPlotIds?.ToArray();
@@ -85,23 +116,26 @@ public sealed class MoveDailyLogHandler(
             || (newPlotIds is not null && (newPlotIds.Length == 0 || command.WholeFarm
                 || newPlotIds.Any(id => id == Guid.Empty) || newPlotIds.Distinct().Count() != newPlotIds.Length))
             || (newPlotIds is null && !command.WholeFarm && command.NewLogDate is null)
-            || command.Reason is { Length: > 400 })
+            || command.Reason is { Length: > 400 }
+            || command.MoneyLines is { Count: > MaxMoneyLines }
+            || (command.MoneyLines?.Any(line => !MoneyEntryIdentity.IsKind(line.Kind)
+                || string.IsNullOrWhiteSpace(line.LineId) || line.LineId.Length > MaxLineIdLength) ?? false))
         {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.InvalidCommand);
         }
 
         // ── 2. The record, held for this change (a second change waits and then sees this one). ───
         var log = await repository.GetDailyLogForChangeAsync(command.DailyLogId, ct);
         if (log is null)
         {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.DailyLogNotFound);
         }
 
         var now = clock.UtcNow;
         if (await LogEditGate.CheckAsync(repository, entitlementPolicy, log, command.ActorUserId, now, ct) is { } refusal)
         {
             logger.LogWarning("move_daily_log for {LogId} refused: {Code}.", log.Id, refusal.Code);
-            return Result.Failure<DailyLogDto>(refusal);
+            return Result.Failure<MoveDailyLogResultDto>(refusal);
         }
 
         // ── 3. When. ───────────────────────────────────────────────────────────────────────────
@@ -109,7 +143,7 @@ public sealed class MoveDailyLogHandler(
         if (command.NewLogDate is { } chosenDay && LogDayRule.IsAfterFarmToday(chosenDay, now))
         {
             logger.LogWarning("move_daily_log for {LogId} refused: {Day} is after the farm's today.", log.Id, chosenDay);
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.LogDateInFuture);
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogDateInFuture);
         }
 
         // ── 4. Where. Every plot read under the farm scope AND checked against the record's farm (E4). ───
@@ -128,7 +162,7 @@ public sealed class MoveDailyLogHandler(
                 if (plot is null || plot.FarmId != log.FarmId)
                 {
                     logger.LogWarning("move_daily_log for {LogId} refused: a chosen plot is not on the record's farm.", log.Id);
-                    return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
+                    return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.Forbidden);
                 }
             }
 
@@ -149,14 +183,14 @@ public sealed class MoveDailyLogHandler(
             if (cropCycleId is null)
             {
                 logger.LogWarning("move_daily_log for {LogId} refused: no crop season on the plot covers {Day}.", log.Id, targetDate);
-                return Result.Failure<DailyLogDto>(ShramSafalErrors.LogMoveNoCropCycle);
+                return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveNoCropCycle);
             }
         }
 
         // Already there: nothing to move, nothing written, no version, no re-open.
         if (log.IsPlacedAt(scope, targetPlots, cropCycleId, targetDate))
         {
-            return Result.Success(log.ToDto());
+            return Result.Success(new MoveDailyLogResultDto(log.ToDto(), []));
         }
 
         // ── 5. Never over a newer change. ───────────────────────────────────────────────────────
@@ -165,7 +199,7 @@ public sealed class MoveDailyLogHandler(
             logger.LogInformation(
                 "move_daily_log for {LogId} refused as stale: made from version {Base}, the record is at {Current}.",
                 log.Id, command.BaseVersion, log.ContentVersion);
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.LogMoveStale);
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveStale);
         }
 
         // ── 6. What is tied to it and cannot follow. Still nothing staged. ────────────────────
@@ -176,19 +210,40 @@ public sealed class MoveDailyLogHandler(
         {
             logger.LogWarning("move_daily_log for {LogId} refused: job card {JobCardId} ({Status}) is linked to it.",
                 log.Id, liveCard.Id, liveCard.Status);
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.LogMoveLinkedRecords);
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveJobCard);
         }
 
-        // Its money (fix 1, B002): the entries the phone made from its lines, found by their derived ids.
-        var money = await repository.GetCostEntriesByIdsAsync(await MoneyIdsOfAsync(log, ct), ct);
-        money = money.Where(entry => entry.FarmId == log.FarmId).ToList(); // E4: never another farm's row
+        // Its money (fix 1, B002; fix 2, orchestrator call): every entry made from its lines, found by derived id — and
+        // every line that STATED an amount must have one, or the record does not move without it (P4).
+        var lines = await MoneyLinesOfAsync(log, command.MoneyLines, ct);
+        if (lines.Unfindable)
+        {
+            logger.LogWarning("move_daily_log for {LogId} refused: its details were never sent and an old-style line states money.", log.Id);
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveMoneyNotFound);
+        }
+
+        var money = (await repository.GetCostEntriesByIdsAsync(lines.LookFor, ct))
+            .Where(entry => entry.FarmId == log.FarmId) // E4: never another farm's row
+            .ToList();
+        var missing = lines.Stated.Count(id => money.All(entry => entry.Id != id));
+        if (missing > 0)
+        {
+            logger.LogWarning("move_daily_log for {LogId} refused: the money of {Missing} stated line(s) was not found.", log.Id, missing);
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveMoneyNotFound);
+        }
+
         foreach (var entry in money)
         {
-            if (entry.JobCardId is not null || await repository.GetDayLedgerBySourceCostEntryIdAsync(entry.Id, ct) is not null)
+            if (entry.JobCardId is not null)
             {
-                logger.LogWarning("move_daily_log for {LogId} refused: its money entry {CostEntryId} is tied to a payout or an allocation.",
-                    log.Id, entry.Id);
-                return Result.Failure<DailyLogDto>(ShramSafalErrors.LogMoveLinkedRecords);
+                logger.LogWarning("move_daily_log for {LogId} refused: its money entry {CostEntryId} is a job card's payout.", log.Id, entry.Id);
+                return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveJobCard);
+            }
+
+            if (await repository.GetDayLedgerBySourceCostEntryIdAsync(entry.Id, ct) is not null)
+            {
+                logger.LogWarning("move_daily_log for {LogId} refused: its money entry {CostEntryId} is shared out across plots.", log.Id, entry.Id);
+                return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveMoneyShared);
             }
         }
 
@@ -211,7 +266,7 @@ public sealed class MoveDailyLogHandler(
                 {
                     logger.LogWarning("move_daily_log for {LogId} refused: a हजेरी ruling on {Day} names a person on it.",
                         log.Id, log.LogDate);
-                    return Result.Failure<DailyLogDto>(ShramSafalErrors.LogMoveLinkedRecords);
+                    return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveAttendance);
                 }
 
                 // fix 1 (B008) — marked ABSENT on the new day: a work row there would contradict the ruling (the
@@ -220,7 +275,7 @@ public sealed class MoveDailyLogHandler(
                 {
                     logger.LogWarning("move_daily_log for {LogId} refused: a person on it is marked absent on {Day}.",
                         log.Id, targetDate);
-                    return Result.Failure<DailyLogDto>(ShramSafalErrors.LogMoveLinkedRecords);
+                    return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveAttendance);
                 }
             }
         }
@@ -238,9 +293,19 @@ public sealed class MoveDailyLogHandler(
             row.FollowEngagementToDay(targetDate);
         }
 
+        // fix 2 (N2) — a plot-only move never touches a money entry's day; a day move shifts only the money dated on the
+        // record's OLD day. An entry neither change reaches is not moved and not listed.
         var moneyMoved = new List<object>(money.Count);
+        var movedMoney = new List<CostEntry>(money.Count);
         foreach (var entry in money)
         {
+            var plot = placeChanges ? singlePlot : entry.PlotId;
+            var day = dayChanges && entry.EntryDate == fromDay ? targetDate : entry.EntryDate;
+            if (plot == entry.PlotId && day == entry.EntryDate)
+            {
+                continue;
+            }
+
             moneyMoved.Add(new
             {
                 costEntryId = entry.Id,
@@ -248,7 +313,8 @@ public sealed class MoveDailyLogHandler(
                 fromCropCycleId = entry.CropCycleId,
                 fromEntryDate = entry.EntryDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             });
-            entry.FollowRecord(singlePlot, cropCycleId, targetDate, now);
+            entry.FollowRecord(plot, plot is { } onIt ? await MoneySeasonAsync(log, onIt, day, ct) : null, day, now);
+            movedMoney.Add(entry);
         }
 
         IReadOnlyList<Domain.Farms.ObservationEvent> observations = placeChanges
@@ -331,52 +397,83 @@ public sealed class MoveDailyLogHandler(
             "move_daily_log moved {LogId} from {FromDay} to {ToDay} ({Scope}); version {FromVersion} -> {ToVersion}; {Rows} work row(s) followed.",
             log.Id, fromDay, targetDate, scope, fromVersion, log.ContentVersion, workRows.Count);
 
+        // The day the record left (fix 2, N5: left empty, it is cleared to a day that never had a record), and the day it
+        // is on now — also after a plot-only move, whose day reads the record's plot (the weather check).
         if (dayChanges)
         {
             await RecomputeDayAsync((Guid)log.FarmId, fromDay, ct);
-            await RecomputeDayAsync((Guid)log.FarmId, targetDate, ct);
         }
 
-        return Result.Success(log.ToDto());
+        await RecomputeDayAsync((Guid)log.FarmId, targetDate, ct);
+
+        return Result.Success(new MoveDailyLogResultDto(log.ToDto(), movedMoney.Select(entry => entry.ToDto()).ToList()));
     }
 
     /// <summary>
-    /// fix 1 (B002) — the ids of the money entries the phone made from this record's lines (<see cref="MoneyEntryIdentity"/>):
-    /// a crew's stated total under its engagement id, and an input, machinery or expense line under its own id — the ids
-    /// of EVERY stored version of the record's details (money made from a line a later edit removed is still its money).
-    /// Line ids the server does not hold cannot be recomputed, and are not guessed.
+    /// fix 1 (B002), fix 2 (orchestrator call) — the money of this record's lines. <c>LookFor</c>: the ids of every money
+    /// entry the phone can have made from them (<see cref="MoneyEntryIdentity"/>: a crew under its engagement id, an
+    /// input / machinery / expense line under its own id, from EVERY stored version — money made from a line a later edit
+    /// removed is still its money — and every line the moving phone names). <c>Stated</c>: the ones that MUST be found,
+    /// because the line stated an amount: a crew's stated total; a line with an amount in the details as the record was
+    /// CREATED (money is made only at the create, <c>LogCommandService.confirmAndSave</c>); every line the phone names.
+    /// <c>Unfindable</c>: the server never held the record's details from its create, and an old-style line states money
+    /// in the phone's own fixed words — that money's id cannot be derived at all, so the move cannot be made safely.
+    /// Line ids the server does not hold are never guessed.
     /// </summary>
-    private async Task<IReadOnlyCollection<Guid>> MoneyIdsOfAsync(DailyLog log, CancellationToken ct)
+    private async Task<RecordMoneyLines> MoneyLinesOfAsync(DailyLog log, IReadOnlyList<MoveMoneyLine>? phoneLines, CancellationToken ct)
     {
-        var ids = new HashSet<Guid>();
+        var lookFor = new HashSet<Guid>();
+        var stated = new HashSet<Guid>();
         foreach (var assignment in await repository.GetLabourAssignmentsForDailyLogsAsync([log.Id], ct))
         {
-            ids.Add(MoneyEntryIdentity.ForRecordLine(log.Id, MoneyEntryIdentity.Labour, assignment.Id.ToString("D")));
+            var id = MoneyEntryIdentity.ForRecordLine(log.Id, MoneyEntryIdentity.Labour, assignment.Id.ToString("D"));
+            lookFor.Add(id);
+            if (assignment.TotalCost is > 0)
+            {
+                stated.Add(id);
+            }
         }
 
+        var heldFromCreate = false;
+        var unreadableCreate = false;
         foreach (var version in await repository.GetDailyLogContentVersionsAsync(log.Id, ct))
         {
+            var atCreate = version.Origin != DailyLogContent.OriginRevision;
+            heldFromCreate |= atCreate;
             try
             {
                 using var document = JsonDocument.Parse(version.DocumentJson);
-                AddLineIds(ids, log.Id, document.RootElement, "inputs", MoneyEntryIdentity.Input);
-                AddLineIds(ids, log.Id, document.RootElement, "machinery", MoneyEntryIdentity.Machinery);
-                AddLineIds(ids, log.Id, document.RootElement, "activityExpenses", MoneyEntryIdentity.ActivityExpense);
+                AddLines(log.Id, document.RootElement, "inputs", MoneyEntryIdentity.Input, atCreate, lookFor, stated);
+                AddLines(log.Id, document.RootElement, "machinery", MoneyEntryIdentity.Machinery, atCreate, lookFor, stated);
+                AddLines(log.Id, document.RootElement, "activityExpenses", MoneyEntryIdentity.ActivityExpense, atCreate, lookFor, stated);
             }
             catch (JsonException ex)
             {
-                // Never silent: a stored version that cannot be read gives no line ids, and the move says so in the log.
+                // Never silent. An unreadable CREATE document hides what its lines stated: the move cannot be made safely.
+                unreadableCreate |= atCreate;
                 logger.LogWarning(ex, "move_daily_log for {LogId}: content version {Version} could not be read for its money lines.",
                     log.Id, version.ContentVersion);
             }
         }
 
-        return ids;
+        foreach (var line in phoneLines ?? [])
+        {
+            var id = MoneyEntryIdentity.ForRecordLine(log.Id, line.Kind, line.LineId);
+            lookFor.Add(id);
+            stated.Add(id);
+        }
+
+        var unfindable = unreadableCreate || (!heldFromCreate && log.Tasks.Any(StatesMoneyTheOldWay));
+        return new RecordMoneyLines(lookFor, stated, unfindable);
     }
 
-    private static void AddLineIds(HashSet<Guid> ids, Guid logId, JsonElement root, string bucket, string kind)
+    private sealed record RecordMoneyLines(IReadOnlyCollection<Guid> LookFor, IReadOnlyCollection<Guid> Stated, bool Unfindable);
+
+    private static void AddLines(
+        Guid logId, JsonElement root, string bucket, string kind, bool atCreate, HashSet<Guid> lookFor, HashSet<Guid> stated)
     {
-        if (!root.TryGetProperty(bucket, out var rows) || rows.ValueKind != JsonValueKind.Array)
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty(bucket, out var rows) || rows.ValueKind != JsonValueKind.Array)
         {
             return;
         }
@@ -387,9 +484,61 @@ public sealed class MoveDailyLogHandler(
                 && row.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
                 && id.GetString() is { Length: > 0 } lineId)
             {
-                ids.Add(MoneyEntryIdentity.ForRecordLine(logId, kind, lineId));
+                var moneyId = MoneyEntryIdentity.ForRecordLine(logId, kind, lineId);
+                lookFor.Add(moneyId);
+                if (atCreate && StatedAmount(row, kind) > 0)
+                {
+                    stated.Add(moneyId);
+                }
             }
         }
+    }
+
+    /// <summary>
+    /// The amount a line stated, by the phone's own rule for making money from it (<c>captureMoneyEventsFromLog</c>): an
+    /// input's <c>cost</c>, a machine's <c>rentalCost</c> + <c>fuelCost</c>, an expense's <c>totalAmount</c>.
+    /// </summary>
+    private static decimal StatedAmount(JsonElement row, string kind) => kind switch
+    {
+        MoneyEntryIdentity.Input => Amount(row, "cost"),
+        MoneyEntryIdentity.Machinery => Amount(row, "rentalCost") + Amount(row, "fuelCost"),
+        MoneyEntryIdentity.ActivityExpense => Amount(row, "totalAmount"),
+        _ => 0m,
+    };
+
+    private static decimal Amount(JsonElement row, string field)
+    {
+        if (!row.TryGetProperty(field, out var value))
+        {
+            return 0m;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetDecimal(out var number) => number,
+            JsonValueKind.String when decimal.TryParse(value.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var text) => text,
+            _ => 0m,
+        };
+    }
+
+    /// <summary>An old-style line (a record whose details never reached the server) that states money in the phone's words.</summary>
+    private static bool StatesMoneyTheOldWay(LogTask task) =>
+        OldMoneyLineLabels.Any(label => task.ActivityType.StartsWith(label, StringComparison.Ordinal))
+        && task.Notes is { } notes
+        && OldMoneyWords.Any(word => notes.Contains(word, StringComparison.Ordinal));
+
+    /// <summary>
+    /// fix 2 (N2) — a money entry's season: the ONE season on <paramref name="plotId"/> (this farm) whose dates cover
+    /// <paramref name="day"/>; none or two → none, never guessed (the phone's rule for money, <c>selectCycleContainingDate</c>).
+    /// </summary>
+    private async Task<Guid?> MoneySeasonAsync(DailyLog log, Guid plotId, DateOnly day, CancellationToken ct)
+    {
+        var covering = (await repository.GetCropCyclesByPlotIdAsync(plotId, ct))
+            .Where(c => c.FarmId == log.FarmId && c.PlotId == plotId
+                        && c.StartDate <= day && (c.EndDate is null || c.EndDate >= day))
+            .Select(c => c.Id)
+            .ToList();
+        return covering.Count == 1 ? covering[0] : null;
     }
 
     /// <summary>The crop season on <paramref name="plotId"/> (this farm only) that covers <paramref name="day"/>, or null.</summary>

@@ -21,6 +21,11 @@ export interface MoveDailyLogPayload {
     newLogDate?: string;
     reason?: string;
     revisedAtUtc: string;
+    /**
+     * fix pass 2 (orchestrator call) — every line that stated an amount (`recordMoneyLines.ts`); the server must find each
+     * one's money or refuses the whole move. Not part of the request id: the same move made again keeps its id.
+     */
+    moneyLines?: Array<{ kind: 'labour' | 'input' | 'machinery' | 'activity-expense'; lineId: string }>;
 }
 
 /** NEVER CHANGE: every queued move's request id is derived under it. */

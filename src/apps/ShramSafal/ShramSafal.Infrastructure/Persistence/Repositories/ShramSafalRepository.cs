@@ -451,6 +451,9 @@ internal sealed class ShramSafalRepository(
         await db.DailyRichnessAggregates.AddAsync(aggregate, ct);
     }
 
+    public void RemoveDailyRichnessAggregate(Domain.Dfes.DailyRichnessAggregate aggregate)
+        => db.DailyRichnessAggregates.Remove(aggregate);
+
     public async Task AddQuestionEventAsync(ShramSafal.Domain.Dfes.QuestionEvent e, CancellationToken ct = default)
         => await db.QuestionEvents.AddAsync(e, ct);
 
@@ -1843,6 +1846,20 @@ internal sealed class ShramSafalRepository(
 
     public async Task<LabourAssignment?> GetLabourAssignmentByIdAsync(Guid id, CancellationToken ct = default)
     {
+        return await db.LabourAssignments.FindAsync([id], ct);
+    }
+
+    public async Task<LabourAssignment?> GetLabourAssignmentForChangeAsync(Guid id, CancellationToken ct = default)
+    {
+        // A tracked copy read before the caller's row hold may be stale: re-read its columns now (FindAsync alone would
+        // hand back the cached instance with the old values).
+        var tracked = db.ChangeTracker.Entries<LabourAssignment>().FirstOrDefault(e => e.Entity.Id == id);
+        if (tracked is not null && db.Database.IsRelational())
+        {
+            await tracked.ReloadAsync(ct);
+            return tracked.State == EntityState.Detached ? null : tracked.Entity;
+        }
+
         return await db.LabourAssignments.FindAsync([id], ct);
     }
 

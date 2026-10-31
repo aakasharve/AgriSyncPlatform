@@ -438,11 +438,11 @@ describe.each(['mr', 'en'] as const)('lane OF — "किंवा दाबू�
 
     it('lane OF-S: a refused move is said in plain words on that entry — put back as the server has it, and why', async () => {
         const { deps } = realSave();
-        render(<Harness start={[ENTRY]} save={deps} refused={{ kind: 'move', reason: 'linked' }} />);
+        render(<Harness start={[ENTRY]} save={deps} refused={{ kind: 'move', reason: 'jobCard' }} />);
         act(() => openCorrection('log-1'));
         const banner = await screen.findByTestId('corr-server-refused');
         expect(banner).toHaveTextContent(language === 'en' ? 'The plot / day was not changed — it is kept as the server has it.' : 'प्लॉट / दिवस बदलला नाही — सर्व्हरवर आहे तसंच ठेवलं.');
-        expect(banner).toHaveTextContent(language === 'en' ? 'Attendance or money is linked to this work — change those first.' : 'या कामावर हजेरी / पैसे जोडलेले आहेत — आधी ते बदला.');
+        expect(banner).toHaveTextContent(language === 'en' ? 'A job card is linked to this work, so it cannot be moved.' : 'या कामाला काम कार्ड जोडलेलं आहे, त्यामुळे हे काम हलवता येत नाही.');
         expect(banner).not.toHaveTextContent(language === 'en' ? 'only on this phone' : 'फक्त या फोनवर');
     });
 

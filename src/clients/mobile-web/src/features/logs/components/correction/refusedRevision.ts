@@ -21,10 +21,16 @@ import { correctionWords } from './correctionWords';
 /** Which change was refused. */
 export type RefusedKind = 'revision' | 'move' | 'workers';
 
-/** Why, as far as the server's code says (anything else claims no reason). */
-export type RefusedReason = 'stale' | 'futureDay' | 'noSeason' | 'linked' | 'notAllowed' | 'other';
+/**
+ * Why, as far as the server's code says (anything else claims no reason). Lane OF-S fix pass 2 (item 9): what is tied
+ * to the entry has ONE reason per cause — हजेरी, a job card, money shared out across plots, money not found — and none
+ * of them tells him to change something first when nothing he can do would change it.
+ */
+export type RefusedReason =
+    | 'stale' | 'futureDay' | 'noSeason' | 'attendance' | 'jobCard' | 'moneyShared' | 'moneyNotFound' | 'notAllowed' | 'other';
 
-export interface RefusedChange { kind: RefusedKind; reason: RefusedReason }
+/** `at` — when the refused change was made (its queue row's time), so the most recent of several can be shown. */
+export interface RefusedChange { kind: RefusedKind; reason: RefusedReason; at?: string }
 
 const KIND_OF: Readonly<Record<string, RefusedKind>> = {
     [SyncMutationName.ReviseLogContent]: 'revision',
@@ -43,8 +49,14 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
             return 'futureDay';
         case 'ShramSafal.LogMoveNoCropCycle.InvalidCommand':
             return 'noSeason';
-        case 'ShramSafal.LogMoveLinkedRecords.Conflict':
-            return 'linked';
+        case 'ShramSafal.LogMoveAttendance.Conflict':
+            return 'attendance';
+        case 'ShramSafal.LogMoveJobCard.Conflict':
+            return 'jobCard';
+        case 'ShramSafal.LogMoveMoneyShared.Conflict':
+            return 'moneyShared';
+        case 'ShramSafal.LogMoveMoneyNotFound.Conflict':
+            return 'moneyNotFound';
         case 'ShramSafal.Forbidden':
             return 'notAllowed';
         default:
@@ -96,7 +108,9 @@ export async function readRefusedChange(logId: string): Promise<RefusedChange | 
                 || (r.status === 'FAILED' && r.retryCount >= MAX_AUTO_RETRY_COUNT))
             .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
             .at(-1);
-        return refused ? { kind: KIND_OF[refused.mutationType], reason: refusalReasonOf(refused.errorCode) } : null;
+        return refused
+            ? { kind: KIND_OF[refused.mutationType], reason: refusalReasonOf(refused.errorCode), at: refused.createdAt }
+            : null;
     } catch (error) {
         // No evidence either way: no claim — but never silently (the queue could not be read).
         console.warn('refusedRevision: the sync queue could not be read', error);
@@ -114,7 +128,7 @@ export function useRefusedChange(
 /**
  * Lane OF-S fix 1 (B011) — the same, for the entries of one recording (the result screen), read again whenever
  * `refreshKey` changes (the app's last sync), so a refusal that arrives while the screen is open is shown there. The
- * most recent refusal among them.
+ * MOST RECENT refusal among them (fix pass 2: by when the refused change was made, never by the entries' order).
  */
 export function useRefusedChangeOf(
     logIds: readonly string[],
@@ -128,9 +142,18 @@ export function useRefusedChangeOf(
         const ids = key ? key.split(',') : [];
         if (ids.length === 0) { setRefused(null); return undefined; }
         void Promise.all(ids.map(id => read(id))).then(all => {
-            if (alive) setRefused(all.find((r): r is RefusedChange => r !== null) ?? null);
+            if (alive) setRefused(mostRecent(all));
         });
         return () => { alive = false; };
     }, [key, read, refreshKey]);
     return refused;
+}
+
+/** The refusal made last; one with no time counts as the oldest, and on a tie the first entry's is kept. */
+function mostRecent(all: ReadonlyArray<RefusedChange | null>): RefusedChange | null {
+    let latest: RefusedChange | null = null;
+    for (const refused of all) {
+        if (refused && (latest === null || (refused.at ?? '') > (latest.at ?? ''))) latest = refused;
+    }
+    return latest;
 }

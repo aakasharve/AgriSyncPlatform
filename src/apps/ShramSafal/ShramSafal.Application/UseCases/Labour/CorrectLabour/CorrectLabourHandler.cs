@@ -181,6 +181,15 @@ public sealed class CorrectLabourHandler(
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
         }
 
+        // lane OF-S fix pass 2 (N6) — the engagement is read AGAIN now that the record is held: the copy above was read
+        // before the hold, and a correction racing on the same crew may have changed it and let go meanwhile. Every
+        // check below (the stale check included) compares against what that correction left, never an older copy.
+        assignment = await repository.GetLabourAssignmentForChangeAsync(command.LabourAssignmentId, ct);
+        if (assignment is null || assignment.DailyLogId != dailyLog.Id)
+        {
+            return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
+        }
+
         // spec: plr-d10 (lane OF-S) — the queued path also names the RECORD; an engagement of any other log is
         // refused exactly like one of another farm (Forbidden, never NotFound: no probing by id).
         if (command.DailyLogId is { } statedLogId && assignment.DailyLogId != statedLogId)

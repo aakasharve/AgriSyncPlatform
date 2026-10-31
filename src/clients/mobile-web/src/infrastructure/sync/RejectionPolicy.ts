@@ -267,6 +267,17 @@ export function isPlotDependencyRejection(input: RejectionInput): boolean {
     return PLOT_DEPENDENCY_CODES.has(code);
 }
 
+/**
+ * spec: plr-d10 (lane OF-S fix pass 2, N4). A move refused because a line of its record stated money the server could
+ * not find (`ShramSafalErrors.LogMoveMoneyNotFound`). Whether that money is still on its way from this phone — the move
+ * then waits for it — is for `resolveMoneyDependency` to say. Matched on the FULL code: its tail is the generic CONFLICT.
+ */
+export const MOVE_MONEY_NOT_FOUND_CODE = 'ShramSafal.LogMoveMoneyNotFound.Conflict';
+
+export function isMoneyDependencyRejection(input: RejectionInput): boolean {
+    return input.errorCode === MOVE_MONEY_NOT_FOUND_CODE;
+}
+
 // ---------------------------------------------------------------------------
 // spec R-11 (c) — the FOURTH class: HELD. The farm's plan, not the row.
 // ---------------------------------------------------------------------------

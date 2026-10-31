@@ -665,13 +665,13 @@ describe('lane OF-S fix 1 (B011) — the result screen says why a move was refus
         await getDatabase().mutationQueue.add({
             deviceId: 'd', clientRequestId: 'move_daily_log:x', clientCommandId: 'move_daily_log:x', mutationType: SyncMutationName.MoveDailyLog,
             payload: { dailyLogId: NOW }, status: 'REJECTED_USER_REVIEW', createdAt: '2026-10-26T10:00:00.000Z', updatedAt: 'T', retryCount: 1,
-            lastError: 'refused', errorCode: 'ShramSafal.LogMoveLinkedRecords.Conflict',
+            lastError: 'refused', errorCode: 'ShramSafal.LogMoveMoneyNotFound.Conflict',
         });
         mount(props({ onMoveDay: vi.fn(async () => undefined) }));
         const banner = await screen.findByTestId('vr-move-refused');
         expect(banner.textContent).toContain(language === 'en'
-            ? 'Attendance or money is linked to this work — change those first.'
-            : 'या कामावर हजेरी / पैसे जोडलेले आहेत — आधी ते बदला.');
+            ? 'This work\'s money was saved the old way or has not arrived yet, so it cannot be moved.'
+            : 'या कामाचे पैसे जुन्या पद्धतीने जतन झाले आहेत किंवा अजून पोहोचले नाहीत, त्यामुळे हे काम हलवता येत नाही.');
     });
 
     it('a हजेरी-door record is never offered the day chip (it is changed in the हजेरी वही)', () => {

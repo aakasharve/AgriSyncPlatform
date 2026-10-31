@@ -15,12 +15,24 @@
 //
 // The idempotency key is the envelope's `clientRequestId` (the server dedupes every mutation on device +
 // request id); it is not repeated here, so the two can never disagree.
+//
+// `moneyLines` (lane OF-S fix pass 2) — every line of the entry that STATED an amount on this phone, by the same rule
+// the save used to make money from it (`LogCommandService.captureMoneyEventsFromLog`): a crew's stated total (its
+// engagement id), an input's cost, a machine's rent + fuel, an expense's amount. The server derives each line's money id
+// under THIS record's id and refuses the whole move when any of them is not found (money saved the old way, kept on the
+// phone, or not arrived yet); its answer lists exactly the money it moved, and the phone moves nothing else. Absent =
+// no line stated an amount.
 import { z } from 'zod';
 import { ZGuid, ZIsoDate } from './_shared.zod';
 
 const ZLogDate = z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'must be YYYY-MM-DD');
+
+const ZMoneyLine = z.object({
+    kind: z.enum(['labour', 'input', 'machinery', 'activity-expense']),
+    lineId: z.string().min(1).max(128),
+});
 
 export const MoveDailyLogPayload = z.object({
     dailyLogId: ZGuid,
@@ -30,6 +42,7 @@ export const MoveDailyLogPayload = z.object({
     newLogDate: ZLogDate.optional(),
     reason: z.string().max(400).optional(),
     revisedAtUtc: ZIsoDate,
+    moneyLines: z.array(ZMoneyLine).min(1).max(500).optional(),
 });
 
 export type MoveDailyLogPayloadType = z.infer<typeof MoveDailyLogPayload>;

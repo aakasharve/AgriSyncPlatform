@@ -9,6 +9,9 @@
  *      `move_daily_log`, queued like every other change, so it works with no internet and every phone's pull carries the
  *      new place and day (P10). The server refuses a stale move, a future day, a plot with no season that day and a move
  *      that would leave हजेरी or money behind; the phone then puts the entry back to the server's version and says why.
+ *      Its money (fix pass 2, N1): the move names every line that stated an amount (`recordMoneyLines.ts`); the server
+ *      finds each one's money or refuses, and its answer lists exactly the money it moved, which the phone then writes
+ *      (`movedMoney.ts`). The phone never moves money on its own.
  *   2. A WORKER-COUNT change with no internet: `correct_labour_assignment`, queued instead of POSTed (`UpdateLog` step 4),
  *      through the same server handler as the online route.
  *
@@ -19,8 +22,10 @@ import type { UpdateLogResponse } from '../../../../application/usecases/UpdateL
 import { MoveDailyLogCommand } from '../../../../application/usecases/sync/MoveDailyLogCommand';
 import { assertNotAfterFarmToday } from '../../../../core/domain/services/farmDay';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
+import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 import { moneyEntryIdFor } from '../../../finance/moneyEntryIdentity';
-import { resolveMoneyPlace } from '../../../finance/moneyPlace';
+import { readHeldMoney } from '../../../finance/heldMoney';
+import { recordMoneyLines, recordMoneySourceKey, type RecordMoneyLine } from '../../../finance/recordMoneyLines';
 
 const SWITCHES = {
     /** OF-S: a queued, offline-safe "move a saved log's plot / date" mutation exists (`move_daily_log`). */
@@ -94,60 +99,28 @@ export function isSamePlace(log: DailyLog, scope: LogScope): boolean {
 }
 
 /**
- * Lane OF-S fix 1 (B002) — the ids of the money entries this phone made from the entry's lines, exactly as it made them
- * (`LogCommandService.captureMoneyEventsFromLog`, `moneyEntryIdFor`): a crew's stated total, an input, machinery or
- * expense line. A crew is listed under its engagement id (how the money is keyed now, and how the server finds it) and,
- * where it differs, under its own line id (how a phone keyed it before).
+ * Lane OF-S fix pass 2 (orchestrator call) — the lines of the entry that stated an amount AND made money that this phone
+ * knows of: in its copy of the server's ledger (`costEntries`), in its outbox (`add_cost_entry:<id>`, any state), or kept
+ * on it (`heldMoney`). Money is made only when an entry is first saved, so a line added or priced by a LATER edit made
+ * none: it is not named, and the move is never refused for money that was never made. Every line named here must be
+ * found by the server, or the whole move is refused (money saved the old way, kept on the phone, or not arrived yet).
  */
-export function moneyIdsOf(log: DailyLog): string[] {
-    const ids = new Set<string>();
-    for (const crew of log.labour ?? []) {
-        if (crew.labourAssignmentId) ids.add(moneyEntryIdFor(`${log.id}:labour:${crew.labourAssignmentId}`));
-        if (crew.id) ids.add(moneyEntryIdFor(`${log.id}:labour:${crew.id}`));
-    }
-    for (const line of log.inputs ?? []) if (line.id) ids.add(moneyEntryIdFor(`${log.id}:input:${line.id}`));
-    for (const line of log.machinery ?? []) if (line.id) ids.add(moneyEntryIdFor(`${log.id}:machinery:${line.id}`));
-    for (const line of log.activityExpenses ?? []) if (line.id) ids.add(moneyEntryIdFor(`${log.id}:activity-expense:${line.id}`));
-    return [...ids];
-}
-
-/**
- * Lane OF-S fix 1 (B002) — the entry's money follows it on THIS phone too, so its money book agrees before the next
- * pull: each of its money entries the phone holds takes the new plot (none for several plots or the whole farm), that
- * plot's season on the new day, and the new day. The amount never changes (P7). The server does the same in the move
- * itself; a refused move brings the server's own money back with its version (`logsRebuildMarker.ts`).
- */
-async function followMoneyOnPhone(log: DailyLog, plotIds: readonly string[] | undefined, dateKey: string | undefined): Promise<void> {
-    const ids = moneyIdsOf(log);
-    if (ids.length === 0) return;
+async function moneyLinesToName(log: DailyLog): Promise<RecordMoneyLine[]> {
+    const lines = recordMoneyLines(log);
+    if (lines.length === 0) return [];
+    const idOf = (line: RecordMoneyLine) => moneyEntryIdFor(recordMoneySourceKey(log.id, line.kind, line.lineId));
     const db = getDatabase();
-    const rows = (await db.costEntries.bulkGet(ids)).filter((row): row is NonNullable<typeof row> => !!row);
-    if (rows.length === 0) return;
-    const onePlot = plotIds && plotIds.length === 1 ? plotIds[0] : undefined;
-    const followed = new Map<string, Record<string, unknown>>();
-    for (const row of rows) {
-        const payload = { ...(row.payload as Record<string, unknown>) };
-        const day = dateKey ?? (typeof payload.entryDate === 'string' ? payload.entryDate.slice(0, 10) : undefined);
-        if (plotIds) {
-            const place = onePlot && day ? await resolveMoneyPlace(row.farmId, onePlot, day) : undefined;
-            payload.plotId = onePlot;
-            payload.cropCycleId = place && place.sendable ? place.cropCycleId : undefined;
-        }
-        if (dateKey) payload.entryDate = dateKey;
-        await db.costEntries.put({ ...row, payload, updatedAt: new Date().toISOString() });
-        followed.set(row.id, payload);
-    }
-    // Loaded only when money actually followed: the money book's module reads the phone's tables as it loads.
-    const { financeService } = await import('../../../finance/financeService');
-    financeService._updateEvents(events => events.map(e => {
-        const payload = followed.get(e.id);
-        if (!payload) return e;
-        return {
-            ...e,
-            ...(plotIds && { plotId: payload.plotId as string | undefined, cropId: payload.cropCycleId as string | undefined }),
-            ...(dateKey && { dateTime: `${dateKey}T00:00:00Z` }),
-        };
-    }));
+    const [pulled, queued, held] = await Promise.all([
+        db.costEntries.bulkGet(lines.map(idOf)),
+        db.mutationQueue.where('mutationType').equals(SyncMutationName.AddCostEntry).toArray(),
+        readHeldMoney(),
+    ]);
+    const known = new Set<string>([
+        ...pulled.filter((row): row is NonNullable<typeof row> => !!row).map(row => row.id),
+        ...queued.map(row => row.clientRequestId.slice(`${SyncMutationName.AddCostEntry}:`.length)),
+        ...held.map(record => record.costEntryId),
+    ]);
+    return lines.filter(line => known.has(idOf(line)));
 }
 
 /** The entry as this phone holds it NOW (a change saved a moment ago may have moved its version on). */
@@ -177,6 +150,9 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
 
     const baseVersion = current.contentVersion ?? 1;
     const plotIds = scope?.selectedPlotIds ?? [];
+    // fix pass 2 (orchestrator call, N1) — every line that made money, by the rule the save made it with: the server must
+    // find each one's money or the whole move is refused (nothing left behind on the old plot / day).
+    const moneyLines = await moneyLinesToName(current);
     await MoveDailyLogCommand.enqueue({
         dailyLogId: log.id,
         baseVersion,
@@ -184,6 +160,7 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
         ...(dateKey && { newLogDate: dateKey }),
         reason: MOVE_REASON,
         revisedAtUtc: new Date().toISOString(),
+        ...(moneyLines.length > 0 && { moneyLines }),
     });
 
     const result = await deps.updateLog(log.id, {
@@ -196,9 +173,7 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
     }
     const saved = result.log;
     deps.setHistory(prev => [saved, ...prev.filter(l => l.id !== log.id)]);
-    // The move is queued and written; the money book on this phone following it is a convenience the next pull also
-    // gives (the server moves the money in the move itself). A failure here never undoes the move — it is kept in the log.
-    await followMoneyOnPhone(current, context ? plotIds : undefined, dateKey)
-        .catch((error: unknown) => console.error(`move of ${log.id}: its money on this phone could not follow yet`, error));
+    // Its money is NOT moved here (fix pass 2, N1): only once the server has moved it, and then exactly the entries the
+    // server names (`BackgroundSyncWorker` → `movedMoney.ts`). A refused move therefore leaves the money book untouched.
     return saved;
 }
