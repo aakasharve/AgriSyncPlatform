@@ -55,6 +55,7 @@ import { useOptionalFarmContext } from './core/session/FarmContext';
 import { hiddenMainViewsFor } from './core/navigation/hiddenViews';
 import { useAttentionModel } from './features/attention/hooks/useAttentionModel';
 import { useWorkTabViewChange } from './features/logs/components/entry/workHomeRequest';
+import { BOTTOM_BAR_CLEARANCE } from './shared/utils/bottomBar';
 
 interface AppContentProps {
     crops: CropProfile[];
@@ -256,13 +257,14 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
             {/* spec R-11 (c) — work held back by the farm's trial / plan, said plainly to owner and worker. */}
             <HeldWorkNotice farm={openFarm} />
 
+            {/* lane FX-1 (founder rule FOOT-1) — the ONE scroll area ends with the bar's whole room (its row, the raised
+                शेड्यूल button above it, a small gap and the phone's safe area), so every page's last line and any
+                button at its end can be scrolled clear of the bar. It used to stop 8px short of the raised button. */}
             <main
                 ref={pageScrollRef}
                 className="page-content relative flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-none"
                 style={{
-                    paddingBottom: isKeyboardOpen
-                        ? '1.5rem'
-                        : 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
+                    paddingBottom: isKeyboardOpen ? '1.5rem' : BOTTOM_BAR_CLEARANCE,
                 }}
             >
                 <AppFeatureProviders app={app} helpers={featureHelpers}>

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
+import { BOTTOM_BAR_CLEARANCE } from '../../utils/bottomBar';
 
 /**
  * Labour Phase 2 -> Phase 1, Task T2 (review round 1, §R6 item 2).
@@ -64,7 +65,8 @@ const ActionToast: React.FC<ActionToastProps> = ({
     return (
         <div
             className="fixed left-1/2 transform -translate-x-1/2 z-50 animate-slide-up w-[90%] max-w-sm"
-            style={{ bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))' }}
+            // lane FX-1 (FOOT-1) — above the bar's whole room, never under its raised centre button.
+            style={{ bottom: BOTTOM_BAR_CLEARANCE }}
         >
             <div className={`
                 flex items-center justify-between p-4 rounded-2xl shadow-hard border backdrop-blur-md

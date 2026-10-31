@@ -38,6 +38,7 @@ import { isOwnerTierRole } from './helpers/teamRoster';
 import { AUTHORITY, holdsAuthority, isPrimaryAccountHolderRole } from '../../core/session/farmAuthorities';
 import { TeamPage } from './team/TeamPage';
 import { TEAM_COPY } from './team/teamCopy';
+import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
 
 import type { CropProfile, FarmerProfile } from '../../types';
@@ -244,7 +245,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                 />
             )}
             {farmAdmin.farmLookupError && farmAdmin.showInviteQr === false && (
-                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 shadow-lg z-50">
+                // lane FX-1 (FOOT-1) — above the bar's whole room (bottom-24 sat under its raised centre button).
+                <div className="fixed left-1/2 -translate-x-1/2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700 shadow-lg z-50"
+                    style={{ bottom: BOTTOM_BAR_CLEARANCE }}>
                     {farmAdmin.farmLookupError}
                 </div>
             )}

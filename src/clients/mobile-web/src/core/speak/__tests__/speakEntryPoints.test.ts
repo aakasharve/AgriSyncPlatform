@@ -34,6 +34,9 @@ const ROUTED: Array<{ id: string; button: string; wiredIn: string; purpose: Spea
         site: /onAddAnother=\{\(\) => speakHere\(\{ purpose: 'addToDay', context: \{ place: 'current' \} \}\)\}/ },
     { id: 'result-untold-part', button: 'result screen "… सांगितलं नाही. दाबा आणि बोला" + a red ring orb', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'fillPart', place: 'current',
         site: /onTellMore=\{part => speakHere\(\{ purpose: 'fillPart', context: \{ place: 'current', part \} \}\)\}/ },
+    // Lane FX-1 (ATT-LOG + CTX-1) — no place: the ONE mic asks the crop, then the plot, then listens.
+    { id: 'result-attendance-count', button: 'result screen हजेरी card "किती जण होते ते सांगा"', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'fillPart', place: 'unknown',
+        site: /<TodayAttendanceCard state=\{attendance\} onTell=\{\(\) => speakHere\(\{ purpose: 'fillPart', context: \{ part: 'labour' \} \}\)\} \/>/ },
     { id: 'result-sathi-question', button: 'result screen Sathi question "बोलून सांगा"', wiredIn: 'core/navigation/voiceResultView.tsx', purpose: 'answerQuestion', place: 'current',
         site: /onAnswerBySpeaking=\{\(pending\) => \{\s*stashPendingQuestionAnswer\(pending\);\s*speakHere\(\{ purpose: 'answerQuestion'/ },
     { id: 'saved-sathi-question', button: 'saved card Sathi question "बोलून सांगा"', wiredIn: 'core/navigation/savedView.tsx', purpose: 'answerQuestion', place: 'current',

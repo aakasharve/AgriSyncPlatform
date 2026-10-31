@@ -17,11 +17,14 @@ import type { LogScope } from '../../../../../domain/types/log.types';
 import { LogEntryFlow, type LogEntryFlowProps, type RecorderHooks } from '../LogEntryFlow';
 import { mayOpenAttendanceFromHome, isWorkerRole } from '../../../../labour/homeAttendanceDoor';
 import { dismissTopOverlay, __resetBackStackForTests } from '../../../../../core/navigation/backStack';
+import type { TodayAttendance } from '../todayAttendance';
 
 const crop = (id: string, name: string, iconName: string, plots: string[]) =>
     ({ id, name, iconName, color: 'emerald', plots: plots.map((n, i) => ({ id: `${id}-${i + 1}`, name: n })) }) as unknown as CropProfile;
 const CROPS = [crop('cane', 'ऊस', 'Sugarcane', ['ऊस १', 'ऊस २']), crop('grape', 'द्राक्ष', 'Grape', ['सोनाका', 'थॉम्पसन'])];
 const EMPTY: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
+/** Lane FX-1 — nothing told today yet: the हजेरी card is the empty one. */
+const NOTHING_TOLD: TodayAttendance = { work: null, headcount: null, provisional: false };
 
 /** Stands in for the real recorder: it reports recording on/off, like the real one. */
 const FakeRecorder: React.FC<{ hooks: RecorderHooks }> = ({ hooks }) => (
@@ -41,6 +44,7 @@ const Harness: React.FC<HarnessProps> = ({ initialScope = EMPTY, role = 'Primary
                 labourIntent={false} onBackToLabour={vi.fn()} onClearLabourIntent={vi.fn()}
                 recordingSegment={null} onCancelSegment={vi.fn()}
                 onOpenAttendance={mayOpenAttendanceFromHome(role, cachedGrant) ? vi.fn() : undefined}
+                attendance={mayOpenAttendanceFromHome(role, cachedGrant) ? NOTHING_TOLD : undefined}
                 cost={isWorkerRole(role) ? undefined : { today: 1200, yesterday: 0, soFar: 45000, scopeLabel: 'संपूर्ण शेत' }}
                 renderRecorder={hooks => <FakeRecorder hooks={hooks} />}
                 {...over}
@@ -54,19 +58,37 @@ const scopeNow = (): LogScope => JSON.parse(screen.getByTestId('scope').textCont
 afterEach(() => { cleanup(); __resetBackStackForTests(); });
 
 describe('work home — the tab opens on the doors (H08, H10)', () => {
-    it('owner: two big doors, "झालेले काम सांगा" and "आजची हजेरी", and no plan door the server cannot back', () => {
+    it('owner: the big "झालेले काम सांगा" door and the "आजची हजेरी" card, and no plan door the server cannot back', () => {
         const onOpenAttendance = vi.fn();
         render(<Harness role="PrimaryOwner" onOpenAttendance={onOpenAttendance} />);
         expect(screen.getByTestId('home-title')).toHaveTextContent('काय करायचं आहे?');
         expect(screen.getByTestId('home-tell')).toHaveTextContent('झालेले काम सांगा');
+        // lane FX-1 (ATT-LOG): the हजेरी door is now the हजेरी card — empty until the work and the headcount are told
         expect(screen.getByTestId('home-attendance')).toHaveTextContent('आजची हजेरी');
-        expect(screen.getByTestId('home-attendance')).toHaveTextContent('हजेरी घ्या आणि हजेरी वही बघा');
-        // only these two are drawn: the plan door waits on a server model (P5), not on a door limit
-        expect(screen.getAllByRole('button')).toHaveLength(2);
+        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'empty');
+        // the door, the card's one button and its quiet link to the हजेरी place: the plan door waits on a server model (P5)
+        expect(screen.getAllByRole('button')).toHaveLength(3);
         expect(document.body.textContent).not.toContain('कामांची जबाबदारी सोपवा');
         expect(document.body.textContent).not.toContain('कामांचे नियोजन करा');
-        fireEvent.click(screen.getByTestId('home-attendance'));
+        // the old door's way to the हजेरी place (वही, आढावा, people) is kept as the card's link
+        fireEvent.click(screen.getByTestId('attendance-card-register'));
         expect(onOpenAttendance).toHaveBeenCalledTimes(1);
+    });
+
+    it('lane FX-1 (CTX-1): the हजेरी card button opens the crop question first — the same step as "झालेले काम सांगा", never the mic', () => {
+        const onOpenAttendance = vi.fn();
+        render(<Harness role="PrimaryOwner" onOpenAttendance={onOpenAttendance} />);
+        expect(screen.getByTestId('attendance-card-tell')).toHaveTextContent('आधी आजचं काम सांगा');
+        fireEvent.click(screen.getByTestId('attendance-card-tell'));
+        expect(screen.getByTestId('log-entry-flow')).toHaveAttribute('data-step', 'crop');
+        expect(screen.getByTestId('flow-sathi-question')).toHaveTextContent('कोणत्या पिकावर काम झालं ?');
+        expect(screen.queryByTestId('fake-recorder')).toBeNull();
+        expect(onOpenAttendance).not.toHaveBeenCalled();
+        // then the plot, then the mic — exactly as the big door
+        fireEvent.click(screen.getByTestId('flow-crop-grape'));
+        expect(screen.queryByTestId('fake-recorder')).toBeNull();
+        fireEvent.click(screen.getByTestId('flow-plot-grape-1'));
+        expect(screen.getByTestId('fake-recorder')).toBeInTheDocument();
     });
 
     it('worker: ONE door only — no हजेरी door, and no money', () => {

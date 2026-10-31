@@ -15,7 +15,7 @@
  * omits the prop on purpose — the fallback below surfaces the feature's own
  * existing toast instead of crashing or attempting to navigate.
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLabourState } from '../useLabourState';
 import { resolveEffectiveLabourAnchor, type LabourAnchor } from '../labourAnchor';
 import { resolveStatedHeadcount } from '../attendanceDisagreement';
@@ -61,6 +61,9 @@ import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
 import RefusedLabourNotice from './RefusedLabourNotice';
 import ReviewSheet from './ReviewSheet';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
+import { BOTTOM_BAR_CLEARANCE } from '../../../shared/utils/bottomBar';
+import { canTakeManualAttendance } from '../attendanceDoor';
+import { clearLabourOpening, peekLabourOpening } from '../labourOpening';
 
 /**
  * Labour V2 R1 Task 3.5c — the honest offline vocabulary for a queued mark,
@@ -282,6 +285,22 @@ export const LabourFeature: React.FC<{
         setAttendanceDate(getDateKey());
         push(mode ? { name: 'attendance', mode } : { name: 'attendance' });
     }, [push]);
+
+    // Lane FX-1 (ATT-LOG) — opened from the log page's ready हजेरी card: straight on to the names, over the hub (so मागे
+    // steps back through it), and only when the server's answer says this person may take हजेरी — the hub's own rule
+    // for its tile. Asked once: the note is forgotten on mount, and dropped if he moves on before the answer arrives.
+    const [namesWanted, setNamesWanted] = useState(() => peekLabourOpening() === 'names');
+    useEffect(() => { clearLabourOpening(); }, []);
+    const sawLoad = useRef(false);
+    useLayoutEffect(() => {
+        if (!namesWanted) return;
+        if (loading) { sawLoad.current = true; return; }
+        const allowed = canTakeManualAttendance(data.canManageLabour);
+        if (stack.length > 1 || error) { setNamesWanted(false); return; }
+        if (!allowed && !sawLoad.current) return; // the read-out has not come in yet
+        setNamesWanted(false);
+        if (allowed) openAttendance();
+    }, [namesWanted, loading, error, data.canManageLabour, stack.length, openAttendance]);
 
     const title = cur.name === 'mukadam' && cur.id ? (data.people[cur.id]?.name ?? 'मुकादम')
         : cur.name === 'person' && cur.id ? (data.people[cur.id]?.name ?? 'कामगार')
@@ -595,7 +614,9 @@ export const LabourFeature: React.FC<{
             )}
 
             {toast && (
-                <div className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-800 px-4 py-2.5 text-[13px] font-bold text-white shadow-lg">{toast}</div>
+                // lane FX-1 (FOOT-1) — above the bar's whole room; at bottom-8 the bar covered it ("लक्षात ठेवलं" after a save).
+                <div className="fixed left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full bg-slate-800 px-4 py-2.5 text-[13px] font-bold text-white shadow-lg"
+                    style={{ bottom: BOTTOM_BAR_CLEARANCE }}>{toast}</div>
             )}
         </div>
     );

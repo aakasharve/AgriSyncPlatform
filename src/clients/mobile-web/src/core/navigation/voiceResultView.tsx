@@ -14,6 +14,10 @@
  * clarity line (`dailyLoop`), the conservative task close (`taskCloseConfirm`), "बदला" (lane E1: the speak-the-change
  * screen, no longer the old form) and the way back to the mic of the same plot. "कामाचा नकाशा" is the आढावा tab, one tap
  * away in the page switcher; it is not repeated on this screen.
+ *
+ * Lane FX-1 (founder ATT-LOG, 2026-10-31) — when this recording says what work was done but not how many people worked,
+ * and the day has no headcount yet, the log page's EMPTY हजेरी card shows here too (only to someone who may take हजेरी).
+ * Its "किती जण होते ते सांगा" opens the ONE mic on the crop question first, then the plot (rule CTX-1).
  */
 import React from 'react';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
@@ -35,6 +39,8 @@ import { getDateKey } from '../domain/services/DateKeyService';
 import type { AppRouterContext } from './routeContext';
 import { VoiceResultContainer } from './lazyComponents';
 import { TaskCloseConfirmSlot } from './savedView';
+import { TodayAttendanceCard } from '../../features/logs/components/entry/TodayAttendanceCard';
+import { entryAttendance } from '../../features/logs/components/entry/todayAttendance';
 
 /** The voice result to show: only while it is the latest save (a typed save afterwards gets the saved card). */
 export const currentVoiceResult = (ctx: AppRouterContext): VoiceResultState | null => {
@@ -76,8 +82,15 @@ export const renderVoiceResultView = (ctx: AppRouterContext, result: VoiceResult
         ? findConfirmableTaskCloses(ctx.plannedTasks ?? [], savedLog, savedLog?.date ?? getDateKey())[0]
         : undefined;
 
-    const extras = (FEATURE_FLAGS.dailyLoop || topTaskClose) ? (
+    // Lane FX-1 — the empty हजेरी card: this recording states work, no headcount, and the day has none yet.
+    const attendance = ctx.canOpenAttendanceFromHome ? entryAttendance(logs, ctx.history) : null;
+
+    const extras = (FEATURE_FLAGS.dailyLoop || topTaskClose || attendance) ? (
         <div className="space-y-3">
+            {attendance && (
+                // No place given: the ONE mic asks the crop, then the plot, then listens (CTX-1) — never the mic directly.
+                <TodayAttendanceCard state={attendance} onTell={() => speakHere({ purpose: 'fillPart', context: { part: 'labour' } })} />
+            )}
             {FEATURE_FLAGS.dailyLoop && <DailyLoopClarity done={ctx.todayDayState.completedCount} left={ctx.todayDayState.pendingCount} />}
             {topTaskClose && (
                 <TaskCloseConfirmSlot key={topTaskClose.task.id} candidate={topTaskClose} onConfirm={(candidate) => {

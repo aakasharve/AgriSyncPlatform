@@ -12,6 +12,7 @@ import { NoWorkReasonSheet } from '../../features/logs/components/NoWorkReasonSh
 import { buildNoWorkDayPayload } from './noWorkDay';
 import { t } from '../../i18n/translations';
 import { useOptionalLanguage } from '../../i18n/LanguageContext';
+import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 
 /**
  * spec I18 — the "+" button's spoken name, in his language: the sheet's own approved question ("आज काय काम झालं?" /
@@ -26,7 +27,8 @@ export const QuickLogFab: React.FC<{ onOpen: () => void; 'data-testid'?: string 
         data-testid={testId}
         className="fixed z-40 w-14 h-14 bg-white text-emerald-600 rounded-full shadow-lg shadow-emerald-900/10 border border-emerald-100 flex items-center justify-center active:scale-95 transition-transform"
         style={{
-            bottom: 'calc(6rem + var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))',
+            // lane FX-1 (FOOT-1) — above the bar's whole room.
+            bottom: BOTTOM_BAR_CLEARANCE,
             left: 'max(1rem, var(--safe-area-inset-left, env(safe-area-inset-left, 0px)))'
         }}
         aria-label={quickLogLabel(useOptionalLanguage()?.language)}

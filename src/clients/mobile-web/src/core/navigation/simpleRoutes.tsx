@@ -44,8 +44,8 @@ import {
 // Finding F3 — SchedulerPage's "Close Day" destination. See that module's
 // header for why this hop is a window event and not a prop path.
 import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavigationEvents';
-import { resolveLabourAnchor } from '../../features/labour/labourAnchor';
-import { attendanceCaptureDay } from '../../features/logs/attendanceDraft';
+// Lane FX-1 — the ONE call for the day's हजेरी anchor (the log page's हजेरी card makes the same call).
+import { todaysLabourAnchor } from '../../features/logs/components/entry/todayAttendance';
 import { buildNoWorkDayPayload } from './noWorkDay';
 import { PageBar } from '../../shared/components/ui/placeUi';
 
@@ -102,7 +102,7 @@ export const renderLabourRoute = (ctx: AppRouterContext): React.ReactNode => {
                     // The day checked is the day a capture made NOW is filed under: the
                     // same rule as the record, its marks and the confirm card's anchor
                     // (attendanceCaptureDay). No parse exists yet, so that is today.
-                    if (!opts?.anchoredByServer && resolveLabourAnchor(ctx.history ?? [], attendanceCaptureDay(null)).state !== 'anchored') return;
+                    if (!opts?.anchoredByServer && todaysLabourAnchor(ctx.history ?? []).state !== 'anchored') return;
                     // spec: 2026-07-13-labour-attendance-approval-design (Task 3.4) —
                     // tag the intent BEFORE navigating so mainView can show a
                     // "why am I here" hint on arrival.

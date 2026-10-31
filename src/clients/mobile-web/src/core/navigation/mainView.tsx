@@ -26,6 +26,8 @@ import { getFarmWideDaySummary } from '../../app/helpers/appContentDailyCounts';
 import { LogEntryFlow } from '../../features/logs/components/entry/LogEntryFlow';
 import { SegmentBanner, SegmentCancel } from '../../features/logs/components/entry/SegmentBanner';
 import { ReviewBackBar } from '../../features/logs/components/entry/ReviewBackBar';
+import { todayAttendance } from '../../features/logs/components/entry/todayAttendance';
+import { requestLabourOpening } from '../../features/labour/labourOpening';
 import { mayShowFarmMoney } from '../../features/labour/homeAttendanceDoor';
 import { toAttendanceOnlyDraft, toAttendanceSubmission, attendanceCaptureDay } from '../../features/logs/attendanceDraft';
 import { draftProvenance } from '../../features/voice/draftProvenance';
@@ -204,6 +206,9 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
     // hand-filled form step cannot reopen with this parse in it.
     const backFromReview = () => { setDraftLog(null); setMode('voice'); };
 
+    // H10 / lane FX-1 — the हजेरी place, opened as a PLACE over the home tabs (merge-review m1: its मागे lands on home).
+    const openLabourPlace = () => (ctx.openPlace ? ctx.openPlace('labour') : setCurrentRoute('labour'));
+
     // Labour V2 R1 Task 3.4b — the ONE ManualEntry call, moved up (not modified) so the review below
     // and the entry flow's hand-filled form use the same form. `labourEdit`: the बदल करा surface of
     // the labour door's confirm card. It takes THAT draft's own parse provenance (never the voice
@@ -362,8 +367,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             // merge-review m1 — opened as a PLACE over the home tabs, so हजेरी's मागे
                             // lands on home (a plain route change could hand back the history of an
                             // earlier, abandoned "बोलून हजेरी" round trip and land on the hub).
-                            onOpenAttendance={ctx.canOpenAttendanceFromHome
-                                ? () => (ctx.openPlace ? ctx.openPlace('labour') : setCurrentRoute('labour'))
+                            onOpenAttendance={ctx.canOpenAttendanceFromHome ? openLabourPlace : undefined}
+                            // Lane FX-1 (ATT-LOG) — the हजेरी card: today's work and headcount from the day's stored logs, by
+                            // the हजेरी screen's own rule; once both are told it opens the names.
+                            attendance={ctx.canOpenAttendanceFromHome ? todayAttendance(history) : undefined}
+                            onOpenAttendanceNames={ctx.canOpenAttendanceFromHome
+                                ? () => { requestLabourOpening('names'); openLabourPlace(); }
                                 : undefined}
                             // The running-cost card (c95afa1c), re-homed on the work home. A worker sees no
                             // money (PLR-D9 §6: "कामगार — … no money"), and neither does a role the

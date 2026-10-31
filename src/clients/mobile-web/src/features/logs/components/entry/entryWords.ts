@@ -37,14 +37,10 @@ export const HOME_WORDS = {
     tell: 'झालेले काम सांगा',
     // PROPOSED (Marathi) — the line under that door (preview planModel.ts:75).
     tellSub: 'आज शेतात काय काम झालं ते बोलून किंवा लिहून सांगा',
-    /** The हजेरी door's name as shown to the founder (PLR-D9 §6 :107). */
+    /** The हजेरी door's name as shown to the founder (PLR-D9 §6 :107) — now the हजेरी card's title (lane FX-1). */
     attendance: 'आजची हजेरी',
-    // PROPOSED (Marathi) — names the two real sections of the हजेरी screen it opens (H-1).
-    // A CHANGE from what the founder saw: the preview's line was "कोण आलं ते सांगा किंवा नावावर दाबा".
-    // On the real हजेरी screen the labour mic appears only once the day's main log has stated a
-    // headcount (simpleRoutes.tsx renderLabourRoute: "No anchor → no mic"), so "सांगा" would not
-    // always be true there (P5). For his ruling.
-    attendanceSub: 'हजेरी घ्या आणि हजेरी वही बघा',
+    // Lane FX-1: the door's line "हजेरी घ्या आणि हजेरी वही बघा" went with the door; the card says the rule instead
+    // (`attendanceCardWords.ts`), and its "हजेरी वही बघा" link keeps the line's second half.
 } as const;
 
 export const ENTRY_WORDS = {

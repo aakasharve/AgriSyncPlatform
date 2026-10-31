@@ -20,23 +20,34 @@
  *
  * Lane UPD-1 (D-53): above the title, the calm "नवीन आवृत्ती आली आहे" card — drawn only when the server
  * names a newer app version than this one (`features/appUpdate`); otherwise nothing at all.
+ *
+ * Lane FX-1 (founder ATT-LOG, 2026-10-31): the "आजची हजेरी" door became the हजेरी CARD (`TodayAttendanceCard`) — empty,
+ * with the rule in big text, until today's work and the headcount are both told; its button is this page's own
+ * "झालेले काम सांगा" step (crop → plot → mic, rule CTX-1). Once both are told it opens the names. The old door's way to
+ * the हजेरी place (वही, आढावा, people) stays as the card's small "हजेरी वही बघा" link. Same people as before.
  */
 import React from 'react';
-import { ChevronRight, Hand, Mic } from 'lucide-react';
+import { ChevronRight, Mic } from 'lucide-react';
 import { SANS, Tap } from '../../../../shared/components/ui/placeUi';
 import { AppUpdateCard } from '../../../appUpdate/AppUpdateCard';
 import { HOME_WORDS } from './entryWords';
 import { RunningCostCard, type RunningCost } from './RunningCostCard';
+import { TodayAttendanceCard } from './TodayAttendanceCard';
+import type { TodayAttendance } from './todayAttendance';
 
 export interface WorkHomeProps {
     onTell: () => void;
-    /** Present only when this person may manage labour; absent = no हजेरी door at all. */
+    /** Present only when this person may manage labour; absent = no हजेरी card at all. Opens the हजेरी place (its वही). */
     onAttendance?: () => void;
+    /** Today's work and headcount as told (the हजेरी card's state). The card is drawn only with it. */
+    attendance?: TodayAttendance;
+    /** Both told: open the हजेरी screen's names. */
+    onAttendanceNames?: () => void;
     /** The running-cost card; absent = not shown to this person. */
     cost?: RunningCost;
 }
 
-export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, cost }) => (
+export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attendance, onAttendanceNames, cost }) => (
     <div className="space-y-3 px-3 pb-6 pt-3" style={{ fontFamily: SANS }} data-testid="work-home">
         <AppUpdateCard />
         <div className="relative flex min-h-[88px] items-center overflow-visible rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 pl-[26%] pr-3">
@@ -55,16 +66,10 @@ export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, cost }
             <ChevronRight size={28} className="shrink-0" aria-hidden="true" />
         </Tap>
 
-        {onAttendance && (
-            <Tap onClick={onAttendance} data-testid="home-attendance"
-                className="flex min-h-[96px] w-full items-center gap-4 rounded-[28px] border-2 border-amber-400 bg-amber-50 p-4 text-left text-stone-900 shadow-sm">
-                <span className="grid h-[60px] w-[60px] shrink-0 place-items-center rounded-full bg-amber-400 text-white"><Hand size={32} strokeWidth={2.4} aria-hidden="true" /></span>
-                <span className="min-w-0 flex-1">
-                    <span className="block text-[22px] font-extrabold leading-tight">{HOME_WORDS.attendance}</span>
-                    <span className="mt-0.5 block text-[16px] font-semibold leading-snug text-stone-700">{HOME_WORDS.attendanceSub}</span>
-                </span>
-                <ChevronRight size={26} className="shrink-0 text-amber-700" aria-hidden="true" />
-            </Tap>
+        {onAttendance && attendance && (
+            <div data-testid="home-attendance">
+                <TodayAttendanceCard state={attendance} onTell={onTell} onOpenNames={onAttendanceNames} onOpenRegister={onAttendance} />
+            </div>
         )}
 
         {cost && <RunningCostCard cost={cost} />}

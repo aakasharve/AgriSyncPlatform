@@ -31,8 +31,10 @@ import { useBackDismiss } from '../../../../core/navigation/useBackDismiss';
 import { SathiAskBand } from './SathiAskBand';
 import { WorkHome } from './WorkHome';
 import type { RunningCost } from './RunningCostCard';
+import type { TodayAttendance } from './todayAttendance';
 import { SegmentBanner, SegmentCancel } from './SegmentBanner';
 import { STEPPER_LABELS } from './entryWords';
+import { BOTTOM_BAR_CLEARANCE } from '../../../../shared/utils/bottomBar';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const EMPTY_SCOPE: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -62,6 +64,10 @@ export interface LogEntryFlowProps {
     onHomeRequestHandled?: () => void;
     /** Present only for someone who may manage labour (owner tier or the labour grant). */
     onOpenAttendance?: () => void;
+    /** Lane FX-1 — the हजेरी card's state on the work home (today's work and headcount, each told or not). */
+    attendance?: TodayAttendance;
+    /** Lane FX-1 — both told: the हजेरी card opens the names. */
+    onOpenAttendanceNames?: () => void;
     /** The running-cost card for the home; absent = not shown to this person. */
     cost?: RunningCost;
     /** Sathi's question he chose to answer by speaking (wave-3.7) — stays visible above the mic. */
@@ -86,7 +92,7 @@ export function plotsByCrop(crops: CropProfile[], scope: LogScope): Record<strin
 export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const {
         crops, logScope, setLogScope, onChooseVoice, labourIntent, onBackToLabour, onClearLabourIntent,
-        recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, cost,
+        recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, attendance, onOpenAttendanceNames, cost,
         pinnedQuestion, micLead, renderRecorder, startAt, onExit,
     } = props;
     const hasSelection = logScope.selectedCropIds.length > 0;
@@ -144,7 +150,9 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     if (step === 'home') {
         return (
             <div data-testid="log-entry-flow" data-step="home">
-                <WorkHome onTell={() => { setLogScope(EMPTY_SCOPE); setEntryStep('crop'); setStep('entry'); }} onAttendance={onOpenAttendance} cost={cost} />
+                {/* The हजेरी card's button is this same "झालेले काम सांगा" step: the crop question first (rule CTX-1). */}
+                <WorkHome onTell={() => { setLogScope(EMPTY_SCOPE); setEntryStep('crop'); setStep('entry'); }} onAttendance={onOpenAttendance}
+                    attendance={attendance} onAttendanceNames={onOpenAttendanceNames} cost={cost} />
             </div>
         );
     }
@@ -173,8 +181,8 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
                         labels: STEPPER_LABELS,
                         focusFooter: recording,
                         footer: () => (
-                            // scroll margins keep the card clear of the bottom bar (nav ~84px) and of the top edge
-                            <div ref={micAnchor} className="scroll-mb-28 scroll-mt-2" data-testid="flow-mic-anchor">
+                            // scroll margins keep the card clear of the bottom bar (its whole room, lane FX-1) and of the top edge
+                            <div ref={micAnchor} className="scroll-mt-2" style={{ scrollMarginBottom: BOTTOM_BAR_CLEARANCE }} data-testid="flow-mic-anchor">
                                 {micLead}
                                 {pinnedQuestion && (
                                     <div data-testid="shramsathi-pinned-question" className="mb-3 rounded-xl border px-4 py-3 text-[16px] font-medium"
