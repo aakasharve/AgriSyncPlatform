@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { MAX_AUTO_RETRY_COUNT } from '../../../../infrastructure/sync/retryCap';
-import { moneyParentsOf } from '../../../../infrastructure/sync/MutationDependency';
+import { moneyRowsOfRecord } from '../../../../infrastructure/sync/MutationDependency';
 import { readHeldMoney } from '../../../finance/heldMoney';
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 import { correctionWords } from './correctionWords';
@@ -30,9 +30,10 @@ export type RefusedKind = 'revision' | 'move' | 'workers';
  */
 export type RefusedReason =
     | 'stale' | 'futureDay' | 'noSeason' | 'attendance' | 'jobCard' | 'moneyShared' | 'moneyNotFound' | 'notAllowed' | 'other'
-    // fix pass 3 (R2-3) — money not found, said as it really stands on THIS phone: kept here (and how to send it, or that
-    // there is no way), or removed for good. (R2-1) — details the server never held and this phone does not hold.
-    | 'moneyKept' | 'moneyKeptStuck' | 'moneyRemoved' | 'detailsNotHere';
+    // fix passes 3–4 (R2-3, R3-3) — money not found, said as it really stands on THIS phone: kept here (and how to send
+    // it, or that there is no way), removed for good, waiting for his review, or stuck at its retry limit. (R2-1, R3-4) —
+    // the server never held the entry's details as it was created (an older app version, or details that did not arrive).
+    | 'moneyKept' | 'moneyKeptStuck' | 'moneyRemoved' | 'moneyNeedsReview' | 'moneyStuck' | 'detailsNotHeld';
 
 /** `at` — when the refused change was made (its queue row's time), so the most recent of several can be shown. */
 export interface RefusedChange { kind: RefusedKind; reason: RefusedReason; at?: string }
@@ -63,7 +64,7 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
         case 'ShramSafal.LogMoveMoneyNotFound.Conflict':
             return 'moneyNotFound';
         case 'ShramSafal.LogMoveDetailsNotHeld.Conflict':
-            return 'detailsNotHere';
+            return 'detailsNotHeld';
         case 'ShramSafal.Forbidden':
             return 'notAllowed';
         default:
@@ -102,26 +103,32 @@ export function refusalHint(mutationType: string, errorCode: string | undefined,
 interface RefusedRow { mutationType: string; errorCode?: string; payload: unknown }
 
 /**
- * Lane OF-S fix pass 3 (R2-3) — the reason for a refused row as it REALLY stands. A move refused because its money was
- * not found is looked up in this phone's own money rows: a money row discarded or refused for good → it can never move;
- * money kept on this phone → where to send it (or, its plot not on the server, that it cannot be moved); otherwise the
- * server's own words.
+ * Lane OF-S fix passes 3–4 (R2-3, R3-3) — the reason for a refused row as it REALLY stands. A move refused because its
+ * money was not found is looked up in this phone's own money rows for that record (`moneyRowsOfRecord`, read from its
+ * own store — the move names none):
+ *   - a money row DISCARDED (gone for good) → this work can never be moved;
+ *   - a money row waiting for his review → look at it on the sync page first (it can still be sent);
+ *   - a money row stuck at its retry limit → send it again from the sync page;
+ *   - money kept on this phone → where to send it (or, its plot not on the server, that it cannot be moved);
+ *   - otherwise the server's own words.
  */
 export async function refusalReasonForRow(row: RefusedRow): Promise<RefusedReason> {
     const reason = refusalReasonOf(row.errorCode);
     if (reason !== 'moneyNotFound' || row.mutationType !== SyncMutationName.MoveDailyLog) return reason;
-    const parents = moneyParentsOf(row.mutationType, row.payload);
-    if (parents.length === 0) return reason;
-    const keys = new Set(parents.map(parent => parent.clientRequestId));
-    const ids = new Set(parents.map(parent => parent.id));
+    const dailyLogId = String((row.payload as { dailyLogId?: unknown } | null)?.dailyLogId ?? '');
+    if (!dailyLogId) return reason;
+    const moneyRows = await moneyRowsOfRecord(dailyLogId);
+    const keys = new Set(moneyRows.map(money => money.clientRequestId));
+    const ids = new Set(moneyRows.map(money => money.id));
     const [rows, held] = await Promise.all([
         getDatabase().mutationQueue.where('mutationType').equals(SyncMutationName.AddCostEntry).toArray(),
         readHeldMoney(),
     ]);
-    if (rows.some(r => keys.has(r.clientRequestId) && (r.status === 'REJECTED_DROPPED' || r.status === 'REJECTED_USER_REVIEW'))) {
-        return 'moneyRemoved';
-    }
-    const kept = held.filter(record => ids.has(record.costEntryId));
+    const mine = rows.filter(r => keys.has(r.clientRequestId));
+    if (mine.some(r => r.status === 'REJECTED_DROPPED')) return 'moneyRemoved';
+    if (mine.some(r => r.status === 'REJECTED_USER_REVIEW')) return 'moneyNeedsReview';
+    if (mine.some(r => r.status === 'FAILED' && r.retryCount >= MAX_AUTO_RETRY_COUNT)) return 'moneyStuck';
+    const kept = held.filter(record => ids.has(record.costEntryId) || record.payload?.logId === dailyLogId);
     if (kept.some(record => record.reason === 'plot-not-on-server')) return 'moneyKeptStuck';
     return kept.length > 0 ? 'moneyKept' : reason;
 }

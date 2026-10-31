@@ -10,12 +10,6 @@ using System.Collections.Generic;
 
 namespace ShramSafal.Application.Contracts.Sync.Payloads;
 
-public sealed record MoneyLinesItem(
-    /// <summary>Allowed values: "labour", "input", "machinery", "activity-expense".</summary>
-    string Kind,
-    string LineId
-);
-
 public sealed record MoveDailyLogPayload(
     Guid DailyLogId,
     int BaseVersion,
@@ -23,7 +17,5 @@ public sealed record MoveDailyLogPayload(
     IReadOnlyList<Guid>? NewPlotIds = null,
     bool? WholeFarm = null,
     DateOnly? NewLogDate = null,
-    string? Reason = null,
-    IReadOnlyList<MoneyLinesItem>? MoneyLines = null,
-    bool? MoneyLinesComplete = null
+    string? Reason = null
 );

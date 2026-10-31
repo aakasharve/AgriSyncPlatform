@@ -203,15 +203,16 @@ describe('lane OF-S fix 1 — a refused change can be made again (B001), a same-
     });
 });
 
-describe('lane OF-S fix pass 2 — the money of the entry: the server finds it, the phone moves none on its own (N1)', () => {
+describe('lane OF-S fix pass 4 — the server alone decides which money moves: the phone names none and claims nothing', () => {
     const ASSIGNMENT = '0f5e2000-0000-4000-8000-0000000000d1';
     const CREW_LINE = 'crew-line-1';
-    const WITH_MONEY = {
+    // Made on THIS phone (it holds the details). The tractor's ₹300 was priced by a LATER edit: no money was ever made for it.
+    const PRICED = {
         ...ENTRY,
-        labour: [{ id: CREW_LINE, labourAssignmentId: ASSIGNMENT, type: 'HIRED', count: 8, totalCost: 2800 },
-            { id: 'crew-unpaid', labourAssignmentId: '0f5e2000-0000-4000-8000-0000000000d2', type: 'HIRED', count: 2 }],
-        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }, { id: 'in-2', productName: 'युरिया' }],
-        machinery: [{ id: 'm-1', type: 'tractor', rentalCost: 300 }, { id: 'm-2', type: 'sprayer', fuelCost: 0 }],
+        meta: { appVersion: '1.0.18' },
+        labour: [{ id: CREW_LINE, labourAssignmentId: ASSIGNMENT, type: 'HIRED', count: 8, totalCost: 2800 }],
+        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }],
+        machinery: [{ id: 'm-1', type: 'tractor', rentalCost: 300 }],
         activityExpenses: [{ id: 'exp-1', category: 'Transport', totalAmount: 200 }],
     } as unknown as DailyLog;
     const row = (id: string, amount: number) => ({
@@ -220,36 +221,13 @@ describe('lane OF-S fix pass 2 — the money of the entry: the server finds it, 
     });
     const payloadOf = async (id: string) => (await getDatabase().costEntries.get(id))?.payload as Record<string, unknown>;
 
-    it('the move names every line that stated an amount and made money this phone knows of — pulled, queued or kept', async () => {
-        const idOf = (key: string) => moneyEntryIdFor(`${LOG}:${key}`);
-        // The crew's money came back in a pull; the input's is still in the outbox; the expense's was kept on this phone.
-        await getDatabase().costEntries.bulkPut([row(idOf(`labour:${ASSIGNMENT}`), 2800)]);
-        await getDatabase().mutationQueue.add({
-            deviceId: 'd', clientRequestId: `${SyncMutationName.AddCostEntry}:${idOf('input:in-1')}`,
-            clientCommandId: `${SyncMutationName.AddCostEntry}:${idOf('input:in-1')}`, mutationType: SyncMutationName.AddCostEntry,
-            payload: {}, status: 'PENDING', createdAt: '2026-10-31T09:00:00.000Z', updatedAt: 'T', retryCount: 0,
-        } as never);
-        await getDatabase().uiPrefs.put({
-            key: 'agrisync_held_money_v1',
-            value: [{ costEntryId: idOf('activity-expense:exp-1'), payload: {}, reason: 'no-farm', heldAt: 'T' }],
-        } as never);
+    it('a line priced by a later edit is never named: the move carries no money lines and no "whole list" claim (R3-1, R3-4)', async () => {
+        await getDatabase().costEntries.bulkPut([row(moneyEntryIdFor(`${LOG}:input:in-1`), 500)]);
         const { d } = deps();
-
-        await queueSavedEntryMove(WITH_MONEY, { scope: scope([S1], ['cane']) }, d);
-
-        const move = (await moves())[0];
-        expect((move.payload as { moneyLines?: unknown }).moneyLines).toEqual([
-            { kind: 'labour', lineId: ASSIGNMENT },
-            { kind: 'input', lineId: 'in-1' },
-            { kind: 'activity-expense', lineId: 'exp-1' },
-        ]); // the tractor's ₹300 was priced by a later edit: no money was ever made for it, so it is not named
-    });
-
-    it('an entry that stated no amount sends no list at all', async () => {
-        const { d } = deps();
-        await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d);
+        await queueSavedEntryMove(PRICED, { scope: scope([S1], ['cane']) }, d);
         const [move] = await moves();
         expect(move.payload).not.toHaveProperty('moneyLines');
+        expect(move.payload).not.toHaveProperty('moneyLinesComplete');
     });
 
     it('money saved under the OLD key and money of withheld details: nothing on this phone moves when the move is queued', async () => {
@@ -260,45 +238,10 @@ describe('lane OF-S fix pass 2 — the money of the entry: the server finds it, 
         await getDatabase().costEntries.bulkPut([row(oldKeyLabour, 2800), row(keptExpense, 200), row(inputMoney, 500)]);
         const { d } = deps();
 
-        await queueSavedEntryMove(WITH_MONEY, { scope: scope([S1], ['cane']), dateKey: '2026-10-24' }, d);
+        await queueSavedEntryMove(PRICED, { scope: scope([S1], ['cane']), dateKey: '2026-10-24' }, d);
 
         for (const id of [oldKeyLabour, keptExpense, inputMoney]) {
             expect(await payloadOf(id)).toMatchObject({ plotId: G1, cropCycleId: 'cycle-g1', entryDate: '2026-10-25' });
         }
-    });
-});
-
-describe('lane OF-S fix pass 3 (R2-1) — the phone vouches for its list of priced lines only when it holds the details', () => {
-    const ASSIGNMENT = '0f5e2000-0000-4000-8000-0000000000d1';
-    const PRICED = {
-        ...ENTRY,
-        labour: [{ id: 'crew-line-1', labourAssignmentId: ASSIGNMENT, type: 'HIRED', count: 8, totalCost: 2800 }],
-        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }, { id: 'in-2', productName: 'युरिया' }],
-        machinery: [{ id: 'm-1', type: 'tractor', rentalCost: 300 }],
-        activityExpenses: [{ id: 'exp-1', category: 'Transport', totalAmount: 200 }],
-    } as unknown as DailyLog;
-
-    it('the phone that made the entry names EVERY priced line in its details, known money or not, and says the list is whole', async () => {
-        const made = { ...PRICED, meta: { appVersion: '1.0.18' } } as unknown as DailyLog;
-        const { d } = deps();
-        await queueSavedEntryMove(made, { scope: scope([S1], ['cane']) }, d);
-        const [move] = await moves();
-        expect(move.payload).toMatchObject({
-            moneyLinesComplete: true,
-            moneyLines: [
-                { kind: 'labour', lineId: ASSIGNMENT },
-                { kind: 'input', lineId: 'in-1' },
-                { kind: 'machinery', lineId: 'm-1' },
-                { kind: 'activity-expense', lineId: 'exp-1' },
-            ],
-        });
-    });
-
-    it('a phone that holds only a task-line rebuild of the entry does not vouch: no "whole list" word', async () => {
-        const rebuilt = { ...PRICED, legacyPartial: true } as unknown as DailyLog;
-        const { d } = deps();
-        await queueSavedEntryMove(rebuilt, { scope: scope([S1], ['cane']) }, d);
-        const [move] = await moves();
-        expect(move.payload).not.toHaveProperty('moneyLinesComplete');
     });
 });

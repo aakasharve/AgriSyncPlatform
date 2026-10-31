@@ -7,11 +7,10 @@
  *
  *   - the save (`LogCommandService.captureMoneyEventsFromLog`) makes one money entry per line that STATED an amount, its
  *     id derived from `<logId>:<kind>:<lineId>` (`moneyEntryIdentity.ts`);
- *   - a move of the saved record (`correctionCapabilities.queueSavedEntryMove`) tells the server those same lines
- *     (`move_daily_log.moneyLines`), so the server can find every one of them and refuses the move when one is missing.
+ *   - after a move is refused because its money was not found, the phone looks up the record's money rows in its own
+ *     store (`MutationDependency.moneyRowsOfRecord`) under the same keys — every line's, priced or not.
  *
- * Two copies of "what counts as a stated amount" could drift apart and make a move look for money the save never made
- * (or miss money it did); there is one copy, here. A line with no stated amount makes no money and is never listed.
+ * One copy of "what counts as a stated amount" and of the key, here, so the two can never drift apart.
  */
 import type { ActivityExpenseEvent, InputEvent, MachineryEvent } from '../../domain/types/log.types';
 import type { LabourEvent } from '../../domain/types/log.labour.types';
@@ -20,7 +19,7 @@ import type { DailyLog } from '../../types';
 /** The kinds of record line the phone turns into money — the server's `MoneyEntryIdentity` kinds, word for word. */
 export type RecordMoneyKind = 'labour' | 'input' | 'machinery' | 'activity-expense';
 
-/** One line that stated an amount: what the server needs to find its money. */
+/** One line of the record that can carry money: its kind and the line id its money is keyed by. */
 export interface RecordMoneyLine { kind: RecordMoneyKind; lineId: string }
 
 /** NO-MULTIPLY (Decision 3a): a crew's money is only its EXPLICIT stated total, never a rate × count. */
@@ -38,20 +37,12 @@ export const labourMoneyLineId = (entry: LabourEvent): string => `${entry.labour
 /** The source key a line's money is made under (its id is `moneyEntryIdFor` of this). */
 export const recordMoneySourceKey = (logId: string, kind: RecordMoneyKind, lineId: string): string => `${logId}:${kind}:${lineId}`;
 
-/** Every line of the record that stated an amount, in the order the save makes their money. */
-export function recordMoneyLines(log: DailyLog): RecordMoneyLine[] {
-    const lines: RecordMoneyLine[] = [];
-    for (const entry of log.labour ?? []) {
-        if (statedLabourAmount(entry)) lines.push({ kind: 'labour', lineId: labourMoneyLineId(entry) });
-    }
-    for (const entry of log.inputs ?? []) {
-        if (statedInputAmount(entry)) lines.push({ kind: 'input', lineId: `${entry.id}` });
-    }
-    for (const entry of log.machinery ?? []) {
-        if (statedMachineryAmount(entry)) lines.push({ kind: 'machinery', lineId: `${entry.id}` });
-    }
-    for (const entry of log.activityExpenses ?? []) {
-        if (statedExpenseAmount(entry)) lines.push({ kind: 'activity-expense', lineId: `${entry.id}` });
-    }
-    return lines;
+/** Every line of the record that CAN carry money, priced or not (its money, if any was made, is keyed by it). */
+export function recordMoneyLineKeys(log: DailyLog): RecordMoneyLine[] {
+    return [
+        ...(log.labour ?? []).map(entry => ({ kind: 'labour' as const, lineId: labourMoneyLineId(entry) })),
+        ...(log.inputs ?? []).map(entry => ({ kind: 'input' as const, lineId: `${entry.id}` })),
+        ...(log.machinery ?? []).map(entry => ({ kind: 'machinery' as const, lineId: `${entry.id}` })),
+        ...(log.activityExpenses ?? []).map(entry => ({ kind: 'activity-expense' as const, lineId: `${entry.id}` })),
+    ];
 }

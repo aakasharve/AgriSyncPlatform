@@ -164,13 +164,21 @@ describe('lane OF-S fix 1 (B004) — a move / worker count sent before the creat
     });
 });
 
+const putLocalRecord = (dailyLogId: string) => getDatabase().logs.put({
+    id: dailyLogId, schemaVersion: 1, date: '2026-10-30',
+    log: {
+        id: dailyLogId, date: '2026-10-30', labour: [], machinery: [],
+        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }],
+        activityExpenses: [{ id: 'exp-1', category: 'Transport', totalAmount: 200 }],
+    },
+} as never);
+
 describe('lane OF-S fix pass 2 — the money follows the server\'s answer at once (N1, N3); a move waits for its money (N4)', () => {
     const FARM = '0f5e0000-0000-4000-8000-0000000000c5';
     const MONEY = moneyEntryIdFor(`${LOG}:input:in-1`); // just saved: in the money book, not pulled yet
     const OLD_KEY = moneyEntryIdFor(`${LOG}:labour:crew-line-1`); // the record's money saved the old way
     const MOVE = {
-        dailyLogId: LOG, baseVersion: 2, newPlotIds: [PLOT], newLogDate: '2026-10-24',
-        moneyLines: [{ kind: 'input', lineId: 'in-1' }], revisedAtUtc: '2026-10-31T10:00:00.000Z',
+        dailyLogId: LOG, baseVersion: 2, newPlotIds: [PLOT], newLogDate: '2026-10-24', revisedAtUtc: '2026-10-31T10:00:00.000Z',
     } as never;
     const rowOf = async (id: string) => (await getDatabase().mutationQueue.toArray()).find(r => r.clientRequestId === id);
 
@@ -181,6 +189,7 @@ describe('lane OF-S fix pass 2 — the money follows the server\'s answer at onc
         pullChangesMock.mockClear();
         await mutationQueue.setCursor('2026-10-30T00:00:00.000Z');
         await markRebuilt();
+        await putLocalRecord(LOG); // the record as this phone holds it: the move names no money (fix pass 4)
     });
 
     it('save, then move at once: the money book shows the new place as soon as the move applies, without waiting for a pull', async () => {
@@ -256,8 +265,7 @@ describe('lane OF-S fix pass 2 — the money follows the server\'s answer at onc
 describe('lane OF-S fix pass 3 (R2-2) — a repeated move answers the same, and an answer with no money list is said', () => {
     const MONEY = moneyEntryIdFor(`${LOG}:input:in-1`);
     const MOVE = {
-        dailyLogId: LOG, baseVersion: 2, newPlotIds: [PLOT], moneyLines: [{ kind: 'input', lineId: 'in-1' }],
-        revisedAtUtc: '2026-10-31T10:00:00.000Z',
+        dailyLogId: LOG, baseVersion: 2, newPlotIds: [PLOT], revisedAtUtc: '2026-10-31T10:00:00.000Z',
     } as never;
     const answerWith = (status: 'applied' | 'duplicate', data: unknown) => pushBatchMock.mockImplementation(async (request: PushRequest) => ({
         serverTimeUtc: '2026-10-31T12:00:00.000Z',

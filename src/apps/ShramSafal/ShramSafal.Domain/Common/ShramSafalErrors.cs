@@ -236,13 +236,13 @@ public static class ShramSafalErrors
         "ShramSafal.LogMoveMoneyNotFound.Conflict",
         "This entry's money was saved the old way or has not arrived yet, so it cannot be moved. Nothing was changed.");
 
-    // spec: plr-d10 (lane OF-S fix pass 3, R2-1; orchestrator call) — the server never held the record's details as it
-    // was created (an older phone's save, or details kept on the phone), and the moving phone does not vouch that it
-    // named every line that stated an amount (it does not hold those details). An expense makes no old-style line, so
-    // nobody could show its money follows: refused whole rather than leave money on the old plot without a word (P4).
+    // spec: plr-d10 (lane OF-S fix passes 3–4; orchestrator call) — the server never held the record's details as it was
+    // created: a 1.0.15–1.0.17 save, or a create whose details did not fit and stayed on the phone. It cannot tell which
+    // of its lines made money, so nobody can show its money follows: refused whole, from every phone (P4). Every record
+    // this build makes outside the हजेरी door sends its details, even when empty.
     public static readonly Error LogMoveDetailsNotHeld = Error.Conflict(
         "ShramSafal.LogMoveDetailsNotHeld.Conflict",
-        "This entry's full details are not on the server or on the phone that moved it, so its money cannot be shown to move with it. Nothing was changed.");
+        "This entry was saved by an older version of the app, or its details did not reach the server, so its money cannot be shown to move with it. Nothing was changed.");
 
     // spec: plr-d10 (lane OF-S) — a worker-count / hours correction made against values the engagement no longer
     // holds (someone corrected it meanwhile). Refused, never written over the newer correction.

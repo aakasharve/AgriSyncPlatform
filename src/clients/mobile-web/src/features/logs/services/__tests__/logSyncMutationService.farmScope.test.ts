@@ -278,10 +278,12 @@ describe('B1c — plot-scoped and multi-plot logs are untouched', () => {
             'logDate',
             'sourceAiJobId',
             'weatherStamp',
+            // lane OF-S fix pass 4 (R3-2): every non-door create carries its details, even when empty.
+            'content',
             'labour',
         ]);
         expect(JSON.stringify(payload)).toBe(
-            `{"dailyLogId":"${LOG_UUID}","farmId":"${FARM_UUID}","plotId":"${PLOT_A}","cropCycleId":"${CYCLE_A}","logDate":"2026-08-12"}`,
+            `{"dailyLogId":"${LOG_UUID}","farmId":"${FARM_UUID}","plotId":"${PLOT_A}","cropCycleId":"${CYCLE_A}","logDate":"2026-08-12","content":{"schema":1,"capturedAtUtc":"2026-08-12T04:00:00.000Z"}}`,
         );
     });
 

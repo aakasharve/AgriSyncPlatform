@@ -39,7 +39,9 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// person's work row (<see cref="FieldOperatorWorkRow.WorkDate"/>), the plot on an observation made from it
 /// (<see cref="Domain.Farms.ObservationEvent.PlotId"/>), and the money entries the phone made from its lines
 /// (<see cref="CostEntry"/>; the amount never changes, P7) — found by recomputing their ids from this record's id and
-/// the line ids the server holds or the phone names (<see cref="MoneyEntryIdentity"/>), never by matching amounts. A
+/// the line ids the server holds (<see cref="MoneyEntryIdentity"/>), never by matching amounts and never from a list a
+/// phone sends (fix pass 4: the server alone decides). Money found for ANY line of the record moves — a line of its
+/// create-time details or of a later version — so money a later edit makes (F89) follows too. A
 /// money entry takes the new plot (none for several plots / the whole farm) only when the PLACE changes, and the new
 /// day only when the day changes AND it was dated on the record's old day (fix pass 2, N2: the phone dates a record's
 /// money on the day it was SAVED, which is often not the record's day); its season is the one season on its plot that
@@ -52,21 +54,20 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// asked, about which plot, when); a task line's compliance verdict (immutable once stamped, I-17); the routine pattern
 /// (a count with no link back to which record fed it). None of them is read by a farmer screen or the pull, and the DFES
 /// day totals rebuilt below read the record's children by <c>daily_log_id</c> — never a copied day.</item>
-/// <item><b>What refuses a move</b> (CTO call, lane OF-S; widened in fix passes 1 and 2), each with its own plain
+/// <item><b>What refuses a move</b> (CTO call, lane OF-S; widened in fix passes 1, 2 and 4), each with its own plain
 /// reason (item 9) and each refusing it WHOLE — nothing changes:
 /// <list type="bullet">
 /// <item>ANY live job card linked to the record (every one, never the first found), or its money being a card's payout
 /// (<see cref="ShramSafalErrors.LogMoveJobCard"/>);</item>
+/// <item>the server never held the record's details as it was CREATED (a 1.0.15–1.0.17 voice save, or a create whose
+/// details did not fit and stayed on the phone): it cannot tell which of its lines made money, so nobody can show its
+/// money follows (<see cref="ShramSafalErrors.LogMoveDetailsNotHeld"/>; fix pass 4 — no phone can unlock it). Every
+/// record this build makes outside the हजेरी door carries its details, even when empty (R3-2);</item>
 /// <item>a line that STATED an amount whose money cannot be found by its derived id — saved the old way, kept on the
-/// phone, or not arrived yet (<see cref="ShramSafalErrors.LogMoveMoneyNotFound"/>; orchestrator call, fix pass 2). The
-/// stated lines are: a crew with a stated total; an input, machinery or expense line with an amount in the details as
-/// the record was CREATED (money is made only at the create; a line added by a later edit made none); every line the
-/// moving phone names (those whose money it holds, has queued or kept: details it alone may hold); and, for a record whose details the server never held, any old-style line whose notes state
-/// money in the phone's own fixed words — its money cannot be found by id at all. A line with no stated amount expects
-/// no money and never blocks;</item>
-/// <item>the server never held the record's details as it was created and the moving phone does not vouch that it named
-/// every priced line in them (<see cref="ShramSafalErrors.LogMoveDetailsNotHeld"/>; fix pass 3, R2-1): an expense makes
-/// no old-style line, so nobody could show its money follows;</item>
+/// phone, or not arrived yet (<see cref="ShramSafalErrors.LogMoveMoneyNotFound"/>). The stated lines are: a crew with a
+/// stated total; an input, machinery or expense line with an amount in the record's create-time details (money is made
+/// only at the create; a line priced by a later edit made none, so it never blocks). A line with no stated amount
+/// expects no money and never blocks;</item>
 /// <item>its money already shared out across plots by an allocation (<see cref="ShramSafalErrors.LogMoveMoneyShared"/>);</item>
 /// <item>a हजेरी ruling on the OLD day for a person named on this record's labour, or an ABSENT ruling on the NEW day
 /// for one (<see cref="ShramSafalErrors.LogMoveAttendance"/>). A place-only move is not stopped by हजेरी: a ruling is
@@ -96,21 +97,6 @@ public sealed class MoveDailyLogHandler(
     /// <summary>The audit action of the one ledger row a move writes.</summary>
     public const string MovedAction = "LogMoved";
 
-    /// <summary>The most money lines one move may name (a real record has a handful).</summary>
-    public const int MaxMoneyLines = 500;
-
-    /// <summary>The longest line id the content document allows (<c>LogContentDocument</c>, 128).</summary>
-    public const int MaxLineIdLength = 128;
-
-    /// <summary>
-    /// The labels the phone's OLD path writes for a line that can carry money (<c>logTaskPayloads.ts</c>,
-    /// <c>buildTaskPayloads</c>, the same in 1.0.15–1.0.17): "Spray X" / "Fertilizer X" for an input, "Machinery X".
-    /// </summary>
-    private static readonly string[] OldMoneyLineLabels = ["Spray ", "Fertilizer ", "Machinery "];
-
-    /// <summary>The phone's own fixed words for a stated amount in an old-style line's notes ("Cost: ₹500").</summary>
-    private static readonly string[] OldMoneyWords = ["Cost: ", "Rent: ", "Fuel: "];
-
     public async Task<Result<MoveDailyLogResultDto>> HandleAsync(MoveDailyLogCommand command, CancellationToken ct = default)
     {
         // ── 1. Shape. Nothing is read yet. ─────────────────────────────────────────────────────
@@ -119,10 +105,7 @@ public sealed class MoveDailyLogHandler(
             || (newPlotIds is not null && (newPlotIds.Length == 0 || command.WholeFarm
                 || newPlotIds.Any(id => id == Guid.Empty) || newPlotIds.Distinct().Count() != newPlotIds.Length))
             || (newPlotIds is null && !command.WholeFarm && command.NewLogDate is null)
-            || command.Reason is { Length: > 400 }
-            || command.MoneyLines is { Count: > MaxMoneyLines }
-            || (command.MoneyLines?.Any(line => !MoneyEntryIdentity.IsKind(line.Kind)
-                || string.IsNullOrWhiteSpace(line.LineId) || line.LineId.Length > MaxLineIdLength) ?? false))
+            || command.Reason is { Length: > 400 })
         {
             return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.InvalidCommand);
         }
@@ -216,23 +199,16 @@ public sealed class MoveDailyLogHandler(
             return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveJobCard);
         }
 
-        // Its money (fix 1, B002; fix 2, orchestrator call): every entry made from its lines, found by derived id — and
-        // every line that STATED an amount must have one, or the record does not move without it (P4).
-        var lines = await MoneyLinesOfAsync(log, command.MoneyLines, ct);
+        // Its money (fix 1, B002; fixes 2 and 4, orchestrator calls — the server alone decides): every entry made from
+        // its lines, found by derived id; every line its create-time details priced must have one (P4).
+        var lines = await MoneyLinesOfAsync(log, ct);
 
-        // fix 3 (R2-1, orchestrator call) — the server never held the record's details as it was created, and the moving
-        // phone does not vouch that it named every priced line in them: an expense makes no old-style line, so nobody
-        // could show its money follows. Refused whole rather than leave money behind without a word.
-        if (!lines.HeldFromCreate && !command.MoneyLinesComplete)
+        // fix 4 (R3-1, R3-4) — without the record's create-time details the server cannot tell which lines made money,
+        // so nobody can show its money follows: refused whole, from every phone, rather than leave money behind.
+        if (!lines.HeldFromCreate)
         {
-            logger.LogWarning("move_daily_log for {LogId} refused: its details were never held and the phone did not name all its priced lines.", log.Id);
+            logger.LogWarning("move_daily_log for {LogId} refused: the server never held its details as it was created.", log.Id);
             return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveDetailsNotHeld);
-        }
-
-        if (lines.Unfindable)
-        {
-            logger.LogWarning("move_daily_log for {LogId} refused: its details were never sent and an old-style line states money.", log.Id);
-            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveMoneyNotFound);
         }
 
         var money = (await repository.GetCostEntriesByIdsAsync(lines.LookFor, ct))
@@ -423,17 +399,16 @@ public sealed class MoveDailyLogHandler(
     }
 
     /// <summary>
-    /// fix 1 (B002), fix 2 (orchestrator call) — the money of this record's lines. <c>LookFor</c>: the ids of every money
-    /// entry the phone can have made from them (<see cref="MoneyEntryIdentity"/>: a crew under its engagement id, an
-    /// input / machinery / expense line under its own id, from EVERY stored version — money made from a line a later edit
-    /// removed is still its money — and every line the moving phone names). <c>Stated</c>: the ones that MUST be found,
-    /// because the line stated an amount: a crew's stated total; a line with an amount in the details as the record was
-    /// CREATED (money is made only at the create, <c>LogCommandService.confirmAndSave</c>); every line the phone names.
-    /// <c>Unfindable</c>: the server never held the record's details from its create, and an old-style line states money
-    /// in the phone's own fixed words — that money's id cannot be derived at all, so the move cannot be made safely.
-    /// Line ids the server does not hold are never guessed.
+    /// fix 1 (B002), fixes 2 and 4 (orchestrator calls) — the money of this record's lines, decided by the server alone.
+    /// <c>LookFor</c>: the ids of every money entry that can have been made from them (<see cref="MoneyEntryIdentity"/>:
+    /// a crew under its engagement id, an input / machinery / expense line under its own id, from EVERY stored version —
+    /// money made from a line a later edit removed or priced is still its money). <c>Stated</c>: the ones that MUST be
+    /// found, because the line stated an amount when the record was CREATED: a crew's stated total, or a priced line of
+    /// the create-time document (money is made only at the create, <c>LogCommandService.confirmAndSave</c>).
+    /// <c>HeldFromCreate</c>: a readable create-time document (origin create or manual draft) exists — without one the
+    /// server cannot tell which lines made money. Line ids the server does not hold are never guessed.
     /// </summary>
-    private async Task<RecordMoneyLines> MoneyLinesOfAsync(DailyLog log, IReadOnlyList<MoveMoneyLine>? phoneLines, CancellationToken ct)
+    private async Task<RecordMoneyLines> MoneyLinesOfAsync(DailyLog log, CancellationToken ct)
     {
         var lookFor = new HashSet<Guid>();
         var stated = new HashSet<Guid>();
@@ -448,40 +423,29 @@ public sealed class MoveDailyLogHandler(
         }
 
         var heldFromCreate = false;
-        var unreadableCreate = false;
         foreach (var version in await repository.GetDailyLogContentVersionsAsync(log.Id, ct))
         {
             var atCreate = version.Origin != DailyLogContent.OriginRevision;
-            heldFromCreate |= atCreate;
             try
             {
                 using var document = JsonDocument.Parse(version.DocumentJson);
                 AddLines(log.Id, document.RootElement, "inputs", MoneyEntryIdentity.Input, atCreate, lookFor, stated);
                 AddLines(log.Id, document.RootElement, "machinery", MoneyEntryIdentity.Machinery, atCreate, lookFor, stated);
                 AddLines(log.Id, document.RootElement, "activityExpenses", MoneyEntryIdentity.ActivityExpense, atCreate, lookFor, stated);
+                heldFromCreate |= atCreate;
             }
             catch (JsonException ex)
             {
-                // Never silent. An unreadable CREATE document hides what its lines stated: the move cannot be made safely.
-                unreadableCreate |= atCreate;
+                // Never silent. An unreadable create document is not held details: what its lines priced cannot be told.
                 logger.LogWarning(ex, "move_daily_log for {LogId}: content version {Version} could not be read for its money lines.",
                     log.Id, version.ContentVersion);
             }
         }
 
-        foreach (var line in phoneLines ?? [])
-        {
-            var id = MoneyEntryIdentity.ForRecordLine(log.Id, line.Kind, line.LineId);
-            lookFor.Add(id);
-            stated.Add(id);
-        }
-
-        var unfindable = unreadableCreate || (!heldFromCreate && log.Tasks.Any(StatesMoneyTheOldWay));
-        return new RecordMoneyLines(lookFor, stated, unfindable, heldFromCreate);
+        return new RecordMoneyLines(lookFor, stated, heldFromCreate);
     }
 
-    private sealed record RecordMoneyLines(
-        IReadOnlyCollection<Guid> LookFor, IReadOnlyCollection<Guid> Stated, bool Unfindable, bool HeldFromCreate);
+    private sealed record RecordMoneyLines(IReadOnlyCollection<Guid> LookFor, IReadOnlyCollection<Guid> Stated, bool HeldFromCreate);
 
     private static void AddLines(
         Guid logId, JsonElement root, string bucket, string kind, bool atCreate, HashSet<Guid> lookFor, HashSet<Guid> stated)
@@ -534,12 +498,6 @@ public sealed class MoveDailyLogHandler(
             _ => 0m,
         };
     }
-
-    /// <summary>An old-style line (a record whose details never reached the server) that states money in the phone's words.</summary>
-    private static bool StatesMoneyTheOldWay(LogTask task) =>
-        OldMoneyLineLabels.Any(label => task.ActivityType.StartsWith(label, StringComparison.Ordinal))
-        && task.Notes is { } notes
-        && OldMoneyWords.Any(word => notes.Contains(word, StringComparison.Ordinal));
 
     /// <summary>
     /// fix 2 (N2) — a money entry's season: the ONE season on <paramref name="plotId"/> (this farm) whose dates cover

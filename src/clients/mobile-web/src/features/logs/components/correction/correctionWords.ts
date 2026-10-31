@@ -119,7 +119,10 @@ const mr: CorrectionWords = {
         moneyKept: 'या कामाचे पैसे अजून या फोनवरच आहेत. ते "खरेदी" मधून पाठवा, मग हे काम हलवा.',
         moneyKeptStuck: 'या कामाचे पैसे या फोनवरच आहेत आणि त्यांचा प्लॉट अजून सर्व्हरवर नाही, त्यामुळे हे काम हलवता येत नाही.',
         moneyRemoved: 'या कामाचे पैसे काढून टाकले आहेत, त्यामुळे हे काम कधीच हलवता येणार नाही.',
-        detailsNotHere: 'या कामाचा पूर्ण तपशील या फोनवर नाही, त्यामुळे इथून हे काम हलवता येत नाही.',
+        // Lane OF-S fix pass 4 (R3-3, R3-4). PROPOSED (Marathi).
+        moneyNeedsReview: 'या कामाचे पैसे सर्व्हरने अजून स्वीकारलेले नाहीत. आधी ते सिंक पानावर पाहा, मग हे काम हलवा.',
+        moneyStuck: 'या कामाचे पैसे अनेक वेळा पाठवूनही पोहोचले नाहीत. सिंक पानावरून ते पुन्हा पाठवा, मग हे काम हलवा.',
+        detailsNotHeld: 'हे काम ॲपच्या जुन्या आवृत्तीतून जतन झालं आहे किंवा त्याचा तपशील सर्व्हरवर पोहोचला नाही, त्यामुळे हे काम हलवता येत नाही.',
         notAllowed: 'हे तुम्हाला बदलता येत नाही — मालकाला सांगा.',
         other: '',
     },
@@ -198,7 +201,10 @@ const en: CorrectionWords = {
         moneyKept: 'This work\'s money is still only on this phone. Send it from Procure, then move this work.',
         moneyKeptStuck: 'This work\'s money is kept on this phone and its plot is not on the server yet, so this work cannot be moved.',
         moneyRemoved: 'This work\'s money was removed, so this work can never be moved.',
-        detailsNotHere: 'This work\'s full details are not on this phone, so it cannot be moved from here.',
+        // Lane OF-S fix pass 4 (R3-3, R3-4). PROPOSED (English).
+        moneyNeedsReview: 'The server has not accepted this work\'s money yet. Look at it on the sync page first, then move this work.',
+        moneyStuck: 'This work\'s money did not get through after many tries. Send it again from the sync page, then move this work.',
+        detailsNotHeld: 'This work was saved by an older version of the app, or its details did not reach the server, so it cannot be moved.',
         notAllowed: 'You cannot change this — tell the owner.',
         other: '',
     },

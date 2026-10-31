@@ -35,9 +35,10 @@ const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 
 export interface BuildLogContentOptions {
     /**
-     * `true` for an EDIT: a document with no items is still a statement ("he removed them all") and
-     * must reach the server. A CREATE that carries nothing sends no document at all, so a log with no
-     * details keeps the wire it always had.
+     * `true`: a document with no items is still a statement and must reach the server — for an EDIT
+     * ("he removed them all") and, since lane OF-S fix pass 4 (R3-2), for every CREATE outside the
+     * हजेरी door, so the server holds each record's create-time details and decides alone which of
+     * its money must move with it. Without it, a log with no details sends no document.
      */
     evenIfEmpty?: boolean;
 }
@@ -45,7 +46,7 @@ export interface BuildLogContentOptions {
 /**
  * What a log's details amount to on the wire:
  *   - `content`  — the document, checked against the contract;
- *   - `none`     — nothing to send (the हजेरी door, B002; or a create with no details);
+ *   - `none`     — nothing to send (the हजेरी door, B002; or no details and not `evenIfEmpty`);
  *   - `withheld` — there ARE details, but they do not fit the contract (over the size cap, or an
  *                  item the contract cannot carry). They stay on this phone, and the farmer is told so
  *                  (review S5) — never only a console line.

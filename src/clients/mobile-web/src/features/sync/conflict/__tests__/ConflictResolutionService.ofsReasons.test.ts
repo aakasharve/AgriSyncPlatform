@@ -48,14 +48,24 @@ describe('lane OF-S — the plain reason on the conflict page', () => {
     });
 });
 
+const putLocalRecord = (dailyLogId: string) => getDatabase().logs.put({
+    id: dailyLogId, schemaVersion: 1, date: '2026-10-30',
+    log: {
+        id: dailyLogId, date: '2026-10-30', labour: [], machinery: [],
+        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }],
+        activityExpenses: [{ id: 'exp-1', category: 'Transport', totalAmount: 200 }],
+    },
+} as never);
+
 describe('lane OF-S fix pass 3 (R2-3) — the conflict page says the real state of the money', () => {
     it('a move refused for money that is kept on this phone points him to खरेदी', async () => {
         await getDatabase().mutationQueue.add({
             deviceId: 'd', clientRequestId: 'move_daily_log:kept', clientCommandId: 'move_daily_log:kept',
             mutationType: SyncMutationName.MoveDailyLog, status: 'REJECTED_USER_REVIEW', createdAt: NOW, updatedAt: NOW, retryCount: 1,
             lastError: 'refused', errorCode: 'ShramSafal.LogMoveMoneyNotFound.Conflict',
-            payload: { dailyLogId: 'log-1', moneyLines: [{ kind: 'activity-expense', lineId: 'exp-1' }] },
+            payload: { dailyLogId: 'log-1' },
         });
+        await putLocalRecord('log-1');
         await getDatabase().uiPrefs.put({
             key: 'agrisync_held_money_v1',
             value: [{ costEntryId: moneyEntryIdFor('log-1:activity-expense:exp-1'), payload: {}, reason: 'no-farm', heldAt: NOW }],

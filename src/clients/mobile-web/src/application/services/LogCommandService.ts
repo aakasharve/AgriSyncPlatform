@@ -431,7 +431,7 @@ export class LogCommandServiceImpl implements LogCommandService {
             // number the farmer never said. If no total was stated, there is
             // nothing to record yet (voice review shows "—", not a guess).
             // Lane OF-S fix pass 2 — "stated amount" and the source key are the ONE rule a move of this record also
-            // reads (`recordMoneyLines.ts`), so the server is told exactly the lines that made money here.
+            // reads (`recordMoneyLines.ts`), so the phone finds this money again under the same key.
             const amount = statedLabourAmount(entry);
             if (!amount) return;
             financeCommandService.createMoneyEventFromSource({

@@ -655,8 +655,7 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         var oldKeyMoney = Guid.NewGuid();
         await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-old-key", CostPayload(oldKeyMoney, "labour_misc", 2800m));
 
-        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-old-key-move", MovePayload(MoneyLog, 1, plots: [PlotA2],
-            moneyLines: [new { kind = "labour", lineId = MoneyLabour.ToString() }, new { kind = "input", lineId = "tm-input-0" }]));
+        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-old-key-move", MovePayload(MoneyLog, 1, plots: [PlotA2]));
         refused.ErrorCode.Should().Be("ShramSafal.LogMoveMoneyNotFound.Conflict");
         (await ReadPlacementAsync(MoneyLog)).Should().Be(new Placement("Plot", PlotA1, [PlotA1], CycleA1, SavedDay, 1), "nothing changed");
         (await ReadMoneyAsync(oldKeyMoney)).Should().Be(new Money(PlotA1, CycleA1, SavedDay, 2800m));
@@ -665,11 +664,11 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
     }
 
     [Fact]
-    public async Task F2_a_record_whose_details_were_kept_on_the_phone_and_whose_old_style_lines_state_money_refuses_the_move()
+    public async Task F2_a_record_whose_details_were_kept_on_the_phone_is_refused_as_details_not_held()
     {
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
         // Details withheld (they did not fit the contract): the create carries no content, the lines go the old way.
-        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-details-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay));
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-details-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay, withDetails: false));
         await PushAppliedAsync(OwnerA, "add_log_task", "req-ofs-details-task", new Dictionary<string, object?>
         {
             ["dailyLogId"] = DetailsLog,
@@ -681,56 +680,102 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-details-money", CostPayload(DetailsInputMoney, "fertilizer", 500m));
         var version = (await ReadPlacementAsync(DetailsLog)).Version;
 
-        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-details-move", MovePayload(DetailsLog, version, plots: [PlotA2],
-            moneyLines: [new { kind = "input", lineId = "inp-1" }]));
-        refused.ErrorCode.Should().Be("ShramSafal.LogMoveMoneyNotFound.Conflict",
-            "the server holds only the old line, which states money it cannot find by id: refused whole");
+        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-details-move", MovePayload(DetailsLog, version, plots: [PlotA2]));
+        refused.ErrorCode.Should().Be("ShramSafal.LogMoveDetailsNotHeld.Conflict");
         (await ReadPlacementAsync(DetailsLog)).PlotId.Should().Be(PlotA1);
         (await ReadMoneyAsync(DetailsInputMoney)).PlotId.Should().Be(PlotA1);
     }
 
+    private static readonly Guid LabourOnlyLog = Guid.Parse("0f5e6000-0000-4000-8000-0000000000f1");
+    private static readonly Guid LabourOnlyCrew = Guid.Parse("0f5e6000-0000-4000-8000-0000000000f2");
+    // v5 id computed OUTSIDE the code under test (Python uuid.uuid5): "<LabourOnlyLog>:labour:<LabourOnlyCrew>".
+    private static readonly Guid LabourOnlyCrewMoney = Guid.Parse("010e835f-5bb7-5c4e-814f-bef1500a6f46");
+
     [Fact]
-    public async Task F2_old_style_lines_that_state_no_money_never_block_a_move()
+    public async Task R3_2_an_empty_create_time_document_is_the_records_details_so_a_labour_only_record_moves_from_any_phone()
     {
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
-        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-nomoney-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay));
-        await PushAppliedAsync(OwnerA, "add_log_task", "req-ofs-nomoney-task", new Dictionary<string, object?>
-        {
-            ["dailyLogId"] = DetailsLog,
-            ["logTaskId"] = Guid.NewGuid(),
-            ["activityType"] = "Spray इथरेल",
-            ["notes"] = "Qty: 250 मिली",
-            ["occurredAtUtc"] = "2026-10-30T06:00:00Z",
-        });
-        var version = (await ReadPlacementAsync(DetailsLog)).Version;
+        // A per-plot part of a multi-plot voice save that holds only labour: this build sends an EMPTY details document.
+        var logId = LabourOnlyLog;
+        var assignment = LabourOnlyCrew;
+        var payload = OldCreatePayload(logId, OwnerA, SavedDay);
+        payload["labour"] = new object[] { new { labourAssignmentId = assignment, engagementType = "hired_daily", workerCount = 5, totalCost = 1500 } };
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-r32-create", payload);
+        var stored = await ScalarAsync("SELECT origin || ':' || document::text FROM ssf.daily_log_contents WHERE daily_log_id = @id", logId);
+        output.WriteLine($"[EVIDENCE] stored create-time details: {stored}");
+        ((string)stored!).Should().StartWith("create:", "an empty document is stored as the record's create-time details");
+        (await ScalarAsync("SELECT COUNT(*) FROM ssf.log_tasks WHERE daily_log_id = @id", logId)).Should().Be(0L,
+            "an empty document says nothing was done: no task line is written from it");
+        // The crew's money, made at the save under its engagement id.
+        var crewMoney = LabourOnlyCrewMoney;
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-r32-money", CostPayload(crewMoney, "labour_misc", 1500m));
 
-        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-nomoney-move", MovePayload(DetailsLog, version, plots: [PlotA2]));
-        (await ReadPlacementAsync(DetailsLog)).PlotId.Should().Be(PlotA2);
+        // Moved from a phone that did not make it: the move names nothing and claims nothing; the server alone decides.
+        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-r32-move", MovePayload(logId, 1, plots: [PlotA2]));
+        (await ReadPlacementAsync(logId)).PlotId.Should().Be(PlotA2);
+        (await ReadMoneyAsync(crewMoney)).PlotId.Should().Be(PlotA2, "the crew's stated money moved with it");
     }
 
     [Fact]
-    public async Task F2_the_phones_own_list_finds_money_for_details_the_server_never_held_and_the_answer_carries_exactly_what_moved()
+    public async Task R3_4_a_record_without_create_time_details_is_refused_from_every_phone_whatever_it_claims()
     {
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
-        // An expense the server never saw (details kept on the phone; an expense makes no old-style line), and its money.
-        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-expense-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay));
-        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-expense-money", CostPayload(DetailsExpenseMoney, "transport", 200m));
-        var unrelated = Guid.NewGuid();
-        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-expense-other", CostPayload(unrelated, "fuel", 90m));
+        // A 1.0.15-1.0.17 voice save (or a withheld create): no create-time details on the server. Its expense's money exists.
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-r34-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay, withDetails: false));
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-r34-money", CostPayload(DetailsExpenseMoney, "transport", 200m));
 
-        var answer = await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-expense-move", MovePayload(DetailsLog, 1, plots: [PlotA2],
-            moneyLines: [new { kind = "activity-expense", lineId = "exp-1" }]));
+        // As this build's phones send a move: refused, with its own true reason.
+        var plain = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-r34-plain", MovePayload(DetailsLog, 1, plots: [PlotA2]));
+        plain.ErrorCode.Should().Be("ShramSafal.LogMoveDetailsNotHeld.Conflict");
 
-        (await ReadMoneyAsync(DetailsExpenseMoney)).Should().Be(new Money(PlotA2, CycleA2, SavedDay, 200m));
-        (await ReadMoneyAsync(unrelated)).PlotId.Should().Be(PlotA1);
-        var data = JsonSerializer.SerializeToElement(answer.Data, new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        output.WriteLine($"[EVIDENCE] move answer data: {data.GetRawText()}");
-        var moved = data.GetProperty("moneyMoved");
-        moved.GetArrayLength().Should().Be(1, "the answer lists exactly the money the server moved");
-        moved[0].GetProperty("id").GetGuid().Should().Be(DetailsExpenseMoney);
-        moved[0].GetProperty("plotId").GetGuid().Should().Be(PlotA2);
-        moved[0].GetProperty("entryDate").GetString().Should().StartWith(SavedDay);
-        data.GetProperty("log").GetProperty("id").GetGuid().Should().Be(DetailsLog);
+        // A phone claiming it holds the details and naming the expense (the fix pass 3 vouch): no phone can unlock it.
+        var vouched = MovePayload(DetailsLog, 1, plots: [PlotA2]);
+        vouched["moneyLines"] = new object[] { new { kind = "activity-expense", lineId = "exp-1" } };
+        vouched["moneyLinesComplete"] = true;
+        await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-r34-vouched", vouched);
+
+        (await ReadPlacementAsync(DetailsLog)).PlotId.Should().Be(PlotA1, "nothing changed");
+        (await ReadMoneyAsync(DetailsExpenseMoney)).PlotId.Should().Be(PlotA1);
+        (await ReadAuditPayloadsAsync(DetailsLog, "LogMoved")).Should().BeEmpty();
+    }
+
+    // v5 id computed OUTSIDE the code under test (Python uuid.uuid5): "<MoneyLog>:input:in-late".
+    private static readonly Guid LateLineMoney = Guid.Parse("bb5f5c6b-a661-59e0-ac95-48edf7b2c773");
+
+    [Fact]
+    public async Task R3_1_a_line_priced_by_a_later_edit_never_blocks_a_move_and_money_found_for_a_later_line_moves_too()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateMoneyLogAsync();
+        // A later edit prices two new lines. Edits make no money yet (F89): "in-edit" has none; "in-late" has some
+        // (as OF-M will make it), under its derived id.
+        await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofs-r31-revise", new Dictionary<string, object?>
+        {
+            ["dailyLogId"] = MoneyLog,
+            ["baseVersion"] = 1,
+            ["content"] = new
+            {
+                schema = 1,
+                inputs = new object[]
+                {
+                    new { id = "tm-input-0", productName = "इथरेल", quantity = 250, unit = "मिली", cost = 500 },
+                    new { id = "in-late", productName = "युरिया", cost = 300 },
+                    new { id = "in-edit", productName = "पोटॅश", cost = 700 },
+                },
+            },
+            ["revisedAtUtc"] = DateTime.UtcNow.ToString("O"),
+        });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-r31-late-money", CostPayload(LateLineMoney, "fertilizer", 300m));
+        var version = (await ReadPlacementAsync(MoneyLog)).Version;
+
+        var answer = await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-r31-move", MovePayload(MoneyLog, version, plots: [PlotA2]));
+
+        (await ReadMoneyAsync(LateLineMoney)).PlotId.Should().Be(PlotA2, "money found for a later line follows the record too");
+        (await ReadMoneyAsync(InputMoney)).PlotId.Should().Be(PlotA2);
+        (await ReadMoneyAsync(LabourMoney)).PlotId.Should().Be(PlotA2);
+        var moved = JsonSerializer.SerializeToElement(answer.Data, new JsonSerializerOptions(JsonSerializerDefaults.Web)).GetProperty("moneyMoved");
+        output.WriteLine($"[EVIDENCE] money moved with an edit-priced line present: {moved.GetArrayLength()} entries");
+        moved.GetArrayLength().Should().Be(3);
     }
 
     [Fact]
@@ -810,16 +855,14 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
     // ═════════════════════════════════════════════════════════════════════════════════════════
 
     [Fact]
-    public async Task R2_1_a_record_whose_details_the_server_never_held_is_refused_when_the_moving_phone_does_not_hold_them_either()
+    public async Task R2_1_a_record_whose_details_the_server_never_held_is_refused_and_its_expense_never_stays_behind_silently()
     {
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
         // Details withheld or saved by an old phone: no content on the server, and an expense makes no old-style line.
-        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-r21-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay));
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-r21-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay, withDetails: false));
         await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-r21-money", CostPayload(DetailsExpenseMoney, "transport", 200m));
 
-        // Another phone (it holds no details of this record): it cannot vouch that it named every priced line.
-        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-r21-other-phone",
-            MovePayload(DetailsLog, 1, plots: [PlotA2], complete: false));
+        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-r21-other-phone", MovePayload(DetailsLog, 1, plots: [PlotA2]));
         refused.ErrorCode.Should().Be("ShramSafal.LogMoveDetailsNotHeld.Conflict");
         (await ReadPlacementAsync(DetailsLog)).PlotId.Should().Be(PlotA1, "nothing changed");
         (await ReadMoneyAsync(DetailsExpenseMoney)).PlotId.Should().Be(PlotA1, "the expense never stays behind silently");
@@ -827,29 +870,12 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
     }
 
     [Fact]
-    public async Task R2_1_moved_from_the_same_phone_an_old_phones_random_id_expense_refuses_the_move()
-    {
-        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
-        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-r21-old-create", OldCreatePayload(DetailsLog, OwnerA, SavedDay));
-        // 1.0.15–1.0.17 saved the expense's money under a RANDOM id.
-        var oldPhoneMoney = Guid.NewGuid();
-        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-r21-old-money", CostPayload(oldPhoneMoney, "transport", 200m));
-
-        // The phone that holds the details names every priced line, the expense included, and vouches for the list.
-        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-r21-same-phone", MovePayload(DetailsLog, 1, plots: [PlotA2],
-            moneyLines: [new { kind = "activity-expense", lineId = "exp-1" }]));
-        refused.ErrorCode.Should().Be("ShramSafal.LogMoveMoneyNotFound.Conflict");
-        (await ReadPlacementAsync(DetailsLog)).PlotId.Should().Be(PlotA1);
-        (await ReadMoneyAsync(oldPhoneMoney)).PlotId.Should().Be(PlotA1);
-    }
-
-    [Fact]
-    public async Task R2_1_a_record_the_server_holds_is_unchanged_it_moves_without_the_phones_word()
+    public async Task R2_1_a_record_the_server_holds_is_unchanged_it_moves_without_any_word_from_the_phone()
     {
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
         await CreateMoneyLogAsync(); // create-time details on the server
 
-        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-r21-held", MovePayload(MoneyLog, 1, plots: [PlotA2], complete: false));
+        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-r21-held", MovePayload(MoneyLog, 1, plots: [PlotA2]));
         (await ReadMoneyAsync(InputMoney)).PlotId.Should().Be(PlotA2);
         (await ReadMoneyAsync(LabourMoney)).PlotId.Should().Be(PlotA2);
     }
@@ -859,7 +885,7 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
     {
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
         await CreateMoneyLogAsync();
-        var move = MovePayload(MoneyLog, 1, plots: [PlotA2], complete: false); // the server holds its details
+        var move = MovePayload(MoneyLog, 1, plots: [PlotA2]);
 
         var first = await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-r22-move", move);
         var again = await PushAsync(OwnerA, "move_daily_log", "req-ofs-r22-move", move);
@@ -954,19 +980,27 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         return (operatorId, workRowId);
     }
 
-    private static Dictionary<string, object?> OldCreatePayload(Guid dailyLogId, Guid operatorId, string logDate) => new()
+    /// <summary>
+    /// A create as THIS build sends it: with its details document, empty when there are none (fix pass 4, R3-2).
+    /// <paramref name="withDetails"/> false = an older phone's save (1.0.15–1.0.17), or a create whose details were withheld.
+    /// </summary>
+    private static Dictionary<string, object?> OldCreatePayload(Guid dailyLogId, Guid operatorId, string logDate, bool withDetails = true)
     {
-        ["dailyLogId"] = dailyLogId,
-        ["farmId"] = FarmA,
-        ["plotId"] = PlotA1,
-        ["cropCycleId"] = CycleA1,
-        ["operatorUserId"] = operatorId,
-        ["logDate"] = logDate,
-    };
+        var payload = new Dictionary<string, object?>
+        {
+            ["dailyLogId"] = dailyLogId,
+            ["farmId"] = FarmA,
+            ["plotId"] = PlotA1,
+            ["cropCycleId"] = CycleA1,
+            ["operatorUserId"] = operatorId,
+            ["logDate"] = logDate,
+        };
+        if (withDetails) payload["content"] = new { schema = 1 };
+        return payload;
+    }
 
     private static Dictionary<string, object?> MovePayload(
-        Guid dailyLogId, int baseVersion, Guid[]? plots = null, bool wholeFarm = false, string? day = null, string? reason = null,
-        object[]? moneyLines = null, bool complete = true)
+        Guid dailyLogId, int baseVersion, Guid[]? plots = null, bool wholeFarm = false, string? day = null, string? reason = null)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -978,9 +1012,6 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         if (wholeFarm) payload["wholeFarm"] = true;
         if (day is not null) payload["newLogDate"] = day;
         if (reason is not null) payload["reason"] = reason;
-        if (moneyLines is not null) payload["moneyLines"] = moneyLines;
-        // fix pass 3 (R2-1) — the phone that made the record holds its details and names every priced line in them.
-        if (complete) payload["moneyLinesComplete"] = true;
         return payload;
     }
 

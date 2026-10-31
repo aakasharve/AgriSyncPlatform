@@ -2054,7 +2054,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "dailyLogId", "baseVersion", "newPlotIds", "wholeFarm", "newLogDate", "reason", "revisedAtUtc", "moneyLines", "moneyLinesComplete"))
+        if (!PayloadHasOnly(payload, "dailyLogId", "baseVersion", "newPlotIds", "wholeFarm", "newLogDate", "reason", "revisedAtUtc"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -2098,12 +2098,7 @@ public sealed class PushSyncBatchHandler(
                 actorRole,
                 clientRequestId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
-                AuditDeviceId: deviceId,
-                // fix pass 2 — the lines that stated an amount on his phone (each must be found, or the move is refused).
-                // A malformed (null) line becomes an empty one, which the handler refuses as an invalid command.
-                MoneyLines: request.MoneyLines?.Select(line => new MoveMoneyLine(line?.Kind ?? string.Empty, line?.LineId ?? string.Empty)).ToList(),
-                // fix pass 3 (R2-1) — the phone holds the record's details and named every priced line in them.
-                MoneyLinesComplete: request.MoneyLinesComplete == true),
+                AuditDeviceId: deviceId),
             ct);
 
         return ToOutcome(result);

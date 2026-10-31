@@ -9,8 +9,8 @@
  *      `move_daily_log`, queued like every other change, so it works with no internet and every phone's pull carries the
  *      new place and day (P10). The server refuses a stale move, a future day, a plot with no season that day and a move
  *      that would leave हजेरी or money behind; the phone then puts the entry back to the server's version and says why.
- *      Its money (fix pass 2, N1): the move names every line that stated an amount (`recordMoneyLines.ts`); the server
- *      finds each one's money or refuses, and its answer lists exactly the money it moved, which the phone then writes
+ *      Its money (fix passes 2 and 4): the SERVER alone decides which money moves, from the entry's create-time details;
+ *      the move names none and claims nothing. Its answer lists exactly the money it moved, which the phone then writes
  *      (`movedMoney.ts`). The phone never moves money on its own.
  *   2. A WORKER-COUNT change with no internet: `correct_labour_assignment`, queued instead of POSTed (`UpdateLog` step 4),
  *      through the same server handler as the online route.
@@ -22,11 +22,6 @@ import type { UpdateLogResponse } from '../../../../application/usecases/UpdateL
 import { MoveDailyLogCommand } from '../../../../application/usecases/sync/MoveDailyLogCommand';
 import { assertNotAfterFarmToday } from '../../../../core/domain/services/farmDay';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
-import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
-import { moneyEntryIdFor } from '../../../finance/moneyEntryIdentity';
-import { readHeldMoney } from '../../../finance/heldMoney';
-import { recordMoneyLines, recordMoneySourceKey, type RecordMoneyLine } from '../../../finance/recordMoneyLines';
-import { holdsOwnDetails } from '../../../sync/pull/helpers/rebuildLogDetails';
 
 const SWITCHES = {
     /** OF-S: a queued, offline-safe "move a saved log's plot / date" mutation exists (`move_daily_log`). */
@@ -99,31 +94,6 @@ export function isSamePlace(log: DailyLog, scope: LogScope): boolean {
     return now.length === chosen.length && now.every((id, i) => id === chosen[i]);
 }
 
-/**
- * Lane OF-S fix pass 2 (orchestrator call) — the lines of the entry that stated an amount AND made money that this phone
- * knows of: in its copy of the server's ledger (`costEntries`), in its outbox (`add_cost_entry:<id>`, any state), or kept
- * on it (`heldMoney`). Money is made only when an entry is first saved, so a line added or priced by a LATER edit made
- * none: it is not named, and the move is never refused for money that was never made. Every line named here must be
- * found by the server, or the whole move is refused (money saved the old way, kept on the phone, or not arrived yet).
- */
-async function moneyLinesToName(log: DailyLog): Promise<RecordMoneyLine[]> {
-    const lines = recordMoneyLines(log);
-    if (lines.length === 0) return [];
-    const idOf = (line: RecordMoneyLine) => moneyEntryIdFor(recordMoneySourceKey(log.id, line.kind, line.lineId));
-    const db = getDatabase();
-    const [pulled, queued, held] = await Promise.all([
-        db.costEntries.bulkGet(lines.map(idOf)),
-        db.mutationQueue.where('mutationType').equals(SyncMutationName.AddCostEntry).toArray(),
-        readHeldMoney(),
-    ]);
-    const known = new Set<string>([
-        ...pulled.filter((row): row is NonNullable<typeof row> => !!row).map(row => row.id),
-        ...queued.map(row => row.clientRequestId.slice(`${SyncMutationName.AddCostEntry}:`.length)),
-        ...held.map(record => record.costEntryId),
-    ]);
-    return lines.filter(line => known.has(idOf(line)));
-}
-
 /** The entry as this phone holds it NOW (a change saved a moment ago may have moved its version on). */
 async function currentOf(log: DailyLog): Promise<DailyLog> {
     const row = await getDatabase().logs.get(log.id);
@@ -151,16 +121,6 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
 
     const baseVersion = current.contentVersion ?? 1;
     const plotIds = scope?.selectedPlotIds ?? [];
-    // fix pass 2 (orchestrator call, N1) — every line that made money, by the rule the save made it with: the server must
-    // find each one's money or the whole move is refused (nothing left behind on the old plot / day).
-    // fix pass 3 (R2-1, orchestrator call) — a phone that HOLDS the entry's details (it made it, or took the server's
-    // stored document) names EVERY line in them that stated an amount, known money or not, and says its list is whole;
-    // without that word the server refuses a record whose details it never held. This phone cannot tell a line priced at
-    // the save from one priced by a later edit (it keeps no copy of the first version), so it names the CURRENT priced
-    // lines: a line priced only by an edit (which makes no money) refuses the move — the honest side, until edits make
-    // money (F89). A phone holding only a task-line rebuild names the lines whose money it knows, and does not vouch.
-    const vouches = holdsOwnDetails(current);
-    const moneyLines = vouches ? recordMoneyLines(current) : await moneyLinesToName(current);
     await MoveDailyLogCommand.enqueue({
         dailyLogId: log.id,
         baseVersion,
@@ -168,8 +128,6 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
         ...(dateKey && { newLogDate: dateKey }),
         reason: MOVE_REASON,
         revisedAtUtc: new Date().toISOString(),
-        ...(moneyLines.length > 0 && { moneyLines }),
-        ...(vouches && { moneyLinesComplete: true as const }),
     });
 
     const result = await deps.updateLog(log.id, {

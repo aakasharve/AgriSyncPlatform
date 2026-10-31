@@ -688,7 +688,8 @@ export async function enqueueLogsForSync(
         // lane F1 — what Sathi understood, stored WITH the log; none at the labour door, and withheld
         // when it does not fit the contract (then the old task lines below carry the log, P9, and the
         // farmer is told the details stay on this phone — review S5).
-        const contentOutcome = logContentFor(log);
+        // OF-S fix 4 (R3-2): sent even when empty, so the server holds every record's create-time details.
+        const contentOutcome = logContentFor(log, { evenIfEmpty: true });
         const content = contentOutcome.kind === 'content' ? contentOutcome.content : undefined;
         if (contentOutcome.kind === 'withheld') {
             detailsKeptOnPhoneLogIds.push(log.id);

@@ -100,18 +100,30 @@ describe('lane OF-S fix pass 2 — a plain reason per cause (item 9), and the mo
     });
 });
 
+const putLocalRecord = (dailyLogId: string) => getDatabase().logs.put({
+    id: dailyLogId, schemaVersion: 1, date: '2026-10-30',
+    log: {
+        id: dailyLogId, date: '2026-10-30', labour: [], machinery: [],
+        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }],
+        activityExpenses: [{ id: 'exp-1', category: 'Transport', totalAmount: 200 }],
+    },
+} as never);
+
 describe('lane OF-S fix pass 3 — words that match the real state of the money (R2-3), and details not held (R2-1)', () => {
-    const LINES = [{ kind: 'input', lineId: 'in-1' }, { kind: 'activity-expense', lineId: 'exp-1' }];
     const inputMoney = moneyEntryIdFor(`${LOG}:input:in-1`);
     const expenseMoney = moneyEntryIdFor(`${LOG}:activity-expense:exp-1`);
-    const refusedMove = () => getDatabase().mutationQueue.add({
-        ...row(SyncMutationName.MoveDailyLog, 'REJECTED_USER_REVIEW', 'ShramSafal.LogMoveMoneyNotFound.Conflict'),
-        payload: { dailyLogId: LOG, moneyLines: LINES },
-    } as never);
-    const moneyRow = (id: string, status: string) => getDatabase().mutationQueue.add({
+    // fix pass 4 — the move names no money: the phone reads the record's lines from its own store.
+    const refusedMove = async () => {
+        await putLocalRecord(LOG);
+        await getDatabase().mutationQueue.add({
+            ...row(SyncMutationName.MoveDailyLog, 'REJECTED_USER_REVIEW', 'ShramSafal.LogMoveMoneyNotFound.Conflict'),
+            payload: { dailyLogId: LOG },
+        } as never);
+    };
+    const moneyRow = (id: string, status: string, retryCount = 0) => getDatabase().mutationQueue.add({
         deviceId: 'd', clientRequestId: `${SyncMutationName.AddCostEntry}:${id}`, clientCommandId: `${SyncMutationName.AddCostEntry}:${id}`,
         mutationType: SyncMutationName.AddCostEntry, payload: { costEntryId: id }, status, createdAt: '2026-10-31T09:00:00.000Z',
-        updatedAt: 'T', retryCount: 0,
+        updatedAt: 'T', retryCount,
     } as never);
     const kept = (id: string, reason: string) => getDatabase().uiPrefs.put({
         key: 'agrisync_held_money_v1', value: [{ costEntryId: id, payload: {}, reason, heldAt: 'T' }],
@@ -132,9 +144,9 @@ describe('lane OF-S fix pass 3 — words that match the real state of the money 
         expect(refusalLines({ kind: 'move', reason: 'moneyKeptStuck' }, 'en')[1]).toContain('cannot be moved');
     });
 
-    it.each(['REJECTED_DROPPED', 'REJECTED_USER_REVIEW'])('its money row %s: this work can never be moved, never "not arrived yet"', async (status) => {
+    it('its money row discarded (gone for good): this work can never be moved, never "not arrived yet"', async () => {
         await refusedMove();
-        await moneyRow(inputMoney, status);
+        await moneyRow(inputMoney, 'REJECTED_DROPPED');
         expect(await readRefusedChange(LOG)).toMatchObject({ reason: 'moneyRemoved' });
         const en = refusalLines({ kind: 'move', reason: 'moneyRemoved' }, 'en')[1];
         const mr = refusalLines({ kind: 'move', reason: 'moneyRemoved' }, 'mr')[1];
@@ -143,20 +155,45 @@ describe('lane OF-S fix pass 3 — words that match the real state of the money 
         expect(mr).not.toContain('पोहोचले');
     });
 
+    it('its money waiting for his review (R3-3): look at it on the sync page first — never "can never be moved"', async () => {
+        await refusedMove();
+        await moneyRow(inputMoney, 'REJECTED_USER_REVIEW');
+        expect(await readRefusedChange(LOG)).toMatchObject({ reason: 'moneyNeedsReview' });
+        const en = refusalLines({ kind: 'move', reason: 'moneyNeedsReview' }, 'en')[1];
+        const mr = refusalLines({ kind: 'move', reason: 'moneyNeedsReview' }, 'mr')[1];
+        expect(en).toContain('sync page');
+        expect(en).not.toMatch(/never/);
+        expect(mr).toContain('सिंक');
+        expect(mr).not.toContain('कधीच');
+    });
+
+    it('its money stuck at its retry limit (R3-3): its own true words — send it again, then move', async () => {
+        await refusedMove();
+        await moneyRow(expenseMoney, 'FAILED', 5);
+        expect(await readRefusedChange(LOG)).toMatchObject({ reason: 'moneyStuck' });
+        const en = refusalLines({ kind: 'move', reason: 'moneyStuck' }, 'en')[1];
+        expect(en).toContain('Send it again');
+        expect(en).not.toMatch(/never/);
+        expect(refusalLines({ kind: 'move', reason: 'moneyStuck' }, 'mr')[1]).not.toContain('कधीच');
+    });
+
     it('otherwise the server\'s own words stand', async () => {
         await refusedMove();
         await moneyRow(inputMoney, 'APPLIED');
         expect(await readRefusedChange(LOG)).toMatchObject({ reason: 'moneyNotFound' });
     });
 
-    it('details the server never held and this phone does not hold: their own plain reason', () => {
-        expect(refusalReasonOf('ShramSafal.LogMoveDetailsNotHeld.Conflict')).toBe('detailsNotHere');
-        expect(refusalLines({ kind: 'move', reason: 'detailsNotHere' }, 'en')[1]).toContain('not on this phone');
-        expect(refusalLines({ kind: 'move', reason: 'detailsNotHere' }, 'mr')[1]).toContain('या फोनवर नाही');
+    it('details the server never held (an older app version, or details that did not arrive): words true for both, no phone named', () => {
+        expect(refusalReasonOf('ShramSafal.LogMoveDetailsNotHeld.Conflict')).toBe('detailsNotHeld');
+        const en = refusalLines({ kind: 'move', reason: 'detailsNotHeld' }, 'en')[1];
+        expect(en).toContain('older version of the app');
+        expect(en).toContain('did not reach the server');
+        expect(en).not.toContain('this phone');
+        expect(refusalLines({ kind: 'move', reason: 'detailsNotHeld' }, 'mr')[1]).toContain('जुन्या आवृत्तीतून');
     });
 
     it('no new reason carries Latin letters in Marathi or Devanagari in English, nor the forbidden words', () => {
-        for (const reason of ['moneyKept', 'moneyKeptStuck', 'moneyRemoved', 'detailsNotHere'] as RefusedReason[]) {
+        for (const reason of ['moneyKept', 'moneyKeptStuck', 'moneyRemoved', 'moneyNeedsReview', 'moneyStuck', 'detailsNotHeld'] as RefusedReason[]) {
             expect(refusalLines({ kind: 'move', reason }, 'mr').join(' ')).not.toMatch(/[A-Za-z]/);
             const en = refusalLines({ kind: 'move', reason }, 'en').join(' ');
             expect(en.replace('खरेदी', '')).not.toMatch(/[\u0900-\u097F]/);

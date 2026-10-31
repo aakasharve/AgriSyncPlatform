@@ -154,12 +154,14 @@ describe('B1a — a single-plot log emits a byte-identical payload', () => {
             'logDate',
             'sourceAiJobId',
             'weatherStamp',
+            // lane OF-S fix pass 4 (R3-2): every non-door create carries its details, even when empty.
+            'content',
             'labour',
         ]);
 
         // As the wire sees it.
         expect(JSON.stringify(payload)).toBe(
-            `{"dailyLogId":"${LOG_UUID}","farmId":"${FARM_UUID}","plotId":"${PLOT_A}","cropCycleId":"${CYCLE_A}","logDate":"2026-08-12"}`,
+            `{"dailyLogId":"${LOG_UUID}","farmId":"${FARM_UUID}","plotId":"${PLOT_A}","cropCycleId":"${CYCLE_A}","logDate":"2026-08-12","content":{"schema":1,"capturedAtUtc":"2026-08-12T04:00:00.000Z"}}`,
         );
     });
 
