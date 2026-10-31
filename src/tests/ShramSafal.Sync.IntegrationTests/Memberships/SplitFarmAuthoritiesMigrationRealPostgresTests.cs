@@ -283,6 +283,51 @@ public sealed class SplitFarmAuthoritiesMigrationRealPostgresTests(ITestOutputHe
     }
 
     /// <summary>
+    /// Lane 2b re-check — the owner gives a power UNTIL A DATE after the upgrade, then the migration is
+    /// rolled back. The older binary has no ends, so carrying the bit back would make it permanent:
+    /// Down() must drop it instead (review money must not become a permanent AddCost; a time-limited
+    /// see money must not become a permanent one).
+    /// </summary>
+    [Fact]
+    public async Task Down_never_turns_an_owners_time_limited_choice_into_a_permanent_power()
+    {
+        await MigrateSsfToAsync(Lane2b);
+        var familyMoney = Seats.Single(s => s.Key == "family-money").UserId;
+        var worker = Seats.Single(s => s.Key == "worker-splits-bills").UserId;
+        var end = FarmAuthorities.SerializeExpiries(new Dictionary<FarmPermission, DateTime>
+        {
+            [FarmPermission.ReviewMoney] = Future,
+            [FarmPermission.SeeMoney] = Future,
+        });
+        await using (var db = new NpgsqlConnection(_superConn))
+        {
+            await db.OpenAsync();
+            await using var owner = db.CreateCommand();
+            owner.CommandText = """
+                UPDATE ssf.farm_memberships SET authority_expires_at = @end::jsonb
+                    WHERE farm_id = @farm AND user_id = @familyMoney;
+                UPDATE ssf.farm_memberships SET permissions = COALESCE(permissions, 0) | 1, authority_expires_at = @end::jsonb
+                    WHERE farm_id = @farm AND user_id = @worker;
+                """;
+            owner.Parameters.AddWithValue("end", end!);
+            owner.Parameters.AddWithValue("farm", Farm);
+            owner.Parameters.AddWithValue("familyMoney", familyMoney);
+            owner.Parameters.AddWithValue("worker", worker);
+            await owner.ExecuteNonQueryAsync();
+        }
+
+        await MigrateSsfToAsync(Before2b);
+        var after = await RowsAsync();
+        var a = after.Single(r => r.UserId == familyMoney);
+        output.WriteLine($"[EVIDENCE] down(time-limited) family-money perms {a.Permissions?.ToString() ?? "null"}");
+        Bit(a, 4).Should().BeFalse("review money with an end must not come back as a permanent AddCost");
+        Bit(a, 1).Should().BeFalse("see money with an end must not come back permanent");
+        var w = after.Single(r => r.UserId == worker);
+        output.WriteLine($"[EVIDENCE] down(time-limited) worker perms {w.Permissions?.ToString() ?? "null"}");
+        Bit(w, 1).Should().BeFalse("see money with an end must not come back permanent");
+    }
+
+    /// <summary>
     /// fix 1 — the PC test database ran the FIRST draft of this migration, so its rows carry that
     /// draft's values (AddCost on every सहमालक / Agronomist / FPC seat, plan / assign bits). The edited
     /// Down() must collapse those rows without widening the older binary too.

@@ -54,7 +54,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// older binary reads for that label), from confirm records and its end; any other seat keeps the
     /// one old switch only if it held BOTH हजेरी and confirm records, ending at the earlier end;
     /// (3) every lane-2b bit (64–1024); review money goes back to the old AddCost bit ONLY on a सहमालक
-    /// seat (the one place this Up grants it, from a stored AddCost — exact), and an AddCost bit the
+    /// seat (the one place this Up grants it, from a stored AddCost — exact) and only while neither it
+    /// nor the see money it needs has an end; any kept old bit (1, 2, 8, 32) that has an end is dropped,
+    /// because the older binary has no ends and would hold it for ever (lane 2b re-check); an AddCost bit the
     /// first draft added to सहमालक / Agronomist / FPC seats is cleared. What Up cleared (AddCost on a
     /// मुकादम / कामगार seat, a step-2 lab-records bit) does not come back: a rollback never widens. An
     /// owner's later choices the older vocabulary cannot express are lost; a seat left with no bits is
@@ -124,8 +126,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         ELSE NULL
                     END,
                     permissions = NULLIF(
-                        (COALESCE(m.permissions, 0) & 63 & ~4)
-                        | CASE WHEN (COALESCE(m.permissions, 0) & 1024) <> 0 THEN 4 ELSE 0 END,
+                        (COALESCE(m.permissions, 0) & 63 & ~4 & ~(
+                              CASE WHEN (m.authority_expires_at -> '1') IS NOT NULL THEN 1 ELSE 0 END
+                            | CASE WHEN (m.authority_expires_at -> '2') IS NOT NULL THEN 2 ELSE 0 END
+                            | CASE WHEN (m.authority_expires_at -> '8') IS NOT NULL THEN 8 ELSE 0 END
+                            | CASE WHEN (m.authority_expires_at -> '32') IS NOT NULL THEN 32 ELSE 0 END))
+                        | CASE WHEN (COALESCE(m.permissions, 0) & 1025) = 1025
+                                 AND (m.authority_expires_at -> '1024') IS NULL
+                                 AND (m.authority_expires_at -> '1') IS NULL
+                               THEN 4 ELSE 0 END,
                         0)
                 WHERE m.status IN (1, 2, 3, 4)
                   AND m.role = 'SecondaryOwner';
@@ -141,7 +150,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     END,
                     permissions = NULLIF(
                         COALESCE(m.permissions, 0) & 63
-                        & CASE WHEN m.role IN ('Agronomist', 'FpcTechnicalManager') THEN ~4 ELSE ~0 END,
+                        & CASE WHEN m.role IN ('Agronomist', 'FpcTechnicalManager') THEN ~4 ELSE ~0 END
+                        & ~(
+                              CASE WHEN (m.authority_expires_at -> '1') IS NOT NULL THEN 1 ELSE 0 END
+                            | CASE WHEN (m.authority_expires_at -> '2') IS NOT NULL THEN 2 ELSE 0 END
+                            | CASE WHEN (m.authority_expires_at -> '8') IS NOT NULL THEN 8 ELSE 0 END
+                            | CASE WHEN (m.authority_expires_at -> '32') IS NOT NULL THEN 32 ELSE 0 END),
                         0)
                 WHERE m.status IN (1, 2, 3, 4)
                   AND m.role NOT IN ('SecondaryOwner', 'PrimaryOwner');
