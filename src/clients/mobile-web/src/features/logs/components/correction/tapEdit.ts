@@ -275,11 +275,12 @@ export const setWork = (a: CropActivityEvent, en: string, mr: string): CropActiv
  * Lane OF fix 1 (H2) — what he typed as an amount, read only when he presses ठीक: '' = no amount (undefined); a number
  * (Marathi digits read too, one decimal point) as a number; anything else `null` (refused, said plainly — never guessed).
  */
-export function parseAmount(text: string): number | undefined | null {
+export function parseAmount(text: string): number | undefined | null | 'zero' {
     const t = text.trim().replace(/[०-९]/g, d => String('०१२३४५६७८९'.indexOf(d)));
     if (t === '') return undefined;
     if (!/^\d+(\.\d+)?$/.test(t) && !/^\.\d+$/.test(t)) return null;
     const n = Number(t);
+    if (n === 0) return 'zero'; // fix 2: a number, but no amount — said as that, never "not a number"
     return Number.isFinite(n) && n > 0 ? n : null;
 }
 

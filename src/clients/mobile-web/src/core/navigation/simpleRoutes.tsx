@@ -176,7 +176,7 @@ export const renderVoiceDiaryRoute = (ctx: AppRouterContext): React.ReactNode =>
                     returnTo: { route: 'voiceDiary', mainView: ctx.mainView },
                     farmId: ctx.activeFarmId, // fix 1 (M5): a recording of another farm is never saved into this one
 
-                    toast: message => window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message, type: 'success' } })),
+                    toast: (message, type) => window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message, type } })), // fix 2 (N4): a failure is a failure
                 } : undefined}
             />
         </div>

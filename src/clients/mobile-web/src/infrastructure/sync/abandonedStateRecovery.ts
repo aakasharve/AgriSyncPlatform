@@ -53,6 +53,7 @@
  */
 import { getDatabase } from '../storage/DexieDatabase';
 import { systemClock } from '../../core/domain/services/Clock';
+import { noteVoiceNotesChanged } from './waitingVoiceNotes';
 
 /**
  * Reclaim attachment uploads abandoned by a dead session.
@@ -91,12 +92,15 @@ export async function reclaimAbandonedUploads(): Promise<number> {
  * backoff it carried belonged to an attempt that never finished, and making the
  * farmer wait out a delay for a parse that never ran is a delay with no cause.
  *
+ * Lane OF fix 2 (N5): a job moved back says so (`VOICE_NOTES_CHANGED`), so the आवाज नोंदी numbers and chips never keep
+ * showing "समजून घेत आहे…" for a job that is waiting again.
+ *
  * @returns how many jobs were reclaimed.
  */
 export async function reclaimAbandonedAiJobs(): Promise<number> {
     const db = getDatabase();
 
-    return db.pendingAiJobs
+    const reclaimed = await db.pendingAiJobs
         .where('status')
         .equals('processing')
         .modify({
@@ -104,4 +108,6 @@ export async function reclaimAbandonedAiJobs(): Promise<number> {
             updatedAt: systemClock.nowISO(),
             nextRetryAfterMs: undefined,
         });
+    if (reclaimed > 0) noteVoiceNotesChanged();
+    return reclaimed;
 }

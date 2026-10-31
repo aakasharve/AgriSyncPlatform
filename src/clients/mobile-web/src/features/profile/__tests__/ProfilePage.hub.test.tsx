@@ -176,6 +176,17 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
         h.voice = [];
     }, 60_000);
 
+    it('lane OF fix 2 (N3): a stuck recording is counted on the row line too — the line says the same number as the badge', async () => {
+        h.voice = [
+            { jobId: 5, state: 'stuck', why: 'notSent', spokenAtUtc: '2026-10-31T10:00:00.000Z', job: { id: 5, context: { farmId: 'farm-1' } } },
+            { jobId: 6, state: 'pending', spokenAtUtc: '2026-10-31T10:05:00.000Z', job: { id: 6, context: { farmId: 'farm-1' } } },
+        ];
+        mount();
+        const voice = await screen.findByTestId('voice-notes-row-count', {}, { timeout: 20_000 });
+        expect(voice).toHaveTextContent('2');
+        expect(screen.getByTestId('hub-settings-voice-diary')).toHaveTextContent('2 नोंदी अजून जतन झालेल्या नाहीत');
+    }, 60_000);
+
     it('the phone\'s own Back on a hub page returns to the hub, like the page\'s मागे', () => {
         const hs = mount();
         fireEvent.click(screen.getByTestId('hub-open-machines'));

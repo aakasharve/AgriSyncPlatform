@@ -19,7 +19,7 @@ import type { LogScope } from '../../types';
 import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { draftProvenance } from '../../features/voice/draftProvenance';
-import { draftDay, draftDecline } from '../../features/voice/draftFacts';
+import { bindDraftAfterSave, draftAfterSave, draftDay, draftDecline } from '../../features/voice/draftFacts';
 import { TypedSheet } from '../../features/voice/components/recorder/TypedEntry';
 import CheckSaveScreen from '../../features/logs/components/checkSave/CheckSaveScreen';
 import { checkSaveWords } from '../../features/logs/components/checkSave/checkSaveWords';
@@ -62,11 +62,14 @@ export const CheckSaveHost: React.FC<{ ctx: AppRouterContext }> = ({ ctx }) => {
         if (chosen && kind === 'otherPlot') ctx.setLogScope(chosen);
         ctx.setDraftLog(null);
         ctx.setMode('voice');
+        // Fix 2 (carried): whoever waited for THIS draft to be saved waits for the words said again instead.
+        const afterSave = draftAfterSave(draft);
         window.setTimeout(() => {
             requestSpeak({
                 purpose: 'addToDay',
                 context: { place: 'current', ...(pastDay && { date: pastDay }), ...(text && { typed: text }) },
                 returnTo: { route: 'main', mainView: 'log' },
+                ...(afterSave && { onLanded: landing => { if (landing.kind === 'saved') afterSave(landing.logIds); } }),
             });
         }, 0);
     };
@@ -79,6 +82,10 @@ export const CheckSaveHost: React.FC<{ ctx: AppRouterContext }> = ({ ctx }) => {
             .then(written => {
                 setSaving(false);
                 if (!written) { setFailed(true); return; }
+                // Fix 2 (carried): the request that said it again hears "saved" (the old recording leaves आवाज नोंदी), once.
+                const afterSave = draftAfterSave(draft);
+                bindDraftAfterSave(draft, undefined);
+                afterSave?.(written.map(l => l.id));
                 // The result screen's "आणखी सांगा" speaks for the place he chose here.
                 ctx.setLogScope(chosen);
                 ctx.setDraftLog(null);

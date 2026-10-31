@@ -197,6 +197,18 @@ describe('fix 1 — M1: one recording never makes two logs', () => {
         expect(first).toHaveLength(1);
         expect(second).toEqual([makeLog('V1')]);
     });
+
+    it('fix 2 (N1): on the "already saved" path the recording-link step runs again (a missing clip link is made), nothing is written', async () => {
+        createFromVoice.mockResolvedValue([makeLog('V1')]);
+        findSaved.mockResolvedValueOnce([makeLog('V1')]);
+        const onWritten = vi.fn(async () => { throw new Error('clip store'); });
+        const { result } = renderHook(() => useLogCommands(commandProps()));
+        let got: DailyLog[] | null = null;
+        await act(async () => { got = await result.current.handleAutoSave(parse(), undefined, { onceKey: 'job:8', stayOnScreen: true, onWritten }); });
+        expect(onWritten).toHaveBeenCalledWith([makeLog('V1')]);
+        expect(got).toEqual([makeLog('V1')]); // a failed link never turns "already saved" into "not saved"
+        expect(confirmAndSave).not.toHaveBeenCalled();
+    });
 });
 
 describe('fix 1 — M2: saved from आवाज नोंदी, a record that will not reach the server is never just "saved"', () => {

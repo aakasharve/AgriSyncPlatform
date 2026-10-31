@@ -17,7 +17,7 @@
  */
 import type { AgriLogResponse, AppStatus, DailyLog, LogScope } from '../../types';
 import type { VoiceDraftSink } from '../../features/voice/useVoiceRecorder.types';
-import { bindDraftDay } from '../../features/voice/draftFacts';
+import { bindDraftAfterSave, bindDraftDay } from '../../features/voice/draftFacts';
 import { correctionEntryForParse } from '../../features/logs/components/correction/correctionEntryForParse';
 import { hasWaitingLogWork } from '../navigation/openLogFlow';
 import { correctionWorkingFor, deliverSpoken, speakState, type SpeakLanding, type SpeakPlace, type SpeakRequest, type SpeakReturn } from './speakStore';
@@ -141,6 +141,10 @@ export function withSpeakPurpose(sink: VoiceDraftSink, deps: { setStatus: (statu
         // Lane OF (D-60) — a past day he chose travels with this parse: saved on that day, and kept with it if the
         // auto-save hands it back to the "तपासा आणि जतन करा" screen.
         bindDraftDay(draft, request?.context.date);
+        // Lane OF fix 2 (carried): handed back and saved later on "तपासा आणि जतन करा", the request still hears "saved" —
+        // so "पुन्हा सांगा" on a recording in आवाज नोंदी clears the old one either way (never two logs of the same work).
+        const onLanded = request?.onLanded;
+        bindDraftAfterSave(draft, onLanded ? logIds => onLanded({ kind: 'saved', logIds }) : undefined);
         return sink(draft, provenance, recording);
     };
 }

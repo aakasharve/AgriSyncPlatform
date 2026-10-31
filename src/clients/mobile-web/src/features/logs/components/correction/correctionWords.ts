@@ -71,6 +71,8 @@ export interface CorrectionWords {
     heard: string;
     /** Lane OF fix 1 (H2): what he typed as an amount is not a number. */
     numberBad: string;
+    /** Lane OF fix 2 — 0 typed as an amount: what is wrong with 0 (not "that is not a number"). */
+    numberZero: string;
 }
 
 const mr: CorrectionWords = {
@@ -132,6 +134,7 @@ const mr: CorrectionWords = {
     labourNeedsNet: 'मजुरांची संख्या बदलायला इंटरनेट लागतं. इंटरनेट आल्यावर जतन करा.',
     heard: 'बदल ऐकला — बघा आणि जतन करा',
     numberBad: 'हा आकडा नाही — मात्रा आकड्यात लिहा, उदा. 1.5', // PROPOSED (Marathi)
+    numberZero: '0 मात्रा ठेवता येत नाही — किती वापरलं ते लिहा, माहीत नसेल तर रिकामं ठेवा', // PROPOSED (Marathi)
 };
 
 const en: CorrectionWords = {
@@ -189,6 +192,7 @@ const en: CorrectionWords = {
     labourNeedsNet: 'Changing the number of workers needs the internet. Save when you are online.',
     heard: 'Change heard — check and save',
     numberBad: 'That is not a number — write the amount as a number, e.g. 1.5', // PROPOSED (English)
+    numberZero: 'An amount of 0 cannot be kept — write how much was used, or leave it empty if you do not know', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language reads Marathi. */

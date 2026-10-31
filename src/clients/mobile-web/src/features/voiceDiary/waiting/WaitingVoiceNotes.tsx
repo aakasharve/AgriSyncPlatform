@@ -33,13 +33,15 @@ import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { requestSpeak, type SpeakPlace, type SpeakReturn } from '../../../core/speak/speakStore';
 import type { UnreviewedAiResult } from '../../../infrastructure/sync/PendingAiResultsReader';
 import {
-    putDownSavedVoiceNote, removeWaitingVoiceNote, retryWaitingVoiceNote, waitingCounts, type WaitingVoiceNote,
+    isTypedNote, putDownSavedVoiceNote, removeWaitingVoiceNote, retryWaitingVoiceNote, waitingCounts, type WaitingVoiceNote,
 } from '../../../infrastructure/sync/waitingVoiceNotes';
 import { logger } from '../../../infrastructure/observability/Logger';
 import { PHONE_COLUMN } from '../../logs/components/phoneColumn';
 import CheckSaveScreen from '../../logs/components/checkSave/CheckSaveScreen';
 import { checkSaveWords } from '../../logs/components/checkSave/checkSaveWords';
-import { checkCaseOf, guessScope, hasPlace, placeLabel, previewLogs, understoodOf } from '../../logs/components/checkSave/checkSaveModel';
+import {
+    checkCaseOf, guessScope, hasPlace, placeLabel, previewLogs, samePlace, scopeOfLogs, understoodOf,
+} from '../../logs/components/checkSave/checkSaveModel';
 import { DayPickSheet } from '../../logs/components/dayPick/DayPickSheet';
 import { dayFull, dayRel } from '../../logs/components/dayPick/dayWords';
 import { PlacePickerSheet } from '../../context/components/PlacePickerSheet';
@@ -59,7 +61,8 @@ export interface VoiceNoteCheckDeps {
     save: (draft: AgriLogResponse, provenance: LogProvenance | undefined, how: CheckedSave) => Promise<DailyLog[] | null>;
     /** Where "पुन्हा सांगा" brings him back to (this page). */
     returnTo: SpeakReturn;
-    toast: (message: string) => void;
+    /** A line for him; `type` is what it is (a failure goes out as a failure, fix 2 N4). */
+    toast: (message: string, type: 'success' | 'error' | 'partial') => void;
     /** The farm open now: a recording made on another farm is never saved here (fix 1, M5). */
     farmId?: string | null;
 }
@@ -81,10 +84,12 @@ const dayOfJob = (job: UnreviewedAiResult | WaitingVoiceNote['job']): string =>
  */
 function speakAgainFor(note: WaitingVoiceNote, deps: { crops: CropProfile[]; returnTo: SpeakReturn }, onPutDownFailed: () => void, text?: string): void {
     const day = dayOfJob(note.job);
+    const todayKey = getDateKey();
     const place = speakPlaceOf(scopeOfJob(note.job as UnreviewedAiResult, deps.crops));
+    // Fix 2 (N7): a day AFTER today (the phone's clock was ahead) is no day at all — the mic opens on today, as always.
     requestSpeak({
         purpose: 'addToDay',
-        context: { ...(place && { place }), ...(day !== getDateKey() && { date: day }), ...(text && { typed: text }) },
+        context: { ...(place && { place }), ...(day < todayKey && { date: day }), ...(text && { typed: text }) },
         returnTo: deps.returnTo,
         onLanded: landing => {
             if (landing.kind !== 'saved') return;
@@ -105,22 +110,32 @@ const NoteCheck: React.FC<{ note: WaitingVoiceNote; deps: VoiceNoteCheckDeps; la
     const [open, setOpen] = useState<'place' | 'day' | 'type' | null>(null);
     const [saving, setSaving] = useState(false);
     const [failed, setFailed] = useState<'save' | 'clear' | null>(null);
+    const [alreadyAt, setAlreadyAt] = useState<string | null>(null);
     const logs = useMemo(() => (draft ? previewLogs(draft.draft, chosen, deps.crops, deps.profile) : []), [draft, chosen, deps.crops, deps.profile]);
     const understood = useMemo(() => understoodOf(logs, language), [logs, language]);
     // मागे is blocked while saving (fix 1, M1): the save finishes, or says what went wrong, before he leaves.
     useBackDismiss(open === null && !saving, onClose);
     if (!draft) return null;
     const otherFarm = !!job.context.farmId && !!deps.farmId && job.context.farmId !== deps.farmId;
+    // Fix 2 (N7): a day after today means the phone's clock was ahead when he spoke — the day is not known; he picks it.
+    const needsDay = day > todayKey;
 
     const save = () => {
-        if (!hasPlace(chosen) || saving || otherFarm) return;
+        if (!hasPlace(chosen) || saving || otherFarm || needsDay) return;
         setSaving(true);
         setFailed(null);
+        setAlreadyAt(null);
         // The job's own key: a second try makes the same log ids, finds them written, and writes nothing again (M1).
         const onceKey = `pending-ai-job:${job.id}:${job.createdAt}`;
         void deps.save(draft.draft, draft.provenance, { scope: chosen, dateKey: day, recording: draft.recording, stayOnScreen: true, onceKey })
             .then(async written => {
                 if (!written) { setSaving(false); setFailed('save'); return; }
+                // Fix 2 (N1): an earlier try already saved it — on the place and day chosen THEN. A changed choice is never
+                // pretended saved: he is told where it is, and the recording only leaves the list.
+                const at = scopeOfLogs(written);
+                const savedDay = written[0]?.date ?? day;
+                const elsewhere = (!!at && !samePlace(at, chosen)) || savedDay !== day
+                    ? vw.alreadySavedAt(placeLabel(at, deps.crops, language, w.wholeFarm), dayFull(savedDay, language)) : null;
                 try {
                     await putDownSavedVoiceNote(job.id);
                 } catch (error) {
@@ -128,8 +143,10 @@ const NoteCheck: React.FC<{ note: WaitingVoiceNote; deps: VoiceNoteCheckDeps; la
                     logger.warn('voice note: saved, but could not be put down', { error: String(error) });
                     setSaving(false);
                     setFailed('clear');
+                    setAlreadyAt(elsewhere);
                     return;
                 }
+                if (elsewhere) deps.toast(elsewhere, 'partial');
                 onClose();
             })
             .catch(error => { logger.error('voice note save failed', error); setSaving(false); setFailed('save'); });
@@ -157,42 +174,46 @@ const NoteCheck: React.FC<{ note: WaitingVoiceNote; deps: VoiceNoteCheckDeps; la
                         placeLabel={placeLabel(chosen, deps.crops, language, w.wholeFarm)}
                         chosenLabel={placeLabel(draft.scope, deps.crops, language, w.wholeFarm)}
                         guessLabel={placeLabel(guess, deps.crops, language, w.wholeFarm)}
-                        dayLabel={dayRel(day, todayKey, language)}
-                        dayNote={day !== todayKey ? w.dayNote(dayFull(day, language)) : undefined}
+                        dayLabel={needsDay ? vw.chooseDay : dayRel(day, todayKey, language)}
+                        dayNote={needsDay ? vw.phoneAhead : day !== todayKey ? w.dayNote(dayFull(day, language)) : undefined}
+                        needsDay={needsDay}
                         saving={saving}
                         saveFailed={failed === 'save'}
                         kept={!draft.typed}
-                        onSayAgain={() => { onClose(); speakAgainFor(note, deps, () => deps.toast(vw.removeFailed)); }}
+                        onSayAgain={() => { onClose(); speakAgainFor(note, deps, () => deps.toast(vw.removeFailed, 'error')); }}
                         onType={() => setOpen('type')}
                         onPickPlace={() => setOpen('place')}
                         onPickDay={() => setOpen('day')}
                         onSave={save}
                     />
+                    {alreadyAt && <p className="m-0 mt-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[14.5px] font-bold text-amber-950" data-testid="voice-note-already-saved">{alreadyAt}</p>}
                     {failed === 'clear' && <p className="m-0 mt-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[14.5px] font-bold text-amber-950" data-testid="voice-note-saved-not-cleared">{vw.savedNotCleared}</p>}
                 </div>
             </div>
             {open === 'place' && (
                 <PlacePickerSheet crops={deps.crops}
                     marked={guess ? { plotIds: guess.selectedPlotIds, label: w.guessTag } : draft.scope ? { plotIds: draft.scope.selectedPlotIds, label: w.nowTag } : undefined}
-                    forDay={day !== todayKey ? dayRel(day, todayKey, language) : undefined}
+                    forDay={day !== todayKey && !needsDay ? dayRel(day, todayKey, language) : undefined}
                     onPick={scope => { setChosen(scope); setOpen(null); }} onClose={() => setOpen(null)} />
             )}
             {open === 'day' && (
-                <DayPickSheet value={day} note={w.dayFor} hasRecords={key => daysWithRecords.has(key)} todayKey={todayKey}
+                <DayPickSheet value={needsDay ? todayKey : day} note={w.dayFor} hasRecords={key => daysWithRecords.has(key)} todayKey={todayKey}
                     onPick={key => { setDay(key); setOpen(null); }} onClose={() => setOpen(null)} />
             )}
-            {open === 'type' && <TypedSheet onClose={() => setOpen(null)} onSend={text => { setOpen(null); onClose(); speakAgainFor(note, deps, () => deps.toast(vw.removeFailed), text); }} />}
+            {open === 'type' && <TypedSheet onClose={() => setOpen(null)} onSend={text => { setOpen(null); onClose(); speakAgainFor(note, deps, () => deps.toast(vw.removeFailed, 'error'), text); }} />}
         </div>
     );
 };
 
-const Chip: React.FC<{ state: WaitingVoiceNote['state']; testId: string; language: string | undefined }> = ({ state, testId, language }) => {
+const Chip: React.FC<{ state: WaitingVoiceNote['state']; why?: WaitingVoiceNote['why']; testId: string; language: string | undefined }> = ({ state, why, testId, language }) => {
     const vw = voiceNotesWords(language);
     const base = 'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[12.5px] font-extrabold';
     if (state === 'pending') return <span data-testid={testId} data-state={state} className={`${base} border-amber-300 bg-amber-50 text-amber-900`}><WifiOff size={13} aria-hidden="true" />{vw.chipPending}</span>;
     if (state === 'working') return <span data-testid={testId} data-state={state} className={`${base} border-sky-300 bg-sky-50 text-sky-900`}><Loader2 size={13} className="animate-spin" aria-hidden="true" />{vw.chipWorking}</span>;
     if (state === 'understood') return <span data-testid={testId} data-state={state} className={`${base} border-emerald-300 bg-emerald-50 text-emerald-900`}><CheckCircle2 size={13} aria-hidden="true" />{vw.chipUnderstood}</span>;
-    const words = state === 'stuck' ? vw.chipStuck : state === 'lost' ? vw.chipLost : vw.cannotOpen;
+    // Fix 2 (N3): "साथीला समजलं नाही" only when the server answered and could not; a weak connection is said as that.
+    const stuck = why === 'notSent' ? vw.chipNotSent : why === 'notUnderstood' ? vw.chipNotUnderstood : vw.chipStuck;
+    const words = state === 'stuck' ? stuck : state === 'lost' ? vw.chipLost : vw.cannotOpen;
     return <span data-testid={testId} data-state={state} className={`${base} border-red-300 bg-red-50 text-red-900`}><XCircle size={13} aria-hidden="true" />{words}</span>;
 };
 
@@ -223,7 +244,7 @@ export const WaitingVoiceNotes: React.FC<{ deps?: VoiceNoteCheckDeps; language?:
                 : { tone: 'border-emerald-300 bg-emerald-50 text-emerald-950', title: vw.topUnderstood(c.understood), body: vw.topUnderstoodBody };
 
     const remove = (note: WaitingVoiceNote) => {
-        if (!window.confirm(vw.removeConfirm)) return;
+        if (!window.confirm(isTypedNote(note.job) ? vw.removeConfirmTyped : vw.removeConfirm)) return;
         setProblem(null);
         void removeWaitingVoiceNote(note).catch(error => { logger.warn('voice note could not be removed', { error: String(error) }); setProblem(vw.removeFailed); });
     };
@@ -244,7 +265,7 @@ export const WaitingVoiceNotes: React.FC<{ deps?: VoiceNoteCheckDeps; language?:
                 const head = (
                     <span className="min-w-0 flex-1">
                         <span className="block text-[15px] font-extrabold text-stone-900">{formatFarmerLogTime(n.spokenAtUtc)}{place ? ` · ${place}` : ''}</span>
-                        <span className="mt-1 block"><Chip state={n.state} testId={`voice-note-state-${n.jobId}`} language={language} /></span>
+                        <span className="mt-1 block"><Chip state={n.state} why={n.why} testId={`voice-note-state-${n.jobId}`} language={language} /></span>
                     </span>
                 );
                 return (

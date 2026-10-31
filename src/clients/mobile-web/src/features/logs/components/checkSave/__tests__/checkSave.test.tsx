@@ -31,7 +31,8 @@ import type { AgriLogResponse, DailyLog, FarmerProfile, LogScope } from '../../.
 import type { AppRouterContext } from '../../../../../core/navigation/routeContext';
 import { CheckSaveHost } from '../../../../../core/navigation/checkSaveView';
 import { bindDraftDay, bindDraftDecline } from '../../../../voice/draftFacts';
-import { resetSpeakStoreForTests, speakState } from '../../../../../core/speak/speakStore';
+import { landSpeak, requestSpeak, resetSpeakStoreForTests, speakState } from '../../../../../core/speak/speakStore';
+import { withSpeakPurpose } from '../../../../../core/speak/speakFlow';
 
 const CROPS = [{
     id: 'grape', name: 'Grapes', iconName: 'Grapes', color: 'x', supportedTasks: [], workflow: [],
@@ -141,5 +142,22 @@ describe('lane OF fix 1 (10) — place words: a plot named after its crop is sai
         const crops = [{ id: 'grape', name: 'Grapes', iconName: 'Grapes', plots: [{ id: 'g1', name: `${crop} G1` }] }] as unknown as AppRouterContext['crops'];
         make(bindDraftDecline(parse(), 'notWritten'), { crops } as Partial<AppRouterContext>);
         expect(screen.getByTestId('check-place').textContent).toBe(`${crop} G1`);
+    });
+});
+
+describe('lane OF fix 2 (carried) — a recording said again, handed to this screen and saved HERE, clears the old one', () => {
+    it.each(['mr', 'en'] as const)('the request that said it again hears "saved" once this screen saves it (%s)', async language => {
+        lang.value = language;
+        const onLanded = vi.fn();
+        requestSpeak({ purpose: 'addToDay', context: {}, returnTo: { route: 'voiceDiary', mainView: 'log' }, onLanded });
+        const draft = parse();
+        // the voice auto-save hands it back (the phone could not write it) instead of saving it
+        const sink = withSpeakPurpose(async d => { bindDraftDecline(d, 'notWritten'); return false; }, { setStatus: vi.fn() });
+        await sink(draft, undefined, { recordedAtUtc: '2026-10-31T09:00:00.000Z' });
+        landSpeak({ kind: 'handedOver' });
+        expect(onLanded).toHaveBeenCalledWith({ kind: 'handedOver' });
+        make(draft);
+        await act(async () => { fireEvent.click(screen.getByTestId('check-save-button')); });
+        expect(onLanded).toHaveBeenLastCalledWith({ kind: 'saved', logIds: ['saved-1'] });
     });
 });

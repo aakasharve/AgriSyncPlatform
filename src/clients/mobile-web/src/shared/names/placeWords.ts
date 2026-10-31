@@ -9,12 +9,26 @@
  */
 import { cropNameIn } from './namesIn';
 
+/** The words of a name: split on spaces, punctuation and symbols (never a word-boundary regex, which does not know Devanagari). */
+const wordsOf = (text: string): string[] => text.toLocaleLowerCase().split(/[\s\p{P}\p{S}]+/u).filter(Boolean);
+
+/**
+ * Lane OF fix 2 (N6) — does this plot name say the crop as whole WORDS ("द्राक्ष G1", "Grapes G1")? Letters inside another
+ * word never count: crop ऊस is not said by the plot "पाऊसवाडी".
+ */
+function saysCrop(plot: string, crop: string): boolean {
+    const want = wordsOf(crop);
+    if (want.length === 0) return false;
+    const have = wordsOf(plot);
+    return have.some((_, i) => want.every((w, j) => have[i + j] === w));
+}
+
 /** "द्राक्ष · वरचा, खालचा" — or "द्राक्ष G1" when every plot already names its crop; '' when there is nothing to say. */
 export function placeWords(cropName: string | null | undefined, plotNames: readonly string[], language: string | null | undefined): string {
     const crop = cropNameIn(cropName ?? '', language);
     const plots = plotNames.map(p => p.trim()).filter(Boolean);
     const plotsSayCrop = plots.length > 0
-        && plots.every(p => (!!crop && p.includes(crop)) || (!!cropName && p.includes(cropName)));
+        && plots.every(p => (!!crop && saysCrop(p, crop)) || (!!cropName && saysCrop(p, cropName)));
     if (plotsSayCrop) return plots.join(', ');
     return [crop, plots.join(', ')].filter(Boolean).join(' · ');
 }

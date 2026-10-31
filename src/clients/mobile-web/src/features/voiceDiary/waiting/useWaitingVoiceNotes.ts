@@ -11,11 +11,14 @@
  *     worker now says too), the phone back online, or the app back in front. No timer. A read that finds the same
  *     recordings in the same states changes nothing, so nothing is redrawn.
  *   - M5: each reader sees THIS farm's recordings only (a row with no farm: only for a one-farm login).
+ * Lane OF fix pass 2 (N5): when the signed-in farmer's phone database changes (logout, login, another farmer), what was
+ * read from the old one is dropped at once and the new one is read — a read still under way on the old one is discarded.
  * A phone database that cannot be read keeps what was shown, and says so in the log — never silently.
  */
 import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { inFarmScope, listWaitingVoiceNotes, VOICE_NOTES_CHANGED, type WaitingVoiceNote } from '../../../infrastructure/sync/waitingVoiceNotes';
 import { logger } from '../../../infrastructure/observability/Logger';
+import { onActiveDatabaseChanged } from '../../../infrastructure/storage/activeDatabaseName';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 
 let all: WaitingVoiceNote[] = [];
@@ -23,13 +26,18 @@ let signature = '';
 let started = false;
 let reading: Promise<void> | null = null;
 let again = false;
+/** Which farmer's database the reads belong to (fix 2, N5): a read begun on an older one is thrown away. */
+let generation = 0;
+let stopWatchingDatabase: (() => void) | null = null;
 const listeners = new Set<() => void>();
 
 const signatureOf = (notes: readonly WaitingVoiceNote[]): string => notes.map(n => `${n.jobId}:${n.state}:${n.job.updatedAt}`).join('|');
 
 async function readOnce(): Promise<void> {
+    const forGeneration = generation;
     try {
         const next = await listWaitingVoiceNotes();
+        if (forGeneration !== generation) return; // read from a database he is no longer signed in to
         const sig = signatureOf(next);
         if (sig === signature) return; // the same recordings in the same states: nothing to redraw
         signature = sig;
@@ -60,6 +68,15 @@ export function refreshWaitingVoiceNotes(): void {
     void readNow();
 }
 
+/** Fix 2 (N5) — another farmer's database: nothing of the last one stays on screen; his is read now. */
+function onDatabaseChanged(): void {
+    generation += 1;
+    all = [];
+    signature = '';
+    listeners.forEach(l => l());
+    refreshWaitingVoiceNotes();
+}
+
 const onVisible = (): void => { if (typeof document === 'undefined' || document.visibilityState === 'visible') refreshWaitingVoiceNotes(); };
 
 function start(): void {
@@ -69,6 +86,7 @@ function start(): void {
     window.addEventListener('online', refreshWaitingVoiceNotes);
     window.addEventListener('focus', refreshWaitingVoiceNotes);
     document.addEventListener('visibilitychange', onVisible);
+    stopWatchingDatabase = onActiveDatabaseChanged(onDatabaseChanged);
     void readNow();
 }
 
@@ -101,6 +119,9 @@ export function resetWaitingVoiceNotesForTests(): void {
     signature = '';
     reading = null;
     again = false;
+    generation += 1;
+    stopWatchingDatabase?.();
+    stopWatchingDatabase = null;
     listeners.clear();
     if (started && typeof window !== 'undefined') {
         window.removeEventListener(VOICE_NOTES_CHANGED, refreshWaitingVoiceNotes);

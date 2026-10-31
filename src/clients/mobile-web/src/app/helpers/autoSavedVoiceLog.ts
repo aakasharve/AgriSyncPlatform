@@ -87,3 +87,17 @@ export function asAutoSaved(
     const day = options.dateKey;
     return day ? marked.map(l => onDay(l, day)) : marked;
 }
+
+/**
+ * Lane OF fix 2 (N1) — a capture found ALREADY saved (its once-key's logs are on the phone): nothing is written again, but
+ * the step after the write still runs, so a recording whose link to its log was never made (the app was killed between
+ * the write and the link) gets it now. That step failing never turns "already saved" into "not saved".
+ */
+export async function alreadySaved(logs: DailyLog[], onWritten: ((logs: DailyLog[]) => Promise<void> | void) | undefined): Promise<DailyLog[]> {
+    try {
+        await onWritten?.(logs);
+    } catch (error) {
+        console.warn('[voice save] already saved; the step after the write failed', String(error));
+    }
+    return logs;
+}

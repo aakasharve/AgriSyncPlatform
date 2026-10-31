@@ -41,6 +41,8 @@ export interface CheckSaveScreenProps {
     dayNote?: string;
     saving: boolean;
     saveFailed: boolean;
+    /** Lane OF fix 2 (N7) — the day is not known yet (the phone's clock was ahead): "जतन करा" waits for his day. */
+    needsDay?: boolean;
     /** The recording is on the phone (not typed): the "kept" line is true. */
     kept: boolean;
     onSayAgain: () => void;
@@ -79,7 +81,7 @@ export const CheckSaveScreen: React.FC<CheckSaveScreenProps> = (p) => {
                         <MapPin size={16} aria-hidden="true" />{p.placeLabel || w.choosePlace}<ChevronDown size={16} aria-hidden="true" />
                     </button>
                     <button type="button" onClick={p.onPickDay} data-testid="check-day"
-                        className="inline-flex min-h-[44px] items-center gap-1 rounded-full border border-stone-300 bg-white px-3 text-[15px] font-extrabold text-stone-800">
+                        className={`inline-flex min-h-[44px] items-center gap-1 rounded-full border px-3 text-[15px] font-extrabold ${p.needsDay ? 'border-sky-500 bg-sky-600 text-white' : 'border-stone-300 bg-white text-stone-800'}`}>
                         <CalendarDays size={16} aria-hidden="true" />{p.dayLabel}<ChevronDown size={16} aria-hidden="true" />
                     </button>
                     {p.spokenAt && <span className="text-[13px] font-bold text-stone-600" data-testid="check-spoken-at">{w.spokenAt(p.spokenAt)}</span>}
@@ -128,7 +130,7 @@ export const CheckSaveScreen: React.FC<CheckSaveScreenProps> = (p) => {
             {!unclear && (
                 <>
                     {!p.placeLabel && <p className="m-0 px-1 text-[14px] font-bold text-sky-800" data-testid="check-place-first">{w.choosePlaceFirst}</p>}
-                    <button type="button" onClick={p.onSave} disabled={p.saving || !p.placeLabel} data-testid="check-save-button"
+                    <button type="button" onClick={p.onSave} disabled={p.saving || !p.placeLabel || p.needsDay} data-testid="check-save-button"
                         className="min-h-[56px] w-full rounded-2xl bg-emerald-700 text-[18px] font-extrabold text-white disabled:bg-stone-300">
                         {p.saving ? w.saving : p.kind === 'notWritten' ? w.saveAgain : w.save}
                     </button>

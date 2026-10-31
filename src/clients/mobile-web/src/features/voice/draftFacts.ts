@@ -22,6 +22,8 @@ export type DeclineReason = 'unclear' | 'otherPlot' | 'notWritten';
 interface DraftFacts {
     day?: string;
     decline?: { reason: DeclineReason; recording?: VoiceRecordingRef };
+    /** Lane OF fix 2 (carried) — who must hear when this draft is saved LATER, on "तपासा आणि जतन करा". */
+    afterSave?: (logIds: string[]) => void;
 }
 
 const factsByDraft = new WeakMap<object, DraftFacts>();
@@ -50,4 +52,19 @@ export function bindDraftDecline<T extends object>(draft: T, reason: DeclineReas
 /** Why this draft was handed back, or undefined when no auto-save looked at it. */
 export function draftDecline(draft: object | null | undefined): DraftFacts['decline'] {
     return draft ? factsByDraft.get(draft)?.decline : undefined;
+}
+
+/**
+ * Lane OF fix 2 (carried) — what must happen once this draft is saved on "तपासा आणि जतन करा" (it was handed back, not
+ * saved by itself): the request that asked for it (e.g. "पुन्हा सांगा" on a recording in आवाज नोंदी) hears "saved", exactly
+ * as it does when the auto-save saves it. `undefined` clears it (it is told once). Returns the same draft.
+ */
+export function bindDraftAfterSave<T extends object>(draft: T, afterSave: ((logIds: string[]) => void) | undefined): T {
+    update(draft, { afterSave });
+    return draft;
+}
+
+/** Who must hear that this draft was saved (once), or undefined. */
+export function draftAfterSave(draft: object | null | undefined): DraftFacts['afterSave'] {
+    return draft ? factsByDraft.get(draft)?.afterSave : undefined;
 }

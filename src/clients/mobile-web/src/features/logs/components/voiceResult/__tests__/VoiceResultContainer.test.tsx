@@ -592,9 +592,12 @@ describe('the ONE result screen — lane L6b (founder design)', () => {
 });
 
 describe('lane OF fix 1 (L2) — a recording saved for a PAST day never says "आज"', () => {
+    // Lane OF fix 2 (N8): he spoke TODAY about that day's work — the lines say "about the work of that day", never that
+    // he spoke on that day ("24 ऑक्टो ला … सांगितलं"). (Fix 2 also repairs this test's English check: its word-boundary
+    // regex had been written with control characters, so it could never match anything.)
     const WORDS = {
-        mr: { count: '24 ऑक्टो ला पहिल्यांदा सांगितलं', who: '24 ऑक्टो ला कोणी सांगितलं', title: '24 ऑक्टो चं काम', today: /आज / },
-        en: { count: 'First time on 24 Oct', who: 'Who told on 24 Oct', title: 'Work on 24 Oct', today: /today/i },
+        mr: { count: '24 ऑक्टो च्या कामाबद्दल पहिल्यांदा सांगितलं', who: '24 ऑक्टो च्या कामाबद्दल कोणी सांगितलं', title: '24 ऑक्टो चं काम', today: /आज |24 ऑक्टो ला (पहिल्यांदा|कोणी|[0-9])/ },
+        en: { count: 'First time telling about the work of 24 Oct', who: 'Who told about the work of 24 Oct', title: 'Work on 24 Oct', today: /\btoday\b|told on 24 Oct|First time on/i },
     } as const;
     afterEach(() => { lng.v = 'mr'; });
     it.each(['mr', 'en'] as const)('the count, the speakers line and the day title name that day (%s)', (language) => {

@@ -138,21 +138,22 @@ export const RESULT_STR_EN: ResultStr = {
  * PROPOSED (Marathi) / PROPOSED (English).
  */
 export interface ResultDayStr { count: (n: number, day: string) => string; first: (day: string) => string; who: (day: string) => string; title: (day: string) => string; earlier: string; sathi: (day: string) => string }
+// Lane OF fix 2 (N8): he speaks NOW about that day's work — "about the work of 30 Oct", never "on 30 Oct" (when he spoke).
 const RESULT_DAY_MR: ResultDayStr = {
-    count: (n, day) => `${day} ला ${n} वेळा सांगितलं`,
-    first: day => `${day} ला पहिल्यांदा सांगितलं`,
-    who: day => `${day} ला कोणी सांगितलं`,
+    count: (n, day) => `${day} च्या कामाबद्दल ${n} वेळा सांगितलं`,
+    first: day => `${day} च्या कामाबद्दल पहिल्यांदा सांगितलं`,
+    who: day => `${day} च्या कामाबद्दल कोणी सांगितलं`,
     title: day => `${day} चं काम`,
-    earlier: 'त्या दिवशी आधीची बोलणी',
+    earlier: 'त्या दिवसाच्या कामाबद्दल आधी सांगितलेलं',
     // the approved `dfes.sathiSaidLine` with its "आज" replaced by the day
     sathi: day => `श्रम सफल मध्ये तुम्ही ${day} ला केलेले काम समजून घेत आहे`,
 };
 const RESULT_DAY_EN: ResultDayStr = {
-    count: (n, day) => `Told ${n} times on ${day}`,
-    first: day => `First time on ${day}`,
-    who: day => `Who told on ${day}`,
+    count: (n, day) => `Told ${n} times about the work of ${day}`,
+    first: day => `First time telling about the work of ${day}`,
+    who: day => `Who told about the work of ${day}`,
     title: day => `Work on ${day}`,
-    earlier: 'Earlier that day',
+    earlier: 'Told earlier about that day’s work',
     sathi: day => `Shram Safal is understanding the work you did on ${day}`,
 };
 export const resultDayStr = (language: string | null | undefined): ResultDayStr => (language === 'en' ? RESULT_DAY_EN : RESULT_DAY_MR);

@@ -493,6 +493,17 @@ describe.each(['mr', 'en'] as const)('lane OF fix 1 — the बदला screen 
         expect(screen.getByTestId('corr-save')).toBeDisabled();
     });
 
+    it('fix 2 (H2 leftover): an amount of 0 is refused with what is wrong with 0 — never "that is not a number"', () => {
+        openWith(ENTRY);
+        fireEvent.click(screen.getByTestId('corr-edit-in'));
+        fireEvent.change(screen.getByTestId('tap-product-qty'), { target: { value: '0' } });
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        const line = screen.getByTestId('tap-number-bad');
+        expect(line).toHaveTextContent(language === 'en' ? 'An amount of 0' : '0 मात्रा');
+        expect(line).not.toHaveTextContent(language === 'en' ? 'not a number' : 'हा आकडा नाही');
+        expect(screen.getByTestId('tap-sheet-inputs')).toBeInTheDocument(); // still open: nothing applied
+    });
+
     it('L1: "+ आणखी जोडा" starts with nothing chosen: ठीक stays off until he picks the work', () => {
         openWith(ENTRY);
         fireEvent.click(screen.getByTestId('corr-add'));

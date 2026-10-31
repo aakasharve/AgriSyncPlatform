@@ -38,6 +38,22 @@ export function checkCaseOf(draft: AgriLogResponse, reason: DeclineReason | unde
     return draft.suggestedContext?.cropId && draft.suggestedContext?.plotId ? 'otherPlot' : 'check';
 }
 
+/** Lane OF fix 2 (N1) — where these SAVED logs are (their own selection), as a place; null when they name none. */
+export function scopeOfLogs(logs: readonly DailyLog[]): LogScope | null {
+    const sel = logs.flatMap(l => l.context?.selection ?? []);
+    if (sel.length === 0) return null;
+    if (sel.every(s => s.cropId === FARM_GLOBAL)) return WHOLE_FARM_SCOPE;
+    const plots = [...new Set(sel.flatMap(s => s.selectedPlotIds ?? []))];
+    const crops = [...new Set(sel.map(s => s.cropId).filter(id => id !== FARM_GLOBAL))];
+    return { selectedCropIds: crops, selectedPlotIds: plots, mode: plots.length > 1 ? 'multi' : 'single', applyPolicy: 'broadcast' };
+}
+
+/** The same place? (the same plots, or both the whole farm.) */
+export function samePlace(a: LogScope | null, b: LogScope | null): boolean {
+    const key = (s: LogScope | null): string => (!s ? '' : s.selectedCropIds.includes(FARM_GLOBAL) ? FARM_GLOBAL : [...s.selectedPlotIds].sort().join(','));
+    return key(a) === key(b);
+}
+
 /** The plot Sathi suggested, as a one-plot place, or null. */
 export function guessScope(draft: AgriLogResponse): LogScope | null {
     const s = draft.suggestedContext;

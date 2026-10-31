@@ -60,7 +60,7 @@ import { seededIdGenerator } from '../../core/domain/services/IdGenerator';
 // re-exported here so existing `from './useLogCommands'` imports (and any
 // future ones) keep working.
 import type { AutoSaveOptions, ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
-import { asAutoSaved } from '../helpers/autoSavedVoiceLog';
+import { alreadySaved, asAutoSaved } from '../helpers/autoSavedVoiceLog';
 import { isAfterFarmToday } from '../../core/domain/services/farmDay';
 export type { ManualSubmitOutcome, UseLogCommandsResult };
 
@@ -332,7 +332,7 @@ export const useLogCommands = ({
             const newLogs = asAutoSaved(created, options); // + lane OF (D-60, TAP-1): on the day he chose, never a new time
             // M1: already on the phone (an earlier try, a killed app): nothing is written again, the logs there are returned.
             const already = options.onceKey ? await logCommandService.findSaved(newLogs.map(l => l.id)) : [];
-            if (already.length > 0) return already;
+            if (already.length > 0) return alreadySaved(already, options.onWritten); // fix 2 (N1): + the clip link, if it is missing
             attempted = newLogs;
 
             // Persist (Service handles persistence via injected repo)

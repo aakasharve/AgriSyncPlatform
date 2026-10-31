@@ -145,7 +145,10 @@ describe.each(['mr', 'en'] as const)('आवाज नोंदी — the recor
 
     it('the words never say "AI" or "draft", in either language', () => {
         const all = [vw.topNotYet(2), vw.topNotYetBody, vw.topWorking, vw.topWorkingBody, vw.topUnderstood(1), vw.topUnderstoodBody,
-            vw.chipPending, vw.chipWorking, vw.chipUnderstood, vw.syncLine(3), vw.badge(2), vw.rowLine({ notYet: 1, understood: 0 }, '')].join(' ');
+            vw.chipPending, vw.chipWorking, vw.chipUnderstood, vw.syncLine(3), vw.badge(2), vw.rowLine({ notYet: 1, understood: 0, stuck: 0, total: 1 }, ''),
+            // lane OF fix 2: the new words too
+            vw.rowLine({ notYet: 1, understood: 1, stuck: 1, total: 3 }, ''), vw.chipStuck, vw.chipNotSent, vw.chipNotUnderstood, vw.topStuck(2),
+            vw.topStuckBody, vw.removeConfirmTyped, vw.alreadySavedAt('', ''), vw.phoneAhead, vw.chooseDay].join(' ');
         expect(all).not.toMatch(/\bAI\b|draft|ड्राफ्ट/i);
         if (language === 'en') expect(all).not.toMatch(/[ऀ-ॿ]/);
         else expect(all).not.toMatch(/[A-Za-z]/);
