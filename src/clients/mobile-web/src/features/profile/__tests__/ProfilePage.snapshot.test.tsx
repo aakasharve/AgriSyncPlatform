@@ -62,6 +62,8 @@ vi.mock('../../../core/session/FarmContext', () => ({
         farms: [],
         isLoading: false,
     }),
+    // Lane OF fix 1 (M5): the waiting voice recordings read the farm open now through the optional hook.
+    useOptionalFarmContext: () => ({ currentFarmId: 'test-farm-id', farms: [], isLoading: false }),
     FarmContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 

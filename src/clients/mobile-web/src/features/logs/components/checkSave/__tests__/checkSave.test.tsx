@@ -133,3 +133,13 @@ describe.each(['mr', 'en'] as const)('"तपासा आणि जतन क�
         expect(ctx.saveCheckedDraft).toHaveBeenCalledWith(expect.anything(), undefined, expect.objectContaining({ dateKey: '2026-10-27' }));
     });
 });
+
+describe('lane OF fix 1 (10) — place words: a plot named after its crop is said alone', () => {
+    it.each(['mr', 'en'] as const)('"तपासा आणि जतन करा" never says "द्राक्ष · द्राक्ष G1" (%s)', language => {
+        lang.value = language;
+        const crop = language === 'en' ? 'Grapes' : 'द्राक्ष';
+        const crops = [{ id: 'grape', name: 'Grapes', iconName: 'Grapes', plots: [{ id: 'g1', name: `${crop} G1` }] }] as unknown as AppRouterContext['crops'];
+        make(bindDraftDecline(parse(), 'notWritten'), { crops } as Partial<AppRouterContext>);
+        expect(screen.getByTestId('check-place').textContent).toBe(`${crop} G1`);
+    });
+});

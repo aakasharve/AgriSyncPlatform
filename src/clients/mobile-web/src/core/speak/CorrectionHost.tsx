@@ -26,11 +26,11 @@ import {
 import { saveSpokenCorrection, type SaveCorrectionDeps, type SaveOutcome } from '../../features/logs/components/correction/saveCorrection';
 import { useRefusedRevision } from '../../features/logs/components/correction/refusedRevision';
 import {
-    afterOf, canRemove, newItem, tapRows, tapUpdates, withItem, withNew, withoutItem, type AddKind, type TapBucket, type TapRow,
+    afterOf, canRemove, newItem, partnersOf, tapRows, tapUpdates, withItem, withNew, withRestored, withoutItem, type AddKind, type TapBucket, type TapRow,
 } from '../../features/logs/components/correction/tapEdit';
 import { AddKindSheet, TapEditSheet, TypeChangeSheet } from '../../features/logs/components/correction/TapEditSheet';
 import { canMoveSavedEntry, canQueueLabourCountOffline, queueSavedEntryMove, type SavedEntryMove } from '../../features/logs/components/correction/correctionCapabilities';
-import { cropNameIn } from '../../features/logs/components/voiceResult/partNames';
+import { placeWords } from '../../shared/names/placeWords';
 import { isConfirmed } from '../../features/logs/components/voiceResult/resultModel';
 import { dayFull } from '../../features/logs/components/dayPick/dayWords';
 import { DayPickSheet } from '../../features/logs/components/dayPick/DayPickSheet';
@@ -40,7 +40,7 @@ import { formatFarmerLogTime } from '../navigation/helpers';
 import type { AppRouterContext } from '../navigation/routeContext';
 import { useBackDismiss } from '../navigation/useBackDismiss';
 import { FARM_GLOBAL } from './speakFlow';
-import { closeCorrection, requestSpeak, type CorrectionSession, type SpeakLanding, type SpeakPlace, setCorrectionProposal } from './speakStore';
+import { closeCorrection, requestSpeak, setCorrectionWorking, type CorrectionSession, type SpeakLanding, type SpeakPlace, setCorrectionProposal } from './speakStore';
 
 /** What the router gives the "बदला" screen to save with (the language is the screen's own). */
 export type CorrectionSaveDeps = Omit<SaveCorrectionDeps, 'language'>;
@@ -62,7 +62,8 @@ const entryPlaceLabel = (log: DailyLog, crops: AppRouterContext['crops'], langua
     const sel = log.context?.selection?.[0];
     if (!sel || sel.cropId === FARM_GLOBAL) return wholeFarm;
     const crop = crops.find(c => c.id === sel.cropId);
-    return [cropNameIn(crop?.name ?? sel.cropName, language), (sel.selectedPlotNames ?? []).join(', ')].filter(Boolean).join(' · ');
+    // Lane OF fix 1 (10): the shared rule — a plot named after its crop is said alone.
+    return placeWords(crop?.name ?? sel.cropName, sel.selectedPlotNames ?? [], language);
 };
 
 const isOffline = (): boolean => typeof navigator !== 'undefined' && navigator.onLine === false;
@@ -123,6 +124,13 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
 
     const rows = useMemo(() => (log && base ? tapRows(log, base, removed, language) : []), [log, base, removed, language]);
     const after = useMemo(() => (base ? afterOf(base, removed) : undefined), [base, removed]);
+    // Lane OF fix 1 (L7): what he says next is understood against what he sees (his taps applied), not the saved version.
+    const logId = log?.id;
+    useEffect(() => {
+        if (!logId || !after) return undefined;
+        setCorrectionWorking({ logId, log: after });
+        return () => setCorrectionWorking(null);
+    }, [logId, after]);
     if (!log || !base || !after || toHajeri) return null;
 
     const updates = {
@@ -153,8 +161,16 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
     };
 
     const toggle = (row: TapRow) => {
+        // What moves with this row (fix 1, M6): planned work and its reminder notes, a reminder and its own task.
+        const group = [row.id, ...partnersOf(row.gone ? log : base, row.id)];
+        if (row.gone) {
+            // A saved part his words left out comes back as it was saved (fix 1, L7).
+            setWorking(group.reduce((w, id) => withRestored(w, log, id), base));
+            setKeepOne(false);
+            return;
+        }
         if (row.removed) {
-            setRemoved(prev => { const n = new Set(prev); n.delete(row.id); return n; });
+            setRemoved(prev => { const n = new Set(prev); group.forEach(id => n.delete(id)); return n; });
             setKeepOne(false);
             return;
         }
@@ -162,7 +178,7 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
         setKeepOne(false);
         // A part he added here and removes again simply goes; a saved part is struck through until he brings it back.
         if (row.isNew) setWorking(withoutItem(base, row.bucket, row.id));
-        else setRemoved(prev => new Set(prev).add(row.id));
+        else setRemoved(prev => { const n = new Set(prev); group.forEach(id => n.add(id)); return n; });
     };
 
     const addKind = (kind: AddKind) => {

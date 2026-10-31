@@ -28,6 +28,7 @@ vi.mock('../../../../i18n/LanguageContext', async () => {
 import { getDatabase, resetDatabase, type PendingAiJobRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import { listWaitingVoiceNotes, waitingCounts } from '../../../../infrastructure/sync/waitingVoiceNotes';
 import { WaitingVoiceNotes, type VoiceNoteCheckDeps } from '../WaitingVoiceNotes';
+import { resetWaitingVoiceNotesForTests } from '../useWaitingVoiceNotes';
 import { SetupHubIcon } from '../../../context/components/SetupHubIcon';
 import { voiceNotesWords } from '../voiceNotesWords';
 import { checkSaveWords } from '../../../logs/components/checkSave/checkSaveWords';
@@ -53,13 +54,14 @@ const deps = (save: VoiceNoteCheckDeps['save']): VoiceNoteCheckDeps => ({
 });
 
 beforeEach(async () => {
+    resetWaitingVoiceNotesForTests(); // fix 1 (L5): one shared store — fresh for each test
     try { await getDatabase().delete(); } catch { /* first run */ }
     await resetDatabase();
 });
 afterEach(() => { cleanup(); lang.value = 'mr'; vi.restoreAllMocks(); });
 
 describe('THE one reader (D-59)', () => {
-    it('counts pending + processing + a retrying one + understood-not-saved; never a bill photo, a reviewed one or a given-up one', async () => {
+    it('counts pending + processing + a retrying one + understood-not-saved (+ fix 1 M4: a given-up one stays, "lost" when its sound is gone); never a bill photo or a reviewed one', async () => {
         const db = getDatabase();
         await db.pendingAiJobs.add(job({ status: 'pending' }));
         await db.pendingAiJobs.add(job({ status: 'processing' }));
@@ -69,8 +71,8 @@ describe('THE one reader (D-59)', () => {
         await db.pendingAiJobs.add(understood({ result: { operationType: 'voice_parse', receivedAtUtc: 'x', payload: {}, reviewedAtUtc: 'y' } }));
         await db.pendingAiJobs.add(job({ status: 'failed_permanent' }));
         const notes = await listWaitingVoiceNotes();
-        expect(notes.map(n => n.state).sort()).toEqual(['pending', 'pending', 'understood', 'working']);
-        expect(waitingCounts(notes)).toEqual({ notYet: 3, working: 1, understood: 1, total: 4 });
+        expect(notes.map(n => n.state).sort()).toEqual(['lost', 'pending', 'pending', 'understood', 'working']);
+        expect(waitingCounts(notes)).toEqual({ notYet: 3, working: 1, understood: 1, stuck: 1, total: 5 });
     });
 
     it('a weak or no internet changes nothing: the count is what is on the phone', async () => {

@@ -11,7 +11,7 @@ import { LogScope, CropProfile, FarmerProfile, DailyLog } from '../../types';
 import { LogFactory } from '../../core/domain/LogFactory';
 import { LogsRepository } from '../ports';
 import { WeatherPort } from '../ports/WeatherPort';
-import { idGenerator } from '../../core/domain/services/IdGenerator';
+import { idGenerator, type IdGenerator } from '../../core/domain/services/IdGenerator';
 import { ensureLabourAssignmentIds, stampCreationFarmId } from '../../core/domain/helpers/log-factory-helpers';
 import { systemClock } from '../../core/domain/services/Clock';
 import { getWeatherForLocation } from '../usecases/AttachWeatherSnapshot';
@@ -64,8 +64,13 @@ export interface LogCommandService {
         // Daily Clarity Loop gate (spec: dfes-companion-2026-07-11) — passed down
         // from the app-layer caller that reads FEATURE_FLAGS.dailyLoop. Off (the
         // default) keeps the spoken-task due-date resolver inert (pre-feature).
-        resolveDue?: boolean
+        resolveDue?: boolean,
+        // Lane OF fix 1 (M1) — derived ids for a capture that may become logs only once (default: random ids).
+        idGen?: IdGenerator
     ): Promise<DailyLog[]>;
+
+    /** Lane OF fix 1 (M1) — the logs with these ids that are already on this phone (none = not written yet). */
+    findSaved(ids: readonly string[]): Promise<DailyLog[]>;
 
     createFromManual(
          
@@ -113,7 +118,8 @@ export class LogCommandServiceImpl implements LogCommandService {
         crops: CropProfile[],
         profile: FarmerProfile,
         provenance?: LogProvenance,
-        resolveDue: boolean = false
+        resolveDue: boolean = false,
+        idGen: IdGenerator = idGenerator
     ): Promise<DailyLog[]> {
         // 1. Factory Creation
         const logs = LogFactory.createFromVoiceResult(
@@ -124,7 +130,7 @@ export class LogCommandServiceImpl implements LogCommandService {
             undefined, // weatherStamps (enriched later)
             provenance,
             systemClock,
-            idGenerator,
+            idGen,
             resolveDue
         );
 
@@ -132,6 +138,12 @@ export class LogCommandServiceImpl implements LogCommandService {
         await this.enrichWithWeather(logs, crops, profile);
 
         return logs;
+    }
+
+    /** Lane OF fix 1 (M1) — the logs with these ids already on this phone. */
+    async findSaved(ids: readonly string[]): Promise<DailyLog[]> {
+        const found = await Promise.all(ids.map(id => this.repo.getById(id)));
+        return found.filter((l): l is DailyLog => !!l);
     }
 
     /**

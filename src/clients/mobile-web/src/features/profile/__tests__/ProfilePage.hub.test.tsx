@@ -32,6 +32,8 @@ vi.mock('../../../app/providers/AuthProvider', () => ({
 }));
 vi.mock('../../../core/session/FarmContext', () => ({
     useFarmContext: () => ({ currentFarmId: 'farm-1', switchFarm: vi.fn(), farms: [], isLoading: false }),
+    // Lane OF fix 1 (M5): the waiting voice recordings read the farm open now through the optional hook.
+    useOptionalFarmContext: () => ({ currentFarmId: 'farm-1', switchFarm: vi.fn(), farms: [], isLoading: false }),
     FarmContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('../../../features/work/hooks/useWorkerProfile', () => ({
@@ -50,6 +52,7 @@ vi.mock('../../../features/people/components/MembershipsList', () => ({ default:
 
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import ProfilePage from '../ProfilePage';
+import { resetWaitingVoiceNotesForTests } from '../../voiceDiary/waiting/useWaitingVoiceNotes';
 import { TestProviders } from '../../../shared/test/TestProviders';
 import { VerificationStatus, type FarmerProfile } from '../../../domain/types/farm.types';
 import { __resetBackStackForTests, dismissTopOverlay } from '../../../core/navigation/backStack';
@@ -73,7 +76,7 @@ const mount = (profile = baseProfile(), hs = handlers()) => {
 };
 
 describe('ProfilePage — the redesigned सेट-अप केंद्र', () => {
-    afterEach(() => { cleanup(); vi.clearAllMocks(); h.waiting = []; __resetBackStackForTests(); });
+    afterEach(() => { cleanup(); vi.clearAllMocks(); h.waiting = []; h.voice = []; resetWaitingVoiceNotesForTests(); __resetBackStackForTests(); });
 
     it('reads सेट-अप केंद्र with one back, and lists every setup page in plain Marathi', () => {
         const hs = mount();
@@ -143,7 +146,7 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
 
     it('lane OF (D-59): the offline-notes row counts only the bill photo; the voice recording waits in आवाज नोंदी with its number', async () => {
         h.waiting = [{ id: 1, operationType: 'voice_parse' }, { id: 2, operationType: 'receipt_extract' }];
-        h.voice = [{ jobId: 1, state: 'understood', spokenAtUtc: '2026-10-31T10:00:00.000Z', job: { id: 1 } }];
+        h.voice = [{ jobId: 1, state: 'understood', spokenAtUtc: '2026-10-31T10:00:00.000Z', job: { id: 1, context: { farmId: 'farm-1' } } }];
         const hs = mount();
         // the waiting lists are read from the phone after the first paint: slow on a busy machine
         const row = await screen.findByTestId('hub-settings-ai-drafts', {}, { timeout: 20_000 });
@@ -163,8 +166,8 @@ describe('ProfilePage — the redesigned सेट-अप केंद्र', (
     it('lane OF (D-59): a recording not understood yet says so on the आवाज नोंदी row; a bill photo alone is not counted there', async () => {
         h.waiting = [{ id: 2, operationType: 'receipt_extract' }];
         h.voice = [
-            { jobId: 3, state: 'pending', spokenAtUtc: '2026-10-31T10:00:00.000Z', job: { id: 3 } },
-            { jobId: 4, state: 'working', spokenAtUtc: '2026-10-31T10:05:00.000Z', job: { id: 4 } },
+            { jobId: 3, state: 'pending', spokenAtUtc: '2026-10-31T10:00:00.000Z', job: { id: 3, context: { farmId: 'farm-1' } } },
+            { jobId: 4, state: 'working', spokenAtUtc: '2026-10-31T10:05:00.000Z', job: { id: 4, context: { farmId: 'farm-1' } } },
         ];
         mount();
         const voice = await screen.findByTestId('voice-notes-row-count', {}, { timeout: 20_000 });

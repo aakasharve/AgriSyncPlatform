@@ -75,6 +75,8 @@ export interface CheckedSave {
     recording?: VoiceRecordingRef;
     /** Saved from आवाज नोंदी: the log tab is left as it was. */
     stayOnScreen?: boolean;
+    /** Lane OF fix 1 (M1): this capture becomes logs only ONCE (an offline job's own key) — see `AutoSaveOptions.onceKey`. */
+    onceKey?: string;
 }
 
 export interface UseVoiceAutoSaveProps {
@@ -180,7 +182,8 @@ export function useVoiceAutoSave({
         const recording = how.recording;
         const typed = recording?.typed === true;
         try {
-            const voiceClipId = recording && !typed ? await archiveIdOf(recording).catch(() => undefined) : undefined;
+            // Lane OF fix 1 (L4): a recording that cannot be named or linked leaves a trace; the save still happens.
+            const voiceClipId = recording && !typed ? await archiveIdOf(recording).catch((error: unknown) => { logger.warn('checked save: the archive id of the recording could not be read', { error: String(error) }); return undefined; }) : undefined;
             // A plot Sathi only suggested is never where it lands: the place he chose is (CTX-1).
             const { suggestedContext: _suggested, ...chosen } = draft;
             return await handleAutoSave(chosen as AgriLogResponse, provenance, {
@@ -190,9 +193,10 @@ export function useVoiceAutoSave({
                 scope: how.scope,
                 ...(how.dateKey && { dateKey: how.dateKey }),
                 ...(how.stayOnScreen && { stayOnScreen: true }),
+                ...(how.onceKey && { onceKey: how.onceKey }),
                 onWritten: async (logs) => {
                     const primary = primaryLogOf(logs);
-                    const clipId = primary && recording && !typed ? await linkClip(recording, primary.id).catch(() => null) : null;
+                    const clipId = primary && recording && !typed ? await linkClip(recording, primary.id).catch((error: unknown) => { logger.warn('checked save: the recording could not be linked to its log', { error: String(error) }); return null; }) : null;
                     if (how.stayOnScreen) return;
                     const unclear = (draft.unclearSegments ?? []).map(s => s.rawText?.trim() ?? '').filter(t => t.length > 0);
                     setVoiceResult({ logIds: logs.map(l => l.id), clipId, key: recording ? recordingKey(recording) : `checked|${Date.now()}`, unclear, written: logs, ...(typed && { typed: true }) });

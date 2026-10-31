@@ -16,7 +16,7 @@ import { PHONE_COLUMN } from '../phoneColumn';
 import { partNameIn } from '../voiceResult/partNames';
 import { correctionWords } from './correctionWords';
 import {
-    ADD_KINDS, UNIT_CHOICES, WATER_METHODS, WORK_CHOICES, methodName, productFace, setCount, setProduct, setWater, setWork, unitName,
+    ADD_KINDS, UNIT_CHOICES, WATER_METHODS, WORK_CHOICES, methodName, parseAmount, productFace, setCount, setProduct, setWater, setWork, unitName,
     type AddKind, type TapBucket,
 } from './tapEdit';
 
@@ -80,6 +80,9 @@ export const TapEditSheet: React.FC<TapEditSheetProps> = ({ bucket, item, labour
     const title = w.editTitle(partNameIn(part, language));
     const [work, setWorkState] = useState<string | undefined>(() => (bucket === 'cropActivities' ? WORK_CHOICES.find(([en, mr]) => (item as CropActivityEvent).workTypes?.includes(en) || (item as CropActivityEvent).title === mr)?.[0] : undefined));
     const [face, setFace] = useState(() => (bucket === 'inputs' ? productFace(item as InputEvent) : { name: '' }));
+    // Lane OF fix 1 (H2): the amount is kept AS HE TYPES IT ("1." stays "1."), and becomes a number only on ठीक.
+    const [qtyText, setQtyText] = useState(() => (bucket === 'inputs' && face.qty !== undefined ? String(face.qty) : ''));
+    const [numberBad, setNumberBad] = useState(false);
     const [method, setMethod] = useState<string | undefined>(() => (bucket === 'irrigation' ? (item as IrrigationEvent).method : undefined));
     const [hours, setHours] = useState<number | undefined>(() => (bucket === 'irrigation' ? (item as IrrigationEvent).durationHours : undefined));
     const [count, setCountState] = useState<number | undefined>(() => (bucket === 'labour' ? (item as LabourEvent).count : undefined));
@@ -105,15 +108,20 @@ export const TapEditSheet: React.FC<TapEditSheetProps> = ({ bucket, item, labour
                 <input value={face.name} onChange={e => setFace(f => ({ ...f, name: e.target.value }))} data-testid="tap-product-name"
                     className="min-h-[52px] w-full rounded-xl border-2 border-stone-300 px-3 text-[17px] font-bold text-stone-900 outline-none focus:border-emerald-600" />
                 <Label>{w.amount}</Label>
-                <input inputMode="decimal" value={face.qty ?? ''} data-testid="tap-product-qty"
-                    onChange={e => { const n = Number(e.target.value); setFace(f => ({ ...f, qty: e.target.value === '' || !Number.isFinite(n) ? undefined : n })); }}
+                <input inputMode="decimal" value={qtyText} data-testid="tap-product-qty"
+                    onChange={e => { setQtyText(e.target.value); setNumberBad(false); }}
                     className="min-h-[52px] w-40 rounded-xl border-2 border-stone-300 px-3 text-[18px] font-extrabold text-stone-900 outline-none focus:border-emerald-600" />
+                {numberBad && <p className="m-0 mt-1.5 text-[13.5px] font-bold text-red-700" data-testid="tap-number-bad">{w.numberBad}</p>}
                 <Label>{w.unit}</Label>
                 <div className="flex flex-wrap gap-2">
                     {UNIT_CHOICES.map(u => <Chip key={u} on={face.unit === u} onClick={() => setFace(f => ({ ...f, unit: u }))} testId={`tap-unit-${u}`}>{unitName(u, language)}</Chip>)}
                 </div>
                 {!face.name.trim() && <p className="m-0 mt-2 text-[13.5px] font-bold text-amber-800" data-testid="tap-name-needed">{w.nameNeeded}</p>}
-                <Actions onCancel={onCancel} okDisabled={!face.name.trim()} onOk={() => onOk(setProduct(item as InputEvent, face))} />
+                <Actions onCancel={onCancel} okDisabled={!face.name.trim()} onOk={() => {
+                    const qty = parseAmount(qtyText);
+                    if (qty === null) { setNumberBad(true); return; }
+                    onOk(setProduct(item as InputEvent, { ...face, qty }));
+                }} />
             </Sheet>
         );
     }
@@ -126,7 +134,8 @@ export const TapEditSheet: React.FC<TapEditSheetProps> = ({ bucket, item, labour
                 </div>
                 <Label>{w.hours}</Label>
                 <Stepper value={hours} step={0.5} min={0.5} onChange={setHours} testId="tap-hours" dash="—" />
-                <Actions onCancel={onCancel} onOk={() => onOk(setWater(item as IrrigationEvent, method, hours))} />
+                {/* Lane OF fix 1 (L1): new water starts with nothing chosen; ठीक waits for a method or hours. */}
+                <Actions onCancel={onCancel} okDisabled={method === undefined && hours === undefined} onOk={() => onOk(setWater(item as IrrigationEvent, method, hours))} />
             </Sheet>
         );
     }

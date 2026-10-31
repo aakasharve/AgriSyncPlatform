@@ -75,7 +75,8 @@ describe('the result screen\'s own lines', () => {
     });
 
     it('the place chip: the server\'s "Grapes" in his language, his plot name as written', () => {
-        expect(placeOf([log()], 'mr')).toBe('द्राक्ष · द्राक्ष G1');
+        // lane OF fix 1 (10): a plot named after its crop is said alone — never "द्राक्ष · द्राक्ष G1"
+        expect(placeOf([log()], 'mr')).toBe('द्राक्ष G1');
         expect(placeOf([log()], 'en')).toBe('Grapes · द्राक्ष G1');
         const farm = log({ context: { selection: [{ cropId: 'FARM_GLOBAL', cropName: '', selectedPlotIds: [] }] } });
         expect(placeOf([farm], 'mr')).toBe(RESULT_STR.wholeFarm);

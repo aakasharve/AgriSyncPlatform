@@ -25,7 +25,7 @@
 import type { CropActivityEvent, DailyLog, InputEvent, IrrigationEvent, LabourEvent } from '../../../../types';
 import type { IdGenerator } from '../../../../core/domain/services/IdGenerator';
 import { workTypeNameIn } from '../../../../shared/names/namesIn';
-import type { PartKey } from '../voiceResult/resultModel';
+import { plannedOnce, type PartKey } from '../voiceResult/resultModel';
 
 /** The buckets a row can stand for, in the screen's order. */
 export const TAP_BUCKETS = ['cropActivities', 'labour', 'irrigation', 'inputs', 'activityExpenses', 'machinery', 'observations', 'plannedTasks'] as const;
@@ -128,16 +128,26 @@ export function itemText(bucket: TapBucket, item: unknown, language: string | nu
 
 type Item = { id?: string };
 const itemsOf = (log: DailyLog, bucket: TapBucket): Item[] => ((log[bucket] as Item[] | undefined) ?? []);
-/** Water actually given is a part; a spray's tank water and water NOT given are not rows here (they stay as they are). */
-const isRow = (bucket: TapBucket, item: Item): boolean => {
-    if (bucket === 'irrigation') return (item as IrrigationEvent).role !== 'spray-carrier';
-    if (bucket === 'observations') {
-        // A stoppage is not a part; a reminder the factory mirrored from planned work is that planned work (shown once).
-        const o = item as { noteType?: string; tags?: string[] };
-        return o.noteType !== 'issue' && !(o.noteType === 'reminder' && (o.tags ?? []).some(t => t === 'planned_task' || t === 'manual_task'));
-    }
-    return true;
+/**
+ * Is this item a row of its own? Water actually given is a part (a spray's tank water is not). A stoppage note is not a
+ * part. Planned work and its reminders are shown ONCE, by the result screen's own rule (`plannedOnce`, fix 1 M6).
+ */
+const rowFilter = (log: DailyLog) => {
+    const once = plannedOnce(log);
+    const notes = new Set(once.observations.map(o => o.id));
+    const tasks = new Set(once.tasks.map(t => t.id));
+    return (bucket: TapBucket, item: Item): boolean => {
+        if (bucket === 'irrigation') return (item as IrrigationEvent).role !== 'spray-carrier';
+        if (bucket === 'observations') return (item as { noteType?: string }).noteType !== 'issue' && notes.has(item.id as string);
+        if (bucket === 'plannedTasks') return tasks.has(item.id as string);
+        return true;
+    };
 };
+
+/** What goes and comes back WITH this row (lane OF fix 1, M6): a planned task's reminders, a reminder's own task. */
+export function partnersOf(working: DailyLog, id: string): string[] {
+    return plannedOnce(working).partnersOf(id);
+}
 
 export interface TapRow {
     bucket: TapBucket;
@@ -163,9 +173,11 @@ export interface TapRow {
  */
 export function tapRows(original: DailyLog, working: DailyLog, removed: ReadonlySet<string>, language: string | null | undefined): TapRow[] {
     const rows: TapRow[] = [];
+    const isRowBefore = rowFilter(original);
+    const isRowNow = rowFilter(working);
     for (const bucket of TAP_BUCKETS) {
-        const before = itemsOf(original, bucket).filter(i => i.id && isRow(bucket, i));
-        const now = itemsOf(working, bucket).filter(i => i.id && isRow(bucket, i));
+        const before = itemsOf(original, bucket).filter(i => i.id && isRowBefore(bucket, i));
+        const now = itemsOf(working, bucket).filter(i => i.id && isRowNow(bucket, i));
         const nowIds = new Set(now.map(i => i.id));
         const beforeIds = new Set(before.map(i => i.id));
         const unmatched = before.filter(i => !nowIds.has(i.id));
@@ -185,9 +197,10 @@ export function tapRows(original: DailyLog, working: DailyLog, removed: Readonly
                 removable: bucket !== 'labour',
             });
         });
+        // A saved part his words left out: struck through, with "परत आणा" like a tapped removal (fix 1, L7).
         unmatched.slice(pair).forEach(item => rows.push({
             bucket, part: PART_OF[bucket], id: item.id as string, text: itemText(bucket, item, language),
-            removed: true, gone: true, isNew: false, editable: false, removable: false,
+            removed: true, gone: true, isNew: false, editable: false, removable: bucket !== 'labour',
         }));
     }
     return rows;
@@ -233,13 +246,22 @@ export function withItem<T extends Item>(working: DailyLog, bucket: TapBucket, i
 /** A new item of this kind, added to the working copy (its values come from the sheet he fills). */
 export function newItem(kind: AddKind, idGen: IdGenerator): Item {
     const id = idGen.generate();
-    if (kind === 'cropActivities') return { id, title: 'खुरपणी', workTypes: ['Weeding'] } as CropActivityEvent;
-    if (kind === 'irrigation') return { id, method: 'Drip' } as IrrigationEvent;
+    // Lane OF fix 1 (L1): a new part starts with NOTHING chosen — he picks the work / the water himself.
+    if (kind === 'cropActivities') return { id, title: '' } as CropActivityEvent;
+    if (kind === 'irrigation') return { id } as IrrigationEvent;
     return { id, mix: [{ id: idGen.generate(), productName: '' }] } as unknown as InputEvent;
 }
 
 export function withNew(working: DailyLog, kind: AddKind, item: Item): DailyLog {
     return { ...working, [kind]: [...itemsOf(working, kind), item] } as DailyLog;
+}
+
+/** A saved part his words left out, brought back as it was saved (fix 1, L7). */
+export function withRestored(working: DailyLog, original: DailyLog, id: string): DailyLog {
+    const bucket = TAP_BUCKETS.find(b => itemsOf(original, b).some(i => i.id === id));
+    const item = bucket ? itemsOf(original, bucket).find(i => i.id === id) : undefined;
+    if (!bucket || !item || itemsOf(working, bucket).some(i => i.id === id)) return working;
+    return { ...working, [bucket]: [...itemsOf(working, bucket), item] } as DailyLog;
 }
 
 export function withoutItem(working: DailyLog, bucket: TapBucket, id: string): DailyLog {
@@ -248,6 +270,18 @@ export function withoutItem(working: DailyLog, bucket: TapBucket, id: string): D
 
 /** The crop work set to one of the app's work names (Marathi title, English work type — as the parser writes it). */
 export const setWork = (a: CropActivityEvent, en: string, mr: string): CropActivityEvent => ({ ...a, title: mr, workTypes: [en] });
+
+/**
+ * Lane OF fix 1 (H2) — what he typed as an amount, read only when he presses ठीक: '' = no amount (undefined); a number
+ * (Marathi digits read too, one decimal point) as a number; anything else `null` (refused, said plainly — never guessed).
+ */
+export function parseAmount(text: string): number | undefined | null {
+    const t = text.trim().replace(/[०-९]/g, d => String('०१२३४५६७८९'.indexOf(d)));
+    if (t === '') return undefined;
+    if (!/^\d+(\.\d+)?$/.test(t) && !/^\.\d+$/.test(t)) return null;
+    const n = Number(t);
+    return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 /** A product's name / amount / unit, on its first mix item (or the legacy fields when it has no mix). */
 export function setProduct(e: InputEvent, face: ProductFace): InputEvent {

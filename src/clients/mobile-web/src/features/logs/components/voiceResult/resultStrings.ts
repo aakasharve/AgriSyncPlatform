@@ -133,6 +133,30 @@ export const RESULT_STR_EN: ResultStr = {
     unsurePart: 'Not sure',
 };
 
+/**
+ * Lane OF fix 1 (L2) — the same lines for a recording saved on a PAST day (D-60): they name that day, never "आज".
+ * PROPOSED (Marathi) / PROPOSED (English).
+ */
+export interface ResultDayStr { count: (n: number, day: string) => string; first: (day: string) => string; who: (day: string) => string; title: (day: string) => string; earlier: string; sathi: (day: string) => string }
+const RESULT_DAY_MR: ResultDayStr = {
+    count: (n, day) => `${day} ला ${n} वेळा सांगितलं`,
+    first: day => `${day} ला पहिल्यांदा सांगितलं`,
+    who: day => `${day} ला कोणी सांगितलं`,
+    title: day => `${day} चं काम`,
+    earlier: 'त्या दिवशी आधीची बोलणी',
+    // the approved `dfes.sathiSaidLine` with its "आज" replaced by the day
+    sathi: day => `श्रम सफल मध्ये तुम्ही ${day} ला केलेले काम समजून घेत आहे`,
+};
+const RESULT_DAY_EN: ResultDayStr = {
+    count: (n, day) => `Told ${n} times on ${day}`,
+    first: day => `First time on ${day}`,
+    who: day => `Who told on ${day}`,
+    title: day => `Work on ${day}`,
+    earlier: 'Earlier that day',
+    sathi: day => `Shram Safal is understanding the work you did on ${day}`,
+};
+export const resultDayStr = (language: string | null | undefined): ResultDayStr => (language === 'en' ? RESULT_DAY_EN : RESULT_DAY_MR);
+
 /** The result screen's lines in this language (Marathi unless the app is in English). */
 export const resultStr = (language: string | null | undefined): ResultStr => (language === 'en' ? RESULT_STR_EN : RESULT_STR);
 

@@ -72,6 +72,7 @@ import { buildCalendarDay } from './overview/calendarModel';
 import { CostSection, InHandCard } from './overview/CostSection';
 import { DayBar } from './overview/DayBar';
 import { PastDayTell } from './overview/PastDayTell';
+import { isBeforeFarmToday } from '../../core/domain/services/farmDay';
 import { FarmStatus } from './overview/FarmStatus';
 import { buildInHand, buildSeasonTotals, buildSpend, farmWideDayMoney, plotDayMoney, spendRange, type MoneyFigure } from './overview/moneyModel';
 import { buildDayNotes } from './overview/notesModel';
@@ -293,7 +294,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     } : undefined;
     // Lane OF (founder D-60) — a past day: "त्या दिवसाचं काम सांगा" opens the normal crop → plot steps with that date in
     // the question, then THE one mic; what he says is saved on that day (never today's).
-    const tellPastDay = !isToday && onSpeak ? () => {
+    // Lane OF fix 1 (H1): only a day BEFORE today (the farm's day) — a future day can be looked at, never told for.
+    const tellPastDay = isBeforeFarmToday(dateKey, todayKey) && onSpeak ? () => {
         listen.stop();
         onSpeak({ purpose: 'addToDay', context: { date: dateKey }, onLanded: landing => { if (landing.kind === 'saved') setFresh(new Set(landing.logIds)); } });
     } : undefined;

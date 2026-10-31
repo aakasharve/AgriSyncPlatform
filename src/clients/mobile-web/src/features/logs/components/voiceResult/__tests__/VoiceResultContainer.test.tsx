@@ -26,7 +26,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
-const { triggerNow, auditAppend, grant } = vi.hoisted(() => ({ triggerNow: vi.fn(), auditAppend: vi.fn(), grant: { value: undefined as boolean | undefined } }));
+const { triggerNow, auditAppend, grant, lng } = vi.hoisted(() => ({ triggerNow: vi.fn(), auditAppend: vi.fn(), grant: { value: undefined as boolean | undefined }, lng: { v: 'mr' as 'mr' | 'en' } }));
 // The server's cached labour grant (what EnsureCanVerify admits besides the owner tier).
 vi.mock('../../../../labour/homeAttendanceDoor', async (orig) => ({
     ...(await orig<typeof import('../../../../labour/homeAttendanceDoor')>()),
@@ -42,8 +42,14 @@ vi.mock('../../../../../app/providers/DataSourceProvider', () => ({
 // The farmer's language is Marathi; the few existing pieces that read it (the not-queued badge) get the real strings.
 vi.mock('../../../../../i18n/LanguageContext', async () => {
     const { t } = await import('../../../../../i18n/translations');
-    const ctx = { language: 'mr', setLanguage: () => undefined, t: (k: string) => t(k, 'mr') };
-    return { useLanguage: () => ctx, useOptionalLanguage: () => ctx };
+    // lane OF fix 1 (L2): one test switches to English (`lng.v`); every other test stays Marathi.
+    const ctx = () => ({ language: lng.v, setLanguage: () => undefined, t: (k: string) => t(k, lng.v) });
+    return { useLanguage: ctx, useOptionalLanguage: ctx };
+});
+// The farm's "today" is the day these recordings were made (lane OF fix 1, L2: a past day is never called "आज").
+vi.mock('../../../../../core/domain/services/DateKeyService', async (orig) => {
+    const actual = await orig<typeof import('../../../../../core/domain/services/DateKeyService')>();
+    return { ...actual, getDateKey: (t?: Date | string) => (t === undefined ? '2026-10-26' : actual.getDateKey(t)) };
 });
 vi.mock('../../../../../infrastructure/voice/VoiceClipRetention', async (orig) => ({
     ...(await orig<typeof import('../../../../../infrastructure/voice/VoiceClipRetention')>()),
@@ -582,5 +588,23 @@ describe('the ONE result screen — lane L6b (founder design)', () => {
         expect(container.textContent).not.toMatch(/9999|777/);
         expect(container.textContent).not.toMatch(/ओळख|कदाचित|मात्रा सांगितली नाही/);
         expect(container.textContent).not.toMatch(/[A-Za-z]/); // Marathi mode: the units in Marathi, no English labels
+    });
+});
+
+describe('lane OF fix 1 (L2) — a recording saved for a PAST day never says "आज"', () => {
+    const WORDS = {
+        mr: { count: '24 ऑक्टो ला पहिल्यांदा सांगितलं', who: '24 ऑक्टो ला कोणी सांगितलं', title: '24 ऑक्टो चं काम', today: /आज / },
+        en: { count: 'First time on 24 Oct', who: 'Who told on 24 Oct', title: 'Work on 24 Oct', today: /today/i },
+    } as const;
+    afterEach(() => { lng.v = 'mr'; });
+    it.each(['mr', 'en'] as const)('the count, the speakers line and the day title name that day (%s)', (language) => {
+        lng.v = language;
+        const w = WORDS[language];
+        const past = HISTORY.filter(l => l.id === NOW).map(l => ({ ...l, date: '2026-10-24' }));
+        mount(props({ history: past }));
+        expect(screen.getByTestId('vr-count').textContent).toBe(w.count);
+        expect(screen.getByTestId('vr-speakers').textContent).toContain(w.who);
+        expect(screen.getByTestId('vr-day-title').textContent).toBe(w.title);
+        expect(screen.getByTestId('voice-result').textContent).not.toMatch(w.today);
     });
 });

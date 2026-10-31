@@ -13,10 +13,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 
-const { createFromVoice, confirmAndSave, enqueueLogsForSync } = vi.hoisted(() => ({
+const { createFromVoice, confirmAndSave, enqueueLogsForSync, findSaved } = vi.hoisted(() => ({
     createFromVoice: vi.fn(),
     confirmAndSave: vi.fn(),
     enqueueLogsForSync: vi.fn(),
+    findSaved: vi.fn(),
 }));
 vi.mock('../../providers/DataSourceProvider', () => ({ useDataSource: () => ({ dataSource: { logs: {} } }) }));
 vi.mock('../../../features/logs/services/logSyncMutationService', () => ({ enqueueLogsForSync }));
@@ -25,6 +26,7 @@ vi.mock('../../../application/services/LogCommandService', () => ({
     LogCommandServiceImpl: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
         this.createFromVoice = createFromVoice;
         this.confirmAndSave = confirmAndSave;
+        this.findSaved = findSaved;
     }),
 }));
 
@@ -36,6 +38,8 @@ import { onDay } from '../../helpers/onDay';
 import { bindDraftDay, draftDay, draftDecline } from '../../../features/voice/draftFacts';
 import { withSpeakPurpose } from '../../../core/speak/speakFlow';
 import { requestSpeak, resetSpeakStoreForTests } from '../../../core/speak/speakStore';
+import { isAfterFarmToday } from '../../../core/domain/services/farmDay';
+import { logger } from '../../../infrastructure/observability/Logger';
 
 const P1: LogScope = { selectedCropIds: ['c1'], selectedPlotIds: ['p1'], mode: 'single', applyPolicy: 'broadcast' };
 const P2: LogScope = { selectedCropIds: ['c1'], selectedPlotIds: ['p2'], mode: 'single', applyPolicy: 'broadcast' };
@@ -62,6 +66,7 @@ beforeEach(() => {
     createFromVoice.mockImplementation(async () => [makeLog('V1')]);
     confirmAndSave.mockResolvedValue(undefined);
     enqueueLogsForSync.mockResolvedValue({ queuedLogIds: ['V1'], skippedLogIds: [] });
+    findSaved.mockResolvedValue([]);
 });
 
 describe('D-60 — a past day', () => {
@@ -70,7 +75,7 @@ describe('D-60 — a past day', () => {
         expect(moved.date).toBe('2026-10-28');
         expect(moved.observations?.[0].dateKey).toBe('2026-10-28');
         expect(moved.meta?.createdAtISO).toBe('2026-10-31T06:00:00.000Z');
-        expect(onDay(makeLog('x'), 'not-a-day').date).toBe('2026-10-31');
+        expect(() => onDay(makeLog('x'), 'not-a-day')).toThrow(); // fix 1 (H1): refused plainly, never quietly kept
     });
 
     it('handleAutoSave with dateKey writes and sends the log ON that day', async () => {
@@ -153,5 +158,73 @@ describe('D-59 — saved from आवाज नोंदी', () => {
         expect(enqueueLogsForSync).toHaveBeenCalledTimes(1);
         expect(setStatus).not.toHaveBeenCalled();
         expect(setLastSavedLogIds).not.toHaveBeenCalled();
+    });
+});
+
+// ─── Lane OF fix pass 1 ───────────────────────────────────────────────────────────────────────────────────────
+describe('fix 1 — H1: the write path itself refuses a day after today', () => {
+    it('handleAutoSave with a FUTURE day writes nothing and sends nothing (whatever screen asked)', async () => {
+        const { result } = renderHook(() => useLogCommands(commandProps()));
+        let saved: DailyLog[] | null = [];
+        await act(async () => { saved = await result.current.handleAutoSave(parse(), undefined, { autoSavedFromVoice: true, dateKey: '2099-01-01' }); });
+        expect(saved).toBeNull();
+        expect(confirmAndSave).not.toHaveBeenCalled();
+        expect(enqueueLogsForSync).not.toHaveBeenCalled();
+    });
+
+    it('the one rule: today and earlier days are fine, a later one is not', () => {
+        expect(isAfterFarmToday('2026-10-31', '2026-10-31')).toBe(false);
+        expect(isAfterFarmToday('2026-10-30', '2026-10-31')).toBe(false);
+        expect(isAfterFarmToday('2026-11-01', '2026-10-31')).toBe(true);
+        expect(() => onDay(makeLog('x'), '2099-01-01')).toThrow();
+    });
+});
+
+describe('fix 1 — M1: one recording never makes two logs', () => {
+    it('the same once-key gives the same log ids, and a second save of it writes nothing and returns the logs already on the phone', async () => {
+        const gens: Array<{ generate: () => string }> = [];
+        createFromVoice.mockImplementation(async (...args: unknown[]) => { gens.push(args[6] as { generate: () => string }); return [makeLog('V1')]; });
+        findSaved.mockResolvedValueOnce([]).mockResolvedValueOnce([makeLog('V1')]);
+        const { result } = renderHook(() => useLogCommands(commandProps()));
+        let first: DailyLog[] | null = null;
+        let second: DailyLog[] | null = null;
+        await act(async () => { first = await result.current.handleAutoSave(parse(), undefined, { onceKey: 'job:7', stayOnScreen: true }); });
+        await act(async () => { second = await result.current.handleAutoSave(parse(), undefined, { onceKey: 'job:7', stayOnScreen: true }); });
+        expect(gens).toHaveLength(2);
+        expect([gens[0].generate(), gens[0].generate()]).toEqual([gens[1].generate(), gens[1].generate()]);
+        expect(confirmAndSave).toHaveBeenCalledTimes(1);
+        expect(enqueueLogsForSync).toHaveBeenCalledTimes(1);
+        expect(first).toHaveLength(1);
+        expect(second).toEqual([makeLog('V1')]);
+    });
+});
+
+describe('fix 1 — M2: saved from आवाज नोंदी, a record that will not reach the server is never just "saved"', () => {
+    it('stayOnScreen says the same as the log tab: the phone claim, then that it will not go into the farm records', async () => {
+        enqueueLogsForSync.mockResolvedValue({ queuedLogIds: [], skippedLogIds: ['V1'] });
+        const setToast = vi.fn();
+        const { result } = renderHook(() => useLogCommands({ ...commandProps(), setToast }));
+        await act(async () => { await result.current.handleAutoSave(parse(), undefined, { scope: P1, stayOnScreen: true }); });
+        expect(setToast).toHaveBeenCalledTimes(1);
+        const { message } = setToast.mock.calls[0][0] as { message: string };
+        expect(message).toContain('शेतनोंदीत जाणार नाहीत');
+        expect(message).not.toContain('जतन झालं');
+    });
+});
+
+describe('fix 1 — L4: a recording that cannot be named or linked leaves a trace', () => {
+    it('saveChecked: archive-id and clip-link failures are logged, and the save still happens', async () => {
+        const warn = vi.spyOn(logger, 'warn');
+        const save = vi.fn<UseVoiceAutoSaveProps['handleAutoSave']>(async (_d, _p, o?: AutoSaveOptions) => { await o?.onWritten?.([makeLog('V1')]); return [makeLog('V1')]; });
+        const { result } = renderHook(() => useVoiceAutoSave({
+            handleAutoSave: save, logIntent: null, setStatus: vi.fn(),
+            linkClip: vi.fn(async () => { throw new Error('clip store'); }), archiveIdOf: vi.fn(async () => { throw new Error('no archive id'); }),
+        }));
+        await act(async () => { await result.current.saveChecked(parse(), undefined, { scope: P1, recording: { recordedAtUtc: 'T', clipId: 'c' } }); });
+        expect(save).toHaveBeenCalledTimes(1);
+        const said = warn.mock.calls.map(c => String(c[0])).join(' | ');
+        expect(said).toMatch(/archive/i);
+        expect(said).toMatch(/link/i);
+        warn.mockRestore();
     });
 });

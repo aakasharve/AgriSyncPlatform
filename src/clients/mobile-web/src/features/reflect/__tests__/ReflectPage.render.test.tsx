@@ -391,3 +391,15 @@ describe('ReflectPage — lane OF (founder D-60 = 4A): any past day can be fille
         expect(props.onSpeak).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'addToDay', context: { date: '2026-10-24' } }));
     });
 });
+
+describe('ReflectPage — lane OF fix 1 (H1): no work can be told for a day after today', () => {
+    it('a FUTURE day in "कामाचं कॅलेंडर" can be looked at, but offers no "त्या दिवसाचं काम सांगा"', () => {
+        const props = renderPage();
+        fireEvent.click(screen.getByTestId('reflect-section-calendar-toggle'));
+        fireEvent.click(screen.getByTestId('cal-day-2026-10-27')); // two days after today (25 Oct)
+        expect(screen.getByTestId('cal-day-2026-10-27')).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.queryByTestId('past-day-tell-cal')).toBeNull();
+        expect(screen.queryByTestId('past-day-tell')).toBeNull();
+        expect(props.onSpeak).not.toHaveBeenCalled();
+    });
+});

@@ -10,11 +10,15 @@
  * the moment he spoke: no time is invented for the day he chose (doctrine P4).
  */
 import type { DailyLog } from '../../types';
+import { assertNotAfterFarmToday } from '../../core/domain/services/farmDay';
 
-const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
-
+/**
+ * Lane OF fix pass 1 (H1): a day after the farm's today (or a key that is not a day) is REFUSED — it throws
+ * `FutureDayRefused`; it is never quietly put on another day. The callers (the voice save) write nothing then.
+ */
 export function onDay(log: DailyLog, dateKey: string): DailyLog {
-    if (!DAY_KEY.test(dateKey) || log.date === dateKey) return log;
+    assertNotAfterFarmToday(dateKey);
+    if (log.date === dateKey) return log;
     const was = log.date;
     return {
         ...log,

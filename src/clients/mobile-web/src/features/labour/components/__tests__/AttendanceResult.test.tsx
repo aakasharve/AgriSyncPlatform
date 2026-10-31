@@ -11,7 +11,7 @@
 // says 'HIRED' and a direct `as` is a TS2352.
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import AttendanceResult from '../AttendanceResult';
 import type { AgriLogResponse } from '../../../../types';
@@ -254,6 +254,19 @@ describe('AttendanceResult — 3.5c: बरोबर enqueues marks for uniquely
         expect(byOp['op-1'].dayMark).toBe('Half');
         expect(byOp['op-2'].dayMark).toBe('Absent');
         expect(mockEnqueue).toHaveBeenCalledTimes(2);
+    });
+
+    it('lane OF fix 1 (L6) — offline, बदल करा says the names could not load without internet (not "did not match")', async () => {
+        mockFetchOperators.mockClear();
+        mockFetchOperators.mockRejectedValueOnce(new Error('Network Error'));
+        render(<AttendanceResult
+            draft={{ ...base, labour: [{ id: 'l1', type: 'hired', count: 2, workerNames: ['गणेश'] } as unknown as AgriLogResponse['labour'][number]] }}
+            anchor={anchor} farmId={FARM} onConfirm={vi.fn()} onSpeakMore={vi.fn()} />);
+        await waitFor(() => expect(mockFetchOperators).toHaveBeenCalledWith(FARM));
+        await act(async () => { await Promise.resolve(); });
+        fireEvent.click(screen.getByTestId('attendance-edit-open'));
+        expect(screen.getByTestId('attendance-edit-hint')).toHaveTextContent('इंटरनेट');
+        expect(screen.getByTestId('attendance-edit-hint')).not.toHaveTextContent('जुळली नाहीत');
     });
 
     it('offline (roster never arrived): no marks, the statement still saves', () => {

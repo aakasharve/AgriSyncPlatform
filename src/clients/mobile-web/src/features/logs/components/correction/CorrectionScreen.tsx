@@ -100,7 +100,7 @@ const Row: React.FC<{ row: TapRow; onEdit: () => void; onToggle: () => void }> =
             ) : (
                 <span className="min-w-0 flex-1">{value}</span>
             )}
-            {row.removable && !row.gone && (
+            {row.removable && (
                 <button type="button" onClick={onToggle} data-testid={`corr-toggle-${row.id}`}
                     className={`inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-full border px-3 text-[14px] font-extrabold ${row.removed ? 'border-emerald-500 text-emerald-800' : 'border-stone-300 text-stone-700'}`}>
                     {row.removed ? <RotateCcw size={15} aria-hidden="true" /> : <X size={15} aria-hidden="true" />}{row.removed ? w.restore : w.remove}

@@ -8,7 +8,7 @@ import { IdempotencyKeyFactory } from './IdempotencyKeyFactory';
 import { annotateFieldConfidencesWithBuckets } from '../../domain/ai/contracts/FieldConfidence';
 import { computeProcessingVoiceClipExpiry, purgeExpiredProcessingVoiceClips } from '../voice/VoiceClipRetention';
 import { resolveApiBaseUrl } from '../api/transport';
-import { OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, offlineVoiceDay, offlineVoiceQueueAllowed } from './offlineVoiceQueue';
+import { OFFLINE_DAY_REFUSED_MESSAGE, OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE, offlineVoiceDay, offlineVoiceQueueAllowed } from './offlineVoiceQueue';
 import { noteVoiceNotesChanged } from '../sync/waitingVoiceNotes';
 import { correctionParseContext } from './correctionParseContext';
 import { parseStreamConsumer } from './ParseStreamConsumer';
@@ -82,7 +82,12 @@ export class BackendAiClient implements VoiceParserPort {
                 if (!offlineVoiceQueueAllowed()) {
                     return { success: false, error: OFFLINE_NOT_KEPT_MESSAGE };
                 }
-                await this.enqueueOfflineVoiceJob(input, farmId, userId, context, scope);
+                // Lane OF fix pass 1 (H1, L4): a chosen day that cannot be used keeps nothing, and says so.
+                const chosen = offlineVoiceDay();
+                if (!chosen.ok) {
+                    return { success: false, error: OFFLINE_DAY_REFUSED_MESSAGE };
+                }
+                await this.enqueueOfflineVoiceJob(input, farmId, userId, context, scope, chosen.day);
                 return {
                     success: false,
                     error: OFFLINE_SAVED_MESSAGE,
@@ -494,10 +499,10 @@ export class BackendAiClient implements VoiceParserPort {
         userId: string,
         parseContext: object,
         scope: LogScope,
+        day?: string,
     ): Promise<void> {
         const db = getDatabase();
         const nowIso = new Date().toISOString();
-        const day = offlineVoiceDay();
         const baseContext: PendingAiJobContext = {
             farmId,
             userId,

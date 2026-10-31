@@ -16,7 +16,8 @@ import type { AgriLogResponse, CropProfile, DailyLog, FarmerProfile, LogScope } 
 import { LogFactory } from '../../../../core/domain/LogFactory';
 import { isAutoSavableVoiceDraft } from '../../../../app/helpers/autoSavedVoiceLog';
 import type { DeclineReason } from '../../../voice/draftFacts';
-import { cropNameIn, entryText, withoutQuotes } from '../voiceResult/partNames';
+import { entryText, withoutQuotes } from '../voiceResult/partNames';
+import { placeWords } from '../../../../shared/names/placeWords';
 import { recordingOf, withoutInventedStoppage, type BlockerEntry, type PartEntry } from '../voiceResult/resultModel';
 
 export type CheckCase = 'unclear' | 'otherPlot' | 'notWritten' | 'check';
@@ -49,7 +50,7 @@ export function placeLabel(scope: LogScope | null | undefined, crops: readonly C
     if (scope.selectedCropIds.includes(FARM_GLOBAL)) return wholeFarm;
     const parts = crops.filter(c => scope.selectedCropIds.includes(c.id)).map(c => {
         const plots = (c.plots ?? []).filter(p => scope.selectedPlotIds.includes(p.id)).map(p => p.name).filter(Boolean);
-        return [cropNameIn(c.name, language), plots.join(', ')].filter(Boolean).join(' · ');
+        return placeWords(c.name, plots, language); // a plot named after its crop is said alone (fix 1, item 10)
     });
     return parts.join(' + ');
 }

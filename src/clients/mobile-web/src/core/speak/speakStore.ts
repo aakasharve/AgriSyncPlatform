@@ -19,7 +19,7 @@
  * subscribes through `useSpeakState`.
  */
 import { useSyncExternalStore } from 'react';
-import type { AgriLogResponse, AppRoute, PageView } from '../../types';
+import type { AgriLogResponse, AppRoute, DailyLog, PageView } from '../../types';
 import type { PartKey } from '../../features/logs/components/voiceResult/resultModel';
 
 /** Why he is speaking: it decides the band above the mic and what happens to his words. */
@@ -112,6 +112,14 @@ const set = (next: SpeakState): void => {
 
 export const speakState = (): SpeakState => state;
 
+/**
+ * Lane OF fix 1 (L7) — the बदला screen's WORKING copy of the entry (his taps applied), so what he then says is understood
+ * against what he sees, not against the saved version. Not part of the subscribed state: only the parse context reads it.
+ */
+let correctionWorking: { logId: string; log: DailyLog } | null = null;
+export function setCorrectionWorking(next: { logId: string; log: DailyLog } | null): void { correctionWorking = next; }
+export const correctionWorkingFor = (logId: string): DailyLog | null => (correctionWorking?.logId === logId ? correctionWorking.log : null);
+
 /** Lane OF (D-60) — the past day the active request is for (`yyyy-MM-dd`), or undefined (today). */
 export const speakDayNow = (): string | undefined => state.request?.context.date;
 
@@ -166,5 +174,6 @@ export function useSpeakState(): SpeakState {
 /** Tests only: back to nothing open. */
 export function resetSpeakStoreForTests(): void {
     seq = 0;
+    correctionWorking = null;
     set(EMPTY);
 }

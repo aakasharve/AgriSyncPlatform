@@ -174,6 +174,8 @@ export const renderVoiceDiaryRoute = (ctx: AppRouterContext): React.ReactNode =>
                     history: ctx.history,
                     save: ctx.saveCheckedDraft,
                     returnTo: { route: 'voiceDiary', mainView: ctx.mainView },
+                    farmId: ctx.activeFarmId, // fix 1 (M5): a recording of another farm is never saved into this one
+
                     toast: message => window.dispatchEvent(new CustomEvent('agrisync:toast', { detail: { message, type: 'success' } })),
                 } : undefined}
             />

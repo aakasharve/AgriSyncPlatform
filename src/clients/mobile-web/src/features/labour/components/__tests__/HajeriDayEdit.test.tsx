@@ -110,3 +110,16 @@ describe.each(['mr', 'en'] as const)('हजेरी वही — one day (%s)
         expect(screen.getByTestId('hajeri-day-cell-f1')).toBeDisabled();
     });
 });
+
+describe('lane OF fix 1 (M7, P10) — a mark only on this phone is drawn weaker, as the हजेरी वही draws it', () => {
+    it('a queued (unsynced) mark: dashed amber with the small clock, and the legend says it is on the phone', () => {
+        const queued = { ...cell('full'), unsynced: true } as LedgerCell;
+        const data = { ledger: { ...DATA.ledger, rows: [{ ...DATA.ledger.rows[0], cells: [queued, cell('full'), queued, null] }] } } as unknown as LabourData;
+        draw({ data });
+        const today = screen.getByTestId('hajeri-day-cell-f1');
+        expect(today.className).toContain('border-dashed');
+        expect(today.className).toContain('border-amber-300');
+        expect(screen.getAllByTestId('hajeri-day-pending').length).toBeGreaterThan(0);
+        expect(screen.getByTestId('hajeri-day-on-phone')).toBeInTheDocument();
+    });
+});

@@ -51,9 +51,9 @@ export type TapMark = 'Full' | 'Half' | 'Absent';
 const NEXT_MARK: Record<TapMark, TapMark> = { Full: 'Half', Half: 'Absent', Absent: 'Full' };
 const TAP_WORDS = {
     // PROPOSED (Marathi) — the working phones (1A).
-    mr: { Full: 'हजर', Half: 'अर्धा', Absent: 'नाही', hint: 'नावावर दाबा: हजर → अर्धा → नाही', speak: 'बोलून बदला', none: 'ही नावं आत्ता हजेरीच्या यादीत जुळली नाहीत — पुन्हा बोलून सांगा.' },
+    mr: { Full: 'हजर', Half: 'अर्धा', Absent: 'नाही', hint: 'नावावर दाबा: हजर → अर्धा → नाही', speak: 'बोलून बदला', none: 'ही नावं आत्ता हजेरीच्या यादीत जुळली नाहीत — पुन्हा बोलून सांगा.', offline: 'इंटरनेट नसल्याने नावांची यादी आणता आली नाही — पुन्हा बोलून सांगा, किंवा इंटरनेट आल्यावर बदला.' },
     // PROPOSED (English)
-    en: { Full: 'Present', Half: 'Half', Absent: 'Absent', hint: 'Tap a name: Present → Half → Absent', speak: 'Change by speaking', none: 'These names do not match the attendance list right now — say it again.' },
+    en: { Full: 'Present', Half: 'Half', Absent: 'Absent', hint: 'Tap a name: Present → Half → Absent', speak: 'Change by speaking', none: 'These names do not match the attendance list right now — say it again.', offline: 'The list of names could not load without internet — say it again, or change it when online.' },
 } as const;
 
 const AttendanceResult: React.FC<AttendanceResultProps> = ({
@@ -70,12 +70,18 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
     // below still records every spoken name on the engagement (workerNames),
     // so nothing is lost.
     const [roster, setRoster] = React.useState<FieldOperator[] | null>(null);
+    // Lane OF fix 1 (L6): the list could not be fetched (no internet) — said as that, never as "the names did not match".
+    const [rosterFailed, setRosterFailed] = React.useState(false);
     React.useEffect(() => {
         if (!farmId) return;
         let live = true;
         fetchFieldOperators(farmId)
             .then((r) => { if (live) setRoster(r); })
-            .catch(() => { /* offline: no marks, statement still saves */ });
+            .catch((error: unknown) => {
+                // offline: no marks, the statement still saves — and the screen says why the names cannot be tapped
+                console.warn(JSON.stringify({ component: 'AttendanceResult', action: 'roster_fetch_failed', reason: error instanceof Error ? error.message : String(error) }));
+                if (live) setRosterFailed(true);
+            });
         return () => { live = false; };
     }, [farmId]);
     // State D answers, keyed by name. Recorded beside the statements, never in
@@ -187,7 +193,7 @@ const AttendanceResult: React.FC<AttendanceResultProps> = ({
                             className="flex w-full items-center justify-center gap-2 rounded-[14px] bg-emerald-600 p-3 text-[15px] font-extrabold text-white active:scale-[0.98]">
                             <Mic size={18} /> {tapWords.speak}
                         </button>
-                        <p className="m-0 text-[13px] font-bold text-slate-600" data-testid="attendance-edit-hint">{tappable.length > 0 ? tapWords.hint : tapWords.none}</p>
+                        <p className="m-0 text-[13px] font-bold text-slate-600" data-testid="attendance-edit-hint">{tappable.length > 0 ? tapWords.hint : (rosterFailed || !farmId) ? tapWords.offline : tapWords.none}</p>
                     </div>
                 )}
                 {/* D9.5 — sourceText first, then the reading taken. Settled by

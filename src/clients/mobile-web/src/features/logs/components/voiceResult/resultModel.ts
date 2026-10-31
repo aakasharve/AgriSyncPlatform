@@ -235,7 +235,13 @@ const isWaterStoppage = (e: IrrigationEvent): boolean => e.role !== 'spray-carri
 // at it (`sourceObservationId`). Shown once each, never twice ("उद्या फवारणी" is one thing he said).
 const MIRROR_TAGS = new Set(['planned_task', 'manual_task']);
 
-function plannedOnce(log: DailyLog): { observations: ObservationNote[]; tasks: PlannedTask[] } {
+/**
+ * Planned work shown ONCE (the result screen, the ring, and — lane OF fix 1, M6 — the बदला screen's taps): the notes and
+ * tasks that stand for themselves, and `partnersOf(id)` — what moves WITH a shown item: a task's mirrored reminder notes,
+ * or the task a reminder note produced. Removing one by tap removes its partners, as the spoken rule moves planned work
+ * and its reminders together (`correctionModel.mergeCorrection`).
+ */
+export function plannedOnce(log: DailyLog): { observations: ObservationNote[]; tasks: PlannedTask[]; partnersOf: (id: string) => string[] } {
     const notes = log.observations ?? [];
     const noteIds = new Set(notes.map(o => o.id));
     // A task made FROM one of this log's notes is that note (or that note's own task): the note stands for it.
@@ -244,7 +250,15 @@ function plannedOnce(log: DailyLog): { observations: ObservationNote[]; tasks: P
     const titles = new Set(tasks.map(task => clean(task.title)).filter(Boolean));
     const observations = notes.filter(o => o.noteType !== 'reminder'
         || !((o.tags ?? []).some(tag => MIRROR_TAGS.has(tag)) || titles.has(clean(o.textRaw))));
-    return { observations, tasks };
+    const shownNotes = new Set(observations.map(o => o.id));
+    const partnersOf = (id: string): string[] => {
+        const task = tasks.find(t => t.id === id);
+        if (task) {
+            return notes.filter(o => o.noteType === 'reminder' && !shownNotes.has(o.id) && clean(o.textRaw) === clean(task.title)).map(o => o.id);
+        }
+        return shownNotes.has(id) ? (log.plannedTasks ?? []).filter(t => t.sourceObservationId === id).map(t => t.id) : [];
+    };
+    return { observations, tasks, partnersOf };
 }
 
 /**

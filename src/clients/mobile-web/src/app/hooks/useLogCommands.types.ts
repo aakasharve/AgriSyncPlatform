@@ -99,6 +99,11 @@ export interface AutoSaveOptions {
      * there, its status untouched); the page he is on says it was saved.
      */
     stayOnScreen?: boolean;
+    /**
+     * Lane OF fix 1 (M1) — this capture may become logs ONCE, whatever the order of failures or a killed app: the logs' ids
+     * are derived from this key, and when they are already on the phone nothing is written again (they are returned).
+     */
+    onceKey?: string;
 }
 
 export interface UseLogCommandsResult {

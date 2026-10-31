@@ -29,6 +29,7 @@ import { idGenerator } from '../../../../core/domain/services/IdGenerator';
 import { BigButton, ChoiceChips, SANS, TextField } from '../../../../shared/components/ui/placeUi';
 import { OTHER_INCOME_SOURCE_LABEL } from './otherIncomeLabels';
 import { cropNameIn } from '../../../../shared/names/namesIn';
+import { placeWords } from '../../../../shared/names/placeWords';
 
 interface OtherIncomeSheetProps {
     crops: CropProfile[]; // For linking to crop
@@ -63,7 +64,7 @@ const OtherIncomeSheet: React.FC<OtherIncomeSheetProps> = ({ crops, onClose, onS
     const keptCrop = kept.cropId ? crops.find(c => c.id === kept.cropId) : undefined;
     const keptPlot = kept.plotId ? keptCrop?.plots.find(p => p.id === kept.plotId) : undefined;
     // PROPOSED (Marathi) — "सर्व शेताचं उत्पन्न" is the sheet's own existing words.
-    const placeText = keptCrop ? [cropNameIn(keptCrop.name, 'mr', keptCrop.masterId), keptPlot?.name].filter(Boolean).join(' · ') : 'सर्व शेताचं उत्पन्न';
+    const placeText = keptCrop ? placeWords(cropNameIn(keptCrop.name, 'mr', keptCrop.masterId), keptPlot ? [keptPlot.name] : [], 'mr') : 'सर्व शेताचं उत्पन्न';
     // spec: pre-launch-repair L2b (R-1) — this entry's identity, minted ONCE when the sheet opens: a second tap
     // on save stores the same entry and sends the same money entry, never a second income.
     const [entryId] = useState(() => `inc_${idGenerator.generate()}`);

@@ -25,6 +25,8 @@ import { HelpCircle, X } from 'lucide-react';
 import { FEATURE_FLAGS } from '../../../../app/featureFlags';
 import { getRootStore } from '../../../../app/state/RootStore';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
+import { getDateKey } from '../../../../core/domain/services/DateKeyService';
+import { dayShort } from '../dayPick/dayWords';
 import { useDayUnderstanding } from '../../hooks/useDayUnderstanding';
 import { subscribeDfesAnswered } from '../../services/dfesAnswerSignal';
 import type { RingNodeData } from '../shramsathi/understandingRing';
@@ -32,7 +34,7 @@ import { PartIcon } from './HisWords';
 import RingStage from './RingStage';
 import { resultCopy } from './resultCopy';
 import { PARTS, PART_OF_NODE, type PartKey } from './resultModel';
-import { useResultStr } from './resultStrings';
+import { resultDayStr, useResultStr } from './resultStrings';
 import { scrollBelowHeader } from './scrollBelowHeader';
 import { partNameIn } from './partNames';
 
@@ -157,15 +159,20 @@ const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, savedLogId, recordi
     );
 };
 
+/** Lane OF fix 1 (L2): the approved line says "आज"; a recording saved for a past day names that day instead. */
+const sathiLineFor = (todayLine: string, dayDate: string | undefined, language: string | undefined): string =>
+    (dayDate && dayDate !== getDateKey() ? resultDayStr(language).sathi(dayShort(dayDate, language)) : todayLine);
+
 export const ResultHero: React.FC<ResultHeroProps> = (props) => {
     const RS = useResultStr();
+    const language = useOptionalLanguage()?.language;
     return (
     <section className="rounded-3xl border border-white/60 bg-white/85 p-3.5 shadow-[0_4px_18px_-8px_rgba(28,25,23,0.18)]" data-testid="vr-hero">
         {FEATURE_FLAGS.understandingMeter ? <Meter {...props} /> : (
             <>
                 <div className="flex items-center gap-3">
                     <SathiOrb />
-                    <p className="m-0 text-[15px] font-bold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{RS.sathiLine}</p>
+                    <p className="m-0 text-[15px] font-bold leading-snug text-emerald-900" style={{ fontFamily: SERIF }} data-testid="vr-hero-line">{sathiLineFor(RS.sathiLine, props.dayDate, language)}</p>
                 </div>
                 <PartsGrid missing={props.missing} unsure={props.unsure} onTellMore={props.onTellMore} />
             </>

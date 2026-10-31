@@ -11,7 +11,7 @@
  *   - PROPOSED words, each marked `// PROPOSED (Marathi)`, shown in the preview but not yet ruled.
  */
 import { t } from '../../../../i18n/translations';
-import { OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE } from '../../../../infrastructure/ai/offlineVoiceQueue';
+import { OFFLINE_DAY_REFUSED_MESSAGE, OFFLINE_NOT_KEPT_MESSAGE, OFFLINE_SAVED_MESSAGE } from '../../../../infrastructure/ai/offlineVoiceQueue';
 import { ERROR_WORDS, errorKindOf } from '../../../../shared/names/errorWords';
 
 /** The founder's own sentence for the idle mic (2026-10-24). It replaces "नोंद सुरू करा" on this screen. */
@@ -75,6 +75,11 @@ const OFFLINE_WORDS: Record<string, { mr: string; en: string }> = {
         // Lane OF (founder D-59) — and where it now waits, with a number: सेट-अप केंद्र › आवाज नोंदी.
         mr: 'आवाज फोनमध्ये सुरक्षित आहे. अजून समजलेलं नाही — चांगलं इंटरनेट मिळाल्यावर साथी समजून घेईल. सेट-अप केंद्र › आवाज नोंदी इथे दिसेल.', // PROPOSED (Marathi)
         en: 'Your voice is safe on this phone. It is not understood yet — Sathi will understand it once the internet is good. It waits in Setup › Voice notes.', // PROPOSED (English)
+    },
+    // Lane OF fix pass 1 (H1, L4): the day he chose could not be used (unreadable, or after today): nothing kept.
+    [OFFLINE_DAY_REFUSED_MESSAGE]: {
+        mr: 'हा दिवस वापरता आला नाही — आत्ता काहीही ठेवलं नाही. दिवस पुन्हा निवडून सांगा.', // PROPOSED (Marathi)
+        en: 'This day could not be used — nothing was kept. Choose the day again and say it.', // PROPOSED (English)
     },
     [OFFLINE_NOT_KEPT_MESSAGE]: {
         mr: 'बदल सांगायला इंटरनेट लागतं. आत्ता काहीही ठेवलं नाही — इंटरनेट आलं की पुन्हा सांगा.', // PROPOSED (Marathi)

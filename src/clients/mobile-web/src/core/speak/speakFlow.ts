@@ -20,7 +20,7 @@ import type { VoiceDraftSink } from '../../features/voice/useVoiceRecorder.types
 import { bindDraftDay } from '../../features/voice/draftFacts';
 import { correctionEntryForParse } from '../../features/logs/components/correction/correctionEntryForParse';
 import { hasWaitingLogWork } from '../navigation/openLogFlow';
-import { deliverSpoken, speakState, type SpeakLanding, type SpeakPlace, type SpeakRequest, type SpeakReturn } from './speakStore';
+import { correctionWorkingFor, deliverSpoken, speakState, type SpeakLanding, type SpeakPlace, type SpeakRequest, type SpeakReturn } from './speakStore';
 
 export const FARM_GLOBAL = 'FARM_GLOBAL';
 const LOG_TAB: SpeakReturn = { route: 'main', mainView: 'log' };
@@ -121,7 +121,8 @@ export function correctionEntryNow(history: readonly DailyLog[]): Record<string,
     const { request } = speakState();
     const logId = request?.purpose === 'correctEntry' ? request.context.logId : undefined;
     if (!logId) return null;
-    const log = history.find(l => l.id === logId);
+    // Lane OF fix 1 (L7): his tapped version when the screen holds one, else the saved entry.
+    const log = correctionWorkingFor(logId) ?? history.find(l => l.id === logId);
     return log ? correctionEntryForParse(log) : null;
 }
 

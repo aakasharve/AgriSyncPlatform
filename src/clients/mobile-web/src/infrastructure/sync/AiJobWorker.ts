@@ -1,4 +1,5 @@
 ﻿import { systemClock } from '../../core/domain/services/Clock';
+import { noteVoiceNotesChanged } from './waitingVoiceNotes';
 import { getAuthSession } from '../storage/AuthTokenStore';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { getDatabase, type PendingAiJobRecord } from '../storage/DexieDatabase';
@@ -109,6 +110,7 @@ export class AiJobWorker {
             lastError: undefined,
             nextRetryAfterMs: undefined,
         });
+        noteVoiceNotesChanged(); // lane OF fix 1 (L5): the आवाज नोंदी numbers read again on a change, never on a timer
         await this.updateVoiceClipStatus(job, 'parsing');
 
         try {
@@ -131,6 +133,7 @@ export class AiJobWorker {
                     payload,
                 },
             });
+            noteVoiceNotesChanged();
             await this.updateVoiceClipStatus(job, 'parsed');
 
             // spec: voice-diary-e2e-2026-05-17 (D.16) — opportunistic
@@ -192,6 +195,7 @@ export class AiJobWorker {
                 nextRetryAfterMs: isPermanentFailure ? undefined : nextRetryAfterMs,
                 attemptSignatures: doomLoopDecision.attemptSignatures,
             });
+            noteVoiceNotesChanged();
             await this.updateVoiceClipStatus(job, 'failed', errorMessage);
 
             console.error(JSON.stringify({

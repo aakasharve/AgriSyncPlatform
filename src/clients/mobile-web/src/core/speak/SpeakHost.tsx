@@ -18,7 +18,7 @@ import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import { LogEntryFlow } from '../../features/logs/components/entry/LogEntryFlow';
 import { abandonPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
 import { readRefusedRevision } from '../../features/logs/components/correction/refusedRevision';
-import { cropNameIn } from '../../features/logs/components/voiceResult/partNames';
+import { placeWords } from '../../shared/names/placeWords';
 import { renderLogRecorder, renderProcessingScreen } from '../navigation/logRecorder';
 import type { AppRouterContext } from '../navigation/routeContext';
 import { useBackDismiss } from '../navigation/useBackDismiss';
@@ -48,7 +48,7 @@ export function placeLabelOf(scope: LogScope, crops: AppRouterContext['crops'], 
     const crop = crops.find(c => scope.selectedCropIds.includes(c.id));
     if (!crop) return undefined;
     const plots = (crop.plots ?? []).filter(p => scope.selectedPlotIds.includes(p.id)).map(p => p.name).filter(Boolean);
-    return [cropNameIn(crop.name, language), plots.join(', ')].filter(Boolean).join(' · ') || undefined;
+    return placeWords(crop.name, plots, language) || undefined; // lane OF fix 1 (10): never "द्राक्ष · द्राक्ष G1"
 }
 
 interface Session { id: string; prevScope: LogScope | null; spoke: boolean; savedAtStart: string | undefined; statusAtStart: AppStatus; typedSent?: boolean }

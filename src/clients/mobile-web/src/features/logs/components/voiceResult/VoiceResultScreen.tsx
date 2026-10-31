@@ -26,7 +26,7 @@
 import React, { useRef, useState } from 'react';
 import { CalendarDays, Check, MapPin, Mic, Pencil } from 'lucide-react';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
-import { dayRel } from '../dayPick/dayWords';
+import { dayRel, dayShort } from '../dayPick/dayWords';
 import FlowBackButton from '../../../context/components/FlowBackButton';
 import { NotQueuedForServerBadge } from '../../../../core/navigation/mainViewComponents';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
@@ -39,7 +39,7 @@ import { AddedProducts } from './ProductRows';
 import { showsProducts } from './productModel';
 import ResultHero from './ResultHero';
 import { PARTS, markTranscript, type DayView, type PartKey, type RecordingView } from './resultModel';
-import { useResultStr, type ResultStr } from './resultStrings';
+import { resultDayStr, useResultStr, type ResultStr } from './resultStrings';
 import { scrollBelowHeader } from './scrollBelowHeader';
 import type { LogSyncState } from './useRecordingTrust';
 
@@ -108,6 +108,9 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const language = useOptionalLanguage()?.language;
     const RS = useResultStr();
     if (!primary) return null;
+    // Lane OF fix 1 (L2): a recording saved for a PAST day (D-60) names that day — never "आज".
+    const DS = resultDayStr(language);
+    const onDay = primary.log.date && primary.log.date !== getDateKey() ? dayShort(primary.log.date, language) : null;
 
     const addedEntries = day.current.flatMap(r => r.entries);
     const runs = markTranscript(primary.transcript, addedEntries);
@@ -137,11 +140,11 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 ) : (
                     <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm font-extrabold text-stone-700" data-testid="vr-day"><CalendarDays size={16} aria-hidden="true" />{dayRel(primary.log.date, getDateKey(), language)}</span>
                 )}
-                <span className="text-xs font-bold text-stone-600" data-testid="vr-count">{count > 1 ? RS.todayCount(count) : RS.firstToday}</span>
+                <span className="text-xs font-bold text-stone-600" data-testid="vr-count">{onDay ? (count > 1 ? DS.count(count, onDay) : DS.first(onDay)) : count > 1 ? RS.todayCount(count) : RS.firstToday}</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-2.5 py-1.5" data-testid="vr-speakers">
-                <span className="text-[12px] font-extrabold text-stone-700">{RS.todayWho}:</span>
+                <span className="text-[12px] font-extrabold text-stone-700">{onDay ? DS.who(onDay) : RS.todayWho}:</span>
                 {day.speakers.map(s => (
                     <span key={`${s.you}-${s.name}`} data-you={s.you ? 'yes' : 'no'}
                         className={`rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${s.you ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-blue-300 bg-blue-50 text-blue-900'}`}>
@@ -240,7 +243,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
             {p.extras}
 
             <div>
-                <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700" data-testid="vr-day-title">{RS.dayTitle}</h3>
+                <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700" data-testid="vr-day-title">{onDay ? DS.title(onDay) : RS.dayTitle}</h3>
                 <p className="m-0 mb-2 text-[12px] text-stone-600">{RS.tapForHistory}</p>
                 <div className="space-y-2">
                     {PARTS.filter(m => day.byPart[m.key].length > 0).map(m => (
@@ -252,7 +255,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
             {day.earlier.length > 0 && (
                 <div className="space-y-2" data-testid="vr-earlier">
-                    <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700">{RS.earlierTitle}</h3>
+                    <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700">{onDay ? DS.earlier : RS.earlierTitle}</h3>
                     {day.earlier.map(r => (
                         <EarlierRecording key={r.id} rec={r} clip={p.clips.get(r.id)} playing={p.playingId === r.id} progress={p.progress}
                             lengthSec={p.lengthOf(r.id)} onToggle={() => p.onTogglePlay(r.id)} />

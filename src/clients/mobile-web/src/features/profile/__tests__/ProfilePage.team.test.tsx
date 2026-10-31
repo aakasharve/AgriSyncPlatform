@@ -22,6 +22,8 @@ vi.mock('../../../app/providers/AuthProvider', () => ({
 }));
 vi.mock('../../../core/session/FarmContext', () => ({
     useFarmContext: () => ({ currentFarmId: 'farm-1', switchFarm: vi.fn(), farms: [], isLoading: false }),
+    // Lane OF fix 1 (M5): the waiting voice recordings read the farm open now through the optional hook.
+    useOptionalFarmContext: () => ({ currentFarmId: 'farm-1', switchFarm: vi.fn(), farms: [], isLoading: false }),
     FarmContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock('../../../features/work/hooks/useWorkerProfile', () => ({

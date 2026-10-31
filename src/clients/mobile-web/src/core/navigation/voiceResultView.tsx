@@ -30,6 +30,7 @@ import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScre
 import { primaryOf } from '../../features/logs/components/voiceResult/resultModel';
 import { resultStr } from '../../features/logs/components/voiceResult/resultStrings';
 import { cropNameIn } from '../../shared/names/namesIn';
+import { placeWords } from '../../shared/names/placeWords';
 import { stashPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
 import { requestSpeak, type SpeakRequestInput } from '../speak/speakStore';
 import { findConfirmableTaskCloses } from '../../features/logs/services/taskAutoClose';
@@ -58,6 +59,8 @@ export const placeOf = (logs: readonly DailyLog[], language?: string): string =>
     if (sel.length === 0 || sel.every(s => s.cropId === 'FARM_GLOBAL')) return resultStr(language).wholeFarm;
     const crops = [...new Set(sel.map(s => cropNameIn(s.cropName, language)).filter(Boolean))];
     const plots = [...new Set(sel.flatMap(s => s.selectedPlotNames ?? []).filter(Boolean))];
+    // Lane OF fix 1 (10): one crop — the shared rule (a plot named after its crop is said alone).
+    if (crops.length === 1) return placeWords(sel.find(s => s.cropName)?.cropName, plots, language) || crops[0];
     return [crops.join(', '), plots.join(', ')].filter(Boolean).join(' · ');
 };
 

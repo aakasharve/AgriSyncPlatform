@@ -16,7 +16,10 @@
  *     otherwise the day is shown and says plainly why it cannot be changed now. Today always can.
  */
 import React, { useMemo, useState } from 'react';
-import { CalendarDays, ChevronDown } from 'lucide-react';
+import { CalendarDays, ChevronDown, Clock } from 'lucide-react';
+import { cellDayClass } from './HajeriLedger';
+import { t as translate } from '../../../i18n/translations';
+import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import type { LabourData, LedgerCell } from '../labour.types';
 import type { DayChoice } from '../attendanceManual';
 import type { ManualAttendanceMark } from './Attendance';
@@ -118,6 +121,9 @@ export const HajeriDayEdit: React.FC<HajeriDayEditProps> = ({ data, farmId, day,
         return chosen && chosen !== cellChoice(p.cells[2]) ? [{ fieldOperatorId: p.id, dayMark: chosen }] : [];
     });
     const dirty = marks.length > 0;
+    /** He changed this person's cell on this screen (not saved yet). */
+    const changed = (p: Person): boolean => !!draft[p.id] && draft[p.id] !== cellChoice(p.cells[2]);
+    const onPhoneShown = people.some(p => p.cells.some(c => c?.unsynced));
     const daysWithMarks = new Set(data.ledger.days.filter((_, i) => data.ledger.rows.some(r => r.cells[i] !== null)));
 
     const save = async () => {
@@ -160,17 +166,31 @@ export const HajeriDayEdit: React.FC<HajeriDayEditProps> = ({ data, farmId, day,
                                 <span className="flex min-h-[44px] items-center truncate pl-1 text-[14.5px] font-extrabold text-stone-800" data-testid={`hajeri-day-name-${p.id}`}>{p.name}</span>
                                 {[0, 1].map(i => {
                                     const c = cellChoice(p.cells[i]);
-                                    return <span key={i} className={`flex min-h-[44px] items-center justify-center rounded-lg border text-[12.5px] font-extrabold ${c ? TONE[c] : 'border-dashed border-stone-200 text-stone-300'}`}>{c ? w[c] : ''}</span>;
+                                    // Lane OF fix 1 (M7, P10): the वही's own look — a mark only on this phone is drawn weaker.
+                                    return (
+                                        <span key={i} className={`relative flex min-h-[44px] items-center justify-center rounded-lg text-[12.5px] font-extrabold ${cellDayClass(p.cells[i] ?? null)}`}>
+                                            {p.cells[i]?.unsynced && <Clock size={8} data-testid="hajeri-day-pending" className="absolute left-0.5 top-0.5 text-amber-600" aria-hidden="true" />}
+                                            {c ? w[c] : ''}
+                                        </span>
+                                    );
                                 })}
                                 <button type="button" disabled={!editable || saving} data-testid={`hajeri-day-cell-${p.id}`} data-mark={now ?? 'none'}
                                     onClick={() => setDraft(d => ({ ...d, [p.id]: now ? NEXT[now] : 'Full' }))}
-                                    className={`flex min-h-[44px] items-center justify-center rounded-lg border-2 text-[13px] font-extrabold ring-2 ring-emerald-400 disabled:ring-0 ${now ? TONE[now] : 'border-dashed border-stone-300 text-stone-400'} ${draft[p.id] && draft[p.id] !== cellChoice(p.cells[2]) ? 'outline outline-2 outline-emerald-700' : ''}`}>
+                                    className={`relative flex min-h-[44px] items-center justify-center rounded-lg text-[13px] font-extrabold ring-2 ring-emerald-400 disabled:ring-0 ${changed(p) ? `border-2 ${TONE[now as DayChoice]} outline outline-2 outline-emerald-700` : cellDayClass(p.cells[2] ?? null)}`}>
+                                    {!changed(p) && p.cells[2]?.unsynced && <Clock size={8} data-testid="hajeri-day-pending" className="absolute left-0.5 top-0.5 text-amber-600" aria-hidden="true" />}
                                     {now ? w[now] : '+'}
                                 </button>
                             </React.Fragment>
                         );
                     })}
                 </div>
+            )}
+
+            {onPhoneShown && (
+                <p className="m-0 flex items-center gap-1.5 text-[12.5px] font-semibold text-amber-700" data-testid="hajeri-day-on-phone">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-md border border-dashed border-amber-300 bg-white text-amber-600"><Clock size={11} aria-hidden="true" /></span>
+                    {translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, language === 'en' ? 'en' : 'mr')}
+                </p>
             )}
 
             {editable && people.length > 0 && (

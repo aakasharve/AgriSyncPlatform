@@ -39,6 +39,7 @@ vi.mock('../../shramsathi/understandingRing', async (orig) => {
 });
 
 import ResultHero, { type ResultHeroProps } from '../ResultHero';
+import { getDateKey } from '../../../../../core/domain/services/DateKeyService';
 import { forgetPlayedReveals } from '../RingStage';
 
 const props = (over: Partial<ResultHeroProps> = {}): ResultHeroProps => ({
@@ -66,10 +67,14 @@ describe('ResultHero — the meter leads', () => {
 
     it('flag OFF: no ring and no score fetch at all — the approved Sathi line instead', () => {
         flags.understandingMeter = false;
-        render(<ResultHero {...props()} />);
+        render(<ResultHero {...props()} dayDate={getDateKey()} />);
         expect(screen.queryByTestId('vr-meter')).toBeNull();
         expect(dayUnderstanding).not.toHaveBeenCalled();
         expect(screen.getByTestId('vr-hero-line').textContent).toBe('श्रम सफल मध्ये तुम्ही आज केलेले काम समजून घेत आहे');
+        // lane OF fix 1 (L2): a recording saved for a past day names that day, never "आज"
+        cleanup();
+        render(<ResultHero {...props()} dayDate="2026-10-24" />);
+        expect(screen.getByTestId('vr-hero-line').textContent).toBe('श्रम सफल मध्ये तुम्ही 24 ऑक्टो ला केलेले काम समजून घेत आहे');
     });
 
     it('no server score yet: the gentle pending line, never a 0', () => {

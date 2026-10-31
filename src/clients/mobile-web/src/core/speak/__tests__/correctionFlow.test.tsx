@@ -45,7 +45,7 @@ import { updateLog } from '../../../application/usecases/UpdateLog';
 import type { LogsRepository } from '../../../application/ports';
 import type { AppRouterContext } from '../../navigation/routeContext';
 import { SpeakHost, type CorrectionSaveDeps } from '../SpeakHost';
-import { withSpeakPurpose } from '../speakFlow';
+import { correctionEntryNow, withSpeakPurpose } from '../speakFlow';
 import { openCorrection, resetSpeakStoreForTests, speakState } from '../speakStore';
 
 const EMPTY: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
@@ -440,5 +440,137 @@ describe.each(['mr', 'en'] as const)('lane OF — "किंवा दाबू�
         expect(labourOpening).toHaveBeenCalledWith({ screen: 'day', date: '2026-10-25' });
         expect(openPlace).toHaveBeenCalledWith('labour');
         expect(speakState().correction).toBeNull();
+    });
+});
+
+// ─── Lane OF fix pass 1 ───────────────────────────────────────────────────────────────────────────────────────
+/** The real F1 path over THIS entry (the store holds it). */
+const saveFor = (entry: DailyLog) => {
+    const saved: DailyLog[] = [];
+    const deps: CorrectionSaveDeps = {
+        updateLog: (logId, updates, profile, reason) => updateLog({ logId, updatedData: updates, actorId: 'me', reason },
+            { getById: async (id: string) => (id === entry.id ? entry : undefined), save: async (l: DailyLog) => { saved.push(l); } } as unknown as LogsRepository, profile),
+        setHistory: () => undefined, profile: PROFILE, toast: vi.fn(),
+    };
+    return { deps, saved };
+};
+const openWith = (entry: DailyLog) => {
+    const { deps, saved } = saveFor(entry);
+    render(<Harness start={[entry]} save={deps} />);
+    act(() => openCorrection(entry.id));
+    return saved;
+};
+const pressSave = async () => {
+    await act(async () => { fireEvent.click(screen.getByTestId('corr-save')); });
+    await act(async () => { await Promise.resolve(); });
+};
+
+describe.each(['mr', 'en'] as const)('lane OF fix 1 — the बदला screen (%s)', language => {
+    beforeEach(() => { lang.value = language; });
+
+    it('H2: an amount is kept as he types it ("1." stays "1."), turned into a number only on ठीक; 1.5 is saved as 1.5', async () => {
+        openWith(ENTRY);
+        fireEvent.click(screen.getByTestId('corr-edit-in'));
+        const qty = screen.getByTestId('tap-product-qty') as HTMLInputElement;
+        fireEvent.change(qty, { target: { value: '1.' } });
+        expect(qty.value).toBe('1.');
+        fireEvent.change(qty, { target: { value: '1.5' } });
+        fireEvent.click(screen.getByTestId('tap-unit-L'));
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        await pressSave();
+        const payload = enqueue.mock.calls[0][0] as { content: { inputs: Array<{ quantity?: number }> } };
+        expect(payload.content.inputs[0].quantity).toBe(1.5);
+    });
+
+    it('H2: a value that is not a number is refused on ठीक with a plain line, and nothing changes', () => {
+        openWith(ENTRY);
+        fireEvent.click(screen.getByTestId('corr-edit-in'));
+        fireEvent.change(screen.getByTestId('tap-product-qty'), { target: { value: '3..5' } });
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        expect(screen.getByTestId('tap-number-bad')).toHaveTextContent(language === 'en' ? 'number' : 'आकडा');
+        expect(screen.getByTestId('tap-sheet-inputs')).toBeInTheDocument(); // still open: nothing applied
+        fireEvent.click(screen.getByTestId('tap-sheet-cancel'));
+        expect(screen.getByTestId('corr-save')).toBeDisabled();
+    });
+
+    it('L1: "+ आणखी जोडा" starts with nothing chosen: ठीक stays off until he picks the work', () => {
+        openWith(ENTRY);
+        fireEvent.click(screen.getByTestId('corr-add'));
+        fireEvent.click(screen.getByTestId('tap-add-cropActivities'));
+        expect(screen.queryAllByRole('button', { pressed: true })).toHaveLength(0);
+        expect(screen.getByTestId('tap-sheet-ok')).toBeDisabled();
+        fireEvent.click(screen.getByTestId('tap-work-Pruning'));
+        expect(screen.getByTestId('tap-sheet-ok')).toBeEnabled();
+    });
+
+    it('L1: new water starts with no method and no hours: ठीक stays off until one is chosen', () => {
+        openWith(ENTRY);
+        fireEvent.click(screen.getByTestId('corr-add'));
+        fireEvent.click(screen.getByTestId('tap-add-irrigation'));
+        expect(screen.getByTestId('tap-method-Drip')).toHaveAttribute('aria-pressed', 'false');
+        expect(screen.getByTestId('tap-sheet-ok')).toBeDisabled();
+    });
+
+    it('M6: planned work and the reminder the factory mirrored from it are ONE row; removing it removes both', async () => {
+        const planned = {
+            ...ENTRY, cropActivities: [], irrigation: [],
+            plannedTasks: [{ id: 't1', title: 'उद्या फवारणी', status: 'pending', plotId: 'g1' }],
+            observations: [{ id: 'n1', textRaw: 'उद्या फवारणी', noteType: 'reminder', tags: ['planned_task'], dateKey: '2026-10-25' }],
+        } as unknown as DailyLog;
+        openWith(planned);
+        expect(screen.getAllByTestId(/^corr-row-/).filter(el => el.getAttribute('data-part') === 'planned')).toHaveLength(1);
+        fireEvent.click(screen.getByTestId('corr-toggle-t1'));
+        await pressSave();
+        const payload = enqueue.mock.calls[0][0] as { content: { plannedTasks?: unknown[]; observations?: unknown[] } };
+        expect(payload.content.plannedTasks ?? []).toEqual([]);
+        expect(payload.content.observations ?? []).toEqual([]);
+    });
+
+    it('M6: a reminder note that produced its own task is one row; removing it removes the note AND its task', async () => {
+        const fromNote = {
+            ...ENTRY, cropActivities: [], irrigation: [],
+            observations: [{ id: 'n2', textRaw: 'परवा छाटणी', noteType: 'reminder', dateKey: '2026-10-25' }],
+            plannedTasks: [{ id: 't2', title: 'परवा छाटणी', status: 'pending', sourceObservationId: 'n2' }],
+        } as unknown as DailyLog;
+        openWith(fromNote);
+        const plannedRows = screen.getAllByTestId(/^corr-row-/).filter(el => el.textContent?.includes('परवा छाटणी'));
+        expect(plannedRows).toHaveLength(1);
+        fireEvent.click(within(plannedRows[0]).getByRole('button', { name: language === 'en' ? /Remove/ : /काढा/ }));
+        await pressSave();
+        const payload = enqueue.mock.calls[0][0] as { content: { plannedTasks?: unknown[]; observations?: unknown[] } };
+        expect(payload.content.plannedTasks ?? []).toEqual([]);
+        expect(payload.content.observations ?? []).toEqual([]);
+    });
+
+    it('L7: what he says is understood against his TAPPED version (the parse is given the working copy)', () => {
+        openWith(ENTRY);
+        fireEvent.click(screen.getByTestId('corr-edit-in'));
+        fireEvent.change(screen.getByTestId('tap-product-qty'), { target: { value: '350' } });
+        fireEvent.click(screen.getByTestId('tap-sheet-ok'));
+        fireEvent.click(screen.getByTestId('corr-mic'));
+        const entry = correctionEntryNow([ENTRY]) as { inputs?: Array<{ quantity?: number }> } | null;
+        expect(entry?.inputs?.[0]?.quantity).toBe(350);
+    });
+
+    it('L7: a part his words left out is struck through with "परत आणा", like a tapped removal, and comes back on tap', async () => {
+        const two = { ...ENTRY, inputs: [ENTRY.inputs[0], { id: 'in2', method: 'Spray', mix: [], productName: 'गंधक', quantity: 2, unit: 'kg' }] } as DailyLog;
+        const { deps } = saveFor(two);
+        render(<Harness start={[two]} save={deps} />);
+        act(() => openCorrection('log-1'));
+        await speak(SAID); // one product said: the other is left out
+        const gone = screen.getAllByTestId(/^corr-row-/).find(el => el.textContent?.includes('गंधक'))!;
+        expect(gone).toHaveAttribute('data-changed', 'yes');
+        fireEvent.click(within(gone).getByRole('button', { name: language === 'en' ? /Bring back/ : /परत आणा/ }));
+        await pressSave();
+        const payload = enqueue.mock.calls[0][0] as { content: { inputs: Array<{ productName?: string }> } };
+        expect(payload.content.inputs.map(i => i.productName)).toEqual(expect.arrayContaining(['इथरेल', 'गंधक']));
+    });
+
+    it('10: a plot named after its crop is said alone — never "द्राक्ष · द्राक्ष G1" on the title or the place row', () => {
+        const named = { ...ENTRY, context: { selection: [{ cropId: 'grape', cropName: 'Grapes', selectedPlotIds: ['g1'], selectedPlotNames: [language === 'en' ? 'Grapes G1' : 'द्राक्ष G1'] }] } } as DailyLog;
+        openWith(named);
+        const crop = language === 'en' ? 'Grapes' : 'द्राक्ष';
+        expect(screen.getByTestId('corr-title').textContent).not.toContain(`${crop} · ${crop}`);
+        expect(screen.getByTestId('corr-plot-row').textContent).toBe(`${crop} G1`);
     });
 });

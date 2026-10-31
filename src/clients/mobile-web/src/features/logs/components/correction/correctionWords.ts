@@ -69,6 +69,8 @@ export interface CorrectionWords {
     /** A worker count needs the internet (until the queued route exists). */
     labourNeedsNet: string;
     heard: string;
+    /** Lane OF fix 1 (H2): what he typed as an amount is not a number. */
+    numberBad: string;
 }
 
 const mr: CorrectionWords = {
@@ -129,6 +131,7 @@ const mr: CorrectionWords = {
     nameNeeded: 'नाव लिहा',
     labourNeedsNet: 'मजुरांची संख्या बदलायला इंटरनेट लागतं. इंटरनेट आल्यावर जतन करा.',
     heard: 'बदल ऐकला — बघा आणि जतन करा',
+    numberBad: 'हा आकडा नाही — मात्रा आकड्यात लिहा, उदा. 1.5', // PROPOSED (Marathi)
 };
 
 const en: CorrectionWords = {
@@ -185,6 +188,7 @@ const en: CorrectionWords = {
     nameNeeded: 'Write the name',
     labourNeedsNet: 'Changing the number of workers needs the internet. Save when you are online.',
     heard: 'Change heard — check and save',
+    numberBad: 'That is not a number — write the amount as a number, e.g. 1.5', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language reads Marathi. */

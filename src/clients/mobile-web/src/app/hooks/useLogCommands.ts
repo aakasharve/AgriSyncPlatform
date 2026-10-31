@@ -51,7 +51,8 @@ import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStr
 // that fact, so this is the only place that can tell it.
 import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { buildDayProgressToast, buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast } from '../helpers/saveToastMessages';
+import { buildDayProgressToast, buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast, onPhoneClaim } from '../helpers/saveToastMessages';
+import { seededIdGenerator } from '../../core/domain/services/IdGenerator';
 
 // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
 // `ManualSubmitOutcome` moved to `useLogCommands.types.ts` (its own doc
@@ -60,6 +61,7 @@ import { buildDayProgressToast, buildEditSavedMessage, buildQueuedLogToast, buil
 // future ones) keep working.
 import type { AutoSaveOptions, ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
 import { asAutoSaved } from '../helpers/autoSavedVoiceLog';
+import { isAfterFarmToday } from '../../core/domain/services/farmDay';
 export type { ManualSubmitOutcome, UseLogCommandsResult };
 
 // `UseLogCommandsResult` moved to `useLogCommands.types.ts` for the same
@@ -290,6 +292,8 @@ export const useLogCommands = ({
     // in the review form). A step that fails AFTER the write still shows the saved record: a retry would mint
     // a second copy. No English toast on failure any more: the review form with his parse IS the message.
     const handleAutoSave = useCallback(async (logData: AgriLogResponse, provenance?: LogProvenance, options: AutoSaveOptions = {}): Promise<DailyLog[] | null> => {
+        // Lane OF fix 1 (H1): the write path itself refuses a day after today, whatever screen asked (nothing is written).
+        if (options.dateKey && isAfterFarmToday(options.dateKey)) { logger.warn('Auto-save refused: a day after today', { dateKey: options.dateKey }); return null; }
         // PHASE 25: Context Switching & Global Voice. Lane OF (D-58 / D-59): a place he chose himself wins over everything.
         let effectiveScope = options.scope ?? logScope;
 
@@ -322,18 +326,13 @@ export const useLogCommands = ({
         let attempted: DailyLog[] = [];
 
         try {
-            // SINGLE WRITE PATH: Delegate to Service
-            const created = await logCommandService.createFromVoice(
-                logData,
-                effectiveScope,
-                crops,
-                farmerProfile,
-                provenance,
-                // Daily Clarity Loop gate: only resolve spoken due-dates when the
-                // loop is on. Flag read stays in the app layer (domain-agnostic).
-                FEATURE_FLAGS.dailyLoop
-            );
+            // SINGLE WRITE PATH: Delegate to Service (Daily Clarity Loop gate: spoken due-dates resolve only when the loop is on).
+            // Lane OF fix 1 (M1): a capture that may become logs ONCE (`onceKey`) gets ids derived from that key.
+            const created = await logCommandService.createFromVoice(logData, effectiveScope, crops, farmerProfile, provenance, FEATURE_FLAGS.dailyLoop, options.onceKey ? seededIdGenerator(`once:${options.onceKey}`) : undefined);
             const newLogs = asAutoSaved(created, options); // + lane OF (D-60, TAP-1): on the day he chose, never a new time
+            // M1: already on the phone (an earlier try, a killed app): nothing is written again, the logs there are returned.
+            const already = options.onceKey ? await logCommandService.findSaved(newLogs.map(l => l.id)) : [];
+            if (already.length > 0) return already;
             attempted = newLogs;
 
             // Persist (Service handles persistence via injected repo)
@@ -352,7 +351,8 @@ export const useLogCommands = ({
             if (newTasks.length > 0) {
                 setPlannedTasks(prev => mergeUniqueTasks(prev, newTasks));
             }
-            if (options.stayOnScreen) return newLogs; // lane OF (D-59): saved from आवाज नोंदी — the log tab stays as it was
+            // Lane OF (D-59): saved from आवाज नोंदी — the log tab stays as it was; fix 1 (M2): the same honest words as there.
+            if (options.stayOnScreen) { setToast(buildSkippedSyncToast(syncOutcome, language) ?? { message: onPhoneClaim(language), type: 'success' }); return newLogs; }
             // Calculate Summary for Feedback
             calculateLogSummary(newLogs, syncOutcome);
             setLastSavedLogIds(newLogs.map(l => l.id));
@@ -379,7 +379,8 @@ export const useLogCommands = ({
                 if (ghostIds.size > 0) setHistory(prev => prev.filter(l => !ghostIds.has(l.id)));
                 return null;
             }
-            if (options.stayOnScreen) return written; else calculateLogSummary(written, null); // no evidence about the server: no claim
+            if (options.stayOnScreen) { setToast({ message: onPhoneClaim(language), type: 'success' }); return written; } // on the phone only: no server claim
+            calculateLogSummary(written, null); // no evidence about the server: no claim
             setLastSavedLogIds(written.map(l => l.id));
             setStatus('success');
             setMode('manual');
