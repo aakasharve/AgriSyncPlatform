@@ -113,13 +113,17 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
     const language = useOptionalLanguage()?.language;
     const files = useLogAttachmentCount(log?.id);
     const cropName = cropNameIn(ref.cropName, language);
+    // spec I18 — the download fills a plot's variety with its crop's (English) name when the server has none
+    // (`plotSchedule.ts`): that is not a variety. Show a variety only when it is not the crop again.
+    const variety = ref.plot?.variety?.trim();
+    const realVariety = variety && variety.toLowerCase() !== ref.cropName.trim().toLowerCase() && cropNameIn(variety, language) !== cropName ? variety : undefined;
     return (
         <CardButton testId={`plot-card-${ref.key}`} status={card.status} onOpen={() => onOpen(ref)} edge={ref.cropColor}>
             <span className="flex items-center gap-2.5">
                 <CropPhoto iconName={ref.crop.iconName} name={ref.cropName} px={44} />
                 <span className="min-w-0 flex-1">
                     <span className="block text-[18px] font-extrabold leading-tight text-stone-900">{ref.plotName ?? (cropName || ref.cropName)}</span>
-                    <span className="block text-[13px] font-bold text-stone-500">{[cropName, ref.plot?.variety, card.area, card.dayLabel].filter(Boolean).join(' · ')}</span>
+                    <span className="block text-[13px] font-bold text-stone-500">{[cropName, realVariety, card.area, card.dayLabel].filter(Boolean).join(' · ')}</span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">
                     {card.confirmed !== undefined && <StatusChip confirmed={card.confirmed} testId={`plot-state-${ref.key}`} />}

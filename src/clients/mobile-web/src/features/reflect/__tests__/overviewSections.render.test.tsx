@@ -35,7 +35,7 @@ import { PlotDayCards } from '../overview/PlotDayCards';
 import { plotRefsInScope, selectAll, toViewScope } from '../overview/reflectSelection';
 import { buildTodoList } from '../overview/todoModel';
 import { TodoCount, TodoSection } from '../overview/TodoSection';
-import { CROPS, TODAY, TODAY_KEY, log, task } from './reflectFixtures';
+import { CROPS, TODAY, TODAY_KEY, crop, log, plot, task } from './reflectFixtures';
 
 afterEach(cleanup);
 const all = toViewScope(CROPS, selectAll(CROPS));
@@ -191,6 +191,20 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
         expect(card.querySelector('[data-kind="labour"]')).toHaveTextContent('3 जण');
         fireEvent.click(card);
         expect(onOpenFarm).toHaveBeenCalledTimes(1);
+    });
+
+    it('L7 live check: a variety the download filled with the crop name is not shown ("द्राक्ष · Grapes"); a real variety stays', () => {
+        const grapes = crop('grape', 'Grapes', 'Grapes', 'bg-purple-500', [plot('g1', 'G1', { variety: 'Grapes' }), plot('g2', 'G2', { variety: 'थॉम्पसन' })]);
+        const scope = toViewScope([grapes], selectAll([grapes]));
+        const plotCards = plotRefsInScope([grapes], scope).map(r => buildPlotDayCard(r, [], scope, TODAY_KEY, TODAY, undefined, language));
+        render(<PlotDayCards cards={plotCards} isToday onOpen={vi.fn()} />);
+        const first = screen.getByTestId('plot-card-grape:g1').textContent ?? '';
+        if (language === 'en') expect(first.match(/Grapes/g)).toHaveLength(1);
+        else {
+            expect(first).not.toMatch(/Grapes/);
+            expect(first.match(/द्राक्ष/g)).toHaveLength(1);
+        }
+        expect(screen.getByTestId('plot-card-grape:g2')).toHaveTextContent('थॉम्पसन');
     });
 });
 
