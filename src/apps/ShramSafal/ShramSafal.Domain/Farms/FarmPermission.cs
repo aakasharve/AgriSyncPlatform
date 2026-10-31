@@ -16,13 +16,14 @@ namespace ShramSafal.Domain.Farms;
 /// <see cref="FarmMembership.LabourGrantExpiresAtUtc"/>), kept as THE one store for it — two stores
 /// for one power is how they drift apart.</para>
 ///
-/// <para><b>Meaning of the step-2 names (the wire keeps the names, P11):</b>
-/// <see cref="AddCost"/> is "review money entries" (correct a cost, split a whole-farm cost,
-/// job-card payout verify / settle) and requires <see cref="SeeMoney"/>;
-/// <see cref="AddTestRecord"/> is "lab records". <see cref="Invite"/> is RETIRED: inviting,
-/// approving, changing authorities, pausing and removing belong to the primary account holder only
-/// (D-26 "Manage people and permissions: primary account holder only"); the bit is kept so no value
-/// is ever reused, and is never granted and never read.</para>
+/// <para><b>Meaning of a step-2 name kept:</b> <see cref="AddTestRecord"/> is "lab records".</para>
+///
+/// <para><b>RETIRED bits — kept so no value is ever reused; never granted, never read:</b>
+/// <see cref="Invite"/> (inviting, approving, changing authorities, pausing and removing are the
+/// primary account holder's alone, D-26) and <see cref="AddCost"/> (lane 2b fix 1: step 2's "may
+/// split a whole-farm bill" meant LESS than review money, so a stored 4 must never be read as review
+/// money — <see cref="ReviewMoney"/> is a new bit, and the 2b migration grants it only to seats that
+/// could already do every one of its actions).</para>
 /// </summary>
 [Flags]
 public enum FarmPermission
@@ -35,7 +36,7 @@ public enum FarmPermission
     /// <summary>See per-person wages. Requires <see cref="SeeMoney"/>. Stored and reported; filter is MU-3.</summary>
     SeeWages = 1 << 1,
 
-    /// <summary>Review money entries (wire name kept): correct a cost, split a whole-farm cost, job-card payout verify / settle. Requires <see cref="SeeMoney"/>.</summary>
+    /// <summary>RETIRED (lane 2b fix 1) — step 2's "may change recorded money". Never granted, never read; see <see cref="ReviewMoney"/>.</summary>
     AddCost = 1 << 2,
 
     /// <summary>Plan work: create or change work plans (job cards, the crop-schedule steps). STORED only: L8 enforces it; until then today's label rule still decides (lane 2b brief).</summary>
@@ -58,4 +59,7 @@ public enum FarmPermission
 
     /// <summary>lane 2b — Schedule templates: write a Team / Licensed template (replaces the global-role gate).</summary>
     ManageScheduleTemplates = 1 << 9,
+
+    /// <summary>lane 2b fix 1 — Review money entries: correct a cost, split a whole-farm cost, job-card payout verify / settle. Requires <see cref="SeeMoney"/>.</summary>
+    ReviewMoney = 1 << 10,
 }

@@ -66,6 +66,7 @@ public sealed class VerifyJobCardForPayoutHandlerTests
     {
         var (job, log) = BuildCompletedJobCardWithLog(logVerified: false);
         var repo = new FakeRepo(job, log, AgronomistGuid, AppRole.Agronomist);
+        repo.ReviewMoneyHolders.Add(AgronomistGuid); // lane 2b fix 1: review money from the seat, never the label
         var handler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(4)));
 
         var result = await handler.HandleAsync(new VerifyJobCardForPayoutCommand(
@@ -78,10 +79,11 @@ public sealed class VerifyJobCardForPayoutHandlerTests
     }
 
     [Fact]
-    public async Task VerifyForPayout_LinkedLogVerified_Agronomist_Succeeds()
+    public async Task VerifyForPayout_LinkedLogVerified_Agronomist_GivenReviewMoney_Succeeds()
     {
         var (job, log) = BuildCompletedJobCardWithLog(logVerified: true);
         var repo = new FakeRepo(job, log, AgronomistGuid, AppRole.Agronomist);
+        repo.ReviewMoneyHolders.Add(AgronomistGuid); // lane 2b fix 1: review money from the seat, never the label
         var handler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(5)));
 
         var result = await handler.HandleAsync(new VerifyJobCardForPayoutCommand(

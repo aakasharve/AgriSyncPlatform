@@ -121,7 +121,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         (await DayLedgerCountAsync(billA)).Should().Be(1);
 
         // …and once he stores AddCost for the co-owner, so may the co-owner.
-        await DecideOkAsync(HttpMethod.Put, $"{Family}/access", Owner, new { permissions = new[] { "AddCost" } });
+        await DecideOkAsync(HttpMethod.Put, $"{Family}/access", Owner, new { permissions = new[] { "ReviewMoney" } });
         var byCoOwner = await PushAllocationAsync(Family, billB);
         byCoOwner.Status.Should().Be("applied", $"{byCoOwner.ErrorCode} {byCoOwner.ErrorMessage}");
         (await DayLedgerCountAsync(billB)).Should().Be(1);
@@ -149,7 +149,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
 
         const string Why = "पाऊस आहे, काम बंद";
         await DecideOkAsync(HttpMethod.Post, $"{Worker}/suspend", Owner, new { reason = Why });
-        await DecideOkAsync(HttpMethod.Put, $"{Family}/access", Owner, new { permissions = new[] { "AddCost" } });
+        await DecideOkAsync(HttpMethod.Put, $"{Family}/access", Owner, new { permissions = new[] { "ReviewMoney" } });
         await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { role = "Mukadam", resetPermissions = true, labourGrant = true });
 
         var paused = (await MeContextAsync(Worker, includePending: true)).Single(f => f.FarmId == Farm);
@@ -163,7 +163,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         // lane 2b: the primary owner holds every grantable authority; Invite is retired (D-26).
         owner.Permissions.Should().BeEquivalentTo(new[]
         {
-            "SeeMoney", "SeeWages", "AddCost", "PlanWork", "AddTestRecord",
+            "SeeMoney", "SeeWages", "ReviewMoney", "PlanWork", "AddTestRecord",
             "AssignWork", "ConfirmRecords", "EditFarmSetup", "ManageScheduleTemplates",
         });
         owner.Authorities!.Select(a => a.Name).Should().BeEquivalentTo(FarmAuthorities.All.Select(FarmAuthorities.NameOf));
@@ -172,7 +172,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
 
         // Exactly what the primary owner stored (D-22) — reviewing money brings seeing money (2b, §11.1).
         var coOwner = (await MeContextAsync(Family, includePending: true)).Single(f => f.FarmId == Farm);
-        coOwner.Permissions.Should().Equal(new[] { "SeeMoney", "AddCost" }, "what the primary owner stored, with what it needs");
+        coOwner.Permissions.Should().Equal(new[] { "SeeMoney", "ReviewMoney" }, "what the primary owner stored, with what it needs");
         coOwner.Authorities!.Select(a => a.Name).Should().BeEquivalentTo(new[] { "SeeMoney", "ReviewMoney" });
         coOwner.Capabilities.CanInvite.Should().BeFalse("people and permissions are the primary account holder's (D-26)");
 

@@ -87,13 +87,13 @@ public sealed class ManageMembershipHandlerTests
         var repo = new Repo();
         var seat = repo.AddRequest(Joiner);
 
-        var result = await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Mukadam", Permissions = ["AddCost"] });
+        var result = await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Mukadam", Permissions = ["ReviewMoney"] });
 
         Assert.True(result.IsSuccess);
         // lane 2b (§11.1): review money needs see money, so choosing it stores see money with it
         // (as the 2b migration and the phone's switch do) — never a power that silently means nothing.
-        Assert.Equal(FarmPermission.SeeMoney | FarmPermission.AddCost, seat.Permissions);
-        Assert.Equal(new[] { "SeeMoney", "AddCost" }, result.Value!.Permissions!);
+        Assert.Equal(FarmPermission.SeeMoney | FarmPermission.ReviewMoney, seat.Permissions);
+        Assert.Equal(new[] { "SeeMoney", "ReviewMoney" }, result.Value!.Permissions!);
     }
 
     [Fact]
@@ -278,7 +278,7 @@ public sealed class ManageMembershipHandlerTests
             Decision(MembershipDecision.Restore, paused) with { CallerUserId = CoOwner },
             Decision(MembershipDecision.Remove, worker) with { CallerUserId = CoOwner, Reason = "x" },
             Decision(MembershipDecision.SetAccess, worker) with { CallerUserId = CoOwner, Role = "Mukadam", LabourGrant = true },
-            Decision(MembershipDecision.SetAccess, worker) with { CallerUserId = CoOwner, Permissions = ["AddCost"] },
+            Decision(MembershipDecision.SetAccess, worker) with { CallerUserId = CoOwner, Permissions = ["ReviewMoney"] },
         };
         foreach (var command in asCoOwner)
         {
@@ -368,9 +368,9 @@ public sealed class ManageMembershipHandlerTests
         Assert.True((await Handle(repo, Decision(MembershipDecision.Approve, trusted) with
         {
             Role = "Mukadam",
-            Permissions = ["AddCost", "PlanWork"],
+            Permissions = ["ReviewMoney", "PlanWork"],
         })).IsSuccess);
-        Assert.Equal(FarmPermission.SeeMoney | FarmPermission.AddCost | FarmPermission.PlanWork, seat.Permissions);
+        Assert.Equal(FarmPermission.SeeMoney | FarmPermission.ReviewMoney | FarmPermission.PlanWork, seat.Permissions);
 
         var demoted = await Handle(repo, Decision(MembershipDecision.SetAccess, trusted) with { Role = "Worker" });
 

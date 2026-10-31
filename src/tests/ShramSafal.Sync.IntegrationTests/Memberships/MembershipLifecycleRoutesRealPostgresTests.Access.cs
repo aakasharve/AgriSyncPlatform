@@ -88,9 +88,9 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
 
         await DecideOkAsync(HttpMethod.Post, $"{Joiner}/approve", Owner, new { role = "Mukadam", grantLabour = true });
         (await LiveSeatAsync(Farm, Joiner))!.LabourGrant.Should().BeTrue("arrange: काम + हजेरी");
-        await DecideOkAsync(HttpMethod.Put, $"{Joiner}/access", Owner, new { permissions = new[] { "AddCost" } });
+        await DecideOkAsync(HttpMethod.Put, $"{Joiner}/access", Owner, new { permissions = new[] { "ReviewMoney" } });
         // lane 2b: the named set is the whole stored set; reviewing money brings seeing money (§11.1).
-        (await LiveSeatAsync(Farm, Joiner))!.Permissions.Should().Be(1 | 4, "arrange: the primary owner's explicit choice is stored");
+        (await LiveSeatAsync(Farm, Joiner))!.Permissions.Should().Be(1 | 1024, "arrange: the primary owner's explicit choice is stored");
 
         using (var doc = await DecideOkAsync(HttpMethod.Put, $"{Joiner}/access", Owner,
                    new { role = "Worker", resetPermissions = true, labourGrant = false }))
@@ -112,8 +112,8 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
 
         // An older body that names ONLY the role (the shape that kept every power before the fix).
         await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { role = "Mukadam", resetPermissions = true, labourGrant = true });
-        await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { permissions = new[] { "AddCost" } });
-        (await LiveSeatAsync(Farm, Worker3))!.Permissions.Should().Be(1 | 4, "review money brings see money (2b)");
+        await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { permissions = new[] { "ReviewMoney" } });
+        (await LiveSeatAsync(Farm, Worker3))!.Permissions.Should().Be(1 | 1024, "review money brings see money (2b)");
         await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { role = "Worker" });
         var plain = await LiveSeatAsync(Farm, Worker3);
         plain!.Role.Should().Be("Worker");
@@ -150,7 +150,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
 
         // CONTROLS: the primary owner corrects; once he stores AddCost for the co-owner, so may he.
         (await PushCorrectionAsync(Owner, 4100m)).Status.Should().Be("applied");
-        await DecideOkAsync(HttpMethod.Put, $"{Family}/access", Owner, new { permissions = new[] { "AddCost" } });
+        await DecideOkAsync(HttpMethod.Put, $"{Family}/access", Owner, new { permissions = new[] { "ReviewMoney" } });
         var allowed = await PushCorrectionAsync(Family, 4200m);
         allowed.Status.Should().Be("applied", $"{allowed.ErrorCode} {allowed.ErrorMessage}");
         (await CorrectionCountAsync()).Should().Be(2);

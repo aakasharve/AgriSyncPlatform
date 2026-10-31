@@ -87,6 +87,20 @@ describe('the primary owner\'s responsibility switches', () => {
         expect(screen.queryByTestId('confirm-access-fam')).toBeNull();
     });
 
+    it('ONE control per power: the old काम सांगणे / काम + हजेरी chooser is not drawn beside the switches (fix 1)', async () => {
+        render(<Harness />);
+        await openCard('fam');
+        expect(screen.queryByTestId('team-preset-work-fam')).toBeNull();
+        expect(screen.queryByTestId('team-preset-crew-fam')).toBeNull();
+    });
+
+    it('the farm-setup switch names only what the server checks: plot and boundary (fix 1)', async () => {
+        render(<Harness />);
+        const block = await openCard('fam');
+        expect(within(block).getByText('शेताची रचना बदलणे (प्लॉट, हद्द)')).toBeTruthy();
+        expect(block.textContent).not.toMatch(/मोटर|पाणी/);
+    });
+
     it('render in English in English mode, and only English', async () => {
         language = 'en';
         render(<Harness />);
@@ -94,6 +108,7 @@ describe('the primary owner\'s responsibility switches', () => {
         expect(within(block).getByText('Responsibilities')).toBeTruthy();
         expect(within(block).getByText('Take attendance')).toBeTruthy();
         expect(within(block).getByText('Confirm records (approve / query)')).toBeTruthy();
+        expect(within(block).getByText('Change farm setup (plots, boundary)')).toBeTruthy();
         expect(block.textContent).not.toMatch(/[ऀ-ॿ]/);
     });
 

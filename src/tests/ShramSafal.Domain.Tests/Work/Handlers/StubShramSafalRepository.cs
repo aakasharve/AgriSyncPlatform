@@ -44,8 +44,18 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
         }
 
         var grant = await GetLabourManagementGrantAsync(farmId, userId, DateTime.UtcNow, ct);
-        return ShramSafal.Domain.Tests.Auth.MigratedSeatAuthorities.AccessFor(role.Value, grant);
+        var access = ShramSafal.Domain.Tests.Auth.MigratedSeatAuthorities.AccessFor(role.Value, grant);
+        return ReviewMoneyHolders.Contains(userId)
+            ? access with { StoredPermissions = access.StoredPermissions | FarmPermission.ReviewMoney | FarmPermission.SeeMoney }
+            : access;
     }
+
+    /// <summary>
+    /// lane 2b fix 1 (HIGH-1) — review money (payout verify / settle, cost correction, bill split) is
+    /// never carried by a label: a test that means "a seat the primary owner gave review money" says
+    /// so here.
+    /// </summary>
+    public HashSet<Guid> ReviewMoneyHolders { get; } = [];
     public virtual Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult(false);
     public virtual Task AddPlotAsync(Plot plot, CancellationToken ct = default) => throw new NotSupportedException();
     public virtual Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();

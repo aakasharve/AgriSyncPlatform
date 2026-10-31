@@ -62,7 +62,7 @@ public sealed class EditScheduleTemplateAuthorizer : IAuthorizationCheck<EditSch
         {
             // Non-private: apply the scope/role gate (CEI Phase 2 §4.7).
             if (!await ScopeRoleGate.IsAllowedAsync(
-                _repository, source.TenantScope, command.FarmId, command.CallerUserId, _clock.UtcNow, ct))
+                _repository, source.TenantScope, command.FarmId, command.CallerUserId, command.CallerRole, _clock.UtcNow, ct))
             {
                 return Result.Failure(ShramSafalErrors.Forbidden);
             }

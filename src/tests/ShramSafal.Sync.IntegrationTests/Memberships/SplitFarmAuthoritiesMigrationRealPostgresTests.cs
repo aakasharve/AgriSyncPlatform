@@ -1,7 +1,9 @@
-// lane 2b (P11, E5, E8) — the 20261031021129_SplitFarmAuthorities migration rehearsed on a throwaway
-// copy of the demo farm's seats: every existing seat can do after the upgrade what it could do
-// before, except the primary-owner-only removals the brief lists (a सहमालक loses inviting and the
-// team roster); and Down() returns the older binary's columns fail-closed.
+// lane 2b (P11, E5, E8; fix 1 HIGH-1 / MEDIUM-3) — the 20261031021129_SplitFarmAuthorities migration
+// rehearsed on a throwaway copy of the demo farm's seats. The governing rule (orchestrator, founder
+// D-22 / D-26): the upgrade NEVER widens anything — for every seat and every checked action, "can
+// after" implies "could before". What a seat loses is listed exactly (the D-26 primary-owner-only
+// set and the money actions one go-live authority cannot carry finer). Down() never widens either —
+// also over the rows the FIRST draft of this migration wrote (the PC test database ran it).
 //
 // "Before" is the PRE-2b rule set, written down here from the code it replaced (file:line in the 2b
 // report) — that code no longer exists in this binary, so it cannot be called. "After" is measured
@@ -51,6 +53,11 @@ public sealed class SplitFarmAuthoritiesMigrationRealPostgresTests(ITestOutputHe
         new("worker-splits-bills", "Worker", 3, 4, false, null),
         new("worker-grant-ended", "Worker", 3, null, true, Past),
         new("agronomist", "Agronomist", 3, null, false, null),
+        new("fpc", "FpcTechnicalManager", 3, null, false, null),
+        new("mukadam-splits-bills", "Mukadam", 3, 4, false, null),
+        new("worker-lab-bit", "Worker", 3, 32, false, null),
+        new("consultant", "Consultant", 3, null, false, null),
+        new("family-money-paused", "SecondaryOwner", 4, 4, false, null),
         new("family-paused", "SecondaryOwner", 4, null, true, null),
         new("waiting", "Worker", 2, null, false, null),
         new("removed", "Mukadam", 5, null, true, null),
@@ -64,7 +71,9 @@ public sealed class SplitFarmAuthoritiesMigrationRealPostgresTests(ITestOutputHe
     private sealed record Row(Guid UserId, string Role, int Status, int? Permissions, bool Grant, DateTime? GrantEnd, string? Json);
 
     /// <summary>Every check that read the owner tier, the label or the labour grant before 2b, and
-    /// the lane-2b authority (or primary-owner-only) it now asks.</summary>
+    /// the lane-2b authority (or primary-owner-only) it now asks. The MONEY checks are listed in
+    /// <see cref="MoneyChecks"/> too. Plan / assign are not here: they are stored for nobody and their
+    /// label rules still decide (L8), and see money / see wages are stored only (MU-3).</summary>
     private static readonly (string Check, Func<Row, bool> Before, Func<Row, bool> After)[] Checks =
     [
         ("labour edits / attendance / field operators (LabourManagementGate)",
@@ -73,27 +82,33 @@ public sealed class SplitFarmAuthoritiesMigrationRealPostgresTests(ITestOutputHe
             r => Active(r) && (r.Role == "PrimaryOwner" || LiveGrant(r)), r => Holds(r, FarmAuthority.ConfirmRecords)),
         ("add a plot / the boundary (owner tier)",
             r => Active(r) && Owner(r), r => Holds(r, FarmAuthority.EditFarmSetup)),
-        ("split a whole-farm bill (AddCost)",
+        (SplitBill,
             r => Active(r) && (r.Role == "PrimaryOwner" || Bit(r, 4)), r => Holds(r, FarmAuthority.ReviewMoney)),
-        ("correct a cost (owner tier + AddCost)",
+        (CorrectCost,
             r => Active(r) && (r.Role == "PrimaryOwner" || (r.Role == "SecondaryOwner" && Bit(r, 4))), r => Holds(r, FarmAuthority.ReviewMoney)),
-        ("job card: create (owner tier + Mukadam) — STORED for L8; the label rule still decides",
-            r => Active(r) && (Owner(r) || r.Role == "Mukadam"), r => Holds(r, FarmAuthority.PlanWork)),
-        ("job card: assign (Mukadam + owner tier) — STORED for L8; the label rule still decides",
-            r => Active(r) && (Owner(r) || r.Role == "Mukadam"), r => Holds(r, FarmAuthority.AssignWork)),
-        ("job card: verify for payout (owner tier + Agronomist + FPC)",
+        (VerifyPayout,
             r => Active(r) && (Owner(r) || r.Role is "Agronomist" or "FpcTechnicalManager"), r => Holds(r, FarmAuthority.ReviewMoney)),
-        ("job card: settle (owner tier)",
+        (SettlePayout,
             r => Active(r) && Owner(r), r => Holds(r, FarmAuthority.ReviewMoney)),
-        ("crop-schedule steps add / move / remove (Mukadam or above) — STORED for L8; the label rule still decides",
-            r => Active(r) && r.Role != "Worker", r => Holds(r, FarmAuthority.PlanWork)),
-        ("labour money book (owner tier)",
-            r => Active(r) && Owner(r), r => Holds(r, FarmAuthority.SeeWages)),
+        // Lab records and schedule templates were the account's sign-up role's, never a seat's: no
+        // seat may gain them by the upgrade. The primary account holder holds every authority by
+        // design (brief scope 1, D-26) — that is the code's rule, not the upgrade's, and is reported
+        // on its own (he may now record his own farm's test collection / result).
+        ("lab records on the seat (a step-2 bit was never enforced)",
+            r => false, r => r.Role != "PrimaryOwner" && Holds(r, FarmAuthority.LabRecords)),
+        ("schedule templates on the seat (the sign-up role decided)",
+            r => false, r => r.Role != "PrimaryOwner" && Holds(r, FarmAuthority.ScheduleTemplates)),
         ("invite QR / rotate (owner tier) — PRIMARY OWNER ONLY now",
             r => Active(r) && Owner(r), r => Active(r) && r.Role == "PrimaryOwner"),
         ("team roster (owner tier) — PRIMARY OWNER ONLY now",
             r => Active(r) && Owner(r), r => Active(r) && r.Role == "PrimaryOwner"),
     ];
+
+    private const string SplitBill = "split a whole-farm bill (AddCost)";
+    private const string CorrectCost = "correct a cost (owner tier + AddCost)";
+    private const string VerifyPayout = "job card: verify for payout (owner tier + Agronomist + FPC)";
+    private const string SettlePayout = "job card: settle (owner tier)";
+    private static readonly string[] MoneyChecks = [SplitBill, CorrectCost, VerifyPayout, SettlePayout];
 
     private static bool Active(Row r) => r.Status == 3;
     private static bool Owner(Row r) => r.Role is "PrimaryOwner" or "SecondaryOwner";
@@ -143,7 +158,7 @@ public sealed class SplitFarmAuthoritiesMigrationRealPostgresTests(ITestOutputHe
     }
 
     [Fact]
-    public async Task Every_seat_keeps_every_power_except_the_listed_primary_owner_only_removals()
+    public async Task The_upgrade_never_widens_anything_and_every_loss_is_the_listed_one()
     {
         var before = await RowsAsync();
         await MigrateSsfToAsync(Lane2b);
@@ -159,43 +174,54 @@ public sealed class SplitFarmAuthoritiesMigrationRealPostgresTests(ITestOutputHe
             {
                 var was = oldRule(b);
                 var now = newRule(a);
-                output.WriteLine($"[EVIDENCE] {seat.Key,-20} {(was ? "Y" : "-")} -> {(now ? "Y" : "-")}  {check}");
+                output.WriteLine($"[EVIDENCE] {seat.Key,-22} {(was ? "Y" : "-")} -> {(now ? "Y" : "-")}  {check}");
                 if (was && !now) losses.Add($"{seat.Key}: {check}");
                 if (!was && now) gains.Add($"{seat.Key}: {check}");
             }
+
+            // The money outcome, per seat type: the set of money actions after ⊆ the set before.
+            var moneyBefore = Checks.Where(c => MoneyChecks.Contains(c.Check) && c.Before(b)).Select(c => c.Check).ToHashSet();
+            var moneyAfter = Checks.Where(c => MoneyChecks.Contains(c.Check) && c.After(a)).Select(c => c.Check).ToHashSet();
+            moneyAfter.Should().BeSubsetOf(moneyBefore, $"{seat.Key}: the upgrade never widens money (D-22)");
+
+            // Plan / assign are stored for nobody (L8 sets them); a step-2 lab-records bit is cleared.
+            ((a.Permissions ?? 0) & (8 | 64)).Should().Be((b.Permissions ?? 0) & 8, $"{seat.Key}: no plan / assign stored by the upgrade");
+            Bit(a, 32).Should().BeFalse($"{seat.Key}: a never-enforced lab-records bit is not carried");
+            Bit(a, 4).Should().BeFalse($"{seat.Key}: the retired AddCost bit is cleared");
         }
+
+        gains.Should().BeEmpty("the upgrade never widens anything (fix 1, D-22 / D-26)");
 
         losses.Should().BeEquivalentTo(new[]
         {
+            // D-26: people and permissions are the primary account holder's.
             "family-plain: invite QR / rotate (owner tier) — PRIMARY OWNER ONLY now",
             "family-plain: team roster (owner tier) — PRIMARY OWNER ONLY now",
             "family-confirms: invite QR / rotate (owner tier) — PRIMARY OWNER ONLY now",
             "family-confirms: team roster (owner tier) — PRIMARY OWNER ONLY now",
             "family-money: invite QR / rotate (owner tier) — PRIMARY OWNER ONLY now",
             "family-money: team roster (owner tier) — PRIMARY OWNER ONLY now",
-        }, "nobody loses a power on upgrade except the D-26 primary-owner-only set (P11)");
-
-        // What an authority now covers that the single old check did not (one authority, several
-        // old checks) — listed, so a widening is a decision, never a surprise.
-        gains.Should().BeEquivalentTo(new[]
-        {
-            "family-plain: split a whole-farm bill (AddCost)",
-            "family-plain: correct a cost (owner tier + AddCost)",
-            "family-confirms: split a whole-farm bill (AddCost)",
-            "family-confirms: correct a cost (owner tier + AddCost)",
-            "agronomist: split a whole-farm bill (AddCost)",
-            "agronomist: correct a cost (owner tier + AddCost)",
-            // Stored only: L8 enforces plan work; until then the label rule still decides.
-            "agronomist: job card: create (owner tier + Mukadam) — STORED for L8; the label rule still decides",
-            "agronomist: job card: settle (owner tier)",
-            "worker-splits-bills: correct a cost (owner tier + AddCost)",
-            "worker-splits-bills: job card: verify for payout (owner tier + Agronomist + FPC)",
-            "worker-splits-bills: job card: settle (owner tier)",
+            // Fix 1 (HIGH-1): one review-money authority cannot carry a part of it — the seat gets less.
+            $"family-plain: {VerifyPayout}",
+            $"family-plain: {SettlePayout}",
+            $"family-confirms: {VerifyPayout}",
+            $"family-confirms: {SettlePayout}",
+            $"agronomist: {VerifyPayout}",
+            $"fpc: {VerifyPayout}",
+            $"worker-splits-bills: {SplitBill}",
+            $"mukadam-splits-bills: {SplitBill}",
         });
-        foreach (var gain in gains)
+        foreach (var loss in losses)
         {
-            output.WriteLine($"[EVIDENCE] widened: {gain}");
+            output.WriteLine($"[EVIDENCE] lost: {loss}");
         }
+
+        // Exactly the seat that could do ALL of review money keeps it (with see money).
+        var familyMoney = after.Single(r => r.UserId == Seats.Single(s => s.Key == "family-money").UserId);
+        Holds(familyMoney, FarmAuthority.ReviewMoney).Should().BeTrue();
+        Bit(familyMoney, 1024).Should().BeTrue();
+        var familyMoneyPaused = after.Single(r => r.UserId == Seats.Single(s => s.Key == "family-money-paused").UserId);
+        Holds(familyMoneyPaused with { Status = 3 }, FarmAuthority.ReviewMoney).Should().BeTrue("restored, he has what he had");
 
         // Waiting and ended seats are untouched; a paused seat keeps what returns on restore.
         var waiting = after.Single(r => r.UserId == Seats.Single(s => s.Key == "waiting").UserId);
@@ -251,7 +277,100 @@ public sealed class SplitFarmAuthoritiesMigrationRealPostgresTests(ITestOutputHe
         var familyConfirms = after.Single(r => r.UserId == Seats.Single(s => s.Key == "family-confirms").UserId);
         familyConfirms.Grant.Should().BeTrue();
         familyConfirms.GrantEnd.Should().BeCloseTo(Future, TimeSpan.FromMilliseconds(1));
+
+        // The one seat Up gave review money gets its AddCost back exactly.
+        Bit(after.Single(r => r.UserId == Seats.Single(s => s.Key == "family-money").UserId), 4).Should().BeTrue();
     }
+
+    /// <summary>
+    /// fix 1 — the PC test database ran the FIRST draft of this migration, so its rows carry that
+    /// draft's values (AddCost on every सहमालक / Agronomist / FPC seat, plan / assign bits). The edited
+    /// Down() must collapse those rows without widening the older binary too.
+    /// </summary>
+    [Fact]
+    public async Task Down_over_the_first_drafts_rows_never_widens_the_older_binary()
+    {
+        var before = await RowsAsync();
+        await MigrateSsfToAsync(Lane2b);
+
+        // Put the seats back as they were before the upgrade, then through the FIRST draft's carry.
+        await using (var db = new NpgsqlConnection(_superConn))
+        {
+            await db.OpenAsync();
+            await using (var wipe = db.CreateCommand())
+            {
+                wipe.CommandText = "DELETE FROM ssf.farm_memberships WHERE farm_id = @farm";
+                wipe.Parameters.AddWithValue("farm", Farm);
+                await wipe.ExecuteNonQueryAsync();
+            }
+        }
+
+        await SeedSeatsAsync();
+        await using (var db = new NpgsqlConnection(_superConn))
+        {
+            await db.OpenAsync();
+            await using var draft = db.CreateCommand();
+            draft.CommandText = FirstDraftCarry + " AND m.farm_id = @farm;";
+            draft.Parameters.AddWithValue("farm", Farm);
+            await draft.ExecuteNonQueryAsync();
+        }
+
+        await MigrateSsfToAsync(Before2b);
+        var after = await RowsAsync();
+        foreach (var seat in Seats)
+        {
+            var b = before.Single(r => r.UserId == seat.UserId);
+            var a = after.Single(r => r.UserId == seat.UserId);
+            output.WriteLine($"[EVIDENCE] down(first draft) {seat.Key,-22} grant {b.Grant}->{a.Grant} perms {b.Permissions?.ToString() ?? "null"}->{a.Permissions?.ToString() ?? "null"}");
+            if (!b.Grant)
+            {
+                a.Grant.Should().BeFalse($"{seat.Key}: rollback must not widen the old switch");
+            }
+
+            if (!Bit(b, 4))
+            {
+                Bit(a, 4).Should().BeFalse($"{seat.Key}: rollback must not hand out AddCost the first draft added");
+            }
+        }
+    }
+
+    /// <summary>The carry the FIRST draft of this migration ran (cd35fc91) — what the PC test database holds.</summary>
+    private const string FirstDraftCarry = """
+        UPDATE ssf.farm_memberships AS m
+        SET
+            permissions =
+                (COALESCE(m.permissions, 0) & ~16)
+                | CASE WHEN (COALESCE(m.permissions, 0) & 4) <> 0 THEN 1 ELSE 0 END
+                | CASE WHEN m.can_manage_labour_records THEN 128 ELSE 0 END
+                | CASE m.role
+                    WHEN 'SecondaryOwner'      THEN 1 | 2 | 4 | 8 | 64 | 256
+                    WHEN 'Mukadam'             THEN 8 | 64
+                    WHEN 'Agronomist'          THEN 1 | 4 | 8
+                    WHEN 'FpcTechnicalManager' THEN 1 | 4 | 8
+                    WHEN 'Consultant'          THEN 8
+                    WHEN 'FieldScout'          THEN 8
+                    WHEN 'LabOperator'         THEN 8
+                    ELSE 0
+                  END,
+            authority_expires_at = CASE
+                WHEN m.can_manage_labour_records AND m.labour_grant_expires_at_utc IS NOT NULL
+                THEN jsonb_build_object(
+                    '128',
+                    to_char(m.labour_grant_expires_at_utc AT TIME ZONE 'UTC',
+                            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'))
+                ELSE NULL
+            END,
+            can_manage_labour_records = CASE
+                WHEN m.role = 'SecondaryOwner' THEN true
+                ELSE m.can_manage_labour_records
+            END,
+            labour_grant_expires_at_utc = CASE
+                WHEN m.role = 'SecondaryOwner' THEN NULL
+                ELSE m.labour_grant_expires_at_utc
+            END
+        WHERE m.status IN (3, 4)
+          AND m.role <> 'PrimaryOwner'
+        """;
 
     // ── Harness ────────────────────────────────────────────────────────────────────────────
 
@@ -278,6 +397,13 @@ public sealed class SplitFarmAuthoritiesMigrationRealPostgresTests(ITestOutputHe
             await farm.ExecuteNonQueryAsync();
         }
 
+        await SeedSeatsAsync();
+    }
+
+    private async Task SeedSeatsAsync()
+    {
+        await using var db = new NpgsqlConnection(_superConn);
+        await db.OpenAsync();
         foreach (var seat in Seats)
         {
             await using var cmd = db.CreateCommand();

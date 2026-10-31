@@ -11,15 +11,14 @@ namespace ShramSafal.Domain.Tests.Auth;
 
 internal static class MigratedSeatAuthorities
 {
-    /// <summary>The bits Up() adds by label (a stored labour grant also adds ConfirmRecords).</summary>
+    /// <summary>
+    /// The bits Up() adds by label for a seat with nothing stored (a stored labour grant also adds
+    /// ConfirmRecords; a सहमालक with a stored AddCost also gets review money). Fix 1: the upgrade
+    /// never widens — no review money, plan or assign for any label by itself.
+    /// </summary>
     public static FarmPermission BitsFor(AppRole role) => role switch
     {
-        AppRole.SecondaryOwner => FarmPermission.SeeMoney | FarmPermission.SeeWages | FarmPermission.AddCost
-            | FarmPermission.PlanWork | FarmPermission.AssignWork | FarmPermission.EditFarmSetup,
-        AppRole.Mukadam => FarmPermission.PlanWork | FarmPermission.AssignWork,
-        AppRole.Agronomist or AppRole.FpcTechnicalManager =>
-            FarmPermission.SeeMoney | FarmPermission.AddCost | FarmPermission.PlanWork,
-        AppRole.Consultant or AppRole.FieldScout or AppRole.LabOperator => FarmPermission.PlanWork,
+        AppRole.SecondaryOwner => FarmPermission.SeeMoney | FarmPermission.SeeWages | FarmPermission.EditFarmSetup,
         _ => FarmPermission.None,
     };
 

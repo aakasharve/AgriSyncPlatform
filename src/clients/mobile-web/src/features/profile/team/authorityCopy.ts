@@ -39,7 +39,7 @@ const mr: AuthorityCopy = {
         TakeAttendance: 'हजेरी घेणे', // PROPOSED (Marathi)
         ConfirmRecords: 'नोंदी पक्क्या करणे (मंजूर / शंका)', // PROPOSED (Marathi)
         ReviewMoney: 'पैशांच्या नोंदी तपासणे व दुरुस्त करणे', // PROPOSED (Marathi)
-        EditFarmSetup: 'शेताची रचना बदलणे (प्लॉट, हद्द, मोटर, पाणी)', // PROPOSED (Marathi)
+        EditFarmSetup: 'शेताची रचना बदलणे (प्लॉट, हद्द)', // PROPOSED (Marathi)
         LabRecords: 'चाचण्यांच्या नोंदी', // PROPOSED (Marathi)
         ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने', // PROPOSED (Marathi)
     },
@@ -62,7 +62,7 @@ const en: AuthorityCopy = {
         TakeAttendance: 'Take attendance', // PROPOSED (English)
         ConfirmRecords: 'Confirm records (approve / query)', // PROPOSED (English)
         ReviewMoney: 'Check and correct money entries', // PROPOSED (English)
-        EditFarmSetup: 'Change farm setup (plots, boundary, motors, water)', // PROPOSED (English)
+        EditFarmSetup: 'Change farm setup (plots, boundary)', // PROPOSED (English)
         LabRecords: 'Lab test records', // PROPOSED (English)
         ScheduleTemplates: 'Crop schedule templates', // PROPOSED (English)
     },

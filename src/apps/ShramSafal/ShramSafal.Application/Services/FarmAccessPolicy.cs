@@ -119,8 +119,34 @@ public enum AuthorityStanding
     /// <summary>Held now: the work is accepted as usual.</summary>
     HeldNow,
 
-    /// <summary>Not held now, but stored on the (still Active) seat and alive when the work happened: accepted and flagged for the owner.</summary>
+    /// <summary>
+    /// Not held now, but stored on the (still Active) seat, alive when the work happened, the work
+    /// happened within <see cref="LateArrivalWindow.DoneWithinDaysBeforeEnd"/> days before the end and
+    /// reached the server within <see cref="LateArrivalWindow.ReceivedWithinDaysAfterEnd"/> days after
+    /// it: a NEW record is accepted and flagged for the owner (never an overwrite — the caller checks).
+    /// </summary>
     HeldWhenItHappened,
+
+    /// <summary>
+    /// Stored on the (still Active) seat but ENDED, and the work is outside the late window (or done
+    /// after the end): refused and kept whole for the owner by the sync layer, never applied.
+    /// </summary>
+    Ended,
+}
+
+/// <summary>
+/// lane 2b fix 1 (HIGH-2; orchestrator's numbers) — how late work from an ENDED authority may be and
+/// still count. The server's own clock decides arrival; the work's own date (the phone's statement)
+/// must lie inside the days just before the end. Anything else from an ended authority is kept for
+/// the owner and not applied (P9, P10).
+/// </summary>
+public static class LateArrivalWindow
+{
+    /// <summary>The server must RECEIVE it within this many days after the authority ended.</summary>
+    public const int ReceivedWithinDaysAfterEnd = 7;
+
+    /// <summary>The work's own date must lie within this many days before the end.</summary>
+    public const int DoneWithinDaysBeforeEnd = 7;
 }
 
 /// <summary>
@@ -169,12 +195,15 @@ public static class FarmAuthorityGate
     }
 
     /// <summary>
-    /// lane 2b (MU design §11.2) — for work that may have been done offline: is the authority held
-    /// now, or was it held when the work happened (<paramref name="occurredAtUtc"/>, the client's own
-    /// statement, bounded to the past)? Only a seat that is STILL Active can be
-    /// <see cref="AuthorityStanding.HeldWhenItHappened"/>: work from a paused or removed seat is kept
-    /// as a mark for the owner, never written (the owner stopped that person; the server cannot tell
-    /// from the seat whether a later pause came first).
+    /// lane 2b (MU design §11.2; fix 1 HIGH-2) — for work that may have been done offline: is the
+    /// authority held now, or does late work still count? <see cref="AuthorityStanding.HeldWhenItHappened"/>
+    /// only inside <see cref="LateArrivalWindow"/>: the authority ended at most
+    /// <see cref="LateArrivalWindow.ReceivedWithinDaysAfterEnd"/> days ago by the SERVER's clock, and the
+    /// work (<paramref name="occurredAtUtc"/>, the phone's statement) happened before the end and at
+    /// most <see cref="LateArrivalWindow.DoneWithinDaysBeforeEnd"/> days before it. A stored authority
+    /// outside that is <see cref="AuthorityStanding.Ended"/>. Only a seat that is STILL Active can be
+    /// either: work from a paused or removed seat is <see cref="AuthorityStanding.NotHeld"/> (the owner
+    /// stopped that person; the server cannot tell from the seat whether a later pause came first).
     /// </summary>
     public static async Task<(AuthorityStanding Standing, DateTime? EndedAtUtc)> StandingAsync(
         IShramSafalRepository repository,
@@ -199,22 +228,31 @@ public static class FarmAuthorityGate
         }
 
         if (access is null
-            || occurredAtUtc is not { } happened
-            || happened >= nowUtc
-            || !FarmAccessPolicy.Holds(access, authority, happened))
+            || access.Status != MembershipStatus.Active
+            || !FarmAuthorities.IsStored(access.StoredPermissions, access.LabourGrant, authority))
         {
             return (AuthorityStanding.NotHeld, null);
         }
 
-        // Held then, not now, on a seat that is still Active: the end that passed in between. It is
-        // the authority's own end, or the end of what it needs (see money), whichever came first.
+        // Stored on a working seat, not held now: it ENDED — its own end, or the end of what it needs
+        // (see money), whichever passed first. No readable end (a corrupt document) = no late window.
         var expiries = FarmAuthorities.ParseExpiries(access.AuthorityExpiresAtJson);
         DateTime? EndOf(FarmAuthority a) => FarmAuthorities.ExpiryOf(
             access.StoredPermissions, access.LabourGrant, access.LabourGrantExpiresAtUtc, expiries, a);
         var ended = new[] { EndOf(authority), FarmAuthorities.RequiredBy(authority) is { } needed ? EndOf(needed) : null }
-            .Where(e => e is not null && e > happened && e <= nowUtc)
+            .Where(e => e is not null && e <= nowUtc && e > DateTime.MinValue)
             .Min();
-        return (AuthorityStanding.HeldWhenItHappened, ended);
+        if (ended is not { } end)
+        {
+            return (AuthorityStanding.Ended, null);
+        }
+
+        var inWindow = occurredAtUtc is { } happened
+            && happened < end
+            && happened >= end.AddDays(-LateArrivalWindow.DoneWithinDaysBeforeEnd)
+            && nowUtc <= end.AddDays(LateArrivalWindow.ReceivedWithinDaysAfterEnd)
+            && FarmAccessPolicy.Holds(access, authority, happened);
+        return (inWindow ? AuthorityStanding.HeldWhenItHappened : AuthorityStanding.Ended, end);
     }
 }
 

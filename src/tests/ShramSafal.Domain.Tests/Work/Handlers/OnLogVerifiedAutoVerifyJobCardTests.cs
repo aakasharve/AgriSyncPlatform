@@ -52,6 +52,7 @@ public sealed class OnLogVerifiedAutoVerifyJobCardTests
     {
         var (job, log) = BuildCompletedJobCardAndVerifiedLog();
         var repo = new FakeAutoVerifyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
+        repo.ReviewMoneyHolders.Add(AgronomistGuid); // lane 2b fix 1: review money from the seat, never the label
         var verifyHandler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(3)));
         var handler = new OnLogVerifiedAutoVerifyJobCard(
             repo, verifyHandler, new FixedClock(Now.AddHours(3)),
@@ -85,6 +86,7 @@ public sealed class OnLogVerifiedAutoVerifyJobCardTests
         job.Status.Should().Be(JobCardStatus.VerifiedForPayout);
 
         var repo = new FakeAutoVerifyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
+        repo.ReviewMoneyHolders.Add(AgronomistGuid); // lane 2b fix 1: review money from the seat, never the label
         var verifyHandler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(4)));
         var handler = new OnLogVerifiedAutoVerifyJobCard(
             repo, verifyHandler, new FixedClock(Now.AddHours(4)),
@@ -106,6 +108,7 @@ public sealed class OnLogVerifiedAutoVerifyJobCardTests
         job.Status.Should().Be(JobCardStatus.PaidOut);
 
         var repo = new FakeAutoVerifyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
+        repo.ReviewMoneyHolders.Add(AgronomistGuid); // lane 2b fix 1: review money from the seat, never the label
         var verifyHandler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(5)));
         var handler = new OnLogVerifiedAutoVerifyJobCard(
             repo, verifyHandler, new FixedClock(Now.AddHours(5)),

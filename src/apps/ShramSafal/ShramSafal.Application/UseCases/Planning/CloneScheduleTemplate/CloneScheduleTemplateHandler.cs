@@ -62,7 +62,7 @@ public sealed class CloneScheduleTemplateHandler(
         // Team     → all Licensed roles + FpcTechnicalManager
         // Private  → any authenticated farm member (no role restriction)
         if (!await ScopeRoleGate.IsAllowedAsync(
-                repository, command.NewScope, command.FarmId, command.CallerUserId, clock.UtcNow, ct))
+                repository, command.NewScope, command.FarmId, command.CallerUserId, command.CallerRole, clock.UtcNow, ct))
         {
             return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.Forbidden);
         }

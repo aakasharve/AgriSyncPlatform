@@ -61,7 +61,7 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
     private static readonly Guid CycleA = Guid.Parse("2b000001-0000-0000-0000-0000000000d2");
     private static readonly Guid CostA = Guid.Parse("2b000001-0000-0000-0000-0000000000d3");
 
-    private const int AllBits = 1 | 2 | 4 | 8 | 32 | 64 | 128 | 256 | 512;
+    private const int AllBits = 1 | 2 | 8 | 32 | 64 | 128 | 256 | 512 | 1024;
 
     private string _rootConn = string.Empty;
     private string _scratchDbName = string.Empty;
@@ -382,63 +382,149 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
         // CONTROL: the farm's primary owner — no global role at all — may evaluate.
         using var owner = await SendAsync(HttpMethod.Post, $"/shramsafal/compliance/evaluate/{FarmA}", OwnerA, null);
         owner.StatusCode.Should().Be(HttpStatusCode.Accepted, await owner.Content.ReadAsStringAsync());
+
+        // fix 1 (LOW-1): a protocol belongs to no farm — a plain registrant (no expert sign-up role)
+        // is refused even naming his own farm, where he holds every authority.
+        foreach (var role in new[] { null, "Worker" })
+        {
+            using var registrant = await SendAsync(HttpMethod.Post, $"/shramsafal/test-protocols?farmId={FarmA}", OwnerA, new
+            {
+                name = "registrant probe",
+                cropType = "Grapes",
+                kind = 1,
+                periodicity = 0,
+                stageNames = new[] { "Flowering" },
+                parameterCodes = new[] { "pH" },
+            }, globalRole: role);
+            registrant.StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.NotFound);
+        }
     }
 
     // ── Late offline work (MU design §11.2) ────────────────────────────────────────────────
 
+    // fix 1 (HIGH-2): late work from an ENDED authority counts only inside LateArrivalWindow —
+    // received within 7 days after the end (server clock), done within the 7 days before it — and
+    // only as NEW work. Everything else is refused (code unchanged, parks visibly) and kept whole for
+    // the owner; nothing is dropped.
+
     [Fact]
-    public async Task Late_hajeri_from_before_the_end_is_accepted_and_flagged_and_from_after_is_kept_not_dropped()
+    public async Task Late_hajeri_counts_only_inside_the_window_and_only_as_a_new_mark_everything_else_is_kept()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var operatorId = await CreateFieldOperatorIdAsync(OwnerA);
-
-        // His हजेरी ended at the start of today (India time).
         var today = ShramSafal.Domain.Dfes.FarmLocalDay.From(DateTime.UtcNow);
-        var endedAt = ShramSafal.Domain.Dfes.FarmLocalDay.UtcWindow(today).StartUtc;
-        await ExecSuperAsync(
+        var todayStart = ShramSafal.Domain.Dfes.FarmLocalDay.UtcWindow(today).StartUtc;
+        async Task EndHajeriAtAsync(DateTime end) => await ExecSuperAsync(
             "UPDATE ssf.farm_memberships SET permissions = 0, can_manage_labour_records = TRUE, labour_grant_expires_at_utc = @end, authority_expires_at = NULL WHERE user_id = @u",
-            ("end", endedAt), ("u", Holder));
+            ("end", end), ("u", Holder));
 
-        var before = await PushAttendanceAsync(Holder, operatorId, today.AddDays(-1), "late-before");
-        before.Status.Should().Be("applied", before.ErrorCode);
+        // (1) inside the window: ended at the start of today, the work is yesterday's -> applied + flagged.
+        await EndHajeriAtAsync(todayStart);
+        var inside = await PushAttendanceAsync(Holder, operatorId, today.AddDays(-1), "late-inside");
+        inside.Status.Should().Be("applied", inside.ErrorCode);
         var flags = await AuditPayloadsAsync(FarmA, LateAuthorityAudit.AcceptedAfterEnd);
         flags.Should().ContainSingle();
         flags[0].GetProperty("authority").GetString().Should().Be("TakeAttendance");
 
-        var after = await PushAttendanceAsync(Holder, operatorId, today, "late-after");
-        after.Status.Should().Be("failed");
-        after.ErrorCode.Should().Be("ShramSafal.Forbidden", "every installed phone parks this code visibly");
-        var kept = await AuditPayloadsAsync(FarmA, LateAuthorityAudit.KeptForOwner);
-        kept.Should().ContainSingle("nothing is dropped (P9 / P10)");
-        kept[0].GetProperty("mutationType").GetString().Should().Be("attendance.mark");
-        kept[0].GetProperty("mutation").GetProperty("fieldOperatorId").GetString().Should().Be(operatorId.ToString());
-        output.WriteLine("[EVIDENCE] late हजेरी: before-end applied+flagged, after-end refused (Forbidden) + kept for owner");
+        // (2) work done after the end (today) -> refused, kept, not applied.
+        var afterEnd = await PushAttendanceAsync(Holder, operatorId, today, "late-after-end");
+        afterEnd.Status.Should().Be("failed");
+        afterEnd.ErrorCode.Should().Be("ShramSafal.Forbidden", "every installed phone parks this code visibly");
 
-        // A re-send of the refused one keeps no second copy.
-        (await PushAttendanceAsync(Holder, operatorId, today, "late-after")).Status.Should().Be("failed");
-        (await AuditPayloadsAsync(FarmA, LateAuthorityAudit.KeptForOwner)).Should().ContainSingle();
+        // (3) the work's date is older than the 7 days before the end -> kept, not applied.
+        var tooOld = await PushAttendanceAsync(Holder, operatorId, today.AddDays(-(LateArrivalWindow.DoneWithinDaysBeforeEnd + 2)), "late-too-old");
+        tooOld.Status.Should().Be("failed");
+        tooOld.ErrorCode.Should().Be("ShramSafal.Forbidden");
+
+        // (4) an EXISTING mark is never overwritten by an ended authority, even inside the window.
+        var markedDay = today.AddDays(-2);
+        (await PushAttendanceAsync(OwnerA, operatorId, markedDay, "owner-mark", dayMark: "Half")).Status.Should().Be("applied");
+        var overwrite = await PushAttendanceAsync(Holder, operatorId, markedDay, "late-overwrite");
+        overwrite.Status.Should().Be("failed");
+        overwrite.ErrorCode.Should().Be("ShramSafal.Forbidden");
+        (await DayMarkAsync(operatorId, markedDay)).Should().Be("Half", "the owner's mark stands");
+
+        // (5) arrival after the window: ended 9 days ago, the work 1 day before that -> kept, not applied.
+        await EndHajeriAtAsync(todayStart.AddDays(-(LateArrivalWindow.ReceivedWithinDaysAfterEnd + 2)));
+        var lateArrival = await PushAttendanceAsync(Holder, operatorId, today.AddDays(-(LateArrivalWindow.ReceivedWithinDaysAfterEnd + 3)), "late-arrival");
+        lateArrival.Status.Should().Be("failed");
+        lateArrival.ErrorCode.Should().Be("ShramSafal.Forbidden");
+
+        foreach (var day in new[] { today, today.AddDays(-(LateArrivalWindow.DoneWithinDaysBeforeEnd + 2)), today.AddDays(-(LateArrivalWindow.ReceivedWithinDaysAfterEnd + 3)) })
+        {
+            (await DayMarkAsync(operatorId, day)).Should().BeNull($"nothing applied for {day}");
+        }
+
+        (await AuditPayloadsAsync(FarmA, LateAuthorityAudit.AcceptedAfterEnd)).Should().ContainSingle("only the in-window new mark is flagged");
+        var kept = await AuditPayloadsAsync(FarmA, LateAuthorityAudit.KeptForOwner);
+        kept.Select(k => k.GetProperty("clientRequestId").GetString()).Should().BeEquivalentTo(
+            new[] { "late-after-end", "late-too-old", "late-overwrite", "late-arrival" }, "nothing is dropped (P9 / P10)");
+        kept.Should().OnlyContain(k => k.GetProperty("mutationType").GetString() == "attendance.mark");
+        output.WriteLine("[EVIDENCE] late हजेरी: inside window applied+flagged; after-end / too-old / overwrite / late-arrival refused (Forbidden) + kept");
+
+        // A re-send of a refused one keeps no second copy.
+        (await PushAttendanceAsync(Holder, operatorId, today, "late-after-end")).Status.Should().Be("failed");
+        (await AuditPayloadsAsync(FarmA, LateAuthorityAudit.KeptForOwner)).Should().HaveCount(4);
     }
 
     [Fact]
-    public async Task Late_confirmation_made_before_the_end_counts_and_is_flagged_and_after_the_end_is_kept_as_a_mark()
+    public async Task Late_confirmation_counts_only_inside_the_window_and_only_on_an_undecided_record_everything_else_is_kept()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        var early = await CreateLogAsync(OwnerA);
-        var late = await CreateLogAsync(OwnerA);
-        var endedAt = DateTime.UtcNow.AddSeconds(-30);
-        await ExecSuperAsync(
+        var inside = await CreateLogAsync(OwnerA, createdHoursAgo: 24 * 12);
+        var afterEnd = await CreateLogAsync(OwnerA, createdHoursAgo: 24 * 12);
+        var tooOld = await CreateLogAsync(OwnerA, createdHoursAgo: 24 * 12);
+        var decided = await CreateLogAsync(OwnerA, createdHoursAgo: 24 * 12);
+        var lateArrival = await CreateLogAsync(OwnerA, createdHoursAgo: 24 * 12);
+        async Task EndConfirmAtAsync(DateTime end) => await ExecSuperAsync(
             "UPDATE ssf.farm_memberships SET permissions = 128, can_manage_labour_records = FALSE, authority_expires_at = jsonb_build_object('128', to_char(@end AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')) WHERE user_id = @u",
-            ("end", endedAt), ("u", Holder));
+            ("end", end), ("u", Holder));
 
-        var made = await PushVerifyV2Async(Holder, early, decidedAt: endedAt.AddSeconds(-10), "confirm-before");
+        // The owner decides one record first (मंजूर): a late decision must never overwrite it.
+        (await VerifyAsync(OwnerA, decided)).Should().Be(HttpStatusCode.OK);
+
+        var endedAt = DateTime.UtcNow.AddSeconds(-30);
+        await EndConfirmAtAsync(endedAt);
+
+        // (1) inside: made 10 s before the end, received now -> applied + flagged.
+        var made = await PushVerifyV2Async(Holder, inside, decidedAt: endedAt.AddSeconds(-10), "confirm-inside");
         made.Status.Should().Be("applied", made.ErrorCode);
-        (await LogStatusAsync(early)).Should().Be("Verified");
+        (await LogStatusAsync(inside)).Should().Be("Verified");
         (await AuditPayloadsAsync(FarmA, LateAuthorityAudit.AcceptedAfterEnd)).Should().ContainSingle();
 
-        var tooLate = await PushVerifyV2Async(Holder, late, decidedAt: DateTime.UtcNow.AddSeconds(-1), "confirm-after");
-        tooLate.Status.Should().Be("applied", "the L6 pattern: kept as his mark, the queue moves on");
-        (await LogStatusAsync(late)).Should().NotBe("Verified");
-        (await AuditCountAsync(FarmA, "ConfirmRequestNotCounted")).Should().Be(1);
+        // (2) made after the end -> refused + kept (no longer a mark: the authority ENDED).
+        var after = await PushVerifyV2Async(Holder, afterEnd, decidedAt: DateTime.UtcNow.AddSeconds(-1), "confirm-after-end");
+        after.Status.Should().Be("failed");
+        after.ErrorCode.Should().Be("ShramSafal.Forbidden");
+
+        // (3) made more than 7 days before the end -> kept.
+        var old = await PushVerifyV2Async(Holder, tooOld, decidedAt: endedAt.AddDays(-(LateArrivalWindow.DoneWithinDaysBeforeEnd + 1)), "confirm-too-old");
+        old.Status.Should().Be("failed");
+        old.ErrorCode.Should().Be("ShramSafal.Forbidden");
+
+        // (4) a शंका on a record the owner already confirmed, made inside the window -> kept.
+        var overwrite = await PushVerifyV2Async(Holder, decided, decidedAt: endedAt.AddSeconds(-5), "confirm-overwrite", decision: "dispute");
+        overwrite.Status.Should().Be("failed");
+        overwrite.ErrorCode.Should().Be("ShramSafal.Forbidden");
+        (await LogStatusAsync(decided)).Should().Be("Verified", "the owner's decision stands");
+
+        // (5) arrival after the window: ended 9 days ago, made the day before that -> kept.
+        var oldEnd = DateTime.UtcNow.AddDays(-(LateArrivalWindow.ReceivedWithinDaysAfterEnd + 2));
+        await EndConfirmAtAsync(oldEnd);
+        var arrival = await PushVerifyV2Async(Holder, lateArrival, decidedAt: oldEnd.AddDays(-1), "confirm-late-arrival");
+        arrival.Status.Should().Be("failed");
+        arrival.ErrorCode.Should().Be("ShramSafal.Forbidden");
+
+        foreach (var log in new[] { afterEnd, tooOld, lateArrival })
+        {
+            (await LogStatusAsync(log)).Should().Be("Draft", "nothing applied");
+        }
+
+        (await AuditPayloadsAsync(FarmA, LateAuthorityAudit.AcceptedAfterEnd)).Should().ContainSingle();
+        (await AuditPayloadsAsync(FarmA, LateAuthorityAudit.KeptForOwner))
+            .Select(k => k.GetProperty("clientRequestId").GetString())
+            .Should().BeEquivalentTo(new[] { "confirm-after-end", "confirm-too-old", "confirm-overwrite", "confirm-late-arrival" });
+        output.WriteLine("[EVIDENCE] late confirm: inside window applied+flagged; after-end / too-old / overwrite / late-arrival refused (Forbidden) + kept");
     }
 
     [Fact]
@@ -466,9 +552,64 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
         (await AuditPayloadsAsync(FarmA, LateAuthorityAudit.KeptForOwner)).Should().ContainSingle();
     }
 
+    // ── fix 1 (MEDIUM-1): a kept copy is bounded ───────────────────────────────────────────
+
+    [Fact]
+    public async Task A_kept_copy_is_bounded_in_size_and_in_number_per_sender_per_farm_per_day()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await StoreOnlyAsync(Holder, FarmAuthority.EditFarmSetup, end: null);
+        await ExecSuperAsync("UPDATE ssf.farm_memberships SET status = 4 WHERE user_id = @u AND farm_id = @f", ("u", Holder), ("f", FarmA));
+
+        // (1) a body over 32 KB is kept as its type, size, SHA-256 and first part — never whole.
+        var hugeName = new string('क', 20_000); // 3 bytes each in UTF-8: ~60 KB
+        var big = await PushAsync(Holder, "kept-big", "create_plot",
+            new { plotId = Guid.NewGuid(), farmId = FarmA, name = hugeName, areaInAcres = 1m });
+        big.Status.Should().Be("failed");
+        big.ErrorCode.Should().Be("ShramSafal.Forbidden");
+        var kept = (await AuditPayloadsAsync(FarmA, LateAuthorityAudit.KeptForOwner)).Single();
+        (kept.TryGetProperty("mutation", out var whole) && whole.ValueKind != JsonValueKind.Null)
+            .Should().BeFalse("an over-size body is never kept whole");
+        var tooLarge = kept.GetProperty("mutationTooLarge");
+        tooLarge.GetProperty("sizeBytes").GetInt32().Should().BeGreaterThan(32 * 1024);
+        tooLarge.GetProperty("sha256").GetString().Should().HaveLength(64);
+        tooLarge.GetProperty("head").GetString()!.Length.Should().BeLessThanOrEqualTo(2048).And.BeGreaterThan(0);
+        kept.GetProperty("mutationType").GetString().Should().Be("create_plot");
+
+        // (2) at most 200 kept copies per sender per farm per farm-day; past it ONE row says so.
+        var outcomes = await PushManyAsync(Holder, Enumerable.Range(0, 205).Select(i =>
+            ($"kept-many-{i}", "create_plot",
+                (object)new { plotId = Guid.NewGuid(), farmId = FarmA, name = $"p{i}", areaInAcres = 1m })).ToList());
+        outcomes.Should().OnlyContain(o => o.Status == "failed" && o.ErrorCode == "ShramSafal.Forbidden",
+            "every refusal still reaches the phone, kept or not");
+        (await AuditCountAsync(FarmA, LateAuthorityAudit.KeptForOwner)).Should().Be(200);
+        var capRows = await AuditPayloadsAsync(FarmA, "WorkKeptForOwnerDailyCapReached");
+        capRows.Should().ContainSingle("one row for the day, however many more arrive");
+        capRows[0].GetProperty("cap").GetInt32().Should().Be(200);
+        output.WriteLine("[EVIDENCE] kept copies: >32 KB body kept as size+sha256+head; 206 refusals -> 200 kept + 1 cap row");
+    }
+
     // ── Harness ────────────────────────────────────────────────────────────────────────────
 
     private sealed record PushOutcome(string Status, string? ErrorCode);
+
+    private async Task<List<PushOutcome>> PushManyAsync(Guid who, List<(string RequestId, string MutationType, object Payload)> mutations)
+    {
+        var request = new
+        {
+            deviceId = $"device-{who:N}",
+            mutations = mutations.Select(m => new { clientRequestId = m.RequestId, mutationType = m.MutationType, payload = m.Payload }).ToArray(),
+        };
+        using var response = await SendAsync(HttpMethod.Post, "/sync/push", who, request);
+        var text = await response.Content.ReadAsStringAsync();
+        response.StatusCode.Should().Be(HttpStatusCode.OK, text);
+        using var doc = JsonDocument.Parse(text);
+        return doc.RootElement.GetProperty("results").EnumerateArray()
+            .Select(result => new PushOutcome(
+                result.GetProperty("status").GetString()!,
+                result.TryGetProperty("errorCode", out var code) && code.ValueKind == JsonValueKind.String ? code.GetString() : null))
+            .ToList();
+    }
 
     private async Task<bool> GateAsync(Guid farm, Guid user, FarmAuthority authority, DateTime at)
     {
@@ -577,7 +718,7 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
 
     /// <summary>A daily log on farm A by <paramref name="who"/>, planted as superuser (the plant never
     /// depends on the code under test).</summary>
-    private async Task<Guid> CreateLogAsync(Guid who)
+    private async Task<Guid> CreateLogAsync(Guid who, int createdHoursAgo = 2)
     {
         var id = Guid.NewGuid();
         await ExecSuperAsync("""
@@ -585,10 +726,10 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
                 ("Id", farm_id, plot_id, crop_cycle_id, plot_ids, scope, operator_user_id,
                  log_date, created_at_utc, modified_at_utc, source, model_version, prompt_version)
             VALUES (@id, @fid, @pid, @cid, ARRAY[@pid], 'Plot', @uid,
-                    @date, NOW() - INTERVAL '2 hours', NOW() - INTERVAL '2 hours', 'manual', 'unknown', 'unknown');
+                    @date, NOW() - make_interval(hours => @ago), NOW() - make_interval(hours => @ago), 'manual', 'unknown', 'unknown');
             """,
-            ("id", id), ("fid", FarmA), ("pid", PlotA), ("cid", CycleA), ("uid", who),
-            ("date", DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1))));
+            ("id", id), ("fid", FarmA), ("pid", PlotA), ("cid", CycleA), ("uid", who), ("ago", createdHoursAgo),
+            ("date", DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-createdHoursAgo))));
         return id;
     }
 
@@ -626,26 +767,40 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
         };
     }
 
-    private Task<PushOutcome> PushAttendanceAsync(Guid who, Guid operatorId, DateOnly day, string requestId) =>
+    private Task<PushOutcome> PushAttendanceAsync(Guid who, Guid operatorId, DateOnly day, string requestId, string dayMark = "Full") =>
         PushAsync(who, requestId, "attendance.mark", new
         {
             attendanceMarkId = DeterministicGuid(requestId),
             farmId = FarmA,
             fieldOperatorId = operatorId,
             workDate = day.ToString("yyyy-MM-dd"),
-            dayMark = "Full",
+            dayMark,
         });
 
-    private Task<PushOutcome> PushVerifyV2Async(Guid who, Guid logId, DateTime decidedAt, string requestId) =>
+    private Task<PushOutcome> PushVerifyV2Async(Guid who, Guid logId, DateTime decidedAt, string requestId, string decision = "verify") =>
         PushAsync(who, requestId, "verify_log_v2", new
         {
             logId,
             verifierUserId = who,
-            decision = "verify",
-            reason = (string?)null,
+            decision,
+            reason = decision == "dispute" ? "probe query" : null,
             decidedAt = decidedAt.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'"),
             reviewBasis = "read",
         });
+
+    /// <summary>The stored day mark for one person on one day ("Full" / "Half" / …), or null when none.</summary>
+    private async Task<string?> DayMarkAsync(Guid operatorId, DateOnly day)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT day_mark FROM ssf.attendance_marks WHERE farm_id = @f AND field_operator_id = @o AND work_date = @d";
+        cmd.Parameters.AddWithValue("f", FarmA);
+        cmd.Parameters.AddWithValue("o", operatorId);
+        cmd.Parameters.AddWithValue("d", day);
+        var value = await cmd.ExecuteScalarAsync();
+        return value is null or DBNull ? null : ((ShramSafal.Domain.Labour.DayMark)Convert.ToInt32(value)).ToString();
+    }
 
     private async Task<PushOutcome> PushAsync(Guid who, string requestId, string mutationType, object payload)
     {

@@ -19,11 +19,11 @@ namespace ShramSafal.Domain.Farms;
 /// </summary>
 public static class FarmPermissionDefaults
 {
-    /// <summary>Every GRANTABLE bit this release knows (the retired Invite bit excluded).</summary>
+    /// <summary>Every GRANTABLE bit this release knows (the retired Invite and AddCost bits excluded).</summary>
     public const FarmPermission All =
         FarmPermission.SeeMoney
         | FarmPermission.SeeWages
-        | FarmPermission.AddCost
+        | FarmPermission.ReviewMoney
         | FarmPermission.PlanWork
         | FarmPermission.AddTestRecord
         | FarmPermission.AssignWork
@@ -31,8 +31,8 @@ public static class FarmPermissionDefaults
         | FarmPermission.EditFarmSetup
         | FarmPermission.ManageScheduleTemplates;
 
-    /// <summary>Every bit a stored value may legally carry (a pre-2b row may still hold the retired Invite bit).</summary>
-    public const FarmPermission Known = All | FarmPermission.Invite;
+    /// <summary>Every bit a stored value may legally carry (a pre-2b row may still hold a retired bit).</summary>
+    public const FarmPermission Known = All | FarmPermission.Invite | FarmPermission.AddCost;
 
     /// <summary>What a label holds when the owner stored nothing: the primary owner everything, everyone else nothing.</summary>
     public static FarmPermission For(AppRole role) => role switch
@@ -53,7 +53,7 @@ public static class FarmPermissionDefaults
     /// <summary><c>true</c> when <paramref name="value"/> uses only bits a stored value may carry.</summary>
     public static bool IsKnown(FarmPermission value) => (value & ~Known) == 0;
 
-    /// <summary>The flag NAMES (never the ordinals) in a stable order, for the wire. The retired Invite bit is never named.</summary>
+    /// <summary>The flag NAMES (never the ordinals) in a stable order, for the wire. A retired bit (Invite, AddCost) is never named.</summary>
     public static IReadOnlyList<string> Names(FarmPermission value)
     {
         var names = new List<string>();
@@ -70,8 +70,8 @@ public static class FarmPermissionDefaults
 
     /// <summary>
     /// Parses flag names from the wire (case-insensitive). <c>false</c> when any name is unknown —
-    /// or is the retired <c>Invite</c>, which can never be granted — so the caller refuses the whole
-    /// request rather than store a partial set the owner did not choose.
+    /// or is a retired one (<c>Invite</c>, <c>AddCost</c>), which can never be granted — so the caller
+    /// refuses the whole request rather than store a set the owner did not choose.
     /// </summary>
     public static bool TryParse(IEnumerable<string>? names, out FarmPermission value)
     {
@@ -100,7 +100,7 @@ public static class FarmPermissionDefaults
     [
         FarmPermission.SeeMoney,
         FarmPermission.SeeWages,
-        FarmPermission.AddCost,
+        FarmPermission.ReviewMoney,
         FarmPermission.PlanWork,
         FarmPermission.AddTestRecord,
         FarmPermission.AssignWork,

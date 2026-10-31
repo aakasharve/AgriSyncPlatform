@@ -263,14 +263,22 @@ public sealed class ScheduleTemplatePipelineTests
             NewName: null, NewStage: null, ClientCommandId: null), default);
         Assert.Equal(ShramSafalErrors.Forbidden, r3.Error);
 
-        // Non-Private + a farm seat holding schedule templates => Success (lane 2b: the seat the
-        // caller names, never his global role — the farm's primary owner here)
+        // fix 1 (LOW-1): his own farm's seat does not open a template that belongs to no farm
         repo.SeatPrimaryOwner(TemplateFarm, OtherId);
-        var r4 = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
+        var r4Worker = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
             SourceTemplateId: licensedTpl.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: OtherId,
             CallerRole: AppRole.Worker,
+            NewName: null, NewStage: null, ClientCommandId: null, FarmId: TemplateFarm), default);
+        Assert.Equal(ShramSafalErrors.Forbidden, r4Worker.Error);
+
+        // Non-Private + the expert role AND the named seat holding schedule templates => Success
+        var r4 = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
+            SourceTemplateId: licensedTpl.Id,
+            NewTemplateId: Guid.NewGuid(),
+            CallerUserId: OtherId,
+            CallerRole: AppRole.PrimaryOwner,
             NewName: null, NewStage: null, ClientCommandId: null, FarmId: TemplateFarm), default);
         Assert.True(r4.IsSuccess);
     }
@@ -349,12 +357,12 @@ public sealed class ScheduleTemplatePipelineTests
             ClientCommandId: null), default);
         Assert.Equal(ShramSafalErrors.Forbidden, r3.Error);
 
-        // Author whose named farm seat holds schedule templates => Success (lane 2b)
+        // fix 1 (LOW-1): the expert role AND the named seat holding schedule templates => Success
         repo.SeatPrimaryOwner(TemplateFarm, AuthorId);
         var r4 = await a.AuthorizeAsync(new PublishScheduleTemplateCommand(
             TemplateId: template.Id,
             CallerUserId: AuthorId,
-            CallerRole: AppRole.Worker,
+            CallerRole: AppRole.Agronomist,
             ClientCommandId: null,
             FarmId: TemplateFarm), default);
         Assert.True(r4.IsSuccess);

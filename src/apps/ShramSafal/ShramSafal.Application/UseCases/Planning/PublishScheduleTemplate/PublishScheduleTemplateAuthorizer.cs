@@ -63,7 +63,7 @@ public sealed class PublishScheduleTemplateAuthorizer : IAuthorizationCheck<Publ
         // Scope role gate (CEI Phase 2 §4.7). Publishing to Licensed /
         // Team scopes requires the matching role set.
         if (!await ScopeRoleGate.IsAllowedAsync(
-                _repository, template.TenantScope, command.FarmId, command.CallerUserId, _clock.UtcNow, ct))
+                _repository, template.TenantScope, command.FarmId, command.CallerUserId, command.CallerRole, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

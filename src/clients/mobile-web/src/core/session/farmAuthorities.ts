@@ -7,9 +7,9 @@
  * सहमालक / कुटुंब / मुकादम label grants nothing; the primary account holder holds every authority.
  *
  * The phone draws a door only where the server would let the person through (doctrine P5). When
- * the phone does not KNOW — no farm context yet, or an older server that sends no `authorities` —
- * the answer is the pre-2b rule for that door (the owner tier), so an older server keeps working
- * exactly as before (P11); the server still decides every request.
+ * the phone does not KNOW — no farm context, or a server that sends no `authorities` — it FAILS
+ * CLOSED (lane 2b fix 1): only the primary account holder, who holds every authority by definition
+ * (D-26), keeps the door; nobody else gets one on a guess. The server still decides every request.
  */
 import type { MeFarm } from './MeContextService';
 
@@ -53,9 +53,8 @@ export function isPrimaryAccountHolderRole(role: string | null | undefined): boo
 }
 
 /**
- * Does this seat hold `name` now? From the server's list when it sent one; otherwise (an older
- * server, or the farm not known yet) the pre-2b owner-tier rule, so nothing that worked yesterday
- * disappears against an older server.
+ * Does this seat hold `name` now? From the server's list when it sent one; otherwise only the
+ * primary account holder (every authority is his, D-26) — never a guess from the सहमालक label.
  */
 export function holdsAuthority(
     farm: Pick<MeFarm, 'role' | 'authorities'> | null | undefined,
@@ -65,5 +64,5 @@ export function holdsAuthority(
     if (Array.isArray(farm.authorities)) {
         return farm.authorities.some(a => a?.name === name);
     }
-    return farm.role === 'PrimaryOwner' || farm.role === 'SecondaryOwner';
+    return isPrimaryAccountHolderRole(farm.role);
 }

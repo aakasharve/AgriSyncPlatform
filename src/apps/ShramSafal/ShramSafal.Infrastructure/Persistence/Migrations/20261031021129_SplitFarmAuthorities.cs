@@ -14,44 +14,50 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// keyed by its persisted bit value (<c>FarmAuthorities</c>). The table already carries
     /// <c>farm_id</c> and <c>p_tenant_farm_memberships</c> (FOR ALL, USING + WITH CHECK on farm_id);
     /// a policy names rows, not columns, so no RLS change. No index, no grant (privileges are per
-    /// table). New authority bits live on the existing <c>permissions</c> bitmask (bits 6–9, new bits
+    /// table). New authority bits live on the existing <c>permissions</c> bitmask (bits 6–10, new bits
     /// only; nothing renumbered).</para>
     ///
-    /// <para><b>Data (P11, the orchestrator's call — "nobody on a farm silently loses a power on
-    /// upgrade").</b> Every LET-IN seat (Active 3 / paused 4) that is not a primary owner's gets its
-    /// CURRENT server-enforced powers written as explicit authorities:</para>
+    /// <para><b>Data — the upgrade NEVER widens anything (fix 1, orchestrator's rule under founder
+    /// D-22 / D-26).</b> Every LET-IN seat (Active 3 / paused 4) that is not a primary owner's gets
+    /// exactly the powers the server enforced for it before, where one go-live authority carries them
+    /// exactly; where carrying them would need an authority finer than the go-live set, the seat gets
+    /// LESS, never more (fail closed; every loss is listed in the lane report):</para>
     /// <list type="bullet">
-    /// <item>the step-2 stored bits are kept; the retired Invite bit (16) is cleared;</item>
+    /// <item>the retired bits are cleared: Invite (16), and AddCost (4) — step 2's "may change recorded
+    /// money" meant LESS than review money, so a stored 4 is never read as review money;</item>
+    /// <item>a stored step-2 lab-records bit (32) is cleared: it was never enforced (the account's
+    /// sign-up role decided tests), and enforcing it now would hand test work to someone who could not
+    /// do it before;</item>
     /// <item>a stored labour grant ("हजेरी व पक्कं", one switch until now) also becomes CONFIRM RECORDS
     /// (128) with the SAME end — the I27 confirm rule read that very grant;</item>
     /// <item>सहमालक / कुटुंब (SecondaryOwner): take हजेरी, permanent (their labour edits came with the
-    /// label; their stored grant meant confirming only, so its end moves to confirm records) +
-    /// see money + see wages (the labour money book) + review money (job-card payout verify /
-    /// settle) + plan work (job cards, crop-schedule steps) + assign work (job cards) + edit farm
-    /// setup (plot, boundary) = 1|2|4|8|64|256;</item>
-    /// <item>मुकादम: plan work + assign work (job cards; crop-schedule steps were "Mukadam or above")
-    /// = 8|64;</item>
-    /// <item>Agronomist / FPC manager: plan work + review money (+ see money) = 1|4|8; Consultant,
-    /// FieldScout, LabOperator: plan work = 8 (crop-schedule steps were "Mukadam or above");</item>
-    /// <item>review money always comes with see money (it needs it, §11.1);</item>
-    /// <item>plan / assign work are STORED for L8, which enforces them; until then the label rules
-    /// that decide them today stay (the lane 2b brief), so storing them changes nothing now.</item>
+    /// label; a stored grant meant confirming only, so its end moves to confirm records) + edit farm
+    /// setup (plot, boundary: owner tier before) + see money + see wages (STORED only; who sees the wage
+    /// book is unchanged in this lane, MU-3) = 1|2|256;</item>
+    /// <item>REVIEW MONEY (1024, with see money) only where the seat could already do ALL of it —
+    /// correct a cost, split a whole-farm bill, job-card payout verify and settle: a सहमालक / कुटुंब seat
+    /// that had AddCost stored. Nobody else gets it;</item>
+    /// <item>plan / assign work are stored for NO seat (L8 sets them with the founder's defaults;
+    /// D-24: co-owner is not automatic); a bit an owner stored himself in step 2 is left as it was;</item>
+    /// <item>मुकादम, कामगार, Agronomist, FPC, Consultant, FieldScout, LabOperator: nothing beyond the
+    /// grant above.</item>
     /// </list>
-    /// <para>Not carried, because no seat held it: lab records, schedule templates and compliance
-    /// were decided by the account's GLOBAL sign-up role, not the seat. The primary-owner-only set
-    /// (invite, approve, change authorities, pause, remove, the team roster, transfer, delete) is
-    /// NOT written as anything — a co-owner loses it (D-26). Waiting requests and ended seats are
-    /// untouched (an approval chooses afresh; history stays history).</para>
+    /// <para>Not carried: lab records, schedule templates and compliance were the account's GLOBAL
+    /// sign-up role's, not the seat's. The primary-owner-only set (invite, approve, change authorities,
+    /// pause, remove, the team roster, transfer, delete) is NOT written as anything — a co-owner loses
+    /// it (D-26). Waiting requests and ended seats are untouched.</para>
     ///
-    /// <para><b>Down() — what it destroys (E8).</b> It cannot hold the split, so it collapses it
-    /// FAIL-CLOSED for the older binary: (1) every per-authority end date (the column is dropped);
-    /// (2) the हजेरी / confirm split — a सहमालक seat's stored grant goes back to meaning CONFIRMING
-    /// (what the older binary reads for that label), from confirm records and its end; any other
-    /// seat keeps the one old switch only if it held BOTH हजेरी and confirm records, ending at the
-    /// earlier end; (3) every lane-2b bit (64–512, which the older binary ignores anyway) and the
-    /// review-money bit on सहमालक / Agronomist / FPC seats (the older binary would read it as "may
-    /// correct a cost"), so a rollback never widens what anyone may do. An owner's later choices
-    /// that the older vocabulary cannot express are lost with them; a seat left with no bits is
+    /// <para><b>Down() — what it destroys (E8).</b> It collapses the split FAIL-CLOSED for the older
+    /// binary, and it also collapses the rows the FIRST draft of this migration wrote (the PC test
+    /// database ran that draft): (1) every per-authority end date (the column is dropped); (2) the
+    /// हजेरी / confirm split — a सहमालक seat's stored grant goes back to meaning CONFIRMING (what the
+    /// older binary reads for that label), from confirm records and its end; any other seat keeps the
+    /// one old switch only if it held BOTH हजेरी and confirm records, ending at the earlier end;
+    /// (3) every lane-2b bit (64–1024); review money goes back to the old AddCost bit ONLY on a सहमालक
+    /// seat (the one place this Up grants it, from a stored AddCost — exact), and an AddCost bit the
+    /// first draft added to सहमालक / Agronomist / FPC seats is cleared. What Up cleared (AddCost on a
+    /// मुकादम / कामगार seat, a step-2 lab-records bit) does not come back: a rollback never widens. An
+    /// owner's later choices the older vocabulary cannot express are lost; a seat left with no bits is
     /// written back as NULL (the older binary's "role defaults", which is nothing for these labels).</para>
     /// </summary>
     public partial class SplitFarmAuthorities : Migration
@@ -64,22 +70,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
         public const string CarryCurrentPowersUpdate = """
             UPDATE ssf.farm_memberships AS m
             SET
-                -- Review money (4) needs see money (1): every role row that adds 4 adds 1 too,
-                -- so only a STORED 4 needs its 1 added here.
                 permissions =
-                    (COALESCE(m.permissions, 0) & ~16)
-                    | CASE WHEN (COALESCE(m.permissions, 0) & 4) <> 0 THEN 1 ELSE 0 END
+                    -- retired: Invite (16), AddCost (4); never enforced, never carried: lab records (32)
+                    (COALESCE(m.permissions, 0) & ~(16 | 4 | 32))
                     | CASE WHEN m.can_manage_labour_records THEN 128 ELSE 0 END
-                    | CASE m.role
-                        WHEN 'SecondaryOwner'      THEN 1 | 2 | 4 | 8 | 64 | 256
-                        WHEN 'Mukadam'             THEN 8 | 64
-                        WHEN 'Agronomist'          THEN 1 | 4 | 8
-                        WHEN 'FpcTechnicalManager' THEN 1 | 4 | 8
-                        WHEN 'Consultant'          THEN 8
-                        WHEN 'FieldScout'          THEN 8
-                        WHEN 'LabOperator'         THEN 8
-                        ELSE 0
-                      END,
+                    | CASE WHEN m.role = 'SecondaryOwner' THEN 1 | 2 | 256 ELSE 0 END
+                    -- review money (+ see money) only where ALL of it was possible before
+                    | CASE WHEN m.role = 'SecondaryOwner' AND (COALESCE(m.permissions, 0) & 4) <> 0
+                           THEN 1024 | 1 ELSE 0 END,
                 authority_expires_at = CASE
                     WHEN m.can_manage_labour_records AND m.labour_grant_expires_at_utc IS NOT NULL
                     THEN jsonb_build_object(
@@ -125,7 +123,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         THEN (m.authority_expires_at ->> '128')::timestamptz
                         ELSE NULL
                     END,
-                    permissions = NULLIF(COALESCE(m.permissions, 0) & 63 & ~4, 0)
+                    permissions = NULLIF(
+                        (COALESCE(m.permissions, 0) & 63 & ~4)
+                        | CASE WHEN (COALESCE(m.permissions, 0) & 1024) <> 0 THEN 4 ELSE 0 END,
+                        0)
                 WHERE m.status IN (1, 2, 3, 4)
                   AND m.role = 'SecondaryOwner';
 

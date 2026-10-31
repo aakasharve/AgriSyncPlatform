@@ -443,7 +443,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests(ITestOutp
             (HttpMethod.Post, $"{Worker2}/restore", new { }),
             (HttpMethod.Post, $"{Worker}/remove", new { reason = "x" }),
             (HttpMethod.Put, $"{Worker}/access", new { role = "Mukadam", resetPermissions = true, labourGrant = true }),
-            (HttpMethod.Put, $"{Worker}/access", new { permissions = new[] { "AddCost" } }),
+            (HttpMethod.Put, $"{Worker}/access", new { permissions = new[] { "ReviewMoney" } }),
             (HttpMethod.Post, $"{Family2}/suspend", new { reason = "x" }),
         };
 

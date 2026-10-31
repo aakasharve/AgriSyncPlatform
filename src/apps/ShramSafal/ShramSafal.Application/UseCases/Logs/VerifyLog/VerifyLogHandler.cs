@@ -99,8 +99,10 @@ public sealed class VerifyLogHandler(
         // हजेरी. MU design §11.2: a confirmation made OFFLINE while the authority was alive, which
         // reaches the server after it ended, still counts — and is flagged for the owner. The
         // moment it was made is the phone's own statement (verify_log_v2 "decidedAt"), trusted
-        // only inside [the record's creation, now]; anything else is "now". A confirmation made
-        // after the end is kept as a mark below (the L6 pattern); nothing is dropped.
+        // only inside [the record's creation, now]; anything else is "now". fix 1 (HIGH-2): only
+        // inside LateArrivalWindow (received within 7 days after the end, made within the 7 days
+        // before it) and only as a NEW decision on an undecided record; any other decision from an
+        // ENDED confirm authority is refused below and kept whole for the owner by the sync layer.
         var nowUtc = clock.UtcNow;
         var decidedAtUtc = BoundedDecisionTime(command.DecidedAtUtc, log.CreatedAtUtc, nowUtc);
         var (confirmStanding, confirmEndedAtUtc) = resolvedCallerRole == AppRole.PrimaryOwner
@@ -110,7 +112,7 @@ public sealed class VerifyLogHandler(
                 nowUtc, decidedAtUtc, ct);
         var hasConfirmAuthority =
             resolvedCallerRole != AppRole.PrimaryOwner
-            && confirmStanding != AuthorityStanding.NotHeld;
+            && confirmStanding is AuthorityStanding.HeldNow or AuthorityStanding.HeldWhenItHappened;
         var acceptedAfterAuthorityEnded = confirmStanding == AuthorityStanding.HeldWhenItHappened;
 
         // Phase 5 entitlement gate (PaidFeature.RunVerification).
@@ -146,6 +148,20 @@ public sealed class VerifyLogHandler(
         var wantsOwnerConfirmation = command.TargetStatus == VerificationStatus.Verified;
         var wantsOwnerDecision = wantsOwnerConfirmation || command.TargetStatus == VerificationStatus.Disputed;
         var isOldResultScreenSelfTap = isSpeaker && command.ReviewBasisOmittedOnV2;
+
+        // lane 2b fix 1 (HIGH-2) — a decision resting on an ENDED confirm authority is never applied:
+        // outside the late window it is refused outright; inside it, only a record nobody has decided
+        // yet takes it (it never overwrites a मंजूर / शंका already given). The refusal (Forbidden) is
+        // kept whole for the owner by the sync layer (WorkKeptForOwner); nothing is dropped.
+        if (wantsOwnerDecision
+            && !(wantsOwnerConfirmation && isOldResultScreenSelfTap)
+            && (confirmStanding == AuthorityStanding.Ended
+                || (acceptedAfterAuthorityEnded
+                    && priorState is not (VerificationStatus.Draft or VerificationStatus.Confirmed))))
+        {
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
+        }
+
         if ((wantsOwnerConfirmation && isOldResultScreenSelfTap)
             || (wantsOwnerDecision
                 && !OwnerConfirmationAuthority.MayConfirm(resolvedCallerRole, hasConfirmAuthority)))

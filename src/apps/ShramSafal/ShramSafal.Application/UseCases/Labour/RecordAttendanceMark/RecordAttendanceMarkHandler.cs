@@ -73,12 +73,14 @@ public sealed class RecordAttendanceMarkHandler(
         var allowed = await LabourManagementGate.IsAllowedAsync(
             repository, command.FarmId, command.RecordedByUserId, now, ct);
 
-        // 2b — lane 2b (MU design §11.2): हजेरी taken OFFLINE while the person was responsible, that
-        // reaches the server after his take-हजेरी authority ended, still counts — and is flagged for
-        // the owner ("जबाबदारी संपल्यानंतर पोहोचलं", PROPOSED). The day it is FOR is the only time
-        // the wire carries: the farm-day's start (India time) must lie before the end. Only a seat
-        // that is still working qualifies (FarmAuthorityGate.StandingAsync); anything else is
-        // refused here and kept whole for the owner by the sync layer (nothing is dropped).
+        // 2b — lane 2b (MU design §11.2; fix 1 HIGH-2): हजेरी taken OFFLINE while the person was
+        // responsible, that reaches the server after his take-हजेरी authority ended, still counts —
+        // and is flagged for the owner ("जबाबदारी संपल्यानंतर पोहोचलं", PROPOSED) — only inside the
+        // late window (LateArrivalWindow: received within 7 days after the end by the server's clock;
+        // the day it is FOR, its India-time start, within the 7 days before the end) and only as a NEW
+        // mark (step 5: it never amends one). Only a seat that is still working qualifies
+        // (FarmAuthorityGate.StandingAsync); anything else is refused here and kept whole for the
+        // owner by the sync layer (nothing is dropped).
         var acceptedAfterAuthorityEnded = false;
         DateTime? authorityEndedAtUtc = null;
         if (!allowed)
@@ -211,6 +213,14 @@ public sealed class RecordAttendanceMarkHandler(
                 AttendanceDayOutcome.Recorded, existing.Id, Contradiction: null));
         }
 
+        // lane 2b fix 1 (HIGH-2) — work from an ENDED authority only ever adds; it never overwrites a
+        // mark already on the record. Refused here (nothing staged) and kept whole for the owner by
+        // the sync layer.
+        if (acceptedAfterAuthorityEnded)
+        {
+            return Result.Failure<RecordAttendanceMarkResult>(ShramSafalErrors.Forbidden);
+        }
+
         AttendanceMarkPreviousValues previous;
         try
         {
@@ -231,11 +241,6 @@ public sealed class RecordAttendanceMarkHandler(
             existing.Id, command, previous, day, night, hoursWorked, extraHours, amendBasis, now))
         {
             await repository.AddAttendanceMarkCorrectionAsync(row, ct);
-        }
-
-        if (acceptedAfterAuthorityEnded)
-        {
-            await FlagAcceptedAfterAuthorityEndedAsync(command, existing.Id, authorityEndedAtUtc, now, ct);
         }
 
         await repository.SaveChangesAsync(ct);

@@ -161,12 +161,36 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         Assert.Equal(ShramSafalErrors.JobCardRoleNotAllowed, result.Error);
     }
 
+    /// <summary>lane 2b fix 1 (HIGH-1): review money, from the seat, under any label.</summary>
     [Theory]
     [InlineData(AppRole.PrimaryOwner)]
     [InlineData(AppRole.SecondaryOwner)]
     [InlineData(AppRole.Agronomist)]
     [InlineData(AppRole.FpcTechnicalManager)]
-    public async Task Authorizer_returns_Success_for_eligible_roles(AppRole role)
+    [InlineData(AppRole.Worker)]
+    public async Task Authorizer_returns_Success_for_any_label_holding_review_money(AppRole role)
+    {
+        var (job, _) = BuildCompletedJobCardWithLog(logVerified: true);
+        var repo = new InMemoryJobCardVerifyRepo();
+        repo.SeedJobCard(job);
+        repo.SetMembership(Farm.Value, Caller.Value, role);
+        repo.ReviewMoneyHolders.Add(Caller.Value);
+        var a = new VerifyJobCardForPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
+
+        var result = await a.AuthorizeAsync(new VerifyJobCardForPayoutCommand(
+            JobCardId: job.Id,
+            CallerUserId: Caller,
+            ClientCommandId: null), default);
+
+        Assert.True(result.IsSuccess);
+    }
+
+    /// <summary>lane 2b fix 1 (HIGH-1): the label alone verifies nothing any more (D-26) — co-owner, Agronomist and FPC included.</summary>
+    [Theory]
+    [InlineData(AppRole.SecondaryOwner)]
+    [InlineData(AppRole.Agronomist)]
+    [InlineData(AppRole.FpcTechnicalManager)]
+    public async Task Authorizer_refuses_a_label_without_review_money(AppRole role)
     {
         var (job, _) = BuildCompletedJobCardWithLog(logVerified: true);
         var repo = new InMemoryJobCardVerifyRepo();
@@ -179,7 +203,8 @@ public sealed class VerifyJobCardForPayoutPipelineTests
             CallerUserId: Caller,
             ClientCommandId: null), default);
 
-        Assert.True(result.IsSuccess);
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ShramSafalErrors.JobCardRoleNotAllowed, result.Error);
     }
 
     // ---- Pipeline integration ----
@@ -245,6 +270,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         var (job, log) = BuildCompletedJobCardWithLog(logVerified: false);
         var (pipeline, repo) = BuildPipeline(job, log);
         repo.SetMembership(Farm.Value, Caller.Value, AppRole.Agronomist);
+        repo.ReviewMoneyHolders.Add(Caller.Value);
 
         var result = await pipeline.HandleAsync(new VerifyJobCardForPayoutCommand(
             JobCardId: job.Id,
@@ -262,6 +288,7 @@ public sealed class VerifyJobCardForPayoutPipelineTests
         var (job, log) = BuildCompletedJobCardWithLog(logVerified: true);
         var (pipeline, repo) = BuildPipeline(job, log);
         repo.SetMembership(Farm.Value, Caller.Value, AppRole.Agronomist);
+        repo.ReviewMoneyHolders.Add(Caller.Value);
 
         var result = await pipeline.HandleAsync(new VerifyJobCardForPayoutCommand(
             JobCardId: job.Id,

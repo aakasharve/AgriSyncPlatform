@@ -171,6 +171,26 @@ public sealed class FarmAccessPolicyTests
         Assert.True(FarmPermissionDefaults.IsKnown(FarmPermission.Invite), "a pre-2b row may still carry it; reading it is not an error");
     }
 
+    /// <summary>
+    /// lane 2b fix 1 (HIGH-1) — step 2's AddCost (4) meant LESS than review money, so it is retired the
+    /// way Invite was: a stored 4 is never read as review money, never named, never parsed. Review
+    /// money is its own bit.
+    /// </summary>
+    [Fact]
+    public void The_retired_AddCost_bit_is_never_read_as_review_money()
+    {
+        Assert.False(FarmPermissionDefaults.All.HasFlag(FarmPermission.AddCost));
+        Assert.Equal(FarmPermission.None, FarmPermissionDefaults.Effective(AppRole.SecondaryOwner, FarmPermission.AddCost));
+        Assert.DoesNotContain("AddCost", FarmPermissionDefaults.Names(FarmPermissionDefaults.Known));
+        Assert.False(FarmPermissionDefaults.TryParse(new[] { "AddCost" }, out _));
+        Assert.True(FarmPermissionDefaults.IsKnown(FarmPermission.AddCost), "a pre-2b row may still carry it");
+        Assert.Equal(FarmPermission.ReviewMoney, FarmAuthorities.BitOf(FarmAuthority.ReviewMoney));
+
+        var oldStoredAddCost = new FarmAccess(AppRole.SecondaryOwner, MembershipStatus.Active, IsRegistrant: false,
+            FarmPermission.SeeMoney | FarmPermission.AddCost);
+        Assert.False(FarmAccessPolicy.Holds(oldStoredAddCost, FarmAuthority.ReviewMoney, Now));
+    }
+
     [Fact]
     public void Bits_are_never_renumbered()
     {
@@ -184,16 +204,17 @@ public sealed class FarmAccessPolicyTests
         Assert.Equal(128, (int)FarmPermission.ConfirmRecords);
         Assert.Equal(256, (int)FarmPermission.EditFarmSetup);
         Assert.Equal(512, (int)FarmPermission.ManageScheduleTemplates);
+        Assert.Equal(1024, (int)FarmPermission.ReviewMoney);
     }
 
     [Fact]
     public void Unknown_bits_are_dropped_and_unknown_names_refuse_the_whole_request()
     {
-        Assert.Equal(FarmPermission.AddCost, FarmPermissionDefaults.Effective(AppRole.Worker, (FarmPermission)(4 | 4096)));
+        Assert.Equal(FarmPermission.ReviewMoney, FarmPermissionDefaults.Effective(AppRole.Worker, (FarmPermission)(1024 | 4096)));
         Assert.False(FarmPermissionDefaults.IsKnown((FarmPermission)4096));
-        Assert.True(FarmPermissionDefaults.TryParse(new[] { "addcost", " PlanWork " }, out var parsed));
-        Assert.Equal(FarmPermission.AddCost | FarmPermission.PlanWork, parsed);
-        Assert.False(FarmPermissionDefaults.TryParse(new[] { "AddCost", "Verify" }, out _));
+        Assert.True(FarmPermissionDefaults.TryParse(new[] { "reviewmoney", " PlanWork " }, out var parsed));
+        Assert.Equal(FarmPermission.ReviewMoney | FarmPermission.PlanWork, parsed);
+        Assert.False(FarmPermissionDefaults.TryParse(new[] { "ReviewMoney", "Verify" }, out _));
         Assert.False(FarmAuthorities.TryParse("7", out _), "ordinals are never accepted");
         Assert.True(FarmAuthorities.TryParse(" confirmrecords ", out var confirm));
         Assert.Equal(FarmAuthority.ConfirmRecords, confirm);
@@ -214,6 +235,16 @@ public sealed class FarmAccessPolicyTests
             FarmPermission.ConfirmRecords, AuthorityExpiresAtJson: "{not json");
         Assert.False(FarmAccessPolicy.Holds(corrupt, FarmAuthority.ConfirmRecords, Now),
             "an unreadable end must never become कायम");
+
+        // fix 1 (LOW-3): a key that is not the bit value of a known authority makes the whole document
+        // corrupt — it might have named any authority, so none of them is held.
+        foreach (var unknownKey in new[] { "{\"4\":\"2099-01-01T00:00:00Z\"}", "{\"ConfirmRecords\":\"2099-01-01T00:00:00Z\"}", "{\"3\":\"2099-01-01T00:00:00Z\"}" })
+        {
+            var withUnknownKey = new FarmAccess(AppRole.Worker, MembershipStatus.Active, IsRegistrant: false,
+                FarmPermission.ConfirmRecords | FarmPermission.EditFarmSetup, AuthorityExpiresAtJson: unknownKey);
+            Assert.False(FarmAccessPolicy.Holds(withUnknownKey, FarmAuthority.ConfirmRecords, Now), unknownKey);
+            Assert.False(FarmAccessPolicy.Holds(withUnknownKey, FarmAuthority.EditFarmSetup, Now), unknownKey);
+        }
         Assert.Null(FarmAuthorities.SerializeExpiries(new Dictionary<FarmPermission, DateTime>()));
     }
 

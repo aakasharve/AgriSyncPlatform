@@ -216,12 +216,13 @@ public sealed class SettleJobCardPayoutPipelineTests
     }
 
     [Fact]
-    public async Task Authorizer_returns_Success_when_caller_is_SecondaryOwner()
+    public async Task Authorizer_returns_Success_when_caller_is_a_SecondaryOwner_given_review_money()
     {
         var job = BuildVerifiedForPayoutJobCard();
         var repo = new InMemoryJobCardSettleRepo();
         repo.SeedJobCard(job);
         repo.SetMembership(Farm.Value, Owner.Value, AppRole.SecondaryOwner);
+        repo.ReviewMoneyHolders.Add(Owner.Value);
         var a = new SettleJobCardPayoutAuthorizer(repo, new AgriSync.BuildingBlocks.Abstractions.SystemClock());
 
         var result = await a.AuthorizeAsync(new SettleJobCardPayoutCommand(

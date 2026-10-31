@@ -45,6 +45,50 @@ public sealed class CreateTestProtocolHandlerTests
         auditRepo.SaveCalls.Should().Be(0);
     }
 
+    /// <summary>
+    /// lane 2b fix 1 (LOW-1) — a protocol belongs to NO farm. A worker who registered a farm holds
+    /// every authority THERE (lab records included), but that must not let him write a protocol he
+    /// could not write before; and an expert naming a farm whose seat lacks lab records is refused.
+    /// </summary>
+    [Fact]
+    public async Task CreateTestProtocol_APlainRegistrant_And_AnExpertWhoseNamedSeatLacksLabRecords_AreRefused()
+    {
+        var handler = CreateHandler(out var protoRepo, out var auditRepo);
+        var registrant = UserId.New();
+        var expert = UserId.New();
+        var farm = Guid.NewGuid();
+        auditRepo.Seat(farm, registrant.Value, new ShramSafal.Application.Services.FarmAccess(
+            AppRole.PrimaryOwner, ShramSafal.Domain.Farms.MembershipStatus.Active, IsRegistrant: true, null));
+        auditRepo.Seat(farm, expert.Value, new ShramSafal.Application.Services.FarmAccess(
+            AppRole.Worker, ShramSafal.Domain.Farms.MembershipStatus.Active, IsRegistrant: false,
+            ShramSafal.Domain.Farms.FarmPermission.EditFarmSetup));
+
+        foreach (var (caller, role, namedFarm) in new (UserId, AppRole, Guid?)[]
+                 {
+                     (registrant, AppRole.Worker, farm),
+                     (registrant, AppRole.Worker, null),
+                     (expert, AppRole.Agronomist, farm),
+                 })
+        {
+            var result = await handler.HandleAsync(new CreateTestProtocolCommand(
+                Name: "Grape soil — pre-flowering",
+                CropType: "Grapes",
+                Kind: TestProtocolKind.Soil,
+                Periodicity: TestProtocolPeriodicity.OneTime,
+                EveryNDays: null,
+                StageNames: new[] { "PreFlowering" },
+                ParameterCodes: new[] { "pH" },
+                CallerUserId: caller,
+                CallerRole: role,
+                FarmId: namedFarm));
+
+            result.IsSuccess.Should().BeFalse();
+            result.Error.Code.Should().Be("ShramSafal.TestRoleNotAllowed");
+        }
+
+        protoRepo.Added.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task CreateTestProtocol_Agronomist_Succeeds_AndEmitsAudit()
     {

@@ -1,6 +1,6 @@
 /**
- * lane 2b — the phone reads its doors from the server's authorities, never from the label; an
- * older server (no `authorities`) keeps the pre-2b owner-tier answer (P11).
+ * lane 2b — the phone reads its doors from the server's authorities, never from the label. With no
+ * list (no farm context, an older server) it fails closed: only the primary account holder (fix 1).
  */
 import { describe, expect, it } from 'vitest';
 import { AUTHORITY, authorityNeeds, holdsAuthority, isPrimaryAccountHolderRole } from '../farmAuthorities';
@@ -15,8 +15,9 @@ describe('holdsAuthority', () => {
         expect(holdsAuthority(workerWithSetup, AUTHORITY.takeAttendance)).toBe(false);
     });
 
-    it('an older server (no list) answers the pre-2b owner-tier rule; no farm answers no', () => {
-        expect(holdsAuthority({ role: 'SecondaryOwner' }, AUTHORITY.editFarmSetup)).toBe(true);
+    it('no list fails closed: only the primary account holder keeps a door; no farm answers no (fix 1)', () => {
+        expect(holdsAuthority({ role: 'PrimaryOwner' }, AUTHORITY.editFarmSetup)).toBe(true);
+        expect(holdsAuthority({ role: 'SecondaryOwner' }, AUTHORITY.editFarmSetup)).toBe(false);
         expect(holdsAuthority({ role: 'Mukadam' }, AUTHORITY.editFarmSetup)).toBe(false);
         expect(holdsAuthority(null, AUTHORITY.editFarmSetup)).toBe(false);
     });

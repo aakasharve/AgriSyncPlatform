@@ -187,13 +187,12 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // row would not exist. Same flag the decision path reads, one place.
         //
         // lane 2b (founder D-26 / D-44) — the seat's AUTHORITIES at this moment, read once: confirm
-        // records (the review inbox and its buttons), take हजेरी (labour edits, the crew), see wages
-        // (the money book; it needs see money). Never the label.
+        // records (the review inbox and its buttons), take हजेरी (labour edits, the crew). The
+        // VIEW (who sees the wage book) stays the 74185ad0 label rule until MU-3.
         var callerAccess = await repository.GetFarmAccessForUserAsync(query.FarmId.Value, query.CallerUserId.Value, ct);
         var readAtUtc = clock.UtcNow;
         var hasConfirmAuthority = FarmAccessPolicy.Holds(callerAccess, FarmAuthority.ConfirmRecords, readAtUtc);
         var holdsTakeAttendance = FarmAccessPolicy.Holds(callerAccess, FarmAuthority.TakeAttendance, readAtUtc);
-        var holdsSeeWages = FarmAccessPolicy.Holds(callerAccess, FarmAuthority.SeeWages, readAtUtc);
 
         // ── 1. Memberships → labour People (Worker / Mukadam only — owners
         //       and other roles are not "labour"). ──────────────────────────
@@ -768,7 +767,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // logs of others are crew data. A GRANTED member keeps the review inbox
         // and people he needs to act on the grant (money stays withheld either
         // way, as before).
-        var registerView = ResolveRegisterView(resolvedCallerRole, holdsSeeWages);
+        var registerView = ResolveRegisterView(resolvedCallerRole);
         var narrowToCaller = registerView == LabourRegisterView.OwnRow && !holdsTakeAttendance && !hasConfirmAuthority;
         var ownReviewIds = narrowToCaller
             ? reviewLogs
@@ -1113,20 +1112,17 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     /// all); everything else = own-row (empty until an account↔FieldOperator
     /// link exists — FieldOperator carries no user member, verified).
     ///
-    /// <para><b>lane 2b (founder D-22 / D-26).</b> The whole book (money and wages) is the primary
-    /// account holder's, or a seat's that holds see wages (which needs see money) — no longer the
-    /// सहमालक label; every existing co-owner seat kept it through the 2b migration (P11). Take
-    /// हजेरी / confirm records widen what a member may DO (and keep his review inbox and people),
-    /// never his VIEW — as the labour grant never did. The मुकादम LABEL still opens the crew READ:
-    /// that is a read filter, and the role-filtered reads are lane MU-3's; until then dropping it
-    /// would silently take a view away from every existing मुकादम (P11).</para>
+    /// <para><b>lane 2b: deliberately UNCHANGED.</b> Who sees the wage book is a READ filter; see
+    /// money / see wages are stored and reported only in this lane, and lane MU-3 makes them real
+    /// (with their switches). Take हजेरी / confirm records widen what a member may DO (and keep his
+    /// review inbox and people), never his view.</para>
     /// </summary>
-    internal static LabourRegisterView ResolveRegisterView(AppRole role, bool holdsSeeWages) =>
-        role == AppRole.PrimaryOwner || holdsSeeWages
-            ? LabourRegisterView.OwnerBook
-            : role == AppRole.Mukadam
-                ? LabourRegisterView.CrewAttendance
-                : LabourRegisterView.OwnRow;
+    internal static LabourRegisterView ResolveRegisterView(AppRole role) => role switch
+    {
+        AppRole.PrimaryOwner or AppRole.SecondaryOwner => LabourRegisterView.OwnerBook,
+        AppRole.Mukadam => LabourRegisterView.CrewAttendance,
+        _ => LabourRegisterView.OwnRow,
+    };
 
     /// <summary>
     /// Projects one built response into the caller's view. Money members go

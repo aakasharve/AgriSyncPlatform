@@ -22,6 +22,15 @@ public sealed class CreateTestProtocolHandler(
     IIdGenerator idGenerator,
     IClock clock)
 {
+    /// <summary>CEI §4.5 — the expert sign-up roles that may write a protocol (a protocol belongs to no farm).</summary>
+    private static readonly HashSet<AppRole> AllowedRoles =
+    [
+        AppRole.PrimaryOwner,
+        AppRole.SecondaryOwner,
+        AppRole.Agronomist,
+        AppRole.Consultant
+    ];
+
     public async Task<Result<Guid>> HandleAsync(
         CreateTestProtocolCommand command,
         CancellationToken ct = default)
@@ -31,12 +40,14 @@ public sealed class CreateTestProtocolHandler(
             return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
         }
 
-        // lane 2b (founder D-26; MU design §2) — a protocol is not on a farm, so the caller names
-        // the farm whose seat authorises him (lab records on THAT farm; its primary account holder
-        // always). The account's global role used to decide this; it decides nothing now.
-        if (command.FarmId is not { } farmId
-            || !await FarmAuthorityGate.HoldsAsync(
-                repository, farmId, command.CallerUserId.Value, FarmAuthority.LabRecords, clock.UtcNow, ct))
+        // lane 2b (fix 1, LOW-1) — a protocol belongs to NO farm, so the account's expert sign-up
+        // role (CEI §4.5) is still required: without it every farm's registrant, who holds every
+        // authority on his own farm, could write one. When the caller ALSO names a farm
+        // (?farmId=…), his seat there must hold lab records — both must agree.
+        if (!AllowedRoles.Contains(command.CallerRole)
+            || (command.FarmId is { } farmId
+                && !await FarmAuthorityGate.HoldsAsync(
+                    repository, farmId, command.CallerUserId.Value, FarmAuthority.LabRecords, clock.UtcNow, ct)))
         {
             return Result.Failure<Guid>(ShramSafalErrors.TestRoleNotAllowed);
         }

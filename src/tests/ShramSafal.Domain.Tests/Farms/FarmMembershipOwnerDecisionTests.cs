@@ -62,7 +62,7 @@ public sealed class FarmMembershipOwnerDecisionTests
     public void Approve_stores_the_owners_permission_choice_and_the_effective_set_follows_it()
     {
         var m = Request();
-        var chosen = FarmPermission.AddCost | FarmPermission.PlanWork;
+        var chosen = FarmPermission.ReviewMoney | FarmPermission.PlanWork;
 
         m.Approve(Owner, AppRole.Mukadam, chosen, Now);
 
@@ -80,8 +80,8 @@ public sealed class FarmMembershipOwnerDecisionTests
         // A seat with a stored power (the primary owner's explicit choice, D-22) holds it while
         // Active and nothing once paused.
         var paused = Request();
-        paused.Approve(Owner, AppRole.Mukadam, FarmPermission.AddCost, Now.AddHours(-2));
-        Assert.Equal(FarmPermission.AddCost, paused.EffectivePermissions);
+        paused.Approve(Owner, AppRole.Mukadam, FarmPermission.ReviewMoney, Now.AddHours(-2));
+        Assert.Equal(FarmPermission.ReviewMoney, paused.EffectivePermissions);
         paused.Suspend(Owner, "पाऊस", Now);
         Assert.Equal(FarmPermission.None, paused.EffectivePermissions);
     }

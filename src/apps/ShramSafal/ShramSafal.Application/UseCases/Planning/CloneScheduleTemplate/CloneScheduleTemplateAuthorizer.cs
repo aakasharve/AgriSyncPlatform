@@ -53,7 +53,7 @@ public sealed class CloneScheduleTemplateAuthorizer : IAuthorizationCheck<CloneS
         }
 
         if (!await ScopeRoleGate.IsAllowedAsync(
-                _repository, command.NewScope, command.FarmId, command.CallerUserId, _clock.UtcNow, ct))
+                _repository, command.NewScope, command.FarmId, command.CallerUserId, command.CallerRole, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

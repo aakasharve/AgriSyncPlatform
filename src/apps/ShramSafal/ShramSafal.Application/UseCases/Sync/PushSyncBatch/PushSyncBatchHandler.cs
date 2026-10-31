@@ -610,6 +610,40 @@ public sealed class PushSyncBatchHandler(
                             return;
                         }
 
+                        // fix 1 (MEDIUM-1) — at most MaxKeptPerSenderPerFarmPerDay copies per sender per
+                        // farm per farm-day; past it, ONE row says so for that day (the ledger is
+                        // append-only, so the count past the cap lives in the log line and the counter).
+                        var receivedAt = clock.UtcNow;
+                        var farmDay = ShramSafal.Domain.Dfes.FarmLocalDay.From(receivedAt);
+                        var (dayStartUtc, dayEndUtc) = ShramSafal.Domain.Dfes.FarmLocalDay.UtcWindow(farmDay);
+                        var keptToday = await repository.CountAuditEventsByActorAsync(
+                            farm, actorUserId, KeptMutationEntityType, Services.LateAuthorityAudit.KeptForOwner,
+                            dayStartUtc, dayEndUtc, innerCt);
+                        if (keptToday >= MaxKeptPerSenderPerFarmPerDay)
+                        {
+                            await KeepDailyCapReachedOnceAsync(
+                                farm, actorUserId, seat.Role.ToString(), farmDay, receivedAt, deviceId, appVersion, innerCt);
+                            if (transaction is not null)
+                            {
+                                await transaction.CommitAsync(innerCt);
+                            }
+
+                            SyncPushMetrics.RecordRefusedWorkNotKept("DailyCapReached");
+                            logger.LogWarning(
+                                "SyncRefusedWorkNotKept: daily cap {Cap} reached; mutationType={MutationType} device={DeviceId} clientRequestId={ClientRequestId}",
+                                MaxKeptPerSenderPerFarmPerDay,
+                                LogSafe.Text(mutationType),
+                                LogSafe.Text(deviceId),
+                                LogSafe.Text(clientRequestId));
+                            return;
+                        }
+
+                        // fix 1 (MEDIUM-1) — a body over MaxKeptBodyBytes is kept as its type, size,
+                        // SHA-256 and first part, never whole.
+                        var body = payload.GetRawText();
+                        var bodyBytes = Encoding.UTF8.GetByteCount(body);
+                        var tooLarge = bodyBytes > MaxKeptBodyBytes;
+
                         await repository.AddAuditEventAsync(
                             Domain.Audit.AuditEventFactory.Create(
                                 entityType: KeptMutationEntityType,
@@ -624,9 +658,19 @@ public sealed class PushSyncBatchHandler(
                                     deviceId,
                                     refusal = refusalCode,
                                     seatStatus = seat.Status.ToString(),
-                                    receivedAtUtc = clock.UtcNow,
-                                    // The work exactly as it arrived (P10: nothing is dropped).
-                                    mutation = payload,
+                                    receivedAtUtc = receivedAt,
+                                    // The work exactly as it arrived (P10: nothing is dropped) — or, over
+                                    // the size cap, what identifies it.
+                                    mutation = tooLarge ? (JsonElement?)null : payload,
+                                    mutationTooLarge = tooLarge
+                                        ? new
+                                        {
+                                            sizeBytes = bodyBytes,
+                                            sha256 = Convert.ToHexString(
+                                                System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(body))),
+                                            head = body[..Math.Min(body.Length, KeptBodyHeadChars)],
+                                        }
+                                        : null,
                                 },
                                 farmId: farm,
                                 clientCommandId: clientRequestId,
@@ -711,6 +755,59 @@ public sealed class PushSyncBatchHandler(
         }
 
         return null;
+    }
+
+    /// <summary>fix 1 (MEDIUM-1, orchestrator's number) — the largest mutation body kept whole (32 KB).</summary>
+    internal const int MaxKeptBodyBytes = 32 * 1024;
+
+    /// <summary>How much of an over-size body is kept, from its start.</summary>
+    internal const int KeptBodyHeadChars = 2048;
+
+    /// <summary>fix 1 (MEDIUM-1, orchestrator's number) — kept copies per sender per farm per farm-day.</summary>
+    internal const int MaxKeptPerSenderPerFarmPerDay = 200;
+
+    /// <summary>The audit action of the one row that says a sender's daily cap was reached.</summary>
+    internal const string KeptDailyCapReachedAction = "WorkKeptForOwnerDailyCapReached";
+
+    /// <summary>
+    /// fix 1 (MEDIUM-1) — the ONE row per (sender, farm, farm-day) that says "the cap was reached:
+    /// refused work after this was not kept". Idempotent by a stable id; the caller's transaction.
+    /// </summary>
+    private async Task KeepDailyCapReachedOnceAsync(
+        Guid farm, Guid actorUserId, string actorRole, DateOnly farmDay, DateTime receivedAt,
+        string deviceId, string? appVersion, CancellationToken ct)
+    {
+        var day = farmDay.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        var capKey = new Guid(System.Security.Cryptography.SHA256.HashData(
+            Encoding.UTF8.GetBytes($"kept-for-owner-cap|{actorUserId}|{farm}|{day}")).AsSpan(0, 16));
+        var already = await repository.GetAuditEventsForEntityAsync(capKey, KeptMutationEntityType, ct);
+        if (already.Any(a => a.Action == KeptDailyCapReachedAction))
+        {
+            return;
+        }
+
+        await repository.AddAuditEventAsync(
+            Domain.Audit.AuditEventFactory.Create(
+                entityType: KeptMutationEntityType,
+                entityId: capKey,
+                action: KeptDailyCapReachedAction,
+                actorUserId: actorUserId,
+                actorRole: actorRole,
+                payload: new
+                {
+                    farmDay = day,
+                    cap = MaxKeptPerSenderPerFarmPerDay,
+                    firstNotKeptAtUtc = receivedAt,
+                },
+                farmId: farm,
+                clientCommandId: null,
+                appVersion: string.IsNullOrWhiteSpace(appVersion)
+                    ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                    : appVersion,
+                deviceId: deviceId,
+                ipHash: "sha256:unknown"),
+            ct);
+        await repository.SaveChangesAsync(ct);
     }
 
     /// <summary>A stable id for one (device, request) pair, so a re-sent refusal is kept once.</summary>

@@ -56,14 +56,13 @@ public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, I
         // crew — owners and Mukadam — or a member the owner explicitly GRANTED
         // labour management may read it; a plain Worker (and any other
         // own-row role) is refused with a READ Forbidden and no body.
-        // lane 2b — the same authorities GetLabourData reads (see wages, take हजेरी, confirm records).
+        // lane 2b — the view is the 74185ad0 rule (unchanged in this lane; MU-3 owns the reads); the
+        // old one-switch "grant" is now its two halves, take हजेरी and confirm records, either of which
+        // keeps the people he acts on.
         var access = await repository.GetFarmAccessForUserAsync(query.FarmId.Value, query.CallerUserId.Value, ct);
         var now = clock.UtcNow;
-        var holdsTakeAttendance = FarmAccessPolicy.Holds(access, FarmAuthority.TakeAttendance, now);
-        if (GetLabourDataHandler.ResolveRegisterView(
-                callerRole.Value, FarmAccessPolicy.Holds(access, FarmAuthority.SeeWages, now))
-                == LabourRegisterView.OwnRow
-            && !holdsTakeAttendance
+        if (GetLabourDataHandler.ResolveRegisterView(callerRole.Value) == LabourRegisterView.OwnRow
+            && !FarmAccessPolicy.Holds(access, FarmAuthority.TakeAttendance, now)
             && !FarmAccessPolicy.Holds(access, FarmAuthority.ConfirmRecords, now))
         {
             return Result.Failure<IReadOnlyList<FieldOperatorSummaryDto>>(ShramSafalErrors.ReadNotAllowed);

@@ -216,10 +216,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     const callerIsPrimary = isPrimaryAccountHolderRole(farmAdmin.myFarm?.role);
     const teamRoster = useLabourPermissions(callerIsPrimary ? teamFarmId : null);
     // lane 2b (D-15 via D-26) — adding a plot and drawing the boundary are "edit farm setup", read
-    // from this seat's /me/context authorities on THIS farm (unknown → the pre-2b owner-tier rule).
-    const setupFarm = meFarms.find(f => f.farmId === teamFarmId)
-        ?? (farmAdmin.myFarm ? { role: farmAdmin.myFarm.role, authorities: undefined } : null);
-    const canEditFarmSetup = holdsAuthority(setupFarm, AUTHORITY.editFarmSetup);
+    // from this seat's /me/context authorities on THIS farm. Farm not in /me/context → fail closed
+    // (fix 1): only the primary account holder, who holds every authority, keeps the door.
+    const setupFarm = meFarms.find(f => f.farmId === teamFarmId) ?? null;
+    const canEditFarmSetup = setupFarm
+        ? holdsAuthority(setupFarm, AUTHORITY.editFarmSetup)
+        : callerIsPrimary;
     // Founder D-22 (26 Oct): only the PRIMARY owner answers a request, so only his hub counts them.
     const teamRequestCount = farmAdmin.myFarm?.role === 'PrimaryOwner'
         ? splitRoster(teamRoster.rows).requests.length

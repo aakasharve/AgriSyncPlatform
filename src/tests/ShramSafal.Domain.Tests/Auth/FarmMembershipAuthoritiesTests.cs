@@ -33,7 +33,7 @@ public sealed class FarmMembershipAuthoritiesTests
         Assert.True(moved);
         Assert.True(seat.CanManageLabourRecords);
         Assert.Null(seat.LabourGrantExpiresAtUtc);
-        Assert.Equal(FarmPermission.ConfirmRecords | FarmPermission.SeeMoney | FarmPermission.AddCost, seat.Permissions);
+        Assert.Equal(FarmPermission.ConfirmRecords | FarmPermission.SeeMoney | FarmPermission.ReviewMoney, seat.Permissions);
         Assert.Equal(Friday, seat.ExpiryOf(FarmAuthority.ConfirmRecords));
         Assert.Equal(Friday, seat.ExpiryOf(FarmAuthority.ReviewMoney));
         Assert.Null(seat.ExpiryOf(FarmAuthority.SeeMoney));
@@ -102,7 +102,7 @@ public sealed class FarmMembershipAuthoritiesTests
     [Fact]
     public void A_chosen_bit_brings_what_it_needs_and_nothing_else()
     {
-        Assert.Equal(FarmPermission.SeeMoney | FarmPermission.AddCost, FarmAuthorities.WithWhatTheyNeed(FarmPermission.AddCost));
+        Assert.Equal(FarmPermission.SeeMoney | FarmPermission.ReviewMoney, FarmAuthorities.WithWhatTheyNeed(FarmPermission.ReviewMoney));
         Assert.Equal(FarmPermission.SeeMoney | FarmPermission.SeeWages, FarmAuthorities.WithWhatTheyNeed(FarmPermission.SeeWages));
         Assert.Equal(FarmPermission.PlanWork, FarmAuthorities.WithWhatTheyNeed(FarmPermission.PlanWork));
         Assert.Equal(FarmPermission.None, FarmAuthorities.WithWhatTheyNeed(FarmPermission.None));

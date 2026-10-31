@@ -82,6 +82,8 @@ describe('no split-the-bill step — a whole-farm bill stays whole-farm (L2a R-9
 
 describe('mayChangeRecordedMoney', () => {
     it('reads only the server\'s AddCost answer; unknown is "as before"', () => {
+        // lane 2b fix 1: the server names it ReviewMoney; a step-2 server's AddCost is still read.
+        expect(mayChangeRecordedMoney({ permissions: ['ReviewMoney'] })).toBe(true);
         expect(mayChangeRecordedMoney({ permissions: ['AddCost'] })).toBe(true);
         expect(mayChangeRecordedMoney({ permissions: ['SeeMoney', 'PlanWork'] })).toBe(false);
         expect(mayChangeRecordedMoney({ permissions: [] })).toBe(false);

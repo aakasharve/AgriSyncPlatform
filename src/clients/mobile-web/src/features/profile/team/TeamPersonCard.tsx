@@ -110,7 +110,11 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
 
             {open && (
                 <div className="mt-3 space-y-2.5 rounded-2xl bg-stone-50 p-3" data-testid={`team-change-panel-${row.userId}`}>
-                    {rights.canChangeRole && !paused && (
+                    {/* lane 2b fix 1 (orchestrator's live finding): ONE control per power. With the
+                        server's per-authority switches the old "काम सांगणे / काम + हजेरी" chooser is not
+                        drawn (it would be a second हजेरी control); the server keeps its old route for
+                        installed APKs (P11). An older server (no authorities) keeps the chooser. */}
+                    {rights.canChangeRole && !paused && !authorityAccess && (
                         <div className="space-y-1.5">
                             <p className="m-0 text-[13.5px] font-extrabold text-stone-700">{TEAM_COPY.quick}</p>
                             <div className="flex flex-wrap gap-1.5">

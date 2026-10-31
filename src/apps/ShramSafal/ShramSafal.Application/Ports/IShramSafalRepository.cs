@@ -239,6 +239,18 @@ public interface IShramSafalRepository
             + "for a farm-scoped request (§P0.2). Override it on this implementation.");
 
     Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default);
+
+    /// <summary>
+    /// lane 2b fix 1 (MEDIUM-1) — how many audit rows of (<paramref name="entityType"/>,
+    /// <paramref name="action"/>) <paramref name="actorUserId"/> has on <paramref name="farmId"/> in
+    /// [<paramref name="fromUtc"/>, <paramref name="toUtcExclusive"/>). No fail-open default: a double
+    /// that is asked gets a loud stop (the caller logs and counts it), never a made-up zero.
+    /// </summary>
+    Task<int> CountAuditEventsByActorAsync(
+        Guid farmId, Guid actorUserId, string entityType, string action,
+        DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        => throw new NotSupportedException(
+            "CountAuditEventsByActorAsync has no fail-open default. Override it on this implementation.");
     Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default);
 
     /// <summary>

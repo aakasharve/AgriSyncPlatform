@@ -22,8 +22,9 @@ public sealed class CloneScheduleTemplateHandlerTests
     private static readonly Guid CallerId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
     private static readonly Guid OwnerCallerId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
 
-    // lane 2b (founder D-26; MU design §2) — a Team / Licensed template is authorised by a FARM
-    // SEAT's schedule-templates authority, never the account's global role.
+    // lane 2b fix 1 (LOW-1) — a Team / Licensed template belongs to NO farm: the account's expert
+    // sign-up role is still required, and when a farm is named its seat must ALSO hold schedule
+    // templates. Nothing becomes possible that was not possible before.
     private static readonly Guid TemplateFarm = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
 
     private static ScheduleTemplate MakeTemplate(Guid? id = null, UserId? author = null, TenantScope scope = TenantScope.Public)
@@ -93,7 +94,36 @@ public sealed class CloneScheduleTemplateHandlerTests
     }
 
     [Fact]
-    public async Task Clone_TeamScope_ByTheFarmsPrimaryOwner_Succeeds()
+    public async Task Clone_TeamScope_ByAPlainRegistrant_IsForbidden_HisFarmSeatDoesNotOpenAFarmlessTemplate()
+    {
+        // A worker who registered a farm holds every authority THERE — that must not let him write a
+        // Team template, which belongs to no farm (fix 1, LOW-1).
+        var source = MakeTemplate();
+        var repo = new FakeCloneRepo(source, hasOwnerMembership: true);
+        repo.Seat(TemplateFarm, OwnerCallerId, AppRole.PrimaryOwner, FarmPermission.None);
+        var handler = CreateHandler(repo);
+
+        foreach (var farm in new Guid?[] { TemplateFarm, null })
+        {
+            var result = await handler.HandleAsync(new CloneScheduleTemplateCommand(
+                SourceTemplateId: source.Id,
+                NewTemplateId: Guid.NewGuid(),
+                CallerUserId: OwnerCallerId,
+                CallerRole: AppRole.Worker,
+                NewScope: TenantScope.Team,
+                Reason: "Team share",
+                ClientCommandId: null,
+                FarmId: farm));
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal("ShramSafal.Forbidden", result.Error.Code);
+        }
+
+        Assert.Empty(repo.AddedTemplates);
+    }
+
+    [Fact]
+    public async Task Clone_TeamScope_ByAnOwnerAccountOnHisOwnFarm_Succeeds()
     {
         var source = MakeTemplate();
         var repo = new FakeCloneRepo(source, hasOwnerMembership: true);
@@ -104,7 +134,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: OwnerCallerId,
-            CallerRole: AppRole.Worker,
+            CallerRole: AppRole.PrimaryOwner,
             NewScope: TenantScope.Team,
             Reason: "Team share",
             ClientCommandId: null,
@@ -198,16 +228,15 @@ public sealed class CloneScheduleTemplateHandlerTests
     // ---------------------------------------------------------------------------
 
     [Fact]
-    public async Task CloneScheduleTemplate_GlobalAgronomistRole_WithoutTheAuthority_IsForbidden()
+    public async Task CloneScheduleTemplate_GlobalAgronomistRole_NamingAFarmWhoseSeatLacksTheAuthority_IsForbidden()
     {
-        // lane 2b: the account's sign-up role decides nothing — no farm named, or a seat there
-        // without schedule templates, is refused.
+        // fix 1: with a farm named, the seat there must ALSO hold schedule templates.
         var source = MakeTemplate();
         var repo = new FakeCloneRepo(source, hasOwnerMembership: false);
         repo.Seat(TemplateFarm, CallerId, AppRole.Agronomist, FarmPermission.PlanWork);
         var handler = CreateHandler(repo);
 
-        foreach (var farm in new Guid?[] { null, TemplateFarm })
+        foreach (var farm in new Guid?[] { TemplateFarm })
         {
             var result = await handler.HandleAsync(new CloneScheduleTemplateCommand(
                 SourceTemplateId: source.Id,
@@ -227,7 +256,7 @@ public sealed class CloneScheduleTemplateHandlerTests
     }
 
     [Fact]
-    public async Task CloneScheduleTemplate_ASeatHoldingScheduleTemplates_ClonesLicensed_WhateverItsLabel()
+    public async Task CloneScheduleTemplate_ExpertRole_AndASeatHoldingScheduleTemplates_ClonesLicensed()
     {
         var source = MakeTemplate();
         var repo = new FakeCloneRepo(source, hasOwnerMembership: false);
@@ -238,7 +267,7 @@ public sealed class CloneScheduleTemplateHandlerTests
             SourceTemplateId: source.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: CallerId,
-            CallerRole: AppRole.Worker,
+            CallerRole: AppRole.Consultant,
             NewScope: TenantScope.Licensed,
             Reason: "Consultant template",
             ClientCommandId: null,
@@ -246,6 +275,19 @@ public sealed class CloneScheduleTemplateHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Single(repo.AddedTemplates);
+
+        // The same seat without the expert role: refused (the template belongs to no farm).
+        var refused = await handler.HandleAsync(new CloneScheduleTemplateCommand(
+            SourceTemplateId: source.Id,
+            NewTemplateId: Guid.NewGuid(),
+            CallerUserId: CallerId,
+            CallerRole: AppRole.Worker,
+            NewScope: TenantScope.Licensed,
+            Reason: "Worker template",
+            ClientCommandId: null,
+            FarmId: TemplateFarm));
+        Assert.False(refused.IsSuccess);
+        Assert.Equal("ShramSafal.Forbidden", refused.Error.Code);
     }
 
     [Fact]

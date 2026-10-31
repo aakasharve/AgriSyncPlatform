@@ -31,7 +31,7 @@ public enum FarmAuthority
     /// <summary>See wages. Requires <see cref="SeeMoney"/>. Stored and reported only (MU-3).</summary>
     SeeWages,
 
-    /// <summary>Review money entries (stored as <see cref="FarmPermission.AddCost"/>). Requires <see cref="SeeMoney"/>.</summary>
+    /// <summary>Review money entries (<see cref="FarmPermission.ReviewMoney"/>): correct a cost, split a whole-farm cost, job-card payout verify / settle. Requires <see cref="SeeMoney"/>.</summary>
     ReviewMoney,
 
     /// <summary>Plan work. STORED only — L8 enforces it (until then today's label rule decides); no phone switch (P5).</summary>
@@ -100,7 +100,7 @@ public static class FarmAuthorities
         FarmAuthority.ConfirmRecords => FarmPermission.ConfirmRecords,
         FarmAuthority.SeeMoney => FarmPermission.SeeMoney,
         FarmAuthority.SeeWages => FarmPermission.SeeWages,
-        FarmAuthority.ReviewMoney => FarmPermission.AddCost,
+        FarmAuthority.ReviewMoney => FarmPermission.ReviewMoney,
         FarmAuthority.PlanWork => FarmPermission.PlanWork,
         FarmAuthority.AssignWork => FarmPermission.AssignWork,
         FarmAuthority.EditFarmSetup => FarmPermission.EditFarmSetup,
@@ -227,8 +227,10 @@ public static class FarmAuthorities
 
     /// <summary>
     /// Reads the expiry document. A null / blank document is "no end on anything". An unreadable
-    /// document or an unreadable instant FAILS CLOSED: the authority is treated as already ended
-    /// (<see cref="DateTime.MinValue"/>), never as कायम — a corrupt end date must never become forever.
+    /// document, a key that is not the bit value of a known authority, or an unreadable instant
+    /// FAILS CLOSED: the authority is treated as already ended (<see cref="DateTime.MinValue"/>),
+    /// never as कायम — a corrupt end date must never become forever. A document with ANY unknown key
+    /// is corrupt as a whole (the key might have named any authority), so every authority ends.
     /// </summary>
     public static IReadOnlyDictionary<FarmPermission, DateTime> ParseExpiries(string? json)
     {
@@ -248,7 +250,7 @@ public static class FarmAuthorities
             raw = null;
         }
 
-        if (raw is null)
+        if (raw is null || raw.Keys.Any(key => !IsKnownExpiryKey(key)))
         {
             // Unreadable as a whole: every stored bit ends now (fail closed).
             foreach (var authority in All)
@@ -265,12 +267,7 @@ public static class FarmAuthorities
 
         foreach (var (key, value) in raw)
         {
-            if (!int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var bitValue))
-            {
-                continue;
-            }
-
-            var bit = (FarmPermission)bitValue;
+            var bit = (FarmPermission)int.Parse(key, NumberStyles.None, CultureInfo.InvariantCulture);
             result[bit] = DateTimeOffset.TryParse(
                     value,
                     CultureInfo.InvariantCulture,
@@ -282,6 +279,11 @@ public static class FarmAuthorities
 
         return result;
     }
+
+    /// <summary>A key is the decimal bit value of exactly one known authority (never a name, never a retired bit).</summary>
+    private static bool IsKnownExpiryKey(string key) =>
+        int.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var bitValue)
+        && All.Any(a => BitOf(a) != FarmPermission.None && (int)BitOf(a) == bitValue);
 
     /// <summary>
     /// The two documents name the same ends. Compared by meaning, never by text: Postgres hands a
