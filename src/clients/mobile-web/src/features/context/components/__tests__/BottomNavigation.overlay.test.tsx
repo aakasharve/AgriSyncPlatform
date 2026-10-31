@@ -77,6 +77,21 @@ describe('FOOT-1 — the bar never sits over an open sheet', () => {
         expect(bar()).toHaveAttribute('data-hidden', 'no');
     });
 
+    it('with animation frames frozen (page not on screen), an overlay that comes and goes never leaves the bar hidden (live 2026-10-31)', async () => {
+        const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 0);
+        try {
+            render(<Page sheet={close => (
+                <div className="fixed inset-0 z-50 bg-white"><button type="button" onClick={close}>मागे</button></div>
+            )} />);
+            fireEvent.click(screen.getByTestId('open-sheet'));
+            await waitFor(() => expect(isAway()).toBe(true));
+            fireEvent.click(screen.getByText('मागे'));
+            await waitFor(() => expect(bar()).toHaveAttribute('data-hidden', 'no'));
+        } finally {
+            raf.mockRestore();
+        }
+    });
+
     it('the keyboard still hides it, as before', () => {
         render(<BottomNavigation {...navProps} hidden />);
         expect(isAway()).toBe(true);

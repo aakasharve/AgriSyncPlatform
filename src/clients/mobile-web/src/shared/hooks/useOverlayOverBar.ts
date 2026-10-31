@@ -4,8 +4,12 @@
  *
  * Lane FX-1 (founder rule FOOT-1) — is a sheet, pop-up or full-screen overlay open over the bottom bar right now?
  * The rule is `findOverlayOverBar` (`shared/utils/bottomBar.ts`); this only watches the page for it. One observer on
- * the whole document (sheets drawn into `document.body` by a portal included), at most one check per frame, and the
- * check reads class names only — no layout is measured.
+ * the whole document (sheets drawn into `document.body` by a portal included); the browser already batches its
+ * changes into one callback, and the check reads class names only — no layout is measured.
+ *
+ * The check runs straight from the observer, never through an animation frame: frames do not run while the page is
+ * not on screen (a hidden pane, an app just woken up), and a check waiting on one left the bar hidden after a loading
+ * overlay had gone (seen live 2026-10-31 on the PC test stack).
  */
 import { useEffect, useState, type RefObject } from 'react';
 import { findOverlayOverBar } from '../utils/bottomBar';
@@ -16,24 +20,10 @@ export function useOverlayOverBar(barRef: RefObject<Element | null>): boolean {
     useEffect(() => {
         if (typeof document === 'undefined' || typeof MutationObserver === 'undefined') return undefined;
         const check = () => setCovered(findOverlayOverBar(document, barRef.current) !== null);
-        const raf = typeof window.requestAnimationFrame === 'function'
-            ? (fn: () => void) => window.requestAnimationFrame(fn)
-            : (fn: () => void) => window.setTimeout(fn, 16);
-        const cancel = typeof window.cancelAnimationFrame === 'function'
-            ? (id: number) => window.cancelAnimationFrame(id)
-            : (id: number) => window.clearTimeout(id);
-        let pending: number | null = null;
-        const schedule = () => {
-            if (pending !== null) return;
-            pending = raf(() => { pending = null; check(); });
-        };
-        const observer = new MutationObserver(schedule);
+        const observer = new MutationObserver(check);
         observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
         check();
-        return () => {
-            observer.disconnect();
-            if (pending !== null) cancel(pending);
-        };
+        return () => observer.disconnect();
     }, [barRef]);
 
     return covered;
