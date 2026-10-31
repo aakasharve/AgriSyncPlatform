@@ -16,6 +16,7 @@ import { useEffect, useState } from 'react';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { MAX_AUTO_RETRY_COUNT } from '../../../../infrastructure/sync/retryCap';
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
+import { correctionWords } from './correctionWords';
 
 /** Which change was refused. */
 export type RefusedKind = 'revision' | 'move' | 'workers';
@@ -52,6 +53,33 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
 }
 
 /**
+ * Lane OF-S fix 1 (B011) — the plain lines for a refused change, in the farmer's language (one language at a time): what
+ * did not happen, then why. A content change keeps its own screen words (it stays on this phone); a move and a worker
+ * count were put back as the server has it. Empty when there is nothing plain to say.
+ */
+export function refusalLines(refused: RefusedChange, language: string | null | undefined): string[] {
+    const words = correctionWords(language);
+    if (refused.kind === 'revision') return [words.serverRefused];
+    const head = refused.kind === 'move' ? words.refusedMove : words.refusedWorkers;
+    return [head, words.refusedReason[refused.reason]].filter(line => line.length > 0);
+}
+
+/**
+ * Lane OF-S fix 1 (B011) — the plain reason for a refused queued change on the app's conflict page, or `undefined` when
+ * this module has nothing to add (the page keeps its own hints). Covers a move, a worker count and a create refused
+ * because its day has not come.
+ */
+export function refusalHint(mutationType: string, errorCode: string | undefined, language: string | null | undefined): string | undefined {
+    const reason = refusalReasonOf(errorCode);
+    const kind = KIND_OF[mutationType];
+    if (kind === 'move' || kind === 'workers') return refusalLines({ kind, reason }, language).join(' ');
+    if (mutationType === SyncMutationName.CreateDailyLog && reason === 'futureDay') {
+        return correctionWords(language).refusedReason.futureDay;
+    }
+    return undefined;
+}
+
+/**
  * A change to this entry the server refused, and that is not since replaced by an accepted change OF THE SAME KIND.
  * The most recent such refusal when there are several. `null` = none.
  */
@@ -80,12 +108,29 @@ export function useRefusedChange(
     logId: string | undefined,
     read: (id: string) => Promise<RefusedChange | null> = readRefusedChange,
 ): RefusedChange | null {
+    return useRefusedChangeOf(logId ? [logId] : [], read);
+}
+
+/**
+ * Lane OF-S fix 1 (B011) — the same, for the entries of one recording (the result screen), read again whenever
+ * `refreshKey` changes (the app's last sync), so a refusal that arrives while the screen is open is shown there. The
+ * most recent refusal among them.
+ */
+export function useRefusedChangeOf(
+    logIds: readonly string[],
+    read: (id: string) => Promise<RefusedChange | null> = readRefusedChange,
+    refreshKey?: unknown,
+): RefusedChange | null {
     const [refused, setRefused] = useState<RefusedChange | null>(null);
+    const key = logIds.join(',');
     useEffect(() => {
         let alive = true;
-        if (!logId) { setRefused(null); return undefined; }
-        void read(logId).then(r => { if (alive) setRefused(r); });
+        const ids = key ? key.split(',') : [];
+        if (ids.length === 0) { setRefused(null); return undefined; }
+        void Promise.all(ids.map(id => read(id))).then(all => {
+            if (alive) setRefused(all.find((r): r is RefusedChange => r !== null) ?? null);
+        });
         return () => { alive = false; };
-    }, [logId, read]);
+    }, [key, read, refreshKey]);
     return refused;
 }

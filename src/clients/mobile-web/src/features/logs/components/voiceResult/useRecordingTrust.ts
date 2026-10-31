@@ -32,6 +32,9 @@ import type { FarmerProfile } from '../../../../types';
 export type LogSyncState = 'onPhone' | 'onServer' | 'needsFix';
 
 /** The sync claim for these logs, from their `create_daily_log` rows. Re-read after every sync cycle. */
+/** Lane OF-S fix 1 (B011) — when this phone last synced: a screen re-reads what the queue says after each sync. */
+export const useLastSyncAt = (): unknown => useSelector(getRootStore().sync, s => s.context.lastSyncAtMs);
+
 export function useLogSyncState(logIds: readonly string[]): LogSyncState {
     const [state, setState] = useState<LogSyncState>('onPhone');
     const lastSyncAtMs = useSelector(getRootStore().sync, s => s.context.lastSyncAtMs);

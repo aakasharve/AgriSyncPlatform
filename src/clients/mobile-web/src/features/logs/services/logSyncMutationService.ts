@@ -2,6 +2,7 @@ import { AddLogTaskCommand } from '../../../application/usecases/sync/AddLogTask
 import { CreateDailyLogCommand, type LabourItemPayload, type ManualDraftPayload } from '../../../application/usecases/sync/CreateDailyLogCommand';
 import { type CropCycleDto, type PlotDto } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
+import { expectVersionOnPhone } from './expectedVersion';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { resolveKnownFarmId } from '../../../infrastructure/sync/SyncContext';
 import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
@@ -772,6 +773,10 @@ export async function enqueueLogsForSync(
                 notes: task.notes,
                 occurredAtUtc: task.occurredAtUtc,
             });
+        }
+        // Lane OF-S fix 1 (B005): each task line moves the server's version on once (`expectedVersion.ts`).
+        if (taskPayloads.length > 0 && log.contentVersion === undefined) {
+            await expectVersionOnPhone(log, 1 + taskPayloads.length);
         }
 
         queuedLogIds.push(log.id);

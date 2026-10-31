@@ -17,7 +17,10 @@ export interface CorrectLabourAssignmentPayload {
     quantity?: LabourQuantityCorrectionRequest;
     /** Absent = he said nothing about the hours. */
     durationHours?: number;
-    /** What his phone showed before his change — only the values it knew. A newer change on the server refuses this one. */
+    /**
+     * What his phone HOLDS for the fields he corrects, shown on screen or not; a field held as not stated is absent
+     * (absent = "not stated", fix 1 B007). A newer change on the server refuses this one.
+     */
     seen: { workerCount?: number; maleCount?: number; femaleCount?: number; durationHours?: number };
     reason?: string;
     correctedAtUtc: string;
@@ -39,7 +42,8 @@ export const correctionRequestId = (p: CorrectLabourAssignmentPayload, seenVersi
 export class CorrectLabourAssignmentCommand {
     static async enqueue(payload: CorrectLabourAssignmentPayload, seenVersion: number): Promise<string> {
         const clientRequestId = correctionRequestId(payload, seenVersion);
-        return mutationQueue.enqueue(SyncMutationName.CorrectLabourAssignment, payload, {
+        // fix 1 (B001): the same change made again after a refusal is queued again (a refused row is re-armed).
+        return mutationQueue.enqueueRepeatable(SyncMutationName.CorrectLabourAssignment, payload, {
             clientRequestId,
             clientCommandId: clientRequestId,
         });

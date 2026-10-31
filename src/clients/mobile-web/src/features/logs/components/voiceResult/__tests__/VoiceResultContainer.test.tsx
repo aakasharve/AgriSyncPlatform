@@ -657,3 +657,26 @@ describe('lane OF-S (rule TAP-1, item 6) — the day chip of a SAVED recording m
         expect(screen.getByTestId('vr-day').tagName).not.toBe('BUTTON');
     });
 });
+
+describe('lane OF-S fix 1 (B011) — the result screen says why a move was refused, and never offers a हजेरी-door day', () => {
+    afterEach(() => { lng.v = 'mr'; });
+    it.each(['mr', 'en'] as const)('a refused day move of this recording shows its plain reason here (%s)', async (language) => {
+        lng.v = language;
+        await getDatabase().mutationQueue.add({
+            deviceId: 'd', clientRequestId: 'move_daily_log:x', clientCommandId: 'move_daily_log:x', mutationType: SyncMutationName.MoveDailyLog,
+            payload: { dailyLogId: NOW }, status: 'REJECTED_USER_REVIEW', createdAt: '2026-10-26T10:00:00.000Z', updatedAt: 'T', retryCount: 1,
+            lastError: 'refused', errorCode: 'ShramSafal.LogMoveLinkedRecords.Conflict',
+        });
+        mount(props({ onMoveDay: vi.fn(async () => undefined) }));
+        const banner = await screen.findByTestId('vr-move-refused');
+        expect(banner.textContent).toContain(language === 'en'
+            ? 'Attendance or money is linked to this work — change those first.'
+            : 'या कामावर हजेरी / पैसे जोडलेले आहेत — आधी ते बदला.');
+    });
+
+    it('a हजेरी-door record is never offered the day chip (it is changed in the हजेरी वही)', () => {
+        const door = HISTORY.map(l => (l.id === NOW ? { ...l, captureScope: 'labour' as const } : l));
+        mount(props({ history: door, onMoveDay: vi.fn(async () => undefined) }));
+        expect(screen.getByTestId('vr-day').tagName).not.toBe('BUTTON');
+    });
+});

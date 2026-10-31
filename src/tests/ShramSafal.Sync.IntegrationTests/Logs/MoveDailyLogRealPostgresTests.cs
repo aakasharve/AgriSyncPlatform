@@ -286,6 +286,8 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
 
         (await ReadPlacementAsync(logId)).Version.Should().Be(2, "the replay changed nothing a second time");
         (await ReadAuditPayloadsAsync(logId, "LogMoved")).Should().ContainSingle();
+        (await ScalarTextAsync("SELECT COUNT(*) FROM ssf.sync_mutations WHERE client_request_id = @id", "req-ofs-move-replay"))
+            .Should().Be(1L, "one replay record for the request, however often it is sent");
     }
 
     [Fact]
@@ -312,12 +314,16 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
         var today = FarmLocalDay.From(DateTime.UtcNow);
         var tomorrow = today.AddDays(1).ToString("yyyy-MM-dd");
+        var dayAfter = today.AddDays(2).ToString("yyyy-MM-dd");
         output.WriteLine($"[EVIDENCE] farm today (India) = {today:yyyy-MM-dd}; tomorrow = {tomorrow}");
 
-        // create_daily_log for tomorrow, in the exact keys an installed 1.0.15–1.0.17 phone sends.
+        // fix 1 (B009) — an installed phone whose clock runs ahead never loses a record: create_daily_log takes the
+        // farm's TOMORROW (the exact keys an installed 1.0.15–1.0.17 phone sends) and refuses only after it.
+        var tomorrowLog = Guid.NewGuid();
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-create-tomorrow", OldCreatePayload(tomorrowLog, OwnerA, tomorrow));
         var futureLog = Guid.NewGuid();
-        var refusedCreate = await PushFailedAsync(OwnerA, "create_daily_log", "req-ofs-create-tomorrow",
-            OldCreatePayload(futureLog, OwnerA, tomorrow));
+        var refusedCreate = await PushFailedAsync(OwnerA, "create_daily_log", "req-ofs-create-day-after",
+            OldCreatePayload(futureLog, OwnerA, dayAfter));
         refusedCreate.ErrorCode.Should().Be("ShramSafal.LogDateInFuture.InvalidCommand");
         (await ScalarAsync("SELECT COUNT(*) FROM ssf.daily_logs WHERE \"Id\" = @id", futureLog)).Should().Be(0L);
 
@@ -452,6 +458,173 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         (await ReadPlacementAsync(dualLog)).PlotId.Should().Be(PlotA1);
         (await ScalarAsync("SELECT COUNT(*) FROM ssf.daily_logs WHERE plot_id = @id", PlotB)).Should().Be(0L,
             "no farm A record ever lands on a farm B plot");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+    // fix pass 1 (review REQUEST_CHANGES) — B002 money, B003 two cards, B008 the NEW day, B010 copies.
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+
+    private static readonly Guid MoneyLog = Guid.Parse("0f5e4000-0000-4000-8000-0000000000d1");
+    private static readonly Guid MoneyLabour = Guid.Parse("0f5e4000-0000-4000-8000-0000000000d2");
+
+    // The phone's money entry ids for that record's lines: RFC 4122 v5 of "<logId>:<kind>:<lineId>" under the phone's
+    // money namespace — computed OUTSIDE the code under test (Python uuid.uuid5 and the phone's own `uuid` package agree).
+    private static readonly Guid InputMoney = Guid.Parse("46656035-4724-5c68-a7c2-14d3d932aed5");
+    private static readonly Guid LabourMoney = Guid.Parse("b7aa5244-057f-5016-858f-afd0a605b7c7");
+
+    /// <summary>A record with one input line and one paid crew, and the two money entries the phone made from them.</summary>
+    private async Task CreateMoneyLogAsync()
+    {
+        var payload = OldCreatePayload(MoneyLog, OwnerA, SavedDay);
+        payload["content"] = new
+        {
+            schema = 1,
+            inputs = new object[] { new { id = "tm-input-0", productName = "इथरेल", method = "Spray", quantity = 250, unit = "मिली" } },
+        };
+        payload["labour"] = new object[] { new { labourAssignmentId = MoneyLabour, engagementType = "hired_daily", workerCount = 8, totalCost = 2800 } };
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofs-money-create", payload);
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-money-input", CostPayload(InputMoney, "fertilizer", 500m));
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-money-labour", CostPayload(LabourMoney, "labour_misc", 2800m));
+    }
+
+    private static Dictionary<string, object?> CostPayload(Guid id, string category, decimal amount) => new()
+    {
+        ["costEntryId"] = id,
+        ["farmId"] = FarmA,
+        ["categoryId"] = category,
+        ["description"] = "from the record",
+        ["amount"] = amount,
+        ["currencyCode"] = "INR",
+        ["entryDate"] = SavedDay,
+        ["plotId"] = PlotA1,
+        ["cropCycleId"] = CycleA1,
+        ["direction"] = "Expense",
+    };
+
+    private sealed record Money(Guid? PlotId, Guid? CropCycleId, string EntryDate, decimal Amount);
+
+    private async Task<Money> ReadMoneyAsync(Guid costEntryId)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = "SELECT plot_id, crop_cycle_id, entry_date, amount FROM ssf.cost_entries WHERE \"Id\" = @id";
+        cmd.Parameters.AddWithValue("id", costEntryId);
+        await using var r = await cmd.ExecuteReaderAsync();
+        (await r.ReadAsync()).Should().BeTrue("the money entry must exist");
+        return new Money(r.IsDBNull(0) ? null : r.GetGuid(0), r.IsDBNull(1) ? null : r.GetGuid(1), Day(r.GetValue(2)), r.GetDecimal(3));
+    }
+
+    [Fact]
+    public async Task B002_the_records_money_follows_it_to_the_new_plot_season_and_day_keeping_its_amount()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateMoneyLogAsync();
+        var unrelated = Guid.NewGuid();
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofs-money-other", CostPayload(unrelated, "fuel", 90m));
+
+        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-money-move", MovePayload(MoneyLog, 1, plots: [PlotA2], day: "2026-10-27"));
+
+        var input = await ReadMoneyAsync(InputMoney);
+        var labour = await ReadMoneyAsync(LabourMoney);
+        output.WriteLine($"[EVIDENCE] input money after move: {input}; labour money after move: {labour}");
+        input.Should().Be(new Money(PlotA2, CycleA2, "2026-10-27", 500m));
+        labour.Should().Be(new Money(PlotA2, CycleA2, "2026-10-27", 2800m), "the amount never changes on a move (P7)");
+        (await ReadMoneyAsync(unrelated)).Should().Be(new Money(PlotA1, CycleA1, SavedDay, 90m), "money not made from this record stays");
+
+        var ledger = Assert.Single(await ReadAuditPayloadsAsync(MoneyLog, "LogMoved"));
+        output.WriteLine($"[EVIDENCE] LogMoved money: {ledger.GetProperty("moneyMoved").GetRawText()}");
+        ledger.GetProperty("moneyMoved").GetArrayLength().Should().Be(2);
+    }
+
+    [Fact]
+    public async Task B002_a_move_to_the_whole_farm_takes_the_money_off_any_plot_and_season()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateMoneyLogAsync();
+
+        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-money-farm", MovePayload(MoneyLog, 1, wholeFarm: true));
+
+        (await ReadMoneyAsync(InputMoney)).Should().Be(new Money(null, null, SavedDay, 500m));
+        (await ReadMoneyAsync(LabourMoney)).Should().Be(new Money(null, null, SavedDay, 2800m));
+    }
+
+    [Fact]
+    public async Task B002_money_that_can_no_longer_move_safely_refuses_the_whole_move_and_nothing_changes()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateMoneyLogAsync();
+        // The crew's money became a job card's payout (tied to that card's plot).
+        await ExecOnSuperuserAsync("""
+            INSERT INTO ssf.job_cards (id, farm_id, plot_id, crop_cycle_id, created_by_user_id, planned_date, status,
+                                       created_at_utc, modified_at_utc, line_items)
+            VALUES (@jc, @fid, @pid, @cid, @uid, DATE '2026-10-30', 'PaidOut', NOW(), NOW(), '[]'::jsonb);
+            UPDATE ssf.cost_entries SET job_card_id = @jc WHERE "Id" = @money;
+            """, ("jc", Guid.NewGuid()), ("fid", FarmA), ("pid", PlotA1), ("cid", CycleA1), ("uid", OwnerA), ("money", LabourMoney));
+
+        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-money-tied", MovePayload(MoneyLog, 1, plots: [PlotA2]));
+        refused.ErrorCode.Should().Be("ShramSafal.LogMoveLinkedRecords.Conflict");
+        (await ReadPlacementAsync(MoneyLog)).PlotId.Should().Be(PlotA1);
+        (await ReadMoneyAsync(InputMoney)).PlotId.Should().Be(PlotA1, "the whole move is refused: no line moves alone");
+    }
+
+    [Fact]
+    public async Task B003_a_cancelled_card_cannot_hide_a_paid_one_linked_to_the_same_record()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var logId = await CreateLogAsync(OwnerA, "req-ofs-create-two-cards");
+        await ExecOnSuperuserAsync("""
+            INSERT INTO ssf.job_cards (id, farm_id, plot_id, crop_cycle_id, created_by_user_id, planned_date, status,
+                                       created_at_utc, modified_at_utc, linked_daily_log_id, line_items)
+            VALUES (gen_random_uuid(), @fid, @pid, @cid, @uid, DATE '2026-10-30', 'Cancelled', NOW() - INTERVAL '1 day', NOW(), @log, '[]'::jsonb),
+                   (gen_random_uuid(), @fid, @pid, @cid, @uid, DATE '2026-10-30', 'PaidOut', NOW(), NOW(), @log, '[]'::jsonb);
+            """, ("fid", FarmA), ("pid", PlotA1), ("cid", CycleA1), ("uid", OwnerA), ("log", logId));
+
+        for (var i = 0; i < 3; i++)
+        {
+            // Whatever order the rows come back in, the paid card is seen.
+            var refused = await PushFailedAsync(OwnerA, "move_daily_log", $"req-ofs-two-cards-{i}", MovePayload(logId, 1, plots: [PlotA2]));
+            refused.ErrorCode.Should().Be("ShramSafal.LogMoveLinkedRecords.Conflict");
+        }
+
+        (await ReadPlacementAsync(logId)).PlotId.Should().Be(PlotA1);
+    }
+
+    [Fact]
+    public async Task B008_a_day_move_is_refused_when_a_named_person_is_absent_on_the_new_day_but_a_present_mark_is_fine()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var logId = await CreateLogAsync(OwnerA, "req-ofs-create-new-day");
+        var (operatorId, _) = await PlantNamedPersonAsync(logId, "सीता");
+        await ExecOnSuperuserAsync("""
+            INSERT INTO ssf.attendance_marks ("Id", farm_id, field_operator_id, work_date, day_mark, night_mark,
+                                              recorded_by_user_id, recorded_at_utc, modified_at_utc)
+            VALUES (gen_random_uuid(), @fid, @oid, DATE '2026-10-26', 3, 0, @uid, NOW(), NOW()),
+                   (gen_random_uuid(), @fid, @oid, DATE '2026-10-25', 1, 0, @uid, NOW(), NOW());
+            """, ("fid", FarmA), ("oid", operatorId), ("uid", OwnerA));
+
+        var refused = await PushFailedAsync(OwnerA, "move_daily_log", "req-ofs-to-absent-day", MovePayload(logId, 1, day: "2026-10-26"));
+        refused.ErrorCode.Should().Be("ShramSafal.LogMoveLinkedRecords.Conflict");
+        (await ReadPlacementAsync(logId)).LogDate.Should().Be(SavedDay, "nothing changed");
+
+        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-to-present-day", MovePayload(logId, 1, day: "2026-10-25"));
+        (await ReadPlacementAsync(logId)).LogDate.Should().Be("2026-10-25");
+    }
+
+    [Fact]
+    public async Task B010_the_plot_on_an_observation_made_from_the_record_follows_the_move()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var logId = await CreateLogAsync(OwnerA, "req-ofs-create-observation");
+        var observationId = Guid.NewGuid();
+        await ExecOnSuperuserAsync("""
+            INSERT INTO ssf.observation_events ("Id", daily_log_id, plot_id, note_type, severity, source, text_raw, created_at_utc)
+            VALUES (@id, @log, @pid, 'Observation', 'Normal', 'Voice', 'पानांवर डाग', NOW());
+            """, ("id", observationId), ("log", logId), ("pid", PlotA1));
+
+        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofs-observation-move", MovePayload(logId, 1, plots: [PlotA2]));
+
+        (await ScalarAsync("SELECT plot_id FROM ssf.observation_events WHERE \"Id\" = @id", observationId)).Should().Be(PlotA2);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -652,6 +825,16 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         await using var db = new NpgsqlConnection(_superuserConn);
         await db.OpenAsync();
         await ExecAsync(db, sql, args);
+    }
+
+    private async Task<object?> ScalarTextAsync(string sql, string id)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await using var cmd = db.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.AddWithValue("id", id);
+        return await cmd.ExecuteScalarAsync();
     }
 
     private async Task<object?> ScalarAsync(string sql, Guid id)

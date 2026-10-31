@@ -23,10 +23,12 @@ import { clipScanFloor } from '../../../../infrastructure/voice/clipLogLink';
 import { buildDayView, isConfirmed, ringNodesForDay, sameDayLogs, type PartKey, type WhoDeps } from './resultModel';
 import { useResultStr } from './resultStrings';
 import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './useClipPlayback';
-import { useConfirmRecording, useLogSyncState } from './useRecordingTrust';
+import { useConfirmRecording, useLastSyncAt, useLogSyncState } from './useRecordingTrust';
 import VoiceResultScreen from './VoiceResultScreen';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { canMoveSavedEntry } from '../correction/correctionCapabilities';
+import { isLabourDoorLog } from '../correction/correctionModel';
+import { readRefusedChange, refusalLines, useRefusedChangeOf } from '../correction/refusedRevision';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
 
 export interface VoiceResultContainerProps {
@@ -86,6 +88,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const { clips, ready: clipsReady } = useLogClips([...day.current, ...day.earlier].map(r => r.id), clipFloor);
     const playback = useClipPlayback(createAudio);
     const sync = useLogSyncState(result.logIds);
+    // Lane OF-S fix 1 (B011): a change to this recording the server refused later (a day moved by the chip) says why HERE.
+    const refused = useRefusedChangeOf(result.logIds, readRefusedChange, useLastSyncAt());
 
     const { dataSource, auditPort } = useDataSource();
     const verifierUserId = resolveVerifierUserId(farmerProfile.activeOperatorId, sessionUserId);
@@ -103,10 +107,17 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const basis: 'heard' | 'read' = playback.heard.has(primary.id) ? 'heard' : 'read';
     const leave = (then: () => void) => () => { playback.stop(); then(); };
 
-    const moveDay = canMoveSavedEntry() && onMoveDay ? onMoveDay : undefined;
+    // A हजेरी-door record is changed in the हजेरी वही, never moved from here (none reaches this screen today: its save
+    // goes to the saved card — this keeps it so).
+    const moveDay = canMoveSavedEntry() && onMoveDay && !current.some(isLabourDoorLog) ? onMoveDay : undefined;
 
     return (
         <>
+        {refused && (
+            <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
+                {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
+            </div>
+        )}
         <VoiceResultScreen
             day={day}
             recordingKey={result.key}

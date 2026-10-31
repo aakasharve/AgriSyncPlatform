@@ -39,7 +39,8 @@ export const moveRequestId = (p: MoveDailyLogPayload): string =>
 export class MoveDailyLogCommand {
     static async enqueue(payload: MoveDailyLogPayload): Promise<string> {
         const clientRequestId = moveRequestId(payload);
-        return mutationQueue.enqueue(SyncMutationName.MoveDailyLog, payload, {
+        // fix 1 (B001): the same change made again after a refusal is queued again (a refused row is re-armed).
+        return mutationQueue.enqueueRepeatable(SyncMutationName.MoveDailyLog, payload, {
             clientRequestId,
             clientCommandId: clientRequestId,
         });

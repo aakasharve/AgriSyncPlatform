@@ -19,6 +19,8 @@ import type { UpdateLogResponse } from '../../../../application/usecases/UpdateL
 import { MoveDailyLogCommand } from '../../../../application/usecases/sync/MoveDailyLogCommand';
 import { assertNotAfterFarmToday } from '../../../../core/domain/services/farmDay';
 import { getDatabase } from '../../../../infrastructure/storage/DexieDatabase';
+import { moneyEntryIdFor } from '../../../finance/moneyEntryIdentity';
+import { resolveMoneyPlace } from '../../../finance/moneyPlace';
 
 const SWITCHES = {
     /** OF-S: a queued, offline-safe "move a saved log's plot / date" mutation exists (`move_daily_log`). */
@@ -76,6 +78,78 @@ export function contextForPlace(scope: LogScope, crops: readonly CropProfile[]):
     return { selection };
 }
 
+/** The plots the entry is on now (empty = no plot: the whole farm, or a crop-level entry). */
+const plotsOf = (log: DailyLog): string[] => (log.context?.selection ?? []).flatMap(s => s.selectedPlotIds ?? []);
+
+/**
+ * Lane OF-S fix 1 (B006) — is this the place the entry ALREADY has? The same plot(s), or the whole farm for an entry
+ * that names no plot. Then nothing moves: nothing is queued and no version is counted (the server writes nothing for a
+ * move to where the record already is, so a counted version would make every later confirm look stale).
+ */
+export function isSamePlace(log: DailyLog, scope: LogScope): boolean {
+    const now = [...plotsOf(log)].sort();
+    const chosen = [...scope.selectedPlotIds].sort();
+    if (chosen.length === 0) return now.length === 0 && scope.selectedCropIds.includes(FARM_GLOBAL);
+    return now.length === chosen.length && now.every((id, i) => id === chosen[i]);
+}
+
+/**
+ * Lane OF-S fix 1 (B002) — the ids of the money entries this phone made from the entry's lines, exactly as it made them
+ * (`LogCommandService.captureMoneyEventsFromLog`, `moneyEntryIdFor`): a crew's stated total, an input, machinery or
+ * expense line. A crew is listed under its engagement id (how the money is keyed now, and how the server finds it) and,
+ * where it differs, under its own line id (how a phone keyed it before).
+ */
+export function moneyIdsOf(log: DailyLog): string[] {
+    const ids = new Set<string>();
+    for (const crew of log.labour ?? []) {
+        if (crew.labourAssignmentId) ids.add(moneyEntryIdFor(`${log.id}:labour:${crew.labourAssignmentId}`));
+        if (crew.id) ids.add(moneyEntryIdFor(`${log.id}:labour:${crew.id}`));
+    }
+    for (const line of log.inputs ?? []) if (line.id) ids.add(moneyEntryIdFor(`${log.id}:input:${line.id}`));
+    for (const line of log.machinery ?? []) if (line.id) ids.add(moneyEntryIdFor(`${log.id}:machinery:${line.id}`));
+    for (const line of log.activityExpenses ?? []) if (line.id) ids.add(moneyEntryIdFor(`${log.id}:activity-expense:${line.id}`));
+    return [...ids];
+}
+
+/**
+ * Lane OF-S fix 1 (B002) — the entry's money follows it on THIS phone too, so its money book agrees before the next
+ * pull: each of its money entries the phone holds takes the new plot (none for several plots or the whole farm), that
+ * plot's season on the new day, and the new day. The amount never changes (P7). The server does the same in the move
+ * itself; a refused move brings the server's own money back with its version (`logsRebuildMarker.ts`).
+ */
+async function followMoneyOnPhone(log: DailyLog, plotIds: readonly string[] | undefined, dateKey: string | undefined): Promise<void> {
+    const ids = moneyIdsOf(log);
+    if (ids.length === 0) return;
+    const db = getDatabase();
+    const rows = (await db.costEntries.bulkGet(ids)).filter((row): row is NonNullable<typeof row> => !!row);
+    if (rows.length === 0) return;
+    const onePlot = plotIds && plotIds.length === 1 ? plotIds[0] : undefined;
+    const followed = new Map<string, Record<string, unknown>>();
+    for (const row of rows) {
+        const payload = { ...(row.payload as Record<string, unknown>) };
+        const day = dateKey ?? (typeof payload.entryDate === 'string' ? payload.entryDate.slice(0, 10) : undefined);
+        if (plotIds) {
+            const place = onePlot && day ? await resolveMoneyPlace(row.farmId, onePlot, day) : undefined;
+            payload.plotId = onePlot;
+            payload.cropCycleId = place && place.sendable ? place.cropCycleId : undefined;
+        }
+        if (dateKey) payload.entryDate = dateKey;
+        await db.costEntries.put({ ...row, payload, updatedAt: new Date().toISOString() });
+        followed.set(row.id, payload);
+    }
+    // Loaded only when money actually followed: the money book's module reads the phone's tables as it loads.
+    const { financeService } = await import('../../../finance/financeService');
+    financeService._updateEvents(events => events.map(e => {
+        const payload = followed.get(e.id);
+        if (!payload) return e;
+        return {
+            ...e,
+            ...(plotIds && { plotId: payload.plotId as string | undefined, cropId: payload.cropCycleId as string | undefined }),
+            ...(dateKey && { dateTime: `${dateKey}T00:00:00Z` }),
+        };
+    }));
+}
+
 /** The entry as this phone holds it NOW (a change saved a moment ago may have moved its version on). */
 async function currentOf(log: DailyLog): Promise<DailyLog> {
     const row = await getDatabase().logs.get(log.id);
@@ -93,14 +167,16 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
     const current = await currentOf(log);
     const dateKey = move.dateKey && move.dateKey !== current.date ? move.dateKey : undefined;
     if (dateKey) assertNotAfterFarmToday(dateKey);
-    const context = move.scope ? contextForPlace(move.scope, deps.crops) : undefined;
-    if (move.scope && !context) {
+    // fix 1 (B006): the place it already has is not a move.
+    const scope = move.scope && !isSamePlace(current, move.scope) ? move.scope : undefined;
+    const context = scope ? contextForPlace(scope, deps.crops) : undefined;
+    if (scope && !context) {
         throw new Error(`move of ${log.id}: a chosen plot is not on this phone`);
     }
     if (!dateKey && !context) return current;
 
     const baseVersion = current.contentVersion ?? 1;
-    const plotIds = move.scope?.selectedPlotIds ?? [];
+    const plotIds = scope?.selectedPlotIds ?? [];
     await MoveDailyLogCommand.enqueue({
         dailyLogId: log.id,
         baseVersion,
@@ -120,5 +196,9 @@ export async function queueSavedEntryMove(log: DailyLog, move: SavedEntryMove, d
     }
     const saved = result.log;
     deps.setHistory(prev => [saved, ...prev.filter(l => l.id !== log.id)]);
+    // The move is queued and written; the money book on this phone following it is a convenience the next pull also
+    // gives (the server moves the money in the move itself). A failure here never undoes the move — it is kept in the log.
+    await followMoneyOnPhone(current, context ? plotIds : undefined, dateKey)
+        .catch((error: unknown) => console.error(`move of ${log.id}: its money on this phone could not follow yet`, error));
     return saved;
 }

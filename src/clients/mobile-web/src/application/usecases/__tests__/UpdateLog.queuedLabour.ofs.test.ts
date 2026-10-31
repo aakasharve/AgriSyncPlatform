@@ -12,7 +12,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockEnqueue = vi.fn(async (_type: string, _payload: unknown, options?: { clientRequestId?: string }) => options?.clientRequestId ?? 'id');
 vi.mock('../../../infrastructure/sync/MutationQueue', () => ({
-    mutationQueue: { enqueue: (type: string, payload: unknown, options?: { clientRequestId?: string }) => mockEnqueue(type, payload, options) },
+    mutationQueue: {
+        enqueue: (type: string, payload: unknown, options?: { clientRequestId?: string }) => mockEnqueue(type, payload, options),
+        // lane OF-S fix 1 (B001): a worker count is queued as a change he can make again after a refusal.
+        enqueueRepeatable: (type: string, payload: unknown, options?: { clientRequestId?: string }) => mockEnqueue(type, payload, options),
+    },
 }));
 const mockPostCorrection = vi.fn();
 vi.mock('../../../features/labour/data/labourCorrectionsClient', () => ({

@@ -66,6 +66,12 @@ public sealed class ObservationEvent : Entity<Guid>
     public string? FarmerConfirmedSummary { get; private set; }
     public Guid? SourceQuestionId { get; private set; }
 
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S fix pass 1, B010) — the record this observation was made from was moved to another place:
+    /// what he saw was seen THERE, so the plot follows it (null for several plots or the whole farm). Nothing else moves.
+    /// </summary>
+    public void FollowRecordToPlot(Guid? plotId) => PlotId = plotId;
+
     /// <summary>DFES — attach/overwrite the structured InsightEntry facets (all nullable).</summary>
     public void ApplyInsightEntry(
         string? observation, string? change, string? comparison, string? challenge,

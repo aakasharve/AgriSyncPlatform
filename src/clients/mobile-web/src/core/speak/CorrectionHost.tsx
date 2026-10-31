@@ -24,12 +24,12 @@ import {
     blockerChange, isLabourDoorLog, mergeCorrection, revisionUpdates, saysAnything, spokenAsLog,
 } from '../../features/logs/components/correction/correctionModel';
 import { saveSpokenCorrection, type SaveCorrectionDeps, type SaveOutcome } from '../../features/logs/components/correction/saveCorrection';
-import { useRefusedChange, type RefusedChange } from '../../features/logs/components/correction/refusedRevision';
+import { refusalLines, useRefusedChange, type RefusedChange } from '../../features/logs/components/correction/refusedRevision';
 import {
     afterOf, canRemove, newItem, partnersOf, tapRows, tapUpdates, withItem, withNew, withRestored, withoutItem, type AddKind, type TapBucket, type TapRow,
 } from '../../features/logs/components/correction/tapEdit';
 import { AddKindSheet, TapEditSheet, TypeChangeSheet } from '../../features/logs/components/correction/TapEditSheet';
-import { canMoveSavedEntry, canQueueLabourCountOffline, queueSavedEntryMove, type SavedEntryMove } from '../../features/logs/components/correction/correctionCapabilities';
+import { canMoveSavedEntry, canQueueLabourCountOffline, isSamePlace, queueSavedEntryMove, type SavedEntryMove } from '../../features/logs/components/correction/correctionCapabilities';
 import { placeWords } from '../../shared/names/placeWords';
 import { isConfirmed } from '../../features/logs/components/voiceResult/resultModel';
 import { dayFull } from '../../features/logs/components/dayPick/dayWords';
@@ -71,11 +71,8 @@ const isOffline = (): boolean => typeof navigator !== 'undefined' && navigator.o
 type Sheet = { kind: 'edit'; bucket: TapBucket; id: string; added?: boolean } | { kind: 'add' } | { kind: 'type' } | { kind: 'plot' } | { kind: 'day' } | null;
 
 /** Lane OF-S — the plain lines for a refused move / worker count (the content-change words stay the screen's own). */
-const refusedLines = (refused: RefusedChange | null, words: ReturnType<typeof correctionWords>): string[] | undefined => {
-    if (!refused || refused.kind === 'revision') return undefined;
-    const head = refused.kind === 'move' ? words.refusedMove : words.refusedWorkers;
-    return [head, words.refusedReason[refused.reason]].filter(line => line.length > 0);
-};
+const refusedLines = (refused: RefusedChange | null, language: string | undefined): string[] | undefined =>
+    (!refused || refused.kind === 'revision' ? undefined : refusalLines(refused, language));
 
 export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: CorrectionSession; speaking: boolean; save: CorrectionSaveDeps | null; readRefused: (logId: string) => Promise<RefusedChange | null> }> = ({ ctx, correction, speaking, save, readRefused }) => {
     const language = useOptionalLanguage()?.language;
@@ -146,7 +143,8 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
     };
     const canMove = canMoveSavedEntry();
     // OF-S: a move of a SAVED entry (plot / day) — only once the server can carry it (`correctionCapabilities`).
-    const moving = canMove && (!!move.scope || (!!move.dateKey && move.dateKey !== log.date));
+    // Lane OF-S fix 1 (B006): choosing the place or day it already has is not a change.
+    const moving = canMove && ((!!move.scope && !isSamePlace(log, move.scope)) || (!!move.dateKey && move.dateKey !== log.date));
     const changed = Object.keys(updates).length > 0 || moving;
     const blockers = blockerChange(log, after, language);
 
@@ -246,7 +244,7 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
                 saveFailedReason={failed ?? undefined}
                 offline={offline}
                 serverRefused={!!serverRefused}
-                serverRefusedLines={refusedLines(serverRefused, words)}
+                serverRefusedLines={refusedLines(serverRefused, language)}
                 canMove={canMove}
                 onSpeak={() => speak()}
                 onType={() => { if (isOffline()) { setOffline(true); return; } setSheet({ kind: 'type' }); }}

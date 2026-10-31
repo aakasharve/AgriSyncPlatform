@@ -1633,6 +1633,13 @@ internal sealed class ShramSafalRepository(
         return await db.JobCards.FindAsync([jobCardId], ct);
     }
 
+    public async Task<List<JobCard>> GetJobCardsByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default)
+    {
+        return await db.JobCards
+            .Where(j => j.LinkedDailyLogId == dailyLogId)
+            .ToListAsync(ct);
+    }
+
     public async Task<JobCard?> GetJobCardByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default)
     {
         return await db.JobCards
@@ -1912,6 +1919,25 @@ internal sealed class ShramSafalRepository(
 
             return false;
         }
+    }
+
+    public async Task<IReadOnlyList<DailyLogContent>> GetDailyLogContentVersionsAsync(Guid dailyLogId, CancellationToken ct = default)
+    {
+        // AsNoTracking: rows are never updated by the app, only appended.
+        return await db.DailyLogContents
+            .AsNoTracking()
+            .Where(c => c.DailyLogId == dailyLogId)
+            .OrderBy(c => c.ContentVersion)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Domain.Farms.ObservationEvent>> GetObservationEventsForChangeAsync(
+        Guid dailyLogId, CancellationToken ct = default)
+    {
+        // TRACKED: the caller changes their plot in the same unit of work.
+        return await db.ObservationEvents
+            .Where(o => o.DailyLogId == dailyLogId)
+            .ToListAsync(ct);
     }
 
     public async Task<DailyLogContent?> GetCurrentDailyLogContentAsync(Guid dailyLogId, CancellationToken ct = default)

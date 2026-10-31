@@ -283,14 +283,15 @@ public sealed class CreateDailyLogHandler(
             }
         }
 
-        // ── spec: plr-d10 (lane OF-S; review of lane OF, H1) — no record of done work on a day that has not
-        // happened. THE one server rule (LogDayRule: the farm's India day, with a minutes-wide clock-skew margin so an
-        // installed phone that records on its own day is never refused). Placed AFTER the idempotency return, so a
-        // resend of a record the server already holds is still answered as saved, and before anything is staged.
-        if (Domain.Logs.LogDayRule.IsInFuture(command.LogDate, clock.UtcNow))
+        // ── spec: plr-d10 (lane OF-S; review of lane OF, H1; fix pass 1, B009) — no record of done work on a day that
+        // has not happened. Every installed phone dates a save by its OWN clock, and an installed phone must never lose a
+        // record because that clock runs ahead (P11; old apps have no move to put it right): so a create is refused only
+        // for a day after the farm's TOMORROW (LogDayRule). Placed AFTER the idempotency return, so a resend of a record
+        // the server already holds is still answered as saved, and before anything is staged.
+        if (Domain.Logs.LogDayRule.IsAfterFarmTomorrow(command.LogDate, clock.UtcNow))
         {
             logger.LogWarning(
-                "CreateDailyLog refused for farm {FarmId}: {LogDate} is after the farm's today.", command.FarmId, command.LogDate);
+                "CreateDailyLog refused for farm {FarmId}: {LogDate} is after the farm's tomorrow.", command.FarmId, command.LogDate);
             return Result.Failure<DailyLogDto>(ShramSafalErrors.LogDateInFuture);
         }
 

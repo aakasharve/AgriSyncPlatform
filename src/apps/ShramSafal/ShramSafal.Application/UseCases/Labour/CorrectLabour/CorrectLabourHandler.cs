@@ -173,7 +173,9 @@ public sealed class CorrectLabourHandler(
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
         }
 
-        var dailyLog = await repository.GetDailyLogByIdAsync(assignment.DailyLogId, ct);
+        // lane OF-S fix 1 (B012) — the record is HELD for this change (the same row hold a move takes) before its
+        // version is read, so a correction and a move racing from two phones can never both write version N+1.
+        var dailyLog = await repository.GetDailyLogForChangeAsync(assignment.DailyLogId, ct);
         if (dailyLog is null || dailyLog.FarmId != command.FarmId)
         {
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
@@ -513,9 +515,17 @@ public sealed class CorrectLabourHandler(
     }
 
     /// <summary>
-    /// spec: plr-d10 (lane OF-S) — does a section being corrected no longer say what the reviewer saw? Counts are
-    /// compared as the engagement stores them (a null stays null); hours to the stored hours. A value he did not
-    /// see (left out of <paramref name="seen"/>) is not compared.
+    /// spec: plr-d10 (lane OF-S; fix pass 1, B007) — does a section being corrected no longer say what the reviewer's
+    /// phone HOLDS for it? The phone sends what it holds for every field of the section, shown on screen or not, and a
+    /// field it holds as not stated is simply absent — so absent means "not stated", never "not known":
+    /// <list type="bullet">
+    /// <item>the headcount is compared the way the server stores it — <see cref="LabourHeadcount.Resolve"/> of what he
+    /// held (count 0 with a 3 / 2 split is the 5 the server stored, never a contradiction of it); the male and female
+    /// halves as stored (not stated = null);</item>
+    /// <item>hours: a stated value must equal the stored hours; "not stated" (an Assumed duration is never shown) is stale
+    /// as soon as someone has STATED hours meanwhile (basis Explicit).</item>
+    /// </list>
+    /// Only the sections he corrects are compared.
     /// </summary>
     private static bool IsStale(
         LabourAssignment assignment,
@@ -524,16 +534,21 @@ public sealed class CorrectLabourHandler(
         decimal? durationHours)
     {
         if (quantity is not null
-            && ((seen.WorkerCount is { } w && assignment.WorkerCount != w)
-                || (seen.MaleCount is { } m && assignment.MaleCount != m)
-                || (seen.FemaleCount is { } f && assignment.FemaleCount != f)))
+            && (LabourHeadcount.Resolve(seen.WorkerCount, seen.MaleCount, seen.FemaleCount) != assignment.WorkerCount
+                || seen.MaleCount != assignment.MaleCount
+                || seen.FemaleCount != assignment.FemaleCount))
         {
             return true;
         }
 
-        return durationHours is not null
-               && seen.DurationHours is { } hours
-               && assignment.DurationHours != hours;
+        if (durationHours is null)
+        {
+            return false;
+        }
+
+        return seen.DurationHours is { } hours
+            ? assignment.DurationHours != hours
+            : assignment.TimeBasis == LabourTimeBasis.Explicit;
     }
 
     /// <summary>

@@ -17,6 +17,10 @@ import { readPendingLogIds } from '../../../../sync/pull/internal/pendingMutatio
 import { FutureDayRefused } from '../../../../../core/domain/services/farmDay';
 import type { CropProfile, DailyLog, FarmerProfile, LogScope } from '../../../../../types';
 import { canMoveSavedEntry, canQueueLabourCountOffline, contextForPlace, queueSavedEntryMove, type SavedEntryMoveDeps } from '../correctionCapabilities';
+import { readRefusedChange } from '../refusedRevision';
+import { CorrectLabourAssignmentCommand } from '../../../../../application/usecases/sync/CorrectLabourAssignmentCommand';
+import { mutationQueue } from '../../../../../infrastructure/sync/MutationQueue';
+import { moneyEntryIdFor } from '../../../../finance/moneyEntryIdentity';
 
 vi.mock('../../../../../core/domain/services/DateKeyService', async (orig) => ({
     ...(await orig<typeof import('../../../../../core/domain/services/DateKeyService')>()),
@@ -127,5 +131,113 @@ describe('lane OF-S — moving a saved entry, offline', () => {
         const { d } = deps();
         await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-25' }, d);
         expect(await moves()).toHaveLength(0);
+    });
+});
+
+
+describe('lane OF-S fix 1 — a refused change can be made again (B001), a same-place pick changes nothing (B006)', () => {
+    const refuse = async (mutationType: string) => {
+        const row = (await getDatabase().mutationQueue.toArray()).find(r => r.mutationType === mutationType)!;
+        await getDatabase().mutationQueue.update(row.id!, { status: 'REJECTED_USER_REVIEW', errorCode: 'ShramSafal.LogMoveLinkedRecords.Conflict', lastError: 'refused' });
+    };
+
+    it('the same move made again AFTER a refusal is queued again — never shown moved with nothing on its way', async () => {
+        const { d } = deps();
+        await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d);
+        await refuse(SyncMutationName.MoveDailyLog);
+        expect(await readRefusedChange(LOG)).toEqual({ kind: 'move', reason: 'linked' });
+
+        // He clears the हजेरी ruling, the server's version comes back (version 3 again), and he makes the same move.
+        await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d);
+
+        const waiting = (await moves()).filter(r => r.status === 'PENDING');
+        expect(waiting).toHaveLength(1);
+        expect(waiting[0].retryCount).toBe(0);
+        expect(waiting[0].errorCode).toBeUndefined();
+        expect(await readPendingLogIds(getDatabase())).toContain(LOG); // on its way, so it holds the entry again
+        expect(await readRefusedChange(LOG)).toBeNull(); // the old refusal is not shown over the new attempt
+    });
+
+    it('pressing save twice while it waits still queues it once', async () => {
+        const { d } = deps();
+        await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d);
+        await queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d);
+        expect(await moves()).toHaveLength(1);
+    });
+
+    it('a worker-count change made again after a refusal is queued again', async () => {
+        const correction = {
+            labourAssignmentId: '0f5e2000-0000-4000-8000-0000000000c1', dailyLogId: LOG, farmId: '0f5e2000-0000-4000-8000-0000000000c2',
+            quantity: { workerCount: 6 }, seen: { workerCount: 8 }, correctedAtUtc: '2026-10-31T10:00:00.000Z',
+        };
+        await CorrectLabourAssignmentCommand.enqueue(correction, 3);
+        await refuse(SyncMutationName.CorrectLabourAssignment);
+        await CorrectLabourAssignmentCommand.enqueue(correction, 3);
+        const rows = (await getDatabase().mutationQueue.toArray()).filter(r => r.mutationType === SyncMutationName.CorrectLabourAssignment);
+        expect(rows.filter(r => r.status === 'PENDING')).toHaveLength(1);
+    });
+
+    it('nothing queued, nothing changed: when the queue refuses the move, the entry is not moved on the phone', async () => {
+        const { d, written } = deps();
+        const spy = vi.spyOn(mutationQueue, 'enqueue').mockRejectedValueOnce(new Error('queue full'));
+        await expect(queueSavedEntryMove(ENTRY, { dateKey: '2026-10-24' }, d)).rejects.toThrow('queue full');
+        expect(written).toHaveLength(0);
+        spy.mockRestore();
+    });
+
+    it('choosing the plot it already has queues nothing and bumps nothing (B006)', async () => {
+        const { d, written } = deps();
+        const same = await queueSavedEntryMove(ENTRY, { scope: scope([G1], ['grape']) }, d);
+        expect(await moves()).toHaveLength(0);
+        expect(written).toHaveLength(0);
+        expect(same.contentVersion).toBe(3);
+        // the same day with the same plot: still nothing
+        await queueSavedEntryMove(ENTRY, { scope: scope([G1], ['grape']), dateKey: '2026-10-25' }, d);
+        expect(await moves()).toHaveLength(0);
+        // the same plot and a NEW day: only the day travels
+        await queueSavedEntryMove(ENTRY, { scope: scope([G1], ['grape']), dateKey: '2026-10-24' }, d);
+        const [row] = await moves();
+        expect(row.payload).toMatchObject({ newLogDate: '2026-10-24' });
+        expect(row.payload).not.toHaveProperty('newPlotIds');
+        expect(written[0]).not.toHaveProperty('context');
+    });
+});
+
+describe('lane OF-S fix 1 — the money of the entry follows it on this phone too (B002)', () => {
+    const ASSIGNMENT = '0f5e2000-0000-4000-8000-0000000000d1';
+    const WITH_MONEY = {
+        ...ENTRY,
+        labour: [{ id: ASSIGNMENT, labourAssignmentId: ASSIGNMENT, type: 'HIRED', count: 8, totalCost: 2800 }],
+        inputs: [{ id: 'in-1', productName: 'इथरेल', cost: 500 }],
+        machinery: [], activityExpenses: [],
+    } as unknown as DailyLog;
+    const labourMoney = moneyEntryIdFor(`${LOG}:labour:${ASSIGNMENT}`);
+    const inputMoney = moneyEntryIdFor(`${LOG}:input:in-1`);
+    const otherMoney = moneyEntryIdFor('bill-9:line-1');
+    const row = (id: string, amount: number) => ({
+        id, farmId: 'farm-1', updatedAt: 'T',
+        payload: { id, farmId: 'farm-1', plotId: G1, cropCycleId: 'cycle-g1', amount, entryDate: '2026-10-25', categoryId: 'other' },
+    });
+    const payloadOf = async (id: string) => (await getDatabase().costEntries.get(id))?.payload as Record<string, unknown>;
+
+    it('its money entries on this phone take the new plot and day, keeping their amounts; other money stays', async () => {
+        await getDatabase().costEntries.bulkPut([row(labourMoney, 2800), row(inputMoney, 500), row(otherMoney, 90)]);
+        const { d } = deps();
+        await queueSavedEntryMove(WITH_MONEY, { scope: scope([S1], ['cane']), dateKey: '2026-10-24' }, d);
+
+        expect(await payloadOf(labourMoney)).toMatchObject({ plotId: S1, entryDate: '2026-10-24', amount: 2800 });
+        expect(await payloadOf(inputMoney)).toMatchObject({ plotId: S1, entryDate: '2026-10-24', amount: 500 });
+        expect((await payloadOf(labourMoney)).cropCycleId).not.toBe('cycle-g1'); // never the old plot's season
+        expect(await payloadOf(otherMoney)).toMatchObject({ plotId: G1, entryDate: '2026-10-25' });
+    });
+
+    it('to the whole farm: its money names no plot and no season', async () => {
+        await getDatabase().costEntries.bulkPut([row(inputMoney, 500)]);
+        const { d } = deps();
+        await queueSavedEntryMove(WITH_MONEY, { scope: scope([], ['FARM_GLOBAL']) }, d);
+        const payload = await payloadOf(inputMoney);
+        expect(payload.plotId).toBeUndefined();
+        expect(payload.cropCycleId).toBeUndefined();
+        expect(payload.entryDate).toBe('2026-10-25');
     });
 });

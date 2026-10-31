@@ -6,9 +6,10 @@
 //
 //   - `quantity` and `durationHours` mean exactly what they mean on the online route: an absent section says
 //     nothing; a count left out inside `quantity` stays "not stated" (never 0, P4).
-//   - `seen` is what he SAW before changing it — only the values his phone knew. The server refuses the
-//     correction when the engagement no longer says that (someone changed it meanwhile): a stale correction
-//     never overwrites a newer one; the phone puts the entry back to the server's version and says why.
+//   - `seen` is what his phone HOLDS for every field of the section he corrects, shown on screen or not; a field
+//     it holds as not stated is ABSENT (absent = "not stated", never "not known" — fix pass 1, B007). The server
+//     refuses the correction when the engagement no longer says that (someone changed it meanwhile): a stale
+//     correction never overwrites a newer one; the phone puts the entry back to the server's version and says why.
 //   - `dailyLogId` is the key the pull guard reads, so the entry keeps his change until the server answers;
 //     the server also checks the engagement belongs to that log.
 //

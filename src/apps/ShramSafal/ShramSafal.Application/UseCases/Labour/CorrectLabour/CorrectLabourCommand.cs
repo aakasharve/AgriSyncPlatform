@@ -60,8 +60,9 @@ public sealed record CorrectLabourCommand(
 }
 
 /// <summary>
-/// spec: plr-d10 (lane OF-S) — the engagement's values as the reviewer's phone showed them before his change. Each is
-/// optional: a value his phone did not know is left out and not compared (never guessed).
+/// spec: plr-d10 (lane OF-S; fix pass 1, B007) — the engagement's values as the reviewer's phone HOLDS them for the
+/// sections he corrects, shown on screen or not. A value held as not stated is null: absent means "not stated", never
+/// "not known" (the phone sends everything it holds). How each is compared: <c>CorrectLabourHandler.IsStale</c>.
 /// </summary>
 public sealed record LabourCorrectionSeen(int? WorkerCount, int? MaleCount, int? FemaleCount, decimal? DurationHours);
 

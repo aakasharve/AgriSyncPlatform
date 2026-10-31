@@ -282,6 +282,22 @@ public sealed class CostEntry : Entity<Guid>
         return entry;
     }
 
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S fix pass 1, B002) — the record this money was made from was moved to another place and/or
+    /// day: the money follows it. The amount never changes (P7); only the place (plot, or none for several plots / the
+    /// whole farm), its crop season and the day. The clock only moves forward, so the pull carries it to every phone.
+    /// </summary>
+    public void FollowRecord(Guid? plotId, Guid? cropCycleId, DateOnly entryDate, DateTime movedAtUtc)
+    {
+        PlotId = plotId;
+        CropCycleId = cropCycleId;
+        EntryDate = entryDate;
+        if (movedAtUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = movedAtUtc;
+        }
+    }
+
     public void Flag(string reason)
     {
         if (string.IsNullOrWhiteSpace(reason))

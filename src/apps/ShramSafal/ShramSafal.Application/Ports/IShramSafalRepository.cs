@@ -108,6 +108,21 @@ public interface IShramSafalRepository
     /// </summary>
     Task<DailyLog?> GetDailyLogForChangeAsync(Guid dailyLogId, CancellationToken ct = default)
         => GetDailyLogByIdAsync(dailyLogId, ct);
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S fix pass 1, B002) — every stored version of what Sathi understood for this log, oldest
+    /// first (append-only rows). The move reads the line ids of ALL versions: money made from a line that a later edit
+    /// removed is still that record's money. Default: none.
+    /// </summary>
+    Task<IReadOnlyList<DailyLogContent>> GetDailyLogContentVersionsAsync(Guid dailyLogId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLogContent>>([]);
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S fix pass 1, B010) — the observations made from this log, TRACKED (the move changes their
+    /// plot in the same unit of work). Default: none.
+    /// </summary>
+    Task<IReadOnlyList<ObservationEvent>> GetObservationEventsForChangeAsync(Guid dailyLogId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ObservationEvent>>([]);
     Task<DailyLog?> GetDailyLogByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default);
 
     /// <summary>
@@ -527,6 +542,14 @@ public interface IShramSafalRepository
     /// </summary>
     Task<JobCard?> GetJobCardByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default)
         => Task.FromResult<JobCard?>(null);
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-S fix pass 1, B003) — EVERY job card linked to this log. Nothing makes the link unique
+    /// (a cancelled card keeps its link, a second card may be completed with the same log), so a check that must see a
+    /// paid card reads them all. The default wraps the single lookup.
+    /// </summary>
+    async Task<List<JobCard>> GetJobCardsByLinkedDailyLogIdAsync(Guid dailyLogId, CancellationToken ct = default)
+        => await GetJobCardByLinkedDailyLogIdAsync(dailyLogId, ct) is { } one ? [one] : [];
 
     /// <summary>
     /// Returns all job cards for the given farm, optionally filtered by status.

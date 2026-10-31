@@ -118,6 +118,56 @@ export class MutationQueue {
         return getOrCreateDeviceId();
     }
 
+    /**
+     * spec: plr-d10 (lane OF-S fix pass 1, B001) — queue a change the farmer can make AGAIN after the server refused it
+     * (a move of a saved entry, a worker-count change). Their request ids are derived from the change itself, so pressing
+     * "जतन करा" twice while one waits queues it once. But `enqueue` alone keeps ANY earlier row with that id — a refused
+     * one too — and queues nothing: the phone would show the change while nothing is on its way (P10). So a row that is
+     * finished without reaching the server — refused (`REJECTED_USER_REVIEW` / `REJECTED_DROPPED`) or given up
+     * (`FAILED` past the retry cap) — is RE-ARMED: the new payload, `PENDING`, tries and backoff cleared, the old refusal
+     * cleared, and it goes to the back of the queue (a fresh `createdAt`). A row still waiting or already applied is left
+     * as it is. The server stores only applied requests, so re-sending a refused id is answered on its merits again.
+     */
+    async enqueueRepeatable(
+        mutationType: SyncMutationType,
+        payload: unknown,
+        options: { clientRequestId: string; clientCommandId?: string },
+    ): Promise<string> {
+        const db = getDatabase();
+        const deviceId = getOrCreateDeviceId();
+        const existing = await db.mutationQueue
+            .where('[deviceId+clientRequestId]')
+            .equals([deviceId, options.clientRequestId])
+            .first();
+        const finishedUnsent = existing?.id !== undefined && (
+            existing.status === 'REJECTED_USER_REVIEW'
+            || existing.status === 'REJECTED_DROPPED'
+            || (existing.status === 'FAILED' && existing.retryCount >= MAX_AUTO_RETRY_COUNT));
+        if (!finishedUnsent || existing?.id === undefined) {
+            return this.enqueue(mutationType, payload, options);
+        }
+
+        const validation = validatePayload(mutationType, payload);
+        if (!validation.ok) {
+            throw new Error(
+                `Payload validation failed for ${mutationType}: ` +
+                validation.errors.map((e) => `${e.path || '<root>'} ${e.message}`).join('; '),
+            );
+        }
+        const now = systemClock.nowISO();
+        await db.mutationQueue.update(existing.id, {
+            payload,
+            status: 'PENDING',
+            retryCount: 0,
+            lastError: undefined,
+            errorCode: undefined,
+            ...CLEAR_BACKOFF,
+            createdAt: now,
+            updatedAt: now,
+        });
+        return options.clientRequestId;
+    }
+
     async enqueue(
         mutationType: SyncMutationType,
         payload: unknown,

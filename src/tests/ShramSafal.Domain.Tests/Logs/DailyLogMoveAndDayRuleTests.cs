@@ -76,17 +76,33 @@ public sealed class DailyLogMoveAndDayRuleTests
     }
 
     [Fact]
-    public void The_day_rule_is_the_farms_India_day_with_a_minutes_wide_skew_margin()
+    public void A_move_may_not_go_after_the_farms_India_today_and_a_create_may_not_go_after_its_tomorrow()
     {
-        // 18:25 UTC = 23:55 IST on 30 Oct.
-        var nearMidnight = new DateTime(2026, 10, 30, 18, 25, 0, DateTimeKind.Utc);
-        LogDayRule.IsInFuture(new DateOnly(2026, 10, 30), nearMidnight).Should().BeFalse();
-        // A phone a few minutes fast already says 31 Oct: never refused.
-        LogDayRule.IsInFuture(new DateOnly(2026, 10, 31), nearMidnight).Should().BeFalse();
-        // Earlier the same evening (22:00 IST), tomorrow is refused — the margin is minutes, never a day.
-        LogDayRule.IsInFuture(new DateOnly(2026, 10, 31), new DateTime(2026, 10, 30, 16, 30, 0, DateTimeKind.Utc)).Should().BeTrue();
-        // A UTC clock still on 30 Oct while India is already on 31 Oct: 31 Oct is today, not the future.
-        LogDayRule.IsInFuture(new DateOnly(2026, 10, 31), new DateTime(2026, 10, 30, 19, 0, 0, DateTimeKind.Utc)).Should().BeFalse();
-        LogDayRule.ClockSkewMargin.Should().BeLessThan(TimeSpan.FromHours(1));
+        // 18:25 UTC = 23:55 IST on 30 Oct; 19:00 UTC = 00:30 IST on 31 Oct.
+        var lateOn30 = new DateTime(2026, 10, 30, 18, 25, 0, DateTimeKind.Utc);
+        var earlyOn31 = new DateTime(2026, 10, 30, 19, 0, 0, DateTimeKind.Utc);
+
+        LogDayRule.IsAfterFarmToday(new DateOnly(2026, 10, 30), lateOn30).Should().BeFalse();
+        LogDayRule.IsAfterFarmToday(new DateOnly(2026, 10, 31), lateOn30).Should().BeTrue("a move is strict: India is still on 30 Oct");
+        LogDayRule.IsAfterFarmToday(new DateOnly(2026, 10, 31), earlyOn31).Should().BeFalse("the UTC date is 30 Oct, India is on 31 Oct");
+
+        // B009 — a create from an installed phone whose clock runs ahead keeps its record: tomorrow is taken.
+        LogDayRule.IsAfterFarmTomorrow(new DateOnly(2026, 10, 31), lateOn30).Should().BeFalse();
+        LogDayRule.IsAfterFarmTomorrow(new DateOnly(2026, 11, 1), lateOn30).Should().BeTrue("beyond tomorrow is a wrong date");
+    }
+
+    [Fact]
+    public void The_money_ids_match_the_phones_RFC_4122_v5_ids()
+    {
+        // Oracle values computed outside this code: Python uuid.uuid5 and the phone's `uuid` package agree on them.
+        ShramSafal.Domain.Finance.MoneyEntryIdentity.V5(ShramSafal.Domain.Finance.MoneyEntryIdentity.Namespace, "bill-1:line-1")
+            .Should().Be(Guid.Parse("a7afd51e-05a9-5f50-a9b4-c337ba2ca7ec"));
+        var log = Guid.Parse("0f5e4000-0000-4000-8000-0000000000d1");
+        ShramSafal.Domain.Finance.MoneyEntryIdentity.ForRecordLine(log, "input", "tm-input-0")
+            .Should().Be(Guid.Parse("46656035-4724-5c68-a7c2-14d3d932aed5"));
+        ShramSafal.Domain.Finance.MoneyEntryIdentity.ForRecordLine(log, "labour", "0f5e4000-0000-4000-8000-0000000000d2")
+            .Should().Be(Guid.Parse("b7aa5244-057f-5016-858f-afd0a605b7c7"));
+        ShramSafal.Domain.Finance.MoneyEntryIdentity.ForRecordLine(log, "activity-expense", "tm-exp-0")
+            .Should().Be(Guid.Parse("ab2ad4e3-02ba-503e-9ea8-d829ba573c05"));
     }
 }

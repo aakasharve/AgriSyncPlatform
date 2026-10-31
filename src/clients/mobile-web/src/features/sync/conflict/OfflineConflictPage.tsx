@@ -19,6 +19,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { ConflictResolutionService, type RejectedMutationView } from './ConflictResolutionService';
 import { formatDisplayTimestamp } from '../../../shared/utils/displayTime';
 import { PageBar } from '../../../shared/components/ui/placeUi';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 /** The page's own heading words, now its title. */
 const CONFLICTS_TITLE = 'सिंक न झालेल्या नोंदी';
@@ -36,10 +37,12 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
     const [busyId, setBusyId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [readFailed, setReadFailed] = useState(false);
+    const language = useOptionalLanguage()?.language;
 
     const refresh = useCallback(async () => {
         try {
-            const fresh = await ConflictResolutionService.list();
+            // Lane OF-S fix 1 (B011): the plain reasons come in his language.
+            const fresh = await ConflictResolutionService.list(language);
             setItems(fresh);
             setError(null);
             setReadFailed(false);
@@ -48,7 +51,7 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
             setReadFailed(true);
             setItems([]);
         }
-    }, []);
+    }, [language]);
 
     useEffect(() => {
         void refresh();

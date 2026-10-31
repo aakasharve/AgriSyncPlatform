@@ -266,6 +266,99 @@ public sealed class QueuedLabourCorrectionRealPostgresTests(Xunit.Abstractions.I
         (await ReadHistoryAsync(assignmentId)).Should().BeEmpty();
     }
 
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+    // fix pass 1 (review REQUEST_CHANGES) — B004 wait for the record, B007 what the phone holds, B012 the row hold.
+    // ═════════════════════════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public async Task B004_a_correction_for_a_record_the_server_does_not_have_yet_is_told_to_wait_never_forbidden()
+    {
+        await AssertRunsAsNonSuperuserAsync();
+        var notYetHere = Guid.NewGuid();
+        var refused = await PushAsync(MukadamA, "req-ofs-before-create",
+            CorrectionPayload(Guid.NewGuid(), notYetHere, FarmA, newCount: 6, seenCount: 8));
+        output.WriteLine($"[EVIDENCE] correction before its record's create -> {refused.Status} {refused.ErrorCode}");
+        refused.Status.Should().Be("failed");
+        refused.ErrorCode.Should().Be("ShramSafal.DailyLogNotFound",
+            "the phone treats this code as 'wait for the record's create', never 'not allowed, tell the owner'");
+    }
+
+    [Fact]
+    public async Task B007_hours_the_phone_held_as_not_stated_are_checked_too_a_newer_stated_hour_is_never_overwritten()
+    {
+        await AssertRunsAsNonSuperuserAsync();
+        var (logId, assignmentId) = await PlantEngagementAsync(FarmA, PlotA, CycleA, workerCount: 8);
+
+        // The owner states the hours meanwhile (8 Assumed -> 4 Explicit).
+        var online = await RunOnlineAsync(OwnerA, new CorrectLabourCommand(
+            new FarmId(FarmA), assignmentId, new UserId(OwnerA), "device-owner", "req-ofs-owner-4h",
+            Reason: null, Quantity: null, DurationHours: 4m, AttributionAdds: null, AttributionRemovals: null));
+        online.IsSuccess.Should().BeTrue();
+
+        // The mukadam's phone still holds "hours not stated" (an Assumed duration is never shown), and sets 6.
+        var payload = CorrectionPayload(assignmentId, logId, FarmA, newCount: 8, seenCount: 8, hours: 6m);
+        payload.Remove("quantity");
+        var refused = await PushAsync(MukadamA, "req-ofs-stale-hours", payload);
+        output.WriteLine($"[EVIDENCE] hours correction against a newer stated hour -> {refused.Status} {refused.ErrorCode}");
+        refused.ErrorCode.Should().Be("ShramSafal.LabourCorrection.Conflict");
+        (await ReadEngagementAsync(assignmentId)).DurationHours.Should().Be(4m);
+    }
+
+    [Fact]
+    public async Task B007_a_count_of_0_with_a_3_2_split_is_not_refused_because_the_server_stored_the_resolved_5()
+    {
+        await AssertRunsAsNonSuperuserAsync();
+        var (logId, assignmentId) = await PlantEngagementAsync(FarmA, PlotA, CycleA, workerCount: 5);
+        await ExecOnSuperuserAsync("UPDATE ssf.labour_assignments SET male_count = 3, female_count = 2 WHERE \"Id\" = @id", ("id", assignmentId));
+
+        var payload = CorrectionPayload(assignmentId, logId, FarmA, newCount: 6, seenCount: 0, male: 4, female: 2);
+        ((Dictionary<string, object?>)payload["seen"]!)["maleCount"] = 3;
+        ((Dictionary<string, object?>)payload["seen"]!)["femaleCount"] = 2;
+        var applied = await PushAsync(MukadamA, "req-ofs-split", payload);
+        output.WriteLine($"[EVIDENCE] honest correction over a resolved count -> {applied.Status} {applied.ErrorCode}");
+        applied.Status.Should().Be("applied");
+        (await ReadEngagementAsync(assignmentId)).WorkerCount.Should().Be(6);
+    }
+
+    [Fact]
+    public async Task B012_a_correction_waits_for_a_change_holding_the_record_and_bumps_the_version_after_it()
+    {
+        await AssertRunsAsNonSuperuserAsync();
+        var (logId, assignmentId) = await PlantEngagementAsync(FarmA, PlotA, CycleA, workerCount: 8);
+
+        // Another change (a move, from another phone) holds the record and is about to move its version 1 -> 2.
+        await using var other = new NpgsqlConnection(_superuserConn);
+        await other.OpenAsync();
+        await using var tx = await other.BeginTransactionAsync();
+        await using (var hold = new NpgsqlCommand("SELECT 1 FROM ssf.daily_logs WHERE \"Id\" = @id FOR UPDATE", other, tx))
+        {
+            hold.Parameters.AddWithValue("id", logId);
+            await hold.ExecuteNonQueryAsync();
+        }
+
+        var correction = PushAsync(MukadamA, "req-ofs-race", CorrectionPayload(assignmentId, logId, FarmA, newCount: 6, seenCount: 8));
+        await Task.Delay(1500);
+        await using (var bump = new NpgsqlCommand("UPDATE ssf.daily_logs SET content_version = content_version + 1 WHERE \"Id\" = @id", other, tx))
+        {
+            bump.Parameters.AddWithValue("id", logId);
+            await bump.ExecuteNonQueryAsync();
+        }
+
+        await tx.CommitAsync();
+        (await correction).Status.Should().Be("applied");
+
+        var version = await ScalarAsync("SELECT content_version FROM ssf.daily_logs WHERE \"Id\" = @id", logId);
+        output.WriteLine($"[EVIDENCE] version after the held change (+1) and the correction (+1): {version}");
+        version.Should().Be(3, "neither bump is lost: the correction read the record only after the other change let go");
+    }
+
+    private async Task ExecOnSuperuserAsync(string sql, params (string Name, object Value)[] args)
+    {
+        await using var db = new NpgsqlConnection(_superuserConn);
+        await db.OpenAsync();
+        await ExecAsync(db, sql, args);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────
 
     private sealed record Engagement(int? WorkerCount, int? MaleCount, int? FemaleCount, decimal DurationHours,

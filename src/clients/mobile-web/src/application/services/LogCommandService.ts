@@ -431,7 +431,10 @@ export class LogCommandServiceImpl implements LogCommandService {
             if (!amount) return;
             financeCommandService.createMoneyEventFromSource({
                 type: 'VoiceLog',
-                sourceId: `${log.id}:labour:${entry.id}`,
+                // Lane OF-S fix 1 (B002) — keyed by the ENGAGEMENT id (minted above, before this runs): the id the server
+                // holds and a pulled entry shows, so a move of the entry can find this money on the server and on any
+                // phone. A crew with no engagement id yet keeps its line id.
+                sourceId: `${log.id}:labour:${entry.labourAssignmentId ?? entry.id}`,
                 dateTime: baseDateTime,
                 eventType: 'Expense',
                 category: 'Labour',

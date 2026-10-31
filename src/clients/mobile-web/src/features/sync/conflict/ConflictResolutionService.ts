@@ -23,6 +23,7 @@ import { getRootStore } from '../../../app/state/RootStore';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { getEditSurface } from './EditSurfaceRegistry';
+import { refusalHint } from '../../logs/components/correction/refusedRevision';
 import {
     DEPENDENCY_PARENT_UNRESOLVED_CODE,
     DEPENDENCY_PLOT_UNRESOLVED_CODE,
@@ -62,7 +63,7 @@ export class ConflictResolutionService {
      * capability — which is exactly why the gap survived: nothing was missing
      * except the rows.
      */
-    static async list(): Promise<RejectedMutationView[]> {
+    static async list(language?: string | null): Promise<RejectedMutationView[]> {
         const [rejected, capExhausted] = await Promise.all([
             mutationQueue.getRejectedUserReview(),
             mutationQueue.getCapExhaustedFailed(),
@@ -83,7 +84,10 @@ export class ConflictResolutionService {
                     mutationType: r.mutationType,
                     capturedAt: r.createdAt,
                     reason: r.lastError ?? 'UNKNOWN',
-                    hint: this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode),
+                    // Lane OF-S fix 1 (B011): a refused move / worker count / future-day create says why in plain
+                    // words, in his language; every other row keeps the hints below.
+                    hint: refusalHint(r.mutationType, r.errorCode, language)
+                        ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode),
                     payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
                 };
             });

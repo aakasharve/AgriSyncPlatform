@@ -2140,6 +2140,16 @@ public sealed class PushSyncBatchHandler(
                 Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
         }
 
+        // lane OF-S fix 1 (B004) — a correction can reach the server before its record's create does (the create is
+        // held, or waits on a plot made offline). Then the answer is "that record is not here yet" — the code every
+        // phone reads as "wait for its create" — never "Forbidden", which would park a farmer's honest change as "not
+        // allowed". Read under this farm's scope: a record of another farm resolves to nothing, exactly like add_log_task.
+        if (await repository.GetDailyLogByIdAsync(request.DailyLogId, ct) is null)
+        {
+            return MutationExecutionOutcome.Failure(
+                Domain.Common.ShramSafalErrors.DailyLogNotFound.Code, Domain.Common.ShramSafalErrors.DailyLogNotFound.Description);
+        }
+
         var result = await correctLabourHandler.HandleAsync(
             new CorrectLabourCommand(
                 new FarmId(request.FarmId),

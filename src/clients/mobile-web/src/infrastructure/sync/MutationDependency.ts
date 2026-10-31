@@ -76,6 +76,10 @@ const DAILY_LOG_PARENT_FIELD: Readonly<Record<string, string>> = {
     [SyncMutationName.AddLogTask]: 'dailyLogId',
     // lane F1 — `revise_log_content.zod.ts`: an edit to what Sathi understood waits for its log.
     [SyncMutationName.ReviseLogContent]: 'dailyLogId',
+    // lane OF-S fix 1 (B004) — `move_daily_log.zod.ts`, `correct_labour_assignment.zod.ts`: a move of a saved entry and
+    // a queued worker count wait for their log's create like every other change to it (never parked as a refusal).
+    [SyncMutationName.MoveDailyLog]: 'dailyLogId',
+    [SyncMutationName.CorrectLabourAssignment]: 'dailyLogId',
     [SyncMutationName.VerifyLog]: 'dailyLogId',
     [SyncMutationName.VerifyLogV2]: 'logId',
     [SyncMutationName.JobcardComplete]: 'dailyLogId',

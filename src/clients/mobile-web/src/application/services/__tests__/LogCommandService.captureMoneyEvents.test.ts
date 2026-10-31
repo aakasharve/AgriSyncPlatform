@@ -268,12 +268,17 @@ describe('LogCommandServiceImpl.confirmAndSave — the money follows the log’s
         const added = vi.spyOn(financeService, '_addEvent');
         const service = new LogCommandServiceImpl(fakeRepo);
 
-        await expect(service.confirmAndSave([plotLog(PLOT_ON_A, 'r3c')])).resolves.toBeUndefined();
+        const saved = [plotLog(PLOT_ON_A, 'r3c')];
+        await expect(service.confirmAndSave(saved)).resolves.toBeUndefined();
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(lookup).toHaveBeenCalled();
         expect(fakeRepo.batchSave).toHaveBeenCalledTimes(1);
-        expect(added).toHaveBeenCalledWith(expect.objectContaining({ sourceId: 'log-r3c:labour:r3c', amount: 800, farmId: '' }));
+        // Lane OF-S fix 1 (B002): a crew's money is keyed by its ENGAGEMENT id (minted on save), so a later move of
+        // the entry can find it on the server and on any phone.
+        const engagementId = saved[0].labour[0].labourAssignmentId;
+        expect(engagementId).toMatch(/^[0-9a-f-]{36}$/);
+        expect(added).toHaveBeenCalledWith(expect.objectContaining({ sourceId: `log-r3c:labour:${engagementId}`, amount: 800, farmId: '' }));
         expect(await pendingAddCostEntryRows()).toHaveLength(0);
         lookup.mockRestore();
         errors.mockRestore();
