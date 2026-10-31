@@ -32,6 +32,9 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // App-local plugins must be registered BEFORE super.onCreate, which starts the bridge.
+        // InstallSource: lets "Update" tell a Play install from a downloaded APK (lane UPD-1).
+        registerPlugin(InstallSourcePlugin.class);
         super.onCreate(savedInstanceState);
         configureNativeShell();
     }

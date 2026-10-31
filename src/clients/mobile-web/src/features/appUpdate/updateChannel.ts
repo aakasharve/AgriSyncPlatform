@@ -4,11 +4,18 @@
  *
  * Lane UPD-1 (founder D-53, register F43, doctrine P5 / P11) — WHERE "अपडेट करा" sends the farmer.
  *
- * Build-time setting `VITE_UPDATE_CHANNEL`:
+ * The places (channels):
  *   - `play` — the Play listing of com.agrisync.shramsafal (a Play install updates from Play);
  *   - `site` — the APK page, normally https://shramsafal.in/apk, in the phone's browser (a downloaded
  *     APK can never update itself);
- *   - `web`  — the browser build: reload the page (a web deploy already IS the new version). Default.
+ *   - `web`  — reload the page (a web deploy already IS the new version).
+ *
+ * WHO DECIDES (fix pass, orchestrator 2026-10-31). The release builds ONE web bundle for the web, the
+ * site APK and the Play bundle, so a build-time setting cannot tell the two installed apps apart:
+ *   - an INSTALLED app asks Android which app installed it (native plugin `InstallSource`):
+ *     `com.android.vending` -> `play`; anything else or nothing -> `site`; the plugin missing or failing
+ *     -> `site`, logged (never an error to the farmer). The build-time setting plays no part here;
+ *   - a BROWSER follows the build-time setting `VITE_UPDATE_CHANNEL` (default `web`).
  *
  * ONLY ALLOW-LISTED PLACES ARE OPENED. The server's `playStoreUrl` is used only when it is the Play
  * listing of THIS app (https://play.google.com/store/apps/details?id=com.agrisync.shramsafal, or
@@ -18,6 +25,7 @@
  * somewhere real (P5).
  */
 import { Capacitor } from '@capacitor/core';
+import { PLAY_STORE_INSTALLER, readInstaller } from '../../infrastructure/device/installSource';
 import { logger } from '../../infrastructure/observability/Logger';
 
 export type UpdateChannel = 'play' | 'site' | 'web';
@@ -39,23 +47,27 @@ export function parseUpdateChannel(raw: unknown): UpdateChannel {
 
 interface ViteEnvShape { env?: Record<string, unknown> }
 
-/** This build's channel. (`import.meta.env` cannot be stubbed under vitest here, so the parsing above is the tested half.) */
+/** This build's channel, for a BROWSER. (`import.meta.env` cannot be stubbed under vitest here, so the parsing above is the tested half.) */
 export function readBuildUpdateChannel(): UpdateChannel {
     return parseUpdateChannel((import.meta as ViteEnvShape).env?.VITE_UPDATE_CHANNEL);
 }
 
+/** Which app installed this one: the package name, or null when none is recorded. Throws when it cannot be read. */
+export type InstallerLookup = () => Promise<string | null>;
+
 /**
- * The channel actually used. MY CALL (lane UPD-1): an installed app whose build says `web` (or nothing)
- * goes to the APK page — reloading a native app installs nothing, so `web` there would be a button that
- * does nothing (P5). A browser keeps whatever the build says, so the founder can try every channel in the
- * preview.
+ * An INSTALLED app's channel, from who installed it: Google Play -> `play`; anything else (a browser, a
+ * file manager, adb, nothing recorded) -> `site`. The lookup missing or failing -> `site`, logged: the APK
+ * page is the safe answer for an app that cannot say where it came from (a reload would install nothing).
  */
-export function effectiveUpdateChannel(configured: UpdateChannel, isNative: boolean): UpdateChannel {
-    if (isNative && configured === 'web') {
-        logger.warn('This installed app was built without VITE_UPDATE_CHANNEL; "Update" opens the APK page.', LOG);
+export async function installedAppChannel(lookup: InstallerLookup): Promise<'play' | 'site'> {
+    try {
+        const installer = await lookup();
+        return installer === PLAY_STORE_INSTALLER ? 'play' : 'site';
+    } catch (error) {
+        logger.warn('Could not read which app installed this one; "Update" opens the APK page.', { ...LOG, error: String(error) });
         return 'site';
     }
-    return configured;
 }
 
 function parseUrl(value: string): URL | null {
@@ -136,12 +148,28 @@ export function performUpdate(target: UpdateTarget, opener: UpdateOpener): void 
     else opener.open(target.url);
 }
 
-/** "अपडेट करा": this build's channel, on this phone, to the allow-listed place. Each piece can be given (tests). */
+/**
+ * "अपडेट करा" to the allow-listed place: an installed app by who installed it, a browser by the build's
+ * setting. Each piece can be given (tests). Never rejects: a failure is logged, never shown.
+ * A browser opens synchronously, inside the tap, so no pop-up blocker can stop the new tab.
+ */
 export function goToUpdate(
     release: { playStoreUrl: string | null; apkUrl: string | null } | null,
-    options: { channel?: UpdateChannel; isNative?: boolean; opener?: UpdateOpener } = {},
-): void {
+    options: { channel?: UpdateChannel; isNative?: boolean; installer?: InstallerLookup; opener?: UpdateOpener } = {},
+): Promise<void> {
     const isNative = options.isNative ?? Capacitor.isNativePlatform();
-    const channel = effectiveUpdateChannel(options.channel ?? readBuildUpdateChannel(), isNative);
-    performUpdate(resolveUpdateTarget(channel, release), options.opener ?? deviceOpener(isNative));
+    const opener = options.opener ?? deviceOpener(isNative);
+    const go = (channel: UpdateChannel) => performUpdate(resolveUpdateTarget(channel, release), opener);
+    try {
+        if (!isNative) {
+            go(options.channel ?? readBuildUpdateChannel());
+            return Promise.resolve();
+        }
+        return installedAppChannel(options.installer ?? (() => readInstaller()))
+            .then(go)
+            .catch((error: unknown) => { logger.error('Could not open the update place.', error, LOG); });
+    } catch (error) {
+        logger.error('Could not open the update place.', error, LOG);
+        return Promise.resolve();
+    }
 }

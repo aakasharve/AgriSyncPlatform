@@ -6,7 +6,7 @@
  * of आजची कामे, above "काय करायचं आहे?". Draws NOTHING unless the server named a version newer than
  * this build (`appUpdateState`).
  *
- * "अपडेट करा" goes to the allow-listed place for this build's channel (`updateChannel`). "नंतर" hides it
+ * "अपडेट करा" goes to the allow-listed place (`updateChannel`: Play or the APK page by who installed the app). "नंतर" hides it
  * until the next day. Below the server's minimum version there is no "नंतर" and one line says the old
  * version may stop working soon — but the card never covers or blocks anything (P11): the rest of the
  * page stays usable.
@@ -47,7 +47,7 @@ export const AppUpdateCard: React.FC<{ language?: Language }> = ({ language }) =
                 </div>
             </div>
             <div className="mt-3 flex gap-2">
-                <Tap onClick={() => goToUpdate(update.release)} data-testid="app-update-go" rippleColor="rgba(255,255,255,0.35)"
+                <Tap onClick={() => { void goToUpdate(update.release); }} data-testid="app-update-go" rippleColor="rgba(255,255,255,0.35)"
                     className="flex min-h-[48px] flex-1 items-center justify-center rounded-full bg-gradient-to-r from-emerald-700 to-emerald-500 px-4 text-[16px] font-extrabold text-white shadow">
                     {words.updateButton}
                 </Tap>

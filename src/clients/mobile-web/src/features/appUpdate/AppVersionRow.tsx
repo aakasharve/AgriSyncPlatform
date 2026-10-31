@@ -24,7 +24,7 @@ export const AppVersionRow: React.FC<{ language: Language }> = ({ language }) =>
     if (update.updateAvailable && update.latestVersion) {
         return (
             <RowLink testId="hub-app-version" icon={icon} tone="green" title={title}
-                line={words.hubNewVersionLine(update.latestVersion)} onClick={() => goToUpdate(update.release)} />
+                line={words.hubNewVersionLine(update.latestVersion)} onClick={() => { void goToUpdate(update.release); }} />
         );
     }
     return (
