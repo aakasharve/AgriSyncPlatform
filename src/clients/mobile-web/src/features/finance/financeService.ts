@@ -9,6 +9,7 @@
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { moneyDayKey } from './moneyDay';
 import {
     MoneyAdjustment,
     MoneyCategory,
@@ -99,10 +100,8 @@ function asArray<T>(value: unknown): T[] {
     return Array.isArray(value) ? value as T[] : [];
 }
 
-function toDateKey(value?: string): string {
-    if (!value) return systemClock.nowISO().split('T')[0];
-    return value.includes('T') ? value.split('T')[0] : value;
-}
+/** lane OF-M (F88) — one rule for a money day (`moneyDay.ts`). */
+const toDateKey = moneyDayKey;
 
 function mapCategory(category?: string): MoneyCategory {
     const normalized = (category || '').toLowerCase();

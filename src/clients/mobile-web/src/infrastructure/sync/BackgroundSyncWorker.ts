@@ -19,12 +19,14 @@ import {
 import {
     describeDependencyRejection,
     describeDependencyWait,
+    missingMoneyIdsIn,
     resolveDailyLogDependency,
     resolveMoneyDependency,
     resolvePlotDependency,
 } from './MutationDependency';
 import { resetFailedUploadsToPending } from './UploadQueueRetry';
 import { takeMovedMoney } from '../../features/finance/movedMoney';
+import { takeEditMoney } from '../../features/finance/editMoney';
 
 // Sub-plan 04 Task 4 — bridge worker → syncMachine. Wrapped so the worker
 // never crashes if the root store hasn't been instantiated (e.g., during
@@ -420,6 +422,15 @@ export class BackgroundSyncWorker {
                             console.error('BackgroundSyncWorker: the money a move took could not be written on this phone yet', error);
                         });
                     }
+                    // spec: plr-d10 (lane OF-M, F89) — an edit answers with exactly the money the server made or corrected
+                    // for it (and why any did not follow): written here at once, the same way; the phone changes no money
+                    // on its own. A failure is said; the pull at the end of the cycle carries the same rows.
+                    if (mutation.mutationType === SyncMutationName.ReviseLogContent) {
+                        const dailyLogId = String((mutation.payload as { dailyLogId?: unknown } | null)?.dailyLogId ?? '');
+                        await takeEditMoney(dailyLogId, result.data).catch((error: unknown) => {
+                            console.error('BackgroundSyncWorker: the money an edit made could not be written on this phone yet', error);
+                        });
+                    }
                     // §P0.7 review B002 — A ROW THE SERVER HAS ACCEPTED IS NOT A
                     // CONFLICT, AND THE BADGE MUST STOP SAYING IT IS.
                     //
@@ -469,10 +480,14 @@ export class BackgroundSyncWorker {
 
                 // spec: plr-d10 (lane OF-S fix pass 2, N4) — a move refused because its record's money has not arrived
                 // waits (uncharged) while that money is still on its way from THIS phone; otherwise the refusal stands.
+                // Lane OF-M (R4-1): the money wait looks only at the money the refusal names.
                 const resolveDependency = isDependencyPendingRejection(rejection)
                     ? resolveDailyLogDependency
                     : isPlotDependencyRejection(rejection) ? resolvePlotDependency
-                        : isMoneyDependencyRejection(rejection) ? resolveMoneyDependency : null;
+                        : isMoneyDependencyRejection(rejection)
+                            ? (device: string, type: string, payload: unknown) =>
+                                resolveMoneyDependency(device, type, payload, missingMoneyIdsIn(result.errorMessage))
+                            : null;
                 if (resolveDependency) {
                     const verdict = await resolveDependency(
                         mutationQueue.getDeviceId(),

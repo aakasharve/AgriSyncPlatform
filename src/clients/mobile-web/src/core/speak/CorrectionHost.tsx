@@ -25,6 +25,7 @@ import {
 } from '../../features/logs/components/correction/correctionModel';
 import { saveSpokenCorrection, type SaveCorrectionDeps, type SaveOutcome } from '../../features/logs/components/correction/saveCorrection';
 import { refusalLines, useRefusedChange, type RefusedChange } from '../../features/logs/components/correction/refusedRevision';
+import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../../features/logs/components/correction/moneyNotFollowed';
 import {
     afterOf, canRemove, newItem, partnersOf, tapRows, tapUpdates, withItem, withNew, withRestored, withoutItem, type AddKind, type TapBucket, type TapRow,
 } from '../../features/logs/components/correction/tapEdit';
@@ -74,7 +75,10 @@ type Sheet = { kind: 'edit'; bucket: TapBucket; id: string; added?: boolean } | 
 const refusedLines = (refused: RefusedChange | null, language: string | undefined): string[] | undefined =>
     (!refused || refused.kind === 'revision' ? undefined : refusalLines(refused, language));
 
-export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: CorrectionSession; speaking: boolean; save: CorrectionSaveDeps | null; readRefused: (logId: string) => Promise<RefusedChange | null> }> = ({ ctx, correction, speaking, save, readRefused }) => {
+export const CorrectionHost: React.FC<{
+    ctx: AppRouterContext; correction: CorrectionSession; speaking: boolean; save: CorrectionSaveDeps | null;
+    readRefused: (logId: string) => Promise<RefusedChange | null>; readMoneyNotFollowed: (logId: string) => Promise<string[]>;
+}> = ({ ctx, correction, speaking, save, readRefused, readMoneyNotFollowed }) => {
     const language = useOptionalLanguage()?.language;
     const log = ctx.history.find(l => l.id === correction.logId);
     const [saving, setSaving] = useState(false);
@@ -88,6 +92,8 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
     const [spoken, setSpoken] = useState<{ transcript: string; typed: boolean; nothing: boolean; labourNotChanged?: boolean } | undefined>(undefined);
     const applied = useRef<CorrectionSession['proposal']>(null);
     const serverRefused = useRefusedChange(log?.id, readRefused);
+    // Lane OF-M — the money of his last saved change that could not follow it, and why.
+    const moneyNotFollowed = useMoneyNotFollowedOf(log ? [log.id] : [], readMoneyNotFollowed);
     // A record that is no longer here (deleted meanwhile) has nothing to change: the screen closes.
     useEffect(() => { if (!log) closeCorrection(); }, [log]);
     // Lane OF (D-57) — a हजेरी-door record: that day in the हजेरी वही, for someone who may open हजेरी.
@@ -245,6 +251,8 @@ export const CorrectionHost: React.FC<{ ctx: AppRouterContext; correction: Corre
                 offline={offline}
                 serverRefused={!!serverRefused}
                 serverRefusedLines={refusedLines(serverRefused, language)}
+                // Money is not talked about to someone who may not see it (the screen's own rule).
+                moneyNotFollowedLines={hideMoney ? [] : moneyNotFollowedLines(moneyNotFollowed, language)}
                 canMove={canMove}
                 onSpeak={() => speak()}
                 onType={() => { if (isOffline()) { setOffline(true); return; } setSheet({ kind: 'type' }); }}

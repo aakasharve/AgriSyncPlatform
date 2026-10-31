@@ -1311,6 +1311,21 @@ public interface IShramSafalRepository
         return true;
     }
 
+    /// <summary>
+    /// spec: plr-d10 (lane OF-M) — saves ONE money entry an edit made for a newly priced line of a record, with its
+    /// <c>Created</c> audit row. Returns <c>false</c>, having written nothing of it, when the entry's id is already held
+    /// by a row this farm cannot see (another farm's: the primary key, error 23505) — so another farm's row can never
+    /// make a farmer's edit fail, and is never written over (E4). Any other failure is thrown, and the caller's whole
+    /// edit is retried with it (P1: the money is the farmer's own statement, never a best-effort side-car).
+    /// </summary>
+    async Task<bool> TryAddRecordMoneyAsync(CostEntry entry, AuditEvent created, CancellationToken ct = default)
+    {
+        await AddCostEntryAsync(entry, ct);
+        await AddAuditEventAsync(created, ct);
+        await SaveChangesAsync(ct);
+        return true;
+    }
+
     /// <summary>The CURRENT content of one log (its highest version), or null when it has none.</summary>
     Task<DailyLogContent?> GetCurrentDailyLogContentAsync(Guid dailyLogId, CancellationToken ct = default)
         => Task.FromResult<DailyLogContent?>(null);

@@ -91,7 +91,7 @@ const SAID: AgriLogResponse = {
 
 let drive: { set: (st: AppStatus) => void; history: () => DailyLog[]; text: (t: string) => void } = { set: () => undefined, history: () => [], text: () => undefined };
 const openPlace = vi.fn();
-const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean | RefusedChange; hajeri?: boolean }> = ({ start, save, refused = false, hajeri = false }) => {
+const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean | RefusedChange; hajeri?: boolean; moneyNotFollowed?: string[] }> = ({ start, save, refused = false, hajeri = false, moneyNotFollowed = [] }) => {
     const [history, setHistory] = useState<DailyLog[]>(start);
     const [status, setStatus] = useState<AppStatus>('idle');
     const [logScope, setLogScope] = useState<LogScope>(EMPTY);
@@ -104,7 +104,7 @@ const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?:
         handleTextReady, canOpenAttendanceFromHome: hajeri, openPlace,
     } as unknown as AppRouterContext;
     const refusal: RefusedChange | null = refused === true ? { kind: 'revision', reason: 'other' } : refused || null;
-    return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} readRefused={async () => refusal} />;
+    return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} readRefused={async () => refusal} readMoneyNotFollowed={async () => moneyNotFollowed} />;
 };
 
 /** The real F1 path: `UpdateLog` with a phone store that holds the entry. */
@@ -303,6 +303,16 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         render(<Harness start={[ENTRY]} save={deps} refused />);
         act(() => openCorrection('log-1'));
         expect(await screen.findByTestId('corr-server-refused')).toHaveTextContent(language === 'en' ? 'only on this phone' : 'फक्त या फोनवर');
+    });
+
+    it('lane OF-M: money an edit could not change is said plainly on the बदला screen, in his language only', async () => {
+        const { deps } = realSave();
+        render(<Harness start={[ENTRY]} save={deps} moneyNotFollowed={['shared', 'notFound']} />);
+        act(() => openCorrection('log-1'));
+        const said = await screen.findByTestId('corr-money-not-followed');
+        expect(said).toHaveTextContent(language === 'en' ? 'shared out across plots' : 'प्लॉटमध्ये वाटले');
+        expect(said).toHaveTextContent(language === 'en' ? 'saved the old way' : 'जुन्या पद्धतीने');
+        expect(said.textContent ?? '').not.toMatch(language === 'en' ? /[ऀ-ॿ]/ : /[A-Za-z]/);
     });
 
     it('a हजेरी-door record, for someone who may not open हजेरी, is refused politely (lane F1): no mic, no save', () => {

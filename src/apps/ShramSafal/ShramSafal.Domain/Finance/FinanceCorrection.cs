@@ -72,4 +72,42 @@ public sealed class FinanceCorrection : Entity<Guid>
             correctedByUserId,
             correctedAtUtc);
     }
+
+    /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 (lane OF-M) — the money of a record line the farmer REMOVED by an
+    /// edit: no longer spent. A correction to ₹0, never a deletion — the entry and every earlier correction stay, so the
+    /// trail still says what was first said and when it stopped counting (P3). Every reader already takes the latest
+    /// correction's amount as the entry's amount, so ₹0 reads as "no longer spent" everywhere. Only the server makes it,
+    /// from the record itself; the released <c>correct_cost_entry</c> still refuses ₹0 (<see cref="Create"/>), so no
+    /// installed phone's request means anything new (P11).
+    /// </summary>
+    public static FinanceCorrection NoLongerSpent(
+        Guid id,
+        Guid costEntryId,
+        decimal originalAmount,
+        string currencyCode,
+        string reason,
+        UserId correctedByUserId,
+        DateTime correctedAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(currencyCode))
+        {
+            throw new ArgumentException("Currency code is required.", nameof(currencyCode));
+        }
+
+        if (string.IsNullOrWhiteSpace(reason))
+        {
+            throw new ArgumentException("Correction reason is required.", nameof(reason));
+        }
+
+        return new FinanceCorrection(
+            id,
+            costEntryId,
+            decimal.Round(originalAmount, 2, MidpointRounding.AwayFromZero),
+            0m,
+            currencyCode.Trim().ToUpperInvariant(),
+            reason.Trim(),
+            correctedByUserId,
+            correctedAtUtc);
+    }
 }

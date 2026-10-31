@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AppRoute } from '../../types';
 import { financeSelectors } from './financeSelectors';
+import { moneyDayKey } from './moneyDay';
 import { FinanceManagerNav } from './components/FinanceManagerNav';
 import { MoneyChip } from './components/MoneyChip';
 import { MoneyLensDrawer } from './components/MoneyLensDrawer';
@@ -41,7 +42,8 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate }) => 
     const groupedEvents = useMemo(() => {
         const groups: Record<string, typeof events> = {};
         filteredEvents.forEach(e => {
-            const date = e.dateTime.split('T')[0];
+            // lane OF-M (F88) — grouped on the farm's day (India time), the one money-day rule.
+            const date = moneyDayKey(e.dateTime);
             if (!groups[date]) groups[date] = [];
             groups[date].push(e);
         });

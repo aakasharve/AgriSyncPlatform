@@ -1938,6 +1938,39 @@ internal sealed class ShramSafalRepository(
         }
     }
 
+    public async Task<bool> TryAddRecordMoneyAsync(CostEntry entry, AuditEvent created, CancellationToken ct = default)
+    {
+        // A SAVEPOINT on the ambient (sync) transaction, so a clash rolls back only this entry and the edit it belongs to
+        // still commits. Without an ambient transaction the save is its own, and a clash leaves nothing behind either.
+        var transaction = db.Database.IsRelational() ? db.Database.CurrentTransaction : null;
+        const string savepoint = "ssf_record_money";
+        if (transaction is not null)
+        {
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        await db.CostEntries.AddAsync(entry, ct);
+        await db.AuditEvents.AddAsync(created, ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "cost_entries_pkey") || IsUniqueViolationOn(ex, "PK_cost_entries"))
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackToSavepointAsync(savepoint, ct);
+            }
+
+            db.Entry(entry).State = EntityState.Detached;
+            db.Entry(created).State = EntityState.Detached;
+            logger?.LogWarning(
+                "Record money {CostEntryId} was not made: its id is already held by a row this farm cannot see.", entry.Id);
+            return false;
+        }
+    }
+
     public async Task<IReadOnlyList<DailyLogContent>> GetDailyLogContentVersionsAsync(Guid dailyLogId, CancellationToken ct = default)
     {
         // AsNoTracking: rows are never updated by the app, only appended.

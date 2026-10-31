@@ -17,6 +17,7 @@ import { CorrectCostEntryCommand } from '../../application/usecases/sync/Correct
 import { financeService } from './financeService';
 import { moneyEntryIdFor } from './moneyEntryIdentity';
 import { resolveMoneyPlace } from './moneyPlace';
+import { moneyDayKey } from './moneyDay';
 import { holdMoney, releaseHeldMoney, type HeldMoneyReason } from './heldMoney';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { noteUnqueueableLogs } from '../sync/status/unqueueableLogs';
@@ -60,10 +61,6 @@ function moneyCategoryToCostCategoryId(category: MoneyCategory): CostCategoryId 
     }
 }
 
-function toDateKey(value?: string): string {
-    if (!value) return systemClock.nowISO().split('T')[0];
-    return value.includes('T') ? value.split('T')[0] : value;
-}
 
 function getCurrentUserId(fallback?: string): string {
     return fallback || getAuthSession()?.userId || '00000000-0000-0000-0000-000000000001';
@@ -179,7 +176,8 @@ async function queueMoneyEntry(event: MoneyEvent, payload: MoneySourcePayload): 
     // Placing the entry sits inside the try too: an unexpected throw there keeps the entry on the phone
     // (written down and listed) instead of losing it (doctrine P10).
     try {
-        const entryDate = toDateKey(event.dateTime);
+        // lane OF-M (F88) — the farm's day of the entry (India time), never the UTC date in front of the `T`.
+        const entryDate = moneyDayKey(event.dateTime);
         const place = await resolveMoneyPlace(event.farmId, event.plotId, entryDate);
         if (!place.sendable) return await hold('plot-not-on-server', new Error(`plot ${event.plotId} is not on the server`));
 
@@ -294,7 +292,7 @@ export const financeCommandService = {
             unitPrice: item.defaultUnitPrice,
             currencyCode: 'INR',
             unitType: item.defaultUnit,
-            effectiveDate: toDateKey(item.effectiveFrom),
+            effectiveDate: moneyDayKey(item.effectiveFrom),
         }).catch(err => noteNeverReachedOutbox(item.id, 'price change', err));
         triggerSyncBestEffort();
 

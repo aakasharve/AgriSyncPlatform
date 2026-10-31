@@ -13,18 +13,15 @@ import {
     MoneyEvent,
 } from './finance.types';
 import { financeService } from './financeService';
+import { moneyDayKey } from './moneyDay';
 
 // ── Enrichment & Filtering ─────────────────────────────────────────────
 
-function toDateKey(value?: string): string {
-    if (!value) return new Date().toISOString().split('T')[0];
-    return value.includes('T') ? value.split('T')[0] : value;
-}
-
+/** lane OF-M (F88) — an entry's day, and the filter's days, are the farm's days (India time): `moneyDayKey`. */
 function inDateRange(value: string, fromDate?: string, toDate?: string): boolean {
-    const dateKey = toDateKey(value);
-    if (fromDate && dateKey < toDateKey(fromDate)) return false;
-    if (toDate && dateKey > toDateKey(toDate)) return false;
+    const dateKey = moneyDayKey(value);
+    if (fromDate && dateKey < moneyDayKey(fromDate)) return false;
+    if (toDate && dateKey > moneyDayKey(toDate)) return false;
     return true;
 }
 

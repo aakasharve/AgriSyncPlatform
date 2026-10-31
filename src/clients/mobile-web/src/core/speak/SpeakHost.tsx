@@ -18,6 +18,7 @@ import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import { LogEntryFlow } from '../../features/logs/components/entry/LogEntryFlow';
 import { abandonPendingQuestionAnswer } from '../../features/logs/services/pendingQuestionAnswer';
 import { readRefusedChange, type RefusedChange } from '../../features/logs/components/correction/refusedRevision';
+import { readMoneyNotFollowed } from '../../features/finance/editMoney';
 import { placeWords } from '../../shared/names/placeWords';
 import { renderLogRecorder, renderProcessingScreen } from '../navigation/logRecorder';
 import type { AppRouterContext } from '../navigation/routeContext';
@@ -65,7 +66,9 @@ export const SpeakHost: React.FC<{
     save?: CorrectionSaveDeps | null;
     /** Was a change he saved for an entry refused by the server? (injected for tests; the real one reads the sync queue) */
     readRefused?: (logId: string) => Promise<RefusedChange | null>;
-}> = ({ ctx, save = null, readRefused = readRefusedChange }) => {
+    /** Lane OF-M — why the money of his last saved change did not follow (injected for tests; the real one reads the phone). */
+    readMoneyNotFollowed?: (logId: string) => Promise<string[]>;
+}> = ({ ctx, save = null, readRefused = readRefusedChange, readMoneyNotFollowed: readMoney = readMoneyNotFollowed }) => {
     const { request, correction } = useSpeakState();
     const language = useOptionalLanguage()?.language;
     const session = useRef<Session | null>(null);
@@ -157,7 +160,7 @@ export const SpeakHost: React.FC<{
     const tabDrawsWaiting = processing && ctx.currentRoute === 'main' && ctx.mainView === 'log' && !correction;
     return (
         <>
-            {correction && <CorrectionHost ctx={ctx} correction={correction} speaking={!!request} save={save} readRefused={readRefused} />}
+            {correction && <CorrectionHost ctx={ctx} correction={correction} speaking={!!request} save={save} readRefused={readRefused} readMoneyNotFollowed={readMoney} />}
             {request && !tabDrawsWaiting && (
                 <SpeakScreen
                     purpose={request.purpose}

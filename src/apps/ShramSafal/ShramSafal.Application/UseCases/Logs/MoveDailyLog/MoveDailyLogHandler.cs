@@ -43,9 +43,10 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// phone sends (fix pass 4: the server alone decides). Money found for ANY line of the record moves — a line of its
 /// create-time details or of a later version — so money a later edit makes (F89) follows too. A
 /// money entry takes the new plot (none for several plots / the whole farm) only when the PLACE changes, and the new
-/// day only when the day changes AND it was dated on the record's old day (fix pass 2, N2: the phone dates a record's
-/// money on the day it was SAVED, which is often not the record's day); its season is the one season on its plot that
-/// covers its own day (the phone's rule, <c>resolveMoneyPlace</c>). The answer lists exactly the money moved
+/// day only when the day changes AND it was dated on the record's old day (fix pass 2, N2: phones up to 1.0.17 dated a
+/// record's money on the day it was SAVED, which is often not the record's day; lane OF-M F88 dates new money on the
+/// record's day); its season is the one season on its plot that covers its own day (<see cref="RecordMoneyPlace"/>, the
+/// phone's rule <c>resolveMoneyPlace</c>). The answer lists exactly the money moved
 /// (<see cref="MoveDailyLogResultDto"/>), and the phone moves nothing else (N1).</item>
 /// <item><b>Copies left as they were, on purpose</b> (fix pass 1, B010) — the typed ledger rows derived at capture
 /// (<c>farm_operations</c>: their identity, <c>DerivedEventKey</c>, contains the capture plot, so rewriting it would make
@@ -65,9 +66,11 @@ namespace ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 /// record this build makes outside the हजेरी door carries its details, even when empty (R3-2);</item>
 /// <item>a line that STATED an amount whose money cannot be found by its derived id — saved the old way, kept on the
 /// phone, or not arrived yet (<see cref="ShramSafalErrors.LogMoveMoneyNotFound"/>). The stated lines are: a crew with a
-/// stated total; an input, machinery or expense line with an amount in the record's create-time details (money is made
-/// only at the create; a line priced by a later edit made none, so it never blocks). A line with no stated amount
-/// expects no money and never blocks;</item>
+/// stated total; an input, machinery or expense line with an amount in the record's create-time details. A line priced by
+/// a later edit never blocks: the edit made its money itself (lane OF-M, at the record's place then), and where it could
+/// not, the edit's answer said why. A line with no stated amount expects no money and never blocks. The refusal NAMES the
+/// money it could not find (<c>[money:&lt;id&gt;,…]</c> at the end of its message, lane OF-M R4-1), so the phone looks at
+/// exactly that money;</item>
 /// <item>its money already shared out across plots by an allocation (<see cref="ShramSafalErrors.LogMoveMoneyShared"/>);</item>
 /// <item>a हजेरी ruling on the OLD day for a person named on this record's labour, or an ABSENT ruling on the NEW day
 /// for one (<see cref="ShramSafalErrors.LogMoveAttendance"/>). A place-only move is not stopped by हजेरी: a ruling is
@@ -214,11 +217,16 @@ public sealed class MoveDailyLogHandler(
         var money = (await repository.GetCostEntriesByIdsAsync(lines.LookFor, ct))
             .Where(entry => entry.FarmId == log.FarmId) // E4: never another farm's row
             .ToList();
-        var missing = lines.Stated.Count(id => money.All(entry => entry.Id != id));
-        if (missing > 0)
+        var missing = lines.Stated.Where(id => money.All(entry => entry.Id != id)).OrderBy(id => id).ToList();
+        if (missing.Count > 0)
         {
-            logger.LogWarning("move_daily_log for {LogId} refused: the money of {Missing} stated line(s) was not found.", log.Id, missing);
-            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveMoneyNotFound);
+            logger.LogWarning("move_daily_log for {LogId} refused: the money of {Missing} stated line(s) was not found.", log.Id, missing.Count);
+            // lane OF-M (R4-1) — the existing refusal shape carries the missing money: same code, its message ends with
+            // the ids, so the phone's words look at exactly those rows (only this build's phones send a move).
+            return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveMoneyNotFound with
+            {
+                Description = $"{ShramSafalErrors.LogMoveMoneyNotFound.Description} [money:{string.Join(",", missing.Select(id => id.ToString("D")))}]",
+            });
         }
 
         foreach (var entry in money)
@@ -302,7 +310,7 @@ public sealed class MoveDailyLogHandler(
                 fromCropCycleId = entry.CropCycleId,
                 fromEntryDate = entry.EntryDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             });
-            entry.FollowRecord(plot, plot is { } onIt ? await MoneySeasonAsync(log, onIt, day, ct) : null, day, now);
+            entry.FollowRecord(plot, plot is { } onIt ? await RecordMoneyPlace.SeasonAsync(repository, (Guid)log.FarmId, onIt, day, ct) : null, day, now);
             movedMoney.Add(entry);
         }
 
@@ -404,11 +412,12 @@ public sealed class MoveDailyLogHandler(
     /// a crew under its engagement id, an input / machinery / expense line under its own id, from EVERY stored version —
     /// money made from a line a later edit removed or priced is still its money). <c>Stated</c>: the ones that MUST be
     /// found, because the line stated an amount when the record was CREATED: a crew's stated total, or a priced line of
-    /// the create-time document (money is made only at the create, <c>LogCommandService.confirmAndSave</c>).
+    /// the create-time document (read by <see cref="RecordMoneyLines"/>, the phone's own rule; money a later edit
+    /// prices is made by that edit, lane OF-M, and is never required here).
     /// <c>HeldFromCreate</c>: a readable create-time document (origin create or manual draft) exists — without one the
     /// server cannot tell which lines made money. Line ids the server does not hold are never guessed.
     /// </summary>
-    private async Task<RecordMoneyLines> MoneyLinesOfAsync(DailyLog log, CancellationToken ct)
+    private async Task<RecordMoneyFound> MoneyLinesOfAsync(DailyLog log, CancellationToken ct)
     {
         var lookFor = new HashSet<Guid>();
         var stated = new HashSet<Guid>();
@@ -429,9 +438,16 @@ public sealed class MoveDailyLogHandler(
             try
             {
                 using var document = JsonDocument.Parse(version.DocumentJson);
-                AddLines(log.Id, document.RootElement, "inputs", MoneyEntryIdentity.Input, atCreate, lookFor, stated);
-                AddLines(log.Id, document.RootElement, "machinery", MoneyEntryIdentity.Machinery, atCreate, lookFor, stated);
-                AddLines(log.Id, document.RootElement, "activityExpenses", MoneyEntryIdentity.ActivityExpense, atCreate, lookFor, stated);
+                foreach (var line in RecordMoneyLines.Of(log.Id, document.RootElement))
+                {
+                    var moneyId = MoneyEntryIdentity.ForRecordLine(log.Id, line.Kind, line.LineId);
+                    lookFor.Add(moneyId);
+                    if (atCreate && line.Amount > 0m)
+                    {
+                        stated.Add(moneyId);
+                    }
+                }
+
                 heldFromCreate |= atCreate;
             }
             catch (JsonException ex)
@@ -442,76 +458,10 @@ public sealed class MoveDailyLogHandler(
             }
         }
 
-        return new RecordMoneyLines(lookFor, stated, heldFromCreate);
+        return new RecordMoneyFound(lookFor, stated, heldFromCreate);
     }
 
-    private sealed record RecordMoneyLines(IReadOnlyCollection<Guid> LookFor, IReadOnlyCollection<Guid> Stated, bool HeldFromCreate);
-
-    private static void AddLines(
-        Guid logId, JsonElement root, string bucket, string kind, bool atCreate, HashSet<Guid> lookFor, HashSet<Guid> stated)
-    {
-        if (root.ValueKind != JsonValueKind.Object
-            || !root.TryGetProperty(bucket, out var rows) || rows.ValueKind != JsonValueKind.Array)
-        {
-            return;
-        }
-
-        foreach (var row in rows.EnumerateArray())
-        {
-            if (row.ValueKind == JsonValueKind.Object
-                && row.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
-                && id.GetString() is { Length: > 0 } lineId)
-            {
-                var moneyId = MoneyEntryIdentity.ForRecordLine(logId, kind, lineId);
-                lookFor.Add(moneyId);
-                if (atCreate && StatedAmount(row, kind) > 0)
-                {
-                    stated.Add(moneyId);
-                }
-            }
-        }
-    }
-
-    /// <summary>
-    /// The amount a line stated, by the phone's own rule for making money from it (<c>captureMoneyEventsFromLog</c>): an
-    /// input's <c>cost</c>, a machine's <c>rentalCost</c> + <c>fuelCost</c>, an expense's <c>totalAmount</c>.
-    /// </summary>
-    private static decimal StatedAmount(JsonElement row, string kind) => kind switch
-    {
-        MoneyEntryIdentity.Input => Amount(row, "cost"),
-        MoneyEntryIdentity.Machinery => Amount(row, "rentalCost") + Amount(row, "fuelCost"),
-        MoneyEntryIdentity.ActivityExpense => Amount(row, "totalAmount"),
-        _ => 0m,
-    };
-
-    private static decimal Amount(JsonElement row, string field)
-    {
-        if (!row.TryGetProperty(field, out var value))
-        {
-            return 0m;
-        }
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.Number when value.TryGetDecimal(out var number) => number,
-            JsonValueKind.String when decimal.TryParse(value.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var text) => text,
-            _ => 0m,
-        };
-    }
-
-    /// <summary>
-    /// fix 2 (N2) — a money entry's season: the ONE season on <paramref name="plotId"/> (this farm) whose dates cover
-    /// <paramref name="day"/>; none or two → none, never guessed (the phone's rule for money, <c>selectCycleContainingDate</c>).
-    /// </summary>
-    private async Task<Guid?> MoneySeasonAsync(DailyLog log, Guid plotId, DateOnly day, CancellationToken ct)
-    {
-        var covering = (await repository.GetCropCyclesByPlotIdAsync(plotId, ct))
-            .Where(c => c.FarmId == log.FarmId && c.PlotId == plotId
-                        && c.StartDate <= day && (c.EndDate is null || c.EndDate >= day))
-            .Select(c => c.Id)
-            .ToList();
-        return covering.Count == 1 ? covering[0] : null;
-    }
+    private sealed record RecordMoneyFound(IReadOnlyCollection<Guid> LookFor, IReadOnlyCollection<Guid> Stated, bool HeldFromCreate);
 
     /// <summary>The crop season on <paramref name="plotId"/> (this farm only) that covers <paramref name="day"/>, or null.</summary>
     private async Task<Guid?> CycleCoveringAsync(DailyLog log, Guid plotId, DateOnly day, CancellationToken ct)

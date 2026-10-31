@@ -285,3 +285,44 @@ describe('LogCommandServiceImpl.confirmAndSave — the money follows the log’s
         added.mockRestore();
     });
 });
+
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lane OF-M, F88) — a record's money sits on the WORK'S day: the
+ * record's own day (the farm's day, India time), never the save time's UTC date. A back-dated save put its money on the
+ * day it was saved; a save between 00:00 and 05:30 India time put it on the day before.
+ */
+describe('LogCommandServiceImpl.confirmAndSave — money is dated on the work’s day (OF-M F88)', () => {
+    beforeEach(async () => {
+        await getDatabase().mutationQueue.clear();
+        await getDatabase().farms.put({ id: FARM_ID, payload: { id: FARM_ID }, updatedAt: '2026-07-19T00:00:00.000Z' });
+        vi.clearAllMocks();
+    });
+
+    const pricedLog = (id: string, date: string, createdAtISO: string): DailyLog => ({
+        ...makeLog([{ id, type: 'HIRED', count: 2, totalCost: 900 } as LabourEvent]),
+        id: `log-${id}`,
+        date,
+        meta: { createdAtISO },
+    } as unknown as DailyLog);
+
+    it('a back-dated save: the money is on the day the work was done, not the day it was saved', async () => {
+        const service = new LogCommandServiceImpl(fakeRepo);
+        await service.confirmAndSave([pricedLog('f88a', '2026-10-25', '2026-10-31T10:00:00.000Z')]);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const pending = await pendingAddCostEntryRows();
+        expect(pending).toHaveLength(1);
+        expect((pending[0].payload as { entryDate: string }).entryDate).toBe('2026-10-25');
+    });
+
+    it('a save at 01:00 India time: the money is on that India day, never the UTC day before', async () => {
+        const service = new LogCommandServiceImpl(fakeRepo);
+        // 2026-10-31T19:30Z is 01:00 on 1 November in India; the work is that day's.
+        await service.confirmAndSave([pricedLog('f88b', '2026-11-01', '2026-10-31T19:30:00.000Z')]);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        const pending = await pendingAddCostEntryRows();
+        expect(pending).toHaveLength(1);
+        expect((pending[0].payload as { entryDate: string }).entryDate).toBe('2026-11-01');
+    });
+});

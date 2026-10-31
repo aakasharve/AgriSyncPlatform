@@ -418,21 +418,40 @@ export async function moneyRowsOfRecord(dailyLogId: string): Promise<RecordMoney
 }
 
 /**
- * A move the server refused because a line's money is not there: if any money row of that record is still on its way
- * from THIS phone (waiting, sending, or failed below the cap), the move waits for it — uncharged, never parked. Any other
- * state (no row here: saved the old way or kept on the phone; a row refused or out of retries) is not a wait: the
- * refusal stands, with its own plain reason (`refusedRevision.refusalReasonForRow`), and the farmer is told.
+ * spec: plr-d10 (lane OF-M, R4-1) — the money a money-not-found refusal NAMES: the server ends the refusal's own message
+ * (the existing refusal shape, same code) with `[money:<id>,<id>]`. `[]` when it names none (a server before this lane).
+ */
+export function missingMoneyIdsIn(message: string | null | undefined): string[] {
+    const named = /\[money:([0-9a-fA-F,-]+)\]/.exec(message ?? '');
+    return named ? named[1].split(',').map(id => id.trim().toLowerCase()).filter(id => id.length > 0) : [];
+}
+
+/** The record's money rows, narrowed to the ones the refusal named when it named any (lane OF-M, R4-1). */
+export async function namedMoneyRowsOfRecord(dailyLogId: string, missingIds: readonly string[] = []): Promise<RecordMoneyRow[]> {
+    const rows = await moneyRowsOfRecord(dailyLogId);
+    if (missingIds.length === 0) return rows;
+    const named = new Set(missingIds.map(id => id.toLowerCase()));
+    return rows.filter(row => named.has(row.id.toLowerCase()));
+}
+
+/**
+ * A move the server refused because a line's money is not there: if that money row (the one the refusal names — lane
+ * OF-M R4-1; any of the record's when it names none) is still on its way from THIS phone (waiting, sending, or failed
+ * below the cap), the move waits for it — uncharged, never parked. Any other state (no row here: saved the old way or kept
+ * on the phone; a row refused or out of retries) is not a wait: the refusal stands, with its own plain reason
+ * (`refusedRevision.refusalReasonForRow`), and the farmer is told.
  */
 export async function resolveMoneyDependency(
     deviceId: string,
     mutationType: string,
     payload: unknown,
+    missingIds: readonly string[] = [],
 ): Promise<DependencyVerdict> {
     const dailyLogId = mutationType === SyncMutationName.MoveDailyLog ? readStringField(payload, 'dailyLogId') : null;
     if (!dailyLogId) {
         return { disposition: 'NOT_A_DEPENDENCY' };
     }
-    for (const parent of await moneyRowsOfRecord(dailyLogId)) {
+    for (const parent of await namedMoneyRowsOfRecord(dailyLogId, missingIds)) {
         const row = await findQueuedRow(deviceId, parent.clientRequestId);
         if (row && classifyParentStatus(row.status, row.retryCount) === 'PARENT_IN_PROGRESS') {
             return {

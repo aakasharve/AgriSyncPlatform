@@ -46,6 +46,10 @@ namespace ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 /// <item><b>Task lines.</b> Old phones and every server reader of <c>LogTask</c> get a line for
 /// each item that is NEW in this version (<see cref="TaskLines"/>), each with its <c>TaskAdded</c>
 /// audit row. No line is deleted: there is no delete path (P3).</item>
+/// <item><b>Its money follows (lane OF-M, F89).</b> A changed price corrects the line's money, a removed one corrects
+/// it to nothing, a newly priced line gets money under its derived id on the record's place and day — or the answer
+/// says why it could not (<see cref="EditMoney"/>). The answer names exactly that money
+/// (<see cref="ReviseLogContentResultDto"/>); the phone writes only it.</item>
 /// </list>
 /// </summary>
 public sealed class ReviseLogContentHandler(
@@ -58,23 +62,23 @@ public sealed class ReviseLogContentHandler(
     // The money consequence, exactly as AddLogTaskHandler: a log that leaves Verified must
     // withdraw a payout authorisation granted on the strength of it. Optional for direct tests.
     Work.Handlers.OnLogVerifiedAutoVerifyJobCard? logVerificationChanged = null)
-    : IHandler<ReviseLogContentCommand, DailyLogDto>
+    : IHandler<ReviseLogContentCommand, ReviseLogContentResultDto>
 {
     /// <summary>How many times a revision that lost the race for its version is re-applied on top.</summary>
     internal const int MaxAttempts = 3;
 
-    public async Task<Result<DailyLogDto>> HandleAsync(ReviseLogContentCommand command, CancellationToken ct = default)
+    public async Task<Result<ReviseLogContentResultDto>> HandleAsync(ReviseLogContentCommand command, CancellationToken ct = default)
     {
         if (command.DailyLogId == Guid.Empty || command.ActorUserId == Guid.Empty || command.BaseVersion < 1)
         {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.InvalidCommand);
+            return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.InvalidCommand);
         }
 
         // The document is checked BEFORE anything is read for writing, so a refusal stages nothing.
         if (Problem(command.ContentJson) is { } problem)
         {
             logger.LogWarning("revise_log_content for {LogId} refused: {Problem}", command.DailyLogId, problem);
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.LogContentInvalid);
+            return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.LogContentInvalid);
         }
 
         for (var attempt = 1; ; attempt++)
@@ -90,7 +94,7 @@ public sealed class ReviseLogContentHandler(
                 logger.LogWarning(
                     "revise_log_content for {LogId} lost the race for its version {Attempts} times; refused as a conflict.",
                     command.DailyLogId, attempt);
-                return Result.Failure<DailyLogDto>(ShramSafalErrors.LogContentVersionConflict);
+                return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.LogContentVersionConflict);
             }
 
             logger.LogInformation(
@@ -115,12 +119,12 @@ public sealed class ReviseLogContentHandler(
     }
 
     /// <summary>One attempt. <c>null</c> = another edit took this version first; try again on top.</summary>
-    private async Task<Result<DailyLogDto>?> ReviseAsync(ReviseLogContentCommand command, CancellationToken ct)
+    private async Task<Result<ReviseLogContentResultDto>?> ReviseAsync(ReviseLogContentCommand command, CancellationToken ct)
     {
         var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
         if (log is null)
         {
-            return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);
+            return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.DailyLogNotFound);
         }
 
         // E4 — the farm is the LOG's farm, read here; nothing in the payload names one.
@@ -137,7 +141,7 @@ public sealed class ReviseLogContentHandler(
                     "revise_log_content for {LogId} refused: the record was saved at the labour door (B002).", log.Id);
             }
 
-            return Result.Failure<DailyLogDto>(refusal);
+            return Result.Failure<ReviseLogContentResultDto>(refusal);
         }
 
         // Authority and the words rule read the role from the DATABASE, never from command.ActorRole.
@@ -157,7 +161,7 @@ public sealed class ReviseLogContentHandler(
             {
                 // Only the size cap can refuse here: his words plus this edit no longer fit.
                 logger.LogWarning("revise_log_content for {LogId} refused after carrying the words forward: {Problem}", log.Id, carried);
-                return Result.Failure<DailyLogDto>(ShramSafalErrors.LogContentInvalid);
+                return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.LogContentInvalid);
             }
         }
 
@@ -166,8 +170,8 @@ public sealed class ReviseLogContentHandler(
             using var incoming = JsonDocument.Parse(documentJson);
             if (LogContentDocument.SameDocument(current.DocumentJson, incoming.RootElement))
             {
-                // Nothing moved: no row, no version, no re-open — the edit is already what is stored.
-                return Result.Success(log.ToDto());
+                // Nothing moved: no row, no version, no re-open, no money — the edit is already what is stored.
+                return Result.Success(new ReviseLogContentResultDto(log.ToDto(), [], [], []));
             }
         }
 
@@ -177,6 +181,13 @@ public sealed class ReviseLogContentHandler(
             ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
             : command.ClientAppVersion;
 
+        var stamp = new ContentAuditStamp(
+            command.ActorUserId,
+            command.ActorRole,
+            command.ClientRequestId,
+            appVersion,
+            command.AuditDeviceId,
+            command.AuditIpHash);
         log.NoteContentChanged();
         await LogContentStaging.StageAsync(
             repository,
@@ -187,16 +198,14 @@ public sealed class ReviseLogContentHandler(
             DailyLogContent.OriginRevision,
             command.BaseVersion,
             now,
-            new ContentAuditStamp(
-                command.ActorUserId,
-                command.ActorRole,
-                command.ClientRequestId,
-                appVersion,
-                command.AuditDeviceId,
-                command.AuditIpHash),
+            stamp,
             // Lines only for items no line stands for yet (see TaskLines).
             TaskLines.NewSince(current?.DocumentJson),
             ct);
+
+        // lane OF-M — its money: corrections staged with the version (one commit), new money right after it.
+        var editMoney = new EditMoney(repository, idGenerator, entitlementPolicy, logger);
+        var money = await editMoney.StageAsync(log, current?.DocumentJson, documentJson, stamp, now, ct);
 
         // ── lane L6 — a material change re-opens a confirmed day (shared with move_daily_log) ─
         var (priorStatus, reOpen, reAttested, reAttestedRole) =
@@ -262,6 +271,8 @@ public sealed class ReviseLogContentHandler(
             return null;
         }
 
+        var answer = await editMoney.FinishAsync(log, money, stamp, now, ct);
+
         if (staleBase)
         {
             logger.LogInformation(
@@ -277,6 +288,6 @@ public sealed class ReviseLogContentHandler(
                 log.Id, log.CurrentVerificationStatus, new UserId(command.ActorUserId), ct);
         }
 
-        return Result.Success(log.ToDto());
+        return Result.Success(answer);
     }
 }

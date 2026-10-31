@@ -747,8 +747,8 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
     {
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
         await CreateMoneyLogAsync();
-        // A later edit prices two new lines. Edits make no money yet (F89): "in-edit" has none; "in-late" has some
-        // (as OF-M will make it), under its derived id.
+        // A later edit prices two new lines. Lane OF-M: the edit itself makes their money on the server, under their
+        // derived ids; the phone's own send of "in-late" is then the same entry again (answered from the store).
         await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofs-r31-revise", new Dictionary<string, object?>
         {
             ["dailyLogId"] = MoneyLog,
@@ -774,8 +774,8 @@ public sealed class MoveDailyLogRealPostgresTests(Xunit.Abstractions.ITestOutput
         (await ReadMoneyAsync(InputMoney)).PlotId.Should().Be(PlotA2);
         (await ReadMoneyAsync(LabourMoney)).PlotId.Should().Be(PlotA2);
         var moved = JsonSerializer.SerializeToElement(answer.Data, new JsonSerializerOptions(JsonSerializerDefaults.Web)).GetProperty("moneyMoved");
-        output.WriteLine($"[EVIDENCE] money moved with an edit-priced line present: {moved.GetArrayLength()} entries");
-        moved.GetArrayLength().Should().Be(3);
+        output.WriteLine($"[EVIDENCE] money moved with edit-priced lines present: {moved.GetArrayLength()} entries");
+        moved.GetArrayLength().Should().Be(4, "the input, the crew, and the two lines the edit priced (OF-M made their money)");
     }
 
     [Fact]

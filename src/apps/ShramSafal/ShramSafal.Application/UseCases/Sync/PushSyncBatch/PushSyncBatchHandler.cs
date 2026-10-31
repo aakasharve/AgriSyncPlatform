@@ -168,7 +168,8 @@ public sealed class PushSyncBatchHandler(
     // spec: plr-d10 (lane OF-S fix pass 3, R2-2) — the answer of a MOVE is stored in the shape it is first sent in
     // (camelCase, ASP.NET's web defaults), so a repeated request answers `{ log, moneyMoved }` exactly as the first one
     // did and the phone writes the same money. Every other mutation's stored answer keeps its shape: released phones
-    // read those as they are.
+    // read those as they are. Lane OF-M: an EDIT's answer too (`{ log, moneyChanged, moneyCorrections, moneyNotFollowed }`)
+    // — revise_log_content was never released, and a repeat must name the same money the first answer did.
     private static readonly JsonSerializerOptions MoveAnswerOptions = new(JsonSerializerDefaults.Web);
     // spec: dfes-farmer-facing-deploy-readiness-2026-08-14 (task-0b) — the buckets a
     // manual draft may carry. Deliberately the SAME eight names as
@@ -903,7 +904,7 @@ public sealed class PushSyncBatchHandler(
 
             var responsePayloadJson = JsonSerializer.Serialize(
                 execution.Data,
-                string.Equals(mutationType, "move_daily_log", StringComparison.Ordinal) ? MoveAnswerOptions : SerializerOptions);
+                mutationType is "move_daily_log" or "revise_log_content" ? MoveAnswerOptions : SerializerOptions);
             var stored = await syncMutationStore.TryStoreSuccessAsync(
                 deviceId,
                 clientRequestId,

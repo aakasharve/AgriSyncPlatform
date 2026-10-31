@@ -417,7 +417,12 @@ export class LogCommandServiceImpl implements LogCommandService {
         const soleCropId = assertedCropIds.size === 1 ? [...assertedCropIds][0] : undefined;
         const cropId = soleCropId && soleCropId !== 'FARM_GLOBAL' ? soleCropId : undefined;
         const plotId = assertedPlotIds.length === 1 ? assertedPlotIds[0] : undefined;
-        const baseDateTime = (log.meta?.createdAtISO || `${log.date}T12:00:00`);
+        // spec: plr-d10 (lane OF-M, F88) — the money sits on the WORK'S day: the record's own day (the farm's day, India
+        // time), written with a local time and no zone so every reader takes that day as it is. It used to be the save
+        // time (`createdAtISO`, UTC): a back-dated record's money went on the day it was saved, and money saved between
+        // 00:00 and 05:30 India time went on the day before.
+        // A record with no day (none is made today) falls back to the save time, read as its India day.
+        const baseDateTime = log.date ? `${log.date}T12:00:00` : (log.meta?.createdAtISO ?? '');
         const createdBy = log.meta?.createdByOperatorId || 'owner';
 
         log.labour.forEach((entry) => {

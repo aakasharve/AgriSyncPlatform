@@ -29,6 +29,8 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { canMoveSavedEntry } from '../correction/correctionCapabilities';
 import { isLabourDoorLog } from '../correction/correctionModel';
 import { readRefusedChange, refusalLines, useRefusedChangeOf } from '../correction/refusedRevision';
+import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../correction/moneyNotFollowed';
+import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
 
 export interface VoiceResultContainerProps {
@@ -89,7 +91,10 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const playback = useClipPlayback(createAudio);
     const sync = useLogSyncState(result.logIds);
     // Lane OF-S fix 1 (B011): a change to this recording the server refused later (a day moved by the chip) says why HERE.
-    const refused = useRefusedChangeOf(result.logIds, readRefusedChange, useLastSyncAt());
+    const lastSyncAt = useLastSyncAt();
+    const refused = useRefusedChangeOf(result.logIds, readRefusedChange, lastSyncAt);
+    // Lane OF-M — money a change he saved here could not change, said where he saved it.
+    const moneyNotFollowed = moneyNotFollowedLines(useMoneyNotFollowedOf(result.logIds, readMoneyNotFollowed, lastSyncAt), language);
 
     const { dataSource, auditPort } = useDataSource();
     const verifierUserId = resolveVerifierUserId(farmerProfile.activeOperatorId, sessionUserId);
@@ -116,6 +121,11 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
         {refused && (
             <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
                 {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
+            </div>
+        )}
+        {moneyNotFollowed.length > 0 && (
+            <div className="mx-3 mt-2 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-[15px] font-bold text-amber-950" data-testid="vr-money-not-followed" role="status">
+                {moneyNotFollowed.map(line => <p key={line} className="m-0">{line}</p>)}
             </div>
         )}
         <VoiceResultScreen

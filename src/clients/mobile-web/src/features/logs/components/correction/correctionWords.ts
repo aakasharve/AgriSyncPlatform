@@ -9,6 +9,7 @@
 import { RESULT_STR } from '../voiceResult/resultStrings';
 import { TYPED_WORDS } from '../../../voice/components/recorder/TypedEntry';
 import type { RefusedReason } from './refusedRevision';
+import type { MoneyNotFollowedReason } from '../../../finance/editMoney';
 
 export interface CorrectionWords {
     title: string;
@@ -38,6 +39,8 @@ export interface CorrectionWords {
     refusedWorkers: string;
     /** Lane OF-S: why the server refused it, in plain words ('' = the server gave no reason we can say). */
     refusedReason: Readonly<Record<RefusedReason, string>>;
+    /** Lane OF-M (F89): an edit he saved changed a price, but that money could not follow — why, in plain words. */
+    moneyNotFollowed: Readonly<Record<MoneyNotFollowedReason, string>>;
     versionNote: string;
     reconfirm: string;
     labourDoor: string;
@@ -126,6 +129,16 @@ const mr: CorrectionWords = {
         notAllowed: 'हे तुम्हाला बदलता येत नाही — मालकाला सांगा.',
         other: '',
     },
+    // PROPOSED (Marathi) — lane OF-M. Each says what did not change (the money's amount) and why; none asks him to do
+    // something he cannot.
+    moneyNotFollowed: {
+        notFound: 'या कामाचे आधीचे पैसे सापडले नाहीत (जुन्या पद्धतीने जतन झाले किंवा अजून पोहोचले नाहीत), त्यामुळे त्यांची रक्कम बदलली नाही.',
+        shared: 'या कामाचे पैसे आधीच प्लॉटमध्ये वाटले आहेत, त्यामुळे त्यांची रक्कम बदलली नाही.',
+        jobCard: 'या कामाचे पैसे काम कार्डचे आहेत, त्यामुळे त्यांची रक्कम बदलली नाही.',
+        detailsNotHeld: 'हे काम ॲपच्या जुन्या आवृत्तीतून जतन झालं आहे किंवा त्याचा तपशील सर्व्हरवर पोहोचला नाही, त्यामुळे पैशांची रक्कम बदलली नाही.',
+        notAllowed: 'शेताची योजना आत्ता चालू नाही, त्यामुळे पैशांची रक्कम बदलली नाही.',
+        idTaken: 'या कामाचे नवे पैसे पैशांच्या हिशोबात लिहिता आले नाहीत.',
+    },
     nothingChanged: 'यातून बदलायचं काही समजलं नाही. पुन्हा सांगा.', // PROPOSED (Marathi)
     versionNote: 'जतन केल्यावर नवीन आवृत्ती ठेवली जाते — आधीचं पण सर्व्हरवर राहतं.', // PROPOSED (Marathi) — screen 3's note
     reconfirm: 'हे आधी पक्कं केलं होतं. जतन केल्यावर नवीन आवृत्ती "पक्कं नाही" राहील, पुन्हा पक्कं होईपर्यंत.', // PROPOSED (Marathi)
@@ -207,6 +220,15 @@ const en: CorrectionWords = {
         detailsNotHeld: 'This work was saved by an older version of the app, or its details did not reach the server, so it cannot be moved.',
         notAllowed: 'You cannot change this — tell the owner.',
         other: '',
+    },
+    // PROPOSED (English) — lane OF-M.
+    moneyNotFollowed: {
+        notFound: 'This work\'s earlier money was not found (saved the old way, or not arrived yet), so its amount was not changed.',
+        shared: 'This work\'s money is already shared out across plots, so its amount was not changed.',
+        jobCard: 'This work\'s money belongs to a job card, so its amount was not changed.',
+        detailsNotHeld: 'This work was saved by an older version of the app, or its details did not reach the server, so the money amount was not changed.',
+        notAllowed: 'The farm\'s plan is not active right now, so the money amount was not changed.',
+        idTaken: 'The new money for this work could not be written in the money accounts.',
     },
     nothingChanged: 'Nothing to change was understood from this. Say it again.', // PROPOSED (English)
     versionNote: 'Saving keeps a new version — the earlier one stays on the server too.', // PROPOSED (English)
