@@ -86,6 +86,14 @@ describe('ATT-LOG — both told: "इथे हजेरी घ्या — आ
         expect(screen.getByTestId('attendance-card-provisional')).toHaveTextContent('खात्री बाकी');
     });
 
+    it('a plot named after its crop is not prefixed with the crop again (live 2026-10-31: "द्राक्ष · द्राक्ष G1")', () => {
+        const grapeG1 = { names: ['Pruning'], parts: [], place: { cropId: 'grape', cropName: 'Grapes', plotNames: ['द्राक्ष G1'] } } as TodayAttendance['work'];
+        render(<TodayAttendanceCard state={{ work: grapeG1, headcount: 10, provisional: false }} onTell={vi.fn()} onOpenNames={vi.fn()} />);
+        const text = screen.getByTestId('attendance-card').textContent ?? '';
+        expect(text).toContain('काम: छाटणी (द्राक्ष G1).');
+        expect(text).not.toContain('द्राक्ष · द्राक्ष');
+    });
+
     it('the whole farm by its own name', () => {
         render(<TodayAttendanceCard state={{ work: { names: ['Pruning'], parts: [], place: { cropId: 'FARM_GLOBAL', cropName: '', plotNames: [] } }, headcount: 2, provisional: false }}
             onTell={vi.fn()} onOpenNames={vi.fn()} />);

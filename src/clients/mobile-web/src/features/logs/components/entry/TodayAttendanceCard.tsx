@@ -47,7 +47,12 @@ export function placeText(work: DayWork, language: string | null | undefined, W:
     const place = work.place;
     if (!place) return '';
     if (place.cropId === 'FARM_GLOBAL') return W.wholeFarm;
-    return [cropNameIn(place.cropName, language), place.plotNames.join(', ')].filter(Boolean).join(' · ');
+    const crop = cropNameIn(place.cropName, language);
+    // A plot named after its crop ("द्राक्ष G1") already says the crop: never "द्राक्ष · द्राक्ष G1".
+    const plotsSayCrop = place.plotNames.length > 0
+        && place.plotNames.every(p => (crop && p.includes(crop)) || (!!place.cropName && p.includes(place.cropName)));
+    if (plotsSayCrop) return place.plotNames.join(', ');
+    return [crop, place.plotNames.join(', ')].filter(Boolean).join(' · ');
 }
 
 const countText = (n: number | null): string => (n === null ? '—' : String(n));
