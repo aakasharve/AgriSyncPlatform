@@ -89,6 +89,10 @@ public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository
             return Result.Failure<List<JobCardDto>>(ShramSafalErrors.Forbidden);
         }
 
-        return Result.Success(dtos);
+        // spec: plr-d10 lane PRV (founder D-26) — a card never names a record kept from him (after the pay rule above).
+        var visibility = await RecordVisibility.ForFarmsAsync(
+            repository, jobCards.Select(j => j.FarmId.Value).Distinct().ToList(), query.CallerUserId.Value,
+            clock?.UtcNow ?? DateTime.UtcNow, ct);
+        return Result.Success(dtos.Select(visibility.WithoutHiddenLinks).ToList());
     }
 }

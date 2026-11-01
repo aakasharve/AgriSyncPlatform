@@ -31,11 +31,18 @@ import {
     BUCKET_LABEL, CATEGORY_LABEL, FINANCE_TITLE, SOURCE_LABEL, entriesCount, entryState, formatDayKey, rupees,
 } from '../features/finance/moneyLabels';
 import { Chip, ChoiceChips, GlassCard, IconDot, Tap, type Tone } from '../shared/components/ui/placeUi';
+import { AudienceLockChip, AudienceRow } from '../features/recordAudience/AudienceRow';
+import { RuleNotCountedNote } from '../features/recordAudience/RuleNotCountedNote';
+import { useMoneyAudiences } from '../features/recordAudience/useMoneyAudiences';
 
 interface LedgerPageProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
     onBack?: () => void;
+    /** lane PRV (D-26) — the farm's primary account holder: he alone sees and sets who may see each money record. */
+    isPrimaryHolder?: boolean;
+    /** His server id (never offered as a choice; his own entries keep their maker label). */
+    selfUserId?: string | null;
 }
 
 type LedgerFilter = 'All' | 'Income' | 'Expense' | 'LabourPayouts';
@@ -46,7 +53,8 @@ const VIEWS: readonly (readonly [ViewMode, string])[] = [['short', 'थोडक
 
 const STATE_TONE: Record<ReturnType<typeof entryState>, Tone> = { Captured: 'blue', NeedsReview: 'amber', Approved: 'green', Adjusted: 'violet' };
 
-const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBack }) => {
+const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBack, isPrimaryHolder = false, selfUserId = null }) => {
+    const audiences = useMoneyAudiences(isPrimaryHolder);
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
     const [refreshKey, setRefreshKey] = useState(0);
     const [correctionTarget, setCorrectionTarget] = useState<{ id: string; amount: number; category: string } | null>(null);
@@ -105,6 +113,8 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
                 <GlassCard testId="ledger-in"><p className="m-0 text-[13px] font-bold text-stone-600">जमा</p><p className="m-0 text-[22px] font-extrabold text-emerald-800">{rupees(totalIncome)}</p></GlassCard>
                 <GlassCard testId="ledger-out"><p className="m-0 text-[13px] font-bold text-stone-600">खर्च</p><p className="m-0 text-[22px] font-extrabold text-stone-900">{rupees(totalExpense)}</p></GlassCard>
             </div>
+            {/* lane PRV (W4) — the totals above count only the money records he may see; say so when one is left out. */}
+            <RuleNotCountedNote kind="money" testId="ledger-not-counted" />
             {noDirection > 0 && (
                 <p className="m-0 rounded-2xl bg-stone-100 p-3 text-[13.5px] font-bold leading-snug text-stone-700" data-testid="ledger-no-direction">
                     {entriesCount(noDirection)} — जमा की खर्च ते नोंदलेलं नाही, म्हणून दोन्ही बेरजेत धरलेलं नाही.
@@ -153,6 +163,7 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
                                     <div className="mt-2 flex flex-wrap items-center gap-1.5">
                                         <Chip tone={STATE_TONE[state]}>{BUCKET_LABEL[state]}</Chip>
                                         <MoneyStateChip claim={evidence ? entryClaim(evidence, item.id) : null} testId={`ledger-state-${item.id}`} />
+                                        <AudienceLockChip audience={audiences.get(item.id)?.audience} madeBySomeoneElse={item.createdByUserId !== selfUserId} testId={`ledger-audience-${item.id}`} />
                                         {item.type === 'Unknown' && <Chip tone="stone">जमा की खर्च — नोंद नाही</Chip>}
                                         {!item.plotId && item.type === 'Expense' && <Chip tone="blue">प्लॉटवर वाटलेला नाही</Chip>}
                                         {item.jobCardId && (
@@ -168,6 +179,13 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
                                             </Tap>
                                         )}
                                     </div>
+                                    {isPrimaryHolder && isDetailView && !item.jobCardId && (
+                                        <div className="mt-2">
+                                            <AudienceRow kind="CostEntry" recordIds={[item.id]} farmId={item.farmId} selfUserId={selfUserId}
+                                                audience={audiences.get(item.id)?.audience} chosen={audiences.get(item.id)?.people}
+                                                madeBySomeoneElse={item.createdByUserId !== selfUserId} testId={`ledger-audience-row-${item.id}`} />
+                                        </div>
+                                    )}
                                 </GlassCard>
                             );
                         })}

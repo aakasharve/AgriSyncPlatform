@@ -35,7 +35,9 @@ export type RefusedReason =
     // the server never held the entry's details as it was created (an older app version, or details that did not arrive).
     | 'moneyKept' | 'moneyKeptStuck' | 'moneyRemoved' | 'moneyNeedsReview' | 'moneyStuck' | 'detailsNotHeld'
     // Lane OF-M fix pass 3 (call 1) — an edit that changed a price, from someone who neither made the entry nor checks money.
-    | 'pricesNotYours';
+    | 'pricesNotYours'
+    // lane PRV (D-26) — the record's audience no longer includes him: his change is kept here, the rule says why.
+    | 'recordClosed';
 
 /** `at` — when the refused change was made (its queue row's time), so the most recent of several can be shown. */
 export interface RefusedChange { kind: RefusedKind; reason: RefusedReason; at?: string }
@@ -71,6 +73,8 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
             return 'pricesNotYours';
         case 'ShramSafal.Forbidden':
             return 'notAllowed';
+        case 'ShramSafal.RecordAudience.Forbidden':
+            return 'recordClosed';
         default:
             return 'other';
     }
@@ -85,7 +89,9 @@ export function refusalLines(refused: RefusedChange, language: string | null | u
     const words = correctionWords(language);
     // A content change keeps its screen words; a price change refused (lane OF-M fix pass 3) also says who may.
     if (refused.kind === 'revision') {
-        return refused.reason === 'pricesNotYours' ? [words.serverRefused, words.refusedReason.pricesNotYours] : [words.serverRefused];
+        return refused.reason === 'pricesNotYours' || refused.reason === 'recordClosed'
+            ? [words.serverRefused, words.refusedReason[refused.reason]]
+            : [words.serverRefused];
     }
     const head = refused.kind === 'move' ? words.refusedMove : words.refusedWorkers;
     return [head, words.refusedReason[refused.reason]].filter(line => line.length > 0);
@@ -101,6 +107,8 @@ export function refusalHint(mutationType: string, errorCode: string | undefined,
     const kind = KIND_OF[mutationType];
     if (kind === 'move' || kind === 'workers') return refusalLines({ kind, reason }, language).join(' ');
     if (kind === 'revision' && reason === 'pricesNotYours') return correctionWords(language).refusedReason.pricesNotYours;
+    // lane PRV — any change parked because the record's audience no longer includes him: the rule's words.
+    if (reason === 'recordClosed') return correctionWords(language).refusedReason.recordClosed;
     if (mutationType === SyncMutationName.CreateDailyLog && reason === 'futureDay') {
         return correctionWords(language).refusedReason.futureDay;
     }

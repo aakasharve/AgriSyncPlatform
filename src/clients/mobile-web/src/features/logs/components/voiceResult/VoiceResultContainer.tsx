@@ -32,6 +32,7 @@ import { readRefusedChange, refusalLines, useRefusedChangeOf } from '../correcti
 import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../correction/moneyNotFollowed';
 import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
+import { AudienceRow } from '../../../recordAudience/AudienceRow';
 
 export interface VoiceResultContainerProps {
     result: VoiceResultState;
@@ -121,6 +122,16 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
         {refused && (
             <div className="mx-3 mt-2 rounded-2xl border border-red-200 bg-red-50 p-3 text-[15px] font-bold text-red-800" data-testid="vr-move-refused" role="status">
                 {refusalLines(refused, language).map(line => <p key={line} className="m-0">{line}</p>)}
+            </div>
+        )}
+        {/* lane PRV (D-26) — who may see this record: the farm's primary account holder only, once it is on its way to
+            the server (the choice is queued after the record itself). Never asked at capture (P9). */}
+        {mayConfirmOwn && farmId && current.every(l => typeof l.contentVersion === 'number' || syncQueuedById.get(l.id) === true) && (
+            <div className="mx-3 mt-2">
+                <AudienceRow kind="DailyLog" recordIds={current.map(l => l.id)} farmId={farmId} selfUserId={sessionUserId}
+                    audience={primary.audience} chosen={primary.audienceUserIds} moneyFollows testId="vr-audience"
+                    madeBySomeoneElse={!!primary.meta?.createdByOperatorId && primary.meta.createdByOperatorId !== 'owner'
+                        && primary.meta.createdByOperatorId !== sessionUserId} />
             </div>
         )}
         {moneyNotFollowed.length > 0 && (

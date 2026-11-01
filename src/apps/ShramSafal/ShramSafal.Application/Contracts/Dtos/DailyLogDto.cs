@@ -168,7 +168,17 @@ public sealed record DailyLogDto(
     /// people) is all still here. The phone shows the system-rule card (FIX-1 item 16, W1) instead of an empty
     /// transcript. Additive and optional (P11): absent = nothing was withheld for money.
     /// </summary>
-    bool? WordsWithheldForMoney = null);
+    bool? WordsWithheldForMoney = null,
+
+    /// <summary>
+    /// spec: plr-d10 lane PRV (founder D-26) — who may see this record: <c>Team</c>, <c>Selected</c> or <c>OnlyMe</c>.
+    /// Sent ONLY to the farm's primary account holder (his picker and lock chip read it); <c>null</c> for everyone
+    /// else (nobody else needs to know a record is narrowed). Additive (P11).
+    /// </summary>
+    string? Audience = null,
+
+    /// <summary>lane PRV — the people the holder chose (<c>Selected</c>); sent only with <see cref="Audience"/>.</summary>
+    IReadOnlyList<Guid>? AudienceUserIds = null);
 
 /// <summary>
 /// spec: plr-d10 (lane F1) — one stored content row on the wire.

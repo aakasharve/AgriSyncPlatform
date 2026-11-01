@@ -112,6 +112,12 @@ public sealed class GetLogOriginalVoiceHandler(
             return Result.Failure<LogOriginalVoiceResult>(ShramSafalErrors.ReadNotAllowed);
         }
 
+        // spec: plr-d10 lane PRV (founder D-26) — a record whose audience leaves him out: not one word of it, refused.
+        if (!await RecordAudienceGate.MaySeeLogAsync(repository, log, query.CallerUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<LogOriginalVoiceResult>(ShramSafalErrors.ReadNotAllowed);
+        }
+
         var speakerUserId = log.OperatorUserId.Value;
         // The ONE rule for who may hear a record's words (also the pull's content filter).
         var mayListen = await RecordWordsGate.MayHearAsync(

@@ -51,7 +51,8 @@ const HANDLER_PATH = resolve(
 // meaningless" failure the comment below names.
 // 16 -> 18 on 2026-10-31 (lane OF-S): move_daily_log and correct_labour_assignment are two NEW
 // server-side key contracts, each guarded by its own PayloadHasOnly and named below.
-const EXPECTED_ALLOWLIST_COUNT = 18;
+// 18 -> 19 on 2026-11-01 (lane PRV, founder D-26): set_record_audience, its own PayloadHasOnly.
+const EXPECTED_ALLOWLIST_COUNT = 19;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -68,6 +69,8 @@ const EXPECTED_GUARDED_MUTATIONS = [
     // lane OF-S — a saved record moved to another place / day, and a queued worker-count correction.
     'move_daily_log',
     'correct_labour_assignment',
+    // lane PRV — the primary account holder chooses who sees one record.
+    'set_record_audience',
     'verify_log',
     // Wired by feat/dfes-companion. On `main` this mutation dispatches to a
     // stub that returns MUTATION_TYPE_UNIMPLEMENTED and has no allow-list, so

@@ -153,6 +153,13 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    only: no table, no policy, no grant, no ledger privilege. Safe to revert and re-apply
         //    mid-proof.
         "20261031021129_SplitFarmAuthorities",
+
+        // ── Reviewed 2026-11-01 (spec: plr-d10 lane PRV, founder D-26); Down() read in full. Up() ADDs the
+        //    audience columns (NOT NULL DEFAULT 'Team', CHECK-constrained) on daily_logs and cost_entries and CREATEs
+        //    ssf.record_audience_members (FORCE RLS, two policies, SELECT + INSERT + DELETE for the app role — current
+        //    state, not a ledger). Down() drops those. No append-only ledger, policy or privilege is touched. Safe to
+        //    revert and re-apply mid-proof.
+        "20261101110309_AddRecordAudience",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

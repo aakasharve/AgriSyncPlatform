@@ -1801,4 +1801,95 @@ public interface IShramSafalRepository
     Task<IReadOnlyList<ShramSafal.Domain.Dfes.AnsweredGap>> GetAnsweredGapsAsync(
         Guid farmId, DateOnly localDate, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Dfes.AnsweredGap>>(Array.Empty<ShramSafal.Domain.Dfes.AnsweredGap>());
+
+    // ── spec: plr-d10 lane PRV (founder D-26) — who may see ONE record. Default bodies on purpose (doctrine F7). ──
+
+    /// <summary>
+    /// lane PRV — every record of these farms whose audience is NOT the normal team (rare by nature), with the people
+    /// chosen for it. The ONE read every door asks before it hands out a record, a total or a photo
+    /// (<see cref="Services.RecordVisibility"/>). Production overrides it with two bounded queries; a test double holds
+    /// no narrowed record unless it overrides this (the in-tree doubles predate audiences and stub the reads a derived
+    /// default would need). In a user-scoped read only the reader's own chosen rows are visible (the table's narrow
+    /// policy) — which is all the rule needs; the primary account holder sees every row.
+    /// </summary>
+    Task<IReadOnlyList<Services.RestrictedRecord>> GetRestrictedRecordsAsync(
+        IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Services.RestrictedRecord>>([]);
+
+    /// <summary>
+    /// lane PRV — the little a door needs to decide whether a change may touch one record: its farm, its audience and
+    /// its maker. Read WITHOUT tracking (it never stands in for the copy a handler changes). Null when the record is not
+    /// found under the caller's current scope.
+    /// </summary>
+    async Task<Services.RecordAudienceHead?> GetRecordAudienceHeadAsync(string recordKind, Guid recordId, CancellationToken ct = default)
+    {
+        if (recordKind == Domain.RecordPrivacy.RecordKinds.DailyLog)
+        {
+            return await GetDailyLogByIdAsync(recordId, ct) is { } log
+                ? new Services.RecordAudienceHead(Domain.RecordPrivacy.RecordKinds.DailyLog, log.Id, (Guid)log.FarmId, log.Audience, log.OperatorUserId.Value)
+                : null;
+        }
+
+        return recordKind == Domain.RecordPrivacy.RecordKinds.CostEntry && await GetCostEntryByIdAsync(recordId, ct) is { } entry
+            ? new Services.RecordAudienceHead(Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.Audience, entry.CreatedByUserId.Value)
+            : null;
+    }
+
+    /// <summary>lane PRV — the people chosen for one record (empty when none, or when the reader may not see them).</summary>
+    Task<IReadOnlyList<Guid>> GetRecordAudienceUserIdsAsync(string recordKind, Guid recordId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Guid>>([]);
+
+    /// <summary>
+    /// lane PRV — stages the people chosen for one record, replacing whoever was chosen before (no SaveChanges: the
+    /// caller's own save commits it with the record's audience and its audit row). Current state only; the history is
+    /// the audit row. A store that cannot hold it REFUSES (never a silent no-op).
+    /// </summary>
+    Task ReplaceRecordAudienceMembersAsync(
+        Guid farmId, string recordKind, Guid recordId, IReadOnlyCollection<Guid> userIds, DateTime atUtc, CancellationToken ct = default)
+        => throw new NotSupportedException("This store cannot hold a record's chosen people.");
+
+    /// <summary>lane PRV — the attachments linked to any of these parents (a re-admitted record's photos are sent again).</summary>
+    async Task<IReadOnlyList<Attachment>> GetAttachmentsForEntitiesAsync(
+        IReadOnlyCollection<Guid> entityIds, string entityType, CancellationToken ct = default)
+    {
+        var result = new List<Attachment>();
+        foreach (var id in entityIds.Distinct())
+        {
+            result.AddRange(await GetAttachmentsForEntityAsync(id, entityType, ct));
+        }
+
+        return result;
+    }
+
+    /// <summary>lane PRV — attachments by id (a money record's bill photos are named on the entry itself).</summary>
+    async Task<IReadOnlyList<Attachment>> GetAttachmentsByIdsAsync(
+        IReadOnlyCollection<Guid> attachmentIds, CancellationToken ct = default)
+    {
+        var result = new List<Attachment>();
+        foreach (var id in attachmentIds.Distinct())
+        {
+            if (await GetAttachmentByIdAsync(id, ct) is { } attachment)
+            {
+                result.Add(attachment);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>lane PRV — the day-ledger rows made from any of these money entries.</summary>
+    async Task<IReadOnlyList<DayLedger>> GetDayLedgersBySourceCostEntryIdsAsync(
+        IReadOnlyCollection<Guid> costEntryIds, CancellationToken ct = default)
+    {
+        var result = new List<DayLedger>();
+        foreach (var id in costEntryIds.Distinct())
+        {
+            if (await GetDayLedgerBySourceCostEntryIdAsync(id, ct) is { } ledger)
+            {
+                result.Add(ledger);
+            }
+        }
+
+        return result;
+    }
 }

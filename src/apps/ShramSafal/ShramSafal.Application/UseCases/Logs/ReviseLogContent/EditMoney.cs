@@ -321,9 +321,23 @@ internal sealed class EditMoney(
                 lineId = step.LineId,
                 trigger = EditTrigger,
             });
+            // spec: plr-d10 lane PRV (founder D-26) — money made from a record's own line follows the record's audience.
+            if (log.Audience != Domain.RecordPrivacy.RecordAudience.Team)
+            {
+                entry.SetAudience(log.Audience, now);
+            }
+
             if (await repository.TryAddRecordMoneyAsync(entry, created, ct))
             {
                 made.Add(entry);
+                if (log.Audience == Domain.RecordPrivacy.RecordAudience.Selected)
+                {
+                    await repository.ReplaceRecordAudienceMembersAsync(
+                        (Guid)log.FarmId, Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id,
+                        await repository.GetRecordAudienceUserIdsAsync(Domain.RecordPrivacy.RecordKinds.DailyLog, log.Id, ct),
+                        now, ct);
+                    await repository.SaveChangesAsync(ct);
+                }
             }
             else
             {

@@ -6,4 +6,6 @@ public sealed record PlotFinanceSummaryDto(
     DateOnly? ToDate,
     decimal DirectCosts,
     decimal AllocatedCosts,
-    decimal TotalCosts);
+    decimal TotalCosts,
+    // spec: plr-d10 lane PRV — money records (and day-ledger rows made from them) this total leaves out by rule (W4).
+    int RecordsNotCounted = 0);

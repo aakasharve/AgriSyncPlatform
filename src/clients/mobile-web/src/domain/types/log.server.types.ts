@@ -44,4 +44,14 @@ export interface DailyLogServerState {
      * transcript. Absent = nothing was withheld for money.
      */
     wordsWithheldForMoney?: boolean;
+
+    /**
+     * spec: plr-d10 lane PRV (founder D-26) — who may see this record, when the farm's primary account holder narrowed
+     * it: `Selected` (him, the person who made it, and the people he chose) or `OnlyMe` (him and the person who made it).
+     * The server tells ONLY the holder (his picker and lock chip read it). Absent = the normal team.
+     */
+    audience?: 'Selected' | 'OnlyMe';
+
+    /** lane PRV — the people the holder chose (`Selected`). */
+    audienceUserIds?: string[];
 }

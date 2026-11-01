@@ -60,6 +60,14 @@ public sealed class GetAiJobStatusHandler(
                 return Result.Failure<AiJobStatusDto>(ShramSafalErrors.Forbidden);
             }
 
+            // spec: plr-d10 lane PRV (founder D-26) — the parse a record kept from him was made from is refused whole
+            // (its words and amounts are that record's). His own parse always comes back.
+            if (!ownJob
+                && (await RecordVisibility.ForFarmAsync(repository, job.FarmId, query.ActorUserId, now, ct)).HiddenAiJobIds.Contains(job.Id))
+            {
+                return Result.Failure<AiJobStatusDto>(ShramSafalErrors.Forbidden);
+            }
+
             var role = access!.IsRegistrant ? AppRole.PrimaryOwner : access.Role;
             var mayHear = await RecordWordsGate.MayHearAsync(
                 query.ActorUserId,

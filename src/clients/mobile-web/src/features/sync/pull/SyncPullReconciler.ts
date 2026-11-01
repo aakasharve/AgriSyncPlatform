@@ -30,6 +30,7 @@ import { reconcileAttendance } from './reconcilers/attendanceReconciler';
 import { reconcileFarmsPlotsCycles } from './reconcilers/farmsPlotsCyclesReconciler';
 import { reconcileAttentionBoard } from './reconcilers/attentionBoardReconciler';
 import { reconcileAccessScopes } from './reconcilers/accessScopeReconciler';
+import { reconcileWithdrawnRecords } from './reconcilers/withdrawnRecordsReconciler';
 import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import { finalizeReconciliation } from './reconcilers/finalizeReconciliation';
 import { dispatchPostReconcileEvents } from './reconcilers/postReconcileEvents';
@@ -43,6 +44,11 @@ export interface ReconcileSyncPullOptions {
      * the marker is written in this transaction ONLY when the logs were actually reconciled.
      */
     rebuildLogs?: boolean;
+    /**
+     * spec: plr-d10 lane PRV — this pull was asked from the beginning (cursor '0'): its records are the whole list, so a
+     * server copy it no longer carries is no longer his (`withdrawnRecordsReconciler`).
+     */
+    fullPull?: boolean;
 }
 
 export async function reconcileSyncPull(payload: SyncPullResponse, options: ReconcileSyncPullOptions = {}): Promise<void> {
@@ -77,6 +83,7 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
     let dayLedgersCount = 0;
     let plannedTasksCount = 0;
     let referenceDataUpdated = false;
+    let withdrawnMoney = 0;
 
     await db.transaction('rw', [
         db.logs, db.attachments, db.uploadQueue, db.appMeta, db.referenceData,
@@ -110,6 +117,14 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
             pendingLogIds,
             receivedAtUtc,
         });
+        // lane PRV (D-26) — records whose audience no longer includes this person leave his phone, with what hangs
+        // from them; never a record with a change still queued (P10).
+        withdrawnMoney = (await reconcileWithdrawnRecords(db, payload, {
+            userId: getAuthSession()?.userId ?? null,
+            pendingLogIds,
+            receivedAtUtc,
+            fullPull: options.fullPull === true,
+        })).removedMoney;
 
         await finalizeReconciliation(
             db,
@@ -126,4 +141,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
     });
 
     dispatchPostReconcileEvents(payload);
+    if (withdrawnMoney > 0 && typeof window !== 'undefined') {
+        // The money cache merges pulls; a withdrawn money record must leave it too (re-read from the phone's store).
+        window.dispatchEvent(new CustomEvent('agrisync:finance-records-withdrawn'));
+    }
 }

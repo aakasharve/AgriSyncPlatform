@@ -49,7 +49,14 @@ public sealed record CostEntryDto(
     /// attachment list reads. Named to make the difference impossible to miss.
     /// </para>
     /// </summary>
-    IReadOnlyList<string>? ClientAttachmentIds = null);
+    IReadOnlyList<string>? ClientAttachmentIds = null,
+    /// <summary>
+    /// spec: plr-d10 lane PRV (founder D-26) — who may see this money record (<c>Team</c> / <c>Selected</c> /
+    /// <c>OnlyMe</c>), sent ONLY to the farm's primary account holder; <c>null</c> for everyone else. Additive (P11).
+    /// </summary>
+    string? Audience = null,
+    /// <summary>lane PRV — the people the holder chose (<c>Selected</c>); sent only with <see cref="Audience"/>.</summary>
+    IReadOnlyList<Guid>? AudienceUserIds = null);
 
 /// <summary>
 /// DATA_PRINCIPLE_SPINE sub-phase 02.5 — reference-data shape for the

@@ -3147,6 +3147,18 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("amount");
 
+                    b.Property<string>("Audience")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Team")
+                        .HasColumnName("audience");
+
+                    b.Property<DateTime?>("AudienceChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("audience_changed_at_utc");
+
                     b.Property<string>("CategoryId")
                         .IsRequired()
                         .HasMaxLength(48)
@@ -3692,6 +3704,18 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("Audience")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Team")
+                        .HasColumnName("audience");
+
+                    b.Property<DateTime?>("AudienceChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("audience_changed_at_utc");
 
                     b.Property<string>("CaptureScope")
                         .HasMaxLength(16)
@@ -4746,6 +4770,48 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_voice_clips_retained_user_recorded");
 
                     b.ToTable("voice_clips_retained", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.RecordPrivacy.RecordAudienceMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AddedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at_utc");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid>("RecordId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("record_id");
+
+                    b.Property<string>("RecordKind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("record_kind");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_record_audience_members_farm_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_record_audience_members_user_id");
+
+                    b.HasIndex("RecordKind", "RecordId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_record_audience_members_record_user");
+
+                    b.ToTable("record_audience_members", "ssf");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Schedules.CropScheduleTemplate", b =>

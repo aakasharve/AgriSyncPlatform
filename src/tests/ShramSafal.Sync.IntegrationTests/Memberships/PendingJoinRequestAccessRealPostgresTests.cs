@@ -486,6 +486,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // and drops the nullable jsonb column authority_expires_at. No policy, no grant, no
         // farm_join_requests object; a waiting seat's status is never touched. Re-Up re-adds them.
         "20261031021129_SplitFarmAuthorities",
+
+        // spec plr-d10 lane PRV (founder D-26) — Down() read in full: drops the two policies on
+        // ssf.record_audience_members and the table, the audience CHECK constraints and columns. Up() creates that
+        // table with its user-select policy written ALREADY narrowed (m.status = 3) — see
+        // PoliciesCreatedAfterActiveOnly. No farm_join_requests object, no other policy. Re-Up recreates them.
+        "20261101110309_AddRecordAudience",
     ];
 
     /// <summary>
@@ -498,6 +504,8 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
     [
         // spec plr-d10 lane F1 — 20261030102448_AddDailyLogContents.
         "p_user_select_daily_log_contents",
+        // spec plr-d10 lane PRV — 20261101110309_AddRecordAudience.
+        "p_user_select_record_audience_members",
     ];
 
     /// <summary>(user-scoped DATA policies still testing NOT IN (5,6), those testing status = 3) —

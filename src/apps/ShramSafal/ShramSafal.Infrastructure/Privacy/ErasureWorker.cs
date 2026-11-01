@@ -357,6 +357,19 @@
 //     account with an erasure request (any status), whatever its rows say.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.record_audience_members (plr-d10 lane PRV, founder D-26) — KEEP. One row is
+//     one person the farm's primary account holder chose to see one restricted record:
+//     (farm_id, record_kind, record_id, user_id, added_at_utc) and no content. On the
+//     erasure of a CHOSEN person the grant is inert: an erased account cannot sign in and
+//     holds no seat, so the row lets nobody read anything. On the erasure of the record's
+//     MAKER the record itself is handled by its own table's disposition above; this row
+//     only says who else may read it.
+//     DISCLOSED: an erased subject's opaque user id stays named in this access list,
+//     exactly as it stays in ssf.farm_memberships (still on the pending-disposition
+//     baseline). Both should get their real disposition together in the DPDP compliance
+//     slice (GO-LIVE-REGISTER F98).
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a
 //     disposition comment; see step 5 of the delete block in ProcessOneAsync.
 //     This table is not merely adjacent to the ownership link, it IS the

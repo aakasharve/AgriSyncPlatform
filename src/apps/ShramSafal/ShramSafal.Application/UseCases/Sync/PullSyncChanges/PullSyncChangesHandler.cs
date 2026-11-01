@@ -80,13 +80,22 @@ public sealed class PullSyncChangesHandler(
         var farmIds = window.FarmIds.ToList();
         static bool Any(FarmReadScope _) => true;
 
+        // ── spec: plr-d10 lane PRV (founder D-26) — who may see EACH record ────────────────────────────────
+        // The farms' restricted records (rare: the holder narrowed them), read once for all farms. A record whose
+        // audience leaves this person out is not sent, nor anything that hangs from it; one he may no longer see and
+        // can hold is named in the withdrawn list (PullAudience). His scope still decides every part of what IS sent.
+        var audience = new PullAudience(
+            RecordVisibility.For(query.UserId, window.Scopes, await repository.GetRestrictedRecordsAsync(farmIds, ct)),
+            window,
+            sinceUtc,
+            serverNowUtc);
+
         var farms = await window.ReadAsync(Any, (ids, since) => repository.GetFarmsChangedSinceAsync(ids, since, ct), f => (Guid)f.Id);
         var plots = await window.ReadAsync(Any, (ids, since) => repository.GetPlotsChangedSinceAsync(ids, since, ct), p => (Guid)p.FarmId);
         var cropCycles = await window.ReadAsync(Any, (ids, since) => repository.GetCropCyclesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId);
         // A कामगार label reads his OWN records only; every other working seat reads the farm's (D-26).
-        var dailyLogs = (await window.ReadAsync(Any, (ids, since) => repository.GetDailyLogsChangedSinceAsync(ids, since, ct), l => (Guid)l.FarmId))
-            .Where(l => window.ScopeOf((Guid)l.FarmId)!.MayReadRecordOf(query.UserId, l.OperatorUserId.Value))
-            .ToList();
+        var dailyLogs = audience.Logs((await window.ReadAsync(Any, (ids, since) => repository.GetDailyLogsChangedSinceAsync(ids, since, ct), l => (Guid)l.FarmId))
+            .Where(l => window.ScopeOf((Guid)l.FarmId)!.MayReadRecordOf(query.UserId, l.OperatorUserId.Value)));
         // ── LABOUR_PHASE2 Phase 3 — labour read-back ─────────────────────────
         // Labour was written and never read back: a farmer recorded 8 workers on
         // Phone A, and Phone B on a clean install saw the log with no labour at
@@ -179,16 +188,40 @@ public sealed class PullSyncChangesHandler(
         // lane MU-3 — an attachment follows its parent: a record's photo goes where the record goes, a
         // money receipt only where money goes, a farm's photo to every working seat. A kind of parent this
         // rule does not know goes to the primary account holder only (fail closed).
-        var attachments = await VisibleAttachmentsAsync(
-            query.UserId,
-            await window.ReadAsync(Any, (ids, since) => repository.GetAttachmentsChangedSinceAsync(ids, since, ct), a => (Guid)a.FarmId),
-            window,
-            dailyLogById,
-            ct);
         // lane MU-3 — money (cost entries, their corrections, the day ledger) only where the seat sees money.
+        // lane PRV — and only the money records whose audience includes him.
         static bool Money(FarmReadScope scope) => scope.SeeMoney;
-        var costEntries = await window.ReadAsync(Money, (ids, since) => repository.GetCostEntriesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId);
+        var costEntries = audience.Costs(
+            await window.ReadAsync(Money, (ids, since) => repository.GetCostEntriesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId));
         var costEntryIds = costEntries.Select(c => c.Id).ToHashSet();
+
+        // lane PRV — a record RE-ADMITTED to him since his cursor comes back whole: its photos, corrections and
+        // day-ledger rows did not change themselves, so they are read again for it (rare; deduplicated below).
+        var readmittedLogIds = dailyLogs
+            .Where(l => audience.Readmitted((Guid)l.FarmId, l.AudienceChangedAtUtc))
+            .Select(l => l.Id)
+            .ToList();
+        var readmittedCosts = costEntries
+            .Where(c => audience.Readmitted((Guid)c.FarmId, c.AudienceChangedAtUtc))
+            .ToList();
+        var readmittedCostIds = readmittedCosts.Select(c => c.Id).ToList();
+        var changedAttachments = await window.ReadAsync(Any, (ids, since) => repository.GetAttachmentsChangedSinceAsync(ids, since, ct), a => (Guid)a.FarmId);
+        if (readmittedLogIds.Count > 0 || readmittedCostIds.Count > 0)
+        {
+            var windowFarms = farmIds.ToHashSet();
+            changedAttachments = changedAttachments
+                .Concat(await repository.GetAttachmentsForEntitiesAsync(readmittedLogIds, AttachmentParentRule.RecordParent, ct))
+                .Concat(await repository.GetAttachmentsForEntitiesAsync(readmittedCostIds, AttachmentParentRule.MoneyParent, ct))
+                .Concat(await repository.GetAttachmentsByIdsAsync(
+                    readmittedCosts.SelectMany(c => RestrictedRecord.BillPhotoIdsOf(c.ClientAttachmentIdsJson)).ToList(), ct))
+                .Where(a => windowFarms.Contains((Guid)a.FarmId))
+                .DistinctBy(a => a.Id)
+                .ToList();
+        }
+
+        var attachments = (await VisibleAttachmentsAsync(query.UserId, changedAttachments, window, dailyLogById, ct))
+            .Where(audience.Visibility.MaySeeAttachment)
+            .ToList();
         var financeCorrections = new List<Domain.Finance.FinanceCorrection>();
         foreach (var (ids, since) in window.Groups(Money))
         {
@@ -196,8 +229,22 @@ public sealed class PullSyncChangesHandler(
                 .Where(c => costEntryIds.Contains(c.CostEntryId)));
         }
 
+        if (readmittedCostIds.Count > 0)
+        {
+            financeCorrections.AddRange((await repository.GetCorrectionsForEntriesAsync(readmittedCostIds, ct))
+                .Where(c => costEntryIds.Contains(c.CostEntryId)));
+        }
+
         financeCorrections = financeCorrections.DistinctBy(c => c.Id).ToList();
-        var dayLedgers = await window.ReadAsync(Money, (ids, since) => repository.GetDayLedgersChangedSinceAsync(ids, since, ct), l => (Guid)l.FarmId);
+        var costEntryFarm = costEntries.ToDictionary(c => c.Id, c => (Guid)c.FarmId);
+        var dayLedgers = (await window.ReadAsync(Money, (ids, since) => repository.GetDayLedgersChangedSinceAsync(ids, since, ct), l => (Guid)l.FarmId))
+            .Concat(readmittedCostIds.Count == 0
+                ? []
+                : (await repository.GetDayLedgersBySourceCostEntryIdsAsync(readmittedCostIds, ct))
+                    .Where(l => costEntryFarm.TryGetValue(l.SourceCostEntryId, out var farm) && farm == (Guid)l.FarmId))
+            .Where(l => audience.Visibility.MaySeeCost(l.SourceCostEntryId))
+            .DistinctBy(l => l.Id)
+            .ToList();
         // Labour V2 R1 Task 3.5c — attendance rulings changed since the cursor.
         // P10's server half: once pulled here, a mark is reconstructable
         // without the device that made it.
@@ -404,6 +451,8 @@ public sealed class PullSyncChangesHandler(
                 .ToList();
             jobCardDtos = changedJobCards
                 .Select(j => ReadScopeProjection.JobCard(j.ToJobCardDto(), window.ScopeOf(j.FarmId.Value), query.UserId))
+                // lane PRV — a card never names a record kept from him.
+                .Select(audience.Visibility.WithoutHiddenLinks)
                 .ToList();
             if (jobCardDtos.Count > 0)
             {
@@ -475,6 +524,8 @@ public sealed class PullSyncChangesHandler(
                 complianceSignalDtos.AddRange(
                     signals
                         .Where(signal => signal.FarmId.Value == fid)
+                        // lane PRV — a warning whose evidence names a record kept from him is not his to read.
+                        .Where(signal => !audience.Visibility.MentionsHidden(signal.PayloadJson))
                         .Select(GetComplianceSignalsForFarmHandler.MapToDto));
             }
             catch (Exception ex)
@@ -504,10 +555,22 @@ public sealed class PullSyncChangesHandler(
             nextCursorUtc = resetThrough;
         }
 
+        // lane PRV — a withdrawal this response delivers is delivered ONCE: the cursor passes its whole second.
+        if (audience.DeliveredThroughUtc is { } withdrawnThrough && withdrawnThrough > nextCursorUtc)
+        {
+            nextCursorUtc = withdrawnThrough;
+        }
+
         // MU-3 fix 1 (F1) — and never past a change too young to send yet: the next pull sends it.
         if (window.PendingCapUtc is { } cap && nextCursorUtc > cap)
         {
             nextCursorUtc = cap;
+        }
+
+        // lane PRV — nor past a withdrawal too young to deliver yet: the next pull names it.
+        if (audience.PendingCapUtc is { } withdrawalCap && nextCursorUtc > withdrawalCap)
+        {
+            nextCursorUtc = withdrawalCap;
         }
 
         // Sub-plan 03 Task 10 (T-IGH-03-PULL-CURSOR-FREEZE) — cursor
@@ -550,15 +613,25 @@ public sealed class PullSyncChangesHandler(
             // lane MU-3 — a record's task lines carry its stated money in their notes ("Cost: ₹…"): for a
             // reader who may not see the farm's money (and did not make the record) those parts are dropped.
             dailyLogs
-                .Select(l => ReadScopeProjection.Record(
-                    l.ToDto(
-                        labourByLogId.TryGetValue(l.Id, out var labour) ? labour : [],
-                        contentDtoByLogId.GetValueOrDefault(l.Id)),
+                .Select(l => WithAudience(
+                    ReadScopeProjection.Record(
+                        l.ToDto(
+                            labourByLogId.TryGetValue(l.Id, out var labour) ? labour : [],
+                            contentDtoByLogId.GetValueOrDefault(l.Id)),
+                        window.ScopeOf((Guid)l.FarmId),
+                        query.UserId),
+                    l.Audience,
                     window.ScopeOf((Guid)l.FarmId),
-                    query.UserId))
+                    audience.Visibility.Restricted(Domain.RecordPrivacy.RecordKinds.DailyLog, l.Id)))
                 .ToList(),
             attachments.Select(a => a.ToDto()).ToList(),
-            costEntries.Select(c => c.ToDto()).ToList(),
+            costEntries
+                .Select(c => WithAudience(
+                    c.ToDto(),
+                    c.Audience,
+                    window.ScopeOf((Guid)c.FarmId),
+                    audience.Visibility.Restricted(Domain.RecordPrivacy.RecordKinds.CostEntry, c.Id)))
+                .ToList(),
             financeCorrections.Select(c => c.ToDto()).ToList(),
             dayLedgers.Select(l => l.ToDto()).ToList(),
             priceConfigs.Select(c => c.ToDto()).ToList(),
@@ -581,10 +654,44 @@ public sealed class PullSyncChangesHandler(
             // rewind handled in the if-block above.
             degraded,
             // lane MU-3 — what this person may read on each farm this pull covers.
-            window.FarmIds.Select(id => FarmAccessScopeDto.From(window.Scopes[id])).Concat(notReadable).ToList());
+            window.FarmIds
+                .Select(id => FarmAccessScopeDto.From(window.Scopes[id]) with
+                {
+                    // lane PRV — the days whose totals leave a record out for him (W4); absent when none.
+                    WithheldRecordDays = audience.WithheldDays(window.Scopes[id]) is { Count: > 0 } days ? days : null,
+                })
+                .Concat(notReadable)
+                .ToList(),
+            // lane PRV — content-free: kind + id of each record taken back from this phone.
+            audience.Withdrawn.ToList());
 
         return Result.Success(response);
     }
+
+    /// <summary>
+    /// spec: plr-d10 lane PRV — a record's audience goes ONLY to the farm's primary account holder (his picker and lock
+    /// chip); everyone else is told nothing about it. "Team" is not sent (absent = the normal team).
+    /// </summary>
+    private static DailyLogDto WithAudience(
+        DailyLogDto dto, Domain.RecordPrivacy.RecordAudience recordAudience, FarmReadScope? scope, RestrictedRecord? restricted) =>
+        scope is { IsPrimaryAccountHolder: true } && recordAudience != Domain.RecordPrivacy.RecordAudience.Team
+            ? dto with
+            {
+                Audience = recordAudience.ToString(),
+                AudienceUserIds = restricted?.SelectedUserIds.Order().ToList() ?? [],
+            }
+            : dto;
+
+    /// <summary>lane PRV — the same for a money record.</summary>
+    private static CostEntryDto WithAudience(
+        CostEntryDto dto, Domain.RecordPrivacy.RecordAudience recordAudience, FarmReadScope? scope, RestrictedRecord? restricted) =>
+        scope is { IsPrimaryAccountHolder: true } && recordAudience != Domain.RecordPrivacy.RecordAudience.Team
+            ? dto with
+            {
+                Audience = recordAudience.ToString(),
+                AudienceUserIds = restricted?.SelectedUserIds.Order().ToList() ?? [],
+            }
+            : dto;
 
     /// <summary>
     /// spec: plr-d10 (lane F1, review S1) — each log's content as THIS reader may see it.

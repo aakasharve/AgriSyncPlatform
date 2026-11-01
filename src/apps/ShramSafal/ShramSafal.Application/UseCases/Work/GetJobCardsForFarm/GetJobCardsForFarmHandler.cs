@@ -47,6 +47,9 @@ public sealed class GetJobCardsForFarmHandler(IShramSafalRepository repository, 
         if (!query.ClientShowsWithheldPay && dtos.Where((d, i) => !ReferenceEquals(d, whole[i])).Any())
             return Result.Failure<List<JobCardDto>>(ShramSafalErrors.Forbidden);
 
-        return Result.Success(dtos);
+        // spec: plr-d10 lane PRV (founder D-26) — a card never names a record kept from him (after the pay rule above).
+        var visibility = await RecordVisibility.ForFarmAsync(
+            repository, query.FarmId.Value, query.CallerUserId.Value, clock?.UtcNow ?? DateTime.UtcNow, ct);
+        return Result.Success(dtos.Select(visibility.WithoutHiddenLinks).ToList());
     }
 }

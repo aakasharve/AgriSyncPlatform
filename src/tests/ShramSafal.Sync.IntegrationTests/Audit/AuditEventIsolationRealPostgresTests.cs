@@ -1283,6 +1283,13 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    rewrites row values only. Never touches ssf.audit_events, its policies or its grants.
         //    Safe mid-proof.
         "20261031021129_SplitFarmAuthorities",
+
+        // ── Reviewed 2026-11-01 (spec: plr-d10 lane PRV, founder D-26); Down() read in full: drops the two
+        //    policies and the table ssf.record_audience_members, the CHECK constraints and the audience columns on
+        //    daily_logs and cost_entries. Up() adds those columns (NOT NULL DEFAULT 'Team') and creates that one
+        //    table (FORCE RLS, its own policies and grants). Never touches ssf.audit_events, its policies or its
+        //    grants (the audience change is an ordinary appended audit row). Safe mid-proof.
+        "20261101110309_AddRecordAudience",
     ];
 
     /// <summary>

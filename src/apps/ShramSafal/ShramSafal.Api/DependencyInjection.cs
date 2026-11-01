@@ -141,6 +141,8 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Logs.ReviseLogContent.ReviseLogContentHandler>();
         // spec: plr-d10 (lane OF-S) — move a saved record to another place / day (move_daily_log).
         services.AddScoped<ShramSafal.Application.UseCases.Logs.MoveDailyLog.MoveDailyLogHandler>();
+        // spec: plr-d10 lane PRV (founder D-26) — who sees one record (set_record_audience, queued only).
+        services.AddScoped<ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler>();
         services.AddScoped<VerifyLogHandler>();
 
         // spec: dfes-companion-2026-07-11 (wave-1.5) — BackfillOwnerAttestationsHandler is

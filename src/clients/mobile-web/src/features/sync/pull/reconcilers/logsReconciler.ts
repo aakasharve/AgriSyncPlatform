@@ -666,6 +666,8 @@ function toDailyLog(
         // lane MU-3 fix 1 (F8 / F3) — what this copy was sent WITHOUT, as the server's own projection says.
         ...(source.content?.amountsWithheld === true && { amountsWithheld: true }),
         ...(source.wordsWithheldForMoney === true && { wordsWithheldForMoney: true }),
+        // lane PRV (D-26) — who may see it, as the server tells the farm's primary account holder (absent = the team).
+        ...((source.audience === 'Selected' || source.audience === 'OnlyMe') && { audience: source.audience, audienceUserIds: source.audienceUserIds ?? [] }),
         legacyPartial: !statedDetails,
         // LABOUR_PHASE2 Phase 3 — the read-back. `?? []` is NOT a reading of the
         // empty set: an empty set is on-the-wire and flows through

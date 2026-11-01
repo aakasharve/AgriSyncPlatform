@@ -3211,6 +3211,134 @@ internal sealed class ShramSafalRepository(
         await db.RoutinePatterns.AddAsync(p, ct);
     }
 
+    // ── spec: plr-d10 lane PRV (founder D-26) — who may see one record ─────────────────────────────────────────
+
+    public async Task<IReadOnlyList<Application.Services.RestrictedRecord>> GetRestrictedRecordsAsync(
+        IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        // Rare by nature (a record the holder narrowed): two bounded reads, no children loaded.
+        var logs = await db.DailyLogs
+            .AsNoTracking()
+            .Where(l => ids.Contains((Guid)l.FarmId) && l.Audience != Domain.RecordPrivacy.RecordAudience.Team)
+            .ToListAsync(ct);
+        var costs = await db.CostEntries
+            .AsNoTracking()
+            .Where(c => ids.Contains((Guid)c.FarmId) && c.Audience != Domain.RecordPrivacy.RecordAudience.Team)
+            .ToListAsync(ct);
+        var recordIds = logs.Select(l => l.Id).Concat(costs.Select(c => c.Id)).ToList();
+        var chosen = recordIds.Count == 0
+            ? []
+            : await db.RecordAudienceMembers
+                .AsNoTracking()
+                .Where(m => recordIds.Contains(m.RecordId))
+                .ToListAsync(ct);
+        IReadOnlyCollection<Guid> PeopleOf(string kind, Guid id, Guid farmId) =>
+            chosen.Where(m => m.RecordKind == kind && m.RecordId == id && m.FarmId == farmId).Select(m => m.UserId).ToHashSet();
+
+        return logs
+            .Select(l => Application.Services.RestrictedRecord.Of(l, PeopleOf(Domain.RecordPrivacy.RecordKinds.DailyLog, l.Id, (Guid)l.FarmId)))
+            .Concat(costs.Select(c => Application.Services.RestrictedRecord.Of(c, PeopleOf(Domain.RecordPrivacy.RecordKinds.CostEntry, c.Id, (Guid)c.FarmId))))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetRecordAudienceUserIdsAsync(string recordKind, Guid recordId, CancellationToken ct = default) =>
+        await db.RecordAudienceMembers
+            .AsNoTracking()
+            .Where(m => m.RecordKind == recordKind && m.RecordId == recordId)
+            .Select(m => m.UserId)
+            .ToListAsync(ct);
+
+    public async Task<Application.Services.RecordAudienceHead?> GetRecordAudienceHeadAsync(
+        string recordKind, Guid recordId, CancellationToken ct = default)
+    {
+        if (recordKind == Domain.RecordPrivacy.RecordKinds.DailyLog)
+        {
+            var log = await db.DailyLogs
+                .AsNoTracking()
+                .Where(l => l.Id == recordId)
+                .Select(l => new { l.Id, l.FarmId, l.Audience, l.OperatorUserId })
+                .FirstOrDefaultAsync(ct);
+            return log is null
+                ? null
+                : new Application.Services.RecordAudienceHead(recordKind, log.Id, (Guid)log.FarmId, log.Audience, log.OperatorUserId.Value);
+        }
+
+        if (recordKind == Domain.RecordPrivacy.RecordKinds.CostEntry)
+        {
+            var entry = await db.CostEntries
+                .AsNoTracking()
+                .Where(c => c.Id == recordId)
+                .Select(c => new { c.Id, c.FarmId, c.Audience, c.CreatedByUserId })
+                .FirstOrDefaultAsync(ct);
+            return entry is null
+                ? null
+                : new Application.Services.RecordAudienceHead(recordKind, entry.Id, (Guid)entry.FarmId, entry.Audience, entry.CreatedByUserId.Value);
+        }
+
+        return null;
+    }
+
+    public async Task ReplaceRecordAudienceMembersAsync(
+        Guid farmId, string recordKind, Guid recordId, IReadOnlyCollection<Guid> userIds, DateTime atUtc, CancellationToken ct = default)
+    {
+        // Only the difference is written: a person who stays chosen keeps his row (no delete + insert of one key).
+        var wanted = userIds.Where(id => id != Guid.Empty).ToHashSet();
+        var current = await db.RecordAudienceMembers
+            .Where(m => m.RecordKind == recordKind && m.RecordId == recordId)
+            .ToListAsync(ct);
+        db.RecordAudienceMembers.RemoveRange(current.Where(m => !wanted.Contains(m.UserId) || m.FarmId != farmId));
+        var kept = current.Where(m => wanted.Contains(m.UserId) && m.FarmId == farmId).Select(m => m.UserId).ToHashSet();
+        foreach (var userId in wanted.Where(id => !kept.Contains(id)))
+        {
+            await db.RecordAudienceMembers.AddAsync(
+                new Domain.RecordPrivacy.RecordAudienceMember(Guid.NewGuid(), farmId, recordKind, recordId, userId, atUtc), ct);
+        }
+    }
+
+    public async Task<IReadOnlyList<Attachment>> GetAttachmentsForEntitiesAsync(
+        IReadOnlyCollection<Guid> entityIds, string entityType, CancellationToken ct = default)
+    {
+        var ids = entityIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var normalizedType = entityType.Trim();
+        return await db.Attachments
+            .AsNoTracking()
+            .Where(a => ids.Contains(a.LinkedEntityId) && a.LinkedEntityType == normalizedType)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Attachment>> GetAttachmentsByIdsAsync(
+        IReadOnlyCollection<Guid> attachmentIds, CancellationToken ct = default)
+    {
+        var ids = attachmentIds.Distinct().ToList();
+        return ids.Count == 0
+            ? []
+            : await db.Attachments.AsNoTracking().Where(a => ids.Contains(a.Id)).ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<DayLedger>> GetDayLedgersBySourceCostEntryIdsAsync(
+        IReadOnlyCollection<Guid> costEntryIds, CancellationToken ct = default)
+    {
+        var ids = costEntryIds.Distinct().ToList();
+        return ids.Count == 0
+            ? []
+            : await db.DayLedgers
+                .AsNoTracking()
+                .Include(x => x.Allocations)
+                .Where(x => ids.Contains(x.SourceCostEntryId))
+                .ToListAsync(ct);
+    }
+
     private static List<Guid> NormalizeFarmIds(IEnumerable<Guid> farmIds)
     {
         return farmIds

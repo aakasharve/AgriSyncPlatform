@@ -375,6 +375,8 @@ if (typeof window !== 'undefined') {
         // An incremental pull: merged, never a replacement of the whole cache (review B003).
         mergeFinanceSnapshot(detail);
     });
+    // spec: plr-d10 lane PRV — a money record this person may no longer see left the phone's store: re-read it.
+    window.addEventListener('agrisync:finance-records-withdrawn', () => refreshInBackground());
 }
 
 // ── Public API: Dexie reads + settings ─────────────────────────────────

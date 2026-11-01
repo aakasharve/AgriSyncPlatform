@@ -58,9 +58,14 @@ public static class ComplianceEndpoints
                 IncludeAcknowledged: includeAcknowledged ?? false);
 
             var result = await handler.HandleAsync(query, ct);
-            return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : ToErrorResult(result.Error);
+            if (!result.IsSuccess)
+            {
+                return ToErrorResult(result.Error);
+            }
+
+            // spec: plr-d10 lane PRV (founder D-26) — the pull's rule: a warning naming a record kept from him is not sent.
+            var visibility = await RecordVisibility.ForFarmAsync(repository, farmId, readerUserId, clock.UtcNow, ct);
+            return Results.Ok(result.Value!.Where(s => !visibility.MentionsHidden(s.PayloadJson)).ToList());
         })
         .WithName("GetComplianceSignalsForFarm");
 

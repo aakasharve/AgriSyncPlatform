@@ -163,6 +163,17 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
             .HasColumnName("flag_reason")
             .HasMaxLength(300);
 
+        // spec: plr-d10 lane PRV (founder D-26) — who may see the money record; the same shape as daily_logs.audience.
+        builder.Property(x => x.Audience)
+            .HasColumnName("audience")
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .HasDefaultValue(ShramSafal.Domain.RecordPrivacy.RecordAudience.Team)
+            .HasSentinel(ShramSafal.Domain.RecordPrivacy.RecordAudience.Team)
+            .IsRequired();
+        builder.Property(x => x.AudienceChangedAtUtc)
+            .HasColumnName("audience_changed_at_utc");
+
         builder.OwnsOne(x => x.Provenance, p =>
         {
             p.ConfigureProvenance();

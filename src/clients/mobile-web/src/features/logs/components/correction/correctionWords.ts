@@ -131,6 +131,8 @@ const mr: CorrectionWords = {
         notAllowed: 'हे तुम्हाला बदलता येत नाही — मालकाला सांगा.',
         // Lane OF-M fix pass 3 (call 1). PROPOSED (Marathi).
         pricesNotYours: 'किंमती फक्त ही नोंद करणारे किंवा पैशांच्या नोंदी तपासणारे बदलू शकतात.',
+        // lane PRV (D-26). PROPOSED (Marathi), in the rule's voice (never "not shown to you", never the owner).
+        recordClosed: 'श्रमसफलच्या नियमानुसार हा बदल या नोंदीवर लागू झाला नाही. तुमचा बदल या फोनवर ठेवला आहे.',
         other: '',
     },
     // PROPOSED (Marathi) — lane OF-M. Each says what did not change (the money's amount) and why; none asks him to do
@@ -232,6 +234,8 @@ const en: CorrectionWords = {
         notAllowed: 'You cannot change this — tell the owner.',
         // Lane OF-M fix pass 3 (call 1). PROPOSED (English).
         pricesNotYours: 'Only the person who made this entry, or someone who checks money entries, can change its prices.',
+        // lane PRV (D-26). PROPOSED (English).
+        recordClosed: "By ShramSafal's rules, this change could not be applied to this record. Your change is kept on this phone.",
         other: '',
     },
     // PROPOSED (English) — lane OF-M.

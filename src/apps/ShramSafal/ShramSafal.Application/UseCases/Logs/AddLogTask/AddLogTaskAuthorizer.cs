@@ -57,6 +57,12 @@ public sealed class AddLogTaskAuthorizer : IAuthorizationCheck<AddLogTaskCommand
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane PRV (founder D-26) — a record whose audience leaves him out is not his to change.
+        if (!await Services.RecordAudienceGate.MaySeeLogAsync(_repository, log, command.ActorUserId, DateTime.UtcNow, ct))
+        {
+            return Result.Failure(ShramSafalErrors.RecordAudienceClosed);
+        }
+
         return Result.Success();
     }
 }

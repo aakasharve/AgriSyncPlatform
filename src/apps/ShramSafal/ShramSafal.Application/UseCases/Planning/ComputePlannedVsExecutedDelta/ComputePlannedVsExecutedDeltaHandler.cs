@@ -29,7 +29,12 @@ public sealed class ComputePlannedVsExecutedDeltaHandler(IShramSafalRepository r
         }
 
         var planned = await repository.GetPlannedActivitiesByCropCycleIdAsync(query.CropCycleId, ct);
-        var executedTasks = await repository.GetExecutedTasksByCropCycleIdAsync(query.CropCycleId, ct);
+        // spec: plr-d10 lane PRV (founder D-26) — the comparison he is shown counts only the work records he may see.
+        var visibility = await Services.RecordVisibility.ForFarmAsync(
+            repository, (Guid)cropCycle.FarmId, query.ActorUserId, DateTime.UtcNow, ct);
+        var executedTasks = (await repository.GetExecutedTasksByCropCycleIdAsync(query.CropCycleId, ct))
+            .Where(t => visibility.MaySeeLog(t.DailyLogId))
+            .ToList();
 
         var stageName = ResolveStageName(query.Stage, cropCycle.Stage, planned);
         var stagePlanned = planned

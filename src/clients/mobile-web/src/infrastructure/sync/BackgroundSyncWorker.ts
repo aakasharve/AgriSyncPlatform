@@ -629,7 +629,7 @@ export class BackgroundSyncWorker {
         // lane MU-3 fix 1 (F9) — name the farms this phone holds, so the server answers each one explicitly.
         const payload = await agriSyncClient.pullSyncChanges(sinceCursor, await readHeldFarmIds(getDatabase()));
         await mutationQueue.saveLastPullPayload(payload);
-        await reconcileSyncPull(payload, { rebuildLogs });
+        await reconcileSyncPull(payload, { rebuildLogs, fullPull: sinceCursor === '0' });
 
         const nextCursor = payload.nextCursorUtc || payload.serverTimeUtc || systemClock.nowISO();
         await mutationQueue.setCursor(nextCursor);

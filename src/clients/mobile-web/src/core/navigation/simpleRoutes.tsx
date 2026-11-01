@@ -49,6 +49,7 @@ import { todaysLabourAnchor } from '../../features/logs/components/entry/todayAt
 import { buildNoWorkDayPayload } from './noWorkDay';
 import { PageBar } from '../../shared/components/ui/placeUi';
 import { MoneyWithheldPage } from '../../features/finance/components/MoneyWithheldPage';
+import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'profile') return null;
@@ -309,6 +310,8 @@ export const renderFinanceLedgerRoute = (ctx: AppRouterContext): React.ReactNode
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
             onBack={() => ctx.goBackOr('finance-manager')}
+            isPrimaryHolder={ctx.farmRole === 'PrimaryOwner'}
+            selfUserId={getSessionUserId()}
         />
     );
 };

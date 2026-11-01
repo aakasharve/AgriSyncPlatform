@@ -20,8 +20,11 @@ public sealed class GetRecentQuestionEventsHandler(IShramSafalRepository reposit
         var sinceDays = query.SinceDays <= 0 ? 14 : query.SinceDays;
         var sinceUtc = clock.UtcNow.AddDays(-sinceDays);
         var rows = await repository.GetRecentQuestionEventsForFarmAsync(query.FarmId, sinceUtc, ct);
+        // spec: plr-d10 lane PRV (founder D-26) — a question about a record kept from him is not his to see.
+        var visibility = await Services.RecordVisibility.ForFarmAsync(repository, query.FarmId, query.CallerUserId, clock.UtcNow, ct);
 
         var dtos = rows
+            .Where(r => r.DailyLogId is not { } logId || visibility.MaySeeLog(logId))
             .Select(r => new RecentQuestionEventDto(
                 r.QuestionKey, r.TriggerType, r.ShownAtUtc, r.CreatedAtUtc, r.StageConfirmed, r.Skipped,
                 // wave-3.1 — the log this question was about. Already on the entity and the

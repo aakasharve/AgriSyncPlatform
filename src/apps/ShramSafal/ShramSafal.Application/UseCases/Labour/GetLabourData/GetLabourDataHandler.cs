@@ -341,8 +341,14 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         //   * `windowLogs` — the `Logs` tile, and the "did we hear anything
         //                    about these days at all" test the man-days rule
         //                    turns on (§7).
-        var farmLogs = await repository.GetDailyLogsByFarmAsync(query.FarmId, ct);
+        // spec: plr-d10 lane PRV (founder D-26) — the review inbox, the Logs tile, the man-days and the money this page
+        // adds up count only the records he may see (orchestrator call 8). The हजेरी ledger below is NOT narrowed: it is
+        // the farm-day truth of who worked (attendance; a record's privacy never hides it — orchestrator call 1).
+        var recordVisibility = await RecordVisibility.ForFarmAsync(repository, query.FarmId.Value, query.CallerUserId.Value, readAtUtc, ct);
+        var everyFarmLog = await repository.GetDailyLogsByFarmAsync(query.FarmId, ct);
+        var farmLogs = everyFarmLog.Where(l => recordVisibility.MaySeeLog(l.Id)).ToList();
         var windowLogs = farmLogs.Where(l => window.Contains(l.LogDate)).ToList();
+        var ledgerWindowLogs = everyFarmLog.Where(l => window.Contains(l.LogDate)).ToList();
 
         var reviewOperatorIds = new List<Guid>();
         reviewOperatorIds.AddRange(farmLogs.Select(l => l.OperatorUserId.Value));
@@ -501,8 +507,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // the assignments whose parent log falls inside it. The upper bound is
         // new — the old query was `LogDate >= weekStart` with nothing on the
         // other side, so a day dated ahead of today counted inside "this week".
-        var windowAssignments = await repository.GetLabourAssignmentsForFarmInWindowAsync(
+        var ledgerWindowAssignments = await repository.GetLabourAssignmentsForFarmInWindowAsync(
             query.FarmId, window.FromDate, window.ToDateInclusive, ct);
+        var windowAssignments = ledgerWindowAssignments.Where(a => recordVisibility.MaySeeLog(a.DailyLogId)).ToList();
 
         // Task 6 (spec: 2026-08-28-labour-v2-release-1, P4) — LabourHeadcount.Resolve
         // now returns null for an assignment whose headcount was never stated
@@ -583,7 +590,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // hitting Postgres twice for one request (same reasoning as §3b).
         var allAssignments = window.FromDate is null && window.ToDateInclusive is null
             ? windowAssignments
-            : await repository.GetLabourAssignmentsForFarmInWindowAsync(query.FarmId, null, null, ct);
+            : (await repository.GetLabourAssignmentsForFarmInWindowAsync(query.FarmId, null, null, ct))
+                .Where(a => recordVisibility.MaySeeLog(a.DailyLogId))
+                .ToList();
         var assignmentsByLogId = allAssignments
             .GroupBy(a => a.DailyLogId)
             .ToDictionary(g => g.Key, g => g.ToList());
@@ -729,14 +738,14 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var attendanceMarks = await repository.GetAttendanceMarksForFarmInWindowAsync(
             query.FarmId, window.FromDate, window.ToDateInclusive, ct);
         var farmOperators = await repository.GetFieldOperatorsForFarmAsync(query.FarmId, ct);
-        var windowLogDateById = windowLogs.ToDictionary(l => l.Id, l => l.LogDate);
+        var windowLogDateById = ledgerWindowLogs.ToDictionary(l => l.Id, l => l.LogDate);
         var windowWorkRows = (await repository.GetFieldOperatorWorkRowsForAssignmentsAsync(
-                windowAssignments.Select(a => a.Id).ToList(), ct))
+                ledgerWindowAssignments.Select(a => a.Id).ToList(), ct))
             .Where(r => r.FarmId == query.FarmId)
             .ToList();
         var ledger = BuildHajeriLedger(
             weekLabel, window, farmLocalToday, attendanceMarks, farmOperators,
-            windowWorkRows, windowAssignments, windowLogDateById);
+            windowWorkRows, ledgerWindowAssignments, windowLogDateById);
 
         // Who has actually been ATTACHED to one of today’s engagements. An
         // attach is a deliberate human act (POST .../field-operators/{id}/attach

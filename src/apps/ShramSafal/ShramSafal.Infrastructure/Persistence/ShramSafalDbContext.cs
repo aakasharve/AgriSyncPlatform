@@ -163,6 +163,11 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // APPEND-ONLY by privilege (migration AddDailyLogContents revokes UPDATE/DELETE/TRUNCATE from
     // the app role); the only rewrite is account erasure's, through the admin context.
     public DbSet<DailyLogContent> DailyLogContents => Set<DailyLogContent>();
+
+    // spec: plr-d10 lane PRV (founder D-26) — the people the primary account holder chose for a "Selected" record.
+    // Current state only (the change itself is the record's audit row); FORCE-RLS on its own farm_id (F8).
+    public DbSet<ShramSafal.Domain.RecordPrivacy.RecordAudienceMember> RecordAudienceMembers =>
+        Set<ShramSafal.Domain.RecordPrivacy.RecordAudienceMember>();
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();

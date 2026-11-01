@@ -38,9 +38,13 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
             return Result.Failure<FinanceSummaryDto>(ShramSafalErrors.Forbidden);
         }
 
-        var entries = (await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct))
+        var farmEntries = (await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct))
             .Where(entry => farmIds.Contains((Guid)entry.FarmId))
             .ToList();
+        // spec: plr-d10 lane PRV (founder D-26) — a total counts only the money records he may see; how many it left out
+        // is said (W4), never hidden in a smaller number.
+        var visibility = await RecordVisibility.ForFarmsAsync(repository, farmIds, query.ActorUserId, now, ct);
+        var entries = farmEntries.Where(entry => visibility.MaySeeCost(entry.Id)).ToList();
         var corrections = await repository.GetCorrectionsForEntriesAsync(entries.Select(e => e.Id), ct);
 
         var latestCorrections = corrections
@@ -87,7 +91,8 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
             currencyCode,
             grandTotal,
             grouped,
-            FarmsNotCounted: memberFarmIds.Count - farmIds.Count));
+            FarmsNotCounted: memberFarmIds.Count - farmIds.Count,
+            RecordsNotCounted: farmEntries.Count - entries.Count));
     }
 
     private static string? NormalizeGroupBy(string groupBy)

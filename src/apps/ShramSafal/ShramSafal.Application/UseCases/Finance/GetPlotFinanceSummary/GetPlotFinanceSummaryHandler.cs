@@ -37,9 +37,13 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
             return Result.Failure<PlotFinanceSummaryDto>(ShramSafalErrors.Forbidden);
         }
 
-        var costEntries = (await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct))
+        // spec: plr-d10 lane PRV (founder D-26) — only the money records he may see; the rest are counted out loud (W4).
+        var visibility = await RecordVisibility.ForFarmAsync(
+            repository, (Guid)plot.FarmId, query.ActorUserId, clock?.UtcNow ?? DateTime.UtcNow, ct);
+        var plotEntries = (await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct))
             .Where(entry => entry.PlotId == query.PlotId)
             .ToList();
+        var costEntries = plotEntries.Where(entry => visibility.MaySeeCost(entry.Id)).ToList();
         // lane OF-M fix pass 1 (review 9) — what each entry says NOW: its latest correction, else as made (₹0 = no longer
         // spent), the rule every other money reader follows.
         var latest = (await repository.GetCorrectionsForEntriesAsync(costEntries.Select(entry => entry.Id), ct))
@@ -52,7 +56,8 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
 
         var from = query.FromDate ?? DateOnly.MinValue;
         var to = query.ToDate ?? DateOnly.MaxValue;
-        var ledgers = await repository.GetDayLedgersForFarm(plot.FarmId, from, to, ct);
+        var farmLedgers = await repository.GetDayLedgersForFarm(plot.FarmId, from, to, ct);
+        var ledgers = farmLedgers.Where(ledger => visibility.MaySeeCost(ledger.SourceCostEntryId)).ToList();
 
         var allocatedCosts = decimal.Round(
             ledgers.Sum(ledger =>
@@ -68,6 +73,9 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
             query.ToDate,
             directCosts,
             allocatedCosts,
-            decimal.Round(directCosts + allocatedCosts, 2, MidpointRounding.AwayFromZero)));
+            decimal.Round(directCosts + allocatedCosts, 2, MidpointRounding.AwayFromZero),
+            RecordsNotCounted: plotEntries.Count - costEntries.Count
+                + farmLedgers.Count(ledger => !visibility.MaySeeCost(ledger.SourceCostEntryId)
+                    && ledger.Allocations.Any(allocation => allocation.PlotId == query.PlotId))));
     }
 }

@@ -680,3 +680,37 @@ describe('lane OF-S fix 1 (B011) — the result screen says why a move was refus
         expect(screen.getByTestId('vr-day').tagName).not.toBe('BUTTON');
     });
 });
+
+// spec: plr-d10 lane PRV (founder D-26; orchestrator call 11) — who may see this record.
+describe('lane PRV — the picker is the primary account holder\'s alone', () => {
+    it('shows "कोण पाहू शकतो: सर्व टीम" to the holder, and a choice queues set_record_audience for this record', async () => {
+        mount(props());
+        const row = await screen.findByTestId('vr-audience');
+        expect(row.textContent).toContain('कोण पाहू शकतो');
+        expect(row.textContent).toContain('सर्व टीम');
+        fireEvent.click(row);
+        fireEvent.click(await screen.findByTestId('vr-audience-choice-OnlyMe'));
+        await act(async () => { fireEvent.click(screen.getByTestId('vr-audience-save')); });
+        await waitFor(async () => {
+            const rows = (await getDatabase().mutationQueue.toArray()).filter(r => r.mutationType === SyncMutationName.SetRecordAudience);
+            expect(rows.map(r => r.payload)).toEqual([expect.objectContaining({ recordKind: 'DailyLog', recordId: NOW, audience: 'OnlyMe', selectedUserIds: [] })]);
+        });
+    });
+
+    it('is never shown to anyone else, and never before the record is on its way to the server', () => {
+        mount(props({ farmRole: 'SecondaryOwner' }));
+        expect(screen.queryByTestId('vr-audience')).toBeNull();
+        cleanup();
+        mount(props({ farmRole: 'Mukadam' }));
+        expect(screen.queryByTestId('vr-audience')).toBeNull();
+        cleanup();
+        mount(props({ syncQueuedById: new Map([[NOW, null]]) }));
+        expect(screen.queryByTestId('vr-audience')).toBeNull();
+    });
+
+    it('labels "only me" honestly on a record someone else made: its maker keeps it', async () => {
+        mount(props({ result: { logIds: [MORNING], clipId: null, key: 'k', unclear: [] } as never, syncQueuedById: new Map([[MORNING, true]]) }));
+        fireEvent.click(await screen.findByTestId('vr-audience'));
+        expect((await screen.findByTestId('vr-audience-choice-OnlyMe')).textContent).toContain('फक्त मी व नोंद करणारा');
+    });
+});

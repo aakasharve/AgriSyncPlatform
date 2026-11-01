@@ -17,6 +17,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Contracts.Sync;
 using ShramSafal.Application.Contracts.Sync.Payloads;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Attachments.CreateAttachment;
 using ShramSafal.Application.UseCases.Compliance.AcknowledgeSignal;
 using ShramSafal.Application.UseCases.Compliance.ResolveSignal;
@@ -158,7 +159,9 @@ public sealed class PushSyncBatchHandler(
     MoveDailyLogHandler moveDailyLogHandler,
     // spec: plr-d10 (lane OF-S) — a worker-count / hours correction sent later (correct_labour_assignment). The SAME
     // handler the online route (POST …/labour/assignments/{id}/corrections) resolves — never a copy of its rule.
-    IHandler<CorrectLabourCommand, CorrectLabourResult> correctLabourHandler)
+    IHandler<CorrectLabourCommand, CorrectLabourResult> correctLabourHandler,
+    // spec: plr-d10 lane PRV (founder D-26) — the primary account holder chooses who sees one record (set_record_audience).
+    ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler setRecordAudienceHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1036,6 +1039,14 @@ public sealed class PushSyncBatchHandler(
             }
         }
 
+        // spec: plr-d10 lane PRV (founder D-26) — a change to a record the sender may no longer see (its audience was
+        // narrowed while his change waited on the phone) is refused WHOLE before any handler runs, with a code every
+        // phone parks visibly (nothing is lost, P10). Asked here once for every kind of change, so no handler can forget.
+        if (await RefuseChangeToClosedRecordAsync(mutationType, payload, actorUserId, ct) is { } closed)
+        {
+            return closed;
+        }
+
         switch (mutationType)
         {
             case "create_farm":
@@ -1054,6 +1065,8 @@ public sealed class PushSyncBatchHandler(
                 return await HandleMoveDailyLogAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "correct_labour_assignment":
                 return await HandleCorrectLabourAssignmentAsync(deviceId, clientRequestId, payload, actorUserId, ct);
+            case "set_record_audience":
+                return await HandleSetRecordAudienceAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
@@ -3416,6 +3429,176 @@ public sealed class PushSyncBatchHandler(
                 ClientCommandId: clientRequestId),
             ct);
         return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane PRV (founder D-26) — the farm's primary account holder chooses who sees one record. Carries
+    /// only the record's id, so the farm is DISCOVERED by a user-scoped read (a record of another farm resolves to
+    /// nothing) before the tenant scope is set; who may, the chosen people's seats (E4) and the record's state are
+    /// <see cref="ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler"/>'s.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleSetRecordAudienceAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "recordKind", "recordId", "audience", "selectedUserIds", "changedAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "set_record_audience payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<SetRecordAudiencePayload>(payload);
+        if (request is null || request.RecordId == Guid.Empty || request.SelectedUserIds is null
+            || !Domain.RecordPrivacy.RecordKinds.IsKnown(request.RecordKind)
+            || !AudienceOf(request.Audience, out var audience))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for set_record_audience.");
+        }
+
+        Error? farmScope;
+        if (request.RecordKind == Domain.RecordPrivacy.RecordKinds.DailyLog)
+        {
+            var logScope = await EstablishFarmScopeForOwnedEntityAsync(
+                actorUserId,
+                c => repository.GetDailyLogByIdAsync(request.RecordId, c),
+                log => (Guid)log.FarmId,
+                Domain.Common.ShramSafalErrors.DailyLogNotFound,
+                ct);
+            farmScope = logScope.IsSuccess ? null : logScope.Error;
+        }
+        else
+        {
+            var entryScope = await EstablishFarmScopeForOwnedEntityAsync(
+                actorUserId,
+                c => repository.GetCostEntryByIdAsync(request.RecordId, c),
+                entry => (Guid)entry.FarmId,
+                Domain.Common.ShramSafalErrors.CostEntryNotFound,
+                ct);
+            farmScope = entryScope.IsSuccess ? null : entryScope.Error;
+        }
+
+        if (farmScope is not null)
+        {
+            return MutationExecutionOutcome.Failure(farmScope.Code, farmScope.Description);
+        }
+
+        var result = await setRecordAudienceHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceCommand(
+                request.RecordKind,
+                request.RecordId,
+                audience,
+                request.SelectedUserIds,
+                actorUserId,
+                actorRole,
+                clientRequestId,
+                request.ChangedAtUtc == default ? null : request.ChangedAtUtc,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId),
+            ct);
+
+        return ToOutcome(result);
+
+        // Only the three member NAMES (never a number, never another spelling).
+        static bool AudienceOf(string? text, out Domain.RecordPrivacy.RecordAudience audience)
+        {
+            audience = Domain.RecordPrivacy.RecordAudience.Team;
+            switch (text)
+            {
+                case "Team":
+                    return true;
+                case "Selected":
+                    audience = Domain.RecordPrivacy.RecordAudience.Selected;
+                    return true;
+                case "OnlyMe":
+                    audience = Domain.RecordPrivacy.RecordAudience.OnlyMe;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane PRV (founder D-26; orchestrator call 7, "push") — the record a change names, for every kind
+    /// of change that touches an EXISTING work or money record: its tasks, words, place or day, workers, confirmation,
+    /// correction, allocation, or a photo linked to it.
+    /// </summary>
+    private static (string Kind, Guid Id)? ChangeTarget(string mutationType, JsonElement payload)
+    {
+        static Guid IdOf(JsonElement payload, string property) =>
+            payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty(property, out var value)
+            && value.ValueKind == JsonValueKind.String
+            && Guid.TryParse(value.GetString(), out var id)
+                ? id
+                : Guid.Empty;
+
+        static string? TextOf(JsonElement payload, string property) =>
+            payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty(property, out var value)
+            && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+
+        var (kind, id) = mutationType switch
+        {
+            "add_log_task" or "revise_log_content" or "move_daily_log" or "correct_labour_assignment" or "verify_log"
+                => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "dailyLogId")),
+            "verify_log_v2" => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "logId")),
+            "correct_cost_entry" or "allocate_global_expense" => (Domain.RecordPrivacy.RecordKinds.CostEntry, IdOf(payload, "costEntryId")),
+            "create_attachment" => TextOf(payload, "linkedEntityType") switch
+            {
+                "DailyLog" => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "linkedEntityId")),
+                "CostEntry" => (Domain.RecordPrivacy.RecordKinds.CostEntry, IdOf(payload, "linkedEntityId")),
+                _ => (string.Empty, Guid.Empty),
+            },
+            _ => (string.Empty, Guid.Empty),
+        };
+        return id == Guid.Empty ? null : (kind, id);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane PRV — refuse a change to a record whose audience no longer includes the sender. The record is
+    /// read under the sender's OWN user-scoped policies (a record of another farm, or one not yet here, resolves to
+    /// nothing and the handler answers as it always did). A record of the normal team is never asked further.
+    /// </summary>
+    private async Task<MutationExecutionOutcome?> RefuseChangeToClosedRecordAsync(
+        string mutationType, JsonElement payload, Guid actorUserId, CancellationToken ct)
+    {
+        if (ChangeTarget(mutationType, payload) is not { } target)
+        {
+            return null;
+        }
+
+        if (dbContext.Database.IsRelational())
+        {
+            await SetUserScopedReadGucsAsync(actorUserId, ct);
+        }
+
+        var head = await repository.GetRecordAudienceHeadAsync(target.Kind, target.Id, ct);
+        if (head is null || head.Audience == Domain.RecordPrivacy.RecordAudience.Team)
+        {
+            return null;
+        }
+
+        var scope = await FarmReadGate.ScopeAsync(repository, head.FarmId, actorUserId, clock.UtcNow, ct);
+        var chosen = await repository.GetRecordAudienceUserIdsAsync(head.Kind, head.Id, ct);
+        if (RecordAudienceRule.MaySee(scope, actorUserId, head.Audience, head.MakerUserId, chosen))
+        {
+            return null;
+        }
+
+        logger.LogWarning(
+            "{MutationType} refused: {Kind} {RecordId} is no longer in the sender's audience ({Audience}); the phone keeps the change.",
+            mutationType, head.Kind, head.Id, head.Audience);
+        var closed = Domain.Common.ShramSafalErrors.RecordAudienceClosed;
+        return MutationExecutionOutcome.Failure(closed.Code, closed.Description);
     }
 
     private static MutationExecutionOutcome ToOutcome<T>(Result<T> result)

@@ -51,6 +51,10 @@ public sealed class GetAttentionBoardHandler(
         var cards = new List<AttentionCardDto>();
         var scheduledWork = new List<ScheduledWorkItemDto>();
 
+        // spec: plr-d10 lane PRV (founder D-26) — what the board adds up for him counts only the records he may see:
+        // a record kept from him neither marks a planned step done nor counts as a dispute (orchestrator call 8).
+        var visibility = await Services.RecordVisibility.ForFarmsAsync(repository, farmIds, query.CallerUserId, clock.UtcNow, ct);
+
         foreach (var farmId in farmIds)
         {
             var farm = await repository.GetFarmByIdAsync(farmId, ct);
@@ -72,7 +76,9 @@ public sealed class GetAttentionBoardHandler(
 
                 // Get planned activities and log tasks for this cycle
                 var planned = await repository.GetPlannedActivitiesByCropCycleIdAsync(latestCycle.Id, ct);
-                var executed = await repository.GetExecutedTasksByCropCycleIdAsync(latestCycle.Id, ct);
+                var executed = (await repository.GetExecutedTasksByCropCycleIdAsync(latestCycle.Id, ct))
+                    .Where(t => visibility.MaySeeLog(t.DailyLogId))
+                    .ToList();
 
                 // Filter out removed planned activities
                 planned = planned.Where(p => !p.IsRemoved).ToList();
@@ -114,6 +120,12 @@ public sealed class GetAttentionBoardHandler(
 
                 // Count disputes
                 var disputeCount = await repository.GetDisputedLogCountForPlotAsync(plot.Id, ct);
+                if (visibility.HiddenLogIds.Count > 0)
+                {
+                    var hiddenDisputes = (await repository.GetDailyLogsForFarmByIdsAsync(new FarmId(farmId), visibility.HiddenLogIds.ToList(), ct))
+                        .Count(l => l.PlotId == plot.Id && l.CurrentVerificationStatus == VerificationStatus.Disputed);
+                    disputeCount = Math.Max(0, disputeCount - hiddenDisputes);
+                }
 
                 // CEI Phase 2 §4.5 — missing tests on this plot
                 var missingTestCount = missingByPlot.TryGetValue(plot.Id, out var mtc) ? mtc : 0;

@@ -22,6 +22,7 @@ import { showsProducts } from '../../logs/components/voiceResult/productModel';
 import type { DayRecording } from './dayRecordings';
 import { ListenControl, LogPhotos, StatusChip, useReflectCopy } from './RecordingParts';
 import type { DayListen } from './useDayListen';
+import { AudienceLockChip } from '../../recordAudience/AudienceRow';
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
@@ -47,6 +48,8 @@ export const RecordingInline: React.FC<{ rec: DayRecording; listen: DayListen; t
                 <WhoChip who={view.who} testId={`${testId}-who`} />
                 {view.typed && <TypedTag testId={`${testId}-typed`} />}
                 <StatusChip confirmed={view.confirmed} testId={`${testId}-state`} />
+                {/* lane PRV — a record the holder narrowed shows it in his list (only the holder is told). */}
+                <AudienceLockChip audience={rec.voiceLog.audience} testId={`${testId}-audience`} />
                 {!view.typed && <ListenControl rec={rec} listen={listen} testId={`${testId}-play`} />}
                 {onEdit && rec.logs.map(l => (
                     <button key={l.id} type="button" onClick={() => { listen.stop(); onEdit(l); }} data-testid={`${testId}-edit-${l.id}`}

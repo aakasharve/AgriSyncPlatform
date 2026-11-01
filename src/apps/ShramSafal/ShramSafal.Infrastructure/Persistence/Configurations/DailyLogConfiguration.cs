@@ -167,6 +167,19 @@ internal sealed class DailyLogConfiguration : IEntityTypeConfiguration<DailyLog>
             .HasColumnName("capture_scope")
             .HasMaxLength(16);
 
+        // spec: plr-d10 lane PRV (founder D-26) — who may see the record. NOT NULL DEFAULT 'Team' (the member name,
+        // CHECK-constrained in the migration), so an older binary inserting without the column writes today's
+        // behaviour (doctrine E8). When it last changed: NULLABLE, NULL = never.
+        builder.Property(x => x.Audience)
+            .HasColumnName("audience")
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .HasDefaultValue(ShramSafal.Domain.RecordPrivacy.RecordAudience.Team)
+            .HasSentinel(ShramSafal.Domain.RecordPrivacy.RecordAudience.Team)
+            .IsRequired();
+        builder.Property(x => x.AudienceChangedAtUtc)
+            .HasColumnName("audience_changed_at_utc");
+
         builder.HasIndex(x => x.IdempotencyKey)
             .IsUnique()
             .HasFilter("idempotency_key IS NOT NULL");

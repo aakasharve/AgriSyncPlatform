@@ -299,6 +299,33 @@ public static class ShramSafalErrors
     public static readonly Error JobCardActivityTypeMismatch = Error.Validation("ShramSafal.JobCardActivityTypeMismatch", "No task in the daily log matches an activity type on this job card.");
     public static readonly Error UseSettleJobCardForLabourPayout = Error.Forbidden("ShramSafal.UseSettleJobCardForLabourPayout", "Use the settle-job-card-payout endpoint to record labour payouts. Direct labour_payout cost entries are not allowed.");
 
+    // --- lane PRV (founder D-26) — who may see one record ---------------------------------------
+    // Every code below ends in ".Forbidden" or ".InvalidCommand" on purpose: every phone in the field (1.0.17 included)
+    // reads the LAST segment and PARKS the change for the farmer to see (RejectionPolicy), never retrying it silently.
+
+    /// <summary>
+    /// A change (an edit, a confirmation, a correction, a photo) to a record the sender may no longer see. Nothing of it
+    /// is applied; the phone keeps it, parked and visible (P10). Worded as ShramSafal's rule, never pointing at anyone.
+    /// </summary>
+    public static readonly Error RecordAudienceClosed = Error.Forbidden(
+        "ShramSafal.RecordAudience.Forbidden",
+        "By ShramSafal's rules this change could not be applied to this record. The change is kept on the phone.");
+
+    /// <summary>Only the farm's primary account holder chooses who sees a record (D-26).</summary>
+    public static readonly Error RecordAudienceNotHolder = Error.Forbidden(
+        "ShramSafal.RecordAudienceHolder.Forbidden",
+        "Only the farm's primary account holder chooses who sees a record.");
+
+    /// <summary>A chosen person who holds no Active seat on the record's own farm (E4: tenancy both ways).</summary>
+    public static readonly Error RecordAudienceStranger = Error.Forbidden(
+        "ShramSafal.RecordAudienceMember.Forbidden",
+        "Every chosen person must be an active member of this record's farm.");
+
+    /// <summary>A record whose audience this release cannot change (a job card's payout follows its job card).</summary>
+    public static readonly Error RecordAudienceNotSettable = Error.Validation(
+        "ShramSafal.RecordAudienceState.InvalidCommand",
+        "Who sees this record cannot be changed here.");
+
     // --- Farm Geo / Weather Anchor ---------------------------------------------------------
     public static readonly Error FarmCentreMissing = Error.Conflict("ShramSafal.FarmCentreMissing", "Farm has no canonical centre; draw the farm boundary before requesting weather.");
     public static readonly Error WeatherProviderNotConfigured = Error.Internal("ShramSafal.WeatherProviderNotConfigured", "Weather provider is not configured on this server.");

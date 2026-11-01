@@ -354,6 +354,30 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
     }
 
     /// <summary>
+    /// lane PRV — runs <paramref name="body"/> in a request scope of the real host, inside one transaction (the
+    /// middleware's posture), with <paramref name="user"/>'s farm scope opened on <paramref name="farmId"/> exactly as a
+    /// farm route opens it (<c>ICallerFarmTenantScope.EstablishForCallerAsync</c>): for a door whose ROUTE cannot run in
+    /// this host, its handler is asked as the route asks it. Rolled back: nothing it does is kept.
+    /// </summary>
+    protected async Task<T> AsFarmMemberAsync<T>(Guid farmId, Guid user, Func<IServiceProvider, Task<T>> body)
+    {
+        await using var scope = _app!.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ShramSafalDbContext>();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var opened = await scope.ServiceProvider.GetRequiredService<ShramSafal.Application.Ports.ICallerFarmTenantScope>()
+            .EstablishForCallerAsync(farmId, user);
+        opened.IsSuccess.Should().BeTrue("{0} is a member of {1}", user, farmId);
+        try
+        {
+            return await body(scope.ServiceProvider);
+        }
+        finally
+        {
+            await transaction.RollbackAsync();
+        }
+    }
+
+    /// <summary>
     /// A request as <paramref name="user"/>. <paramref name="appVersion"/>: what the phone says it is (MU-3 fix 2, N1) —
     /// the new phone by default; <c>null</c> sends no version at all, as 1.0.17's job-card and worker-page calls do.
     /// </summary>

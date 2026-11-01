@@ -208,6 +208,13 @@ public static class LogsEndpoints
             {
                 return Results.Forbid();
             }
+
+            // spec: plr-d10 lane PRV (founder D-26) — a record whose audience leaves him out: refused.
+            if (!await RecordAudienceGate.MaySeeLogAsync(repository, log, callerUserId, clock.UtcNow, ct))
+            {
+                return Results.Forbid();
+            }
+
             var resolvedCallerRole = callerRole.Value;
 
             // spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27. This

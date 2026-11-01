@@ -88,7 +88,23 @@ public sealed record SyncPullResponseDto(
     // per farm. A farm the phone holds that is NOT listed is no longer his to read (paused, removed,
     // never approved): the phone purges it. Additive and last (P11): an older phone ignores it and
     // simply receives less; an older server never sends it (the phone then purges nothing).
-    IReadOnlyList<FarmAccessScopeDto>? AccessScopes = null);
+    IReadOnlyList<FarmAccessScopeDto>? AccessScopes = null,
+    // spec: plr-d10 lane PRV (founder D-26) — records this person held (they were made before his cursor) whose
+    // audience changed after it and that he may no longer see: kind + id, NOTHING else. The phone removes them and
+    // everything that hangs from them. Additive and last (P11): an older phone ignores it and keeps its copy (D-65).
+    IReadOnlyList<WithdrawnRecordDto>? WithdrawnRecords = null);
+
+/// <summary>
+/// lane PRV — one record taken back from a phone: its kind (<c>DailyLog</c> / <c>CostEntry</c>) and id. Content-free.
+/// </summary>
+public sealed record WithdrawnRecordDto(string Kind, Guid Id);
+
+/// <summary>
+/// lane PRV — one kind of record on one day that this person's totals do not count (W4: "By ShramSafal's rules, some
+/// records are not counted here"). Kind is <c>work</c> or <c>money</c>; the day is the record's own day. No id, no
+/// amount, no words: the phone only needs to know WHICH totals to label.
+/// </summary>
+public sealed record WithheldRecordDayDto(string Kind, DateOnly Date);
 
 /// <summary>
 /// lane MU-3 — one farm's read scope on the pull wire (<c>Services.FarmReadScope</c>), for the phone's
@@ -116,7 +132,10 @@ public sealed record FarmAccessScopeDto(
     bool SeeTests,
     bool SeeCompliance,
     bool SeeFarmOverview,
-    string Status = FarmAccessScopeDto.Active)
+    string Status = FarmAccessScopeDto.Active,
+    // spec: plr-d10 lane PRV — the days of this farm whose totals leave out a record by rule (W4). Additive; absent or
+    // empty = every record the farm holds is counted for him.
+    IReadOnlyList<WithheldRecordDayDto>? WithheldRecordDays = null)
 {
     public const string Active = "Active";
     public const string Paused = "Paused";

@@ -9,6 +9,7 @@ import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostC
 // LABOUR_PHASE2 Phase 3 — see the LABOUR ENGAGEMENT DTOS section below.
 import type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEngagementDto } from './labourDtos';
 import type { FarmAccessScopeDto } from './accessScopeDtos';
+import type { PullAudienceFields, RecordAudienceFields } from './recordAudienceDtos';
 export type { FarmAccessScopeDto } from './accessScopeDtos';
 
 export type VerificationStatus =
@@ -156,7 +157,7 @@ export type DailyLogScope = 'Plot' | 'MultiPlot' | 'Farm';
 // `DayOutcomeDto` followed the same path for the same reason.
 export type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEngagementDto };
 
-export interface DailyLogDto {
+export interface DailyLogDto extends RecordAudienceFields {
     id: string;
     farmId: string;
     /**
@@ -295,7 +296,7 @@ export interface LogContentDto {
     amountsWithheld?: boolean | null;
 }
 
-export interface CostEntryDto {
+export interface CostEntryDto extends RecordAudienceFields {
     id: string;
     farmId: string;
     plotId?: string;
@@ -457,7 +458,7 @@ export interface AttentionBoardDto {
     scheduledWork?: unknown[] | null; // spec: plr-d10 (I22) — additive; each row read by `features/attention/scheduledWork.ts`
 }
 
-export interface SyncPullResponse {
+export interface SyncPullResponse extends PullAudienceFields {
     serverTimeUtc: string;
     nextCursorUtc: string;
     farms: FarmDto[];

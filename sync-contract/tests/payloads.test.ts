@@ -1016,3 +1016,36 @@ describe('AddLocationPayload', () => {
         expect(r.success).toBe(false);
     });
 });
+
+// spec: plr-d10 lane PRV (founder D-26) — set_record_audience: who sees ONE record.
+describe('lane PRV — SetRecordAudiencePayload', () => {
+    const base = {
+        recordKind: 'DailyLog',
+        recordId: VALID_GUID_A,
+        audience: 'OnlyMe',
+        selectedUserIds: [] as string[],
+        changedAtUtc: VALID_ISO,
+    };
+
+    it('accepts the three audiences on either kind of record', () => {
+        expect(payloads.SetRecordAudiencePayload.safeParse(base).success).toBe(true);
+        expect(payloads.SetRecordAudiencePayload.safeParse({ ...base, audience: 'Team' }).success).toBe(true);
+        expect(payloads.SetRecordAudiencePayload.safeParse({ ...base, recordKind: 'CostEntry', audience: 'Selected', selectedUserIds: [VALID_GUID_B] }).success).toBe(true);
+    });
+
+    it('refuses an unknown kind, an unknown audience, a non-id person and a missing time', () => {
+        expect(payloads.SetRecordAudiencePayload.safeParse({ ...base, recordKind: 'JobCard' }).success).toBe(false);
+        expect(payloads.SetRecordAudiencePayload.safeParse({ ...base, audience: 'Owner' }).success).toBe(false);
+        expect(payloads.SetRecordAudiencePayload.safeParse({ ...base, audience: 'Selected', selectedUserIds: ['ram'] }).success).toBe(false);
+        const { changedAtUtc: _omit, ...noTime } = base;
+        expect(payloads.SetRecordAudiencePayload.safeParse(noTime).success).toBe(false);
+    });
+
+    it("names people only for 'Selected', each once", async () => {
+        const { setRecordAudienceNamesPeopleRightly: names } = await import('../schemas/payloads/set_record_audience.zod');
+        expect(names({ ...base, audience: 'Selected', selectedUserIds: [VALID_GUID_B] } as never)).toBe(true);
+        expect(names({ ...base, audience: 'Selected', selectedUserIds: [] } as never)).toBe(false);
+        expect(names({ ...base, audience: 'OnlyMe', selectedUserIds: [VALID_GUID_B] } as never)).toBe(false);
+        expect(names({ ...base, audience: 'Selected', selectedUserIds: [VALID_GUID_B, VALID_GUID_B] } as never)).toBe(false);
+    });
+});

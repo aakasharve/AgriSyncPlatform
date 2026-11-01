@@ -18,6 +18,11 @@ export interface RuleWithheldCopy {
     moneyAccounts: string;
     /** W3 — in place of an amount or a wage (a cell where ₹ would be: job cards, labour, the worker page). */
     amount: string;
+    /**
+     * W4 (lane PRV, founder D-26 — orchestrator call 8) — under a total that leaves out a record whose audience leaves
+     * this person out. The founder's rule of 2026-11-01: ShramSafal's rule, never "not shown to you", never the owner.
+     */
+    notCounted: string;
 }
 
 const mr: RuleWithheldCopy = {
@@ -27,6 +32,8 @@ const mr: RuleWithheldCopy = {
     moneyAccounts: 'श्रमसफलच्या नियमानुसार पैशांचा हिशोब इथे दिसत नाही.',
     // Founder 2026-11-01 (W3), verbatim.
     amount: 'नियमानुसार दिसत नाही',
+    // Orchestrator 2026-11-01 (W4), verbatim.
+    notCounted: 'श्रमसफलच्या नियमानुसार काही नोंदी या हिशोबात धरलेल्या नाहीत.',
 };
 
 const en: RuleWithheldCopy = {
@@ -36,6 +43,8 @@ const en: RuleWithheldCopy = {
     moneyAccounts: "By ShramSafal's rules, the money accounts are not shown here.",
     // Founder 2026-11-01 (W3), verbatim.
     amount: 'Not shown by rule',
+    // Orchestrator 2026-11-01 (W4), verbatim.
+    notCounted: "By ShramSafal's rules, some records are not counted here.",
 };
 
 /** English only for 'en'; every other language reads Marathi (the app's default). */

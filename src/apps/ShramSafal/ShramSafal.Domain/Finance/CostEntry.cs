@@ -3,6 +3,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Events;
 using ShramSafal.Domain.Location;
+using ShramSafal.Domain.RecordPrivacy;
 
 namespace ShramSafal.Domain.Finance;
 
@@ -347,6 +348,31 @@ public sealed class CostEntry : Entity<Guid>
             correctionId,
             correctedAmount,
             currencyCode));
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane PRV (founder D-26) — who may see this money record, as the farm's primary account holder chose
+    /// it. <see cref="RecordAudience.Team"/> (the default, exactly today's behaviour) until he narrows it.
+    /// </summary>
+    public RecordAudience Audience { get; private set; } = RecordAudience.Team;
+
+    /// <summary>lane PRV — when the audience last changed; <c>null</c> when it never did.</summary>
+    public DateTime? AudienceChangedAtUtc { get; private set; }
+
+    /// <summary>
+    /// lane PRV — the audience changed. Moves the entry past every phone's cursor and nothing else: the amount, its
+    /// corrections and its history are untouched (P3).
+    /// </summary>
+    public void SetAudience(RecordAudience audience, DateTime changedAtUtc)
+    {
+        if (!Enum.IsDefined(audience))
+        {
+            throw new ArgumentOutOfRangeException(nameof(audience), audience, "Unknown audience.");
+        }
+
+        Audience = audience;
+        ModifiedAtUtc = AudienceStamp.NextModified(ModifiedAtUtc, changedAtUtc);
+        AudienceChangedAtUtc = ModifiedAtUtc;
     }
 
     public void AttachLocation(LocationSnapshot location)

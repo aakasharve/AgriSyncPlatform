@@ -96,8 +96,15 @@ public static class AttachmentParentRule
             ? new Dictionary<Guid, RecordMaker>()
             : await repository.GetRecordMakersAsync(needMakers, ct);
 
+        // spec: plr-d10 lane PRV (founder D-26) — and where its parent's AUDIENCE includes him: a photo of a record kept
+        // from him, or a bill photo a money record kept from him names, is not his (one read for all their farms).
+        var visibility = RecordVisibility.For(
+            readerUserId,
+            scopes.Where(kv => kv.Value is not null).ToDictionary(kv => kv.Key, kv => kv.Value!),
+            await repository.GetRestrictedRecordsAsync(scopes.Keys.ToList(), ct));
         return attachments
             .Where(a => MayRead(scopes.GetValueOrDefault((Guid)a.FarmId), readerUserId, a, makers.GetValueOrDefault(a.LinkedEntityId)))
+            .Where(visibility.MaySeeAttachment)
             .ToList();
     }
 

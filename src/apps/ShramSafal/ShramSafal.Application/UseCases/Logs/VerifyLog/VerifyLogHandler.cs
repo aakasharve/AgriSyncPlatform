@@ -74,6 +74,13 @@ public sealed class VerifyLogHandler(
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
         }
+
+        // spec: plr-d10 lane PRV (founder D-26) — a record whose audience leaves him out is not his to confirm.
+        if (!await Services.RecordAudienceGate.MaySeeLogAsync(repository, log, command.VerifiedByUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<DailyLogDto>(ShramSafalErrors.RecordAudienceClosed);
+        }
+
         var resolvedCallerRole = callerRole.Value;
 
         // ── spec: 2026-08-25-prod-cutover-waves — FOUNDER RULING 2026-08-27 ──────

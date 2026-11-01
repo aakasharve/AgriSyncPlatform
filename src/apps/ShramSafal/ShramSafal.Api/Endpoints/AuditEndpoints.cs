@@ -34,6 +34,15 @@ public static class AuditEndpoints
 
             if (!string.IsNullOrWhiteSpace(entityType) && entityId.HasValue)
             {
+                // spec: plr-d10 lane PRV — a caller who names the farm gets its scope opened first (the farm stream's
+                // own gate, MU-3 fix 1 F94), so a farm-linked trail can be read — and refused for a record kept from
+                // him. Without a farm the branch behaves exactly as before.
+                if (farmId.HasValue
+                    && !(await tenantScope.EstablishForCallerAsync(farmId.Value, actorUserId, ct)).IsSuccess)
+                {
+                    return Results.Forbid();
+                }
+
                 return await GetEntityStreamAsync(
                     entityType, entityId.Value, actorUserId, http, repository, entitlementResolver, ct, clock);
             }
@@ -81,7 +90,10 @@ public static class AuditEndpoints
                 pageOffset,
                 ct);
 
+            // spec: plr-d10 lane PRV (founder D-26) — no row about, or naming, a record kept from him.
+            var visibility = await RecordVisibility.ForFarmAsync(repository, farmId.Value, actorUserId, clock.UtcNow, ct);
             var result = farmEvents
+                .Where(e => !NamesHidden(visibility, e))
                 .Select(ToDto)
                 .ToList();
 
@@ -111,6 +123,21 @@ public static class AuditEndpoints
     {
         var events = await repository.GetAuditEventsForEntityAsync(entityId, entityType, ct);
         var now = clock?.UtcNow ?? DateTime.UtcNow;
+
+        // spec: plr-d10 lane PRV (founder D-26) — the trail of a record kept from him is refused whole, and no row of
+        // another entity's trail that names such a record reaches him.
+        var trailFarms = events.Select(x => x.FarmId).Where(x => x.HasValue).Select(x => x!.Value).Distinct().ToList();
+        if (trailFarms.Count > 0)
+        {
+            var visibility = await RecordVisibility.ForFarmsAsync(repository, trailFarms, actorUserId, now, ct);
+            if ((entityType == ShramSafal.Domain.RecordPrivacy.RecordKinds.DailyLog && !visibility.MaySeeLog(entityId))
+                || (entityType == ShramSafal.Domain.RecordPrivacy.RecordKinds.CostEntry && !visibility.MaySeeCost(entityId)))
+            {
+                return Results.Forbid();
+            }
+
+            events = events.Where(e => !NamesHidden(visibility, e)).ToList();
+        }
 
         // Entity stream may include farm-linked events; enforce visibility by farm membership.
         foreach (var relatedFarmId in events
@@ -170,6 +197,12 @@ public static class AuditEndpoints
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, userId, atUtc, ct);
         return scope is { OwnRecordsOnly: false, SeeMoney: true, SeeWages: true };
     }
+
+    /// <summary>lane PRV — is this row about, or does its payload name, a record kept from the reader?</summary>
+    private static bool NamesHidden(RecordVisibility visibility, Domain.Audit.AuditEvent auditEvent) =>
+        visibility.HiddenLogIds.Contains(auditEvent.EntityId)
+        || visibility.HiddenCostIds.Contains(auditEvent.EntityId)
+        || visibility.MentionsHidden(auditEvent.Payload);
 
     private static bool IsPlatformAuditReader(AdminScope? scope) =>
         scope is { IsPlatformAdmin: true } && scope.CanRead(ModuleKey.AuditLedger);

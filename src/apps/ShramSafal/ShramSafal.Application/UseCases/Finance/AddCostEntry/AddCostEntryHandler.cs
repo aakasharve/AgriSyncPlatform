@@ -192,7 +192,16 @@ public sealed class AddCostEntryHandler(
             entry.Flag(HighAmountFlagReason);
         }
 
+        // spec: plr-d10 lane PRV (founder D-26) — money a narrowed record's own line made follows that record's audience,
+        // even when it arrives after the record was narrowed (its phone was offline).
+        var selected = await Services.RecordMoneyAudience.InheritAsync(repository, entry, clock.UtcNow, ct);
+
         await repository.AddCostEntryAsync(entry, ct);
+        if (selected is { Count: > 0 })
+        {
+            await repository.ReplaceRecordAudienceMembersAsync(
+                (Guid)entry.FarmId, Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id, selected, clock.UtcNow, ct);
+        }
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real
         // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
