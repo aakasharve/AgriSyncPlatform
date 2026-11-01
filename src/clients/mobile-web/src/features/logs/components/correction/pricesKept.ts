@@ -10,8 +10,9 @@
  * "A price" is read by the same stated-amount rule the save makes money by (`recordMoneyLines.ts`): an input's cost, a
  * machine's rent + fuel, an expense's amount. Kept as saved:
  *   - a saved line keeps its saved price, whatever else of it changes;
- *   - a line said again (his words replace the part with a new item, paired with the saved one the way the screen pairs
- *     them) keeps the saved line's id and price, with his other words — the server sees the same priced line;
+ *   - a line said again (his words replace the part with a new item) keeps the saved line's id and price, with his other
+ *     words — the server sees the same priced line. Fix pass 5: paired by what it names (a product, a machine, an
+ *     expense's reason) before its place in the list, so two lines said again in another order never swap prices;
  *   - a saved priced line his words left out stays as saved;
  *   - a new line carries no price; a new expense (nothing but its amount) is not added.
  * TODO(D-12): when money can be approved, approved money will be changed only by someone who checks money.
@@ -30,6 +31,14 @@ const PRICE_FIELDS: Readonly<Record<PricedBucket, readonly string[]>> = {
 };
 
 const isPricedBucket = (bucket: string): bucket is PricedBucket => (PRICED_BUCKETS as readonly string[]).includes(bucket);
+
+/** What a line names, to pair a line said again with its saved one ('' = nothing to pair by). */
+function nameOf(bucket: PricedBucket, line: Line): string {
+    const said = bucket === 'inputs'
+        ? (line.productName ?? (line.mix as Array<{ productName?: unknown }> | undefined)?.[0]?.productName)
+        : bucket === 'machinery' ? line.type : (line.reason ?? line.category);
+    return typeof said === 'string' ? said.trim().toLowerCase() : '';
+}
 const linesOf = (log: DailyLog, bucket: PricedBucket): Line[] => ((log[bucket] as unknown as Line[] | undefined) ?? []);
 
 function priceOf(bucket: PricedBucket, line: Line): number {
@@ -59,15 +68,25 @@ export function keepSavedPrices(saved: DailyLog, working: DailyLog): DailyLog {
         const beforeIds = new Set(before.map(l => l.id));
         const nowIds = new Set(now.map(l => l.id));
         const unmatched = before.filter(l => !nowIds.has(l.id));
+        // Each new line takes the saved line naming the same thing; what is left pairs by place, as the screen shows it.
+        const named = new Set<string | undefined>();
+        const fresh = now.filter(l => !beforeIds.has(l.id));
+        const partner = new Map<Line, Line>();
+        for (const line of fresh) {
+            const name = nameOf(bucket, line);
+            const same = name ? unmatched.find(w => !named.has(w.id) && nameOf(bucket, w) === name) : undefined;
+            if (same) { partner.set(line, same); named.add(same.id); }
+        }
+        const byPlace = unmatched.filter(w => !named.has(w.id));
+        fresh.filter(l => !partner.has(l)).forEach((line, i) => { if (byPlace[i]) partner.set(line, byPlace[i]); });
         const paired = new Set<string | undefined>();
-        let pair = 0;
         const kept: Line[] = [];
         for (const line of now) {
             if (beforeIds.has(line.id)) {
                 kept.push(withPriceOf(bucket, line, before.find(b => b.id === line.id)));
                 continue;
             }
-            const was = unmatched[pair++];
+            const was = partner.get(line);
             if (was && priceOf(bucket, was) > 0) {
                 paired.add(was.id);
                 kept.push(withPriceOf(bucket, { ...line, id: was.id }, was));

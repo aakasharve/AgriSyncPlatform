@@ -25,6 +25,7 @@ import { holdMoney, readHeldMoney } from '../heldMoney';
 import { moneyEntryIdFor } from '../moneyEntryIdentity';
 import { readMoneyNotFollowed, takeEditMoney } from '../editMoney';
 import { readLedgerGaps } from '../../reflect/overview/useMoneyLedger';
+import { moneyNotFollowedLines } from '../../logs/components/correction/moneyNotFollowed';
 import type { MoneySourcePayload } from '../finance.types';
 
 const LOG = '0f5e7000-0000-4000-8000-0000000000f1';
@@ -98,6 +99,17 @@ describe('review 10 — the money a refusal names is found by its id alone', () 
         expect(await readMoneyNotFollowed(LOG)).toEqual(['moneyBook']);
         await takeEditMoney(LOG, { moneyChanged: [], moneyCorrections: [], moneyNotFollowed: [] });
         expect(await readMoneyNotFollowed(LOG)).toEqual(['moneyBook']);
+    });
+
+    it('fix pass 5 (item 10): a record whose money follows no edit is said in ONE plain line, however many lines it names', async () => {
+        const lines = ['in-1', 'in-2', 'in-3'].map(lineId => ({
+            kind: 'input', lineId, costEntryId: moneyEntryIdFor(`${LOG}:input:${lineId}`), reason: 'detailsNotHeld',
+        }));
+        await takeEditMoney(LOG, { moneyChanged: [], moneyCorrections: [], moneyNotFollowed: lines });
+        const reasons = await readMoneyNotFollowed(LOG);
+        expect(reasons).toHaveLength(3);
+        expect(moneyNotFollowedLines(reasons, 'mr')).toHaveLength(1);
+        expect(moneyNotFollowedLines(reasons, 'en')).toHaveLength(1);
     });
 
     it('a named line he has since removed still finds its row in the outbox', async () => {

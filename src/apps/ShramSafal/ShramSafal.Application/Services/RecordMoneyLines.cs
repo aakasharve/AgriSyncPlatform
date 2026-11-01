@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ShramSafal.Domain.Finance;
 
 namespace ShramSafal.Application.Services;
@@ -73,6 +75,77 @@ public static class RecordMoneyLines
 
         return lines;
     }
+
+    /// <summary>The fields that hold a line's price, per bucket (the same reading as <see cref="Of"/>).</summary>
+    private static readonly (string Bucket, string Kind, string[] Fields)[] PriceFields =
+    [
+        ("inputs", MoneyEntryIdentity.Input, ["cost"]),
+        ("machinery", MoneyEntryIdentity.Machinery, ["rentalCost", "fuelCost"]),
+        ("activityExpenses", MoneyEntryIdentity.ActivityExpense, ["totalAmount"]),
+    ];
+
+    private static readonly JsonSerializerOptions WriteOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-M fix pass 5) — an edit made on an older version by a seat that may not change prices, which
+    /// changed no price of what it saw: the record's CURRENT prices are carried into it (as his words are carried
+    /// forward), so it lands without putting back an older price. A line of his keeps everything but its price, which
+    /// is the record's now (none when the record does not price it); a priced line he never saw is kept as it is.
+    /// </summary>
+    public static string CarryPricesForward(Guid dailyLogId, string currentDocumentJson, string incomingDocumentJson)
+    {
+        if (JsonNode.Parse(incomingDocumentJson) is not JsonObject incoming
+            || JsonNode.Parse(currentDocumentJson) is not JsonObject current)
+        {
+            return incomingDocumentJson;
+        }
+
+        using var currentDocument = JsonDocument.Parse(currentDocumentJson);
+        var priced = Of(dailyLogId, currentDocument.RootElement).Where(l => l.Amount > 0m).Select(l => (l.Kind, l.LineId)).ToHashSet();
+        foreach (var (bucket, kind, fields) in PriceFields)
+        {
+            var now = (current[bucket] as JsonArray)?.OfType<JsonObject>()
+                .Where(item => IdOf(item) is not null)
+                .GroupBy(item => IdOf(item)!)
+                .ToDictionary(g => g.Key, g => g.First()) ?? [];
+            var his = incoming[bucket] as JsonArray;
+            var seen = new HashSet<string>();
+            foreach (var item in his?.OfType<JsonObject>() ?? [])
+            {
+                if (IdOf(item) is not { } id)
+                {
+                    continue;
+                }
+
+                seen.Add(id);
+                var from = now.GetValueOrDefault(id);
+                foreach (var field in fields)
+                {
+                    item.Remove(field);
+                    if (from?[field] is { } value)
+                    {
+                        item[field] = value.DeepClone();
+                    }
+                }
+            }
+
+            foreach (var (id, item) in now.Where(n => !seen.Contains(n.Key) && priced.Contains((kind, n.Key))))
+            {
+                if (his is null)
+                {
+                    his = [];
+                    incoming[bucket] = his;
+                }
+
+                his.Add(item.DeepClone());
+            }
+        }
+
+        return incoming.ToJsonString(WriteOptions);
+    }
+
+    private static string? IdOf(JsonObject item) =>
+        item["id"] is JsonValue id && id.TryGetValue<string>(out var text) && text.Length > 0 ? text : null;
 
     /// <summary>The phone's <c>mapActivityExpenseCategory</c> then <c>moneyCategoryToCostCategoryId</c>, as one step.</summary>
     public static string ExpenseCategoryOf(string? category)

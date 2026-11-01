@@ -91,7 +91,7 @@ describe('OF-M R4-1 — the refusal names the money it could not find', () => {
 });
 
 describe('OF-M F89 — money that could not follow an edit, said plainly in his language only', () => {
-    const reasons = ['notFound', 'shared', 'jobCard', 'detailsNotHeld', 'notAllowed', 'idTaken', 'tooLong', 'moneyBook'] as const;
+    const reasons = ['notFound', 'shared', 'jobCard', 'detailsNotHeld', 'notAllowed', 'idTaken', 'tooLong', 'moneyBook', 'oldMoneyKept'] as const;
 
     it('one plain line per reason, never repeated, in Marathi or English only', () => {
         for (const reason of reasons) {
@@ -123,6 +123,9 @@ describe('OF-M F89 — money that could not follow an edit, said plainly in his 
         // fix pass 4: money corrected in the money book is not changed by an edit
         expect(moneyNotFollowedLines(['moneyBook'], 'en')[0]).toContain('corrected in the money accounts');
         expect(moneyNotFollowedLines(['moneyBook'], 'mr')[0]).toContain('हिशोबात दुरुस्त');
+        // fix pass 5 (N4): new money held back beside money that is kept
+        expect(moneyNotFollowedLines(['oldMoneyKept'], 'en')[0]).toContain('not added separately');
+        expect(moneyNotFollowedLines(['oldMoneyKept'], 'mr')[0]).toContain('वेगळी जोडली नाही');
     });
 });
 

@@ -27,10 +27,12 @@ export type MoneyNotFollowedReason =
     // fix pass 1 (review 10): a value too long for the money book.
     | 'tooLong'
     // fix pass 4: its latest correction was made in the money book, so no edit changes it.
-    | 'moneyBook';
+    | 'moneyBook'
+    // fix pass 5 (N4): money of a line that is gone is kept, so no new money was made beside it.
+    | 'oldMoneyKept';
 
 const REASONS: ReadonlySet<string> = new Set<MoneyNotFollowedReason>(
-    ['notFound', 'shared', 'jobCard', 'detailsNotHeld', 'notAllowed', 'idTaken', 'tooLong', 'moneyBook']);
+    ['notFound', 'shared', 'jobCard', 'detailsNotHeld', 'notAllowed', 'idTaken', 'tooLong', 'moneyBook', 'oldMoneyKept']);
 
 /** One line whose money did not follow: the money id it has (or would have; `kind:lineId` from an answer without one) and why. */
 export interface MoneyNotFollowedLine { key: string; reason: MoneyNotFollowedReason }

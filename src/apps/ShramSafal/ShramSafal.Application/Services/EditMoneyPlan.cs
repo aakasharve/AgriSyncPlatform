@@ -43,6 +43,10 @@ public enum EditMoneyNotFollowed
     /// <summary>Fix pass 4 — its latest correction was made in the money book (a reviewer acting on the money itself): it
     /// belongs to the money book from then on, and no record edit changes it.</summary>
     MoneyBook,
+
+    /// <summary>Fix pass 5 (N4) — money of a line the record no longer states is kept as it is (the money book's, shared
+    /// out, or a job card's), so no new money is made on the record: a line said again could otherwise count twice.</summary>
+    OldMoneyKept,
 }
 
 /// <summary>
@@ -76,6 +80,9 @@ public sealed record EditMoneyStep(
 /// derived id (a crew's money is made only with its record: a priced crew is first money, so a missing one is rule B's);</item>
 /// <item>money of a line the record no longer states (any version's line, <see cref="RecordFirstMoney.Known"/>) →
 /// corrected to ₹0 (or, tied as above, said);</item>
+/// <item>(fix pass 5, N4) tied money of a line that is gone is kept as it is, so it may stand for a line said again: the
+/// edit then makes NO new money on the record (<see cref="EditMoneyNotFollowed.OldMoneyKept"/>, said); it still corrects
+/// what it may;</item>
 /// <item><paramref name="blocked"/> set (rule B: no create-time details, or first money not all found) → nothing changes:
 /// every step above is said with that reason, and so is every line whose first money is missing.</item>
 /// </list>
@@ -109,12 +116,22 @@ public static class EditMoneyPlan
         }
 
         // Money whose line the record no longer states: no longer spent.
+        var oldKept = false;
         foreach (var (moneyId, key) in known.Where(k => !lineOf.ContainsKey(k.Key)).OrderBy(k => k.Value.Kind).ThenBy(k => k.Value.LineId))
         {
             if (StepFor(key.Kind, key.LineId, moneyId, 0m, null, found) is { } step)
             {
                 steps.Add(step);
+                oldKept |= step.Reason is EditMoneyNotFollowed.MoneyBook or EditMoneyNotFollowed.Shared or EditMoneyNotFollowed.JobCard;
             }
+        }
+
+        // N4 — that kept money may be a line said again: nothing new is made beside it.
+        if (oldKept)
+        {
+            steps = steps.Select(s => s.Action == EditMoneyAction.Create
+                ? s with { Action = EditMoneyAction.NotFollowed, Reason = EditMoneyNotFollowed.OldMoneyKept }
+                : s).ToList();
         }
 
         if (blocked is not { } why)

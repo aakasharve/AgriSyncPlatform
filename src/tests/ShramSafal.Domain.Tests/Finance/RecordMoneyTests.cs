@@ -219,6 +219,61 @@ public sealed class RecordMoneyTests
     }
 
     [Fact]
+    public void Fix5_N4_tied_money_of_a_line_that_is_gone_holds_back_every_new_money_of_the_record_and_says_so()
+    {
+        var found = new Dictionary<Guid, FoundMoney>
+        {
+            [Id("in-1")] = new(Id("in-1"), 450m, Shared: false, JobCard: false, MoneyBook: true),
+            [Id("in-2")] = new(Id("in-2"), 200m, Shared: false, JobCard: false),
+        };
+        var steps = Plan(
+            [Input("in-9", 450), Input("in-2", 250), Input("in-8", 100)],
+            found,
+            ever: [Input("in-1", 500), Input("in-2", 200)]);
+
+        Assert.Equal(EditMoneyNotFollowed.MoneyBook, steps.Single(s => s.LineId == "in-1").Reason);
+        Assert.All(steps.Where(s => s.LineId is "in-9" or "in-8"),
+            s => Assert.Equal((EditMoneyAction.NotFollowed, EditMoneyNotFollowed.OldMoneyKept), (s.Action, s.Reason)));
+        // It still corrects what it may.
+        var corrected = steps.Single(s => s.LineId == "in-2");
+        Assert.Equal((EditMoneyAction.Correct, 250m), (corrected.Action, corrected.Amount));
+        Assert.Equal(4, steps.Count);
+
+        // The money book's money of a line still stated holds nothing back.
+        var stillStated = Plan([Input("in-1", 600), Input("in-8", 100)], found, ever: [Input("in-1", 500)]);
+        Assert.Equal(EditMoneyAction.Create, stillStated.Single(s => s.LineId == "in-8").Action);
+    }
+
+    [Fact]
+    public void Fix5_a_stale_documents_prices_become_the_records_current_ones_and_nothing_else_of_it_changes()
+    {
+        var current = """
+            { "schema": 1,
+              "inputs": [ { "id": "in-1", "productName": "युरिया", "quantity": 2, "cost": 800 }, { "id": "in-3", "productName": "DAP", "cost": "70" } ],
+              "machinery": [ { "id": "m-1", "type": "tractor", "rentalCost": 1000, "fuelCost": 100 } ] }
+            """;
+        var stale = """
+            { "schema": 1,
+              "inputs": [ { "id": "in-1", "productName": "युरिया", "quantity": 3, "cost": 500 }, { "id": "in-2", "productName": "पाणी", "cost": 40 } ],
+              "irrigation": [ { "id": "w-1", "method": "Drip" } ] }
+            """;
+        var carried = RecordMoneyLines.CarryPricesForward(Log, current, stale);
+
+        using var document = JsonDocument.Parse(carried);
+        var inputs = document.RootElement.GetProperty("inputs");
+        Assert.Equal(3, inputs.GetArrayLength());
+        Assert.Equal(800m, inputs[0].GetProperty("cost").GetDecimal());
+        Assert.Equal(3m, inputs[0].GetProperty("quantity").GetDecimal()); // his words stay his
+        Assert.False(inputs[1].TryGetProperty("cost", out _)); // a line the record never priced takes no price
+        Assert.Equal("in-3", inputs[2].GetProperty("id").GetString()); // a priced line he never saw stays
+        Assert.Equal("m-1", document.RootElement.GetProperty("machinery")[0].GetProperty("id").GetString());
+        Assert.Equal(1, document.RootElement.GetProperty("irrigation").GetArrayLength());
+        Assert.Contains("युरिया", carried); // readable, not escaped
+        Assert.False(EditMoneyPlan.ChangesPrices(
+            RecordMoneyLines.Of(Log, Doc(current)), RecordMoneyLines.Of(Log, Doc(carried))));
+    }
+
+    [Fact]
     public void Call1_an_edit_changes_prices_when_a_priced_lines_amount_changes_or_a_priced_line_comes_or_goes()
     {
         RecordMoneyLine[] saved = [Input("in-1", 500), Input("in-2", 0)];

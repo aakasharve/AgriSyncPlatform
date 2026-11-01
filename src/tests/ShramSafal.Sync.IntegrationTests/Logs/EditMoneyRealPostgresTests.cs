@@ -895,6 +895,92 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         latest[In2Money].Should().Be(300m);
     }
 
+    // ── fix pass 5 ─────────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Fix5_N4_money_book_money_of_a_line_said_again_is_never_doubled_and_he_is_told()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateRecordAsync(WorkerA, new
+        {
+            schema = 1,
+            activityExpenses = new object[] { new { id = "exp-1", reason = "डिझेल", category = "Fuel", totalAmount = 500 } },
+        });
+        await PushAppliedAsync(WorkerA, "add_cost_entry", "req-ofm-f5-diesel", CostPayload(ExpMoney, "fuel", 500m));
+        await PushAppliedAsync(OwnerA, "correct_cost_entry", "req-ofm-f5-book", new Dictionary<string, object?>
+        {
+            ["costEntryId"] = ExpMoney,
+            ["correctedAmount"] = 450m,
+            ["currencyCode"] = "INR",
+            ["reason"] = "चूक",
+        });
+
+        // The maker re-says the diesel in बदला at ₹450 (a new line id) and adds ₹100 of transport.
+        var answer = await PushAppliedAsync(WorkerA, "revise_log_content", "req-ofm-f5-resaid", RevisePayload(1, new
+        {
+            schema = 1,
+            activityExpenses = new object[]
+            {
+                new { id = "exp-9", reason = "डिझेल", category = "Fuel", totalAmount = 450 },
+                new { id = "exp-8", reason = "वाहतूक", category = "Transport", totalAmount = 100 },
+            },
+        }));
+
+        (await ReadVersionAsync()).Should().Be(2, "the edit itself lands");
+        var pulled = await PullAsync(OwnerA);
+        var latest = pulled.FinanceCorrections.GroupBy(c => c.CostEntryId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First().CorrectedAmount);
+        var book = pulled.CostEntries.Where(e => e.FarmId == FarmA).Sum(e => latest.TryGetValue(e.Id, out var now) ? now : e.Amount);
+        output.WriteLine($"[EVIDENCE] money book after the re-said diesel: {book}; told: {string.Join(", ", NotFollowed(answer))}");
+        book.Should().Be(450m, "never ₹450 + ₹450");
+        (await ScalarAsync("SELECT COUNT(*) FROM ssf.cost_entries WHERE farm_id = @id", FarmA)).Should().Be(1L);
+        NotFollowed(answer).Should().BeEquivalentTo(
+            ["activity-expense:exp-1:moneyBook", "activity-expense:exp-9:oldMoneyKept", "activity-expense:exp-8:oldMoneyKept"]);
+    }
+
+    [Fact]
+    public async Task Fix5_a_stale_edit_by_a_seat_that_may_not_change_prices_carries_the_current_prices_and_lands()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 500) } });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-f5-money", CostPayload(In1Money, "other", 500m));
+        // The maker changes the price (version 2) while the मुकादम's phone is still on version 1.
+        await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-f5-owner-800", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 800) },
+        }));
+
+        // He adds water on version 1: he changed no price, so his edit lands, at the record's CURRENT price.
+        var water = new object[] { new { id = "w-1", method = "Drip", durationHours = 2 } };
+        await PushAppliedAsync(MukadamA, "revise_log_content", "req-ofm-f5-stale-water", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 500) },
+            irrigation = water,
+        }));
+        (await ReadVersionAsync()).Should().Be(3);
+        var stored = (string)(await ScalarAsync(
+            "SELECT document::text FROM ssf.daily_log_contents WHERE daily_log_id = @id ORDER BY content_version DESC LIMIT 1", EditLog))!;
+        output.WriteLine($"[EVIDENCE] stored after his stale edit: {stored}");
+        using (var document = JsonDocument.Parse(stored))
+        {
+            document.RootElement.GetProperty("inputs")[0].GetProperty("cost").GetDecimal().Should().Be(800m);
+            document.RootElement.GetProperty("irrigation").GetArrayLength().Should().Be(1);
+        }
+
+        (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 800m, OwnerA));
+
+        // A real price change of his, made on version 1, is still refused whole.
+        var refused = await PushFailedAsync(MukadamA, "revise_log_content", "req-ofm-f5-stale-50", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 50) },
+        }));
+        refused.ErrorCode.Should().Be("ShramSafal.LogContentPrices.Conflict");
+        (await ReadVersionAsync()).Should().Be(3);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers.
     // ─────────────────────────────────────────────────────────────────────────

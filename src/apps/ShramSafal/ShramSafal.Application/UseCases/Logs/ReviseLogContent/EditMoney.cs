@@ -88,36 +88,63 @@ internal sealed class EditMoney(
         public static readonly Staged None = new([], []);
     }
 
+    /// <summary>What an edit may do to the record's prices: the document to save, whether its money follows, and whether
+    /// the record's current prices were carried into it (fix pass 5).</summary>
+    public sealed record PriceCheck(string DocumentJson, bool MoneyFollows, bool PricesCarried);
+
     /// <summary>
-    /// BEFORE the new version is staged: refuse an edit that changes a price from a seat that may not (call 1), else bring
-    /// the record's money in line with <paramref name="newDocumentJson"/> and stage the corrections so they commit with the
-    /// version. <paramref name="currentDocumentJson"/> is the record's version before this edit (null = none).
+    /// Call 1, BEFORE anything is compared or staged. The record's maker or someone who reviews money: his document as
+    /// sent, and its money follows. Anyone else: his edit changes no money, and a change of a price is refused whole —
+    /// judged (fix pass 5) against the version he edited, so an edit made on an older version that changed no price of
+    /// it lands, with the record's CURRENT prices carried into it (<see cref="RecordMoneyLines.CarryPricesForward"/>), as
+    /// his words are carried forward. With no earlier version held no price can be shown to change; such a record's money
+    /// follows no edit anyway (rule B, detailsNotHeld).
     /// </summary>
-    public async Task<Result<Staged>> StageAsync(
+    public async Task<Result<PriceCheck>> CheckPricesAsync(
+        DailyLog log, string? currentDocumentJson, int baseVersion, string newDocumentJson, Guid actor, DateTime now, CancellationToken ct)
+    {
+        if (await MayChangePricesAsync(log, actor, now, ct))
+        {
+            return Result.Success(new PriceCheck(newDocumentJson, MoneyFollows: true, PricesCarried: false));
+        }
+
+        var current = currentDocumentJson is null ? null : Read(log, currentDocumentJson);
+        IReadOnlyList<RecordMoneyLine> after = Read(log, newDocumentJson) ?? [];
+        if (current is null || !EditMoneyPlan.ChangesPrices(current, after))
+        {
+            return Result.Success(new PriceCheck(newDocumentJson, MoneyFollows: false, PricesCarried: false));
+        }
+
+        var seen = (await repository.GetDailyLogContentVersionsAsync(log.Id, ct)).FirstOrDefault(v => v.ContentVersion == baseVersion);
+        var seenLines = seen is null ? null : Read(log, seen.DocumentJson);
+        if (seenLines is null || EditMoneyPlan.ChangesPrices(seenLines, after))
+        {
+            logger.LogWarning(
+                "revise_log_content for {LogId} refused: it changes a price, and the editor neither made the record nor reviews money.",
+                log.Id);
+            return Result.Failure<PriceCheck>(ShramSafalErrors.LogContentPricesNotYours);
+        }
+
+        logger.LogInformation(
+            "revise_log_content for {LogId}: made on version {BaseVersion}, it changed no price of it; the record's current prices are carried into it.",
+            log.Id, baseVersion);
+        return Result.Success(new PriceCheck(
+            RecordMoneyLines.CarryPricesForward(log.Id, currentDocumentJson!, newDocumentJson), MoneyFollows: false, PricesCarried: true));
+    }
+
+    /// <summary>
+    /// For a seat whose edit's money follows (<see cref="CheckPricesAsync"/>), before the new version is staged: bring the
+    /// record's money in line with <paramref name="newDocumentJson"/> and stage the corrections so they commit with the
+    /// version.
+    /// </summary>
+    public async Task<Staged> StageAsync(
         DailyLog log,
-        string? currentDocumentJson,
         string newDocumentJson,
         ContentAuditStamp stamp,
         DateTime now,
         CancellationToken ct)
     {
         IReadOnlyList<RecordMoneyLine> after = Read(log, newDocumentJson) ?? [];
-        if (!await MayChangePricesAsync(log, stamp.ActorUserId, now, ct))
-        {
-            // With no earlier version held (a record whose details never reached the server) no price can be shown to
-            // change; such a record's money follows no edit anyway (rule B, detailsNotHeld).
-            var before = currentDocumentJson is null ? null : Read(log, currentDocumentJson);
-            if (before is not null && EditMoneyPlan.ChangesPrices(before, after))
-            {
-                logger.LogWarning(
-                    "revise_log_content for {LogId} refused: it changes a price, and the editor neither made the record nor reviews money.",
-                    log.Id);
-                return Result.Failure<Staged>(ShramSafalErrors.LogContentPricesNotYours);
-            }
-
-            return Result.Success(Staged.None); // his edit lands; no money is touched by a seat that may not change it
-        }
-
         var first = await RecordFirstMoney.OfAsync(repository, log, logger, ct);
         IReadOnlyList<RecordMoneyLine> stated = [.. after, .. first.Crews];
         var ids = first.LookFor
@@ -152,7 +179,7 @@ internal sealed class EditMoney(
         var steps = EditMoneyPlan.Of(log.Id, stated, first.Known, missingFirst, blocked, found).ToList();
         if (steps.Count == 0)
         {
-            return Result.Success(Staged.None);
+            return Staged.None;
         }
 
         steps = await WithMoneySwitchAsync(log, steps, stamp.ActorUserId, ct);
@@ -195,7 +222,7 @@ internal sealed class EditMoney(
             corrected.Add((entry, correction));
         }
 
-        return Result.Success(new Staged(steps, corrected));
+        return new Staged(steps, corrected);
     }
 
     /// <summary>

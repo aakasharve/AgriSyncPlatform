@@ -146,6 +146,8 @@ const mr: CorrectionWords = {
         tooLong: 'या कामाचा तपशील खूप मोठा असल्याने त्याचे पैसे हिशोबात लिहिता आले नाहीत.',
         // PROPOSED (Marathi) — lane OF-M fix pass 4.
         moneyBook: 'या कामाचे पैसे पैशांच्या हिशोबात दुरुस्त केले आहेत, त्यामुळे या बदलाने त्यांची रक्कम बदलली नाही.',
+        // PROPOSED (Marathi) — lane OF-M fix pass 5 (N4).
+        oldMoneyKept: 'या कामाचे आधीचे पैसे हिशोबात तसेच ठेवले आहेत, त्यामुळे नवी रक्कम वेगळी जोडली नाही.',
     },
     pricesLocked: 'किंमती आहेत तशाच राहतील: त्या फक्त ही नोंद करणारे किंवा पैशांच्या नोंदी तपासणारे बदलू शकतात.', // PROPOSED (Marathi) — lane OF-M fix pass 3
     nothingChanged: 'यातून बदलायचं काही समजलं नाही. पुन्हा सांगा.', // PROPOSED (Marathi)
@@ -244,6 +246,8 @@ const en: CorrectionWords = {
         tooLong: 'This work\'s details are too long, so its money could not be written in the money accounts.',
         // PROPOSED (English) — lane OF-M fix pass 4.
         moneyBook: 'This work\'s money was corrected in the money accounts, so this change did not change its amount.',
+        // PROPOSED (English) — lane OF-M fix pass 5 (N4).
+        oldMoneyKept: 'This work\'s earlier money is kept in the money accounts as it is, so the new amount was not added separately.',
     },
     pricesLocked: 'Prices stay as they are: only the person who made this entry, or someone who checks money entries, can change them.', // PROPOSED (English) — lane OF-M fix pass 3
     nothingChanged: 'Nothing to change was understood from this. Say it again.', // PROPOSED (English)

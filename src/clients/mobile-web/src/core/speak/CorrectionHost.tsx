@@ -29,6 +29,7 @@ import { saveSpokenCorrection, type SaveCorrectionDeps, type SaveOutcome } from 
 import { refusalLines, useRefusedChange, type RefusedChange } from '../../features/logs/components/correction/refusedRevision';
 import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../../features/logs/components/correction/moneyNotFollowed';
 import { hasPricedLine, isPricedPart, keepSavedPrices } from '../../features/logs/components/correction/pricesKept';
+import { useCreatedOnThisPhone } from '../../features/logs/components/correction/madeOnThisPhone';
 import {
     afterOf, canRemove, newItem, partnersOf, tapRows, tapUpdates, withItem, withNew, withRestored, withoutItem, type AddKind, type TapBucket, type TapRow,
 } from '../../features/logs/components/correction/tapEdit';
@@ -116,7 +117,10 @@ export const CorrectionHost: React.FC<{
     useBackDismiss(!!log && !speaking && !saving && sheet === null, closeCorrection);
 
     const sessionUserId = getSessionUserId();
-    const isMaker = !!log?.meta?.createdByOperatorId && log.meta.createdByOperatorId === sessionUserId;
+    // Lane OF-M fix pass 5 (N5) — the maker as the server decides it: the person who sends the create. Its stamp says so
+    // once its pull is back; before that a non-owner's phone stamps the primary owner, so its own outbox decides.
+    const madeHere = useCreatedOnThisPhone(log?.id);
+    const isMaker = (!!log?.meta?.createdByOperatorId && log.meta.createdByOperatorId === sessionUserId) || madeHere;
     const hideMoney = !mayShowFarmMoney(ctx.farmRole) && !isMaker;
     // Lane OF-M fix pass 3 (call 1) — only the entry's maker, or someone who checks money, changes its prices (the server
     // refuses anyone else's price change whole). Not known (no farm context yet) = not held back here; the server decides.

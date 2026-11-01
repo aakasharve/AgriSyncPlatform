@@ -63,6 +63,27 @@ describe('lane OF-M fix pass 3 — prices kept as saved', () => {
         expect(changesPricedLine(SAVED, kept)).toBe(false);
     });
 
+    it('fix pass 5: lines said again in another order keep each its own saved line and price, paired by product, not by place', () => {
+        const saved = withBuckets({
+            inputs: [
+                { id: 'in-1', productName: 'युरिया', quantity: 1, unit: 'kg', cost: 500 },
+                { id: 'in-2', productName: 'DAP', quantity: 1, unit: 'kg', cost: 300 },
+            ],
+        });
+        const kept = keepSavedPrices(saved, { ...saved, inputs: [
+            { id: 'x', productName: 'DAP', quantity: 2, unit: 'kg', cost: 999 },
+            { id: 'y', productName: 'युरिया', quantity: 3, unit: 'kg' },
+        ] } as unknown as DailyLog);
+        expect(kept.inputs).toEqual([
+            { id: 'in-2', productName: 'DAP', quantity: 2, unit: 'kg', cost: 300 },
+            { id: 'in-1', productName: 'युरिया', quantity: 3, unit: 'kg', cost: 500 },
+        ]);
+        expect(changesPricedLine(saved, kept)).toBe(false);
+        // Nothing to pair by: the place in the list decides, as before.
+        const unnamed = keepSavedPrices(saved, { ...saved, inputs: [{ id: 'z', quantity: 9 }] } as unknown as DailyLog);
+        expect(unnamed.inputs).toEqual([{ id: 'in-1', quantity: 9, cost: 500 }, saved.inputs[1]]);
+    });
+
     it('nothing to keep: the same copy comes back (no new object, so the screen does not redraw for nothing)', () => {
         expect(keepSavedPrices(SAVED, SAVED)).toBe(SAVED);
         const kept = keepSavedPrices(SAVED, withBuckets({ inputs: [{ id: 'x', productName: 'इथरेल', cost: 900 }] }));

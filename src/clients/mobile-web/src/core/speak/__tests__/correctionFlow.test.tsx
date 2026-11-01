@@ -39,9 +39,14 @@ vi.mock('../../../features/logs/services/logSyncMutationService', async (orig) =
     ...(await orig<typeof import('../../../features/logs/services/logSyncMutationService')>()),
     resolveLogFarmId: async () => 'farm-1',
 }));
+// Lane OF-M fix pass 5 (N5): this phone's outbox, as far as the creates it holds.
+const outbox = vi.hoisted(() => ({ creates: [] as unknown[] }));
 vi.mock('../../../infrastructure/storage/DexieDatabase', async (orig) => ({
     ...(await orig<typeof import('../../../infrastructure/storage/DexieDatabase')>()),
-    getDatabase: () => ({ logs: { get: async () => undefined } }),
+    getDatabase: () => ({
+        logs: { get: async () => undefined },
+        mutationQueue: { where: () => ({ equals: () => ({ toArray: async () => outbox.creates }) }) },
+    }),
 }));
 vi.mock('../../navigation/logRecorder', () => ({
     renderLogRecorder: () => <div data-testid="the-recorder" />,
@@ -62,6 +67,7 @@ import type { RefusedChange } from '../../../features/logs/components/correction
 import { correctionEntryNow, withSpeakPurpose } from '../speakFlow';
 import { openCorrection, resetSpeakStoreForTests, speakState } from '../speakStore';
 import { getRootStore } from '../../../app/state/RootStore';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
 const EMPTY: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
 const CROPS = [{ id: 'grape', name: 'Grapes', iconName: 'Grapes', color: 'x', supportedTasks: [], workflow: [], plots: [{ id: 'g1', name: 'सोनाका', baseline: {}, schedule: {} }] }];
@@ -759,5 +765,33 @@ describe.each(['mr', 'en'] as const)('lane OF-M fix pass 3 — prices on the ब
         const said = await screen.findByTestId('corr-server-refused');
         expect(said).toHaveTextContent(language === 'en' ? 'only on this phone' : 'फक्त या फोनवर');
         expect(said).toHaveTextContent(language === 'en' ? 'can change its prices' : 'किंमती फक्त');
+    });
+});
+
+// ── lane OF-M fix pass 5 (N5) — "the maker" decided as the server decides it ────────────────────────────────────────
+describe.each(['mr', 'en'] as const)('lane OF-M fix pass 5 — a worker on the बदला screen (%s)', language => {
+    beforeEach(() => { lang.value = language; outbox.creates = []; });
+    afterEach(() => { outbox.creates = []; });
+
+    // On a worker's phone a record he makes is stamped with the PRIMARY OWNER's id (the sync's active operator) until its
+    // pull comes back; the server's maker is the person who sends its create. PRICED carries the owner's id.
+    it('his own new record, its create still in this phone\'s outbox, keeps its prices his to change', async () => {
+        outbox.creates = [{ mutationType: SyncMutationName.CreateDailyLog, payload: { dailyLogId: 'log-1' }, status: 'PENDING' }];
+        openAs(PRICED, { farmRole: 'Worker', mayReviewMoney: false });
+        expect(await screen.findByTestId('corr-toggle-in')).toBeInTheDocument();
+        expect(screen.queryByTestId('corr-prices-locked')).toBeNull();
+        await speak(SAID_PRICES);
+        await pressSave();
+        const payload = enqueue.mock.calls[0][0] as PricedPayload;
+        expect(payload.content.inputs).toEqual([expect.objectContaining({ productName: 'इथरेल', quantity: 350, cost: 900 })]);
+    });
+
+    it('another person\'s record stays locked for him', async () => {
+        outbox.creates = [{ mutationType: SyncMutationName.CreateDailyLog, payload: { dailyLogId: 'another-log' }, status: 'APPLIED' }];
+        openAs(PRICED, { farmRole: 'Worker', mayReviewMoney: false });
+        expect(await screen.findByTestId('corr-prices-locked')).toBeInTheDocument();
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.getByTestId('corr-prices-locked')).toBeInTheDocument();
+        expect(screen.queryByTestId('corr-toggle-in')).toBeNull();
     });
 });

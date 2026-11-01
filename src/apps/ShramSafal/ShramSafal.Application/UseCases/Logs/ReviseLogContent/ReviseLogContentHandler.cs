@@ -165,6 +165,25 @@ public sealed class ReviseLogContentHandler(
             }
         }
 
+        var wordsCarried = !ReferenceEquals(documentJson, command.ContentJson);
+
+        // lane OF-M — its prices (fix passes 3 and 5), asked FIRST, so a refusal stages nothing: a seat that may not change
+        // them is refused only for a real change of a price; an edit made on an older version takes the current prices.
+        var editMoney = new EditMoney(repository, idGenerator, entitlementPolicy, logger);
+        var prices = await editMoney.CheckPricesAsync(log, current?.DocumentJson, command.BaseVersion, documentJson, command.ActorUserId, now, ct);
+        if (prices.IsFailure || prices.Value is not { } priceCheck)
+        {
+            return Result.Failure<ReviseLogContentResultDto>(prices.Error);
+        }
+
+        documentJson = priceCheck.DocumentJson;
+        if (priceCheck.PricesCarried && Problem(documentJson) is { } carriedPrices)
+        {
+            // Only the size cap can refuse here: the record's prices plus this edit no longer fit.
+            logger.LogWarning("revise_log_content for {LogId} refused after carrying the prices forward: {Problem}", log.Id, carriedPrices);
+            return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.LogContentInvalid);
+        }
+
         if (current is not null)
         {
             using var incoming = JsonDocument.Parse(documentJson);
@@ -189,15 +208,11 @@ public sealed class ReviseLogContentHandler(
             command.AuditDeviceId,
             command.AuditIpHash);
 
-        // lane OF-M — its money (fix pass 3): whether this seat may change the record's prices is asked FIRST, so a refusal
-        // stages nothing (call 1); then ALL its money is brought in line with what it now states (call 2), the corrections
-        // staged with the version (one commit), new money right after it.
-        var editMoney = new EditMoney(repository, idGenerator, entitlementPolicy, logger);
-        var priced = await editMoney.StageAsync(log, current?.DocumentJson, documentJson, stamp, now, ct);
-        if (priced.IsFailure || priced.Value is not { } money)
-        {
-            return Result.Failure<ReviseLogContentResultDto>(priced.Error);
-        }
+        // lane OF-M — its money (fix pass 3, call 2): for a seat that may change its prices, ALL of it is brought in line with
+        // what the record now states, the corrections staged with the version (one commit), new money right after it.
+        var money = priceCheck.MoneyFollows
+            ? await editMoney.StageAsync(log, documentJson, stamp, now, ct)
+            : EditMoney.Staged.None;
 
         log.NoteContentChanged();
         await LogContentStaging.StageAsync(
@@ -232,7 +247,8 @@ public sealed class ReviseLogContentHandler(
                     toVersion = log.ContentVersion,
                     baseVersion = command.BaseVersion,
                     staleBase,
-                    wordsCarriedForward = !ReferenceEquals(documentJson, command.ContentJson),
+                    wordsCarriedForward = wordsCarried,
+                    pricesCarriedForward = priceCheck.PricesCarried,
                     reason = command.Reason,
                 },
                 farmId: farmId,
