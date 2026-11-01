@@ -46,11 +46,21 @@ vi.mock('../../../../infrastructure/sync/BackgroundSyncWorker', () => ({
 const mockListParked = vi.fn();
 const mockBuildQuestion = vi.fn();
 const mockAnswer = vi.fn();
-vi.mock('../../data/attendanceParked', () => ({
-    listParkedAttendanceContradictions: (farmId: string) => mockListParked(farmId),
-    buildContradictionQuestion: (park: unknown, history: unknown) => mockBuildQuestion(park, history),
-    answerAttendanceContradiction: (park: unknown, fact: unknown) => mockAnswer(park, fact),
-}));
+const mockAnswerDay = vi.fn();
+const mockAnswered = vi.fn(async (_farmId: string) => new Set<string>());
+vi.mock('../../data/attendanceParked', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../data/attendanceParked')>();
+    return {
+        listParkedAttendanceContradictions: (farmId: string) => mockListParked(farmId),
+        buildContradictionQuestion: (park: unknown, history: unknown) => mockBuildQuestion(park, history),
+        answerAttendanceContradiction: (park: unknown, fact: unknown) => mockAnswer(park, fact),
+        // lane PRV fix pass 3 (M-B) — the real handle helpers; the answer and the queue read are this file's to control.
+        dayToRulePark: actual.dayToRulePark,
+        isDayToRule: actual.isDayToRule,
+        answerDayToRule: (park: unknown, fact: unknown) => mockAnswerDay(park, fact),
+        listAnsweredDaysToRule: (farmId: string) => mockAnswered(farmId),
+    };
+});
 
 import LabourFeature from '../LabourFeature';
 import { EMPTY_LABOUR_DATA } from '../../labourMock';
@@ -64,6 +74,9 @@ afterEach(() => {
     mockListParked.mockReset();
     mockBuildQuestion.mockReset();
     mockAnswer.mockReset();
+    mockAnswerDay.mockReset();
+    mockAnswered.mockReset();
+    mockAnswered.mockResolvedValue(new Set<string>());
 });
 
 const hookState = (over: Partial<ReturnType<typeof baseState>> = {}) => {
@@ -154,6 +167,49 @@ describe('the parked contradiction question renders on the labour route', () => 
 
         await Promise.resolve();
         expect(mockListParked).not.toHaveBeenCalled();
+    });
+});
+
+// spec: plr-d10 lane PRV fix pass 3 (M-B) — a day the SERVER says needs his ruling (a mark recorded by someone a record
+// of that day was kept from, and the day's records disagree) shows the SAME question card, and answering it sends his
+// ruling through the same flow.
+describe('a day the server says needs his ruling', () => {
+    const DAY = { fieldOperatorId: 'op-1', workDate: '2026-09-02' };
+
+    it('shows the same question card for it, and his answer is sent as his ruling', async () => {
+        withFarm();
+        hookState({ data: { ...EMPTY_LABOUR_DATA, daysToRule: [DAY] } as LabourData });
+        mockListParked.mockResolvedValue([]);
+        mockBuildQuestion.mockReturnValue(QUESTION);
+        mockAnswerDay.mockResolvedValue('attendance.mark:farm-1:op-1:2026-09-02:-:Worked:-:-');
+
+        render(<LabourFeature onExit={vi.fn()} history={[]} />);
+
+        await waitFor(() => expect(screen.getByTestId('attendance-contradiction')).toBeInTheDocument());
+        expect(mockBuildQuestion).toHaveBeenCalledWith(
+            expect.objectContaining({ payload: expect.objectContaining({ farmId: 'farm-1', ...DAY }) }), []);
+        mockAnswered.mockResolvedValue(new Set([`${DAY.fieldOperatorId}:${DAY.workDate}`]));
+        fireEvent.click(screen.getByRole('button', { name: ATTENDANCE_COPY.markWord.night }));
+        await waitFor(() => expect(mockAnswerDay).toHaveBeenCalledWith(
+            expect.objectContaining({ payload: expect.objectContaining(DAY) }), { shift: 'night', labourAssignmentId: 'a-2' }));
+        expect(mockAnswer).not.toHaveBeenCalled();
+        await waitFor(() => expect(screen.queryByTestId('attendance-contradiction')).not.toBeInTheDocument());
+    });
+
+    it('is asked once when a parked question already covers that person\'s day, and never without the server naming it', async () => {
+        withFarm();
+        hookState({ data: { ...EMPTY_LABOUR_DATA, daysToRule: [DAY] } as LabourData });
+        mockListParked.mockResolvedValue([PARK]);
+        mockBuildQuestion.mockReturnValue(QUESTION);
+        render(<LabourFeature onExit={vi.fn()} history={[]} />);
+        await waitFor(() => expect(screen.getAllByTestId('attendance-contradiction')).toHaveLength(1));
+        cleanup();
+
+        hookState({ data: EMPTY_LABOUR_DATA as LabourData });
+        mockListParked.mockResolvedValue([]);
+        render(<LabourFeature onExit={vi.fn()} history={[]} />);
+        await waitFor(() => expect(mockListParked).toHaveBeenCalled());
+        expect(screen.queryByTestId('attendance-contradiction')).not.toBeInTheDocument();
     });
 });
 

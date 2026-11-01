@@ -114,18 +114,21 @@ public sealed class RecordAttendanceMarkHandler(
         // for the people who may see that record (FlagRestrictedDisagreementAsync, below), and when one of them marks or
         // amends this person's day, the full check (he sees every record) asks him to rule.
         var restrictedDisagreement = false;
-        IReadOnlyList<Guid> restrictedLogIds = [];
+        var allFacts = await repository.GetAttendanceEngagementFactsAsync(
+            new FarmId(command.FarmId), command.FieldOperatorId, command.WorkDate, ct);
+        var visibility = await RecordVisibility.ForFarmAsync(repository, command.FarmId, command.RecordedByUserId, now, ct);
+        var facts = allFacts.Where(f => visibility.MaySeeLog(f.DailyLogId)).ToList();
+        IReadOnlyList<Guid> restrictedLogIds =
+            allFacts.Where(f => !visibility.MaySeeLog(f.DailyLogId)).Select(f => f.DailyLogId).Distinct().ToList();
+        // Fix pass 3 (M-B) — a sender who may see EVERY record of this person's day rules it (the holder always): his mark,
+        // his amendment or his answer to the question clears the owner's flag (DaysToRule on the labour read).
+        var rulesTheDay = restrictedLogIds.Count == 0;
         if (command.ResolvedLabourAssignmentId is null)
         {
-            var allFacts = await repository.GetAttendanceEngagementFactsAsync(
-                new FarmId(command.FarmId), command.FieldOperatorId, command.WorkDate, ct);
-            var visibility = await RecordVisibility.ForFarmAsync(repository, command.FarmId, command.RecordedByUserId, now, ct);
-            var facts = allFacts.Where(f => visibility.MaySeeLog(f.DailyLogId)).ToList();
             var claiming = facts.Where(f => f.Shift is not null).ToList();
             restrictedDisagreement = allFacts.Count != facts.Count
                 && allFacts.Where(f => f.Shift is not null).Select(f => f.Shift!.Value).Distinct().Count() > 1
                 && claiming.Select(f => f.Shift!.Value).Distinct().Count() <= 1;
-            restrictedLogIds = allFacts.Where(f => !visibility.MaySeeLog(f.DailyLogId)).Select(f => f.DailyLogId).Distinct().ToList();
 
             // B003 (3.3 review, carried to 3.5): a shift value this check does
             // not know is a broken producer. Mapping it onto a blank candidate
@@ -227,6 +230,12 @@ public sealed class RecordAttendanceMarkHandler(
         if (existing.Day == day && existing.Night == night
             && existing.HoursWorked == hoursWorked && existing.ExtraHours == extraHours)
         {
+            // Fix pass 3 (M-B) — the same facts again from someone who sees the whole day is still his ruling.
+            if (rulesTheDay && await MarkRuledAsync(command, existing.Id, now, ct))
+            {
+                await repository.SaveChangesAsync(ct);
+            }
+
             return Result.Success(new RecordAttendanceMarkResult(
                 AttendanceDayOutcome.Recorded, existing.Id, Contradiction: null));
         }
@@ -264,6 +273,10 @@ public sealed class RecordAttendanceMarkHandler(
         if (restrictedDisagreement)
         {
             await FlagRestrictedDisagreementAsync(command, existing.Id, restrictedLogIds, now, ct);
+        }
+        else if (rulesTheDay)
+        {
+            await MarkRuledAsync(command, existing.Id, now, ct);
         }
 
         await repository.SaveChangesAsync(ct);
@@ -312,6 +325,48 @@ public sealed class RecordAttendanceMarkHandler(
     /// </summary>
     public const string RestrictedDisagreementAction = "AttendanceMarkDisagreesWithRestrictedRecord";
 
+    /// <summary>Fix pass 3 (M-B) — the day a flag named was ruled by someone who may see every record of it.</summary>
+    public const string DayRuledAction = "AttendanceDayRuled";
+
+    /// <summary>
+    /// Fix pass 3 (M-B) — stage the "ruled" row for this mark when a flag on it is still open (its newest flag is newer than
+    /// its newest ruling). Same unit of work as the mark. Carries no record id. Actor: the person who ruled.
+    /// </summary>
+    private async Task<bool> MarkRuledAsync(RecordAttendanceMarkCommand command, Guid markId, DateTime now, CancellationToken ct)
+    {
+        var rows = (await repository.GetAuditEventsForEntityAsync(markId, "AttendanceMark", ct))
+            .Where(a => a.Action is RestrictedDisagreementAction or DayRuledAction)
+            .ToList();
+        var lastFlag = rows.Where(a => a.Action == RestrictedDisagreementAction).Select(a => (DateTime?)a.OccurredAtUtc).Max();
+        var lastRuled = rows.Where(a => a.Action == DayRuledAction).Select(a => (DateTime?)a.OccurredAtUtc).Max();
+        if (lastFlag is null || (lastRuled is not null && lastRuled >= lastFlag))
+        {
+            return false;
+        }
+
+        await repository.AddAuditEventAsync(
+            Domain.Audit.AuditEventFactory.Create(
+                entityType: "AttendanceMark",
+                entityId: markId,
+                action: DayRuledAction,
+                actorUserId: command.RecordedByUserId,
+                actorRole: "member",
+                payload: new
+                {
+                    attendanceMarkId = markId,
+                    fieldOperatorId = command.FieldOperatorId,
+                    workDate = command.WorkDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                    ruledAtUtc = now,
+                },
+                farmId: command.FarmId,
+                clientCommandId: null,
+                appVersion: AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current,
+                deviceId: "unknown",
+                ipHash: "sha256:unknown"),
+            ct);
+        return true;
+    }
+
     private Task FlagRestrictedDisagreementAsync(
         RecordAttendanceMarkCommand command, Guid markId, IReadOnlyList<Guid> restrictedLogIds, DateTime now, CancellationToken ct) =>
         repository.AddAuditEventAsync(
@@ -319,8 +374,10 @@ public sealed class RecordAttendanceMarkHandler(
                 entityType: "AttendanceMark",
                 entityId: markId,
                 action: RestrictedDisagreementAction,
-                actorUserId: command.RecordedByUserId,
-                actorRole: "member",
+                // Fix pass 3 (N1-b) — the server's own note, not the sender's act: a system actor, so his personal data
+                // export (the rows whose actor is he) never carries the ids of records kept from him.
+                actorUserId: AgriSync.BuildingBlocks.Auditing.SystemActor.Worker,
+                actorRole: "system",
                 payload: new
                 {
                     attendanceMarkId = markId,

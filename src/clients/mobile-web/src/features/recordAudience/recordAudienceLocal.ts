@@ -12,8 +12,9 @@ import type { RecordAudienceName, RecordKindName } from '../../infrastructure/ap
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../core/domain/services/Clock';
 import { fetchLabourPermissions } from '../profile/data/labourPermissionsClient';
+import { AUDIENCE_CHANGED_EVENT, rememberAudienceBeforeChoice } from './refusedAudience';
 
-export const AUDIENCE_CHANGED_EVENT = 'agrisync:record-audience-changed';
+export { AUDIENCE_CHANGED_EVENT };
 
 export interface AudienceChoice {
     audience: RecordAudienceName;
@@ -25,6 +26,8 @@ export interface AudienceChoice {
 export async function chooseAudience(kind: RecordKindName, recordIds: readonly string[], choice: AudienceChoice): Promise<void> {
     const people = choice.audience === 'Selected' ? [...new Set(choice.people)] : [];
     const changedAtUtc = systemClock.nowISO();
+    // Fix pass 3 (item 6) — what the record showed before his first unsent choice, so a refusal can put it back.
+    await rememberAudienceBeforeChoice(kind, recordIds);
     for (const recordId of recordIds) {
         await SetRecordAudienceCommand.enqueue({ recordKind: kind, recordId, audience: choice.audience, selectedUserIds: people, changedAtUtc });
     }

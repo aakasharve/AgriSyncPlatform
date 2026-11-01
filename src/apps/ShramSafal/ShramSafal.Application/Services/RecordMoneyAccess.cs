@@ -50,6 +50,14 @@ public static class RecordMoneyAccess
     public static FarmReadScope? ScopeFor(DailyLogDto dto, FarmReadScope? scope, RecordVisibility visibility) =>
         scope is { SeeMoney: true } && MoneyHidden(dto, visibility) ? WithoutMoney(scope) : scope;
 
+    /// <summary>
+    /// Fix pass 3 (item 8) — the scope for a COMMAND ANSWER (verify, add a task, move, revise): its DTO carries neither the
+    /// record's crews nor its document, so the record's own money is asked of the record as stored (every version).
+    /// </summary>
+    public static async Task<FarmReadScope?> ScopeForStoredAsync(
+        IShramSafalRepository repository, DailyLog log, FarmReadScope? scope, Guid readerUserId, DateTime atUtc, CancellationToken ct = default) =>
+        scope is { SeeMoney: true } && await MoneyHiddenFromAsync(repository, log, readerUserId, atUtc, ct) ? WithoutMoney(scope) : scope;
+
     /// <summary>A seat without "पैसे पाहणे" (and so without wages, which need it).</summary>
     public static FarmReadScope WithoutMoney(FarmReadScope scope)
     {

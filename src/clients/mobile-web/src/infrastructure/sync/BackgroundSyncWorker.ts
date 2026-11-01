@@ -31,6 +31,7 @@ import { clearMoneyNotFollowedFor, takeEditMoney } from '../../features/finance/
 import { prepareRecordMoney } from './recordMoneyOrder';
 import type { QueueRowWithFacts } from './queueRowFacts';
 import { lineAmountNow } from '../../features/finance/recordMoneyNow';
+import { restoreRefusedAudienceChoice } from '../../features/recordAudience/refusedAudience';
 
 /** A record's first money that reached the server is in step only when it went at its line's current amount. */
 async function clearWhenInStep(moneySource: string, payload: unknown): Promise<void> {
@@ -574,6 +575,13 @@ export class BackgroundSyncWorker {
                     if (REFUSAL_RESTORES_SERVER_VERSION.has(mutation.mutationType)) {
                         await requestLogsRebuild(getDatabase()).catch((error: unknown) => {
                             console.error('BackgroundSyncWorker: could not ask for the server version again', error);
+                        });
+                    }
+                    // lane PRV fix pass 3 (item 6) — a refused choice of who sees a record leaves the lock chip at once,
+                    // even when another change of his to that record is still queued (the pull would not re-merge it).
+                    if (mutation.mutationType === SyncMutationName.SetRecordAudience) {
+                        await restoreRefusedAudienceChoice(mutation.payload).catch((error: unknown) => {
+                            console.error('BackgroundSyncWorker: could not put the refused audience choice back', error);
                         });
                     }
                 } else {

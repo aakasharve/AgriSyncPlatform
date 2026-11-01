@@ -1055,6 +1055,15 @@ internal sealed class ShramSafalRepository(
                 a.OccurredAtUtc < toUtcExclusive)
             .CountAsync(ct);
 
+    public async Task<IReadOnlyList<AuditEvent>> GetAuditEventsForFarmByActionsAsync(
+        Guid farmId, IReadOnlyCollection<string> actions, CancellationToken ct = default) =>
+        actions.Count == 0
+            ? []
+            : await db.AuditEvents
+                .AsNoTracking()
+                .Where(a => a.FarmId == farmId && actions.Contains(a.Action))
+                .ToListAsync(ct);
+
     public async Task<List<AuditEvent>> GetAuditEventsForFarmAsync(
         Guid farmId,
         DateOnly from,

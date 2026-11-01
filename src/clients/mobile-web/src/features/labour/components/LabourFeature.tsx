@@ -28,6 +28,10 @@ import type { BucketIssueType } from '../../../domain/types/log.types';
 import {
     listParkedAttendanceContradictions,
     buildContradictionQuestion,
+    answerDayToRule,
+    dayToRulePark,
+    isDayToRule,
+    listAnsweredDaysToRule,
     answerAttendanceContradiction,
     type ContradictionQuestion,
     type ParkedAttendanceContradiction,
@@ -246,7 +250,14 @@ export const LabourFeature: React.FC<{
         }
         try {
             const parks = await listParkedAttendanceContradictions(farmId);
-            setParkedQuestions(parks.flatMap((park) => {
+            // lane PRV fix pass 3 (M-B) — and the days the server says need HIS ruling, unless a parked question or his own
+            // unsent answer already covers that person's day.
+            const covered = new Set(parks.map((p) => `${p.payload.fieldOperatorId}:${p.payload.workDate}`));
+            const ruled = await listAnsweredDaysToRule(farmId);
+            const named = (data.daysToRule ?? [])
+                .filter((d) => !covered.has(`${d.fieldOperatorId}:${d.workDate}`) && !ruled.has(`${d.fieldOperatorId}:${d.workDate}`))
+                .map((d) => dayToRulePark(farmId, d));
+            setParkedQuestions([...parks, ...named].flatMap((park) => {
                 const question = buildContradictionQuestion(park, history ?? []);
                 return question === null ? [] : [{ park, question }];
             }));
@@ -255,7 +266,7 @@ export const LabourFeature: React.FC<{
             // can exist where no queue exists — render none, never crash.
             setParkedQuestions([]);
         }
-    }, [farmId, history]);
+    }, [farmId, history, data.daysToRule]);
     useEffect(() => { void loadParkedQuestions(); }, [loadParkedQuestions]);
 
     const retryRefused = useCallback(() => {
@@ -472,7 +483,9 @@ export const LabourFeature: React.FC<{
                         question={question}
                         onAnswer={(fact) => {
                             void (async () => {
-                                const answered = await answerAttendanceContradiction(park, fact);
+                                const answered = isDayToRule(park)
+                                    ? Boolean(await answerDayToRule(park, fact))
+                                    : await answerAttendanceContradiction(park, fact);
                                 if (answered) {
                                     // The mark is PENDING again — remembered on
                                     // the phone, not saved: the honest claim.

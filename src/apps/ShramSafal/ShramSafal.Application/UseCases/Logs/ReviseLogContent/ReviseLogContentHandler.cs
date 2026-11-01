@@ -160,10 +160,11 @@ public sealed class ReviseLogContentHandler(
             ? null
             : await FarmReadGate.ScopeAsync(repository, farmId, command.ActorUserId, now, ct);
         // lane PRV fix pass 2 (D-69) — or when the record's own money is kept from him: his copy came without its amounts.
+        var moneyKeptFromEditor = current is not null && !isCreator
+            && await RecordMoneyAccess.MoneyHiddenFromAsync(repository, log, command.ActorUserId, now, ct);
         var copyWithoutAmounts = current is not null
             && !isCreator
-            && (command.AmountsWithheld == true || editorScope?.SeeMoney != true
-                || await RecordMoneyAccess.MoneyHiddenFromAsync(repository, log, command.ActorUserId, now, ct));
+            && (command.AmountsWithheld == true || editorScope?.SeeMoney != true || moneyKeptFromEditor);
         // lane MU-3 fix 1 (F3) / fix 2 (N4 = D-67) — his copy came WITHOUT the record's words when his phone says so
         // (wordsWithheld), when he may not hear words at all (RecordWordsGate), or when the record mentions money and his
         // seat does not see wages now: their absence from his edit is not a deletion either.
@@ -175,8 +176,10 @@ public sealed class ReviseLogContentHandler(
                     actorRole,
                     () => FarmAuthorityGate.HoldsAsync(
                         repository, farmId, command.ActorUserId, Domain.Farms.FarmAuthority.ConfirmRecords, now, ct))
+                // lane PRV fix pass 3 (item 5) — the server's own rule, never only the phone's flag: a record whose own
+                // money is kept from him came without its money words too (D-69).
                 || (!isCreator
-                    && !MoneyMention.HearsMoneyWords(editorScope)
+                    && (!MoneyMention.HearsMoneyWords(editorScope) || moneyKeptFromEditor)
                     && await MoneyMention.InStoredRecordAsync(repository, log, ct)));
         if (current is not null && wordsNotSent)
         {
@@ -368,7 +371,8 @@ public sealed class ReviseLogContentHandler(
         var visibility = await RecordVisibility.ForFarmAsync(repository, (Guid)log.FarmId, actor, now, ct);
         return answer with
         {
-            Log = ReadScopeProjection.Record(answer.Log, RecordMoneyAccess.ScopeFor(answer.Log, scope, visibility), actor),
+            Log = ReadScopeProjection.Record(
+                answer.Log, await RecordMoneyAccess.ScopeForStoredAsync(repository, log, RecordMoneyAccess.ScopeFor(answer.Log, scope, visibility), actor, now, ct), actor),
             MoneyChanged = ReadScopeProjection.Money(answer.MoneyChanged.Where(m => visibility.MaySeeCost(m.Id)).ToList(), scope),
             MoneyCorrections = ReadScopeProjection.Money(
                 answer.MoneyCorrections.Where(c => visibility.MaySeeCost(c.CostEntryId)).ToList(), scope),

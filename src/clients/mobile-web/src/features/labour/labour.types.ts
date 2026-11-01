@@ -295,6 +295,12 @@ export interface LabourData {
     canConfirm?: boolean;
     /** D6 — the two money truths and the आज कामावर counts; see LabourHome. */
     home: LabourHome;
+    /**
+     * lane PRV fix pass 3 (M-B) — people's days that need this reader's ruling (a mark was recorded by someone a record of
+     * that day was kept from, and the day's records disagree). The server sends it only to someone who may see every
+     * record of the day and may take हजेरी (the holder always). Absent = none.
+     */
+    daysToRule?: { fieldOperatorId: string; workDate: string }[];
     review: ReviewItem[];
     /**
      * Attendance draft for "today" (a plot's gang). Task 5 (founder Global

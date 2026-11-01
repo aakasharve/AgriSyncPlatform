@@ -250,7 +250,12 @@ public sealed class CreateDailyLogHandler(
         {
             var existing = await repository.GetDailyLogByIdempotencyKeyAsync(command.IdempotencyKey, ct);
             if (existing is not null
-                && !await Services.RecordAudienceGate.MaySeeLogAsync(repository, existing, command.OperatorUserId, DateTime.UtcNow, ct))
+                && (!await Services.RecordAudienceGate.MaySeeLogAsync(repository, existing, command.OperatorUserId, DateTime.UtcNow, ct)
+                    // lane PRV fix pass 3 (item 5) — nor to a seat that reads only its own records (MU-3): the pull would
+                    // never send him someone else's record, so its replay does not either.
+                    || (existing.OperatorUserId.Value != command.OperatorUserId
+                        && (await Services.FarmReadGate.ScopeAsync(repository, (Guid)existing.FarmId, command.OperatorUserId, DateTime.UtcNow, ct))
+                            ?.MayReadRecordOf(command.OperatorUserId, existing.OperatorUserId.Value) != true)))
             {
                 // spec: plr-d10 lane PRV fix pass 1 (H2) — a replay never hands back a record kept from the sender.
                 return Result.Failure<DailyLogDto>(ShramSafalErrors.RecordAudienceClosed);
@@ -286,7 +291,10 @@ public sealed class CreateDailyLogHandler(
                     "re-running the richness side-car in case the original attempt's Phase 2 never ran.",
                     existing.Id, existing.FarmId.Value, existing.LogDate);
                 await PersistRichnessRecomputeSideCarAsync(existing.FarmId.Value, existing.LogDate, ct);
-                return Result.Success(existing.ToDto());
+                // lane PRV fix pass 3 (item 5) — the stored record goes back as the pull would send it to the sender: whole
+                // to its maker, projected (money, wages, words that name them; D-66/D-67/D-69) to anyone else.
+                return Result.Success(await Services.ReadScopeProjection.RecordForAsync(
+                    repository, existing.ToDto(), command.OperatorUserId, DateTime.UtcNow, ct));
             }
         }
 

@@ -221,6 +221,8 @@ export interface LabourDataDto {
     // D6 — the two money truths + आज कामावर counts. Nulls are blanks (never
     // 0); the server nulls the money members for non-owner views.
     home: { rojandariStated: number | null; ukteAgreed: number | null; onFarmToday: number | null; rojandariToday: number | null; ukteToday: number | null; };
+    // lane PRV fix pass 3 (M-B) — the days that need THIS reader's ruling (additive; absent/null = none, an older server).
+    daysToRule?: Array<{ fieldOperatorId: string; workDate: string }> | null;
 }
 
 /**
@@ -419,6 +421,9 @@ export async function fetchLabourData(
         // Old-server fallback (deploy skew): a wire without `home` renders
         // all blanks — '—', never a fabricated figure.
         home: dto.home ?? { rojandariStated: null, ukteAgreed: null, onFarmToday: null, rojandariToday: null, ukteToday: null },
+        // lane PRV fix pass 3 (M-B) — only well-formed days; the server decides who is told.
+        daysToRule: (dto.daysToRule ?? []).filter((d) => typeof d?.fieldOperatorId === 'string' && typeof d?.workDate === 'string')
+            .map((d) => ({ fieldOperatorId: d.fieldOperatorId, workDate: d.workDate })),
         review: dto.review.map(mapReview),
         attendance: {
             plot: dto.attendance.plot,

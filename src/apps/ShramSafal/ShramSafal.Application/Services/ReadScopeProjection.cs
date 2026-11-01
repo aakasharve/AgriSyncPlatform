@@ -119,10 +119,18 @@ public static class ReadScopeProjection
             return dto;
         }
 
-        // lane PRV fix pass 2 (D-69) — a record whose own money is kept from him: as for a seat without see money.
+        // lane PRV fix pass 2 (D-69) — a record whose own money is kept from him: as for a seat without see money. Fix pass
+        // 3 (item 8): asked of the record as stored (a command answer's DTO carries neither its crews nor its document).
         var scope = await FarmReadGate.ScopeAsync(repository, dto.FarmId, readerUserId, atUtc, ct);
         var visibility = await RecordVisibility.ForFarmAsync(repository, dto.FarmId, readerUserId, atUtc, ct);
-        return Record(dto, RecordMoneyAccess.ScopeFor(dto, scope, visibility), readerUserId);
+        scope = RecordMoneyAccess.ScopeFor(dto, scope, visibility);
+        if (scope is { SeeMoney: true } && visibility.HiddenCostIds.Count > 0
+            && await repository.GetDailyLogByIdAsync(dto.Id, ct) is { } stored)
+        {
+            scope = await RecordMoneyAccess.ScopeForStoredAsync(repository, stored, scope, readerUserId, atUtc, ct);
+        }
+
+        return Record(dto, scope, readerUserId);
     }
 
     /// <summary>

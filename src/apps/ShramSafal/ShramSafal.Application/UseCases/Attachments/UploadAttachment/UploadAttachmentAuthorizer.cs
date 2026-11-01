@@ -61,7 +61,12 @@ public sealed class UploadAttachmentAuthorizer : IAuthorizationCheck<UploadAttac
         // spec: plr-d10 lane PRV fix pass 1 (H2) — no file is put into a photo of a record (or a bill) kept from him.
         var visibility = await Services.RecordVisibility.ForFarmAsync(
             _repository, (Guid)attachment.FarmId, command.UploadedByUserId, DateTime.UtcNow, ct);
-        if (!visibility.MaySeeAttachment(attachment))
+        // Fix pass 3 (item 7) — the bytes of a photo whose row HE made always reach the server: he took it, the row is
+        // already there, and the answer is his own photo's row (nothing of the record it hangs from). Without this, a
+        // photo he added before its record was kept from him could never finish, and his phone would hold that record
+        // for ever. Once it is up, the record (and the photo) leave his phone at the next sync like any withdrawn record.
+        var tookIt = attachment.CreatedByUserId.Value == command.UploadedByUserId;
+        if (!tookIt && !visibility.MaySeeAttachment(attachment))
         {
             return Result.Failure(ShramSafalErrors.RecordAudienceClosed);
         }

@@ -419,7 +419,7 @@ public sealed class MoveDailyLogHandler(
         var visibility = await RecordVisibility.ForFarmAsync(repository, (Guid)log.FarmId, actor, now, ct);
         var dto = log.ToDto();
         return new MoveDailyLogResultDto(
-            ReadScopeProjection.Record(dto, RecordMoneyAccess.ScopeFor(dto, scope, visibility), actor),
+            ReadScopeProjection.Record(dto, await RecordMoneyAccess.ScopeForStoredAsync(repository, log, scope, actor, now, ct), actor),
             ReadScopeProjection.Money(movedMoney.Where(m => visibility.MaySeeCost(m.Id)).ToList(), scope));
     }
 

@@ -43,6 +43,8 @@ import { mutationQueue } from '../MutationQueue';
 import { backgroundSyncWorker } from '../BackgroundSyncWorker';
 import { LOGS_REBUILD_MARKER_KEY } from '../../../features/sync/pull/logsRebuildMarker';
 import { SetRecordAudienceCommand } from '../../../application/usecases/sync/SetRecordAudienceCommand';
+import { ReviseLogContentCommand } from '../../../application/usecases/sync/ReviseLogContentCommand';
+import { chooseAudience } from '../../../features/recordAudience/recordAudienceLocal';
 
 type PushRequest = { mutations: Array<{ clientRequestId: string; mutationType: string }> };
 const LOG = '0f5e0000-0000-4000-8000-0000000000d1';
@@ -77,5 +79,26 @@ describe('lane PRV fix pass 2 — a refused audience choice puts the record back
         expect(row?.errorCode).toBe('ShramSafal.RecordAudienceHolder.Forbidden');
         expect(await getDatabase().appMeta.get(LOGS_REBUILD_MARKER_KEY)).toBeUndefined();
         expect(pullChangesMock.mock.calls.at(-1)?.[0]).toBe('0');
+    });
+
+    // Fix pass 3 (item 6) — the full pull never re-merges a record with another change of his still queued, so the
+    // refused choice is put back on the phone itself, at once: the lock chip never keeps a choice the server refused.
+    it('puts the record back as it was even while another change of his to it is still queued', async () => {
+        await getDatabase().logs.put({
+            id: LOG, schemaVersion: 2, date: '2026-10-30', isDeleted: 0, serverModifiedAtUtc: '2026-10-31T00:00:00.000Z',
+            log: { id: LOG, date: '2026-10-30', labour: [], inputs: [], machinery: [], activityExpenses: [], meta: {}, audience: 'Selected', audienceUserIds: ['u-1'] },
+        } as never);
+        await chooseAudience('DailyLog', [LOG], { audience: 'OnlyMe', people: [] });
+        expect(((await getDatabase().logs.get(LOG))?.log as { audience?: string }).audience).toBe('OnlyMe'); // shown at once
+        await ReviseLogContentCommand.enqueue({
+            dailyLogId: LOG, baseVersion: 1, content: { schema: 1 } as never, revisedAtUtc: '2026-11-01T10:00:00.000Z',
+        });
+        refuseWith('ShramSafal.RecordAudienceMember.Forbidden');
+
+        await backgroundSyncWorker.triggerNow();
+
+        const log = (await getDatabase().logs.get(LOG))?.log as { audience?: string; audienceUserIds?: string[] };
+        expect(log.audience).toBe('Selected');
+        expect(log.audienceUserIds).toEqual(['u-1']);
     });
 });

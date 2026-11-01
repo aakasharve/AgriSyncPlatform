@@ -35,7 +35,15 @@ public sealed record LabourDataDto(
     // (OwnerConfirmationAuthority). Distinct from CanManageLabour on purpose: a co-owner may
     // still correct labour, but confirming is the owner's to delegate. Additive and nullable:
     // absent/null = unknown (an older server), and a client then keeps today's behaviour.
-    bool? CanConfirm = null);
+    bool? CanConfirm = null,
+    // spec: plr-d10 lane PRV fix pass 3 (M-B) — the people's days that need THIS reader's ruling: a mark was recorded by
+    // someone from whom a record of that day was kept, and the day's records disagree. Only for a reader who may see every
+    // record named and may take हजेरी (the holder always); never to the sender or to anyone a named record is kept from.
+    // Clears when someone who sees the whole day rules it. Additive; absent/null = none (an older server).
+    IReadOnlyList<LabourDayToRuleDto>? DaysToRule = null);
+
+/// <summary>spec: plr-d10 lane PRV fix pass 3 (M-B) — one person's day that needs the reader's ruling. No record named.</summary>
+public sealed record LabourDayToRuleDto(Guid FieldOperatorId, DateOnly WorkDate);
 
 public sealed record LabourPersonDto(
     string Id,

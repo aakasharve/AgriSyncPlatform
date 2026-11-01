@@ -106,22 +106,34 @@ public sealed class SetRecordAudienceHandler(
                 log?.AudienceChangedAtUtc ?? entry!.AudienceChangedAtUtc ?? now, 0, Changed: false));
         }
 
-        // The record's own money follows a work record (found from its own lines; same farm only — E4) only while it is
-        // FOLLOWING that record (fix pass 2, M2): its audience was never set on its own, or its newest audience change was a
-        // follow of THIS record (FollowsRecordAsync). Money the holder set on its own keeps his choice through any later
-        // change of the record — a coincidental match of audiences is never "following". Fix pass 1's test stays as a
-        // second guard: money that follows has the record's audience before this change, and the same people.
-        var money = new List<CostEntry>();
+        // The record's own money (found from its own lines; same farm only — E4) and a change of the record (fix pass 3,
+        // M-A, on fix pass 2's M2):
+        //   - money FOLLOWING the record (its audience never set on its own, or its newest change a follow of THIS record)
+        //     takes the record's new audience, never wider than the holder's own last choice for that money (MoneyTrail);
+        //   - money the holder set on its own keeps his choice, EXCEPT that a narrowing of the record takes away from it
+        //     everyone the record no longer admits (never adding anyone): after a record narrows, none of its line money
+        //     is seen by someone who cannot see the record ("या कामाचा खर्चही याच लोकांना दिसेल").
+        // Every move a record makes of its money is written as a follow of that record, so a later widening of the record
+        // brings the money back with it — up to the holder's own last choice, never past it.
+        var oldSet = AudienceSet.Of(before, beforeSelected);
+        var newSet = AudienceSet.Of(command.Audience, selected);
+        var narrows = !oldSet.Within(newSet);
+        var money = new List<(CostEntry Entry, AudienceSet Before, AudienceSet After)>();
         if (log is not null)
         {
             var lines = await RecordFirstMoney.OfAsync(repository, log, logger, ct);
             foreach (var candidate in (await repository.GetCostEntriesByIdsAsync(lines.LookFor, ct))
-                         .Where(e => e.FarmId == log.FarmId && !IsJobCardPayout(e) && e.Audience == before))
+                         .Where(e => e.FarmId == log.FarmId && !IsJobCardPayout(e)))
             {
-                var candidatePeople = (await repository.GetRecordAudienceUserIdsAsync(RecordKinds.CostEntry, candidate.Id, ct)).ToHashSet();
-                if (candidatePeople.SetEquals(beforeSelected) && await FollowsRecordAsync(candidate.Id, log.Id, ct))
+                var current = AudienceSet.Of(
+                    candidate.Audience, await repository.GetRecordAudienceUserIdsAsync(RecordKinds.CostEntry, candidate.Id, ct));
+                var trail = await MoneyTrailAsync(candidate.Id, ct);
+                var target = trail.Follows(log.Id)
+                    ? trail.OwnChoice.Intersect(newSet)
+                    : narrows ? current.Intersect(newSet) : current;
+                if (!target.SameAs(current))
                 {
-                    money.Add(candidate);
+                    money.Add((candidate, current, target));
                 }
             }
         }
@@ -139,16 +151,16 @@ public sealed class SetRecordAudienceHandler(
         }
 
         await repository.ReplaceRecordAudienceMembersAsync(farmId, command.RecordKind, command.RecordId, selected, now, ct);
-        await AuditAsync(command, command.RecordKind, command.RecordId, farmId, before, beforeSelected, selected, followed: null, ct);
+        await AuditAsync(command, command.RecordKind, command.RecordId, farmId, before, beforeSelected, command.Audience, selected,
+            followed: null, stampedAtUtc: changedAt, ct);
 
-        foreach (var moneyEntry in money)
+        foreach (var (moneyEntry, moneyBefore, moneyAfter) in money)
         {
-            var moneyBefore = moneyEntry.Audience;
-            var moneyBeforeSelected = (await repository.GetRecordAudienceUserIdsAsync(RecordKinds.CostEntry, moneyEntry.Id, ct)).ToHashSet();
-            moneyEntry.SetAudience(command.Audience, now);
-            await repository.ReplaceRecordAudienceMembersAsync(farmId, RecordKinds.CostEntry, moneyEntry.Id, selected, now, ct);
-            await AuditAsync(command, RecordKinds.CostEntry, moneyEntry.Id, farmId, moneyBefore, moneyBeforeSelected, selected,
-                followed: command.RecordId, ct);
+            var afterPeople = moneyAfter.People.ToList();
+            moneyEntry.SetAudience(moneyAfter.Audience, now);
+            await repository.ReplaceRecordAudienceMembersAsync(farmId, RecordKinds.CostEntry, moneyEntry.Id, afterPeople, now, ct);
+            await AuditAsync(command, RecordKinds.CostEntry, moneyEntry.Id, farmId, moneyBefore.Audience, moneyBefore.People.ToList(),
+                moneyAfter.Audience, afterPeople, followed: command.RecordId, stampedAtUtc: moneyEntry.AudienceChangedAtUtc, ct);
         }
 
         await repository.SaveChangesAsync(ct);
@@ -161,38 +173,80 @@ public sealed class SetRecordAudienceHandler(
     }
 
     /// <summary>
-    /// Fix pass 2 (M2) — is this money FOLLOWING the record <paramref name="recordId"/>? Read from the money's own
-    /// audience trail, the append-only <c>AudienceChanged</c> rows this handler writes in the SAME unit of work as every
-    /// change (the app role can neither update nor delete <c>ssf.audit_events</c>): no row at all = its audience was
-    /// never set on its own (Team since it was made, or born with this record's audience — <c>RecordMoneyAudience</c>),
-    /// so it follows; otherwise it follows only when its NEWEST row is a follow of this record (<c>followedRecordId</c>).
-    /// A row the holder wrote for the money itself (followedRecordId null) ends the following for good.
+    /// Fix pass 2 (M2) / fix pass 3 (M-A, item 4) — the money's own audience trail: the append-only <c>AudienceChanged</c>
+    /// rows this handler writes in the SAME unit of work as every change (the app role can neither update nor delete
+    /// <c>ssf.audit_events</c>), in a STABLE order: the record's own audience stamp written into each row
+    /// (<c>stampedAtUtc</c> — <see cref="AudienceStamp"/>, strictly increasing per record), then the row's time, then its id
+    /// (rows written before the stamp existed fall back to their time). From it: is the money FOLLOWING a record (no row
+    /// at all, or the newest row a follow of that record), and the holder's own last choice for it (his newest own row;
+    /// none = the whole team). An unreadable row ends the following and is read as Only me (never widened).
     /// </summary>
-    private async Task<bool> FollowsRecordAsync(Guid moneyId, Guid recordId, CancellationToken ct)
+    private async Task<MoneyTrail> MoneyTrailAsync(Guid moneyId, CancellationToken ct)
     {
-        var newest = (await repository.GetAuditEventsForEntityAsync(moneyId, RecordKinds.CostEntry, ct))
+        var rows = (await repository.GetAuditEventsForEntityAsync(moneyId, RecordKinds.CostEntry, ct))
             .Where(a => a.Action == ChangedAction)
-            .OrderBy(a => a.OccurredAtUtc)
-            .LastOrDefault();
-        if (newest is null)
+            .Select(a => (Row: a, Parsed: ParseTrailRow(a)))
+            .OrderBy(x => x.Parsed?.StampedAtUtc ?? x.Row.OccurredAtUtc)
+            .ThenBy(x => x.Row.OccurredAtUtc)
+            .ThenBy(x => x.Row.Id)
+            .ToList();
+        if (rows.Count == 0)
         {
-            return true;
+            return new MoneyTrail(HasRows: false, NewestFollowed: null, NewestUnreadable: false, OwnChoice: AudienceSet.Team);
         }
 
+        var newest = rows[^1].Parsed;
+        var own = rows.LastOrDefault(x => x.Parsed is { FollowedRecordId: null }).Parsed;
+        var anyUnreadable = rows.Any(x => x.Parsed is null);
+        return new MoneyTrail(
+            HasRows: true,
+            NewestFollowed: newest?.FollowedRecordId,
+            NewestUnreadable: newest is null,
+            OwnChoice: anyUnreadable ? AudienceSet.OnlyMe : own?.To ?? AudienceSet.Team);
+    }
+
+    private TrailRow? ParseTrailRow(Domain.Audit.AuditEvent row)
+    {
         try
         {
-            using var payload = System.Text.Json.JsonDocument.Parse(newest.Payload);
-            return payload.RootElement.TryGetProperty("followedRecordId", out var followed)
-                && followed.ValueKind == System.Text.Json.JsonValueKind.String
-                && followed.TryGetGuid(out var followedId)
-                && followedId == recordId;
+            using var payload = System.Text.Json.JsonDocument.Parse(row.Payload);
+            var root = payload.RootElement;
+            Guid? followed = root.TryGetProperty("followedRecordId", out var f)
+                && f.ValueKind == System.Text.Json.JsonValueKind.String && f.TryGetGuid(out var followedId)
+                    ? followedId
+                    : null;
+            DateTime? stamped = root.TryGetProperty("stampedAtUtc", out var st)
+                && st.ValueKind == System.Text.Json.JsonValueKind.String && st.TryGetDateTime(out var stampedAt)
+                    ? stampedAt.ToUniversalTime()
+                    : null;
+            var to = root.TryGetProperty("to", out var t) && t.ValueKind == System.Text.Json.JsonValueKind.String
+                && Enum.TryParse<RecordAudience>(t.GetString(), out var toAudience)
+                    ? toAudience
+                    : (RecordAudience?)null;
+            if (to is null)
+            {
+                return null;
+            }
+
+            var toPeople = root.TryGetProperty("toPeople", out var tp) && tp.ValueKind == System.Text.Json.JsonValueKind.Array
+                ? tp.EnumerateArray().Where(e => e.TryGetGuid(out _)).Select(e => e.GetGuid()).ToList()
+                : [];
+            return new TrailRow(followed, stamped, AudienceSet.Of(to.Value, toPeople));
         }
         catch (System.Text.Json.JsonException ex)
         {
-            // A trail row that cannot be read is never taken as "following": the money keeps its audience (never widened).
-            logger.LogWarning(ex, "set_record_audience: the audience trail of money {MoneyId} cannot be read; it does not follow.", moneyId);
-            return false;
+            // An unreadable trail row is never taken as "following", and the money's own choice is read as Only me.
+            logger.LogWarning(ex, "set_record_audience: an audience trail row {RowId} of money {MoneyId} cannot be read.", row.Id, row.EntityId);
+            return null;
         }
+    }
+
+    private sealed record TrailRow(Guid? FollowedRecordId, DateTime? StampedAtUtc, AudienceSet To);
+
+    private sealed record MoneyTrail(bool HasRows, Guid? NewestFollowed, bool NewestUnreadable, AudienceSet OwnChoice)
+    {
+        /// <summary>Following <paramref name="recordId"/>: never set at all, or its newest row a follow of it.</summary>
+        public bool Follows(Guid recordId) => !HasRows || (!NewestUnreadable && NewestFollowed == recordId);
     }
 
     /// <summary>A job card's payout (its own category, or made by settling a job card) follows the job card.</summary>
@@ -206,8 +260,10 @@ public sealed class SetRecordAudienceHandler(
         Guid farmId,
         RecordAudience from,
         IReadOnlyCollection<Guid> fromSelected,
+        RecordAudience to,
         IReadOnlyCollection<Guid> toSelected,
         Guid? followed,
+        DateTime? stampedAtUtc,
         CancellationToken ct)
     {
         await repository.AddAuditEventAsync(
@@ -222,10 +278,12 @@ public sealed class SetRecordAudienceHandler(
                     recordKind = kind,
                     recordId,
                     from = from.ToString(),
-                    to = command.Audience.ToString(),
+                    to = to.ToString(),
                     fromPeople = fromSelected.Order().ToList(),
                     toPeople = toSelected.Order().ToList(),
                     followedRecordId = followed,
+                    // Fix pass 3 (item 4) — the record's own audience stamp: the trail's stable order.
+                    stampedAtUtc,
                     phoneChangedAtUtc = command.ChangedOnPhoneAtUtc,
                 },
                 farmId: farmId,

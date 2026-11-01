@@ -166,6 +166,15 @@ describe('labourClient.fetchLabourData', () => {
         expect(labourDataPath('farm-123')).toBe('/shramsafal/farms/farm-123/labour');
     });
 
+    // spec: plr-d10 lane PRV fix pass 3 (M-B) — the days the server says need this reader's ruling; none from an older server.
+    it('maps the days that need his ruling, and none when the server sends none', async () => {
+        const day = { fieldOperatorId: 'op-1', workDate: '2026-10-30' };
+        mockGet.mockResolvedValueOnce(mockOkResponse({ ...buildDto(), daysToRule: [day, { nope: 1 } as never] }));
+        expect((await fetchLabourData('farm-123')).daysToRule).toEqual([day]);
+        mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
+        expect((await fetchLabourData('farm-123')).daysToRule).toEqual([]);
+    });
+
     it('maps the people LIST into a Record<id, LabourPerson> dict', async () => {
         mockGet.mockResolvedValueOnce(mockOkResponse(buildDto()));
 

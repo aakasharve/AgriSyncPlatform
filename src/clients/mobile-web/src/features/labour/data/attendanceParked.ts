@@ -47,7 +47,7 @@
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
-import type { AttendanceMarkPayload } from '../../../application/usecases/sync/MarkAttendanceCommand';
+import { MarkAttendanceCommand, type AttendanceMarkPayload } from '../../../application/usecases/sync/MarkAttendanceCommand';
 import type { DayShift } from '../attendanceContradiction';
 import type { DailyLog } from '../../../types';
 
@@ -136,6 +136,44 @@ export function buildContradictionQuestion(
  * Returns replacePayload's own verdict (false = the row is gone — e.g.
  * discarded from the conflict page in the meantime; nothing is invented).
  */
+/**
+ * lane PRV fix pass 3 (M-B) — a day the SERVER says needs this reader's ruling (`daysToRule`): the same question the
+ * parked-mark flow asks, rebuilt from his own records (he sees every record of that day), under a synthetic handle. There
+ * is no parked row behind it, so it is answered with a NEW ruling (`answerDayToRule`).
+ */
+export const DAY_TO_RULE_PREFIX = 'day-to-rule:';
+
+export function dayToRulePark(farmId: string, day: { fieldOperatorId: string; workDate: string }): ParkedAttendanceContradiction {
+    return {
+        clientRequestId: `${DAY_TO_RULE_PREFIX}${day.fieldOperatorId}:${day.workDate}`,
+        payload: { attendanceMarkId: '', farmId, fieldOperatorId: day.fieldOperatorId, workDate: day.workDate },
+    };
+}
+
+export const isDayToRule = (park: ParkedAttendanceContradiction): boolean => park.clientRequestId.startsWith(DAY_TO_RULE_PREFIX);
+
+/** His ruling for a day the server named: the chosen record's fact, sent as the answer to the question (the server rules). */
+export async function answerDayToRule(park: ParkedAttendanceContradiction, chosen: ContradictionFact): Promise<string> {
+    const { farmId, fieldOperatorId, workDate } = park.payload;
+    return MarkAttendanceCommand.enqueue({
+        attendanceMarkId: crypto.randomUUID(), farmId, fieldOperatorId, workDate,
+        ...(chosen.shift === 'night'
+            ? { nightMark: 'Worked' as const }
+            : { dayMark: chosen.shift === 'half' ? 'Half' as const : 'Full' as const }),
+        resolvedLabourAssignmentId: chosen.labourAssignmentId,
+    });
+}
+
+/** The person-days his answer to a named day is still on its way for (so the question is not asked twice). */
+export async function listAnsweredDaysToRule(farmId: string): Promise<Set<string>> {
+    const rows = await getDatabase().mutationQueue.where('status').anyOf(['PENDING', 'SENDING', 'FAILED']).toArray();
+    return new Set(rows
+        .filter((r) => r.mutationType === SyncMutationName.AttendanceMark)
+        .map((r) => r.payload as AttendanceMarkPayload)
+        .filter((p) => p?.farmId === farmId && typeof p.resolvedLabourAssignmentId === 'string')
+        .map((p) => `${p.fieldOperatorId}:${p.workDate}`));
+}
+
 export async function answerAttendanceContradiction(
     park: ParkedAttendanceContradiction,
     chosen: ContradictionFact,

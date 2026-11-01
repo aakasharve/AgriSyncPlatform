@@ -280,6 +280,14 @@ public interface IShramSafalRepository
     Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default);
 
     /// <summary>
+    /// spec: plr-d10 lane PRV fix pass 3 (M-B) — the farm's audit rows of these actions (the server's own notes it derives
+    /// a screen state from; never sent to a phone). Default: none, so in-tree doubles keep compiling.
+    /// </summary>
+    Task<IReadOnlyList<AuditEvent>> GetAuditEventsForFarmByActionsAsync(
+        Guid farmId, IReadOnlyCollection<string> actions, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<AuditEvent>>([]);
+
+    /// <summary>
     /// The farms whose data this user may read (the sync pull's farm list): owned, or an
     /// <c>Active</c> seat. spec plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1): a
     /// PendingApproval request or a Suspended seat contributes no farm.

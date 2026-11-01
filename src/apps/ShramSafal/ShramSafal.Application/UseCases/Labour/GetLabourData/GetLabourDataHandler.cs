@@ -749,9 +749,19 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 windowAssignments.Select(a => a.Id).ToList(), ct))
             .Where(r => r.FarmId == query.FarmId)
             .ToList();
-        var ledger = BuildHajeriLedger(
-            weekLabel, window, farmLocalToday, attendanceMarks, farmOperators,
-            windowWorkRows, windowAssignments, windowLogDateById);
+        // lane PRV fix pass 3 (item 5) — a cell's work words that name money: only to a seat that hears money words
+        // (see wages, D-67), and never from a record whose own money is kept from him (D-69). The build itself takes no
+        // permission input (its signature is pinned), so the words are taken out of the finished register.
+        var ledger = WithoutMoneyWords(
+            BuildHajeriLedger(
+                weekLabel, window, farmLocalToday, attendanceMarks, farmOperators,
+                windowWorkRows, windowAssignments, windowLogDateById),
+            windowAssignments
+                .Where(a => !(seesWages && !moneyHiddenLogIds.Contains(a.DailyLogId)))
+                .Select(a => a.Task?.Trim())
+                .Where(t => !string.IsNullOrWhiteSpace(t) && Services.MoneyMention.InText(t))
+                .Select(t => t!)
+                .ToHashSet());
 
         // Who has actually been ATTACHED to one of today’s engagements. An
         // attach is a deliberate human act (POST .../field-operators/{id}/attach
@@ -784,8 +794,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
 
         var topLevelIds = people.Select(p => p.Id).ToList();
 
+        // lane PRV fix pass 3 (M-B) — the days this reader must rule (the owner's flag, derived here: the server is the truth).
+        var daysToRule = await DaysToRuleAsync(
+            query.FarmId.Value, recordVisibility, holdsTakeAttendance || FarmAccessPolicy.IsPrimaryAccountHolder(callerAccess), ct);
         var built = new LabourDataDto(
-            topLevelIds, people, dashboard, ledger, review, attendance, View: "owner", Home: home);
+            topLevelIds, people, dashboard, ledger, review, attendance, View: "owner", Home: home, DaysToRule: daysToRule);
         // A plain own-row caller (Worker etc. with NO explicit labour-management
         // grant) is narrowed to his own row: other people's identities and the
         // logs of others are crew data. A GRANTED member keeps the review inbox
@@ -816,6 +829,78 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // lane MU-3 fix 1 (F4): crew totals to a seat that sees money (a कामगार narrowed to his row never).
             seesMoney: !narrowToCaller && registerView != LabourRegisterView.OwnRow
                 && FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc)?.SeeMoney == true));
+    }
+
+    /// <summary>
+    /// lane PRV fix pass 3 (M-B) — from the server's own flags (<c>RecordAttendanceMarkHandler</c>): per mark, open while its
+    /// newest flag is newer than its newest ruling; shown only to a reader who may take हजेरी (or the holder) and may see
+    /// EVERY record any open flag of that day names. Nothing for anyone else — no flag, no count.
+    /// </summary>
+    private async Task<IReadOnlyList<LabourDayToRuleDto>> DaysToRuleAsync(
+        Guid farmId, RecordVisibility visibility, bool mayRule, CancellationToken ct)
+    {
+        if (!mayRule)
+        {
+            return [];
+        }
+
+        var rows = await repository.GetAuditEventsForFarmByActionsAsync(
+            farmId,
+            [
+                UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler.RestrictedDisagreementAction,
+                UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler.DayRuledAction,
+            ],
+            ct);
+        var days = new List<LabourDayToRuleDto>();
+        foreach (var mark in rows.GroupBy(r => r.EntityId))
+        {
+            var lastRuled = mark.Where(r => r.Action == UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler.DayRuledAction)
+                .Select(r => (DateTime?)r.OccurredAtUtc).Max();
+            var open = mark
+                .Where(r => r.Action == UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler.RestrictedDisagreementAction
+                            && (lastRuled is null || r.OccurredAtUtc > lastRuled))
+                .Select(r => ParseDayFlag(r.Payload))
+                .ToList();
+            if (open.Count == 0 || open.Any(f => f is null))
+            {
+                continue; // nothing open, or a flag that cannot be read: never a guessed day
+            }
+
+            var first = open[0]!;
+            if (open.SelectMany(f => f!.LogIds).All(visibility.MaySeeLog))
+            {
+                days.Add(new LabourDayToRuleDto(first.FieldOperatorId, first.WorkDate));
+            }
+        }
+
+        return days.DistinctBy(d => (d.FieldOperatorId, d.WorkDate)).ToList();
+    }
+
+    private sealed record DayFlag(Guid FieldOperatorId, DateOnly WorkDate, IReadOnlyList<Guid> LogIds);
+
+    private static DayFlag? ParseDayFlag(string payload)
+    {
+        try
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            if (!root.TryGetProperty("fieldOperatorId", out var op) || !op.TryGetGuid(out var operatorId)
+                || !root.TryGetProperty("workDate", out var wd) || !DateOnly.TryParse(wd.GetString(), System.Globalization.CultureInfo.InvariantCulture, out var workDate)
+                || !root.TryGetProperty("disagreeingDailyLogIds", out var ids) || ids.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            return new DayFlag(operatorId, workDate, ids.EnumerateArray().Where(e => e.TryGetGuid(out _)).Select(e => e.GetGuid()).ToList());
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            // Never a guessed day: an unreadable flag is not offered, and the trace says so.
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
+                "labour.day_to_rule.flag_unreadable",
+                tags: new System.Diagnostics.ActivityTagsCollection { { "exception.type", ex.GetType().Name } }));
+            return null;
+        }
     }
 
     /// <summary>Latest <see cref="FinanceCorrection"/> per <c>CostEntryId</c>, by <c>CorrectedAtUtc</c>.</summary>
@@ -966,6 +1051,33 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     /// per-day stated counts). Nothing here sums a mark, multiplies anything,
     /// or reads AttendanceMark.Value (which is [Obsolete]).</para>
     /// </summary>
+    /// <summary>
+    /// lane PRV fix pass 3 (item 5) — the register with every work phrase in <paramref name="withheld"/> taken out of its
+    /// cells (each is a phrase that names money, from a crew whose words this reader may not read); a cell left with no
+    /// work says none.
+    /// </summary>
+    internal static LabourLedgerDto WithoutMoneyWords(LabourLedgerDto ledger, IReadOnlySet<string> withheld)
+    {
+        if (withheld.Count == 0)
+        {
+            return ledger;
+        }
+
+        return ledger with
+        {
+            Rows = ledger.Rows.Select(row => row with
+            {
+                Cells = row.Cells.Select(cell => cell?.Work is null
+                    ? cell
+                    : cell with
+                    {
+                        Work = string.Join(SeparatorMiddot, cell.Work.Split(SeparatorMiddot).Where(part => !withheld.Contains(part)))
+                            is { Length: > 0 } kept ? kept : null,
+                    }).ToList(),
+            }).ToList(),
+        };
+    }
+
     internal static LabourLedgerDto BuildHajeriLedger(
         string weekLabel,
         LabourTimeWindow window,
