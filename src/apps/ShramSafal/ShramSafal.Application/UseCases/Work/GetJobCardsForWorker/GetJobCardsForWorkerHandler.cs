@@ -1,6 +1,8 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Work;
 
@@ -23,7 +25,11 @@ namespace ShramSafal.Application.UseCases.Work.GetJobCardsForWorker;
 /// <c>GetWorkerReputationHandler</c>. Names stay: inside a shared farm the caller still
 /// sees exactly what he saw before. See <see cref="WorkerRecordTier"/>.</para>
 /// </summary>
-public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository)
+/// <summary>
+/// One worker's job cards. lane MU-3 (founder D-22 / D-26): a worker's OWN cards are his own record and
+/// stay his; anyone else reads them only on a farm where he sees money (a job card carries rates and payouts).
+/// </summary>
+public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository, IClock? clock = null)
 {
     public async Task<Result<List<JobCardDto>>> HandleAsync(
         GetJobCardsForWorkerQuery query,
@@ -60,6 +66,22 @@ public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository
         // design (a worker's own view needs all of it); the filter is what keeps another
         // farm's record of him from coming back with it.
         var permitted = permittedFarmIds.ToHashSet();
+        if (query.CallerUserId.Value != query.WorkerUserId.Value)
+        {
+            var now = clock?.UtcNow ?? DateTime.UtcNow;
+            foreach (var farmId in permitted.ToList())
+            {
+                if (!await FarmReadGate.MaySeeMoneyAsync(repository, farmId, query.CallerUserId.Value, now, ct))
+                {
+                    permitted.Remove(farmId);
+                }
+            }
+
+            if (permitted.Count == 0)
+            {
+                return Result.Failure<List<JobCardDto>>(ShramSafalErrors.Forbidden);
+            }
+        }
         var jobCards = await repository.GetJobCardsForWorkerAsync(query.WorkerUserId, ct);
         var dtos = jobCards
             .Where(j => permitted.Contains(j.FarmId.Value))

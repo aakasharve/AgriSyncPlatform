@@ -4,6 +4,7 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using FluentAssertions;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Work.GetJobCardsForFarm;
 using ShramSafal.Application.UseCases.Work.GetJobCardsForWorker;
 using ShramSafal.Domain.Work;
@@ -100,14 +101,41 @@ public sealed class GetJobCardsQueryHandlerTests
         result.Error.Code.Should().Contain("Forbidden");
     }
 
+    /// <summary>
+    /// lane MU-3 (founder D-22 / D-26) — a job card carries rates and payouts: a मुकादम who does not see
+    /// the farm's money is refused the farm's cards, however much he takes हजेरी.
+    /// </summary>
+    [Fact]
+    public async Task GetForFarm_A_member_who_does_not_see_money_is_refused()
+    {
+        var repo = new FakeRepo(
+            farmJobCards: [BuildJobCard()],
+            memberFarmIds: [FarmId.Value],
+            seesMoney: false);
+
+        var result = await new GetJobCardsForFarmHandler(repo).HandleAsync(new GetJobCardsForFarmQuery(
+            FarmId, MukadamUserId, StatusFilter: null));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Contain("Forbidden");
+    }
+
     // ─── Test doubles ────────────────────────────────────────────────────────
 
+    /// <summary>The caller is an Active मुकादम seat on his farms; <paramref name="seesMoney"/> = the owner stored see money for him.</summary>
     private sealed class FakeRepo(
         List<JobCard> farmJobCards,
-        List<Guid> memberFarmIds) : StubShramSafalRepository
+        List<Guid> memberFarmIds,
+        bool seesMoney = true) : StubShramSafalRepository
     {
         public override Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(memberFarmIds.Contains(farmId));
+
+        public override Task<FarmAccess?> GetFarmAccessForUserAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(memberFarmIds.Contains(farmId)
+                ? new FarmAccess(AppRole.Mukadam, Domain.Farms.MembershipStatus.Active, IsRegistrant: false,
+                    seesMoney ? Domain.Farms.FarmPermission.SeeMoney : null)
+                : null);
 
         public override Task<List<JobCard>> GetJobCardsForFarmAsync(FarmId farmId, JobCardStatus? statusFilter, CancellationToken ct = default)
         {

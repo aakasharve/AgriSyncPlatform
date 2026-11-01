@@ -21,6 +21,7 @@ import MainViewTransition from './MainViewTransition';
 import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useFarmContext } from '../session/FarmContext';
 import { mayChangeRecordedMoney } from '../session/farmPermissions';
+import { AUTHORITY, holdsAuthority } from '../session/farmAuthorities';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
@@ -285,6 +286,8 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         consumeLogHome: navigation.consumeLogHome,
         farmRole,
         mayReviewMoney: mayChangeRecordedMoney(currentFarm),
+        // lane MU-3 — the money doors follow the server's see-money answer, never the label.
+        maySeeMoney: currentFarm ? holdsAuthority(currentFarm, AUTHORITY.seeMoney) : undefined,
         canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,

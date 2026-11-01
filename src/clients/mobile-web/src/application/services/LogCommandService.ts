@@ -21,6 +21,7 @@ import {
     labourMoneyLineId, recordMoneySourceKey, statedExpenseAmount, statedInputAmount, statedLabourAmount, statedMachineryAmount,
 } from '../../features/finance/recordMoneyLines';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
+import { assertFarmsInScope } from '../../infrastructure/storage/accessScopeStore';
 import { resolveLogFarmId } from '../../features/logs/services/logSyncMutationService';
 // Labour Phase 2 / T2 — the use case's own response type, so the additive
 // `persistedLabourCorrections` evidence survives this pass-through instead of
@@ -233,6 +234,12 @@ export class LogCommandServiceImpl implements LogCommandService {
         //    farmer, nothing is prompted, and nothing blocks. A null farm
         //    context stamps nothing and the save proceeds unchanged.
         stampCreationFarmId(logs, SessionStore.getCurrentFarmId());
+
+        // 2b. lane MU-3 (plan step 4a) — a farm the SERVER stopped sending this person (paused, removed)
+        //     takes no new record from this phone: refused here, before anything is written or queued,
+        //     with words he can read (FarmOutOfScopeError). Unknown is never refused (an older server, a
+        //     farm made offline): only the server's own last answer is.
+        await assertFarmsInScope(logs.map(log => log.meta?.farmId));
 
         // 3. Update UI State (Optimistic or Confirmed)
         if (updateState) {

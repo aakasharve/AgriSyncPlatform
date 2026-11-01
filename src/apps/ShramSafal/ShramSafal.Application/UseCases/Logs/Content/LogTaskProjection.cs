@@ -165,6 +165,27 @@ public static class LogTaskProjection
     private static string? StringOrNull(JsonElement? value) =>
         value is { ValueKind: JsonValueKind.String } s ? s.GetString() : null;
 
+    /// <summary>
+    /// lane MU-3 (founder D-22 / D-26) — a task line's notes WITHOUT the money they state, for a reader who
+    /// may not see the farm's money. Every " • " part that carries an amount (₹ — the one marker every
+    /// writer of these notes uses: <c>Cost: ₹</c>, <c>Rent: ₹</c>, <c>Fuel: ₹</c>, and older phones'
+    /// <c>Workers: 6 • Cost: ₹3000</c>) is dropped; every other part is kept as it was. Null when nothing is left.
+    /// </summary>
+    public static string? NotesWithoutMoney(string? notes)
+    {
+        if (string.IsNullOrEmpty(notes) || !notes.Contains('₹', StringComparison.Ordinal))
+        {
+            return notes;
+        }
+
+        var kept = notes.Split(" • ")
+            .Where(part => !part.Contains('₹', StringComparison.Ordinal))
+            .Select(part => part.Trim())
+            .Where(part => part.Length > 0)
+            .ToList();
+        return kept.Count == 0 ? null : string.Join(" • ", kept);
+    }
+
     /// <summary><c>buildTaskNotes</c>: trimmed non-empty parts joined by " • ", or null.</summary>
     private static string? JoinNotes(params string?[] parts)
     {

@@ -121,7 +121,7 @@ export const CorrectionHost: React.FC<{
     // once its pull is back; before that a non-owner's phone stamps the primary owner, so its own outbox decides.
     const madeHere = useCreatedOnThisPhone(log?.id);
     const isMaker = (!!log?.meta?.createdByOperatorId && log.meta.createdByOperatorId === sessionUserId) || madeHere;
-    const hideMoney = !mayShowFarmMoney(ctx.farmRole) && !isMaker;
+    const hideMoney = !mayShowFarmMoney(ctx.farmRole, ctx.maySeeMoney) && !isMaker;
     // Lane OF-M fix pass 3 (call 1) — only the entry's maker, or someone who checks money, changes its prices (the server
     // refuses anyone else's price change whole). Not known (no farm context yet) = not held back here; the server decides.
     // TODO(D-12): when money can be approved, approved money will be changed only by someone who checks money.

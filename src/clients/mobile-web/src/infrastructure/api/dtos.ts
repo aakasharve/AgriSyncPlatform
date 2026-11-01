@@ -8,6 +8,8 @@ import type { VisibleBucketId } from '../../domain/ai/BucketId';
 import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostCategory';
 // LABOUR_PHASE2 Phase 3 — see the LABOUR ENGAGEMENT DTOS section below.
 import type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEngagementDto } from './labourDtos';
+import type { FarmAccessScopeDto } from './accessScopeDtos';
+export type { FarmAccessScopeDto } from './accessScopeDtos';
 
 export type VerificationStatus =
     | 'draft'
@@ -479,6 +481,10 @@ export interface SyncPullResponse {
     attentionBoard?: AttentionBoardDto | null;
     // Labour V2 R1 Task 3.5c — additive: absent from an older server = no-op.
     attendanceMarks?: AttendanceMarkDto[];
+    // lane MU-3 (plan step 4a) — what this person may read on EACH farm this pull covers. A farm this phone
+    // holds that is not listed is no longer his to read: `accessScopeReconciler` purges it. Additive: absent
+    // from an older server = nothing is purged (the phone does not guess).
+    accessScopes?: FarmAccessScopeDto[];
 }
 
 export interface AiParseResponse {

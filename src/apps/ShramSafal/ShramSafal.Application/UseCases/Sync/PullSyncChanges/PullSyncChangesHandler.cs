@@ -8,6 +8,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Compliance.EvaluateCompliance;
+using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Application.UseCases.Compliance.GetComplianceSignalsForFarm;
 using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
@@ -37,20 +38,34 @@ public sealed class PullSyncChangesHandler(
     {
         var serverNowUtc = clock.UtcNow;
         var sinceUtc = NormalizeCursor(query.SinceUtc, serverNowUtc);
-        var farmIds = await repository.GetFarmIdsForUserAsync(query.UserId, ct);
-        var farmIdSet = farmIds.ToHashSet();
 
-        var farms = (await repository.GetFarmsChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(f => farmIdSet.Contains((Guid)f.Id))
-            .ToList();
-        var plots = (await repository.GetPlotsChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(p => farmIdSet.Contains((Guid)p.FarmId))
-            .ToList();
-        var cropCycles = (await repository.GetCropCyclesChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(c => farmIdSet.Contains((Guid)c.FarmId))
-            .ToList();
-        var dailyLogs = (await repository.GetDailyLogsChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(l => farmIdSet.Contains((Guid)l.FarmId))
+        // ── lane MU-3 (plan step 4a; founder D-22 / D-26) — each farm's READ SCOPE ──────────────
+        // The farms this person may pull (owned, or an Active seat), each with what he may read there,
+        // decided by FarmAccessPolicy over his stored authorities (FarmReadScope) — never by the label
+        // alone, never by a second rule. A farm whose standing reads nothing (paused, waiting, removed
+        // between the two reads) contributes nothing at all. Every kind below is read only for the
+        // farms whose scope admits it, and a farm whose reading widened after this phone's cursor is
+        // re-sent from the beginning (PullReadWindow — the per-farm cursor reset).
+        var scopes = new Dictionary<Guid, FarmReadScope>();
+        foreach (var candidateFarmId in await repository.GetFarmIdsForUserAsync(query.UserId, ct))
+        {
+            var access = await repository.GetFarmAccessForUserAsync(candidateFarmId, query.UserId, ct);
+            if (FarmReadScope.Of(candidateFarmId, access, serverNowUtc) is { } scope)
+            {
+                scopes[candidateFarmId] = scope;
+            }
+        }
+
+        var window = new PullReadWindow(scopes, sinceUtc, serverNowUtc);
+        var farmIds = window.FarmIds.ToList();
+        static bool Any(FarmReadScope _) => true;
+
+        var farms = await window.ReadAsync(Any, (ids, since) => repository.GetFarmsChangedSinceAsync(ids, since, ct), f => (Guid)f.Id);
+        var plots = await window.ReadAsync(Any, (ids, since) => repository.GetPlotsChangedSinceAsync(ids, since, ct), p => (Guid)p.FarmId);
+        var cropCycles = await window.ReadAsync(Any, (ids, since) => repository.GetCropCyclesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId);
+        // A कामगार label reads his OWN records only; every other working seat reads the farm's (D-26).
+        var dailyLogs = (await window.ReadAsync(Any, (ids, since) => repository.GetDailyLogsChangedSinceAsync(ids, since, ct), l => (Guid)l.FarmId))
+            .Where(l => window.ScopeOf((Guid)l.FarmId)!.MayReadRecordOf(query.UserId, l.OperatorUserId.Value))
             .ToList();
         // ── LABOUR_PHASE2 Phase 3 — labour read-back ─────────────────────────
         // Labour was written and never read back: a farmer recorded 8 workers on
@@ -95,6 +110,19 @@ public sealed class PullSyncChangesHandler(
                 g => g.Key,
                 g => (IReadOnlyList<Domain.Labour.FieldOperatorWorkRow>)g.ToList());
 
+        // lane MU-3 — wages on OTHER people's labour only to a seat that sees wages (or the primary
+        // account holder). The engagement itself travels (worker counts, hours, names: the record of the
+        // work, P7), its money does not: WagePerPerson / TotalCost are null — "not sent", which the phone
+        // shows as withheld for this farm (accessScopes.seeWages = false), never as ₹0 (P4). A person's
+        // OWN record comes back whole: it is his own statement.
+        var dailyLogById = dailyLogs.ToDictionary(l => l.Id);
+        bool MoneyWithheldFrom(Domain.Logs.DailyLog log) =>
+            log.OperatorUserId.Value != query.UserId
+            && window.ScopeOf((Guid)log.FarmId) is { SeeMoney: false };
+        bool WagesWithheld(Guid logId) =>
+            dailyLogById.TryGetValue(logId, out var log)
+            && log.OperatorUserId.Value != query.UserId
+            && window.ScopeOf((Guid)log.FarmId) is { SeeWages: false };
         var labourByLogId = labourAssignments
             .GroupBy(a => a.DailyLogId)
             .ToDictionary(
@@ -102,6 +130,7 @@ public sealed class PullSyncChangesHandler(
                 g => (IReadOnlyList<LabourEngagementDto>)g
                     .Select(a => a.ToDto(
                         attributionsByAssignment.TryGetValue(a.Id, out var rows) ? rows : []))
+                    .Select(dto => WagesWithheld(g.Key) ? dto with { WagePerPerson = null, TotalCost = null } : dto)
                     .ToList());
 
         // ── spec: plr-d10 (lane F1) — what Sathi understood, read back ────────
@@ -123,40 +152,61 @@ public sealed class PullSyncChangesHandler(
         // (RecordWordsGate, the rule the original-voice route uses). Everyone else gets the same
         // document with the words removed and every value kept. Role and grant are read once
         // per farm, and only for farms this response carries content for.
+        // lane MU-3 — and its stated money only to a reader who sees the farm's money (or who made it).
         var contentDtoByLogId = await ProjectContentForReaderAsync(
-            query.UserId, dailyLogs, contentByLogId, serverNowUtc, ct);
+            query.UserId, dailyLogs, contentByLogId, window, serverNowUtc, ct);
 
         // NOTE — the cursor is NOT advanced from labour, on purpose.
         // ssf.labour_assignments has no modified_at_utc; the parent log's
         // ModifiedAtUtc is the only real clock, and inventing one here would be a
         // fabricated timestamp (P4). See ComputeNextCursor.
 
-        var attachments = (await repository.GetAttachmentsChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(a => farmIdSet.Contains((Guid)a.FarmId))
-            .ToList();
-        var costEntries = (await repository.GetCostEntriesChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(c => farmIdSet.Contains((Guid)c.FarmId))
-            .ToList();
+        // lane MU-3 — an attachment follows its parent: a record's photo goes where the record goes, a
+        // money receipt only where money goes, a farm's photo to every working seat. A kind of parent this
+        // rule does not know goes to the primary account holder only (fail closed).
+        var attachments = await VisibleAttachmentsAsync(
+            query.UserId,
+            await window.ReadAsync(Any, (ids, since) => repository.GetAttachmentsChangedSinceAsync(ids, since, ct), a => (Guid)a.FarmId),
+            window,
+            dailyLogById,
+            ct);
+        // lane MU-3 — money (cost entries, their corrections, the day ledger) only where the seat sees money.
+        static bool Money(FarmReadScope scope) => scope.SeeMoney;
+        var costEntries = await window.ReadAsync(Money, (ids, since) => repository.GetCostEntriesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId);
         var costEntryIds = costEntries.Select(c => c.Id).ToHashSet();
-        var financeCorrections = (await repository.GetFinanceCorrectionsChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(c => costEntryIds.Contains(c.CostEntryId))
-            .ToList();
-        var dayLedgers = (await repository.GetDayLedgersChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(l => farmIdSet.Contains((Guid)l.FarmId))
-            .ToList();
+        var financeCorrections = new List<Domain.Finance.FinanceCorrection>();
+        foreach (var (ids, since) in window.Groups(Money))
+        {
+            financeCorrections.AddRange((await repository.GetFinanceCorrectionsChangedSinceAsync(ids, since, ct))
+                .Where(c => costEntryIds.Contains(c.CostEntryId)));
+        }
+
+        financeCorrections = financeCorrections.DistinctBy(c => c.Id).ToList();
+        var dayLedgers = await window.ReadAsync(Money, (ids, since) => repository.GetDayLedgersChangedSinceAsync(ids, since, ct), l => (Guid)l.FarmId);
         // Labour V2 R1 Task 3.5c — attendance rulings changed since the cursor.
         // P10's server half: once pulled here, a mark is reconstructable
         // without the device that made it.
-        var attendanceMarks = (await repository.GetAttendanceMarksChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(m => farmIdSet.Contains((Guid)m.FarmId))
-            .ToList();
+        // lane MU-3 — attendance only to a seat that takes हजेरी (or the primary account holder).
+        var attendanceMarks = await window.ReadAsync(
+            s => s.SeeAttendance,
+            (ids, since) => repository.GetAttendanceMarksChangedSinceAsync(ids, since, ct),
+            m => (Guid)m.FarmId);
         var priceConfigs = (await repository.GetPriceConfigsChangedSinceAsync(sinceUtc, ct))
             .Where(p => (Guid)p.CreatedByUserId == query.UserId)
             .ToList();
-        var cropCycleIds = cropCycles.Select(c => c.Id).ToHashSet();
-        var plannedActivities = (await repository.GetPlannedActivitiesChangedSinceAsync(farmIds, sinceUtc, ct))
-            .Where(a => cropCycleIds.Contains(a.CropCycleId))
-            .ToList();
+        // lane MU-3 — the farm's planned work only to a seat that reads the farm's overview.
+        var overviewCycleIds = cropCycles
+            .Where(c => window.ScopeOf((Guid)c.FarmId) is { SeeFarmOverview: true })
+            .Select(c => c.Id)
+            .ToHashSet();
+        var plannedActivities = new List<Domain.Planning.PlannedActivity>();
+        foreach (var (ids, since) in window.Groups(s => s.SeeFarmOverview))
+        {
+            plannedActivities.AddRange((await repository.GetPlannedActivitiesChangedSinceAsync(ids, since, ct))
+                .Where(a => overviewCycleIds.Contains(a.CropCycleId)));
+        }
+
+        plannedActivities = plannedActivities.DistinctBy(a => a.Id).ToList();
         // §P0.2 — the sync pull no longer carries the audit ledger at all.
         //
         // Not a trim: every audit row this path could ever have returned was a
@@ -196,6 +246,7 @@ public sealed class PullSyncChangesHandler(
             : ReferenceDataCatalog.VersionHash;
         var operatorIds = CollectOperatorIds(
             query.UserId,
+            window,
             farms,
             dailyLogs,
             attachments,
@@ -241,6 +292,19 @@ public sealed class PullSyncChangesHandler(
             var attentionResult = await getAttentionBoardHandler.HandleAsync(
                 new GetAttentionBoardQuery(query.UserId, serverNowUtc), ct);
             attentionBoard = attentionResult.IsSuccess ? attentionResult.Value : null;
+            // lane MU-3 — the board only for farms whose overview this seat reads.
+            if (attentionBoard is not null)
+            {
+                attentionBoard = attentionBoard with
+                {
+                    Cards = attentionBoard.Cards
+                        .Where(c => window.ScopeOf(c.FarmId) is { SeeFarmOverview: true })
+                        .ToList(),
+                    ScheduledWork = attentionBoard.ScheduledWork?
+                        .Where(w => window.ScopeOf(w.FarmId) is { SeeFarmOverview: true })
+                        .ToList(),
+                };
+            }
         }
         catch (Exception ex)
         {
@@ -255,11 +319,12 @@ public sealed class PullSyncChangesHandler(
 
         // CEI Phase 2 §4.5 — test instances modified since the cursor, scoped
         // to the caller's farms. Recommendations follow the parent instances.
-        var typedFarmIds = farmIds.Select(id => new FarmId(id)).ToList();
-        var testInstances = typedFarmIds.Count == 0
-            ? Array.Empty<Domain.Tests.TestInstance>()
-            : (IReadOnlyList<Domain.Tests.TestInstance>)await testInstanceRepository
-                .GetModifiedSinceAsync(typedFarmIds, sinceUtc, ct);
+        // lane MU-3 — tests only to a seat that reads them (not an own-records-only seat without lab records).
+        IReadOnlyList<Domain.Tests.TestInstance> testInstances = await window.ReadAsync(
+            s => s.SeeTests,
+            async (ids, since) => (await testInstanceRepository
+                .GetModifiedSinceAsync(ids.Select(id => new FarmId(id)).ToList(), since, ct)).ToList(),
+            i => i.FarmId.Value);
         var testInstanceIds = testInstances.Select(i => i.Id).ToList();
         var testRecommendations = testInstanceIds.Count == 0
             ? Array.Empty<Domain.Tests.TestRecommendation>()
@@ -312,7 +377,11 @@ public sealed class PullSyncChangesHandler(
         List<JobCardDto> jobCardDtos = [];
         try
         {
-            var changedJobCards = await repository.GetJobCardsChangedSinceAsync(farmIds, sinceUtc, ct);
+            // lane MU-3 — job cards carry rates and payouts: money, so only where the seat sees money.
+            var changedJobCards = await window.ReadAsync(
+                Money,
+                (ids, since) => repository.GetJobCardsChangedSinceAsync(ids, since, ct),
+                j => j.FarmId.Value);
             jobCardDtos = changedJobCards.Select(j => j.ToJobCardDto()).ToList();
             if (jobCardDtos.Count > 0)
             {
@@ -334,7 +403,8 @@ public sealed class PullSyncChangesHandler(
         // CEI Phase 3 §4.6 — compliance signals since cursor (per farm), with
         // on-pull freshness trigger: if latest evaluation is >6h old, fire async eval.
         var complianceSignalDtos = new List<ComplianceSignalDto>();
-        foreach (var fid in farmIds)
+        // lane MU-3 — compliance warnings only to a seat that reads them, each farm from its own cursor.
+        foreach (var fid in farmIds.Where(id => window.ScopeOf(id) is { SeeCompliance: true }))
         {
             var typedFarmId = new FarmId(fid);
 
@@ -379,9 +449,11 @@ public sealed class PullSyncChangesHandler(
             // Pull signals since cursor
             try
             {
-                var signals = await complianceSignalRepository.GetSinceCursorAsync(typedFarmId, sinceUtc, ct);
+                var signals = await complianceSignalRepository.GetSinceCursorAsync(typedFarmId, window.SinceFor(fid), ct);
                 complianceSignalDtos.AddRange(
-                    signals.Select(GetComplianceSignalsForFarmHandler.MapToDto));
+                    signals
+                        .Where(signal => signal.FarmId.Value == fid)
+                        .Select(GetComplianceSignalsForFarmHandler.MapToDto));
             }
             catch (Exception ex)
             {
@@ -400,6 +472,14 @@ public sealed class PullSyncChangesHandler(
         {
             var maxSignal = complianceSignalDtos.Max(s => s.LastSeenAtUtc);
             if (maxSignal > nextCursorUtc) nextCursorUtc = maxSignal;
+        }
+
+        // lane MU-3 — a farm re-sent from the beginning (its reading widened after this phone's cursor) is
+        // re-sent ONCE: the cursor moves at least past that access change. Every farm was read with no
+        // upper bound, so nothing up to it is skipped.
+        if (window.ResetThroughUtc is { } resetThrough && resetThrough > nextCursorUtc)
+        {
+            nextCursorUtc = resetThrough;
         }
 
         // Sub-plan 03 Task 10 (T-IGH-03-PULL-CURSOR-FREEZE) — cursor
@@ -439,10 +519,16 @@ public sealed class PullSyncChangesHandler(
             // Every log in this response gets a labour STATEMENT — `[]` when it has
             // none. `null` (the DTO's "this caller made no statement") belongs only
             // to callers that never looked; the pull looked.
+            // lane MU-3 — a record's task lines carry its stated money in their notes ("Cost: ₹…"): for a
+            // reader who may not see the farm's money (and did not make the record) those parts are dropped.
             dailyLogs
-                .Select(l => l.ToDto(
-                    labourByLogId.TryGetValue(l.Id, out var labour) ? labour : [],
-                    contentDtoByLogId.GetValueOrDefault(l.Id)))
+                .Select(l => MoneyWithheldFrom(l)
+                    ? WithoutTaskMoney(l.ToDto(
+                        labourByLogId.TryGetValue(l.Id, out var labour) ? labour : [],
+                        contentDtoByLogId.GetValueOrDefault(l.Id)))
+                    : l.ToDto(
+                        labourByLogId.TryGetValue(l.Id, out var ownLabour) ? ownLabour : [],
+                        contentDtoByLogId.GetValueOrDefault(l.Id)))
                 .ToList(),
             attachments.Select(a => a.ToDto()).ToList(),
             costEntries.Select(c => c.ToDto()).ToList(),
@@ -466,7 +552,9 @@ public sealed class PullSyncChangesHandler(
             // Sub-plan 03 Task 10: empty list when healthy; non-empty
             // signals partial data AND triggers the NextCursorUtc
             // rewind handled in the if-block above.
-            degraded);
+            degraded,
+            // lane MU-3 — what this person may read on each farm this pull covers.
+            window.FarmIds.Select(id => FarmAccessScopeDto.From(window.Scopes[id])).ToList());
 
         return Result.Success(response);
     }
@@ -478,6 +566,7 @@ public sealed class PullSyncChangesHandler(
         Guid readerUserId,
         IReadOnlyList<Domain.Logs.DailyLog> dailyLogs,
         IReadOnlyDictionary<Guid, Domain.Logs.DailyLogContent> contentByLogId,
+        PullReadWindow window,
         DateTime nowUtc,
         CancellationToken ct)
     {
@@ -520,11 +609,60 @@ public sealed class PullSyncChangesHandler(
                     return grant;
                 });
 
-            projected[log.Id] = content.ToDto(withWords: mayHear);
+            // lane MU-3 — the record's stated money to a reader who sees the farm's money, or its maker.
+            var withMoney = log.OperatorUserId.Value == readerUserId
+                || window.ScopeOf(farmId) is { SeeMoney: true };
+            projected[log.Id] = content.ToDto(withWords: mayHear, withMoney: withMoney);
         }
 
         return projected;
     }
+
+    /// <summary>
+    /// lane MU-3 — an attachment follows its PARENT (<see cref="AttachmentParentRule"/>). A
+    /// record's photo whose record is not in this response is looked up only for an own-records-only
+    /// seat (whose rule depends on who made it); E4: the parent must be on the attachment's own farm.
+    /// </summary>
+    private async Task<List<Domain.Attachments.Attachment>> VisibleAttachmentsAsync(
+        Guid readerUserId,
+        IReadOnlyList<Domain.Attachments.Attachment> attachments,
+        PullReadWindow window,
+        IReadOnlyDictionary<Guid, Domain.Logs.DailyLog> sentLogs,
+        CancellationToken ct)
+    {
+        var visible = new List<Domain.Attachments.Attachment>();
+        foreach (var attachment in attachments)
+        {
+            var scope = window.ScopeOf((Guid)attachment.FarmId);
+            if (scope is null)
+            {
+                continue;
+            }
+
+            Domain.Logs.DailyLog? parentLog = null;
+            if (AttachmentParentRule.IsRecordParent(attachment.LinkedEntityType) && scope.OwnRecordsOnly)
+            {
+                parentLog = sentLogs.GetValueOrDefault(attachment.LinkedEntityId)
+                    ?? await repository.GetDailyLogByIdAsync(attachment.LinkedEntityId, ct);
+            }
+
+            if (AttachmentParentRule.MayRead(scope, readerUserId, attachment, parentLog))
+            {
+                visible.Add(attachment);
+            }
+        }
+
+        return visible;
+    }
+
+    /// <summary>lane MU-3 — the record with its task lines' money parts dropped (<see cref="LogTaskProjection.NotesWithoutMoney"/>).</summary>
+    private static DailyLogDto WithoutTaskMoney(DailyLogDto dto) =>
+        dto with
+        {
+            Tasks = dto.Tasks
+                .Select(t => t with { Notes = LogTaskProjection.NotesWithoutMoney(t.Notes) })
+                .ToList(),
+        };
 
     private static DateTime NormalizeCursor(DateTime rawCursor, DateTime serverNowUtc)
     {
@@ -637,6 +775,7 @@ public sealed class PullSyncChangesHandler(
 
     private static HashSet<Guid> CollectOperatorIds(
         Guid requestingUserId,
+        PullReadWindow window,
         IReadOnlyList<Domain.Farms.Farm> farms,
         IReadOnlyList<Domain.Logs.DailyLog> dailyLogs,
         IReadOnlyList<Domain.Attachments.Attachment> attachments,
@@ -648,38 +787,54 @@ public sealed class PullSyncChangesHandler(
         var ids = new HashSet<Guid>();
         AddIfValid(requestingUserId, ids);
 
+        // lane MU-3 — names follow the rows this seat receives, and an own-records-only seat (a कामगार)
+        // is sent no other person's name at all: not the registrant's, not whoever added a farm photo or
+        // confirmed his record. Everyone else gets the people behind the rows he was sent.
+        void AddFor(Guid farmId, Guid userId)
+        {
+            if (userId == requestingUserId || window.ScopeOf(farmId) is { OwnRecordsOnly: false })
+            {
+                AddIfValid(userId, ids);
+            }
+        }
+
         foreach (var farm in farms)
         {
-            AddIfValid((Guid)farm.OwnerUserId, ids);
+            AddFor((Guid)farm.Id, (Guid)farm.OwnerUserId);
         }
 
         foreach (var log in dailyLogs)
         {
-            AddIfValid((Guid)log.OperatorUserId, ids);
+            AddFor((Guid)log.FarmId, (Guid)log.OperatorUserId);
             foreach (var verification in log.VerificationEvents)
             {
-                AddIfValid((Guid)verification.VerifiedByUserId, ids);
+                AddFor((Guid)log.FarmId, (Guid)verification.VerifiedByUserId);
             }
         }
 
         foreach (var attachment in attachments)
         {
-            AddIfValid((Guid)attachment.CreatedByUserId, ids);
+            AddFor((Guid)attachment.FarmId, (Guid)attachment.CreatedByUserId);
         }
 
         foreach (var entry in costEntries)
         {
-            AddIfValid((Guid)entry.CreatedByUserId, ids);
+            AddFor((Guid)entry.FarmId, (Guid)entry.CreatedByUserId);
         }
 
+        // A correction belongs to a cost entry this pull sent: it is named under that entry's farm.
+        var entryFarm = costEntries.ToDictionary(e => e.Id, e => (Guid)e.FarmId);
         foreach (var correction in financeCorrections)
         {
-            AddIfValid((Guid)correction.CorrectedByUserId, ids);
+            if (entryFarm.TryGetValue(correction.CostEntryId, out var correctionFarm))
+            {
+                AddFor(correctionFarm, (Guid)correction.CorrectedByUserId);
+            }
         }
 
         foreach (var ledger in dayLedgers)
         {
-            AddIfValid((Guid)ledger.CreatedByUserId, ids);
+            AddFor((Guid)ledger.FarmId, (Guid)ledger.CreatedByUserId);
         }
 
         foreach (var auditEvent in auditEvents)

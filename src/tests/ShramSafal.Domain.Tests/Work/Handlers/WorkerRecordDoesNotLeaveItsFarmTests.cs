@@ -68,6 +68,30 @@ public sealed class WorkerRecordDoesNotLeaveItsFarmTests
                 "the unscoped request must be narrowed, never left open-ended");
     }
 
+    /// <summary>
+    /// lane MU-3 (founder D-22 / D-26) — the profile states what the farm paid him: wages. A shared-farm
+    /// member who does not see wages (a मुकादम taking हजेरी) is refused, and his metrics are never read;
+    /// the worker's own profile stays his.
+    /// </summary>
+    [Fact]
+    public async Task A_member_who_does_not_see_wages_is_refused_the_record_of_what_he_was_paid()
+    {
+        var repo = new RecordingRepo(
+            workerFarmIds: [FarmBGuid],
+            callerFarmIds: [FarmBGuid],
+            workerConsented: false,
+            callerSeesMoney: false);
+
+        var refused = await NewProfileHandler(repo).HandleAsync(new GetWorkerProfileQuery(WorkerUserId, OwnerOfBUserId));
+
+        refused.IsFailure.Should().BeTrue();
+        refused.Error.Code.Should().Be("ShramSafal.Forbidden");
+        repo.MetricsScopesRequested.Should().BeEmpty("a refusal must not read what he was paid");
+
+        var own = await NewProfileHandler(repo).HandleAsync(new GetWorkerProfileQuery(WorkerUserId, WorkerUserId));
+        own.IsSuccess.Should().BeTrue("his own record is his");
+    }
+
     [Fact]
     public async Task Farm_Bs_owner_cannot_pull_a_score_spanning_both_farms_they_share()
     {
@@ -296,13 +320,28 @@ public sealed class WorkerRecordDoesNotLeaveItsFarmTests
         List<Guid> callerFarmIds,
         bool workerConsented,
         List<JobCard>? workerJobCards = null,
-        List<Guid>? callerOwnedFarmIds = null) : StubShramSafalRepository
+        List<Guid>? callerOwnedFarmIds = null,
+        bool callerSeesMoney = true) : StubShramSafalRepository
     {
         /// <summary>Every farm scope the handler actually asked metrics for.</summary>
         public List<IReadOnlyCollection<Guid>> MetricsScopesRequested { get; } = [];
 
         public override Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default)
             => Task.FromResult(userId == WorkerGuid ? workerFarmIds : callerFarmIds);
+
+        // lane MU-3 — the caller is the farm's own owner (the registrant): he sees its money and wages;
+        // or, with callerSeesMoney false, a मुकादम the owner never let see them.
+        public override Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(userId != WorkerGuid && callerFarmIds.Contains(farmId)
+                ? callerSeesMoney
+                    ? new ShramSafal.Application.Services.FarmAccess(
+                        AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner,
+                        Domain.Farms.MembershipStatus.Active, IsRegistrant: true, null)
+                    : new ShramSafal.Application.Services.FarmAccess(
+                        AgriSync.SharedKernel.Contracts.Roles.AppRole.Mukadam,
+                        Domain.Farms.MembershipStatus.Active, IsRegistrant: false, null, LabourGrant: true)
+                : null);
 
         public override Task<List<Guid>> GetOwnedFarmIdsForUserAsync(Guid userId, CancellationToken ct = default)
             => Task.FromResult(callerOwnedFarmIds ?? []);

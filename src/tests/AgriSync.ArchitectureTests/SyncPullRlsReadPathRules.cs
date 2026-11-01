@@ -21,23 +21,30 @@ public sealed class SyncPullRlsReadPathRules
 
         var source = File.ReadAllText(handlerPath);
 
-        var requiredCalls = new[]
+        var farmScopedReads = new[]
         {
-            "GetFarmsChangedSinceAsync(farmIds, sinceUtc, ct)",
-            "GetPlotsChangedSinceAsync(farmIds, sinceUtc, ct)",
-            "GetCropCyclesChangedSinceAsync(farmIds, sinceUtc, ct)",
-            "GetDailyLogsChangedSinceAsync(farmIds, sinceUtc, ct)",
-            "GetAttachmentsChangedSinceAsync(farmIds, sinceUtc, ct)",
-            "GetCostEntriesChangedSinceAsync(farmIds, sinceUtc, ct)",
-            "GetFinanceCorrectionsChangedSinceAsync(farmIds, sinceUtc, ct)",
-            "GetDayLedgersChangedSinceAsync(farmIds, sinceUtc, ct)",
-            "GetPlannedActivitiesChangedSinceAsync(farmIds, sinceUtc, ct)"
+            "GetFarmsChangedSinceAsync",
+            "GetPlotsChangedSinceAsync",
+            "GetCropCyclesChangedSinceAsync",
+            "GetDailyLogsChangedSinceAsync",
+            "GetAttachmentsChangedSinceAsync",
+            "GetCostEntriesChangedSinceAsync",
+            "GetFinanceCorrectionsChangedSinceAsync",
+            "GetDayLedgersChangedSinceAsync",
+            "GetPlannedActivitiesChangedSinceAsync"
         };
 
-        foreach (var call in requiredCalls)
+        // lane MU-3 — the pull reads each kind per group of farms (PullReadWindow: from the cursor, or
+        // from the beginning for a farm whose access changed), so the call takes the group's farm ids
+        // and cursor, `(ids, since, ct)`, instead of the whole pull's `(farmIds, sinceUtc, ct)`. Either
+        // way the farm list reaches SQL; the farm-less overload `(sinceUtc, ct)` must never be used.
+        foreach (var read in farmScopedReads)
         {
-            source.Should().Contain(call,
-                "sync pull must push farm scope into SQL before RLS evaluates per-row policies");
+            System.Text.RegularExpressions.Regex.IsMatch(source, $@"{read}\((farmIds, sinceUtc|ids, since), ct\)")
+                .Should().BeTrue(
+                    $"sync pull must push farm scope into SQL before RLS evaluates per-row policies ({read})");
+            source.Should().NotContain($"{read}(sinceUtc, ct)",
+                $"the farm-less overload of {read} reads every farm's rows");
         }
     }
 

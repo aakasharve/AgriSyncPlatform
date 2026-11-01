@@ -40,6 +40,8 @@ export interface ReflectPageProps {
      * whether he sees the farm's money (`mayShowFarmMoney`, founder D-22) and where ▶ may be offered (`listenModel`).
      */
     farmRole?: string | null;
+    /** lane MU-3 — the server's see-money answer for this seat (absent = the role rule, `mayShowFarmMoney`). */
+    maySeeMoney?: boolean;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing prop shape (not part of the Activity Feed change); typing it is a separate cleanup
     navigate?: (route: any) => void;
     focusLogRequest?: { logId: string; date: string; plotId?: string } | null;

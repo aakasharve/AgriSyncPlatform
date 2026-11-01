@@ -1,7 +1,9 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using ShramSafal.Application.Admin;
 using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Organizations;
 
 namespace ShramSafal.Api.Endpoints;
@@ -21,6 +23,7 @@ public static class AuditEndpoints
             HttpContext http,
             IShramSafalRepository repository,
             IEntitlementResolver entitlementResolver,
+            IClock clock,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(http.User, out var actorUserId))
@@ -31,7 +34,7 @@ public static class AuditEndpoints
             if (!string.IsNullOrWhiteSpace(entityType) && entityId.HasValue)
             {
                 return await GetEntityStreamAsync(
-                    entityType, entityId.Value, actorUserId, http, repository, entitlementResolver, ct);
+                    entityType, entityId.Value, actorUserId, http, repository, entitlementResolver, ct, clock);
             }
 
             if (!farmId.HasValue)
@@ -44,7 +47,7 @@ public static class AuditEndpoints
             }
 
             var isFarmMember = await repository.IsUserMemberOfFarmAsync(farmId.Value, actorUserId, ct);
-            if (!isFarmMember)
+            if (!isFarmMember || !await MayReadFarmAuditAsync(repository, farmId.Value, actorUserId, clock.UtcNow, ct))
             {
                 return Results.Forbid();
             }
@@ -96,9 +99,11 @@ public static class AuditEndpoints
         HttpContext http,
         IShramSafalRepository repository,
         IEntitlementResolver entitlementResolver,
-        CancellationToken ct)
+        CancellationToken ct,
+        IClock? clock = null)
     {
         var events = await repository.GetAuditEventsForEntityAsync(entityId, entityType, ct);
+        var now = clock?.UtcNow ?? DateTime.UtcNow;
 
         // Entity stream may include farm-linked events; enforce visibility by farm membership.
         foreach (var relatedFarmId in events
@@ -108,7 +113,7 @@ public static class AuditEndpoints
                      .Distinct())
         {
             var isMember = await repository.IsUserMemberOfFarmAsync(relatedFarmId, actorUserId, ct);
-            if (!isMember)
+            if (!isMember || !await MayReadFarmAuditAsync(repository, relatedFarmId, actorUserId, now, ct))
             {
                 return Results.Forbid();
             }
@@ -147,6 +152,18 @@ public static class AuditEndpoints
     /// <see cref="EntitlementMatrix"/> is sufficient to close the surface without
     /// touching this file. A null scope (the ordinary farmer) is never a reader.
     /// </summary>
+    /// <summary>
+    /// lane MU-3 (founder D-22 / D-26) — a farm's audit trail carries every record's payload: amounts,
+    /// wages and everyone's work. It goes only to a seat that reads the farm's records AND sees its money
+    /// and wages (the primary account holder always). Public so the REST-door proof runs this rule.
+    /// </summary>
+    public static async Task<bool> MayReadFarmAuditAsync(
+        IShramSafalRepository repository, Guid farmId, Guid userId, DateTime atUtc, CancellationToken ct)
+    {
+        var scope = await FarmReadGate.ScopeAsync(repository, farmId, userId, atUtc, ct);
+        return scope is { OwnRecordsOnly: false, SeeMoney: true, SeeWages: true };
+    }
+
     private static bool IsPlatformAuditReader(AdminScope? scope) =>
         scope is { IsPlatformAdmin: true } && scope.CanRead(ModuleKey.AuditLedger);
 

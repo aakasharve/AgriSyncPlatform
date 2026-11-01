@@ -410,6 +410,8 @@ public sealed class FarmMembership : Entity<Guid>
         Status = MembershipStatus.Active;
         ModifiedAtUtc = utcNow;
         LastSeenAtUtc = utcNow;
+        // lane MU-3 — becoming Active changes what this person may read: the pull re-sends the farm.
+        AccessChangedAtUtc = utcNow;
     }
 
     /// <summary>
@@ -451,6 +453,8 @@ public sealed class FarmMembership : Entity<Guid>
         AuthorityExpiresAtJson = null;
         ModifiedAtUtc = utcNow;
         LastSeenAtUtc = utcNow;
+        // lane MU-3 — the request became an Active seat: what he may read changed (the pull re-sends the farm).
+        AccessChangedAtUtc = utcNow;
     }
 
     /// <summary>Legacy approve: the seat keeps the role and permissions it already carries.</summary>

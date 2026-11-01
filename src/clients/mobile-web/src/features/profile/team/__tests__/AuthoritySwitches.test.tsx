@@ -71,10 +71,11 @@ describe('the primary owner\'s responsibility switches', () => {
     it('render one switch per ENFORCED responsibility, from the server\'s list, in Marathi', async () => {
         render(<Harness />);
         const block = await openCard('fam');
-        for (const name of ['TakeAttendance', 'ConfirmRecords', 'ReviewMoney', 'EditFarmSetup', 'LabRecords', 'ScheduleTemplates']) {
+        // lane MU-3 — see money / see wages are enforced on every download and money read now: real switches.
+        for (const name of ['TakeAttendance', 'ConfirmRecords', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'EditFarmSetup', 'LabRecords', 'ScheduleTemplates']) {
             expect(within(block).getByTestId(`authority-${name}-fam`)).toBeTruthy();
         }
-        for (const name of ['SeeMoney', 'SeeWages', 'PlanWork', 'AssignWork']) {
+        for (const name of ['PlanWork', 'AssignWork']) {
             expect(within(block).queryByTestId(`authority-${name}-fam`)).toBeNull();
         }
         expect(within(block).getByTestId('authority-TakeAttendance-fam').getAttribute('data-on')).toBe('yes');
@@ -141,6 +142,26 @@ describe('the primary owner\'s responsibility switches', () => {
         const money = sent.find(a => a.name === 'SeeMoney')!;
         expect(review.expiresAtUtc).toBe(new Date(2026, 10, 5).toISOString());
         expect(money.expiresAtUtc).toBe(review.expiresAtUtc);
+    });
+
+    it('lane MU-3 — turning see money OFF takes see wages and review money with it (they mean nothing without it)', async () => {
+        fetchLabourPermissions.mockResolvedValue([OWNER, {
+            ...FAMILY,
+            authorities: [
+                { name: 'SeeMoney', expiresAtUtc: null },
+                { name: 'SeeWages', expiresAtUtc: null },
+                { name: 'ReviewMoney', expiresAtUtc: null },
+                { name: 'TakeAttendance', expiresAtUtc: null },
+            ],
+        }]);
+        setMemberAuthorities.mockResolvedValue(FAMILY);
+        render(<Harness />);
+        const block = await openCard('fam');
+        expect(within(block).getByText('शेताचा पैशांचा हिशोब पाहणे')).toBeTruthy();
+        fireEvent.click(within(block).getByTestId('authority-SeeMoney-fam'));
+        await waitFor(() => expect(setMemberAuthorities).toHaveBeenCalledWith('farm-1', 'fam', [
+            { name: 'TakeAttendance', expiresAtUtc: null },
+        ]));
     });
 
     it('turning one OFF sends the set without it', async () => {

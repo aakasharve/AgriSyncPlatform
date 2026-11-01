@@ -131,7 +131,8 @@ public sealed class DailyLogContentRealPostgresTests(Xunit.Abstractions.ITestOut
                        (gen_random_uuid(), @farmA, @coOwnerA, 'SecondaryOwner', NOW(), NOW(), @accountA, 3),
                        (gen_random_uuid(), @farmA, @workerA, 'Worker', NOW(), NOW(), @accountA, 3),
                        (gen_random_uuid(), @farmA, @speakerA, 'Worker', NOW(), NOW(), @accountA, 3),
-                       (gen_random_uuid(), @farmA, @dualAB, 'Worker', NOW(), NOW(), @accountA, 3),
+                       -- lane MU-3: a मुकादम label on farm A (a कामगार reads only his own records, D-26).
+                       (gen_random_uuid(), @farmA, @dualAB, 'Mukadam', NOW(), NOW(), @accountA, 3),
                        (gen_random_uuid(), @farmB, @ownerB, 'PrimaryOwner', NOW(), NOW(), @accountB, 3),
                        (gen_random_uuid(), @farmB, @dualAB, 'Worker', NOW(), NOW(), @accountB, 3);
                 INSERT INTO ssf.farm_memberships ("Id", farm_id, user_id, role, granted_at_utc, modified_at_utc, owner_account_id, status, can_manage_labour_records)
@@ -680,7 +681,6 @@ public sealed class DailyLogContentRealPostgresTests(Xunit.Abstractions.ITestOut
                      (SpeakerA, "the speaker", true),
                      (OwnerA, "the primary owner", true),
                      (MukadamA, "a mukadam holding the owner's grant", true),
-                     (WorkerA, "a worker on the same farm", false),
                      (CoOwnerA, "a co-owner without the grant", false),
                  })
         {
@@ -709,6 +709,10 @@ public sealed class DailyLogContentRealPostgresTests(Xunit.Abstractions.ITestOut
             pulled.Content.Document.GetProperty("irrigation")[0].GetProperty("durationHours").GetInt32().Should().Be(2);
             pulled.Content.Document.GetProperty("cropActivities")[0].GetProperty("title").GetString().Should().Be("खुरपणी");
         }
+
+        // lane MU-3 (founder D-26 — a label may narrow, never widen): a कामगार on the same farm reads his OWN
+        // records only, so another person's record — words and values alike — never reaches him at all.
+        (await PullAllAsync(WorkerA)).Should().NotContain(l => l.Id == logId, "a कामगार reads only the records he made");
     }
 
     [Fact]

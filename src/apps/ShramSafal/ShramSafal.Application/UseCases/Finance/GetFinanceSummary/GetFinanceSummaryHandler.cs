@@ -1,11 +1,17 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Finance.GetFinanceSummary;
 
-public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository)
+/// <summary>
+/// The caller's money summary across his farms. lane MU-3 (founder D-22 / D-26): only the farms where he
+/// sees money (<see cref="FarmReadScope.SeeMoney"/>) are counted; none at all = Forbidden, never a ₹0.
+/// </summary>
+public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, IClock? clock = null)
 {
     public async Task<Result<FinanceSummaryDto>> HandleAsync(GetFinanceSummaryQuery query, CancellationToken ct = default)
     {
@@ -20,7 +26,16 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository)
             return Result.Failure<FinanceSummaryDto>(ShramSafalErrors.InvalidCommand);
         }
 
-        var farmIds = await repository.GetFarmIdsForUserAsync(query.ActorUserId, ct);
+        var now = clock?.UtcNow ?? DateTime.UtcNow;
+        var farmIds = new List<Guid>();
+        foreach (var farmId in await repository.GetFarmIdsForUserAsync(query.ActorUserId, ct))
+        {
+            if (await FarmReadGate.MaySeeMoneyAsync(repository, farmId, query.ActorUserId, now, ct))
+            {
+                farmIds.Add(farmId);
+            }
+        }
+
         if (farmIds.Count == 0)
         {
             return Result.Failure<FinanceSummaryDto>(ShramSafalErrors.Forbidden);

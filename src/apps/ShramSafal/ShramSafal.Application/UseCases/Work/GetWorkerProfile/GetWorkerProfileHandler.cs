@@ -75,11 +75,37 @@ public sealed class GetWorkerProfileHandler(
                     : ShramSafalErrors.WorkerRecordPortabilityForbidden);
         }
 
+        // lane MU-3 (founder D-22 / D-26) — the profile states what the farm PAID him (EarnedLast30d): wages.
+        // His own profile is his; anyone else reads it only over the farms where he sees wages, and is
+        // refused when there is none (never a ₹0 that would read as "earned nothing").
+        IReadOnlyList<Guid> farmIds = access.PermittedFarmIds;
+        if (query.CallerUserId.Value != query.WorkerUserId.Value)
+        {
+            var withWages = new List<Guid>();
+            foreach (var farmId in farmIds)
+            {
+                if ((await Services.FarmReadGate.ScopeAsync(repository, farmId, query.CallerUserId.Value, clock.UtcNow, ct))?.SeeWages == true)
+                {
+                    withWages.Add(farmId);
+                }
+            }
+
+            if (withWages.Count == 0)
+            {
+                logger.LogInformation(
+                    "GetWorkerProfile refused for worker {WorkerUserId} by caller {CallerUserId}: no farm where the caller sees wages.",
+                    query.WorkerUserId, query.CallerUserId);
+                return Result.Failure<WorkerProfileDto>(ShramSafalErrors.Forbidden);
+            }
+
+            farmIds = withWages;
+        }
+
         // 2. Load worker metrics — over the farms the guard permitted, never over the raw
         //    farm id the client asked for, and never over an open-ended scope.
         var since30d = clock.UtcNow.AddDays(-30);
         var metrics = await repository.GetWorkerMetricsAsync(
-            query.WorkerUserId, access.PermittedFarmIds, since30d, ct);
+            query.WorkerUserId, farmIds, since30d, ct);
 
         // 3. Compute ReliabilityScore.
         var reliability = ReliabilityScore.Compute(

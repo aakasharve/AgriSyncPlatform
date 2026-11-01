@@ -30,12 +30,15 @@ export const AUTHORITY = {
 export type AuthorityName = typeof AUTHORITY[keyof typeof AUTHORITY];
 
 /**
- * The authorities lane 2b ENFORCES on the server, in the order the owner's switches show them.
- * See money, see wages, plan and assign have no switch yet (P5: not enforced until MU-3 / L8).
+ * The authorities the server ENFORCES, in the order the owner's switches show them. Lane MU-3 made see
+ * money and see wages real (every download and money read follows them); plan and assign have no switch
+ * yet (P5: not enforced until L8).
  */
 export const SWITCHABLE_AUTHORITIES: readonly AuthorityName[] = [
     AUTHORITY.takeAttendance,
     AUTHORITY.confirmRecords,
+    AUTHORITY.seeMoney,
+    AUTHORITY.seeWages,
     AUTHORITY.reviewMoney,
     AUTHORITY.editFarmSetup,
     AUTHORITY.labRecords,

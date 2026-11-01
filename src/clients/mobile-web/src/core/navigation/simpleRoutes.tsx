@@ -48,6 +48,7 @@ import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavi
 import { todaysLabourAnchor } from '../../features/logs/components/entry/todayAttendance';
 import { buildNoWorkDayPayload } from './noWorkDay';
 import { PageBar } from '../../shared/components/ui/placeUi';
+import { MoneyWithheldPage } from '../../features/finance/components/MoneyWithheldPage';
 
 export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'profile') return null;
@@ -64,7 +65,8 @@ export const renderProfileRoute = (ctx: AppRouterContext): React.ReactNode => {
                     }
                     ctx.setCurrentRoute('schedule');
                 }}
-                onOpenFinanceManager={() => ctx.setCurrentRoute('finance-manager')}
+                // lane MU-3 — पैसे व हिशोब only for a seat that sees the farm's money (the hub then hides its row).
+                onOpenFinanceManager={ctx.maySeeMoney === false ? undefined : () => ctx.setCurrentRoute('finance-manager')}
                 onOpenLabour={() => ctx.setCurrentRoute('labour')}
                 // spec: plr-d10 (I17, PLR-D9 O4/§6) — Referrals is out of the farmer's hub (it opened a
                 // blank English page); export + erase now live inside "गोपनीयता व संमती" (one page).
@@ -289,6 +291,7 @@ export const renderIncomeRoute = (ctx: AppRouterContext): React.ReactNode => {
 
 export const renderFinanceManagerRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'finance-manager') return null;
+    if (ctx.maySeeMoney === false) return <MoneyWithheldPage onBack={() => ctx.goBackOr('main')} />; // lane MU-3
     return (
         <FinanceManagerHome
             currentRoute={ctx.currentRoute}
@@ -300,6 +303,7 @@ export const renderFinanceManagerRoute = (ctx: AppRouterContext): React.ReactNod
 
 export const renderFinanceLedgerRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'finance-ledger') return null;
+    if (ctx.maySeeMoney === false) return <MoneyWithheldPage onBack={() => ctx.goBackOr('main')} />; // lane MU-3
     return (
         <LedgerPage
             currentRoute={ctx.currentRoute}
@@ -311,6 +315,7 @@ export const renderFinanceLedgerRoute = (ctx: AppRouterContext): React.ReactNode
 
 export const renderFinancePriceBookRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'finance-price-book') return null;
+    if (ctx.maySeeMoney === false) return <MoneyWithheldPage onBack={() => ctx.goBackOr('main')} />; // lane MU-3
     return (
         <PriceBookPage
             currentRoute={ctx.currentRoute}
@@ -322,6 +327,7 @@ export const renderFinancePriceBookRoute = (ctx: AppRouterContext): React.ReactN
 
 export const renderFinanceReviewInboxRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'finance-review-inbox') return null;
+    if (ctx.maySeeMoney === false) return <MoneyWithheldPage onBack={() => ctx.goBackOr('main')} />; // lane MU-3
     return (
         <ReviewInboxPage
             currentRoute={ctx.currentRoute}
@@ -333,6 +339,7 @@ export const renderFinanceReviewInboxRoute = (ctx: AppRouterContext): React.Reac
 
 export const renderFinanceReportsRoute = (ctx: AppRouterContext): React.ReactNode => {
     if (ctx.currentRoute !== 'finance-reports') return null;
+    if (ctx.maySeeMoney === false) return <MoneyWithheldPage onBack={() => ctx.goBackOr('main')} />; // lane MU-3
     return (
         <ReportsPage
             currentRoute={ctx.currentRoute}

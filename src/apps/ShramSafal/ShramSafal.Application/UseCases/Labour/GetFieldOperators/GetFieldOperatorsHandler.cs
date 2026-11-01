@@ -61,7 +61,8 @@ public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, I
         // keeps the people he acts on.
         var access = await repository.GetFarmAccessForUserAsync(query.FarmId.Value, query.CallerUserId.Value, ct);
         var now = clock.UtcNow;
-        if (GetLabourDataHandler.ResolveRegisterView(callerRole.Value) == LabourRegisterView.OwnRow
+        var seesWages = FarmReadScope.Of(query.FarmId.Value, access, now)?.SeeWages == true;
+        if (GetLabourDataHandler.ResolveRegisterView(callerRole.Value, seesWages) == LabourRegisterView.OwnRow
             && !FarmAccessPolicy.Holds(access, FarmAuthority.TakeAttendance, now)
             && !FarmAccessPolicy.Holds(access, FarmAuthority.ConfirmRecords, now))
         {

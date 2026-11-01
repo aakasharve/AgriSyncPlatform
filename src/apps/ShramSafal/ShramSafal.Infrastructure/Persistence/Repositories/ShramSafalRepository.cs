@@ -2299,11 +2299,15 @@ internal sealed class ShramSafalRepository(
                 m.CanManageLabourRecords,
                 m.LabourGrantExpiresAtUtc,
                 m.AuthorityExpiresAtJson,
+                m.GrantedAtUtc,
+                m.AccessChangedAtUtc,
             })
             .FirstOrDefaultAsync(ct);
 
         // lane 2b — the whole stored decision (bits, the labour grant and every end), so the policy
         // evaluates each authority at the caller's clock; nothing is pre-decided here.
+        // lane MU-3 — when what the seat may read last changed: the later of its creation and its
+        // last access change (the pull re-sends the farm to a phone whose cursor is older).
         return seat is null
             ? null
             : new ShramSafal.Application.Services.FarmAccess(
@@ -2313,7 +2317,10 @@ internal sealed class ShramSafalRepository(
                 seat.Permissions,
                 seat.CanManageLabourRecords,
                 seat.LabourGrantExpiresAtUtc,
-                seat.AuthorityExpiresAtJson);
+                seat.AuthorityExpiresAtJson,
+                seat.AccessChangedAtUtc is { } changed && changed > seat.GrantedAtUtc
+                    ? changed
+                    : seat.GrantedAtUtc);
     }
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — see the port. Newest ended seat by its

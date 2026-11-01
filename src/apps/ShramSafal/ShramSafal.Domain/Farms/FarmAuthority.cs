@@ -25,10 +25,10 @@ public enum FarmAuthority
     /// <summary>Confirm records: a log's मंजूर / शंका and a compliance warning (D-26, D-44). Never money.</summary>
     ConfirmRecords,
 
-    /// <summary>See money. Stored and reported only — the download filter is lane MU-3 (P5: no switch yet).</summary>
+    /// <summary>See money: cost entries, the day ledger, job cards, finance summaries, exports and a record's stated money (lane MU-3 enforces it on every download and read).</summary>
     SeeMoney,
 
-    /// <summary>See wages. Requires <see cref="SeeMoney"/>. Stored and reported only (MU-3).</summary>
+    /// <summary>See wages on other people's labour. Requires <see cref="SeeMoney"/> (lane MU-3 enforces it).</summary>
     SeeWages,
 
     /// <summary>Review money entries (<see cref="FarmPermission.ReviewMoney"/>): correct a cost, split a whole-farm cost, job-card payout verify / settle. Requires <see cref="SeeMoney"/>.</summary>
@@ -80,13 +80,15 @@ public static class FarmAuthorities
     ];
 
     /// <summary>
-    /// The authorities lane 2b ENFORCES on the server and therefore offers as a phone switch (P5):
-    /// see money / see wages wait for MU-3, plan / assign for L8.
+    /// The authorities the server ENFORCES and therefore offers as a phone switch (P5): lane MU-3 made
+    /// see money / see wages real (the download and every money read follow them); plan / assign wait for L8.
     /// </summary>
     public static readonly IReadOnlyList<FarmAuthority> Switchable =
     [
         FarmAuthority.TakeAttendance,
         FarmAuthority.ConfirmRecords,
+        FarmAuthority.SeeMoney,
+        FarmAuthority.SeeWages,
         FarmAuthority.ReviewMoney,
         FarmAuthority.EditFarmSetup,
         FarmAuthority.LabRecords,

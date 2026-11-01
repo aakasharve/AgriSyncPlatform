@@ -29,6 +29,8 @@ import { reconcileFinance } from './reconcilers/financeReconciler';
 import { reconcileAttendance } from './reconcilers/attendanceReconciler';
 import { reconcileFarmsPlotsCycles } from './reconcilers/farmsPlotsCyclesReconciler';
 import { reconcileAttentionBoard } from './reconcilers/attentionBoardReconciler';
+import { reconcileAccessScopes } from './reconcilers/accessScopeReconciler';
+import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import { finalizeReconciliation } from './reconcilers/finalizeReconciliation';
 import { dispatchPostReconcileEvents } from './reconcilers/postReconcileEvents';
 import { markLogsRebuilt } from './logsRebuildMarker';
@@ -80,6 +82,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         db.logs, db.attachments, db.uploadQueue, db.appMeta, db.referenceData,
         db.farms, db.plots, db.cropCycles, db.costEntries, db.financeCorrections,
         db.dayLedgers, db.plannedTasks, db.attentionCards, db.attendanceMarks,
+        // lane MU-3 — the purge also reaches these (existing stores; no version bump).
+        db.jobCards, db.testInstances, db.testRecommendations, db.complianceSignals,
     ], async () => {
         if (pendingLogIds) {
             importedLogs = await reconcileLogs(
@@ -97,6 +101,13 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         await reconcileAttendance(db, payload, receivedAtUtc);
         await reconcileFarmsPlotsCycles(db, payload, receivedAtUtc);
         await reconcileAttentionBoard(db, payload);
+        // lane MU-3 (plan step 4a) — keep only what the server lets this person read: after every other
+        // reconciler, so what this pull just wrote is scanned too. An older server sends no scopes: no-op.
+        await reconcileAccessScopes(db, payload, {
+            userId: getAuthSession()?.userId ?? null,
+            pendingLogIds,
+            receivedAtUtc,
+        });
 
         await finalizeReconciliation(
             db,

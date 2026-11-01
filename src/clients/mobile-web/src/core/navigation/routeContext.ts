@@ -109,6 +109,12 @@ export interface AppRouterContext {
      * (`farmPermissions.mayChangeRecordedMoney`). Optional so older context builders compile; absent = not known.
      */
     mayReviewMoney?: boolean;
+    /**
+     * lane MU-3 — this seat sees the farm's money, as the SERVER answers it (/me/context see-money
+     * authority; the primary account holder when the server sent no authorities). Optional so older
+     * context builders compile; absent = the role rule (`mayShowFarmMoney`).
+     */
+    maySeeMoney?: boolean;
     /** The work home's "आजची हजेरी" door: owner tier or the owner's labour grant only (H10). */
     canOpenAttendanceFromHome?: boolean;
 

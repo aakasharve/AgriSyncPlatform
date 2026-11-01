@@ -294,7 +294,10 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests(ITestOutp
         await AssertAppRoleIsNotVacuousAsync();
 
         // CONTROL: the (legacy) co-owner reads the farm and records a purchase before the pause.
-        (await PullAsync(Family)).Should().Contain(SecretCost);
+        // lane MU-3 (founder D-22 / D-26): a bare सहमालक label holds no see money, so he reads the farm's
+        // work (its plot), never its money — in either direction of the pause.
+        var beforePause = await PullAsync(Family);
+        beforePause.Should().Contain(PlotName).And.NotContain(SecretCost);
         (await PushCostAsync(Family, Guid.NewGuid(), "before-pause")).Status.Should().Be("applied");
 
         using (var pause = await SendAsync(HttpMethod.Post, $"/shramsafal/farms/{Farm}/memberships/{Family}/suspend", Owner, new { reason = "हिशोब तपासायचा आहे" }))
@@ -335,7 +338,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests(ITestOutp
             restore.StatusCode.Should().Be(HttpStatusCode.OK, text);
         }
 
-        (await PullAsync(Family)).Should().Contain(SecretCost, "restore gives the reads back");
+        (await PullAsync(Family)).Should().Contain(PlotName, "restore gives the reads back").And.NotContain(SecretCost);
         (await PushCostAsync(Family, Guid.NewGuid(), "after-restore")).Status.Should().Be("applied");
         var seat = await LiveSeatAsync(Farm, Family);
         seat!.Status.Should().Be(3);

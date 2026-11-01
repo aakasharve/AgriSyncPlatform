@@ -98,6 +98,7 @@ export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
         <ReflectPage
             sessionUserId={getSessionUserId()}
             farmRole={ctx.farmRole ?? null}
+            maySeeMoney={ctx.maySeeMoney}
             onOpenLog={ctx.handleEditLog}
             onSpeak={(request) => { requestSpeak({ ...request, returnTo: { route: 'main', mainView: 'reflect' } }); }}
             history={ctx.history}
@@ -276,7 +277,7 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             // The running-cost card (c95afa1c), re-homed on the work home. A worker sees no
                             // money (PLR-D9 §6: "कामगार — … no money"), and neither does a role the
                             // server has not told this phone yet (unknown stays closed, I12-V1-m6).
-                            cost={!mayShowFarmMoney(ctx.farmRole) ? undefined : {
+                            cost={!mayShowFarmMoney(ctx.farmRole, ctx.maySeeMoney) ? undefined : {
                                 today: costSnapshot.today, yesterday: yesterdayCost, soFar: costSnapshot.cropSoFar, scopeLabel: costSnapshot.scopeLabel,
                             }}
                             // wave-3.7, founder decision 3 — the question stays VISIBLE while he answers it.

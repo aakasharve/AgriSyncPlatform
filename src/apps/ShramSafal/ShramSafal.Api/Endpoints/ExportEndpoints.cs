@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using AgriSync.BuildingBlocks.Abstractions;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Export.ExportDailySummary;
 using ShramSafal.Application.UseCases.Export.ExportMonthlyCost;
 using ShramSafal.Application.UseCases.Export.ExportVerificationReport;
@@ -19,6 +21,7 @@ public static class ExportEndpoints
             [FromQuery] DateOnly date,
             ClaimsPrincipal user,
             IShramSafalRepository repository,
+            IClock clock,
             [FromServices] ExportDailySummaryHandler handler,
             CancellationToken ct) =>
         {
@@ -27,8 +30,7 @@ public static class ExportEndpoints
                 return Results.Unauthorized();
             }
 
-            var isFarmMember = await repository.IsUserMemberOfFarmAsync(farmId, actorUserId, ct);
-            if (!isFarmMember)
+            if (!await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }
@@ -44,6 +46,7 @@ public static class ExportEndpoints
             [FromQuery] int month,
             ClaimsPrincipal user,
             IShramSafalRepository repository,
+            IClock clock,
             [FromServices] ExportMonthlyCostHandler handler,
             CancellationToken ct) =>
         {
@@ -52,8 +55,7 @@ public static class ExportEndpoints
                 return Results.Unauthorized();
             }
 
-            var isFarmMember = await repository.IsUserMemberOfFarmAsync(farmId, actorUserId, ct);
-            if (!isFarmMember)
+            if (!await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }
@@ -69,6 +71,7 @@ public static class ExportEndpoints
             [FromQuery] DateOnly toDate,
             ClaimsPrincipal user,
             IShramSafalRepository repository,
+            IClock clock,
             [FromServices] ExportVerificationReportHandler handler,
             CancellationToken ct) =>
         {
@@ -77,8 +80,7 @@ public static class ExportEndpoints
                 return Results.Unauthorized();
             }
 
-            var isFarmMember = await repository.IsUserMemberOfFarmAsync(farmId, actorUserId, ct);
-            if (!isFarmMember)
+            if (!await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }
@@ -89,5 +91,17 @@ public static class ExportEndpoints
         .WithName("ExportVerificationReport");
 
         return group;
+    }
+
+    /// <summary>
+    /// lane MU-3 (founder D-22 / D-26) — every export is a FARM report that carries amounts (the day
+    /// ledger's allocations), so it goes only to a seat that sees the farm's money and reads the farm's
+    /// records (not an own-records-only seat). Public so the REST-door proof runs the route's own rule.
+    /// </summary>
+    public static async Task<bool> MayExportAsync(
+        IShramSafalRepository repository, IClock clock, Guid farmId, Guid userId, CancellationToken ct)
+    {
+        var scope = await FarmReadGate.ScopeAsync(repository, farmId, userId, clock.UtcNow, ct);
+        return scope is { SeeMoney: true, OwnRecordsOnly: false };
     }
 }

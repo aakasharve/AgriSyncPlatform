@@ -60,15 +60,23 @@ public sealed class LabourRegisterViewTests
         Attendance: new LabourAttendanceDraftDto("", null, [], ""),
         View: "owner", Home: new LabourHomeDto(1200m, 12000m, 12, 4, 8));
 
-    /// <summary>lane 2b fix 1 (MEDIUM-2): unchanged from 74185ad0 — see money / see wages are stored only; MU-3 makes them real.</summary>
+    /// <summary>
+    /// lane MU-3 (founder D-22 / D-26): the wage book follows SEE WAGES, never the label. The primary
+    /// owner always reads it; a सहमालक / मुकादम without see wages reads the crew register (no money); a
+    /// कामगार label narrows to his own row whatever he holds; another seat with see wages reads the book.
+    /// </summary>
     [Fact]
     public void RolesResolveToTheThreeViews()
     {
-        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.PrimaryOwner));
-        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.SecondaryOwner));
-        Assert.Equal(LabourRegisterView.CrewAttendance, GetLabourDataHandler.ResolveRegisterView(AppRole.Mukadam));
-        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Worker));
-        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Agronomist));
+        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.PrimaryOwner, seesWages: true));
+        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.PrimaryOwner, seesWages: false));
+        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.SecondaryOwner, seesWages: true));
+        Assert.Equal(LabourRegisterView.CrewAttendance, GetLabourDataHandler.ResolveRegisterView(AppRole.SecondaryOwner, seesWages: false));
+        Assert.Equal(LabourRegisterView.CrewAttendance, GetLabourDataHandler.ResolveRegisterView(AppRole.Mukadam, seesWages: false));
+        Assert.Equal(LabourRegisterView.OwnerBook, GetLabourDataHandler.ResolveRegisterView(AppRole.Mukadam, seesWages: true));
+        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Worker, seesWages: false));
+        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Worker, seesWages: true));
+        Assert.Equal(LabourRegisterView.OwnRow, GetLabourDataHandler.ResolveRegisterView(AppRole.Agronomist, seesWages: false));
     }
 
     /// <summary>The owner's book is untouched — his record, every rupee.</summary>

@@ -85,6 +85,27 @@ public static class LogContentDocument
         "systemInterpretation",
     };
 
+    /// <summary>
+    /// lane MU-3 (founder D-22 / D-26) — the MONEY a record states: the amounts the server itself reads as
+    /// a line's price (<c>RecordMoneyLines</c>: an input's <c>cost</c>, a machine's <c>rentalCost</c> and
+    /// <c>fuelCost</c>, an expense's <c>totalAmount</c>), an expense item's <c>unitPrice</c> and
+    /// <c>total</c>, and <c>totalCost</c>. Removed wherever they sit — the
+    /// <c>numbers.&lt;field&gt;</c> fact behind each amount (with his spoken words for it) included — for a
+    /// reader who may not see the farm's money and did not make the record himself; every other value
+    /// stays. An edit by such a reader carries them forward (<see cref="CarryMoneyForward"/>), so their
+    /// absence from his edit is never a deletion.
+    /// </summary>
+    public static readonly IReadOnlySet<string> MoneyKeys = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "cost",
+        "rentalCost",
+        "fuelCost",
+        "totalAmount",
+        "unitPrice",
+        "total",
+        "totalCost",
+    };
+
     private static readonly HashSet<string> BucketSet = new(Buckets, StringComparer.Ordinal);
 
     private static readonly HashSet<string> ScalarKeys = new(StringComparer.Ordinal)
@@ -232,10 +253,18 @@ public static class LogContentDocument
     /// Account erasure: the document with every <see cref="WordKeys"/> property removed, at any
     /// depth. Values stay exactly as they were.
     /// </summary>
-    public static string StripWords(string documentJson)
+    public static string StripWords(string documentJson) => StripKeys(documentJson, WordKeys);
+
+    /// <summary>
+    /// lane MU-3 — the document with every <see cref="MoneyKeys"/> property removed, at any depth. Every
+    /// other value (and his words) stays exactly as it was.
+    /// </summary>
+    public static string StripMoney(string documentJson) => StripKeys(documentJson, MoneyKeys);
+
+    private static string StripKeys(string documentJson, IReadOnlySet<string> keys)
     {
         var root = JsonNode.Parse(documentJson);
-        Strip(root);
+        Strip(root, keys);
         return root?.ToJsonString(WriteOptions) ?? "{}";
     }
 
@@ -246,7 +275,20 @@ public static class LogContentDocument
     /// its id), the same nested object — is carried onto his document. Everything he did write
     /// stays exactly as he wrote it, and an item he removed takes its words with it.
     /// </summary>
-    public static string CarryWordsForward(string previousDocumentJson, string incomingDocumentJson)
+    public static string CarryWordsForward(string previousDocumentJson, string incomingDocumentJson) =>
+        CarryKeysForward(previousDocumentJson, incomingDocumentJson, WordKeys);
+
+    /// <summary>
+    /// lane MU-3 — a revision made by someone who may NOT see the farm's money and did not make the
+    /// record: his phone was sent the document without its amounts, so their absence from his edit is not
+    /// a deletion. Every amount the previous version held at a place his edit still has is carried onto
+    /// his document, exactly as <see cref="CarryWordsForward"/> carries the words; an item he removed
+    /// takes its amounts with it.
+    /// </summary>
+    public static string CarryMoneyForward(string previousDocumentJson, string incomingDocumentJson) =>
+        CarryKeysForward(previousDocumentJson, incomingDocumentJson, MoneyKeys);
+
+    private static string CarryKeysForward(string previousDocumentJson, string incomingDocumentJson, IReadOnlySet<string> keys)
     {
         var previous = JsonNode.Parse(previousDocumentJson);
         var incoming = JsonNode.Parse(incomingDocumentJson);
@@ -255,7 +297,7 @@ public static class LogContentDocument
             return incomingDocumentJson;
         }
 
-        Carry(previous, incoming);
+        Carry(previous, incoming, keys);
         return incoming.ToJsonString(WriteOptions);
     }
 
@@ -310,13 +352,13 @@ public static class LogContentDocument
         return Validate(parsed.RootElement) is null ? json : null;
     }
 
-    private static void Carry(JsonNode? from, JsonNode? to)
+    private static void Carry(JsonNode? from, JsonNode? to, IReadOnlySet<string> keys)
     {
         if (from is JsonObject source && to is JsonObject target)
         {
             foreach (var (key, value) in source)
             {
-                if (WordKeys.Contains(key))
+                if (keys.Contains(key))
                 {
                     if (value is not null && !target.ContainsKey(key))
                     {
@@ -328,7 +370,7 @@ public static class LogContentDocument
 
                 if (target.TryGetPropertyValue(key, out var child))
                 {
-                    Carry(value, child);
+                    Carry(value, child, keys);
                 }
             }
 
@@ -353,7 +395,7 @@ public static class LogContentDocument
                 var match = IdOf(item) is { } id
                     ? sourceById.GetValueOrDefault(id)
                     : i < sourceItems.Count && IdOf(sourceItems[i]) is null ? sourceItems[i] : null;
-                Carry(match, item);
+                Carry(match, item, keys);
             }
         }
     }
@@ -366,26 +408,26 @@ public static class LogContentDocument
             ? text
             : null;
 
-    private static void Strip(JsonNode? node)
+    private static void Strip(JsonNode? node, IReadOnlySet<string> keys)
     {
         switch (node)
         {
             case JsonObject obj:
-                foreach (var key in obj.Select(p => p.Key).Where(WordKeys.Contains).ToList())
+                foreach (var key in obj.Select(p => p.Key).Where(keys.Contains).ToList())
                 {
                     obj.Remove(key);
                 }
 
                 foreach (var child in obj.Select(p => p.Value).ToList())
                 {
-                    Strip(child);
+                    Strip(child, keys);
                 }
 
                 break;
             case JsonArray array:
                 foreach (var child in array)
                 {
-                    Strip(child);
+                    Strip(child, keys);
                 }
 
                 break;

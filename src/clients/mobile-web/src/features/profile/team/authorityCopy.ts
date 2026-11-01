@@ -38,12 +38,15 @@ const mr: AuthorityCopy = {
     label: {
         TakeAttendance: 'हजेरी घेणे', // PROPOSED (Marathi)
         ConfirmRecords: 'नोंदी पक्क्या करणे (मंजूर / शंका)', // PROPOSED (Marathi)
+        SeeMoney: 'शेताचा पैशांचा हिशोब पाहणे', // PROPOSED (Marathi) — lane MU-3
+        SeeWages: 'इतरांची मजुरी पाहणे', // PROPOSED (Marathi) — lane MU-3
         ReviewMoney: 'पैशांच्या नोंदी तपासणे व दुरुस्त करणे', // PROPOSED (Marathi)
         EditFarmSetup: 'शेताची रचना बदलणे (प्लॉट, हद्द)', // PROPOSED (Marathi)
         LabRecords: 'चाचण्यांच्या नोंदी', // PROPOSED (Marathi)
         ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने', // PROPOSED (Marathi)
     },
     note: {
+        SeeWages: 'यासोबत पैसे पाहणेही मिळते.', // PROPOSED (Marathi) — lane MU-3, the same line as below
         ReviewMoney: 'यासोबत पैसे पाहणेही मिळते.', // PROPOSED (Marathi)
     },
     on: 'आहे', // PROPOSED (Marathi)
@@ -61,12 +64,15 @@ const en: AuthorityCopy = {
     label: {
         TakeAttendance: 'Take attendance', // PROPOSED (English)
         ConfirmRecords: 'Confirm records (approve / query)', // PROPOSED (English)
+        SeeMoney: "See the farm's money", // PROPOSED (English) — lane MU-3
+        SeeWages: "See other people's wages", // PROPOSED (English) — lane MU-3
         ReviewMoney: 'Check and correct money entries', // PROPOSED (English)
         EditFarmSetup: 'Change farm setup (plots, boundary)', // PROPOSED (English)
         LabRecords: 'Lab test records', // PROPOSED (English)
         ScheduleTemplates: 'Crop schedule templates', // PROPOSED (English)
     },
     note: {
+        SeeWages: 'Comes with seeing money.', // PROPOSED (English) — lane MU-3
         ReviewMoney: 'Comes with seeing money.', // PROPOSED (English)
     },
     on: 'Yes', // PROPOSED (English)

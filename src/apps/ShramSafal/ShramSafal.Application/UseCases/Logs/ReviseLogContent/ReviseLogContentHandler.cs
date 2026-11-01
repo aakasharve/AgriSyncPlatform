@@ -167,6 +167,22 @@ public sealed class ReviseLogContentHandler(
 
         var wordsCarried = !ReferenceEquals(documentJson, command.ContentJson);
 
+        // lane MU-3 (founder D-22 / D-26) — a member who may not see the farm's money and did not make the
+        // record was sent its document WITHOUT its amounts (the pull's FarmReadScope), so their absence from
+        // his edit is not a deletion: they are carried onto the new version, as his words are.
+        if (current is not null
+            && !isCreator
+            && !await FarmReadGate.MaySeeMoneyAsync(repository, farmId, command.ActorUserId, now, ct))
+        {
+            documentJson = LogContentDocument.CarryMoneyForward(current.DocumentJson, documentJson);
+            if (Problem(documentJson) is { } carriedMoney)
+            {
+                // Only the size cap can refuse here: the record's amounts plus this edit no longer fit.
+                logger.LogWarning("revise_log_content for {LogId} refused after carrying the amounts forward: {Problem}", log.Id, carriedMoney);
+                return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.LogContentInvalid);
+            }
+        }
+
         // lane OF-M — its prices (fix passes 3 and 5), asked FIRST, so a refusal stages nothing: a seat that may not change
         // them is refused only for a real change of a price; an edit made on an older version takes the current prices.
         var editMoney = new EditMoney(repository, idGenerator, entitlementPolicy, logger);

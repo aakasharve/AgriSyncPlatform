@@ -4,8 +4,8 @@
  *
  * lane 2b — the pure rules behind the primary owner's responsibility switches. The server's PUT
  * takes the WHOLE desired set, so every change is computed from the server's last answer: the one
- * switch moves, every other authority (the ones with no switch yet — see money, see wages, plan,
- * assign — included) travels back exactly as the server sent it.
+ * switch moves, every other authority (the ones with no switch yet — plan, assign — included) travels
+ * back exactly as the server sent it.
  */
 import { MARATHI_MONTHS_FULL } from '../../labour/marathiDate';
 import { authorityNeeds } from '../../../core/session/farmAuthorities';
@@ -40,9 +40,13 @@ export function withAuthority(
     return next;
 }
 
-/** Turn `name` OFF; nothing else moves. */
+/**
+ * Turn `name` OFF. A responsibility that means nothing without it goes with it (see money off takes see
+ * wages and review money along — lane MU-3; the server refuses one stored without the other); nothing
+ * else moves.
+ */
 export function withoutAuthority(current: readonly AuthorityGrant[], name: string): AuthorityGrant[] {
-    return current.filter(a => a.name !== name).map(a => ({ ...a }));
+    return current.filter(a => a.name !== name && authorityNeeds(a.name) !== name).map(a => ({ ...a }));
 }
 
 /**

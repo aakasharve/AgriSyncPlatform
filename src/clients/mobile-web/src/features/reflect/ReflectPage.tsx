@@ -115,6 +115,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     operators = [],
     sessionUserId = null,
     farmRole = null,
+    maySeeMoney,
     navigate,
     focusPlotId,
     onFocusPlotConsumed,
@@ -163,7 +164,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const isToday = dateKey === todayKey;
 
     // ── who is looking (lane RF): "तुम्ही", his money, his ▶ ────────────────────────────────────
-    const moneyVisible = mayShowFarmMoney(farmRole);
+    const moneyVisible = mayShowFarmMoney(farmRole, maySeeMoney);
     // "He said it" is the SIGNED-IN user only (review B001) — never the profile's active operator.
     const viewer = useMemo<Viewer>(() => ({ sessionUserId, farmRole, farmId: currentFarmId ?? null }), [sessionUserId, farmRole, currentFarmId]);
     const operatorNameById = useMemo(() => Object.fromEntries(operators.map(o => [o.id, o.name])), [operators]);

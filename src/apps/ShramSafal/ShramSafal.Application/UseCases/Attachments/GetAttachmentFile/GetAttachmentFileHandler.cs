@@ -1,14 +1,18 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Attachments.GetAttachmentFile;
 
+/// <summary>One attachment's file. lane MU-3: read where its parent is read (<see cref="AttachmentParentRule"/>).</summary>
 public sealed class GetAttachmentFileHandler(
     IShramSafalRepository repository,
-    IAttachmentStorageService storageService)
+    IAttachmentStorageService storageService,
+    IClock? clock = null)
 {
     public async Task<Result<GetAttachmentFileResult>> HandleAsync(GetAttachmentFileQuery query, CancellationToken ct = default)
     {
@@ -24,7 +28,9 @@ public sealed class GetAttachmentFileHandler(
         }
 
         var canReadFarm = await repository.IsUserMemberOfFarmAsync(attachment.FarmId, query.RequestedByUserId, ct);
-        if (!canReadFarm)
+        if (!canReadFarm
+            || !await AttachmentParentRule.MayReadAsync(
+                repository, attachment, query.RequestedByUserId, clock?.UtcNow ?? DateTime.UtcNow, ct))
         {
             return Result.Failure<GetAttachmentFileResult>(ShramSafalErrors.Forbidden);
         }

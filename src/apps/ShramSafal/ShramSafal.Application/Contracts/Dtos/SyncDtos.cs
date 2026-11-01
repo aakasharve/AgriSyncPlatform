@@ -83,4 +83,43 @@ public sealed record SyncPullResponseDto(
     // Optional with a default of empty so all existing callers remain
     // wire-compatible — null/missing in the JSON deserializes to []
     // for clients that haven't been updated.
-    IReadOnlyList<AgriSync.BuildingBlocks.Results.DegradedComponent>? DegradedComponents = null);
+    IReadOnlyList<AgriSync.BuildingBlocks.Results.DegradedComponent>? DegradedComponents = null,
+    // lane MU-3 (plan step 4a) — what this person may read on EACH farm this pull covers, one entry
+    // per farm. A farm the phone holds that is NOT listed is no longer his to read (paused, removed,
+    // never approved): the phone purges it. Additive and last (P11): an older phone ignores it and
+    // simply receives less; an older server never sends it (the phone then purges nothing).
+    IReadOnlyList<FarmAccessScopeDto>? AccessScopes = null);
+
+/// <summary>
+/// lane MU-3 — one farm's read scope on the pull wire (<c>Services.FarmReadScope</c>), for the phone's
+/// purge and its screens. Booleans only: no authority names, no expiry (those stay on <c>/me/context</c>).
+/// </summary>
+/// <param name="FarmId">The farm.</param>
+/// <param name="OwnRecordsOnly">Only the records this person made are sent; the phone drops everyone else's.</param>
+/// <param name="SeeMoney">Money is sent (cost entries, corrections, day ledger, job cards, a record's stated money).</param>
+/// <param name="SeeWages">Wages on other people's labour are sent; when false the phone holds them as withheld.</param>
+/// <param name="SeeAttendance">Attendance rulings are sent.</param>
+/// <param name="SeeTests">Test records are sent.</param>
+/// <param name="SeeCompliance">Compliance warnings are sent.</param>
+/// <param name="SeeFarmOverview">The attention board and the planned work are sent.</param>
+public sealed record FarmAccessScopeDto(
+    Guid FarmId,
+    bool OwnRecordsOnly,
+    bool SeeMoney,
+    bool SeeWages,
+    bool SeeAttendance,
+    bool SeeTests,
+    bool SeeCompliance,
+    bool SeeFarmOverview)
+{
+    public static FarmAccessScopeDto From(Services.FarmReadScope scope) =>
+        new(
+            scope.FarmId,
+            scope.OwnRecordsOnly,
+            scope.SeeMoney,
+            scope.SeeWages,
+            scope.SeeAttendance,
+            scope.SeeTests,
+            scope.SeeCompliance,
+            scope.SeeFarmOverview);
+}

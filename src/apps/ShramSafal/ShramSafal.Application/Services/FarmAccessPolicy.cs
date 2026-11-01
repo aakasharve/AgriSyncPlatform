@@ -11,6 +11,9 @@ namespace ShramSafal.Application.Services;
 /// authority), and what the primary account holder stored: the permission bits, the labour grant
 /// (take हजेरी) with its end, and the per-authority ends. Loaded by
 /// <see cref="IShramSafalRepository.GetFarmAccessForUserAsync"/>.
+/// <para>lane MU-3 — <c>AccessChangedAtUtc</c>: when what this seat may read last changed, the later of
+/// the seat's creation and its last status / label / authority change; <c>null</c> when unknown (a test
+/// double, or the registrant). The sync pull re-sends the farm when it is newer than the phone's cursor.</para>
 /// </summary>
 public sealed record FarmAccess(
     AppRole Role,
@@ -19,7 +22,8 @@ public sealed record FarmAccess(
     FarmPermission? StoredPermissions,
     bool LabourGrant = false,
     DateTime? LabourGrantExpiresAtUtc = null,
-    string? AuthorityExpiresAtJson = null);
+    string? AuthorityExpiresAtJson = null,
+    DateTime? AccessChangedAtUtc = null);
 
 /// <summary>
 /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2), lane 2b (MU design §2, §11.1, §11.2) — THE rule
@@ -58,6 +62,14 @@ public static class FarmAccessPolicy
                 authority,
                 atUtc);
     }
+
+    /// <summary>
+    /// lane MU-3 — may this standing read ANYTHING of the farm? The registrant, or an Active seat. A
+    /// waiting request, a paused seat, an ended one or no standing at all reads nothing (BN-1). What it
+    /// may read is <see cref="FarmReadScope"/>.
+    /// </summary>
+    public static bool MayRead(FarmAccess? access) =>
+        access is not null && (access.IsRegistrant || access.Status == MembershipStatus.Active);
 
     /// <summary>Is this the primary account holder (people and permissions, transfer, deletion — D-26)?</summary>
     public static bool IsPrimaryAccountHolder(FarmAccess? access) =>

@@ -256,6 +256,15 @@ public sealed class WorkerReputationTravelsWithHimTests
         public override Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default)
             => Task.FromResult(userId == RameshGuid ? workerFarmIds : callerFarmIds);
 
+        // lane MU-3 — the caller is the farm's own owner (the registrant): he sees its money.
+        public override Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult(userId != RameshGuid && callerFarmIds.Contains(farmId)
+                ? new ShramSafal.Application.Services.FarmAccess(
+                    AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner,
+                    Domain.Farms.MembershipStatus.Active, IsRegistrant: true, null)
+                : null);
+
         public override Task<bool> HasWorkerRecordPortabilityConsentAsync(
             UserId workerUserId, CancellationToken ct = default)
             => Task.FromResult(workerConsented);

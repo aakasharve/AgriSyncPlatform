@@ -150,12 +150,21 @@ internal static class DtoMappingExtensions
     /// D-26): with <paramref name="withWords"/> false every
     /// <see cref="UseCases.Logs.Content.LogContentDocument.WordKeys"/> property is removed and every
     /// value is kept. The caller decides with <c>RecordWordsGate</c>; this only applies it.</para>
+    /// <para><b>Its money goes only to a reader allowed to see it</b> (lane MU-3, founder D-22 / D-26):
+    /// with <paramref name="withMoney"/> false every
+    /// <see cref="UseCases.Logs.Content.LogContentDocument.MoneyKeys"/> amount is removed. The pull decides
+    /// with <c>FarmReadScope.SeeMoney</c> (and the record's maker always gets his own back).</para>
     /// </summary>
-    public static LogContentDto ToDto(this DailyLogContent content, bool withWords)
+    public static LogContentDto ToDto(this DailyLogContent content, bool withWords, bool withMoney = true)
     {
         var json = withWords
             ? content.DocumentJson
             : UseCases.Logs.Content.LogContentDocument.StripWords(content.DocumentJson);
+        if (!withMoney)
+        {
+            json = UseCases.Logs.Content.LogContentDocument.StripMoney(json);
+        }
+
         using var document = System.Text.Json.JsonDocument.Parse(json);
         return new LogContentDto(content.ContentVersion, content.SchemaVersion, document.RootElement.Clone());
     }

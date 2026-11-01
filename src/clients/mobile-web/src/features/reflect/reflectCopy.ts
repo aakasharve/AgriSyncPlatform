@@ -128,8 +128,9 @@ const mr: ReflectCopy = {
     noteSource: 'कुठून आलं ते पाहा',
     // PROPOSED (Marathi) — the feed card's existing words (ActivityFeedCard CARD_STR.attachments).
     photos: (n: number) => `जोडलेले फोटो ${n}`,
-    // PROPOSED (Marathi) — founder D-22 "work access ≠ money access"; mayShowFarmMoney is the primary owner only.
-    moneyHidden: 'पैशांचा हिशोब फक्त मुख्य मालकाला दिसतो',
+    // PROPOSED (Marathi) — founder D-22 "work access ≠ money access"; lane MU-3: the server's see-money answer
+    // decides (mayShowFarmMoney), so the line says only what is true for him: it is not shown to HIM.
+    moneyHidden: 'या शेताचा पैशांचा हिशोब तुम्हाला दाखवला जात नाही',
     // PROPOSED (Marathi)
     partialTag: 'अपूर्ण',
     partialNotOnServer: 'अपूर्ण — काही पैसे अजून सर्व्हरच्या हिशोबात पोचलेले नाहीत',
@@ -176,7 +177,7 @@ const en: ReflectCopy = {
     seasonDay: (n: number) => `Day ${n}`, // PROPOSED (English)
     noteSource: 'See where it came from', // PROPOSED (English)
     photos: (n: number) => `Photos attached ${n}`, // PROPOSED (English)
-    moneyHidden: 'Only the main owner sees the money', // PROPOSED (English)
+    moneyHidden: "This farm's money is not shown to you", // PROPOSED (English) — lane MU-3
     partialTag: 'partial', // PROPOSED (English)
     partialNotOnServer: 'Partial — some money has not reached the farm account on the server yet', // PROPOSED (English)
     partialUnknownDirection: 'Partial — some older amounts do not say whether money came in or went out; they are not counted here', // PROPOSED (English)

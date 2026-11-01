@@ -51,7 +51,7 @@ import { RESULT_STR } from '../../features/logs/components/voiceResult/resultStr
 // that fact, so this is the only place that can tell it.
 import { noteUnqueueableLogs } from '../../features/sync/status/unqueueableLogs';
 import { useLanguage } from '../../i18n/LanguageContext';
-import { buildDayProgressToast, buildEditSavedMessage, buildQueuedLogToast, buildSkippedSyncToast, onPhoneClaim } from '../helpers/saveToastMessages';
+import { buildDayProgressToast, buildEditSavedMessage, buildOutOfScopeToast, buildQueuedLogToast, buildSkippedSyncToast, onPhoneClaim } from '../helpers/saveToastMessages';
 import { seededIdGenerator } from '../../core/domain/services/IdGenerator';
 
 // spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — fix round 3.
@@ -372,7 +372,7 @@ export const useLogCommands = ({
             logger.info('Auto-save completed', { correlationId });
             return newLogs;
         } catch (e) {
-            logger.error("Auto-save error", e, { correlationId });
+            logger.error("Auto-save error", e, { correlationId }); const refused = buildOutOfScopeToast(e, language); if (refused) setToast(refused); // MU-3: says why
             if (!written) {
                 // Not kept: drop confirmAndSave's optimistic copy, so the review form is its only home (no ghost).
                 const ghostIds = new Set(attempted.map(l => l.id));

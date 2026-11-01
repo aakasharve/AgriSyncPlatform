@@ -37,6 +37,7 @@
  */
 import { SYNC_HONESTY_I18N_KEYS } from '../../features/sync/status/syncHonestyState';
 import { t as translate, tf as translateFormat, type Language } from '../../i18n/translations';
+import { FarmOutOfScopeError } from '../../infrastructure/storage/accessScopeStore';
 
 /** Mirrors the caller's toast shape; kept local so this module imports no UI. */
 export interface SaveToastMessage {
@@ -264,4 +265,14 @@ export function buildEditSavedMessage(
 
     const onPhone = onPhoneClaim(language);
     return tails.length === 0 ? onPhone : `${onPhone} — ${tails.join(' ')}`;
+}
+
+/**
+ * lane MU-3 (plan step 4a) — a save the phone refused because the server no longer lets this person
+ * record on that farm (`FarmOutOfScopeError`): the farmer is told why, in his language. `null` for any
+ * other failure (the caller's own handling stands).
+ */
+export function buildOutOfScopeToast(error: unknown, language: Language): SaveToastMessage | null {
+    if (!(error instanceof FarmOutOfScopeError)) return null;
+    return { message: language === 'en' ? error.messageEn : error.messageMr, type: 'error' };
 }

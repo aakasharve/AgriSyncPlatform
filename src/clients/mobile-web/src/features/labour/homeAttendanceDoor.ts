@@ -46,12 +46,14 @@ export function isWorkerRole(role: string | null | undefined): boolean {
 }
 
 /**
- * May the work home show the farm's running cost? ONLY to the primary account holder — the farm's
- * creator, `PrimaryOwner` as the server told this phone (PLR-D10 I20 / N7; founder D-22 "work access
- * ≠ money access" and D-26 "neither सहमालक nor कुटुंब receives additional powers automatically").
- * A co-owner, family member, मुकादम or expert gets nothing from the label; a worker never; and a
- * role the server has not told this phone yet stays closed (I12-V1-m6).
+ * May this phone show the farm's money (running cost, आढावा's money, a record's amounts)? Founder D-22
+ * "work access ≠ money access" and D-26 "a label gives nothing": lane MU-3 made SEE MONEY real on the
+ * server, so the answer is the server's own — `maySeeMoney`, this seat's see-money authority from
+ * /me/context (`farmAuthorities.holdsAuthority`), when the caller has it. Without it (an older caller,
+ * no farm context yet) only the primary account holder, `PrimaryOwner` as the server told this phone,
+ * keeps it; a role the server has not told this phone yet stays closed (I12-V1-m6).
  */
-export function mayShowFarmMoney(role: string | null | undefined): boolean {
+export function mayShowFarmMoney(role: string | null | undefined, maySeeMoney?: boolean): boolean {
+    if (typeof maySeeMoney === 'boolean') return maySeeMoney;
     return role === 'PrimaryOwner';
 }

@@ -196,7 +196,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // status, nothing else.
         await SetSeatStatusAsync(Stranger, status: 3);
         var approvedPull = await PullAsync(Stranger);
-        approvedPull.Should().Contain(FarmName).And.Contain(PlotName).And.Contain(SecretCost);
+        approvedPull.Should().Contain(FarmName).And.Contain(PlotName);
+        // lane MU-3 (founder D-22): the request became a कामगार seat with no authority — he reads the farm,
+        // never its money.
+        approvedPull.Should().NotContain(SecretCost).And.NotContain(SecretAmount);
     }
 
     [Fact]

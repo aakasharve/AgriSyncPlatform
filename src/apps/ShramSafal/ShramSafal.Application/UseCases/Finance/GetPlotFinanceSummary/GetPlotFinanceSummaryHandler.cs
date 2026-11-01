@@ -1,12 +1,15 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Finance.GetPlotFinanceSummary;
 
-public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repository)
+/// <summary>One plot's money. lane MU-3 (founder D-22 / D-26): only for a seat that sees the farm's money.</summary>
+public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repository, IClock? clock = null)
 {
     public async Task<Result<PlotFinanceSummaryDto>> HandleAsync(GetPlotFinanceSummaryQuery query, CancellationToken ct = default)
     {
@@ -27,7 +30,9 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
         }
 
         var canReadFarm = await repository.IsUserMemberOfFarmAsync((Guid)plot.FarmId, query.ActorUserId, ct);
-        if (!canReadFarm)
+        if (!canReadFarm
+            || !await FarmReadGate.MaySeeMoneyAsync(
+                repository, (Guid)plot.FarmId, query.ActorUserId, clock?.UtcNow ?? DateTime.UtcNow, ct))
         {
             return Result.Failure<PlotFinanceSummaryDto>(ShramSafalErrors.Forbidden);
         }

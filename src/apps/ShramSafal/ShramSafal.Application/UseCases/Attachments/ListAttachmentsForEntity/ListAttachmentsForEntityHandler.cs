@@ -1,11 +1,14 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
 
 namespace ShramSafal.Application.UseCases.Attachments.ListAttachmentsForEntity;
 
-public sealed class ListAttachmentsForEntityHandler(IShramSafalRepository repository)
+/// <summary>The attachments of one record / receipt / farm. lane MU-3: each read where its parent is read.</summary>
+public sealed class ListAttachmentsForEntityHandler(IShramSafalRepository repository, IClock? clock = null)
 {
     public async Task<Result<IReadOnlyList<AttachmentDto>>> HandleAsync(
         ListAttachmentsForEntityQuery query,
@@ -31,8 +34,17 @@ public sealed class ListAttachmentsForEntityHandler(IShramSafalRepository reposi
             linkedEntityType,
             ct);
 
-        var visible = attachments
-            .Where(a => farmIdSet.Contains((Guid)a.FarmId))
+        var now = clock?.UtcNow ?? DateTime.UtcNow;
+        var readable = new List<Domain.Attachments.Attachment>();
+        foreach (var attachment in attachments.Where(a => farmIdSet.Contains((Guid)a.FarmId)))
+        {
+            if (await AttachmentParentRule.MayReadAsync(repository, attachment, query.RequestedByUserId, now, ct))
+            {
+                readable.Add(attachment);
+            }
+        }
+
+        var visible = readable
             .OrderBy(a => a.CreatedAtUtc)
             .Select(a => a.ToDto())
             .ToList();
