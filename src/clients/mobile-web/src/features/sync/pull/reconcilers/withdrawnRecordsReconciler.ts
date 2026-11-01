@@ -15,11 +15,16 @@
  * What goes with a record: a work record takes its photos (its labour, words and content live inside it); a money record
  * takes its corrections, its day-ledger rows, its photos and the bill photos it names, and leaves the money mirrors.
  *
- * What is NEVER touched (doctrine P10 — unsynced intent is not cache): a record with a change still in the outbox, a
- * record made on this phone and not yet acknowledged, a photo still uploading, and this person's OWN records (the maker
- * always stays). A record held back for one of those reasons is remembered (`appMeta`, no Dexie version bump) and let go
- * on a later sync, once nothing holds it — unless the server has sent it again meanwhile (he regained it).
- * Must run inside the orchestrator's `db.transaction('rw', ...)`.
+ * What is NEVER touched (doctrine P10 — unsynced intent is not cache): a record — work or money — with a change still in
+ * the outbox (a refusal parked for him to decide included), a record made on this phone and not yet acknowledged, a
+ * photo still uploading, and this person's OWN records (the maker always stays: never remembered, nothing to do later).
+ * A record held back for one of the other reasons is remembered (`appMeta`, no Dexie version bump) and let go on a
+ * later sync — or the moment he discards the parked change (`applyPendingWithdrawals`) — once nothing holds it, unless
+ * the server has sent it again meanwhile (he regained it).
+ *
+ * Fix pass 1 (M6): what a pull names is remembered FIRST, before anything can stop this pass (an unknown person, an
+ * unreadable outbox): the cursor moves past those names, so a name not stored here would never come again.
+ * `reconcileWithdrawnRecords` must run inside the orchestrator's `db.transaction('rw', ...)`.
  */
 import type { SyncPullResponse } from '../../../../infrastructure/api/AgriSyncClient';
 import type { RecordKindName, WithdrawnRecordDto } from '../../../../infrastructure/api/recordAudienceDtos';
@@ -27,15 +32,18 @@ import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDa
 import type { AttachmentRecord } from '../../../../infrastructure/storage/DexieDatabase.types';
 import { isReadableScope } from '../../../../infrastructure/storage/accessScopeStore';
 import { dayLedgerMetaKey } from '../helpers/dayLedgerMetaKey';
+import { readWithdrawalHolds } from '../internal/pendingMutations';
 
 /** `appMeta` key: the withdrawals this phone could not apply yet. */
 export const PENDING_WITHDRAWALS_META_KEY = 'shramsafal_withdrawn_records_pending_v1'; // gitleaks:allow (a storage name, not a secret)
 
 export interface WithdrawnContext {
-    /** This phone's signed-in person; `null` = unknown: nothing is removed. */
+    /** This phone's signed-in person; `null` = unknown: nothing is removed (what the pull names is still remembered). */
     userId: string | null;
-    /** Records with a change still in the outbox. `undefined` = the outbox could not be read: nothing is removed. */
+    /** Work records with a change still in the outbox. `undefined` = the outbox could not be read: nothing is removed. */
     pendingLogIds: Set<string> | undefined;
+    /** Money records with a change still in the outbox (fix pass 1, M6). `undefined` = unreadable: nothing is removed. */
+    pendingMoneyIds: Set<string> | undefined;
     receivedAtUtc: string;
     /** The pull was asked from the beginning (cursor '0'): its records are the whole list. */
     fullPull: boolean;
@@ -55,9 +63,6 @@ export async function reconcileWithdrawnRecords(
     payload: SyncPullResponse,
     ctx: WithdrawnContext,
 ): Promise<WithdrawnOutcome> {
-    const outcome: WithdrawnOutcome = { removedLogs: 0, removedMoney: 0, heldBack: 0 };
-    if (!ctx.userId || !ctx.pendingLogIds) return outcome;
-
     const sentLogs = new Set((payload.dailyLogs ?? []).map(l => l.id));
     const sentMoney = new Set((payload.costEntries ?? []).map(c => c.id));
     const sentAgain = (r: WithdrawnRecordDto) => (r.kind === 'DailyLog' ? sentLogs : sentMoney).has(r.id);
@@ -70,21 +75,53 @@ export async function reconcileWithdrawnRecords(
     if (ctx.fullPull) {
         for (const r of await sweepFullPull(db, payload, ctx.userId)) wanted.set(key(r), r);
     }
+    // He regained it: the fresh copy stands, and the name is forgotten.
+    const candidates = [...wanted.values()].filter(r => !sentAgain(r));
 
+    if (!ctx.userId || !ctx.pendingLogIds || !ctx.pendingMoneyIds) {
+        // M6 — nothing is removed without knowing who he is and what he still owes the server, but every name is kept.
+        await writePending(db, candidates, ctx.receivedAtUtc);
+        return { removedLogs: 0, removedMoney: 0, heldBack: candidates.length };
+    }
+    return applyWithdrawals(db, candidates, { userId: ctx.userId, logs: ctx.pendingLogIds, money: ctx.pendingMoneyIds, at: ctx.receivedAtUtc });
+}
+
+interface Holds { userId: string; logs: Set<string>; money: Set<string>; at: string }
+
+async function applyWithdrawals(db: AgriLogDatabase, candidates: WithdrawnRecordDto[], holds: Holds): Promise<WithdrawnOutcome> {
+    const outcome: WithdrawnOutcome = { removedLogs: 0, removedMoney: 0, heldBack: 0 };
     const stillHeld: WithdrawnRecordDto[] = [];
-    for (const record of wanted.values()) {
-        if (sentAgain(record)) continue; // he regained it: the fresh copy stands
+    for (const record of candidates) {
         const removed = record.kind === 'DailyLog'
-            ? await removeLog(db, record.id, ctx)
-            : await removeMoney(db, record.id, ctx);
+            ? await removeLog(db, record.id, holds)
+            : await removeMoney(db, record.id, holds);
         if (removed === 'held') stillHeld.push(record);
         else if (removed === 'removed' && record.kind === 'DailyLog') outcome.removedLogs++;
         else if (removed === 'removed') outcome.removedMoney++;
     }
-
     outcome.heldBack = stillHeld.length;
-    await db.appMeta.put({ key: PENDING_WITHDRAWALS_META_KEY, value: stillHeld, updatedAt: ctx.receivedAtUtc });
+    await writePending(db, stillHeld, holds.at);
     return outcome;
+}
+
+/** The tables a withdrawal touches (`applyPendingWithdrawals` opens its own transaction on exactly these). */
+const WITHDRAWAL_TABLES = (db: AgriLogDatabase) => [
+    db.logs, db.attachments, db.uploadQueue, db.appMeta, db.costEntries, db.financeCorrections, db.dayLedgers,
+];
+
+/**
+ * Fix pass 1 (M6) — apply the remembered withdrawals NOW (he just discarded the parked change that held a record), not
+ * on the next sync. Nothing new is named here; the same holds apply (anything still owed to the server stays).
+ */
+export async function applyPendingWithdrawals(db: AgriLogDatabase, userId: string | null, at: string): Promise<WithdrawnOutcome> {
+    const holds = await readWithdrawalHolds(db);
+    if (!userId || !holds) return { removedLogs: 0, removedMoney: 0, heldBack: 0 };
+    return db.transaction('rw', WITHDRAWAL_TABLES(db), async () =>
+        applyWithdrawals(db, await readPending(db), { userId, logs: holds.logIds, money: holds.moneyIds, at }));
+}
+
+async function writePending(db: AgriLogDatabase, records: WithdrawnRecordDto[], at: string): Promise<void> {
+    await db.appMeta.put({ key: PENDING_WITHDRAWALS_META_KEY, value: records, updatedAt: at });
 }
 
 async function readPending(db: AgriLogDatabase): Promise<WithdrawnRecordDto[]> {
@@ -99,7 +136,7 @@ async function readPending(db: AgriLogDatabase): Promise<WithdrawnRecordDto[]> {
  * from the server) on such a farm that the answer does not carry, and that someone else made, is no longer his.
  * Money only where the farm's money is read (otherwise MU-3's purge already owns it).
  */
-async function sweepFullPull(db: AgriLogDatabase, payload: SyncPullResponse, userId: string): Promise<WithdrawnRecordDto[]> {
+async function sweepFullPull(db: AgriLogDatabase, payload: SyncPullResponse, userId: string | null): Promise<WithdrawnRecordDto[]> {
     const scopes = Array.isArray(payload.accessScopes) ? payload.accessScopes.filter(isReadableScope) : [];
     if (scopes.length === 0) return []; // an older server: the phone does not guess
     const readsRecords = new Set(scopes.filter(s => !s.ownRecordsOnly).map(s => s.farmId));
@@ -125,23 +162,25 @@ async function sweepFullPull(db: AgriLogDatabase, payload: SyncPullResponse, use
 
 type Removal = 'removed' | 'held' | 'absent';
 
-async function removeLog(db: AgriLogDatabase, id: string, ctx: WithdrawnContext): Promise<Removal> {
+async function removeLog(db: AgriLogDatabase, id: string, holds: Holds): Promise<Removal> {
     const row = await db.logs.get(id);
     if (!row) return 'absent';
-    const maker = row.log?.meta?.createdByOperatorId;
-    // P10: a change still queued, a record not yet acknowledged, or his own record — never taken off his phone now.
-    if (ctx.pendingLogIds!.has(id) || !row.serverModifiedAtUtc || maker === ctx.userId) return 'held';
+    // The maker always stays: nothing to remove, now or later.
+    if (row.log?.meta?.createdByOperatorId === holds.userId) return 'absent';
+    // P10: a change still queued (or parked for him to decide), or a record not yet acknowledged — not now.
+    if (holds.logs.has(id) || !row.serverModifiedAtUtc) return 'held';
     if (await photosStillUploading(db, [id])) return 'held';
     await db.logs.delete(id);
     await removePhotos(db, a => a.linkedEntityType === 'DailyLog' && a.linkedEntityId === id);
     return 'removed';
 }
 
-async function removeMoney(db: AgriLogDatabase, id: string, ctx: WithdrawnContext): Promise<Removal> {
+async function removeMoney(db: AgriLogDatabase, id: string, holds: Holds): Promise<Removal> {
     const row = await db.costEntries.get(id);
     if (!row) return 'absent';
     const entry = row.payload as { createdByUserId?: unknown; clientAttachmentIds?: unknown } | null;
-    if (entry?.createdByUserId === ctx.userId) return 'held';
+    if (entry?.createdByUserId === holds.userId) return 'absent'; // the maker always stays
+    if (holds.money.has(id)) return 'held'; // M6 — a money change of his still waits on it (P10)
     const bills = new Set(Array.isArray(entry?.clientAttachmentIds) ? (entry!.clientAttachmentIds as unknown[]).filter((x): x is string => typeof x === 'string') : []);
     if (await photosStillUploading(db, [id], bills)) return 'held';
     await db.costEntries.delete(id);
@@ -153,8 +192,8 @@ async function removeMoney(db: AgriLogDatabase, id: string, ctx: WithdrawnContex
     await db.dayLedgers.bulkDelete(ledgers);
     await db.appMeta.bulkDelete(ledgers.map(dayLedgerMetaKey));
     await removePhotos(db, a => (a.linkedEntityType === 'CostEntry' && a.linkedEntityId === id) || bills.has(a.remoteAttachmentId ?? a.id));
-    await trimMirror(db, 'shramsafal_finance_cost_entries_v1', r => r.id !== id, ctx.receivedAtUtc);
-    await trimMirror(db, 'shramsafal_finance_corrections_v1', r => r.costEntryId !== id, ctx.receivedAtUtc);
+    await trimMirror(db, 'shramsafal_finance_cost_entries_v1', r => r.id !== id, holds.at);
+    await trimMirror(db, 'shramsafal_finance_corrections_v1', r => r.costEntryId !== id, holds.at);
     return 'removed';
 }
 

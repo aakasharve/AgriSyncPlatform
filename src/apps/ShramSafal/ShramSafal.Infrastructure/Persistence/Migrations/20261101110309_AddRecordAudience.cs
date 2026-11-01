@@ -13,10 +13,13 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// names), so every existing record keeps exactly today's behaviour and an older binary that inserts without the
     /// column writes 'Team'; <c>audience_changed_at_utc</c> is NULLABLE (never changed). One new table,
     /// <c>ssf.record_audience_members</c> (the people chosen for a "Selected" record), FORCE-RLS from birth on its own
-    /// <c>farm_id</c> (F8 — a direct tenant column, never an EXISTS through a parent), with a NARROW user-scoped read
-    /// policy: a person reads only the rows that name HIM, and the farm's primary account holder reads them all (who else
-    /// was chosen is not a member's to know). No existing column, constraint or policy changes, so the deployed binary
-    /// runs unchanged against the migrated schema (it never names the new columns or table).</para>
+    /// <c>farm_id</c> (F8 — a direct tenant column, never an EXISTS through a parent), with a user-scoped read policy:
+    /// in a USER-scoped read (no farm scope set) a person reads only the rows that name HIM, and the farm's registrant
+    /// (the record holder, fix pass 1 L2) reads them all. It is narrow ONLY there: in a FARM-scoped request the tenant
+    /// policy admits every row of the farm, so who else was chosen is kept from members by application code (the
+    /// audience and its people go to the holder alone; the AudienceChanged audit rows are his alone — fix pass 1, L3).
+    /// No existing column, constraint or policy changes, so the deployed binary runs unchanged against the migrated
+    /// schema (it never names the new columns or table).</para>
     ///
     /// <para><b>Down() destroys data, stated before it ever runs.</b> It drops <c>ssf.record_audience_members</c> and the
     /// two columns on each table: EVERY audience the primary account holder chose is forgotten, and every record he made
@@ -47,16 +50,7 @@ CREATE POLICY p_user_select_record_audience_members ON ssf.record_audience_membe
     OR EXISTS (
       SELECT 1 FROM ssf.farms f
       WHERE f.""Id"" = record_audience_members.farm_id
-        AND (
-          f.owner_user_id = NULLIF(current_setting('agrisync.user_id', true), '')::uuid
-          OR EXISTS (
-            SELECT 1 FROM ssf.farm_memberships m
-            WHERE m.farm_id = f.""Id""
-              AND m.user_id = NULLIF(current_setting('agrisync.user_id', true), '')::uuid
-              AND m.status = 3
-              AND m.role = 'PrimaryOwner'
-          )
-        )
+        AND f.owner_user_id = NULLIF(current_setting('agrisync.user_id', true), '')::uuid
     )
   );
 

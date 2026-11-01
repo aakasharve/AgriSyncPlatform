@@ -3549,13 +3549,15 @@ public sealed class PushSyncBatchHandler(
         var (kind, id) = mutationType switch
         {
             "add_log_task" or "revise_log_content" or "move_daily_log" or "correct_labour_assignment" or "verify_log"
+                or "jobcard.complete"
                 => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "dailyLogId")),
             "verify_log_v2" => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "logId")),
             "correct_cost_entry" or "allocate_global_expense" => (Domain.RecordPrivacy.RecordKinds.CostEntry, IdOf(payload, "costEntryId")),
-            "create_attachment" => TextOf(payload, "linkedEntityType") switch
+            // The handler reads the kind case-insensitively (CreateAttachmentHandler), so the gate does too (fix pass 1, L4).
+            "create_attachment" => TextOf(payload, "linkedEntityType")?.Trim().ToLowerInvariant() switch
             {
-                "DailyLog" => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "linkedEntityId")),
-                "CostEntry" => (Domain.RecordPrivacy.RecordKinds.CostEntry, IdOf(payload, "linkedEntityId")),
+                "dailylog" => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "linkedEntityId")),
+                "costentry" => (Domain.RecordPrivacy.RecordKinds.CostEntry, IdOf(payload, "linkedEntityId")),
                 _ => (string.Empty, Guid.Empty),
             },
             _ => (string.Empty, Guid.Empty),

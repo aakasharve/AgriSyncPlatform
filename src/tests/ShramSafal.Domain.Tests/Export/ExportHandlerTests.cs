@@ -8,6 +8,8 @@ namespace ShramSafal.Domain.Tests.Export;
 
 public sealed class ExportHandlerTests
 {
+    private static readonly Guid Reader = Guid.Parse("7a000000-0000-4000-8000-0000000000e1");
+
     [Fact]
     public async Task DailySummary_GeneratesNonEmptyPdfBytes()
     {
@@ -19,11 +21,12 @@ public sealed class ExportHandlerTests
         var farmId = Guid.NewGuid();
         var date = new DateOnly(2026, 2, 26);
 
-        var result = await handler.HandleAsync(new ExportDailySummaryQuery(farmId, date));
+        var result = await handler.HandleAsync(new ExportDailySummaryQuery(farmId, date, Reader));
 
         Assert.NotEmpty(result);
         Assert.Equal(farmId, service.LastDailySummaryFarmId);
         Assert.Equal(date, service.LastDailySummaryDate);
+        Assert.Equal(Reader, service.LastReader);
     }
 
     [Fact]
@@ -36,7 +39,7 @@ public sealed class ExportHandlerTests
         var handler = new ExportMonthlyCostHandler(service);
         var farmId = Guid.NewGuid();
 
-        var result = await handler.HandleAsync(new ExportMonthlyCostQuery(farmId, 2026, 2));
+        var result = await handler.HandleAsync(new ExportMonthlyCostQuery(farmId, 2026, 2, Reader));
 
         Assert.NotEmpty(result);
         Assert.Equal(farmId, service.LastMonthlyCostFarmId);
@@ -56,7 +59,7 @@ public sealed class ExportHandlerTests
         var fromDate = new DateOnly(2026, 2, 1);
         var toDate = new DateOnly(2026, 2, 20);
 
-        var result = await handler.HandleAsync(new ExportVerificationReportQuery(farmId, fromDate, toDate));
+        var result = await handler.HandleAsync(new ExportVerificationReportQuery(farmId, fromDate, toDate, Reader));
 
         Assert.NotEmpty(result);
         Assert.Equal(farmId, service.LastVerificationFarmId);
@@ -78,24 +81,28 @@ public sealed class ExportHandlerTests
         public Guid? LastVerificationFarmId { get; private set; }
         public DateOnly? LastVerificationFromDate { get; private set; }
         public DateOnly? LastVerificationToDate { get; private set; }
+        public Guid? LastReader { get; private set; }
 
-        public Task<byte[]> GenerateDailySummaryAsync(Guid farmId, DateOnly date, CancellationToken ct)
+        public Task<byte[]> GenerateDailySummaryAsync(Guid farmId, DateOnly date, Guid readerUserId, CancellationToken ct)
         {
+            LastReader = readerUserId;
             LastDailySummaryFarmId = farmId;
             LastDailySummaryDate = date;
             return Task.FromResult(DailySummaryBytes.Length > 0 ? DailySummaryBytes : "%PDF-default-daily"u8.ToArray());
         }
 
-        public Task<byte[]> GenerateMonthlyCostReportAsync(Guid farmId, int year, int month, CancellationToken ct)
+        public Task<byte[]> GenerateMonthlyCostReportAsync(Guid farmId, int year, int month, Guid readerUserId, CancellationToken ct)
         {
+            LastReader = readerUserId;
             LastMonthlyCostFarmId = farmId;
             LastMonthlyCostYear = year;
             LastMonthlyCostMonth = month;
             return Task.FromResult(MonthlyCostBytes.Length > 0 ? MonthlyCostBytes : "%PDF-default-monthly"u8.ToArray());
         }
 
-        public Task<byte[]> GenerateVerificationReportAsync(Guid farmId, DateOnly fromDate, DateOnly toDate, CancellationToken ct)
+        public Task<byte[]> GenerateVerificationReportAsync(Guid farmId, DateOnly fromDate, DateOnly toDate, Guid readerUserId, CancellationToken ct)
         {
+            LastReader = readerUserId;
             LastVerificationFarmId = farmId;
             LastVerificationFromDate = fromDate;
             LastVerificationToDate = toDate;

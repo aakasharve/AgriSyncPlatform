@@ -2,7 +2,8 @@
 // on a real Postgres as agrisync_app (E3 first) through the real host, the real routes and the real push path, with
 // every cursor sent the way a phone sends it (whole seconds, fed from each answer):
 //   1. a since=0 pull hands each person only the records whose audience includes him (content, not just ids);
-//   2. an audience change withdraws the record ONCE, a restore brings it back ONCE (never a loop, never a skip);
+//   2. an audience change withdraws the record ONCE, a restore brings it back ONCE (no loop; and in this sequential
+//      run, no skip — a late-committing row behind a cursor is the protocol's whole-second limit, PullAudience's note);
 //   3. a change to a record he may no longer see is refused with a visible reason, and nothing is written;
 //   4. the money totals leave the record out and say so (W4);
 //   5. export, audit, original voice, /ai/jobs and the attachment reads refuse;
@@ -32,7 +33,7 @@ using Xunit.Abstractions;
 namespace ShramSafal.Sync.IntegrationTests.Memberships;
 
 [Trait("Category", "RequiresPostgres")]
-public sealed class RecordAudienceRealPostgresTests(ITestOutputHelper output) : RoleScopedFarm(output)
+public sealed partial class RecordAudienceRealPostgresTests(ITestOutputHelper output) : RoleScopedFarm(output)
 {
     private static readonly Guid PrivateLog = Guid.Parse("3d0a0000-0000-4000-8000-000000000101");
     private static readonly Guid PrivatePhoto = Guid.Parse("3d0a0000-0000-4000-8000-000000000102");
@@ -41,6 +42,7 @@ public sealed class RecordAudienceRealPostgresTests(ITestOutputHelper output) : 
     private static readonly Guid SelectedLog = Guid.Parse("3d0a0000-0000-4000-8000-000000000105");
     private static readonly Guid SelectedCost = Guid.Parse("3d0a0000-0000-4000-8000-000000000106");
     private static readonly Guid PrivateJob = Guid.Parse("3d0a0000-0000-4000-8000-000000000107");
+    private static readonly Guid PrivateCrew = Guid.Parse("3d0a0000-0000-4000-8000-000000000108");
 
     /// <summary>The money the private record's own input line made (the phone's derived id): it follows its record.</summary>
     private static readonly Guid PrivateMoney = MoneyEntryIdentity.ForRecordLine(PrivateLog, MoneyEntryIdentity.Input, "in-1");
@@ -174,7 +176,7 @@ public sealed class RecordAudienceRealPostgresTests(ITestOutputHelper output) : 
             await Task.Delay(400);
         }
 
-        withdrawnLog.Should().Be(1, "the record is withdrawn exactly once: never skipped, never looped");
+        withdrawnLog.Should().Be(1, "the record is withdrawn exactly once: not skipped, not looped");
         withdrawnCost.Should().Be(1, "the money record too");
 
         await SetAudienceAsync(Owner, "DailyLog", OwnerLog, "Team");
@@ -320,7 +322,8 @@ public sealed class RecordAudienceRealPostgresTests(ITestOutputHelper output) : 
 
         var export = $"/shramsafal/export/monthly-cost?farmId={FarmA}&year=2026&month=10";
         (await GetAsync(export, Owner)).Status.Should().Be(HttpStatusCode.OK, "the holder exports his farm");
-        (await GetAsync(export, CoOwner)).Status.Should().Be(HttpStatusCode.Forbidden, "a report that would carry a record kept from him");
+        (await GetAsync(export, CoOwner)).Status.Should().Be(HttpStatusCode.OK,
+            "fix pass 1 (M5): never refused for a record kept from him; built from what he may see, with W4 (FixOne M5)");
 
         (await GetAsync($"/shramsafal/audit?entityType=DailyLog&entityId={PrivateLog}&farmId={FarmA}", Owner)).Status
             .Should().Be(HttpStatusCode.OK, "the holder reads his record's trail");
@@ -442,7 +445,7 @@ public sealed class RecordAudienceRealPostgresTests(ITestOutputHelper output) : 
             await db.SaveChangesAsync();
         }
 
-        var privateLog = LogPayload(PrivateLog, Owner, Guid.NewGuid(), 4, null, null, [], PrivateInputCost);
+        var privateLog = LogPayload(PrivateLog, Owner, PrivateCrew, 4, null, null, [], PrivateInputCost);
         privateLog["sourceAiJobId"] = PrivateJob;
         privateLog["content"] = new
         {

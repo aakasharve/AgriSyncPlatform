@@ -21,7 +21,7 @@ public sealed class RecordAudienceRuleTests
     private static readonly Guid Other = Guid.Parse("7a000000-0000-4000-8000-000000000004");
 
     private static FarmReadScope Scope(bool primary = false, bool ownOnly = false, bool money = true) =>
-        new(Farm, ownOnly, money, money, false, true, true, !ownOnly, primary, null);
+        new(Farm, ownOnly, money, money, false, true, true, !ownOnly, primary, null) { IsRecordHolder = primary };
 
     // ── The rule ─────────────────────────────────────────────────────────────────────────
 
@@ -135,7 +135,7 @@ public sealed class RecordAudienceRuleTests
 
         pull.Logs([log]);
         pull.Withdrawn.Should().BeEmpty("its second is not over");
-        pull.PendingCapUtc.Should().Be(Cursor.AddSeconds(4), "the next pull's cursor cannot pass it: never skipped");
+        pull.PendingCapUtc.Should().Be(Cursor.AddSeconds(4), "the next pull's cursor cannot pass this young change");
 
         var next = Pull(Cursor.AddSeconds(4), Cursor.AddSeconds(5).AddMilliseconds(200), record);
         next.Logs([log]);
@@ -143,13 +143,8 @@ public sealed class RecordAudienceRuleTests
     }
 
     [Fact]
-    public void Nothing_is_named_to_a_phone_that_cannot_hold_the_record()
+    public void Nothing_is_named_on_a_pull_from_the_beginning_or_for_a_change_he_was_already_told()
     {
-        var (fresh, freshRecord) = Hidden(Cursor.AddSeconds(1).AddMilliseconds(200), Cursor.AddSeconds(2).AddMilliseconds(5));
-        var pull = Pull(Cursor, Cursor.AddSeconds(9), freshRecord);
-        pull.Logs([fresh]);
-        pull.Withdrawn.Should().BeEmpty("made after his cursor: it never reached his phone, so its id is never sent to him");
-
         var (old, oldRecord) = Hidden(Cursor.AddMinutes(-10), Cursor.AddSeconds(2).AddMilliseconds(5));
         var zero = Pull(DateTime.UnixEpoch, Cursor.AddSeconds(9), oldRecord);
         zero.Logs([old]);

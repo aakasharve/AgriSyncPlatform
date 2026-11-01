@@ -16,8 +16,8 @@ namespace ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience;
 /// <item><b>Shape.</b> A known kind and audience; <see cref="RecordAudience.Selected"/> names at least one person and no
 /// other audience names anyone.</item>
 /// <item><b>The record</b>, read under the scope the caller set (a record of another farm resolves to nothing).</item>
-/// <item><b>The sender is the primary account holder OF THAT RECORD'S FARM</b> (D-26) — never a co-owner, never a
-/// claim in the payload.</item>
+/// <item><b>The sender is the registrant OF THAT RECORD'S FARM</b> (D-26; fix pass 1, L2 — the record holder, the same rule
+/// membership decisions use) — never a co-owner, never a second PrimaryOwner seat, never a claim in the payload.</item>
 /// <item><b>Every chosen person holds an Active seat on that same farm</b> (E4, tenancy both ways: the record's farm AND
 /// each person's farm, checked here in code; an FK or RLS alone proves nothing).</item>
 /// <item><b>The record's state</b>: a job card's payout follows its job card (planned work is not in this release), so
@@ -70,9 +70,11 @@ public sealed class SetRecordAudienceHandler(
         }
 
         var farmId = log is not null ? (Guid)log.FarmId : (Guid)entry!.FarmId;
-        if (!FarmAccessPolicy.IsPrimaryAccountHolder(await repository.GetFarmAccessForUserAsync(farmId, command.ActorUserId, ct)))
+        // Fix pass 1 (L2) — the record holder is the farm's registrant (ManageMembershipHandler's rule), never a second
+        // PrimaryOwner seat.
+        if (await repository.GetFarmAccessForUserAsync(farmId, command.ActorUserId, ct) is not { IsRegistrant: true })
         {
-            logger.LogWarning("set_record_audience for {Kind} {RecordId} refused: the sender is not the farm's primary account holder.",
+            logger.LogWarning("set_record_audience for {Kind} {RecordId} refused: the sender is not the farm's registrant.",
                 command.RecordKind, command.RecordId);
             return Result.Failure<SetRecordAudienceResultDto>(ShramSafalErrors.RecordAudienceNotHolder);
         }
@@ -104,14 +106,22 @@ public sealed class SetRecordAudienceHandler(
                 log?.AudienceChangedAtUtc ?? entry!.AudienceChangedAtUtc ?? now, 0, Changed: false));
         }
 
-        // The record's own money follows a work record (found from its own lines; same farm only — E4).
+        // The record's own money follows a work record (found from its own lines; same farm only — E4). Fix pass 1 (M2):
+        // only the money whose audience EQUALS the record's audience before this change (it was following the record).
+        // Money the holder narrowed (or widened) on its own keeps his own choice: a record's change never widens its money.
         var money = new List<CostEntry>();
         if (log is not null)
         {
             var lines = await RecordFirstMoney.OfAsync(repository, log, logger, ct);
-            money = (await repository.GetCostEntriesByIdsAsync(lines.LookFor, ct))
-                .Where(e => e.FarmId == log.FarmId && !IsJobCardPayout(e))
-                .ToList();
+            foreach (var candidate in (await repository.GetCostEntriesByIdsAsync(lines.LookFor, ct))
+                         .Where(e => e.FarmId == log.FarmId && !IsJobCardPayout(e) && e.Audience == before))
+            {
+                var candidatePeople = (await repository.GetRecordAudienceUserIdsAsync(RecordKinds.CostEntry, candidate.Id, ct)).ToHashSet();
+                if (candidatePeople.SetEquals(beforeSelected))
+                {
+                    money.Add(candidate);
+                }
+            }
         }
 
         DateTime changedAt;

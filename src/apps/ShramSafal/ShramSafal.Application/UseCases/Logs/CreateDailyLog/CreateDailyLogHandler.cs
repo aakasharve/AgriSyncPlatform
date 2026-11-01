@@ -249,6 +249,13 @@ public sealed class CreateDailyLogHandler(
         if (!string.IsNullOrWhiteSpace(command.IdempotencyKey))
         {
             var existing = await repository.GetDailyLogByIdempotencyKeyAsync(command.IdempotencyKey, ct);
+            if (existing is not null
+                && !await Services.RecordAudienceGate.MaySeeLogAsync(repository, existing, command.OperatorUserId, DateTime.UtcNow, ct))
+            {
+                // spec: plr-d10 lane PRV fix pass 1 (H2) — a replay never hands back a record kept from the sender.
+                return Result.Failure<DailyLogDto>(ShramSafalErrors.RecordAudienceClosed);
+            }
+
             if (existing is not null)
             {
                 // FIX (dfes-companion-2026-07-11, "the derivation is never

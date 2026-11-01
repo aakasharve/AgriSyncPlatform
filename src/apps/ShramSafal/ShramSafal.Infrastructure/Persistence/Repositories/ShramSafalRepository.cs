@@ -1691,6 +1691,10 @@ internal sealed class ShramSafalRepository(
         // Note also what these zeros mean for tier 3: nothing in this method is derived
         // from anything, so ReliabilityScore is not a real number today. Do not let it
         // become a portable reputation until it is.
+        //
+        // spec: plr-d10 lane PRV fix pass 1 (M4) — and LogCount30d (or any count built here) must count only
+        // the records the CALLER may see (RecordVisibility / RecordAudienceRule): a count over a record kept
+        // from him tells him it exists. Today nothing is counted, so nothing leaks.
         return Task.FromResult(new WorkerMetricsDto(0, 0, 0, 0, 0, 0, 0));
     }
 
@@ -3240,6 +3244,15 @@ internal sealed class ShramSafalRepository(
                 .ToListAsync(ct);
         IReadOnlyCollection<Guid> PeopleOf(string kind, Guid id, Guid farmId) =>
             chosen.Where(m => m.RecordKind == kind && m.RecordId == id && m.FarmId == farmId).Select(m => m.UserId).ToHashSet();
+
+        // spec: plr-d10 lane PRV fix pass 1 (L7) — said through the normal logger, not only a trace event: a narrowed money
+        // record whose bill-photo list cannot be read keeps every bill photo of its farm from readers outside its audience.
+        foreach (var unreadable in costs.Where(c => Application.Services.RestrictedRecord.BillPhotoIdsUnreadable(c.ClientAttachmentIdsJson)))
+        {
+            logger?.LogWarning(
+                "Record privacy: money record {CostEntryId} on farm {FarmId} has a bill-photo list that cannot be read; every bill photo of that farm is kept from readers outside its audience (fail closed).",
+                unreadable.Id, (Guid)unreadable.FarmId);
+        }
 
         return logs
             .Select(l => Application.Services.RestrictedRecord.Of(l, PeopleOf(Domain.RecordPrivacy.RecordKinds.DailyLog, l.Id, (Guid)l.FarmId)))

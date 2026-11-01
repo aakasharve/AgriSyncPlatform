@@ -34,12 +34,12 @@ public static class ExportEndpoints
             // lane MU-3 fix 1 (F94) — open the caller's farm scope first, as every working farm route does:
             // without it the first read failed closed in TenantConnectionInterceptor (500 for everyone).
             if (!(await tenantScope.EstablishForCallerAsync(farmId, actorUserId, ct)).IsSuccess
-                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct, date, date))
+                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }
 
-            var pdfBytes = await handler.HandleAsync(new ExportDailySummaryQuery(farmId, date));
+            var pdfBytes = await handler.HandleAsync(new ExportDailySummaryQuery(farmId, date, actorUserId), ct);
             return Results.File(pdfBytes, "application/pdf", $"daily-summary-{date:yyyy-MM-dd}.pdf");
         })
         .WithName("ExportDailySummary");
@@ -69,12 +69,12 @@ public static class ExportEndpoints
 
             var monthStart = new DateOnly(year, month, 1);
             if (!(await tenantScope.EstablishForCallerAsync(farmId, actorUserId, ct)).IsSuccess
-                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct, monthStart, monthStart.AddMonths(1).AddDays(-1)))
+                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }
 
-            var pdfBytes = await handler.HandleAsync(new ExportMonthlyCostQuery(farmId, year, month));
+            var pdfBytes = await handler.HandleAsync(new ExportMonthlyCostQuery(farmId, year, month, actorUserId), ct);
             return Results.File(pdfBytes, "application/pdf", $"monthly-cost-{year}-{month:D2}.pdf");
         })
         .WithName("ExportMonthlyCost");
@@ -98,12 +98,12 @@ public static class ExportEndpoints
             // lane MU-3 fix 1 (F94) — open the caller's farm scope first, as every working farm route does:
             // without it the first read failed closed in TenantConnectionInterceptor (500 for everyone).
             if (!(await tenantScope.EstablishForCallerAsync(farmId, actorUserId, ct)).IsSuccess
-                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct, fromDate, toDate))
+                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }
 
-            var pdfBytes = await handler.HandleAsync(new ExportVerificationReportQuery(farmId, fromDate, toDate));
+            var pdfBytes = await handler.HandleAsync(new ExportVerificationReportQuery(farmId, fromDate, toDate, actorUserId), ct);
             return Results.File(pdfBytes, "application/pdf", $"verification-report-{fromDate:yyyy-MM-dd}-to-{toDate:yyyy-MM-dd}.pdf");
         })
         .WithName("ExportVerificationReport");
@@ -116,22 +116,13 @@ public static class ExportEndpoints
     /// ledger's allocations), so it goes only to a seat that sees the farm's money and reads the farm's
     /// records (not an own-records-only seat). Public so the REST-door proof runs the route's own rule.
     /// </summary>
-    /// <para>spec: plr-d10 lane PRV (founder D-26) — and only when no money record of the period is kept from him: the
-    /// PDF is built from the farm's day ledger, so a report that would add up a record he may not see is refused
-    /// whole (my call: refuse, never a quietly smaller PDF), exactly as the orchestrator's call 7 asks.</para>
+    /// <para>spec: plr-d10 lane PRV fix pass 1 (M5) — a record of the period kept from him never refuses the export:
+    /// the report is built from what he may see and carries the W4 line when something is left out
+    /// (<c>ExportVisibility</c>, inside the export service).</para>
     public static async Task<bool> MayExportAsync(
-        IShramSafalRepository repository, IClock clock, Guid farmId, Guid userId, CancellationToken ct,
-        DateOnly? fromDate = null, DateOnly? toDate = null)
+        IShramSafalRepository repository, IClock clock, Guid farmId, Guid userId, CancellationToken ct)
     {
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, userId, clock.UtcNow, ct);
-        if (scope is not { SeeMoney: true, OwnRecordsOnly: false })
-        {
-            return false;
-        }
-
-        var visibility = await RecordVisibility.ForFarmAsync(repository, farmId, userId, clock.UtcNow, ct);
-        return !visibility.Hidden.Any(r => r.Kind == ShramSafal.Domain.RecordPrivacy.RecordKinds.CostEntry
-            && (fromDate is null || r.Date >= fromDate)
-            && (toDate is null || r.Date <= toDate));
+        return scope is { SeeMoney: true, OwnRecordsOnly: false };
     }
 }

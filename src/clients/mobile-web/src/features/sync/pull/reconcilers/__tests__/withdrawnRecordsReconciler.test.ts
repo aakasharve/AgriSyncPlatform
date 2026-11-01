@@ -65,6 +65,7 @@ const run = (db: AgriLogDatabase, payload: SyncPullResponse, opts: { pending?: S
     reconcileWithdrawnRecords(db, payload, {
         userId: opts.userId === undefined ? ME : opts.userId,
         pendingLogIds: opts.pending ?? new Set(),
+        pendingMoneyIds: new Set(),
         receivedAtUtc: AT,
         fullPull: opts.fullPull ?? false,
     });
@@ -135,7 +136,9 @@ describe('withdrawnRecordsReconciler (lane PRV)', () => {
         await putLog(db, 'uploading-log', OWNER);
         await putPhoto(db, 'uploading-photo', 'uploading-log', 'DailyLog', false);
         const outcome = await run(db, pull({ withdrawnRecords: [{ kind: 'DailyLog', id: 'my-log' }, { kind: 'DailyLog', id: 'uploading-log' }] }));
-        expect(outcome.heldBack).toBe(2);
+        // Fix pass 1 (M6): his own record is never remembered (the maker always stays: nothing to do later).
+        expect(outcome.heldBack).toBe(1);
+        expect((await db.appMeta.get(PENDING_WITHDRAWALS_META_KEY))?.value).toEqual([{ kind: 'DailyLog', id: 'uploading-log' }]);
         expect(await db.logs.get('my-log')).toBeDefined();
         expect(await db.logs.get('uploading-log')).toBeDefined();
 

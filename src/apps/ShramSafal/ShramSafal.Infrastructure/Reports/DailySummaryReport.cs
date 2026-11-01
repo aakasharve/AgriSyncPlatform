@@ -14,12 +14,14 @@ public class DailySummaryReport : IDocument
     private readonly Farm _farm;
     private readonly DateOnly _date;
     private readonly List<DayLedger> _ledgers;
+    private readonly string? _ruleNote;
 
-    public DailySummaryReport(Farm farm, DateOnly date, List<DayLedger> ledgers)
+    public DailySummaryReport(Farm farm, DateOnly date, List<DayLedger> ledgers, string? ruleNote = null)
     {
         _farm = farm;
         _date = date;
         _ledgers = ledgers;
+        _ruleNote = ruleNote;
     }
 
     public void Compose(IDocumentContainer container)
@@ -54,6 +56,12 @@ public class DailySummaryReport : IDocument
     {
         container.PaddingVertical(1, Unit.Centimetre).Column(column =>
         {
+            // spec: plr-d10 lane PRV fix pass 1 (M5) — W4, when a record of this period is kept from the reader.
+            if (_ruleNote is not null)
+            {
+                column.Item().PaddingBottom(10).Text(_ruleNote).Italic();
+            }
+
             if (!_ledgers.Any())
             {
                 column.Item().Text("No activities recorded for this date.").Italic();
@@ -114,6 +122,9 @@ public class DailySummaryReport : IDocument
             x.TotalPages();
         });
     }
+
+    /// <summary>The W4 line this document carries, or null when it leaves nothing out.</summary>
+    public string? RuleNote => _ruleNote;
 
     public DocumentMetadata GetMetadata() => DocumentMetadata.Default;
 }

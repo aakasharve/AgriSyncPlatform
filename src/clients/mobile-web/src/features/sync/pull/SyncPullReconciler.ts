@@ -19,7 +19,7 @@
 
 import type { SyncPullResponse } from '../../../infrastructure/api/AgriSyncClient';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
-import { readPendingLogIds } from './internal/pendingMutations';
+import { readPendingLogIds, readWithdrawalHolds } from './internal/pendingMutations';
 import { reconcileProfileAndCrops } from './reconcilers/profileAndCropsReconciler';
 import { reconcileLogs } from './reconcilers/logsReconciler';
 import { reconcileAttachments } from './reconcilers/attachmentsReconciler';
@@ -77,6 +77,9 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
             }));
     }
 
+    // lane PRV fix pass 1 (M6) — what a change of his still waits on, work AND money, parked refusals included.
+    const withdrawalHolds = await readWithdrawalHolds(db);
+
     const attachmentsCount = (payload.attachments ?? []).length;
 
     let importedLogs = 0;
@@ -121,7 +124,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         // from them; never a record with a change still queued (P10).
         withdrawnMoney = (await reconcileWithdrawnRecords(db, payload, {
             userId: getAuthSession()?.userId ?? null,
-            pendingLogIds,
+            pendingLogIds: withdrawalHolds?.logIds,
+            pendingMoneyIds: withdrawalHolds?.moneyIds,
             receivedAtUtc,
             fullPull: options.fullPull === true,
         })).removedMoney;

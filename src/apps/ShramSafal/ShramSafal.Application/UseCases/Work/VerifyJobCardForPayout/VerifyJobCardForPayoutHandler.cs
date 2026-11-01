@@ -38,6 +38,10 @@ public sealed class VerifyJobCardForPayoutHandler(
         if (dailyLog is null)
             return Result.Failure<VerifyJobCardForPayoutResult>(ShramSafalErrors.DailyLogNotFound);
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2) — the record behind the payout is read for the caller only if he may see it.
+        if (!await Services.RecordAudienceGate.MaySeeLogAsync(repository, dailyLog, command.CallerUserId.Value, clock.UtcNow, ct))
+            return Result.Failure<VerifyJobCardForPayoutResult>(ShramSafalErrors.RecordAudienceClosed);
+
         // 3. Resolve caller role on farm.
         var callerRole = await repository.GetUserRoleForFarmAsync(
             jobCard.FarmId.Value, command.CallerUserId.Value, ct);

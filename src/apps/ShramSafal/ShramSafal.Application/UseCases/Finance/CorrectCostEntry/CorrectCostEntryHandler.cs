@@ -46,6 +46,12 @@ public sealed class CorrectCostEntryHandler(
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
         }
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2) — a money record kept from him is not his to correct.
+        if (!await Services.RecordAudienceGate.MaySeeCostAsync(repository, entry, command.CorrectedByUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.RecordAudienceClosed);
+        }
+
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 2), lane 2b — correcting a cost is the
         // review-money-entries authority (stored as AddCost; it needs see money), at this moment.
         // Founder D-22 / D-26: a label — सहमालक included — grants nothing by itself, so the old

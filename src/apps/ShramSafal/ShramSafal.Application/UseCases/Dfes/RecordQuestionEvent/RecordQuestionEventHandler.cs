@@ -64,6 +64,14 @@ public sealed class RecordQuestionEventHandler(
             return Result.Failure<Guid>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2) — a question about a record kept from him is not his to answer.
+        if (cmd.DailyLogId is { } aboutLogId
+            && await repository.GetDailyLogByIdAsync(aboutLogId, ct) is { } aboutLog
+            && !await Services.RecordAudienceGate.MaySeeLogAsync(repository, aboutLog, cmd.CallerUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.RecordAudienceClosed);
+        }
+
         // wave-3.3, Ruling 1 (2026-08-15): "offline retries, reopening the app, or syncing
         // from another device must not create duplicate questions."
         //

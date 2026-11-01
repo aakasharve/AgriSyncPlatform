@@ -104,6 +104,9 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
     }, []);
 
     const reportFarmId = events[0]?.farmId;
+    // Fix pass 1 (L5) — W4 speaks for the farm(s) whose money this book shows (an empty book: every farm it could show),
+    // and not under the labour-payout filter: a job-card payout's audience is never narrowed.
+    const shownFarmIds = useMemo(() => [...new Set(events.map(e => e.farmId).filter((id): id is string => !!id))], [events]);
 
     return (
         <MoneyPage title={FINANCE_TITLE['finance-ledger']} testId="fin-ledger" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
@@ -114,7 +117,9 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
                 <GlassCard testId="ledger-out"><p className="m-0 text-[13px] font-bold text-stone-600">खर्च</p><p className="m-0 text-[22px] font-extrabold text-stone-900">{rupees(totalExpense)}</p></GlassCard>
             </div>
             {/* lane PRV (W4) — the totals above count only the money records he may see; say so when one is left out. */}
-            <RuleNotCountedNote kind="money" testId="ledger-not-counted" />
+            {filterType !== 'LabourPayouts' && (
+                <RuleNotCountedNote kind="money" farmIds={shownFarmIds.length > 0 ? shownFarmIds : undefined} testId="ledger-not-counted" />
+            )}
             {noDirection > 0 && (
                 <p className="m-0 rounded-2xl bg-stone-100 p-3 text-[13.5px] font-bold leading-snug text-stone-700" data-testid="ledger-no-direction">
                     {entriesCount(noDirection)} — जमा की खर्च ते नोंदलेलं नाही, म्हणून दोन्ही बेरजेत धरलेलं नाही.

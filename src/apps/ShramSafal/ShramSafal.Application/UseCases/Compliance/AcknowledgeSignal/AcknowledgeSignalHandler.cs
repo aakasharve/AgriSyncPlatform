@@ -38,6 +38,11 @@ public sealed class AcknowledgeSignalHandler(
                 clock.UtcNow, ct))
             return Result.Failure(ShramSafalErrors.ComplianceSignalRoleNotAllowed);
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2) — a warning that names a record kept from him is not his to handle.
+        if ((await RecordVisibility.ForFarmAsync(repository, signal.FarmId.Value, command.CallerUserId.Value, clock.UtcNow, ct))
+            .MentionsHidden(signal.PayloadJson))
+            return Result.Failure(ShramSafalErrors.RecordAudienceClosed);
+
         var now = clock.UtcNow;
 
         try

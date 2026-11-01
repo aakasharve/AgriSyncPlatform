@@ -669,12 +669,12 @@ public sealed class PullSyncChangesHandler(
     }
 
     /// <summary>
-    /// spec: plr-d10 lane PRV — a record's audience goes ONLY to the farm's primary account holder (his picker and lock
-    /// chip); everyone else is told nothing about it. "Team" is not sent (absent = the normal team).
+    /// spec: plr-d10 lane PRV — a record's audience goes ONLY to the record holder, the farm's registrant (his picker and
+    /// lock chip; fix pass 1, L2); everyone else is told nothing about it. "Team" is not sent (absent = the normal team).
     /// </summary>
     private static DailyLogDto WithAudience(
         DailyLogDto dto, Domain.RecordPrivacy.RecordAudience recordAudience, FarmReadScope? scope, RestrictedRecord? restricted) =>
-        scope is { IsPrimaryAccountHolder: true } && recordAudience != Domain.RecordPrivacy.RecordAudience.Team
+        scope is { IsRecordHolder: true } && recordAudience != Domain.RecordPrivacy.RecordAudience.Team
             ? dto with
             {
                 Audience = recordAudience.ToString(),
@@ -685,7 +685,7 @@ public sealed class PullSyncChangesHandler(
     /// <summary>lane PRV — the same for a money record.</summary>
     private static CostEntryDto WithAudience(
         CostEntryDto dto, Domain.RecordPrivacy.RecordAudience recordAudience, FarmReadScope? scope, RestrictedRecord? restricted) =>
-        scope is { IsPrimaryAccountHolder: true } && recordAudience != Domain.RecordPrivacy.RecordAudience.Team
+        scope is { IsRecordHolder: true } && recordAudience != Domain.RecordPrivacy.RecordAudience.Team
             ? dto with
             {
                 Audience = recordAudience.ToString(),

@@ -610,6 +610,7 @@ export const LabourFeature: React.FC<{
                                 onToast={showToast}
                                 timeWindow={timeWindow}
                                 onTimeWindowChange={setTimeWindow}
+                                farmId={farmId}
                             />
                         )}
                         {/* I23 (D-16) — the वही with its history: ‹ › week / month, exact dates, आज, read-only.

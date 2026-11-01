@@ -55,6 +55,14 @@ public sealed record FarmReadScope(
     DateTime? AccessChangedAtUtc)
 {
     /// <summary>
+    /// spec: plr-d10 lane PRV fix pass 1 (L2) — the farm's REGISTRANT: the one person who sets a record's audience and
+    /// always sees every record (D-26: "Only me" is his). The same rule <c>ManageMembershipHandler</c> uses for membership
+    /// decisions — narrower than <see cref="IsPrimaryAccountHolder"/>, which also admits any Active PrimaryOwner seat
+    /// (MU-3's <see cref="FarmAccessPolicy"/>, unchanged). Never on the wire.
+    /// </summary>
+    public bool IsRecordHolder { get; init; }
+
+    /// <summary>
     /// The scope of <paramref name="access"/> at <paramref name="atUtc"/>; <c>null</c> when the standing
     /// reads nothing of the farm (<see cref="FarmAccessPolicy.MayRead"/>).
     /// </summary>
@@ -80,7 +88,10 @@ public sealed record FarmReadScope(
             SeeCompliance: !ownOnly || Holds(FarmAuthority.ConfirmRecords),
             SeeFarmOverview: !ownOnly,
             IsPrimaryAccountHolder: primary,
-            AccessChangedAtUtc: access!.IsRegistrant ? null : access.AccessChangedAtUtc);
+            AccessChangedAtUtc: access!.IsRegistrant ? null : access.AccessChangedAtUtc)
+        {
+            IsRecordHolder = access.IsRegistrant,
+        };
     }
 
     /// <summary>May this seat read the record <paramref name="operatorUserId"/> made?</summary>

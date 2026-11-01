@@ -52,6 +52,7 @@ import { StatTile, GroupLabel, EmptyState } from './LabourUiKit';
 import { isReadableWeekRange } from '../weekLabel';
 import { formatWindowRange } from '../marathiDate';
 import LabourWindowSlider from './LabourWindowSlider';
+import { RuleNotCountedNote } from '../../recordAudience/RuleNotCountedNote';
 // `LABOUR_WINDOW_LABELS` is read for TWO different jobs here: the stat-grid
 // heading names the window in force, and the money card names the ONE basis it
 // is always on (`alltime`). Both come from the same closed, founder-approved
@@ -103,6 +104,8 @@ interface Props {
     timeWindow: LabourWindow;
     /** Reports a tapped window upward; `useLabourState` re-asks the server. */
     onTimeWindowChange: (window: LabourWindow) => void;
+    /** spec: plr-d10 lane PRV (fix pass 1, M4) — the farm these figures are for, so W4 can say when a record is left out. */
+    farmId?: string;
 }
 
 /**
@@ -113,7 +116,7 @@ interface Props {
  */
 const MONEY_EPSILON = 0.005;
 
-const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow, onTimeWindowChange }) => {
+const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow, onTimeWindowChange, farmId }) => {
     const d = data.dashboard;
     // See the money card's own note below for what each clause is defending.
     // Phase 4 (D-H8) — `d.money === null` means the whole card was WITHHELD
@@ -243,6 +246,9 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                     <StatTile icon={<ClipboardList size={17} />} tone="bl" value={String(d.logs)} label="नोंदी" />
                 </div>
             </div>
+            {/* lane PRV (W4) — these figures count only the work records he may see; say so when one is left out. */}
+            <RuleNotCountedNote kind="work" farmIds={farmId ? [farmId] : undefined} from={d.windowFrom ?? undefined} to={d.windowTo ?? undefined}
+                testId="labour-not-counted" />
 
             {/*
               * TASK 11 — तपासायचं LEFT THE STAT GRID, and it must never go
@@ -393,6 +399,8 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
                     <div className="text-[16px] font-black text-slate-800">—</div>
                 )}
             </div>
+            {/* lane PRV (W4) — the crew money is on the all-time basis; same rule, no window. */}
+            {d.money !== null && <RuleNotCountedNote kind="work" farmIds={farmId ? [farmId] : undefined} testId="labour-money-not-counted" />}
 
             {/* Correction 5: the हजेरी वही door is never gated — constant DELETED, not flipped. */}
             <button type="button" onClick={onLedger} className="flex w-full items-center gap-3.5 rounded-[20px] border border-slate-100 bg-white p-3.5 text-left shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md transition-transform active:scale-[0.98]">

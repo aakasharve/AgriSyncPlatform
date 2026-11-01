@@ -104,11 +104,12 @@ export function refusalLines(refused: RefusedChange, language: string | null | u
  */
 export function refusalHint(mutationType: string, errorCode: string | undefined, language: string | null | undefined): string | undefined {
     const reason = refusalReasonOf(errorCode);
+    // lane PRV — any change parked because the record's audience no longer includes him: the rule's words ALONE (fix
+    // pass 1, M6). Never "kept as the server has it": there is no server version of a record kept from him.
+    if (reason === 'recordClosed') return correctionWords(language).refusedReason.recordClosed;
     const kind = KIND_OF[mutationType];
     if (kind === 'move' || kind === 'workers') return refusalLines({ kind, reason }, language).join(' ');
     if (kind === 'revision' && reason === 'pricesNotYours') return correctionWords(language).refusedReason.pricesNotYours;
-    // lane PRV — any change parked because the record's audience no longer includes him: the rule's words.
-    if (reason === 'recordClosed') return correctionWords(language).refusedReason.recordClosed;
     if (mutationType === SyncMutationName.CreateDailyLog && reason === 'futureDay') {
         return correctionWords(language).refusedReason.futureDay;
     }
@@ -155,7 +156,7 @@ export async function refusalReasonForRow(row: RefusedRow): Promise<RefusedReaso
 /** `refusalHint` for one refused row, its reason read as it really stands (`refusalReasonForRow`). */
 export async function refusalHintForRow(row: RefusedRow, language: string | null | undefined): Promise<string | undefined> {
     const kind = KIND_OF[row.mutationType];
-    if (kind !== 'move') return refusalHint(row.mutationType, row.errorCode, language);
+    if (kind !== 'move' || refusalReasonOf(row.errorCode) === 'recordClosed') return refusalHint(row.mutationType, row.errorCode, language);
     return refusalLines({ kind, reason: await refusalReasonForRow(row) }, language).join(' ');
 }
 

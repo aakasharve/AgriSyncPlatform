@@ -23,7 +23,9 @@ import { getRootStore } from '../../../app/state/RootStore';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { getEditSurface } from './EditSurfaceRegistry';
-import { refusalHintForRow } from '../../logs/components/correction/refusedRevision';
+import { refusalHintForRow, refusalReasonOf } from '../../logs/components/correction/refusedRevision';
+import { applyPendingWithdrawals } from '../pull/reconcilers/withdrawnRecordsReconciler';
+import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import {
     DEPENDENCY_PARENT_UNRESOLVED_CODE,
     DEPENDENCY_PLOT_UNRESOLVED_CODE,
@@ -39,6 +41,12 @@ export interface RejectedMutationView {
     reason: string;
     hint?: string;
     payloadPreview: string;
+    /**
+     * lane PRV fix pass 1 (M6) — refused because the record's audience no longer includes him
+     * (`ShramSafal.RecordAudience.Forbidden`): sending it again cannot succeed, so the page shows only the rule's
+     * words (`hint`) and offers only "discard". Until he discards it, the record stays on his phone (P10).
+     */
+    closedByRule?: boolean;
 }
 
 const MAX_PAYLOAD_PREVIEW = 160;
@@ -90,6 +98,7 @@ export class ConflictResolutionService {
                     // words, in his language; every other row keeps the hints below.
                     hint: hints[index] ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode),
                     payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
+                    closedByRule: refusalReasonOf(r.errorCode) === 'recordClosed',
                 };
             });
     }
@@ -168,6 +177,15 @@ export class ConflictResolutionService {
             // Soft-delete: keep the row for audit + E2E assertion.
             // Never returned by list() or getPending().
             await mutationQueue.markRejectedDropped(row.id);
+            // lane PRV fix pass 1 (M6) — the change no longer holds its record: a withdrawal it held back applies now.
+            try {
+                const outcome = await applyPendingWithdrawals(db, getAuthSession()?.userId ?? null, systemClock.nowISO());
+                if (outcome.removedLogs + outcome.removedMoney > 0 && typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('agrisync:sync-reconciled'));
+                }
+            } catch (error) {
+                console.warn('ConflictResolutionService.discard: the held withdrawals could not be applied now; the next sync applies them', error);
+            }
         }
 
         try {

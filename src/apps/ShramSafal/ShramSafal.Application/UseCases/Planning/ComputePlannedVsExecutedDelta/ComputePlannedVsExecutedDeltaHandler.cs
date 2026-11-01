@@ -29,12 +29,12 @@ public sealed class ComputePlannedVsExecutedDeltaHandler(IShramSafalRepository r
         }
 
         var planned = await repository.GetPlannedActivitiesByCropCycleIdAsync(query.CropCycleId, ct);
-        // spec: plr-d10 lane PRV (founder D-26) — the comparison he is shown counts only the work records he may see.
+        // spec: plr-d10 lane PRV (founder D-26; fix pass 1, H3) — planned steps are matched against ALL the recorded work
+        // (a step that hidden work completed is DONE for him: he is never told to repeat it), and only what is SHOWN is
+        // narrowed below: the names of work recorded only in records kept from him leave "done" and "extra".
         var visibility = await Services.RecordVisibility.ForFarmAsync(
             repository, (Guid)cropCycle.FarmId, query.ActorUserId, DateTime.UtcNow, ct);
-        var executedTasks = (await repository.GetExecutedTasksByCropCycleIdAsync(query.CropCycleId, ct))
-            .Where(t => visibility.MaySeeLog(t.DailyLogId))
-            .ToList();
+        var executedTasks = await repository.GetExecutedTasksByCropCycleIdAsync(query.CropCycleId, ct);
 
         var stageName = ResolveStageName(query.Stage, cropCycle.Stage, planned);
         var stagePlanned = planned
@@ -62,6 +62,23 @@ public sealed class ComputePlannedVsExecutedDeltaHandler(IShramSafalRepository r
         }
 
         var stageComparison = CompareEngine.ComputeStageComparison(stagePlanned, stageExecuted, stageName);
+        if (visibility.HiddenLogIds.Count > 0)
+        {
+            var shownNames = stageExecuted
+                .Where(t => visibility.MaySeeLog(t.DailyLogId))
+                .Select(t => t.ActivityType.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            stageComparison = stageComparison with
+            {
+                Buckets = stageComparison.Buckets
+                    .Select(b => b with
+                    {
+                        Executed = b.Executed.Where(shownNames.Contains).ToList(),
+                        Extra = b.Extra.Where(shownNames.Contains).ToList(),
+                    })
+                    .ToList(),
+            };
+        }
 
         var startDay = stageStartDate is null
             ? 0

@@ -40,6 +40,12 @@ public sealed class AllocateGlobalExpenseHandler(
             return Result.Failure<DayLedgerDto>(ShramSafalErrors.CostEntryNotFound);
         }
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2) — a money record kept from him is not his to share out.
+        if (!await Services.RecordAudienceGate.MaySeeCostAsync(repository, costEntry, command.CreatedByUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.RecordAudienceClosed);
+        }
+
         // lane OF-M fix pass 1 (review 9) — the amount spread is what the entry says NOW (its latest correction, else as
         // made). An entry corrected to ₹0 (no longer spent) is never spread: the existing invalid-amount answer, so what the
         // released mutation accepts and answers does not change; only what the server reads does.

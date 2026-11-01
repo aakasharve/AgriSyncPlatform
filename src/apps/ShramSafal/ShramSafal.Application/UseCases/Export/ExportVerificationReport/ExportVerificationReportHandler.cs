@@ -15,6 +15,6 @@ public class ExportVerificationReportHandler
 
     public async Task<byte[]> HandleAsync(ExportVerificationReportQuery request, CancellationToken cancellationToken = default)
     {
-        return await _exportService.GenerateVerificationReportAsync(request.FarmId, request.FromDate, request.ToDate, cancellationToken);
+        return await _exportService.GenerateVerificationReportAsync(request.FarmId, request.FromDate, request.ToDate, request.ReaderUserId, cancellationToken);
     }
 }

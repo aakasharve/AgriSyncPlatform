@@ -182,8 +182,11 @@ public sealed class AddCostEntryHandler(
             clock.UtcNow.AddMinutes(-DuplicateWindowMinutes),
             ct);
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2 sweep) — "possible duplicate" is said only about money he may see: a money
+        // record kept from him is never compared, so the flag cannot tell him one exists.
+        var duplicateVisibility = await Services.RecordVisibility.ForFarmAsync(repository, (Guid)farmId, command.CreatedByUserId, clock.UtcNow, ct);
         var isPotentialDuplicate = Domain.Finance.DuplicateDetector.IsPotentialDuplicate(
-            duplicateCandidates,
+            duplicateCandidates.Where(e => duplicateVisibility.MaySeeCost(e.Id)).ToList(),
             entry,
             DuplicateWindowMinutes);
 

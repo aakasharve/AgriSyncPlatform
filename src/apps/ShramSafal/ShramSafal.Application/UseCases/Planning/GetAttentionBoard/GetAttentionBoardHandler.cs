@@ -51,8 +51,12 @@ public sealed class GetAttentionBoardHandler(
         var cards = new List<AttentionCardDto>();
         var scheduledWork = new List<ScheduledWorkItemDto>();
 
-        // spec: plr-d10 lane PRV (founder D-26) — what the board adds up for him counts only the records he may see:
-        // a record kept from him neither marks a planned step done nor counts as a dispute (orchestrator call 8).
+        // spec: plr-d10 lane PRV (founder D-26; fix pass 1, H3) — a planned step that work kept from him completed is DONE
+        // for him too: the founder's own text, "the app must not simultaneously assign that hidden activity to someone who
+        // cannot see it" (a member must never be told to repeat a private spray). So steps are matched against ALL the
+        // recorded work, and only what is SHOWN is narrowed: the board names planned steps (plan text he already reads)
+        // and counts; no record id, day, words, amounts or maker of a hidden record ever reaches it. Disputes he cannot
+        // see are not counted for him.
         var visibility = await Services.RecordVisibility.ForFarmsAsync(repository, farmIds, query.CallerUserId, clock.UtcNow, ct);
 
         foreach (var farmId in farmIds)
@@ -76,9 +80,7 @@ public sealed class GetAttentionBoardHandler(
 
                 // Get planned activities and log tasks for this cycle
                 var planned = await repository.GetPlannedActivitiesByCropCycleIdAsync(latestCycle.Id, ct);
-                var executed = (await repository.GetExecutedTasksByCropCycleIdAsync(latestCycle.Id, ct))
-                    .Where(t => visibility.MaySeeLog(t.DailyLogId))
-                    .ToList();
+                var executed = await repository.GetExecutedTasksByCropCycleIdAsync(latestCycle.Id, ct);
 
                 // Filter out removed planned activities
                 planned = planned.Where(p => !p.IsRemoved).ToList();

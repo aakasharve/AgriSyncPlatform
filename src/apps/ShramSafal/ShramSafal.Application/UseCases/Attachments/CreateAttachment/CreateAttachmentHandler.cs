@@ -35,7 +35,7 @@ public sealed class CreateAttachmentHandler(
             return Result.Failure<AttachmentDto>(ShramSafalErrors.Forbidden);
         }
 
-        var linkCheck = await ValidateLinkTargetAsync(command.FarmId, command.LinkedEntityId, normalizedEntityType, ct);
+        var linkCheck = await ValidateLinkTargetAsync(command.FarmId, command.LinkedEntityId, normalizedEntityType, command.CreatedByUserId, ct);
         if (!linkCheck.IsSuccess)
         {
             return Result.Failure<AttachmentDto>(linkCheck.Error);
@@ -97,6 +97,7 @@ public sealed class CreateAttachmentHandler(
         Guid farmId,
         Guid linkedEntityId,
         string linkedEntityType,
+        Guid actorUserId,
         CancellationToken ct)
     {
         // A bill photo hangs on the farm, exactly as a farm photo does (lane MU-3 fix 1, F2).
@@ -122,9 +123,15 @@ public sealed class CreateAttachmentHandler(
                 return Result.Failure(ShramSafalErrors.DailyLogNotFound);
             }
 
-            return (Guid)log.FarmId == farmId
+            if ((Guid)log.FarmId != farmId)
+            {
+                return Result.Failure(ShramSafalErrors.Forbidden);
+            }
+
+            // spec: plr-d10 lane PRV fix pass 1 (H2) — never a photo on a record kept from him.
+            return await Services.RecordAudienceGate.MaySeeLogAsync(repository, log, actorUserId, clock.UtcNow, ct)
                 ? Result.Success()
-                : Result.Failure(ShramSafalErrors.Forbidden);
+                : Result.Failure(ShramSafalErrors.RecordAudienceClosed);
         }
 
         if (linkedEntityType.Equals("costentry", StringComparison.OrdinalIgnoreCase))
@@ -135,9 +142,15 @@ public sealed class CreateAttachmentHandler(
                 return Result.Failure(ShramSafalErrors.CostEntryNotFound);
             }
 
-            return (Guid)entry.FarmId == farmId
+            if ((Guid)entry.FarmId != farmId)
+            {
+                return Result.Failure(ShramSafalErrors.Forbidden);
+            }
+
+            // spec: plr-d10 lane PRV fix pass 1 (H2) — never a receipt on a money record kept from him.
+            return await Services.RecordAudienceGate.MaySeeCostAsync(repository, entry, actorUserId, clock.UtcNow, ct)
                 ? Result.Success()
-                : Result.Failure(ShramSafalErrors.Forbidden);
+                : Result.Failure(ShramSafalErrors.RecordAudienceClosed);
         }
 
         return Result.Failure(ShramSafalErrors.InvalidCommand);

@@ -15,13 +15,15 @@ public class MonthlyCostReport : IDocument
     private readonly DateOnly _fromDate;
     private readonly DateOnly _toDate;
     private readonly List<DayLedger> _ledgers;
+    private readonly string? _ruleNote;
 
-    public MonthlyCostReport(Farm farm, DateOnly fromDate, DateOnly toDate, List<DayLedger> ledgers)
+    public MonthlyCostReport(Farm farm, DateOnly fromDate, DateOnly toDate, List<DayLedger> ledgers, string? ruleNote = null)
     {
         _farm = farm;
         _fromDate = fromDate;
         _toDate = toDate;
         _ledgers = ledgers;
+        _ruleNote = ruleNote;
     }
 
     public void Compose(IDocumentContainer container)
@@ -56,6 +58,12 @@ public class MonthlyCostReport : IDocument
     {
         container.PaddingVertical(1, Unit.Centimetre).Column(column =>
         {
+            // spec: plr-d10 lane PRV fix pass 1 (M5) — W4, when a record of this period is kept from the reader.
+            if (_ruleNote is not null)
+            {
+                column.Item().PaddingBottom(10).Text(_ruleNote).Italic();
+            }
+
             if (!_ledgers.Any())
             {
                 column.Item().Text("No costs recorded for this month.").Italic();
@@ -146,6 +154,9 @@ public class MonthlyCostReport : IDocument
             x.TotalPages();
         });
     }
+
+    /// <summary>The W4 line this document carries, or null when it leaves nothing out.</summary>
+    public string? RuleNote => _ruleNote;
 
     public DocumentMetadata GetMetadata() => DocumentMetadata.Default;
 }

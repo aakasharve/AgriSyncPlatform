@@ -86,3 +86,32 @@ export async function readPendingLogIds(db: AgriLogDatabase): Promise<Set<string
     }
     return pendingLogIds;
 }
+
+/** spec: plr-d10 lane PRV fix pass 1 (M6) — the records a change of his still waits on, for the withdrawal reconciler. */
+export interface WithdrawalHolds {
+    logIds: Set<string>;
+    moneyIds: Set<string>;
+}
+
+/**
+ * Lane PRV fix pass 1 (M6) — every record a change of his still waits on, work AND money (P10: his intent is not cache).
+ * Unlike `readPendingLogIds`, a parked refusal ALWAYS holds its record here, even one whose refusal would put the
+ * server's version back: a record kept from him has no server version to put back, so while he has not discarded his
+ * change the record stays on his phone. `undefined` when the outbox cannot be read: then nothing is removed.
+ */
+export async function readWithdrawalHolds(db: AgriLogDatabase): Promise<WithdrawalHolds | undefined> {
+    try {
+        const rows = await db.mutationQueue.where('status').anyOf([...UNRESOLVED_LOCAL_INTENT]).toArray();
+        const holds: WithdrawalHolds = { logIds: new Set(), moneyIds: new Set() };
+        for (const row of rows) {
+            const payload = row.payload as { dailyLogId?: unknown; logId?: unknown; costEntryId?: unknown } | null | undefined;
+            if (!payload || typeof payload !== 'object') continue;
+            for (const id of [payload.dailyLogId, payload.logId]) if (typeof id === 'string' && id) holds.logIds.add(id);
+            if (typeof payload.costEntryId === 'string' && payload.costEntryId) holds.moneyIds.add(payload.costEntryId);
+        }
+        return holds;
+    } catch (error) {
+        console.warn('readWithdrawalHolds: the outbox could not be read; nothing is removed this time', error);
+        return undefined;
+    }
+}

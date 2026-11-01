@@ -15,6 +15,6 @@ public class ExportMonthlyCostHandler
 
     public async Task<byte[]> HandleAsync(ExportMonthlyCostQuery request, CancellationToken cancellationToken = default)
     {
-        return await _exportService.GenerateMonthlyCostReportAsync(request.FarmId, request.Year, request.Month, cancellationToken);
+        return await _exportService.GenerateMonthlyCostReportAsync(request.FarmId, request.Year, request.Month, request.ReaderUserId, cancellationToken);
     }
 }

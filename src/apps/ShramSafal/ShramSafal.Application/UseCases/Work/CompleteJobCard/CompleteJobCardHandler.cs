@@ -43,6 +43,10 @@ public sealed class CompleteJobCardHandler(
         if (dailyLog is null)
             return Result.Failure<CompleteJobCardResult>(ShramSafalErrors.DailyLogNotFound);
 
+        // spec: plr-d10 lane PRV fix pass 1 (L4) — a job card is never linked to a record kept from the caller.
+        if (!await Services.RecordAudienceGate.MaySeeLogAsync(repository, dailyLog, command.CallerUserId.Value, clock.UtcNow, ct))
+            return Result.Failure<CompleteJobCardResult>(ShramSafalErrors.RecordAudienceClosed);
+
         // 3. Assert same farm + plot.
         if (dailyLog.FarmId != jobCard.FarmId || dailyLog.PlotId != jobCard.PlotId)
             return Result.Failure<CompleteJobCardResult>(ShramSafalErrors.JobCardDailyLogMismatch);

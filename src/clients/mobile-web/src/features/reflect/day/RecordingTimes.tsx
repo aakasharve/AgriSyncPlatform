@@ -23,11 +23,19 @@ import type { DayRecording } from './dayRecordings';
 import { ListenControl, LogPhotos, StatusChip, useReflectCopy } from './RecordingParts';
 import type { DayListen } from './useDayListen';
 import { AudienceLockChip } from '../../recordAudience/AudienceRow';
+import { getSessionUserId } from '../../../infrastructure/storage/AuthTokenStore';
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
 /** A test id from a log id (ids can carry characters a test id should not). */
 export const recId = (rec: DayRecording): string => rec.view.id;
+
+/** Fix pass 1 (L5) — someone other than the signed-in person made it (unknown either way: told as his own). */
+const madeBySomeoneElse = (log: DailyLog): boolean => {
+    const maker = log.meta?.createdByOperatorId;
+    const self = getSessionUserId();
+    return !!maker && !!self && maker !== self;
+};
 
 const plotOf = (log: DailyLog): string => (log.context?.selection ?? []).flatMap(s => s.selectedPlotNames ?? []).filter(Boolean).join(', ');
 
@@ -49,7 +57,7 @@ export const RecordingInline: React.FC<{ rec: DayRecording; listen: DayListen; t
                 {view.typed && <TypedTag testId={`${testId}-typed`} />}
                 <StatusChip confirmed={view.confirmed} testId={`${testId}-state`} />
                 {/* lane PRV — a record the holder narrowed shows it in his list (only the holder is told). */}
-                <AudienceLockChip audience={rec.voiceLog.audience} testId={`${testId}-audience`} />
+                <AudienceLockChip audience={rec.voiceLog.audience} madeBySomeoneElse={madeBySomeoneElse(rec.voiceLog)} testId={`${testId}-audience`} />
                 {!view.typed && <ListenControl rec={rec} listen={listen} testId={`${testId}-play`} />}
                 {onEdit && rec.logs.map(l => (
                     <button key={l.id} type="button" onClick={() => { listen.stop(); onEdit(l); }} data-testid={`${testId}-edit-${l.id}`}

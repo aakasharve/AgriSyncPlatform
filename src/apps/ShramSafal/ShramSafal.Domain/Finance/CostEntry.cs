@@ -340,7 +340,12 @@ public sealed class CostEntry : Entity<Guid>
         DateTime correctedAtUtc)
     {
         IsCorrected = true;
-        ModifiedAtUtc = correctedAtUtc;
+        // lane PRV fix pass 1 (L6) — forward only: never back below a cursor that already read this money.
+        if (correctedAtUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = correctedAtUtc;
+        }
+
         Raise(new CostEntryCorrectedEvent(
             Guid.NewGuid(),
             correctedAtUtc,
@@ -383,6 +388,9 @@ public sealed class CostEntry : Entity<Guid>
         }
 
         Location = location;
-        ModifiedAtUtc = location.CapturedAtUtc;
+        if (location.CapturedAtUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = location.CapturedAtUtc;
+        }
     }
 }

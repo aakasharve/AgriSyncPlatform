@@ -109,6 +109,12 @@ public sealed class AttachFieldOperatorHandler(
             return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2) — never onto a record kept from him.
+        if (!await Services.RecordAudienceGate.MaySeeLogAsync(repository, dailyLog, command.CallerUserId.Value, clock.UtcNow, ct))
+        {
+            return Result.Failure<AttachFieldOperatorResult>(ShramSafalErrors.RecordAudienceClosed);
+        }
+
         // ── Side 2: the FieldOperator originated on THIS farm. ────────────────────
         var fieldOperator = await repository.GetFieldOperatorByIdAsync(command.FieldOperatorId, ct);
         if (fieldOperator is null || fieldOperator.OriginatingFarmId != command.FarmId)

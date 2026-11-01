@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ShramSafal.Domain.Logs;
+using ShramSafal.Domain.RecordPrivacy;
 using ShramSafal.Domain.Tests;
 
 namespace ShramSafal.Domain.Compliance;
@@ -56,8 +57,16 @@ public static class ComplianceRuleBook
             "एकच काम ३ वेळा राहिलं",
             input =>
             {
+                // spec: plr-d10 lane PRV fix pass 1 (M4) — this signal is one farm-level row every member with the
+                // compliance view reads, so it may carry nothing from a record kept from anyone: a task of a log whose
+                // audience is not the whole team is not counted (its activity type is the record's content).
+                var narrowedLogIds = input.DailyLogs
+                    .Where(l => l.Audience != RecordAudience.Team)
+                    .Select(l => l.Id)
+                    .ToHashSet();
                 var skipsByActivity = input.LogTasksLastWeek
                     .Where(t => t.ExecutionStatus == ExecutionStatus.Skipped)
+                    .Where(t => !narrowedLogIds.Contains(t.DailyLogId))
                     .GroupBy(t => t.ActivityType, StringComparer.OrdinalIgnoreCase)
                     .Where(g => g.Count() >= 3)
                     .ToList();
@@ -130,9 +139,9 @@ public static class ComplianceRuleBook
 
                 return disputed.Select(d => new ComplianceEvidence(
                     d.FarmId, d.PlotId!.Value, d.CropCycleId,
-                    PayloadJson: JsonSerializer.Serialize(new { dailyLogId = d.Id, disputedSince = d.ModifiedAtUtc }),
-                    DescriptionEn: $"This daily log has been disputed since {d.ModifiedAtUtc:yyyy-MM-dd}.",
-                    DescriptionMr: $"हा लॉग {d.ModifiedAtUtc:yyyy-MM-dd} पासून वादात आहे."
+                    PayloadJson: JsonSerializer.Serialize(new { dailyLogId = d.Id, disputedSince = DisputedSince(d) }),
+                    DescriptionEn: $"This daily log has been disputed since {DisputedSince(d):yyyy-MM-dd}.",
+                    DescriptionMr: $"हा लॉग {DisputedSince(d):yyyy-MM-dd} पासून वादात आहे."
                 )).ToArray();
             }),
 
@@ -164,7 +173,22 @@ public static class ComplianceRuleBook
         var cutoff = input.AsOfUtc.AddDays(-3);
         return input.DailyLogs
             .Where(d => d.CurrentVerificationStatus == VerificationStatus.Disputed)
-            .Where(d => d.ModifiedAtUtc <= cutoff);
+            .Where(d => DisputedSince(d) <= cutoff);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane PRV fix pass 1 (M3) — when the dispute began: the newest Disputed verification event's own time.
+    /// Never the record's <c>ModifiedAtUtc</c>, which any later stamp moves (an audience change, a photo, a correction) and
+    /// which would reset the warning and print a false "disputed since" day (P4). A disputed log always has that event;
+    /// should one ever lack it, the record's stamp is the honest upper bound.
+    /// </summary>
+    public static DateTime DisputedSince(DailyLog log)
+    {
+        ArgumentNullException.ThrowIfNull(log);
+        return log.VerificationEvents
+            .Where(v => v.Status == VerificationStatus.Disputed)
+            .Select(v => (DateTime?)v.OccurredAtUtc)
+            .Max() ?? log.ModifiedAtUtc;
     }
 
     /// <summary>

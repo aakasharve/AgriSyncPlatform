@@ -128,23 +128,31 @@ const OfflineConflictPage: React.FC<OfflineConflictPageProps> = ({ onBack }) => 
                             {formatDisplayTimestamp(item.capturedAt)}
                         </span>
                     </header>
-                    <p className="mt-2 text-sm">
-                        <strong>{item.reason}</strong>
-                        {item.hint ? <> — {item.hint}</> : null}
-                    </p>
+                    {/* lane PRV fix pass 1 (M6) — refused by the rule: its words alone (in his language), never the server's text. */}
+                    {item.closedByRule && item.hint ? (
+                        <p className="mt-2 text-sm" data-testid={`closed-by-rule-${item.mutationId}`}>{item.hint}</p>
+                    ) : (
+                        <p className="mt-2 text-sm">
+                            <strong>{item.reason}</strong>
+                            {item.hint ? <> — {item.hint}</> : null}
+                        </p>
+                    )}
                     <pre className="mt-2 max-h-24 overflow-hidden text-xs bg-white p-2 rounded">
                         {item.payloadPreview}
                     </pre>
                     <div className="mt-3 flex gap-2">
-                        <button
-                            type="button"
-                            onClick={() => handleRetry(item.mutationId)}
-                            disabled={busyId === item.mutationId}
-                            className="rounded bg-emerald-600 px-3 py-1 text-white disabled:opacity-50"
-                            data-testid={`retry-${item.mutationId}`}
-                        >
-                            पुन्हा प्रयत्न करा
-                        </button>
+                        {/* A change refused by the rule cannot succeed when sent again: only "discard". */}
+                        {!item.closedByRule && (
+                            <button
+                                type="button"
+                                onClick={() => handleRetry(item.mutationId)}
+                                disabled={busyId === item.mutationId}
+                                className="rounded bg-emerald-600 px-3 py-1 text-white disabled:opacity-50"
+                                data-testid={`retry-${item.mutationId}`}
+                            >
+                                पुन्हा प्रयत्न करा
+                            </button>
+                        )}
                         <button
                             type="button"
                             onClick={() => handleDiscard(item.mutationId)}

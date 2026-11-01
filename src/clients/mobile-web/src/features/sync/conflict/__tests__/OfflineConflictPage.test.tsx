@@ -101,4 +101,25 @@ describe('OfflineConflictPage', () => {
             expect(screen.queryByTestId('conflict-row-mx')).not.toBeInTheDocument();
         });
     });
+
+    // lane PRV fix pass 1 (M6) — a change refused by the rule: its words alone, never the server's text; only "discard".
+    it('shows a change refused by the rule with only the rule words and only "discard"', async () => {
+        const words = 'श्रमसफलच्या नियमानुसार हा बदल या नोंदीवर लागू झाला नाही. तुमचा बदल या फोनवर ठेवला आहे.';
+        mockedService.list.mockResolvedValue([
+            {
+                mutationId: 'closed',
+                mutationType: SyncMutationName.CorrectLabourAssignment,
+                capturedAt: '2026-11-01T10:00:00Z',
+                reason: "By ShramSafal's rules this change could not be applied to this record.",
+                hint: words,
+                payloadPreview: '{}',
+                closedByRule: true,
+            },
+        ]);
+        render(<OfflineConflictPage />);
+        expect(await screen.findByTestId('closed-by-rule-closed')).toHaveTextContent(words);
+        expect(screen.queryByText(/ShramSafal's rules/)).not.toBeInTheDocument();
+        expect(screen.queryByTestId('retry-closed')).not.toBeInTheDocument();
+        expect(screen.getByTestId('discard-closed')).toBeInTheDocument();
+    });
 });

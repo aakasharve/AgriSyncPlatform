@@ -15,6 +15,6 @@ public class ExportDailySummaryHandler
 
     public async Task<byte[]> HandleAsync(ExportDailySummaryQuery request, CancellationToken cancellationToken = default)
     {
-        return await _exportService.GenerateDailySummaryAsync(request.FarmId, request.Date, cancellationToken);
+        return await _exportService.GenerateDailySummaryAsync(request.FarmId, request.Date, request.ReaderUserId, cancellationToken);
     }
 }

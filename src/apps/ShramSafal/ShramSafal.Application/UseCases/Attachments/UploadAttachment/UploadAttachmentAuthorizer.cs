@@ -58,6 +58,14 @@ public sealed class UploadAttachmentAuthorizer : IAuthorizationCheck<UploadAttac
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2) — no file is put into a photo of a record (or a bill) kept from him.
+        var visibility = await Services.RecordVisibility.ForFarmAsync(
+            _repository, (Guid)attachment.FarmId, command.UploadedByUserId, DateTime.UtcNow, ct);
+        if (!visibility.MaySeeAttachment(attachment))
+        {
+            return Result.Failure(ShramSafalErrors.RecordAudienceClosed);
+        }
+
         return Result.Success();
     }
 }

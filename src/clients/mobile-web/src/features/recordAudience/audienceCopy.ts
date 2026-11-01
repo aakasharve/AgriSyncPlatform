@@ -18,6 +18,8 @@ export interface AudienceCopy {
     sheetTitle: string;
     teamHint: string;
     selectedHint: string;
+    /** "Selected" on a record someone ELSE made: its maker keeps seeing it too (fix pass 1, L5). PROPOSED. */
+    selectedAndMakerHint: string;
     onlyMeHint: string;
     onlyMeAndMakerHint: string;
     pickPeople: string;
@@ -39,6 +41,7 @@ const mr: AudienceCopy = {
     sheetTitle: 'ही नोंद कोण पाहू शकतो?',
     teamHint: 'ज्यांना शेताची ही माहिती पाहण्याची परवानगी आहे ते सर्व',
     selectedHint: 'तुम्ही निवडलेले लोक, आणि तुम्ही',
+    selectedAndMakerHint: 'तुम्ही निवडलेले लोक, तुम्ही आणि ज्यांनी ही नोंद केली ते',
     onlyMeHint: 'फक्त तुम्ही',
     onlyMeAndMakerHint: 'तुम्ही आणि ज्यांनी ही नोंद केली ते',
     pickPeople: 'कोण पाहू शकतो ते निवडा',
@@ -60,6 +63,7 @@ const en: AudienceCopy = {
     sheetTitle: 'Who can see this record?',
     teamHint: 'Everyone whose permissions cover this record',
     selectedHint: 'The people you choose, and you',
+    selectedAndMakerHint: 'The people you choose, you, and the person who recorded it',
     onlyMeHint: 'Only you',
     onlyMeAndMakerHint: 'You and the person who recorded it',
     pickPeople: 'Choose who can see it',

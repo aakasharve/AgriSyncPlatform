@@ -9,6 +9,7 @@
  * is never asked at capture (P9).
  */
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronRight, Lock, Users } from 'lucide-react';
 import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import type { RecordAudienceName, RecordKindName } from '../../infrastructure/api/recordAudienceDtos';
@@ -72,7 +73,7 @@ const AudienceSheet: React.FC<AudienceRowProps & { copy: AudienceCopy; current: 
 
     const choices: readonly (readonly [RecordAudienceName, string, string])[] = [
         ['Team', copy.team, copy.teamHint],
-        ['Selected', copy.selected, copy.selectedHint],
+        ['Selected', copy.selected, madeBySomeoneElse ? copy.selectedAndMakerHint : copy.selectedHint],
         ['OnlyMe', madeBySomeoneElse ? copy.onlyMeAndMaker : copy.onlyMe, madeBySomeoneElse ? copy.onlyMeAndMakerHint : copy.onlyMeHint],
     ];
     const ready = pick !== 'Selected' || people.length > 0;
@@ -93,7 +94,9 @@ const AudienceSheet: React.FC<AudienceRowProps & { copy: AudienceCopy; current: 
         }
     };
 
-    return (
+    // Fix pass 1 (L1) — through a portal to document.body: a card with a backdrop blur (the money book's सविस्तर view) is
+    // the containing block of anything `fixed` inside it, so the sheet opened mid-list under the sticky header.
+    return createPortal(
         <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/45" onClick={onClose} data-testid={`${testId}-sheet`} style={{ fontFamily: SANS }}>
             <div className="max-h-[92%] w-full max-w-[480px] overflow-y-auto rounded-t-[28px] bg-white p-4 pb-6 shadow-2xl"
                 onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={copy.sheetTitle}>
@@ -137,7 +140,8 @@ const AudienceSheet: React.FC<AudienceRowProps & { copy: AudienceCopy; current: 
                         className="min-h-[48px] flex-1 rounded-2xl bg-emerald-700 text-[16px] font-extrabold text-white disabled:opacity-50">{copy.save}</button>
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 };
 

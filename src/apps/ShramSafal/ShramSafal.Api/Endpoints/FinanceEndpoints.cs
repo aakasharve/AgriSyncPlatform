@@ -306,12 +306,17 @@ public static class FinanceEndpoints
                 clock.UtcNow,
                 provenance: Provenance.Manual(clientAppVersion));
 
-            var existing = await repository.GetCostEntriesForDuplicateCheck(
-                new FarmId(request.FarmId),
-                request.PlotId,
-                request.CategoryId,
-                clock.UtcNow.AddMinutes(-windowMinutes),
-                ct);
+            // spec: plr-d10 lane PRV fix pass 1 (L4) — a money record kept from him is never matched, so its id never
+            // reaches him (and whether it exists is not told either). The window is bounded as before.
+            var visibility = await ShramSafal.Application.Services.RecordVisibility.ForFarmAsync(repository, request.FarmId, actorUserId, clock.UtcNow, ct);
+            var existing = (await repository.GetCostEntriesForDuplicateCheck(
+                    new FarmId(request.FarmId),
+                    request.PlotId,
+                    request.CategoryId,
+                    clock.UtcNow.AddMinutes(-Math.Min(windowMinutes, 24 * 60)),
+                    ct))
+                .Where(entry => visibility.MaySeeCost(entry.Id))
+                .ToList();
 
             var isDuplicate = DuplicateDetector.IsPotentialDuplicate(existing, candidate, windowMinutes);
             // DATA_PRINCIPLE_SPINE sub-phase 02.5 — codes are exact, so the

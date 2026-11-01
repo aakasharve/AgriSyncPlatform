@@ -409,7 +409,7 @@ public sealed class DailyLog : Entity<Guid>
 
         var task = new LogTask(taskId, Id, activityType.Trim(), notes?.Trim(), occurredAtUtc, executionStatus, deviationReasonCode, deviationNote);
         _tasks.Add(task);
-        ModifiedAtUtc = occurredAtUtc;
+        MoveClockForward(occurredAtUtc);
         return task;
     }
 
@@ -438,6 +438,20 @@ public sealed class DailyLog : Entity<Guid>
     /// the very correction this exists to deliver, so a stale or skewed timestamp
     /// is ignored rather than obeyed.</para>
     /// </remarks>
+    /// <summary>
+    /// spec: plr-d10 lane PRV fix pass 1 (L6) — every stamp moves the record's clock FORWARD only. A phone's capture time
+    /// (a task line, a location, a verification) can be older than the record's last stamp — an audience change is
+    /// stamped past every cursor that read the record before it — and obeying it would drop the record back below
+    /// those cursors, so the change would never reach a phone that already passed them.
+    /// </summary>
+    private void MoveClockForward(DateTime atUtc)
+    {
+        if (atUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = atUtc;
+        }
+    }
+
     public void MarkLabourCorrected(DateTime correctedAtUtc)
     {
         if (correctedAtUtc > ModifiedAtUtc)
@@ -514,7 +528,7 @@ public sealed class DailyLog : Entity<Guid>
         }
 
         Location = location;
-        ModifiedAtUtc = location.CapturedAtUtc;
+        MoveClockForward(location.CapturedAtUtc);
     }
 
     public VerificationEvent Edit(
@@ -532,7 +546,7 @@ public sealed class DailyLog : Entity<Guid>
             occurredAtUtc);
 
         _verificationEvents.Add(editMarker);
-        ModifiedAtUtc = occurredAtUtc;
+        MoveClockForward(occurredAtUtc);
         return editMarker;
     }
 
@@ -579,7 +593,7 @@ public sealed class DailyLog : Entity<Guid>
             occurredAtUtc);
 
         _verificationEvents.Add(verification);
-        ModifiedAtUtc = occurredAtUtc;
+        MoveClockForward(occurredAtUtc);
 
         Raise(new LogVerifiedEvent(
             Guid.NewGuid(),
@@ -1172,7 +1186,7 @@ public sealed class DailyLog : Entity<Guid>
         EvidenceSourcesJson = string.IsNullOrWhiteSpace(evidenceSourcesJson)
             ? "[]"
             : evidenceSourcesJson.Trim();
-        ModifiedAtUtc = DateTime.UtcNow;
+        MoveClockForward(DateTime.UtcNow);
     }
 
     // ── wave-3.10, founder decision 8 (2026-08-16) ───────────────────────
@@ -1205,6 +1219,6 @@ public sealed class DailyLog : Entity<Guid>
     public void SetDayOutcome(string? dayOutcome)
     {
         DayOutcome = string.IsNullOrWhiteSpace(dayOutcome) ? null : dayOutcome.Trim().ToUpperInvariant();
-        ModifiedAtUtc = DateTime.UtcNow;
+        MoveClockForward(DateTime.UtcNow);
     }
 }

@@ -90,10 +90,13 @@ public static class AuditEndpoints
                 pageOffset,
                 ct);
 
-            // spec: plr-d10 lane PRV (founder D-26) — no row about, or naming, a record kept from him.
+            // spec: plr-d10 lane PRV (founder D-26) — no row about, or naming, a record kept from him; and (fix pass 1, L3) the
+            // audience changes themselves — from / to and the people before and after — are the record holder's alone.
             var visibility = await RecordVisibility.ForFarmAsync(repository, farmId.Value, actorUserId, clock.UtcNow, ct);
+            var holder = await IsRecordHolderAsync(repository, farmId.Value, actorUserId, clock.UtcNow, ct);
             var result = farmEvents
                 .Where(e => !NamesHidden(visibility, e))
+                .Where(e => holder || !IsAudienceChange(e))
                 .Select(ToDto)
                 .ToList();
 
@@ -138,6 +141,19 @@ public static class AuditEndpoints
 
             events = events.Where(e => !NamesHidden(visibility, e)).ToList();
         }
+
+        // Fix pass 1 (L3) — an audience change's own row (from / to, the people before and after) goes to the record
+        // holder of its farm alone; any other reader of the trail never sees who was chosen.
+        var holderFarms = new HashSet<Guid>();
+        foreach (var changeFarm in events.Where(IsAudienceChange).Select(e => e.FarmId).OfType<Guid>().Distinct())
+        {
+            if (await IsRecordHolderAsync(repository, changeFarm, actorUserId, now, ct))
+            {
+                holderFarms.Add(changeFarm);
+            }
+        }
+
+        events = events.Where(e => !IsAudienceChange(e) || (e.FarmId is { } f && holderFarms.Contains(f))).ToList();
 
         // Entity stream may include farm-linked events; enforce visibility by farm membership.
         foreach (var relatedFarmId in events
@@ -197,6 +213,15 @@ public static class AuditEndpoints
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, userId, atUtc, ct);
         return scope is { OwnRecordsOnly: false, SeeMoney: true, SeeWages: true };
     }
+
+    /// <summary>lane PRV fix pass 1 (L3) — a row recording an audience change (set_record_audience).</summary>
+    private static bool IsAudienceChange(Domain.Audit.AuditEvent auditEvent) =>
+        auditEvent.Action == ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler.ChangedAction;
+
+    /// <summary>lane PRV fix pass 1 (L2/L3) — the farm's record holder (its registrant).</summary>
+    private static async Task<bool> IsRecordHolderAsync(
+        IShramSafalRepository repository, Guid farmId, Guid userId, DateTime atUtc, CancellationToken ct) =>
+        (await FarmReadGate.ScopeAsync(repository, farmId, userId, atUtc, ct))?.IsRecordHolder == true;
 
     /// <summary>lane PRV — is this row about, or does its payload name, a record kept from the reader?</summary>
     private static bool NamesHidden(RecordVisibility visibility, Domain.Audit.AuditEvent auditEvent) =>

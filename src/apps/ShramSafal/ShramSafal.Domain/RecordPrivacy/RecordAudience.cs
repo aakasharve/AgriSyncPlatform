@@ -89,7 +89,10 @@ public static class AudienceStamp
     /// The record's next <c>ModifiedAtUtc</c> for a change at <paramref name="atUtc"/>: strictly after the current one,
     /// and never EXACTLY on a whole second. Every phone sends its cursor back rounded down to the whole second and the
     /// pull reads <c>modified &gt; cursor</c>, so a change stamped exactly on a second could be passed by a cursor equal to
-    /// it without ever being read; one microsecond later it is always read (never skipped).
+    /// it without ever being read; one microsecond later it is read by a cursor equal to that second. (Fix pass 1, L6 —
+    /// stated honestly: this closes the exact-second case only. Like every cursor read here, a row stamped earlier but
+    /// committed after a pull read past its second can still be passed — the same class as MU-3's reset; the whole-second
+    /// cursor limit is the sync protocol's, not this stamp's.)
     /// </summary>
     public static DateTime NextModified(DateTime currentModifiedUtc, DateTime atUtc)
     {

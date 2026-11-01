@@ -26,6 +26,13 @@ public sealed record RestrictedRecord(
     IReadOnlyCollection<Guid> BillPhotoIds,
     IReadOnlyCollection<Guid> SelectedUserIds)
 {
+    /// <summary>
+    /// spec: plr-d10 lane PRV fix pass 1 (L7) — a money record whose bill-photo list cannot be read. A bill photo is linked
+    /// to the FARM (<c>Bill</c> / legacy <c>Farm</c>), not to its money record, so nothing else ties it to this record:
+    /// when the record is kept from a reader, every bill photo of its farm is kept from him too (fail closed).
+    /// </summary>
+    public bool BillPhotosUnreadable { get; init; }
+
     public static RestrictedRecord Of(DailyLog log, IReadOnlyCollection<Guid> selected)
     {
         ArgumentNullException.ThrowIfNull(log);
@@ -40,10 +47,41 @@ public sealed record RestrictedRecord(
         return new RestrictedRecord(
             RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.Audience, entry.CreatedByUserId.Value,
             entry.CreatedAtUtc, entry.AudienceChangedAtUtc, entry.EntryDate, entry.PlotId, entry.SourceAiJobId,
-            BillPhotoIdsOf(entry.ClientAttachmentIdsJson), selected);
+            BillPhotoIdsOf(entry.ClientAttachmentIdsJson), selected)
+        {
+            BillPhotosUnreadable = BillPhotoIdsUnreadable(entry.ClientAttachmentIdsJson),
+        };
     }
 
-    /// <summary>The bill photos a money record names (its client-stated attachment ids); unreadable = none named.</summary>
+    /// <summary>
+    /// Fix pass 1 (L7) — is there a stated list that is NOT a readable list of ids (broken JSON, or not a list)? Blank or
+    /// JSON <c>null</c> is "names no photo", which is readable.
+    /// </summary>
+    public static bool BillPhotoIdsUnreadable(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind is not (JsonValueKind.Array or JsonValueKind.Null);
+        }
+        catch (JsonException)
+        {
+            // Not silent: the answer IS "unreadable" (the photo rule fails closed for the farm), the repository logs it
+            // through the normal logger, and the trace carries it too.
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent("record_privacy.bill_photo_ids_json.fail_closed"));
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// The bill photos a money record names (its client-stated attachment ids); unreadable = none named HERE, and the
+    /// record is marked <see cref="BillPhotosUnreadable"/> so the photo rule fails closed for its farm (fix pass 1, L7).
+    /// </summary>
     public static IReadOnlyCollection<Guid> BillPhotoIdsOf(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
@@ -63,7 +101,8 @@ public sealed record RestrictedRecord(
         }
         catch (JsonException ex)
         {
-            // Not a list of ids: the entry names no photo (the photo rule still follows the photo's own parent).
+            // Not a list of ids: none named here; BillPhotosUnreadable makes the farm's bill photos fail closed (L7), and the
+            // repository logs it through the normal logger.
             System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent(
                 "record_privacy.bill_photo_ids_json.unreadable",
                 tags: new System.Diagnostics.ActivityTagsCollection
@@ -83,7 +122,8 @@ public sealed record RecordAudienceHead(string Kind, Guid Id, Guid FarmId, Recor
 /// <list type="bullet">
 /// <item>No scope (no working standing on the farm) → no.</item>
 /// <item><see cref="RecordAudience.Team"/> → yes (his normal rights still decide every part of it, as before).</item>
-/// <item>The farm's primary account holder → yes (D-26: "Only me" is HIS).</item>
+/// <item>The farm's registrant, the record holder → yes (D-26: "Only me" is HIS; fix pass 1, L2: never a second
+/// PrimaryOwner seat).</item>
 /// <item>The person who made the record → yes (the maker always stays; orchestrator call 4).</item>
 /// <item><see cref="RecordAudience.Selected"/> → only a person the holder chose.</item>
 /// </list>
@@ -99,7 +139,7 @@ public static class RecordAudienceRule
             return false;
         }
 
-        if (audience == RecordAudience.Team || scope.IsPrimaryAccountHolder)
+        if (audience == RecordAudience.Team || scope.IsRecordHolder)
         {
             return true;
         }
@@ -139,11 +179,15 @@ public sealed class RecordVisibility
         HiddenLogIds = Hidden.Where(r => r.Kind == RecordKinds.DailyLog).Select(r => r.Id).ToHashSet();
         HiddenCostIds = Hidden.Where(r => r.Kind == RecordKinds.CostEntry).Select(r => r.Id).ToHashSet();
         HiddenBillPhotoIds = Hidden.SelectMany(r => r.BillPhotoIds).ToHashSet();
+        unreadableBillFarms = Hidden.Where(r => r.BillPhotosUnreadable).Select(r => r.FarmId).ToHashSet();
         HiddenAiJobIds = Hidden.Where(r => r.SourceAiJobId is not null).Select(r => r.SourceAiJobId!.Value).ToHashSet();
         hiddenIdText = Hidden.Select(r => r.Id.ToString("D")).ToList();
     }
 
     private readonly List<string> hiddenIdText;
+
+    /// <summary>Farms with a money record kept from him whose bill-photo list cannot be read (fix pass 1, L7).</summary>
+    private readonly HashSet<Guid> unreadableBillFarms;
 
     /// <summary>Nothing restricted, or nothing hidden from him.</summary>
     public static RecordVisibility None(Guid readerUserId) =>
@@ -219,6 +263,13 @@ public sealed class RecordVisibility
     {
         ArgumentNullException.ThrowIfNull(attachment);
         if (HiddenBillPhotoIds.Contains(attachment.Id))
+        {
+            return false;
+        }
+
+        // Fix pass 1 (L7) — fail closed: which bills a hidden money record named cannot be read, so no bill of its farm.
+        if (attachment.LinkedEntityType is AttachmentParentRule.BillParent or AttachmentParentRule.FarmParent
+            && unreadableBillFarms.Contains((Guid)attachment.FarmId))
         {
             return false;
         }

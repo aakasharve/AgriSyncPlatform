@@ -181,6 +181,13 @@ public sealed class CorrectLabourHandler(
             return Result.Failure<CorrectLabourResult>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane PRV fix pass 1 (H2) — a record whose audience leaves him out is not his to change, on the
+        // online route (1.0.17 sends every count edit here) exactly as on the queue; refused before anything is read back.
+        if (!await Services.RecordAudienceGate.MaySeeLogAsync(repository, dailyLog, command.CallerUserId.Value, clock.UtcNow, ct))
+        {
+            return Result.Failure<CorrectLabourResult>(ShramSafalErrors.RecordAudienceClosed);
+        }
+
         // lane OF-S fix pass 2 (N6) — the engagement is read AGAIN now that the record is held: the copy above was read
         // before the hold, and a correction racing on the same crew may have changed it and let go meanwhile. Every
         // check below (the stale check included) compares against what that correction left, never an older copy.

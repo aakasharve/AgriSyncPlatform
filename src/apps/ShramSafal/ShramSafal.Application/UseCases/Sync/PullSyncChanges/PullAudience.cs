@@ -17,19 +17,25 @@ namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 /// (<see cref="Readmitted"/>), because they did not change themselves.</para>
 ///
 /// <para><b>The withdrawn list.</b> A record this reader may no longer see is named — kind and id, nothing else — when
-/// he can HOLD it and has not yet been told:</para>
+/// he has not yet been told:</para>
 /// <list type="bullet">
 /// <item>his cursor is not the beginning (a phone pulling from the beginning holds nothing it is owed a word about; the
 /// phone itself sweeps a full pull, my call — so a since=0 body names no restricted record at all);</item>
-/// <item>the record existed before his cursor: its whole second is at or before it (a record made after his cursor
-/// never reached his phone, so its id is never sent to him);</item>
 /// <item>its audience changed after his cursor, at WHOLE-SECOND grain exactly as <see cref="PullReadWindow"/> does it:
 /// a change stamped at <c>c</c> is delivered by a response whose cursor is at least <see cref="PullReadWindow.DeliveredAt"/>(c).
 /// A listed change raises this response's cursor to that second, so the phone's rounded-down cursor passes it and it is
-/// never listed again (never a loop); a change whose second is still running is not listed yet and holds this response's
-/// cursor below that second (never a skip) — the next pull lists it. <see cref="AudienceStamp"/> never stamps a change
-/// exactly on a whole second, so a cursor equal to its second always reads it.</item>
+/// not listed again; a change whose second is still running is not listed yet and holds this response's cursor below
+/// that second — the next pull lists it. <see cref="AudienceStamp"/> never stamps a change exactly on a whole second,
+/// so a cursor equal to its second always reads it.</item>
 /// </list>
+/// <para>Fix pass 1 (M1): it no longer asks WHEN the record was made. A phone can hold rows newer than its cursor (a
+/// degraded answer delivers every row but freezes the cursor; the pending caps hold it back), and he was entitled to the
+/// record while it was the team's, so a bare kind + id tells him nothing new.</para>
+/// <para><b>The limit, stated honestly (as <see cref="PullReadWindow"/>'s F1 note does).</b> The jump moves the cursor to
+/// the end of the change's whole second, not to the last row read: a row of another kind stamped earlier in that second
+/// but committed after this pull read it is passed by the cursor and not re-sent — the same class as MU-3's reset, closed
+/// only by a lock shared with every write or a trailing safety margin on every cursor. The window is one save straddling
+/// one pull inside one second.</para>
 /// <para>A farm the phone says it holds no data for (MU-3 N5) is never named in the list.</para>
 /// </summary>
 internal sealed class PullAudience(
@@ -63,7 +69,7 @@ internal sealed class PullAudience(
             }
             else
             {
-                Consider(RecordKinds.DailyLog, log.Id, (Guid)log.FarmId, log.CreatedAtUtc, log.AudienceChangedAtUtc);
+                Consider(RecordKinds.DailyLog, log.Id, (Guid)log.FarmId, log.AudienceChangedAtUtc);
             }
         }
 
@@ -82,7 +88,7 @@ internal sealed class PullAudience(
             }
             else
             {
-                Consider(RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.CreatedAtUtc, entry.AudienceChangedAtUtc);
+                Consider(RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.AudienceChangedAtUtc);
             }
         }
 
@@ -137,12 +143,11 @@ internal sealed class PullAudience(
             .ToList();
     }
 
-    private void Consider(string kind, Guid id, Guid farmId, DateTime createdAtUtc, DateTime? audienceChangedAtUtc)
+    private void Consider(string kind, Guid id, Guid farmId, DateTime? audienceChangedAtUtc)
     {
         if (audienceChangedAtUtc is not { } changed
             || phoneSinceUtc <= DateTime.UnixEpoch
-            || window.NotHeldFarmIds.Contains(farmId)
-            || PullReadWindow.DeliveredAt(createdAtUtc).AddSeconds(-1) > phoneSinceUtc)
+            || window.NotHeldFarmIds.Contains(farmId))
         {
             return;
         }
