@@ -16,7 +16,8 @@ export type JobCardStatus =
 export interface JobCardLineItem {
     activityType: string;
     expectedHours: number;
-    ratePerHourAmount: number;
+    /** null = a worker's pay held back from this seat by rule (lane MU-3 fix 1, F7): shown as such, never ₹0. */
+    ratePerHourAmount: number | null;
     ratePerHourCurrencyCode: string;
     notes?: string;
 }
@@ -33,7 +34,8 @@ export interface JobCard {
     plannedDate: string;
     status: JobCardStatus;
     lineItems: JobCardLineItem[];
-    estimatedTotalAmount: number;
+    /** null = a worker's pay held back from this seat by rule (lane MU-3 fix 1, F7): shown as such, never ₹0. */
+    estimatedTotalAmount: number | null;
     estimatedTotalCurrency: string;
     linkedDailyLogId?: string;
     payoutCostEntryId?: string;

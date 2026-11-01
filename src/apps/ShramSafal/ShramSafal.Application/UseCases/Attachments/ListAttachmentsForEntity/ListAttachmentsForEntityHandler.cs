@@ -34,15 +34,12 @@ public sealed class ListAttachmentsForEntityHandler(IShramSafalRepository reposi
             linkedEntityType,
             ct);
 
-        var now = clock?.UtcNow ?? DateTime.UtcNow;
-        var readable = new List<Domain.Attachments.Attachment>();
-        foreach (var attachment in attachments.Where(a => farmIdSet.Contains((Guid)a.FarmId)))
-        {
-            if (await AttachmentParentRule.MayReadAsync(repository, attachment, query.RequestedByUserId, now, ct))
-            {
-                readable.Add(attachment);
-            }
-        }
+        var readable = await AttachmentParentRule.ReadableAsync(
+            repository,
+            attachments.Where(a => farmIdSet.Contains((Guid)a.FarmId)).ToList(),
+            query.RequestedByUserId,
+            clock?.UtcNow ?? DateTime.UtcNow,
+            ct);
 
         var visible = readable
             .OrderBy(a => a.CreatedAtUtc)
@@ -62,6 +59,7 @@ public sealed class ListAttachmentsForEntityHandler(IShramSafalRepository reposi
         return linkedEntityType.Trim().ToLowerInvariant() switch
         {
             "farm" => "Farm",
+            "bill" => "Bill",
             "dailylog" => "DailyLog",
             "costentry" => "CostEntry",
             _ => null

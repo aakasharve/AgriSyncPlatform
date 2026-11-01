@@ -485,6 +485,9 @@ async function queueContentRevision(
         content,
         ...(reason && reason.trim().length > 0 && { reason: reason.trim().slice(0, 400) }),
         revisedAtUtc: new Date().toISOString(),
+        // lane MU-3 fix 1 (F8) — whether his copy came without its amounts, said every time: the server follows what
+        // this phone was SENT, not the seat's switches when the edit arrives.
+        amountsWithheld: existingLog.amountsWithheld === true,
     }, { changesMoney: changesPricedLine(existingLog, finalLog) });
     return true;
 }

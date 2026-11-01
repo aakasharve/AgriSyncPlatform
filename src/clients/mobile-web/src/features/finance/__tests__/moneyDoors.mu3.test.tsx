@@ -5,8 +5,8 @@
  *
  * lane MU-3 (plan step 4a; founder D-22 "work access ≠ money access", doctrine P4) — the money doors follow
  * the SERVER's see-money answer, never the label: the पैसे व हिशोब door is not drawn for a seat that does
- * not see money, every money page says "not shown to you" instead of an empty book that reads as ₹0, and
- * आढावा's money section says the same. The owner (and a सहमालक the owner lets see money) keeps every door.
+ * not see money, every money page says so in ShramSafal's rule's words (fix 1, item 16 W2) instead of an empty book
+ * that reads as ₹0, and आढावा's money section says the same. The owner (and a सहमालक the owner lets see money) keeps every door.
  */
 import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -50,11 +50,14 @@ describe('the money doors follow see money (lane MU-3)', () => {
         const onBack = vi.fn();
         render(<MoneyWithheldPage onBack={onBack} />);
         const page = screen.getByTestId('money-withheld-page');
-        expect(page.textContent).toContain('या शेताचा पैशांचा हिशोब तुम्हाला दाखवला जात नाही.');
-        expect(page.textContent).not.toMatch(/₹|0\.00|AI|policy|permission|role|access/);
+        // Fix 1 (item 16, W2): ShramSafal's rule, never "not shown to you", never pointing at the owner.
+        expect(page.textContent).toContain('श्रमसफलच्या नियमानुसार पैशांचा हिशोब इथे दिसत नाही.');
+        expect(page.textContent).not.toMatch(/₹|0\.00|AI|policy|permission|role|access|तुम्हाला|मालक/);
         cleanup();
         render(<MoneyWithheldPage onBack={onBack} language="en" />);
-        expect(screen.getByTestId('money-withheld-page').textContent).not.toMatch(/[ऀ-ॿ]/);
+        const en = screen.getByTestId('money-withheld-page').textContent ?? '';
+        expect(en).toContain("By ShramSafal's rules, the money accounts are not shown here.");
+        expect(en).not.toMatch(/[ऀ-ॿ]|to you|owner/);
     });
 
     it('every पैसे व हिशोब route answers a seat without see money with the withheld page, and the hub gets no door', async () => {
@@ -83,8 +86,8 @@ describe('the money doors follow see money (lane MU-3)', () => {
     });
 
     it('आढावा\'s hidden-money line is true for whoever reads it (not "only the main owner")', () => {
-        expect(reflectCopy('mr').moneyHidden).toBe('या शेताचा पैशांचा हिशोब तुम्हाला दाखवला जात नाही');
-        expect(reflectCopy('mr').moneyHidden).not.toMatch(/मुख्य मालक|AI|policy|permission|role|access/);
-        expect(reflectCopy('en').moneyHidden).not.toMatch(/[ऀ-ॿ]/);
+        expect(reflectCopy('mr').moneyHidden).toBe('श्रमसफलच्या नियमानुसार पैशांचा हिशोब इथे दिसत नाही.');
+        expect(reflectCopy('mr').moneyHidden).not.toMatch(/मुख्य मालक|तुम्हाला|AI|policy|permission|role|access/);
+        expect(reflectCopy('en').moneyHidden).toBe("By ShramSafal's rules, the money accounts are not shown here.");
     });
 });

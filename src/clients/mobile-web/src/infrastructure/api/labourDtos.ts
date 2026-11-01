@@ -108,6 +108,10 @@ export interface LabourEngagementDto {
 
     /** The LIVE attribution set. Never null; empty is normal and complete. */
     attributedOperators: AttributedOperatorDto[];
+    /** lane MU-3 fix 1 (F10) — a stated per-person wage withheld from this reader by rule (never "not stated"). */
+    wageWithheld?: boolean | null;
+    /** lane MU-3 fix 1 (F10) — a stated crew total withheld from this reader by rule (never "not stated"). */
+    totalCostWithheld?: boolean | null;
 }
 
 

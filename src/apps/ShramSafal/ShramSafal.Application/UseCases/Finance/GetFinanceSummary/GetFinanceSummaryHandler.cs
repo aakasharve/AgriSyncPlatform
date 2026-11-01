@@ -27,14 +27,11 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
         }
 
         var now = clock?.UtcNow ?? DateTime.UtcNow;
-        var farmIds = new List<Guid>();
-        foreach (var farmId in await repository.GetFarmIdsForUserAsync(query.ActorUserId, ct))
-        {
-            if (await FarmReadGate.MaySeeMoneyAsync(repository, farmId, query.ActorUserId, now, ct))
-            {
-                farmIds.Add(farmId);
-            }
-        }
+        var memberFarmIds = await repository.GetFarmIdsForUserAsync(query.ActorUserId, ct);
+        var accesses = await repository.GetFarmAccessesForUserAsync(query.ActorUserId, memberFarmIds, ct);
+        var farmIds = memberFarmIds
+            .Where(id => FarmReadScope.Of(id, accesses.GetValueOrDefault(id), now)?.SeeMoney == true)
+            .ToList();
 
         if (farmIds.Count == 0)
         {
@@ -89,7 +86,8 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
             query.ToDate,
             currencyCode,
             grandTotal,
-            grouped));
+            grouped,
+            FarmsNotCounted: memberFarmIds.Count - farmIds.Count));
     }
 
     private static string? NormalizeGroupBy(string groupBy)

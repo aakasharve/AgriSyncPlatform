@@ -28,6 +28,13 @@ public static class OriginalVoiceUnavailableReason
 
     /// <summary>The linked recording is not on the server (not uploaded, or nothing to play).</summary>
     public const string NotOnServer = "not_on_server";
+
+    /// <summary>
+    /// lane MU-3 fix 1 (F3, founder D-66 = option 1) — the record mentions money and the listener neither made
+    /// it nor sees the farm's money: by ShramSafal's rule its words and voice are not played here (the phone
+    /// shows the rule card, FIX-1 item 16 W1). Asked before anything is read from the archive.
+    /// </summary>
+    public const string MoneyWithheld = "money_withheld";
 }
 
 /// <summary>
@@ -117,6 +124,16 @@ public sealed class GetLogOriginalVoiceHandler(
         if (!mayListen)
         {
             return Result.Failure<LogOriginalVoiceResult>(ShramSafalErrors.ReadNotAllowed);
+        }
+
+        // lane MU-3 fix 1 (F3, D-66 = option 1) — the words rule's money clause, the same one the pull and every
+        // command answer apply (MoneyMention): a record that mentions money is not played to a listener who did
+        // not make it and does not see the farm's money. Asked before the consent, erasure or clip reads.
+        if (query.CallerUserId != speakerUserId
+            && !await FarmReadGate.MaySeeMoneyAsync(repository, farmId, query.CallerUserId, clock.UtcNow, ct)
+            && await MoneyMention.InStoredRecordAsync(repository, log, ct))
+        {
+            return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.MoneyWithheld));
         }
 
         if (log.VoiceClipId is not { } clipId)

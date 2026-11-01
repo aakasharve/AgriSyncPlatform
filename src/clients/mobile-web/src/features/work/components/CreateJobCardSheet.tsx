@@ -40,7 +40,10 @@ const ACTIVITY_TYPES = [
     'Fertilizing', 'Weeding', 'Monitoring', 'Soil work', 'Other',
 ];
 
-const emptyLineItem = (): JobCardLineItem => ({
+/** A line being written here always has a rate (a stored card may not: lane MU-3 fix 1, F7 — pay held back by rule). */
+type NewLineItem = JobCardLineItem & { ratePerHourAmount: number };
+
+const emptyLineItem = (): NewLineItem => ({
     activityType: '',
     expectedHours: 1,
     ratePerHourAmount: 0,
@@ -63,7 +66,7 @@ const CreateJobCardSheet: React.FC<CreateJobCardSheetProps> = ({
     const [plotId, setPlotId] = useState('');
     const [cropCycleId, setCropCycleId] = useState('');
     const [plannedDate, setPlannedDate] = useState(getToday());
-    const [lineItems, setLineItems] = useState<JobCardLineItem[]>([emptyLineItem()]);
+    const [lineItems, setLineItems] = useState<NewLineItem[]>([emptyLineItem()]);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     // spec I18 — a failure in his language, read by its code; never the server's English sentence.
@@ -76,7 +79,7 @@ const CreateJobCardSheet: React.FC<CreateJobCardSheetProps> = ({
         [lineItems]
     );
 
-    const updateLineItem = (idx: number, patch: Partial<JobCardLineItem>) => {
+    const updateLineItem = (idx: number, patch: Partial<NewLineItem>) => {
         setLineItems(prev => prev.map((item, i) => i === idx ? { ...item, ...patch } : item));
     };
 

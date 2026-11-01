@@ -41,7 +41,9 @@ beforeEach(async () => {
 
 describe('accessScopeReconciler — the cached wage book (lane MU-3)', () => {
     it('clears the cached wage book of a farm whose wages are off, and of a farm that is gone; keeps the rest', async () => {
-        await run([scope(WAGES_OFF, false), scope(WAGES_ON, true)]);
+        // Fix 1 (F9): "gone" is the server's explicit word for a farm this phone named, never mere absence.
+        const gone: FarmAccessScopeDto = { ...scope(GONE, false), status: 'Removed', seeAttendance: false, seeTests: false, seeCompliance: false, seeFarmOverview: false };
+        await run([scope(WAGES_OFF, false), scope(WAGES_ON, true), gone]);
         expect(readLabourReadout(ME, WAGES_OFF, 'week')).toBeNull();
         expect(readLabourReadout(ME, GONE, 'week')).toBeNull();
         expect(readLabourReadout(ME, WAGES_ON, 'week')).not.toBeNull();

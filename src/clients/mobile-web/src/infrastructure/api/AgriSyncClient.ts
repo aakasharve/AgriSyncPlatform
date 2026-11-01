@@ -288,8 +288,8 @@ export class AgriSyncClient implements HttpTransport {
         return Sync.pushSyncBatch(this, request);
     }
 
-    pullSyncChanges(sinceCursorIso?: string): Promise<SyncPullResponse> {
-        return Sync.pullSyncChanges(this, sinceCursorIso);
+    pullSyncChanges(sinceCursorIso?: string, heldFarmIds?: readonly string[]): Promise<SyncPullResponse> {
+        return Sync.pullSyncChanges(this, sinceCursorIso, heldFarmIds);
     }
 
     // --- Attachments ------------------------------------------------------

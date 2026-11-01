@@ -9,7 +9,8 @@ public sealed record WorkerProfileDto(
     string DisplayName,
     int JobCardsLast30d,
     int JobCardsPaidOutLast30d,
-    decimal EarnedLast30d,
+    // lane MU-3 fix 1 (F7) — what the farm paid him (a wage): null = withheld from this reader, never ₹0.
+    decimal? EarnedLast30d,
     string EarnedCurrencyCode,
     decimal ReliabilityOverall,
     decimal VerifiedRatio,

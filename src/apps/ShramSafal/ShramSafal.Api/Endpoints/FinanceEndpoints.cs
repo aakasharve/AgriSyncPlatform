@@ -214,11 +214,32 @@ public static class FinanceEndpoints
             DateOnly? toDate,
             ClaimsPrincipal user,
             [FromServices] GetPlotFinanceSummaryHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane MU-3 fix 1 (F94) — the route names a PLOT, so its farm is found under the caller's own
+            // user scope first (a plot of a farm he is not on is not found), then the farm scope is opened as
+            // every working farm route does. Without both the first read failed closed: 500 for everyone.
+            var plotFarmId = await userScope.RunForCallerAsync(
+                actorUserId,
+                async token => (await repository.GetPlotByIdAsync(plotId, token)) is { } plot ? (Guid?)(Guid)plot.FarmId : null,
+                ct);
+            if (plotFarmId is not { } farmOfPlot)
+            {
+                return ToErrorResult(ShramSafalErrors.Forbidden);
+            }
+
+            var established = await farmScope.EstablishForCallerAsync(farmOfPlot, actorUserId, ct);
+            if (!established.IsSuccess)
+            {
+                return ToErrorResult(established.Error);
             }
 
             var result = await handler.HandleAsync(

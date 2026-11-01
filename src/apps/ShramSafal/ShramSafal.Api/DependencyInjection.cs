@@ -154,6 +154,8 @@ public static class DependencyInjection
         services.AddScoped<AllocateGlobalExpenseHandler>();
         services.AddScoped<CorrectCostEntryHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
+        // lane MU-3 fix 1 (F94) — /finance/plot-summary asked for this and it was never registered (500).
+        services.AddScoped<GetPlotFinanceSummaryHandler>();
         services.AddScoped<GetFarmerEngagementHandler>();
         services.AddScoped<GetDayUnderstandingHandler>();
         services.AddScoped<RecordQuestionEventHandler>();

@@ -75,30 +75,16 @@ public sealed class GetWorkerProfileHandler(
                     : ShramSafalErrors.WorkerRecordPortabilityForbidden);
         }
 
-        // lane MU-3 (founder D-22 / D-26) — the profile states what the farm PAID him (EarnedLast30d): wages.
-        // His own profile is his; anyone else reads it only over the farms where he sees wages, and is
-        // refused when there is none (never a ₹0 that would read as "earned nothing").
+        // lane MU-3 (founder D-22 / D-26; fix 1 F7) — the profile states what the farm PAID him
+        // (EarnedLast30d): a WAGE. His own profile is his; anyone else gets the profile (the work, the
+        // reliability) with the earnings WITHHELD (null, never ₹0) unless he sees wages on every farm it covers.
         IReadOnlyList<Guid> farmIds = access.PermittedFarmIds;
-        if (query.CallerUserId.Value != query.WorkerUserId.Value)
+        var earningsShown = query.CallerUserId.Value == query.WorkerUserId.Value;
+        if (!earningsShown)
         {
-            var withWages = new List<Guid>();
-            foreach (var farmId in farmIds)
-            {
-                if ((await Services.FarmReadGate.ScopeAsync(repository, farmId, query.CallerUserId.Value, clock.UtcNow, ct))?.SeeWages == true)
-                {
-                    withWages.Add(farmId);
-                }
-            }
-
-            if (withWages.Count == 0)
-            {
-                logger.LogInformation(
-                    "GetWorkerProfile refused for worker {WorkerUserId} by caller {CallerUserId}: no farm where the caller sees wages.",
-                    query.WorkerUserId, query.CallerUserId);
-                return Result.Failure<WorkerProfileDto>(ShramSafalErrors.Forbidden);
-            }
-
-            farmIds = withWages;
+            var scopes = await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, farmIds.ToList(), ct);
+            earningsShown = farmIds.Count > 0
+                && farmIds.All(id => Services.FarmReadScope.Of(id, scopes.GetValueOrDefault(id), clock.UtcNow)?.SeeWages == true);
         }
 
         // 2. Load worker metrics — over the farms the guard permitted, never over the raw
@@ -140,7 +126,7 @@ public sealed class GetWorkerProfileHandler(
             DisplayName: displayName,
             JobCardsLast30d: metrics.JobCardsLast30d,
             JobCardsPaidOutLast30d: metrics.JobCardsPaidOutLast30d,
-            EarnedLast30d: metrics.EarnedLast30d,
+            EarnedLast30d: earningsShown ? metrics.EarnedLast30d : null,
             EarnedCurrencyCode: metrics.EarnedCurrencyCode,
             ReliabilityOverall: reliability.Overall,
             VerifiedRatio: reliability.VerifiedRatio,

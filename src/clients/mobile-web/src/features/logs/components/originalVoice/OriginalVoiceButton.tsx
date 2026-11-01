@@ -18,8 +18,9 @@ import { Pause, Play } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { fetchLogOriginalVoice, type OriginalVoiceOutcome } from '../../../../infrastructure/voice/logOriginalVoice';
 import { originalVoiceCopy } from './originalVoiceCopy';
+import MoneyWordsWithheldCard from './MoneyWordsWithheldCard';
 
-type State = 'idle' | 'loading' | 'playing' | 'unavailable' | 'pending' | 'failed';
+type State = 'idle' | 'loading' | 'playing' | 'unavailable' | 'moneyWithheld' | 'pending' | 'failed';
 
 export interface OriginalVoiceButtonProps {
     dailyLogId: string;
@@ -77,6 +78,7 @@ export const OriginalVoiceButton: React.FC<OriginalVoiceButtonProps> = ({
         }
     };
 
+    if (state === 'moneyWithheld') return <MoneyWordsWithheldCard testId={`ov-money-withheld-${dailyLogId}`} />;
     if (state === 'unavailable') {
         return <p className="m-0 mt-2 text-[13px] font-bold text-stone-600" data-testid={`ov-unavailable-${dailyLogId}`}>{copy.unavailable}</p>;
     }

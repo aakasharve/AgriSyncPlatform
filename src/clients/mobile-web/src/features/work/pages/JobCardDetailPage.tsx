@@ -17,6 +17,7 @@ import type { JobCard, JobCardStatus } from '../../../domain/work/JobCard';
 import PayoutEligibilityStrip from '../components/PayoutEligibilityStrip';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { workTypeNameIn } from '../../../shared/names/namesIn';
+import { jobCardAmountText } from '../jobCardAmount';
 
 interface JobCardDetailPageProps {
     jobCardId: string;
@@ -264,7 +265,9 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
                                         className="text-xs text-stone-400"
                                         style={{ fontFamily: "'DM Sans', sans-serif" }}
                                     >
-                                        {item.expectedHours}h × {item.ratePerHourCurrencyCode} {item.ratePerHourAmount}/hr
+                                        {item.ratePerHourAmount == null
+                                            ? `${item.expectedHours}h`
+                                            : `${item.expectedHours}h × ${item.ratePerHourCurrencyCode} ${item.ratePerHourAmount}/hr`}
                                     </p>
                                     {item.notes && (
                                         <p
@@ -279,7 +282,7 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
                                     className="text-sm font-black text-stone-900"
                                     style={{ fontFamily: "'DM Sans', sans-serif" }}
                                 >
-                                    {item.ratePerHourCurrencyCode} {Math.round(item.expectedHours * item.ratePerHourAmount).toLocaleString('en-IN')}
+                                    {jobCardAmountText(item.ratePerHourCurrencyCode, item.ratePerHourAmount == null ? null : item.expectedHours * item.ratePerHourAmount, language)}
                                 </p>
                             </div>
                         ))}
@@ -294,7 +297,7 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
                                 className="text-base font-black text-stone-900"
                                 style={{ fontFamily: "'DM Sans', sans-serif" }}
                             >
-                                {card.estimatedTotalCurrency} {Math.round(card.estimatedTotalAmount).toLocaleString('en-IN')}
+                                {jobCardAmountText(card.estimatedTotalCurrency, card.estimatedTotalAmount, language)}
                             </p>
                         </div>
                     </div>

@@ -16,5 +16,6 @@ public sealed record ReviseLogContentPayload(
     // generator: unhandled zod typeName ZodEffects — emitted as object
     object Content,
     DateTime RevisedAtUtc,
-    string? Reason = null
+    string? Reason = null,
+    bool? AmountsWithheld = null
 );

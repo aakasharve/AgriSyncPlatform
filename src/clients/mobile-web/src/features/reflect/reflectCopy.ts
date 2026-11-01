@@ -19,6 +19,7 @@ import { FEED_STR } from '../logs/components/TodayActivityFeed';
 import { resultCopy } from '../logs/components/voiceResult/resultCopy';
 import { RESULT_STR } from '../logs/components/voiceResult/resultStrings';
 import { offsetOf, relLabel } from './overview/reflectDates';
+import { ruleWithheldCopy } from '../../i18n/ruleWithheldTranslations';
 
 export interface ReflectCopy {
     /** Who spoke it: the person holding this phone, or nobody recorded (never a guessed name). */
@@ -128,9 +129,9 @@ const mr: ReflectCopy = {
     noteSource: 'कुठून आलं ते पाहा',
     // PROPOSED (Marathi) — the feed card's existing words (ActivityFeedCard CARD_STR.attachments).
     photos: (n: number) => `जोडलेले फोटो ${n}`,
-    // PROPOSED (Marathi) — founder D-22 "work access ≠ money access"; lane MU-3: the server's see-money answer
-    // decides (mayShowFarmMoney), so the line says only what is true for him: it is not shown to HIM.
-    moneyHidden: 'या शेताचा पैशांचा हिशोब तुम्हाला दाखवला जात नाही',
+    // Founder W2 (MU-3 fix 1, item 16) — founder D-22 "work access ≠ money access"; the server's see-money answer
+    // decides (mayShowFarmMoney), and the line reads as ShramSafal's rule, never as the owner's distrust.
+    moneyHidden: ruleWithheldCopy('mr').moneyAccounts,
     // PROPOSED (Marathi)
     partialTag: 'अपूर्ण',
     partialNotOnServer: 'अपूर्ण — काही पैसे अजून सर्व्हरच्या हिशोबात पोचलेले नाहीत',
@@ -177,7 +178,7 @@ const en: ReflectCopy = {
     seasonDay: (n: number) => `Day ${n}`, // PROPOSED (English)
     noteSource: 'See where it came from', // PROPOSED (English)
     photos: (n: number) => `Photos attached ${n}`, // PROPOSED (English)
-    moneyHidden: "This farm's money is not shown to you", // PROPOSED (English) — lane MU-3
+    moneyHidden: ruleWithheldCopy('en').moneyAccounts, // Founder W2 (MU-3 fix 1, item 16)
     partialTag: 'partial', // PROPOSED (English)
     partialNotOnServer: 'Partial — some money has not reached the farm account on the server yet', // PROPOSED (English)
     partialUnknownDirection: 'Partial — some older amounts do not say whether money came in or went out; they are not counted here', // PROPOSED (English)

@@ -8,11 +8,16 @@
  * removes it, by a filter scan over the tables that already exist: NO Dexie version bump.
  *
  * What it removes, per the server's scopes (and nothing when the server sent none — an older server):
- *   - a farm the server no longer lists (paused, removed, never approved): the farm, its plots and crops,
- *     its records, photos, money, attendance, job cards, tests and warnings;
- *   - without SEE MONEY: the farm's cost entries (and their corrections), day ledger, job cards, money
- *     receipts — and the amounts other people's records state;
- *   - without SEE WAGES: the wage and total on other people's labour;
+ *   - a farm the server EXPLICITLY says this person no longer reads (`status` Paused / Waiting / Removed — the
+ *     server answers so only for a farm this phone named in the pull, `farms=`): the farm, its plots and crops (and
+ *     the crop list's plots), its records, photos, money, attendance, job cards, tests and warnings. A farm merely
+ *     ABSENT from the answer is never removed (fix 1, F9), and a farm this person registered never is;
+ *   - job cards stay (the farm's work, fix 1 F7): a कामगार keeps only his own; without SEE WAGES another worker's
+ *     card loses its rates and payout;
+ *   - without SEE MONEY: the farm's cost entries (and their corrections), day ledger, bill and receipt photos
+ *     (`Bill`, the farm-linked bills of older builds, `CostEntry`), the amounts other people's records state, and
+ *     the words of another person's record that mentions money (fix 1, F3 — D-66);
+ *   - without SEE WAGES: the per-person wage on other people's labour (a crew's total is MONEY, fix 1 F4);
  *   - OWN RECORDS ONLY (a कामगार): every record someone else made, and its photos;
  *   - without attendance / tests / warnings: those rows.
  *
@@ -25,10 +30,11 @@ import type { SyncPullResponse } from '../../../../infrastructure/api/AgriSyncCl
 import type { FarmAccessScopeDto } from '../../../../infrastructure/api/dtos';
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import type { DailyLog } from '../../../../types';
-import { ACCESS_SCOPES_META_KEY, OUT_OF_SCOPE_FARMS_META_KEY, readAccessScopes, readOutOfScopeFarmIds } from '../../../../infrastructure/storage/accessScopeStore';
+import { ACCESS_SCOPES_META_KEY, OUT_OF_SCOPE_FARMS_META_KEY, isReadableScope, readAccessScopes, readOutOfScopeFarmIds } from '../../../../infrastructure/storage/accessScopeStore';
 import { clearLabourReadoutsForFarm } from '../../../../infrastructure/storage/LabourReadoutCache';
 import { purgeLabourCachesForFarm } from '../../../../infrastructure/storage/labourFarmAccess';
 import { dayLedgerMetaKey } from '../helpers/dayLedgerMetaKey';
+import { logMentionsMoney, MONEY_KEYS, WORD_KEYS } from '../helpers/moneyMention';
 
 export interface AccessScopeContext {
     /** This phone's signed-in person; `null` = unknown, then nothing is attributed to him or removed as another's. */
@@ -47,10 +53,12 @@ export interface AccessScopeOutcome {
     removedMoneyRows: number;
 }
 
-/** The amounts a record's bucket item states (the server's `LogContentDocument.MoneyKeys`), plus a crew's wage. */
-const MONEY_KEYS = new Set(['cost', 'rentalCost', 'fuelCost', 'totalAmount', 'unitPrice', 'total', 'totalCost', 'wagePerPerson']);
-const WAGE_KEYS = new Set(['wagePerPerson', 'totalCost']);
+/** A named worker's own pay (fix 1, F4): the crew's total is MONEY and stays with see money. */
+const WAGE_KEYS = new Set(['wagePerPerson']);
 const MONEY_BUCKETS = ['cropActivities', 'irrigation', 'inputs', 'machinery', 'activityExpenses', 'labour'] as const;
+const WORD_BUCKETS = ['cropActivities', 'irrigation', 'inputs', 'observations', 'machinery', 'activityExpenses', 'plannedTasks', 'labour'] as const;
+/** Bill and receipt photos are money (fix 1, F2): `Bill` from this build, `Farm` from every earlier bill flow. */
+const MONEY_PHOTO_PARENTS = new Set(['Bill', 'Farm', 'CostEntry']);
 
 /** The maker a record made on THIS phone carries until a pull brings it back with the server's id (`activeOperatorId`). */
 const LOCAL_MAKER = 'owner';
@@ -65,25 +73,41 @@ export async function reconcileAccessScopes(
     const scopes = payload.accessScopes;
     if (!Array.isArray(scopes)) return NOTHING;
 
-    const byFarm = new Map<string, FarmAccessScopeDto>(scopes.map(s => [s.farmId, s]));
+    // fix 1 (F9) — only an Active entry is read as what he may see; a Paused / Waiting / Removed entry is the
+    // server's explicit word that he reads nothing of that farm now.
+    const byFarm = new Map<string, FarmAccessScopeDto>(scopes.filter(isReadableScope).map(s => [s.farmId, s]));
+    const notReadable = new Set(scopes.filter(s => !isReadableScope(s)).map(s => s.farmId));
     const scopeOf = (farmId: string | null | undefined): FarmAccessScopeDto | undefined =>
         farmId ? byFarm.get(farmId) : undefined;
     const outcome: AccessScopeOutcome = { applied: true, outOfScopeFarmIds: [], removedLogs: 0, trimmedLogs: 0, removedMoneyRows: 0 };
 
-    // ── Farms the server no longer sends ────────────────────────────────────────────────
+    // ── Farms the server SAYS he no longer reads (fix 1, F9) ─────────────────────────────
+    //    Never on a missing entry; never a farm he registered (his own farm is never taken off his phone by an
+    //    answer, whatever it says), nor a farm row this phone still holds as unsent (made or changed here and not
+    //    yet on the server: P10); nothing at all when this phone does not know who is signed in.
     const heldFarmIds = new Set<string>();
-    for (const farm of await db.farms.toArray()) heldFarmIds.add(farm.id);
+    const registered = new Set<string>();
+    for (const farm of await db.farms.toArray()) {
+        heldFarmIds.add(farm.id);
+        const owner = (farm.payload as { ownerUserId?: unknown } | null)?.ownerUserId;
+        const unsent = typeof farm.syncStatus === 'string' && farm.syncStatus !== 'synced';
+        if ((ctx.userId && owner === ctx.userId) || unsent) registered.add(farm.id);
+    }
     for (const plot of await db.plots.toArray()) heldFarmIds.add(plot.farmId);
     for (const cycle of await db.cropCycles.toArray()) heldFarmIds.add(cycle.farmId);
-    const gone = [...heldFarmIds].filter(id => id && !byFarm.has(id));
+    const gone = ctx.userId
+        ? [...heldFarmIds].filter(id => id && notReadable.has(id) && !byFarm.has(id) && !registered.has(id))
+        : [];
     outcome.outOfScopeFarmIds = gone;
     const goneSet = new Set(gone);
 
     const cycleFarm = new Map<string, string>();
     for (const cycle of await db.cropCycles.toArray()) cycleFarm.set(cycle.id, cycle.farmId);
 
+    const gonePlotIds = new Set((await db.plots.where('farmId').anyOf(gone).toArray()).map(p => p.id));
     await db.farms.bulkDelete(gone);
     await db.plots.where('farmId').anyOf(gone).delete();
+    await removeCatalogPlots(db, gonePlotIds);
     await db.cropCycles.where('farmId').anyOf(gone).delete();
     for (const task of await db.plannedTasks.toArray()) {
         const farmId = cycleFarm.get(task.cropCycleId);
@@ -105,7 +129,22 @@ export async function reconcileAccessScopes(
     const ledgers = (await db.dayLedgers.toArray()).filter(l => moneyWithheld(l.farmId)).map(l => l.id);
     await db.dayLedgers.bulkDelete(ledgers);
     await db.appMeta.bulkDelete(ledgers.map(dayLedgerMetaKey));
-    const jobCards = (await db.jobCards.toArray()).filter(j => moneyWithheld(j.farmId)).map(j => j.id);
+    // Job cards (fix 1, F7) are the farm's WORK: kept for every seat that reads the farm's work (a कामगार keeps the cards
+    // assigned to him); only their pay — rates and payout, a WAGE — is taken off another worker's card without see wages.
+    const jobCards: string[] = [];
+    for (const card of await db.jobCards.toArray()) {
+        const scope = scopeOf(card.farmId);
+        const his = !!ctx.userId && card.assignedWorkerUserId === ctx.userId;
+        if (goneSet.has(card.farmId) || (scope?.ownRecordsOnly && !his)) {
+            jobCards.push(card.id);
+        } else if (scope && !scope.seeWages && !his && (card.estimatedTotalAmount != null || card.lineItems?.some(i => i.ratePerHourAmount != null))) {
+            await db.jobCards.put({
+                ...card,
+                estimatedTotalAmount: null,
+                lineItems: (card.lineItems ?? []).map(i => ({ ...i, ratePerHourAmount: null })),
+            });
+        }
+    }
     await db.jobCards.bulkDelete(jobCards);
     outcome.removedMoneyRows = removedEntryIds.length + corrections.length + ledgers.length + jobCards.length;
     await trimMirror(db, 'shramsafal_finance_cost_entries_v1', row => !moneyWithheld(String(row.farmId ?? '')), ctx.receivedAtUtc);
@@ -141,7 +180,10 @@ export async function reconcileAccessScopes(
             }
 
             if (!scope || !byAnother) continue;
-            const trimmed = !scope.seeMoney ? withoutMoney(log) : !scope.seeWages ? withoutWages(log) : log;
+            // F3 — asked of the copy as held, BEFORE its amounts are removed.
+            const wordsForMoney = !scope.seeMoney && logMentionsMoney(log);
+            const priced = !scope.seeMoney ? withoutMoney(log) : !scope.seeWages ? withoutWages(log) : log;
+            const trimmed = wordsForMoney ? withoutWords(priced) : priced;
             if (trimmed !== log) {
                 await db.logs.update(record.id, { log: trimmed });
                 outcome.trimmedLogs++;
@@ -156,7 +198,7 @@ export async function reconcileAccessScopes(
         if (queued.some(item => item.status !== 'completed')) continue;
         const scope = scopeOf(attachment.farmId);
         const remove = goneSet.has(attachment.farmId)
-            || (attachment.linkedEntityType === 'CostEntry' && scope?.seeMoney === false)
+            || (MONEY_PHOTO_PARENTS.has(attachment.linkedEntityType ?? '') && scope?.seeMoney === false)
             || (attachment.linkedEntityType === 'DailyLog' && !!attachment.linkedEntityId && removedLogIds.has(attachment.linkedEntityId));
         if (remove) await db.attachments.delete(attachment.id);
     }
@@ -167,6 +209,12 @@ export async function reconcileAccessScopes(
     //    that is gone loses its cached crew roster too.
     const previous = new Map((await readAccessScopes(db))?.scopes.map(s => [s.farmId, s]) ?? []);
     for (const farmId of gone) purgeLabourCachesForFarm(ctx.userId, farmId);
+    // Item 14 — other people's names: a person who now reads no farm's team (every farm he still reads is his own
+    // records only) keeps only himself in the profile's people list.
+    const readsATeam = [...byFarm.values()].some(s => !s.ownRecordsOnly);
+    if (ctx.userId && !readsATeam && (gone.length > 0 || byFarm.size > 0)) {
+        await keepOnlySelfInProfile(db, ctx.userId);
+    }
     for (const s of scopes) {
         if (!s.seeWages && previous.get(s.farmId)?.seeWages !== false && ctx.userId) {
             clearLabourReadoutsForFarm(ctx.userId, s.farmId);
@@ -175,7 +223,8 @@ export async function reconcileAccessScopes(
 
     // ── Remember the server's answer (the save path reads it) ───────────────────────────
     const previouslyOut = await readOutOfScopeFarmIds(db);
-    const out = new Set([...previouslyOut, ...gone].filter(id => !byFarm.has(id)));
+    const out = new Set([...previouslyOut, ...gone, ...[...notReadable].filter(id => !registered.has(id))]
+        .filter(id => !byFarm.has(id)));
     await db.appMeta.put({ key: ACCESS_SCOPES_META_KEY, value: { receivedAtUtc: ctx.receivedAtUtc, scopes }, updatedAt: ctx.receivedAtUtc });
     await db.appMeta.put({
         key: OUT_OF_SCOPE_FARMS_META_KEY,
@@ -184,6 +233,30 @@ export async function reconcileAccessScopes(
     });
 
     return outcome;
+}
+
+/** Item 14 — the crop list (`crops`) loses the plots of a farm that is gone; a crop left with no plot goes too. */
+async function removeCatalogPlots(db: AgriLogDatabase, plotIds: ReadonlySet<string>): Promise<void> {
+    if (plotIds.size === 0) return;
+    for (const row of await db.crops.toArray()) {
+        const crop = row.data as { plots?: { id?: string }[] } | null;
+        const plots = Array.isArray(crop?.plots) ? crop.plots : [];
+        const kept = plots.filter(p => !p?.id || !plotIds.has(p.id));
+        if (kept.length === plots.length) continue;
+        if (kept.length === 0) await db.crops.delete(row.id);
+        else await db.crops.put({ ...row, data: { ...crop, plots: kept } });
+    }
+}
+
+/** Item 14 — the profile's people list keeps only this person (the server sends a कामगार no other name). */
+async function keepOnlySelfInProfile(db: AgriLogDatabase, userId: string): Promise<void> {
+    const row = await db.farmerProfile.get('self');
+    const profile = row?.data as { operators?: { id?: string }[] } | undefined;
+    if (!row || !profile || !Array.isArray(profile.operators)) return;
+    const kept = profile.operators.filter(o => o?.id === userId);
+    if (kept.length !== profile.operators.length) {
+        await db.farmerProfile.put({ ...row, data: { ...profile, operators: kept } });
+    }
 }
 
 /** Keep only the rows of a finance mirror in `appMeta` that `keep` admits. */
@@ -210,7 +283,7 @@ export function withoutMoney(log: DailyLog): DailyLog {
     for (const bucket of MONEY_BUCKETS) {
         const items = (log as unknown as Record<string, unknown>)[bucket];
         if (!Array.isArray(items)) continue;
-        const stripped = items.map(item => stripKeys(item, MONEY_KEYS));
+        const stripped = items.map(item => (bucket === 'labour' ? markLabourWithheld(item, true) : stripKeys(item, MONEY_KEYS)));
         if (stripped.some((item, i) => item !== items[i])) {
             next[bucket] = stripped;
             changed = true;
@@ -220,11 +293,45 @@ export function withoutMoney(log: DailyLog): DailyLog {
     return changed ? (next as unknown as DailyLog) : log;
 }
 
-/** Another person's record WITHOUT the wage and total on its labour. Same log when nothing changes. */
+/**
+ * F3 (D-66) — another person's record that mentions money, WITHOUT his words: the transcript, each item's phrase,
+ * Sathi's restatement, notes and descriptions are removed WHOLE (never cut), and the record says why. The work stays.
+ */
+export function withoutWords(log: DailyLog): DailyLog {
+    const next: Record<string, unknown> = { ...log, wordsWithheldForMoney: true };
+    delete next.fullTranscript;
+    delete next.transcriptSnapshot;
+    for (const bucket of WORD_BUCKETS) {
+        const items = (log as unknown as Record<string, unknown>)[bucket];
+        if (Array.isArray(items)) next[bucket] = items.map(item => stripKeys(item, WORD_KEYS));
+    }
+    const disturbance = (log as unknown as Record<string, unknown>).disturbance;
+    if (disturbance && typeof disturbance === 'object') next.disturbance = stripKeys(disturbance, WORD_KEYS);
+    return next as unknown as DailyLog;
+}
+
+/** Another person's record WITHOUT the per-person wage on its labour (a WAGE). Same log when nothing changes. */
 export function withoutWages(log: DailyLog): DailyLog {
     if (!Array.isArray(log.labour)) return log;
-    const labour = log.labour.map(item => stripKeys(item, WAGE_KEYS));
+    const labour = log.labour.map(item => markLabourWithheld(item, false));
     return labour.some((item, i) => item !== log.labour[i]) ? { ...log, labour } as DailyLog : log;
+}
+
+/**
+ * F10 — one crew WITHOUT its per-person wage (and, without see money, its total), each stated amount marked as held
+ * back by rule (`wageWithheld` / `totalCostWithheld`), never left reading "not stated". Same item when nothing changes.
+ */
+function markLabourWithheld<T>(item: T, money: boolean): T {
+    if (!item || typeof item !== 'object') return item;
+    const crew = item as Record<string, unknown>;
+    const stated = (key: string) => crew[key] !== undefined && crew[key] !== null;
+    const stripped = stripKeys(item, money ? MONEY_KEYS : WAGE_KEYS) as Record<string, unknown>;
+    if ((stripped as unknown) === item) return item;
+    return {
+        ...stripped,
+        ...(stated('wagePerPerson') && { wageWithheld: true }),
+        ...(money && stated('totalCost') && { totalCostWithheld: true }),
+    } as T;
 }
 
 /** `value` with every key in `keys` removed at any depth; the same object when none was there. */

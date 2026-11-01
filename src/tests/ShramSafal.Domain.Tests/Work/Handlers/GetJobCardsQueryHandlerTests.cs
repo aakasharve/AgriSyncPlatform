@@ -102,11 +102,11 @@ public sealed class GetJobCardsQueryHandlerTests
     }
 
     /// <summary>
-    /// lane MU-3 (founder D-22 / D-26) — a job card carries rates and payouts: a मुकादम who does not see
-    /// the farm's money is refused the farm's cards, however much he takes हजेरी.
+    /// lane MU-3 fix 1 (F7; founder D-22 "work access ≠ money access") — a job card is the farm's WORK: a मुकादम who
+    /// does not see wages gets the farm's cards, and every rate and payout on them is withheld by rule (null, never 0).
     /// </summary>
     [Fact]
-    public async Task GetForFarm_A_member_who_does_not_see_money_is_refused()
+    public async Task GetForFarm_A_member_who_does_not_see_wages_gets_the_work_without_the_pay()
     {
         var repo = new FakeRepo(
             farmJobCards: [BuildJobCard()],
@@ -116,8 +116,11 @@ public sealed class GetJobCardsQueryHandlerTests
         var result = await new GetJobCardsForFarmHandler(repo).HandleAsync(new GetJobCardsForFarmQuery(
             FarmId, MukadamUserId, StatusFilter: null));
 
-        result.IsFailure.Should().BeTrue();
-        result.Error.Code.Should().Contain("Forbidden");
+        result.IsSuccess.Should().BeTrue();
+        var card = result.Value!.Should().ContainSingle().Subject;
+        card.EstimatedTotalAmount.Should().BeNull("a worker's pay is withheld by rule");
+        card.LineItems.Should().OnlyContain(i => i.RatePerHourAmount == null);
+        card.LineItems.Should().NotBeEmpty("the work itself stays");
     }
 
     // ─── Test doubles ────────────────────────────────────────────────────────

@@ -172,7 +172,8 @@ export const ReceiptCaptureSheet: React.FC<Props> = ({ onClose, onSave, crops, a
                 source: 'file',
                 farmId: farm,
                 linkedEntityId: farm,
-                linkedEntityType: 'Farm',
+                // lane MU-3 fix 1 (F2) — a bill photo is MONEY: marked as a bill, so only a seat that sees money gets it.
+                linkedEntityType: 'Bill',
                 file,
                 fileName: file.name,
                 mimeType: file.type

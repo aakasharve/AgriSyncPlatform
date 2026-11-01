@@ -69,12 +69,12 @@ public sealed class WorkerRecordDoesNotLeaveItsFarmTests
     }
 
     /// <summary>
-    /// lane MU-3 (founder D-22 / D-26) — the profile states what the farm paid him: wages. A shared-farm
-    /// member who does not see wages (a मुकादम taking हजेरी) is refused, and his metrics are never read;
-    /// the worker's own profile stays his.
+    /// lane MU-3 fix 1 (F7) — the profile states his work AND what the farm paid him. A shared-farm member who does
+    /// not see wages (a मुकादम taking हजेरी) gets the page — his reliability and recent work — with the earnings
+    /// withheld by rule (null, never 0); the worker's own profile stays whole.
     /// </summary>
     [Fact]
-    public async Task A_member_who_does_not_see_wages_is_refused_the_record_of_what_he_was_paid()
+    public async Task A_member_who_does_not_see_wages_gets_the_page_without_what_he_was_paid()
     {
         var repo = new RecordingRepo(
             workerFarmIds: [FarmBGuid],
@@ -82,14 +82,14 @@ public sealed class WorkerRecordDoesNotLeaveItsFarmTests
             workerConsented: false,
             callerSeesMoney: false);
 
-        var refused = await NewProfileHandler(repo).HandleAsync(new GetWorkerProfileQuery(WorkerUserId, OwnerOfBUserId));
+        var page = await NewProfileHandler(repo).HandleAsync(new GetWorkerProfileQuery(WorkerUserId, OwnerOfBUserId));
 
-        refused.IsFailure.Should().BeTrue();
-        refused.Error.Code.Should().Be("ShramSafal.Forbidden");
-        repo.MetricsScopesRequested.Should().BeEmpty("a refusal must not read what he was paid");
+        page.IsSuccess.Should().BeTrue("the page is sent, never refused whole");
+        page.Value!.EarnedLast30d.Should().BeNull("what he was paid is withheld by rule");
 
         var own = await NewProfileHandler(repo).HandleAsync(new GetWorkerProfileQuery(WorkerUserId, WorkerUserId));
         own.IsSuccess.Should().BeTrue("his own record is his");
+        own.Value!.EarnedLast30d.Should().NotBeNull("his own earnings are his");
     }
 
     [Fact]

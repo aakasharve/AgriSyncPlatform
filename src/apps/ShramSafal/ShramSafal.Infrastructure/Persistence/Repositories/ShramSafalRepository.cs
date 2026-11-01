@@ -2323,6 +2323,90 @@ internal sealed class ShramSafalRepository(
                     : seat.GrantedAtUtc);
     }
 
+    // lane MU-3 fix 1 (F12) — see the port: two queries for any number of farms (registrant farms, then
+    // the live seats), exactly the answers GetFarmAccessForUserAsync gives one by one.
+    public async Task<IReadOnlyDictionary<Guid, ShramSafal.Application.Services.FarmAccess?>> GetFarmAccessesForUserAsync(
+        Guid userId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        var ids = farmIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        var result = ids.ToDictionary(id => id, _ => (ShramSafal.Application.Services.FarmAccess?)null);
+        if (ids.Count == 0)
+        {
+            return result;
+        }
+
+        var typedUserId = new UserId(userId);
+        var typedIds = ids.Select(id => new FarmId(id)).ToList();
+        var registered = await db.Farms
+            .AsNoTracking()
+            .Where(f => typedIds.Contains(f.Id) && f.OwnerUserId == typedUserId)
+            .Select(f => f.Id)
+            .ToListAsync(ct);
+        foreach (var farmId in registered)
+        {
+            result[(Guid)farmId] = new ShramSafal.Application.Services.FarmAccess(
+                AppRole.PrimaryOwner, MembershipStatus.Active, IsRegistrant: true, StoredPermissions: null);
+        }
+
+        var seats = await db.FarmMemberships
+            .AsNoTracking()
+            .Where(m => typedIds.Contains(m.FarmId) && m.UserId == typedUserId
+                && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited)
+            .Select(m => new
+            {
+                m.FarmId,
+                m.Role,
+                m.Status,
+                m.Permissions,
+                m.CanManageLabourRecords,
+                m.LabourGrantExpiresAtUtc,
+                m.AuthorityExpiresAtJson,
+                m.GrantedAtUtc,
+                m.AccessChangedAtUtc,
+            })
+            .ToListAsync(ct);
+        foreach (var seat in seats)
+        {
+            var farmId = (Guid)seat.FarmId;
+            if (result[farmId] is { IsRegistrant: true })
+            {
+                continue;
+            }
+
+            result[farmId] = new ShramSafal.Application.Services.FarmAccess(
+                seat.Role,
+                seat.Status,
+                IsRegistrant: false,
+                seat.Permissions,
+                seat.CanManageLabourRecords,
+                seat.LabourGrantExpiresAtUtc,
+                seat.AuthorityExpiresAtJson,
+                seat.AccessChangedAtUtc is { } changed && changed > seat.GrantedAtUtc ? changed : seat.GrantedAtUtc);
+        }
+
+        return result;
+    }
+
+    // lane MU-3 fix 1 (F12) — see the port: one query, the three columns only.
+    public async Task<IReadOnlyDictionary<Guid, ShramSafal.Application.Services.RecordMaker>> GetRecordMakersAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        var ids = dailyLogIds.Where(id => id != Guid.Empty).Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, ShramSafal.Application.Services.RecordMaker>();
+        }
+
+        var rows = await db.DailyLogs
+            .AsNoTracking()
+            .Where(l => ids.Contains(l.Id))
+            .Select(l => new { l.Id, l.FarmId, l.OperatorUserId })
+            .ToListAsync(ct);
+        return rows.ToDictionary(
+            r => r.Id,
+            r => new ShramSafal.Application.Services.RecordMaker(r.Id, (Guid)r.FarmId, (Guid)r.OperatorUserId));
+    }
+
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2) — see the port. Newest ended seat by its
     // last change (an exit or a removal is the row's last write).
     public async Task<FarmMembership?> GetLatestEndedFarmMembershipAsync(

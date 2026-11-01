@@ -13,6 +13,7 @@ using ShramSafal.Application.UseCases.Work.SettleJobCardPayout;
 using ShramSafal.Application.UseCases.Work.StartJobCard;
 using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Work;
 
 namespace ShramSafal.Api.Endpoints;
@@ -268,10 +269,16 @@ public static class JobCardEndpoints
             string? status,
             ClaimsPrincipal user,
             GetJobCardsForFarmHandler handler,
+            ICallerFarmTenantScope tenantScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane MU-3 fix 1 (F94) — the caller's farm scope first (the route answered 500 without it).
+            var established = await tenantScope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!established.IsSuccess)
+                return ToErrorResult(established.Error);
 
             JobCardStatus? statusFilter = null;
             if (!string.IsNullOrWhiteSpace(status) &&

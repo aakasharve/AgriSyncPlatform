@@ -233,7 +233,8 @@ export async function sendUnsentGroup(group: UnsentGroup, confirmedFarmId: strin
             try {
                 const blob = dataUrlToBlob(group.photoDataUrl);
                 await captureAttachment({
-                    source: 'file', farmId: confirmedFarmId, linkedEntityId: confirmedFarmId, linkedEntityType: 'Farm',
+                    // lane MU-3 fix 1 (F2) — a bill photo is MONEY: marked as a bill (only a seat that sees money gets it).
+                    source: 'file', farmId: confirmedFarmId, linkedEntityId: confirmedFarmId, linkedEntityType: 'Bill',
                     attachmentId: photoId, file: blob, fileName: `bill-${bill.id}.${blob.type.split('/')[1] ?? 'jpg'}`, mimeType: blob.type,
                 });
                 procurementRepository.updateExpense(bill.id, { attachmentIds: [photoId] });

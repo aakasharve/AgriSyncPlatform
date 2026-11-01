@@ -49,10 +49,14 @@ export interface LabourEvent {
     femaleCount?: number;
     count?: number;
     wagePerPerson?: number;
+    /** lane MU-3 fix 1 (F10) — a wage WAS stated and is withheld from this person by rule: shown as such, never "not stated". */
+    wageWithheld?: true;
     contractUnit?: 'Tree' | 'Acre' | 'Row' | 'Lump Sum';
     contractQuantity?: number;
     operatorId?: string;
     totalCost?: number;
+    /** lane MU-3 fix 1 (F10) — a crew total WAS stated and is withheld from this person by rule. */
+    totalCostWithheld?: true;
     notes?: string;
     detectedCrop?: string;
     whoWorked?: 'OWNER' | 'OPERATOR' | 'HIRED_LABOUR' | 'UNKNOWN';

@@ -209,6 +209,9 @@ function toLabourEvent(engagement: LabourEngagementDto): LabourEvent {
         // engagement's own stated total, and nothing here derives one from a
         // rate and a headcount.
         ...(totalCost !== undefined && { totalCost }),
+        // lane MU-3 fix 1 (F10) — an amount the server holds back BY RULE is said to be held back, never "not stated".
+        ...(totalCost === undefined && engagement.totalCostWithheld === true && { totalCostWithheld: true as const }),
+        ...(wagePerPerson === undefined && engagement.wageWithheld === true && { wageWithheld: true as const }),
         ...(explicitHours !== undefined && { durationHours: explicitHours, timeBasis: 'Explicit' as const }),
         ...(explicitHours === undefined && timeBasis !== undefined && { timeBasis }),
         // The local field for a shift is `shiftId`, and the server's `"Full"` /

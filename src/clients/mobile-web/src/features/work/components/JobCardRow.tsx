@@ -16,6 +16,7 @@ import type { JobCard } from '../../../domain/work/JobCard';
 import PayoutEligibilityStrip from './PayoutEligibilityStrip';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { workTypeNameIn } from '../../../shared/names/namesIn';
+import { jobCardAmountText } from '../jobCardAmount';
 
 interface JobCardRowProps {
     card: JobCard;
@@ -140,7 +141,7 @@ const JobCardRow: React.FC<JobCardRowProps> = ({ card, onAction, onPress }) => {
                         className="text-sm font-bold text-stone-900"
                         style={{ fontFamily: "'DM Sans', sans-serif" }}
                     >
-                        {card.estimatedTotalCurrency} {Math.round(card.estimatedTotalAmount).toLocaleString('en-IN')}
+                        {jobCardAmountText(card.estimatedTotalCurrency, card.estimatedTotalAmount, language)}
                     </p>
                 </div>
             </div>

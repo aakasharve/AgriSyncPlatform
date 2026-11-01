@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
 
 namespace ShramSafal.Api.Endpoints;
@@ -17,13 +18,18 @@ public static class AttentionEndpoints
             DateTime? asOf,
             ClaimsPrincipal user,
             GetAttentionBoardHandler handler,
+            ICallerUserTenantScope userScope,
             HttpContext httpContext,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
 
-            var result = await handler.HandleAsync(new GetAttentionBoardQuery(actorUserId, asOf), ct);
+            // lane MU-3 fix 1 (review item 12) — the board spans every farm of the caller, so it is read under his OWN
+            // user scope (the route opened none: its first read failed closed, 500 for everyone). The handler keeps
+            // only the farms whose seat reads the overview (a कामगार's does not), as the pull does.
+            var result = await userScope.RunForCallerAsync(
+                actorUserId, token => handler.HandleAsync(new GetAttentionBoardQuery(actorUserId, asOf), token), ct);
             if (!result.IsSuccess)
                 return ToErrorResult(result.Error);
 

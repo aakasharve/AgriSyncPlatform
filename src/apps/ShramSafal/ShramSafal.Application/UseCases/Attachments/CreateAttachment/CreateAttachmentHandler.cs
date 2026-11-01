@@ -99,7 +99,9 @@ public sealed class CreateAttachmentHandler(
         string linkedEntityType,
         CancellationToken ct)
     {
-        if (linkedEntityType.Equals("farm", StringComparison.OrdinalIgnoreCase))
+        // A bill photo hangs on the farm, exactly as a farm photo does (lane MU-3 fix 1, F2).
+        if (linkedEntityType.Equals("farm", StringComparison.OrdinalIgnoreCase)
+            || linkedEntityType.Equals("bill", StringComparison.OrdinalIgnoreCase))
         {
             var farm = await repository.GetFarmByIdAsync(linkedEntityId, ct);
             if (farm is null)
@@ -151,6 +153,8 @@ public sealed class CreateAttachmentHandler(
         return linkedEntityType.Trim().ToLowerInvariant() switch
         {
             "farm" => "Farm",
+            // lane MU-3 fix 1 (F2) — a bill or receipt photo of the farm: money (AttachmentParentRule).
+            "bill" => "Bill",
             "dailylog" => "DailyLog",
             "costentry" => "CostEntry",
             _ => null

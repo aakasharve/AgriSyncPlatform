@@ -24,6 +24,7 @@ public static class AuditEndpoints
             IShramSafalRepository repository,
             IEntitlementResolver entitlementResolver,
             IClock clock,
+            ICallerFarmTenantScope tenantScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(http.User, out var actorUserId))
@@ -44,6 +45,12 @@ public static class AuditEndpoints
                     error = "ShramSafal.InvalidCommand",
                     message = "Provide either (entityType + entityId) or farmId."
                 });
+            }
+
+            // lane MU-3 fix 1 (F94) — the caller's farm scope first (the route answered 500 without it).
+            if (!(await tenantScope.EstablishForCallerAsync(farmId.Value, actorUserId, ct)).IsSuccess)
+            {
+                return Results.Forbid();
             }
 
             var isFarmMember = await repository.IsUserMemberOfFarmAsync(farmId.Value, actorUserId, ct);

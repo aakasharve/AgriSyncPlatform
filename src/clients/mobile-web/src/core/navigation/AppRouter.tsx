@@ -21,7 +21,7 @@ import MainViewTransition from './MainViewTransition';
 import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useFarmContext } from '../session/FarmContext';
 import { mayChangeRecordedMoney } from '../session/farmPermissions';
-import { AUTHORITY, holdsAuthority } from '../session/farmAuthorities';
+import { seeMoneyDoor, useStoredAccessScopes } from '../session/storedFarmScope';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
@@ -97,6 +97,8 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     // `currentFarm` (its role) decides the hidden tabs (a worker gets no तुलना) and the work home's
     // हजेरी door; the first run's welcome reads its role from `firstRunFarm` instead.
     const { currentFarmId, currentFarm, meContext } = useFarmContext();
+    // lane MU-3 fix 1 (F11) — the money doors read the same answer the pull's purge applied.
+    const storedAccessScopes = useStoredAccessScopes();
     const userId = meContext?.me?.userId ?? null;
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
@@ -286,8 +288,9 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         consumeLogHome: navigation.consumeLogHome,
         farmRole,
         mayReviewMoney: mayChangeRecordedMoney(currentFarm),
-        // lane MU-3 — the money doors follow the server's see-money answer, never the label.
-        maySeeMoney: currentFarm ? holdsAuthority(currentFarm, AUTHORITY.seeMoney) : undefined,
+        // lane MU-3 — the money doors follow the server's see-money answer, never the label: the pull's stored answer
+        // (fix 1, F11), `/me/context` only before it.
+        maySeeMoney: seeMoneyDoor(storedAccessScopes, currentFarmId, currentFarm),
         canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,

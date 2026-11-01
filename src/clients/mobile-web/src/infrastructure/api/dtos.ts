@@ -282,6 +282,8 @@ export interface DailyLogDto {
      * `'labour'` for the हजेरी door, `null` for every other save. Absent on an older server (no statement).
      */
     captureScope?: string | null;
+    /** lane MU-3 fix 1 (F3) — `true` = its words and voice are withheld by the money rule (D-66). */
+    wordsWithheldForMoney?: boolean | null;
 }
 
 /** spec: plr-d10 (lane F1) — one stored content row (`ShramSafal…LogContentDto`). */
@@ -289,6 +291,8 @@ export interface LogContentDto {
     version: number;
     schema: number;
     document: Record<string, unknown>;
+    /** lane MU-3 fix 1 (F8) — `true` = sent without the amounts it states. */
+    amountsWithheld?: boolean | null;
 }
 
 export interface CostEntryDto {
@@ -481,9 +485,9 @@ export interface SyncPullResponse {
     attentionBoard?: AttentionBoardDto | null;
     // Labour V2 R1 Task 3.5c — additive: absent from an older server = no-op.
     attendanceMarks?: AttendanceMarkDto[];
-    // lane MU-3 (plan step 4a) — what this person may read on EACH farm this pull covers. A farm this phone
-    // holds that is not listed is no longer his to read: `accessScopeReconciler` purges it. Additive: absent
-    // from an older server = nothing is purged (the phone does not guess).
+    // lane MU-3 (plan step 4a) — what this person may read on EACH farm this pull covers. Fix 1 (F9): a farm the
+    // phone named (`farms=`) and may no longer read comes with an explicit status; only that is purged, never a
+    // farm merely absent. Additive: absent from an older server = nothing is purged (the phone does not guess).
     accessScopes?: FarmAccessScopeDto[];
 }
 

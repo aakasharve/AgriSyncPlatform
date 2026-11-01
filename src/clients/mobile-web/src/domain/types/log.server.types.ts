@@ -28,4 +28,20 @@ export interface DailyLogServerState {
      * Absent = this phone's own record (it made it), which a silent server never overwrites.
      */
     legacyPartial?: boolean;
+
+    /**
+     * lane MU-3 fix 1 (F8) — `true` = the server sent this copy WITHOUT the amounts it states (this person does
+     * not see the farm's money and did not make the record: `LogContentDto.amountsWithheld`). An edit of it says
+     * so (`revise_log_content.amountsWithheld`), so the server carries the amounts forward instead of reading
+     * their absence as "no longer spent". Absent = the copy is whole.
+     */
+    amountsWithheld?: boolean;
+
+    /**
+     * lane MU-3 fix 1 (F3, founder D-66 = option 1) — `true` = the record mentions money, and by ShramSafal's rule
+     * its words and voice are not sent to this person (`DailyLogDto.wordsWithheldForMoney`). The work itself is
+     * all here; the record card says so in the rule's words (FIX-1 item 16, W1) instead of showing an empty
+     * transcript. Absent = nothing was withheld for money.
+     */
+    wordsWithheldForMoney?: boolean;
 }

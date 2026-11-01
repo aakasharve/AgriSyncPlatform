@@ -12,5 +12,8 @@ public sealed record FinanceSummaryDto(
     DateOnly? ToDate,
     string CurrencyCode,
     decimal GrandTotal,
-    IReadOnlyList<FinanceSummaryItemDto> Items);
+    IReadOnlyList<FinanceSummaryItemDto> Items,
+    // lane MU-3 fix 1 (F11) — how many of the caller's farms this summary does NOT count because their money
+    // is not shown to him (0 = every farm he works on is counted). Additive: absent on an older server.
+    int FarmsNotCounted = 0);
 

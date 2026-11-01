@@ -430,7 +430,7 @@ internal static class DtoMappingExtensions
             workerDisplayName,
             jobCard.PlannedDate,
             jobCard.Status.ToString(),
-            jobCard.LineItems.Select(li => new JobCardLineItemDto(
+            jobCard.LineItems.Select(li => new JobCardLineItemViewDto(
                 li.ActivityType,
                 li.ExpectedHours,
                 li.RatePerHour.Amount,

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning.ComputePlannedVsExecutedDelta;
 using ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 using ShramSafal.Application.UseCases.Planning.GetStagePlan;
@@ -54,11 +55,19 @@ public static class PlanningEndpoints
             Guid cropCycleId,
             ClaimsPrincipal user,
             GetTodaysPlanHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            if (await OpenCycleFarmAsync(cropCycleId, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return refused;
             }
 
             var result = await handler.HandleAsync(new GetTodaysPlanQuery(actorUserId, cropCycleId), ct);
@@ -71,11 +80,19 @@ public static class PlanningEndpoints
             string? stage,
             ClaimsPrincipal user,
             GetStagePlanHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            if (await OpenCycleFarmAsync(cropCycleId, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return refused;
             }
 
             var result = await handler.HandleAsync(new GetStagePlanQuery(actorUserId, cropCycleId, stage), ct);
@@ -121,8 +138,41 @@ public static class PlanningEndpoints
         return group;
     }
 
+    /// <summary>
+    /// lane MU-3 fix 1 (review item 12) — the plan routes name a CROP SEASON, so its farm is found under the caller's
+    /// own user scope first (a season of a farm he is not on is not found), then the farm scope is opened as every
+    /// working farm route does; without it the first read failed closed (500 for everyone). The handler then asks
+    /// the farm's read scope (a कामगार is not shown the farm's plan). Null = open; otherwise the answer to return.
+    /// </summary>
+    private static async Task<IResult?> OpenCycleFarmAsync(
+        Guid cropCycleId,
+        Guid actorUserId,
+        IShramSafalRepository repository,
+        ICallerUserTenantScope userScope,
+        ICallerFarmTenantScope farmScope,
+        CancellationToken ct)
+    {
+        var farmId = await userScope.RunForCallerAsync(
+            actorUserId,
+            async token => (await repository.GetCropCycleByIdAsync(cropCycleId, token)) is { } cycle ? (Guid?)(Guid)cycle.FarmId : null,
+            ct);
+        if (farmId is not { } farm)
+        {
+            return ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.CropCycleNotFound);
+        }
+
+        var established = await farmScope.EstablishForCallerAsync(farm, actorUserId, ct);
+        return established.IsSuccess ? null : ToErrorResult(established.Error);
+    }
+
     private static IResult ToErrorResult(Error error)
     {
+        // lane MU-3 fix 1 — a refusal is a refusal (403), never a malformed request.
+        if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
+        {
+            return Results.Forbid();
+        }
+
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : Results.BadRequest(new { error = error.Code, message = error.Description });

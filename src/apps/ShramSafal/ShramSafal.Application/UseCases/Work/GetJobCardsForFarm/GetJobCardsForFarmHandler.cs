@@ -13,8 +13,10 @@ namespace ShramSafal.Application.UseCases.Work.GetJobCardsForFarm;
 /// Caller must be an active member of the farm.
 /// </summary>
 /// <summary>
-/// The farm's job cards. lane MU-3 (founder D-22 / D-26): a job card carries rates and payouts, so only a
-/// seat that sees the farm's money reads them (the sync pull applies the same rule).
+/// The farm's job cards. lane MU-3 (founder D-22 / D-26; fix 1 F7) — a job card is the farm's WORK (plot, day,
+/// worker, tasks): every seat that reads the farm's work gets it; its rates and payout are a worker's pay and
+/// go only to a seat that sees wages (<see cref="ReadScopeProjection.JobCard"/>). An own-records-only seat
+/// (a कामगार) reads no farm list — the sync pull applies the same rule.
 /// </summary>
 public sealed class GetJobCardsForFarmHandler(IShramSafalRepository repository, IClock? clock = null)
 {
@@ -26,15 +28,18 @@ public sealed class GetJobCardsForFarmHandler(IShramSafalRepository repository, 
         var isMember = await repository.IsUserMemberOfFarmAsync(
             query.FarmId.Value, query.CallerUserId.Value, ct);
 
-        if (!isMember
-            || !await FarmReadGate.MaySeeMoneyAsync(
-                repository, query.FarmId.Value, query.CallerUserId.Value, clock?.UtcNow ?? DateTime.UtcNow, ct))
+        var scope = isMember
+            ? await FarmReadGate.ScopeAsync(repository, query.FarmId.Value, query.CallerUserId.Value, clock?.UtcNow ?? DateTime.UtcNow, ct)
+            : null;
+        if (scope is null || scope.OwnRecordsOnly)
             return Result.Failure<List<JobCardDto>>(ShramSafalErrors.Forbidden);
 
         var jobCards = await repository.GetJobCardsForFarmAsync(
             query.FarmId, query.StatusFilter, ct);
 
-        var dtos = jobCards.Select(j => j.ToJobCardDto()).ToList();
+        var dtos = jobCards
+            .Select(j => ReadScopeProjection.JobCard(j.ToJobCardDto(), scope, query.CallerUserId.Value))
+            .ToList();
         return Result.Success(dtos);
     }
 }

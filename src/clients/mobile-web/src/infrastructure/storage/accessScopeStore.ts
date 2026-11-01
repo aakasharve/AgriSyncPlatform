@@ -28,6 +28,36 @@ export async function readAccessScopes(db: AgriLogDatabase = getDatabase()): Pro
     return value && Array.isArray(value.scopes) ? value : null;
 }
 
+/** lane MU-3 fix 1 (F9) — at most this many farms are named in one pull (the server's own cap). */
+export const MAX_HELD_FARMS = 100;
+
+/**
+ * lane MU-3 fix 1 (F9) — every farm this phone holds anything of (its farm row, a plot, a crop season), so the
+ * pull can ask the server about each one by name. Sorted, so the same phone sends the same list.
+ */
+export async function readHeldFarmIds(db: AgriLogDatabase = getDatabase()): Promise<string[]> {
+    const held = new Set<string>();
+    for (const farm of await db.farms.toArray()) held.add(farm.id);
+    for (const plot of await db.plots.toArray()) held.add(plot.farmId);
+    for (const cycle of await db.cropCycles.toArray()) held.add(cycle.farmId);
+    return [...held].filter(id => typeof id === 'string' && id.length > 0).sort().slice(0, MAX_HELD_FARMS);
+}
+
+/**
+ * lane MU-3 fix 1 (F11) — the server's last word on ONE farm, or `undefined` when this phone has none yet (never
+ * pulled since MU-3, or the farm is not in the last answer). The money doors read THIS, the same answer the purge
+ * applied; `/me/context` is only the stand-in before the first pull.
+ */
+export function scopeForFarm(stored: StoredAccessScopes | null, farmId: string | null | undefined): FarmAccessScopeDto | undefined {
+    if (!stored || !farmId) return undefined;
+    return stored.scopes.find(s => s.farmId === farmId);
+}
+
+/** lane MU-3 fix 1 (F9) — does this entry say the person reads the farm now? (absent status = an older server = yes) */
+export function isReadableScope(scope: FarmAccessScopeDto): boolean {
+    return scope.status === undefined || scope.status === 'Active';
+}
+
 export async function readOutOfScopeFarmIds(db: AgriLogDatabase = getDatabase()): Promise<Set<string>> {
     const row = await db.appMeta.get(OUT_OF_SCOPE_FARMS_META_KEY);
     const ids = (row?.value as { farmIds?: unknown } | undefined)?.farmIds;

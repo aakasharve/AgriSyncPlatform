@@ -159,7 +159,16 @@ public sealed record DailyLogDto(
     /// server would refuse (lane F1). Additive and optional (P11): an older phone ignores it, an older
     /// server never sends it.
     /// </summary>
-    string? CaptureScope = null);
+    string? CaptureScope = null,
+
+    /// <summary>
+    /// lane MU-3 fix 1 (F3, founder D-66 = option 1) — <c>true</c> when this copy was sent WITHOUT the record's
+    /// words (and its voice is not played) because the record mentions money (<c>MoneyMention</c>) and the
+    /// reader neither made it nor sees the farm's money. The work itself (what, where, which day, how many
+    /// people) is all still here. The phone shows the system-rule card (FIX-1 item 16, W1) instead of an empty
+    /// transcript. Additive and optional (P11): absent = nothing was withheld for money.
+    /// </summary>
+    bool? WordsWithheldForMoney = null);
 
 /// <summary>
 /// spec: plr-d10 (lane F1) — one stored content row on the wire.
@@ -167,4 +176,10 @@ public sealed record DailyLogDto(
 /// <param name="Version">The record version this content was stored at (&lt;= the log's).</param>
 /// <param name="Schema">The document format.</param>
 /// <param name="Document">The document itself, verbatim.</param>
-public sealed record LogContentDto(int Version, int Schema, System.Text.Json.JsonElement Document);
+/// <param name="AmountsWithheld">
+/// lane MU-3 fix 1 (F8) — <c>true</c> when this copy was sent WITHOUT the amounts it states (a reader who does
+/// not see the farm's money). The phone keeps it with the record and says so in an edit
+/// (<c>revise_log_content.amountsWithheld</c>), so the server carries the amounts forward. Additive; absent =
+/// the copy is whole.
+/// </param>
+public sealed record LogContentDto(int Version, int Schema, System.Text.Json.JsonElement Document, bool? AmountsWithheld = null);

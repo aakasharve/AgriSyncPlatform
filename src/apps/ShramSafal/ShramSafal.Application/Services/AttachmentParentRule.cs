@@ -1,15 +1,22 @@
 using ShramSafal.Domain.Attachments;
-using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.Services;
+
+/// <summary>lane MU-3 fix 1 (F12) — who made one record, and on which farm (the photo rule needs nothing more).</summary>
+public sealed record RecordMaker(Guid DailyLogId, Guid FarmId, Guid OperatorUserId);
 
 /// <summary>
 /// lane MU-3 (plan step 4a) — an attachment is read where its PARENT is read (<see cref="FarmReadScope"/>):
 /// <list type="bullet">
-/// <item><c>Farm</c> — every working seat of the farm;</item>
+/// <item><c>Bill</c> — a bill or receipt photo (MU-3 fix 1, F2; the phone's two bill flows send this marker):
+/// money, so only a seat that sees money;</item>
+/// <item><c>Farm</c> — linked to the farm itself. Every farm-linked photo this app has ever made is a BILL
+/// (the phone's bill flows — <c>ReceiptCaptureSheet</c>, <c>unsentMoney</c> — linked their photo to the farm
+/// before the <c>Bill</c> marker existed, and 1.0.15–1.0.17 still do; no other flow links to the farm), so it
+/// is money too: fail closed, never guessed from a file name;</item>
+/// <item><c>CostEntry</c> — a money receipt: only a seat that sees money;</item>
 /// <item><c>DailyLog</c> — where the record is read: the farm's records, or for an own-records-only seat
 /// only the records he made (the parent must be on the attachment's own farm, E4);</item>
-/// <item><c>CostEntry</c> — a money receipt: only a seat that sees money;</item>
 /// <item>anything else — the primary account holder only (a kind this rule does not know fails closed).</item>
 /// </list>
 /// The sync pull and the attachment reads (<c>/attachments</c>) share this one rule.
@@ -17,6 +24,7 @@ namespace ShramSafal.Application.Services;
 public static class AttachmentParentRule
 {
     public const string FarmParent = "Farm";
+    public const string BillParent = "Bill";
     public const string RecordParent = "DailyLog";
     public const string MoneyParent = "CostEntry";
 
@@ -24,12 +32,16 @@ public static class AttachmentParentRule
     public static bool IsRecordParent(string? linkedEntityType) =>
         string.Equals(linkedEntityType, RecordParent, StringComparison.Ordinal);
 
+    /// <summary>Is the attachment a bill, a receipt or any money photo (the farm-linked legacy bills included)?</summary>
+    public static bool IsMoneyPhoto(string? linkedEntityType) =>
+        linkedEntityType is BillParent or FarmParent or MoneyParent;
+
     /// <summary>
     /// May the holder of <paramref name="scope"/> read <paramref name="attachment"/>?
-    /// <paramref name="parentLog"/> is needed only for a record's attachment on an own-records-only seat;
+    /// <paramref name="parentMaker"/> is needed only for a record's attachment on an own-records-only seat;
     /// when it is needed and absent (or on another farm) the answer is no.
     /// </summary>
-    public static bool MayRead(FarmReadScope? scope, Guid readerUserId, Attachment attachment, DailyLog? parentLog)
+    public static bool MayRead(FarmReadScope? scope, Guid readerUserId, Attachment attachment, RecordMaker? parentMaker)
     {
         ArgumentNullException.ThrowIfNull(attachment);
         if (scope is null || scope.FarmId != (Guid)attachment.FarmId)
@@ -37,43 +49,64 @@ public static class AttachmentParentRule
             return false;
         }
 
+        if (IsMoneyPhoto(attachment.LinkedEntityType))
+        {
+            return scope.SeeMoney;
+        }
+
         return attachment.LinkedEntityType switch
         {
-            FarmParent => true,
             RecordParent => !scope.OwnRecordsOnly
-                || (parentLog is not null
-                    && parentLog.Id == attachment.LinkedEntityId
-                    && parentLog.FarmId == attachment.FarmId
-                    && scope.MayReadRecordOf(readerUserId, parentLog.OperatorUserId.Value)),
-            MoneyParent => scope.SeeMoney,
+                || (parentMaker is not null
+                    && parentMaker.DailyLogId == attachment.LinkedEntityId
+                    && parentMaker.FarmId == (Guid)attachment.FarmId
+                    && scope.MayReadRecordOf(readerUserId, parentMaker.OperatorUserId)),
             _ => scope.IsPrimaryAccountHolder,
         };
     }
 
     /// <summary>
-    /// The same rule for one attachment read on its own (<c>/attachments/{id}</c>, its download, the
-    /// per-record list): loads the caller's scope on the attachment's farm and, only when the rule needs
-    /// it, the parent record.
+    /// The same rule for any number of attachments read together (<c>/attachments</c>, its metadata and
+    /// download): the reader's standing is read ONCE for all their farms and the parent records ONCE, only
+    /// where an own-records-only seat needs them (F12: never one read per attachment).
     /// </summary>
-    public static async Task<bool> MayReadAsync(
+    public static async Task<IReadOnlyList<Attachment>> ReadableAsync(
         Ports.IShramSafalRepository repository,
-        Attachment attachment,
+        IReadOnlyCollection<Attachment> attachments,
         Guid readerUserId,
         DateTime atUtc,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(repository);
-        ArgumentNullException.ThrowIfNull(attachment);
-
-        var scope = await FarmReadGate.ScopeAsync(repository, (Guid)attachment.FarmId, readerUserId, atUtc, ct);
-        if (scope is null)
+        ArgumentNullException.ThrowIfNull(attachments);
+        if (attachments.Count == 0 || readerUserId == Guid.Empty)
         {
-            return false;
+            return [];
         }
 
-        var parentLog = IsRecordParent(attachment.LinkedEntityType) && scope.OwnRecordsOnly
-            ? await repository.GetDailyLogByIdAsync(attachment.LinkedEntityId, ct)
-            : null;
-        return MayRead(scope, readerUserId, attachment, parentLog);
+        var accesses = await repository.GetFarmAccessesForUserAsync(
+            readerUserId, attachments.Select(a => (Guid)a.FarmId).Distinct().ToList(), ct);
+        var scopes = accesses.ToDictionary(kv => kv.Key, kv => FarmReadScope.Of(kv.Key, kv.Value, atUtc));
+        var needMakers = attachments
+            .Where(a => IsRecordParent(a.LinkedEntityType)
+                && scopes.GetValueOrDefault((Guid)a.FarmId) is { OwnRecordsOnly: true })
+            .Select(a => a.LinkedEntityId)
+            .ToList();
+        IReadOnlyDictionary<Guid, RecordMaker> makers = needMakers.Count == 0
+            ? new Dictionary<Guid, RecordMaker>()
+            : await repository.GetRecordMakersAsync(needMakers, ct);
+
+        return attachments
+            .Where(a => MayRead(scopes.GetValueOrDefault((Guid)a.FarmId), readerUserId, a, makers.GetValueOrDefault(a.LinkedEntityId)))
+            .ToList();
     }
+
+    /// <summary>One attachment read on its own (<c>/attachments/{id}</c>, its download).</summary>
+    public static async Task<bool> MayReadAsync(
+        Ports.IShramSafalRepository repository,
+        Attachment attachment,
+        Guid readerUserId,
+        DateTime atUtc,
+        CancellationToken ct = default) =>
+        (await ReadableAsync(repository, [attachment], readerUserId, atUtc, ct)).Count == 1;
 }

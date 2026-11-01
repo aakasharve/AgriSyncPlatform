@@ -34,6 +34,9 @@ public sealed class PullSyncChangesHandler(
     private const string ComponentJobCards = "JobCards";
     private const string ComponentComplianceFreshness = "ComplianceFreshness";
     private const string ComponentComplianceSignals = "ComplianceSignals";
+
+    /// <summary>MU-3 fix 1 (F9) — at most this many farms a phone may ask about in one pull.</summary>
+    public const int MaxHeldFarms = 100;
     public async Task<Result<SyncPullResponseDto>> HandleAsync(PullSyncChangesQuery query, CancellationToken ct = default)
     {
         var serverNowUtc = clock.UtcNow;
@@ -46,15 +49,27 @@ public sealed class PullSyncChangesHandler(
         // between the two reads) contributes nothing at all. Every kind below is read only for the
         // farms whose scope admits it, and a farm whose reading widened after this phone's cursor is
         // re-sent from the beginning (PullReadWindow — the per-farm cursor reset).
+        // MU-3 fix 1 (F12): every seat in ONE batched read, never one read per farm. (F9): the farms the
+        // phone says it holds are asked about too, so a farm it may no longer read is TOLD to it explicitly
+        // (Paused / Waiting / Removed) — the phone never wipes a farm because it is merely absent.
+        var readable = await repository.GetFarmIdsForUserAsync(query.UserId, ct);
+        var held = (query.HeldFarmIds ?? []).Where(id => id != Guid.Empty).Distinct().Take(MaxHeldFarms).ToList();
+        var accesses = await repository.GetFarmAccessesForUserAsync(query.UserId, readable.Union(held).ToList(), ct);
         var scopes = new Dictionary<Guid, FarmReadScope>();
-        foreach (var candidateFarmId in await repository.GetFarmIdsForUserAsync(query.UserId, ct))
+        foreach (var candidateFarmId in readable)
         {
-            var access = await repository.GetFarmAccessForUserAsync(candidateFarmId, query.UserId, ct);
-            if (FarmReadScope.Of(candidateFarmId, access, serverNowUtc) is { } scope)
+            if (FarmReadScope.Of(candidateFarmId, accesses.GetValueOrDefault(candidateFarmId), serverNowUtc) is { } scope)
             {
                 scopes[candidateFarmId] = scope;
             }
         }
+
+        // A farm read as readable a moment ago by the other query (a seat activated in between) is not
+        // told "gone": only a standing that truly reads nothing is.
+        var notReadable = held
+            .Where(id => !scopes.ContainsKey(id) && !FarmAccessPolicy.MayRead(accesses.GetValueOrDefault(id)))
+            .Select(id => FarmAccessScopeDto.NotReadable(id, accesses.GetValueOrDefault(id)))
+            .ToList();
 
         var window = new PullReadWindow(scopes, sinceUtc, serverNowUtc);
         var farmIds = window.FarmIds.ToList();
@@ -115,14 +130,10 @@ public sealed class PullSyncChangesHandler(
         // work, P7), its money does not: WagePerPerson / TotalCost are null — "not sent", which the phone
         // shows as withheld for this farm (accessScopes.seeWages = false), never as ₹0 (P4). A person's
         // OWN record comes back whole: it is his own statement.
+        // MU-3 fix 1 (F4): the per-person wage is a WAGE (see wages), the crew's total is MONEY (see money);
+        // both, the content amounts and the task lines' "₹" parts are applied by ReadScopeProjection.Record
+        // below — the same projection every command answer uses (F5).
         var dailyLogById = dailyLogs.ToDictionary(l => l.Id);
-        bool MoneyWithheldFrom(Domain.Logs.DailyLog log) =>
-            log.OperatorUserId.Value != query.UserId
-            && window.ScopeOf((Guid)log.FarmId) is { SeeMoney: false };
-        bool WagesWithheld(Guid logId) =>
-            dailyLogById.TryGetValue(logId, out var log)
-            && log.OperatorUserId.Value != query.UserId
-            && window.ScopeOf((Guid)log.FarmId) is { SeeWages: false };
         var labourByLogId = labourAssignments
             .GroupBy(a => a.DailyLogId)
             .ToDictionary(
@@ -130,7 +141,6 @@ public sealed class PullSyncChangesHandler(
                 g => (IReadOnlyList<LabourEngagementDto>)g
                     .Select(a => a.ToDto(
                         attributionsByAssignment.TryGetValue(a.Id, out var rows) ? rows : []))
-                    .Select(dto => WagesWithheld(g.Key) ? dto with { WagePerPerson = null, TotalCost = null } : dto)
                     .ToList());
 
         // ── spec: plr-d10 (lane F1) — what Sathi understood, read back ────────
@@ -153,8 +163,8 @@ public sealed class PullSyncChangesHandler(
         // document with the words removed and every value kept. Role and grant are read once
         // per farm, and only for farms this response carries content for.
         // lane MU-3 — and its stated money only to a reader who sees the farm's money (or who made it).
-        var contentDtoByLogId = await ProjectContentForReaderAsync(
-            query.UserId, dailyLogs, contentByLogId, window, serverNowUtc, ct);
+        var contentDtoByLogId = ProjectContentForReader(
+            query.UserId, dailyLogs, contentByLogId, accesses, serverNowUtc);
 
         // NOTE — the cursor is NOT advanced from labour, on purpose.
         // ssf.labour_assignments has no modified_at_utc; the parent log's
@@ -377,12 +387,19 @@ public sealed class PullSyncChangesHandler(
         List<JobCardDto> jobCardDtos = [];
         try
         {
-            // lane MU-3 — job cards carry rates and payouts: money, so only where the seat sees money.
-            var changedJobCards = await window.ReadAsync(
-                Money,
-                (ids, since) => repository.GetJobCardsChangedSinceAsync(ids, since, ct),
-                j => j.FarmId.Value);
-            jobCardDtos = changedJobCards.Select(j => j.ToJobCardDto()).ToList();
+            // lane MU-3 fix 1 (F7) — a job card is the farm's WORK (plot, day, worker, tasks): every seat that reads the
+            // farm's work gets it, and an own-records-only seat (a कामगार) gets the cards assigned to HIM. Its rates and
+            // payout are a worker's pay: withheld without see wages (ReadScopeProjection.JobCard), never the card.
+            var changedJobCards = (await window.ReadAsync(
+                    Any,
+                    (ids, since) => repository.GetJobCardsChangedSinceAsync(ids, since, ct),
+                    j => j.FarmId.Value))
+                .Where(j => window.ScopeOf(j.FarmId.Value) is { OwnRecordsOnly: false }
+                    || j.AssignedWorkerUserId?.Value == query.UserId)
+                .ToList();
+            jobCardDtos = changedJobCards
+                .Select(j => ReadScopeProjection.JobCard(j.ToJobCardDto(), window.ScopeOf(j.FarmId.Value), query.UserId))
+                .ToList();
             if (jobCardDtos.Count > 0)
             {
                 var maxJobCard = changedJobCards.Max(j => j.ModifiedAtUtc);
@@ -482,6 +499,12 @@ public sealed class PullSyncChangesHandler(
             nextCursorUtc = resetThrough;
         }
 
+        // MU-3 fix 1 (F1) — and never past a change too young to send yet: the next pull sends it.
+        if (window.PendingCapUtc is { } cap && nextCursorUtc > cap)
+        {
+            nextCursorUtc = cap;
+        }
+
         // Sub-plan 03 Task 10 (T-IGH-03-PULL-CURSOR-FREEZE) — cursor
         // freeze on partial failure. If ANY component degraded,
         // NextCursorUtc is set BACK to SinceUtc so the next pull
@@ -522,13 +545,12 @@ public sealed class PullSyncChangesHandler(
             // lane MU-3 — a record's task lines carry its stated money in their notes ("Cost: ₹…"): for a
             // reader who may not see the farm's money (and did not make the record) those parts are dropped.
             dailyLogs
-                .Select(l => MoneyWithheldFrom(l)
-                    ? WithoutTaskMoney(l.ToDto(
+                .Select(l => ReadScopeProjection.Record(
+                    l.ToDto(
                         labourByLogId.TryGetValue(l.Id, out var labour) ? labour : [],
-                        contentDtoByLogId.GetValueOrDefault(l.Id)))
-                    : l.ToDto(
-                        labourByLogId.TryGetValue(l.Id, out var ownLabour) ? ownLabour : [],
-                        contentDtoByLogId.GetValueOrDefault(l.Id)))
+                        contentDtoByLogId.GetValueOrDefault(l.Id)),
+                    window.ScopeOf((Guid)l.FarmId),
+                    query.UserId))
                 .ToList(),
             attachments.Select(a => a.ToDto()).ToList(),
             costEntries.Select(c => c.ToDto()).ToList(),
@@ -554,7 +576,7 @@ public sealed class PullSyncChangesHandler(
             // rewind handled in the if-block above.
             degraded,
             // lane MU-3 — what this person may read on each farm this pull covers.
-            window.FarmIds.Select(id => FarmAccessScopeDto.From(window.Scopes[id])).ToList());
+            window.FarmIds.Select(id => FarmAccessScopeDto.From(window.Scopes[id])).Concat(notReadable).ToList());
 
         return Result.Success(response);
     }
@@ -562,22 +584,14 @@ public sealed class PullSyncChangesHandler(
     /// <summary>
     /// spec: plr-d10 (lane F1, review S1) — each log's content as THIS reader may see it.
     /// </summary>
-    private async Task<Dictionary<Guid, LogContentDto>> ProjectContentForReaderAsync(
+    private static Dictionary<Guid, LogContentDto> ProjectContentForReader(
         Guid readerUserId,
         IReadOnlyList<Domain.Logs.DailyLog> dailyLogs,
         IReadOnlyDictionary<Guid, Domain.Logs.DailyLogContent> contentByLogId,
-        PullReadWindow window,
-        DateTime nowUtc,
-        CancellationToken ct)
+        IReadOnlyDictionary<Guid, FarmAccess?> accesses,
+        DateTime nowUtc)
     {
         var projected = new Dictionary<Guid, LogContentDto>();
-        if (contentByLogId.Count == 0)
-        {
-            return projected;
-        }
-
-        var roleByFarm = new Dictionary<Guid, AppRole?>();
-        var grantByFarm = new Dictionary<Guid, bool>();
         foreach (var log in dailyLogs)
         {
             if (!contentByLogId.TryGetValue(log.Id, out var content))
@@ -585,43 +599,26 @@ public sealed class PullSyncChangesHandler(
                 continue;
             }
 
-            var farmId = (Guid)log.FarmId;
-            if (!roleByFarm.TryGetValue(farmId, out var role))
-            {
-                role = await repository.GetUserRoleForFarmAsync(farmId, readerUserId, ct);
-                roleByFarm[farmId] = role;
-            }
-
-            var mayHear = await RecordWordsGate.MayHearAsync(
-                readerUserId,
-                log.OperatorUserId.Value,
-                role,
-                async () =>
-                {
-                    if (!grantByFarm.TryGetValue(farmId, out var grant))
-                    {
-                        // lane 2b (D-31 "authorised approvers"; D-44) — the confirm-records authority.
-                        grant = await FarmAuthorityGate.HoldsAsync(
-                            repository, farmId, readerUserId, Domain.Farms.FarmAuthority.ConfirmRecords, nowUtc, ct);
-                        grantByFarm[farmId] = grant;
-                    }
-
-                    return grant;
-                });
-
-            // lane MU-3 — the record's stated money to a reader who sees the farm's money, or its maker.
-            var withMoney = log.OperatorUserId.Value == readerUserId
-                || window.ScopeOf(farmId) is { SeeMoney: true };
-            projected[log.Id] = content.ToDto(withWords: mayHear, withMoney: withMoney);
+            // Review S1 (founder D-31 / D-26) — his words to the speaker, the primary owner, or a holder of the
+            // confirm-records authority (RecordWordsGate's rule), read from the batched seat (MU-3 fix 1, F12).
+            // Its MONEY is applied afterwards by ReadScopeProjection.Record, like every other part of the record.
+            var access = accesses.GetValueOrDefault((Guid)log.FarmId);
+            var role = access is null ? (AppRole?)null : access.IsRegistrant ? AppRole.PrimaryOwner : access.Role;
+            var mayHear = readerUserId != Guid.Empty
+                && role is not null
+                && (readerUserId == log.OperatorUserId.Value
+                    || role == AppRole.PrimaryOwner
+                    || FarmAccessPolicy.Holds(access, Domain.Farms.FarmAuthority.ConfirmRecords, nowUtc));
+            projected[log.Id] = content.ToDto(withWords: mayHear);
         }
 
         return projected;
     }
 
     /// <summary>
-    /// lane MU-3 — an attachment follows its PARENT (<see cref="AttachmentParentRule"/>). A
-    /// record's photo whose record is not in this response is looked up only for an own-records-only
-    /// seat (whose rule depends on who made it); E4: the parent must be on the attachment's own farm.
+    /// lane MU-3 — an attachment follows its PARENT (<see cref="AttachmentParentRule"/>). For an
+    /// own-records-only seat a record's photo needs its record's maker: the ones not in this response are read
+    /// in ONE batch (MU-3 fix 1, F12), never one read per photo.
     /// </summary>
     private async Task<List<Domain.Attachments.Attachment>> VisibleAttachmentsAsync(
         Guid readerUserId,
@@ -630,39 +627,25 @@ public sealed class PullSyncChangesHandler(
         IReadOnlyDictionary<Guid, Domain.Logs.DailyLog> sentLogs,
         CancellationToken ct)
     {
-        var visible = new List<Domain.Attachments.Attachment>();
-        foreach (var attachment in attachments)
+        var missing = attachments
+            .Where(a => AttachmentParentRule.IsRecordParent(a.LinkedEntityType)
+                && window.ScopeOf((Guid)a.FarmId) is { OwnRecordsOnly: true }
+                && !sentLogs.ContainsKey(a.LinkedEntityId))
+            .Select(a => a.LinkedEntityId)
+            .Distinct()
+            .ToList();
+        var makers = new Dictionary<Guid, RecordMaker>(
+            missing.Count == 0 ? [] : await repository.GetRecordMakersAsync(missing, ct));
+        foreach (var log in sentLogs.Values)
         {
-            var scope = window.ScopeOf((Guid)attachment.FarmId);
-            if (scope is null)
-            {
-                continue;
-            }
-
-            Domain.Logs.DailyLog? parentLog = null;
-            if (AttachmentParentRule.IsRecordParent(attachment.LinkedEntityType) && scope.OwnRecordsOnly)
-            {
-                parentLog = sentLogs.GetValueOrDefault(attachment.LinkedEntityId)
-                    ?? await repository.GetDailyLogByIdAsync(attachment.LinkedEntityId, ct);
-            }
-
-            if (AttachmentParentRule.MayRead(scope, readerUserId, attachment, parentLog))
-            {
-                visible.Add(attachment);
-            }
+            makers[log.Id] = new RecordMaker(log.Id, (Guid)log.FarmId, log.OperatorUserId.Value);
         }
 
-        return visible;
+        return attachments
+            .Where(a => AttachmentParentRule.MayRead(
+                window.ScopeOf((Guid)a.FarmId), readerUserId, a, makers.GetValueOrDefault(a.LinkedEntityId)))
+            .ToList();
     }
-
-    /// <summary>lane MU-3 — the record with its task lines' money parts dropped (<see cref="LogTaskProjection.NotesWithoutMoney"/>).</summary>
-    private static DailyLogDto WithoutTaskMoney(DailyLogDto dto) =>
-        dto with
-        {
-            Tasks = dto.Tasks
-                .Select(t => t with { Notes = LogTaskProjection.NotesWithoutMoney(t.Notes) })
-                .ToList(),
-        };
 
     private static DateTime NormalizeCursor(DateTime rawCursor, DateTime serverNowUtc)
     {

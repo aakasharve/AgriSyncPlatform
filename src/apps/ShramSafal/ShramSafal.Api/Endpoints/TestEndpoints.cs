@@ -232,13 +232,22 @@ public static class TestEndpoints
         .WithName("WaiveTestInstance");
 
         // ---------------------------------------------------------- Instances: queries
+        // lane MU-3 fix 1 (review item 12) — a test read follows the farm's read scope, both ways: the caller must
+        // read the cycle's (or the instance's) farm with the lab-records rule (FarmReadScope.SeeTests: every seat but a
+        // कामगार, who needs the LabRecords authority), and only rows ON that farm come back (E4). The farm is found
+        // under the caller's own user scope (a row of a farm he is not on is not found), then the farm scope is
+        // opened as every working farm route does.
         group.MapGet("/test-instances", async (
             Guid? cropCycleId,
             ClaimsPrincipal user,
             GetTestQueueForCycleHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
+            AgriSync.BuildingBlocks.Abstractions.IClock clock,
             CancellationToken ct) =>
         {
-            if (!EndpointActorContext.TryGetUserId(user, out _))
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
             {
                 return Results.Unauthorized();
             }
@@ -252,28 +261,62 @@ public static class TestEndpoints
                 });
             }
 
+            var cycleFarmId = await userScope.RunForCallerAsync(
+                callerUserId,
+                async token => (await repository.GetCropCycleByIdAsync(cropCycleId.Value, token)) is { } cycle
+                    ? (Guid?)(Guid)cycle.FarmId
+                    : null,
+                ct);
+            if (await TestsReadableAsync(cycleFarmId, callerUserId, repository, farmScope, clock, ct) is { } refused)
+            {
+                return refused;
+            }
+
             var instances = await handler.HandleAsync(
                 new GetTestQueueForCycleQuery(cropCycleId.Value, IncludeReported: true),
                 ct);
-            return Results.Ok(instances);
+            return Results.Ok(instances.Where(i => i.FarmId == cycleFarmId).ToList());
         })
         .WithName("ListTestInstancesForCycle");
 
         group.MapGet("/test-instances/{id:guid}", async (
             Guid id,
             ClaimsPrincipal user,
-            [FromServices] GetTestQueueForCycleHandler handler,
             [FromServices] ShramSafal.Application.Ports.ITestInstanceRepository instanceRepository,
             [FromServices] ShramSafal.Application.Ports.ITestProtocolRepository protocolRepository,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
+            AgriSync.BuildingBlocks.Abstractions.IClock clock,
             CancellationToken ct) =>
         {
-            if (!EndpointActorContext.TryGetUserId(user, out _))
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
             {
                 return Results.Unauthorized();
             }
 
+            var instanceFarmId = await userScope.RunForCallerAsync(
+                callerUserId,
+                async token => (await instanceRepository.GetByIdAsync(id, token)) is { } found
+                    ? (Guid?)(Guid)found.FarmId
+                    : null,
+                ct);
+            if (instanceFarmId is null)
+            {
+                return Results.NotFound(new
+                {
+                    error = "ShramSafal.TestInstanceNotFound",
+                    message = "Test instance was not found."
+                });
+            }
+
+            if (await TestsReadableAsync(instanceFarmId, callerUserId, repository, farmScope, clock, ct) is { } refused)
+            {
+                return refused;
+            }
+
             var instance = await instanceRepository.GetByIdAsync(id, ct);
-            if (instance is null)
+            if (instance is null || (Guid)instance.FarmId != instanceFarmId)
             {
                 return Results.NotFound(new
                 {
@@ -308,6 +351,33 @@ public static class TestEndpoints
         .WithName("GetMissingTestsForFarm");
 
         return group;
+    }
+
+    /// <summary>
+    /// lane MU-3 fix 1 — null when the caller reads lab records on <paramref name="farmId"/> (the farm scope is
+    /// then open for the reads that follow); otherwise the refusal to return.
+    /// </summary>
+    private static async Task<IResult?> TestsReadableAsync(
+        Guid? farmId,
+        Guid callerUserId,
+        IShramSafalRepository repository,
+        ICallerFarmTenantScope farmScope,
+        AgriSync.BuildingBlocks.Abstractions.IClock clock,
+        CancellationToken ct)
+    {
+        if (farmId is not { } farm)
+        {
+            return ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.Forbidden);
+        }
+
+        var established = await farmScope.EstablishForCallerAsync(farm, callerUserId, ct);
+        if (!established.IsSuccess)
+        {
+            return ToErrorResult(established.Error);
+        }
+
+        var scope = await ShramSafal.Application.Services.FarmReadGate.ScopeAsync(repository, farm, callerUserId, clock.UtcNow, ct);
+        return scope?.SeeTests == true ? null : ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.Forbidden);
     }
 
     private static IResult ToErrorResult(Error error)

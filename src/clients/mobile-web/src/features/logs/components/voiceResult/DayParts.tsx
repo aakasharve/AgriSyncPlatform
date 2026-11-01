@@ -27,6 +27,7 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import { CategoryIcon } from '../shramsathi/understandingRing';
 import ClipPlayer from './ClipPlayer';
+import MoneyWordsWithheldCard from '../originalVoice/MoneyWordsWithheldCard';
 import { PartIcon, Words } from './HisWords';
 import { ProductBoxCard } from './ProductRows';
 import { showsProducts } from './productModel';
@@ -194,7 +195,9 @@ export const EarlierRecording: React.FC<{
             </span>
         </summary>
         <div className="mt-2">
-            {rec.transcript && <Words runs={markTranscript(rec.transcript, rec.entries)} size="text-[16px]" testId={`vr-earlier-words-${rec.id}`} />}
+            {rec.wordsWithheld
+                ? <MoneyWordsWithheldCard testId={`vr-earlier-withheld-${rec.id}`} />
+                : rec.transcript && <Words runs={markTranscript(rec.transcript, rec.entries)} size="text-[16px]" testId={`vr-earlier-words-${rec.id}`} />}
             {(rec.entries.length > 0 || rec.blockers.length > 0) && (
                 <div className="mb-2 space-y-1.5">
                     {rec.entries.map(e => <AddedRow key={e.id} entry={e} />)}

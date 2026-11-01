@@ -38,7 +38,13 @@ public sealed class GetAttentionBoardHandler(
         var today = FarmLocalDay.From(asOf);
 
         // 1. Get all farmIds for the caller
-        var farmIds = await repository.GetFarmIdsForUserAsync(query.CallerUserId, ct);
+        // lane MU-3 fix 1 (review item 12) — the board is the farm overview: only farms whose seat reads it
+        // (FarmReadScope.SeeFarmOverview; a कामगार seat does not), every seat in ONE batched read.
+        var memberFarmIds = await repository.GetFarmIdsForUserAsync(query.CallerUserId, ct);
+        var accesses = await repository.GetFarmAccessesForUserAsync(query.CallerUserId, memberFarmIds, ct);
+        var farmIds = memberFarmIds
+            .Where(id => Services.FarmReadScope.Of(id, accesses.GetValueOrDefault(id), clock.UtcNow) is { SeeFarmOverview: true })
+            .ToList();
         if (farmIds.Count == 0)
             return Result.Success(new AttentionBoardDto(asOf, Array.Empty<AttentionCardDto>(), Array.Empty<ScheduledWorkItemDto>()));
 

@@ -1491,6 +1491,44 @@ public interface IShramSafalRepository
     }
 
     /// <summary>
+    /// lane MU-3 fix 1 (F12) — <see cref="GetFarmAccessForUserAsync"/> for MANY farms at once (the sync pull
+    /// asks it every 15 s per phone): one answer per id, <c>null</c> where the person has no standing.
+    /// Default body (F7): one call per farm, so a test double answers exactly what it answers alone;
+    /// production overrides with a fixed number of queries whatever the number of farms.
+    /// </summary>
+    async Task<IReadOnlyDictionary<Guid, Services.FarmAccess?>> GetFarmAccessesForUserAsync(
+        Guid userId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        var result = new Dictionary<Guid, Services.FarmAccess?>();
+        foreach (var farmId in farmIds.Distinct())
+        {
+            result[farmId] = await GetFarmAccessForUserAsync(farmId, userId, ct);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// lane MU-3 fix 1 (F12) — who made each of these records, and on which farm (a record's photo follows
+    /// its record: an own-records-only seat may read it only when the record is his). Unknown ids are
+    /// absent. Default body: one read per id; production overrides with one query.
+    /// </summary>
+    async Task<IReadOnlyDictionary<Guid, Services.RecordMaker>> GetRecordMakersAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        var result = new Dictionary<Guid, Services.RecordMaker>();
+        foreach (var id in dailyLogIds.Distinct())
+        {
+            if (await GetDailyLogByIdAsync(id, ct) is { } log)
+            {
+                result[id] = new Services.RecordMaker(log.Id, (Guid)log.FarmId, log.OperatorUserId.Value);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the person's most recently ENDED seat on the
     /// farm (Revoked or Exited; newest by its last change), untracked, or <c>null</c>. The owner's
     /// decision route reads it to answer a decline / removal re-sent after it landed. NOT for SEC-2:

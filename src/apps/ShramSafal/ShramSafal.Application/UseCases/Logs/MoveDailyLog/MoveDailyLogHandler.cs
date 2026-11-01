@@ -178,7 +178,7 @@ public sealed class MoveDailyLogHandler(
         // Already there: nothing to move, nothing written, no version, no re-open.
         if (log.IsPlacedAt(scope, targetPlots, cropCycleId, targetDate))
         {
-            return Result.Success(new MoveDailyLogResultDto(log.ToDto(), []));
+            return Result.Success(await AnswerAsync(log, [], command.ActorUserId, now, ct));
         }
 
         // ── 5. Never over a newer change. ───────────────────────────────────────────────────────
@@ -402,7 +402,21 @@ public sealed class MoveDailyLogHandler(
 
         await RecomputeDayAsync((Guid)log.FarmId, targetDate, ct);
 
-        return Result.Success(new MoveDailyLogResultDto(log.ToDto(), movedMoney.Select(entry => entry.ToDto()).ToList()));
+        return Result.Success(await AnswerAsync(log, movedMoney.Select(entry => entry.ToDto()).ToList(), command.ActorUserId, now, ct));
+    }
+
+    /// <summary>
+    /// lane MU-3 fix 1 (F5) — the answer as the PULL would send it to the mover: the record through
+    /// <see cref="ReadScopeProjection.Record"/>, and the moved money only to a mover who sees money (the phone
+    /// stores what it is given, so nothing withheld may ride an answer).
+    /// </summary>
+    private async Task<MoveDailyLogResultDto> AnswerAsync(
+        Domain.Logs.DailyLog log, IReadOnlyList<CostEntryDto> movedMoney, Guid actor, DateTime now, CancellationToken ct)
+    {
+        var scope = await FarmReadGate.ScopeAsync(repository, (Guid)log.FarmId, actor, now, ct);
+        return new MoveDailyLogResultDto(
+            ReadScopeProjection.Record(log.ToDto(), scope, actor),
+            ReadScopeProjection.Money(movedMoney, scope));
     }
 
     /// <summary>The crop season on <paramref name="plotId"/> (this farm only) that covers <paramref name="day"/>, or null.</summary>

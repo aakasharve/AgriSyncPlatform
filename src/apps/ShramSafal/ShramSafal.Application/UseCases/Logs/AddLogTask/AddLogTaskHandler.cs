@@ -8,6 +8,7 @@ using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Crops;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Schedules;
 
@@ -333,6 +334,8 @@ public sealed class AddLogTaskHandler(
                 log.Id, log.CurrentVerificationStatus, new UserId(command.ActorUserId), ct);
         }
 
-        return Result.Success(log.ToDto());
+        // lane MU-3 fix 1 (F5) — the record as the PULL would send it to this person.
+        return Result.Success(await ReadScopeProjection.RecordForAsync(
+            repository, log.ToDto(), command.ActorUserId, clock.UtcNow, ct));
     }
 }

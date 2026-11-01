@@ -10,11 +10,13 @@
 
 import React from 'react';
 import { useFarmContext } from '../../../core/session/FarmContext';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { useWorkerProfile } from '../hooks/useWorkerProfile';
 import JobCardRow from '../components/JobCardRow';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 // TASK 8 — reused as-is, no new copy. See the note in `JobCardsPage.tsx`.
 import { LoadErrorBanner } from '../../labour/components/LabourUiKit';
+import { ruleWithheldCopy } from '../../../i18n/ruleWithheldTranslations';
 
 interface WorkerProfilePageProps {
     userId: string;
@@ -42,6 +44,8 @@ const WorkerProfilePage: React.FC<WorkerProfilePageProps> = ({
 }) => {
     const { currentFarmId } = useFarmContext();
     const { profile, recentCards, isLoading, loadFailed, refresh } = useWorkerProfile(userId, currentFarmId);
+    // lane MU-3 fix 1 (F7) — his earnings, when held back by rule, read in the person's language.
+    const language = useOptionalLanguage()?.language;
 
     const resolvedName = profile?.displayName ?? displayName ?? 'Worker';
     const roleLabel = role ? getRoleLabel(role) : null;
@@ -154,7 +158,9 @@ const WorkerProfilePage: React.FC<WorkerProfilePageProps> = ({
                                 className="text-xl font-black text-emerald-800"
                                 style={{ fontFamily: "'DM Sans', sans-serif" }}
                             >
-                                {Math.round(profile.earnedLast30d / 1000)}k
+                                {profile.earnedLast30d == null
+                                    ? ruleWithheldCopy(language).amount
+                                    : `${Math.round(profile.earnedLast30d / 1000)}k`}
                             </p>
                             <p
                                 className="text-[10px] text-emerald-600 font-semibold mt-0.5"

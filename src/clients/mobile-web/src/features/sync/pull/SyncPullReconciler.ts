@@ -84,6 +84,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         db.dayLedgers, db.plannedTasks, db.attentionCards, db.attendanceMarks,
         // lane MU-3 — the purge also reaches these (existing stores; no version bump).
         db.jobCards, db.testInstances, db.testRecommendations, db.complianceSignals,
+        // lane MU-3 fix 1 (item 14) — a gone farm's plots leave the crop list; other people's names leave the profile.
+        db.crops, db.farmerProfile,
     ], async () => {
         if (pendingLogIds) {
             importedLogs = await reconcileLogs(

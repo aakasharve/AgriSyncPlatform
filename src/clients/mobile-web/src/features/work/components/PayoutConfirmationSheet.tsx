@@ -18,6 +18,7 @@ import type { JobCard } from '../../../domain/work/JobCard';
 import type { SettleJobCardRequest } from '../data/jobCardsClient';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { errorTextIn } from '../../../shared/names/namesIn';
+import { jobCardAmountText } from '../jobCardAmount';
 
 interface PayoutConfirmationSheetProps {
     card: JobCard;
@@ -32,7 +33,8 @@ const PayoutConfirmationSheet: React.FC<PayoutConfirmationSheetProps> = ({
     onSettled,
     onViewLedger,
 }) => {
-    const [actualAmount, setActualAmount] = useState<number>(card.estimatedTotalAmount);
+    // lane MU-3 fix 1 (F7) — a seat the server held the pay back from cannot settle it: nothing is prefilled as ₹0.
+    const [actualAmount, setActualAmount] = useState<number>(card.estimatedTotalAmount ?? 0);
     const [settlementNote, setSettlementNote] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -42,7 +44,7 @@ const PayoutConfirmationSheet: React.FC<PayoutConfirmationSheetProps> = ({
     const [settled, setSettled] = useState(false);
 
     // The linked log must be verified for payout — we check via status
-    const canSettle = card.status === 'VerifiedForPayout';
+    const canSettle = card.status === 'VerifiedForPayout' && card.estimatedTotalAmount != null;
 
     const handleSettle = async () => {
         setIsSaving(true);
@@ -187,7 +189,7 @@ const PayoutConfirmationSheet: React.FC<PayoutConfirmationSheetProps> = ({
                                     className="text-base font-black text-stone-500 line-through"
                                     style={{ fontFamily: "'DM Sans', sans-serif" }}
                                 >
-                                    {card.estimatedTotalCurrency} {Math.round(card.estimatedTotalAmount).toLocaleString('en-IN')}
+                                    {jobCardAmountText(card.estimatedTotalCurrency, card.estimatedTotalAmount, language)}
                                 </p>
                             </div>
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-stone-300">

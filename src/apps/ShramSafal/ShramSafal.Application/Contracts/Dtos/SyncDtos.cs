@@ -93,15 +93,20 @@ public sealed record SyncPullResponseDto(
 /// <summary>
 /// lane MU-3 — one farm's read scope on the pull wire (<c>Services.FarmReadScope</c>), for the phone's
 /// purge and its screens. Booleans only: no authority names, no expiry (those stay on <c>/me/context</c>).
+/// <para>MU-3 fix 1 (F9) — <see cref="Status"/> says what the farm IS to this person: <c>Active</c> (read
+/// per the flags), or — only for a farm the phone said it holds and may no longer read — <c>Paused</c>,
+/// <c>Waiting</c> or <c>Removed</c> (every flag false). The phone removes a farm's data only on one of these
+/// three, never because a farm is absent from the list.</para>
 /// </summary>
 /// <param name="FarmId">The farm.</param>
 /// <param name="OwnRecordsOnly">Only the records this person made are sent; the phone drops everyone else's.</param>
-/// <param name="SeeMoney">Money is sent (cost entries, corrections, day ledger, job cards, a record's stated money).</param>
-/// <param name="SeeWages">Wages on other people's labour are sent; when false the phone holds them as withheld.</param>
+/// <param name="SeeMoney">Money is sent (cost entries, corrections, day ledger, crew totals, a record's stated money).</param>
+/// <param name="SeeWages">A named worker's pay is sent (per-person wages, job-card rates and payouts, earnings).</param>
 /// <param name="SeeAttendance">Attendance rulings are sent.</param>
 /// <param name="SeeTests">Test records are sent.</param>
 /// <param name="SeeCompliance">Compliance warnings are sent.</param>
-/// <param name="SeeFarmOverview">The attention board and the planned work are sent.</param>
+/// <param name="SeeFarmOverview">The attention board, the planned work and the job cards are sent.</param>
+/// <param name="Status"><c>Active</c>, <c>Paused</c>, <c>Waiting</c> or <c>Removed</c> (additive; absent = Active).</param>
 public sealed record FarmAccessScopeDto(
     Guid FarmId,
     bool OwnRecordsOnly,
@@ -110,8 +115,14 @@ public sealed record FarmAccessScopeDto(
     bool SeeAttendance,
     bool SeeTests,
     bool SeeCompliance,
-    bool SeeFarmOverview)
+    bool SeeFarmOverview,
+    string Status = FarmAccessScopeDto.Active)
 {
+    public const string Active = "Active";
+    public const string Paused = "Paused";
+    public const string Waiting = "Waiting";
+    public const string Removed = "Removed";
+
     public static FarmAccessScopeDto From(Services.FarmReadScope scope) =>
         new(
             scope.FarmId,
@@ -122,4 +133,19 @@ public sealed record FarmAccessScopeDto(
             scope.SeeTests,
             scope.SeeCompliance,
             scope.SeeFarmOverview);
+
+    /// <summary>
+    /// A farm the phone holds that this person may no longer read: a paused seat says Paused, a waiting
+    /// request Waiting, and no live seat at all (removed, exited, never a member) Removed.
+    /// </summary>
+    public static FarmAccessScopeDto NotReadable(Guid farmId, Services.FarmAccess? access) =>
+        new(
+            farmId, OwnRecordsOnly: false, SeeMoney: false, SeeWages: false, SeeAttendance: false,
+            SeeTests: false, SeeCompliance: false, SeeFarmOverview: false,
+            Status: access?.Status switch
+            {
+                Domain.Farms.MembershipStatus.Suspended => Paused,
+                Domain.Farms.MembershipStatus.PendingApproval or Domain.Farms.MembershipStatus.PendingOtpClaim => Waiting,
+                _ => Removed,
+            });
 }

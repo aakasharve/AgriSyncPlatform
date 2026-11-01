@@ -32,11 +32,16 @@ import { readFarmOwnerAccountId } from './VoiceClipRetention';
 export type OriginalVoiceOutcome =
     | { kind: 'audio'; blob: Blob }
     | { kind: 'unavailable' }
+    /** Lane MU-3 fix 1 (F3, D-66): the record mentions money and, by ShramSafal's rule, its voice is not played here. */
+    | { kind: 'moneyWithheld' }
     | { kind: 'pending' }
     | { kind: 'failed' };
 
 /** The server's reason when the recording is not (yet) in its archive (GetLogOriginalVoiceHandler). */
 export const NOT_ON_SERVER_REASON = 'not_on_server';
+
+/** Lane MU-3 fix 1 (F3) — the server's reason when the money rule withholds a record's voice (GetLogOriginalVoiceHandler). */
+export const MONEY_WITHHELD_REASON = 'money_withheld';
 
 const DEFAULT_MIME = 'audio/webm';
 
@@ -98,7 +103,10 @@ export async function fetchLogOriginalVoice(dailyLogId: string, farmId: string):
     const parsed = OriginalVoiceResponseSchema.safeParse(body);
     if (!parsed.success) return { kind: 'failed' };
     const voice = parsed.data;
-    if (!voice.available) return voice.reason === NOT_ON_SERVER_REASON ? { kind: 'pending' } : { kind: 'unavailable' };
+    if (!voice.available) {
+        if (voice.reason === MONEY_WITHHELD_REASON) return { kind: 'moneyWithheld' };
+        return voice.reason === NOT_ON_SERVER_REASON ? { kind: 'pending' } : { kind: 'unavailable' };
+    }
     if (!voice.clipId || !voice.dekId || !voice.ivBase64 || !voice.authTagBase64 || !voice.cipherBase64) {
         return { kind: 'failed' };
     }

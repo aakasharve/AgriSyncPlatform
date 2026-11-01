@@ -9,9 +9,21 @@ export async function pushSyncBatch(t: HttpTransport, request: SyncPushRequest):
     return response.data;
 }
 
-export async function pullSyncChanges(t: HttpTransport, sinceCursorIso?: string): Promise<SyncPullResponse> {
+/**
+ * lane MU-3 fix 1 (F9) — `heldFarmIds`: the farms this phone holds, sent as `farms=` so the server can say
+ * EXPLICITLY which of them this person may no longer read (paused, waiting, removed). Additive: an older
+ * server ignores it.
+ */
+export async function pullSyncChanges(
+    t: HttpTransport,
+    sinceCursorIso?: string,
+    heldFarmIds: readonly string[] = [],
+): Promise<SyncPullResponse> {
     const normalizedCursor = normalizeSyncCursorForApi(sinceCursorIso);
-    const params = normalizedCursor ? { since: normalizedCursor } : undefined;
+    const farms = heldFarmIds.length > 0 ? heldFarmIds.join(',') : undefined;
+    const params = normalizedCursor || farms
+        ? { ...(normalizedCursor ? { since: normalizedCursor } : {}), ...(farms ? { farms } : {}) }
+        : undefined;
     const response = await t.http.get<SyncPullResponse>('/sync/pull', { params });
     return response.data;
 }

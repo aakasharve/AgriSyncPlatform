@@ -790,7 +790,10 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             // spec: plr-d10 (I27; founder D-44) — confirming is the primary owner's, or the
             // grant's; a co-owner's role alone no longer carries it.
             canConfirm: OwnerConfirmationAuthority.MayConfirm(
-                resolvedCallerRole, hasConfirmAuthority)));
+                resolvedCallerRole, hasConfirmAuthority),
+            // lane MU-3 fix 1 (F4): crew totals to a seat that sees money (a कामगार narrowed to his row never).
+            seesMoney: !narrowToCaller && registerView != LabourRegisterView.OwnRow
+                && FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc)?.SeeMoney == true));
     }
 
     /// <summary>Latest <see cref="FinanceCorrection"/> per <c>CostEntryId</c>, by <c>CorrectedAtUtc</c>.</summary>
@@ -1144,7 +1147,8 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         IReadOnlySet<string>? ownReviewIds = null,
         bool narrowToCaller = false,
         bool? canManageLabour = null,
-        bool? canConfirm = null)
+        bool? canConfirm = null,
+        bool seesMoney = false)
     {
         if (view == LabourRegisterView.OwnerBook)
         {
@@ -1156,7 +1160,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             {
                 View = "owner",
                 Dashboard = dto.Dashboard with { Pending = dto.Review.Count },
-                CanManageLabour = true,
+                // lane MU-3 fix 1 (F6) — reading the wage book (see wages) is not writing labour (take हजेरी):
+                // the handler's answer, never assumed. Only a direct caller with nothing to hand gets the old true.
+                CanManageLabour = canManageLabour ?? true,
                 // plr-d10 I27: a co-owner reads the whole book but does not confirm by role.
                 CanConfirm = canConfirm,
             };
@@ -1190,28 +1196,40 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 .ToList();
         }
 
+        // lane MU-3 fix 1 (F4) — a crew's amount and the farm-wide totals are MONEY (see money); a named
+        // person's pay (the People rows above, the ledger's per-person rows) is a WAGE and stays withheld here.
         var review = dto.Review
             .Where(r => !narrowToCaller || (ownReviewIds is not null && ownReviewIds.Contains(r.Id)))
-            .Select(r => r with { Points = r.Points with { Amount = null } })
+            // F3 (D-66) — a crew's task words that themselves name money are withheld whole, never cut.
+            .Select(r => seesMoney ? r : r with
+            {
+                Points = r.Points with
+                {
+                    Amount = null,
+                    Task = Services.MoneyMention.InText(r.Points.Task) ? null : r.Points.Task,
+                },
+            })
             .ToList();
         // The badge must agree with the list under it, for every role: pending
         // is the number of cards THIS caller receives. For owner, secondary
         // owner, Mukadam and a granted member that is the farm's whole inbox
         // (unchanged); for a no-grant Worker it is his own.
-        var dashboard = dto.Dashboard with
-        {
-            Wages = null,
-            Advances = null,
-            Owed = null,
-            Money = null,
-            Pending = review.Count,
-        };
+        var dashboard = seesMoney
+            ? dto.Dashboard with { Pending = review.Count }
+            : dto.Dashboard with
+            {
+                Wages = null,
+                Advances = null,
+                Owed = null,
+                Money = null,
+                Pending = review.Count,
+            };
         var ledger = view == LabourRegisterView.OwnRow
             ? dto.Ledger with { Rows = [], CrewRows = [] }
             : dto.Ledger;
         // D6 home cards: money withheld for non-owners; the आज कामावर
         // headcounts survive (attendance is safe for anyone — D-H8).
-        var home = dto.Home with { RojandariStated = null, UkteAgreed = null };
+        var home = seesMoney ? dto.Home : dto.Home with { RojandariStated = null, UkteAgreed = null };
 
         return dto with
         {

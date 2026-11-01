@@ -16,6 +16,11 @@ export interface ReviseLogContentPayload {
      content: LogContentPayload;
      reason?: string;
      revisedAtUtc: string;
+     /**
+      * lane MU-3 fix 1 (F8) — the copy this edit was made on came WITHOUT its amounts (`DailyLog.amountsWithheld`), so
+      * the server carries them forward. Decided by what this phone was SENT, never by the seat's switches now.
+      */
+     amountsWithheld?: boolean;
 }
 
 export class ReviseLogContentCommand {

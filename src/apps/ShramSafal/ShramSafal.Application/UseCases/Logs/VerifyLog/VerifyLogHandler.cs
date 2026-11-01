@@ -318,7 +318,7 @@ public sealed class VerifyLogHandler(
             })
         ), ct);
 
-        return Result.Success(log.ToDto());
+        return Result.Success(await ForVerifierAsync(log, command.VerifiedByUserId, ct));
     }
 
     /// <summary>
@@ -372,7 +372,7 @@ public sealed class VerifyLogHandler(
             ct);
 
         await repository.SaveChangesAsync(ct);
-        return Result.Success(log.ToDto());
+        return Result.Success(await ForVerifierAsync(log, command.VerifiedByUserId, ct));
     }
 
     /// <summary>
@@ -397,4 +397,8 @@ public sealed class VerifyLogHandler(
 
         return utc >= recordCreatedAtUtc && utc <= nowUtc ? utc : null;
     }
+
+    /// <summary>lane MU-3 fix 1 (F5) — the record as the PULL would send it to the verifier (<see cref="ReadScopeProjection.Record"/>).</summary>
+    private Task<DailyLogDto> ForVerifierAsync(DailyLog log, Guid verifier, CancellationToken ct) =>
+        ReadScopeProjection.RecordForAsync(repository, log.ToDto(), verifier, clock.UtcNow, ct);
 }

@@ -42,6 +42,7 @@ import { PARTS, markTranscript, type DayView, type PartKey, type RecordingView }
 import { resultDayStr, useResultStr, type ResultStr } from './resultStrings';
 import { scrollBelowHeader } from './scrollBelowHeader';
 import type { LogSyncState } from './useRecordingTrust';
+import MoneyWordsWithheldCard from '../originalVoice/MoneyWordsWithheldCard';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
@@ -172,7 +173,9 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 {!severalPlots && <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />}
                 {primary.legacyPartial && <LegacyNote />}
 
-                {runs.length > 0 && <Words runs={runs} tags focus={focus} />}
+                {primary.wordsWithheld
+                    ? <MoneyWordsWithheldCard testId="vr-words-withheld" />
+                    : runs.length > 0 && <Words runs={runs} tags focus={focus} />}
                 <PartLinks runs={runs} entries={addedEntries} focus={focus} onFocus={setFocus} />
 
                 {p.unclear.length > 0 && (

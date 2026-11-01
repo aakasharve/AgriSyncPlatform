@@ -663,6 +663,9 @@ function toDailyLog(
         // lane RF2 fix pass (review B002) — the हजेरी door's mark, from the server's own record, so a pulled record
         // still refuses a details edit on this phone (lane F1's rule) before anything is queued.
         ...(source.captureScope === 'labour' && { captureScope: 'labour' as const }),
+        // lane MU-3 fix 1 (F8 / F3) — what this copy was sent WITHOUT, as the server's own projection says.
+        ...(source.content?.amountsWithheld === true && { amountsWithheld: true }),
+        ...(source.wordsWithheldForMoney === true && { wordsWithheldForMoney: true }),
         legacyPartial: !statedDetails,
         // LABOUR_PHASE2 Phase 3 — the read-back. `?? []` is NOT a reading of the
         // empty set: an empty set is on-the-wire and flows through

@@ -22,6 +22,7 @@ public static class ExportEndpoints
             ClaimsPrincipal user,
             IShramSafalRepository repository,
             IClock clock,
+            ICallerFarmTenantScope tenantScope,
             [FromServices] ExportDailySummaryHandler handler,
             CancellationToken ct) =>
         {
@@ -30,7 +31,10 @@ public static class ExportEndpoints
                 return Results.Unauthorized();
             }
 
-            if (!await MayExportAsync(repository, clock, farmId, actorUserId, ct))
+            // lane MU-3 fix 1 (F94) — open the caller's farm scope first, as every working farm route does:
+            // without it the first read failed closed in TenantConnectionInterceptor (500 for everyone).
+            if (!(await tenantScope.EstablishForCallerAsync(farmId, actorUserId, ct)).IsSuccess
+                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }
@@ -47,6 +51,7 @@ public static class ExportEndpoints
             ClaimsPrincipal user,
             IShramSafalRepository repository,
             IClock clock,
+            ICallerFarmTenantScope tenantScope,
             [FromServices] ExportMonthlyCostHandler handler,
             CancellationToken ct) =>
         {
@@ -55,7 +60,10 @@ public static class ExportEndpoints
                 return Results.Unauthorized();
             }
 
-            if (!await MayExportAsync(repository, clock, farmId, actorUserId, ct))
+            // lane MU-3 fix 1 (F94) — open the caller's farm scope first, as every working farm route does:
+            // without it the first read failed closed in TenantConnectionInterceptor (500 for everyone).
+            if (!(await tenantScope.EstablishForCallerAsync(farmId, actorUserId, ct)).IsSuccess
+                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }
@@ -72,6 +80,7 @@ public static class ExportEndpoints
             ClaimsPrincipal user,
             IShramSafalRepository repository,
             IClock clock,
+            ICallerFarmTenantScope tenantScope,
             [FromServices] ExportVerificationReportHandler handler,
             CancellationToken ct) =>
         {
@@ -80,7 +89,10 @@ public static class ExportEndpoints
                 return Results.Unauthorized();
             }
 
-            if (!await MayExportAsync(repository, clock, farmId, actorUserId, ct))
+            // lane MU-3 fix 1 (F94) — open the caller's farm scope first, as every working farm route does:
+            // without it the first read failed closed in TenantConnectionInterceptor (500 for everyone).
+            if (!(await tenantScope.EstablishForCallerAsync(farmId, actorUserId, ct)).IsSuccess
+                || !await MayExportAsync(repository, clock, farmId, actorUserId, ct))
             {
                 return Results.Forbid();
             }

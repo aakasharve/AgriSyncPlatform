@@ -21,4 +21,9 @@ public sealed record ReviseLogContentCommand(
     string? ClientRequestId = null,
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+    // lane MU-3 fix 1 (F8) — was the copy this edit was made on sent WITHOUT its amounts? The phone says so
+    // (true / false), and the server follows what the phone was SENT, whatever the editor's authority is when the
+    // edit arrives. null = a phone that does not say (1.0.17 and older): the editor's authority now decides, as
+    // before fix 1.
+    bool? AmountsWithheld = null);

@@ -94,6 +94,37 @@ public sealed class LabourRegisterViewTests
     }
 
     /// <summary>
+    /// lane MU-3 fix 1 (F6) — the owner's book is READ with see wages; WRITING labour needs take हजेरी. A seat given
+    /// see wages but not take हजेरी reads the book and is told he may not manage labour (the phone hides the doors
+    /// the server would refuse, P5).
+    /// </summary>
+    [Fact]
+    public void The_owner_book_tells_a_see_wages_seat_without_take_attendance_that_he_may_not_manage_labour()
+    {
+        var dto = GetLabourDataHandler.ApplyRegisterView(FullDto(), LabourRegisterView.OwnerBook, canManageLabour: false);
+
+        Assert.Equal("owner", dto.View);
+        Assert.False(dto.CanManageLabour);
+    }
+
+    /// <summary>
+    /// lane MU-3 fix 1 (F3, D-66) — a crew's task words that themselves name money are withheld WHOLE from a seat
+    /// without see money; task words without money stay exactly as written.
+    /// </summary>
+    [Fact]
+    public void A_crew_task_that_names_money_is_withheld_whole_without_see_money()
+    {
+        var full = FullDto();
+        var priced = full with { Review = [full.Review[0] with { Points = full.Review[0].Points with { Task = "छाटणी ४०० रुपये" } }] };
+        var plain = full with { Review = [full.Review[0] with { Points = full.Review[0].Points with { Task = "छाटणी" } }] };
+
+        Assert.Null(GetLabourDataHandler.ApplyRegisterView(priced, LabourRegisterView.CrewAttendance).Review[0].Points.Task);
+        Assert.Equal("छाटणी", GetLabourDataHandler.ApplyRegisterView(plain, LabourRegisterView.CrewAttendance).Review[0].Points.Task);
+        Assert.Equal("छाटणी ४०० रुपये",
+            GetLabourDataHandler.ApplyRegisterView(priced, LabourRegisterView.CrewAttendance, seesMoney: true).Review[0].Points.Task);
+    }
+
+    /// <summary>
     /// D-H8 + the Task 4.1 constraint verbatim: a मुकादम reading the register
     /// receives his crew's attendance and NO other worker's money. Money is
     /// ABSENT (null), never a fabricated ₹0 — blank is not zero.

@@ -3,26 +3,16 @@
 // trail, the job-card reads, the wage book (labour read-out) and the attachment reads. On a real Postgres as
 // agrisync_app (E3 first), each person, through the real host.
 //
-// FOUND (pre-existing on dbea472a, not changed by this lane): /finance/plot-summary, /export/*,
-// /audit?farmId= and /farms/{id}/job-cards answer 500 to EVERY caller at the route — they open no tenant
-// scope, so the first database read fails closed in TenantConnectionInterceptor, and the plot-summary
-// handler is not even registered. Those four are therefore proved here on the exact rule / handler the
-// route asks, run user-scoped (only agrisync.user_id set); the working routes are proved through the host.
+// MU-3 fix 1 (F94): /finance/plot-summary, /export/*, /audit?farmId= and /farms/{id}/job-cards answered 500 to
+// EVERY caller at the route on edee6667 (no tenant scope was opened; the plot-summary handler was not even
+// registered). They now open the caller's farm scope first, and the money rule is proved THROUGH THE ROUTE.
 using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Reflection;
 using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
-using AgriSync.BuildingBlocks.Abstractions;
-using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
-using Microsoft.Extensions.DependencyInjection;
-using ShramSafal.Application.Ports;
-using ShramSafal.Application.UseCases.Finance.GetPlotFinanceSummary;
-using ShramSafal.Application.UseCases.Work.GetJobCardsForFarm;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -52,54 +42,83 @@ public sealed class RoleScopedReadDoorsRealPostgresTests(ITestOutputHelper outpu
     }
 
     [Fact]
-    public async Task The_plot_summary_opens_only_for_a_seat_that_sees_money()
+    public async Task The_plot_summary_route_opens_only_for_a_seat_that_sees_money()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        (await PlotSummaryAsync(Owner)).Should().BeTrue("the owner reads his plot's money");
+        var url = $"/shramsafal/finance/plot-summary?plotId={PlotA}";
+        var (ownerStatus, ownerBody) = await GetAsync(url, Owner);
+        ownerStatus.Should().Be(HttpStatusCode.OK, ownerBody);
+        ownerBody.Should().Contain("9876.54", "the owner reads his plot's money");
         foreach (var seat in NoMoneySeats.Append(Paused).Append(OwnerB))
         {
-            (await PlotSummaryAsync(seat)).Should().BeFalse($"{seat} does not see this farm's money");
+            var (status, body) = await GetAsync(url, seat);
+            status.Should().Be(HttpStatusCode.Forbidden, $"{seat} does not see this farm's money: {body}");
+            body.Should().NotContain("9876.54");
         }
     }
 
     [Fact]
-    public async Task Exports_carry_amounts_and_open_only_for_a_seat_that_sees_the_farms_money()
+    public async Task The_export_routes_carry_amounts_and_open_only_for_a_seat_that_sees_the_farms_money()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        var rule = Rule(typeof(ShramSafal.Api.Endpoints.ExportEndpoints), "MayExportAsync");
-        (await AsUserAsync(Owner, sp => Ask(rule, sp, Owner))).Should().BeTrue("the owner exports his farm's reports");
-        foreach (var seat in NoMoneySeats.Append(Paused).Append(OwnerB))
+        // The production host's own startup line (Bootstrapper Program.cs): the PDF library's Community licence.
+        QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+        var urls = new[]
         {
-            (await AsUserAsync(seat, sp => Ask(rule, sp, seat))).Should().BeFalse($"{seat} may not export amounts");
+            $"/shramsafal/export/monthly-cost?farmId={FarmA}&year=2026&month=10",
+            $"/shramsafal/export/verification?farmId={FarmA}&fromDate=2026-10-01&toDate=2026-10-31",
+        };
+        foreach (var url in urls)
+        {
+            var (ownerStatus, ownerBody) = await GetAsync(url, Owner);
+            ownerStatus.Should().Be(HttpStatusCode.OK, $"the owner exports his farm's reports: {ownerBody}");
+            foreach (var seat in NoMoneySeats.Append(Paused).Append(OwnerB))
+            {
+                var (status, body) = await GetAsync(url, seat);
+                status.Should().Be(HttpStatusCode.Forbidden, $"{seat} may not export amounts: {body}");
+            }
         }
     }
 
     [Fact]
-    public async Task The_farms_audit_trail_opens_only_for_a_seat_that_sees_money_and_wages()
+    public async Task The_farms_audit_trail_route_opens_only_for_a_seat_that_sees_money_and_wages()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        var rule = Rule(typeof(ShramSafal.Api.Endpoints.AuditEndpoints), "MayReadFarmAuditAsync");
-        (await AsUserAsync(Owner, sp => Ask(rule, sp, Owner, withClock: false))).Should().BeTrue();
+        var url = $"/shramsafal/audit?farmId={FarmA}";
+        var (ownerStatus, ownerBody) = await GetAsync(url, Owner);
+        ownerStatus.Should().Be(HttpStatusCode.OK, ownerBody);
         foreach (var seat in NoMoneySeats.Append(Paused).Append(OwnerB))
         {
-            (await AsUserAsync(seat, sp => Ask(rule, sp, seat, withClock: false))).Should()
-                .BeFalse($"{seat}: the trail carries amounts and wages");
+            var (status, body) = await GetAsync(url, seat);
+            status.Should().Be(HttpStatusCode.Forbidden, $"{seat}: the trail carries amounts and wages: {body}");
+            body.Should().NotContain("9876.54");
         }
     }
 
     [Fact]
-    public async Task Job_cards_carry_rates_and_open_only_for_a_seat_that_sees_money()
+    public async Task The_farms_job_cards_route_sends_the_work_to_every_working_seat_and_the_pay_only_with_see_wages()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        var owner = await JobCardsAsync(Owner);
-        owner.IsSuccess.Should().BeTrue();
-        owner.Value!.Select(j => j.Id).Should().Equal([JobCard]);
+        var url = $"/shramsafal/farms/{FarmA}/job-cards";
+        var (ownerStatus, ownerBody) = await GetAsync(url, Owner);
+        ownerStatus.Should().Be(HttpStatusCode.OK, ownerBody);
+        ownerBody.Should().Contain("6129.37", "the owner sees the rate");
 
-        foreach (var seat in NoMoneySeats.Append(Paused))
+        foreach (var seat in new[] { CoOwner, Mukadam })
         {
-            var result = await JobCardsAsync(seat);
-            result.IsSuccess.Should().BeFalse($"{seat}: a job card's rate is money");
-            result.Error.Code.Should().Contain("Forbidden");
+            var (status, body) = await GetAsync(url, seat);
+            status.Should().Be(HttpStatusCode.OK, $"{seat}: the work assignment is his to read (fix 1 F7): {body}");
+            JsonDocument.Parse(body).RootElement.EnumerateArray().Select(j => j.GetProperty("id").GetGuid()).Should().Equal([JobCard]);
+            body.Should().NotContain("6129.37", $"{seat}: a worker's pay is withheld by rule, never ₹0");
+            var card = JsonDocument.Parse(body).RootElement[0];
+            card.GetProperty("estimatedTotalAmount").ValueKind.Should().Be(JsonValueKind.Null);
+            card.GetProperty("lineItems")[0].GetProperty("ratePerHourAmount").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+
+        foreach (var seat in new[] { Worker, Paused, OwnerB })
+        {
+            var (status, body) = await GetAsync(url, seat);
+            status.Should().Be(HttpStatusCode.Forbidden, $"{seat}: not the farm's work list: {body}");
         }
     }
 
@@ -155,37 +174,5 @@ public sealed class RoleScopedReadDoorsRealPostgresTests(ITestOutputHelper outpu
         var (status, body) = await GetAsync($"/shramsafal/attachments?entityId={entityId}&entityType={entityType}", user);
         status.Should().Be(HttpStatusCode.OK, body);
         return JsonDocument.Parse(body).RootElement.EnumerateArray().Select(a => a.GetProperty("id").GetGuid()).ToArray();
-    }
-
-    private Task<bool> PlotSummaryAsync(Guid user) => AsUserAsync(user, async sp =>
-    {
-        var result = await ActivatorUtilities.CreateInstance<GetPlotFinanceSummaryHandler>(sp)
-            .HandleAsync(new GetPlotFinanceSummaryQuery(user, PlotA));
-        Output.WriteLine($"[DOOR] {user} plot-summary -> {(result.IsSuccess ? "ok" : result.Error.Code)}");
-        return result.IsSuccess;
-    });
-
-    private Task<AgriSync.BuildingBlocks.Results.Result<System.Collections.Generic.List<ShramSafal.Application.Contracts.Dtos.JobCardDto>>> JobCardsAsync(Guid user) =>
-        AsUserAsync(user, sp => ActivatorUtilities.CreateInstance<GetJobCardsForFarmHandler>(sp)
-            .HandleAsync(new GetJobCardsForFarmQuery(new FarmId(FarmA), new UserId(user), StatusFilter: null)));
-
-    /// <summary>
-    /// The door's own rule, found by name: a public static method the ROUTE calls. On a build without it
-    /// (dbea472a) the door had no money rule at all, which fails the test rather than the compile.
-    /// </summary>
-    private static MethodInfo? Rule(Type endpoints, string name) =>
-        endpoints.GetMethod(name, BindingFlags.Public | BindingFlags.Static);
-
-    private async Task<bool> Ask(MethodInfo? rule, IServiceProvider sp, Guid user, bool withClock = true)
-    {
-        rule.Should().NotBeNull("the door must ask a money rule before it answers");
-        var repository = sp.GetRequiredService<IShramSafalRepository>();
-        var clock = sp.GetRequiredService<IClock>();
-        object[] args = withClock
-            ? [repository, clock, FarmA, user, CancellationToken.None]
-            : [repository, FarmA, user, clock.UtcNow, CancellationToken.None];
-        var answer = await (Task<bool>)rule!.Invoke(null, args)!;
-        Output.WriteLine($"[DOOR] {user} {rule.Name} -> {answer}");
-        return answer;
     }
 }

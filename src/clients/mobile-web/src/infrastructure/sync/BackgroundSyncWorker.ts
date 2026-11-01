@@ -5,6 +5,7 @@ import { getAuthSession } from '../storage/AuthTokenStore';
 import { reconcileSyncPull } from '../../features/sync/pull/SyncPullReconciler';
 import { isLogsRebuildDue, REFUSAL_RESTORES_SERVER_VERSION, requestLogsRebuild } from '../../features/sync/pull/logsRebuildMarker';
 import { getDatabase } from '../storage/DexieDatabase';
+import { readHeldFarmIds } from '../storage/accessScopeStore';
 import { AiJobWorker } from './AiJobWorker';
 import { isSyncMutationType, SyncMutationName } from './SyncMutationCatalog';
 import { getRootStore } from '../../app/state/RootStore';
@@ -625,7 +626,8 @@ export class BackgroundSyncWorker {
         // rebuilt truthfully (logsRebuildMarker.ts). Until the marker is written, the pull starts from the beginning.
         const rebuildLogs = await isLogsRebuildDue(getDatabase());
         const sinceCursor = rebuildLogs ? '0' : (await mutationQueue.getCursor() ?? '0');
-        const payload = await agriSyncClient.pullSyncChanges(sinceCursor);
+        // lane MU-3 fix 1 (F9) — name the farms this phone holds, so the server answers each one explicitly.
+        const payload = await agriSyncClient.pullSyncChanges(sinceCursor, await readHeldFarmIds(getDatabase()));
         await mutationQueue.saveLastPullPayload(payload);
         await reconcileSyncPull(payload, { rebuildLogs });
 

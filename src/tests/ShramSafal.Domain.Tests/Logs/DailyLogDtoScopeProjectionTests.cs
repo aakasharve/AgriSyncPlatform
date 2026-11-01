@@ -197,7 +197,7 @@ public sealed class DailyLogDtoScopeProjectionTests
             // lane F1 appends two more members, after every earlier one: the record version and the
             // stored details (null = this response states none — only the pull loads them). Lane RF2's fix
             // pass (review B002) appends one more, last: the door that saved it (null = not the हजेरी door).
-            $"{legacyJson[..^1]},\"scope\":\"Plot\",\"plotIds\":[\"{PlotA}\"],\"labour\":null,\"dayOutcome\":null,\"contentVersion\":1,\"content\":null,\"captureScope\":null}}",
+            $"{legacyJson[..^1]},\"scope\":\"Plot\",\"plotIds\":[\"{PlotA}\"],\"labour\":null,\"dayOutcome\":null,\"contentVersion\":1,\"content\":null,\"captureScope\":null,\"wordsWithheldForMoney\":null}}",
             "additive and inert: every field that shipped before A2a keeps its exact position, name and value, and " +
             "the only difference a shipped client can observe is members it does not yet read");
     }

@@ -15,6 +15,7 @@
  *   - the next pull brings the same rows again (the server moved their clock forward), so a failure here heals itself.
  */
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { readAccessScopes, scopeForFarm } from '../../infrastructure/storage/accessScopeStore';
 
 /** One money entry as the server sends it (the fields this module relies on; the rest is kept as sent). */
 interface MovedCostEntry { id: string; farmId: string; [field: string]: unknown }
@@ -42,11 +43,15 @@ export async function takeMovedMoney(data: unknown): Promise<number> {
         console.error(`[movedMoney] a move answer has no money list (keys: ${shape}); its money comes with the next pull`);
         return 0;
     }
-    if (moved.length === 0) return 0;
+    // lane MU-3 fix 1 (F5) — never store money of a farm the server's last answer says this person does not see (the
+    // server already sends none; this is the phone's own guard, the same answer the pull's purge applied).
+    const stored = await readAccessScopes(getDatabase());
+    const kept = moved.filter(entry => scopeForFarm(stored, entry.farmId)?.seeMoney !== false);
+    if (kept.length === 0) return 0;
     const at = new Date().toISOString();
-    await getDatabase().costEntries.bulkPut(moved.map(entry => ({ id: entry.id, farmId: entry.farmId, payload: entry, updatedAt: at })));
+    await getDatabase().costEntries.bulkPut(kept.map(entry => ({ id: entry.id, farmId: entry.farmId, payload: entry, updatedAt: at })));
     if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('agrisync:finance-sync-payload', { detail: { costEntries: moved } }));
+        window.dispatchEvent(new CustomEvent('agrisync:finance-sync-payload', { detail: { costEntries: kept } }));
     }
-    return moved.length;
+    return kept.length;
 }

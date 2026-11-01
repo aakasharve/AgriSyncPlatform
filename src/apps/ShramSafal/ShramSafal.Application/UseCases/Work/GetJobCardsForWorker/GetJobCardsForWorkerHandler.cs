@@ -26,8 +26,8 @@ namespace ShramSafal.Application.UseCases.Work.GetJobCardsForWorker;
 /// sees exactly what he saw before. See <see cref="WorkerRecordTier"/>.</para>
 /// </summary>
 /// <summary>
-/// One worker's job cards. lane MU-3 (founder D-22 / D-26): a worker's OWN cards are his own record and
-/// stay his; anyone else reads them only on a farm where he sees money (a job card carries rates and payouts).
+/// One worker's job cards. lane MU-3 (founder D-22 / D-26; fix 1 F7): a worker's OWN cards are his own record
+/// and stay his; anyone else gets the work with the rates and payout withheld unless he sees wages there.
 /// </summary>
 public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository, IClock? clock = null)
 {
@@ -66,26 +66,20 @@ public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository
         // design (a worker's own view needs all of it); the filter is what keeps another
         // farm's record of him from coming back with it.
         var permitted = permittedFarmIds.ToHashSet();
-        if (query.CallerUserId.Value != query.WorkerUserId.Value)
-        {
-            var now = clock?.UtcNow ?? DateTime.UtcNow;
-            foreach (var farmId in permitted.ToList())
-            {
-                if (!await FarmReadGate.MaySeeMoneyAsync(repository, farmId, query.CallerUserId.Value, now, ct))
-                {
-                    permitted.Remove(farmId);
-                }
-            }
-
-            if (permitted.Count == 0)
-            {
-                return Result.Failure<List<JobCardDto>>(ShramSafalErrors.Forbidden);
-            }
-        }
-        var jobCards = await repository.GetJobCardsForWorkerAsync(query.WorkerUserId, ct);
-        var dtos = jobCards
+        var jobCards = (await repository.GetJobCardsForWorkerAsync(query.WorkerUserId, ct))
             .Where(j => permitted.Contains(j.FarmId.Value))
-            .Select(j => j.ToJobCardDto())
+            .ToList();
+
+        // lane MU-3 (fix 1 F7) — his own cards are his; anyone else gets the work with the pay withheld
+        // unless he sees wages on that card's farm (ReadScopeProjection.JobCard).
+        var scopes = query.CallerUserId.Value == query.WorkerUserId.Value
+            ? new Dictionary<Guid, FarmReadScope?>()
+            : (await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, permitted.ToList(), ct))
+                .ToDictionary(kv => kv.Key, kv => FarmReadScope.Of(kv.Key, kv.Value, clock?.UtcNow ?? DateTime.UtcNow));
+        var dtos = jobCards
+            .Select(j => query.CallerUserId.Value == query.WorkerUserId.Value
+                ? j.ToJobCardDto()
+                : ReadScopeProjection.JobCard(j.ToJobCardDto(), scopes.GetValueOrDefault(j.FarmId.Value), query.CallerUserId.Value))
             .ToList();
 
         return Result.Success(dtos);

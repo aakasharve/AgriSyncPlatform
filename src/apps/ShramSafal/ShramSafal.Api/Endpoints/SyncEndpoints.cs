@@ -81,6 +81,7 @@ public static class SyncEndpoints
         group.MapGet("/pull", async (
             HttpContext httpContext,
             string? since,
+            string? farms,
             ClaimsPrincipal user,
             ILoggerFactory loggerFactory,
             PullSyncChangesHandler handler,
@@ -109,7 +110,17 @@ public static class SyncEndpoints
                 });
             }
 
-            var result = await handler.HandleAsync(new PullSyncChangesQuery(cursor, actorUserId), ct);
+            // lane MU-3 fix 1 (F9) — the farms the phone holds (comma-separated ids; optional, additive). An
+            // unreadable id is ignored, never refused: an older phone sends none and must keep working (P11).
+            var heldFarmIds = (farms ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(raw => Guid.TryParse(raw, out var id) ? id : Guid.Empty)
+                .Where(id => id != Guid.Empty)
+                .Distinct()
+                .Take(PullSyncChangesHandler.MaxHeldFarms)
+                .ToList();
+
+            var result = await handler.HandleAsync(new PullSyncChangesQuery(cursor, actorUserId, heldFarmIds), ct);
             if (!result.IsSuccess)
             {
                 return ToErrorResult(result.Error);

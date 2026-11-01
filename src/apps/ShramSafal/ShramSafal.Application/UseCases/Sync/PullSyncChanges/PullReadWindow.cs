@@ -14,10 +14,34 @@ namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 /// every row is re-checked against its OWN group's farms (E4), so a repository that ignores the farm
 /// list (a test double's default body) still cannot send a row twice or another farm's row.</para>
 ///
-/// <para><b>The cost.</b> After any access change on a seat, that seat's next pull re-sends that ONE
-/// farm's whole history (every kind it may read) once; then the cursor moves past the change
-/// (<see cref="ResetThroughUtc"/>) so it is not re-sent again. A narrowing re-sends too (harmless; the
-/// phone's purge follows the scopes, not the re-send).</para>
+/// <para><b>Whole seconds (MU-3 fix 1, review F1).</b> Every phone sends its cursor back ROUNDED DOWN to the
+/// whole second (<c>transport.ts</c>: <c>toISOString().replace(/\.\d{3}Z$/, 'Z')</c>; 1.0.17 has the same
+/// line), while an access change is stamped to the microsecond. So "re-sent" is decided at whole-second
+/// grain: a change stamped at <c>c</c> is DELIVERED by a response whose cursor is at least
+/// <see cref="DeliveredAt"/>(c) = the whole second after <c>c</c>. Rounding a whole second down changes
+/// nothing, so a phone that received the re-send sends back a cursor ≥ that second and is never re-sent
+/// again; a phone whose cursor is below it (any pull that ran before the change, even in the same second)
+/// has not had it, and gets it. A change younger than that second (its whole second is still running at
+/// this pull's start) is not re-sent yet — the cursor could not move past it without passing rows not
+/// yet written — and the next pull sends it. Exactly once per change, never skipped:</para>
+/// <list type="bullet">
+/// <item>delivered ⇒ the cursor is ≥ <see cref="DeliveredAt"/>(c) ⇒ the phone's rounded cursor is too ⇒ no re-send;</item>
+/// <item>not delivered ⇒ every cursor this person was ever given is ≤ the pull's own start, which is &lt; the
+/// change or in the change's own second ⇒ the rounded cursor is &lt; <see cref="DeliveredAt"/>(c) ⇒ re-sent.</item>
+/// </list>
+///
+/// <para><b>The cost.</b> After any access change on a seat, that seat's next pull (at least one second
+/// later) re-sends that ONE farm's whole history (every kind it may read) once — what a fresh install
+/// downloads. A narrowing re-sends too (harmless; the phone's purge follows the scopes).</para>
+///
+/// <para><b>Not closed: a change still being SAVED while a pull reads.</b> A pull that reads the seat
+/// before the change commits, and also reads a row written in a later second, hands out a cursor past
+/// the change's stamp; the change is then never re-sent. Closing it needs every cursor to trail the
+/// server clock by a safety margin (re-sending every pull's last seconds to every phone, for every kind)
+/// or a lock shared by every access change and every pull; the window is one save of a few milliseconds
+/// that must straddle a pull which also reads a newer row, and the owner flipping the switch again
+/// closes it. This is the same class as any row stamped before it commits, which the cursor already
+/// carries.</para>
 /// </summary>
 internal sealed class PullReadWindow
 {
@@ -28,16 +52,37 @@ internal sealed class PullReadWindow
     {
         this.scopes = scopes;
         SinceUtc = sinceUtc;
+        // Re-sent now: not yet delivered to this cursor, and its whole second is over.
         resetFarms = scopes.Values
-            .Where(s => s.AccessChangedAtUtc is { } changed && changed > sinceUtc)
+            .Where(s => s.AccessChangedAtUtc is { } changed
+                && sinceUtc < DeliveredAt(changed)
+                && DeliveredAt(changed) <= serverNowUtc)
             .Select(s => s.FarmId)
             .ToHashSet();
-        var latest = scopes.Values
-            .Where(s => resetFarms.Contains(s.FarmId))
-            .Select(s => s.AccessChangedAtUtc!.Value)
-            .DefaultIfEmpty(DateTime.MinValue)
-            .Max();
-        ResetThroughUtc = resetFarms.Count == 0 ? null : (latest > serverNowUtc ? serverNowUtc : latest);
+        ResetThroughUtc = resetFarms.Count == 0
+            ? null
+            : scopes.Values
+                .Where(s => resetFarms.Contains(s.FarmId))
+                .Max(s => DeliveredAt(s.AccessChangedAtUtc!.Value));
+        // A change too young to send yet: this response's cursor must stay below its second, or a row this
+        // pull reads a moment later (stamped in the next second) would carry the cursor past it unsent.
+        var pending = scopes.Values
+            .Where(s => s.AccessChangedAtUtc is { } changed
+                && sinceUtc < DeliveredAt(changed)
+                && DeliveredAt(changed) > serverNowUtc)
+            .Select(s => DeliveredAt(s.AccessChangedAtUtc!.Value).AddSeconds(-1))
+            .ToList();
+        PendingCapUtc = pending.Count == 0 ? null : (pending.Min() < sinceUtc ? sinceUtc : pending.Min());
+    }
+
+    /// <summary>
+    /// The whole second after <paramref name="changedAtUtc"/>: a response whose cursor is at least this has
+    /// delivered the change, whatever the phone's rounding does to it.
+    /// </summary>
+    public static DateTime DeliveredAt(DateTime changedAtUtc)
+    {
+        var utc = DateTime.SpecifyKind(changedAtUtc, DateTimeKind.Utc);
+        return new DateTime(utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc).AddSeconds(1);
     }
 
     /// <summary>The phone's cursor.</summary>
@@ -54,6 +99,12 @@ internal sealed class PullReadWindow
     /// <c>null</c> when nothing was re-sent: the next cursor is at least this, so the farm is re-sent once.
     /// </summary>
     public DateTime? ResetThroughUtc { get; }
+
+    /// <summary>
+    /// The highest cursor this response may hand out while a change is too young to send (its whole second
+    /// is still running), or <c>null</c>: the next pull then sends it.
+    /// </summary>
+    public DateTime? PendingCapUtc { get; }
 
     /// <summary>The farms re-sent from the beginning by this pull.</summary>
     public IReadOnlyCollection<Guid> ResetFarmIds => resetFarms;

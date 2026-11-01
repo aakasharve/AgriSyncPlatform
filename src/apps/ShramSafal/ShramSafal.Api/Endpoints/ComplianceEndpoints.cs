@@ -28,6 +28,8 @@ public static class ComplianceEndpoints
             ClaimsPrincipal user,
             GetComplianceSignalsForFarmHandler handler,
             ICallerFarmTenantScope scope,
+            IShramSafalRepository repository,
+            AgriSync.BuildingBlocks.Abstractions.IClock clock,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var readerUserId))
@@ -43,6 +45,12 @@ public static class ComplianceEndpoints
             var readScope = await scope.EstablishForCallerAsync(farmId, readerUserId, ct);
             if (!readScope.IsSuccess)
                 return ToErrorResult(readScope.Error);
+
+            // lane MU-3 fix 1 (review item 12) — compliance is the farm's overview: a कामगार seat reads it only
+            // with the confirm-records authority, exactly as the pull sends it (FarmReadScope.SeeCompliance).
+            var farmRead = await FarmReadGate.ScopeAsync(repository, farmId, readerUserId, clock.UtcNow, ct);
+            if (farmRead is not { SeeCompliance: true })
+                return ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.Forbidden);
 
             var query = new GetComplianceSignalsForFarmQuery(
                 FarmId: new FarmId(farmId),

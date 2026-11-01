@@ -20,6 +20,7 @@
  *     (sent at the line's current amount, call C). An edit that touched no price never clears them.
  */
 import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { readAccessScopes, scopeForFarm } from '../../infrastructure/storage/accessScopeStore';
 
 /** Why a changed line's money did not follow its edit (the server's names). */
 export type MoneyNotFollowedReason =
@@ -94,9 +95,23 @@ const asMap = (value: unknown): NotFollowedMap => {
 const inStepIds = (answer: EditMoneyAnswer): Set<string> =>
     new Set([...answer.moneyChanged.map(e => e.id), ...answer.moneyCorrections.map(c => c.costEntryId)].map(id => id.toLowerCase()));
 
+/**
+ * lane MU-3 fix 1 (F5) — never store money of a farm the server's last answer says this person does not see: the record's
+ * own farm decides for the corrections, each entry's farm for the entries (the server already sends none to such a seat).
+ */
+async function withoutWithheldMoney(dailyLogId: string, answer: EditMoneyAnswer | null): Promise<EditMoneyAnswer | null> {
+    if (answer === null) return null;
+    const db = getDatabase();
+    const stored = await readAccessScopes(db);
+    if (!stored) return answer;
+    const recordFarm = dailyLogId ? (await db.logs.get(dailyLogId))?.log?.meta?.farmId : undefined;
+    if (scopeForFarm(stored, recordFarm)?.seeMoney === false) return { ...answer, moneyChanged: [], moneyCorrections: [] };
+    return { ...answer, moneyChanged: answer.moneyChanged.filter(e => scopeForFarm(stored, e.farmId)?.seeMoney !== false) };
+}
+
 /** Write the money an applied edit names into this phone's ledger copy and money book; keep why any did not follow. */
 export async function takeEditMoney(dailyLogId: string, data: unknown): Promise<number> {
-    const answer = editMoneyOf(data);
+    const answer = await withoutWithheldMoney(dailyLogId, editMoneyOf(data));
     if (answer === null) {
         // Never a silent drop: the answer is not the shape this phone reads. Nothing is written; the next pull carries
         // the server's money as it stands.

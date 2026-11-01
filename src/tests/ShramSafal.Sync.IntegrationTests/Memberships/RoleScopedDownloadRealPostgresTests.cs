@@ -21,7 +21,8 @@ namespace ShramSafal.Sync.IntegrationTests.Memberships;
 [Trait("Category", "RequiresPostgres")]
 public sealed class RoleScopedDownloadRealPostgresTests(ITestOutputHelper output) : RoleScopedFarm(output)
 {
-    private static readonly string[] MoneyKinds = ["costEntries", "financeCorrections", "dayLedgers", "jobCards"];
+    // MU-3 fix 1 (F7): a job card is the farm's WORK and travels to every seat that reads it, its pay withheld by rule.
+    private static readonly string[] MoneyKinds = ["costEntries", "financeCorrections", "dayLedgers"];
 
     [Fact]
     public async Task The_owner_gets_everything_of_his_farm_and_nothing_of_another()
@@ -72,7 +73,11 @@ public sealed class RoleScopedDownloadRealPostgresTests(ITestOutputHelper output
         crew.GetProperty("workerCount").GetInt32().Should().Be(8, "the work itself travels (P7)");
         crew.GetProperty("wagePerPerson").ValueKind.Should().Be(JsonValueKind.Null, "a wage withheld is not sent, never a ₹0");
         crew.GetProperty("totalCost").ValueKind.Should().Be(JsonValueKind.Null);
-        IdsOf(root, "attachments").Should().BeEquivalentTo([FarmPhoto, OwnerLogPhoto, WorkerLogPhoto], "a receipt is money");
+        crew.GetProperty("wageWithheld").GetBoolean().Should().BeTrue("fix 1 F10: withheld by rule, never 'not stated'");
+        crew.GetProperty("totalCostWithheld").GetBoolean().Should().BeTrue();
+        IdsOf(root, "jobCards").Should().Equal([JobCard], "fix 1 F7: the work travels; its pay does not");
+        // Fix 1 F2: the farm-linked photo is a bill of an earlier build, money like the receipt.
+        IdsOf(root, "attachments").Should().BeEquivalentTo([OwnerLogPhoto, WorkerLogPhoto], "a receipt and a bill are money");
         IdsOf(root, "attendanceMarks").Should().Equal([Mark], "he holds take हजेरी");
         Scope(root, FarmA).GetProperty("seeMoney").GetBoolean().Should().BeFalse();
         Scope(root, FarmA).GetProperty("seeWages").GetBoolean().Should().BeFalse();
@@ -93,6 +98,7 @@ public sealed class RoleScopedDownloadRealPostgresTests(ITestOutputHelper output
         }
 
         IdsOf(root, "attendanceMarks").Should().Equal([Mark], "he takes हजेरी");
+        IdsOf(root, "jobCards").Should().Equal([JobCard], "fix 1 F7: the farm's work assignment reaches him");
         foreach (var log in new[] { OwnerLog, Worker2Log })
         {
             var crew = LabourOf(root, log);
@@ -133,7 +139,8 @@ public sealed class RoleScopedDownloadRealPostgresTests(ITestOutputHelper output
             ArrayOf(board, "scheduledWork").Should().BeEmpty();
         }
 
-        IdsOf(root, "attachments").Should().BeEquivalentTo([FarmPhoto, WorkerLogPhoto], "his record's photo and the farm's, nothing else");
+        IdsOf(root, "attachments").Should().BeEquivalentTo([WorkerLogPhoto], "his record's photo; the farm-linked bill is money (fix 1 F2)");
+        ArrayOf(root, "jobCards").Should().BeEmpty("no card is assigned to him; another worker's card is not his");
         IdsOf(root, "operators", "userId").Should().Equal([Worker], "no other person's name");
         foreach (var name in new[] { OwnerName, CoOwnerName, MukadamName, Worker2Name, PausedName, OwnerBName, CrewName, "हजेरी-शंकर" })
         {
@@ -209,14 +216,9 @@ public sealed class RoleScopedDownloadRealPostgresTests(ITestOutputHelper output
         Output.WriteLine($"[EVIDENCE] mukadam cursor before the switch: {oldCursor:O}");
 
         await Task.Delay(50);
-        await using (var db = NewSuperuserContext())
-        {
-            var seat = await db.FarmMemberships.SingleAsync(m => m.FarmId == new FarmId(FarmA) && m.UserId == new UserId(Mukadam));
-            seat.SetAuthorities(
-                new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.TakeAttendance] = null, [FarmAuthority.SeeMoney] = null },
-                DateTime.UtcNow).Should().BeTrue();
-            await db.SaveChangesAsync();
-        }
+        await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.TakeAttendance, FarmAuthority.SeeMoney);
+        // MU-3 fix 1 (F1): a change is sent once its whole second is over (a phone's cursor counts whole seconds).
+        await Task.Delay(1100);
 
         var (body, again) = await PullAsync(Mukadam, oldCursor);
         Evidence("mukadam after see money, old cursor", again);
@@ -267,8 +269,4 @@ public sealed class RoleScopedDownloadRealPostgresTests(ITestOutputHelper output
         ArrayOf(root, "accessScopes").Select(s => s.GetProperty("farmId").GetGuid()).Should().Equal([FarmA]);
     }
 
-    private ShramSafalDbContext NewSuperuserContext() =>
-        new(new DbContextOptionsBuilder<ShramSafalDbContext>()
-            .UseNpgsql(SuperuserConn, npgsql => npgsql.MigrationsHistoryTable("__ef_migrations", "ssf"))
-            .Options);
 }

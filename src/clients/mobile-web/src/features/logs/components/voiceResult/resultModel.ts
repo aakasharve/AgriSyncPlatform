@@ -34,6 +34,7 @@ import { dayCategoryStates, type CoverageExtras } from '../shramsathi/understand
 import type { IconName } from '../shramsathi/understandingRing/icons';
 import { productBoxesOf, withoutTaskPrefix, type ProductBox } from './productModel';
 import { workTypeNameIn } from '../../../../shared/names/namesIn';
+import { ruleWithheldCopy } from '../../../../i18n/ruleWithheldTranslations';
 
 export type PartKey = 'crop' | 'labour' | 'irrigation' | 'inputs' | 'expense' | 'machinery' | 'observation' | 'planned';
 
@@ -221,9 +222,18 @@ const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: numb
     return split || workIn(language, e.activity) || labelIn(language)(e.activity);
 };
 
-/** The money he said on a labour row, as said: the total, the wage per person, a rate. */
-const labourMoney = (e: { totalCost?: number; wagePerPerson?: number; rate?: number }, language = 'mr'): string =>
-    join(rupees(e.totalCost), rupees(e.wagePerPerson, unitsIn(language).each), e.rate !== e.wagePerPerson ? rupees(e.rate, unitsIn(language).rate) : '');
+/**
+ * The money he said on a labour row, as said: the total, the wage per person, a rate. Lane MU-3 fix 1 (F10): an amount
+ * held back by rule reads "नियमानुसार दिसत नाही" (W3) where the ₹ would be — never silence that reads "not stated".
+ */
+const labourMoney = (
+    e: { totalCost?: number; wagePerPerson?: number; rate?: number; totalCostWithheld?: true; wageWithheld?: true },
+    language = 'mr',
+): string =>
+    join(
+        e.totalCostWithheld || e.wageWithheld ? ruleWithheldCopy(language).amount : '',
+        rupees(e.totalCost), rupees(e.wagePerPerson, unitsIn(language).each), e.rate !== e.wagePerPerson ? rupees(e.rate, unitsIn(language).rate) : '',
+    );
 
 /** Water actually given, by the app's own rule; a spray tank's water belongs to the spray, not to पाणी. */
 const isGivenWater = (e: IrrigationEvent): boolean => e.role !== 'spray-carrier' && isCompletedIrrigationEvent(e);
@@ -435,6 +445,11 @@ export interface RecordingView {
     blockers: BlockerEntry[];
     /** Lane F1 (review N9): rebuilt from the server's task lines only, so some of its details are not available. */
     legacyPartial: boolean;
+    /**
+     * Lane MU-3 fix 1 (F3, D-66): it mentions money and, by ShramSafal's rule, its words and voice are not sent to this
+     * person — the card shows the rule line (W1) in their place, never an empty transcript.
+     */
+    wordsWithheld: boolean;
 }
 
 /** One recording from the (non-empty) list of logs it became. */
@@ -449,6 +464,7 @@ export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingV
         confirmed: all.every(isConfirmed),
         typed: all.every(isTyped),
         legacyPartial: all.some(l => l.legacyPartial === true),
+        wordsWithheld: all.some(l => l.wordsWithheldForMoney === true),
         byForm: all.every(l => l.meta?.provenance?.source === 'manual'),
         transcript: clean(log.fullTranscript),
         entries: all.flatMap(l => partEntriesOf(l, deps.language)),

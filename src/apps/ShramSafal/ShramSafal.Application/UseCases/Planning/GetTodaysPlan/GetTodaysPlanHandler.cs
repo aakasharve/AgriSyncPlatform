@@ -26,8 +26,11 @@ public sealed class GetTodaysPlanHandler(
             return Result.Failure<IReadOnlyList<PlannedActivityDto>>(ShramSafalErrors.CropCycleNotFound);
         }
 
-        var canReadFarm = await repository.IsUserMemberOfFarmAsync((Guid)cropCycle.FarmId, query.ActorUserId, ct);
-        if (!canReadFarm)
+        // lane MU-3 fix 1 (review item 12) — the farm's plan is its overview: a कामगार seat (his own records only)
+        // is not shown it, exactly as the pull withholds planned work (FarmReadScope.SeeFarmOverview).
+        var scope = await Services.FarmReadGate.ScopeAsync(
+            repository, (Guid)cropCycle.FarmId, query.ActorUserId, clock.UtcNow, ct);
+        if (scope is not { SeeFarmOverview: true })
         {
             return Result.Failure<IReadOnlyList<PlannedActivityDto>>(ShramSafalErrors.Forbidden);
         }

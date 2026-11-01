@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Work.GetWorkerProfile;
 using ShramSafal.Application.UseCases.Work.GetWorkerReputation;
 
@@ -25,6 +26,8 @@ public static class WorkerProfileEndpoints
             Guid? farmId,
             ClaimsPrincipal user,
             GetWorkerProfileHandler handler,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -35,7 +38,19 @@ public static class WorkerProfileEndpoints
                 CallerUserId: new UserId(actorUserId),
                 ScopedFarmId: farmId);
 
-            var result = await handler.HandleAsync(query, ct);
+            // lane MU-3 fix 1 (F7) — the page is read under a tenant scope (the route opened none: its first read failed
+            // closed, 500 for everyone): the named farm's scope when the phone names one (it always does), else the
+            // caller's own user scope.
+            if (farmId is { } farm)
+            {
+                var established = await farmScope.EstablishForCallerAsync(farm, actorUserId, ct);
+                if (!established.IsSuccess)
+                    return ToErrorResult(established.Error);
+            }
+
+            var result = farmId is null
+                ? await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(query, token), ct)
+                : await handler.HandleAsync(query, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetWorkerProfile");

@@ -33,6 +33,8 @@ using ShramSafal.Api;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
+using ShramSafal.Domain.Farms;
+using ShramSafal.Infrastructure.Persistence;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -302,15 +304,42 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
 
     // ── Reads through the real host ──────────────────────────────────────────────────────
 
-    /// <summary>GET /sync/pull as <paramref name="user"/>; the raw JSON body and the parsed root.</summary>
-    protected async Task<(string Body, JsonElement Root)> PullAsync(Guid user, DateTime? since = null)
+    /// <summary>
+    /// GET /sync/pull as <paramref name="user"/>; the raw JSON body and the parsed root. MU-3 fix 1 (review F1): the
+    /// cursor is sent the way EVERY phone sends it — rounded DOWN to the whole second (<c>transport.ts</c>
+    /// <c>toISOString().replace(/\.\d{3}Z$/, 'Z')</c>; 1.0.17 has the same line) — never with fractions no phone
+    /// sends. <paramref name="farms"/>: the farms the phone says it holds (<c>farms=</c>, fix 1 F9).
+    /// </summary>
+    protected async Task<(string Body, JsonElement Root)> PullAsync(Guid user, DateTime? since = null, IEnumerable<Guid>? farms = null)
     {
-        var cursor = (since ?? DateTime.UnixEpoch).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffffffZ");
-        using var response = await SendAsync(HttpMethod.Get, $"/sync/pull?since={Uri.EscapeDataString(cursor)}", user);
+        var cursor = PhoneCursor(since ?? DateTime.UnixEpoch);
+        var held = farms is null ? string.Empty : "&farms=" + Uri.EscapeDataString(string.Join(',', farms));
+        using var response = await SendAsync(HttpMethod.Get, $"/sync/pull?since={Uri.EscapeDataString(cursor)}{held}", user);
         var body = await response.Content.ReadAsStringAsync();
         response.IsSuccessStatusCode.Should().BeTrue($"the pull must succeed for {user}: {(int)response.StatusCode} {body}");
         return (body, JsonDocument.Parse(body).RootElement.Clone());
     }
+
+    /// <summary>A cursor exactly as a phone sends it back: rounded down to the whole second, "Z".</summary>
+    protected static string PhoneCursor(DateTime cursor)
+    {
+        var utc = cursor.ToUniversalTime();
+        return new DateTime(utc.Ticks - (utc.Ticks % TimeSpan.TicksPerSecond), DateTimeKind.Utc).ToString("yyyy-MM-ddTHH:mm:ssZ");
+    }
+
+    /// <summary>The owner's switches on one seat, through the real domain decision (as the owner's page sets them).</summary>
+    protected async Task SetAuthoritiesAsync(Guid farmId, Guid user, params FarmAuthority[] authorities)
+    {
+        await using var db = NewSuperuserContext();
+        var seat = await db.FarmMemberships.SingleAsync(m => m.FarmId == new FarmId(farmId) && m.UserId == new UserId(user));
+        seat.SetAuthorities(authorities.ToDictionary(a => a, _ => (DateTime?)null), DateTime.UtcNow);
+        await db.SaveChangesAsync();
+    }
+
+    protected ShramSafalDbContext NewSuperuserContext() =>
+        new(new DbContextOptionsBuilder<ShramSafalDbContext>()
+            .UseNpgsql(SuperuserConn, npgsql => npgsql.MigrationsHistoryTable("__ef_migrations", "ssf"))
+            .Options);
 
     /// <summary>
     /// Runs <paramref name="body"/> in a request scope of the real host, user-scoped as <paramref name="user"/>

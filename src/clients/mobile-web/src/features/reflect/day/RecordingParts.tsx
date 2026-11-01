@@ -13,6 +13,7 @@ import React, { useState } from 'react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { AttachmentList, useAttachmentRetry } from '../../attachments';
 import OriginalVoiceButton from '../../logs/components/originalVoice/OriginalVoiceButton';
+import MoneyWordsWithheldCard from '../../logs/components/originalVoice/MoneyWordsWithheldCard';
 import ClipPlayer from '../../logs/components/voiceResult/ClipPlayer';
 import { reflectCopy, type ReflectCopy } from '../reflectCopy';
 import { useLogAttachmentCount } from '../overview/useLogAttachmentCount';
@@ -35,6 +36,9 @@ export const StatusChip: React.FC<{ confirmed: boolean; testId?: string }> = ({ 
 
 /** ▶ for this recording, only where `listenModel` allows it; nothing at all otherwise (never a dead button). */
 export const ListenControl: React.FC<{ rec: DayRecording; listen: DayListen; big?: boolean; testId: string }> = ({ rec, listen, big, testId }) => {
+    // Lane MU-3 fix 1 (F3, D-66): a record that mentions money, not his, not his money — its voice is not offered; the
+    // rule line says why (W1), never a dead button.
+    if (rec.view.wordsWithheld) return <MoneyWordsWithheldCard testId={`${testId}-withheld`} />;
     const kind = listen.kindOf(rec);
     if (kind === 'clip') {
         const clip = listen.clipOf(rec);

@@ -126,7 +126,20 @@ public sealed record LabourEngagementDto(
     /// <see cref="WorkerCount"/>: three named people on an eight-worker
     /// engagement is still eight (P7).
     /// </summary>
-    IReadOnlyList<AttributedOperatorDto> AttributedOperators);
+    IReadOnlyList<AttributedOperatorDto> AttributedOperators,
+
+    /// <summary>
+    /// lane MU-3 fix 1 (F10) — <c>true</c> when a per-person wage WAS stated and is withheld from this reader (he
+    /// does not see wages): <see cref="WagePerPerson"/> is then null by rule, never "not stated" (P4). Additive;
+    /// absent = nothing withheld.
+    /// </summary>
+    bool? WageWithheld = null,
+
+    /// <summary>
+    /// lane MU-3 fix 1 (F10) — <c>true</c> when a crew total WAS stated and is withheld from this reader (he does
+    /// not see the farm's money): <see cref="TotalCost"/> is then null by rule, never "not stated". Additive.
+    /// </summary>
+    bool? TotalCostWithheld = null);
 
 /// <summary>
 /// One live attribution row (<c>FieldOperatorWorkRow</c>) as a device reads it.

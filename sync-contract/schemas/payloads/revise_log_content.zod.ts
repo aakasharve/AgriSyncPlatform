@@ -17,6 +17,11 @@ export const ReviseLogContentPayload = z.object({
     content: LogContentSchema,
     reason: z.string().max(400).optional(),
     revisedAtUtc: ZIsoDate,
+    // lane MU-3 fix 1 (F8) — the copy this edit was made on was sent WITHOUT its amounts (a reader who does
+    // not see the farm's money, editing someone else's record). The server then carries the record's amounts
+    // onto the edit, whatever the editor's authority is by the time the edit arrives: an amount he was never
+    // shown is never erased by his edit. Optional and additive: absent = his copy was whole.
+    amountsWithheld: z.boolean().optional(),
 });
 
 export type ReviseLogContentPayloadType = z.infer<typeof ReviseLogContentPayload>;

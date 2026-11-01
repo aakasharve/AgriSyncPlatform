@@ -486,6 +486,16 @@ public sealed class GetAttentionBoardHandlerTests
             return Task.FromResult(ids);
         }
 
+        // lane MU-3 fix 1 (item 12) — the board reads each farm's standing in one batch: every farm this double
+        // lists for a user is his own (the registrant reads its overview).
+        public Task<IReadOnlyDictionary<Guid, ShramSafal.Application.Services.FarmAccess?>> GetFarmAccessesForUserAsync(
+            Guid userId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, ShramSafal.Application.Services.FarmAccess?>>(farmIds.Distinct().ToDictionary(
+                id => id,
+                id => (ShramSafal.Application.Services.FarmAccess?)new ShramSafal.Application.Services.FarmAccess(
+                    AppRole.PrimaryOwner, MembershipStatus.Active, IsRegistrant: true, null, LabourGrant: false,
+                    AuthorityExpiresAtJson: null, AccessChangedAtUtc: null)));
+
         public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default)
         {
             _farms.TryGetValue(farmId, out var farm);

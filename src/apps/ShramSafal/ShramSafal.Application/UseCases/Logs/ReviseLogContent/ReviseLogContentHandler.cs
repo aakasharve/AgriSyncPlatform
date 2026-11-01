@@ -149,12 +149,23 @@ public sealed class ReviseLogContentHandler(
         var current = await repository.GetCurrentDailyLogContentAsync(log.Id, ct);
 
         var documentJson = command.ContentJson;
-        if (current is not null && !await RecordWordsGate.MayHearAsync(
-                command.ActorUserId,
-                log.OperatorUserId.Value,
-                actorRole,
-                () => FarmAuthorityGate.HoldsAsync(
-                    repository, farmId, command.ActorUserId, Domain.Farms.FarmAuthority.ConfirmRecords, now, ct)))
+        // lane MU-3 fix 1 (F8) — was his copy sent without its amounts? His phone says (amountsWithheld); a phone that
+        // does not say (1.0.17) is answered by his seat now. His OWN record was never sent without them.
+        var copyWithoutAmounts = current is not null
+            && !isCreator
+            && (command.AmountsWithheld
+                ?? !await FarmReadGate.MaySeeMoneyAsync(repository, farmId, command.ActorUserId, now, ct));
+        // lane MU-3 fix 1 (F3, D-66 = option 1) — a copy sent without its amounts, of a record that mentions money,
+        // came WITHOUT its words too (ReadScopeProjection.Record): their absence from his edit is not a deletion.
+        var wordsNotSent = current is not null
+            && (!await RecordWordsGate.MayHearAsync(
+                    command.ActorUserId,
+                    log.OperatorUserId.Value,
+                    actorRole,
+                    () => FarmAuthorityGate.HoldsAsync(
+                        repository, farmId, command.ActorUserId, Domain.Farms.FarmAuthority.ConfirmRecords, now, ct))
+                || (copyWithoutAmounts && await MoneyMention.InStoredRecordAsync(repository, log, ct)));
+        if (current is not null && wordsNotSent)
         {
             documentJson = LogContentDocument.CarryWordsForward(current.DocumentJson, command.ContentJson);
             if (Problem(documentJson) is { } carried)
@@ -167,12 +178,12 @@ public sealed class ReviseLogContentHandler(
 
         var wordsCarried = !ReferenceEquals(documentJson, command.ContentJson);
 
-        // lane MU-3 (founder D-22 / D-26) — a member who may not see the farm's money and did not make the
-        // record was sent its document WITHOUT its amounts (the pull's FarmReadScope), so their absence from
-        // his edit is not a deletion: they are carried onto the new version, as his words are.
-        if (current is not null
-            && !isCreator
-            && !await FarmReadGate.MaySeeMoneyAsync(repository, farmId, command.ActorUserId, now, ct))
+        // lane MU-3 (founder D-22 / D-26; fix 1 F8) — the editor's copy was sent WITHOUT its amounts (his
+        // phone says so: AmountsWithheld), so their absence from his edit is not a deletion: they are carried
+        // onto the new version, as his words are. Decided by what his phone was SENT, never by the authority he
+        // holds by the time the edit arrives — a see-money switched on while the edit waited must not turn the
+        // missing amounts into "no longer spent". The maker's own record was never sent without them.
+        if (current is not null && copyWithoutAmounts)
         {
             documentJson = LogContentDocument.CarryMoneyForward(current.DocumentJson, documentJson);
             if (Problem(documentJson) is { } carriedMoney)
@@ -206,7 +217,7 @@ public sealed class ReviseLogContentHandler(
             if (LogContentDocument.SameDocument(current.DocumentJson, incoming.RootElement))
             {
                 // Nothing moved: no row, no version, no re-open, no money — the edit is already what is stored.
-                return Result.Success(new ReviseLogContentResultDto(log.ToDto(), [], [], []));
+                return Result.Success(await ForReaderAsync(new ReviseLogContentResultDto(log.ToDto(), [], [], []), log, command.ActorUserId, now, ct));
             }
         }
 
@@ -327,6 +338,23 @@ public sealed class ReviseLogContentHandler(
                 log.Id, log.CurrentVerificationStatus, new UserId(command.ActorUserId), ct);
         }
 
-        return Result.Success(answer);
+        return Result.Success(await ForReaderAsync(answer, log, command.ActorUserId, now, ct));
+    }
+
+    /// <summary>
+    /// lane MU-3 fix 1 (F5) — the answer as the PULL would send it to the editor: the record through
+    /// <see cref="ReadScopeProjection.Record"/>; the money it made or corrected only to an editor who sees money
+    /// (the lines whose money did not follow name no amount and stay).
+    /// </summary>
+    private async Task<ReviseLogContentResultDto> ForReaderAsync(
+        ReviseLogContentResultDto answer, DailyLog log, Guid actor, DateTime now, CancellationToken ct)
+    {
+        var scope = await FarmReadGate.ScopeAsync(repository, (Guid)log.FarmId, actor, now, ct);
+        return answer with
+        {
+            Log = ReadScopeProjection.Record(answer.Log, scope, actor),
+            MoneyChanged = ReadScopeProjection.Money(answer.MoneyChanged, scope),
+            MoneyCorrections = ReadScopeProjection.Money(answer.MoneyCorrections, scope),
+        };
     }
 }

@@ -21,7 +21,8 @@ export interface WorkerProfileData {
     displayName: string;
     jobCardsLast30d: number;
     jobCardsPaidOutLast30d: number;
-    earnedLast30d: number;
+    /** null = his earnings are held back from this seat by rule (lane MU-3 fix 1, F7); the rest of the page stays. */
+    earnedLast30d: number | null;
     earnedCurrencyCode: string;
     reliability: ReliabilityScore;
 }

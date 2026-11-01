@@ -149,7 +149,10 @@ public sealed class FarmReadScopeTests
         var owner = FarmReadScope.Of(Farm, Seat(AppRole.PrimaryOwner), Now)!;
         var worker = FarmReadScope.Of(Farm, Seat(AppRole.Worker), Now)!;
 
-        Assert.True(AttachmentParentRule.MayRead(coOwner, Reader, AttachmentOn("Farm", Farm), null));
+        // MU-3 fix 1 (F2): every farm-linked photo is a bill of an earlier build, and a "Bill" is one: money.
+        Assert.False(AttachmentParentRule.MayRead(coOwner, Reader, AttachmentOn("Farm", Farm), null), "a bill is money");
+        Assert.False(AttachmentParentRule.MayRead(coOwner, Reader, AttachmentOn("Bill", Farm), null), "a bill is money");
+        Assert.True(AttachmentParentRule.MayRead(owner, Reader, AttachmentOn("Bill", Farm), null));
         Assert.True(AttachmentParentRule.MayRead(coOwner, Reader, AttachmentOn("DailyLog", Guid.NewGuid()), null));
         Assert.False(AttachmentParentRule.MayRead(coOwner, Reader, AttachmentOn("CostEntry", Guid.NewGuid()), null), "a receipt is money");
         Assert.True(AttachmentParentRule.MayRead(owner, Reader, AttachmentOn("CostEntry", Guid.NewGuid()), null));
@@ -179,16 +182,17 @@ public sealed class FarmReadScopeTests
         var window = new PullReadWindow(scopes, cursor, Now);
         Assert.Equal(DateTime.UnixEpoch, window.SinceFor(farmA));
         Assert.Equal(cursor, window.SinceFor(farmB));
-        Assert.Equal(widened, window.ResetThroughUtc);
+        // MU-3 fix 1 (F1): delivered through the whole second after the change (a phone's cursor counts seconds).
+        Assert.Equal(widened.AddSeconds(1), window.ResetThroughUtc);
         var groups = window.Groups(s => s.SeeMoney).ToList();
         Assert.Equal(2, groups.Count);
         Assert.Contains(groups, g => g.SinceUtc == cursor && g.Farms.SequenceEqual([farmB]));
         Assert.Contains(groups, g => g.SinceUtc == DateTime.UnixEpoch && g.Farms.SequenceEqual([farmA]));
 
         // The next pull's cursor is past the change: nothing is re-sent again.
-        var next = new PullReadWindow(scopes, widened, Now);
+        var next = new PullReadWindow(scopes, window.ResetThroughUtc!.Value, Now);
         Assert.Null(next.ResetThroughUtc);
-        Assert.Equal(widened, next.SinceFor(farmA));
+        Assert.Equal(window.ResetThroughUtc, next.SinceFor(farmA));
     }
 
     [Fact]
