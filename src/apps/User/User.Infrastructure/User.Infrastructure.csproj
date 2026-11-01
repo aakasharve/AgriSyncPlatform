@@ -36,6 +36,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="User.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\User.Application\User.Application.csproj" />
     <ProjectReference Include="..\User.Domain\User.Domain.csproj" />
     <ProjectReference Include="..\..\..\AgriSync.SharedKernel\AgriSync.SharedKernel.csproj" />

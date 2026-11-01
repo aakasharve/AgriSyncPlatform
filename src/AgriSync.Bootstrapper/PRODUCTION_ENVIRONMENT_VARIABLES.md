@@ -28,14 +28,17 @@ Msg91__UseDevStub="false"
 Msg91__AuthKey="<MSG91 dashboard -> Settings -> API keys>"
 # The MSG91-generated template ID (OTP -> Templates), NOT the DLT template ID.
 Msg91__TemplateId="<msg91-template-id>"
-# Optional: 6-char DLT-approved header; defaults to the template's bound sender.
+# Optional, informational: not sent; MSG91 uses the sender bound to the template.
 Msg91__SenderId="<SENDER>"
 ```
 
 - The DLT template text must use the tagged variable (`{#numeric#}`) and state the
   same validity as the server enforces (5 minutes; `OtpPolicy:OtpExpiryMinutes`
   and `Msg91:OtpExpiryMinutes` both default to 5 — change them together).
-- Register the header and template as Service Implicit (SI), not Promotional/SE.
+- Register the template as **Transactional** (Airtel rejects OTP templates as Service Implicit),
+  and include the full entity name in the text.
+- MSG91 only accepts calls from whitelisted IPs (error 418 otherwise). Whitelist the
+  prod server's outbound IP on the auth key before going live.
 - A wrong or unapproved template does not fail loudly: MSG91/DLT may accept the
   request and the SMS is dropped. After setting these, prove delivery with a real
   `start-otp` to a test number and confirm `"provider":"msg91"` and an SMS arrives.
