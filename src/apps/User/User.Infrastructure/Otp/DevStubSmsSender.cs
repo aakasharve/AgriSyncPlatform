@@ -8,8 +8,9 @@ namespace User.Infrastructure.Otp;
 /// Development-only SMS sender. Logs the OTP to the console instead of
 /// dispatching anything. Selected via <c>Msg91:UseDevStub=true</c>.
 ///
-/// DO NOT register this adapter when <c>ASPNETCORE_ENVIRONMENT</c> is
-/// Production. Startup fails loudly if someone tries.
+/// Never runs in Production: <see cref="SmsGatewayStartupGuard"/> (called from
+/// Program.cs) stops the API from booting there with the stub selected. This
+/// adapter logs the full OTP and phone number, which dev needs to sign in.
 /// </summary>
 internal sealed class DevStubSmsSender(ILogger<DevStubSmsSender> logger) : ISmsSender
 {

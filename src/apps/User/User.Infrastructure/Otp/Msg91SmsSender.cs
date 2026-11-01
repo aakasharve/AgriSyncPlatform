@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
@@ -12,7 +11,8 @@ namespace User.Infrastructure.Otp;
 ///
 /// Endpoint: POST https://control.msg91.com/api/v5/otp
 /// Headers:  authkey (bearer of our MSG91 API key), Content-Type: application/json
-/// Body:     { template_id, mobile, otp, otp_length, otp_expiry }
+/// Query:    template_id, mobile, otp, otp_length, otp_expiry (body is "{}")
+/// Sender:   not sent; MSG91 uses the sender bound to the template.
 /// Response: { type: "success" | "error", message, request_id? }
 ///
 /// This class only handles the outbound call. Persisting the OTP hash,
@@ -44,17 +44,18 @@ internal sealed class Msg91SmsSender(
                 Error.Internal("msg91.missing_template", "MSG91 DLT TemplateId is not configured."));
         }
 
-        var payload = new Msg91SendOtpPayload(
-            TemplateId: _options.TemplateId,
-            Mobile: phoneNumberInternational,
-            Otp: otpCode,
-            OtpLength: _options.OtpLength,
-            OtpExpiry: _options.OtpExpiryMinutes,
-            SenderId: _options.SenderId);
+        // Same request shape as the 2026-11-01 curl that delivered a real SMS:
+        // everything in the query string, empty JSON body, authkey header.
+        var query = string.Join('&',
+            $"template_id={Uri.EscapeDataString(_options.TemplateId)}",
+            $"mobile={Uri.EscapeDataString(phoneNumberInternational)}",
+            $"otp={Uri.EscapeDataString(otpCode)}",
+            $"otp_length={_options.OtpLength}",
+            $"otp_expiry={_options.OtpExpiryMinutes}");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl.TrimEnd('/')}/otp")
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_options.BaseUrl.TrimEnd('/')}/otp?{query}")
         {
-            Content = JsonContent.Create(payload, options: JsonOptions),
+            Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json"),
         };
         request.Headers.Add("authkey", _options.AuthKey);
 
@@ -127,20 +128,6 @@ internal sealed class Msg91SmsSender(
 
     private static string SafeTail(string phone) =>
         phone.Length <= 4 ? phone : phone[^4..];
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
-
-    private sealed record Msg91SendOtpPayload(
-        string TemplateId,
-        string Mobile,
-        string Otp,
-        int OtpLength,
-        int OtpExpiry,
-        string? SenderId);
 
     private sealed record Msg91Response(string? Type, string? Message, string? RequestId);
 }

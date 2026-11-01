@@ -189,6 +189,13 @@ try
         return new AgriSync.BuildingBlocks.Audit.IpHasher(Convert.FromBase64String(saltB64));
     });
 
+    // Production must not boot on the dev SMS stub: it logs the OTP and reports
+    // success, so no farmer would ever get a code. Fails before DI is built.
+    User.Infrastructure.Otp.SmsGatewayStartupGuard.EnsureSafeForEnvironment(
+        builder.Environment.IsProduction(),
+        builder.Configuration.GetSection(User.Infrastructure.Otp.Msg91Options.SectionName)
+            .Get<User.Infrastructure.Otp.Msg91Options>() ?? new User.Infrastructure.Otp.Msg91Options());
+
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
     builder.Services.AddAccountsModule(builder.Configuration);
