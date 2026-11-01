@@ -104,6 +104,11 @@ export interface AppRouterContext {
     consumeLogHome?: () => void;
     /** The server-told role on the current farm (/me/context), e.g. 'PrimaryOwner', 'Worker'. */
     farmRole?: string | null;
+    /**
+     * Lane OF-M fix pass 3 — this seat may check (and correct) money entries, as the server answers it
+     * (`farmPermissions.mayChangeRecordedMoney`). Optional so older context builders compile; absent = not known.
+     */
+    mayReviewMoney?: boolean;
     /** The work home's "आजची हजेरी" door: owner tier or the owner's labour grant only (H10). */
     canOpenAttendanceFromHome?: boolean;
 

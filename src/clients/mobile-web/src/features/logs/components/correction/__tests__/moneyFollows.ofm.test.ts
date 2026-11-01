@@ -14,7 +14,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getDatabase, resetDatabase } from '../../../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../../../infrastructure/sync/SyncMutationCatalog';
 import { missingMoneyIdsIn, resolveMoneyDependency } from '../../../../../infrastructure/sync/MutationDependency';
-import { readRefusedChange } from '../refusedRevision';
+import { readRefusedChange, refusalHint, refusalLines, refusalReasonOf } from '../refusedRevision';
+import { correctionWords } from '../correctionWords';
 import { moneyNotFollowedLines } from '../moneyNotFollowed';
 import { moneyEntryIdFor } from '../../../../finance/moneyEntryIdentity';
 
@@ -90,7 +91,7 @@ describe('OF-M R4-1 — the refusal names the money it could not find', () => {
 });
 
 describe('OF-M F89 — money that could not follow an edit, said plainly in his language only', () => {
-    const reasons = ['notFound', 'shared', 'jobCard', 'detailsNotHeld', 'notAllowed', 'idTaken'] as const;
+    const reasons = ['notFound', 'shared', 'jobCard', 'detailsNotHeld', 'notAllowed', 'idTaken', 'tooLong', 'moneyBook'] as const;
 
     it('one plain line per reason, never repeated, in Marathi or English only', () => {
         for (const reason of reasons) {
@@ -117,5 +118,39 @@ describe('OF-M F89 — money that could not follow an edit, said plainly in his 
             expect(line.length).toBeGreaterThan(20);
         }
         expect(moneyNotFollowedLines(['shared'], 'en')[0]).toMatch(/not changed/);
+        // fix pass 1 (review 10)
+        expect(moneyNotFollowedLines(['tooLong'], 'en')[0]).toContain('too long');
+        // fix pass 4: money corrected in the money book is not changed by an edit
+        expect(moneyNotFollowedLines(['moneyBook'], 'en')[0]).toContain('corrected in the money accounts');
+        expect(moneyNotFollowedLines(['moneyBook'], 'mr')[0]).toContain('हिशोबात दुरुस्त');
+    });
+});
+
+const PRICES_REFUSED = 'ShramSafal.LogContentPrices.Conflict';
+
+describe('OF-M fix pass 3 (call 1) — a price change the server refused says who may change prices', () => {
+    it('the refusal reads as its own reason, said plainly in his language only, on the बदला screen and the sync page', () => {
+        expect(refusalReasonOf(PRICES_REFUSED)).toBe('pricesNotYours');
+        for (const language of ['mr', 'en'] as const) {
+            const lines = refusalLines({ kind: 'revision', reason: 'pricesNotYours' }, language);
+            expect(lines).toHaveLength(2);
+            expect(lines[0]).toBe(correctionWords(language).serverRefused);
+            expect(lines[1]).not.toMatch(language === 'en' ? /[ऀ-ॿ]/ : /[A-Za-z]/);
+            expect(lines[1]).not.toMatch(/policy|permission|grant|role|access|परवानगी|भूमिका|धोरण|प्रवेश/i);
+            expect(refusalHint(SyncMutationName.ReviseLogContent, PRICES_REFUSED, language)).toBe(lines[1]);
+        }
+        expect(refusalLines({ kind: 'revision', reason: 'pricesNotYours' }, 'en')[1]).toContain('can change its prices');
+        // every other refused edit keeps the screen's own words, as before
+        expect(refusalLines({ kind: 'revision', reason: 'stale' }, 'en')).toEqual([correctionWords('en').serverRefused]);
+        expect(refusalHint(SyncMutationName.ReviseLogContent, 'ShramSafal.LogContent.Conflict', 'en')).toBeUndefined();
+    });
+
+    it('a queued edit refused this way is read as that reason', async () => {
+        await getDatabase().mutationQueue.add({
+            deviceId: 'd', clientRequestId: 'edit-1', clientCommandId: 'edit-1', mutationType: SyncMutationName.ReviseLogContent,
+            payload: { dailyLogId: LOG }, status: 'REJECTED_USER_REVIEW', createdAt: '2026-10-31T10:00:00.000Z', updatedAt: 'T',
+            retryCount: 1, errorCode: PRICES_REFUSED, lastError: 'Only the person who made this entry, or someone who checks money entries, can change its prices. Nothing was saved.',
+        } as never);
+        expect(await readRefusedChange(LOG)).toMatchObject({ kind: 'revision', reason: 'pricesNotYours' });
     });
 });

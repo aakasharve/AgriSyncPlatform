@@ -10,7 +10,7 @@ namespace ShramSafal.Domain.Tests.Finance;
 /// <summary>
 /// Lane OF-M (F89). <see cref="RecordMoneyLines"/> reads a record's priced lines exactly as the phone's save makes money
 /// from them (<c>LogCommandService.captureMoneyEventsFromLog</c>: amount, category, description); <see cref="EditMoneyPlan"/>
-/// decides, per line an edit changed, what happens to its money; <see cref="FinanceCorrection.NoLongerSpent"/> is the
+/// brings ALL of a record's money in line with what it states after an edit (fix pass 3: reconcile, not diff); <see cref="FinanceCorrection.NoLongerSpent"/> is the
 /// "corrected to nothing" a removed line needs (the trail kept; <c>correct_cost_entry</c> still refuses ₹0).
 /// </summary>
 public sealed class RecordMoneyTests
@@ -71,91 +71,181 @@ public sealed class RecordMoneyTests
     public void An_expense_category_maps_as_the_phone_maps_it(string? said, string expected) =>
         Assert.Equal(expected, RecordMoneyLines.ExpenseCategoryOf(said));
 
-    // ── The plan ──────────────────────────────────────────────────────────────────────────────
+    // ── The plan (fix pass 3, call 2 — reconcile, not diff) ────────────────────────────────────────
 
     private static RecordMoneyLine Input(string id, decimal amount) => new("input", id, amount, "other", "x", null, null, null);
 
-    private static Guid Id(string lineId) => MoneyEntryIdentity.ForRecordLine(Log, "input", lineId);
+    private static RecordMoneyLine Crew(string id, decimal total) => new("labour", id, total, "labour_misc", id, null, null, null);
 
+    private static Guid Id(string lineId, string kind = "input") => MoneyEntryIdentity.ForRecordLine(Log, kind, lineId);
+
+    /// <summary>The record states <paramref name="stated"/>; <paramref name="ever"/> are its lines from any version.</summary>
     private static IReadOnlyList<EditMoneyStep> Plan(
-        RecordMoneyLine[] before, RecordMoneyLine[] after, Dictionary<Guid, FoundMoney>? found = null,
-        bool heldFromCreate = true, HashSet<Guid>? pricedBefore = null) =>
-        EditMoneyPlan.Of(Log, before, after, heldFromCreate,
-            pricedBefore ?? before.Where(l => l.Amount > 0).Select(l => MoneyEntryIdentity.ForRecordLine(Log, l.Kind, l.LineId)).ToHashSet(),
+        RecordMoneyLine[] stated,
+        Dictionary<Guid, FoundMoney>? found = null,
+        RecordMoneyLine[]? ever = null,
+        Guid[]? missingFirst = null,
+        EditMoneyNotFollowed? blocked = null) =>
+        EditMoneyPlan.Of(
+            Log,
+            stated,
+            (ever ?? stated).Concat(stated).DistinctBy(l => (l.Kind, l.LineId))
+                .ToDictionary(l => Id(l.LineId, l.Kind), l => new RecordLineKey(l.Kind, l.LineId)),
+            missingFirst ?? [],
+            blocked,
             found ?? []);
 
+    private static FoundMoney Money(string lineId, decimal now, string kind = "input") => new(Id(lineId, kind), now, false, false);
+
     [Fact]
-    public void An_unchanged_line_is_never_touched_even_when_its_money_reads_otherwise()
+    public void Money_in_line_with_its_record_is_never_touched()
     {
-        // The owner corrected the money in the money book to ₹600; an edit elsewhere must not put ₹500 back.
-        var steps = Plan([Input("in-1", 500)], [Input("in-1", 500)], new() { [Id("in-1")] = new FoundMoney(Id("in-1"), 600m, false, false) });
-        Assert.Empty(steps);
+        Assert.Empty(Plan([Input("in-1", 500)], new() { [Id("in-1")] = Money("in-1", 500m) }));
     }
 
     [Fact]
-    public void A_changed_amount_with_money_found_is_a_correction_and_a_removed_line_a_correction_to_nothing()
+    public void Money_that_differs_from_what_its_line_states_is_corrected_to_it_even_when_this_edit_did_not_change_the_line()
     {
-        var found = new Dictionary<Guid, FoundMoney>
-        {
-            [Id("in-1")] = new(Id("in-1"), 500m, false, false),
-            [Id("in-2")] = new(Id("in-2"), 200m, false, false),
-        };
-        var steps = Plan([Input("in-1", 500), Input("in-2", 200)], [Input("in-1", 800)], found);
-
-        Assert.Contains(steps, s => s.LineId == "in-1" && s.Action == EditMoneyAction.Correct && s.Amount == 800m);
-        Assert.Contains(steps, s => s.LineId == "in-2" && s.Action == EditMoneyAction.Correct && s.Amount == 0m);
-        Assert.Equal(2, steps.Count);
+        // Reconcile: the money reads ₹600 (another phone, a retry, a correction); the record says ₹500 → ₹500.
+        var step = Assert.Single(Plan([Input("in-1", 500)], new() { [Id("in-1")] = Money("in-1", 600m) }));
+        Assert.Equal(EditMoneyAction.Correct, step.Action);
+        Assert.Equal(500m, step.Amount);
     }
 
     [Fact]
-    public void A_line_priced_for_the_first_time_makes_money_under_its_derived_id()
+    public void Money_whose_line_is_gone_is_corrected_to_nothing_and_money_already_at_nothing_is_left_alone()
     {
-        var step = Assert.Single(Plan([Input("in-1", 0)], [Input("in-1", 0), Input("in-2", 300)]));
+        var steps = Plan(
+            [Input("in-1", 500)],
+            new() { [Id("in-1")] = Money("in-1", 500m), [Id("in-2")] = Money("in-2", 200m), [Id("in-3")] = Money("in-3", 0m) },
+            ever: [Input("in-1", 500), Input("in-2", 200), Input("in-3", 100)]);
+
+        var step = Assert.Single(steps);
+        Assert.Equal(("in-2", EditMoneyAction.Correct, 0m), (step.LineId, step.Action, step.Amount));
+    }
+
+    [Fact]
+    public void A_priced_line_with_no_money_makes_it_under_its_derived_id_and_an_unpriced_one_makes_none()
+    {
+        var step = Assert.Single(Plan([Input("in-1", 0), Input("in-2", 300)]));
         Assert.Equal(EditMoneyAction.Create, step.Action);
         Assert.Equal(Id("in-2"), step.MoneyId);
         Assert.Equal(300m, step.Amount);
     }
 
     [Fact]
-    public void Money_already_at_the_new_amount_is_left_alone()
+    public void A_removed_line_whose_money_was_never_made_needs_nothing()
     {
-        var found = new Dictionary<Guid, FoundMoney> { [Id("in-1")] = new(Id("in-1"), 800m, false, false) };
-        Assert.Empty(Plan([Input("in-1", 500)], [Input("in-1", 800)], found));
+        Assert.Empty(Plan([], ever: [Input("in-1", 300)]));
     }
 
     [Fact]
-    public void A_line_that_had_money_but_whose_money_is_not_found_is_never_guessed_at()
+    public void A_re_said_line_corrects_the_old_money_to_nothing_and_makes_the_new_never_1300()
     {
-        // Saved the old way (a random id), held on the phone, or not arrived: changed, removed or priced again.
-        Assert.Equal(EditMoneyNotFollowed.NotFound, Assert.Single(Plan([Input("in-1", 500)], [Input("in-1", 800)])).Reason);
-        Assert.Equal(EditMoneyNotFollowed.NotFound, Assert.Single(Plan([Input("in-1", 500)], [])).Reason);
-        var again = Plan([Input("in-1", 0)], [Input("in-1", 700)], pricedBefore: [Id("in-1")]);
-        Assert.Equal(EditMoneyNotFollowed.NotFound, Assert.Single(again).Reason);
+        var steps = Plan([Input("in-9", 800)], new() { [Id("in-1")] = Money("in-1", 500m) }, ever: [Input("in-1", 500)]);
+
+        Assert.Contains(steps, s => s.LineId == "in-1" && s.Action == EditMoneyAction.Correct && s.Amount == 0m);
+        Assert.Contains(steps, s => s.LineId == "in-9" && s.Action == EditMoneyAction.Create && s.Amount == 800m);
+        Assert.Equal(2, steps.Count);
     }
 
     [Fact]
-    public void Money_shared_out_or_a_job_cards_money_is_not_changed_and_says_why()
+    public void A_crews_money_follows_its_stated_total_and_is_never_made_by_an_edit()
+    {
+        var corrected = Assert.Single(Plan([Crew("c-1", 2800)], new() { [Id("c-1", "labour")] = Money("c-1", 3000m, "labour") }));
+        Assert.Equal((EditMoneyAction.Correct, 2800m), (corrected.Action, corrected.Amount));
+        // A priced crew is first money: missing, it is rule B's (below) — an edit never makes a crew's money.
+        Assert.Empty(Plan([Crew("c-1", 2800)]));
+    }
+
+    [Fact]
+    public void Fix1_B_when_the_records_first_money_is_not_all_found_nothing_changes_and_each_line_is_said_once()
+    {
+        // The first money of in-1 was saved the old way: the re-said line (in-1 out, in-9 in) must never be doubled.
+        var steps = Plan(
+            [Input("in-9", 800), Input("in-2", 250), Crew("c-1", 2800)],
+            new() { [Id("in-2")] = Money("in-2", 200m) },
+            ever: [Input("in-1", 500), Input("in-2", 200)],
+            missingFirst: [Id("in-1"), Id("c-1", "labour")],
+            blocked: EditMoneyNotFollowed.NotFound);
+
+        Assert.Equal(["c-1", "in-1", "in-2", "in-9"], steps.Select(s => s.LineId).Order().ToArray());
+        Assert.All(steps, s => Assert.Equal(EditMoneyAction.NotFollowed, s.Action));
+        Assert.All(steps, s => Assert.Equal(EditMoneyNotFollowed.NotFound, s.Reason));
+    }
+
+    [Fact]
+    public void Money_shared_out_or_a_job_cards_money_is_not_changed_and_says_why_only_when_it_is_out_of_line()
     {
         var found = new Dictionary<Guid, FoundMoney>
         {
             [Id("in-1")] = new(Id("in-1"), 500m, Shared: true, JobCard: false),
             [Id("in-2")] = new(Id("in-2"), 200m, Shared: false, JobCard: true),
+            [Id("in-3")] = new(Id("in-3"), 100m, Shared: true, JobCard: false),
         };
-        var steps = Plan([Input("in-1", 500), Input("in-2", 200)], [Input("in-1", 900), Input("in-2", 250)], found);
+        var steps = Plan([Input("in-1", 900), Input("in-2", 250), Input("in-3", 100)], found);
 
+        Assert.Equal(2, steps.Count);
         Assert.All(steps, s => Assert.Equal(EditMoneyAction.NotFollowed, s.Action));
         Assert.Equal(EditMoneyNotFollowed.Shared, steps.Single(s => s.LineId == "in-1").Reason);
         Assert.Equal(EditMoneyNotFollowed.JobCard, steps.Single(s => s.LineId == "in-2").Reason);
     }
 
     [Fact]
-    public void Without_the_records_create_time_details_no_money_changes_and_every_changed_line_says_so()
+    public void Without_the_records_create_time_details_no_money_changes_and_only_lines_out_of_line_say_so()
     {
-        var found = new Dictionary<Guid, FoundMoney> { [Id("in-1")] = new(Id("in-1"), 500m, false, false) };
-        var steps = Plan([Input("in-1", 500)], [Input("in-1", 800), Input("in-2", 300)], found, heldFromCreate: false);
+        var steps = Plan([Input("in-1", 800), Input("in-2", 300), Input("in-3", 100)],
+            new() { [Id("in-1")] = Money("in-1", 500m), [Id("in-3")] = Money("in-3", 100m) },
+            blocked: EditMoneyNotFollowed.DetailsNotHeld);
 
-        Assert.Equal(2, steps.Count);
+        Assert.Equal(["in-1", "in-2"], steps.Select(s => s.LineId).Order().ToArray());
         Assert.All(steps, s => Assert.Equal(EditMoneyNotFollowed.DetailsNotHeld, s.Reason));
+    }
+
+    [Fact]
+    public void Fix4_money_whose_latest_correction_was_made_in_the_money_book_is_not_changed_and_says_so()
+    {
+        var found = new Dictionary<Guid, FoundMoney>
+        {
+            [Id("in-1")] = new(Id("in-1"), 450m, Shared: false, JobCard: false, MoneyBook: true),
+            [Id("in-2")] = new(Id("in-2"), 450m, Shared: false, JobCard: false, MoneyBook: true),
+            [Id("in-3")] = new(Id("in-3"), 100m, Shared: false, JobCard: false, MoneyBook: true),
+        };
+        var steps = Plan([Input("in-1", 600), Input("in-2", 450)], found, ever: [Input("in-1", 500), Input("in-2", 450), Input("in-3", 100)]);
+
+        // in-1 restated, in-3 removed: neither is changed, both are said; in-2 already reads what its line says.
+        Assert.Equal(["in-1", "in-3"], steps.Select(s => s.LineId).Order().ToArray());
+        Assert.All(steps, s => Assert.Equal((EditMoneyAction.NotFollowed, EditMoneyNotFollowed.MoneyBook), (s.Action, s.Reason)));
+    }
+
+    [Fact]
+    public void Call1_an_edit_changes_prices_when_a_priced_lines_amount_changes_or_a_priced_line_comes_or_goes()
+    {
+        RecordMoneyLine[] saved = [Input("in-1", 500), Input("in-2", 0)];
+        Assert.False(EditMoneyPlan.ChangesPrices(saved, [Input("in-1", 500), Input("in-2", 0), Input("in-3", 0)]));
+        Assert.False(EditMoneyPlan.ChangesPrices(saved, [Input("in-1", 500.001m)]), "a line with no price may go; amounts are read as money is (2 places)");
+        Assert.True(EditMoneyPlan.ChangesPrices(saved, [Input("in-1", 800), Input("in-2", 0)]));
+        Assert.True(EditMoneyPlan.ChangesPrices(saved, [Input("in-2", 0)]));
+        Assert.True(EditMoneyPlan.ChangesPrices(saved, [Input("in-9", 500), Input("in-2", 0)]), "said again under a new id");
+        Assert.True(EditMoneyPlan.ChangesPrices(saved, [Input("in-1", 500), Input("in-2", 50)]));
+    }
+
+    // ── fix pass 1: the review flag ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Flagging_money_for_review_moves_its_clock_forward_so_every_phone_pulls_it()
+    {
+        var created = new DateTime(2026, 11, 1, 6, 0, 0, DateTimeKind.Utc);
+        var entry = CostEntry.Create(Guid.NewGuid(), new FarmId(Guid.NewGuid()), null, null, "other", "x", 500m, "INR",
+            new DateOnly(2026, 11, 1), new UserId(Guid.NewGuid()), null, created);
+
+        entry.FlagForReview("Its record says ₹800", created.AddHours(1));
+
+        Assert.True(entry.IsFlagged);
+        Assert.Equal("Its record says ₹800", entry.FlagReason);
+        Assert.Equal(created.AddHours(1), entry.ModifiedAtUtc);
+        Assert.Equal(500m, entry.Amount);
+        Assert.Equal(25000m, CostEntry.ReviewAmountThreshold);
     }
 
     // ── "Corrected to nothing" ────────────────────────────────────────────────────────────────

@@ -134,14 +134,20 @@ describe('lane OF-M — an offline edit\'s money, written from the server\'s ans
 
     it('money that could not follow is kept to be said plainly; a later edit whose money followed clears it', async () => {
         await queueEdit([{ id: 'in-1', cost: 800 }]);
-        answerWith({ log: { id: LOG }, moneyChanged: [], moneyCorrections: [], moneyNotFollowed: [{ kind: 'input', lineId: 'in-1', reason: 'notFound' }] });
+        answerWith({ log: { id: LOG }, moneyChanged: [], moneyCorrections: [], moneyNotFollowed: [{ kind: 'input', lineId: 'in-1', costEntryId: in1, reason: 'notFound' }] });
         await backgroundSyncWorker.triggerNow();
 
         expect(inBook(in1)?.effectiveAmount).toBe(500); // the phone changed nothing on its own
         expect(await readMoneyNotFollowed(LOG)).toEqual(['notFound']);
 
-        await queueEdit([{ id: 'in-1', cost: 900 }]);
+        // Fix pass 1 (review 4): an answer that names no money for that line leaves the words; one that names it clears.
+        await queueEdit([{ id: 'in-1', cost: 800 }]);
         answerWith({ log: { id: LOG }, moneyChanged: [], moneyCorrections: [], moneyNotFollowed: [] });
+        await backgroundSyncWorker.triggerNow();
+        expect(await readMoneyNotFollowed(LOG)).toEqual(['notFound']);
+
+        await queueEdit([{ id: 'in-1', cost: 900 }]);
+        answerWith({ log: { id: LOG }, moneyChanged: [{ ...entry(in1, 500), isCorrected: true }], moneyCorrections: [correction(in1, 500, 900)], moneyNotFollowed: [] });
         await backgroundSyncWorker.triggerNow();
         expect(await readMoneyNotFollowed(LOG)).toEqual([]);
     });

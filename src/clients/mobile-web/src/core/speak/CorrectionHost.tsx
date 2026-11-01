@@ -11,6 +11,8 @@
  * difference — queued, so a tap change works with no internet (P10).
  * Lane OF (founder D-57 = 1A): a record the हजेरी door saved opens THAT DAY in the हजेरी वही (the people are changed
  * there, by tapping), for someone who may open हजेरी; anyone else is told where it can be changed.
+ * Lane OF-M fix pass 3 (call 1): someone who did not make the entry and does not check money keeps its prices as saved
+ * (`pricesKept.ts`), told in one plain line; every other part stays his to change.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { DailyLog } from '../../types';
@@ -26,6 +28,7 @@ import {
 import { saveSpokenCorrection, type SaveCorrectionDeps, type SaveOutcome } from '../../features/logs/components/correction/saveCorrection';
 import { refusalLines, useRefusedChange, type RefusedChange } from '../../features/logs/components/correction/refusedRevision';
 import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../../features/logs/components/correction/moneyNotFollowed';
+import { hasPricedLine, isPricedPart, keepSavedPrices } from '../../features/logs/components/correction/pricesKept';
 import {
     afterOf, canRemove, newItem, partnersOf, tapRows, tapUpdates, withItem, withNew, withRestored, withoutItem, type AddKind, type TapBucket, type TapRow,
 } from '../../features/logs/components/correction/tapEdit';
@@ -33,6 +36,7 @@ import { AddKindSheet, TapEditSheet, TypeChangeSheet } from '../../features/logs
 import { canMoveSavedEntry, canQueueLabourCountOffline, isSamePlace, queueSavedEntryMove, type SavedEntryMove } from '../../features/logs/components/correction/correctionCapabilities';
 import { placeWords } from '../../shared/names/placeWords';
 import { isConfirmed } from '../../features/logs/components/voiceResult/resultModel';
+import { useLastSyncAt } from '../../features/logs/components/voiceResult/useRecordingTrust';
 import { dayFull } from '../../features/logs/components/dayPick/dayWords';
 import { DayPickSheet } from '../../features/logs/components/dayPick/DayPickSheet';
 import { PlacePickerSheet } from '../../features/context/components/PlacePickerSheet';
@@ -71,9 +75,9 @@ const isOffline = (): boolean => typeof navigator !== 'undefined' && navigator.o
 
 type Sheet = { kind: 'edit'; bucket: TapBucket; id: string; added?: boolean } | { kind: 'add' } | { kind: 'type' } | { kind: 'plot' } | { kind: 'day' } | null;
 
-/** Lane OF-S — the plain lines for a refused move / worker count (the content-change words stay the screen's own). */
+/** Lane OF-S — the plain lines for a refused change (lane OF-M fix pass 3: a refused price change also says who may). */
 const refusedLines = (refused: RefusedChange | null, language: string | undefined): string[] | undefined =>
-    (!refused || refused.kind === 'revision' ? undefined : refusalLines(refused, language));
+    (refused ? refusalLines(refused, language) : undefined);
 
 export const CorrectionHost: React.FC<{
     ctx: AppRouterContext; correction: CorrectionSession; speaking: boolean; save: CorrectionSaveDeps | null;
@@ -92,8 +96,9 @@ export const CorrectionHost: React.FC<{
     const [spoken, setSpoken] = useState<{ transcript: string; typed: boolean; nothing: boolean; labourNotChanged?: boolean } | undefined>(undefined);
     const applied = useRef<CorrectionSession['proposal']>(null);
     const serverRefused = useRefusedChange(log?.id, readRefused);
-    // Lane OF-M — the money of his last saved change that could not follow it, and why.
-    const moneyNotFollowed = useMoneyNotFollowedOf(log ? [log.id] : [], readMoneyNotFollowed);
+    // Lane OF-M — the money of his saved changes that could not follow them, and why; read again when a sync lands (fix
+    // pass 1, review 10), so an answer that arrives while this screen is open is said here.
+    const moneyNotFollowed = useMoneyNotFollowedOf(log ? [log.id] : [], readMoneyNotFollowed, useLastSyncAt());
     // A record that is no longer here (deleted meanwhile) has nothing to change: the screen closes.
     useEffect(() => { if (!log) closeCorrection(); }, [log]);
     // Lane OF (D-57) — a हजेरी-door record: that day in the हजेरी वही, for someone who may open हजेरी.
@@ -111,8 +116,16 @@ export const CorrectionHost: React.FC<{
     useBackDismiss(!!log && !speaking && !saving && sheet === null, closeCorrection);
 
     const sessionUserId = getSessionUserId();
-    const hideMoney = !mayShowFarmMoney(ctx.farmRole) && !(log?.meta?.createdByOperatorId && log.meta.createdByOperatorId === sessionUserId);
-    const base = working ?? log;
+    const isMaker = !!log?.meta?.createdByOperatorId && log.meta.createdByOperatorId === sessionUserId;
+    const hideMoney = !mayShowFarmMoney(ctx.farmRole) && !isMaker;
+    // Lane OF-M fix pass 3 (call 1) — only the entry's maker, or someone who checks money, changes its prices (the server
+    // refuses anyone else's price change whole). Not known (no farm context yet) = not held back here; the server decides.
+    // TODO(D-12): when money can be approved, approved money will be changed only by someone who checks money.
+    const pricesLocked = !!log && !isMaker && ctx.mayReviewMoney === false;
+    const base = useMemo(() => {
+        const copy = working ?? log;
+        return copy && log && pricesLocked ? keepSavedPrices(log, copy) : copy;
+    }, [working, log, pricesLocked]);
 
     // What he said (or typed) is merged into the working copy once (a part he spoke of replaces that part).
     const proposal = correction.proposal;
@@ -123,16 +136,22 @@ export const CorrectionHost: React.FC<{
         const merged = fresh ? mergeCorrection(base, proposal.draft, fresh) : null;
         const before = JSON.stringify(afterOf(base, removed));
         const next = merged?.after ?? base;
+        const shown = pricesLocked ? keepSavedPrices(log, next) : next; // a price he said is not taken (call 1)
         setSpoken({
             transcript: (proposal.draft.fullTranscript ?? '').trim(),
             typed: proposal.typed,
-            nothing: !saysAnything(proposal.draft) || JSON.stringify(afterOf(next, removed)) === before,
+            nothing: !saysAnything(proposal.draft) || JSON.stringify(afterOf(shown, removed)) === before,
             labourNotChanged: merged?.labourNotChanged,
         });
         setWorking(next);
-    }, [log, proposal, base, removed, ctx.crops, ctx.farmerProfile]);
+    }, [log, proposal, base, removed, ctx.crops, ctx.farmerProfile, pricesLocked]);
 
-    const rows = useMemo(() => (log && base ? tapRows(log, base, removed, language) : []), [log, base, removed, language]);
+    const rows = useMemo(() => {
+        if (!log || !base) return [];
+        const all = tapRows(log, base, removed, language);
+        // A priced part is not removed by someone who may not change its price (call 1).
+        return pricesLocked ? all.map(r => (isPricedPart(log, r.bucket, r.id) ? { ...r, removable: false } : r)) : all;
+    }, [log, base, removed, language, pricesLocked]);
     const after = useMemo(() => (base ? afterOf(base, removed) : undefined), [base, removed]);
     // Lane OF fix 1 (L7): what he says next is understood against what he sees (his taps applied), not the saved version.
     const logId = log?.id;
@@ -253,6 +272,7 @@ export const CorrectionHost: React.FC<{
                 serverRefusedLines={refusedLines(serverRefused, language)}
                 // Money is not talked about to someone who may not see it (the screen's own rule).
                 moneyNotFollowedLines={hideMoney ? [] : moneyNotFollowedLines(moneyNotFollowed, language)}
+                pricesLockedLine={pricesLocked && hasPricedLine(log) ? words.pricesLocked : undefined}
                 canMove={canMove}
                 onSpeak={() => speak()}
                 onType={() => { if (isOffline()) { setOffline(true); return; } setSheet({ kind: 'type' }); }}

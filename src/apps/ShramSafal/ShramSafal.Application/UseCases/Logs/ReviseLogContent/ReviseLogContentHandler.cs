@@ -188,6 +188,17 @@ public sealed class ReviseLogContentHandler(
             appVersion,
             command.AuditDeviceId,
             command.AuditIpHash);
+
+        // lane OF-M — its money (fix pass 3): whether this seat may change the record's prices is asked FIRST, so a refusal
+        // stages nothing (call 1); then ALL its money is brought in line with what it now states (call 2), the corrections
+        // staged with the version (one commit), new money right after it.
+        var editMoney = new EditMoney(repository, idGenerator, entitlementPolicy, logger);
+        var priced = await editMoney.StageAsync(log, current?.DocumentJson, documentJson, stamp, now, ct);
+        if (priced.IsFailure || priced.Value is not { } money)
+        {
+            return Result.Failure<ReviseLogContentResultDto>(priced.Error);
+        }
+
         log.NoteContentChanged();
         await LogContentStaging.StageAsync(
             repository,
@@ -202,10 +213,6 @@ public sealed class ReviseLogContentHandler(
             // Lines only for items no line stands for yet (see TaskLines).
             TaskLines.NewSince(current?.DocumentJson),
             ct);
-
-        // lane OF-M — its money: corrections staged with the version (one commit), new money right after it.
-        var editMoney = new EditMoney(repository, idGenerator, entitlementPolicy, logger);
-        var money = await editMoney.StageAsync(log, current?.DocumentJson, documentJson, stamp, now, ct);
 
         // ── lane L6 — a material change re-opens a confirmed day (shared with move_daily_log) ─
         var (priorStatus, reOpen, reAttested, reAttestedRole) =

@@ -962,7 +962,9 @@ public sealed class DailyLogContentRealPostgresTests(Xunit.Abstractions.ITestOut
         schema = 1,
         capturedAtUtc = "2026-10-30T05:00:00.000Z",
         irrigation = new object[] { new { id = "tm-irr-0", method = "Drip", source = "Well", durationHours = 3 } },
-        machinery = new object[] { new { id = "mach-0", type = "tractor", ownership = "rented", hoursUsed = 2, rentalCost = 1600 } },
+        // Lane OF-M fix pass 3: no price — the co-owner who saves this edit does not review money, and only the record's
+        // maker or a seat that reviews money may change a record's prices (a priced line here would be refused whole).
+        machinery = new object[] { new { id = "mach-0", type = "tractor", ownership = "rented", hoursUsed = 2 } },
     };
 
     private static Dictionary<string, object?> CreatePayload(

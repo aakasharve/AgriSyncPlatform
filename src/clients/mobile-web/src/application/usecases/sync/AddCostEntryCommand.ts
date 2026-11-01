@@ -77,10 +77,15 @@ export class AddCostEntryCommand {
       * mints a new `costEntryId` per tap. A stable key cannot fix an unstable
       * identity; that needs the id minted once at intent capture.
       */
-     static async enqueue(payload: AddCostEntryPayload): Promise<string> {
+     /**
+      * `moneySource` (lane OF-M fix pass 1): for a record's first money, the record line it was made from — kept on the
+      * queue row only (never sent), so the row is sent at that line's current amount.
+      */
+     static async enqueue(payload: AddCostEntryPayload, options: { moneySource?: string } = {}): Promise<string> {
           const clientRequestId = `${SyncMutationName.AddCostEntry}:${payload.costEntryId}`;
           return mutationQueue.enqueue(SyncMutationName.AddCostEntry, payload, {
                clientRequestId,
+               ...(options.moneySource ? { moneySource: options.moneySource } : {}),
                clientCommandId: clientRequestId
           });
      }

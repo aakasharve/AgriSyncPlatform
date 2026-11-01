@@ -19,6 +19,7 @@ import { moneyEntryIdFor } from './moneyEntryIdentity';
 import { resolveMoneyPlace } from './moneyPlace';
 import { moneyDayKey } from './moneyDay';
 import { holdMoney, releaseHeldMoney, type HeldMoneyReason } from './heldMoney';
+import { lineAmountNow } from './recordMoneyNow';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { noteUnqueueableLogs } from '../sync/status/unqueueableLogs';
 import {
@@ -126,6 +127,10 @@ export type ApplyAdjustmentInput = Omit<MoneyAdjustment, 'id' | 'correctedAt'> &
 /** What queueing one money entry came to: in the outbox, or kept on this phone (and why). */
 export type MoneyQueueOutcome = 'queued' | HeldMoneyReason;
 
+/** A record's money is made from one of its lines: its source key `<logId>:<kind>:<lineId>` (lane OF-M fix pass 1). */
+const recordLineSource = (payload: MoneySourcePayload): string | undefined =>
+    payload.logId && payload.sourceId.startsWith(`${payload.logId}:`) ? payload.sourceId : undefined;
+
 /** The in-memory event for a money source — `id` derived from its source key, `farmId` '' when none is known. */
 function buildMoneyEvent(payload: MoneySourcePayload, id: string, farmId: string): MoneyEvent {
     return {
@@ -181,6 +186,7 @@ async function queueMoneyEntry(event: MoneyEvent, payload: MoneySourcePayload): 
         const place = await resolveMoneyPlace(event.farmId, event.plotId, entryDate);
         if (!place.sendable) return await hold('plot-not-on-server', new Error(`plot ${event.plotId} is not on the server`));
 
+        const moneySource = recordLineSource(payload);
         await AddCostEntryCommand.enqueue({
             costEntryId: event.id,
             farmId: event.farmId,
@@ -209,7 +215,7 @@ async function queueMoneyEntry(event: MoneyEvent, payload: MoneySourcePayload): 
             // client can honestly make about every event it creates.
             attachments: event.attachments ?? [],
             ...(payload.location ? { location: payload.location } : {}),
-        });
+        }, moneySource ? { moneySource } : {});
     } catch (err) {
         return hold('refused-on-phone', err);
     }
@@ -256,7 +262,16 @@ export const financeCommandService = {
      */
     async sendKeptMoney(payload: MoneySourcePayload, confirmedFarmId: string): Promise<MoneyQueueOutcome> {
         const id = moneyEntryIdFor(payload.sourceId);
-        const confirmed: MoneySourcePayload = { ...payload, farmId: confirmedFarmId };
+        // lane OF-M fix pass 1 (call C) — a record's money kept here goes at its line's CURRENT amount. Fix pass 2: a line he
+        // removed still goes at its saved amount (never dropped: the record's first money must all reach the server), and
+        // his edit corrects it there.
+        const source = recordLineSource(payload);
+        const now = source ? await lineAmountNow(source) : { state: 'unknown' as const };
+        const confirmed: MoneySourcePayload = {
+            ...payload,
+            farmId: confirmedFarmId,
+            ...(now.state === 'priced' ? { amount: now.amount } : {}),
+        };
         const event = buildMoneyEvent(confirmed, id, confirmedFarmId);
         if (!financeService.getMoneyEvents().some(e => e.id === id)) financeService._addEvent(event);
         const outcome = await queueMoneyEntry(event, confirmed);

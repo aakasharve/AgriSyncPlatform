@@ -9,7 +9,9 @@
  *     farm's only;
  *   - gaps: money told on this phone that the ledger does not hold yet, read from where the money path writes it —
  *     the outbox (`add_cost_entry` rows, any state) and the money kept on this phone (`heldMoney`). An entry the
- *     ledger already holds is not a gap. These make a total say it is partial; they are never added to it;
+ *     ledger already holds is not a gap. Lane OF-M fix pass 1 (review 7): a queued edit that changes a price
+ *     (`revise_log_content` marked `changesMoney`) is a gap for its record until it is applied — the server changes that
+ *     money only then. These make a total say it is partial; they are never added to it;
  *   - complete: true only once a FULL read of the phone's copy of the ledger has finished AND the gaps are known.
  *
  * Review B003 — how it settles on the complete ledger, and why it cannot loop:
@@ -23,15 +25,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
+import type { QueueRowWithFacts } from '../../../infrastructure/sync/queueRowFacts';
 import type { AddCostEntryPayload } from '../../../application/usecases/sync/AddCostEntryCommand';
 import { financeSelectors } from '../../finance/financeSelectors';
 import { financeService } from '../../finance/financeService';
 import { readHeldMoney } from '../../finance/heldMoney';
+import { moneyDayKey } from '../../finance/moneyDay';
 import type { Ledger, LedgerEntry, LedgerGap } from './moneyModel';
 
 const CACHE_UPDATED = 'agrisync:finance-cache-updated';
 
-const dateKeyOf = (value: string | undefined): string => (value ?? '').slice(0, 10);
+// lane OF-M fix pass 1 (review 8) — one rule for a money day: the farm's day (India time), `moneyDay.ts`.
+const dateKeyOf = (value: string | undefined): string => (value ? moneyDayKey(value) : '');
 
 /** The ledger entries of this farm (every farm when the farm is not known yet), as the cache holds them now. */
 export function readLedgerEntries(farmId: string | null): LedgerEntry[] {
@@ -49,9 +54,10 @@ export function readLedgerEntries(farmId: string | null): LedgerEntry[] {
 
 /** Money told on this phone that the ledger does not hold yet. Rejects when the outbox cannot be read. */
 export async function readLedgerGaps(known: ReadonlySet<string>, farmId: string | null): Promise<LedgerGap[]> {
-    const [rows, held] = await Promise.all([
+    const [rows, held, edits] = await Promise.all([
         getDatabase().mutationQueue.where('mutationType').equals(SyncMutationName.AddCostEntry).toArray(),
         readHeldMoney(),
+        getDatabase().mutationQueue.where('mutationType').equals(SyncMutationName.ReviseLogContent).toArray(),
     ]);
     const seen = new Set(known);
     const gaps: LedgerGap[] = [];
@@ -66,6 +72,16 @@ export async function readLedgerGaps(known: ReadonlySet<string>, farmId: string 
     }
     for (const h of held) {
         add(h.costEntryId, h.payload.farmId ?? undefined, { ...(h.payload.plotId ? { plotId: h.payload.plotId } : {}), dateKey: dateKeyOf(h.payload.dateTime), direction: h.payload.eventType });
+    }
+    for (const edit of (edits as QueueRowWithFacts[]).filter(e => e.changesMoney && e.status !== 'APPLIED' && e.status !== 'REJECTED_DROPPED')) {
+        const logId = String((edit.payload as { dailyLogId?: unknown } | null)?.dailyLogId ?? '');
+        const record = logId ? (await getDatabase().logs.get(logId))?.log : undefined;
+        const plotIds = (record?.context?.selection ?? []).flatMap(sel => sel.selectedPlotIds ?? []);
+        add(`edit:${edit.clientRequestId}`, edit.farmId, {
+            ...(plotIds.length === 1 ? { plotId: plotIds[0] } : {}),
+            dateKey: record?.date ?? '',
+            direction: 'Expense',
+        });
     }
     return gaps;
 }

@@ -111,6 +111,15 @@ public static class ShramSafalErrors
         "ShramSafal.LogContent.Conflict",
         "This record kept changing while your edit was being saved. Nothing was saved; please try again.");
 
+    // spec: plr-d10 (lane OF-M fix pass 3, call 1) — a saved record's prices (a priced line's amount changed, a priced
+    // line added, said again or removed) are changed only by the record's maker or by someone who reviews money (the
+    // money book's rule). Anyone else's edit that changes one is refused WHOLE and nothing is saved: a backstop, since
+    // his phone shows him the prices read-only. THREE SEGMENTS, tail CONFLICT: parked where he sees it, never retried
+    // for ever (P10, P11). Only this build's phones send revise_log_content.
+    public static readonly Error LogContentPricesNotYours = Error.Conflict(
+        "ShramSafal.LogContentPrices.Conflict",
+        "Only the person who made this entry, or someone who checks money entries, can change its prices. Nothing was saved.");
+
     public static readonly Error LabourAssignmentConflict = Error.Conflict(
         "ShramSafal.LabourAssignment.Conflict",
         "This labour entry is already recorded on another daily log. The same engagement cannot belong to two logs — recording it again would count the same workers twice.");

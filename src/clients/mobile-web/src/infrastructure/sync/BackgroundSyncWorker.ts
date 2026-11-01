@@ -26,7 +26,19 @@ import {
 } from './MutationDependency';
 import { resetFailedUploadsToPending } from './UploadQueueRetry';
 import { takeMovedMoney } from '../../features/finance/movedMoney';
-import { takeEditMoney } from '../../features/finance/editMoney';
+import { clearMoneyNotFollowedFor, takeEditMoney } from '../../features/finance/editMoney';
+import { prepareRecordMoney } from './recordMoneyOrder';
+import type { QueueRowWithFacts } from './queueRowFacts';
+import { lineAmountNow } from '../../features/finance/recordMoneyNow';
+
+/** A record's first money that reached the server is in step only when it went at its line's current amount. */
+async function clearWhenInStep(moneySource: string, payload: unknown): Promise<void> {
+    const sent = (payload ?? {}) as { costEntryId?: string; amount?: number };
+    const now = await lineAmountNow(moneySource);
+    if (sent.costEntryId && now.state === 'priced' && now.amount === sent.amount) {
+        await clearMoneyNotFollowedFor(sent.costEntryId);
+    }
+}
 
 // Sub-plan 04 Task 4 — bridge worker → syncMachine. Wrapped so the worker
 // never crashes if the root store hasn't been instantiated (e.g., during
@@ -347,12 +359,14 @@ export class BackgroundSyncWorker {
             return;
         }
 
-        const pendingWithId = pending.filter(item => item.id !== undefined);
+        // spec: plr-d10 (lane OF-M fix pass 1, call C) — a record's first money goes at its line's current amount (or is
+        // set aside, with a trail, when the line was removed), and a queued edit waits while that money is on its way.
+        const pendingWithId = await prepareRecordMoney(pending.filter(item => item.id !== undefined));
         if (pendingWithId.length === 0) {
             return;
         }
 
-        const supportedMutations: Array<{ id: number; clientRequestId: string; clientCommandId?: string; mutationType: SyncMutationType; payload: unknown }> = [];
+        const supportedMutations: Array<{ id: number; clientRequestId: string; clientCommandId?: string; mutationType: SyncMutationType; payload: unknown; moneySource?: string }> = [];
         for (const mutation of pendingWithId) {
             const mutationType = toSyncMutationType(mutation.mutationType);
             if (!mutationType) {
@@ -372,6 +386,7 @@ export class BackgroundSyncWorker {
                 clientCommandId: mutation.clientCommandId,
                 mutationType,
                 payload: mutation.payload,
+                moneySource: (mutation as QueueRowWithFacts).moneySource,
             });
         }
 
@@ -425,6 +440,14 @@ export class BackgroundSyncWorker {
                     // spec: plr-d10 (lane OF-M, F89) — an edit answers with exactly the money the server made or corrected
                     // for it (and why any did not follow): written here at once, the same way; the phone changes no money
                     // on its own. A failure is said; the pull at the end of the cycle carries the same rows.
+                    // Lane OF-M fix passes 1–2 — a record's first money reached the server AT ITS LINE'S CURRENT AMOUNT: its
+                    // "money did not change" words go. Money of a removed line went at its saved amount: not in step yet,
+                    // so they stay until an answer says it is.
+                    if (mutation.mutationType === SyncMutationName.AddCostEntry && mutation.moneySource) {
+                        await clearWhenInStep(mutation.moneySource, mutation.payload).catch((error: unknown) => {
+                            console.error('BackgroundSyncWorker: the money words could not be cleared', error);
+                        });
+                    }
                     if (mutation.mutationType === SyncMutationName.ReviseLogContent) {
                         const dailyLogId = String((mutation.payload as { dailyLogId?: unknown } | null)?.dailyLogId ?? '');
                         await takeEditMoney(dailyLogId, result.data).catch((error: unknown) => {

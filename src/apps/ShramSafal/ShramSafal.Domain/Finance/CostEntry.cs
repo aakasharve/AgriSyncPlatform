@@ -8,6 +8,15 @@ namespace ShramSafal.Domain.Finance;
 
 public sealed class CostEntry : Entity<Guid>
 {
+    /// <summary>
+    /// The amount at or above which money waits in the review inbox (flagged) — one rule for a first save
+    /// (<c>AddCostEntryHandler</c>), money an edit makes, and a correction an edit makes (lane OF-M fix pass 1, review 6).
+    /// </summary>
+    public const decimal ReviewAmountThreshold = 25000m;
+
+    /// <summary>The flag reason that rule writes.</summary>
+    public const string ReviewAmountReason = "High amount: >= 25000 INR";
+
     private CostEntry() : base(Guid.Empty) { } // EF Core
 
     private CostEntry(
@@ -295,6 +304,20 @@ public sealed class CostEntry : Entity<Guid>
         if (movedAtUtc > ModifiedAtUtc)
         {
             ModifiedAtUtc = movedAtUtc;
+        }
+    }
+
+    /// <summary>
+    /// spec: plr-d10 (lane OF-M fix passes 1 and 3) — flag money for the person who reviews money, later than it was made
+    /// (an edit's correction raised it past <see cref="ReviewAmountThreshold"/>, review 6). Server-side only: no phone
+    /// shows a money flag yet (F90, open in the D-12 approval lane). The amount never changes; its clock moves forward.
+    /// </summary>
+    public void FlagForReview(string reason, DateTime atUtc)
+    {
+        Flag(reason);
+        if (atUtc > ModifiedAtUtc)
+        {
+            ModifiedAtUtc = atUtc;
         }
     }
 

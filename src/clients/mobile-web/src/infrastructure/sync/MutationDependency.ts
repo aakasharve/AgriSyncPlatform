@@ -426,12 +426,15 @@ export function missingMoneyIdsIn(message: string | null | undefined): string[] 
     return named ? named[1].split(',').map(id => id.trim().toLowerCase()).filter(id => id.length > 0) : [];
 }
 
-/** The record's money rows, narrowed to the ones the refusal named when it named any (lane OF-M, R4-1). */
+/**
+ * The money rows the refusal named (lane OF-M, R4-1), each found in the outbox by its own id — `add_cost_entry:<id>` —
+ * whether or not its line is still on this phone's copy of the record (fix pass 1, review 10: a line since removed or
+ * re-said still names its money). When the refusal names none (an older server), every money row of the record.
+ */
 export async function namedMoneyRowsOfRecord(dailyLogId: string, missingIds: readonly string[] = []): Promise<RecordMoneyRow[]> {
-    const rows = await moneyRowsOfRecord(dailyLogId);
-    if (missingIds.length === 0) return rows;
-    const named = new Set(missingIds.map(id => id.toLowerCase()));
-    return rows.filter(row => named.has(row.id.toLowerCase()));
+    if (missingIds.length === 0) return moneyRowsOfRecord(dailyLogId);
+    return [...new Set(missingIds.map(id => id.toLowerCase()))]
+        .map(id => ({ id, clientRequestId: `${SyncMutationName.AddCostEntry}:${id}` }));
 }
 
 /**

@@ -61,6 +61,7 @@ import { SpeakHost, type CorrectionSaveDeps } from '../SpeakHost';
 import type { RefusedChange } from '../../../features/logs/components/correction/refusedRevision';
 import { correctionEntryNow, withSpeakPurpose } from '../speakFlow';
 import { openCorrection, resetSpeakStoreForTests, speakState } from '../speakStore';
+import { getRootStore } from '../../../app/state/RootStore';
 
 const EMPTY: LogScope = { selectedCropIds: [], selectedPlotIds: [], mode: 'single', applyPolicy: 'broadcast' };
 const CROPS = [{ id: 'grape', name: 'Grapes', iconName: 'Grapes', color: 'x', supportedTasks: [], workflow: [], plots: [{ id: 'g1', name: 'सोनाका', baseline: {}, schedule: {} }] }];
@@ -91,20 +92,25 @@ const SAID: AgriLogResponse = {
 
 let drive: { set: (st: AppStatus) => void; history: () => DailyLog[]; text: (t: string) => void } = { set: () => undefined, history: () => [], text: () => undefined };
 const openPlace = vi.fn();
-const Harness: React.FC<{ start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean | RefusedChange; hajeri?: boolean; moneyNotFollowed?: string[] }> = ({ start, save, refused = false, hajeri = false, moneyNotFollowed = [] }) => {
+const Harness: React.FC<{
+    start: DailyLog[]; save: CorrectionSaveDeps; refused?: boolean | RefusedChange; hajeri?: boolean; moneyNotFollowed?: string[];
+    readMoney?: (logId: string) => Promise<string[]>;
+    // Lane OF-M fix pass 3: the seat (its server-told role, and whether it may check money).
+    farmRole?: string; mayReviewMoney?: boolean;
+}> = ({ start, save, refused = false, hajeri = false, moneyNotFollowed = [], readMoney, farmRole = 'PrimaryOwner', mayReviewMoney }) => {
     const [history, setHistory] = useState<DailyLog[]>(start);
     const [status, setStatus] = useState<AppStatus>('idle');
     const [logScope, setLogScope] = useState<LogScope>(EMPTY);
     const handleTextReady = vi.fn(async (t: string) => { drive.text(t); });
     drive = { set: setStatus, history: () => history, text: drive.text };
     const ctx = {
-        status, draftLog: null, lastSavedLogIds: [], logScope, crops: CROPS, history, farmerProfile: PROFILE, farmRole: 'PrimaryOwner',
+        status, draftLog: null, lastSavedLogIds: [], logScope, crops: CROPS, history, farmerProfile: PROFILE, farmRole, mayReviewMoney,
         currentRoute: 'main', mainView: 'reflect', isContextReady: logScope.selectedCropIds.length > 0,
         handleReset: vi.fn(), setMode: vi.fn(), setStatus, setLogScope, setCurrentRoute: vi.fn(), setMainView: vi.fn(),
         handleTextReady, canOpenAttendanceFromHome: hajeri, openPlace,
     } as unknown as AppRouterContext;
     const refusal: RefusedChange | null = refused === true ? { kind: 'revision', reason: 'other' } : refused || null;
-    return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} readRefused={async () => refusal} readMoneyNotFollowed={async () => moneyNotFollowed} />;
+    return <SpeakHost ctx={ctx} save={{ ...save, setHistory }} readRefused={async () => refusal} readMoneyNotFollowed={readMoney ?? (async () => moneyNotFollowed)} />;
 };
 
 /** The real F1 path: `UpdateLog` with a phone store that holds the entry. */
@@ -303,6 +309,23 @@ describe.each(['mr', 'en'] as const)('"बदला" → speak → before / afte
         render(<Harness start={[ENTRY]} save={deps} refused />);
         act(() => openCorrection('log-1'));
         expect(await screen.findByTestId('corr-server-refused')).toHaveTextContent(language === 'en' ? 'only on this phone' : 'फक्त या फोनवर');
+    });
+
+    it('lane OF-M fix pass 1 (review 10): the बदला screen reads the money words again when a sync lands', async () => {
+        const { deps } = realSave();
+        const reasons: string[] = [];
+        render(<Harness start={[ENTRY]} save={deps} readMoney={async () => [...reasons]} />);
+        act(() => openCorrection('log-1'));
+        await act(async () => { await Promise.resolve(); });
+        expect(screen.queryByTestId('corr-money-not-followed')).toBeNull();
+
+        reasons.push('shared'); // the edit's answer arrives while the screen is open
+        await act(async () => {
+            getRootStore().sync.send({ type: 'TRIGGER' });
+            getRootStore().sync.send({ type: 'SYNC_DONE' });
+            await Promise.resolve();
+        });
+        expect(await screen.findByTestId('corr-money-not-followed')).toHaveTextContent(language === 'en' ? 'shared out across plots' : 'प्लॉटमध्ये वाटले');
     });
 
     it('lane OF-M: money an edit could not change is said plainly on the बदला screen, in his language only', async () => {
@@ -661,5 +684,80 @@ describe.each(['mr', 'en'] as const)('lane OF fix 1 — the बदला screen 
         expect(screen.getByTestId('corr-title').textContent).not.toContain(`${crop} · ${crop}`);
         // Lane OF-S: the row now also carries "प्लॉट बदला" — the PLACE words are what this checks.
         expect(screen.getByTestId('corr-plot-row').querySelector('span')?.textContent).toBe(`${crop} G1`);
+    });
+});
+
+// ── lane OF-M fix pass 3 (call 1) — only the entry's maker, or someone who checks money, changes its prices ────────────
+const PRICED = {
+    ...ENTRY,
+    inputs: [{ ...ENTRY.inputs[0], cost: 500 }],
+    activityExpenses: [{ id: 'exp', reason: 'डिझेल', category: 'Fuel', totalAmount: 500 }],
+    meta: { ...ENTRY.meta, createdByOperatorId: 'owner-1' }, // made by someone else (this phone's person is 'me')
+} as DailyLog;
+const SAID_PRICES = {
+    ...SAID, fullTranscript: 'इथरेल 350 मिली, 900 रुपये; डिझेल 800',
+    inputs: [{ id: 'x', method: 'Spray', mix: [], productName: 'इथरेल', quantity: 350, unit: 'ml', cost: 900 }],
+    activityExpenses: [{ id: 'y', reason: 'डिझेल', category: 'Fuel', totalAmount: 800 }],
+} as unknown as AgriLogResponse;
+const openAs = (entry: DailyLog, seat: { farmRole: string; mayReviewMoney: boolean }) => {
+    const { deps } = saveFor(entry);
+    render(<Harness start={[entry]} save={deps} farmRole={seat.farmRole} mayReviewMoney={seat.mayReviewMoney} />);
+    act(() => openCorrection(entry.id));
+};
+type PricedPayload = { content: { inputs: Array<Record<string, unknown>>; activityExpenses: Array<Record<string, unknown>>; irrigation?: unknown[] } };
+
+describe.each(['mr', 'en'] as const)('lane OF-M fix pass 3 — prices on the बदला screen (%s)', language => {
+    beforeEach(() => { lang.value = language; });
+
+    it('someone who did not make the entry and may not check money: its prices stay as saved, said in one plain line; every other part still changes', async () => {
+        openAs(PRICED, { farmRole: 'Mukadam', mayReviewMoney: false });
+        const line = screen.getByTestId('corr-prices-locked');
+        expect(line).toHaveTextContent(language === 'en' ? 'Prices stay as they are' : 'किंमती आहेत तशाच राहतील');
+        expect(line.textContent ?? '').not.toMatch(language === 'en' ? /[ऀ-ॿ]/ : /[A-Za-z]/);
+        expect(line.textContent ?? '').not.toMatch(/policy|permission|role|access|परवानगी|भूमिका|धोरण|प्रवेश/i);
+        // a priced part cannot be removed; a part with no price still can (TAP-1 for what he may change)
+        expect(screen.queryByTestId('corr-toggle-in')).toBeNull();
+        expect(screen.queryByTestId('corr-toggle-exp')).toBeNull();
+        expect(screen.getByTestId('corr-toggle-w')).toBeInTheDocument();
+
+        await speak(SAID_PRICES);
+        await pressSave();
+        const payload = enqueue.mock.calls[0][0] as PricedPayload;
+        // what he said that is not a price lands (350 ml), on the saved line, at its saved price; the ₹800 is not taken
+        expect(payload.content.inputs).toEqual([expect.objectContaining({ id: 'in', productName: 'इथरेल', quantity: 350, cost: 500 })]);
+        expect(payload.content.activityExpenses).toEqual([expect.objectContaining({ id: 'exp', totalAmount: 500 })]);
+    });
+
+    it('his removal of a part with no price saves; the priced parts stay', async () => {
+        openAs(PRICED, { farmRole: 'Mukadam', mayReviewMoney: false });
+        fireEvent.click(screen.getByTestId('corr-toggle-w'));
+        await pressSave();
+        const payload = enqueue.mock.calls[0][0] as PricedPayload;
+        expect(payload.content.irrigation ?? []).toEqual([]);
+        expect(payload.content.inputs).toEqual([expect.objectContaining({ id: 'in', cost: 500 })]);
+        expect(payload.content.activityExpenses).toEqual([expect.objectContaining({ id: 'exp', totalAmount: 500 })]);
+    });
+
+    it.each([
+        ['the entry\'s maker', { ...PRICED, meta: { ...PRICED.meta, createdByOperatorId: 'me' } } as DailyLog, { farmRole: 'Worker', mayReviewMoney: false }],
+        ['someone who checks money', PRICED, { farmRole: 'PrimaryOwner', mayReviewMoney: true }],
+    ])('%s changes its prices as before', async (_who, entry, seat) => {
+        openAs(entry, seat);
+        expect(screen.queryByTestId('corr-prices-locked')).toBeNull();
+        expect(screen.getByTestId('corr-toggle-in')).toBeInTheDocument();
+        await speak(SAID_PRICES);
+        await pressSave();
+        const payload = enqueue.mock.calls[0][0] as PricedPayload;
+        expect(payload.content.inputs).toEqual([expect.objectContaining({ productName: 'इथरेल', quantity: 350, cost: 900 })]);
+        expect(payload.content.activityExpenses).toEqual([expect.objectContaining({ reason: 'डिझेल', totalAmount: 800 })]);
+    });
+
+    it('a price change the server refused is said plainly: who may change prices', async () => {
+        const { deps } = saveFor(PRICED);
+        render(<Harness start={[PRICED]} save={deps} refused={{ kind: 'revision', reason: 'pricesNotYours' } as RefusedChange} />);
+        act(() => openCorrection('log-1'));
+        const said = await screen.findByTestId('corr-server-refused');
+        expect(said).toHaveTextContent(language === 'en' ? 'only on this phone' : 'फक्त या फोनवर');
+        expect(said).toHaveTextContent(language === 'en' ? 'can change its prices' : 'किंमती फक्त');
     });
 });

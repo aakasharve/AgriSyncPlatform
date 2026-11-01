@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
@@ -8,32 +9,52 @@ using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 
 /// <summary>
-/// spec: plr-d10-redesign-real-integration-2026-10-25 (lane OF-M, F89; orchestrator-agreed design) — an edit makes or
-/// corrects its money, on the SERVER, inside the edit itself. The phone never changes money on its own.
+/// spec: plr-d10-redesign-real-integration-2026-10-25 (lane OF-M, F89; fix passes 1 and 3) — an edit keeps its record's
+/// money in line, on the SERVER, inside the edit itself. The phone never changes money on its own.
 ///
 /// <list type="bullet">
-/// <item><b>What</b> — <see cref="EditMoneyPlan"/>: only lines whose stated amount the edit changed. Found money →
-/// a <see cref="FinanceCorrection"/> (the entry keeps what was first said; ₹0 = no longer spent, via
-/// <see cref="FinanceCorrection.NoLongerSpent"/>); a line priced for the first time → a new <see cref="CostEntry"/> under
-/// its derived id (<see cref="MoneyEntryIdentity"/>); everything else is not changed and is said
-/// (<see cref="EditMoneyNotFollowed"/>). Never a silent overwrite (P3), never a fabricated or doubled number (P4).</item>
-/// <item><b>Who</b> — the rule that let a FIRST save make that money (<c>add_cost_entry</c>: a member of the record's farm
-/// whose farm may write money, <see cref="PaidFeature.EditFinance"/> — nothing more; the edit gate has already proved the
-/// membership). Reviewing money in the money book (<c>ReviewMoney</c>) is a different act and is not asked. If the farm may
-/// not write money now, the money is not changed and he is told (<see cref="EditMoneyNotFollowed.NotAllowed"/>); the edit
-/// itself is never held back for it (P9).</item>
+/// <item><b>Who</b> (fix pass 3, call 1) — a saved record's prices (a priced line's amount changed, a priced line added,
+/// said again or removed) are changed only by the record's MAKER, restating his own record, or by someone who REVIEWS
+/// MONEY (<c>ReviewMoney</c>, the money book's rule). Anyone else's edit that changes a price is refused whole
+/// (<see cref="ShramSafalErrors.LogContentPricesNotYours"/>) and nothing is saved — a backstop, since his phone shows him
+/// the prices read-only; his edit of any other part lands and changes no money. So no seat makes money it could not
+/// correct, and no edit leaves a price and its money apart.
+/// TODO(D-12): there is no money approval yet, so all money is unreviewed and the maker may restate it. When D-12 brings
+/// approval, APPROVED money will need <c>ReviewMoney</c> even for the record's maker.</item>
+/// <item><b>What</b> (fix pass 3, call 2 — reconcile, not diff) — <see cref="EditMoneyPlan"/>: on every edit by an
+/// allowed seat, ALL of the record's derived money is brought in line with what the record now states — a priced line
+/// with no money is made under its derived id (<see cref="MoneyEntryIdentity"/>); money that differs from its line is
+/// corrected (a <see cref="FinanceCorrection"/>: the entry keeps what was first said); money whose line is gone is
+/// corrected to ₹0 (<see cref="FinanceCorrection.NoLongerSpent"/>). Money shared out across plots or a job card's is
+/// never changed, and it is said. Never a silent overwrite (P3), never a fabricated or doubled number (P4).</item>
+/// <item><b>The money book's own</b> (fix pass 4) — money whose LATEST correction was made in the money book
+/// (<c>correct_cost_entry</c>: a reviewer acting on the money itself) belongs to the money book from then on: no edit
+/// changes it — not one of another part, not the maker restating the price — the edit lands, and he is told
+/// (<see cref="EditMoneyNotFollowed.MoneyBook"/>). Told apart by the correction's own audit row, written by the server in
+/// the same save as the correction (<see cref="MadeByAnEditAsync"/>); never by its reason, which a person types. The
+/// same idea as D-12: a reviewed amount is changed by a reviewer, in the money book.</item>
+/// <item><b>Only when ALL its first money is found</b> (fix pass 1, call B; the move's rule, <see cref="RecordFirstMoney"/>)
+/// — a record with no create-time details, or with first money not found under its derived ids, changes no money at all,
+/// and it is said: a re-said line can never leave two live entries.</item>
+/// <item><b>The farm's money switch</b> — making or correcting money also needs the farm's <c>EditFinance</c> (the first
+/// save's rule, a farm-level paid switch, not a person's grant): without it nothing changes, it is said
+/// (<see cref="EditMoneyNotFollowed.NotAllowed"/>), and the edit itself still lands (P9); the next edit puts it right.</item>
 /// <item><b>Where</b> — the record's place and day at the moment the edit applies (<see cref="RecordMoneyPlace"/>), so an
 /// edit that arrives after a move makes its money at the new place (R4-3); a move carries every derived entry with it.
 /// Tenancy: only this farm's rows are read or written (E4); a row of another farm holding a derived id is never written
 /// over and never fails the edit (<see cref="IShramSafalRepository.TryAddRecordMoneyAsync"/>).</item>
-/// <item><b>When</b> — corrections are staged with the new version and commit with it (P1); new entries right after it, in
-/// the same sync transaction. The AI-parse ledger (<c>CorrectionEvent</c>) is not used (E7).</item>
+/// <item><b>When</b> — the price check runs before anything is staged; corrections are staged with the new version and
+/// commit with it (P1); new entries right after it, in the same sync transaction. The AI-parse ledger
+/// (<c>CorrectionEvent</c>) is not used (E7).</item>
+/// <item><b>Review</b> — money an edit raises to <see cref="CostEntry.ReviewAmountThreshold"/> or more is flagged exactly
+/// as a first save of it would be (server-side only).</item>
 /// <item><b>History</b> — each correction keeps the entry's first amount, who, when and why, with the standard
 /// <c>CostEntry</c> / <c>Corrected</c> (or <c>Created</c>) audit row; the record gets one <see cref="FollowedAction"/> row
 /// listing what followed and what did not.</item>
@@ -51,21 +72,28 @@ internal sealed class EditMoney(
     /// <summary>The reason a correction made by an edit carries (English, stored; the phone shows its own words).</summary>
     public const string CorrectionReason = "Changed with its record";
 
-    private const decimal HighAmountThreshold = 25000m;
-    private const string HighAmountFlagReason = "High amount: >= 25000 INR";
+    /// <summary>The <c>trigger</c> the server writes in the audit row of money an edit makes or corrects.</summary>
+    private const string EditTrigger = "ContentRevised";
+
+    // The money book's own column lengths (CostEntryConfiguration): a longer value drops only that line's money (review 10).
+    private const int DescriptionMax = 500;
+    private const int UnitMax = 32;
+    private const int VendorMax = 200;
 
     /// <summary>The plan and the corrections staged with the new version.</summary>
-    public sealed record Staged(IReadOnlyList<EditMoneyStep> Steps, IReadOnlyList<(CostEntry Entry, FinanceCorrection Correction)> Corrected)
+    public sealed record Staged(
+        IReadOnlyList<EditMoneyStep> Steps,
+        IReadOnlyList<(CostEntry Entry, FinanceCorrection Correction)> Corrected)
     {
         public static readonly Staged None = new([], []);
     }
 
     /// <summary>
-    /// Before the new version is saved: decide what happens to each changed line's money, and stage the corrections so they
-    /// commit with the version. <paramref name="currentDocumentJson"/> is the record's version before this edit (null =
-    /// none); <paramref name="newDocumentJson"/> the edit's.
+    /// BEFORE the new version is staged: refuse an edit that changes a price from a seat that may not (call 1), else bring
+    /// the record's money in line with <paramref name="newDocumentJson"/> and stage the corrections so they commit with the
+    /// version. <paramref name="currentDocumentJson"/> is the record's version before this edit (null = none).
     /// </summary>
-    public async Task<Staged> StageAsync(
+    public async Task<Result<Staged>> StageAsync(
         DailyLog log,
         string? currentDocumentJson,
         string newDocumentJson,
@@ -73,68 +101,80 @@ internal sealed class EditMoney(
         DateTime now,
         CancellationToken ct)
     {
-        var heldFromCreate = false;
-        var pricedBefore = new HashSet<Guid>();
-        foreach (var version in await repository.GetDailyLogContentVersionsAsync(log.Id, ct))
+        IReadOnlyList<RecordMoneyLine> after = Read(log, newDocumentJson) ?? [];
+        if (!await MayChangePricesAsync(log, stamp.ActorUserId, now, ct))
         {
-            if (Read(log, version.DocumentJson) is not { } lines)
+            // With no earlier version held (a record whose details never reached the server) no price can be shown to
+            // change; such a record's money follows no edit anyway (rule B, detailsNotHeld).
+            var before = currentDocumentJson is null ? null : Read(log, currentDocumentJson);
+            if (before is not null && EditMoneyPlan.ChangesPrices(before, after))
             {
-                continue;
+                logger.LogWarning(
+                    "revise_log_content for {LogId} refused: it changes a price, and the editor neither made the record nor reviews money.",
+                    log.Id);
+                return Result.Failure<Staged>(ShramSafalErrors.LogContentPricesNotYours);
             }
 
-            heldFromCreate |= version.Origin != DailyLogContent.OriginRevision;
-            foreach (var line in lines.Where(l => l.Amount > 0m))
-            {
-                pricedBefore.Add(MoneyEntryIdentity.ForRecordLine(log.Id, line.Kind, line.LineId));
-            }
+            return Result.Success(Staged.None); // his edit lands; no money is touched by a seat that may not change it
         }
 
-        IReadOnlyList<RecordMoneyLine> before = (currentDocumentJson is null ? null : Read(log, currentDocumentJson)) ?? [];
-        IReadOnlyList<RecordMoneyLine> after = Read(log, newDocumentJson) ?? [];
-        var ids = before.Concat(after).Select(l => MoneyEntryIdentity.ForRecordLine(log.Id, l.Kind, l.LineId)).Distinct().ToList();
-
+        var first = await RecordFirstMoney.OfAsync(repository, log, logger, ct);
+        IReadOnlyList<RecordMoneyLine> stated = [.. after, .. first.Crews];
+        var ids = first.LookFor
+            .Concat(stated.Select(l => MoneyEntryIdentity.ForRecordLine(log.Id, l.Kind, l.LineId)))
+            .Distinct()
+            .ToList();
         var money = (await repository.GetCostEntriesByIdsAsync(ids, ct))
             .Where(entry => entry.FarmId == log.FarmId) // E4: never another farm's row
             .ToList();
         var latest = (await repository.GetCorrectionsForEntriesAsync(money.Select(e => e.Id), ct))
             .GroupBy(c => c.CostEntryId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First().CorrectedAmount);
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First());
         var found = new Dictionary<Guid, FoundMoney>();
         foreach (var entry in money)
         {
             var shared = await repository.GetDayLedgerBySourceCostEntryIdAsync(entry.Id, ct) is not null;
+            var last = latest.GetValueOrDefault(entry.Id);
             found[entry.Id] = new FoundMoney(
-                entry.Id, latest.TryGetValue(entry.Id, out var now0) ? now0 : entry.Amount, shared, entry.JobCardId is not null);
+                entry.Id,
+                last?.CorrectedAmount ?? entry.Amount,
+                shared,
+                entry.JobCardId is not null,
+                MoneyBook: last is not null && !await MadeByAnEditAsync(entry.Id, last.Id, ct));
         }
 
-        var steps = EditMoneyPlan.Of(log.Id, before, after, heldFromCreate, pricedBefore, found).ToList();
+        // Call B — the record's money follows edits only when ALL its first money is found (the move's rule).
+        var missingFirst = first.Stated.Where(id => !found.ContainsKey(id)).ToList();
+        EditMoneyNotFollowed? blocked = !first.HeldFromCreate ? EditMoneyNotFollowed.DetailsNotHeld
+            : missingFirst.Count > 0 ? EditMoneyNotFollowed.NotFound
+            : null;
+
+        var steps = EditMoneyPlan.Of(log.Id, stated, first.Known, missingFirst, blocked, found).ToList();
         if (steps.Count == 0)
         {
-            return Staged.None;
+            return Result.Success(Staged.None);
         }
 
-        // Who: the first save's rule (add_cost_entry) — a member (the edit gate proved it) whose farm may write money.
-        if (steps.Any(s => s.Action != EditMoneyAction.NotFollowed)
-            && await EntitlementGate.CheckErrorAsync(
-                entitlementPolicy, new UserId(stamp.ActorUserId), log.FarmId, PaidFeature.EditFinance, ct) is { } refused)
-        {
-            logger.LogWarning("revise_log_content for {LogId}: its money was not changed: {Code}.", log.Id, refused.Code);
-            steps = steps
-                .Select(s => s.Action == EditMoneyAction.NotFollowed
-                    ? s
-                    : s with { Action = EditMoneyAction.NotFollowed, Reason = EditMoneyNotFollowed.NotAllowed })
-                .ToList();
-        }
+        steps = await WithMoneySwitchAsync(log, steps, stamp.ActorUserId, ct);
+        steps = steps.Select(s => s.Action == EditMoneyAction.Create && TooLong(s.Line!)
+            ? s with { Action = EditMoneyAction.NotFollowed, Reason = EditMoneyNotFollowed.TooLong }
+            : s).ToList();
 
+        var by = new UserId(stamp.ActorUserId);
         var corrected = new List<(CostEntry, FinanceCorrection)>();
         foreach (var step in steps.Where(s => s.Action == EditMoneyAction.Correct))
         {
             var entry = money.Single(e => e.Id == step.MoneyId);
-            var by = new UserId(stamp.ActorUserId);
             var correction = step.Amount > 0m
                 ? FinanceCorrection.Create(idGenerator.New(), entry.Id, entry.Amount, step.Amount, entry.CurrencyCode, CorrectionReason, by, now)
                 : FinanceCorrection.NoLongerSpent(idGenerator.New(), entry.Id, entry.Amount, entry.CurrencyCode, CorrectionReason, by, now);
             entry.MarkCorrected(correction.Id, correction.CorrectedAmount, correction.CurrencyCode, now);
+            // Review 6 — raised past the review amount: flagged exactly as a first save of it would be.
+            if (correction.CorrectedAmount >= CostEntry.ReviewAmountThreshold)
+            {
+                entry.FlagForReview(CostEntry.ReviewAmountReason, now);
+            }
+
             await repository.AddFinanceCorrectionAsync(correction, ct);
             await repository.AddAuditEventAsync(
                 Audit(stamp, "CostEntry", entry.Id, "Corrected", (Guid)log.FarmId, new
@@ -149,18 +189,86 @@ internal sealed class EditMoney(
                     dailyLogId = log.Id,
                     kind = step.Kind,
                     lineId = step.LineId,
-                    trigger = "ContentRevised",
+                    trigger = EditTrigger,
                 }),
                 ct);
             corrected.Add((entry, correction));
         }
 
-        return new Staged(steps, corrected);
+        return Result.Success(new Staged(steps, corrected));
     }
 
     /// <summary>
-    /// After the new version is saved: the money of lines priced for the first time, each in its own savepoint, then the
-    /// one row on the record of what followed. Returns the answer the phone writes.
+    /// Call 1 — may this seat change the record's prices? Its maker (TODO(D-12): approved money will need ReviewMoney even
+    /// for him), or a member who reviews money (the money book's rule, <c>CorrectCostEntryHandler</c>).
+    /// </summary>
+    private async Task<bool> MayChangePricesAsync(DailyLog log, Guid actor, DateTime now, CancellationToken ct) =>
+        actor == log.OperatorUserId.Value
+        || (await repository.GetUserRoleForFarmAsync((Guid)log.FarmId, actor, ct) is not null
+            && await FarmAuthorityGate.HoldsAsync(repository, (Guid)log.FarmId, actor, FarmAuthority.ReviewMoney, now, ct));
+
+    /// <summary>
+    /// Fix pass 4 — was this correction made by a record edit? Told by its own <c>CostEntry</c> / <c>Corrected</c> audit row,
+    /// which the server writes in the SAME save as the correction, with <c>trigger</c> = <see cref="EditTrigger"/> only when
+    /// an edit made it. Nothing a person types or a phone sends decides it (the reason is free text; the correction's id
+    /// can come from the phone). Every other correction — the money book's, or one without such a row — is the money book's.
+    /// </summary>
+    private async Task<bool> MadeByAnEditAsync(Guid costEntryId, Guid correctionId, CancellationToken ct)
+    {
+        foreach (var row in await repository.GetAuditEventsForEntityAsync(costEntryId, "CostEntry", ct))
+        {
+            if (row.Action != "Corrected")
+            {
+                continue;
+            }
+
+            try
+            {
+                using var payload = JsonDocument.Parse(row.Payload);
+                var p = payload.RootElement;
+                if (p.ValueKind == JsonValueKind.Object
+                    && p.TryGetProperty("financeCorrectionId", out var id) && id.ValueKind == JsonValueKind.String
+                    && id.TryGetGuid(out var made) && made == correctionId)
+                {
+                    return p.TryGetProperty("trigger", out var trigger)
+                        && trigger.ValueKind == JsonValueKind.String
+                        && trigger.GetString() == EditTrigger;
+                }
+            }
+            catch (JsonException ex)
+            {
+                // Never silent: an unreadable row ties nothing, so the correction stays the money book's.
+                logger.LogWarning(ex, "Audit row {AuditEventId} of money {CostEntryId} could not be read.", row.Id, costEntryId);
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The farm's money switch (<c>EditFinance</c>, the first save's rule): off → nothing changes, and it is said.</summary>
+    private async Task<List<EditMoneyStep>> WithMoneySwitchAsync(DailyLog log, List<EditMoneyStep> steps, Guid actor, CancellationToken ct)
+    {
+        if (!steps.Any(s => s.Action != EditMoneyAction.NotFollowed)
+            || await EntitlementGate.CheckErrorAsync(entitlementPolicy, new UserId(actor), log.FarmId, PaidFeature.EditFinance, ct) is null)
+        {
+            return steps;
+        }
+
+        logger.LogWarning("revise_log_content for {LogId}: its money was not changed: the farm may not write money now.", log.Id);
+        return steps.Select(s => s.Action == EditMoneyAction.NotFollowed
+            ? s
+            : s with { Action = EditMoneyAction.NotFollowed, Reason = EditMoneyNotFollowed.NotAllowed }).ToList();
+    }
+
+    /// <summary>Review 10 — a value longer than the money book holds: only this line's money is not made, and it is said.</summary>
+    private static bool TooLong(RecordMoneyLine line) =>
+        line.Description.Length > DescriptionMax
+        || (line.Unit?.Length ?? 0) > UnitMax
+        || (line.VendorName?.Length ?? 0) > VendorMax;
+
+    /// <summary>
+    /// After the new version is saved: the money of lines priced with none yet, each in its own savepoint, then the one row
+    /// on the record of what followed. Returns the answer the phone writes.
     /// </summary>
     public async Task<ReviseLogContentResultDto> FinishAsync(
         DailyLog log, Staged staged, ContentAuditStamp stamp, DateTime now, CancellationToken ct)
@@ -184,7 +292,7 @@ internal sealed class EditMoney(
                 dailyLogId = log.Id,
                 kind = step.Kind,
                 lineId = step.LineId,
-                trigger = "ContentRevised",
+                trigger = EditTrigger,
             });
             if (await repository.TryAddRecordMoneyAsync(entry, created, ct))
             {
@@ -222,15 +330,15 @@ internal sealed class EditMoney(
         if (notFollowed.Count > 0)
         {
             logger.LogInformation(
-                "revise_log_content for {LogId}: the money of {Count} changed line(s) did not follow ({Reasons}).",
+                "revise_log_content for {LogId}: the money of {Count} line(s) was not brought in line ({Reasons}).",
                 log.Id, notFollowed.Count, string.Join(",", notFollowed.Select(s => ReasonName(s.Reason))));
         }
 
         return new ReviseLogContentResultDto(
             log.ToDto(),
-            staged.Corrected.Select(c => c.Entry.ToDto()).Concat(made.Select(e => e.ToDto())).ToList(),
+            staged.Corrected.Select(c => c.Entry).Concat(made).Select(e => e.ToDto()).ToList(),
             staged.Corrected.Select(c => c.Correction.ToDto()).ToList(),
-            notFollowed.Select(s => new MoneyNotFollowedDto(s.Kind, s.LineId, ReasonName(s.Reason))).ToList());
+            notFollowed.Select(s => new MoneyNotFollowedDto(s.Kind, s.LineId, s.MoneyId, ReasonName(s.Reason))).ToList());
     }
 
     /// <summary>The camelCase name the phone reads (<c>notFound</c>, <c>shared</c>, …).</summary>
@@ -266,9 +374,9 @@ internal sealed class EditMoney(
             quantity: line.Quantity,
             unit: line.Unit,
             vendorName: line.VendorName);
-        if (entry.Amount >= HighAmountThreshold)
+        if (entry.Amount >= CostEntry.ReviewAmountThreshold)
         {
-            entry.Flag(HighAmountFlagReason);
+            entry.Flag(CostEntry.ReviewAmountReason);
         }
 
         return entry;

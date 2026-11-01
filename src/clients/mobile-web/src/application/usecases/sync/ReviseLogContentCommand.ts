@@ -19,12 +19,17 @@ export interface ReviseLogContentPayload {
 }
 
 export class ReviseLogContentCommand {
-     static async enqueue(payload: ReviseLogContentPayload): Promise<string> {
+     /**
+      * `changesMoney` (lane OF-M fix pass 1, review 7): this edit changes a priced line — kept on the queue row only (never
+      * sent), so आढावा counts the record's money as a gap until the edit is applied.
+      */
+     static async enqueue(payload: ReviseLogContentPayload, options: { changesMoney?: boolean } = {}): Promise<string> {
           // One id per edit: every edit is its own mutation, deduplicated on replay by this key.
           const clientRequestId = `${SyncMutationName.ReviseLogContent}:${payload.dailyLogId}:${idGenerator.generate()}`;
           return mutationQueue.enqueue(SyncMutationName.ReviseLogContent, payload, {
                clientRequestId,
                clientCommandId: clientRequestId,
+               ...(options.changesMoney ? { changesMoney: true } : {}),
           });
      }
 }

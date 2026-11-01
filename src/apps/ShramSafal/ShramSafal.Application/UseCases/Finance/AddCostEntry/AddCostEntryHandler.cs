@@ -45,8 +45,9 @@ public sealed class AddCostEntryHandler(
     : IHandler<AddCostEntryCommand, AddCostEntryResultDto>
 {
     private const int DuplicateWindowMinutes = 120;
-    private const decimal HighAmountThreshold = 25000m;
-    private const string HighAmountFlagReason = "High amount: >= 25000 INR";
+    // One rule with money an edit makes or corrects (lane OF-M fix pass 1): the constants live on the entry.
+    private const decimal HighAmountThreshold = Domain.Finance.CostEntry.ReviewAmountThreshold;
+    private const string HighAmountFlagReason = Domain.Finance.CostEntry.ReviewAmountReason;
 
     public async Task<Result<AddCostEntryResultDto>> HandleAsync(AddCostEntryCommand command, CancellationToken ct = default)
     {

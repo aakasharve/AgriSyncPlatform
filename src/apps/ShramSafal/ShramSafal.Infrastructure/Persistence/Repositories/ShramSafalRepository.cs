@@ -1966,7 +1966,7 @@ internal sealed class ShramSafalRepository(
             db.Entry(entry).State = EntityState.Detached;
             db.Entry(created).State = EntityState.Detached;
             logger?.LogWarning(
-                "Record money {CostEntryId} was not made: its id is already held by a row this farm cannot see.", entry.Id);
+                "Record money {CostEntryId} was not made: another money entry already uses its id.", entry.Id);
             return false;
         }
     }

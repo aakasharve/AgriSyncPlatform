@@ -1,4 +1,5 @@
 import { getDatabase, type MutationQueueItem } from '../storage/DexieDatabase';
+import type { QueueRowWithFacts } from './queueRowFacts';
 import { idGenerator } from '../../core/domain/services/IdGenerator';
 import { systemClock } from '../../core/domain/services/Clock';
 import type { SyncMutationType } from '../api/AgriSyncClient';
@@ -171,7 +172,7 @@ export class MutationQueue {
     async enqueue(
         mutationType: SyncMutationType,
         payload: unknown,
-        options?: { clientRequestId?: string; clientCommandId?: string; deviceId?: string }
+        options?: { clientRequestId?: string; clientCommandId?: string; deviceId?: string; moneySource?: string; changesMoney?: boolean }
     ): Promise<string> {
         if (!mutationType || mutationType.trim().length === 0) {
             throw new Error('mutationType is required');
@@ -204,7 +205,7 @@ export class MutationQueue {
         // farm open now), so a "held" notice speaks only on that farm.
         const farmId = queuedRowFarmId({ payload }) ?? SessionStore.getCurrentFarmId() ?? undefined;
 
-        const record: MutationQueueItem = {
+        const record: QueueRowWithFacts = {
             deviceId,
             clientRequestId,
             clientCommandId,
@@ -215,6 +216,9 @@ export class MutationQueue {
             updatedAt: now,
             retryCount: 0,
             ...(farmId ? { farmId } : {}),
+            // lane OF-M fix pass 1 — phone-only facts about the row, never on the wire.
+            ...(options?.moneySource ? { moneySource: options.moneySource } : {}),
+            ...(options?.changesMoney ? { changesMoney: true } : {}),
         };
 
         try {

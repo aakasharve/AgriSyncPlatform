@@ -20,6 +20,7 @@ import { renderGlobalSheets } from './globalSheets';
 import MainViewTransition from './MainViewTransition';
 import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useFarmContext } from '../session/FarmContext';
+import { mayChangeRecordedMoney } from '../session/farmPermissions';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
@@ -283,6 +284,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         logHomePending: navigation.logHomePending,
         consumeLogHome: navigation.consumeLogHome,
         farmRole,
+        mayReviewMoney: mayChangeRecordedMoney(currentFarm),
         canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,

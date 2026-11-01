@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
@@ -204,7 +203,7 @@ public sealed class MoveDailyLogHandler(
 
         // Its money (fix 1, B002; fixes 2 and 4, orchestrator calls — the server alone decides): every entry made from
         // its lines, found by derived id; every line its create-time details priced must have one (P4).
-        var lines = await MoneyLinesOfAsync(log, ct);
+        var lines = await RecordFirstMoney.OfAsync(repository, log, logger, ct);
 
         // fix 4 (R3-1, R3-4) — without the record's create-time details the server cannot tell which lines made money,
         // so nobody can show its money follows: refused whole, from every phone, rather than leave money behind.
@@ -405,63 +404,6 @@ public sealed class MoveDailyLogHandler(
 
         return Result.Success(new MoveDailyLogResultDto(log.ToDto(), movedMoney.Select(entry => entry.ToDto()).ToList()));
     }
-
-    /// <summary>
-    /// fix 1 (B002), fixes 2 and 4 (orchestrator calls) — the money of this record's lines, decided by the server alone.
-    /// <c>LookFor</c>: the ids of every money entry that can have been made from them (<see cref="MoneyEntryIdentity"/>:
-    /// a crew under its engagement id, an input / machinery / expense line under its own id, from EVERY stored version —
-    /// money made from a line a later edit removed or priced is still its money). <c>Stated</c>: the ones that MUST be
-    /// found, because the line stated an amount when the record was CREATED: a crew's stated total, or a priced line of
-    /// the create-time document (read by <see cref="RecordMoneyLines"/>, the phone's own rule; money a later edit
-    /// prices is made by that edit, lane OF-M, and is never required here).
-    /// <c>HeldFromCreate</c>: a readable create-time document (origin create or manual draft) exists — without one the
-    /// server cannot tell which lines made money. Line ids the server does not hold are never guessed.
-    /// </summary>
-    private async Task<RecordMoneyFound> MoneyLinesOfAsync(DailyLog log, CancellationToken ct)
-    {
-        var lookFor = new HashSet<Guid>();
-        var stated = new HashSet<Guid>();
-        foreach (var assignment in await repository.GetLabourAssignmentsForDailyLogsAsync([log.Id], ct))
-        {
-            var id = MoneyEntryIdentity.ForRecordLine(log.Id, MoneyEntryIdentity.Labour, assignment.Id.ToString("D"));
-            lookFor.Add(id);
-            if (assignment.TotalCost is > 0)
-            {
-                stated.Add(id);
-            }
-        }
-
-        var heldFromCreate = false;
-        foreach (var version in await repository.GetDailyLogContentVersionsAsync(log.Id, ct))
-        {
-            var atCreate = version.Origin != DailyLogContent.OriginRevision;
-            try
-            {
-                using var document = JsonDocument.Parse(version.DocumentJson);
-                foreach (var line in RecordMoneyLines.Of(log.Id, document.RootElement))
-                {
-                    var moneyId = MoneyEntryIdentity.ForRecordLine(log.Id, line.Kind, line.LineId);
-                    lookFor.Add(moneyId);
-                    if (atCreate && line.Amount > 0m)
-                    {
-                        stated.Add(moneyId);
-                    }
-                }
-
-                heldFromCreate |= atCreate;
-            }
-            catch (JsonException ex)
-            {
-                // Never silent. An unreadable create document is not held details: what its lines priced cannot be told.
-                logger.LogWarning(ex, "move_daily_log for {LogId}: content version {Version} could not be read for its money lines.",
-                    log.Id, version.ContentVersion);
-            }
-        }
-
-        return new RecordMoneyFound(lookFor, stated, heldFromCreate);
-    }
-
-    private sealed record RecordMoneyFound(IReadOnlyCollection<Guid> LookFor, IReadOnlyCollection<Guid> Stated, bool HeldFromCreate);
 
     /// <summary>The crop season on <paramref name="plotId"/> (this farm only) that covers <paramref name="day"/>, or null.</summary>
     private async Task<Guid?> CycleCoveringAsync(DailyLog log, Guid plotId, DateOnly day, CancellationToken ct)

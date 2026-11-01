@@ -27,6 +27,7 @@ import { attachmentUploadWorker } from '../../infrastructure/sync/AttachmentUplo
 import { captureAttachment } from '../../application/use-cases/CaptureAttachment';
 import { procurementRepository } from '../../services/procurementRepository';
 import { financeCommandService, type MoneyQueueOutcome } from '../finance/financeCommandService';
+import { moneyDayKey } from '../finance/moneyDay';
 import { moneyEntryIdFor } from '../finance/moneyEntryIdentity';
 import { readHeldMoney, releaseHeldMoney } from '../finance/heldMoney';
 import { resolveLogFarmId } from '../logs/services/logSyncMutationService';
@@ -64,7 +65,8 @@ export interface UnsentMoney {
     groups: UnsentGroup[];
 }
 
-const dateKeyOf = (iso: string): string => (iso.includes('T') ? iso.split('T')[0] : iso);
+// lane OF-M fix pass 1 (review 8) — one rule for a money day (the farm's day, India time).
+const dateKeyOf = (iso: string): string => moneyDayKey(iso);
 
 /** The deterministic id a recovered bill photo is queued under — a second send finds it instead of adding one. */
 export const recoveredPhotoIdFor = (billId: string): string => moneyEntryIdFor(`bill-photo:${billId}`);

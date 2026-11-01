@@ -12,6 +12,7 @@ import {
     type LabourCorrectionRequest,
 } from '../../features/labour/data/labourCorrectionsClient';
 import { buildLogContent } from '../../features/logs/services/logContentPayload';
+import { statedExpenseAmount, statedInputAmount, statedMachineryAmount } from '../../features/finance/recordMoneyLines';
 import { ReviseLogContentCommand } from './sync/ReviseLogContentCommand';
 import { CorrectLabourAssignmentCommand, type CorrectLabourAssignmentPayload } from './sync/CorrectLabourAssignmentCommand';
 import { canQueueLabourCountOffline } from '../../features/logs/components/correction/correctionCapabilities';
@@ -484,8 +485,24 @@ async function queueContentRevision(
         content,
         ...(reason && reason.trim().length > 0 && { reason: reason.trim().slice(0, 400) }),
         revisedAtUtc: new Date().toISOString(),
-    });
+    }, { changesMoney: changesPricedLine(existingLog, finalLog) });
     return true;
+}
+
+/**
+ * spec: plr-d10 (lane OF-M fix pass 1, review 7) — does this edit change what a priced line states (a price changed, a
+ * priced line added or removed)? The SERVER makes that money change when the edit arrives; until then आढावा counts the
+ * record's money as a gap. Read by the same stated-amount rule the save makes money by (`recordMoneyLines.ts`).
+ */
+export function changesPricedLine(existingLog: DailyLog, finalLog: DailyLog): boolean {
+    const priced = (log: DailyLog): Map<string, number> => new Map([
+        ...(log.inputs ?? []).map(e => [`input:${e.id}`, statedInputAmount(e) ?? 0] as const),
+        ...(log.machinery ?? []).map(e => [`machinery:${e.id}`, statedMachineryAmount(e)] as const),
+        ...(log.activityExpenses ?? []).map(e => [`activity-expense:${e.id}`, statedExpenseAmount(e)] as const),
+    ].filter(([, amount]) => amount > 0));
+    const before = priced(existingLog);
+    const after = priced(finalLog);
+    return before.size !== after.size || [...after].some(([key, amount]) => before.get(key) !== amount);
 }
 
 /**

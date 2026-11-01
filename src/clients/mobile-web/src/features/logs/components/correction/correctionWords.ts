@@ -41,6 +41,8 @@ export interface CorrectionWords {
     refusedReason: Readonly<Record<RefusedReason, string>>;
     /** Lane OF-M (F89): an edit he saved changed a price, but that money could not follow — why, in plain words. */
     moneyNotFollowed: Readonly<Record<MoneyNotFollowedReason, string>>;
+    /** Lane OF-M fix pass 3 (call 1): he did not make this entry and does not check money — its prices stay as saved. */
+    pricesLocked: string;
     versionNote: string;
     reconfirm: string;
     labourDoor: string;
@@ -127,6 +129,8 @@ const mr: CorrectionWords = {
         moneyStuck: 'या कामाचे पैसे अनेक वेळा पाठवूनही पोहोचले नाहीत. सिंक पानावरून ते पुन्हा पाठवा, मग हे काम हलवा.',
         detailsNotHeld: 'हे काम ॲपच्या जुन्या आवृत्तीतून जतन झालं आहे किंवा त्याचा तपशील सर्व्हरवर पोहोचला नाही, त्यामुळे हे काम हलवता येत नाही.',
         notAllowed: 'हे तुम्हाला बदलता येत नाही — मालकाला सांगा.',
+        // Lane OF-M fix pass 3 (call 1). PROPOSED (Marathi).
+        pricesNotYours: 'किंमती फक्त ही नोंद करणारे किंवा पैशांच्या नोंदी तपासणारे बदलू शकतात.',
         other: '',
     },
     // PROPOSED (Marathi) — lane OF-M. Each says what did not change (the money's amount) and why; none asks him to do
@@ -138,7 +142,12 @@ const mr: CorrectionWords = {
         detailsNotHeld: 'हे काम ॲपच्या जुन्या आवृत्तीतून जतन झालं आहे किंवा त्याचा तपशील सर्व्हरवर पोहोचला नाही, त्यामुळे पैशांची रक्कम बदलली नाही.',
         notAllowed: 'शेताची योजना आत्ता चालू नाही, त्यामुळे पैशांची रक्कम बदलली नाही.',
         idTaken: 'या कामाचे नवे पैसे पैशांच्या हिशोबात लिहिता आले नाहीत.',
+        // PROPOSED (Marathi) — lane OF-M fix pass 1.
+        tooLong: 'या कामाचा तपशील खूप मोठा असल्याने त्याचे पैसे हिशोबात लिहिता आले नाहीत.',
+        // PROPOSED (Marathi) — lane OF-M fix pass 4.
+        moneyBook: 'या कामाचे पैसे पैशांच्या हिशोबात दुरुस्त केले आहेत, त्यामुळे या बदलाने त्यांची रक्कम बदलली नाही.',
     },
+    pricesLocked: 'किंमती आहेत तशाच राहतील: त्या फक्त ही नोंद करणारे किंवा पैशांच्या नोंदी तपासणारे बदलू शकतात.', // PROPOSED (Marathi) — lane OF-M fix pass 3
     nothingChanged: 'यातून बदलायचं काही समजलं नाही. पुन्हा सांगा.', // PROPOSED (Marathi)
     versionNote: 'जतन केल्यावर नवीन आवृत्ती ठेवली जाते — आधीचं पण सर्व्हरवर राहतं.', // PROPOSED (Marathi) — screen 3's note
     reconfirm: 'हे आधी पक्कं केलं होतं. जतन केल्यावर नवीन आवृत्ती "पक्कं नाही" राहील, पुन्हा पक्कं होईपर्यंत.', // PROPOSED (Marathi)
@@ -219,6 +228,8 @@ const en: CorrectionWords = {
         moneyStuck: 'This work\'s money did not get through after many tries. Send it again from the sync page, then move this work.',
         detailsNotHeld: 'This work was saved by an older version of the app, or its details did not reach the server, so it cannot be moved.',
         notAllowed: 'You cannot change this — tell the owner.',
+        // Lane OF-M fix pass 3 (call 1). PROPOSED (English).
+        pricesNotYours: 'Only the person who made this entry, or someone who checks money entries, can change its prices.',
         other: '',
     },
     // PROPOSED (English) — lane OF-M.
@@ -229,7 +240,12 @@ const en: CorrectionWords = {
         detailsNotHeld: 'This work was saved by an older version of the app, or its details did not reach the server, so the money amount was not changed.',
         notAllowed: 'The farm\'s plan is not active right now, so the money amount was not changed.',
         idTaken: 'The new money for this work could not be written in the money accounts.',
+        // PROPOSED (English) — lane OF-M fix pass 1.
+        tooLong: 'This work\'s details are too long, so its money could not be written in the money accounts.',
+        // PROPOSED (English) — lane OF-M fix pass 4.
+        moneyBook: 'This work\'s money was corrected in the money accounts, so this change did not change its amount.',
     },
+    pricesLocked: 'Prices stay as they are: only the person who made this entry, or someone who checks money entries, can change them.', // PROPOSED (English) — lane OF-M fix pass 3
     nothingChanged: 'Nothing to change was understood from this. Say it again.', // PROPOSED (English)
     versionNote: 'Saving keeps a new version — the earlier one stays on the server too.', // PROPOSED (English)
     reconfirm: 'This was confirmed. After saving, the new version stays "Not confirmed" until it is confirmed again.', // PROPOSED (English)

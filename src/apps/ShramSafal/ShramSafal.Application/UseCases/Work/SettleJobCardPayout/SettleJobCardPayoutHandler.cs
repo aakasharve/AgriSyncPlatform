@@ -8,6 +8,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Work;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Farms;
@@ -73,6 +74,8 @@ public sealed class SettleJobCardPayoutHandler(
             : command.ClientAppVersion.Trim();
         try
         {
+            // lane OF-M fix pass 1 (review 8) — dated by the farm's day (India time), never the UTC date of now: a payout
+            // settled between 00:00 and 05:30 India time went on the day before.
             costEntry = CostEntry.CreateLabourPayout(
                 id: idGenerator.New(),
                 jobCardId: jobCard.Id,
@@ -81,7 +84,7 @@ public sealed class SettleJobCardPayoutHandler(
                 cropCycleId: jobCard.CropCycleId,
                 amount: command.ActualPayoutAmount,
                 currencyCode: command.ActualPayoutCurrencyCode,
-                entryDate: DateOnly.FromDateTime(clock.UtcNow),
+                entryDate: LogDayRule.FarmToday(clock.UtcNow),
                 createdByUserId: command.CallerUserId,
                 createdAtUtc: clock.UtcNow,
                 provenance: Provenance.Manual(settlementAppVersion));

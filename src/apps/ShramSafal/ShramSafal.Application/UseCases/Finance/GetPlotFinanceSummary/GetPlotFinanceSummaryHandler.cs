@@ -32,11 +32,16 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
             return Result.Failure<PlotFinanceSummaryDto>(ShramSafalErrors.Forbidden);
         }
 
-        var costEntries = await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct);
+        var costEntries = (await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct))
+            .Where(entry => entry.PlotId == query.PlotId)
+            .ToList();
+        // lane OF-M fix pass 1 (review 9) — what each entry says NOW: its latest correction, else as made (₹0 = no longer
+        // spent), the rule every other money reader follows.
+        var latest = (await repository.GetCorrectionsForEntriesAsync(costEntries.Select(entry => entry.Id), ct))
+            .GroupBy(correction => correction.CostEntryId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(correction => correction.CorrectedAtUtc).First().CorrectedAmount);
         var directCosts = decimal.Round(
-            costEntries
-                .Where(entry => entry.PlotId == query.PlotId)
-                .Sum(entry => entry.Amount),
+            costEntries.Sum(entry => latest.TryGetValue(entry.Id, out var now) ? now : entry.Amount),
             2,
             MidpointRounding.AwayFromZero);
 

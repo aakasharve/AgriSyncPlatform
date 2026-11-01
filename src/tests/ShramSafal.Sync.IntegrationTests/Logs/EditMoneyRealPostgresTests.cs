@@ -9,6 +9,7 @@ using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Persistence;
 using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
@@ -140,7 +141,7 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         services.AddShramSafalApi(config);
         services.AddScoped<IIdGenerator, GuidIdGenerator>();
         services.AddScoped<IClock, SystemClock>();
-        services.AddSingleton<IEntitlementPolicy, AllowAllEntitlementPolicy>();
+        services.AddSingleton<IEntitlementPolicy>(Policy);
         services.AddSingleton<IAnalyticsWriter, NoopAnalyticsWriter>();
 
         _rootProvider = services.BuildServiceProvider();
@@ -332,8 +333,12 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         (await ScalarAsync("SELECT COUNT(*) FROM ssf.cost_entries WHERE \"Id\" = @id", In1Money)).Should().Be(0L,
             "no second entry is made beside the old one");
         (await ReadMoneyAsync(oldWay)).Amount.Should().Be(500m);
-        (await ReadMoneyAsync(In2Money)).Amount.Should().Be(300m, "a line never priced before is new money: nothing old can stand for it");
-        NotFollowed(answer).Should().Equal("input:in-1:notFound");
+        // Fix pass 1 (call B): a record whose first money is not all found follows NO edit — not even a new line, which
+        // could be the same work said again (review F2).
+        (await ScalarAsync("SELECT COUNT(*) FROM ssf.cost_entries WHERE \"Id\" = @id", In2Money)).Should().Be(0L);
+        NotFollowed(answer).Should().BeEquivalentTo(["input:in-1:notFound", "input:in-2:notFound"]);
+        AnswerOf(answer).GetProperty("moneyNotFollowed").EnumerateArray()
+            .Select(e => e.GetProperty("costEntryId").GetGuid()).Should().BeEquivalentTo([In1Money, In2Money]);
     }
 
     [Fact]
@@ -433,10 +438,10 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         (await ScalarAsync("SELECT COUNT(*) FROM ssf.cost_entries WHERE farm_id = @id", FarmA)).Should().Be(1L);
     }
 
-    // ── 8. Authority — the rule that let the first save make the money ────────────────────────────────────────
+    // ── 8. Authority (fix pass 3, call 1) — the maker, or a seat that reviews money, may change a record's prices ──
 
     [Fact]
-    public async Task Authority_the_records_maker_corrects_its_money_by_editing_it_under_his_first_saves_rule()
+    public async Task Authority_the_records_maker_changes_his_own_records_money_by_an_edit_without_review_money()
     {
         await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
         // A worker saved the record and its money (any member may: add_cost_entry asks membership, nothing more).
@@ -453,9 +458,212 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         });
         direct.ErrorCode.Should().Be("ShramSafal.Forbidden");
 
-        // …but his own record's money follows his edit, as it followed his first save.
-        await PushAppliedAsync(WorkerA, "revise_log_content", "req-ofm-worker-edit", RevisePayload(1, new { schema = 1, inputs = new object[] { Input("in-1", 800) } }));
+        // …but he restates his OWN record (no money is reviewed yet; D-12): its money follows, and a new line is made.
+        // TODO(D-12): once money can be approved, approved money will need ReviewMoney even for the record's maker.
+        var answer = await PushAppliedAsync(WorkerA, "revise_log_content", "req-ofm-worker-edit", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 800), new { id = "in-2", productName = "युरिया", cost = 300 } },
+        }));
         (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 800m, WorkerA));
+        (await ReadMoneyAsync(In2Money)).Amount.Should().Be(300m);
+        NotFollowed(answer).Should().BeEmpty();
+        (await ReadFlagAsync(In1Money)).Should().BeFalse("no flag is written for money that followed");
+    }
+
+    [Fact]
+    public async Task Authority_a_seat_with_the_hajeri_grant_but_not_review_money_cannot_change_another_persons_prices()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 5000) } });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-owner-money", CostPayload(In1Money, "other", 5000m));
+        (await PushFailedAsync(MukadamA, "correct_cost_entry", "req-ofm-mukadam-direct", new Dictionary<string, object?>
+        {
+            ["costEntryId"] = In1Money,
+            ["correctedAmount"] = 50m,
+            ["currencyCode"] = "INR",
+            ["reason"] = "x",
+        })).ErrorCode.Should().Be("ShramSafal.Forbidden", "the money book refuses him");
+
+        // Removing the priced line, saying ₹50, or re-saying it: each is refused WHOLE, and nothing changes.
+        foreach (var (key, content) in new (string, object)[]
+        {
+            ("req-ofm-mukadam-remove", new { schema = 1 }),
+            ("req-ofm-mukadam-50", new { schema = 1, inputs = new object[] { Input("in-1", 50) } }),
+            ("req-ofm-mukadam-resaid", new { schema = 1, inputs = new object[] { Input("in-9", 800) } }),
+        })
+        {
+            var refused = await PushFailedAsync(MukadamA, "revise_log_content", key, RevisePayload(1, content));
+            output.WriteLine($"[EVIDENCE] {key}: {refused.ErrorCode} | {refused.ErrorMessage}");
+            refused.ErrorCode.Should().Be("ShramSafal.LogContentPrices.Conflict");
+        }
+
+        (await ReadVersionAsync()).Should().Be(1, "nothing changed");
+        (await ReadCorrectionsAsync(In1Money)).Should().BeEmpty();
+        (await ScalarAsync("SELECT COUNT(*) FROM ssf.cost_entries WHERE farm_id = @id", FarmA)).Should().Be(1L, "no ₹1,300 path");
+
+        // His edit of a part that is not a price lands.
+        await PushAppliedAsync(MukadamA, "revise_log_content", "req-ofm-mukadam-water", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 5000) },
+            irrigation = new object[] { new { id = "w-1", method = "Drip", durationHours = 2 } },
+        }));
+        (await ReadVersionAsync()).Should().Be(2);
+        (await ReadMoneyAsync(In1Money)).Amount.Should().Be(5000m);
+        (await ReadCorrectionsAsync(In1Money)).Should().BeEmpty();
+    }
+
+    // ── fix pass 1 (call B) — a record whose first money is not all found follows no edit ─────────────────────
+
+    [Fact]
+    public async Task B_a_typed_record_from_1_0_17_re_said_from_500_to_800_still_shows_500_never_1300()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        // 1.0.17 typed it: a manual draft (stored as the create-time details) and its ₹500 under a fresh random id.
+        var create = CreatePayload(EditLog, WorkerA, content: null);
+        create["manualDraft"] = new
+        {
+            activityExpenses = new object[] { new { id = "exp-1", reason = "डिझेल", category = "Fuel", totalAmount = 500 } },
+        };
+        await PushAppliedAsync(WorkerA, "create_daily_log", "req-ofm-1017-create", create);
+        var oldWay = Guid.NewGuid();
+        await PushAppliedAsync(WorkerA, "add_cost_entry", "req-ofm-1017-money", CostPayload(oldWay, "fuel", 500m));
+
+        // The owner, on this build, re-says it: the old line goes, a new line says ₹800.
+        var answer = await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-1017-resaid", RevisePayload(1, new
+        {
+            schema = 1,
+            activityExpenses = new object[] { new { id = "exp-9", reason = "डिझेल", category = "Fuel", totalAmount = 800 } },
+        }));
+
+        var pulled = await PullAsync(OwnerA);
+        var latest = pulled.FinanceCorrections.GroupBy(c => c.CostEntryId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First().CorrectedAmount);
+        var book = pulled.CostEntries.Where(e => e.FarmId == FarmA)
+            .Sum(e => latest.TryGetValue(e.Id, out var now) ? now : e.Amount);
+        output.WriteLine($"[EVIDENCE] money book for the re-said ₹800 diesel: {book}");
+        book.Should().Be(500m, "the money book keeps the ₹500 it cannot tie to the line, and never shows ₹1,300");
+        NotFollowed(answer).Should().BeEquivalentTo(["activity-expense:exp-1:notFound", "activity-expense:exp-9:notFound"]);
+    }
+
+    [Fact]
+    public async Task B_a_line_priced_while_the_farm_could_not_write_money_is_made_by_a_later_edit()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 500) } });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-money-in1", CostPayload(In1Money, "other", 500m));
+
+        Policy.DenyEditFinance = true; // the farm may still write records, but not money
+        var refused = await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-edit-no-plan", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 500), new { id = "in-2", productName = "युरिया", cost = 300 } },
+        }));
+        NotFollowed(refused).Should().Equal("input:in-2:notAllowed");
+        (await ScalarAsync("SELECT COUNT(*) FROM ssf.cost_entries WHERE \"Id\" = @id", In2Money)).Should().Be(0L);
+
+        Policy.DenyEditFinance = false;
+        var later = await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-edit-plan-back", RevisePayload(2, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 500), new { id = "in-2", productName = "युरिया", cost = 350 } },
+        }));
+        NotFollowed(later).Should().BeEmpty("a line priced only by an edit has no phone money: not found means never made");
+        (await ReadMoneyAsync(In2Money)).Amount.Should().Be(350m);
+    }
+
+    // ── fix pass 1 (review 6) — a correction past the review threshold is flagged as a first save is ──────────
+
+    [Fact]
+    public async Task Review6_a_correction_that_raises_an_amount_past_the_review_threshold_is_flagged_for_review()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 500) } });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-money-in1", CostPayload(In1Money, "other", 500m));
+        (await ReadFlagAsync(In1Money)).Should().BeFalse();
+
+        await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-edit-big", RevisePayload(1, new { schema = 1, inputs = new object[] { Input("in-1", 30000) } }));
+
+        (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 30000m, OwnerA));
+        (await ReadFlagAsync(In1Money)).Should().BeTrue("₹30,000 waits in the review inbox, exactly as a first save of it would");
+    }
+
+    // ── fix pass 1 (review 10) — an over-long value drops only the money, never the edit ───────────────────────
+
+    [Fact]
+    public async Task Review10_an_over_long_vendor_drops_only_that_lines_money_and_the_edit_lands()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 500) } });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-money-in1", CostPayload(In1Money, "other", 500m));
+
+        var answer = await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-edit-long", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { Input("in-1", 500) },
+            activityExpenses = new object[] { new { id = "exp-1", reason = "वाहतूक", category = "Transport", vendor = new string('र', 201), totalAmount = 150 } },
+        }));
+
+        (await ReadVersionAsync()).Should().Be(2, "the edit itself lands (P9)");
+        (await ScalarAsync("SELECT COUNT(*) FROM ssf.cost_entries WHERE \"Id\" = @id", ExpMoney)).Should().Be(0L);
+        NotFollowed(answer).Should().Equal("activity-expense:exp-1:tooLong");
+    }
+
+    // ── fix pass 1 (review 9) — the allocation and the plot summary read the latest correction ─────────────────
+
+    [Fact]
+    public async Task Review9_an_allocation_spreads_the_corrected_amount_and_never_a_zero_and_the_plot_summary_reads_it()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var wholeId = Guid.NewGuid();
+        var whole = CostPayload(wholeId, "fuel", 900m);
+        whole.Remove("plotId");
+        whole.Remove("cropCycleId");
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-whole", whole);
+        await PushAppliedAsync(OwnerA, "correct_cost_entry", "req-ofm-whole-600", new Dictionary<string, object?>
+        {
+            ["costEntryId"] = wholeId,
+            ["correctedAmount"] = 600m,
+            ["currencyCode"] = "INR",
+            ["reason"] = "चूक",
+        });
+
+        await PushAppliedAsync(OwnerA, "allocate_global_expense", "req-ofm-allocate", new Dictionary<string, object?>
+        {
+            ["costEntryId"] = wholeId,
+            ["allocationBasis"] = "equal",
+            ["allocations"] = new object[] { new { plotId = PlotA1, amount = 0m } },
+        });
+        var spread = (decimal)(await ScalarAsync(
+            "SELECT SUM(a.allocated_amount) FROM ssf.day_ledger_allocations a JOIN ssf.day_ledgers l ON l.\"Id\" = a.day_ledger_id WHERE l.source_cost_entry_id = @id",
+            wholeId))!;
+        spread.Should().Be(600m, "the amount spread is what the entry says NOW");
+
+        // A record line removed by an edit (₹0) is never spread.
+        await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 500) } });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-money-in1", CostPayload(In1Money, "other", 500m));
+        await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-edit-zero", RevisePayload(1, new { schema = 1 }));
+        await PushFailedAsync(OwnerA, "allocate_global_expense", "req-ofm-allocate-zero", new Dictionary<string, object?>
+        {
+            ["costEntryId"] = In1Money,
+            ["allocationBasis"] = "equal",
+            ["allocations"] = new object[] { new { plotId = PlotA1, amount = 0m } },
+        });
+
+        await using var scope = _rootProvider!.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        var ctx = sp.GetRequiredService<ShramSafalDbContext>();
+        sp.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+        await using var tx = await ctx.Database.BeginTransactionAsync();
+        // The online route's farm scope (as the endpoint sets it): this caller, this farm.
+        await ctx.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('agrisync.user_id', {OwnerA.ToString()}, true)");
+        await ctx.Database.ExecuteSqlInterpolatedAsync($"SELECT set_config('agrisync.farm_id', {FarmA.ToString()}, true)");
+        var summary = await ActivatorUtilities.CreateInstance<ShramSafal.Application.UseCases.Finance.GetPlotFinanceSummary.GetPlotFinanceSummaryHandler>(sp)
+            .HandleAsync(new ShramSafal.Application.UseCases.Finance.GetPlotFinanceSummary.GetPlotFinanceSummaryQuery(OwnerA, PlotA1));
+        summary.IsSuccess.Should().BeTrue("{0}", summary.Error?.ToString() ?? "-");
+        output.WriteLine($"[EVIDENCE] plot summary after the record's line was removed: direct={summary.Value!.DirectCosts}");
+        summary.Value!.DirectCosts.Should().Be(0m, "the record's ₹500 was removed by its edit: ₹0 now");
     }
 
     // ── 9. Labour — a worker-count correction never changes a crew's stated total (P7, NO-MULTIPLY) ───────────
@@ -508,6 +716,183 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         refused.ErrorCode.Should().Be("ShramSafal.LogMoveMoneyNotFound.Conflict", "the code every phone already reads is unchanged");
         refused.ErrorMessage.Should().Contain($"[money:{In1Money:D}]", "the refusal names the money it could not find");
         refused.ErrorMessage.Should().NotContain(CrewMoney.ToString("D"), "money that IS there is never named");
+    }
+
+    // ── fix pass 2 item 1, fix pass 3 call 2 — a removed line's first money is sent, then the edit reconciles ─────
+
+    [Fact]
+    public async Task Fix2_a_removed_lines_first_money_sent_before_its_edit_is_corrected_to_nothing_by_the_maker_and_stays_movable()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        // Offline on the phone: saved with ₹500, then the line removed. The phone sends the first money at its saved ₹500,
+        // and the edit (which waited for it) then arrives.
+        await CreateRecordAsync(WorkerA, new { schema = 1, inputs = new object[] { Input("in-1", 500) } });
+        await PushAppliedAsync(WorkerA, "add_cost_entry", "req-ofm-f2-money", CostPayload(In1Money, "other", 500m));
+        var answer = await PushAppliedAsync(WorkerA, "revise_log_content", "req-ofm-f2-remove", RevisePayload(1, new { schema = 1 }));
+
+        NotFollowed(answer).Should().BeEmpty();
+        (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 0m, WorkerA));
+        (await ReadMoneyAsync(In1Money)).Amount.Should().Be(500m, "the entry keeps what was first said: the trail");
+
+        // Rule B stays satisfied: the record is movable afterwards.
+        await PushAppliedAsync(OwnerA, "move_daily_log", "req-ofm-f2-move", new Dictionary<string, object?>
+        {
+            ["dailyLogId"] = EditLog,
+            ["baseVersion"] = await ReadVersionAsync(),
+            ["newPlotIds"] = new[] { PlotA2 },
+            ["revisedAtUtc"] = DateTime.UtcNow.ToString("O"),
+        });
+        (await ReadMoneyRowAsync(In1Money)).PlotId.Should().Be(PlotA2);
+    }
+
+    [Fact]
+    public async Task Fix3_late_first_money_of_a_removed_line_is_corrected_to_nothing_by_the_next_allowed_edit()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        await CreateRecordAsync(OwnerA, new { schema = 1, inputs = new object[] { Input("in-1", 500), new { id = "in-2", productName = "युरिया", cost = 200 } } });
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-f3-in2", CostPayload(In2Money, "other", 200m));
+
+        // in-1's first money is still on another phone when this edit removes in-1: rule B — nothing changes, said once.
+        var blocked = await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-f3-remove", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = new object[] { new { id = "in-2", productName = "युरिया", cost = 200 } },
+        }));
+        NotFollowed(blocked).Should().Equal("input:in-1:notFound");
+
+        // The first money arrives late, at its saved ₹500.
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-f3-in1-late", CostPayload(In1Money, "other", 500m));
+
+        // The next allowed edit — of a part that is not a price — brings ALL the record's money in line.
+        var next = await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-f3-water", RevisePayload(2, new
+        {
+            schema = 1,
+            inputs = new object[] { new { id = "in-2", productName = "युरिया", cost = 200 } },
+            irrigation = new object[] { new { id = "w-1", method = "Drip", durationHours = 2 } },
+        }));
+        NotFollowed(next).Should().BeEmpty();
+        (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 0m, OwnerA));
+        (await ReadCorrectionsAsync(In2Money)).Should().BeEmpty("money already in line is never touched");
+
+        // Fix pass 3 (call 3): the pull is unchanged — no flag fields on any phone.
+        var pulled = await PullAsync(OwnerA);
+        var row = JsonSerializer.SerializeToElement(pulled, Web).GetProperty("costEntries").EnumerateArray()
+            .Single(e => e.GetProperty("id").GetGuid() == In1Money);
+        row.TryGetProperty("isFlagged", out _).Should().BeFalse();
+        row.TryGetProperty("flagReason", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Fix3_the_maker_re_says_500_as_800_and_the_money_book_shows_800_never_1300()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        // The worker's own ₹500 diesel, its money under its derived id; he has no ReviewMoney.
+        await CreateRecordAsync(WorkerA, new
+        {
+            schema = 1,
+            activityExpenses = new object[] { new { id = "exp-1", reason = "डिझेल", category = "Fuel", totalAmount = 500 } },
+        });
+        await PushAppliedAsync(WorkerA, "add_cost_entry", "req-ofm-f3-diesel", CostPayload(ExpMoney, "fuel", 500m));
+
+        // He re-says it in बदला: the old line goes, a new line says ₹800.
+        await PushAppliedAsync(WorkerA, "revise_log_content", "req-ofm-f3-resaid", RevisePayload(1, new
+        {
+            schema = 1,
+            activityExpenses = new object[] { new { id = "exp-9", reason = "डिझेल", category = "Fuel", totalAmount = 800 } },
+        }));
+
+        var pulled = await PullAsync(OwnerA);
+        var latest = pulled.FinanceCorrections.GroupBy(c => c.CostEntryId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First().CorrectedAmount);
+        var book = pulled.CostEntries.Where(e => e.FarmId == FarmA)
+            .Sum(e => latest.TryGetValue(e.Id, out var now) ? now : e.Amount);
+        output.WriteLine($"[EVIDENCE] money book after the re-said diesel: {book}");
+        book.Should().Be(800m);
+        (await ReadCorrectionsAsync(ExpMoney)).Should().Equal(new Correction(500m, 0m, WorkerA));
+    }
+
+    [Fact]
+    public async Task Fix3_a_crews_money_sent_at_a_total_only_the_phone_held_is_put_back_to_the_stated_total_by_the_next_edit()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var payload = CreatePayload(EditLog, OwnerA, new { schema = 1 });
+        payload["labour"] = new object[] { new { labourAssignmentId = Crew, engagementType = "hired_daily", workerCount = 8, totalCost = 2800 } };
+        await PushAppliedAsync(OwnerA, "create_daily_log", "req-ofm-f3-crew-create", payload);
+        // The crew's first money arrives at ₹3000: a total changed only on the phone (never sent as a labour correction).
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-ofm-f3-crew-money", CostPayload(CrewMoney, "labour_misc", 3000m));
+
+        await PushAppliedAsync(OwnerA, "revise_log_content", "req-ofm-f3-crew-edit", RevisePayload(1, new
+        {
+            schema = 1,
+            irrigation = new object[] { new { id = "w-1", method = "Drip", durationHours = 2 } },
+        }));
+
+        (await ReadCorrectionsAsync(CrewMoney)).Should().Equal(new Correction(3000m, 2800m, OwnerA));
+    }
+
+    // ── fix pass 4 — money corrected in the money book belongs to the money book ──────────────────────────────
+
+    [Fact]
+    public async Task Fix4_money_corrected_in_the_money_book_is_never_changed_by_a_record_edit_and_he_is_told()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        // The worker's own record: ₹500 of इथरेल and ₹200 of युरिया, each with its money.
+        object Lines(decimal ethrel, decimal urea) => new object[] { Input("in-1", ethrel), new { id = "in-2", productName = "युरिया", cost = urea } };
+        var water = new object[] { new { id = "w-1", method = "Drip", durationHours = 2 } };
+        await CreateRecordAsync(WorkerA, new { schema = 1, inputs = Lines(500, 200) });
+        await PushAppliedAsync(WorkerA, "add_cost_entry", "req-ofm-f4-in1", CostPayload(In1Money, "other", 500m));
+        await PushAppliedAsync(WorkerA, "add_cost_entry", "req-ofm-f4-in2", CostPayload(In2Money, "other", 200m));
+
+        // The owner corrects the ₹500 to ₹450 in the money book. The reason is typed by a person, so it never decides —
+        // here he even types the words an edit's correction carries.
+        await PushAppliedAsync(OwnerA, "correct_cost_entry", "req-ofm-f4-book", new Dictionary<string, object?>
+        {
+            ["costEntryId"] = In1Money,
+            ["correctedAmount"] = 450m,
+            ["currencyCode"] = "INR",
+            ["reason"] = "Changed with its record",
+        });
+
+        // The maker edits a part that is not a price: the edit lands, the ₹450 stays, and he is told.
+        var watered = await PushAppliedAsync(WorkerA, "revise_log_content", "req-ofm-f4-water", RevisePayload(1, new
+        {
+            schema = 1,
+            inputs = Lines(500, 200),
+            irrigation = water,
+        }));
+        (await ReadVersionAsync()).Should().Be(2);
+        output.WriteLine($"[EVIDENCE] in-1 after the non-price edit: {string.Join(" | ", await ReadCorrectionsAsync(In1Money))}; told: {string.Join(",", NotFollowed(watered))}");
+        NotFollowed(watered).Should().Equal("input:in-1:moneyBook");
+        (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 450m, OwnerA));
+
+        // The maker restates it as ₹600 (and युरिया as ₹250): the ₹450 stays, he is told; युरिया's money follows as before.
+        var restated = await PushAppliedAsync(WorkerA, "revise_log_content", "req-ofm-f4-600", RevisePayload(2, new
+        {
+            schema = 1,
+            inputs = Lines(600, 250),
+            irrigation = water,
+        }));
+        (await ReadVersionAsync()).Should().Be(3);
+        NotFollowed(restated).Should().Equal("input:in-1:moneyBook");
+        (await ReadCorrectionsAsync(In1Money)).Should().Equal(new Correction(500m, 450m, OwnerA));
+        (await ReadCorrectionsAsync(In2Money)).Should().Equal(new Correction(200m, 250m, WorkerA));
+
+        // An edit's own correction never makes money the money book's: युरिया follows the next restatement too.
+        await PushAppliedAsync(WorkerA, "revise_log_content", "req-ofm-f4-300", RevisePayload(3, new
+        {
+            schema = 1,
+            inputs = Lines(600, 300),
+            irrigation = water,
+        }));
+        (await ReadCorrectionsAsync(In2Money)).Select(c => c.Corrected).Should().Equal(250m, 300m);
+        (await ReadCorrectionsAsync(In1Money)).Should().ContainSingle();
+
+        var pulled = await PullAsync(OwnerA);
+        var latest = pulled.FinanceCorrections.GroupBy(c => c.CostEntryId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First().CorrectedAmount);
+        output.WriteLine($"[EVIDENCE] money book after the edits: in-1 {latest[In1Money]}, in-2 {latest[In2Money]}");
+        latest[In1Money].Should().Be(450m);
+        latest[In2Money].Should().Be(300m);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -619,6 +1004,9 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
             r.GetGuid(7),
             r.GetString(8));
     }
+
+    private async Task<bool> ReadFlagAsync(Guid costEntryId) =>
+        (bool)(await ScalarAsync("SELECT is_flagged FROM ssf.cost_entries WHERE \"Id\" = @id", costEntryId))!;
 
     private async Task<int> ReadVersionAsync() =>
         (int)(await ScalarAsync("SELECT content_version FROM ssf.daily_logs WHERE \"Id\" = @id", EditLog))!;
@@ -758,11 +1146,18 @@ public sealed class EditMoneyRealPostgresTests(Xunit.Abstractions.ITestOutputHel
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private sealed class AllowAllEntitlementPolicy : IEntitlementPolicy
+    private SwitchablePolicy Policy { get; } = new();
+
+    /// <summary>Allows everything, except money writes while <see cref="DenyEditFinance"/> is set (records stay allowed).</summary>
+    private sealed class SwitchablePolicy : IEntitlementPolicy
     {
+        public bool DenyEditFinance { get; set; }
+
         public Task<EntitlementDecision> EvaluateAsync(
             UserId userId, FarmId farmId, PaidFeature feature, System.Threading.CancellationToken ct = default)
-            => Task.FromResult(new EntitlementDecision(true, EntitlementReason.Allowed, null));
+            => Task.FromResult(DenyEditFinance && feature == PaidFeature.EditFinance
+                ? new EntitlementDecision(false, EntitlementReason.SubscriptionExpired, null)
+                : new EntitlementDecision(true, EntitlementReason.Allowed, null));
     }
 
     private sealed class NoopAnalyticsWriter : IAnalyticsWriter

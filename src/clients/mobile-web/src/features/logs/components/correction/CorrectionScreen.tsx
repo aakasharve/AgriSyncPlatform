@@ -64,6 +64,8 @@ export interface CorrectionScreenProps {
     serverRefusedLines?: readonly string[];
     /** Lane OF-M — the plain words for money his saved change could not change (empty = it all followed). */
     moneyNotFollowedLines?: readonly string[];
+    /** Lane OF-M fix pass 3 — he did not make this entry and does not check money: its prices stay as saved (one line). */
+    pricesLockedLine?: string;
     /** The server can move a saved entry's plot / day (`correctionCapabilities`). */
     canMove: boolean;
     onSpeak: () => void;
@@ -202,6 +204,7 @@ export const CorrectionScreen: React.FC<CorrectionScreenProps> = (p) => {
                                 {p.canMove && p.onChangeDay && <button type="button" onClick={p.onChangeDay} data-testid="corr-change-day" className="min-h-[40px] rounded-full border border-emerald-500 px-3 text-[14px] font-extrabold text-emerald-800">{words.changeDay}</button>}
                             </div>
                             {!p.canMove && <p className="m-0 px-0.5 text-[13px] font-bold text-stone-600" data-testid="corr-move-not-yet">{words.moveNotYet}</p>}
+                            {p.pricesLockedLine && <p className="m-0 rounded-xl bg-stone-100 p-2.5 text-[14px] font-bold text-stone-800" data-testid="corr-prices-locked">{p.pricesLockedLine}</p>}
 
                             <div className="space-y-1.5" data-testid="corr-rows">
                                 {p.rows.map(r => <Row key={`${r.bucket}:${r.id}`} row={r} onEdit={() => p.onEditRow(r)} onToggle={() => p.onToggleRow(r)} />)}

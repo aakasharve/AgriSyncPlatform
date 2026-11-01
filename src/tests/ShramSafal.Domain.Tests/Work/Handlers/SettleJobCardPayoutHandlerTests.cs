@@ -111,6 +111,22 @@ public sealed class SettleJobCardPayoutHandlerTests
     }
 
     [Fact]
+    public async Task Settle_at_01_30_India_time_dates_the_payout_on_that_India_day_never_the_UTC_day_before()
+    {
+        // spec: plr-d10 (lane OF-M fix pass 1, review 8) — 2026-04-21T20:00Z is 01:30 on 22 April in India.
+        var job = BuildVerifiedForPayoutJobCard();
+        var repo = new FakeRepo(job, OwnerGuid, AppRole.PrimaryOwner);
+        var handler = new SettleJobCardPayoutHandler(repo, new SeqIdGen(), new FixedClock(new DateTime(2026, 4, 21, 20, 0, 0, DateTimeKind.Utc)));
+
+        var result = await handler.HandleAsync(new SettleJobCardPayoutCommand(
+            JobCardId: job.Id, ActualPayoutAmount: 250m, ActualPayoutCurrencyCode: "INR",
+            SettlementNote: null, CallerUserId: OwnerUserId, ClientCommandId: "settle-ist"));
+
+        result.IsSuccess.Should().BeTrue();
+        repo.AddedCostEntries.Should().ContainSingle().Which.EntryDate.Should().Be(new DateOnly(2026, 4, 22));
+    }
+
+    [Fact]
     public async Task Settle_Idempotent_ByClientCommandId()
     {
         // Two calls with same clientCommandId. Second call should fail (card already PaidOut).

@@ -33,7 +33,9 @@ export type RefusedReason =
     // fix passes 3–4 (R2-3, R3-3) — money not found, said as it really stands on THIS phone: kept here (and how to send
     // it, or that there is no way), removed for good, waiting for his review, or stuck at its retry limit. (R2-1, R3-4) —
     // the server never held the entry's details as it was created (an older app version, or details that did not arrive).
-    | 'moneyKept' | 'moneyKeptStuck' | 'moneyRemoved' | 'moneyNeedsReview' | 'moneyStuck' | 'detailsNotHeld';
+    | 'moneyKept' | 'moneyKeptStuck' | 'moneyRemoved' | 'moneyNeedsReview' | 'moneyStuck' | 'detailsNotHeld'
+    // Lane OF-M fix pass 3 (call 1) — an edit that changed a price, from someone who neither made the entry nor checks money.
+    | 'pricesNotYours';
 
 /** `at` — when the refused change was made (its queue row's time), so the most recent of several can be shown. */
 export interface RefusedChange { kind: RefusedKind; reason: RefusedReason; at?: string }
@@ -65,6 +67,8 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
             return 'moneyNotFound';
         case 'ShramSafal.LogMoveDetailsNotHeld.Conflict':
             return 'detailsNotHeld';
+        case 'ShramSafal.LogContentPrices.Conflict':
+            return 'pricesNotYours';
         case 'ShramSafal.Forbidden':
             return 'notAllowed';
         default:
@@ -79,7 +83,10 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
  */
 export function refusalLines(refused: RefusedChange, language: string | null | undefined): string[] {
     const words = correctionWords(language);
-    if (refused.kind === 'revision') return [words.serverRefused];
+    // A content change keeps its screen words; a price change refused (lane OF-M fix pass 3) also says who may.
+    if (refused.kind === 'revision') {
+        return refused.reason === 'pricesNotYours' ? [words.serverRefused, words.refusedReason.pricesNotYours] : [words.serverRefused];
+    }
     const head = refused.kind === 'move' ? words.refusedMove : words.refusedWorkers;
     return [head, words.refusedReason[refused.reason]].filter(line => line.length > 0);
 }
@@ -93,6 +100,7 @@ export function refusalHint(mutationType: string, errorCode: string | undefined,
     const reason = refusalReasonOf(errorCode);
     const kind = KIND_OF[mutationType];
     if (kind === 'move' || kind === 'workers') return refusalLines({ kind, reason }, language).join(' ');
+    if (kind === 'revision' && reason === 'pricesNotYours') return correctionWords(language).refusedReason.pricesNotYours;
     if (mutationType === SyncMutationName.CreateDailyLog && reason === 'futureDay') {
         return correctionWords(language).refusedReason.futureDay;
     }

@@ -40,7 +40,14 @@ public sealed class AllocateGlobalExpenseHandler(
             return Result.Failure<DayLedgerDto>(ShramSafalErrors.CostEntryNotFound);
         }
 
-        if (IsAmountOutOfRange(costEntry.Amount))
+        // lane OF-M fix pass 1 (review 9) — the amount spread is what the entry says NOW (its latest correction, else as
+        // made). An entry corrected to ₹0 (no longer spent) is never spread: the existing invalid-amount answer, so what the
+        // released mutation accepts and answers does not change; only what the server reads does.
+        var corrections = await repository.GetCorrectionsForEntriesAsync([costEntry.Id], ct);
+        var amountNow = corrections.Count == 0
+            ? costEntry.Amount
+            : corrections.OrderByDescending(correction => correction.CorrectedAtUtc).First().CorrectedAmount;
+        if (IsAmountOutOfRange(amountNow))
         {
             return Result.Failure<DayLedgerDto>(CreateInvalidAmountError());
         }
@@ -88,9 +95,9 @@ public sealed class AllocateGlobalExpenseHandler(
         var nowUtc = clock.UtcNow;
         var allocations = normalizedBasis switch
         {
-            "equal" => BuildEqualAllocations(costEntry.Amount, costEntry.CurrencyCode, farmPlots, nowUtc),
-            "by_acreage" => BuildAcreageAllocations(costEntry.Amount, costEntry.CurrencyCode, farmPlots, nowUtc),
-            "custom" => BuildCustomAllocations(costEntry.Amount, costEntry.CurrencyCode, farmPlots, command.Allocations, nowUtc),
+            "equal" => BuildEqualAllocations(amountNow, costEntry.CurrencyCode, farmPlots, nowUtc),
+            "by_acreage" => BuildAcreageAllocations(amountNow, costEntry.CurrencyCode, farmPlots, nowUtc),
+            "custom" => BuildCustomAllocations(amountNow, costEntry.CurrencyCode, farmPlots, command.Allocations, nowUtc),
             _ => null
         };
 
@@ -131,7 +138,7 @@ public sealed class AllocateGlobalExpenseHandler(
                     dayLedger.SourceCostEntryId,
                     dayLedger.LedgerDate,
                     dayLedger.AllocationBasis,
-                    TotalAmount = costEntry.Amount,
+                    TotalAmount = amountNow,
                     CurrencyCode = costEntry.CurrencyCode,
                     Allocations = dayLedger.Allocations.Select(a => new
                     {

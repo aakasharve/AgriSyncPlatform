@@ -17,6 +17,7 @@ import { updateLog } from '../UpdateLog';
 import { DexieLogsRepository } from '../../../infrastructure/storage/DexieLogsRepository';
 import { getDatabase, resetDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
+import type { QueueRowWithFacts } from '../../../infrastructure/sync/queueRowFacts';
 import type { DailyLog, FarmerProfile } from '../../../types';
 
 const LOG = '0f5e7000-0000-4000-8000-0000000000d1';
@@ -55,5 +56,18 @@ describe('OF-M — an edit\'s money rides the edit; save twice queues once', () 
         expect((revisions[0].payload as { content: { inputs: Array<{ cost: number }> } }).content.inputs[0].cost).toBe(800);
         expect(await rowsOf(SyncMutationName.AddCostEntry)).toHaveLength(0);
         expect(await rowsOf(SyncMutationName.CorrectCostEntry)).toHaveLength(0);
+        // fix pass 1 (review 7) — the queued edit says it changes money, so आढावा counts it as a gap until applied.
+        expect((revisions[0] as QueueRowWithFacts).changesMoney).toBe(true);
+    });
+
+    it('fix pass 1 (review 7): an edit that changes no price does not say it changes money', async () => {
+        const repo = DexieLogsRepository.getInstance();
+        await repo.save({ ...saved, irrigation: [{ id: 'w', method: 'Drip', durationHours: 2 }] } as unknown as DailyLog);
+
+        await updateLog({ logId: LOG, updatedData: { irrigation: [{ id: 'w', method: 'Drip', durationHours: 3 }] } as Partial<DailyLog>, actorId: 'me', reason: 'x' }, repo, PROFILE);
+
+        const revisions = await rowsOf(SyncMutationName.ReviseLogContent);
+        expect(revisions).toHaveLength(1);
+        expect((revisions[0] as QueueRowWithFacts).changesMoney).toBeFalsy();
     });
 });
