@@ -34,6 +34,13 @@ namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 /// later) re-sends that ONE farm's whole history (every kind it may read) once — what a fresh install
 /// downloads. A narrowing re-sends too (harmless; the phone's purge follows the scopes).</para>
 ///
+/// <para><b>A farm the phone holds no data for (MU-3 fix 2, N5).</b> A phone that names the farms it holds
+/// (<c>farms=</c>) and does NOT name one it may read — it purged it on a wrong "Removed", or never received it —
+/// gets that farm read from the beginning too, with no access change needed. Once: the re-send carries the
+/// farm's own row (farms are read for every seat), so on its next pull the phone names it and it is read from
+/// the cursor again. It moves no cursor (every kind was read with no upper bound). A phone that names no farm
+/// (1.0.17) is never asked about it.</para>
+///
 /// <para><b>Not closed: a change still being SAVED while a pull reads.</b> A pull that reads the seat
 /// before the change commits, and also reads a row written in a later second, hands out a cursor past
 /// the change's stamp; the change is then never re-sent. Closing it needs every cursor to trail the
@@ -48,22 +55,24 @@ internal sealed class PullReadWindow
     private readonly IReadOnlyDictionary<Guid, FarmReadScope> scopes;
     private readonly HashSet<Guid> resetFarms;
 
-    public PullReadWindow(IReadOnlyDictionary<Guid, FarmReadScope> scopes, DateTime sinceUtc, DateTime serverNowUtc)
+    public PullReadWindow(
+        IReadOnlyDictionary<Guid, FarmReadScope> scopes,
+        DateTime sinceUtc,
+        DateTime serverNowUtc,
+        IReadOnlyCollection<Guid>? notHeldFarmIds = null)
     {
         this.scopes = scopes;
         SinceUtc = sinceUtc;
         // Re-sent now: not yet delivered to this cursor, and its whole second is over.
-        resetFarms = scopes.Values
+        var changedFarms = scopes.Values
             .Where(s => s.AccessChangedAtUtc is { } changed
                 && sinceUtc < DeliveredAt(changed)
                 && DeliveredAt(changed) <= serverNowUtc)
-            .Select(s => s.FarmId)
-            .ToHashSet();
-        ResetThroughUtc = resetFarms.Count == 0
-            ? null
-            : scopes.Values
-                .Where(s => resetFarms.Contains(s.FarmId))
-                .Max(s => DeliveredAt(s.AccessChangedAtUtc!.Value));
+            .ToList();
+        ResetThroughUtc = changedFarms.Count == 0 ? null : changedFarms.Max(s => DeliveredAt(s.AccessChangedAtUtc!.Value));
+        // N5 — and every readable farm the phone says it holds no data for (no cursor move needed).
+        NotHeldFarmIds = (notHeldFarmIds ?? []).Where(scopes.ContainsKey).ToHashSet();
+        resetFarms = changedFarms.Select(s => s.FarmId).Concat(NotHeldFarmIds).ToHashSet();
         // A change too young to send yet: this response's cursor must stay below its second, or a row this
         // pull reads a moment later (stamped in the next second) would carry the cursor past it unsent.
         var pending = scopes.Values
@@ -108,6 +117,9 @@ internal sealed class PullReadWindow
 
     /// <summary>The farms re-sent from the beginning by this pull.</summary>
     public IReadOnlyCollection<Guid> ResetFarmIds => resetFarms;
+
+    /// <summary>N5 — the readable farms re-sent because the phone holds no data for them.</summary>
+    public IReadOnlyCollection<Guid> NotHeldFarmIds { get; }
 
     /// <summary>The scope of one farm, or null when this pull reads nothing of it.</summary>
     public FarmReadScope? ScopeOf(Guid farmId) => scopes.GetValueOrDefault(farmId);

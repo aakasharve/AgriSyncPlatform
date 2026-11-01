@@ -191,10 +191,12 @@ public sealed class FixOneReadRulesTests
     }
 
     [Fact]
-    public void F3_unchanged_for_his_own_record_a_record_without_money_and_a_seat_that_sees_money()
+    public void F3_unchanged_for_his_own_record_a_record_without_money_and_a_seat_that_sees_wages()
     {
         var noMoney = FarmReadScope.Of(FarmA, Seat(AppRole.Mukadam, FarmPermission.ConfirmRecords), DateTime.UtcNow)!;
-        var seesMoney = FarmReadScope.Of(FarmA, Seat(AppRole.Mukadam, FarmPermission.ConfirmRecords | FarmPermission.SeeMoney), DateTime.UtcNow)!;
+        // Fix 2 (N4 = D-67): the words of a record that mentions money need SEE WAGES (which needs see money).
+        var seesMoney = FarmReadScope.Of(
+            FarmA, Seat(AppRole.Mukadam, FarmPermission.ConfirmRecords | FarmPermission.SeeMoney | FarmPermission.SeeWages), DateTime.UtcNow)!;
         const string money = """{"schema":1,"fullTranscript":"४०० रुपये"}""";
         const string plain = """{"schema":1,"fullTranscript":"छाटणी केली"}""";
 
@@ -257,7 +259,12 @@ public sealed class FixOneReadRulesTests
         Assert.Null(confirmer.Result);
         Assert.Equal(GetAiJobStatusHandler.ResultWithheldMoney, confirmer.Withheld);
 
-        var withMoney = await Read(Reader, Seat(AppRole.Mukadam, FarmPermission.ConfirmRecords | FarmPermission.SeeMoney));
+        // Fix 2 (N4 = D-67): see money alone does not hear a money record's words; see wages does.
+        var moneyOnly = await Read(Reader, Seat(AppRole.Mukadam, FarmPermission.ConfirmRecords | FarmPermission.SeeMoney));
+        Assert.Null(moneyOnly.Result);
+        Assert.Equal(GetAiJobStatusHandler.ResultWithheldMoney, moneyOnly.Withheld);
+
+        var withMoney = await Read(Reader, Seat(AppRole.Mukadam, FarmPermission.ConfirmRecords | FarmPermission.SeeMoney | FarmPermission.SeeWages));
         Assert.NotNull(withMoney.Result);
         Assert.Null(withMoney.Withheld);
 

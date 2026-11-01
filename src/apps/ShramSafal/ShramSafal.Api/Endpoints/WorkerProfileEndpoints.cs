@@ -25,6 +25,7 @@ public static class WorkerProfileEndpoints
             Guid userId,
             Guid? farmId,
             ClaimsPrincipal user,
+            HttpContext httpContext,
             GetWorkerProfileHandler handler,
             ICallerUserTenantScope userScope,
             ICallerFarmTenantScope farmScope,
@@ -36,7 +37,10 @@ public static class WorkerProfileEndpoints
             var query = new GetWorkerProfileQuery(
                 WorkerUserId: new UserId(userId),
                 CallerUserId: new UserId(actorUserId),
-                ScopedFarmId: farmId);
+                ScopedFarmId: farmId,
+                // lane MU-3 fix 2 (N1) — withheld earnings only to a phone that shows them as withheld (never 1.0.17).
+                ClientShowsWithheldPay: ShramSafal.Application.Services.ClientContract.ShowsWithheldPay(
+                    httpContext.Request.Headers["X-App-Version"].FirstOrDefault()));
 
             // lane MU-3 fix 1 (F7) — the page is read under a tenant scope (the route opened none: its first read failed
             // closed, 500 for everyone): the named farm's scope when the phone names one (it always does), else the

@@ -57,15 +57,15 @@ public static class ReadScopeProjection
             content = WithoutWords(content);
         }
 
+        // D-67 (fix 2, N4) — free text that names money is a seat-without-see-WAGES matter: a named worker's pay can be
+        // in his words even where the farm's money is seen. Money VALUES still follow see money.
         return dto with
         {
-            Tasks = seesMoney
-                ? dto.Tasks
-                : dto.Tasks.Select(t => t with
-                {
-                    Notes = TaskNotes(t.Notes),
-                    DeviationNote = Unless(t.DeviationNote),
-                }).ToList(),
+            Tasks = dto.Tasks.Select(t => t with
+            {
+                Notes = TaskNotes(t.Notes, seesMoney),
+                DeviationNote = Unless(t.DeviationNote),
+            }).ToList(),
             Labour = dto.Labour?
                 .Select(l => l with
                 {
@@ -74,13 +74,11 @@ public static class ReadScopeProjection
                     // F10 — a stated amount withheld by rule says so; one never stated stays "not stated".
                     WageWithheld = !seesWages && l.WagePerPerson is not null ? true : l.WageWithheld,
                     TotalCostWithheld = !seesMoney && l.TotalCost is not null ? true : l.TotalCostWithheld,
-                    Notes = seesMoney ? l.Notes : Unless(l.Notes),
-                    Task = seesMoney ? l.Task : Unless(l.Task),
+                    Notes = Unless(l.Notes),
+                    Task = Unless(l.Task),
                 })
                 .ToList(),
-            VerificationEvents = seesMoney
-                ? dto.VerificationEvents
-                : dto.VerificationEvents.Select(v => v with { Reason = Unless(v.Reason) }).ToList(),
+            VerificationEvents = dto.VerificationEvents.Select(v => v with { Reason = Unless(v.Reason) }).ToList(),
             Content = seesMoney || content is null ? content : WithoutMoney(content),
             WordsWithheldForMoney = wordsWithheld ? true : dto.WordsWithheldForMoney,
         };
@@ -88,13 +86,18 @@ public static class ReadScopeProjection
         // A free-text field that itself names money goes WHOLE; anything else stays exactly as written.
         static string? Unless(string? text) => MoneyMention.InText(text) ? null : text;
 
-        // A task line's own amount labels (the app's "Cost: ₹…", "Rent: ₹…", "Fuel: ₹…") are values and are taken
-        // off as before; a ₹ anywhere else is HIS words, so the whole note goes — never cut out of his text.
-        static string? TaskNotes(string? notes)
+        // A task line's own amount labels (the app's "Cost: ₹…", "Rent: ₹…", "Fuel: ₹…") are VALUES: taken off only for
+        // a seat without see money. Any other part is HIS words: if it names money, the whole note goes — never cut.
+        static string? TaskNotes(string? notes, bool seesMoney)
         {
-            var hisWordsNameMoney = notes?.Split(" • ")
-                .Any(part => part.Contains('₹', StringComparison.Ordinal) && !IsAmountLabel(part.Trim())) == true;
-            return hisWordsNameMoney ? null : Unless(LogTaskProjection.NotesWithoutMoney(notes));
+            if (notes is null)
+            {
+                return null;
+            }
+
+            var hisWordsNameMoney = notes.Split(" • ")
+                .Any(part => !IsAmountLabel(part.Trim()) && MoneyMention.InText(part));
+            return hisWordsNameMoney ? null : seesMoney ? notes : LogTaskProjection.NotesWithoutMoney(notes);
         }
 
         static bool IsAmountLabel(string part) =>
@@ -116,7 +119,12 @@ public static class ReadScopeProjection
             : Record(dto, await FarmReadGate.ScopeAsync(repository, dto.FarmId, readerUserId, atUtc, ct), readerUserId);
     }
 
-    /// <summary>A job card as the reader may receive it: its rates and payout are a worker's pay (a wage).</summary>
+    /// <summary>
+    /// A job card as the reader may receive it: its rates and payout are a worker's pay (a wage). Fix 2 (N3): the id of
+    /// the payout's money entry goes with the pay — that entry (with its amount) reaches every see-money seat, so the
+    /// id would join a named worker to what he was paid. A line's own words that name money go whole too (N4). The
+    /// SAME instance comes back when nothing is withheld (callers compare by reference).
+    /// </summary>
     public static JobCardDto JobCard(JobCardDto dto, FarmReadScope? scope, Guid readerUserId)
     {
         ArgumentNullException.ThrowIfNull(dto);
@@ -128,7 +136,11 @@ public static class ReadScopeProjection
         return dto with
         {
             EstimatedTotalAmount = null,
-            LineItems = dto.LineItems.Select(i => i with { RatePerHourAmount = null }).ToList(),
+            PayoutCostEntryId = null,
+            LineItems = dto.LineItems
+                .Select(i => i with { RatePerHourAmount = null, Notes = MoneyMention.InText(i.Notes) ? null : i.Notes })
+                .ToList(),
+            CancellationReason = MoneyMention.InText(dto.CancellationReason) ? null : dto.CancellationReason,
         };
     }
 

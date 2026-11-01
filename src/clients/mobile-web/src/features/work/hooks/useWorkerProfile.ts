@@ -78,7 +78,7 @@ export function useWorkerProfile(
             try {
                 const [freshProfile, freshCards] = await Promise.all([
                     getWorkerProfile(userId, farmId),
-                    getWorkerJobCards(userId),
+                    getWorkerJobCards(userId, farmId ?? undefined),
                 ]);
                 if (cancelled) return;
 

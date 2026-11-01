@@ -353,11 +353,18 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
         return await body(scope.ServiceProvider);
     }
 
-    protected async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, Guid user, object? body = null)
+    /// <summary>
+    /// A request as <paramref name="user"/>. <paramref name="appVersion"/>: what the phone says it is (MU-3 fix 2, N1) —
+    /// the new phone by default; <c>null</c> sends no version at all, as 1.0.17's job-card and worker-page calls do.
+    /// </summary>
+    protected async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, Guid user, object? body = null, string? appVersion = "1.0.18")
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Add("X-Test-UserId", user.ToString());
-        request.Headers.Add("X-App-Version", "1.0.18");
+        if (appVersion is not null)
+        {
+            request.Headers.Add("X-App-Version", appVersion);
+        }
         if (body is not null)
         {
             request.Content = JsonContent.Create(body);

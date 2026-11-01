@@ -17,7 +17,9 @@
  *   - without SEE MONEY: the farm's cost entries (and their corrections), day ledger, bill and receipt photos
  *     (`Bill`, the farm-linked bills of older builds, `CostEntry`), the amounts other people's records state, and
  *     the words of another person's record that mentions money (fix 1, F3 — D-66);
- *   - without SEE WAGES: the per-person wage on other people's labour (a crew's total is MONEY, fix 1 F4);
+ *   - without SEE WAGES: the per-person wage on other people's labour (a crew's total is MONEY, fix 1 F4), a job
+ *     card's pay and its payout id (fix 2 N3), and the words of another person's record that mentions money (fix 2
+ *     N4 = D-67). Every copy it trims says so (`amountsWithheld`, fix 2 N2);
  *   - OWN RECORDS ONLY (a कामगार): every record someone else made, and its photos;
  *   - without attendance / tests / warnings: those rows.
  *
@@ -34,7 +36,7 @@ import { ACCESS_SCOPES_META_KEY, OUT_OF_SCOPE_FARMS_META_KEY, isReadableScope, r
 import { clearLabourReadoutsForFarm } from '../../../../infrastructure/storage/LabourReadoutCache';
 import { purgeLabourCachesForFarm } from '../../../../infrastructure/storage/labourFarmAccess';
 import { dayLedgerMetaKey } from '../helpers/dayLedgerMetaKey';
-import { logMentionsMoney, MONEY_KEYS, WORD_KEYS } from '../helpers/moneyMention';
+import { logMentionsMoney, MONEY_KEYS, textMentionsMoney, WORD_KEYS } from '../helpers/moneyMention';
 
 export interface AccessScopeContext {
     /** This phone's signed-in person; `null` = unknown, then nothing is attributed to him or removed as another's. */
@@ -137,12 +139,23 @@ export async function reconcileAccessScopes(
         const his = !!ctx.userId && card.assignedWorkerUserId === ctx.userId;
         if (goneSet.has(card.farmId) || (scope?.ownRecordsOnly && !his)) {
             jobCards.push(card.id);
-        } else if (scope && !scope.seeWages && !his && (card.estimatedTotalAmount != null || card.lineItems?.some(i => i.ratePerHourAmount != null))) {
-            await db.jobCards.put({
+        } else if (scope && !scope.seeWages && !his && (card.estimatedTotalAmount != null || card.payoutCostEntryId
+            || card.lineItems?.some(i => i.ratePerHourAmount != null || textMentionsMoney(i.notes))
+            || textMentionsMoney(card.cancellationReason))) {
+            // Fix 2 (N3): the payout's money-entry id goes with the pay (that entry reaches every see-money seat, so the
+            // id would join a named worker to what he was paid); a line's own words that name money go whole (N4).
+            const next: Record<string, unknown> = {
                 ...card,
                 estimatedTotalAmount: null,
-                lineItems: (card.lineItems ?? []).map(i => ({ ...i, ratePerHourAmount: null })),
-            });
+                lineItems: (card.lineItems ?? []).map(i => {
+                    const line: Record<string, unknown> = { ...i, ratePerHourAmount: null };
+                    if (textMentionsMoney(i.notes)) delete line.notes;
+                    return line;
+                }),
+            };
+            delete next.payoutCostEntryId;
+            if (textMentionsMoney(card.cancellationReason)) delete next.cancellationReason;
+            await db.jobCards.put(next as never);
         }
     }
     await db.jobCards.bulkDelete(jobCards);
@@ -180,9 +193,12 @@ export async function reconcileAccessScopes(
             }
 
             if (!scope || !byAnother) continue;
-            // F3 — asked of the copy as held, BEFORE its amounts are removed.
-            const wordsForMoney = !scope.seeMoney && logMentionsMoney(log);
-            const priced = !scope.seeMoney ? withoutMoney(log) : !scope.seeWages ? withoutWages(log) : log;
+            // F3 / fix 2 N4 (D-67) — asked of the copy as held, BEFORE its amounts are removed: the words of a record that
+            // mentions money stay only with see WAGES (a named worker's pay can be in them).
+            const wordsForMoney = !scope.seeWages && logMentionsMoney(log) && !alreadyWithoutWords(log);
+            const stripped = !scope.seeMoney ? withoutMoney(log) : !scope.seeWages ? withoutWages(log) : log;
+            // Fix 2 (N2): a copy the purge trimmed SAYS so, so an edit of it never reads the missing amounts as deleted.
+            const priced = stripped === log ? log : ({ ...stripped, amountsWithheld: true } as DailyLog);
             const trimmed = wordsForMoney ? withoutWords(priced) : priced;
             if (trimmed !== log) {
                 await db.logs.update(record.id, { log: trimmed });
@@ -291,6 +307,11 @@ export function withoutMoney(log: DailyLog): DailyLog {
     }
 
     return changed ? (next as unknown as DailyLog) : log;
+}
+
+/** Already trimmed of its words by an earlier pass (nothing left to take): not written again. */
+function alreadyWithoutWords(log: DailyLog): boolean {
+    return log.wordsWithheldForMoney === true && log.fullTranscript === undefined;
 }
 
 /**

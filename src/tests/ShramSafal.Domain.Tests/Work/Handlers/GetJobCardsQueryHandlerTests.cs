@@ -49,7 +49,7 @@ public sealed class GetJobCardsQueryHandlerTests
 
         var handler = new GetJobCardsForFarmHandler(repo);
         var result = await handler.HandleAsync(new GetJobCardsForFarmQuery(
-            FarmId, MukadamUserId, StatusFilter: JobCardStatus.Assigned));
+            FarmId, MukadamUserId, StatusFilter: JobCardStatus.Assigned, ClientShowsWithheldPay: true));
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Should().ContainSingle(j => j.Status == "Assigned");
@@ -61,7 +61,7 @@ public sealed class GetJobCardsQueryHandlerTests
         var jobs = new[] { BuildJobCard(), BuildJobCard() };
         var repo = new FakeRepo(farmJobCards: jobs.ToList(), memberFarmIds: [FarmId.Value]);
         var handler = new GetJobCardsForFarmHandler(repo);
-        var result = await handler.HandleAsync(new GetJobCardsForFarmQuery(FarmId, MukadamUserId, null));
+        var result = await handler.HandleAsync(new GetJobCardsForFarmQuery(FarmId, MukadamUserId, null, ClientShowsWithheldPay: true));
 
         result.IsSuccess.Should().BeTrue();
         result.Value!.Should().HaveCount(2);
@@ -114,13 +114,29 @@ public sealed class GetJobCardsQueryHandlerTests
             seesMoney: false);
 
         var result = await new GetJobCardsForFarmHandler(repo).HandleAsync(new GetJobCardsForFarmQuery(
-            FarmId, MukadamUserId, StatusFilter: null));
+            FarmId, MukadamUserId, StatusFilter: null, ClientShowsWithheldPay: true));
 
         result.IsSuccess.Should().BeTrue();
         var card = result.Value!.Should().ContainSingle().Subject;
         card.EstimatedTotalAmount.Should().BeNull("a worker's pay is withheld by rule");
         card.LineItems.Should().OnlyContain(i => i.RatePerHourAmount == null);
         card.LineItems.Should().NotBeEmpty("the work itself stays");
+    }
+
+    /// <summary>
+    /// lane MU-3 fix 2 (N1) — a phone that would draw a withheld pay as a number (an installed 1.0.17, or any caller that
+    /// does not say it is newer) is refused the list, as edee6667 refused it — never sent "INR 0".
+    /// </summary>
+    [Fact]
+    public async Task GetForFarm_A_phone_that_would_draw_a_withheld_pay_as_0_is_refused()
+    {
+        var repo = new FakeRepo(farmJobCards: [BuildJobCard()], memberFarmIds: [FarmId.Value], seesMoney: false);
+
+        var result = await new GetJobCardsForFarmHandler(repo).HandleAsync(new GetJobCardsForFarmQuery(
+            FarmId, MukadamUserId, StatusFilter: null, ClientShowsWithheldPay: false));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Contain("Forbidden");
     }
 
     // ─── Test doubles ────────────────────────────────────────────────────────

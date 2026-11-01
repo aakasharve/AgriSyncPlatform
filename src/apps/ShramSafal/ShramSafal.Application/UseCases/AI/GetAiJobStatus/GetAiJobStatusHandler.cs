@@ -71,7 +71,7 @@ public sealed class GetAiJobStatusHandler(
             {
                 withheld = ResultWithheldWords;
             }
-            else if (!ownJob && !scope.SeeMoney && MentionsMoney(job.NormalizedResultJson))
+            else if (!ownJob && !MoneyMention.HearsMoneyWords(scope) && MentionsMoney(job.NormalizedResultJson))
             {
                 withheld = ResultWithheldMoney;
             }

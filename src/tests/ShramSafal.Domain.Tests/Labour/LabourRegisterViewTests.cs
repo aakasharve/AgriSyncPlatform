@@ -120,8 +120,11 @@ public sealed class LabourRegisterViewTests
 
         Assert.Null(GetLabourDataHandler.ApplyRegisterView(priced, LabourRegisterView.CrewAttendance).Review[0].Points.Task);
         Assert.Equal("छाटणी", GetLabourDataHandler.ApplyRegisterView(plain, LabourRegisterView.CrewAttendance).Review[0].Points.Task);
-        Assert.Equal("छाटणी ४०० रुपये",
-            GetLabourDataHandler.ApplyRegisterView(priced, LabourRegisterView.CrewAttendance, seesMoney: true).Review[0].Points.Task);
+        // Fix 2 (N4 = D-67): the crew view is a seat without see WAGES — the words go whatever its money; its amount stays
+        // with see money.
+        var moneySeen = GetLabourDataHandler.ApplyRegisterView(priced, LabourRegisterView.CrewAttendance, seesMoney: true);
+        Assert.Null(moneySeen.Review[0].Points.Task);
+        Assert.Equal(850m, moneySeen.Review[0].Points.Amount);
     }
 
     /// <summary>

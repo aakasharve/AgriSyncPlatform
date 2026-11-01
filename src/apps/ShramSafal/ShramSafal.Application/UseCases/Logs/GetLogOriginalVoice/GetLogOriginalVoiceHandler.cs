@@ -128,9 +128,10 @@ public sealed class GetLogOriginalVoiceHandler(
 
         // lane MU-3 fix 1 (F3, D-66 = option 1) — the words rule's money clause, the same one the pull and every
         // command answer apply (MoneyMention): a record that mentions money is not played to a listener who did
-        // not make it and does not see the farm's money. Asked before the consent, erasure or clip reads.
+        // not make it and does not see WAGES there (fix 2, N4 = D-67; see wages needs see money). Asked before the
+        // consent, erasure or clip reads.
         if (query.CallerUserId != speakerUserId
-            && !await FarmReadGate.MaySeeMoneyAsync(repository, farmId, query.CallerUserId, clock.UtcNow, ct)
+            && !MoneyMention.HearsMoneyWords(await FarmReadGate.ScopeAsync(repository, farmId, query.CallerUserId, clock.UtcNow, ct))
             && await MoneyMention.InStoredRecordAsync(repository, log, ct))
         {
             return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.MoneyWithheld));

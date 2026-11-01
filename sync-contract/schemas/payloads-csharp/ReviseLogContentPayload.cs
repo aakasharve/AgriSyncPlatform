@@ -17,5 +17,6 @@ public sealed record ReviseLogContentPayload(
     object Content,
     DateTime RevisedAtUtc,
     string? Reason = null,
-    bool? AmountsWithheld = null
+    bool? AmountsWithheld = null,
+    bool? WordsWithheld = null
 );

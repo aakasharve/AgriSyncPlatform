@@ -87,6 +87,13 @@ public sealed class GetWorkerProfileHandler(
                 && farmIds.All(id => Services.FarmReadScope.Of(id, scopes.GetValueOrDefault(id), clock.UtcNow)?.SeeWages == true);
         }
 
+        // lane MU-3 fix 2 (N1) — a phone that would draw withheld earnings as "0k" (1.0.17) is refused, as edee6667
+        // refused a caller without see wages; it shows its own "could not load", never a made-up 0.
+        if (!earningsShown && !query.ClientShowsWithheldPay)
+        {
+            return Result.Failure<WorkerProfileDto>(ShramSafalErrors.Forbidden);
+        }
+
         // 2. Load worker metrics — over the farms the guard permitted, never over the raw
         //    farm id the client asked for, and never over an open-ended scope.
         var since30d = clock.UtcNow.AddDays(-30);

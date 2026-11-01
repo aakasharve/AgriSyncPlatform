@@ -11,18 +11,19 @@ export async function pushSyncBatch(t: HttpTransport, request: SyncPushRequest):
 
 /**
  * lane MU-3 fix 1 (F9) — `heldFarmIds`: the farms this phone holds, sent as `farms=` so the server can say
- * EXPLICITLY which of them this person may no longer read (paused, waiting, removed). Additive: an older
- * server ignores it.
+ * EXPLICITLY which of them this person may no longer read (paused, waiting, removed). Fix 2 (N5): sent EVEN WHEN
+ * EMPTY (`farms=`) — a phone that holds no farm (all purged, or new) is then sent every farm it may read from the
+ * start. `undefined` = the caller does not say (nothing is sent). Additive: an older server ignores it.
  */
 export async function pullSyncChanges(
     t: HttpTransport,
     sinceCursorIso?: string,
-    heldFarmIds: readonly string[] = [],
+    heldFarmIds?: readonly string[],
 ): Promise<SyncPullResponse> {
     const normalizedCursor = normalizeSyncCursorForApi(sinceCursorIso);
-    const farms = heldFarmIds.length > 0 ? heldFarmIds.join(',') : undefined;
-    const params = normalizedCursor || farms
-        ? { ...(normalizedCursor ? { since: normalizedCursor } : {}), ...(farms ? { farms } : {}) }
+    const farms = heldFarmIds === undefined ? undefined : heldFarmIds.join(',');
+    const params = normalizedCursor || farms !== undefined
+        ? { ...(normalizedCursor ? { since: normalizedCursor } : {}), ...(farms !== undefined ? { farms } : {}) }
         : undefined;
     const response = await t.http.get<SyncPullResponse>('/sync/pull', { params });
     return response.data;

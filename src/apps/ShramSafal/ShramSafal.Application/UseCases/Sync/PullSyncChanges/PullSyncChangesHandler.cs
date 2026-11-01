@@ -71,7 +71,12 @@ public sealed class PullSyncChangesHandler(
             .Select(id => FarmAccessScopeDto.NotReadable(id, accesses.GetValueOrDefault(id)))
             .ToList();
 
-        var window = new PullReadWindow(scopes, sinceUtc, serverNowUtc);
+        // MU-3 fix 2 (N5) — a phone that names the farms it holds (and named fewer than the cap, so the list is
+        // whole) holds no data for a readable farm it did not name: that farm is read from the beginning, once.
+        IReadOnlyCollection<Guid>? notHeld = query.HeldFarmIds is not null && held.Count < MaxHeldFarms
+            ? scopes.Keys.Where(id => !held.Contains(id)).ToList()
+            : null;
+        var window = new PullReadWindow(scopes, sinceUtc, serverNowUtc, notHeld);
         var farmIds = window.FarmIds.ToList();
         static bool Any(FarmReadScope _) => true;
 

@@ -82,10 +82,16 @@ public sealed class WorkerRecordDoesNotLeaveItsFarmTests
             workerConsented: false,
             callerSeesMoney: false);
 
-        var page = await NewProfileHandler(repo).HandleAsync(new GetWorkerProfileQuery(WorkerUserId, OwnerOfBUserId));
+        var page = await NewProfileHandler(repo).HandleAsync(
+            new GetWorkerProfileQuery(WorkerUserId, OwnerOfBUserId, ClientShowsWithheldPay: true));
 
         page.IsSuccess.Should().BeTrue("the page is sent, never refused whole");
         page.Value!.EarnedLast30d.Should().BeNull("what he was paid is withheld by rule");
+
+        // lane MU-3 fix 2 (N1) — an installed 1.0.17 draws a null as "0k": it is refused instead, as edee6667 refused it.
+        var legacy = await NewProfileHandler(repo).HandleAsync(new GetWorkerProfileQuery(WorkerUserId, OwnerOfBUserId));
+        legacy.IsFailure.Should().BeTrue();
+        legacy.Error.Code.Should().Be("ShramSafal.Forbidden");
 
         var own = await NewProfileHandler(repo).HandleAsync(new GetWorkerProfileQuery(WorkerUserId, WorkerUserId));
         own.IsSuccess.Should().BeTrue("his own record is his");

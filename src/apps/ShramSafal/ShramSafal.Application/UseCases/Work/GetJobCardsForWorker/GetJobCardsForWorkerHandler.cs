@@ -76,11 +76,18 @@ public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository
             ? new Dictionary<Guid, FarmReadScope?>()
             : (await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, permitted.ToList(), ct))
                 .ToDictionary(kv => kv.Key, kv => FarmReadScope.Of(kv.Key, kv.Value, clock?.UtcNow ?? DateTime.UtcNow));
-        var dtos = jobCards
-            .Select(j => query.CallerUserId.Value == query.WorkerUserId.Value
-                ? j.ToJobCardDto()
-                : ReadScopeProjection.JobCard(j.ToJobCardDto(), scopes.GetValueOrDefault(j.FarmId.Value), query.CallerUserId.Value))
+        var whole = jobCards.Select(j => j.ToJobCardDto()).ToList();
+        var dtos = whole
+            .Select((j, i) => query.CallerUserId.Value == query.WorkerUserId.Value
+                ? j
+                : ReadScopeProjection.JobCard(j, scopes.GetValueOrDefault(jobCards[i].FarmId.Value), query.CallerUserId.Value))
             .ToList();
+
+        // lane MU-3 fix 2 (N1) — a phone that would draw a withheld pay as a number (1.0.17) is refused instead.
+        if (!query.ClientShowsWithheldPay && dtos.Where((d, i) => !ReferenceEquals(d, whole[i])).Any())
+        {
+            return Result.Failure<List<JobCardDto>>(ShramSafalErrors.Forbidden);
+        }
 
         return Result.Success(dtos);
     }

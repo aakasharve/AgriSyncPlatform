@@ -21,6 +21,11 @@ export interface ReviseLogContentPayload {
       * the server carries them forward. Decided by what this phone was SENT, never by the seat's switches now.
       */
      amountsWithheld?: boolean;
+     /**
+      * lane MU-3 fix 2 (N4) — the copy came WITHOUT the record's words (`DailyLog.wordsWithheldForMoney`): the server
+      * carries them onto the edit.
+      */
+     wordsWithheld?: boolean;
 }
 
 export class ReviseLogContentCommand {

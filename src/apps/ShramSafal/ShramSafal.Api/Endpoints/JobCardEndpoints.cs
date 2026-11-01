@@ -268,6 +268,7 @@ public static class JobCardEndpoints
             Guid farmId,
             string? status,
             ClaimsPrincipal user,
+            HttpContext httpContext,
             GetJobCardsForFarmHandler handler,
             ICallerFarmTenantScope tenantScope,
             CancellationToken ct) =>
@@ -290,7 +291,10 @@ public static class JobCardEndpoints
             var query = new GetJobCardsForFarmQuery(
                 FarmId: new FarmId(farmId),
                 CallerUserId: new UserId(actorUserId),
-                StatusFilter: statusFilter);
+                StatusFilter: statusFilter,
+                // lane MU-3 fix 2 (N1) — only a phone that shows a withheld pay as withheld gets one (never 1.0.17).
+                ClientShowsWithheldPay: ShramSafal.Application.Services.ClientContract.ShowsWithheldPay(
+                    ResolveClientAppVersion(httpContext)));
 
             var result = await handler.HandleAsync(query, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -300,8 +304,12 @@ public static class JobCardEndpoints
         // GET /workers/{userId}/job-cards → 200
         group.MapGet("/workers/{userId:guid}/job-cards", async (
             Guid userId,
+            Guid? farmId,
             ClaimsPrincipal user,
+            HttpContext httpContext,
             GetJobCardsForWorkerHandler handler,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -309,9 +317,24 @@ public static class JobCardEndpoints
 
             var query = new GetJobCardsForWorkerQuery(
                 WorkerUserId: new UserId(userId),
-                CallerUserId: new UserId(actorUserId));
+                CallerUserId: new UserId(actorUserId),
+                // lane MU-3 fix 2 (N1) — only a phone that shows a withheld pay as withheld gets one (never 1.0.17).
+                ClientShowsWithheldPay: ShramSafal.Application.Services.ClientContract.ShowsWithheldPay(
+                    ResolveClientAppVersion(httpContext)));
 
-            var result = await handler.HandleAsync(query, ct);
+            // lane MU-3 fix 2 — the route opened no tenant scope (its first read failed closed, 500 for everyone). The
+            // worker page names its farm (the new phone does): that farm's scope is opened, so the worker's seat there is
+            // visible and the list is that farm's. Without a farm (1.0.17) the caller's OWN user scope: his own list.
+            if (farmId is { } farm)
+            {
+                var established = await farmScope.EstablishForCallerAsync(farm, actorUserId, ct);
+                if (!established.IsSuccess)
+                    return ToErrorResult(established.Error);
+            }
+
+            var result = farmId is null
+                ? await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(query, token), ct)
+                : await handler.HandleAsync(query, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetJobCardsForWorker");

@@ -149,22 +149,33 @@ public sealed class ReviseLogContentHandler(
         var current = await repository.GetCurrentDailyLogContentAsync(log.Id, ct);
 
         var documentJson = command.ContentJson;
-        // lane MU-3 fix 1 (F8) — was his copy sent without its amounts? His phone says (amountsWithheld); a phone that
-        // does not say (1.0.17) is answered by his seat now. His OWN record was never sent without them.
+        // lane MU-3 fix 2 (N2; P7) — was his copy trimmed of its amounts? YES when his phone says so (amountsWithheld:
+        // true — the pull's projection, or the purge of a copy held from before MU-3), OR when his seat cannot see the
+        // farm's money NOW (a copy trimmed by an older phone's purge that did not say so, an edit from 1.0.17, an
+        // explicit "false" the phone could not know better). Either way their absence from his edit is not a
+        // deletion: they are carried (both are safe — a seat that cannot see money cannot have meant to change it).
+        // His OWN record was never trimmed. No per-person wage lives in the content document (labour is its own path,
+        // and no labour correction writes a wage), so see money is the whole question here.
+        var editorScope = current is null || isCreator
+            ? null
+            : await FarmReadGate.ScopeAsync(repository, farmId, command.ActorUserId, now, ct);
         var copyWithoutAmounts = current is not null
             && !isCreator
-            && (command.AmountsWithheld
-                ?? !await FarmReadGate.MaySeeMoneyAsync(repository, farmId, command.ActorUserId, now, ct));
-        // lane MU-3 fix 1 (F3, D-66 = option 1) — a copy sent without its amounts, of a record that mentions money,
-        // came WITHOUT its words too (ReadScopeProjection.Record): their absence from his edit is not a deletion.
+            && (command.AmountsWithheld == true || editorScope?.SeeMoney != true);
+        // lane MU-3 fix 1 (F3) / fix 2 (N4 = D-67) — his copy came WITHOUT the record's words when his phone says so
+        // (wordsWithheld), when he may not hear words at all (RecordWordsGate), or when the record mentions money and his
+        // seat does not see wages now: their absence from his edit is not a deletion either.
         var wordsNotSent = current is not null
-            && (!await RecordWordsGate.MayHearAsync(
+            && (command.WordsWithheld == true
+                || !await RecordWordsGate.MayHearAsync(
                     command.ActorUserId,
                     log.OperatorUserId.Value,
                     actorRole,
                     () => FarmAuthorityGate.HoldsAsync(
                         repository, farmId, command.ActorUserId, Domain.Farms.FarmAuthority.ConfirmRecords, now, ct))
-                || (copyWithoutAmounts && await MoneyMention.InStoredRecordAsync(repository, log, ct)));
+                || (!isCreator
+                    && !MoneyMention.HearsMoneyWords(editorScope)
+                    && await MoneyMention.InStoredRecordAsync(repository, log, ct)));
         if (current is not null && wordsNotSent)
         {
             documentJson = LogContentDocument.CarryWordsForward(current.DocumentJson, command.ContentJson);

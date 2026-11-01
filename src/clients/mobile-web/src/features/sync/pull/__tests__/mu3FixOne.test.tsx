@@ -75,7 +75,11 @@ describe('MU-3 fix 1 — the phone', () => {
         await pullSyncChanges({ http: { get } } as unknown as HttpTransport, '2026-11-01T06:00:00.123Z', held);
         expect(get).toHaveBeenCalledWith('/sync/pull', { params: { since: '2026-11-01T06:00:00Z', farms: `${FARM_A},${FARM_B}` } });
         get.mockClear();
+        // Fix 2 (N5): a phone holding no farm still says so (`farms=`); only a caller that says nothing sends nothing.
         await pullSyncChanges({ http: { get } } as unknown as HttpTransport, undefined, []);
+        expect(get).toHaveBeenCalledWith('/sync/pull', { params: { farms: '' } });
+        get.mockClear();
+        await pullSyncChanges({ http: { get } } as unknown as HttpTransport, undefined);
         expect(get).toHaveBeenCalledWith('/sync/pull', { params: undefined });
     });
 

@@ -6,6 +6,7 @@
  */
 
 import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
+import { APP_VERSION } from '../../../buildInfo';
 import type { JobCard, JobCardLineItem } from '../../../domain/work/JobCard';
 import type { WorkerProfileData } from '../../../domain/work/ReliabilityScore';
 
@@ -57,7 +58,9 @@ const resolveBaseUrl = (): string => {
 
 const authHeaders = (): Record<string, string> => {
     const session = getAuthSession();
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    // lane MU-3 fix 2 (N1) — the server sends a withheld pay as null (shown "नियमानुसार दिसत नाही") only to a phone
+    // that says it is newer than 1.0.17; 1.0.17 sent no version here and is answered the old way, never with ₹0.
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-App-Version': APP_VERSION };
     if (session?.accessToken) {
         headers['Authorization'] = `Bearer ${session.accessToken}`;
     }
@@ -159,8 +162,12 @@ export async function getFarmJobCards(
     return res.json() as Promise<JobCard[]>;
 }
 
-export async function getWorkerJobCards(userId: string): Promise<JobCard[]> {
-    const url = `${resolveBaseUrl()}/workers/${userId}/job-cards`;
+/**
+ * A worker's job cards. lane MU-3 fix 2 — `farmId`: the farm the worker page is about; the server reads that farm's
+ * cards under that farm's scope (without it, only a person's OWN list can be read).
+ */
+export async function getWorkerJobCards(userId: string, farmId?: string): Promise<JobCard[]> {
+    const url = `${resolveBaseUrl()}/workers/${userId}/job-cards${farmId ? `?farmId=${encodeURIComponent(farmId)}` : ''}`;
     const res = await fetch(url, { headers: authHeaders() });
     // TASK 8 — same fabrication as `getFarmJobCards` above; see the note there.
     if (!res.ok) throw new Error(`getWorkerJobCards failed: ${res.status}`);

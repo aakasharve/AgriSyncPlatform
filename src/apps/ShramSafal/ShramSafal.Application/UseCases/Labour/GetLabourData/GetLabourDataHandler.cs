@@ -1200,12 +1200,13 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // person's pay (the People rows above, the ledger's per-person rows) is a WAGE and stays withheld here.
         var review = dto.Review
             .Where(r => !narrowToCaller || (ownReviewIds is not null && ownReviewIds.Contains(r.Id)))
-            // F3 (D-66) — a crew's task words that themselves name money are withheld whole, never cut.
-            .Select(r => seesMoney ? r : r with
+            // F3 (D-66; fix 2 N4 = D-67) — this view is a seat WITHOUT see wages: a crew's task words that themselves
+            // name money are withheld whole, never cut; the crew's amount is money (see money).
+            .Select(r => r with
             {
                 Points = r.Points with
                 {
-                    Amount = null,
+                    Amount = seesMoney ? r.Points.Amount : null,
                     Task = Services.MoneyMention.InText(r.Points.Task) ? null : r.Points.Task,
                 },
             })

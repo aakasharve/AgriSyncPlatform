@@ -26,4 +26,7 @@ public sealed record ReviseLogContentCommand(
     // (true / false), and the server follows what the phone was SENT, whatever the editor's authority is when the
     // edit arrives. null = a phone that does not say (1.0.17 and older): the editor's authority now decides, as
     // before fix 1.
-    bool? AmountsWithheld = null);
+    bool? AmountsWithheld = null,
+    // lane MU-3 fix 2 (N4) — the copy this edit was made on was sent WITHOUT the record's words (the money rule): the
+    // words are carried onto it. null / false = the phone does not say; the server's own rule still applies.
+    bool? WordsWithheld = null);

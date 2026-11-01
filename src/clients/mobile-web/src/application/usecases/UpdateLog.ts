@@ -488,6 +488,8 @@ async function queueContentRevision(
         // lane MU-3 fix 1 (F8) — whether his copy came without its amounts, said every time: the server follows what
         // this phone was SENT, not the seat's switches when the edit arrives.
         amountsWithheld: existingLog.amountsWithheld === true,
+        // lane MU-3 fix 2 (N4) — and whether it came without the record's words: their absence is not a deletion either.
+        wordsWithheld: existingLog.wordsWithheldForMoney === true,
     }, { changesMoney: changesPricedLine(existingLog, finalLog) });
     return true;
 }

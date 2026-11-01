@@ -37,9 +37,16 @@ public sealed class GetJobCardsForFarmHandler(IShramSafalRepository repository, 
         var jobCards = await repository.GetJobCardsForFarmAsync(
             query.FarmId, query.StatusFilter, ct);
 
-        var dtos = jobCards
-            .Select(j => ReadScopeProjection.JobCard(j.ToJobCardDto(), scope, query.CallerUserId.Value))
+        var whole = jobCards.Select(j => j.ToJobCardDto()).ToList();
+        var dtos = whole
+            .Select(j => ReadScopeProjection.JobCard(j, scope, query.CallerUserId.Value))
             .ToList();
+
+        // lane MU-3 fix 2 (N1) — a phone that would draw a withheld pay as a number (1.0.17) is refused, as edee6667
+        // refused it, rather than shown "INR 0".
+        if (!query.ClientShowsWithheldPay && dtos.Where((d, i) => !ReferenceEquals(d, whole[i])).Any())
+            return Result.Failure<List<JobCardDto>>(ShramSafalErrors.Forbidden);
+
         return Result.Success(dtos);
     }
 }

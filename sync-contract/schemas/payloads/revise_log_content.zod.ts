@@ -22,6 +22,10 @@ export const ReviseLogContentPayload = z.object({
     // onto the edit, whatever the editor's authority is by the time the edit arrives: an amount he was never
     // shown is never erased by his edit. Optional and additive: absent = his copy was whole.
     amountsWithheld: z.boolean().optional(),
+    // lane MU-3 fix 2 (N4 = D-67) — the copy this edit was made on was sent WITHOUT the record's words (a record that
+    // mentions money, read by a seat without see wages). The server carries the words onto the edit. Optional and
+    // additive: absent = the phone does not say (the server's own rule still applies).
+    wordsWithheld: z.boolean().optional(),
 });
 
 export type ReviseLogContentPayloadType = z.infer<typeof ReviseLogContentPayload>;

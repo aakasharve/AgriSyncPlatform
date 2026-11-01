@@ -112,13 +112,17 @@ public static class SyncEndpoints
 
             // lane MU-3 fix 1 (F9) — the farms the phone holds (comma-separated ids; optional, additive). An
             // unreadable id is ignored, never refused: an older phone sends none and must keep working (P11).
-            var heldFarmIds = (farms ?? string.Empty)
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Select(raw => Guid.TryParse(raw, out var id) ? id : Guid.Empty)
-                .Where(id => id != Guid.Empty)
-                .Distinct()
-                .Take(PullSyncChangesHandler.MaxHeldFarms)
-                .ToList();
+            // Fix 2 (N5): no `farms` at all (1.0.17) stays null — "said nothing" — and is never read as "holds none of
+            // them"; an EMPTY `farms=` is a phone that holds no farm (everything purged, or a fresh install).
+            List<Guid>? heldFarmIds = farms is null
+                ? null
+                : farms
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(raw => Guid.TryParse(raw, out var id) ? id : Guid.Empty)
+                    .Where(id => id != Guid.Empty)
+                    .Distinct()
+                    .Take(PullSyncChangesHandler.MaxHeldFarms)
+                    .ToList();
 
             var result = await handler.HandleAsync(new PullSyncChangesQuery(cursor, actorUserId, heldFarmIds), ct);
             if (!result.IsSuccess)

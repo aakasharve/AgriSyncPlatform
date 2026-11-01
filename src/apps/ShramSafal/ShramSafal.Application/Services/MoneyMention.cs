@@ -95,17 +95,21 @@ public static partial class MoneyMention
     }
 
     /// <summary>
-    /// Are the words and voice of <paramref name="original"/> withheld from this reader for money (D-66)? Yes
-    /// when he did not make the record, does not see the farm's money (no scope at all fails closed), and the
-    /// record mentions money. The primary owner always sees money, so he is never caught.
+    /// Are the words and voice of <paramref name="original"/> withheld from this reader for money (D-66; fix 2 N4 =
+    /// D-67)? Yes when he did not make the record, does not see WAGES there (see wages needs see money, so every seat
+    /// without see money is caught too; no scope at all fails closed), and the record mentions money — his words may
+    /// state a named worker's pay ("रवीला ५०० रु."). The primary owner always sees wages, so he is never caught.
     /// </summary>
     public static bool WithholdsWords(DailyLogDto original, FarmReadScope? scope, Guid readerUserId)
     {
         ArgumentNullException.ThrowIfNull(original);
         return !(readerUserId != Guid.Empty && original.OperatorUserId == readerUserId)
-            && scope?.SeeMoney != true
+            && !HearsMoneyWords(scope)
             && InRecord(original);
     }
+
+    /// <summary>D-67 — may this seat hear the words of a record that mentions money? Only with see wages.</summary>
+    public static bool HearsMoneyWords(FarmReadScope? scope) => scope?.SeeWages == true;
 
     private static bool IsAmount(JsonElement value) => value.ValueKind switch
     {

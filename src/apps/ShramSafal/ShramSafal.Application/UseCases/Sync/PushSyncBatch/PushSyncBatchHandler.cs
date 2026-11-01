@@ -1981,7 +1981,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "dailyLogId", "baseVersion", "content", "reason", "revisedAtUtc", "amountsWithheld"))
+        if (!PayloadHasOnly(payload, "dailyLogId", "baseVersion", "content", "reason", "revisedAtUtc", "amountsWithheld", "wordsWithheld"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -2036,7 +2036,8 @@ public sealed class PushSyncBatchHandler(
                 clientRequestId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
                 // lane MU-3 fix 1 (F8) — the phone says its copy was sent without amounts.
-                AmountsWithheld: request.AmountsWithheld),
+                AmountsWithheld: request.AmountsWithheld,
+                WordsWithheld: request.WordsWithheld),
             ct);
 
         return ToOutcome(result);
