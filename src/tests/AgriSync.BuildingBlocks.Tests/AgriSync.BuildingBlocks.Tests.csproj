@@ -15,6 +15,13 @@
          provider is non-transactional, so it cannot exercise
          OutboxTransactionInterceptor's TransactionRolledBack hook. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.3" />
+    <!-- GHSA-2m69-gcr7-jv3q (CVE-2025-6965): EF Core Sqlite 10.0.3 pulls
+         SQLitePCLRaw 2.1.11, whose native e_sqlite3 is SQLite 3.49.1 (fixed
+         upstream in 3.50.2). 2.1.13 embeds SQLite 3.53.3 and is the same
+         bundle version EF Core 10.0.14 itself depends on. Measured 2026-11-01,
+         spec: nuget-audit-hardening-2026-11-01. Remove this pin when
+         EF Core Sqlite is bumped to a release that already depends on >= 2.1.13. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
     <!-- T-IGH-03-OUTBOX-PUBLISHER-IMPL: FakeTimeProvider for retry/DLQ
          tests; concrete logging + DI extensions for the subscriber
