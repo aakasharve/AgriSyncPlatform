@@ -70,6 +70,28 @@ jobs:
       - name: Restore
         run: dotnet restore src/AgriSync.sln
 
+      - name: NuGet vulnerability report + gate (high/critical block)
+        # spec: nuget-audit-hardening-2026-11-01. Writes the FULL report (every
+        # severity, direct + transitive) and then fails on any high/critical
+        # advisory that has no valid, unexpired entry in
+        # .github/security/nuget-audit-exceptions.json.
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p nuget-audit
+          dotnet list src/AgriSync.sln package --vulnerable --include-transitive | tee nuget-audit/vulnerabilities.txt
+          dotnet list src/AgriSync.sln package --vulnerable --include-transitive --format json > nuget-audit/vulnerabilities.json
+          python3 .github/scripts/check-nuget-audit.py --report nuget-audit/vulnerabilities.json | tee nuget-audit/gate-result.txt
+
+      - name: Keep NuGet vulnerability report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-audit-report
+          path: nuget-audit/
+          retention-days: 90
+          if-no-files-found: warn
+
       - name: Build (warnings = errors)
         # Existing pre-existing warning codes are listed in
         # src/Directory.Build.props WarningsNotAsErrors so today's debt
