@@ -262,13 +262,18 @@ public sealed class RecordVisibility
     public bool MaySeeAttachment(Attachment attachment)
     {
         ArgumentNullException.ThrowIfNull(attachment);
-        if (HiddenBillPhotoIds.Contains(attachment.Id))
+
+        // Fix pass 2 (N2) — a bill photo HE took is never kept from him by a money record's rule (named, or the fail-closed
+        // one below): he holds what it shows, and nothing on the photo names the money. At its upload and at every read.
+        var tookIt = readerUserId != Guid.Empty && attachment.CreatedByUserId.Value == readerUserId;
+        if (!tookIt && HiddenBillPhotoIds.Contains(attachment.Id))
         {
             return false;
         }
 
         // Fix pass 1 (L7) — fail closed: which bills a hidden money record named cannot be read, so no bill of its farm.
-        if (attachment.LinkedEntityType is AttachmentParentRule.BillParent or AttachmentParentRule.FarmParent
+        if (!tookIt
+            && attachment.LinkedEntityType is AttachmentParentRule.BillParent or AttachmentParentRule.FarmParent
             && unreadableBillFarms.Contains((Guid)attachment.FarmId))
         {
             return false;

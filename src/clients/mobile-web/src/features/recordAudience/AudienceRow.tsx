@@ -16,6 +16,7 @@ import type { RecordAudienceName, RecordKindName } from '../../infrastructure/ap
 import { useBackDismiss } from '../../core/navigation/useBackDismiss';
 import { audienceCopy, audienceLabel, type AudienceCopy } from './audienceCopy';
 import { chooseAudience, loadChoosablePeople, type ChoosablePerson } from './recordAudienceLocal';
+import { useIsFarmRegistrant } from './recordHolder';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
@@ -38,8 +39,11 @@ export interface AudienceRowProps {
 export const AudienceRow: React.FC<AudienceRowProps> = props => {
     const copy = audienceCopy(useOptionalLanguage()?.language);
     const [open, setOpen] = useState(false);
+    // Fix pass 2 — the farm's registrant only (every screen that renders the row gets this one rule).
+    const registrant = useIsFarmRegistrant(props.farmId, props.selfUserId);
     const testId = props.testId ?? 'audience-row';
     const current = props.audience ?? 'Team';
+    if (!registrant) return null;
     return (
         <>
             <button type="button" onClick={() => setOpen(true)} data-testid={testId} data-audience={current}

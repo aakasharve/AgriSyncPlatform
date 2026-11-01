@@ -414,9 +414,13 @@ public sealed class MoveDailyLogHandler(
         Domain.Logs.DailyLog log, IReadOnlyList<CostEntryDto> movedMoney, Guid actor, DateTime now, CancellationToken ct)
     {
         var scope = await FarmReadGate.ScopeAsync(repository, (Guid)log.FarmId, actor, now, ct);
+        // lane PRV fix pass 2 (D-69) — money kept from him never rides his answer, and its record comes back as for a seat
+        // without see money.
+        var visibility = await RecordVisibility.ForFarmAsync(repository, (Guid)log.FarmId, actor, now, ct);
+        var dto = log.ToDto();
         return new MoveDailyLogResultDto(
-            ReadScopeProjection.Record(log.ToDto(), scope, actor),
-            ReadScopeProjection.Money(movedMoney, scope));
+            ReadScopeProjection.Record(dto, RecordMoneyAccess.ScopeFor(dto, scope, visibility), actor),
+            ReadScopeProjection.Money(movedMoney.Where(m => visibility.MaySeeCost(m.Id)).ToList(), scope));
     }
 
     /// <summary>The crop season on <paramref name="plotId"/> (this farm only) that covers <paramref name="day"/>, or null.</summary>

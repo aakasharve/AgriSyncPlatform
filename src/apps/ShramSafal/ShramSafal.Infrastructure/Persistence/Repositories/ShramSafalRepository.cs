@@ -1580,6 +1580,12 @@ internal sealed class ShramSafalRepository(
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<DailyLog>> GetDailyLogsBySourceAiJobAsync(FarmId farmId, Guid aiJobId, CancellationToken ct = default) =>
+        await db.DailyLogs
+            .AsNoTracking()
+            .Where(l => l.FarmId == farmId && l.SourceAiJobId == aiJobId)
+            .ToListAsync(ct);
+
     public async Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmByIdsAsync(FarmId farmId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
     {
         if (ids.Count == 0) return [];
@@ -2102,7 +2108,7 @@ internal sealed class ShramSafalRepository(
             where row.FieldOperatorId == fieldOperatorId
                   && log.FarmId == farmId
                   && log.LogDate == workDate
-            select new AttendanceEngagementFact(a.Id, a.Task, a.Shift)
+            select new AttendanceEngagementFact(a.Id, a.Task, a.Shift, log.Id)
         ).ToListAsync(ct);
     }
 

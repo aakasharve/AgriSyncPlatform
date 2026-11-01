@@ -232,7 +232,9 @@ internal sealed class EditMoney(
     private async Task<bool> MayChangePricesAsync(DailyLog log, Guid actor, DateTime now, CancellationToken ct) =>
         actor == log.OperatorUserId.Value
         || (await repository.GetUserRoleForFarmAsync((Guid)log.FarmId, actor, ct) is not null
-            && await FarmAuthorityGate.HoldsAsync(repository, (Guid)log.FarmId, actor, FarmAuthority.ReviewMoney, now, ct));
+            && await FarmAuthorityGate.HoldsAsync(repository, (Guid)log.FarmId, actor, FarmAuthority.ReviewMoney, now, ct)
+            // lane PRV fix pass 2 (D-69) — never the prices of money kept from him: his edit changes none of it.
+            && !await RecordMoneyAccess.MoneyHiddenFromAsync(repository, log, actor, now, ct));
 
     /// <summary>
     /// Fix pass 4 — was this correction made by a record edit? Told by its own <c>CostEntry</c> / <c>Corrected</c> audit row,

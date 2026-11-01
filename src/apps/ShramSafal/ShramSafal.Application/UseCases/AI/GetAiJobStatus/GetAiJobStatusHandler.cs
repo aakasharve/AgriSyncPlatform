@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Ports.External;
@@ -79,8 +80,12 @@ public sealed class GetAiJobStatusHandler(
             {
                 withheld = ResultWithheldWords;
             }
-            else if (!ownJob && !MoneyMention.HearsMoneyWords(scope) && MentionsMoney(job.NormalizedResultJson))
+            else if (!ownJob
+                     && (!MoneyMention.HearsMoneyWords(scope) || await MoneyOfItsRecordHiddenAsync(job.FarmId, job.Id, query.ActorUserId, now, ct))
+                     && MentionsMoney(job.NormalizedResultJson))
             {
+                // lane PRV fix pass 2 (D-69) — a parse whose record's own money is kept from him is read as by a seat
+                // without see money.
                 withheld = ResultWithheldMoney;
             }
         }
@@ -115,6 +120,20 @@ public sealed class GetAiJobStatusHandler(
             withheld);
 
         return Result.Success(dto);
+    }
+
+    /// <summary>lane PRV fix pass 2 (D-69) — is the own money of a record made from this parse kept from the reader?</summary>
+    private async Task<bool> MoneyOfItsRecordHiddenAsync(Guid farmId, Guid jobId, Guid readerUserId, DateTime atUtc, CancellationToken ct)
+    {
+        foreach (var log in await repository.GetDailyLogsBySourceAiJobAsync(new FarmId(farmId), jobId, ct))
+        {
+            if (await RecordMoneyAccess.MoneyHiddenFromAsync(repository, log, readerUserId, atUtc, ct))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>The F3 test on a parse: an amount key or a money word anywhere in it (unreadable = yes).</summary>

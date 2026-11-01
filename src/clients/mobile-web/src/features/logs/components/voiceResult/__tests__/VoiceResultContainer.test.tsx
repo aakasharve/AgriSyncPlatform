@@ -697,6 +697,18 @@ describe('lane PRV — the picker is the primary account holder\'s alone', () =>
         });
     });
 
+    // Fix pass 2 - the holder is the farm's registrant (its ownerUserId), as the phone holds the farm.
+    beforeEach(async () => {
+        await getDatabase().farms.put({ id: 'farm-1', payload: { id: 'farm-1', ownerUserId: ME }, updatedAt: 'T' });
+    });
+
+    it('fix pass 2: a PrimaryOwner seat that is not the registrant of the farm is never offered the picker', async () => {
+        await getDatabase().farms.put({ id: 'farm-1', payload: { id: 'farm-1', ownerUserId: 'someone-else' }, updatedAt: 'T' });
+        mount(props());
+        await new Promise(r => setTimeout(r, 30));
+        expect(screen.queryByTestId('vr-audience')).toBeNull();
+    });
+
     it('is never shown to anyone else, and never before the record is on its way to the server', () => {
         mount(props({ farmRole: 'SecondaryOwner' }));
         expect(screen.queryByTestId('vr-audience')).toBeNull();

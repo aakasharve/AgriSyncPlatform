@@ -106,9 +106,11 @@ public sealed class SetRecordAudienceHandler(
                 log?.AudienceChangedAtUtc ?? entry!.AudienceChangedAtUtc ?? now, 0, Changed: false));
         }
 
-        // The record's own money follows a work record (found from its own lines; same farm only — E4). Fix pass 1 (M2):
-        // only the money whose audience EQUALS the record's audience before this change (it was following the record).
-        // Money the holder narrowed (or widened) on its own keeps his own choice: a record's change never widens its money.
+        // The record's own money follows a work record (found from its own lines; same farm only — E4) only while it is
+        // FOLLOWING that record (fix pass 2, M2): its audience was never set on its own, or its newest audience change was a
+        // follow of THIS record (FollowsRecordAsync). Money the holder set on its own keeps his choice through any later
+        // change of the record — a coincidental match of audiences is never "following". Fix pass 1's test stays as a
+        // second guard: money that follows has the record's audience before this change, and the same people.
         var money = new List<CostEntry>();
         if (log is not null)
         {
@@ -117,7 +119,7 @@ public sealed class SetRecordAudienceHandler(
                          .Where(e => e.FarmId == log.FarmId && !IsJobCardPayout(e) && e.Audience == before))
             {
                 var candidatePeople = (await repository.GetRecordAudienceUserIdsAsync(RecordKinds.CostEntry, candidate.Id, ct)).ToHashSet();
-                if (candidatePeople.SetEquals(beforeSelected))
+                if (candidatePeople.SetEquals(beforeSelected) && await FollowsRecordAsync(candidate.Id, log.Id, ct))
                 {
                     money.Add(candidate);
                 }
@@ -156,6 +158,41 @@ public sealed class SetRecordAudienceHandler(
 
         return Result.Success(new SetRecordAudienceResultDto(
             command.RecordKind, command.RecordId, command.Audience.ToString(), [.. selected.Order()], changedAt, money.Count, Changed: true));
+    }
+
+    /// <summary>
+    /// Fix pass 2 (M2) — is this money FOLLOWING the record <paramref name="recordId"/>? Read from the money's own
+    /// audience trail, the append-only <c>AudienceChanged</c> rows this handler writes in the SAME unit of work as every
+    /// change (the app role can neither update nor delete <c>ssf.audit_events</c>): no row at all = its audience was
+    /// never set on its own (Team since it was made, or born with this record's audience — <c>RecordMoneyAudience</c>),
+    /// so it follows; otherwise it follows only when its NEWEST row is a follow of this record (<c>followedRecordId</c>).
+    /// A row the holder wrote for the money itself (followedRecordId null) ends the following for good.
+    /// </summary>
+    private async Task<bool> FollowsRecordAsync(Guid moneyId, Guid recordId, CancellationToken ct)
+    {
+        var newest = (await repository.GetAuditEventsForEntityAsync(moneyId, RecordKinds.CostEntry, ct))
+            .Where(a => a.Action == ChangedAction)
+            .OrderBy(a => a.OccurredAtUtc)
+            .LastOrDefault();
+        if (newest is null)
+        {
+            return true;
+        }
+
+        try
+        {
+            using var payload = System.Text.Json.JsonDocument.Parse(newest.Payload);
+            return payload.RootElement.TryGetProperty("followedRecordId", out var followed)
+                && followed.ValueKind == System.Text.Json.JsonValueKind.String
+                && followed.TryGetGuid(out var followedId)
+                && followedId == recordId;
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            // A trail row that cannot be read is never taken as "following": the money keeps its audience (never widened).
+            logger.LogWarning(ex, "set_record_audience: the audience trail of money {MoneyId} cannot be read; it does not follow.", moneyId);
+            return false;
+        }
     }
 
     /// <summary>A job card's payout (its own category, or made by settling a job card) follows the job card.</summary>

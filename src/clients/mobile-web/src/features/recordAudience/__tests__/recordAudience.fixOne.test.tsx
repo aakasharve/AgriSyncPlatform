@@ -12,6 +12,8 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 vi.mock('../../../i18n/LanguageContext', () => ({ useOptionalLanguage: () => ({ language: 'mr' }) }));
 vi.mock('../../../core/navigation/useBackDismiss', () => ({ useBackDismiss: () => undefined }));
+// Fix pass 2 - the row is the registrant's alone; these facts are about the sheet, so he is the registrant here.
+vi.mock('../recordHolder', () => ({ useIsFarmRegistrant: () => true }));
 vi.mock('../recordAudienceLocal', () => ({
     loadChoosablePeople: vi.fn(async () => []),
     chooseAudience: vi.fn(async () => undefined),

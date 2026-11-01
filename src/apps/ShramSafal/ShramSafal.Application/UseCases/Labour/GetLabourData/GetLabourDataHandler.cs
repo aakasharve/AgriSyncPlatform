@@ -348,6 +348,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var recordVisibility = await RecordVisibility.ForFarmAsync(repository, query.FarmId.Value, query.CallerUserId.Value, readAtUtc, ct);
         var everyFarmLog = await repository.GetDailyLogsByFarmAsync(query.FarmId, ct);
         var farmLogs = everyFarmLog.Where(l => recordVisibility.MaySeeLog(l.Id)).ToList();
+        // lane PRV fix pass 2 (D-69) — records he may see whose OWN money is kept from him: on this page their amounts are
+        // withheld (and their words when they name money), exactly as for a seat without see money; their work still counts.
+        var moneyHiddenLogIds = await RecordMoneyAccess.LogsWithHiddenMoneyAsync(repository, farmLogs, recordVisibility, ct);
         var windowLogs = farmLogs.Where(l => window.Contains(l.LogDate)).ToList();
 
         var reviewOperatorIds = new List<Guid>();
@@ -611,6 +614,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             {
                 var who = displayNameByUserId.GetValueOrDefault(l.OperatorUserId.Value, "Worker");
                 var engagements = assignmentsByLogId.GetValueOrDefault(l.Id) ?? [];
+                var moneyKept = moneyHiddenLogIds.Contains(l.Id); // D-69
 
                 // Headcount - the SAME rule §7 applies to man-days, one log
                 // wide: a known figure among unknowns is never poisoned to null,
@@ -639,6 +643,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 var tasks = engagements
                     .Select(a => a.Task)
                     .Where(t => !string.IsNullOrWhiteSpace(t))
+                    .Where(t => !moneyKept || !Services.MoneyMention.InText(t))
                     .Select(t => t!.Trim())
                     .Distinct()
                     .ToList();
@@ -680,7 +685,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                         Count: count,
                         Shift: shift,
                         Task: tasks.Count > 0 ? string.Join(SeparatorMiddot, tasks) : null,
-                        Amount: statedCosts.Count > 0 ? statedCosts.Sum() : null,
+                        Amount: !moneyKept && statedCosts.Count > 0 ? statedCosts.Sum() : null,
                         Names: names),
                     Plot: plotNames.Count > 0 ? string.Join(SeparatorMiddot, plotNames) : null,
                     PlotScope: l.Scope.ToString(),
@@ -769,6 +774,13 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             farmLogs, allAssignments, plotNameById, farmLocalToday, todaysWorkRows);
 
         var home = BuildLabourHome(allAssignments, todaysLogIdSet);
+        if (moneyHiddenLogIds.Count > 0)
+        {
+            // D-69 — the stated money of records whose own money is kept from him is not in his sums (the people are).
+            var moneyHome = BuildLabourHome(
+                allAssignments.Where(a => !moneyHiddenLogIds.Contains(a.DailyLogId)).ToList(), todaysLogIdSet);
+            home = home with { RojandariStated = moneyHome.RojandariStated, UkteAgreed = moneyHome.UkteAgreed };
+        }
 
         var topLevelIds = people.Select(p => p.Id).ToList();
 

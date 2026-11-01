@@ -3527,9 +3527,10 @@ public sealed class PushSyncBatchHandler(
     /// <summary>
     /// spec: plr-d10 lane PRV (founder D-26; orchestrator call 7, "push") — the record a change names, for every kind
     /// of change that touches an EXISTING work or money record: its tasks, words, place or day, workers, confirmation,
-    /// correction, allocation, or a photo linked to it.
+    /// correction, allocation, or a photo linked to it. Internal (fix pass 2, L4) so a test proves which changes the PUSH
+    /// gate itself refuses, apart from any later refusal by a handler.
     /// </summary>
-    private static (string Kind, Guid Id)? ChangeTarget(string mutationType, JsonElement payload)
+    internal static (string Kind, Guid Id)? ChangeTarget(string mutationType, JsonElement payload)
     {
         static Guid IdOf(JsonElement payload, string property) =>
             payload.ValueKind == JsonValueKind.Object

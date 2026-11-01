@@ -159,9 +159,11 @@ public sealed class ReviseLogContentHandler(
         var editorScope = current is null || isCreator
             ? null
             : await FarmReadGate.ScopeAsync(repository, farmId, command.ActorUserId, now, ct);
+        // lane PRV fix pass 2 (D-69) — or when the record's own money is kept from him: his copy came without its amounts.
         var copyWithoutAmounts = current is not null
             && !isCreator
-            && (command.AmountsWithheld == true || editorScope?.SeeMoney != true);
+            && (command.AmountsWithheld == true || editorScope?.SeeMoney != true
+                || await RecordMoneyAccess.MoneyHiddenFromAsync(repository, log, command.ActorUserId, now, ct));
         // lane MU-3 fix 1 (F3) / fix 2 (N4 = D-67) — his copy came WITHOUT the record's words when his phone says so
         // (wordsWithheld), when he may not hear words at all (RecordWordsGate), or when the record mentions money and his
         // seat does not see wages now: their absence from his edit is not a deletion either.
@@ -361,11 +363,15 @@ public sealed class ReviseLogContentHandler(
         ReviseLogContentResultDto answer, DailyLog log, Guid actor, DateTime now, CancellationToken ct)
     {
         var scope = await FarmReadGate.ScopeAsync(repository, (Guid)log.FarmId, actor, now, ct);
+        // lane PRV fix pass 2 (D-69) — money kept from him never rides his answer, and its record comes back as for a seat
+        // without see money.
+        var visibility = await RecordVisibility.ForFarmAsync(repository, (Guid)log.FarmId, actor, now, ct);
         return answer with
         {
-            Log = ReadScopeProjection.Record(answer.Log, scope, actor),
-            MoneyChanged = ReadScopeProjection.Money(answer.MoneyChanged, scope),
-            MoneyCorrections = ReadScopeProjection.Money(answer.MoneyCorrections, scope),
+            Log = ReadScopeProjection.Record(answer.Log, RecordMoneyAccess.ScopeFor(answer.Log, scope, visibility), actor),
+            MoneyChanged = ReadScopeProjection.Money(answer.MoneyChanged.Where(m => visibility.MaySeeCost(m.Id)).ToList(), scope),
+            MoneyCorrections = ReadScopeProjection.Money(
+                answer.MoneyCorrections.Where(c => visibility.MaySeeCost(c.CostEntryId)).ToList(), scope),
         };
     }
 }

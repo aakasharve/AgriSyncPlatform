@@ -43,7 +43,9 @@ public sealed record MyFarmProjection(
 /// check. <c>Shift</c> is <c>null</c> when the engagement made no day claim
 /// ("no claim → no question", GetLabourDataHandler.cs agreement idiom).
 /// </summary>
-public sealed record AttendanceEngagementFact(Guid LabourAssignmentId, string? Task, LabourShift? Shift);
+/// <param name="DailyLogId">spec: plr-d10 lane PRV fix pass 2 (N1) — the record the engagement belongs to, so a check
+/// asks only the engagements on records the sender may see. Empty only from a test double that does not say.</param>
+public sealed record AttendanceEngagementFact(Guid LabourAssignmentId, string? Task, LabourShift? Shift, Guid DailyLogId = default);
 
 public interface IShramSafalRepository
 {
@@ -506,6 +508,14 @@ public interface IShramSafalRepository
     /// </summary>
     async Task<IReadOnlyList<DailyLog>> GetDailyLogsForFarmByIdsAsync(FarmId farmId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
         => (await GetDailyLogsByFarmAsync(farmId, ct)).Where(l => ids.Contains(l.Id)).ToList();
+
+    /// <summary>
+    /// spec: plr-d10 lane PRV fix pass 2 (D-69) — the farm's records made from one voice parse (<c>source_ai_job_id</c>):
+    /// its words and amounts are theirs. The default body filters <see cref="GetDailyLogsByFarmAsync"/> so the in-tree
+    /// test doubles keep working; production overrides it with one bounded, untracked query.
+    /// </summary>
+    async Task<IReadOnlyList<DailyLog>> GetDailyLogsBySourceAiJobAsync(FarmId farmId, Guid aiJobId, CancellationToken ct = default)
+        => (await GetDailyLogsByFarmAsync(farmId, ct)).Where(l => l.SourceAiJobId == aiJobId).ToList();
 
     /// <summary>
     /// Returns <see cref="PlannedActivity"/> records for all crop cycles on the given farm

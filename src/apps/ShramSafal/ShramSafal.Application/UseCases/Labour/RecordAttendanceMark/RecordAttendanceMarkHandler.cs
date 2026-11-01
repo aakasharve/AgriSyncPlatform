@@ -108,11 +108,24 @@ public sealed class RecordAttendanceMarkHandler(
         }
 
         // 4 — the pre-persistence semantic check, strictly before staging.
+        // spec: plr-d10 lane PRV fix pass 2 (N1) — asked ONLY of the engagements on records the sender may see: a record
+        // kept from him never refuses his mark, and nothing of it (words, id, shift, existence) is in his answer. What a
+        // record kept from him would have contradicted is not lost: the mark is recorded and the disagreement is flagged
+        // for the people who may see that record (FlagRestrictedDisagreementAsync, below), and when one of them marks or
+        // amends this person's day, the full check (he sees every record) asks him to rule.
+        var restrictedDisagreement = false;
+        IReadOnlyList<Guid> restrictedLogIds = [];
         if (command.ResolvedLabourAssignmentId is null)
         {
-            var facts = await repository.GetAttendanceEngagementFactsAsync(
+            var allFacts = await repository.GetAttendanceEngagementFactsAsync(
                 new FarmId(command.FarmId), command.FieldOperatorId, command.WorkDate, ct);
+            var visibility = await RecordVisibility.ForFarmAsync(repository, command.FarmId, command.RecordedByUserId, now, ct);
+            var facts = allFacts.Where(f => visibility.MaySeeLog(f.DailyLogId)).ToList();
             var claiming = facts.Where(f => f.Shift is not null).ToList();
+            restrictedDisagreement = allFacts.Count != facts.Count
+                && allFacts.Where(f => f.Shift is not null).Select(f => f.Shift!.Value).Distinct().Count() > 1
+                && claiming.Select(f => f.Shift!.Value).Distinct().Count() <= 1;
+            restrictedLogIds = allFacts.Where(f => !visibility.MaySeeLog(f.DailyLogId)).Select(f => f.DailyLogId).Distinct().ToList();
 
             // B003 (3.3 review, carried to 3.5): a shift value this check does
             // not know is a broken producer. Mapping it onto a blank candidate
@@ -185,6 +198,11 @@ public sealed class RecordAttendanceMarkHandler(
                 await FlagAcceptedAfterAuthorityEndedAsync(command, mark.Id, authorityEndedAtUtc, now, ct);
             }
 
+            if (restrictedDisagreement)
+            {
+                await FlagRestrictedDisagreementAsync(command, mark.Id, restrictedLogIds, now, ct);
+            }
+
             await repository.SaveChangesAsync(ct);
             return Result.Success(new RecordAttendanceMarkResult(
                 AttendanceDayOutcome.Recorded, mark.Id, Contradiction: null));
@@ -243,6 +261,11 @@ public sealed class RecordAttendanceMarkHandler(
             await repository.AddAttendanceMarkCorrectionAsync(row, ct);
         }
 
+        if (restrictedDisagreement)
+        {
+            await FlagRestrictedDisagreementAsync(command, existing.Id, restrictedLogIds, now, ct);
+        }
+
         await repository.SaveChangesAsync(ct);
         return Result.Success(new RecordAttendanceMarkResult(
             AttendanceDayOutcome.Recorded, existing.Id, Contradiction: null));
@@ -270,6 +293,40 @@ public sealed class RecordAttendanceMarkHandler(
                     workDate = command.WorkDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
                     authority = FarmAuthorities.NameOf(FarmAuthority.TakeAttendance),
                     authorityEndedAtUtc = endedAtUtc,
+                    receivedAtUtc = now,
+                },
+                farmId: command.FarmId,
+                clientCommandId: null,
+                appVersion: AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current,
+                deviceId: "unknown",
+                ipHash: "sha256:unknown"),
+            ct);
+
+    /// <summary>
+    /// lane PRV fix pass 2 (N1) — the owner's flag when a mark was recorded although the day's engagements disagree once
+    /// the records kept from its sender are counted too. An audit row in the SAME unit of work as the mark, naming the
+    /// person, the day and the records that disagree: because it names them, the audit routes give it only to someone who
+    /// may see every one of them (RecordVisibility.MentionsHidden) — the holder always, the sender never. The disagreement
+    /// itself also stays where it lives: the holder's labour page shows this mark beside his own record, and his next mark
+    /// of that day asks him to rule (the full check: he sees every record).
+    /// </summary>
+    public const string RestrictedDisagreementAction = "AttendanceMarkDisagreesWithRestrictedRecord";
+
+    private Task FlagRestrictedDisagreementAsync(
+        RecordAttendanceMarkCommand command, Guid markId, IReadOnlyList<Guid> restrictedLogIds, DateTime now, CancellationToken ct) =>
+        repository.AddAuditEventAsync(
+            Domain.Audit.AuditEventFactory.Create(
+                entityType: "AttendanceMark",
+                entityId: markId,
+                action: RestrictedDisagreementAction,
+                actorUserId: command.RecordedByUserId,
+                actorRole: "member",
+                payload: new
+                {
+                    attendanceMarkId = markId,
+                    fieldOperatorId = command.FieldOperatorId,
+                    workDate = command.WorkDate.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+                    disagreeingDailyLogIds = restrictedLogIds,
                     receivedAtUtc = now,
                 },
                 farmId: command.FarmId,

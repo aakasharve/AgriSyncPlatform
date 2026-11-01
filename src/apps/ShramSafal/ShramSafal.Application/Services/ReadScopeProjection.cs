@@ -114,9 +114,15 @@ public static class ReadScopeProjection
         Ports.IShramSafalRepository repository, DailyLogDto dto, Guid readerUserId, DateTime atUtc, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
-        return readerUserId != Guid.Empty && dto.OperatorUserId == readerUserId
-            ? dto
-            : Record(dto, await FarmReadGate.ScopeAsync(repository, dto.FarmId, readerUserId, atUtc, ct), readerUserId);
+        if (readerUserId != Guid.Empty && dto.OperatorUserId == readerUserId)
+        {
+            return dto;
+        }
+
+        // lane PRV fix pass 2 (D-69) — a record whose own money is kept from him: as for a seat without see money.
+        var scope = await FarmReadGate.ScopeAsync(repository, dto.FarmId, readerUserId, atUtc, ct);
+        var visibility = await RecordVisibility.ForFarmAsync(repository, dto.FarmId, readerUserId, atUtc, ct);
+        return Record(dto, RecordMoneyAccess.ScopeFor(dto, scope, visibility), readerUserId);
     }
 
     /// <summary>

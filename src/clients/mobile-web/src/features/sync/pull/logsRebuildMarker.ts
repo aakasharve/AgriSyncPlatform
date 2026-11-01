@@ -48,7 +48,9 @@ export async function markLogsRebuilt(db: AgriLogDatabase, atIso: string): Promi
  * entry's plot / day, a worker-count correction), and the request that brings that version back.
  *
  * The server REFUSED a queued move / worker-count change of an entry, so the entry must show
- * the server's version again. The pull is a delta and this phone's cursor has already gone past that version (its pull
+ * the server's version again. lane PRV fix pass 2 — a refused choice of who sees a record (`set_record_audience`) too:
+ * the phone showed his choice at once, so a refusal puts the record's audience back as the server has it (the lock chip
+ * never shows a choice the server refused). The pull is a delta and this phone's cursor has already gone past that version (its pull
  * was held off the entry while the change waited), so the ONE full rebuild above is asked for once more: the next pull
  * (in the same sync cycle) starts from the beginning and re-merges every entry that holds no unsent change. Rare by
  * nature (a refusal), and the marker is written again by that pull.
@@ -56,6 +58,7 @@ export async function markLogsRebuilt(db: AgriLogDatabase, atIso: string): Promi
 export const REFUSAL_RESTORES_SERVER_VERSION: ReadonlySet<string> = new Set([
     SyncMutationName.MoveDailyLog,
     SyncMutationName.CorrectLabourAssignment,
+    SyncMutationName.SetRecordAudience,
 ]);
 
 export async function requestLogsRebuild(db: AgriLogDatabase): Promise<void> {

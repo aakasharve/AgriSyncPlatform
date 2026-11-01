@@ -409,6 +409,14 @@ public sealed partial class RecordAudienceRealPostgresTests(ITestOutputHelper ou
 
         await using (var db = ChainContext())
         {
+            // Fix pass 2 (L8) — the cause of the old 42703 "date_key", named and pinned: that combined run still stepped
+            // down through NewSuperuserContext, whose history table (ssf.__ef_migrations) the integration chain never
+            // writes (the chain migrates through the context's own default table). EF saw NO migration applied and replayed
+            // every Up from the start: 20260218073025_FinanceV2's CREATE TABLE IF NOT EXISTS day_ledgers was skipped on
+            // today's table, and its index on the long-gone date_key failed. Not order: every fact has its own scratch
+            // database. This context reads the history the chain wrote, so it knows what is applied.
+            (await db.Database.GetAppliedMigrationsAsync()).Should().Contain("20261101110309_AddRecordAudience",
+                "the step down must read the history the chain wrote, or it replays every migration (the old 42703)");
             await db.Database.GetService<IMigrator>().MigrateAsync("20261031021129_SplitFarmAuthorities");
         }
 

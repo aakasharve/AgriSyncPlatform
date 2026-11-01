@@ -613,16 +613,20 @@ public sealed class PullSyncChangesHandler(
             // lane MU-3 — a record's task lines carry its stated money in their notes ("Cost: ₹…"): for a
             // reader who may not see the farm's money (and did not make the record) those parts are dropped.
             dailyLogs
-                .Select(l => WithAudience(
-                    ReadScopeProjection.Record(
-                        l.ToDto(
-                            labourByLogId.TryGetValue(l.Id, out var labour) ? labour : [],
-                            contentDtoByLogId.GetValueOrDefault(l.Id)),
-                        window.ScopeOf((Guid)l.FarmId),
-                        query.UserId),
-                    l.Audience,
-                    window.ScopeOf((Guid)l.FarmId),
-                    audience.Visibility.Restricted(Domain.RecordPrivacy.RecordKinds.DailyLog, l.Id)))
+                .Select(l =>
+                {
+                    var dto = l.ToDto(
+                        labourByLogId.TryGetValue(l.Id, out var labour) ? labour : [],
+                        contentDtoByLogId.GetValueOrDefault(l.Id));
+                    // lane PRV fix pass 2 (D-69) — a record whose own money is kept from him is projected as for a seat
+                    // without see money: no amount, and no words when it mentions money.
+                    var scope = window.ScopeOf((Guid)l.FarmId);
+                    return WithAudience(
+                        ReadScopeProjection.Record(dto, RecordMoneyAccess.ScopeFor(dto, scope, audience.Visibility), query.UserId),
+                        l.Audience,
+                        scope,
+                        audience.Visibility.Restricted(Domain.RecordPrivacy.RecordKinds.DailyLog, l.Id));
+                })
                 .ToList(),
             attachments.Select(a => a.ToDto()).ToList(),
             costEntries
