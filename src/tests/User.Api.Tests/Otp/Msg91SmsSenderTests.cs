@@ -51,8 +51,9 @@ public sealed class Msg91SmsSenderTests
         var result = await Create(handler).SendOtpAsync("919999999999", "123456");
 
         result.IsSuccess.Should().BeTrue();
-        result.Value.ProviderRequestId.Should().Be("abc123");
-        result.Value.ProviderName.Should().Be("msg91");
+        var receipt = result.Value!;
+        receipt.ProviderRequestId.Should().Be("abc123");
+        receipt.ProviderName.Should().Be("msg91");
 
         var request = handler.Request!;
         request.Method.Should().Be(HttpMethod.Post);
