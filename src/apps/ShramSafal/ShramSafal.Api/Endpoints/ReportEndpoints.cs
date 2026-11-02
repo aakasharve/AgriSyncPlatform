@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Reports.GetFarmWeekMis;
 
 namespace ShramSafal.Api.Endpoints;
@@ -18,11 +19,18 @@ public static class ReportEndpoints
             Guid farmId,
             ClaimsPrincipal user,
             GetFarmWeekMisHandler handler,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the farm's scope first (the route answered 500 without it).
+            if (await RouteFarmScope.OpenAsync(farmScope, farmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             var result = await handler.HandleAsync(

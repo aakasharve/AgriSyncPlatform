@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Schedules.AbandonSchedule;
 using ShramSafal.Application.UseCases.Schedules.AdoptSchedule;
 using ShramSafal.Application.UseCases.Schedules.CompleteSchedule;
@@ -28,11 +29,18 @@ public static class ScheduleEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             AdoptScheduleHandler handler,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the farm the request names: its scope first (the route answered 500 without it).
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -65,11 +73,18 @@ public static class ScheduleEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             MigrateScheduleHandler handler,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the farm the request names: its scope first (the route answered 500 without it).
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             if (!Enum.TryParse<ScheduleMigrationReason>(request.Reason, ignoreCase: true, out var reason))
@@ -114,11 +129,18 @@ public static class ScheduleEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             AbandonScheduleHandler handler,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the farm the request names: its scope first (the route answered 500 without it).
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -150,11 +172,18 @@ public static class ScheduleEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             CompleteScheduleHandler handler,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the farm the request names: its scope first (the route answered 500 without it).
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -183,6 +212,12 @@ public static class ScheduleEndpoints
 
     private static IResult ToErrorResult(Error error)
     {
+        // lane F99 (MU-4 review R3-L4) — the plot rule's refusal carries its code and words, as the job-card and test routes do.
+        if (PlotRefusalResult.For(error) is { } plotRefusal)
+        {
+            return plotRefusal;
+        }
+
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : error.Code.EndsWith("Forbidden", StringComparison.Ordinal)

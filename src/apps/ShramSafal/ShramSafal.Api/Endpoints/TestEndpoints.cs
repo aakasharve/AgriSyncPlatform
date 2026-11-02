@@ -87,6 +87,7 @@ public static class TestEndpoints
             IShramSafalRepository repository,
             ICallerUserTenantScope userScope,
             AgriSync.BuildingBlocks.Abstractions.IClock clock,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -125,6 +126,13 @@ public static class TestEndpoints
                 return ToErrorResult(refused);
             }
 
+            // lane F99 — the gate above ran under his user scope; the handler WRITES the farm's due dates, so the farm's
+            // own scope is opened for it (its insert was refused by the row policy without it: 500 for everyone).
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is { } unopened)
+            {
+                return ToErrorResult(unopened);
+            }
+
             var stages = (request.Stages ?? Array.Empty<ScheduleTestStageRequest>())
                 .Select(s => new CropCycleStageInfo(s.StageName, s.StartDate, s.EndDate))
                 .ToList();
@@ -156,11 +164,20 @@ public static class TestEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             RecordTestCollectedHandler handler,
+            ITestInstanceRepository instanceRepository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the test's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenTestFarmAsync(id, actorUserId, instanceRepository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -188,11 +205,20 @@ public static class TestEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             RecordTestResultHandler handler,
+            ITestInstanceRepository instanceRepository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the test's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenTestFarmAsync(id, actorUserId, instanceRepository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             var results = (request.Results ?? Array.Empty<RecordTestResultEntryRequest>())
@@ -239,11 +265,20 @@ public static class TestEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<WaiveTestInstanceCommand> handler,
+            ITestInstanceRepository instanceRepository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the test's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenTestFarmAsync(id, actorUserId, instanceRepository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -401,6 +436,22 @@ public static class TestEndpoints
 
         return group;
     }
+
+    /// <summary>lane F99 — a test's farm, found under the caller's own scope (another farm's test is not found), then its scope.</summary>
+    private static Task<Error?> OpenTestFarmAsync(
+        Guid id,
+        Guid callerUserId,
+        ITestInstanceRepository instanceRepository,
+        ICallerUserTenantScope userScope,
+        ICallerFarmTenantScope farmScope,
+        CancellationToken ct) =>
+        RouteFarmScope.OpenForRecordAsync(
+            userScope,
+            farmScope,
+            callerUserId,
+            async token => (await instanceRepository.GetByIdAsync(id, token))?.FarmId.Value,
+            ShramSafal.Domain.Common.ShramSafalErrors.TestInstanceNotFound,
+            ct);
 
     /// <summary>
     /// lane MU-3 fix 1 — null when the caller reads lab records on <paramref name="farmId"/> (the farm scope is

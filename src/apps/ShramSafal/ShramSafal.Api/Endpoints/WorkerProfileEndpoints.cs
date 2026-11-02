@@ -69,6 +69,7 @@ public static class WorkerProfileEndpoints
             Guid userId,
             ClaimsPrincipal user,
             GetWorkerReputationHandler handler,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -78,7 +79,10 @@ public static class WorkerProfileEndpoints
                 WorkerUserId: new UserId(userId),
                 CallerUserId: new UserId(actorUserId));
 
-            var result = await handler.HandleAsync(query, ct);
+            // lane F99 — a reputation names no farm (and must not: see above), so it is read under the caller's OWN user
+            // scope, as the profile is when no farm is named: he sees only the farms he is on. The route opened no scope
+            // before: its first read failed closed, 500 for everyone.
+            var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(query, token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetWorkerReputation");

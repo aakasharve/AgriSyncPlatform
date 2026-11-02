@@ -18,6 +18,9 @@ public static class PlanningEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             GeneratePlanFromTemplateHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -25,7 +28,21 @@ public static class PlanningEndpoints
                 return Results.Unauthorized();
             }
 
-            var activities = request.Activities
+            // lane F99 — the season's farm, found under his own scope, then its scope (the route answered 500 without it). The
+            // handler then asks its own rules (membership, the plot rule), as before.
+            if (await RouteFarmScope.OpenForRecordAsync(
+                    userScope,
+                    farmScope,
+                    actorUserId,
+                    async token => (await repository.GetCropCycleByIdAsync(request.CropCycleId, token))?.FarmId.Value,
+                    ShramSafal.Domain.Common.ShramSafalErrors.CropCycleNotFound,
+                    ct) is { } refused)
+            {
+                return ToErrorResult(refused);
+            }
+
+            // lane F99 — a body with no activities is the handler's own answer, never a null read (500).
+            var activities = (request.Activities ?? [])
                 .Select(a => new TemplateActivityInput(a.ActivityName, a.OffsetDays))
                 .ToList();
 
@@ -218,6 +235,12 @@ public static class PlanningEndpoints
 
     private static IResult ToErrorResult(Error error)
     {
+        // lane F99 (MU-4 review R3-L4) — the plot rule's refusal carries its code and words, as the job-card and test routes do.
+        if (PlotRefusalResult.For(error) is { } plotRefusal)
+        {
+            return plotRefusal;
+        }
+
         // lane MU-3 fix 1 — a refusal is a refusal (403), never a malformed request.
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {

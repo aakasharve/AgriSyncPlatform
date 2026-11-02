@@ -169,10 +169,20 @@ public static class ScheduleTemplateEndpoints
 
         group.MapGet("/schedule-templates/{rootId}/lineage", async (
             Guid rootId,
+            ClaimsPrincipal user,
             GetScheduleLineageHandler handler,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(new GetScheduleLineageQuery(rootId), ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // lane F99 — a template's lineage belongs to no farm, so it is read under the caller's own user scope (the route
+            // opened none: its first read failed closed, 500 for everyone).
+            var result = await userScope.RunForCallerAsync(
+                actorUserId, token => handler.HandleAsync(new GetScheduleLineageQuery(rootId), token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetScheduleLineage");

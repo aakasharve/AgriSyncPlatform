@@ -163,6 +163,12 @@ public static class PlannedActivityEndpoints
 
     private static IResult ToErrorResult(Error error)
     {
+        // lane F99 (MU-4 review R3-L4) — the plot rule's refusal carries its code and words, as the job-card and test routes do.
+        if (PlotRefusalResult.For(error) is { } plotRefusal)
+        {
+            return plotRefusal;
+        }
+
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
             ? Results.NotFound(new { error = error.Code, message = error.Description })
             : error.Code.EndsWith("Forbidden", StringComparison.Ordinal)

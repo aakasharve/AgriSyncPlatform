@@ -125,6 +125,9 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
 
     protected ITestOutputHelper Output => output;
 
+    /// <summary>lane F99 — the real host's services (its route table, for the route sweep).</summary>
+    protected IServiceProvider HostServices => _app!.Services;
+
     public async Task InitializeAsync()
     {
         _rootConn = await RequiresPostgresConnection.ResolveReachableConnectionOrThrowAsync();
@@ -522,7 +525,12 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
     }
 
-    private static async Task<WebApplication> BuildHostAsync(string appConn)
+    /// <summary>lane F99 — what the production host registers outside the module (Program.cs), for a subclass that needs it.</summary>
+    protected virtual void AddHostServices(IServiceCollection services)
+    {
+    }
+
+    private async Task<WebApplication> BuildHostAsync(string appConn)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         builder.WebHost.UseTestServer();
@@ -540,6 +548,7 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
         builder.Services.AddAnalytics(o => o.UseInMemoryDatabase($"mu3-analytics-{Guid.NewGuid()}"));
         builder.Services.AddShramSafalApi(builder.Configuration);
         builder.Services.AddScoped<IEntitlementPolicy, AllowAllEntitlementPolicy>();
+        AddHostServices(builder.Services);
 
         var app = builder.Build();
         app.UseAuthentication();

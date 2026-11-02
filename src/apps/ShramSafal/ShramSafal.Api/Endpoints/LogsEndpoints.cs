@@ -34,11 +34,18 @@ public static class LogsEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<CreateDailyLogCommand, DailyLogDto> handler,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the farm the record is for: its scope first (the route answered 500 without it).
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 01.4 — capture X-App-Version
@@ -98,11 +105,20 @@ public static class LogsEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<AddLogTaskCommand, DailyLogDto> handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the record's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenLogFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -142,11 +158,20 @@ public static class LogsEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<VerifyLogCommand, DailyLogDto> handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the record's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenLogFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             if (!Enum.TryParse<VerificationStatus>(request.Status, true, out var status))
@@ -180,11 +205,19 @@ public static class LogsEndpoints
             ClaimsPrincipal user,
             IShramSafalRepository repository,
             IClock clock,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the record's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenLogFarmAsync(id, callerUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             var log = await repository.GetDailyLogByIdAsync(id, ct);
@@ -265,6 +298,9 @@ public static class LogsEndpoints
             Guid id,
             ClaimsPrincipal user,
             GetLogOriginalVoiceHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
@@ -272,16 +308,16 @@ public static class LogsEndpoints
                 return Results.Unauthorized();
             }
 
+            // lane F99 — the record's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenLogFarmAsync(id, callerUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return OriginalVoiceRefusal(refused);
+            }
+
             var result = await handler.HandleAsync(new GetLogOriginalVoiceQuery(id, callerUserId), ct);
             if (!result.IsSuccess)
             {
-                var body = new { error = result.Error.Code, message = result.Error.Description };
-                return result.Error.Kind switch
-                {
-                    ErrorKind.NotFound => Results.NotFound(body),
-                    ErrorKind.Forbidden => Results.Json(body, statusCode: StatusCodes.Status403Forbidden),
-                    _ => Results.BadRequest(body),
-                };
+                return OriginalVoiceRefusal(result.Error);
             }
 
             var voice = result.Value!;
@@ -306,8 +342,41 @@ public static class LogsEndpoints
         return group;
     }
 
+    /// <summary>lane F99 — a record's farm, found under the caller's own scope (another farm's record is not found), then its scope.</summary>
+    private static Task<Error?> OpenLogFarmAsync(
+        Guid id,
+        Guid callerUserId,
+        IShramSafalRepository repository,
+        ICallerUserTenantScope userScope,
+        ICallerFarmTenantScope farmScope,
+        CancellationToken ct) =>
+        RouteFarmScope.OpenForRecordAsync(
+            userScope,
+            farmScope,
+            callerUserId,
+            async token => (await repository.GetDailyLogByIdAsync(id, token))?.FarmId.Value,
+            ShramSafal.Domain.Common.ShramSafalErrors.DailyLogNotFound,
+            ct);
+
+    private static IResult OriginalVoiceRefusal(Error error)
+    {
+        var body = new { error = error.Code, message = error.Description };
+        return error.Kind switch
+        {
+            ErrorKind.NotFound => Results.NotFound(body),
+            ErrorKind.Forbidden => Results.Json(body, statusCode: StatusCodes.Status403Forbidden),
+            _ => Results.BadRequest(body),
+        };
+    }
+
     private static IResult ToErrorResult(Error error)
     {
+        // lane F99 (MU-4 review R3-L4) — the plot rule's refusal carries its code and words, as the job-card and test routes do.
+        if (PlotRefusalResult.For(error) is { } plotRefusal)
+        {
+            return plotRefusal;
+        }
+
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {
             return Results.Forbid();

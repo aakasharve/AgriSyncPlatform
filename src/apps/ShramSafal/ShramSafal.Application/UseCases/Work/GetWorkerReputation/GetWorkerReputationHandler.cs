@@ -40,6 +40,19 @@ public sealed class GetWorkerReputationHandler(
         var callerFarmIds = await repository.GetFarmIdsForUserAsync(query.CallerUserId.Value, ct);
         var workerFarmIds = await repository.GetFarmIdsForUserAsync(query.WorkerUserId.Value, ct);
 
+        // spec: plr-d10 lane F99 (MU-4 review R3-L1, §11.7) — the farm that opens the lookup must be one where he reads more
+        // than his own records. A farm where he reads only his own (the कामगार label or the स्वतःचं काम scope) gives him
+        // nothing of another worker, so it may not open the worker's reputation either: otherwise, once the worker has
+        // consented to his standing travelling, that one shared farm would carry the other farms' word to a seat that may
+        // not read even this farm's word about him. The same own-records rule MU-4 fix pass 2 applied to the profile.
+        if (query.CallerUserId.Value != query.WorkerUserId.Value && callerFarmIds.Count > 0)
+        {
+            var seats = await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, callerFarmIds, ct);
+            callerFarmIds = callerFarmIds
+                .Where(id => Services.FarmReadScope.Of(id, seats.GetValueOrDefault(id), DateTime.UtcNow) is not { OwnRecordsOnly: true })
+                .ToList();
+        }
+
         // Founder ruling, 2026-08-17 — two farms of his own are one owner's own record.
         var callerOwnedFarmIds = await repository
             .GetOwnedFarmIdsForUserAsync(query.CallerUserId.Value, ct);

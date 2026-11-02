@@ -13,6 +13,7 @@
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Admin.Ports;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Privacy.RequestErasure;
 using ShramSafal.Application.UseCases.Privacy.RequestExport;
 using ShramSafal.Domain.Common;
@@ -96,6 +97,7 @@ public static class DataRightsEndpoints
     private static async Task<IResult> HandleRequestErasureAsync(
         HttpContext httpContext,
         RequestErasureHandler handler,
+        ICallerUserTenantScope userScope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId))
@@ -113,7 +115,9 @@ public static class DataRightsEndpoints
             AuditDeviceId: deviceId,
             AuditIpHash: ipHash);
 
-        var result = await handler.HandleAsync(command, ct);
+        // lane F99 — his own request about his own data names no farm, so it is written under his own user scope: the route
+        // opened none, and its write failed closed in TenantConnectionInterceptor (500 for everyone, the request not kept).
+        var result = await userScope.RunForCallerAsync(userId, token => handler.HandleAsync(command, token), ct);
         if (!result.IsSuccess)
         {
             return ToErrorResult(result.Error);
@@ -126,6 +130,7 @@ public static class DataRightsEndpoints
     private static async Task<IResult> HandleRequestExportAsync(
         HttpContext httpContext,
         RequestExportHandler handler,
+        ICallerUserTenantScope userScope,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId))
@@ -142,7 +147,8 @@ public static class DataRightsEndpoints
             AuditDeviceId: deviceId,
             AuditIpHash: ipHash);
 
-        var result = await handler.HandleAsync(command, ct);
+        // lane F99 — the same: his own export request is written under his own user scope (it failed closed: 500).
+        var result = await userScope.RunForCallerAsync(userId, token => handler.HandleAsync(command, token), ct);
         if (!result.IsSuccess)
         {
             return ToErrorResult(result.Error);

@@ -73,11 +73,18 @@ public static class FinanceEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<AddCostEntryCommand, AddCostEntryResultDto> handler,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the farm the money is for: its scope first (the route answered 500 without it).
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 01.4 — X-App-Version (fallback
@@ -120,11 +127,20 @@ public static class FinanceEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             AllocateGlobalExpenseHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the expense's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenCostFarmAsync(request.CostEntryId, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -135,7 +151,8 @@ public static class FinanceEndpoints
             var command = new AllocateGlobalExpenseCommand(
                 request.CostEntryId,
                 request.AllocationBasis,
-                request.Allocations
+                // lane F99 — a body with no allocations is the handler's InvalidCommand (400), never a null read (500).
+                (request.Allocations ?? [])
                     .Select(a => new AllocateGlobalExpenseAllocationCommand(a.PlotId, a.Amount))
                     .ToList(),
                 actorUserId,
@@ -158,11 +175,20 @@ public static class FinanceEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             CorrectCostEntryHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the entry's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenCostFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
@@ -256,6 +282,7 @@ public static class FinanceEndpoints
             ClaimsPrincipal user,
             IShramSafalRepository repository,
             IClock clock,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -272,6 +299,13 @@ public static class FinanceEndpoints
                     error = "ShramSafal.InvalidCommand",
                     message = "Request is invalid."
                 });
+            }
+
+            // lane F99 — the farm's scope first (the route answered 500 without it): its gate refuses a farm he is not an
+            // active member of, as the membership check below did.
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is not null)
+            {
+                return Results.Forbid();
             }
 
             var canReadFarm = await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, ct);
@@ -309,6 +343,10 @@ public static class FinanceEndpoints
             // spec: plr-d10 lane PRV fix pass 1 (L4) — a money record kept from him is never matched, so its id never
             // reaches him (and whether it exists is not told either). The window is bounded as before.
             var visibility = await ShramSafal.Application.Services.RecordVisibility.ForFarmAsync(repository, request.FarmId, actorUserId, clock.UtcNow, ct);
+            // lane F99 — the route answers now (it failed closed before), so it must not become a way to ask about money he
+            // may not see: it matches only the money the pull sends him — any money with see money, on the plots he covers
+            // (MU-3; MU-4), and always his own submissions (MU-4 M5).
+            var readScope = await ShramSafal.Application.Services.FarmReadGate.ScopeAsync(repository, request.FarmId, actorUserId, clock.UtcNow, ct);
             var existing = (await repository.GetCostEntriesForDuplicateCheck(
                     new FarmId(request.FarmId),
                     request.PlotId,
@@ -316,6 +354,9 @@ public static class FinanceEndpoints
                     clock.UtcNow.AddMinutes(-Math.Min(windowMinutes, 24 * 60)),
                     ct))
                 .Where(entry => visibility.MaySeeCost(entry.Id))
+                .Where(entry => entry.CreatedByUserId.Value == actorUserId
+                    || (readScope is { SeeMoney: true } money
+                        && (entry.PlotId is { } plot ? money.CoversPlot(plot) : money.PlotIds is null)))
                 .ToList();
 
             var isDuplicate = DuplicateDetector.IsPotentialDuplicate(existing, candidate, windowMinutes);
@@ -334,8 +375,30 @@ public static class FinanceEndpoints
         return group;
     }
 
+    /// <summary>lane F99 — a cost entry's farm, found under the caller's own scope (another farm's is not found), then its scope.</summary>
+    private static Task<Error?> OpenCostFarmAsync(
+        Guid costEntryId,
+        Guid callerUserId,
+        IShramSafalRepository repository,
+        ICallerUserTenantScope userScope,
+        ICallerFarmTenantScope farmScope,
+        CancellationToken ct) =>
+        RouteFarmScope.OpenForRecordAsync(
+            userScope,
+            farmScope,
+            callerUserId,
+            async token => (await repository.GetCostEntryByIdAsync(costEntryId, token))?.FarmId.Value,
+            ShramSafalErrors.CostEntryNotFound,
+            ct);
+
     private static IResult ToErrorResult(Error error)
     {
+        // lane F99 (MU-4 review R3-L4) — the plot rule's refusal carries its code and words, as the job-card and test routes do.
+        if (PlotRefusalResult.For(error) is { } plotRefusal)
+        {
+            return plotRefusal;
+        }
+
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {
             return Results.Forbid();

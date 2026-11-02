@@ -14,6 +14,7 @@ using ShramSafal.Application.UseCases.Work.StartJobCard;
 using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Work;
 
 namespace ShramSafal.Api.Endpoints;
@@ -31,10 +32,15 @@ public static class JobCardEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             CreateJobCardHandler handler,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the farm the card is for: its scope first (the route answered 500 without it).
+            if (await RouteFarmScope.OpenAsync(farmScope, request.FarmId, actorUserId, ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent row.
@@ -67,10 +73,17 @@ public static class JobCardEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             AssignJobCardHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the card's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenCardFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent row.
@@ -98,10 +111,17 @@ public static class JobCardEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             StartJobCardHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the card's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenCardFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent row.
@@ -132,10 +152,17 @@ public static class JobCardEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<CompleteJobCardCommand, CompleteJobCardResult> handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the card's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenCardFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent row.
@@ -163,10 +190,17 @@ public static class JobCardEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             VerifyJobCardForPayoutHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the card's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenCardFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent row.
@@ -198,10 +232,17 @@ public static class JobCardEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<SettleJobCardPayoutCommand, SettleJobCardPayoutResult> handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the card's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenCardFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 01.4 — capture X-App-Version
             // (fallback "unknown") so the labour-payout CostEntry's
@@ -239,10 +280,17 @@ public static class JobCardEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<CancelJobCardCommand, CancelJobCardResult> handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the card's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await OpenCardFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent row.
@@ -341,6 +389,22 @@ public static class JobCardEndpoints
 
         return group;
     }
+
+    /// <summary>lane F99 — a card's farm, found under the caller's own scope (another farm's card is not found), then its scope.</summary>
+    private static Task<Error?> OpenCardFarmAsync(
+        Guid id,
+        Guid callerUserId,
+        IShramSafalRepository repository,
+        ICallerUserTenantScope userScope,
+        ICallerFarmTenantScope farmScope,
+        CancellationToken ct) =>
+        RouteFarmScope.OpenForRecordAsync(
+            userScope,
+            farmScope,
+            callerUserId,
+            async token => (await repository.GetJobCardByIdAsync(id, token))?.FarmId.Value,
+            ShramSafalErrors.JobCardNotFound,
+            ct);
 
     private static IResult ToErrorResult(Error error)
     {

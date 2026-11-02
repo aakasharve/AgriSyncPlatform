@@ -108,6 +108,7 @@ public static class AiEndpoints
             Guid sessionId,
             ClaimsPrincipal user,
             GetDocumentSessionHandler handler,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -115,7 +116,10 @@ public static class AiEndpoints
                 return Results.Unauthorized();
             }
 
-            var result = await handler.HandleAsync(new GetDocumentSessionQuery(sessionId, actorUserId), ct);
+            // lane F99 — a document session is the caller's own (the handler answers only its owner), so it is read under
+            // his own user scope: the route opened none, and its first read failed closed (500 for everyone).
+            var result = await userScope.RunForCallerAsync(
+                actorUserId, token => handler.HandleAsync(new GetDocumentSessionQuery(sessionId, actorUserId), token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetDocumentSession")
@@ -131,11 +135,21 @@ public static class AiEndpoints
             HttpContext http,
             IEntitlementResolver resolver,
             GetAiJobStatusHandler handler,
+            IShramSafalRepository repository,
+            IAiJobRepository jobs,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(http.User, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // lane F99 — the job's farm, found among his own farms, then its scope (the route answered 500 without it).
+            if (await OpenAiJobFarmAsync(jobId, actorUserId, repository, jobs, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             var scope = await AdminScopeHelper.TryResolveSilentlyAsync(http, resolver, ct);
@@ -1514,6 +1528,39 @@ public static class AiEndpoints
             config.ModifiedAtUtc,
             config.ModifiedByUserId
         };
+    }
+
+    /// <summary>
+    /// lane F99 — an AI job's farm, then its scope. <c>ssf.ai_jobs</c> has no read policy keyed on the caller (only the
+    /// farm's), so the job is looked for under each farm he is an active member of in turn (the farms are found under his
+    /// own user scope, and each scope is opened by <see cref="RouteFarmScope"/>'s gate): a job of a farm he is not on is
+    /// not found, exactly like a made-up id (E4), and answered as the handler answers one.
+    /// </summary>
+    private static async Task<Error?> OpenAiJobFarmAsync(
+        Guid jobId,
+        Guid callerUserId,
+        IShramSafalRepository repository,
+        IAiJobRepository jobs,
+        ICallerUserTenantScope userScope,
+        ICallerFarmTenantScope farmScope,
+        CancellationToken ct)
+    {
+        if (jobId == Guid.Empty)
+        {
+            return ShramSafalErrors.InvalidCommand;
+        }
+
+        var farms = await userScope.RunForCallerAsync(callerUserId, token => repository.GetFarmIdsForUserAsync(callerUserId, token), ct);
+        foreach (var farm in farms.Distinct())
+        {
+            if (await RouteFarmScope.OpenAsync(farmScope, farm, callerUserId, ct) is null
+                && await jobs.GetByIdAsync(jobId, ct) is not null)
+            {
+                return null;
+            }
+        }
+
+        return GetAiJobStatusHandler.AiJobNotFound;
     }
 
     /// <summary>

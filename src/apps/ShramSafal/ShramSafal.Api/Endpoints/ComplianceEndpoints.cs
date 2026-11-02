@@ -79,10 +79,23 @@ public static class ComplianceEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<AcknowledgeSignalCommand> handler,
+            IComplianceSignalRepository signals,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the warning's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await RouteFarmScope.OpenForRecordAsync(
+                    userScope,
+                    farmScope,
+                    actorUserId,
+                    async token => (await signals.GetByIdAsync(signalId, token))?.FarmId.Value,
+                    ShramSafal.Domain.Common.ShramSafalErrors.ComplianceSignalNotFound,
+                    ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent row.
@@ -109,10 +122,23 @@ public static class ComplianceEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             IHandler<ResolveSignalCommand> handler,
+            IComplianceSignalRepository signals,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
                 return Results.Unauthorized();
+
+            // lane F99 — the warning's farm, found under his own scope, then its scope (the route answered 500 without it).
+            if (await RouteFarmScope.OpenForRecordAsync(
+                    userScope,
+                    farmScope,
+                    actorUserId,
+                    async token => (await signals.GetByIdAsync(signalId, token))?.FarmId.Value,
+                    ShramSafal.Domain.Common.ShramSafalErrors.ComplianceSignalNotFound,
+                    ct) is { } refused)
+                return ToErrorResult(refused);
 
             // DATA_PRINCIPLE_SPINE sub-phase 04.3b — extract forensic
             // provenance for the AuditEvent row.
@@ -195,6 +221,12 @@ public static class ComplianceEndpoints
 
     private static IResult ToErrorResult(Error error)
     {
+        // lane F99 (MU-4 review R3-L4) — the plot rule's refusal carries its code and words, as the job-card and test routes do.
+        if (PlotRefusalResult.For(error) is { } plotRefusal)
+        {
+            return plotRefusal;
+        }
+
         if (error.Code.EndsWith("RoleNotAllowed", StringComparison.Ordinal) ||
             error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {

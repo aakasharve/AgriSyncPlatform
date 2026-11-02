@@ -31,7 +31,8 @@ public sealed class GetAiJobStatusHandler(
     /// <summary>The parse was withheld: it mentions money and the reader does not see the farm's money (F3).</summary>
     public const string ResultWithheldMoney = "money";
 
-    private static readonly Error AiJobNotFound =
+    /// <summary>lane F99 — public so the route answers a job it cannot find under the caller's own farms exactly as this does.</summary>
+    public static readonly Error AiJobNotFound =
         new("ShramSafal.AiJobNotFound", "AI job was not found.");
 
     public async Task<Result<AiJobStatusDto>> HandleAsync(

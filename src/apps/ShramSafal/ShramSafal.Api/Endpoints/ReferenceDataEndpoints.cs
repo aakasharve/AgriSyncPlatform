@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
@@ -13,21 +14,37 @@ public static class ReferenceDataEndpoints
     {
         var referenceGroup = group.MapGroup("/reference");
 
+        // lane F99 — the reference lists belong to no farm, so each is read under the caller's own user scope: these routes
+        // opened none, and their first read failed closed in TenantConnectionInterceptor (500 for everyone).
         referenceGroup.MapGet("/schedule-templates", async (
+            ClaimsPrincipal user,
             GetScheduleTemplatesHandler handler,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetScheduleTemplates");
 
         referenceGroup.MapGet("/schedule-templates/{id:guid}", async (
             Guid id,
+            ClaimsPrincipal user,
             GetScheduleTemplatesHandler handler,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(token), ct);
             if (!result.IsSuccess)
             {
                 return ToErrorResult(result.Error);
@@ -42,10 +59,17 @@ public static class ReferenceDataEndpoints
         .WithName("GetScheduleTemplateById");
 
         referenceGroup.MapGet("/crop-types", async (
+            ClaimsPrincipal user,
             GetCropTypesHandler handler,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
-            var result = await handler.HandleAsync(ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetCropTypes");
@@ -67,10 +91,17 @@ public static class ReferenceDataEndpoints
         // back to the in-memory ReferenceDataCatalog list when the DB
         // is empty (test harness without seed replay).
         referenceGroup.MapGet("/cost-categories", async (
+            ClaimsPrincipal user,
             IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
-            var rows = await repository.GetCostCategoriesAsync(ct);
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var rows = await userScope.RunForCallerAsync(callerUserId, token => repository.GetCostCategoriesAsync(token), ct);
             IReadOnlyList<CostCategoryRefDto> payload = rows.Count > 0
                 ? rows
                     .Select(c => new CostCategoryRefDto(c.Id, c.DisplayEn, c.DisplayMr, c.DisplayHi))
