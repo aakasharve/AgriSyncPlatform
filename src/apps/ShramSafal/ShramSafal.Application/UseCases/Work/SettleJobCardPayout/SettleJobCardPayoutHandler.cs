@@ -60,6 +60,12 @@ public sealed class SettleJobCardPayoutHandler(
         if (callerRole is null)
             return Result.Failure<SettleJobCardPayoutResult>(ShramSafalErrors.Forbidden);
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike): a
+        //    payout writes money on the card's plot.
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, jobCard.FarmId.Value, jobCard.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+            return Result.Failure<SettleJobCardPayoutResult>(outsidePlots);
+
         if (!await FarmAuthorityGate.HoldsAsync(
                 repository, jobCard.FarmId.Value, command.CallerUserId.Value, FarmAuthority.ReviewMoney, clock.UtcNow, ct))
             return Result.Failure<SettleJobCardPayoutResult>(ShramSafalErrors.JobCardRoleNotAllowed);

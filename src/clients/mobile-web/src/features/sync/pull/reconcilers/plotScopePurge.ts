@@ -14,8 +14,10 @@
  *   - a bill photo stays only with money he keeps (or when he took it; an upload still going is never touched);
  *   - an own-work seat (and the कामगार label): nothing of other people's money either (§11.7).
  * NEVER touched (doctrine P10): a record with a change still in the outbox, anything this phone has not had back from
- * the server, and his own records. Everything removed is the server's copy; a widening re-sends it (the server's
- * per-farm cursor reset).
+ * the server, and his own money submissions (D-28: they reach him whatever their plot). His own WORK record on another
+ * plot goes, exactly as the server stops sending it (§3 G2); the server keeps it whole. With no signed-in person known,
+ * no money row is touched at all (fail closed). Everything removed is the server's copy; a widening re-sends it (the
+ * server's per-farm cursor reset).
  */
 import type { FarmAccessScopeDto } from '../../../../infrastructure/api/dtos';
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
@@ -103,7 +105,8 @@ export async function purgeOutsidePlots(
 
     // ── Money: his plots' (or, unplaced, his own); an own-work seat: his own only ────────
     const removedMoney = new Set<string>();
-    for (const entry of await db.costEntries.toArray()) {
+    // fix pass 1 (L4) — whose money is whose is not knowable without the signed-in person: nothing is removed then.
+    for (const entry of me ? await db.costEntries.toArray() : []) {
         const payload = (entry.payload ?? {}) as { plotId?: string | null; createdByUserId?: string };
         if (mine(payload.createdByUserId)) continue;
         const his = chosen.get(entry.farmId);
@@ -114,10 +117,10 @@ export async function purgeOutsidePlots(
     await db.costEntries.bulkDelete(outcome.removedMoneyIds);
     await db.financeCorrections.bulkDelete(
         (await db.financeCorrections.toArray()).filter(c => removedMoney.has(c.costEntryId)).map(c => c.id));
-    await trimFinanceMirror(db, chosen, ownOnly, me, removedMoney, ctx.receivedAtUtc);
+    if (me) await trimFinanceMirror(db, chosen, ownOnly, me, removedMoney, ctx.receivedAtUtc);
 
     // A split bill: his share lines only (D-39); an own-work seat: none of another person's.
-    for (const ledger of await db.dayLedgers.toArray()) {
+    for (const ledger of me ? await db.dayLedgers.toArray() : []) {
         const payload = (ledger.payload ?? {}) as { createdByUserId?: string; allocations?: { plotId?: string }[] };
         if (mine(payload.createdByUserId)) continue;
         const his = chosen.get(ledger.farmId);

@@ -30,6 +30,10 @@ export interface AuthorityCopy {
     until: (day: string) => string;
     /** Cancel the choice of duration. */
     cancel: string;
+    /** fix pass 1 (M7, P5) — the state word of a responsibility that does nothing on this person's seat. */
+    notInForce: string;
+    /** fix pass 1 (M7) — why, one line per responsibility the server can say is not in force. */
+    notInForceWhy: Partial<Record<string, string>>;
 }
 
 const mr: AuthorityCopy = {
@@ -56,6 +60,12 @@ const mr: AuthorityCopy = {
     pickDate: 'शेवटची तारीख', // PROPOSED (Marathi)
     until: day => `${day}पर्यंत`, // PROPOSED (Marathi)
     cancel: 'राहू द्या', // PROPOSED (Marathi)
+    notInForce: 'लागू नाही', // PROPOSED (Marathi) — lane MU-4 fix pass 1
+    notInForceWhy: {
+        EditFarmSetup: 'सर्व प्लॉट असतील तरच शेताची रचना बदलता येते.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
+        SeeMoney: 'याला फक्त स्वतःच्या नोंदी दिसतात, म्हणून फक्त स्वतःचे पैसे दिसतात.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
+        SeeWages: 'याला फक्त स्वतःच्या नोंदी दिसतात, म्हणून फक्त स्वतःची मजुरी दिसते.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
+    },
 };
 
 const en: AuthorityCopy = {
@@ -82,6 +92,12 @@ const en: AuthorityCopy = {
     pickDate: 'Last day', // PROPOSED (English)
     until: day => `until ${day}`, // PROPOSED (English)
     cancel: 'Not now', // PROPOSED (English)
+    notInForce: 'Not in force', // PROPOSED (English) — lane MU-4 fix pass 1
+    notInForceWhy: {
+        EditFarmSetup: 'Farm setup can be changed only with all plots.', // PROPOSED (English) — lane MU-4 fix pass 1
+        SeeMoney: 'He sees only his own records, so only his own money shows.', // PROPOSED (English) — lane MU-4 fix pass 1
+        SeeWages: 'He sees only his own records, so only his own wages show.', // PROPOSED (English) — lane MU-4 fix pass 1
+    },
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

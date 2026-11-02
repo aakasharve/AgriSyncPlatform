@@ -546,9 +546,12 @@ public sealed class PushSyncBatchHandler(
     /// lane 2b — the refusal codes that mean "this person may not do this here (any more)": the
     /// uniform Forbidden and the four role-shaped codes the job-card, test, compliance and
     /// verification gates still answer with (their wire codes are kept for the installed phones).
+    /// spec: plr-d10 lane MU-4 fix pass 1 (M6) — and the plot refusal: work queued on a plot that has since left his
+    /// scope is kept whole for the owner (the same mark), while his phone parks it visibly (its code ends "Forbidden").
     /// </summary>
     private static bool IsAuthorityRefusal(string? errorCode) =>
         errorCode is "ShramSafal.Forbidden"
+            or "ShramSafal.PlotScope.Forbidden"
             or "ShramSafal.JobCardRoleNotAllowed"
             or "ShramSafal.TestRoleNotAllowed"
             or "ShramSafal.ComplianceSignalRoleNotAllowed"

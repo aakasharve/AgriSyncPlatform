@@ -19,6 +19,18 @@
  * / co-owner choice with visible switches is proposed for step 2b), so their words are gone too.
  */
 
+/**
+ * spec: plr-d10 lane MU-4 fix pass 1 (M8) — the people section's one line about what each phone gets. The old line
+ * ("every phone gets every record, money too — this closes in the next step") stopped being true once MU-3 (money and
+ * wages), PRV (who may see a record) and MU-4 (plots) narrowed each phone; this is the true one. Marathi and English
+ * twins (one language at a time).
+ */
+export function phonesGetNote(language: string | null | undefined): string {
+    return language === 'en'
+        ? "Each person's phone gets only the records their responsibilities and plots allow." // PROPOSED (English)
+        : 'प्रत्येकाच्या फोनवर फक्त त्याला दिलेल्या जबाबदाऱ्या आणि प्लॉटनुसार नोंदी जातात.'; // PROPOSED (Marathi)
+}
+
 export const TEAM_COPY = {
     pageTitle: 'माझी टीम',
     // Hub row line for the owner (preview HubPages: "कोण, कोणती भूमिका · नवीन व्यक्ती जोडा").
@@ -48,8 +60,6 @@ export const TEAM_COPY = {
     presetCrewHint: 'काम सांगतील, हजेरी व पक्कं करतील', // PROPOSED (Marathi)
 
     peopleTitle: 'शेतातली माणसं', // PROPOSED (Marathi)
-    // M-8 (a): one honest line until the role-scoped download (step 4a) narrows what each phone gets.
-    allRecordsNote: 'सध्या शेतातल्या प्रत्येकाच्या फोनवर सर्व नोंदी, पैसेसुद्धा, जातात — पुढच्या टप्प्यात हे बंद होईल.', // PROPOSED (Marathi)
     // M-8 (b): how a person came in, from the server's facts.
     cameByQrDirect: 'QR ने थेट आले', // PROPOSED (Marathi)
     cameByCodeApproved: 'कोड टाकून विचारलं · मालकाने मंजूर केलं', // PROPOSED (Marathi)

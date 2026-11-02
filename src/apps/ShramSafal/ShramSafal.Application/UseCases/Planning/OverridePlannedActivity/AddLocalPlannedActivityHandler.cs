@@ -53,6 +53,13 @@ public sealed class AddLocalPlannedActivityHandler(
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseCycleAsync(
+                repository, command.FarmId, command.CropCycleId, command.CallerUserId, clock.UtcNow, ct) is { } outsidePlots)
+        {
+            return Result.Failure(outsidePlots);
+        }
+
         // Step 4: create locally-added activity
         var activity = PlannedActivity.CreateLocallyAdded(
             command.NewActivityId,

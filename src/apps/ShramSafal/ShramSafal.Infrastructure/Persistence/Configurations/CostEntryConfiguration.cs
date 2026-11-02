@@ -174,6 +174,18 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
         builder.Property(x => x.AudienceChangedAtUtc)
             .HasColumnName("audience_changed_at_utc");
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (M2) — the last move to another place, and every plot it stood on before.
+        builder.Property(x => x.PlaceChangedAtUtc)
+            .HasColumnName("place_changed_at_utc");
+        builder.PrimitiveCollection<List<Guid>>("_formerPlotIds")
+            .HasField("_formerPlotIds")
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasColumnName("former_plot_ids")
+            .HasColumnType("uuid[]")
+            .HasDefaultValueSql("'{}'::uuid[]")
+            .IsRequired();
+        builder.Ignore(x => x.FormerPlotIds);
+
         builder.OwnsOne(x => x.Provenance, p =>
         {
             p.ConfigureProvenance();

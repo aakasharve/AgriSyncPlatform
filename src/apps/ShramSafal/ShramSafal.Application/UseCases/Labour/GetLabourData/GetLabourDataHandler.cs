@@ -195,6 +195,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var hasConfirmAuthority = FarmAccessPolicy.Holds(callerAccess, FarmAuthority.ConfirmRecords, readAtUtc);
         var holdsTakeAttendance = FarmAccessPolicy.Holds(callerAccess, FarmAuthority.TakeAttendance, readAtUtc);
         var seesWages = FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc)?.SeeWages == true;
+        // spec: plr-d10 lane MU-4 fix pass 1 (H2, M1) — the seat's read scope: own work (the कामगार label OR the स्वतःचं
+        // काम scope, ONE rule) picks the own-row view below, and chosen plots narrow the page's plot work and money.
+        var callerReadScope = FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc);
+        // The place rule, read once for this page (records, job cards' payouts): the same visibility every door asks.
+        var recordVisibility = await RecordVisibility.ForFarmAsync(repository, query.FarmId.Value, query.CallerUserId.Value, readAtUtc, ct);
 
         // ── 1. Memberships → labour People (Worker / Mukadam only — owners
         //       and other roles are not "labour"). ──────────────────────────
@@ -220,7 +225,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // below — because GetJobCardsForFarmAsync is shared with
         // GetJobCardsForFarmHandler; this feature does not get to re-shape
         // another use case's port.
-        var jobCards = await repository.GetJobCardsForFarmAsync(query.FarmId, statusFilter: null, ct);
+        // lane MU-4 fix pass 1 (M1; orchestrator call 3, D-70) — job cards and their payouts are PLOT work: a seat on
+        // chosen plots counts only his plots' cards here (what each person did, owed and was paid on them).
+        var jobCards = (await repository.GetJobCardsForFarmAsync(query.FarmId, statusFilter: null, ct))
+            .Where(j => callerReadScope?.PlotIds is null || callerReadScope.CoversPlot(j.PlotId))
+            .ToList();
 
         // ── 2b. Per-worker काम झालं, ALL TIME — R13 (ruling, Task 10) for the
         //       balance, widened to the whole card by R15 (ruling, Task 13).
@@ -285,8 +294,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // knowable. Unlike a daily log, a payment made through the app cannot
         // exist without leaving a row here — within the ledger the app owns, no
         // row IS no payment.
-        var payoutRows = await repository.GetLabourPayoutCostEntriesWithJobCardAsync(
-            query.FarmId, window.FromDate, window.ToDateInclusive, ct);
+        // lane MU-4 fix pass 1 (M1) — a payout on another plot (or the farm's, not his) is not his to add up.
+        var payoutRows = (await repository.GetLabourPayoutCostEntriesWithJobCardAsync(
+                query.FarmId, window.FromDate, window.ToDateInclusive, ct))
+            .Where(r => !recordVisibility.IsOutOfPlace(Domain.RecordPrivacy.RecordKinds.CostEntry, r.CostEntry.Id))
+            .ToList();
         var latestCorrections = BuildLatestCorrections(
             await repository.GetCorrectionsForEntriesAsync(payoutRows.Select(r => r.CostEntry.Id), ct));
 
@@ -325,7 +337,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         }
         else
         {
-            payoutRowsAllTime = await repository.GetLabourPayoutCostEntriesWithJobCardAsync(query.FarmId, null, null, ct);
+            payoutRowsAllTime = (await repository.GetLabourPayoutCostEntriesWithJobCardAsync(query.FarmId, null, null, ct))
+                .Where(r => !recordVisibility.IsOutOfPlace(Domain.RecordPrivacy.RecordKinds.CostEntry, r.CostEntry.Id))
+                .ToList();
             latestCorrectionsAllTime = BuildLatestCorrections(
                 await repository.GetCorrectionsForEntriesAsync(payoutRowsAllTime.Select(r => r.CostEntry.Id), ct));
         }
@@ -345,7 +359,6 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // records he may see: the review inbox, the Logs tile, the man-days, the money AND the हजेरी ledger's work words,
         // उक्ते dots and crew rows. Only the attendance marks themselves (who was there, day / night, hours) are not
         // narrowed: हजेरी is shared farm-day truth, and a record's privacy never hides it (orchestrator call 1).
-        var recordVisibility = await RecordVisibility.ForFarmAsync(repository, query.FarmId.Value, query.CallerUserId.Value, readAtUtc, ct);
         var everyFarmLog = await repository.GetDailyLogsByFarmAsync(query.FarmId, ct);
         var farmLogs = everyFarmLog.Where(l => recordVisibility.MaySeeLog(l.Id)).ToList();
         // lane PRV fix pass 2 (D-69) — records he may see whose OWN money is kept from him: on this page their amounts are
@@ -804,7 +817,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // logs of others are crew data. A GRANTED member keeps the review inbox
         // and people he needs to act on the grant (money stays withheld either
         // way, as before).
-        var registerView = ResolveRegisterView(resolvedCallerRole, seesWages);
+        // lane MU-4 fix pass 1 (H2) — own work is own work whatever the label: a seat on स्वतःचं काम (a मुकादम or सहमालक
+        // label too) reads the own-row view, exactly as the कामगार label does (a हजेरी grant keeps the inbox, MU-3).
+        var registerView = callerReadScope?.OwnRecordsOnly == true
+            ? LabourRegisterView.OwnRow
+            : ResolveRegisterView(resolvedCallerRole, seesWages);
         var narrowToCaller = registerView == LabourRegisterView.OwnRow && !holdsTakeAttendance && !hasConfirmAuthority;
         var ownReviewIds = narrowToCaller
             ? reviewLogs

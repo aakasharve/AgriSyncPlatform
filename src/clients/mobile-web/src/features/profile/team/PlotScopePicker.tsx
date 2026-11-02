@@ -20,6 +20,16 @@ import type { FarmPlot } from './useFarmPlots';
 
 const CHOICES: readonly PlotScopeName[] = ['AllPlots', 'ChosenPlots', 'OwnWork'];
 
+/**
+ * lane MU-4 fix pass 1 (M7, P5) — only the choices that change what he gets, in the sheet's own order. A कामगार's label
+ * already narrows him to his own work, so "सर्व प्लॉट" would read exactly as "स्वतःचं काम": the server leaves it out, and
+ * the card says why (`labelFixesOwnWork`). An unknown name is dropped; nothing usable = all three (an older server).
+ */
+export function offeredChoices(choices: readonly string[] | undefined): readonly PlotScopeName[] {
+    const offered = CHOICES.filter(c => choices?.includes(c));
+    return offered.length > 0 ? offered : CHOICES;
+}
+
 export interface PlotScopePickerProps {
     /** Whose card (test ids). */
     memberId: string;
@@ -30,9 +40,11 @@ export interface PlotScopePickerProps {
     onSave: (choice: PlotScopeChoice) => void;
     /** The row's value in place of the choice's own word (a joining request: what each preset starts from). */
     summary?: string;
+    /** lane MU-4 fix pass 1 (M7) — the server's choices that change something for him (absent = all three). */
+    choices?: readonly PlotScopeName[];
 }
 
-export const PlotScopePicker: React.FC<PlotScopePickerProps> = ({ memberId, value, farmPlots, busy, onSave, summary: shown }) => {
+export const PlotScopePicker: React.FC<PlotScopePickerProps> = ({ memberId, value, farmPlots, busy, onSave, summary: shown, choices }) => {
     const language = useOptionalLanguage()?.language;
     const copy = plotScopeCopy(language);
     const [open, setOpen] = useState(false);
@@ -41,6 +53,8 @@ export const PlotScopePicker: React.FC<PlotScopePickerProps> = ({ memberId, valu
     const names = new Map(farmPlots.map(p => [p.id, p.name]));
     const summary = shown ?? plotScopeSummary(copy, value.plotScope, value.plotIds, names);
     const canSave = !busy && (scope !== 'ChosenPlots' || ticked.size > 0);
+    const offered = offeredChoices(choices);
+    const fixedByLabel = !offered.includes('AllPlots');
 
     const openSheet = () => {
         setScope(value.plotScope);
@@ -68,12 +82,17 @@ export const PlotScopePicker: React.FC<PlotScopePickerProps> = ({ memberId, valu
                 </span>
                 <ChevronRight size={18} className="shrink-0 text-stone-500" aria-hidden="true" />
             </Tap>
+            {fixedByLabel && (
+                <p className="m-0 px-1 text-[12.5px] font-semibold leading-snug text-stone-600" data-testid={`plot-scope-rule-${memberId}`}>
+                    {copy.labelFixesOwnWork}
+                </p>
+            )}
 
             {open && (
                 <div role="dialog" aria-label={copy.sheetTitle} className="space-y-2 rounded-2xl bg-stone-50 p-3 ring-1 ring-stone-200"
                     data-testid={`plot-scope-sheet-${memberId}`}>
                     <p className="m-0 text-[15px] font-extrabold text-stone-800">{copy.sheetTitle}</p>
-                    {CHOICES.map(choice => (
+                    {offered.map(choice => (
                         <div key={choice} className="space-y-1.5">
                             <Tap onClick={() => setScope(choice)} aria-pressed={scope === choice} data-testid={`plot-scope-choice-${choice}-${memberId}`}
                                 className={`w-full min-h-[52px] rounded-2xl border-2 px-3 py-2 text-left ${scope === choice ? 'border-emerald-600 bg-emerald-50' : 'border-stone-200 bg-white'}`}>

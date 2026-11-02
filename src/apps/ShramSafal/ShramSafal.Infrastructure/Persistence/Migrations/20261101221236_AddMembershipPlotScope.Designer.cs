@@ -3257,6 +3257,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(16)")
                         .HasColumnName("payment_mode");
 
+                    b.Property<DateTime?>("PlaceChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("place_changed_at_utc");
+
                     b.Property<Guid?>("PlotId")
                         .HasColumnType("uuid")
                         .HasColumnName("plot_id");
@@ -3284,6 +3288,13 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("vendor_name");
+
+                    b.PrimitiveCollection<List<Guid>>("_formerPlotIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("former_plot_ids")
+                        .HasDefaultValueSql("'{}'::uuid[]");
 
                     b.HasKey("Id");
 
@@ -3790,6 +3801,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("operator_user_id");
 
+                    b.Property<DateTime?>("PlaceChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("place_changed_at_utc");
+
                     b.Property<Guid?>("PlotId")
                         .HasColumnType("uuid")
                         .HasColumnName("plot_id");
@@ -3807,6 +3822,13 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("VoiceClipId")
                         .HasColumnType("uuid")
                         .HasColumnName("voice_clip_id");
+
+                    b.PrimitiveCollection<List<Guid>>("_formerPlotIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("former_plot_ids")
+                        .HasDefaultValueSql("'{}'::uuid[]");
 
                     b.PrimitiveCollection<List<Guid>>("_plotIds")
                         .IsRequired()

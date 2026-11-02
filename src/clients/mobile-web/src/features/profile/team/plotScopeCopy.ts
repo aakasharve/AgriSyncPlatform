@@ -31,8 +31,12 @@ export interface PlotScopeCopy {
     overviewTitle: string;
     /** A total that counts his plots only. */
     totalsLabel: string;
+    /** fix pass 1 (L5) — the money section's hint on the overview, in the page's one language. */
+    costHint: string;
     /** A joining request's row before the owner chooses: what each preset starts from. */
     presetDefaults: string;
+    /** fix pass 1 (M7) — under a कामगार's row: the label fixes his own work; choosing plots still narrows where. */
+    labelFixesOwnWork: string;
 }
 
 const mr: PlotScopeCopy = {
@@ -55,7 +59,9 @@ const mr: PlotScopeCopy = {
     cancel: 'राहू द्या', // the authority switches' word (lane 2b)
     overviewTitle: 'माझ्या प्लॉटचा आढावा', // PROPOSED (Marathi)
     totalsLabel: 'तुमच्या प्लॉटचे', // MU design §11.6 (PROPOSED there)
+    costHint: 'आतापर्यंतचा हिशोब आणि खर्चाचा आलेख', // the overview's existing words
     presetDefaults: 'काम सांगणे: स्वतःचं काम · काम + हजेरी: सर्व प्लॉट', // PROPOSED (Marathi)
+    labelFixesOwnWork: 'कामगार म्हणून फक्त स्वतःचं काम दिसतं. प्लॉट निवडले तर फक्त त्या प्लॉटवर नोंद करता येईल.', // PROPOSED (Marathi)
 };
 
 const en: PlotScopeCopy = {
@@ -78,7 +84,9 @@ const en: PlotScopeCopy = {
     cancel: 'Not now', // the authority switches' word (lane 2b)
     overviewTitle: 'My plots overview', // PROPOSED (English)
     totalsLabel: 'Your plots', // PROPOSED (English)
+    costHint: 'Totals so far and the spending chart', // PROPOSED (English) — lane MU-4 fix pass 1 (L5)
     presetDefaults: 'Tells work: own work · Work + attendance: all plots', // PROPOSED (English)
+    labelFixesOwnWork: 'As a worker he sees only his own work. Choosing plots limits him to those plots.', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

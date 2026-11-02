@@ -81,6 +81,34 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
             };
         }).ToList();
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (L3, D-39) — "his plots'" total is the SAME number /finance/plot-summary gives:
+        // a bill split across plots counts by its share lines on his plots (RecordVisibility.Ledger: never the whole bill,
+        // a bill kept by its audience not at all), exactly as the plot summary adds them.
+        foreach (var (farmId, plotScope) in plotScopes)
+        {
+            var farmLedgers = await repository.GetDayLedgersForFarm(
+                new AgriSync.SharedKernel.Contracts.Ids.FarmId(farmId),
+                query.FromDate ?? DateOnly.MinValue,
+                query.ToDate ?? DateOnly.MaxValue,
+                ct);
+            foreach (var ledger in farmLedgers.Select(l => visibility.Ledger(l.ToDto())).Where(l => l is not null))
+            {
+                normalizedRows.AddRange(ledger!.Allocations
+                    .Where(share => plotScope.CoversPlot(share.PlotId))
+                    .Select(share => new
+                    {
+                        GroupKey = normalizedGroupBy switch
+                        {
+                            "plot" => share.PlotId.ToString(),
+                            "crop" => "unassigned-crop",
+                            _ => ledger.LedgerDate.ToString("yyyy-MM-dd"),
+                        },
+                        EffectiveAmount = share.AllocatedAmount,
+                        CorrectionsCount = 0,
+                    }));
+            }
+        }
+
         var grouped = normalizedRows
             .GroupBy(x => x.GroupKey)
             .Select(g => new FinanceSummaryItemDto(
@@ -103,7 +131,10 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
             grouped,
             FarmsNotCounted: memberFarmIds.Count - farmIds.Count,
             // lane MU-4 — only a record kept by its AUDIENCE is "not counted by rule" (W4); one outside his plots is not his.
-            RecordsNotCounted: farmEntries.Count(entry => visibility.HiddenByAudience(Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id)),
+            // lane MU-4 fix pass 1 (M4) — and only one he would see by its place (never another plot's private money).
+            RecordsNotCounted: farmEntries.Count(entry =>
+                visibility.HiddenByAudience(Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id)
+                && !visibility.IsOutOfPlace(Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id)),
             ScopedToPlots: plotScopes.Count > 0));
     }
 

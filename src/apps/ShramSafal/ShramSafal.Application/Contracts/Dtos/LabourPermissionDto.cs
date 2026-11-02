@@ -138,7 +138,15 @@ public sealed record LabourPermissionDto(
     // spec: plr-d10 lane MU-4 — which plots this person covers ("AllPlots" / "ChosenPlots" / "OwnWork"; the primary owner
     // always "AllPlots") and, for chosen plots, the plots. The owner's team card shows "प्लॉट: …" from these. Additive (P11).
     string PlotScope = "AllPlots",
-    IReadOnlyList<Guid>? PlotIds = null);
+    IReadOnlyList<Guid>? PlotIds = null,
+    // spec: plr-d10 lane MU-4 fix pass 1 (M7, P5) — additive. What this person EFFECTIVELY reads ("OwnWork" for a कामगार
+    // whose seat covers every plot: the label narrows to his own records); the plot choices that change what he gets
+    // (a कामगार: "OwnWork" / "ChosenPlots" — "AllPlots" would read exactly as "OwnWork"); and the responsibilities that
+    // do nothing on this seat (edit farm setup without every plot; see money / see wages on an own-records seat). An
+    // older phone ignores all three.
+    string? EffectivePlotScope = null,
+    IReadOnlyList<string>? PlotScopeChoices = null,
+    IReadOnlyList<string>? AuthoritiesNotInForce = null);
 
 /// <summary>
 /// lane 2b (MU design §2, §11.1) — one authority a member holds on one farm, as the wire carries it:

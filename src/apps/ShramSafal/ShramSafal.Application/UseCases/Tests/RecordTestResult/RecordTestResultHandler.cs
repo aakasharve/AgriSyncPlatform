@@ -63,6 +63,13 @@ public sealed class RecordTestResultHandler(
             return Result.Failure<RecordTestResultResponse>(ShramSafalErrors.TestRoleNotAllowed);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await PlotScopeGate.RefuseAsync(
+                repository, instance.FarmId.Value, instance.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+        {
+            return Result.Failure<RecordTestResultResponse>(outsidePlots);
+        }
+
         var now = clock.UtcNow;
         var attachmentIds = command.AttachmentIds ?? Array.Empty<Guid>();
 

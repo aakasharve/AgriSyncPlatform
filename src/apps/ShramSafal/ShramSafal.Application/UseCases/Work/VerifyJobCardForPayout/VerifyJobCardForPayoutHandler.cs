@@ -30,6 +30,11 @@ public sealed class VerifyJobCardForPayoutHandler(
         if (jobCard is null)
             return Result.Failure<VerifyJobCardForPayoutResult>(ShramSafalErrors.JobCardNotFound);
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, jobCard.FarmId.Value, jobCard.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+            return Result.Failure<VerifyJobCardForPayoutResult>(outsidePlots);
+
         // 2. Load linked daily log.
         if (jobCard.LinkedDailyLogId is null)
             return Result.Failure<VerifyJobCardForPayoutResult>(ShramSafalErrors.JobCardInvalidState);

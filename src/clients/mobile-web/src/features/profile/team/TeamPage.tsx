@@ -33,7 +33,8 @@ import { useMembershipDecisions } from '../hooks/useMembershipDecisions';
 import { FarmCodeCard } from './FarmCodeCard';
 import { JoinRequestCard } from './JoinRequestCard';
 import { TeamPersonCard } from './TeamPersonCard';
-import { TEAM_COPY } from './teamCopy';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { TEAM_COPY, phonesGetNote } from './teamCopy';
 import { useFarmPlots } from './useFarmPlots';
 import {
     isPrimaryOwner, nameFor, rightsOver, roleTone, roleWord, serverRoleOf, splitRoster,
@@ -67,6 +68,7 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
     const { requests, people } = splitRoster(roster.rows);
     // lane MU-4 — the farm's plots for the owner's plot choice (his phone holds every plot of his farm).
     const farmPlots = useFarmPlots(decidesPeople ? farmId : null);
+    const language = useOptionalLanguage()?.language;
     const busy = (userId: string) => decisions.busyUserId === userId || roster.savingUserId === userId;
 
     return (
@@ -105,8 +107,8 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
             {ownerTier && roster.rows && (
                 <section className="space-y-2" data-testid="team-people">
                     <SectionHead title={TEAM_COPY.peopleTitle} />
-                    <p className="m-0 rounded-2xl bg-amber-50 px-3 py-2 text-[13px] font-bold leading-snug text-amber-900 ring-1 ring-amber-200" data-testid="team-all-records-note">
-                        {TEAM_COPY.allRecordsNote}
+                    <p className="m-0 rounded-2xl bg-stone-50 px-3 py-2 text-[13px] font-bold leading-snug text-stone-700 ring-1 ring-stone-200" data-testid="team-all-records-note">
+                        {phonesGetNote(language)}
                     </p>
                     {people.length === 0 ? (
                         <p className="m-0 rounded-2xl bg-white px-3 py-3 text-[14px] font-bold text-stone-600 ring-1 ring-stone-200">{TEAM_COPY.noPeople}</p>
@@ -143,11 +145,13 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                         } : undefined}
                                         authorityAccess={maySetAuthorities ? {
                                             authorities: row.authorities ?? [],
+                                            notInForce: row.authoritiesNotInForce ?? [],
                                             saving: roster.savingUserId === row.userId,
                                             onChange: next => void roster.setAuthorities(row.userId, next),
                                         } : undefined}
                                         plotAccess={maySetPlots ? {
-                                            value: { plotScope: row.plotScope ?? 'AllPlots', plotIds: row.plotIds ?? undefined },
+                                            value: { plotScope: row.effectivePlotScope ?? row.plotScope ?? 'AllPlots', plotIds: row.plotIds ?? undefined },
+                                            choices: row.plotScopeChoices ?? undefined,
                                             farmPlots,
                                             onSave: choice => void decisions.setPlots(row.userId, choice),
                                         } : undefined}

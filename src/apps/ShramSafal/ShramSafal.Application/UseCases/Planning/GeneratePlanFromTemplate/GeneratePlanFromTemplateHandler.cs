@@ -46,6 +46,13 @@ public sealed class GeneratePlanFromTemplateHandler(
             return Result.Failure<PlanGenerationResultDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, (Guid)cropCycle.FarmId, cropCycle.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } outsidePlots)
+        {
+            return Result.Failure<PlanGenerationResultDto>(outsidePlots);
+        }
+
         var utcNow = clock.UtcNow;
         var template = Domain.Planning.ScheduleTemplate.Create(
             idGenerator.New(),

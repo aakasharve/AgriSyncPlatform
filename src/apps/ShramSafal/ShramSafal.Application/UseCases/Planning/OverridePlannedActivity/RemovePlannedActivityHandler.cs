@@ -56,6 +56,13 @@ public sealed class RemovePlannedActivityHandler(
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseCycleAsync(
+                repository, command.FarmId, activity.CropCycleId, command.CallerUserId, clock.UtcNow, ct) is { } outsidePlots)
+        {
+            return Result.Failure(outsidePlots);
+        }
+
         // Step 5 & 6: soft-remove (consistent for both locally-added and template-derived)
         activity.SoftRemove(new UserId(command.CallerUserId), command.Reason, clock.UtcNow);
 

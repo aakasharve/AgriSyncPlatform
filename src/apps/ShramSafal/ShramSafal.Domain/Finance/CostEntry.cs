@@ -18,6 +18,8 @@ public sealed class CostEntry : Entity<Guid>
     /// <summary>The flag reason that rule writes.</summary>
     public const string ReviewAmountReason = "High amount: >= 25000 INR";
 
+    private readonly List<Guid> _formerPlotIds = [];
+
     private CostEntry() : base(Guid.Empty) { } // EF Core
 
     private CostEntry(
@@ -299,14 +301,35 @@ public sealed class CostEntry : Entity<Guid>
     /// </summary>
     public void FollowRecord(Guid? plotId, Guid? cropCycleId, DateOnly entryDate, DateTime movedAtUtc)
     {
+        var plotBefore = PlotId;
         PlotId = plotId;
         CropCycleId = cropCycleId;
         EntryDate = entryDate;
-        if (movedAtUtc > ModifiedAtUtc)
+        if (plotBefore != plotId)
+        {
+            // spec: plr-d10 lane MU-4 fix pass 1 (M2) — a new PLACE changes who may see it (DailyLog.MoveTo's rule).
+            if (plotBefore is { } before && before != Guid.Empty && !_formerPlotIds.Contains(before))
+            {
+                _formerPlotIds.Add(before);
+            }
+
+            ModifiedAtUtc = AudienceStamp.NextModified(ModifiedAtUtc, movedAtUtc);
+            PlaceChangedAtUtc = ModifiedAtUtc;
+        }
+        else if (movedAtUtc > ModifiedAtUtc)
         {
             ModifiedAtUtc = movedAtUtc;
         }
     }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-4 fix pass 1 (M2) — when this money last moved to another place (it follows its record);
+    /// <c>null</c> when it never did. Stamped like an audience change (<see cref="AudienceStamp"/>).
+    /// </summary>
+    public DateTime? PlaceChangedAtUtc { get; private set; }
+
+    /// <summary>lane MU-4 fix pass 1 (M2) — every plot this money stood on before a move (a set that only grows).</summary>
+    public IReadOnlyCollection<Guid> FormerPlotIds => _formerPlotIds.AsReadOnly();
 
     /// <summary>
     /// spec: plr-d10 (lane OF-M fix passes 1 and 3) — flag money for the person who reviews money, later than it was made

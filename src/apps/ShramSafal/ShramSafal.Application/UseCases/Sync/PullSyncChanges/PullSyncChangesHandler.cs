@@ -205,18 +205,23 @@ public sealed class PullSyncChangesHandler(
         // lane MU-3 — money (cost entries, their corrections, the day ledger) only where the seat sees money.
         // lane PRV — and only the money records whose audience includes him.
         static bool Money(FarmReadScope scope) => scope.SeeMoney;
+        // spec: plr-d10 lane MU-4 fix pass 1 (M5, founder D-28) — and every working seat receives HIS OWN money submissions
+        // with their review status, with or without see money and whatever their plot ("they can see their own submission
+        // and its review status"); a seat without see money receives nothing else of the farm's money (filtered BEFORE
+        // the audience rule, so no other money record is even named to him).
         var costEntries = audience.Costs(
-            await window.ReadAsync(Money, (ids, since) => repository.GetCostEntriesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId));
+            (await window.ReadAsync(Any, (ids, since) => repository.GetCostEntriesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId))
+                .Where(c => window.ScopeOf((Guid)c.FarmId)!.SeeMoney || c.CreatedByUserId.Value == query.UserId));
         var costEntryIds = costEntries.Select(c => c.Id).ToHashSet();
 
         // lane PRV — a record RE-ADMITTED to him since his cursor comes back whole: its photos, corrections and
         // day-ledger rows did not change themselves, so they are read again for it (rare; deduplicated below).
         var readmittedLogIds = dailyLogs
-            .Where(l => audience.Readmitted((Guid)l.FarmId, l.AudienceChangedAtUtc))
+            .Where(l => audience.Readmitted((Guid)l.FarmId, l.AudienceChangedAtUtc, l.PlaceChangedAtUtc))
             .Select(l => l.Id)
             .ToList();
         var readmittedCosts = costEntries
-            .Where(c => audience.Readmitted((Guid)c.FarmId, c.AudienceChangedAtUtc))
+            .Where(c => audience.Readmitted((Guid)c.FarmId, c.AudienceChangedAtUtc, c.PlaceChangedAtUtc))
             .ToList();
         var readmittedCostIds = readmittedCosts.Select(c => c.Id).ToList();
         var changedAttachments = await window.ReadAsync(Any, (ids, since) => repository.GetAttachmentsChangedSinceAsync(ids, since, ct), a => (Guid)a.FarmId);
@@ -237,8 +242,9 @@ public sealed class PullSyncChangesHandler(
             .Where(audience.Visibility.MaySeeAttachment)
             .ToList();
         var financeCorrections = new List<Domain.Finance.FinanceCorrection>();
-        foreach (var (ids, since) in window.Groups(Money))
+        foreach (var (ids, since) in window.Groups(Any))
         {
+            // lane MU-4 fix pass 1 (M5) — corrections follow the money records sent (his own included).
             financeCorrections.AddRange((await repository.GetFinanceCorrectionsChangedSinceAsync(ids, since, ct))
                 .Where(c => costEntryIds.Contains(c.CostEntryId)));
         }

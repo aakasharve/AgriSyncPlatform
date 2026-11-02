@@ -24,6 +24,11 @@ import { endOf, holds, throughDay, withAuthority, withoutAuthority } from './aut
 export interface AuthorityAccessView {
     /** The server's list for this person (held now, each with its end). */
     authorities: readonly AuthorityGrant[];
+    /**
+     * lane MU-4 fix pass 1 (M7, P5) — the responsibilities the server says do nothing on this seat. Each is drawn as a
+     * still row with its rule line, never a switch; a held one keeps travelling back in the whole set, untouched.
+     */
+    notInForce?: readonly string[];
     /** A write for this person is in flight. */
     saving: boolean;
     /** The WHOLE desired set. */
@@ -49,6 +54,18 @@ export const AuthoritySwitches: React.FC<{ memberId: string; access: AuthorityAc
             <p className="m-0 text-[12px] font-semibold leading-snug text-stone-600">{copy.hint}</p>
             <ul className="m-0 space-y-1.5 p-0">
                 {SWITCHABLE_AUTHORITIES.map(name => {
+                    if (access.notInForce?.includes(name)) {
+                        return (
+                            <li key={name} className="list-none rounded-xl border border-slate-200 bg-slate-50 p-2.5"
+                                data-testid={`authority-${name}-${memberId}`} data-on="not-in-force">
+                                <span className="block text-[13.5px] font-bold text-slate-700">{authorityLabel(copy, name)}</span>
+                                <span className="block text-[12px] font-extrabold text-slate-600">{copy.notInForce}</span>
+                                <span className="block text-[11.5px] leading-snug text-slate-500" data-testid={`authority-${name}-rule-${memberId}`}>
+                                    {copy.notInForceWhy[name] ?? ''}
+                                </span>
+                            </li>
+                        );
+                    }
                     const on = holds(access.authorities, name);
                     const end = throughDay(endOf(access.authorities, name), language);
                     const note = copy.note[name];

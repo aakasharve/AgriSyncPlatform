@@ -163,8 +163,9 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
 
         // ── Reviewed 2026-11-02 (spec: plr-d10 lane MU-4); Down() read in full. Up() ADDs plot_scope (NOT NULL DEFAULT
         //    'AllPlots') and scope_plot_ids (uuid[] NOT NULL DEFAULT '{}') with one CHECK on ssf.farm_memberships. Down()
-        //    drops the CHECK and both columns. No table, append-only ledger, policy or privilege is touched. Safe to revert
-        //    and re-apply mid-proof.
+        //    drops the CHECK and both columns. Fix pass 1 (M2) added, in the same migration, place_changed_at_utc (NULL)
+        //    and former_plot_ids (uuid[] NOT NULL DEFAULT '{}') on ssf.daily_logs and ssf.cost_entries; Down() drops those
+        //    four. No table, append-only ledger, policy or privilege is touched. Safe to revert and re-apply mid-proof.
         "20261101221236_AddMembershipPlotScope",
     ];
 

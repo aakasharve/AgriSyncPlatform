@@ -52,6 +52,12 @@ vi.mock('../day/useDayListen', () => ({
 }));
 vi.mock('../../../infrastructure/voice/logOriginalVoice', () => ({ fetchLogOriginalVoice: vi.fn() }));
 vi.mock('../../../infrastructure/sync/PayloadValidator', () => ({ validatePayload: () => ({ ok: true }) }));
+// spec: plr-d10 lane MU-4 fix pass 1 (L5) — the page's one language, set per test (Marathi unless a test says English).
+const lang = vi.hoisted(() => ({ value: undefined as string | undefined }));
+vi.mock('../../../i18n/LanguageContext', async (importActual) => ({
+    ...(await importActual<typeof import('../../../i18n/LanguageContext')>()),
+    useOptionalLanguage: () => (lang.value ? { language: lang.value } : null),
+}));
 
 import ReflectPage from '../ReflectPage';
 import { CROPS, TODAY_KEY, log, money, task } from './reflectFixtures';
@@ -70,6 +76,7 @@ beforeEach(() => {
     vi.setSystemTime(new Date(2026, 9, 25, 10, 0, 0));
     prefs.clear();
     ledger.entries = [SPENT_TODAY];
+    lang.value = undefined;
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
@@ -401,5 +408,20 @@ describe('ReflectPage — lane OF fix 1 (H1): no work can be told for a day afte
         expect(screen.queryByTestId('past-day-tell-cal')).toBeNull();
         expect(screen.queryByTestId('past-day-tell')).toBeNull();
         expect(props.onSpeak).not.toHaveBeenCalled();
+    });
+});
+
+describe('ReflectPage — lane MU-4 fix pass 1 (L5): one language at a time', () => {
+    it('in English mode the money section\'s hint is English only', () => {
+        lang.value = 'en';
+        renderPage();
+        const section = screen.getByTestId('reflect-section-cost');
+        const hint = within(section).getByText('Totals so far and the spending chart');
+        expect(hint.textContent).not.toMatch(/[\u0900-\u097F]/);
+    });
+
+    it('in Marathi mode it keeps its words', () => {
+        renderPage();
+        expect(within(screen.getByTestId('reflect-section-cost')).getByText('आतापर्यंतचा हिशोब आणि खर्चाचा आलेख')).toBeTruthy();
     });
 });

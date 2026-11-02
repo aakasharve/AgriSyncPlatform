@@ -211,7 +211,9 @@ public static class AuditEndpoints
         IShramSafalRepository repository, Guid farmId, Guid userId, DateTime atUtc, CancellationToken ct)
     {
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, userId, atUtc, ct);
-        return scope is { OwnRecordsOnly: false, SeeMoney: true, SeeWages: true };
+        // spec: plr-d10 lane MU-4 fix pass 1 (M9) — and covers EVERY plot: the farm's trail is the whole farm's history
+        // (plots, seasons, tasks, tests, warnings, payouts), so a seat on chosen plots reads none of it (fail closed).
+        return scope is { OwnRecordsOnly: false, SeeMoney: true, SeeWages: true, PlotIds: null };
     }
 
     /// <summary>lane PRV fix pass 1 (L3) — a row recording an audience change (set_record_audience).</summary>

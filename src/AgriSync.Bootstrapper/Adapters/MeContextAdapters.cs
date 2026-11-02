@@ -163,6 +163,8 @@ public sealed class FarmMembershipSnapshotReader(
                     x.m.LabourGrantExpiresAtUtc,
                     // lane 2b — the per-authority ends.
                     x.m.AuthorityExpiresAtJson,
+                    // spec: plr-d10 lane MU-4 fix pass 1 (M7) — which plots the seat covers.
+                    x.m.PlotScope,
                     IsRegistrant = x.f.OwnerUserId == userId,
                 })
                 .ToListAsync(token),
@@ -207,9 +209,14 @@ public sealed class FarmMembershipSnapshotReader(
             var expiries = ShramSafal.Domain.Farms.FarmAuthorities.ParseExpiries(r.AuthorityExpiresAtJson);
             var held = active
                 ? ShramSafal.Domain.Farms.FarmAuthorities.All
-                    .Where(a => primary || ShramSafal.Domain.Farms.FarmAuthorities.IsHeld(
+                    .Where(a => primary || (ShramSafal.Domain.Farms.FarmAuthorities.IsHeld(
                         r.Role, r.Permissions, r.CanManageLabourRecords, r.LabourGrantExpiresAtUtc,
-                        r.AuthorityExpiresAtJson, a, nowUtc))
+                        r.AuthorityExpiresAtJson, a, nowUtc)
+                        // spec: plr-d10 lane MU-4 fix pass 1 (M7, P5) — editing the farm's setup needs a seat that
+                        // covers every plot (FarmAccessPolicy.Holds); his phone is not told he holds it otherwise, so it
+                        // offers no add-plot or boundary door the server would refuse.
+                        && (a != ShramSafal.Domain.Farms.FarmAuthority.EditFarmSetup
+                            || r.PlotScope == ShramSafal.Domain.Farms.MembershipPlotScope.AllPlots)))
                     .Select(a => new KeyValuePair<ShramSafal.Domain.Farms.FarmAuthority, DateTime?>(
                         a,
                         primary ? null : ShramSafal.Domain.Farms.FarmAuthorities.ExpiryOf(

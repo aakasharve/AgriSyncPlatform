@@ -37,6 +37,17 @@ public sealed class AssignJobCardHandler(
         if (!IsEligibleToAssign(callerRole.Value))
             return Result.Failure<AssignJobCardResult>(ShramSafalErrors.JobCardRoleNotAllowed);
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, jobCard.FarmId.Value, jobCard.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+            return Result.Failure<AssignJobCardResult>(outsidePlots);
+
+        // lane MU-4 fix pass 1 (L1) — and never to a person who covers other plots: a task he could not see would be
+        // given to him (founder, PRV H3: never assign an activity to someone who cannot see it). Refused visibly.
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, jobCard.FarmId.Value, jobCard.PlotId, command.WorkerUserId.Value, clock.UtcNow, ct) is { } workerOutside)
+            return Result.Failure<AssignJobCardResult>(workerOutside);
+
         // 3. Verify the worker is an active member of the farm.
         var workerMembership = await repository.GetFarmMembershipAsync(
             jobCard.FarmId.Value, command.WorkerUserId.Value, ct);

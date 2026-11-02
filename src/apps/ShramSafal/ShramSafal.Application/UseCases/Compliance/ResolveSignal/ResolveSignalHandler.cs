@@ -41,6 +41,12 @@ public sealed class ResolveSignalHandler(
                 clock.UtcNow, ct))
             return Result.Failure(ShramSafalErrors.ComplianceSignalRoleNotAllowed);
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike): the
+        //    sync payload names only the warning, so the warning's own plot is asked here.
+        if (await PlotScopeGate.RefuseAsync(
+                repository, signal.FarmId.Value, signal.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+            return Result.Failure(outsidePlots);
+
         // spec: plr-d10 lane PRV fix pass 1 (H2) — a warning that names a record kept from him is not his to handle.
         if ((await RecordVisibility.ForFarmAsync(repository, signal.FarmId.Value, command.CallerUserId.Value, clock.UtcNow, ct))
             .MentionsHidden(signal.PayloadJson))

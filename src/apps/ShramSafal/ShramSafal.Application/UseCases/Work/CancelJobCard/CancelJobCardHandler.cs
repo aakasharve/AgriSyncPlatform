@@ -50,6 +50,11 @@ public sealed class CancelJobCardHandler(
         if (callerRole is null)
             return Result.Failure<CancelJobCardResult>(ShramSafalErrors.Forbidden);
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, jobCard.FarmId.Value, jobCard.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+            return Result.Failure<CancelJobCardResult>(outsidePlots);
+
         // 3. Delegate to domain — enforces state and role gates.
         try
         {

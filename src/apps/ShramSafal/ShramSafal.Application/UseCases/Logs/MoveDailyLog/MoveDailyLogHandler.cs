@@ -126,6 +126,27 @@ public sealed class MoveDailyLogHandler(
             return Result.Failure<MoveDailyLogResultDto>(refusal);
         }
 
+        // ── 2b. spec: plr-d10 lane MU-4 fix pass 1 (H1, M3) — a seat on chosen plots moves work only onto his plots, and
+        //        from his narrowed copy his move changes only HIS part: the plots he cannot see are kept as stored (never
+        //        silently dropped, P3). A change that cannot touch his part alone (the day, or "the whole farm", of a
+        //        record that also stands on plots not his) is refused visibly, as the push gate refuses a foreign plot.
+        if (await Services.PlotScopeGate.ChosenPlotsAsync(repository, (Guid)log.FarmId, command.ActorUserId, now, ct) is { } his)
+        {
+            var notHis = log.PlotIds.Where(p => !his.Contains(p)).ToList();
+            var movesDay = command.NewLogDate is { } day && day != log.LogDate;
+            if ((newPlotIds is not null && newPlotIds.Any(p => !his.Contains(p)))
+                || (notHis.Count > 0 && (command.WholeFarm || movesDay)))
+            {
+                logger.LogWarning("move_daily_log for {LogId} refused: it names or reaches a plot outside the sender's plots.", log.Id);
+                return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.PlotScopeForbidden);
+            }
+
+            if (newPlotIds is not null && notHis.Count > 0)
+            {
+                newPlotIds = notHis.Concat(newPlotIds).Distinct().ToArray();
+            }
+        }
+
         // ── 3. When. ───────────────────────────────────────────────────────────────────────────
         var targetDate = command.NewLogDate ?? log.LogDate;
         if (command.NewLogDate is { } chosenDay && LogDayRule.IsAfterFarmToday(chosenDay, now))

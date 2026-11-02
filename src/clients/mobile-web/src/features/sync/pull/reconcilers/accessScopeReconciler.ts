@@ -124,7 +124,10 @@ export async function reconcileAccessScopes(
     const moneyWithheld = (farmId: string) => goneSet.has(farmId) || scopeOf(farmId)?.seeMoney === false;
     const removedEntryIds: string[] = [];
     for (const entry of await db.costEntries.toArray()) {
-        if (moneyWithheld(entry.farmId)) removedEntryIds.push(entry.id);
+        // lane MU-4 fix pass 1 (M5, D-28) — his OWN submissions stay (with their status) on a farm he still reads: the server
+        // sends them to every working seat. A farm that is gone takes them too.
+        const own = !!ctx.userId && (entry.payload as { createdByUserId?: unknown } | null)?.createdByUserId === ctx.userId;
+        if (moneyWithheld(entry.farmId) && !(own && !goneSet.has(entry.farmId))) removedEntryIds.push(entry.id);
     }
     await db.costEntries.bulkDelete(removedEntryIds);
     const removedEntries = new Set(removedEntryIds);
@@ -162,7 +165,8 @@ export async function reconcileAccessScopes(
     }
     await db.jobCards.bulkDelete(jobCards);
     outcome.removedMoneyRows = removedEntryIds.length + corrections.length + ledgers.length + jobCards.length;
-    await trimMirror(db, 'shramsafal_finance_cost_entries_v1', row => !moneyWithheld(String(row.farmId ?? '')), ctx.receivedAtUtc);
+    await trimMirror(db, 'shramsafal_finance_cost_entries_v1', row => !removedEntries.has(String(row.id ?? ''))
+        && (!moneyWithheld(String(row.farmId ?? '')) || (!!ctx.userId && row.createdByUserId === ctx.userId && !goneSet.has(String(row.farmId ?? '')))), ctx.receivedAtUtc);
     await trimMirror(db, 'shramsafal_finance_corrections_v1', row => !removedEntries.has(String(row.costEntryId ?? '')), ctx.receivedAtUtc);
 
     // ── Attendance, tests, warnings ─────────────────────────────────────────────────────

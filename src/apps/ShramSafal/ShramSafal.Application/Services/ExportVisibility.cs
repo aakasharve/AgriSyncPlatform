@@ -44,7 +44,9 @@ public static class ExportVisibility
                     ledger.CreatedAtUtc));
         }
 
-        var leftOutByRule = all.Any(l => visibility.HiddenByAudience(Domain.RecordPrivacy.RecordKinds.CostEntry, l.SourceCostEntryId));
+        // lane MU-4 fix pass 1 (M4) — W4 only for a row he would receive by its place (his plots' share, his own bill).
+        var leftOutByRule = all.Any(l => visibility.HiddenByAudience(Domain.RecordPrivacy.RecordKinds.CostEntry, l.SourceCostEntryId)
+            && visibility.LedgerInPlace(Contracts.Dtos.DtoMappingExtensions.ToDto(l)));
         return new ExportLedgers(shown, leftOutByRule ? RuleNotCountedEn : null);
     }
 }

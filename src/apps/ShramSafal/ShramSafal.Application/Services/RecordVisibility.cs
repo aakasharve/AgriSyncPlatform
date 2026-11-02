@@ -219,6 +219,12 @@ public static class RecordPlaceRule
             return place.Kind != RecordKinds.CostEntry || his;
         }
 
+        // lane MU-4 fix pass 1 (M5, D-28) — his own money submission always reaches him, whatever its plot.
+        if (his && place.Kind == RecordKinds.CostEntry)
+        {
+            return true;
+        }
+
         return place.WholeFarm ? his : place.PlotIds.Any(scope.CoversPlot);
     }
 }
@@ -301,6 +307,7 @@ public sealed class RecordVisibility
             .ToList();
         placeNarrowedFarms = scopes.Values.Where(RecordPlaceRule.Narrows).Select(s => s.FarmId).ToHashSet();
         var outOfPlaceIds = OutOfPlace.Select(r => r.Id).ToHashSet();
+        outOfPlaceRecordIds = outOfPlaceIds;
         billPhotosOfSeenMoney = placed
             .Where(p => p.Kind == RecordKinds.CostEntry && !outOfPlaceIds.Contains(p.Id) && !audienceHiddenCostIds.Contains(p.Id))
             .SelectMany(p => p.BillPhotoIds)
@@ -409,6 +416,46 @@ public sealed class RecordVisibility
     /// seat). Hidden from every door like <see cref="Hidden"/>, but never counted as "left out by rule": his totals are his.
     /// </summary>
     public IReadOnlyList<RestrictedRecord> OutOfPlace { get; }
+
+    /// <summary>
+    /// lane MU-4 fix pass 1 — is this record kept from him by its PLACE (another plot, or not his own money), whatever its
+    /// audience? Record ids are unique across both kinds (the kind is kept for the callers' readability).
+    /// </summary>
+    public bool IsOutOfPlace(string kind, Guid id) => outOfPlaceRecordIds.Contains(id);
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-4 fix pass 1 (M2) — has this record LEFT his plots: it is out of his place now, and either he
+    /// made it or it once stood on one of his plots (<paramref name="formerPlotIds"/>)? Only then is he owed a word that it
+    /// left (the pull's content-free withdrawn list); a move between plots he never covered is never hinted at.
+    /// </summary>
+    public bool LeftHisPlaces(string kind, Guid id, Guid farmId, Guid makerUserId, IReadOnlyCollection<Guid> formerPlotIds)
+    {
+        ArgumentNullException.ThrowIfNull(formerPlotIds);
+        var scope = scopes.GetValueOrDefault(farmId);
+        return IsOutOfPlace(kind, id)
+            && RecordPlaceRule.NarrowsByPlot(scope)
+            && ((readerUserId != Guid.Empty && makerUserId == readerUserId) || formerPlotIds.Any(scope!.CoversPlot));
+    }
+
+    private readonly HashSet<Guid> outOfPlaceRecordIds;
+
+    /// <summary>
+    /// lane MU-4 fix pass 1 (M4) — would this day-ledger row reach him by its PLACE alone (audience aside): a seat that
+    /// reads the farm's records, his own bill, his plots' share lines, or (own work) a bill of his.
+    /// </summary>
+    public bool LedgerInPlace(Contracts.Dtos.DayLedgerDto dto)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+        var scope = scopes.GetValueOrDefault(dto.FarmId);
+        if (!RecordPlaceRule.Narrows(scope) || (readerUserId != Guid.Empty && dto.CreatedByUserId == readerUserId))
+        {
+            return true;
+        }
+
+        return scope!.OwnRecordsOnly
+            ? !IsOutOfPlace(RecordKinds.CostEntry, dto.SourceCostEntryId)
+            : dto.Allocations.Any(a => scope.CoversPlot(a.PlotId));
+    }
 
     /// <summary>lane MU-4 — is this record kept from him by its AUDIENCE (not merely by its place)?</summary>
     public bool HiddenByAudience(string kind, Guid id) =>

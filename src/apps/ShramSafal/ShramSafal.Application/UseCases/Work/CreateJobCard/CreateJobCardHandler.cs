@@ -46,6 +46,11 @@ public sealed class CreateJobCardHandler(
         if (!IsEligibleToCreate(callerRole.Value))
             return Result.Failure<CreateJobCardResult>(ShramSafalErrors.JobCardRoleNotAllowed);
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, command.FarmId.Value, command.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+            return Result.Failure<CreateJobCardResult>(outsidePlots);
+
         // 4. Map DTOs to domain line items.
         List<JobCardLineItem> lineItems;
         try

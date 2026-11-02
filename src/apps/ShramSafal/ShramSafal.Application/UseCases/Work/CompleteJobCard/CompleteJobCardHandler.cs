@@ -43,6 +43,11 @@ public sealed class CompleteJobCardHandler(
         if (dailyLog is null)
             return Result.Failure<CompleteJobCardResult>(ShramSafalErrors.DailyLogNotFound);
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, jobCard.FarmId.Value, jobCard.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+            return Result.Failure<CompleteJobCardResult>(outsidePlots);
+
         // spec: plr-d10 lane PRV fix pass 1 (L4) — a job card is never linked to a record kept from the caller.
         if (!await Services.RecordAudienceGate.MaySeeLogAsync(repository, dailyLog, command.CallerUserId.Value, clock.UtcNow, ct))
             return Result.Failure<CompleteJobCardResult>(ShramSafalErrors.RecordAudienceClosed);

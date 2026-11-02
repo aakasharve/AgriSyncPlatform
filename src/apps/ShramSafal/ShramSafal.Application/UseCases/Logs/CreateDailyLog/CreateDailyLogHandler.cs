@@ -139,6 +139,18 @@ public sealed class CreateDailyLogHandler(
             return Result.Failure<DailyLogDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository,
+                command.FarmId,
+                (command.PlotIds ?? []).Select(p => (Guid?)p).Append(command.PlotId),
+                command.OperatorUserId,
+                clock.UtcNow,
+                ct) is { } outsidePlots)
+        {
+            return Result.Failure<DailyLogDto>(outsidePlots);
+        }
+
         // Phase 5 entitlement gate (PaidFeature.WriteDailyLog). Plan §4.5.
         var gate = await EntitlementGate.CheckAsync<DailyLogDto>(
             entitlementPolicy, new UserId(command.OperatorUserId), farmId,

@@ -13,6 +13,7 @@ public sealed class DailyLog : Entity<Guid>
     private readonly List<LogTask> _tasks = [];
     private readonly List<VerificationEvent> _verificationEvents = [];
     private readonly List<Guid> _plotIds = [];
+    private readonly List<Guid> _formerPlotIds = [];
 
     private DailyLog() : base(Guid.Empty) { } // EF Core
 
@@ -151,6 +152,20 @@ public sealed class DailyLog : Entity<Guid>
 
     /// <summary>lane PRV — when the audience last changed; <c>null</c> when it never did.</summary>
     public DateTime? AudienceChangedAtUtc { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-4 fix pass 1 (M2) — when the record last moved to another PLACE (another set of plots, or
+    /// to / from the whole farm); <c>null</c> when it never did. Stamped like an audience change (<see cref="AudienceStamp"/>):
+    /// a move changes who may see it, so a person whose plots it left is told (the pull's withdrawn list) and a person
+    /// whose plots it reached gets it with its photos and corrections.
+    /// </summary>
+    public DateTime? PlaceChangedAtUtc { get; private set; }
+
+    /// <summary>
+    /// lane MU-4 fix pass 1 (M2) — every plot this record stood on before a move (a set that only grows; none for a record
+    /// never moved off a plot). Content-free: it decides only who is told the record left his plots.
+    /// </summary>
+    public IReadOnlyCollection<Guid> FormerPlotIds => _formerPlotIds.AsReadOnly();
 
     /// <summary>
     /// lane PRV — the primary account holder narrowed or widened who sees this record. Moves the record past every
@@ -499,6 +514,7 @@ public sealed class DailyLog : Entity<Guid>
     {
         EnsureScopeInvariant(scope, plotIds, plotId, cropCycleId);
 
+        var placeBefore = PlacePlotIds();
         Scope = scope;
         _plotIds.Clear();
         _plotIds.AddRange(plotIds);
@@ -506,11 +522,26 @@ public sealed class DailyLog : Entity<Guid>
         CropCycleId = cropCycleId;
         LogDate = logDate;
         NoteContentChanged();
-        if (movedAtUtc > ModifiedAtUtc)
+        var placeAfter = PlacePlotIds();
+        if (!placeBefore.SetEquals(placeAfter))
+        {
+            // lane MU-4 fix pass 1 (M2) — a new PLACE changes who may see it: remember where it stood and stamp the
+            // move past every cursor, exactly as an audience change is stamped.
+            _formerPlotIds.AddRange(placeBefore.Where(p => !_formerPlotIds.Contains(p)).Order());
+            ModifiedAtUtc = AudienceStamp.NextModified(ModifiedAtUtc, movedAtUtc);
+            PlaceChangedAtUtc = ModifiedAtUtc;
+        }
+        else if (movedAtUtc > ModifiedAtUtc)
         {
             ModifiedAtUtc = movedAtUtc;
         }
     }
+
+    /// <summary>lane MU-4 fix pass 1 (M2) — the plots this record stands on (none for the whole farm).</summary>
+    private HashSet<Guid> PlacePlotIds() =>
+        Scope == DailyLogScope.Farm
+            ? []
+            : (_plotIds.Count > 0 ? _plotIds : PlotId is { } one ? [one] : []).Where(p => p != Guid.Empty).ToHashSet();
 
     /// <summary>True when the record already sits exactly here: this scope, these plots, this cycle and this day.</summary>
     public bool IsPlacedAt(DailyLogScope scope, IReadOnlyCollection<Guid> plotIds, Guid? cropCycleId, DateOnly logDate) =>

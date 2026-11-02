@@ -297,11 +297,15 @@ public sealed class PlotScopeRealPostgresTests(ITestOutputHelper output) : RoleS
 
         var (_, pull) = await PullAsync(Mukadam);
         var hisMoney = ArrayOf(pull, "costEntries").Sum(c => c.GetProperty("amount").GetDecimal());
+        // lane MU-4 fix pass 1 (L3) — and his share lines of a split bill, as /finance/plot-summary counts them.
+        var hisShares = ArrayOf(pull, "dayLedgers")
+            .SelectMany(l => l.GetProperty("allocations").EnumerateArray())
+            .Sum(a => a.GetProperty("allocatedAmount").GetDecimal());
 
         var (summaryStatus, summary) = await GetAsync(Mukadam, "/shramsafal/finance/summary?groupBy=plot");
         summaryStatus.Should().Be(HttpStatusCode.OK, summary);
         var summaryRoot = JsonDocument.Parse(summary).RootElement;
-        summaryRoot.GetProperty("grandTotal").GetDecimal().Should().Be(hisMoney, "his plots' money only");
+        summaryRoot.GetProperty("grandTotal").GetDecimal().Should().Be(hisMoney + hisShares, "his plots' money only, his split share counted (L3)");
         summaryRoot.GetProperty("scopedToPlots").GetBoolean().Should().BeTrue("the phone labels it तुमच्या प्लॉटचे");
         summaryRoot.GetProperty("recordsNotCounted").GetInt32().Should().Be(0, "another plot's money is not 'left out by rule'");
         summary.Should().NotContain(PlotA.ToString()).And.NotContain("9876.54");

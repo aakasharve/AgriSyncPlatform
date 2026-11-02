@@ -64,6 +64,19 @@ public sealed class AllocateGlobalExpenseHandler(
             return Result.Failure<DayLedgerDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike): every
+        //    share of the split lands on a plot, so every plot must be his.
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository,
+                (Guid)costEntry.FarmId,
+                (command.Allocations ?? []).Select(a => (Guid?)a.PlotId),
+                command.CreatedByUserId,
+                clock.UtcNow,
+                ct) is { } outsidePlots)
+        {
+            return Result.Failure<DayLedgerDto>(outsidePlots);
+        }
+
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — spreading a whole-farm cost over plots is
         // CHANGING money: the AddCost permission (the primary owner, or someone he stored it for).
         // Recording a cost stays open to every Active member (AddCostEntry).

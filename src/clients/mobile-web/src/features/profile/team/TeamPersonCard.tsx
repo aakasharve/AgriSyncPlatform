@@ -31,7 +31,7 @@ import { LabourAccessControl, type LabourAccessView } from '../components/Labour
 import { ConfirmAccessControl, type ConfirmAccessView } from './ConfirmAccessControl';
 import { AuthoritySwitches, type AuthorityAccessView } from './AuthoritySwitches';
 import { PlotScopePicker } from './PlotScopePicker';
-import type { PlotScopeChoice } from '../data/membershipAdminClient';
+import type { PlotScopeChoice, PlotScopeName } from '../data/membershipAdminClient';
 import type { FarmPlot } from './useFarmPlots';
 import { PRESETS, arrivalLine, doLine, phoneLine, presetOf, roleTone, roleWord, type DecisionRights } from './teamModel';
 import { ReasonStep } from './ReasonStep';
@@ -64,7 +64,13 @@ export interface TeamPersonCardProps {
      * lane MU-4 — the primary owner's plot choice for this person ("प्लॉट: सर्व प्लॉट ›"), passed ONLY when he may set
      * it (the primary account holder, a let-in person who is not the primary owner, not himself).
      */
-    plotAccess?: { value: PlotScopeChoice; farmPlots: readonly FarmPlot[]; onSave: (choice: PlotScopeChoice) => void };
+    plotAccess?: {
+        value: PlotScopeChoice;
+        /** lane MU-4 fix pass 1 (M7) — the choices that change something for him (absent = all three). */
+        choices?: readonly PlotScopeName[];
+        farmPlots: readonly FarmPlot[];
+        onSave: (choice: PlotScopeChoice) => void;
+    };
     onChangePreset: (preset: ApprovePreset) => void;
     onSuspend: (reason: string) => void;
     onRestore: () => void;
@@ -106,7 +112,7 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
             {plotAccess && (
                 <div className="mt-2">
                     <PlotScopePicker memberId={row.userId} value={plotAccess.value} farmPlots={plotAccess.farmPlots} busy={busy}
-                        onSave={plotAccess.onSave} />
+                        choices={plotAccess.choices} onSave={plotAccess.onSave} />
                 </div>
             )}
             {paused && (

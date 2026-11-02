@@ -59,6 +59,13 @@ public sealed class AdoptScheduleHandler(
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, command.FarmId, command.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } outsidePlots)
+        {
+            return Result.Failure<ScheduleSubscriptionDto>(outsidePlots);
+        }
+
         // Phase 5 entitlement gate — schedule adoption is a setup-level
         // operation, tiered with PaidFeature.CreatePlot.
         var gate = await EntitlementGate.CheckAsync<ScheduleSubscriptionDto>(

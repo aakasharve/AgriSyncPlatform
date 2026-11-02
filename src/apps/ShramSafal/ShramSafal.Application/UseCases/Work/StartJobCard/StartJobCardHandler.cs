@@ -31,6 +31,11 @@ public sealed class StartJobCardHandler(
         if (jobCard.StartedAtUtc.HasValue && jobCard.AssignedWorkerUserId == command.CallerUserId)
             return Result.Success(new StartJobCardResult(jobCard.Id, jobCard.StartedAtUtc.Value));
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, jobCard.FarmId.Value, jobCard.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
+            return Result.Failure<StartJobCardResult>(outsidePlots);
+
         // 3. Delegate to domain — domain enforces the assigned-worker invariant.
         try
         {

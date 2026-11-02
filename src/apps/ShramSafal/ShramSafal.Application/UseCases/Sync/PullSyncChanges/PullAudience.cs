@@ -69,9 +69,14 @@ internal sealed class PullAudience(
             }
             else if (visibility.HiddenByAudience(RecordKinds.DailyLog, log.Id))
             {
-                // lane MU-4 — only a record kept by its AUDIENCE is named here; one outside his plots leaves his phone by
-                // the plot scope the phone holds (accessScopes), as MU-3's purge does.
+                // lane MU-4 — a record kept by its AUDIENCE is named here; one outside his plots leaves his phone by the plot
+                // scope the phone holds (accessScopes), as MU-3's purge does ...
                 Consider(RecordKinds.DailyLog, log.Id, (Guid)log.FarmId, log.AudienceChangedAtUtc);
+            }
+            else if (visibility.LeftHisPlaces(RecordKinds.DailyLog, log.Id, (Guid)log.FarmId, log.OperatorUserId.Value, log.FormerPlotIds))
+            {
+                // ... fix pass 1 (M2): except one MOVED off his plots, which his phone still holds under its old place.
+                Consider(RecordKinds.DailyLog, log.Id, (Guid)log.FarmId, log.PlaceChangedAtUtc);
             }
         }
 
@@ -92,6 +97,12 @@ internal sealed class PullAudience(
             {
                 Consider(RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.AudienceChangedAtUtc);
             }
+            else if (visibility.LeftHisPlaces(
+                RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.CreatedByUserId.Value, entry.FormerPlotIds))
+            {
+                // lane MU-4 fix pass 1 (M2) — money moved off his plots with its record.
+                Consider(RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.PlaceChangedAtUtc);
+            }
         }
 
         return kept;
@@ -103,8 +114,14 @@ internal sealed class PullAudience(
     /// day-ledger rows are sent again with it, and — when the change's whole second is over — this response's cursor
     /// passes that second, so the record and its children come back ONCE (the withdrawal's rule, mirrored).
     /// </summary>
-    public bool Readmitted(Guid farmId, DateTime? audienceChangedAtUtc)
+    public bool Readmitted(Guid farmId, DateTime? audienceChangedAtUtc, DateTime? placeChangedAtUtc = null)
     {
+        // lane MU-4 fix pass 1 (M2) — a record MOVED onto his plots since his cursor is re-admitted the same way.
+        if (placeChangedAtUtc is { } moved && (audienceChangedAtUtc is not { } changedFirst || moved > changedFirst))
+        {
+            audienceChangedAtUtc = moved;
+        }
+
         if (audienceChangedAtUtc is not { } changed
             || phoneSinceUtc <= DateTime.UnixEpoch
             || window.ResetFarmIds.Contains(farmId))
@@ -136,8 +153,11 @@ internal sealed class PullAudience(
             return [];
         }
 
+        // lane MU-4 fix pass 1 (M4) — only a record he would see by its PLACE counts: a private record on another plot is
+        // never counted, nor hinted at (his totals are his plots').
         return visibility.Hidden
             .Where(r => r.FarmId == scope.FarmId && (r.Kind == RecordKinds.DailyLog || scope.SeeMoney))
+            .Where(r => !visibility.IsOutOfPlace(r.Kind, r.Id))
             .Select(r => new WithheldRecordDayDto(r.Kind == RecordKinds.DailyLog ? "work" : "money", r.Date))
             .Distinct()
             .OrderBy(d => d.Date)

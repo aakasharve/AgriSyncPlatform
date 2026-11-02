@@ -496,6 +496,7 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // spec plr-d10 lane MU-4 — Down() read in full: drops ck_farm_memberships_plot_scope and the two additive
         // farm_memberships columns plot_scope / scope_plot_ids (every seat back to every plot). No policy, no grant, no
         // table, no farm_join_requests object; a seat's status is never touched. Re-Up re-adds them with their defaults.
+        // Fix pass 1 (M2): also the four additive move columns on daily_logs / cost_entries (no policy, no grant).
         "20261101221236_AddMembershipPlotScope",
     ];
 

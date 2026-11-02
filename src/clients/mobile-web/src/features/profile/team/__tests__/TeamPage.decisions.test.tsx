@@ -296,13 +296,14 @@ describe('a person let in', () => {
         expect(document.body.textContent).not.toMatch(/खर्च नोंदवू शकतो|कामं ठरवू शकतो|काम ठरवणे/);
     });
 
-    it('a person card shows his phone tail, how he came in, and the honest all-records line', async () => {
+    it('a person card shows his phone tail, how he came in, and the true line about what each phone gets (MU-4 M8)', async () => {
         render(<Harness />);
         const card = await screen.findByTestId('team-person-ramesh');
         expect(within(card).getByTestId('team-person-phone').textContent).toBe('मोबाईल …7788');
         expect(within(card).getByTestId('team-person-arrival').textContent).toBe('QR ने थेट आले');
         expect(screen.getByTestId('team-all-records-note').textContent)
-            .toBe('सध्या शेतातल्या प्रत्येकाच्या फोनवर सर्व नोंदी, पैसेसुद्धा, जातात — पुढच्या टप्प्यात हे बंद होईल.');
+            .toBe('प्रत्येकाच्या फोनवर फक्त त्याला दिलेल्या जबाबदाऱ्या आणि प्लॉटनुसार नोंदी जातात.');
+        expect(document.body.textContent).not.toMatch(/सर्व नोंदी, पैसेसुद्धा/);
     });
 
     it('a reason longer than the server keeps is never cut: the owner is told and the confirm waits', async () => {

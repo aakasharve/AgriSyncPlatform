@@ -17,6 +17,8 @@ import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-li
 
 vi.mock('../../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: vi.fn(), t: (k: string) => k }),
+    // lane MU-4 fix pass 1 (M8) — the team page now reads the language for its one line about what each phone gets.
+    useOptionalLanguage: () => ({ language: 'mr', setLanguage: vi.fn(), t: (k: string) => k }),
 }));
 
 const fetchFieldOperators = vi.fn();

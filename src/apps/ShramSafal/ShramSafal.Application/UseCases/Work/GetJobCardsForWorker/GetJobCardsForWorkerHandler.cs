@@ -76,16 +76,19 @@ public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository
             ? new Dictionary<Guid, FarmReadScope?>()
             : (await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, permitted.ToList(), ct))
                 .ToDictionary(kv => kv.Key, kv => FarmReadScope.Of(kv.Key, kv.Value, clock?.UtcNow ?? DateTime.UtcNow));
-        // spec: plr-d10 lane MU-4 (§11.6) — another person's cards reach a chosen-plots seat only on his plots (his own
-        // cards are his whatever their plot).
-        if (query.CallerUserId.Value != query.WorkerUserId.Value)
-        {
-            jobCards = jobCards
-                .Where(j => scopes.GetValueOrDefault(j.FarmId.Value) is not { } s
-                    || s.OwnRecordsOnly
-                    || s.CoversPlot(j.PlotId))
-                .ToList();
-        }
+        // spec: plr-d10 lane MU-4 (§11.6) — a chosen-plots seat reads cards only on his plots; fix pass 1 (L1): his own
+        // cards too, exactly as the pull sends them (FarmReadScope.MayReadTask), so the two doors never disagree.
+        var placeScopes = query.CallerUserId.Value == query.WorkerUserId.Value
+            ? (await repository.GetFarmsMaybeReadByPlaceAsync(query.CallerUserId.Value, permitted.ToList(), ct)).Count == 0
+                ? new Dictionary<Guid, FarmReadScope?>()
+                : (await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, permitted.ToList(), ct))
+                    .ToDictionary(kv => kv.Key, kv => FarmReadScope.Of(kv.Key, kv.Value, clock?.UtcNow ?? DateTime.UtcNow))
+            : scopes;
+        jobCards = jobCards
+            .Where(j => placeScopes.GetValueOrDefault(j.FarmId.Value) is not { } s
+                || s.OwnRecordsOnly
+                || s.CoversPlot(j.PlotId))
+            .ToList();
 
         var whole = jobCards.Select(j => j.ToJobCardDto()).ToList();
         var dtos = whole

@@ -364,7 +364,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
             case 'cost':
                 return (
                     <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose"
-                        hint={plotsOnly ? `${plotScopeCopy(language).totalsLabel} · आतापर्यंतचा हिशोब आणि खर्चाचा आलेख` : 'आतापर्यंतचा हिशोब आणि खर्चाचा आलेख'} {...fold}>
+                        hint={plotsOnly ? `${plotScopeCopy(language).totalsLabel} · ${plotScopeCopy(language).costHint}` : plotScopeCopy(language).costHint} {...fold}>
                         <CostSection totals={money.totals} spend={money.spend} range={money.range} onOpenFinance={navigate ? () => navigate('finance-ledger') : undefined} />
                     </SectionBlock>
                 );

@@ -84,11 +84,26 @@ public static class TestEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             ScheduleTestDueDatesHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            AgriSync.BuildingBlocks.Abstractions.IClock clock,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots schedules tests on his plots only (asked
+            // under his own user scope; the handler answers a count, so the refusal is made here, visibly: 403).
+            var outsidePlots = await userScope.RunForCallerAsync(
+                actorUserId,
+                token => ShramSafal.Application.Services.PlotScopeGate.RefuseAsync(
+                    repository, request.FarmId, request.PlotId, actorUserId, clock.UtcNow, token),
+                ct);
+            if (outsidePlots is { } refused)
+            {
+                return ToErrorResult(refused);
             }
 
             var stages = (request.Stages ?? Array.Empty<ScheduleTestStageRequest>())

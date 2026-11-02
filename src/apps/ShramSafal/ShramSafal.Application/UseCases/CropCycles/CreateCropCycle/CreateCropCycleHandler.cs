@@ -67,6 +67,13 @@ public sealed class CreateCropCycleHandler(
             return Result.Failure<CropCycleDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, command.FarmId, command.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } outsidePlots)
+        {
+            return Result.Failure<CropCycleDto>(outsidePlots);
+        }
+
         // Phase 5 entitlement gate (PaidFeature.CreatePlot tier — crop
         // cycles live in the same setup-level entitlement as plots).
         var gate = await EntitlementGate.CheckAsync<CropCycleDto>(

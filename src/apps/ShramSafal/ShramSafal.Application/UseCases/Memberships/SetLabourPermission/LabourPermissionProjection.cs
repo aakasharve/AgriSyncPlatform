@@ -59,6 +59,31 @@ internal static class LabourPermissionProjection
         }
 
         var confirms = isPrimary || membership.HoldsIgnoringStatus(FarmAuthority.ConfirmRecords, nowUtc);
+
+        // spec: plr-d10 lane MU-4 fix pass 1 (M7, P5) — the same rules the server enforces, said on the card: one
+        // own-records rule for the कामगार label and the स्वतःचं काम scope (FarmReadScope.Of); edit farm setup only on a
+        // seat that covers every plot (FarmAccessPolicy.Holds).
+        var ownRecords = !isPrimary && (membership.Role == AppRole.Worker || membership.PlotScope == MembershipPlotScope.OwnWork);
+        var notInForce = new List<string>();
+        if (!isPrimary && membership.PlotScope != MembershipPlotScope.AllPlots)
+        {
+            notInForce.Add(FarmAuthorities.NameOf(FarmAuthority.EditFarmSetup));
+        }
+
+        if (ownRecords)
+        {
+            notInForce.Add(FarmAuthorities.NameOf(FarmAuthority.SeeMoney));
+            notInForce.Add(FarmAuthorities.NameOf(FarmAuthority.SeeWages));
+        }
+
+        var effectiveScope = isPrimary
+            ? MembershipPlotScope.AllPlots
+            : ownRecords && membership.PlotScope != MembershipPlotScope.ChosenPlots
+                ? MembershipPlotScope.OwnWork
+                : membership.PlotScope;
+        var choices = !isPrimary && membership.Role == AppRole.Worker
+            ? new[] { nameof(MembershipPlotScope.OwnWork), nameof(MembershipPlotScope.ChosenPlots) }
+            : new[] { nameof(MembershipPlotScope.AllPlots), nameof(MembershipPlotScope.ChosenPlots), nameof(MembershipPlotScope.OwnWork) };
         var letIn = membership.Status is MembershipStatus.Active or MembershipStatus.Suspended;
 
         return new LabourPermissionDto(
@@ -93,6 +118,9 @@ internal static class LabourPermissionProjection
             PlotScope: isPrimary ? nameof(MembershipPlotScope.AllPlots) : membership.PlotScope.ToString(),
             PlotIds: !isPrimary && membership.PlotScope == MembershipPlotScope.ChosenPlots
                 ? membership.ScopePlotIds.Order().ToList()
-                : null);
+                : null,
+            EffectivePlotScope: effectiveScope.ToString(),
+            PlotScopeChoices: choices,
+            AuthoritiesNotInForce: notInForce);
     }
 }

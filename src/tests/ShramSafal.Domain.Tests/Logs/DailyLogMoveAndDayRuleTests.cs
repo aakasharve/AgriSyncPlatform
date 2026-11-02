@@ -35,7 +35,9 @@ public sealed class DailyLogMoveAndDayRuleTests
         log.CropCycleId.Should().Be(CycleB);
         log.LogDate.Should().Be(new DateOnly(2026, 10, 28));
         log.ContentVersion.Should().Be(2);
-        log.ModifiedAtUtc.Should().Be(Created.AddHours(1));
+        // lane MU-4 fix pass 1 (M2) — a new place is stamped like an audience change: never exactly on a whole second.
+        log.ModifiedAtUtc.Should().BeOnOrAfter(Created.AddHours(1)).And.BeCloseTo(Created.AddHours(1), TimeSpan.FromMilliseconds(1));
+        log.PlaceChangedAtUtc.Should().Be(log.ModifiedAtUtc);
         log.IsPlacedAt(DailyLogScope.Plot, [PlotB], CycleB, new DateOnly(2026, 10, 28)).Should().BeTrue();
     }
 
@@ -71,8 +73,13 @@ public sealed class DailyLogMoveAndDayRuleTests
     public void The_clock_never_moves_back_on_a_move()
     {
         var log = Log();
+        log.MoveTo(DailyLogScope.Plot, [PlotA], PlotA, CycleA, new DateOnly(2026, 10, 29), Created.AddDays(-3));
+        log.ModifiedAtUtc.Should().Be(Created, "a day-only move with an older time leaves the clock where it is");
+
+        // spec: plr-d10 lane MU-4 fix pass 1 (M2) — a move to another PLACE is stamped like an audience change: strictly
+        // forward (one microsecond), never back, so every phone's cursor passes it once.
         log.MoveTo(DailyLogScope.Plot, [PlotB], PlotB, CycleB, log.LogDate, Created.AddDays(-3));
-        log.ModifiedAtUtc.Should().Be(Created);
+        log.ModifiedAtUtc.Should().BeAfter(Created).And.BeCloseTo(Created, TimeSpan.FromMilliseconds(1));
     }
 
     [Fact]

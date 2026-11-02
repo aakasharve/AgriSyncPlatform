@@ -75,6 +75,13 @@ public sealed class AddCostEntryHandler(
             return Result.Failure<AddCostEntryResultDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
+        if (await Services.PlotScopeGate.RefuseAsync(
+                repository, command.FarmId, command.PlotId, command.CreatedByUserId, clock.UtcNow, ct) is { } outsidePlots)
+        {
+            return Result.Failure<AddCostEntryResultDto>(outsidePlots);
+        }
+
         // spec: pre-launch-repair L2b (R-1; founder D-41 phase A) — ONE stored entry per money entry id.
         // The phone derives the id from the entry's own source (a bill line, a log entry), so a double tap,
         // a retry under a new device id, a reopen of खरेदी or a recovery send all carry the SAME id.

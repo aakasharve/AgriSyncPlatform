@@ -156,6 +156,14 @@ export interface LabourPermission {
      */
     plotScope?: 'AllPlots' | 'ChosenPlots' | 'OwnWork';
     plotIds?: string[] | null;
+    /**
+     * lane MU-4 fix pass 1 (M7) — ADDITIVE: what he EFFECTIVELY reads (a कामगार on every plot reads "OwnWork": the label
+     * narrows), the plot choices that change something for him, and the responsibilities that do nothing on his seat.
+     * Absent = an older server: the stored scope, all three choices, every switch live.
+     */
+    effectivePlotScope?: 'AllPlots' | 'ChosenPlots' | 'OwnWork' | null;
+    plotScopeChoices?: ('AllPlots' | 'ChosenPlots' | 'OwnWork')[] | null;
+    authoritiesNotInForce?: string[] | null;
 }
 
 /** lane 2b — one authority on the wire: the server's name and its end (ISO UTC, null = कायम). */
