@@ -34,8 +34,10 @@ public sealed class GetJobCardsForFarmHandler(IShramSafalRepository repository, 
         if (scope is null || scope.OwnRecordsOnly)
             return Result.Failure<List<JobCardDto>>(ShramSafalErrors.Forbidden);
 
-        var jobCards = await repository.GetJobCardsForFarmAsync(
-            query.FarmId, query.StatusFilter, ct);
+        // spec: plr-d10 lane MU-4 (§11.6) — a chosen-plots seat: the cards on his plots.
+        var jobCards = (await repository.GetJobCardsForFarmAsync(query.FarmId, query.StatusFilter, ct))
+            .Where(j => scope.MayReadTask(query.CallerUserId.Value, j.PlotId, j.AssignedWorkerUserId?.Value))
+            .ToList();
 
         var whole = jobCards.Select(j => j.ToJobCardDto()).ToList();
         var dtos = whole

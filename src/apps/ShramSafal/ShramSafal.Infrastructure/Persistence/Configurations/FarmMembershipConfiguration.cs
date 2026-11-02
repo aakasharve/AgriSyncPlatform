@@ -8,7 +8,11 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
 {
     public void Configure(EntityTypeBuilder<FarmMembership> builder)
     {
-        builder.ToTable("farm_memberships");
+        // lane MU-4 — ck_farm_memberships_plot_scope: chosen plots name one or more plots, every other scope names none.
+        builder.ToTable("farm_memberships", t => t.HasCheckConstraint(
+            "ck_farm_memberships_plot_scope",
+            "(plot_scope = 'ChosenPlots') = (cardinality(scope_plot_ids) > 0) "
+            + "AND plot_scope IN ('AllPlots', 'ChosenPlots', 'OwnWork')"));
 
         builder.HasKey(x => x.Id);
 
@@ -157,6 +161,28 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
         builder.Property(x => x.AuthorityExpiresAtJson)
             .HasColumnName("authority_expires_at")
             .HasColumnType("jsonb");
+
+        // spec: plr-d10 lane MU-4 — migration AddMembershipPlotScope. Which plots the seat covers, as the literal member
+        // name (the DailyLogScope shape: varchar + HasConversion<string>), NOT NULL DEFAULT 'AllPlots' so every row written
+        // before MU-4 covers every plot (P11), and the chosen plots as a native uuid[] (the DailyLog.plot_ids mapping),
+        // NOT NULL DEFAULT '{}' (empty = no chosen plot). ck_farm_memberships_plot_scope (on the table, above) ties the two
+        // together. No new table, so no new RLS policy: p_tenant_farm_memberships names the row, not the column (F8 does
+        // not arise).
+        builder.Property(x => x.PlotScope)
+            .HasColumnName("plot_scope")
+            .HasConversion<string>()
+            .HasMaxLength(12)
+            .HasDefaultValue(MembershipPlotScope.AllPlots)
+            .IsRequired();
+
+        builder.PrimitiveCollection<List<Guid>>("_scopePlotIds")
+            .HasField("_scopePlotIds")
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasColumnName("scope_plot_ids")
+            .HasColumnType("uuid[]")
+            .HasDefaultValueSql("'{}'::uuid[]")
+            .IsRequired();
+        builder.Ignore(x => x.ScopePlotIds);
 
         builder.Ignore(x => x.EffectivePermissions);
         builder.Ignore(x => x.EndedAfterOwnerStop);

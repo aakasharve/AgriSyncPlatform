@@ -1290,6 +1290,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    table (FORCE RLS, its own policies and grants). Never touches ssf.audit_events, its policies or its
         //    grants (the audience change is an ordinary appended audit row). Safe mid-proof.
         "20261101110309_AddRecordAudience",
+
+        // ── Reviewed 2026-11-02 (spec: plr-d10 lane MU-4); Down() read in full: drops ck_farm_memberships_plot_scope and
+        //    the two additive farm_memberships columns plot_scope / scope_plot_ids. Up() adds them with their defaults.
+        //    Never touches ssf.audit_events, its policies or its grants (a plot-scope change is an ordinary appended
+        //    audit row, MemberPlotScopeChanged). Safe mid-proof.
+        "20261101221236_AddMembershipPlotScope",
     ];
 
     /// <summary>

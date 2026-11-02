@@ -76,6 +76,17 @@ public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository
             ? new Dictionary<Guid, FarmReadScope?>()
             : (await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, permitted.ToList(), ct))
                 .ToDictionary(kv => kv.Key, kv => FarmReadScope.Of(kv.Key, kv.Value, clock?.UtcNow ?? DateTime.UtcNow));
+        // spec: plr-d10 lane MU-4 (§11.6) — another person's cards reach a chosen-plots seat only on his plots (his own
+        // cards are his whatever their plot).
+        if (query.CallerUserId.Value != query.WorkerUserId.Value)
+        {
+            jobCards = jobCards
+                .Where(j => scopes.GetValueOrDefault(j.FarmId.Value) is not { } s
+                    || s.OwnRecordsOnly
+                    || s.CoversPlot(j.PlotId))
+                .ToList();
+        }
+
         var whole = jobCards.Select(j => j.ToJobCardDto()).ToList();
         var dtos = whole
             .Select((j, i) => query.CallerUserId.Value == query.WorkerUserId.Value

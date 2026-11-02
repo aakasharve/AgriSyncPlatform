@@ -2352,6 +2352,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("permissions");
 
+                    b.Property<string>("PlotScope")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasDefaultValue("AllPlots")
+                        .HasColumnName("plot_scope");
+
                     b.Property<DateTime?>("RevokedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at_utc");
@@ -2385,6 +2393,13 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
+                    b.PrimitiveCollection<List<Guid>>("_scopePlotIds")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("scope_plot_ids")
+                        .HasDefaultValueSql("'{}'::uuid[]");
+
                     b.Property<Guid>("owner_account_id")
                         .HasColumnType("uuid")
                         .HasColumnName("owner_account_id");
@@ -2403,7 +2418,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_farm_memberships_farm_user_nonterminal")
                         .HasFilter("status NOT IN (5, 6)");
 
-                    b.ToTable("farm_memberships", "ssf");
+                    b.ToTable("farm_memberships", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_farm_memberships_plot_scope", "(plot_scope = 'ChosenPlots') = (cardinality(scope_plot_ids) > 0) AND plot_scope IN ('AllPlots', 'ChosenPlots', 'OwnWork')");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Farms.FarmOperation", b =>

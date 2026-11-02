@@ -135,7 +135,12 @@ public sealed record FarmAccessScopeDto(
     string Status = FarmAccessScopeDto.Active,
     // spec: plr-d10 lane PRV — the days of this farm whose totals leave out a record by rule (W4). Additive; absent or
     // empty = every record the farm holds is counted for him.
-    IReadOnlyList<WithheldRecordDayDto>? WithheldRecordDays = null)
+    IReadOnlyList<WithheldRecordDayDto>? WithheldRecordDays = null,
+    // spec: plr-d10 lane MU-4 — which plots this seat covers: "AllPlots", "ChosenPlots" or "OwnWork" (additive; absent =
+    // every plot, an older server), and, for chosen plots only, the plots (null otherwise). The phone's pickers offer only
+    // these plots and its purge removes what lies outside them. A not-readable entry carries neither.
+    string? PlotScope = null,
+    IReadOnlyList<Guid>? PlotIds = null)
 {
     public const string Active = "Active";
     public const string Paused = "Paused";
@@ -151,7 +156,9 @@ public sealed record FarmAccessScopeDto(
             scope.SeeAttendance,
             scope.SeeTests,
             scope.SeeCompliance,
-            scope.SeeFarmOverview);
+            scope.SeeFarmOverview,
+            PlotScope: scope.PlotScope.ToString(),
+            PlotIds: scope.PlotIds?.Order().ToList());
 
     /// <summary>
     /// A farm the phone holds that this person may no longer read: a paused seat says Paused, a waiting

@@ -140,6 +140,86 @@ public sealed class FarmMembership : Entity<Guid>
     public DateTime? AccessChangedAtUtc { get; private set; }
 
     /// <summary>
+    /// spec: plr-d10 lane MU-4 (MU design §2, §3 G2) — which plots this seat covers. <see cref="MembershipPlotScope.AllPlots"/>
+    /// for every row written before MU-4 (the column's default), so an old seat reads exactly what it read (P11). Set only by
+    /// the primary account holder (<see cref="SetPlotScope"/>, D-26); the primary owner's own seat always covers every plot.
+    /// </summary>
+    public MembershipPlotScope PlotScope { get; private set; } = MembershipPlotScope.AllPlots;
+
+    private readonly List<Guid> _scopePlotIds = [];
+
+    /// <summary>
+    /// lane MU-4 — the plots a <see cref="MembershipPlotScope.ChosenPlots"/> seat covers (one or more plots of THIS farm;
+    /// the caller proves they are, doctrine E4). Empty for every other scope.
+    /// </summary>
+    public IReadOnlyCollection<Guid> ScopePlotIds => _scopePlotIds.AsReadOnly();
+
+    /// <summary>
+    /// lane MU-4 — the owner chooses which plots this person covers: all plots, the chosen <paramref name="plotIds"/> (one
+    /// or more, each of this farm — the caller's check), or his own work. Returns <c>true</c> only when something stored
+    /// moved (a re-sent choice writes no history). A change moves <see cref="AccessChangedAtUtc"/>, so the phone purges on a
+    /// narrowing and the pull re-sends the farm on a widening (MU-3's mechanics).
+    /// <para><b>Refused (never silently trimmed):</b> chosen plots with none named; plots named for any other scope; an
+    /// empty plot id; an ended seat (<see cref="InvalidOperationException"/>); the primary owner's own seat (he covers every
+    /// plot by label).</para>
+    /// </summary>
+    public bool SetPlotScope(MembershipPlotScope scope, IReadOnlyCollection<Guid>? plotIds, DateTime utcNow)
+    {
+        if (IsTerminal)
+        {
+            throw new InvalidOperationException($"Cannot change the plots of a {Status} membership.");
+        }
+
+        if (Role == AppRole.PrimaryOwner)
+        {
+            throw new InvalidOperationException("The primary owner covers every plot; his plots are not chosen.");
+        }
+
+        var chosen = NormalizePlotScope(scope, plotIds);
+        if (PlotScope == scope && _scopePlotIds.Count == chosen.Count && _scopePlotIds.All(chosen.Contains))
+        {
+            return false;
+        }
+
+        PlotScope = scope;
+        _scopePlotIds.Clear();
+        _scopePlotIds.AddRange(chosen.Order());
+        ModifiedAtUtc = utcNow;
+        AccessChangedAtUtc = utcNow;
+        return true;
+    }
+
+    /// <summary>
+    /// lane MU-4 — the plot set a scope stores, or <see cref="ArgumentException"/>: chosen plots need one or more
+    /// (non-empty) plot ids, and every other scope names none.
+    /// </summary>
+    public static IReadOnlySet<Guid> NormalizePlotScope(MembershipPlotScope scope, IReadOnlyCollection<Guid>? plotIds)
+    {
+        if (!Enum.IsDefined(scope))
+        {
+            throw new ArgumentException("Unknown plot scope.", nameof(scope));
+        }
+
+        var ids = (plotIds ?? []).ToHashSet();
+        if (ids.Contains(Guid.Empty))
+        {
+            throw new ArgumentException("A chosen plot needs its id.", nameof(plotIds));
+        }
+
+        if (scope == MembershipPlotScope.ChosenPlots && ids.Count == 0)
+        {
+            throw new ArgumentException("Chosen plots need at least one plot.", nameof(plotIds));
+        }
+
+        if (scope != MembershipPlotScope.ChosenPlots && ids.Count > 0)
+        {
+            throw new ArgumentException("Only chosen plots name plots.", nameof(plotIds));
+        }
+
+        return ids;
+    }
+
+    /// <summary>
     /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the effective permission set of THIS seat:
     /// <see cref="FarmPermissionDefaults.Effective"/> over the role and the stored choice, and
     /// nothing at all unless the seat is <see cref="MembershipStatus.Active"/> (a waiting request,
@@ -451,6 +531,9 @@ public sealed class FarmMembership : Entity<Guid>
         LabourGrantExpiresAtUtc = null;
         Permissions = null;
         AuthorityExpiresAtJson = null;
+        // lane MU-4 — a fresh claim covers every plot, as a fresh QR claim does (no scope rides in from the request).
+        PlotScope = MembershipPlotScope.AllPlots;
+        _scopePlotIds.Clear();
         ModifiedAtUtc = utcNow;
         LastSeenAtUtc = utcNow;
         // lane MU-3 — the request became an Active seat: what he may read changed (the pull re-sends the farm).

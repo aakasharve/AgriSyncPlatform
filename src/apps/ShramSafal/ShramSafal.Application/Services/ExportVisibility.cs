@@ -18,8 +18,34 @@ public static class ExportVisibility
         ArgumentNullException.ThrowIfNull(ledgers);
         ArgumentNullException.ThrowIfNull(visibility);
         var all = ledgers.ToList();
-        var shown = all.Where(l => visibility.MaySeeCost(l.SourceCostEntryId)).ToList();
-        return new ExportLedgers(shown, shown.Count < all.Count ? RuleNotCountedEn : null);
+        // spec: plr-d10 lane MU-4 (D-39) - each row as the reader may receive it (RecordVisibility.Ledger): a bill kept by
+        // its audience is left out (and the W4 line says so); for a chosen-plots seat only the share lines on HIS plots,
+        // never the whole bill; a row with no share of his is not his (not "left out by rule": it is another plot's).
+        var shown = new List<DayLedger>();
+        foreach (var ledger in all)
+        {
+            if (visibility.Ledger(Contracts.Dtos.DtoMappingExtensions.ToDto(ledger)) is not { } seen)
+            {
+                continue;
+            }
+
+            shown.Add(seen.Allocations.Count == ledger.Allocations.Count
+                ? ledger
+                : DayLedger.Create(
+                    ledger.Id,
+                    ledger.FarmId,
+                    ledger.SourceCostEntryId,
+                    ledger.LedgerDate,
+                    ledger.AllocationBasis,
+                    ledger.CreatedByUserId,
+                    seen.Allocations
+                        .Select(a => DayLedgerAllocation.Create(a.Id, a.PlotId, a.AllocatedAmount, a.CurrencyCode, a.AllocatedAtUtc))
+                        .ToList(),
+                    ledger.CreatedAtUtc));
+        }
+
+        var leftOutByRule = all.Any(l => visibility.HiddenByAudience(Domain.RecordPrivacy.RecordKinds.CostEntry, l.SourceCostEntryId));
+        return new ExportLedgers(shown, leftOutByRule ? RuleNotCountedEn : null);
     }
 }
 

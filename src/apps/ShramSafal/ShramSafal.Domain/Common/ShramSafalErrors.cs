@@ -326,6 +326,23 @@ public static class ShramSafalErrors
         "ShramSafal.RecordAudienceState.InvalidCommand",
         "Who sees this record cannot be changed here.");
 
+    // --- spec: plr-d10 lane MU-4 — plots per person ----------------------------------------------------------------
+    // Ends in ".Forbidden" / ".InvalidCommand" on purpose, like PRV's codes: every phone in the field reads the LAST segment
+    // and PARKS the change for the farmer to see (RejectionPolicy), never retrying it silently.
+
+    /// <summary>
+    /// A write that names a plot outside the sender's chosen plots (a record, a cost, a move, a split). Nothing of it is
+    /// applied; the phone keeps it, parked and visible (P10). Worded as ShramSafal's rule, never pointing at anyone.
+    /// </summary>
+    public static readonly Error PlotScopeForbidden = Error.Forbidden(
+        "ShramSafal.PlotScope.Forbidden",
+        "By ShramSafal's rules this work could not be saved on this plot. The work is kept on the phone.");
+
+    /// <summary>A chosen plot that is not a plot of this farm (E4: tenancy both ways; never an oracle for another farm).</summary>
+    public static readonly Error MembershipPlotNotOnFarm = Error.Validation(
+        "ShramSafal.MembershipPlot.InvalidCommand",
+        "Every chosen plot must be a plot of this farm.");
+
     // --- Farm Geo / Weather Anchor ---------------------------------------------------------
     public static readonly Error FarmCentreMissing = Error.Conflict("ShramSafal.FarmCentreMissing", "Farm has no canonical centre; draw the farm boundary before requesting weather.");
     public static readonly Error WeatherProviderNotConfigured = Error.Internal("ShramSafal.WeatherProviderNotConfigured", "Weather provider is not configured on this server.");

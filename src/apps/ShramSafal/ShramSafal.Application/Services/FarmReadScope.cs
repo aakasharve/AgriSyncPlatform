@@ -21,7 +21,8 @@ namespace ShramSafal.Application.Services;
 /// <item><b>Attendance rulings</b> → <see cref="FarmAuthority.TakeAttendance"/>, or the primary account
 /// holder.</item>
 /// <item><b>Which records</b>: there is no authority for it. A कामगार (Worker) label reads his OWN records
-/// only; every other working seat reads the farm's. A label may narrow, never widen (D-26).</item>
+/// only; every other working seat reads the farm's. A label may narrow, never widen (D-26). lane MU-4: the स्वतःचं काम
+/// scope narrows the same way, and a chosen-plots scope narrows to his plots (<see cref="PlotIds"/>).</item>
 /// <item><b>Tests</b> → every seat but an own-records-only one, or one holding
 /// <see cref="FarmAuthority.LabRecords"/>. <b>Compliance warnings</b> → the same, or
 /// <see cref="FarmAuthority.ConfirmRecords"/>. <b>The attention board and the planned work</b> → every
@@ -63,6 +64,31 @@ public sealed record FarmReadScope(
     public bool IsRecordHolder { get; init; }
 
     /// <summary>
+    /// spec: plr-d10 lane MU-4 (MU design §2 "Scope", §3 G2, §11.6) — the plots this seat covers; <c>null</c> = every plot
+    /// (the default, the registrant, the primary owner, and an own-work seat, which reads by maker instead). A record, a
+    /// cost, a task, a test or an attention item reaches him only when it is on one of these plots — or he made it, or it
+    /// is assigned to him. The same one rule as the audience (<see cref="RecordVisibility"/>): both must allow a record.
+    /// </summary>
+    public IReadOnlySet<Guid>? PlotIds { get; init; }
+
+    /// <summary>lane MU-4 — the seat's plot scope as stored (for the wire: the phone's pickers and its purge).</summary>
+    public MembershipPlotScope PlotScope { get; init; } = MembershipPlotScope.AllPlots;
+
+    /// <summary>lane MU-4 — does this seat cover <paramref name="plotId"/>? Every plot when it covers all.</summary>
+    public bool CoversPlot(Guid plotId) => PlotIds is null || PlotIds.Contains(plotId);
+
+    /// <summary>
+    /// lane MU-4 (§11.6, §11.7) — may this seat read a task (a job card) on <paramref name="plotId"/>, assigned to
+    /// <paramref name="assignedUserId"/>? An own-records-only seat: the tasks assigned to him (MU-3's rule, unchanged). Any
+    /// other seat: a task on one of his plots (every task names its plot; a task on another plot is not his, even when it
+    /// is assigned to him — the owner sees it and can move it).
+    /// </summary>
+    public bool MayReadTask(Guid readerUserId, Guid plotId, Guid? assignedUserId) =>
+        OwnRecordsOnly
+            ? readerUserId != Guid.Empty && assignedUserId == readerUserId
+            : CoversPlot(plotId);
+
+    /// <summary>
     /// The scope of <paramref name="access"/> at <paramref name="atUtc"/>; <c>null</c> when the standing
     /// reads nothing of the farm (<see cref="FarmAccessPolicy.MayRead"/>).
     /// </summary>
@@ -77,7 +103,8 @@ public sealed record FarmReadScope(
         bool Holds(FarmAuthority authority) => primary || FarmAccessPolicy.Holds(access, authority, atUtc);
 
         // D-26 — the label narrows, never widens: only the कामगार label narrows to his own records.
-        var ownOnly = !primary && access!.Role == AppRole.Worker;
+        // spec: plr-d10 lane MU-4 (§11.7) — and so does the स्वतःचं काम scope: ONE own-records rule for both.
+        var ownOnly = !primary && (access!.Role == AppRole.Worker || access.OwnWorkScope);
         return new FarmReadScope(
             farmId,
             OwnRecordsOnly: ownOnly,
@@ -91,6 +118,8 @@ public sealed record FarmReadScope(
             AccessChangedAtUtc: access!.IsRegistrant ? null : access.AccessChangedAtUtc)
         {
             IsRecordHolder = access.IsRegistrant,
+            PlotIds = primary ? null : access.CoveredPlotIds,
+            PlotScope = primary ? MembershipPlotScope.AllPlots : access.PlotScope,
         };
     }
 

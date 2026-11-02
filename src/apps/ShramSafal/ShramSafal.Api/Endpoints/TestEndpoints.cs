@@ -261,13 +261,15 @@ public static class TestEndpoints
                 });
             }
 
-            var cycleFarmId = await userScope.RunForCallerAsync(
+            var cyclePlace = await userScope.RunForCallerAsync(
                 callerUserId,
                 async token => (await repository.GetCropCycleByIdAsync(cropCycleId.Value, token)) is { } cycle
-                    ? (Guid?)(Guid)cycle.FarmId
-                    : null,
+                    ? ((Guid)cycle.FarmId, cycle.PlotId)
+                    : ((Guid, Guid)?)null,
                 ct);
-            if (await TestsReadableAsync(cycleFarmId, callerUserId, repository, farmScope, clock, ct) is { } refused)
+            var cycleFarmId = cyclePlace?.Item1;
+            // lane MU-4 (§11.6) — and the season's plot must be one he covers.
+            if (await TestsReadableAsync(cycleFarmId, callerUserId, repository, farmScope, clock, ct, cyclePlace?.Item2) is { } refused)
             {
                 return refused;
             }
@@ -295,12 +297,13 @@ public static class TestEndpoints
                 return Results.Unauthorized();
             }
 
-            var instanceFarmId = await userScope.RunForCallerAsync(
+            var instancePlace = await userScope.RunForCallerAsync(
                 callerUserId,
                 async token => (await instanceRepository.GetByIdAsync(id, token)) is { } found
-                    ? (Guid?)(Guid)found.FarmId
-                    : null,
+                    ? ((Guid)found.FarmId, found.PlotId)
+                    : ((Guid, Guid)?)null,
                 ct);
+            var instanceFarmId = instancePlace?.Item1;
             if (instanceFarmId is null)
             {
                 return Results.NotFound(new
@@ -310,7 +313,8 @@ public static class TestEndpoints
                 });
             }
 
-            if (await TestsReadableAsync(instanceFarmId, callerUserId, repository, farmScope, clock, ct) is { } refused)
+            // lane MU-4 (§11.6) — and the test's plot must be one he covers.
+            if (await TestsReadableAsync(instanceFarmId, callerUserId, repository, farmScope, clock, ct, instancePlace?.Item2) is { } refused)
             {
                 return refused;
             }
@@ -336,17 +340,28 @@ public static class TestEndpoints
             Guid farmId,
             ClaimsPrincipal user,
             GetMissingTestsForFarmHandler handler,
+            IShramSafalRepository repository,
+            ICallerFarmTenantScope farmScope,
+            AgriSync.BuildingBlocks.Abstractions.IClock clock,
             CancellationToken ct) =>
         {
-            if (!EndpointActorContext.TryGetUserId(user, out _))
+            if (!EndpointActorContext.TryGetUserId(user, out var callerUserId))
             {
                 return Results.Unauthorized();
             }
 
+            // spec: plr-d10 lane MU-4 (§11.6) — the farm's read scope first (the lab-records rule every test read follows),
+            // then only the tests of the plots he covers.
+            if (await TestsReadableAsync(farmId, callerUserId, repository, farmScope, clock, ct) is { } refused)
+            {
+                return refused;
+            }
+
+            var scope = await ShramSafal.Application.Services.FarmReadGate.ScopeAsync(repository, farmId, callerUserId, clock.UtcNow, ct);
             var missing = await handler.HandleAsync(
                 new GetMissingTestsForFarmQuery(new FarmId(farmId)),
                 ct);
-            return Results.Ok(missing);
+            return Results.Ok(missing.Where(m => scope!.CoversPlot(m.PlotId)).ToList());
         })
         .WithName("GetMissingTestsForFarm");
 
@@ -363,7 +378,8 @@ public static class TestEndpoints
         IShramSafalRepository repository,
         ICallerFarmTenantScope farmScope,
         AgriSync.BuildingBlocks.Abstractions.IClock clock,
-        CancellationToken ct)
+        CancellationToken ct,
+        Guid? plotId = null)
     {
         if (farmId is not { } farm)
         {
@@ -377,7 +393,9 @@ public static class TestEndpoints
         }
 
         var scope = await ShramSafal.Application.Services.FarmReadGate.ScopeAsync(repository, farm, callerUserId, clock.UtcNow, ct);
-        return scope?.SeeTests == true ? null : ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.Forbidden);
+        return scope?.SeeTests == true && (plotId is not { } plot || scope.CoversPlot(plot))
+            ? null
+            : ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.Forbidden);
     }
 
     private static IResult ToErrorResult(Error error)

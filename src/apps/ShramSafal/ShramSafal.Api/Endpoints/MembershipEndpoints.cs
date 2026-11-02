@@ -447,7 +447,8 @@ public static class MembershipEndpoints
             }
 
             return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.Approve, httpContext, handler, ct,
-                role: request?.Role, permissions: request?.Permissions, grantLabour: request?.GrantLabour == true);
+                role: request?.Role, permissions: request?.Permissions, grantLabour: request?.GrantLabour == true,
+                plotScope: request?.PlotScope, plotIds: request?.PlotIds);
         })
         .WithName("ApproveFarmMembership");
 
@@ -592,6 +593,31 @@ public static class MembershipEndpoints
         })
         .WithName("SetFarmMemberAuthorities");
 
+        // spec: plr-d10 lane MU-4 (MU design §2 "Scope", §3 G2; founder D-26) — the PRIMARY account holder sets which
+        // plots one person covers: { plotScope: "AllPlots" | "ChosenPlots" | "OwnWork", plotIds: [...] } (plots only with
+        // ChosenPlots, each of THIS farm). Refused for anyone else (403), audited once per real change (from and to). A
+        // change moves the seat's access stamp: the phone purges on a narrowing, the pull re-sends on a widening.
+        group.MapPut("/farms/{farmId:guid}/memberships/{targetUserId:guid}/plot-scope", async Task<IResult> (
+            Guid farmId, Guid targetUserId, SetMemberPlotScopeRequest? request, HttpContext httpContext,
+            ClaimsPrincipal user, IHandler<ManageMembershipCommand, LabourPermissionDto> handler,
+            ICallerFarmTenantScope scope, CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            return await DecideAsync(farmId, targetUserId, userId, MembershipDecision.SetPlotScope, httpContext, handler, ct,
+                plotScope: request?.PlotScope, plotIds: request?.PlotIds);
+        })
+        .WithName("SetFarmMemberPlotScope");
+
         // Minimal "my farms" list so the frontend can resolve the real farmId.
         //
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, P11) — `?includePending=true` (sent by this
@@ -639,7 +665,9 @@ public static class MembershipEndpoints
         bool resetPermissions = false,
         string? reason = null,
         bool? labourGrant = null,
-        IReadOnlyList<AuthorityGrantDto>? authorities = null)
+        IReadOnlyList<AuthorityGrantDto>? authorities = null,
+        string? plotScope = null,
+        IReadOnlyList<Guid>? plotIds = null)
     {
         var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
         var result = await handler.HandleAsync(
@@ -655,6 +683,8 @@ public static class MembershipEndpoints
                 LabourGrant: labourGrant,
                 Reason: reason,
                 Authorities: authorities,
+                PlotScope: plotScope,
+                PlotIds: plotIds,
                 ClientAppVersion: ResolveClientAppVersion(httpContext),
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash),
@@ -763,7 +793,11 @@ public sealed record SetLabourPermissionRequest(
 public sealed record ApproveMembershipRequest(
     string? Role,
     IReadOnlyList<string>? Permissions = null,
-    bool? GrantLabour = null);
+    bool? GrantLabour = null,
+    // spec: plr-d10 lane MU-4 — the plots chosen in the same tap (absent = every plot): "AllPlots" / "ChosenPlots" /
+    // "OwnWork", and the plots for ChosenPlots. Additive: an older phone sends neither.
+    string? PlotScope = null,
+    IReadOnlyList<Guid>? PlotIds = null);
 
 /// <summary>spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the owner's words for a decline, pause or removal.</summary>
 public sealed record MembershipReasonRequest(string? Reason);
@@ -789,3 +823,10 @@ public sealed record SetMemberAccessRequest(
 /// taken back.
 /// </summary>
 public sealed record SetMemberAuthoritiesRequest(IReadOnlyList<AuthorityGrantDto>? Authorities = null);
+
+/// <summary>
+/// spec: plr-d10 lane MU-4 — body of <c>PUT farms/{farmId}/memberships/{userId}/plot-scope</c>: which plots the person
+/// covers (<c>AllPlots</c> / <c>ChosenPlots</c> / <c>OwnWork</c>) and, for <c>ChosenPlots</c> only, one or more plots of
+/// this farm.
+/// </summary>
+public sealed record SetMemberPlotScopeRequest(string? PlotScope = null, IReadOnlyList<Guid>? PlotIds = null);

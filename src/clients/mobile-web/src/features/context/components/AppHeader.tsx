@@ -44,6 +44,8 @@ import OversightOverlay from '../../oversight/components/OversightOverlay';
 // still-compiling, still-exported component is a separate call from this
 // task's scope.
 import OversightNavCards from '../../oversight/components/OversightNavCards';
+import { useStoredAccessScopes } from '../../../core/session/storedFarmScope';
+import { scopeForFarm } from '../../../infrastructure/storage/accessScopeStore';
 import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
 // Findings F2/F3 — the two cross-tree "open this surface" hops. See that
 // module's header for why a window event and not a prop path.
@@ -220,6 +222,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
   const currentFarm = farmContext?.farms.find((f) => f.farmId === farmContext.currentFarmId)
     ?? farmContext?.farms[0];
+  // spec: plr-d10 lane MU-4 — a person who covers chosen plots on the open farm sees "his plots", never "the whole farm".
+  const storedScopes = useStoredAccessScopes();
+  const plotsOnly = scopeForFarm(storedScopes, currentFarmId)?.plotScope === 'ChosenPlots';
   const farmName = currentFarm?.name ?? '';
   // `plotCount` was derived here for `FarmIdentityElement`'s plot line. That
   // element left row 1 with the founder's 2026-08-30 nameboard ruling — the
@@ -532,6 +537,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             }}
             disabled={disabled}
             hiddenViews={hiddenViews}
+            plotsOnly={plotsOnly}
           />
         </div>
       )}

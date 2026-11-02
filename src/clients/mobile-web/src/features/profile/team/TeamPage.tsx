@@ -34,6 +34,7 @@ import { FarmCodeCard } from './FarmCodeCard';
 import { JoinRequestCard } from './JoinRequestCard';
 import { TeamPersonCard } from './TeamPersonCard';
 import { TEAM_COPY } from './teamCopy';
+import { useFarmPlots } from './useFarmPlots';
 import {
     isPrimaryOwner, nameFor, rightsOver, roleTone, roleWord, serverRoleOf, splitRoster,
 } from './teamModel';
@@ -64,6 +65,8 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
     const grantsSwitches = isPrimaryOwner(callerRole);
     const decisions = useMembershipDecisions(farmId, roster.adoptRow, roster.reload);
     const { requests, people } = splitRoster(roster.rows);
+    // lane MU-4 — the farm's plots for the owner's plot choice (his phone holds every plot of his farm).
+    const farmPlots = useFarmPlots(decidesPeople ? farmId : null);
     const busy = (userId: string) => decisions.busyUserId === userId || roster.savingUserId === userId;
 
     return (
@@ -91,7 +94,8 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                     <ul className="m-0 space-y-2.5 p-0">
                         {requests.map(row => (
                             <JoinRequestCard key={row.userId} row={row} name={nameFor(row, operators)} busy={busy(row.userId)}
-                                onApprove={preset => void decisions.approve(row.userId, preset)}
+                                farmPlots={farmPlots}
+                                onApprove={(preset, plots) => void decisions.approve(row.userId, preset, plots)}
                                 onDecline={reason => void decisions.decline(row.userId, reason)} />
                         ))}
                     </ul>
@@ -117,6 +121,11 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                 // lane 2b: one switch per enforced responsibility, when the server sent them.
                                 const maySetAuthorities = grantsSwitches && row.canEditAuthorities === true
                                     && Array.isArray(row.authorities) && row.userId !== callerUserId;
+                                // lane MU-4 — the plots: the primary account holder's choice, on a let-in person who is not
+                                // the primary owner and not himself; only from a server that sends the scope.
+                                const maySetPlots = decidesPeople && row.plotScope !== undefined && row.userId !== callerUserId
+                                    && !row.isRegistrant && row.role !== 'PrimaryOwner'
+                                    && (row.status === 'Active' || row.status === 'Suspended');
                                 return (
                                     <TeamPersonCard key={row.userId} row={row} name={nameFor(row, operators)}
                                         isYou={row.userId === callerUserId} rights={rights} busy={busy(row.userId)}
@@ -136,6 +145,11 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                             authorities: row.authorities ?? [],
                                             saving: roster.savingUserId === row.userId,
                                             onChange: next => void roster.setAuthorities(row.userId, next),
+                                        } : undefined}
+                                        plotAccess={maySetPlots ? {
+                                            value: { plotScope: row.plotScope ?? 'AllPlots', plotIds: row.plotIds ?? undefined },
+                                            farmPlots,
+                                            onSave: choice => void decisions.setPlots(row.userId, choice),
                                         } : undefined}
                                         onChangePreset={preset => void decisions.changePreset(row, preset)}
                                         onSuspend={reason => void decisions.suspend(row.userId, reason)}

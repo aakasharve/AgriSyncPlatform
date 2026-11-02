@@ -1835,6 +1835,35 @@ public interface IShramSafalRepository
         => Task.FromResult<IReadOnlyList<Services.RestrictedRecord>>([]);
 
     /// <summary>
+    /// spec: plr-d10 lane MU-4 — where EVERY work and money record of these farms sits and who made it
+    /// (<see cref="Services.RecordPlace"/>), for the place rule (<see cref="Services.RecordPlaceRule"/>). Asked only for the
+    /// farms whose reader's seat covers chosen plots or reads his own work (rare: never the owner's own farm). Production
+    /// overrides it with two bounded, untracked projections (no children); a test double holds no place (nothing is
+    /// narrowed by place unless it overrides this), doctrine F7.
+    /// </summary>
+    Task<IReadOnlyList<Services.RecordPlace>> GetRecordPlacesAsync(
+        IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Services.RecordPlace>>([]);
+
+    /// <summary>
+    /// lane MU-4 — of <paramref name="farmIds"/>, the farms where this person's live seat MAY read by place (it covers
+    /// chosen plots or its own work, or carries the कामगार label): a cheap pre-filter, a superset — the rule itself
+    /// (<see cref="Services.RecordPlaceRule.Narrows"/>) is then asked of his real scope. Lets a door that finds nothing
+    /// narrowed skip reading his standing at all (PRV's common case). Default body: none (a test double narrows nothing by
+    /// place unless it overrides this), doctrine F7.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> GetFarmsMaybeReadByPlaceAsync(
+        Guid userId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<Guid>>([]);
+
+    /// <summary>
+    /// lane MU-4 — the place of ONE work (<c>DailyLog</c>) or money (<c>CostEntry</c>) record, read without tracking; null
+    /// when it is not found under the caller's scope. Default body: none (a test double narrows nothing by place).
+    /// </summary>
+    Task<Services.RecordPlace?> GetRecordPlaceAsync(string recordKind, Guid recordId, CancellationToken ct = default)
+        => Task.FromResult<Services.RecordPlace?>(null);
+
+    /// <summary>
     /// lane PRV — the little a door needs to decide whether a change may touch one record: its farm, its audience and
     /// its maker. Read WITHOUT tracking (it never stands in for the copy a handler changes). Null when the record is not
     /// found under the caller's current scope.

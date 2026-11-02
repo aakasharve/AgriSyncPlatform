@@ -14,8 +14,10 @@
  * (`AuthoritySwitches`) in place of the old हजेरी व पक्कं switch and the co-owner confirm switch; an
  * older server keeps the old switches.
  *
+ * lane MU-4: one row, "प्लॉट: सर्व प्लॉट ›", opens the owner's plot choice (`PlotScopePicker`) for a let-in person.
+ *
  * Real data only (spec: plr-d7-m1-multiuser-2026-10-26, step 2, MU-10). NOT here on purpose (P5,
- * plan §4, founder D-22 / D-24 of 26 Oct): plot chips (step 4b), any permission switch (money,
+ * plan §4, founder D-22 / D-24 of 26 Oct): any permission switch (money,
  * planning — no switch until the step whose server rule it would control exists), the family /
  * co-owner choice (proposed step 2b). Only the PRIMARY owner decides about people; no control is
  * drawn on the registrant or on yourself — the server refuses both.
@@ -28,6 +30,9 @@ import type { ApprovePreset } from '../data/membershipAdminClient';
 import { LabourAccessControl, type LabourAccessView } from '../components/LabourAccessControl';
 import { ConfirmAccessControl, type ConfirmAccessView } from './ConfirmAccessControl';
 import { AuthoritySwitches, type AuthorityAccessView } from './AuthoritySwitches';
+import { PlotScopePicker } from './PlotScopePicker';
+import type { PlotScopeChoice } from '../data/membershipAdminClient';
+import type { FarmPlot } from './useFarmPlots';
 import { PRESETS, arrivalLine, doLine, phoneLine, presetOf, roleTone, roleWord, type DecisionRights } from './teamModel';
 import { ReasonStep } from './ReasonStep';
 import { TEAM_COPY } from './teamCopy';
@@ -55,6 +60,11 @@ export interface TeamPersonCardProps {
      * above are not drawn.
      */
     authorityAccess?: AuthorityAccessView;
+    /**
+     * lane MU-4 — the primary owner's plot choice for this person ("प्लॉट: सर्व प्लॉट ›"), passed ONLY when he may set
+     * it (the primary account holder, a let-in person who is not the primary owner, not himself).
+     */
+    plotAccess?: { value: PlotScopeChoice; farmPlots: readonly FarmPlot[]; onSave: (choice: PlotScopeChoice) => void };
     onChangePreset: (preset: ApprovePreset) => void;
     onSuspend: (reason: string) => void;
     onRestore: () => void;
@@ -64,7 +74,7 @@ export interface TeamPersonCardProps {
 type Step = null | 'pause' | 'remove';
 
 export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
-    row, name, isYou, rights, busy, labourAccess, confirmAccess, authorityAccess, onChangePreset, onSuspend, onRestore, onRemove,
+    row, name, isYou, rights, busy, labourAccess, confirmAccess, authorityAccess, plotAccess, onChangePreset, onSuspend, onRestore, onRemove,
 }) => {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<Step>(null);
@@ -93,6 +103,12 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
             </div>
             {line && <p className="m-0 mt-1.5 text-[14px] font-bold leading-snug text-stone-900" data-testid="team-person-line">{line}</p>}
             {arrival && <p className="m-0 mt-0.5 text-[12.5px] font-semibold text-stone-500" data-testid="team-person-arrival">{arrival}</p>}
+            {plotAccess && (
+                <div className="mt-2">
+                    <PlotScopePicker memberId={row.userId} value={plotAccess.value} farmPlots={plotAccess.farmPlots} busy={busy}
+                        onSave={plotAccess.onSave} />
+                </div>
+            )}
             {paused && (
                 <div className="mt-1 space-y-0.5" data-testid="team-person-paused">
                     <p className="m-0 text-[13px] font-extrabold text-amber-900">{TEAM_COPY.pausedNote}</p>

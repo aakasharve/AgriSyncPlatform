@@ -104,7 +104,8 @@ describe('a waiting request', () => {
         approveMember.mockResolvedValue(row({ userId: 'sunil', role: 'Worker', displayName: 'सुनील', joinedVia: 'SelfJoin', approvedByOwner: true, phoneLast4: '4321' }));
         render(<Harness />);
         fireEvent.click(await screen.findByTestId('approve-work-sunil'));
-        await waitFor(() => expect(approveMember).toHaveBeenCalledWith('farm-1', 'sunil', { role: 'Worker', grantLabour: false }));
+        // lane MU-4 — the approval also carries the plots, from the preset (काम सांगणे → स्वतःचं काम).
+        await waitFor(() => expect(approveMember).toHaveBeenCalledWith('farm-1', 'sunil', { role: 'Worker', grantLabour: false, plotScope: 'OwnWork' }));
         const card = await screen.findByTestId('team-person-sunil');
         expect(within(card).getByText('कामगार')).toBeTruthy();
         expect(within(card).getByTestId('team-person-line').textContent).toBe('काम सांगणे · खर्च नोंदवणे');
@@ -117,7 +118,8 @@ describe('a waiting request', () => {
         approveMember.mockResolvedValue(row({ userId: 'sunil', role: 'Mukadam', displayName: 'सुनील', canManageLabourRecords: true }));
         render(<Harness />);
         fireEvent.click(await screen.findByTestId('approve-crew-sunil'));
-        await waitFor(() => expect(approveMember).toHaveBeenCalledWith('farm-1', 'sunil', { role: 'Mukadam', grantLabour: true }));
+        // lane MU-4 — काम + हजेरी starts from every plot.
+        await waitFor(() => expect(approveMember).toHaveBeenCalledWith('farm-1', 'sunil', { role: 'Mukadam', grantLabour: true, plotScope: 'AllPlots' }));
         const card = await screen.findByTestId('team-person-sunil');
         expect(within(card).getByTestId('team-person-line').textContent).toBe('काम सांगणे · खर्च नोंदवणे · हजेरी · पक्कं करणे');
     });

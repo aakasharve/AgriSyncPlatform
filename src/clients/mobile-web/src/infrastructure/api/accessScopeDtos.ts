@@ -16,7 +16,17 @@ import type { WithheldRecordDayDto } from './recordAudienceDtos';
  */
 export type FarmAccessStatus = 'Active' | 'Paused' | 'Waiting' | 'Removed';
 
+/**
+ * spec: plr-d10 lane MU-4 — which plots the seat covers: every plot (the default), the chosen plots (`plotIds`), or his
+ * own work (every plot's NAME, his own records). Absent = an older server = every plot.
+ */
+export type FarmPlotScope = 'AllPlots' | 'ChosenPlots' | 'OwnWork';
+
 export interface FarmAccessScopeDto {
+    /** lane MU-4 — which plots the seat covers (absent = every plot). */
+    plotScope?: FarmPlotScope | null;
+    /** lane MU-4 — the chosen plots, sent only with `ChosenPlots` (absent / null otherwise). */
+    plotIds?: string[] | null;
     farmId: string;
     /** spec: plr-d10 lane PRV — the days whose totals leave a record out for him by rule (W4). Absent = none. */
     withheldRecordDays?: WithheldRecordDayDto[] | null;

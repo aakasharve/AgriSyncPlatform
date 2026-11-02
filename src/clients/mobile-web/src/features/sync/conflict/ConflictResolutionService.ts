@@ -98,7 +98,7 @@ export class ConflictResolutionService {
                     // words, in his language; every other row keeps the hints below.
                     hint: hints[index] ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode),
                     payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
-                    closedByRule: refusalReasonOf(r.errorCode) === 'recordClosed',
+                    closedByRule: refusalReasonOf(r.errorCode) === 'recordClosed' || refusalReasonOf(r.errorCode) === 'plotClosed',
                 };
             });
     }

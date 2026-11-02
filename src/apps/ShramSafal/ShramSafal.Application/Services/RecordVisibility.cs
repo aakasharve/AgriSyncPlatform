@@ -118,6 +118,112 @@ public sealed record RestrictedRecord(
 public sealed record RecordAudienceHead(string Kind, Guid Id, Guid FarmId, RecordAudience Audience, Guid MakerUserId);
 
 /// <summary>
+/// spec: plr-d10 lane MU-4 (MU design §11.6, §11.7) — WHERE one work or money record sits and who made it: everything the
+/// place rule needs, content-free. A work record's plots (none when it is the whole farm's), a money record's one plot
+/// (none when it is shared, split or unallocated), its day, its AI parse job and — for money — the bill photos it names.
+/// </summary>
+public sealed record RecordPlace(
+    string Kind,
+    Guid Id,
+    Guid FarmId,
+    Guid MakerUserId,
+    DateOnly Date,
+    DateTime CreatedAtUtc,
+    IReadOnlyCollection<Guid> PlotIds,
+    Guid? SourceAiJobId,
+    IReadOnlyCollection<Guid> BillPhotoIds)
+{
+    /// <summary>A money record whose bill-photo list cannot be read (PRV fix pass 1, L7: its farm's bills fail closed).</summary>
+    public bool BillPhotosUnreadable { get; init; }
+
+    /// <summary>The whole farm's, or a place nobody stated (no plot named).</summary>
+    public bool WholeFarm => PlotIds.Count == 0;
+
+    /// <summary>A work record's place: its plots as stored (none for the whole farm).</summary>
+    public static RecordPlace OfLog(
+        Guid id, Guid farmId, Guid makerUserId, DateOnly date, DateTime createdAtUtc, DailyLogScope scope, Guid? plotId,
+        IReadOnlyCollection<Guid>? plotIds, Guid? sourceAiJobId) =>
+        new(RecordKinds.DailyLog, id, farmId, makerUserId, date, createdAtUtc,
+            scope == DailyLogScope.Farm
+                ? []
+                : (plotIds is { Count: > 0 } ? plotIds : plotId is { } one ? [one] : []).Where(p => p != Guid.Empty).ToHashSet(),
+            sourceAiJobId, []);
+
+    /// <summary>A money record's place: its one plot, or none (shared, split or unallocated).</summary>
+    public static RecordPlace OfCost(
+        Guid id, Guid farmId, Guid makerUserId, DateOnly date, DateTime createdAtUtc, Guid? plotId, Guid? sourceAiJobId,
+        string? clientAttachmentIdsJson) =>
+        new(RecordKinds.CostEntry, id, farmId, makerUserId, date, createdAtUtc,
+            plotId is { } one && one != Guid.Empty ? [one] : [], sourceAiJobId,
+            RestrictedRecord.BillPhotoIdsOf(clientAttachmentIdsJson))
+        {
+            BillPhotosUnreadable = RestrictedRecord.BillPhotoIdsUnreadable(clientAttachmentIdsJson),
+        };
+
+    /// <summary>The same place as a hidden-record entry (the shape every PRV door already asks).</summary>
+    public RestrictedRecord AsHidden() =>
+        new(Kind, Id, FarmId, RecordAudience.Team, MakerUserId, CreatedAtUtc, null, Date,
+            PlotIds.Count == 1 ? PlotIds.First() : null, SourceAiJobId, BillPhotoIds, [])
+        {
+            BillPhotosUnreadable = BillPhotosUnreadable,
+        };
+}
+
+/// <summary>
+/// spec: plr-d10 lane MU-4 — THE place rule, pure, beside the audience rule: a record reaches a person only when BOTH
+/// allow it (orchestrator call 6). For a seat that covers every plot and reads the farm's records it allows everything.
+/// <list type="bullet">
+/// <item>An own-records-only seat (the कामगार label or the स्वतःचं काम scope, §11.7) → of money, only what he made; work
+/// records keep MU-3's own-records rule at each door (one rule for the label and the scope: <see cref="FarmReadScope.OwnRecordsOnly"/>).</item>
+/// <item>A chosen-plots seat → a work or money record on any of his plots (one spanning plots is sent narrowed to his
+/// plots); a whole-farm or unplaced one (a shared, split or unallocated cost included) only if he made it — his own
+/// submission and its status always reach him (D-28); one on other plots only → no, even his own (§3 G2: "outside the
+/// scope … neither sent nor accepted"; the server keeps it whole, P10). One rule for both kinds, so a record and the money
+/// its own lines made always travel together (a line's money carries its record's place, RecordMoneyPlace). A split bill
+/// reaches him as his share lines only (D-39, <see cref="RecordVisibility.Ledger"/>).</item>
+/// </list>
+/// </summary>
+public static class RecordPlaceRule
+{
+    /// <summary>Does this seat read records by place at all (anything but every record of the farm)?</summary>
+    public static bool Narrows(FarmReadScope? scope) =>
+        scope is not null && !scope.IsPrimaryAccountHolder && (scope.PlotIds is not null || scope.OwnRecordsOnly);
+
+    /// <summary>
+    /// Does this seat cover CHOSEN plots? The single-record doors (a change, its voice, its parse) ask the place rule only
+    /// for such a seat; an own-records-only seat keeps MU-3's own checks there (its writes stay as they were, §11.7: he may
+    /// log on any plot).
+    /// </summary>
+    public static bool NarrowsByPlot(FarmReadScope? scope) =>
+        scope is not null && !scope.IsPrimaryAccountHolder && scope.PlotIds is not null;
+
+    public static bool MaySee(FarmReadScope? scope, Guid readerUserId, RecordPlace place)
+    {
+        ArgumentNullException.ThrowIfNull(place);
+        if (scope is null)
+        {
+            return false;
+        }
+
+        if (!Narrows(scope))
+        {
+            return true;
+        }
+
+        var his = readerUserId != Guid.Empty && place.MakerUserId == readerUserId;
+        if (scope.OwnRecordsOnly)
+        {
+            // Other people's MONEY never reaches him (§11.7). Other people's WORK records follow MU-3's own-records rule at
+            // each door, exactly as built (the pull sends his own; the labour page keeps what MU-3 gives a seat that takes
+            // हजेरी): this rule does not narrow them a second time.
+            return place.Kind != RecordKinds.CostEntry || his;
+        }
+
+        return place.WholeFarm ? his : place.PlotIds.Any(scope.CoversPlot);
+    }
+}
+
+/// <summary>
 /// lane PRV — THE audience rule, pure. May the holder of <paramref name="scope"/> see a record with this audience?
 /// <list type="bullet">
 /// <item>No scope (no working standing on the farm) → no.</item>
@@ -166,7 +272,11 @@ public sealed class RecordVisibility
     private readonly Dictionary<Guid, RestrictedRecord> logs = [];
     private readonly Dictionary<Guid, RestrictedRecord> costs = [];
 
-    private RecordVisibility(Guid readerUserId, IReadOnlyDictionary<Guid, FarmReadScope> scopes, IEnumerable<RestrictedRecord> restricted)
+    private RecordVisibility(
+        Guid readerUserId,
+        IReadOnlyDictionary<Guid, FarmReadScope> scopes,
+        IEnumerable<RestrictedRecord> restricted,
+        IEnumerable<RecordPlace>? places = null)
     {
         this.readerUserId = readerUserId;
         this.scopes = scopes;
@@ -176,13 +286,43 @@ public sealed class RecordVisibility
         }
 
         Hidden = logs.Values.Concat(costs.Values).Where(r => !MaySee(r)).ToList();
-        HiddenLogIds = Hidden.Where(r => r.Kind == RecordKinds.DailyLog).Select(r => r.Id).ToHashSet();
-        HiddenCostIds = Hidden.Where(r => r.Kind == RecordKinds.CostEntry).Select(r => r.Id).ToHashSet();
-        HiddenBillPhotoIds = Hidden.SelectMany(r => r.BillPhotoIds).ToHashSet();
-        unreadableBillFarms = Hidden.Where(r => r.BillPhotosUnreadable).Select(r => r.FarmId).ToHashSet();
-        HiddenAiJobIds = Hidden.Where(r => r.SourceAiJobId is not null).Select(r => r.SourceAiJobId!.Value).ToHashSet();
-        hiddenIdText = Hidden.Select(r => r.Id.ToString("D")).ToList();
+        audienceHiddenLogIds = Hidden.Where(r => r.Kind == RecordKinds.DailyLog).Select(r => r.Id).ToHashSet();
+        audienceHiddenCostIds = Hidden.Where(r => r.Kind == RecordKinds.CostEntry).Select(r => r.Id).ToHashSet();
+
+        // spec: plr-d10 lane MU-4 — the place rule (plots, own work), asked only of the farms whose seat it narrows. A record
+        // out of his place is hidden from every door exactly like one out of its audience (its id, words, money, photos,
+        // AI parse); it is NOT a "record not counted by rule" (W4) — his totals are his plots' / his own (§11.6).
+        var placed = (places ?? [])
+            .Where(p => RecordPlaceRule.Narrows(scopes.GetValueOrDefault(p.FarmId)))
+            .ToList();
+        OutOfPlace = placed
+            .Where(p => !RecordPlaceRule.MaySee(scopes.GetValueOrDefault(p.FarmId), readerUserId, p))
+            .Select(p => p.AsHidden())
+            .ToList();
+        placeNarrowedFarms = scopes.Values.Where(RecordPlaceRule.Narrows).Select(s => s.FarmId).ToHashSet();
+        var outOfPlaceIds = OutOfPlace.Select(r => r.Id).ToHashSet();
+        billPhotosOfSeenMoney = placed
+            .Where(p => p.Kind == RecordKinds.CostEntry && !outOfPlaceIds.Contains(p.Id) && !audienceHiddenCostIds.Contains(p.Id))
+            .SelectMany(p => p.BillPhotoIds)
+            .ToHashSet();
+
+        var everyHidden = Hidden.Concat(OutOfPlace).ToList();
+        HiddenLogIds = everyHidden.Where(r => r.Kind == RecordKinds.DailyLog).Select(r => r.Id).ToHashSet();
+        HiddenCostIds = everyHidden.Where(r => r.Kind == RecordKinds.CostEntry).Select(r => r.Id).ToHashSet();
+        HiddenBillPhotoIds = everyHidden.SelectMany(r => r.BillPhotoIds).ToHashSet();
+        unreadableBillFarms = everyHidden.Where(r => r.BillPhotosUnreadable).Select(r => r.FarmId).ToHashSet();
+        HiddenAiJobIds = everyHidden.Where(r => r.SourceAiJobId is not null).Select(r => r.SourceAiJobId!.Value).ToHashSet();
+        hiddenIdText = everyHidden.Select(r => r.Id.ToString("D")).ToList();
     }
+
+    private readonly HashSet<Guid> audienceHiddenLogIds;
+    private readonly HashSet<Guid> audienceHiddenCostIds;
+
+    /// <summary>lane MU-4 — farms whose seat reads by place (plots / own work): their bill photos follow the money he sees.</summary>
+    private readonly HashSet<Guid> placeNarrowedFarms;
+
+    /// <summary>lane MU-4 — the bill photos named by money he may see on those farms.</summary>
+    private readonly HashSet<Guid> billPhotosOfSeenMoney;
 
     private readonly List<string> hiddenIdText;
 
@@ -193,9 +333,31 @@ public sealed class RecordVisibility
     public static RecordVisibility None(Guid readerUserId) =>
         new(readerUserId, new Dictionary<Guid, FarmReadScope>(), []);
 
+    /// <param name="readerUserId">The reader.</param>
+    /// <param name="scopes">His scope on each farm.</param>
+    /// <param name="restricted">The farms' records whose audience is not the normal team (PRV).</param>
+    /// <param name="places">lane MU-4 — the places of the records of the farms whose seat reads by place
+    /// (<see cref="FarmsReadByPlace"/>); <c>null</c> when none does.</param>
     public static RecordVisibility For(
-        Guid readerUserId, IReadOnlyDictionary<Guid, FarmReadScope> scopes, IEnumerable<RestrictedRecord> restricted) =>
-        new(readerUserId, scopes, restricted);
+        Guid readerUserId,
+        IReadOnlyDictionary<Guid, FarmReadScope> scopes,
+        IEnumerable<RestrictedRecord> restricted,
+        IEnumerable<RecordPlace>? places = null) =>
+        new(readerUserId, scopes, restricted, places);
+
+    /// <summary>
+    /// lane MU-4 — the farms among <paramref name="scopes"/> whose records' places must be read: a seat that covers chosen
+    /// plots, or an own-records-only seat that sees money (other people's money is then kept from him by place). An
+    /// own-records-only seat WITHOUT money (the common कामगार seat) is not asked: every door already reads only his own
+    /// records for him (MU-3) and no money reaches him at all, so the farm's places would hide nothing more — and are not
+    /// read on his every pull.
+    /// </summary>
+    public static IReadOnlyList<Guid> FarmsReadByPlace(IReadOnlyDictionary<Guid, FarmReadScope> scopes) =>
+        scopes.Values
+            .Where(s => RecordPlaceRule.Narrows(s) && (s.PlotIds is not null || s.SeeMoney))
+            .Select(s => s.FarmId)
+            .Distinct()
+            .ToList();
 
     /// <summary>The reader's view of one farm (a REST door): his scope there and its restricted records.</summary>
     public static async Task<RecordVisibility> ForFarmAsync(
@@ -213,9 +375,11 @@ public sealed class RecordVisibility
             return None(readerUserId);
         }
 
-        // Nothing narrowed on these farms (the common case): nothing is hidden, and his standing is not read again.
+        // Nothing narrowed on these farms and no seat of his that may read by place (the common case): nothing is hidden,
+        // and his standing is not read again. lane MU-4: the place pre-filter is a superset; the rule decides below.
         var restricted = await repository.GetRestrictedRecordsAsync(farms, ct);
-        if (restricted.Count == 0)
+        var maybeByPlace = readerUserId == Guid.Empty ? [] : await repository.GetFarmsMaybeReadByPlaceAsync(readerUserId, farms, ct);
+        if (restricted.Count == 0 && maybeByPlace.Count == 0)
         {
             return None(readerUserId);
         }
@@ -232,11 +396,55 @@ public sealed class RecordVisibility
             }
         }
 
-        return new RecordVisibility(readerUserId, scopes, restricted);
+        var placeFarms = FarmsReadByPlace(scopes);
+        var places = placeFarms.Count == 0 ? [] : await repository.GetRecordPlacesAsync(placeFarms, ct);
+        return new RecordVisibility(readerUserId, scopes, restricted, places);
     }
 
-    /// <summary>Every restricted record hidden from this reader.</summary>
+    /// <summary>Every restricted record hidden from this reader BY ITS AUDIENCE (PRV; the W4 "not counted" set).</summary>
     public IReadOnlyList<RestrictedRecord> Hidden { get; }
+
+    /// <summary>
+    /// lane MU-4 — every record hidden from him by the PLACE rule (outside his plots, or someone else's for an own-work
+    /// seat). Hidden from every door like <see cref="Hidden"/>, but never counted as "left out by rule": his totals are his.
+    /// </summary>
+    public IReadOnlyList<RestrictedRecord> OutOfPlace { get; }
+
+    /// <summary>lane MU-4 — is this record kept from him by its AUDIENCE (not merely by its place)?</summary>
+    public bool HiddenByAudience(string kind, Guid id) =>
+        kind == RecordKinds.DailyLog ? audienceHiddenLogIds.Contains(id) : audienceHiddenCostIds.Contains(id);
+
+    /// <summary>lane MU-4 — does his seat on <paramref name="farmId"/> read records by place (plots / own work)?</summary>
+    public bool ReadsByPlace(Guid farmId) => placeNarrowedFarms.Contains(farmId);
+
+    /// <summary>
+    /// lane MU-4 (§11.6, D-39) — a day-ledger row (a bill's split across plots) as he may receive it: none when its bill is
+    /// kept from him by its audience; for a seat that reads by place, only the share lines on HIS plots (never the whole
+    /// bill: the bill row itself is not sent when it is not on his plots), none when no share is his. His own bill comes
+    /// whole. The same row otherwise.
+    /// </summary>
+    public Contracts.Dtos.DayLedgerDto? Ledger(Contracts.Dtos.DayLedgerDto dto)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+        if (audienceHiddenCostIds.Contains(dto.SourceCostEntryId))
+        {
+            return null;
+        }
+
+        var scope = scopes.GetValueOrDefault(dto.FarmId);
+        if (!RecordPlaceRule.Narrows(scope) || (readerUserId != Guid.Empty && dto.CreatedByUserId == readerUserId))
+        {
+            return dto;
+        }
+
+        if (scope!.OwnRecordsOnly)
+        {
+            return MaySeeCost(dto.SourceCostEntryId) ? dto : null;
+        }
+
+        var mine = dto.Allocations.Where(a => scope.CoversPlot(a.PlotId)).ToList();
+        return mine.Count == 0 ? null : mine.Count == dto.Allocations.Count ? dto : dto with { Allocations = mine };
+    }
 
     public IReadOnlySet<Guid> HiddenLogIds { get; }
 
@@ -275,6 +483,16 @@ public sealed class RecordVisibility
         if (!tookIt
             && attachment.LinkedEntityType is AttachmentParentRule.BillParent or AttachmentParentRule.FarmParent
             && unreadableBillFarms.Contains((Guid)attachment.FarmId))
+        {
+            return false;
+        }
+
+        // lane MU-4 — on a farm he reads by place, a bill photo goes only with money he may see (or he took it): a bill no
+        // money of his names is another plot's or the farm's shared bill (fail closed, never guessed from a file name).
+        if (!tookIt
+            && attachment.LinkedEntityType is AttachmentParentRule.BillParent or AttachmentParentRule.FarmParent
+            && placeNarrowedFarms.Contains((Guid)attachment.FarmId)
+            && !billPhotosOfSeenMoney.Contains(attachment.Id))
         {
             return false;
         }
@@ -332,15 +550,30 @@ public static class RecordAudienceGate
         Guid makerUserId,
         Guid readerUserId,
         DateTime atUtc,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        RecordPlace? place = null)
     {
         ArgumentNullException.ThrowIfNull(repository);
-        if (audience == RecordAudience.Team)
+        if (audience == RecordAudience.Team
+            && (place is null || readerUserId == Guid.Empty
+                || (await repository.GetFarmsMaybeReadByPlaceAsync(readerUserId, [farmId], ct)).Count == 0))
         {
             return true;
         }
 
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, readerUserId, atUtc, ct);
+
+        // spec: plr-d10 lane MU-4 — and its PLACE: a chosen-plots seat sees one record only on his plots (or his own).
+        if (place is not null && RecordPlaceRule.NarrowsByPlot(scope) && !RecordPlaceRule.MaySee(scope, readerUserId, place))
+        {
+            return false;
+        }
+
+        if (audience == RecordAudience.Team)
+        {
+            return true;
+        }
+
         IReadOnlyCollection<Guid> chosen = audience == RecordAudience.Selected
             ? await repository.GetRecordAudienceUserIdsAsync(kind, recordId, ct)
             : [];
@@ -352,7 +585,9 @@ public static class RecordAudienceGate
     {
         ArgumentNullException.ThrowIfNull(log);
         return MaySeeAsync(repository, RecordKinds.DailyLog, log.Id, (Guid)log.FarmId, log.Audience, log.OperatorUserId.Value,
-            readerUserId, atUtc, ct);
+            readerUserId, atUtc, ct,
+            RecordPlace.OfLog(log.Id, (Guid)log.FarmId, log.OperatorUserId.Value, log.LogDate, log.CreatedAtUtc, log.Scope,
+                log.PlotId, log.PlotIds, log.SourceAiJobId));
     }
 
     public static Task<bool> MaySeeCostAsync(
@@ -360,7 +595,9 @@ public static class RecordAudienceGate
     {
         ArgumentNullException.ThrowIfNull(entry);
         return MaySeeAsync(repository, RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.Audience, entry.CreatedByUserId.Value,
-            readerUserId, atUtc, ct);
+            readerUserId, atUtc, ct,
+            RecordPlace.OfCost(entry.Id, (Guid)entry.FarmId, entry.CreatedByUserId.Value, entry.EntryDate, entry.CreatedAtUtc,
+                entry.PlotId, entry.SourceAiJobId, entry.ClientAttachmentIdsJson));
     }
 }
 

@@ -84,15 +84,29 @@ public sealed class PullSyncChangesHandler(
         // The farms' restricted records (rare: the holder narrowed them), read once for all farms. A record whose
         // audience leaves this person out is not sent, nor anything that hangs from it; one he may no longer see and
         // can hold is named in the withdrawn list (PullAudience). His scope still decides every part of what IS sent.
+        // spec: plr-d10 lane MU-4 — and the PLACE rule, the same visibility: a seat that covers chosen plots (or reads only
+        // his own work) receives a record only on his plots (or made by him). Both rules must allow a record.
+        var placeFarms = RecordVisibility.FarmsReadByPlace(window.Scopes);
         var audience = new PullAudience(
-            RecordVisibility.For(query.UserId, window.Scopes, await repository.GetRestrictedRecordsAsync(farmIds, ct)),
+            RecordVisibility.For(
+                query.UserId,
+                window.Scopes,
+                await repository.GetRestrictedRecordsAsync(farmIds, ct),
+                placeFarms.Count == 0 ? null : await repository.GetRecordPlacesAsync(placeFarms, ct)),
             window,
             sinceUtc,
             serverNowUtc);
 
         var farms = await window.ReadAsync(Any, (ids, since) => repository.GetFarmsChangedSinceAsync(ids, since, ct), f => (Guid)f.Id);
-        var plots = await window.ReadAsync(Any, (ids, since) => repository.GetPlotsChangedSinceAsync(ids, since, ct), p => (Guid)p.FarmId);
-        var cropCycles = await window.ReadAsync(Any, (ids, since) => repository.GetCropCyclesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId);
+        // spec: plr-d10 lane MU-4 (§11.6, §11.7) — a chosen-plots seat receives only HIS plots and the crop seasons on them
+        // (and so only their planned work, below); every other seat (an own-work seat included: it needs the farm's crop
+        // and plot names to log on any plot) receives every plot, as before.
+        var plots = (await window.ReadAsync(Any, (ids, since) => repository.GetPlotsChangedSinceAsync(ids, since, ct), p => (Guid)p.FarmId))
+            .Where(p => window.ScopeOf((Guid)p.FarmId)!.CoversPlot(p.Id))
+            .ToList();
+        var cropCycles = (await window.ReadAsync(Any, (ids, since) => repository.GetCropCyclesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId))
+            .Where(c => window.ScopeOf((Guid)c.FarmId)!.CoversPlot(c.PlotId))
+            .ToList();
         // A कामगार label reads his OWN records only; every other working seat reads the farm's (D-26).
         var dailyLogs = audience.Logs((await window.ReadAsync(Any, (ids, since) => repository.GetDailyLogsChangedSinceAsync(ids, since, ct), l => (Guid)l.FarmId))
             .Where(l => window.ScopeOf((Guid)l.FarmId)!.MayReadRecordOf(query.UserId, l.OperatorUserId.Value)));
@@ -237,12 +251,14 @@ public sealed class PullSyncChangesHandler(
 
         financeCorrections = financeCorrections.DistinctBy(c => c.Id).ToList();
         var costEntryFarm = costEntries.ToDictionary(c => c.Id, c => (Guid)c.FarmId);
+        // lane MU-4 (D-39) — a bill split across plots reaches a chosen-plots seat as HIS share lines only
+        // (RecordVisibility.Ledger), never as the whole bill; a bill kept by its audience not at all (PRV).
         var dayLedgers = (await window.ReadAsync(Money, (ids, since) => repository.GetDayLedgersChangedSinceAsync(ids, since, ct), l => (Guid)l.FarmId))
             .Concat(readmittedCostIds.Count == 0
                 ? []
                 : (await repository.GetDayLedgersBySourceCostEntryIdsAsync(readmittedCostIds, ct))
                     .Where(l => costEntryFarm.TryGetValue(l.SourceCostEntryId, out var farm) && farm == (Guid)l.FarmId))
-            .Where(l => audience.Visibility.MaySeeCost(l.SourceCostEntryId))
+            .Where(l => audience.Visibility.Ledger(l.ToDto()) is not null)
             .DistinctBy(l => l.Id)
             .ToList();
         // Labour V2 R1 Task 3.5c — attendance rulings changed since the cursor.
@@ -355,15 +371,16 @@ public sealed class PullSyncChangesHandler(
                 new GetAttentionBoardQuery(query.UserId, serverNowUtc), ct);
             attentionBoard = attentionResult.IsSuccess ? attentionResult.Value : null;
             // lane MU-3 — the board only for farms whose overview this seat reads.
+            // lane MU-4 (§11.6) — and, for a chosen-plots seat, only the items about his plots.
             if (attentionBoard is not null)
             {
                 attentionBoard = attentionBoard with
                 {
                     Cards = attentionBoard.Cards
-                        .Where(c => window.ScopeOf(c.FarmId) is { SeeFarmOverview: true })
+                        .Where(c => window.ScopeOf(c.FarmId) is { SeeFarmOverview: true } s && s.CoversPlot(c.PlotId))
                         .ToList(),
                     ScheduledWork = attentionBoard.ScheduledWork?
-                        .Where(w => window.ScopeOf(w.FarmId) is { SeeFarmOverview: true })
+                        .Where(w => window.ScopeOf(w.FarmId) is { SeeFarmOverview: true } s && s.CoversPlot(w.PlotId))
                         .ToList(),
                 };
             }
@@ -382,11 +399,14 @@ public sealed class PullSyncChangesHandler(
         // CEI Phase 2 §4.5 — test instances modified since the cursor, scoped
         // to the caller's farms. Recommendations follow the parent instances.
         // lane MU-3 — tests only to a seat that reads them (not an own-records-only seat without lab records).
-        IReadOnlyList<Domain.Tests.TestInstance> testInstances = await window.ReadAsync(
+        // lane MU-4 (§11.6) — and, for a chosen-plots seat, only the tests of his plots.
+        IReadOnlyList<Domain.Tests.TestInstance> testInstances = (await window.ReadAsync(
             s => s.SeeTests,
             async (ids, since) => (await testInstanceRepository
                 .GetModifiedSinceAsync(ids.Select(id => new FarmId(id)).ToList(), since, ct)).ToList(),
-            i => i.FarmId.Value);
+            i => i.FarmId.Value))
+            .Where(i => window.ScopeOf(i.FarmId.Value)!.CoversPlot(i.PlotId))
+            .ToList();
         var testInstanceIds = testInstances.Select(i => i.Id).ToList();
         var testRecommendations = testInstanceIds.Count == 0
             ? Array.Empty<Domain.Tests.TestRecommendation>()
@@ -446,8 +466,8 @@ public sealed class PullSyncChangesHandler(
                     Any,
                     (ids, since) => repository.GetJobCardsChangedSinceAsync(ids, since, ct),
                     j => j.FarmId.Value))
-                .Where(j => window.ScopeOf(j.FarmId.Value) is { OwnRecordsOnly: false }
-                    || j.AssignedWorkerUserId?.Value == query.UserId)
+                // lane MU-4 (§11.6) — a chosen-plots seat: the cards on his plots (FarmReadScope.MayReadTask).
+                .Where(j => window.ScopeOf(j.FarmId.Value)!.MayReadTask(query.UserId, j.PlotId, j.AssignedWorkerUserId?.Value))
                 .ToList();
             jobCardDtos = changedJobCards
                 .Select(j => ReadScopeProjection.JobCard(j.ToJobCardDto(), window.ScopeOf(j.FarmId.Value), query.UserId))
@@ -524,6 +544,8 @@ public sealed class PullSyncChangesHandler(
                 complianceSignalDtos.AddRange(
                     signals
                         .Where(signal => signal.FarmId.Value == fid)
+                        // lane MU-4 (§11.6) — a chosen-plots seat: the warnings about his plots only.
+                        .Where(signal => window.ScopeOf(fid)!.CoversPlot(signal.PlotId))
                         // lane PRV — a warning whose evidence names a record kept from him is not his to read.
                         .Where(signal => !audience.Visibility.MentionsHidden(signal.PayloadJson))
                         .Select(GetComplianceSignalsForFarmHandler.MapToDto));
@@ -637,7 +659,7 @@ public sealed class PullSyncChangesHandler(
                     audience.Visibility.Restricted(Domain.RecordPrivacy.RecordKinds.CostEntry, c.Id)))
                 .ToList(),
             financeCorrections.Select(c => c.ToDto()).ToList(),
-            dayLedgers.Select(l => l.ToDto()).ToList(),
+            dayLedgers.Select(l => audience.Visibility.Ledger(l.ToDto())!).ToList(),
             priceConfigs.Select(c => c.ToDto()).ToList(),
             plannedActivities.Select(a => a.ToDto()).ToList(),
             auditEvents.Select(a => a.ToDto()).ToList(),

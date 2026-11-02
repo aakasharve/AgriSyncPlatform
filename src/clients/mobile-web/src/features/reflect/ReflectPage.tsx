@@ -52,6 +52,9 @@ import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmContext } from '../../core/session/FarmContext';
+import { useStoredAccessScopes } from '../../core/session/storedFarmScope';
+import { scopeForFarm } from '../../infrastructure/storage/accessScopeStore';
+import { plotScopeCopy } from '../profile/team/plotScopeCopy';
 import { emitClosureSummaryViewed, emitNextActionCreated } from '../../core/telemetry/eventEmitters';
 import FarmWideTodayPanel from '../logs/components/FarmWideTodayPanel';
 import { TodayActivityButton } from '../logs/components/TodayActivityFeed';
@@ -124,6 +127,10 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const { currentFarmId } = useFarmContext();
     const copy = useReflectCopy();
     const language = useOptionalLanguage()?.language;
+    // spec: plr-d10 lane MU-4 (§11.6) — a person who covers chosen plots holds only his plots' work and money (the
+    // server sends nothing else), so his totals say whose they are.
+    const storedScopes = useStoredAccessScopes();
+    const plotsOnly = scopeForFarm(storedScopes, currentFarmId)?.plotScope === 'ChosenPlots';
 
     // ── page state ──────────────────────────────────────────────────────────────────────────────
     const [sel, setSel] = useState<ReflectSelection | null>(null); // null = every crop, every plot
@@ -356,7 +363,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 );
             case 'cost':
                 return (
-                    <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose" hint="आतापर्यंतचा हिशोब आणि खर्चाचा आलेख" {...fold}>
+                    <SectionBlock id="cost" title="उत्पन्न आणि खर्च" icon={<PieChart size={22} aria-hidden="true" />} tone="rose"
+                        hint={plotsOnly ? `${plotScopeCopy(language).totalsLabel} · आतापर्यंतचा हिशोब आणि खर्चाचा आलेख` : 'आतापर्यंतचा हिशोब आणि खर्चाचा आलेख'} {...fold}>
                         <CostSection totals={money.totals} spend={money.spend} range={money.range} onOpenFinance={navigate ? () => navigate('finance-ledger') : undefined} />
                     </SectionBlock>
                 );

@@ -34,6 +34,12 @@ public enum MembershipDecision
     /// permanent or until an instant. The label is untouched (it grants nothing).
     /// </summary>
     SetAuthorities,
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-4 (MU design §2 "Scope", §3 G2) — set which plots a let-in person covers: सर्व प्लॉट, the
+    /// chosen plots of THIS farm, or स्वतःचं काम. The label and the authorities are untouched.
+    /// </summary>
+    SetPlotScope,
 }
 
 /// <param name="FarmId">The farm.</param>
@@ -56,6 +62,9 @@ public enum MembershipDecision
 /// <param name="Authorities">SetAuthorities only (lane 2b): the WHOLE desired set — each a
 /// <c>FarmAuthority</c> name and its end as a UTC instant, or <c>null</c> for कायम. Required there,
 /// refused on every other decision.</param>
+/// <param name="PlotScope">lane MU-4 — SetPlotScope (required) and Approve (optional; absent = every plot): the
+/// <c>MembershipPlotScope</c> NAME (<c>AllPlots</c> / <c>ChosenPlots</c> / <c>OwnWork</c>). Refused on every other decision.</param>
+/// <param name="PlotIds">lane MU-4 — with <c>ChosenPlots</c> only: one or more plots, each of THIS farm (E4).</param>
 public sealed record ManageMembershipCommand(
     FarmId FarmId,
     UserId TargetUserId,
@@ -70,4 +79,6 @@ public sealed record ManageMembershipCommand(
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
     string AuditIpHash = "sha256:unknown",
-    IReadOnlyList<ShramSafal.Application.Contracts.Dtos.AuthorityGrantDto>? Authorities = null);
+    IReadOnlyList<ShramSafal.Application.Contracts.Dtos.AuthorityGrantDto>? Authorities = null,
+    string? PlotScope = null,
+    IReadOnlyList<Guid>? PlotIds = null);

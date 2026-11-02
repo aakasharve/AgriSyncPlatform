@@ -44,7 +44,17 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
         // spec: plr-d10 lane PRV (founder D-26) — a total counts only the money records he may see; how many it left out
         // is said (W4), never hidden in a smaller number.
         var visibility = await RecordVisibility.ForFarmsAsync(repository, farmIds, query.ActorUserId, now, ct);
-        var entries = farmEntries.Where(entry => visibility.MaySeeCost(entry.Id)).ToList();
+        // spec: plr-d10 lane MU-4 (§11.6) — a seat that covers chosen plots counts his plots' money only (labelled so on the
+        // phone: ScopedToPlots); his own submissions elsewhere are his to see, never part of "his plots'" total.
+        var plotScopes = farmIds
+            .Select(id => FarmReadScope.Of(id, accesses.GetValueOrDefault(id), now))
+            .Where(s => s?.PlotIds is not null && !s.IsPrimaryAccountHolder)
+            .ToDictionary(s => s!.FarmId, s => s!);
+        var entries = farmEntries
+            .Where(entry => visibility.MaySeeCost(entry.Id))
+            .Where(entry => !plotScopes.TryGetValue((Guid)entry.FarmId, out var plotScope)
+                || (entry.PlotId is { } plotId && plotScope.CoversPlot(plotId)))
+            .ToList();
         var corrections = await repository.GetCorrectionsForEntriesAsync(entries.Select(e => e.Id), ct);
 
         var latestCorrections = corrections
@@ -92,7 +102,9 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
             grandTotal,
             grouped,
             FarmsNotCounted: memberFarmIds.Count - farmIds.Count,
-            RecordsNotCounted: farmEntries.Count - entries.Count));
+            // lane MU-4 — only a record kept by its AUDIENCE is "not counted by rule" (W4); one outside his plots is not his.
+            RecordsNotCounted: farmEntries.Count(entry => visibility.HiddenByAudience(Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id)),
+            ScopedToPlots: plotScopes.Count > 0));
     }
 
     private static string? NormalizeGroupBy(string groupBy)

@@ -91,6 +91,12 @@ public sealed class ManageMembershipHandler(
             return Invalid();
         }
 
+        // lane MU-4 — the plot scope belongs to its own decision (required there) and to an approval (optional).
+        if (!TryReadPlotScope(command, out var requestedPlotScope))
+        {
+            return Invalid();
+        }
+
         if (command.Decision == MembershipDecision.SetAccess
             && requestedRole is null && command.Permissions is null && !command.ResetPermissions
             && command.LabourGrant is null)
@@ -165,23 +171,59 @@ public sealed class ManageMembershipHandler(
             }
         }
 
+        // ── 6c. lane MU-4 — plots are chosen for a person who was let in (working or paused) or is being let in now, never
+        //        for the primary owner's label (he covers every plot), and only plots of THIS farm (E4, both ways: a plot
+        //        id of another farm, or one that does not exist, is refused — never silently dropped).
+        if (requestedPlotScope is { } plotChoice)
+        {
+            if (command.Decision == MembershipDecision.SetPlotScope
+                && seat.Status is not (MembershipStatus.Active or MembershipStatus.Suspended))
+            {
+                return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipWrongStatus);
+            }
+
+            if (seat.Role == AppRole.PrimaryOwner)
+            {
+                return Result.Failure<LabourPermissionDto>(ShramSafalErrors.LabourManagementCarriedByRole);
+            }
+
+            if (plotChoice.PlotIds.Count > 0)
+            {
+                var farmPlots = (await repository.GetPlotsByFarmIdAsync(command.FarmId.Value, ct))
+                    .Where(p => p.FarmId == command.FarmId)
+                    .Select(p => p.Id)
+                    .ToHashSet();
+                if (!plotChoice.PlotIds.All(farmPlots.Contains))
+                {
+                    return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipPlotNotOnFarm);
+                }
+            }
+        }
+
         // ── 7. What the seat becomes (approve / change). Only the primary owner gets here, and he
         //       holds every power, so nothing he gives is a power he lacks (no re-delegation exists).
         var target = ResolveAccess(command, seat, requestedRole, requestedPermissions);
 
         // ── 8. A decision re-sent after it landed: the current truth, no second history row ──
-        if (AlreadyDone(command, seat, target))
+        if (AlreadyDone(command, seat, target, requestedPlotScope))
         {
             return Result.Success(await ProjectAsync(seat, now, ct));
         }
 
         // ── 9. Apply ─────────────────────────────────────────────────────────
         var before = new SeatSnapshot(
-            seat.Status, seat.Role, seat.EffectivePermissions, seat.CanManageLabourRecords, AuthorityList(seat));
+            seat.Status, seat.Role, seat.EffectivePermissions, seat.CanManageLabourRecords, AuthorityList(seat),
+            seat.PlotScope, seat.ScopePlotIds.Order().ToList());
         bool changed;
         try
         {
             changed = Apply(command, seat, target, reason, requestedAuthorities, isLastActivePrimaryOwner, now);
+            // lane MU-4 — an approval may choose the plots in the same tap (the preset's default, कामगार → स्वतःचं काम).
+            if (requestedPlotScope is { } plots
+                && command.Decision is MembershipDecision.Approve or MembershipDecision.SetPlotScope)
+            {
+                changed |= seat.SetPlotScope(plots.Scope, plots.PlotIds, now);
+            }
         }
         catch (LastPrimaryOwnerRevocationException)
         {
@@ -263,11 +305,13 @@ public sealed class ManageMembershipHandler(
     /// seat the owner already let in as exactly this choice, pause of a paused seat, restore of a
     /// working seat. Decline / remove of an ended seat are answered by <see cref="AnswerEndedSeatAsync"/>.
     /// </summary>
-    private static bool AlreadyDone(ManageMembershipCommand command, FarmMembership seat, AccessTarget? target) =>
+    private static bool AlreadyDone(
+        ManageMembershipCommand command, FarmMembership seat, AccessTarget? target, PlotChoice? plots) =>
         command.Decision switch
         {
             MembershipDecision.Approve =>
-                seat.Status == MembershipStatus.Active
+                (plots is null || plots.IsStoredOn(seat))
+                && seat.Status == MembershipStatus.Active
                 && seat.ApprovedByUserId is not null
                 && target is not null
                 && seat.Role == target.Role
@@ -332,6 +376,10 @@ public sealed class ManageMembershipHandler(
             case MembershipDecision.SetAuthorities:
                 return seat.SetAuthorities(authorities!, now);
 
+            case MembershipDecision.SetPlotScope:
+                // lane MU-4 — applied by the caller with the parsed choice (it also rides an approval).
+                return false;
+
             default:
                 // Unreachable: HandleAsync refuses an undefined decision first.
                 return false;
@@ -384,6 +432,7 @@ public sealed class ManageMembershipHandler(
                 MembershipDecision.Restore => "MemberRestored",
                 MembershipDecision.Remove => "MemberRemoved",
                 MembershipDecision.SetAuthorities => "MemberAuthoritiesChanged",
+                MembershipDecision.SetPlotScope => "MemberPlotScopeChanged",
                 _ => "MemberAccessChanged",
             },
             actorUserId: command.CallerUserId.Value,
@@ -408,6 +457,11 @@ public sealed class ManageMembershipHandler(
                 // 4th" and "permanently" are different decisions).
                 authoritiesBefore = before.Authorities,
                 authorities = AuthorityList(seat),
+                // lane MU-4 — which plots, before and after (P3: who, when, from and to).
+                plotScopeBefore = before.PlotScope.ToString(),
+                plotIdsBefore = before.PlotIds,
+                plotScope = seat.PlotScope.ToString(),
+                plotIds = seat.ScopePlotIds.Order().ToList(),
                 reason = seat.StatusReason,
             },
             farmId: command.FarmId.Value,
@@ -527,6 +581,44 @@ public sealed class ManageMembershipHandler(
         return true;
     }
 
+    /// <summary>
+    /// lane MU-4 — reads the requested plot scope: required on <see cref="MembershipDecision.SetPlotScope"/>, optional on
+    /// <see cref="MembershipDecision.Approve"/>, refused everywhere else. A known NAME (never a number), chosen plots with
+    /// one or more plot ids, every other scope with none (<see cref="FarmMembership.NormalizePlotScope"/>).
+    /// </summary>
+    private static bool TryReadPlotScope(ManageMembershipCommand command, out PlotChoice? choice)
+    {
+        choice = null;
+        var raw = command.PlotScope?.Trim();
+        if (command.Decision is not (MembershipDecision.SetPlotScope or MembershipDecision.Approve))
+        {
+            return string.IsNullOrEmpty(raw) && command.PlotIds is null;
+        }
+
+        if (string.IsNullOrEmpty(raw))
+        {
+            return command.Decision == MembershipDecision.Approve && command.PlotIds is null;
+        }
+
+        if (int.TryParse(raw, out _) || !Enum.TryParse<MembershipPlotScope>(raw, ignoreCase: false, out var scope)
+            || !Enum.IsDefined(scope))
+        {
+            return false;
+        }
+
+        try
+        {
+            choice = new PlotChoice(scope, FarmMembership.NormalizePlotScope(scope, command.PlotIds));
+            return true;
+        }
+        catch (ArgumentException)
+        {
+            // A shape the domain refuses (chosen plots with none, plots named for another scope): Invalid, never trimmed.
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent("membership.plot_scope.refused_shape"));
+            return false;
+        }
+    }
+
     private static IReadOnlyList<object> AuthorityList(FarmMembership seat) =>
         seat.StoredAuthorities()
             .Select(a => (object)new { name = FarmAuthorities.NameOf(a.Key), expiresAtUtc = a.Value })
@@ -539,7 +631,20 @@ public sealed class ManageMembershipHandler(
         Result.Failure<LabourPermissionDto>(ShramSafalErrors.Forbidden);
 
     private sealed record SeatSnapshot(
-        MembershipStatus Status, AppRole Role, FarmPermission Permissions, bool LabourGrant, IReadOnlyList<object> Authorities);
+        MembershipStatus Status,
+        AppRole Role,
+        FarmPermission Permissions,
+        bool LabourGrant,
+        IReadOnlyList<object> Authorities,
+        MembershipPlotScope PlotScope,
+        IReadOnlyList<Guid> PlotIds);
+
+    /// <summary>lane MU-4 — one parsed plot choice: the scope and its plots (empty unless chosen plots).</summary>
+    private sealed record PlotChoice(MembershipPlotScope Scope, IReadOnlySet<Guid> PlotIds)
+    {
+        public bool IsStoredOn(FarmMembership seat) =>
+            seat.PlotScope == Scope && seat.ScopePlotIds.Count == PlotIds.Count && seat.ScopePlotIds.All(PlotIds.Contains);
+    }
 
     private sealed record AccessTarget(AppRole Role, FarmPermission? Permissions, bool? LabourGrant);
 }

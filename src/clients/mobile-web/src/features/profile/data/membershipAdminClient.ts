@@ -13,6 +13,7 @@
  *   POST farms/{farmId}/memberships/{userId}/restore
  *   POST farms/{farmId}/memberships/{userId}/remove   {reason?}
  *   PUT  farms/{farmId}/memberships/{userId}/access   {role?, resetPermissions?, labourGrant?}
+ *   PUT  farms/{farmId}/memberships/{userId}/plot-scope {plotScope, plotIds?}   (lane MU-4)
  *
  * Every answer is the person's roster row (`LabourPermission`, the same shape the
  * labour-permissions roster returns), so the caller ADOPTS the server's row instead of assuming
@@ -39,6 +40,31 @@ export type ApprovePreset = 'work' | 'crew';
 export interface ApproveBody {
     role: 'Worker' | 'Mukadam';
     grantLabour?: boolean;
+    /** lane MU-4 — the plots chosen in the same tap (absent = every plot, an older server's answer). */
+    plotScope?: PlotScopeName;
+    plotIds?: string[];
+}
+
+/** lane MU-4 — which plots a person covers (the server's names). */
+export type PlotScopeName = 'AllPlots' | 'ChosenPlots' | 'OwnWork';
+
+/** lane MU-4 — one plot choice: the scope and, for chosen plots only, the plots. */
+export interface PlotScopeChoice {
+    plotScope: PlotScopeName;
+    plotIds?: string[];
+}
+
+/**
+ * lane MU-4 (orchestrator call 8) — the plots an approval starts from: the preset's default (कामगार → स्वतःचं काम;
+ * काम + हजेरी → सर्व प्लॉट), unless the owner chose otherwise in the same card.
+ */
+export function defaultPlotScopeFor(preset: ApprovePreset): PlotScopeChoice {
+    return preset === 'work' ? { plotScope: 'OwnWork' } : { plotScope: 'AllPlots' };
+}
+
+/** lane MU-4 — the body for a choice: plots only with chosen plots, never an empty choice. */
+export function plotScopeBody(choice: PlotScopeChoice): PlotScopeChoice {
+    return choice.plotScope === 'ChosenPlots' ? { plotScope: 'ChosenPlots', plotIds: [...(choice.plotIds ?? [])] } : { plotScope: choice.plotScope };
 }
 
 /**
@@ -128,6 +154,17 @@ export async function setMemberAuthorities(
 ): Promise<LabourPermission> {
     const response = await agriSyncClient.http.put<LabourPermission>(
         `${membershipPath(farmId, userId)}/authorities`, { authorities });
+    return response.data;
+}
+
+/**
+ * lane MU-4 (MU design §2 "Scope", §3 G2) — the primary account holder sets which plots this person covers. DESIRED
+ * state (a retry converges); the server's row is adopted, never assumed. Refused for anyone else (403), and for a plot
+ * of another farm (400).
+ */
+export async function setMemberPlotScope(farmId: string, userId: string, choice: PlotScopeChoice): Promise<LabourPermission> {
+    const response = await agriSyncClient.http.put<LabourPermission>(
+        `${membershipPath(farmId, userId)}/plot-scope`, plotScopeBody(choice));
     return response.data;
 }
 

@@ -67,8 +67,10 @@ internal sealed class PullAudience(
             {
                 kept.Add(log);
             }
-            else
+            else if (visibility.HiddenByAudience(RecordKinds.DailyLog, log.Id))
             {
+                // lane MU-4 — only a record kept by its AUDIENCE is named here; one outside his plots leaves his phone by
+                // the plot scope the phone holds (accessScopes), as MU-3's purge does.
                 Consider(RecordKinds.DailyLog, log.Id, (Guid)log.FarmId, log.AudienceChangedAtUtc);
             }
         }
@@ -86,7 +88,7 @@ internal sealed class PullAudience(
             {
                 kept.Add(entry);
             }
-            else
+            else if (visibility.HiddenByAudience(RecordKinds.CostEntry, entry.Id))
             {
                 Consider(RecordKinds.CostEntry, entry.Id, (Guid)entry.FarmId, entry.AudienceChangedAtUtc);
             }

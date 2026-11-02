@@ -19,7 +19,11 @@ import React, { useState } from 'react';
 import { Smartphone, UserPlus } from 'lucide-react';
 import { Tap } from '../../../shared/components/ui/placeUi';
 import type { LabourPermission } from '../data/labourPermissionsClient';
-import type { ApprovePreset } from '../data/membershipAdminClient';
+import { defaultPlotScopeFor, type ApprovePreset, type PlotScopeChoice } from '../data/membershipAdminClient';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { PlotScopePicker } from './PlotScopePicker';
+import { plotScopeCopy } from './plotScopeCopy';
+import type { FarmPlot } from './useFarmPlots';
 import { PRESETS, phoneLine } from './teamModel';
 import { ReasonStep } from './ReasonStep';
 import { TEAM_COPY } from './teamCopy';
@@ -28,12 +32,19 @@ export interface JoinRequestCardProps {
     row: LabourPermission;
     name: string;
     busy: boolean;
-    onApprove: (preset: ApprovePreset) => void;
+    /** lane MU-4 — `plots`: the owner's plot choice when he made one; absent = the preset's default. */
+    onApprove: (preset: ApprovePreset, plots?: PlotScopeChoice) => void;
     onDecline: (reason: string) => void;
+    /** lane MU-4 — the farm's plots, for the owner's plot choice in the same card. Absent = no plot row. */
+    farmPlots?: readonly FarmPlot[];
 }
 
-export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, busy, onApprove, onDecline }) => {
+export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, busy, onApprove, onDecline, farmPlots }) => {
     const [declining, setDeclining] = useState(false);
+    // lane MU-4 (orchestrator call 8) — the plots start from the preset (कामगार → स्वतःचं काम); a choice the owner makes
+    // here replaces that default for whichever preset he then taps.
+    const [plots, setPlots] = useState<PlotScopeChoice | null>(null);
+    const copy = plotScopeCopy(useOptionalLanguage()?.language);
     const via = row.joinedVia === 'SelfJoin' ? TEAM_COPY.viaCode : row.joinedVia === 'QrScan' ? TEAM_COPY.viaQr : null;
     const phone = phoneLine(row);
 
@@ -49,11 +60,15 @@ export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, bus
                 </p>
             )}
             {via && <p className="m-0 text-[13px] font-bold text-stone-600">{via}</p>}
+            {farmPlots && (
+                <PlotScopePicker memberId={row.userId} value={plots ?? defaultPlotScopeFor('work')} farmPlots={farmPlots} busy={busy}
+                    summary={plots ? undefined : copy.presetDefaults} onSave={setPlots} />
+            )}
             <p className="m-0 text-[14px] font-extrabold text-stone-800">{TEAM_COPY.quick}</p>
             <div className="grid grid-cols-1 gap-2">
                 {PRESETS.map(p => (
                     <Tap key={p.id} disabled={busy} data-testid={`approve-${p.id}-${row.userId}`}
-                        onClick={() => onApprove(p.id)}
+                        onClick={() => onApprove(p.id, farmPlots ? (plots ?? defaultPlotScopeFor(p.id)) : undefined)}
                         className="min-h-[56px] rounded-2xl border-2 border-emerald-600 bg-emerald-50 px-3 py-2 text-left disabled:opacity-60">
                         <span className="block text-[16px] font-extrabold text-stone-900">{p.label}</span>
                         <span className="block text-[12.5px] font-semibold leading-snug text-stone-600">{p.hint}</span>

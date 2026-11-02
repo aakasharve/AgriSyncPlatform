@@ -21,7 +21,8 @@
  *     card's pay and its payout id (fix 2 N3), and the words of another person's record that mentions money (fix 2
  *     N4 = D-67). Every copy it trims says so (`amountsWithheld`, fix 2 N2);
  *   - OWN RECORDS ONLY (a कामगार): every record someone else made, and its photos;
- *   - without attendance / tests / warnings: those rows.
+ *   - without attendance / tests / warnings: those rows;
+ *   - lane MU-4: outside a chosen-plots seat's PLOTS, and other people's money on an own-work seat (`plotScopePurge`).
  *
  * What it NEVER touches (doctrine P10 — unsynced intent is not cache): a record with a change still in the
  * outbox, a photo still uploading, anything the outbox holds, and this person's OWN records. Everything
@@ -37,6 +38,7 @@ import { clearLabourReadoutsForFarm } from '../../../../infrastructure/storage/L
 import { purgeLabourCachesForFarm } from '../../../../infrastructure/storage/labourFarmAccess';
 import { dayLedgerMetaKey } from '../helpers/dayLedgerMetaKey';
 import { logMentionsMoney, MONEY_KEYS, textMentionsMoney, WORD_KEYS } from '../helpers/moneyMention';
+import { purgeOutsidePlots, removeCatalogPlots } from './plotScopePurge';
 
 export interface AccessScopeContext {
     /** This phone's signed-in person; `null` = unknown, then nothing is attributed to him or removed as another's. */
@@ -219,6 +221,11 @@ export async function reconcileAccessScopes(
         if (remove) await db.attachments.delete(attachment.id);
     }
 
+    // ── spec: plr-d10 lane MU-4 — and his PLOTS (a chosen-plots seat), his own work's money (an own-work seat) ──
+    const placed = await purgeOutsidePlots(db, [...byFarm.values()], ctx);
+    outcome.removedLogs += placed.removedLogIds.length;
+    outcome.removedMoneyRows += placed.removedMoneyIds.length;
+
     // ── The wage book this phone cached (localStorage read-out) for a farm whose wages stopped being his
     //    — gone, or see wages now off where the last answer (or no answer, before MU-3) did not say so:
     //    cleared once, so an offline open can never show a wage the server no longer sends him. A farm
@@ -249,19 +256,6 @@ export async function reconcileAccessScopes(
     });
 
     return outcome;
-}
-
-/** Item 14 — the crop list (`crops`) loses the plots of a farm that is gone; a crop left with no plot goes too. */
-async function removeCatalogPlots(db: AgriLogDatabase, plotIds: ReadonlySet<string>): Promise<void> {
-    if (plotIds.size === 0) return;
-    for (const row of await db.crops.toArray()) {
-        const crop = row.data as { plots?: { id?: string }[] } | null;
-        const plots = Array.isArray(crop?.plots) ? crop.plots : [];
-        const kept = plots.filter(p => !p?.id || !plotIds.has(p.id));
-        if (kept.length === plots.length) continue;
-        if (kept.length === 0) await db.crops.delete(row.id);
-        else await db.crops.put({ ...row, data: { ...crop, plots: kept } });
-    }
 }
 
 /** Item 14 — the profile's people list keeps only this person (the server sends a कामगार no other name). */

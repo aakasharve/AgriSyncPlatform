@@ -88,6 +88,11 @@ internal static class LabourPermissionProjection
             CanConfirmRecords: OwnerConfirmationAuthority.MayConfirm(membership.Role, confirms),
             IsConfirmGrantEditable: false,
             Authorities: held,
-            CanEditAuthorities: callerMayGrant && !isPrimary && letIn);
+            CanEditAuthorities: callerMayGrant && !isPrimary && letIn,
+            // spec: plr-d10 lane MU-4 — the plots he covers (the primary owner covers every plot by label).
+            PlotScope: isPrimary ? nameof(MembershipPlotScope.AllPlots) : membership.PlotScope.ToString(),
+            PlotIds: !isPrimary && membership.PlotScope == MembershipPlotScope.ChosenPlots
+                ? membership.ScopePlotIds.Order().ToList()
+                : null);
     }
 }

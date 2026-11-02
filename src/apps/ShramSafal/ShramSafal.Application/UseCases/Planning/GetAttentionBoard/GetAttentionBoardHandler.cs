@@ -45,6 +45,8 @@ public sealed class GetAttentionBoardHandler(
         var farmIds = memberFarmIds
             .Where(id => Services.FarmReadScope.Of(id, accesses.GetValueOrDefault(id), clock.UtcNow) is { SeeFarmOverview: true })
             .ToList();
+        // spec: plr-d10 lane MU-4 (11.6) - and, for a chosen-plots seat, only the items about his plots.
+        var plotScopes = farmIds.ToDictionary(id => id, id => Services.FarmReadScope.Of(id, accesses.GetValueOrDefault(id), clock.UtcNow));
         if (farmIds.Count == 0)
             return Result.Success(new AttentionBoardDto(asOf, Array.Empty<AttentionCardDto>(), Array.Empty<ScheduledWorkItemDto>()));
 
@@ -73,6 +75,11 @@ public sealed class GetAttentionBoardHandler(
 
             foreach (var plot in plots)
             {
+                if (plotScopes.GetValueOrDefault(farmId) is not { } plotScope || !plotScope.CoversPlot(plot.Id))
+                {
+                    continue;
+                }
+
                 var cycles = await repository.GetCropCyclesByPlotIdAsync(plot.Id, ct);
                 // Most recent cycle
                 var latestCycle = cycles.OrderByDescending(c => c.StartDate).FirstOrDefault();

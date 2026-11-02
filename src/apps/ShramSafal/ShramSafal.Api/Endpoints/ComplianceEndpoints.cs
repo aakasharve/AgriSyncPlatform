@@ -65,7 +65,11 @@ public static class ComplianceEndpoints
 
             // spec: plr-d10 lane PRV (founder D-26) — the pull's rule: a warning naming a record kept from him is not sent.
             var visibility = await RecordVisibility.ForFarmAsync(repository, farmId, readerUserId, clock.UtcNow, ct);
-            return Results.Ok(result.Value!.Where(s => !visibility.MentionsHidden(s.PayloadJson)).ToList());
+            // spec: plr-d10 lane MU-4 (§11.6) — and, for a chosen-plots seat, only the warnings about his plots.
+            return Results.Ok(result.Value!
+                .Where(s => !visibility.MentionsHidden(s.PayloadJson))
+                .Where(s => farmRead.CoversPlot(s.PlotId))
+                .ToList());
         })
         .WithName("GetComplianceSignalsForFarm");
 

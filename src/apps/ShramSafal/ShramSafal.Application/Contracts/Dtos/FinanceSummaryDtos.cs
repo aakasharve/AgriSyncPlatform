@@ -18,5 +18,8 @@ public sealed record FinanceSummaryDto(
     int FarmsNotCounted = 0,
     // spec: plr-d10 lane PRV (founder D-26) — how many money records in this period this total does NOT count because
     // their audience leaves the caller out (0 = every one is counted). The phone shows W4 when it is above 0. Additive.
-    int RecordsNotCounted = 0);
+    int RecordsNotCounted = 0,
+    // spec: plr-d10 lane MU-4 (§11.6) — true when this total counts only the plots the caller covers (a chosen-plots
+    // seat): the phone labels it "तुमच्या प्लॉटचे" (PROPOSED). Additive: absent / false = the whole farm's.
+    bool ScopedToPlots = false);
 

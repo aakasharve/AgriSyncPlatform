@@ -32,6 +32,7 @@ import type { PageView } from '../../../types';
 import type { Language } from '../../../i18n/language';
 import { resolveOversightString, type OversightTranslations } from '../../../i18n/oversightTranslations';
 import { hapticFeedback } from '../../../shared/utils/haptics';
+import { plotScopeCopy } from '../../profile/team/plotScopeCopy';
 
 // Same font-selection convention every other oversight component uses
 // (root CLAUDE.md Font Rules) — picks which of the two locked fonts a
@@ -64,13 +65,18 @@ export interface OversightNavCardsProps {
     disabled?: boolean;
     /** Pages this person may not open (founder 2026-10-25: a worker gets no तुलना). The rest share the row. Default: none hidden. */
     hiddenViews?: readonly PageView[];
+    /**
+     * spec: plr-d10 lane MU-4 — this person covers CHOSEN plots on the open farm: the overview shows only his plots, so
+     * its card must not say "पूर्ण शेती" to him (`plotScopeCopy.overviewTitle`, PROPOSED).
+     */
+    plotsOnly?: boolean;
 }
 
 const GRID_COLS: Record<number, string> = { 1: 'grid-cols-1', 2: 'grid-cols-2', 3: 'grid-cols-3' };
 
 interface Ripple { key: PageView; x: number; y: number; size: number; id: number }
 
-const OversightNavCards: React.FC<OversightNavCardsProps> = ({ language, view, onChange, disabled, hiddenViews }) => {
+const OversightNavCards: React.FC<OversightNavCardsProps> = ({ language, view, onChange, disabled, hiddenViews, plotsOnly }) => {
     const items = hiddenViews?.length ? NAV_ITEMS.filter(i => !hiddenViews.includes(i.key)) : NAV_ITEMS;
     const [ripple, setRipple] = React.useState<Ripple | null>(null);
     const startRipple = (key: PageView, e: React.PointerEvent<HTMLButtonElement>) => {
@@ -81,7 +87,9 @@ const OversightNavCards: React.FC<OversightNavCardsProps> = ({ language, view, o
         <div className={`grid w-full ${GRID_COLS[items.length]} gap-2`} data-testid="oversight-nav-cards">
             {items.map((item) => {
                 const isActive = view === item.key;
-                const label = resolveOversightString(language, item.labelKey);
+                const label = plotsOnly && item.key === 'reflect'
+                    ? plotScopeCopy(language).overviewTitle
+                    : resolveOversightString(language, item.labelKey);
                 const Icon = item.icon;
 
                 return (

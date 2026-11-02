@@ -25,9 +25,12 @@ import {
     removeMember,
     restoreMember,
     setMemberAccess,
+    setMemberPlotScope,
     suspendMember,
+    plotScopeBody,
     type ApprovePreset,
     type MembershipErrorKind,
+    type PlotScopeChoice,
 } from '../data/membershipAdminClient';
 import { TEAM_COPY } from '../team/teamCopy';
 
@@ -47,7 +50,10 @@ export interface UseMembershipDecisionsResult {
     /** The person whose decision is in flight, if any (one at a time). */
     busyUserId: string | null;
     error: MembershipDecisionError | null;
-    approve: (userId: string, preset: ApprovePreset) => Promise<boolean>;
+    /** lane MU-4 — `plots`: the plots chosen in the same tap (absent = the server's default, every plot). */
+    approve: (userId: string, preset: ApprovePreset, plots?: PlotScopeChoice) => Promise<boolean>;
+    /** lane MU-4 — which plots a let-in person covers (DESIRED state; the server's row is adopted). */
+    setPlots: (userId: string, plots: PlotScopeChoice) => Promise<boolean>;
     decline: (userId: string, reason?: string) => Promise<boolean>;
     suspend: (userId: string, reason?: string) => Promise<boolean>;
     restore: (userId: string) => Promise<boolean>;
@@ -97,9 +103,12 @@ export function useMembershipDecisions(
         }
     }, [farmId, adoptRow, reload]);
 
-    const approve = useCallback((userId: string, preset: ApprovePreset) =>
-        run(userId, async farm => [await approveMember(farm, userId, approveBodyFor(preset))]),
+    const approve = useCallback((userId: string, preset: ApprovePreset, plots?: PlotScopeChoice) =>
+        run(userId, async farm => [await approveMember(farm, userId, { ...approveBodyFor(preset), ...(plots ? plotScopeBody(plots) : {}) })]),
     [run]);
+
+    const setPlots = useCallback((userId: string, plots: PlotScopeChoice) =>
+        run(userId, async farm => [await setMemberPlotScope(farm, userId, plots)]), [run]);
 
     const decline = useCallback((userId: string, reason?: string) =>
         run(userId, async farm => [await declineMember(farm, userId, reason)]), [run]);
@@ -119,5 +128,5 @@ export function useMembershipDecisions(
 
     const dismissError = useCallback(() => setError(null), []);
 
-    return { busyUserId, error, approve, decline, suspend, restore, remove, changePreset, dismissError };
+    return { busyUserId, error, approve, setPlots, decline, suspend, restore, remove, changePreset, dismissError };
 }

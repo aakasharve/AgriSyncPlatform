@@ -150,6 +150,12 @@ export interface LabourPermission {
      * Never on the primary account holder's own row. Absent = older server.
      */
     canEditAuthorities?: boolean;
+    /**
+     * spec: plr-d10 lane MU-4 — ADDITIVE: which plots this person covers ("AllPlots" / "ChosenPlots" / "OwnWork"; the
+     * primary owner always "AllPlots") and, for chosen plots, the plots. Absent = an older server = every plot.
+     */
+    plotScope?: 'AllPlots' | 'ChosenPlots' | 'OwnWork';
+    plotIds?: string[] | null;
 }
 
 /** lane 2b — one authority on the wire: the server's name and its end (ISO UTC, null = कायम). */

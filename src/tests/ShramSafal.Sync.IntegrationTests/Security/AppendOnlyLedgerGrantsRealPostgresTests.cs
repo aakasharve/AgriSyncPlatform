@@ -160,6 +160,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    state, not a ledger). Down() drops those. No append-only ledger, policy or privilege is touched. Safe to
         //    revert and re-apply mid-proof.
         "20261101110309_AddRecordAudience",
+
+        // ── Reviewed 2026-11-02 (spec: plr-d10 lane MU-4); Down() read in full. Up() ADDs plot_scope (NOT NULL DEFAULT
+        //    'AllPlots') and scope_plot_ids (uuid[] NOT NULL DEFAULT '{}') with one CHECK on ssf.farm_memberships. Down()
+        //    drops the CHECK and both columns. No table, append-only ledger, policy or privilege is touched. Safe to revert
+        //    and re-apply mid-proof.
+        "20261101221236_AddMembershipPlotScope",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

@@ -106,11 +106,20 @@ public static class PlanningEndpoints
             Guid cropCycleId,
             ClaimsPrincipal user,
             ComputePlannedVsExecutedDeltaHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: plr-d10 lane MU-4 - the route only: a season on a plot outside his chosen plots is not his to read.
+            // The comparison itself is lane CMP-T's (founder D-68) and is not touched here.
+            if (await CycleOutsidePlotsAsync(cropCycleId, actorUserId, repository, userScope, ct) is { } outside)
+            {
+                return outside;
             }
 
             var result = await handler.HandleAsync(new ComputePlannedVsExecutedDeltaQuery(actorUserId, cropCycleId), ct);
@@ -123,11 +132,19 @@ public static class PlanningEndpoints
             string? stage,
             ClaimsPrincipal user,
             ComputePlannedVsExecutedDeltaHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
             {
                 return Results.Unauthorized();
+            }
+
+            // spec: plr-d10 lane MU-4 - the route only (CMP-T owns the comparison): his plots' seasons only.
+            if (await CycleOutsidePlotsAsync(cropCycleId, actorUserId, repository, userScope, ct) is { } outside)
+            {
+                return outside;
             }
 
             var result = await handler.HandleAsync(new ComputePlannedVsExecutedDeltaQuery(actorUserId, cropCycleId, stage), ct);
@@ -162,7 +179,41 @@ public static class PlanningEndpoints
         }
 
         var established = await farmScope.EstablishForCallerAsync(farm, actorUserId, ct);
-        return established.IsSuccess ? null : ToErrorResult(established.Error);
+        if (!established.IsSuccess)
+        {
+            return ToErrorResult(established.Error);
+        }
+
+        // spec: plr-d10 lane MU-4 (11.6) - a chosen-plots seat reads the plan of his plots' seasons only.
+        return await CycleOutsidePlotsAsync(cropCycleId, actorUserId, repository, userScope, ct);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-4 - Forbidden when the season lies on a plot outside the caller's chosen plots; null when it
+    /// is his (or he covers every plot, or the season is not found under his own scope - the caller's next read answers).
+    /// </summary>
+    private static async Task<IResult?> CycleOutsidePlotsAsync(
+        Guid cropCycleId,
+        Guid actorUserId,
+        IShramSafalRepository repository,
+        ICallerUserTenantScope userScope,
+        CancellationToken ct)
+    {
+        var outside = await userScope.RunForCallerAsync(
+            actorUserId,
+            async token =>
+            {
+                if (await repository.GetCropCycleByIdAsync(cropCycleId, token) is not { } cycle)
+                {
+                    return false;
+                }
+
+                var scope = await ShramSafal.Application.Services.FarmReadGate.ScopeAsync(
+                    repository, (Guid)cycle.FarmId, actorUserId, DateTime.UtcNow, token);
+                return scope is not null && !scope.CoversPlot(cycle.PlotId);
+            },
+            ct);
+        return outside ? ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.Forbidden) : null;
     }
 
     private static IResult ToErrorResult(Error error)

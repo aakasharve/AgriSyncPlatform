@@ -14,6 +14,9 @@ namespace ShramSafal.Application.Services;
 /// <para>lane MU-3 — <c>AccessChangedAtUtc</c>: when what this seat may read last changed, the later of
 /// the seat's creation and its last status / label / authority change; <c>null</c> when unknown (a test
 /// double, or the registrant). The sync pull re-sends the farm when it is newer than the phone's cursor.</para>
+/// <para>spec: plr-d10 lane MU-4 — <c>PlotScope</c> / <c>ScopePlotIds</c>: which plots the seat covers (the second layer of
+/// the MU design §2). Every plot (<see cref="MembershipPlotScope.AllPlots"/>, no ids) for the registrant, for a test double
+/// and for every seat made before MU-4.</para>
 /// </summary>
 public sealed record FarmAccess(
     AppRole Role,
@@ -23,7 +26,24 @@ public sealed record FarmAccess(
     bool LabourGrant = false,
     DateTime? LabourGrantExpiresAtUtc = null,
     string? AuthorityExpiresAtJson = null,
-    DateTime? AccessChangedAtUtc = null);
+    DateTime? AccessChangedAtUtc = null,
+    MembershipPlotScope PlotScope = MembershipPlotScope.AllPlots,
+    IReadOnlyCollection<Guid>? ScopePlotIds = null)
+{
+    /// <summary>
+    /// lane MU-4 — the plots this standing covers, or <c>null</c> for every plot: the registrant and the primary owner's
+    /// label always cover every plot; a chosen-plots seat covers its chosen plots (an empty set — a row the check
+    /// constraint forbids — covers none, failing closed); own work reads by maker, not by plot (<c>null</c> here).
+    /// </summary>
+    public IReadOnlySet<Guid>? CoveredPlotIds =>
+        IsRegistrant || Role == AppRole.PrimaryOwner || PlotScope != MembershipPlotScope.ChosenPlots
+            ? null
+            : (ScopePlotIds ?? []).ToHashSet();
+
+    /// <summary>lane MU-4 — a seat whose scope is स्वतःचं काम (never the registrant's or the primary owner's).</summary>
+    public bool OwnWorkScope =>
+        !IsRegistrant && Role != AppRole.PrimaryOwner && PlotScope == MembershipPlotScope.OwnWork;
+}
 
 /// <summary>
 /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2), lane 2b (MU design §2, §11.1, §11.2) — THE rule
@@ -50,6 +70,14 @@ public static class FarmAccessPolicy
         if (access.IsRegistrant)
         {
             return true;
+        }
+
+        // spec: plr-d10 lane MU-4 (MU design §11.6) — editing the farm's setup (plots, boundary, motors, water) is a
+        // whole-farm act: it needs "edit farm setup" AND a seat that covers every plot. Reading the setup stays open.
+        if (authority == FarmAuthority.EditFarmSetup && access.PlotScope != MembershipPlotScope.AllPlots
+            && access.Role != AppRole.PrimaryOwner)
+        {
+            return false;
         }
 
         return access.Status == MembershipStatus.Active

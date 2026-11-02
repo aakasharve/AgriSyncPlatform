@@ -42,6 +42,21 @@ public static class ReadScopeProjection
             return dto;
         }
 
+        // spec: plr-d10 lane MU-4 (§11.6) — a record that spans plots reaches a chosen-plots seat with its plot list
+        // narrowed to HIS plots, and without the money it states: its amounts are the whole record's, across plots that are
+        // not his (my call, the D-69 projection — the same as a record whose own money is kept from him).
+        if (scope?.PlotIds is { } his && dto.PlotIds.Count > 0 && !dto.PlotIds.All(his.Contains))
+        {
+            var kept = dto.PlotIds.Where(his.Contains).ToList();
+            dto = dto with
+            {
+                PlotIds = kept,
+                PlotId = dto.PlotId is { } single && his.Contains(single) ? single : null,
+                CropCycleId = dto.PlotId is { } one && his.Contains(one) ? dto.CropCycleId : null,
+            };
+            scope = RecordMoneyAccess.WithoutMoney(scope);
+        }
+
         var seesMoney = scope?.SeeMoney == true;
         var seesWages = scope?.SeeWages == true;
         if (seesMoney && seesWages)

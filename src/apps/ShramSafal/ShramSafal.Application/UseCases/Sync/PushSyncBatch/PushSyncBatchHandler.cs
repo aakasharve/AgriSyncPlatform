@@ -1047,6 +1047,14 @@ public sealed class PushSyncBatchHandler(
             return closed;
         }
 
+        // spec: plr-d10 lane MU-4 (MU design §3 G2) — a chosen-plots seat's write that names a plot outside his plots (a
+        // record, a cost, a move, a split, a crop season, a task, a test) is refused WHOLE before any handler runs, with a
+        // code every phone parks visibly (P10: never dropped). Asked here once for every kind of change.
+        if (await RefuseOutsidePlotScopeAsync(mutationType, payload, actorUserId, ct) is { } outside)
+        {
+            return outside;
+        }
+
         switch (mutationType)
         {
             case "create_farm":
@@ -3585,12 +3593,32 @@ public sealed class PushSyncBatchHandler(
         }
 
         var head = await repository.GetRecordAudienceHeadAsync(target.Kind, target.Id, ct);
-        if (head is null || head.Audience == Domain.RecordPrivacy.RecordAudience.Team)
+        if (head is null)
         {
             return null;
         }
 
         var scope = await FarmReadGate.ScopeAsync(repository, head.FarmId, actorUserId, clock.UtcNow, ct);
+
+        // spec: plr-d10 lane MU-4 — and a change to a record outside the sender's CHOSEN plots: the same one rule the reads
+        // ask. Refused with the plot rule's own code, parked visibly (P10). An own-work seat's changes stay as they were.
+        if (RecordPlaceRule.NarrowsByPlot(scope)
+            && await repository.GetRecordPlaceAsync(target.Kind, target.Id, ct) is { } place
+            && place.FarmId == head.FarmId
+            && !RecordPlaceRule.MaySee(scope, actorUserId, place))
+        {
+            logger.LogWarning(
+                "{MutationType} refused: {Kind} {RecordId} lies outside the sender's plots; the phone keeps the change.",
+                mutationType, head.Kind, head.Id);
+            var outside = Domain.Common.ShramSafalErrors.PlotScopeForbidden;
+            return MutationExecutionOutcome.Failure(outside.Code, outside.Description);
+        }
+
+        if (head.Audience == Domain.RecordPrivacy.RecordAudience.Team)
+        {
+            return null;
+        }
+
         var chosen = await repository.GetRecordAudienceUserIdsAsync(head.Kind, head.Id, ct);
         if (RecordAudienceRule.MaySee(scope, actorUserId, head.Audience, head.MakerUserId, chosen))
         {
@@ -3602,6 +3630,143 @@ public sealed class PushSyncBatchHandler(
             mutationType, head.Kind, head.Id, head.Audience);
         var closed = Domain.Common.ShramSafalErrors.RecordAudienceClosed;
         return MutationExecutionOutcome.Failure(closed.Code, closed.Description);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-4 (MU design §3 G2, §11.6) — refuse a write that names a plot outside the sender's CHOSEN
+    /// plots. Every plot the payload names — any property called <c>plotId</c> / <c>plotIds</c> (or ending so, at any
+    /// depth), the plot of any crop season it names (<c>cropCycleId</c>), of the task (<c>jobCardId</c>) or the test
+    /// (<c>testInstanceId</c>) it acts on — is read under the sender's OWN user-scoped policies; a plot of a farm where his
+    /// seat covers chosen plots must be one of them. A plot that resolves to nothing (another farm, not yet here) is left to
+    /// the handler, which answers as it always did. An own-work seat may log on any plot (§11.7); every other seat covers
+    /// every plot. Nothing of a refused write is applied; the phone keeps it, parked and visible (P10).
+    /// </summary>
+    private async Task<MutationExecutionOutcome?> RefuseOutsidePlotScopeAsync(
+        string mutationType, JsonElement payload, Guid actorUserId, CancellationToken ct)
+    {
+        var plots = new HashSet<Guid>();
+        var cycles = new HashSet<Guid>();
+        CollectPlaces(payload, plots, cycles, depth: 0);
+        var jobCardId = TopLevelId(payload, "jobCardId");
+        var testInstanceId = TopLevelId(payload, "testInstanceId");
+        if (plots.Count == 0 && cycles.Count == 0 && jobCardId == Guid.Empty && testInstanceId == Guid.Empty)
+        {
+            return null;
+        }
+
+        if (dbContext.Database.IsRelational())
+        {
+            await SetUserScopedReadGucsAsync(actorUserId, ct);
+        }
+
+        var named = new List<(Guid FarmId, Guid PlotId)>();
+        foreach (var plotId in plots)
+        {
+            if (await repository.GetPlotByIdAsync(plotId, ct) is { } plot && plot.Id == plotId)
+            {
+                named.Add(((Guid)plot.FarmId, plot.Id));
+            }
+        }
+
+        foreach (var cycleId in cycles)
+        {
+            if (await repository.GetCropCycleByIdAsync(cycleId, ct) is { } cycle && cycle.Id == cycleId)
+            {
+                named.Add(((Guid)cycle.FarmId, cycle.PlotId));
+            }
+        }
+
+        if (jobCardId != Guid.Empty && await repository.GetJobCardByIdAsync(jobCardId, ct) is { } card && card.Id == jobCardId)
+        {
+            named.Add((card.FarmId.Value, card.PlotId));
+        }
+
+        if (testInstanceId != Guid.Empty
+            && await testInstanceRepository.GetByIdAsync(testInstanceId, ct) is { } test && test.Id == testInstanceId)
+        {
+            named.Add((test.FarmId.Value, test.PlotId));
+        }
+
+        var now = clock.UtcNow;
+        foreach (var farm in named.GroupBy(n => n.FarmId))
+        {
+            var scope = await FarmReadGate.ScopeAsync(repository, farm.Key, actorUserId, now, ct);
+            if (scope?.PlotIds is not { } his || farm.All(n => his.Contains(n.PlotId)))
+            {
+                continue;
+            }
+
+            logger.LogWarning(
+                "{MutationType} refused: it names a plot of farm {FarmId} outside the sender's plots; the phone keeps it.",
+                mutationType, farm.Key);
+            var outside = Domain.Common.ShramSafalErrors.PlotScopeForbidden;
+            return MutationExecutionOutcome.Failure(outside.Code, outside.Description);
+        }
+
+        return null;
+
+        static Guid TopLevelId(JsonElement element, string property) =>
+            element.ValueKind == JsonValueKind.Object
+            && element.TryGetProperty(property, out var value)
+            && value.ValueKind == JsonValueKind.String
+            && Guid.TryParse(value.GetString(), out var id)
+                ? id
+                : Guid.Empty;
+    }
+
+    /// <summary>lane MU-4 — every plot id and crop-season id a payload names, at any depth (bounded).</summary>
+    private static void CollectPlaces(JsonElement element, HashSet<Guid> plots, HashSet<Guid> cycles, int depth)
+    {
+        if (depth > 12)
+        {
+            return;
+        }
+
+        if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                CollectPlaces(item, plots, cycles, depth + 1);
+            }
+
+            return;
+        }
+
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        foreach (var property in element.EnumerateObject())
+        {
+            var name = property.Name;
+            if (name.EndsWith("plotId", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("plotIds", StringComparison.OrdinalIgnoreCase))
+            {
+                AddIds(property.Value, plots);
+            }
+            else if (name.EndsWith("cropCycleId", StringComparison.OrdinalIgnoreCase))
+            {
+                AddIds(property.Value, cycles);
+            }
+
+            CollectPlaces(property.Value, plots, cycles, depth + 1);
+        }
+
+        static void AddIds(JsonElement value, HashSet<Guid> into)
+        {
+            if (value.ValueKind == JsonValueKind.String && Guid.TryParse(value.GetString(), out var one) && one != Guid.Empty)
+            {
+                into.Add(one);
+            }
+            else if (value.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in value.EnumerateArray())
+                {
+                    AddIds(item, into);
+                }
+            }
+        }
     }
 
     private static MutationExecutionOutcome ToOutcome<T>(Result<T> result)

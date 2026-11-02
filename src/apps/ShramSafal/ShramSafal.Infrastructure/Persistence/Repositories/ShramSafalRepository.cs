@@ -2320,6 +2320,8 @@ internal sealed class ShramSafalRepository(
                 m.AuthorityExpiresAtJson,
                 m.GrantedAtUtc,
                 m.AccessChangedAtUtc,
+                m.PlotScope,
+                ScopePlotIds = EF.Property<List<Guid>>(m, "_scopePlotIds"),
             })
             .FirstOrDefaultAsync(ct);
 
@@ -2339,7 +2341,10 @@ internal sealed class ShramSafalRepository(
                 seat.AuthorityExpiresAtJson,
                 seat.AccessChangedAtUtc is { } changed && changed > seat.GrantedAtUtc
                     ? changed
-                    : seat.GrantedAtUtc);
+                    : seat.GrantedAtUtc,
+                // spec: plr-d10 lane MU-4 — which plots the seat covers.
+                seat.PlotScope,
+                seat.ScopePlotIds);
     }
 
     // lane MU-3 fix 1 (F12) — see the port: two queries for any number of farms (registrant farms, then
@@ -2382,6 +2387,8 @@ internal sealed class ShramSafalRepository(
                 m.AuthorityExpiresAtJson,
                 m.GrantedAtUtc,
                 m.AccessChangedAtUtc,
+                m.PlotScope,
+                ScopePlotIds = EF.Property<List<Guid>>(m, "_scopePlotIds"),
             })
             .ToListAsync(ct);
         foreach (var seat in seats)
@@ -2400,7 +2407,10 @@ internal sealed class ShramSafalRepository(
                 seat.CanManageLabourRecords,
                 seat.LabourGrantExpiresAtUtc,
                 seat.AuthorityExpiresAtJson,
-                seat.AccessChangedAtUtc is { } changed && changed > seat.GrantedAtUtc ? changed : seat.GrantedAtUtc);
+                seat.AccessChangedAtUtc is { } changed && changed > seat.GrantedAtUtc ? changed : seat.GrantedAtUtc,
+                // spec: plr-d10 lane MU-4 — which plots the seat covers.
+                seat.PlotScope,
+                seat.ScopePlotIds);
         }
 
         return result;
@@ -3273,6 +3283,134 @@ internal sealed class ShramSafalRepository(
             .Select(l => Application.Services.RestrictedRecord.Of(l, PeopleOf(Domain.RecordPrivacy.RecordKinds.DailyLog, l.Id, (Guid)l.FarmId)))
             .Concat(costs.Select(c => Application.Services.RestrictedRecord.Of(c, PeopleOf(Domain.RecordPrivacy.RecordKinds.CostEntry, c.Id, (Guid)c.FarmId))))
             .ToList();
+    }
+
+    // spec: plr-d10 lane MU-4 — see the port: two untracked projections, no children, every record of the farms asked.
+    public async Task<IReadOnlyList<Application.Services.RecordPlace>> GetRecordPlacesAsync(
+        IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        var logs = await db.DailyLogs
+            .AsNoTracking()
+            .Where(l => ids.Contains((Guid)l.FarmId))
+            .Select(l => new
+            {
+                l.Id,
+                l.FarmId,
+                l.OperatorUserId,
+                l.LogDate,
+                l.CreatedAtUtc,
+                l.Scope,
+                l.PlotId,
+                PlotIds = EF.Property<List<Guid>>(l, "_plotIds"),
+                l.SourceAiJobId,
+            })
+            .ToListAsync(ct);
+        var costs = await db.CostEntries
+            .AsNoTracking()
+            .Where(c => ids.Contains((Guid)c.FarmId))
+            .Select(c => new
+            {
+                c.Id,
+                c.FarmId,
+                c.CreatedByUserId,
+                c.EntryDate,
+                c.CreatedAtUtc,
+                c.PlotId,
+                c.SourceAiJobId,
+                c.ClientAttachmentIdsJson,
+            })
+            .ToListAsync(ct);
+
+        return logs
+            .Select(l => Application.Services.RecordPlace.OfLog(
+                l.Id, (Guid)l.FarmId, (Guid)l.OperatorUserId, l.LogDate, l.CreatedAtUtc, l.Scope, l.PlotId, l.PlotIds, l.SourceAiJobId))
+            .Concat(costs.Select(c => Application.Services.RecordPlace.OfCost(
+                c.Id, (Guid)c.FarmId, (Guid)c.CreatedByUserId, c.EntryDate, c.CreatedAtUtc, c.PlotId, c.SourceAiJobId,
+                c.ClientAttachmentIdsJson)))
+            .ToList();
+    }
+
+    // spec: plr-d10 lane MU-4 — see the port: one bounded read of his live seats (a superset; the rule decides).
+    public async Task<IReadOnlyList<Guid>> GetFarmsMaybeReadByPlaceAsync(
+        Guid userId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0 || userId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var typedUserId = new UserId(userId);
+        var typedIds = ids.Select(id => new FarmId(id)).ToList();
+        var farms = await db.FarmMemberships
+            .AsNoTracking()
+            .Where(m => typedIds.Contains(m.FarmId) && m.UserId == typedUserId
+                && m.Status != MembershipStatus.Revoked && m.Status != MembershipStatus.Exited
+                && (m.PlotScope != MembershipPlotScope.AllPlots || m.Role == AppRole.Worker))
+            .Select(m => m.FarmId)
+            .ToListAsync(ct);
+        return farms.Select(f => (Guid)f).Distinct().ToList();
+    }
+
+    // spec: plr-d10 lane MU-4 — see the port: one untracked projection.
+    public async Task<Application.Services.RecordPlace?> GetRecordPlaceAsync(
+        string recordKind, Guid recordId, CancellationToken ct = default)
+    {
+        if (recordKind == Domain.RecordPrivacy.RecordKinds.DailyLog)
+        {
+            var l = await db.DailyLogs
+                .AsNoTracking()
+                .Where(x => x.Id == recordId)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.FarmId,
+                    x.OperatorUserId,
+                    x.LogDate,
+                    x.CreatedAtUtc,
+                    x.Scope,
+                    x.PlotId,
+                    PlotIds = EF.Property<List<Guid>>(x, "_plotIds"),
+                    x.SourceAiJobId,
+                })
+                .FirstOrDefaultAsync(ct);
+            return l is null
+                ? null
+                : Application.Services.RecordPlace.OfLog(
+                    l.Id, (Guid)l.FarmId, (Guid)l.OperatorUserId, l.LogDate, l.CreatedAtUtc, l.Scope, l.PlotId, l.PlotIds, l.SourceAiJobId);
+        }
+
+        if (recordKind == Domain.RecordPrivacy.RecordKinds.CostEntry)
+        {
+            var c = await db.CostEntries
+                .AsNoTracking()
+                .Where(x => x.Id == recordId)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.FarmId,
+                    x.CreatedByUserId,
+                    x.EntryDate,
+                    x.CreatedAtUtc,
+                    x.PlotId,
+                    x.SourceAiJobId,
+                    x.ClientAttachmentIdsJson,
+                })
+                .FirstOrDefaultAsync(ct);
+            return c is null
+                ? null
+                : Application.Services.RecordPlace.OfCost(
+                    c.Id, (Guid)c.FarmId, (Guid)c.CreatedByUserId, c.EntryDate, c.CreatedAtUtc, c.PlotId, c.SourceAiJobId,
+                    c.ClientAttachmentIdsJson);
+        }
+
+        return null;
     }
 
     public async Task<IReadOnlyList<Guid>> GetRecordAudienceUserIdsAsync(string recordKind, Guid recordId, CancellationToken ct = default) =>

@@ -37,6 +37,14 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
             return Result.Failure<PlotFinanceSummaryDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane MU-4 (§11.6) — a plot he does not cover is not his to total (Forbidden, never a 0).
+        var readScope = await FarmReadGate.ScopeAsync(
+            repository, (Guid)plot.FarmId, query.ActorUserId, clock?.UtcNow ?? DateTime.UtcNow, ct);
+        if (readScope is null || !readScope.CoversPlot(query.PlotId))
+        {
+            return Result.Failure<PlotFinanceSummaryDto>(ShramSafalErrors.Forbidden);
+        }
+
         // spec: plr-d10 lane PRV (founder D-26) — only the money records he may see; the rest are counted out loud (W4).
         var visibility = await RecordVisibility.ForFarmAsync(
             repository, (Guid)plot.FarmId, query.ActorUserId, clock?.UtcNow ?? DateTime.UtcNow, ct);
@@ -57,11 +65,16 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
         var from = query.FromDate ?? DateOnly.MinValue;
         var to = query.ToDate ?? DateOnly.MaxValue;
         var farmLedgers = await repository.GetDayLedgersForFarm(plot.FarmId, from, to, ct);
-        var ledgers = farmLedgers.Where(ledger => visibility.MaySeeCost(ledger.SourceCostEntryId)).ToList();
+        // lane MU-4 (D-39) — a bill split across plots counts here by ITS SHARE on this plot (RecordVisibility.Ledger): the
+        // share lines he may see, never the whole bill; a bill kept by its audience not at all (PRV).
+        var ledgers = farmLedgers
+            .Select(ledger => visibility.Ledger(ledger.ToDto()))
+            .Where(ledger => ledger is not null)
+            .ToList();
 
         var allocatedCosts = decimal.Round(
             ledgers.Sum(ledger =>
-                ledger.Allocations
+                ledger!.Allocations
                     .Where(allocation => allocation.PlotId == query.PlotId)
                     .Sum(allocation => allocation.AllocatedAmount)),
             2,
@@ -74,8 +87,9 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
             directCosts,
             allocatedCosts,
             decimal.Round(directCosts + allocatedCosts, 2, MidpointRounding.AwayFromZero),
-            RecordsNotCounted: plotEntries.Count - costEntries.Count
-                + farmLedgers.Count(ledger => !visibility.MaySeeCost(ledger.SourceCostEntryId)
+            // lane MU-4 — "not counted by rule" (W4) is the AUDIENCE's alone; this plot is his, so nothing of it is out of place.
+            RecordsNotCounted: plotEntries.Count(entry => visibility.HiddenByAudience(Domain.RecordPrivacy.RecordKinds.CostEntry, entry.Id))
+                + farmLedgers.Count(ledger => visibility.HiddenByAudience(Domain.RecordPrivacy.RecordKinds.CostEntry, ledger.SourceCostEntryId)
                     && ledger.Allocations.Any(allocation => allocation.PlotId == query.PlotId))));
     }
 }

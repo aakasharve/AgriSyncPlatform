@@ -134,7 +134,11 @@ public sealed record LabourPermissionDto(
     bool? CanConfirmRecords = null,
     bool? IsConfirmGrantEditable = null,
     IReadOnlyList<AuthorityGrantDto>? Authorities = null,
-    bool CanEditAuthorities = false);
+    bool CanEditAuthorities = false,
+    // spec: plr-d10 lane MU-4 — which plots this person covers ("AllPlots" / "ChosenPlots" / "OwnWork"; the primary owner
+    // always "AllPlots") and, for chosen plots, the plots. The owner's team card shows "प्लॉट: …" from these. Additive (P11).
+    string PlotScope = "AllPlots",
+    IReadOnlyList<Guid>? PlotIds = null);
 
 /// <summary>
 /// lane 2b (MU design §2, §11.1) — one authority a member holds on one farm, as the wire carries it:

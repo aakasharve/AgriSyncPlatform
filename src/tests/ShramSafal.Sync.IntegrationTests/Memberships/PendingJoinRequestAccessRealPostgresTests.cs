@@ -492,6 +492,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // policy names no membership status at all (fix pass 1, L2: a person's own rows, or the farm's registrant),
         // so it is neither an "open" nor an "active" predicate here. No farm_join_requests object, no other policy.
         "20261101110309_AddRecordAudience",
+
+        // spec plr-d10 lane MU-4 — Down() read in full: drops ck_farm_memberships_plot_scope and the two additive
+        // farm_memberships columns plot_scope / scope_plot_ids (every seat back to every plot). No policy, no grant, no
+        // table, no farm_join_requests object; a seat's status is never touched. Re-Up re-adds them with their defaults.
+        "20261101221236_AddMembershipPlotScope",
     ];
 
     /// <summary>

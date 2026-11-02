@@ -98,10 +98,14 @@ public static class AttachmentParentRule
 
         // spec: plr-d10 lane PRV (founder D-26) — and where its parent's AUDIENCE includes him: a photo of a record kept
         // from him, or a bill photo a money record kept from him names, is not his (one read for all their farms).
+        // spec: plr-d10 lane MU-4 — and where its parent's PLACE is his (his plots, or his own work): the one place rule.
+        var readable = scopes.Where(kv => kv.Value is not null).ToDictionary(kv => kv.Key, kv => kv.Value!);
+        var placeFarms = RecordVisibility.FarmsReadByPlace(readable);
         var visibility = RecordVisibility.For(
             readerUserId,
-            scopes.Where(kv => kv.Value is not null).ToDictionary(kv => kv.Key, kv => kv.Value!),
-            await repository.GetRestrictedRecordsAsync(scopes.Keys.ToList(), ct));
+            readable,
+            await repository.GetRestrictedRecordsAsync(scopes.Keys.ToList(), ct),
+            placeFarms.Count == 0 ? null : await repository.GetRecordPlacesAsync(placeFarms, ct));
         return attachments
             .Where(a => MayRead(scopes.GetValueOrDefault((Guid)a.FarmId), readerUserId, a, makers.GetValueOrDefault(a.LinkedEntityId)))
             .Where(visibility.MaySeeAttachment)

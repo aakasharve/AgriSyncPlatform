@@ -37,7 +37,9 @@ export type RefusedReason =
     // Lane OF-M fix pass 3 (call 1) — an edit that changed a price, from someone who neither made the entry nor checks money.
     | 'pricesNotYours'
     // lane PRV (D-26) — the record's audience no longer includes him: his change is kept here, the rule says why.
-    | 'recordClosed';
+    | 'recordClosed'
+    // lane MU-4 — the change names a plot outside his plots (or acts on a record there): kept here, the rule says why.
+    | 'plotClosed';
 
 /** `at` — when the refused change was made (its queue row's time), so the most recent of several can be shown. */
 export interface RefusedChange { kind: RefusedKind; reason: RefusedReason; at?: string }
@@ -75,6 +77,8 @@ export function refusalReasonOf(errorCode: string | undefined): RefusedReason {
             return 'notAllowed';
         case 'ShramSafal.RecordAudience.Forbidden':
             return 'recordClosed';
+        case 'ShramSafal.PlotScope.Forbidden':
+            return 'plotClosed';
         default:
             return 'other';
     }
@@ -89,7 +93,7 @@ export function refusalLines(refused: RefusedChange, language: string | null | u
     const words = correctionWords(language);
     // A content change keeps its screen words; a price change refused (lane OF-M fix pass 3) also says who may.
     if (refused.kind === 'revision') {
-        return refused.reason === 'pricesNotYours' || refused.reason === 'recordClosed'
+        return refused.reason === 'pricesNotYours' || refused.reason === 'recordClosed' || refused.reason === 'plotClosed'
             ? [words.serverRefused, words.refusedReason[refused.reason]]
             : [words.serverRefused];
     }
@@ -107,6 +111,9 @@ export function refusalHint(mutationType: string, errorCode: string | undefined,
     // lane PRV — any change parked because the record's audience no longer includes him: the rule's words ALONE (fix
     // pass 1, M6). Never "kept as the server has it": there is no server version of a record kept from him.
     if (reason === 'recordClosed') return correctionWords(language).refusedReason.recordClosed;
+    // lane MU-4 — a change naming a plot outside his plots: the rule's words alone, parked with only "discard" (it
+    // cannot succeed as it is; P10: kept on the phone until he discards it).
+    if (reason === 'plotClosed') return correctionWords(language).refusedReason.plotClosed;
     const kind = KIND_OF[mutationType];
     if (kind === 'move' || kind === 'workers') return refusalLines({ kind, reason }, language).join(' ');
     if (kind === 'revision' && reason === 'pricesNotYours') return correctionWords(language).refusedReason.pricesNotYours;
