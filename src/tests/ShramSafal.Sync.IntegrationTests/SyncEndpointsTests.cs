@@ -1806,8 +1806,15 @@ public sealed class SyncEndpointsTests
         });
 
         withMembership.EnsureSuccessStatusCode();
-        var status = await ReadFirstPushStatusAsync(withMembership);
-        Assert.Equal("applied", status);
+        // spec: plr-d10 lane F99 fix pass 1 (review F-4; D-72) — a farm seat is no longer enough: the price list is one list
+        // for every farm, so only the platform admin writes it. A farmer's change is refused with the rule's code, visibly
+        // (the phone parks a ".Forbidden"), never applied and never dropped.
+        using (var doc = JsonDocument.Parse(await withMembership.Content.ReadAsStringAsync()))
+        {
+            var result = doc.RootElement.GetProperty("results")[0];
+            Assert.Equal("failed", result.GetProperty("status").GetString());
+            Assert.Equal("ShramSafal.PriceList.Forbidden", result.GetProperty("errorCode").GetString());
+        }
     }
 
     [Fact]

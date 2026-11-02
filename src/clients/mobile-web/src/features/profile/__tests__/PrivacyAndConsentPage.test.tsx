@@ -65,13 +65,15 @@ describe('PrivacyAndConsentPage — the one गोपनीयता व सं�
     });
 
     it('erase still asks "are you sure" first — nothing is sent on the first tap', async () => {
+        // lane F99 fix pass 1 (D-71): the page READS his erasure requests (a GET); what must not happen is a request SENT.
+        const sent = () => fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'POST');
         render(<PrivacyAndConsentPage onBack={vi.fn()} />);
         fireEvent.click(await screen.findByTestId('erasure-open-confirm'));
-        expect(fetchMock).not.toHaveBeenCalled();
+        expect(sent()).toHaveLength(0);
         expect(screen.getByTestId('erasure-confirm-dialog')).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('erasure-confirm-cancel'));
         expect(screen.queryByTestId('erasure-confirm-dialog')).toBeNull();
-        expect(fetchMock).not.toHaveBeenCalled();
+        expect(sent()).toHaveLength(0);
     });
 
     it('asking for a copy sends the real request from here', async () => {

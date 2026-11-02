@@ -286,6 +286,9 @@ public static class DependencyInjection
         // DATA_PRINCIPLE_SPINE 08.2 / 08.3 / 08.5 — DPDP rights surface
         // handlers. All three depend on TimeProvider + IShramSafalRepository.
         services.AddScoped<ShramSafal.Application.UseCases.Privacy.RequestErasure.RequestErasureHandler>();
+        // spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — the cancel and the person's own list.
+        services.AddScoped<ShramSafal.Application.UseCases.Privacy.CancelErasure.CancelErasureHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Privacy.GetErasureRequests.GetMyErasureRequestsHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Privacy.RequestExport.RequestExportHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Privacy.ReportBreach.ReportBreachHandler>();
         services.AddScoped<ExtractReceiptHandler>();

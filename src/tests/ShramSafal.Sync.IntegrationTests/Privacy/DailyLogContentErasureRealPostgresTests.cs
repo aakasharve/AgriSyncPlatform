@@ -332,8 +332,9 @@ public sealed class DailyLogContentErasureRealPostgresTests(Xunit.Abstractions.I
         {
             await seed.OpenAsync();
             await ExecAsync(seed, $"""
+                -- lane F99 fix pass 1 (D-71): a request that has already waited its 30 days, so the worker takes it.
                 INSERT INTO ssf.erasure_requests (id, requested_by_user_id, on_behalf_of_user_id, status, requested_at_utc)
-                VALUES ('{requestId}', '{ErasedUser}', NULL, 0, NOW());
+                VALUES ('{requestId}', '{ErasedUser}', NULL, 0, NOW() - INTERVAL '31 days');
                 """);
         }
 

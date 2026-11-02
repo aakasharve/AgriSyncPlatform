@@ -14,8 +14,9 @@
 //   OwnRecordsSeat  a कामगार of the farm (a seat that reads only his own records), as MadeUpIds;
 //   RealRecords     the owner, the farm's REAL records (its plot, season, log, job card, test, worker): a made-up id
 //                   stops at the first not-found, so only real ids reach a handler step that runs after the gate.
-// The few routes F99 leaves answering 500 are NAMED in KnownOpen with their reason (admin routes the brief says to list,
-// a route with no authorization that must keep failing closed, two defects that are not scope faults); any other 500 fails.
+// The few routes F99 leaves answering 500 are NAMED in KnownOpen with the one cause each is known for (fix pass 1: an entry
+// silences only that cause); any other 500 fails. Fix pass 1 also sweeps the ShramSafal routes the Bootstrapper maps itself,
+// and in AnotherFarm every route that names the other farmer's farm must refuse (never 2xx).
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -34,7 +35,11 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Routing;
+using AgriSync.Bootstrapper;
+using AgriSync.Bootstrapper.Endpoints;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ShramSafal.Sync.IntegrationTests.Memberships;
@@ -51,32 +56,32 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
     private static readonly NullabilityInfoContext Nullability = new();
 
     /// <summary>
-    /// The routes lane F99 leaves answering 500, each NAMED here with its reason and reported to the orchestrator, never
-    /// silently tolerated: any route NOT on this list that answers 500 fails the sweep. Remove an entry when its route is fixed.
+    /// The routes lane F99 leaves answering 500, each NAMED here with the ONE cause it is known for and its reason, and
+    /// reported to the orchestrator. Fix pass 1 (review F-10): an entry silences only its own cause; the same route
+    /// answering 500 for any other reason fails the sweep, and any route NOT on this list that answers 500 fails it too.
+    /// Remove an entry when its route is fixed.
     /// </summary>
-    private static readonly IReadOnlyDictionary<string, string> KnownOpen = new Dictionary<string, string>
-    {
-        // Admin routes (the brief: list, do not fix): each resolves the caller's admin scope before any scope is open.
-        ["GET /shramsafal/ai/config"] = "admin route; AdminScopeHelper's first read runs with no scope",
-        ["PUT /shramsafal/ai/config"] = "admin route; AdminScopeHelper's first read runs with no scope",
-        ["GET /shramsafal/ai/dashboard"] = "admin route; AdminScopeHelper's first read runs with no scope",
-        ["GET /shramsafal/ai/health"] = "admin route; AdminScopeHelper's first read runs with no scope",
-        // Failing closed is the only thing that stops it today: it checks no authority at all, so opening a scope would let
-        // ANY signed-in person write the platform's global price list. It needs an admin gate first (not this lane's call).
-        ["POST /shramsafal/finance/price-config"] = "no authorization at all; left failing closed",
-        // Creating a farm: there is no farm to open yet. The phone creates farms through /bootstrap/first-farm.
-        ["POST /shramsafal/farms"] = "creates a farm; no farm scope exists to open (needs the bootstrap technique)",
-        // Not a scope fault: a bad body reaches the database (text that is not JSON into a json column; a missing field).
-        ["POST /shramsafal/corrections"] = "not a scope fault: body not validated before the json column (22P02) or null",
-        // Its farm scope is now opened and its farm reads pass; what fails next is the weekly report's read of mis.* on the
-        // analytics connection: no migration grants the app role (or mis_reader membership) SELECT there (42501). A grant
-        // is a schema change, which this lane may not make.
-        ["GET /shramsafal/reports/farm-week/{farmId:guid}"] = "not a scope fault now: the app role has no SELECT on mis.* (42501)",
-        // Not a scope fault: ShramSafalRepository.GetScheduleTemplateByIdAsync includes Stages, which the EF map ignores.
-        ["POST /shramsafal/schedule-templates/{id}/clone"] = "not a scope fault: Include of an unmapped navigation (Stages)",
-        ["POST /shramsafal/schedule-templates/{id}/edit"] = "not a scope fault: Include of an unmapped navigation (Stages)",
-        ["POST /shramsafal/schedule-templates/{id}/publish"] = "not a scope fault: Include of an unmapped navigation (Stages)",
-    };
+    private static readonly IReadOnlyDictionary<string, (string Cause, string Why)> KnownOpen =
+        new Dictionary<string, (string Cause, string Why)>
+        {
+            // Creating a farm: there is no farm to open yet. The phone creates farms through /bootstrap/first-farm.
+            ["POST /shramsafal/farms"] = ("TenantConnectionInterceptor: no tenant claim set",
+                "creates a farm; no farm scope exists to open (needs the bootstrap technique)"),
+            // Its scope opens and its rule now holds (an own-records seat is refused, the AI cost is money); what fails next
+            // for a seat that may read it is the weekly report's read of mis.* on the analytics connection: no migration
+            // grants the app role (or mis_reader) SELECT there. A grant is a schema change; registered for OPS-1.
+            ["GET /shramsafal/reports/farm-week/{farmId:guid}"] = ("42501: permission denied for materialized view",
+                "the app role has no SELECT on mis.* (OPS-1)"),
+            // Not a scope fault: ShramSafalRepository.GetScheduleTemplateByIdAsync includes Stages, which the EF map
+            // ignores. Carried to lane L8b.
+            ["POST /shramsafal/schedule-templates/{id}/clone"] = ("is invalid inside an 'Include' operation", "Include of an unmapped navigation (L8b)"),
+            ["POST /shramsafal/schedule-templates/{id}/edit"] = ("is invalid inside an 'Include' operation", "Include of an unmapped navigation (L8b)"),
+            ["POST /shramsafal/schedule-templates/{id}/publish"] = ("is invalid inside an 'Include' operation", "Include of an unmapped navigation (L8b)"),
+        };
+
+    private static bool IsKnownOpen(Route route, string detail) =>
+        KnownOpen.TryGetValue($"{route.Method} {route.Template}", out var known)
+        && detail.Contains(known.Cause, StringComparison.Ordinal);
 
     /// <summary>
     /// What Program.cs registers beside the module, so a route answers here as it does in production rather than failing on a
@@ -97,6 +102,22 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
         services.RemoveAll<Microsoft.EntityFrameworkCore.Infrastructure.IDbContextOptionsConfiguration<AgriSync.BuildingBlocks.Analytics.AnalyticsDbContext>>();
         services.RemoveAll<Microsoft.EntityFrameworkCore.DbContextOptions<AgriSync.BuildingBlocks.Analytics.AnalyticsDbContext>>();
         services.AddDbContext<AgriSync.BuildingBlocks.Analytics.AnalyticsDbContext>(o => o.UseNpgsql(AppConn));
+
+        // Fix pass 1 (review F-10): the routes the Bootstrapper maps itself (first farm, access extensions, farmer health)
+        // are swept too; they need the User and Accounts contexts Program.cs registers (AddUserApi, AddAccountsModule).
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["ConnectionStrings:UserDb"] = AppConn })
+            .Build();
+        global::User.Infrastructure.DependencyInjection.AddUserInfrastructure(services, config);
+        global::Accounts.Infrastructure.DependencyInjection.AddAccountsInfrastructure(services, config);
+    }
+
+    /// <summary>Fix pass 1 (review F-10): the ShramSafal routes the Bootstrapper maps outside the module (Program.cs).</summary>
+    protected override void MapHostRoutes(WebApplication app)
+    {
+        app.MapFirstFarmBootstrapEndpoints();
+        app.MapAccessExtensionAdminEndpoints();
+        app.MapAdminFarmerHealth();
     }
 
     [Theory]
@@ -110,6 +131,11 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
         await AssertAppRoleIsNotVacuousAsync();
         // The production host's own startup line (Program.cs): the PDF library's Community licence.
         QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+        // The first-farm route writes the accounts schema as the app role. No migration grants that (only
+        // access_extensions is granted, 20261027040015), yet production onboards farmers through it, so the production
+        // role holds it by deployment; the shared seed grants public and analytics only. Granted here so the route answers
+        // as it does in production (registered for OPS-1 to confirm the production grant).
+        await ExecOnSuperuserAsync("GRANT USAGE ON SCHEMA accounts TO agrisync_app; GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA accounts TO agrisync_app;");
 
         var routes = Routes();
         routes.Count.Should().BeGreaterThan(120, "the sweep must see the module's whole route table, or it proves nothing");
@@ -117,12 +143,19 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
 
         var caller = variant == Variant.OwnRecordsSeat ? Worker : Owner;
         var answers = new List<(Route Route, int Status, string Detail)>();
+        var namingAnotherFarm = new List<(Route Route, int Status, string Url)>();
         foreach (var route in routes)
         {
             var (url, body) = Request(route, variant);
             var (status, detail) = await AskAsync(route.Method, url, caller, body);
             answers.Add((route, status, detail));
             Output.WriteLine($"[ROUTE] {status} {route.Method} {route.Template} -> {url} {detail}");
+            if (variant == Variant.AnotherFarm
+                && (url.Contains(FarmB.ToString(), StringComparison.OrdinalIgnoreCase)
+                    || (body as JsonNode)?.ToJsonString().Contains(FarmB.ToString(), StringComparison.OrdinalIgnoreCase) == true))
+            {
+                namingAnotherFarm.Add((route, status, url));
+            }
         }
 
         var counts = answers.GroupBy(a => a.Status).OrderBy(g => g.Key).Select(g => $"{g.Key}={g.Count()}");
@@ -131,7 +164,7 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
         var failed = answers.Where(a => a.Status == 500).ToList();
         foreach (var (route, _, detail) in failed)
         {
-            var known = KnownOpen.TryGetValue($"{route.Method} {route.Template}", out var why) ? $" [KNOWN-OPEN: {why}]" : string.Empty;
+            var known = IsKnownOpen(route, detail) ? $" [KNOWN-OPEN: {KnownOpen[$"{route.Method} {route.Template}"].Why}]" : string.Empty;
             Output.WriteLine($"[500] {variant} {route.Method} {route.Template} :: {detail}{known}");
         }
 
@@ -140,9 +173,20 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
             Output.WriteLine($"[KNOWN-OPEN now {status}] {variant} {route.Method} {route.Template} — remove it from the list once fixed in every variant");
         }
 
-        failed.Where(a => !KnownOpen.ContainsKey($"{a.Route.Method} {a.Route.Template}"))
+        failed.Where(a => !IsKnownOpen(a.Route, a.Detail))
             .Select(a => $"{a.Route.Method} {a.Route.Template} :: {a.Detail}")
             .Should().BeEmpty($"no route answers 500 ({variant}): a made-up id is 404, a bad body 400, a refusal 403");
+
+        // Fix pass 1 (review F-10): a route that names another farmer's farm is REFUSED, never answered with success.
+        if (variant == Variant.AnotherFarm)
+        {
+            Output.WriteLine($"[ANOTHER-FARM] {namingAnotherFarm.Count} routes named another farmer's farm: "
+                + string.Join(" ", namingAnotherFarm.GroupBy(a => a.Status).OrderBy(g => g.Key).Select(g => $"{g.Key}={g.Count()}")));
+            namingAnotherFarm.Count.Should().BeGreaterThan(30, "the variant must really name the other farm, or it proves nothing");
+            namingAnotherFarm.Where(a => a.Status is >= 200 and < 300)
+                .Select(a => $"{a.Status} {a.Route.Method} {a.Route.Template} -> {a.Url}")
+                .Should().BeEmpty("another farmer's farm is refused (403) or not found (404), never answered with success");
+        }
     }
 
     // ── The route table ─────────────────────────────────────────────────────────────────

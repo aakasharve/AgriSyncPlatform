@@ -6,7 +6,7 @@
  * Proves:
  * - logout calls backend (logoutCurrentDevice) BEFORE clearing local state.
  * - logout clears AuthTokenStore (clearAuthSession).
- * - logout clears DEK (clearCachedDek) + consent token (clearCachedConsentToken).
+ * - logout clears DEK (clearCachedDek).
  * - logout clears rememberDevice flag (clearRememberDevice).
  * - logout calls clearNativeRefreshSession.
  * - logout sets authStatus → 'anonymous' and session → null.
@@ -59,11 +59,6 @@ vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({
 const mockClearCachedDek = vi.fn();
 vi.mock('../../../infrastructure/security/tenantDekClient', () => ({
     clearCachedDek: () => mockClearCachedDek(),
-}));
-
-const mockClearCachedConsentToken = vi.fn();
-vi.mock('../../../infrastructure/consent/ConsentTokenClient', () => ({
-    clearCachedConsentToken: () => mockClearCachedConsentToken(),
 }));
 
 const mockSetRememberDevice = vi.fn();
@@ -185,18 +180,6 @@ describe('AuthProvider — Task 6.1 logout wiring', () => {
         expect(mockClearCachedDek).toHaveBeenCalledTimes(1);
     });
 
-    it('clears consent token on logout', async () => {
-        mockLogoutCurrentDevice.mockResolvedValueOnce(undefined);
-
-        await renderAuthenticated();
-
-        await act(async () => {
-            screen.getByTestId('logout-btn').click();
-        });
-
-        expect(mockClearCachedConsentToken).toHaveBeenCalledTimes(1);
-    });
-
     it('clears rememberDevice flag on logout', async () => {
         mockLogoutCurrentDevice.mockResolvedValueOnce(undefined);
 
@@ -247,7 +230,6 @@ describe('AuthProvider — Task 6.1 logout wiring', () => {
         // Despite backend failure, cleanup must happen
         expect(mockClearAuthSession).toHaveBeenCalledTimes(1);
         expect(mockClearCachedDek).toHaveBeenCalledTimes(1);
-        expect(mockClearCachedConsentToken).toHaveBeenCalledTimes(1);
         expect(mockClearRememberDevice).toHaveBeenCalledTimes(1);
 
         await waitFor(() => {

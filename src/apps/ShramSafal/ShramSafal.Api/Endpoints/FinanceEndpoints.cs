@@ -27,6 +27,7 @@ public static class FinanceEndpoints
             HttpContext httpContext,
             ClaimsPrincipal user,
             SetPriceConfigVersionHandler handler,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -53,7 +54,17 @@ public static class FinanceEndpoints
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash);
 
-            var result = await handler.HandleAsync(command, ct);
+            // spec: plr-d10 lane F99 fix pass 1 (review F-4; D-72) — the price list belongs to no farm, so the write runs under
+            // the caller's own user scope (the route opened none: it failed closed for everyone, admin included). The handler
+            // lets only ShramSafal's platform admin write; anyone else is refused with the rule's reason (403).
+            var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct);
+            if (!result.IsSuccess && result.Error.Code == ShramSafalErrors.PriceListPlatformAdminOnly.Code)
+            {
+                return Results.Json(
+                    new { error = result.Error.Code, message = result.Error.Description },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("SetPriceConfigVersion");

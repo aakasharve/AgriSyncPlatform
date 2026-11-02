@@ -370,14 +370,15 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
     /// </para>
     ///
     /// <para>
-    /// The substitute factory does NOT discriminate between call sites and fails
-    /// no context creation. Every context it hands back carries an interceptor
-    /// that throws on <b>that context's own</b> second save. What makes it land
-    /// on the right one is arithmetic, not targeting:
-    /// <c>ProcessOneAsync</c> saves twice on its context (<c>MarkInProgress</c>,
-    /// then the record write), so its second save IS the record write; the
-    /// fallback's fresh context saves once, so it is still at save #1 and
-    /// survives to rescue the run. The nine anonymizers never enter the count —
+    /// The substitute factory fails no context creation. It TARGETS the record
+    /// write by the reason the worker opens each context with: the
+    /// <c>ProcessOneAsync</c> context (<c>ErasureWorker.process.*</c>) throws on its
+    /// first save, which IS the record write — lane F99 fix pass 1 (D-71) made the
+    /// claim one guarded UPDATE (<c>ExecuteUpdateAsync</c>, no save), where it used
+    /// to be a <c>MarkInProgress</c> save, so the old "second save" arithmetic no
+    /// longer named the record write. The fallback's fresh context
+    /// (<c>ErasureWorker.minimalRecord.*</c>) never throws, and survives to rescue
+    /// the run. The nine anonymizers never enter the count —
     /// they use <c>ExecuteSqlRawAsync</c>/<c>ExecuteDeleteAsync</c>, which do not
     /// raise <c>SavingChangesAsync</c>.
     /// </para>
@@ -649,9 +650,10 @@ public sealed class ErasureAuditSurvivesBlobFailureRealPostgresTests : IAsyncLif
         await db.OpenAsync();
         await using var cmd = db.CreateCommand();
         cmd.CommandText = """
+            -- lane F99 fix pass 1 (D-71): a request that has already waited its 30 days, so the worker takes it.
             INSERT INTO ssf.erasure_requests
                 (id, requested_by_user_id, on_behalf_of_user_id, status, requested_at_utc)
-            VALUES (@id, @uid, NULL, 0, NOW());
+            VALUES (@id, @uid, NULL, 0, NOW() - INTERVAL '31 days');
             """;
         cmd.Parameters.AddWithValue("id", requestId);
         cmd.Parameters.AddWithValue("uid", _userId);
@@ -781,16 +783,20 @@ internal sealed class FailingAdminDbContextFactory(IConfiguration configuration)
         // (nothing under test reads those rows) but it means the audit ledger
         // in this test has fewer rows than production would — do not use this
         // factory to assert anything about audit-row counts.
+        // lane F99 fix pass 1 (D-71): the record write is the FIRST save of the processing context (the claim is an
+        // ExecuteUpdate). Every other context never throws.
+        var throwOnSave = reason.StartsWith("ErasureWorker.process.", StringComparison.Ordinal) ? 1 : 0;
         var options = new DbContextOptionsBuilder<ShramSafalDbContext>()
             .UseNpgsql(connectionString)
-            .AddInterceptors(new ThrowOnSecondSaveInterceptor())
+            .AddInterceptors(new ThrowOnRecordWriteInterceptor(throwOnSave))
             .Options;
 
         return Task.FromResult(new ShramSafalDbContext(options));
     }
 }
 
-internal sealed class ThrowOnSecondSaveInterceptor : SaveChangesInterceptor
+/// <summary>Throws on this context's <paramref name="throwOnSave"/>-th save (0 = never).</summary>
+internal sealed class ThrowOnRecordWriteInterceptor(int throwOnSave) : SaveChangesInterceptor
 {
     private int _saves;
 
@@ -799,7 +805,7 @@ internal sealed class ThrowOnSecondSaveInterceptor : SaveChangesInterceptor
         InterceptionResult<int> result,
         CancellationToken cancellationToken = default)
     {
-        if (Interlocked.Increment(ref _saves) == 2)
+        if (Interlocked.Increment(ref _saves) == throwOnSave)
         {
             throw new InvalidOperationException(
                 "Simulated failure of the erasure record write (I1). The scrub is already committed "

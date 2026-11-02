@@ -886,6 +886,17 @@ public interface IShramSafalRepository
     Task<List<ErasureRequest>> GetErasureRequestsForUserAsync(Guid userId, CancellationToken ct = default)
         => Task.FromResult(new List<ErasureRequest>());
 
+    /// <summary>lane F99 fix pass 1, item 11 (D-71) — one erasure request by id (no tracking), or null.</summary>
+    Task<ErasureRequest?> GetErasureRequestByIdAsync(Guid requestId, CancellationToken ct = default)
+        => Task.FromResult<ErasureRequest?>(null);
+
+    /// <summary>
+    /// lane F99 fix pass 1, item 11 (D-71) — cancel a request that is STILL WAITING, as one guarded UPDATE
+    /// (status Requested → Cancelled, ended now). False when it is no longer waiting (the worker took it first).
+    /// </summary>
+    Task<bool> TryCancelErasureRequestAsync(Guid requestId, DateTime nowUtc, CancellationToken ct = default)
+        => Task.FromResult(false);
+
     Task<List<ExportRequest>> GetExportRequestsForUserAsync(Guid userId, CancellationToken ct = default)
         => Task.FromResult(new List<ExportRequest>());
 

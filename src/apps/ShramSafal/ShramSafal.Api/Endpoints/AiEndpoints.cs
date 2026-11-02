@@ -268,14 +268,18 @@ public static class AiEndpoints
         group.MapGet("/ai/dashboard", async Task<IResult> (
             HttpContext http,
             IEntitlementResolver resolver,
-            GetAiDashboardHandler handler,
+            IAdminAiJobRepositoryFactory adminJobs,
             CancellationToken ct) =>
         {
             var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
             if (scope is null) return Results.Empty;
             if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsVoice)) return Results.Empty;
+            if (!EndpointActorContext.TryGetUserId(http.User, out var adminUserId)) return Results.Unauthorized();
 
-            var result = await handler.HandleAsync(new GetAiDashboardQuery(), ct);
+            // spec: plr-d10 lane F99 fix pass 1 (review F-5) — the route runs admin-elevated (no tenant GUC), so its counts
+            // across every farm are read through the audited privileged context, never the request's RLS-bound one.
+            var jobs = await adminJobs.CreateAsync("admin AI dashboard: AI job counts across every farm", adminUserId, ct);
+            var result = await new GetAiDashboardHandler(jobs).HandleAsync(new GetAiDashboardQuery(), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetAiDashboard")

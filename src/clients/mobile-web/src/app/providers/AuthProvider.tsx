@@ -26,9 +26,6 @@ import {
 // device cannot decrypt the previous user's voice clips without
 // re-authenticating to the backend (and getting a fresh KMS-bound DEK).
 import { clearCachedDek } from '../../infrastructure/security/tenantDekClient';
-// spec: data-principle-spine-2026-05-05/06.5
-// Same discipline for the in-memory consent token (HS256, 24h TTL).
-import { clearCachedConsentToken } from '../../infrastructure/consent/ConsentTokenClient';
 // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2 / Task 6.1
 // setRememberDevice is called on successful login so the flag persists
 // for the refresh cycle (AgriSyncClient.refreshSession reads it).
@@ -382,8 +379,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearAuthSession();
         // spec: data-principle-spine-2026-05-05/05.3
         clearCachedDek();
-        // spec: data-principle-spine-2026-05-05/06.5
-        clearCachedConsentToken();
         // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
         clearRememberDevice();
         await clearNativeRefreshSession();

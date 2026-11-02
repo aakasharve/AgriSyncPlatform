@@ -465,6 +465,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ShramSafal.Application.Privacy;
 using ShramSafal.Application.Privacy.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Labour;
@@ -507,10 +508,18 @@ public sealed class ErasureWorker(
         logger.LogInformation("ErasureWorker stopping.");
     }
 
-    private async Task RunPassAsync(CancellationToken ct)
+    /// <summary>
+    /// One pass: every request whose wait has passed is erased. Internal so a test runs exactly one pass (with its own
+    /// clock) instead of waiting on the 60 s loop.
+    /// </summary>
+    internal async Task RunPassAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var sp = scope.ServiceProvider;
+
+        // spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — a request waits (30 days by default) before anything
+        // is erased, and may be cancelled until then. Only a request asked at or before this instant is due.
+        var dueIfRequestedAtOrBefore = DueIfRequestedAtOrBefore(sp);
 
         List<Guid> pendingIds;
 
@@ -521,7 +530,7 @@ public sealed class ErasureWorker(
             ct: ct).ConfigureAwait(false))
         {
             pendingIds = await admin.ErasureRequests
-                .Where(r => r.Status == ErasureStatus.Requested)
+                .Where(r => r.Status == ErasureStatus.Requested && r.RequestedAtUtc <= dueIfRequestedAtOrBefore)
                 .OrderBy(r => r.RequestedAtUtc)
                 .Select(r => r.Id)
                 .Take(10)
@@ -533,7 +542,7 @@ public sealed class ErasureWorker(
         {
             try
             {
-                await ProcessOneAsync(sp, requestId, ct).ConfigureAwait(false);
+                await ProcessOneAsync(sp, requestId, dueIfRequestedAtOrBefore, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -543,13 +552,36 @@ public sealed class ErasureWorker(
         }
     }
 
-    private async Task ProcessOneAsync(IServiceProvider sp, Guid requestId, CancellationToken ct)
+    /// <summary>The clock (the host's <see cref="TimeProvider"/>) less the wait (<see cref="ErasureTiming"/>, 30 days by default).</summary>
+    private static DateTime DueIfRequestedAtOrBefore(IServiceProvider sp)
+    {
+        var clock = sp.GetService<TimeProvider>() ?? TimeProvider.System;
+        var timing = sp.GetService<ErasureTiming>() ?? new ErasureTiming();
+        return timing.DueIfRequestedAtOrBefore(clock.GetUtcNow().UtcDateTime);
+    }
+
+    private async Task ProcessOneAsync(IServiceProvider sp, Guid requestId, DateTime dueIfRequestedAtOrBefore, CancellationToken ct)
     {
         var adminFactory = sp.GetRequiredService<IAdminDbContextFactory<ShramSafalDbContext>>();
         await using var admin = await adminFactory.CreateAsync(
             reason: $"{nameof(ErasureWorker)}.process.{requestId:N}",
             actorUserId: SystemActor.ErasedFarmer,
             ct: ct).ConfigureAwait(false);
+
+        // lane F99 fix pass 1, item 11 (D-71) — the claim is ONE guarded UPDATE: still waiting AND its wait has passed.
+        // The person's cancel uses the same guard (status still Requested), so whichever lands first wins and the other
+        // changes nothing: a request is never both cancelled and erased. Zero rows = cancelled meanwhile, not due, or
+        // another pass took it.
+        var claimed = await admin.ErasureRequests
+            .Where(r => r.Id == requestId
+                && r.Status == ErasureStatus.Requested
+                && r.RequestedAtUtc <= dueIfRequestedAtOrBefore)
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.Status, ErasureStatus.InProgress), ct)
+            .ConfigureAwait(false);
+        if (claimed == 0)
+        {
+            return;
+        }
 
         var request = await admin.ErasureRequests
             .FirstOrDefaultAsync(r => r.Id == requestId, ct)
@@ -560,15 +592,6 @@ public sealed class ErasureWorker(
             logger.LogWarning("ErasureRequest {RequestId} vanished before processing.", requestId);
             return;
         }
-
-        if (request.Status != ErasureStatus.Requested)
-        {
-            // Another worker pass beat us to it (or the row was hand-edited).
-            return;
-        }
-
-        request.MarkInProgress();
-        await admin.SaveChangesAsync(ct).ConfigureAwait(false);
 
         var nowUtc = DateTime.UtcNow;
         var targetUserId = request.TargetUserId;
@@ -1682,10 +1705,12 @@ UPDATE ssf.labour_corrections
             // Failed would restore the exact lie this change removes — and it
             // is reachable, because the audit write now runs after a caught
             // retained-voice failure.
+            // lane F99 fix pass 1 (D-71) — and a Cancelled one: nothing was erased, and it must stay saying so.
             if (req is not null
                 && req.Status != ErasureStatus.Failed
                 && req.Status != ErasureStatus.Completed
-                && req.Status != ErasureStatus.CompletedWithResidue)
+                && req.Status != ErasureStatus.CompletedWithResidue
+                && req.Status != ErasureStatus.Cancelled)
             {
                 req.MarkFailed(reason.Length > 1000 ? reason[..1000] : reason, DateTime.UtcNow);
                 await admin.SaveChangesAsync(ct).ConfigureAwait(false);

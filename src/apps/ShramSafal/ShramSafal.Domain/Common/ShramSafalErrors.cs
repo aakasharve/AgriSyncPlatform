@@ -338,6 +338,25 @@ public static class ShramSafalErrors
         "ShramSafal.PlotScope.Forbidden",
         "By ShramSafal's rules this work could not be saved on this plot. The work is kept on the phone.");
 
+    /// <summary>
+    /// spec: plr-d10 lane F99 fix pass 1 (review F-4; orchestrator call D-72) — the price list is ONE list for every farm, so
+    /// only ShramSafal's platform admin writes it, on REST and on push alike. Ends in ".Forbidden": a phone parks a refused
+    /// push visibly (P10), never drops it.
+    /// </summary>
+    // spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — cancelling an erasure request. Another person's request
+    // and a made-up id get this same answer (E4). PROPOSED words.
+    public static readonly Error ErasureRequestNotFound = Error.NotFound(
+        "ShramSafal.ErasureRequest.NotFound", "No such erasure request of yours.");
+
+    // Once the erasure has started, nothing can stop it: it is refused with this reason. PROPOSED words.
+    public static readonly Error ErasureAlreadyStarted = Error.Conflict(
+        "ShramSafal.ErasureRequest.AlreadyStarted",
+        "Erasure has already started, so this request can no longer be cancelled.");
+
+    public static readonly Error PriceListPlatformAdminOnly = Error.Forbidden(
+        "ShramSafal.PriceList.Forbidden",
+        "The price list is one list for every farm. Only ShramSafal can change it.");
+
     /// <summary>A chosen plot that is not a plot of this farm (E4: tenancy both ways; never an oracle for another farm).</summary>
     public static readonly Error MembershipPlotNotOnFarm = Error.Validation(
         "ShramSafal.MembershipPlot.InvalidCommand",

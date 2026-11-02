@@ -25,7 +25,7 @@ public sealed class GetFarmWeekMisHandlerTests
         var misRepo = new FakeMisRepo(
             new FarmWeekMisDto(FarmIdVal, 5.0m, "A", 18.5m, 8.2m, 62.0m, 74.0m, 3.1m, 0.12m));
 
-        var handler = new GetFarmWeekMisHandler(repo, misRepo, new AllowEntitlementPolicy());
+        var handler = new GetFarmWeekMisHandler(repo, misRepo, new AllowEntitlementPolicy(), new ShramSafal.Domain.Tests.Analytics.FixedClock(Now));
         var result = await handler.HandleAsync(new GetFarmWeekMisQuery(FarmIdVal, ActorIdVal));
 
         Assert.True(result.IsSuccess);
@@ -40,7 +40,7 @@ public sealed class GetFarmWeekMisHandlerTests
         var repo = BuildBaseRepo();
         var misRepo = new FakeMisRepo(null); // farm has no analytics data yet
 
-        var handler = new GetFarmWeekMisHandler(repo, misRepo, new AllowEntitlementPolicy());
+        var handler = new GetFarmWeekMisHandler(repo, misRepo, new AllowEntitlementPolicy(), new ShramSafal.Domain.Tests.Analytics.FixedClock(Now));
         var result = await handler.HandleAsync(new GetFarmWeekMisQuery(FarmIdVal, ActorIdVal));
 
         Assert.True(result.IsSuccess);
@@ -56,7 +56,7 @@ public sealed class GetFarmWeekMisHandlerTests
         repo.FarmMembers.Clear(); // actor is not a member
 
         var misRepo = new FakeMisRepo(null);
-        var handler = new GetFarmWeekMisHandler(repo, misRepo, new AllowEntitlementPolicy());
+        var handler = new GetFarmWeekMisHandler(repo, misRepo, new AllowEntitlementPolicy(), new ShramSafal.Domain.Tests.Analytics.FixedClock(Now));
         var result = await handler.HandleAsync(new GetFarmWeekMisQuery(FarmIdVal, ActorIdVal));
 
         Assert.True(result.IsFailure);
@@ -68,7 +68,7 @@ public sealed class GetFarmWeekMisHandlerTests
     {
         var repo = BuildBaseRepo();
         var misRepo = new FakeMisRepo(null);
-        var handler = new GetFarmWeekMisHandler(repo, misRepo, new DenyEntitlementPolicy());
+        var handler = new GetFarmWeekMisHandler(repo, misRepo, new DenyEntitlementPolicy(), new ShramSafal.Domain.Tests.Analytics.FixedClock(Now));
 
         var result = await handler.HandleAsync(new GetFarmWeekMisQuery(FarmIdVal, ActorIdVal));
 
@@ -77,7 +77,55 @@ public sealed class GetFarmWeekMisHandlerTests
         Assert.StartsWith("entitlement.", result.Error.Code, StringComparison.Ordinal);
     }
 
+    // spec: plr-d10 lane F99 fix pass 1 (review F-2; MU-3) — the weekly report is the farm's overview.
+    [Theory]
+    [InlineData(AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker, MembershipPlotScope.AllPlots)]
+    [InlineData(AgriSync.SharedKernel.Contracts.Roles.AppRole.Mukadam, MembershipPlotScope.OwnWork)]
+    public async Task HandleAsync_OwnRecordsSeat_IsNotSentTheFarmOverview(
+        AgriSync.SharedKernel.Contracts.Roles.AppRole role, MembershipPlotScope scope)
+    {
+        var repo = BuildBaseRepo();
+        repo.Seat = new ShramSafal.Application.Services.FarmAccess(role, MembershipStatus.Active, IsRegistrant: false, null, PlotScope: scope);
+        var handler = new GetFarmWeekMisHandler(
+            repo, new FakeMisRepo(Snapshot()), new AllowEntitlementPolicy(), new ShramSafal.Domain.Tests.Analytics.FixedClock(Now));
+
+        var result = await handler.HandleAsync(new GetFarmWeekMisQuery(FarmIdVal, ActorIdVal));
+
+        Assert.True(result.IsFailure, "a seat that reads only his own records gets no farm overview");
+        Assert.Equal(ShramSafalErrors.Forbidden, result.Error);
+    }
+
+    [Fact]
+    public async Task HandleAsync_SeatWithoutSeeMoney_GetsTheReportWithoutItsAiCost()
+    {
+        var repo = BuildBaseRepo();
+        repo.Seat = new ShramSafal.Application.Services.FarmAccess(
+            AgriSync.SharedKernel.Contracts.Roles.AppRole.Mukadam, MembershipStatus.Active, IsRegistrant: false, null);
+        var handler = new GetFarmWeekMisHandler(
+            repo, new FakeMisRepo(Snapshot()), new AllowEntitlementPolicy(), new ShramSafal.Domain.Tests.Analytics.FixedClock(Now));
+
+        var result = await handler.HandleAsync(new GetFarmWeekMisQuery(FarmIdVal, ActorIdVal));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(5.0m, result.Value!.Wvfd);
+        Assert.Null(result.Value.AiCostUsd7d); // withheld, never a made-up 0
+    }
+
+    [Fact]
+    public async Task HandleAsync_TheOwnerGetsTheAiCost()
+    {
+        var repo = BuildBaseRepo();
+        var handler = new GetFarmWeekMisHandler(
+            repo, new FakeMisRepo(Snapshot()), new AllowEntitlementPolicy(), new ShramSafal.Domain.Tests.Analytics.FixedClock(Now));
+
+        var result = await handler.HandleAsync(new GetFarmWeekMisQuery(FarmIdVal, ActorIdVal));
+
+        Assert.Equal(0.12m, result.Value!.AiCostUsd7d);
+    }
+
     // ---- Helpers ----
+
+    private static FarmWeekMisDto Snapshot() => new(FarmIdVal, 5.0m, "A", 18.5m, 8.2m, 62.0m, 74.0m, 3.1m, 0.12m);
 
     private static FakeBaseRepo BuildBaseRepo()
     {
@@ -111,6 +159,13 @@ public sealed class GetFarmWeekMisHandlerTests
     {
         public Dictionary<Guid, Farm> Farms { get; } = new();
         public HashSet<(Guid farmId, Guid userId)> FarmMembers { get; } = new();
+
+        /// <summary>lane F99 fix pass 1 — the actor's standing on the farm (the registrant unless a test says otherwise).</summary>
+        public ShramSafal.Application.Services.FarmAccess? Seat { get; set; } = new(
+            AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner, MembershipStatus.Active, IsRegistrant: true, null);
+
+        public Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(FarmMembers.Contains((farmId, userId)) ? Seat : null);
 
         public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) =>
             Task.FromResult(Farms.TryGetValue(farmId, out var f) ? f : null);

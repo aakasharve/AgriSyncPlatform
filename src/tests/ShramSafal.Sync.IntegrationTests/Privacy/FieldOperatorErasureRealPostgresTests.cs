@@ -154,9 +154,10 @@ public sealed class FieldOperatorErasureRealPostgresTests : IAsyncLifetime
             await seed.OpenAsync();
             await using var cmd = seed.CreateCommand();
             cmd.CommandText = """
+                -- lane F99 fix pass 1 (D-71): a request that has already waited its 30 days, so the worker takes it.
                 INSERT INTO ssf.erasure_requests
                     (id, requested_by_user_id, on_behalf_of_user_id, status, requested_at_utc)
-                VALUES (@id, @uid, NULL, 0, NOW());
+                VALUES (@id, @uid, NULL, 0, NOW() - INTERVAL '31 days');
                 """;
             cmd.Parameters.AddWithValue("id", requestId);
             cmd.Parameters.AddWithValue("uid", _userId);

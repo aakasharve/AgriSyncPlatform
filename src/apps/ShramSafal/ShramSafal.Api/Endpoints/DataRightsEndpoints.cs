@@ -14,6 +14,8 @@ using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Privacy.CancelErasure;
+using ShramSafal.Application.UseCases.Privacy.GetErasureRequests;
 using ShramSafal.Application.UseCases.Privacy.RequestErasure;
 using ShramSafal.Application.UseCases.Privacy.RequestExport;
 using ShramSafal.Domain.Common;
@@ -26,6 +28,16 @@ public static class DataRightsEndpoints
     {
         group.MapPost("/me/erasure/request", HandleRequestErasureAsync)
             .WithName("RequestErasureForCurrentUser")
+            .RequireAuthorization();
+
+        // spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — a request waits 30 days; until then the person who
+        // asked may cancel it. His own requests (with the date erasure starts) and the cancel.
+        group.MapGet("/me/erasure/requests", HandleListMyErasureRequestsAsync)
+            .WithName("ListMyErasureRequests")
+            .RequireAuthorization();
+
+        group.MapPost("/me/erasure/{requestId:guid}/cancel", HandleCancelErasureAsync)
+            .WithName("CancelMyErasureRequest")
             .RequireAuthorization();
 
         group.MapPost("/me/export/request", HandleRequestExportAsync)
@@ -125,6 +137,48 @@ public static class DataRightsEndpoints
 
         // 202 Accepted per OQ-6 (async + 48h SLA).
         return Results.Accepted(value: result.Value);
+    }
+
+    private static async Task<IResult> HandleListMyErasureRequestsAsync(
+        HttpContext httpContext,
+        GetMyErasureRequestsHandler handler,
+        ICallerUserTenantScope userScope,
+        CancellationToken ct)
+    {
+        if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        // His own requests name no farm: read under his own user scope, as the request itself is written.
+        var requests = await userScope.RunForCallerAsync(userId, token => handler.HandleAsync(userId, token), ct);
+        return Results.Ok(requests);
+    }
+
+    private static async Task<IResult> HandleCancelErasureAsync(
+        Guid requestId,
+        HttpContext httpContext,
+        CancelErasureHandler handler,
+        ICallerUserTenantScope userScope,
+        CancellationToken ct)
+    {
+        if (!EndpointActorContext.TryGetUserId(httpContext.User, out var userId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var (deviceId, ipHash) = httpContext.AuditClaims();
+        var command = new CancelErasureCommand(
+            RequestId: requestId,
+            CallerUserId: userId,
+            ClientAppVersion: ResolveAppVersion(httpContext),
+            AuditDeviceId: deviceId,
+            AuditIpHash: ipHash);
+
+        // Another person's request and a made-up id answer the same 404 (E4); one that has started answers 409 with
+        // its reason.
+        var result = await userScope.RunForCallerAsync(userId, token => handler.HandleAsync(command, token), ct);
+        return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
     }
 
     private static async Task<IResult> HandleRequestExportAsync(

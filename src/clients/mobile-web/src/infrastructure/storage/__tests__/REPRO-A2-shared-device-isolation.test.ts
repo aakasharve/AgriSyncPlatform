@@ -24,8 +24,8 @@
  * MOCK DISCIPLINE
  * ---------------
  * Only the network client is mocked (`AgriSyncClient`), because a test cannot
- * reach a server. `AuthTokenStore`, `RememberDeviceStore`, `RefreshSessionStore`,
- * `tenantDekClient` and `ConsentTokenClient` are the REAL modules, so the
+ * reach a server. `AuthTokenStore`, `RememberDeviceStore`, `RefreshSessionStore`
+ * and `tenantDekClient` are the REAL modules, so the
  * logout path under test is the production one, touching real `localStorage`.
  * Each block opens with a sanity assertion of a KNOWN-TRUE property, so a green
  * failure caused by a broken mock cannot be mistaken for a defect.

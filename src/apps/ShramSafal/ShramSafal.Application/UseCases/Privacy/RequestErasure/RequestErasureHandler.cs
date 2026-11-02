@@ -8,6 +8,7 @@
 
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Privacy;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Privacy;
@@ -16,7 +17,8 @@ namespace ShramSafal.Application.UseCases.Privacy.RequestErasure;
 
 public sealed class RequestErasureHandler(
     IShramSafalRepository repository,
-    TimeProvider clock)
+    TimeProvider clock,
+    ErasureTiming timing)
 {
     public async Task<Result<RequestErasureResult>> HandleAsync(
         RequestErasureCommand command,
@@ -63,8 +65,10 @@ public sealed class RequestErasureHandler(
 
         await repository.SaveChangesAsync(ct).ConfigureAwait(false);
 
+        // lane F99 fix pass 1, item 11 (D-71) — nothing is erased now: the request waits, and the answer says until when.
         return Result.Success(new RequestErasureResult(
             RequestId: request.Id,
-            RequestedAtUtc: nowUtc));
+            RequestedAtUtc: nowUtc,
+            ErasureStartsAtUtc: timing.ErasureStartsAtUtc(request)));
     }
 }

@@ -62,11 +62,6 @@ export async function register(
     return response.data;
 }
 
-export async function getCurrentUser(t: HttpTransport): Promise<unknown> {
-    const response = await t.http.get('/user/auth/me');
-    return response.data;
-}
-
 /** POST /accounts/affiliation/code — idempotent, returns the caller's referral code. */
 export async function generateReferralCode(t: HttpTransport): Promise<{ code: string }> {
     const response = await t.http.post<{ code: string }>('/accounts/affiliation/code');

@@ -14,6 +14,6 @@ namespace ShramSafal.Application.Privacy.Ports;
 /// </summary>
 public interface IAccountErasureCheck
 {
-    /// <summary>True when an erasure was asked for this account (any status).</summary>
+    /// <summary>True when an erasure was asked for this account (any status but Cancelled — D-71).</summary>
     Task<bool> IsErasureRequestedAsync(Guid userId, CancellationToken ct = default);
 }

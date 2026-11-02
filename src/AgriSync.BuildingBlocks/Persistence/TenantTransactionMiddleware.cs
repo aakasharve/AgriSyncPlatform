@@ -244,6 +244,15 @@ public sealed class TenantTransactionMiddleware
         // a valid platform owner to the misleading 403 page. AdminScopeHelper
         // still performs the membership/module gates inside each endpoint.
         "/shramsafal/admin",
+        // spec: plr-d10 lane F99 fix pass 1 (review F-5) — the AI admin routes live under /shramsafal/ai, not
+        // /shramsafal/admin, so they missed the entry above and answered 500 to everyone, a platform admin included
+        // (AdminScopeHelper's first read ran with no tenant claim). Exactly these three paths, nothing else under
+        // /shramsafal/ai: each keeps its own AdminScopeHelper gate (read on ops voice; the write is platform-admin only),
+        // the provider config is platform-global (no farm, no RLS), and the dashboard's cross-farm counts are read
+        // through IAdminDbContextFactory, because elevation sets no GUC and FORCE RLS would return them empty.
+        "/shramsafal/ai/health",
+        "/shramsafal/ai/config",
+        "/shramsafal/ai/dashboard",
         // Farmer-health admin routes are mounted at the API root for the
         // admin-web route contract, but they use the same AdminScopeHelper
         // gate and have the same no-farm-at-entry shape.

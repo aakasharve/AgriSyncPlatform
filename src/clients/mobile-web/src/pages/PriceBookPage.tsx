@@ -11,6 +11,11 @@
  * `set_price_config` payload is refused before it reaches the outbox, and the next read of the price book
  * replaces the list with the server's copy. So the page never says "saved" — it says the rate was written
  * and that keeping it is still to come. A price is required: a blank one used to be stored as ₹ 0.
+ *
+ * spec: plr-d10 lane F99 fix pass 1 (D-72) — the price list is ONE list for every farm, and only the platform admin may
+ * write it (the server refuses anyone else, REST and push). So the write controls ("दर बदला", the "नवीन दर" form and its
+ * "लवकरच" line) are shown only to the platform admin (`usePlatformAdmin`, fails closed); everyone else reads the list and
+ * is told, in one line, that it is one list ShramSafal keeps (P5: no control that does nothing).
  */
 import React, { useMemo, useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
@@ -22,6 +27,7 @@ import { getDateKey } from '../core/domain/services/DateKeyService';
 import { MoneyPage } from '../features/finance/components/MoneyPage';
 import { CATEGORY_LABEL, FINANCE_TITLE, MONEY_CATEGORIES, formatMoneyDate, rupees } from '../features/finance/moneyLabels';
 import { BigButton, Chip, ChoiceChips, GlassCard, SectionHead, Soon, Tap, TextField } from '../shared/components/ui/placeUi';
+import { usePlatformAdmin } from '../core/session/usePlatformAdmin';
 
 interface PriceBookPageProps {
     currentRoute: AppRoute;
@@ -46,6 +52,7 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate,
     const [show, setShow] = useState<MoneyCategory | 'all'>('all');
     const [changing, setChanging] = useState<PriceBookItem | null>(null);
     const [written, setWritten] = useState(false);
+    const mayWritePrices = usePlatformAdmin();
 
     // `refresh` and `currentRoute` are re-read triggers: the service reads a mutable store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,7 +100,14 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate,
 
     return (
         <MoneyPage title={FINANCE_TITLE['finance-price-book']} testId="fin-prices" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
-            <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">ठरलेले दर इथे एकदा लिहून ठेवा — मजुरी, खत-औषध, यंत्र, इंधन.</p>
+            {mayWritePrices ? (
+                <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">ठरलेले दर इथे एकदा लिहून ठेवा — मजुरी, खत-औषध, यंत्र, इंधन.</p>
+            ) : (
+                // PROPOSED words (lane F99 fix pass 1, D-72).
+                <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700" data-testid="price-read-only">
+                    हे दरपत्रक सगळ्या शेतांसाठी एकच आहे. ते फक्त श्रमसफल बदलू शकतं.
+                </p>
+            )}
 
             <ChoiceChips items={SHOW_CHIPS} value={show} onPick={setShow} testId="price-show" />
 
@@ -109,10 +123,12 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate,
                     <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
                         <Chip tone="violet">{CATEGORY_LABEL[item.category]}</Chip>
                         {formatMoneyDate(item.effectiveFrom) && <span className="text-[12.5px] font-bold text-stone-500">{formatMoneyDate(item.effectiveFrom)} पासून</span>}
-                        <Tap onClick={() => startChange(item)} data-testid={`price-change-${item.id}`}
-                            className="flex min-h-[40px] items-center gap-1 rounded-full bg-white px-3 text-[13.5px] font-extrabold text-emerald-800 ring-1 ring-emerald-300">
-                            <Pencil size={14} aria-hidden="true" />दर बदला
-                        </Tap>
+                        {mayWritePrices && (
+                            <Tap onClick={() => startChange(item)} data-testid={`price-change-${item.id}`}
+                                className="flex min-h-[40px] items-center gap-1 rounded-full bg-white px-3 text-[13.5px] font-extrabold text-emerald-800 ring-1 ring-emerald-300">
+                                <Pencil size={14} aria-hidden="true" />दर बदला
+                            </Tap>
+                        )}
                     </div>
                 </GlassCard>
             ))}
@@ -122,7 +138,7 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate,
                 </p>
             )}
 
-            <div id="price-form" className="space-y-3">
+            {mayWritePrices && <div id="price-form" className="space-y-3">
                 <SectionHead
                     title={changing ? `दर बदला — ${nameShown(changing.name)}` : 'नवीन दर'}
                     hint={changing ? 'नवा दर आणि तो कधीपासून ते लिहा. आधीचा दर यादीत तसाच राहील.' : 'प्रकार निवडा, मग नाव, दर आणि कधीपासून'}
@@ -155,7 +171,7 @@ const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate,
                     </div>
                 </GlassCard>
                 <Soon what="लिहिलेला दर कायम जतन होणं आणि शेतातल्या इतर फोनवर दिसणं" />
-            </div>
+            </div>}
         </MoneyPage>
     );
 };

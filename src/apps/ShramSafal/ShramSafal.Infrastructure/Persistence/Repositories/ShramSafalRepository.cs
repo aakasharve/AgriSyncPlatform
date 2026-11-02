@@ -3056,6 +3056,24 @@ internal sealed class ShramSafalRepository(
             .ToListAsync(ct);
     }
 
+    // spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — read one request; cancel one that still waits.
+    public async Task<ErasureRequest?> GetErasureRequestByIdAsync(Guid requestId, CancellationToken ct = default)
+        => requestId == Guid.Empty
+            ? null
+            : await db.ErasureRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == requestId, ct);
+
+    public async Task<bool> TryCancelErasureRequestAsync(Guid requestId, DateTime nowUtc, CancellationToken ct = default)
+    {
+        // The same guard as the worker's claim (status still Requested): whichever UPDATE lands first wins, the other
+        // changes nothing — a request is never both cancelled and erased.
+        var changed = await db.ErasureRequests
+            .Where(r => r.Id == requestId && r.Status == ErasureStatus.Requested)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, ErasureStatus.Cancelled)
+                .SetProperty(r => r.CompletedAtUtc, nowUtc), ct);
+        return changed == 1;
+    }
+
     public async Task<List<ExportRequest>> GetExportRequestsForUserAsync(Guid userId, CancellationToken ct = default)
     {
         if (userId == Guid.Empty)

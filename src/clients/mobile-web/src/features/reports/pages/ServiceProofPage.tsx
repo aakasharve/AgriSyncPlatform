@@ -2,10 +2,13 @@
  * ServiceProofPage — CEI Phase 3 §23.2
  *
  * First concrete expression of v2 §14 "consultants and agronomists are core users."
- * Generates a PDF/CSV verification report filtered by template lineage,
- * usable as proof of advisory delivery.
+ * Generates the farm's verification report (PDF) for a period, usable as proof of advisory delivery.
  *
- * Visible only to: Agronomist | Consultant | PrimaryOwner.
+ * Visible only to: Agronomist | Consultant | PrimaryOwner. The server decides who gets the report (a seat that sees the
+ * farm's money and reads its records); a refusal is shown as one, not as a connection failure.
+ *
+ * spec: plr-d10 lane F99 fix pass 1 (F100, row 15) — wired to the server's real route; no CSV (the server has none) and no
+ * template or resolved-warning filter (it takes a period only).
  */
 
 import React, { useState } from 'react';
@@ -21,7 +24,6 @@ interface ServiceProofPageProps {
 
 interface RecentExport {
     url: string;
-    format: string;
     generatedAt: string;
     fromDate: string;
     toDate: string;
@@ -31,14 +33,11 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
     const { currentFarm } = useFarmContext();
     const [showFilterSheet, setShowFilterSheet] = useState(false);
     const [filterSummary, setFilterSummary] = useState<{
-        templateLineageRootId?: string;
         fromDate: string;
         toDate: string;
-        includeResolvedSignals: boolean;
     }>({
         fromDate: (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0]; })(),
         toDate: new Date().toISOString().split('T')[0],
-        includeResolvedSignals: false,
     });
     const [recentExports, setRecentExports] = useState<RecentExport[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -61,22 +60,26 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
         );
     }
 
-    const handleGenerate = async (format: 'ServiceProof' | 'Csv') => {
+    const handleGenerate = async () => {
+        if (!currentFarm) return;
         setIsGenerating(true);
         setErrorMsg(null);
 
         const params: ServiceProofParams = {
-            format,
-            byTemplateLineageRootId: filterSummary.templateLineageRootId,
+            farmId: currentFarm.farmId,
             fromDate: filterSummary.fromDate,
             toDate: filterSummary.toDate,
-            includeResolvedSignals: filterSummary.includeResolvedSignals,
         };
 
         const result = await generateServiceProof(params);
         setIsGenerating(false);
 
-        if (!result) {
+        if (result.kind === 'refused') {
+            // PROPOSED words (lane F99 fix pass 1): the server's rule, said as a refusal, not as a connection failure.
+            setErrorMsg('This farm\'s report goes only to someone who sees the farm\'s money and records.');
+            return;
+        }
+        if (result.kind === 'failed') {
             setErrorMsg('Could not generate export. Please check your connection.');
             return;
         }
@@ -84,12 +87,11 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
         // Trigger download
         const a = document.createElement('a');
         a.href = result.url;
-        a.download = `service-proof-${filterSummary.fromDate}-to-${filterSummary.toDate}.${format === 'Csv' ? 'csv' : 'pdf'}`;
+        a.download = `service-proof-${filterSummary.fromDate}-to-${filterSummary.toDate}.pdf`;
         a.click();
 
         setRecentExports(prev => [{
             url: result.url,
-            format,
             generatedAt: new Date().toISOString(),
             fromDate: filterSummary.fromDate,
             toDate: filterSummary.toDate,
@@ -144,16 +146,6 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
                         <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600" style={{ fontFamily: "'DM Sans', sans-serif" }}>
                             {filterSummary.fromDate} → {filterSummary.toDate}
                         </span>
-                        {filterSummary.templateLineageRootId && (
-                            <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                                Template: {filterSummary.templateLineageRootId.slice(0, 8)}…
-                            </span>
-                        )}
-                        {filterSummary.includeResolvedSignals && (
-                            <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs text-emerald-700" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                                + resolved signals
-                            </span>
-                        )}
                     </div>
                 </div>
 
@@ -167,20 +159,12 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
                 {/* Generate buttons */}
                 <div className="flex flex-col gap-3">
                     <button
-                        onClick={() => handleGenerate('ServiceProof')}
-                        disabled={isGenerating}
+                        onClick={() => { void handleGenerate(); }}
+                        disabled={isGenerating || !currentFarm}
                         className="w-full rounded-2xl bg-stone-900 py-4 text-sm font-bold text-white disabled:opacity-60"
                         style={{ fontFamily: "'DM Sans', sans-serif" }}
                     >
                         {isGenerating ? 'Generating…' : '⬇ Generate PDF'}
-                    </button>
-                    <button
-                        onClick={() => handleGenerate('Csv')}
-                        disabled={isGenerating}
-                        className="w-full rounded-2xl border border-stone-200 bg-white py-3.5 text-sm font-semibold text-stone-700 disabled:opacity-60"
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    >
-                        ⬇ Generate CSV
                     </button>
                 </div>
 
@@ -197,7 +181,7 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
                                     className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2"
                                     style={{ fontFamily: "'DM Sans', sans-serif" }}
                                 >
-                                    <span className="text-xs text-stone-600">{exp.format} · {exp.fromDate} → {exp.toDate}</span>
+                                    <span className="text-xs text-stone-600">PDF · {exp.fromDate} → {exp.toDate}</span>
                                     <span className="text-xs font-semibold text-emerald-600">↓</span>
                                 </a>
                             ))}

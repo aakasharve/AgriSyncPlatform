@@ -789,7 +789,6 @@ export interface ResolveDekResponse {
 export type {
     ConsentStateDto,
     UpdateConsentRequest,
-    IssueConsentTokenResponse,
     ImprovementPermissionDto,
     SetImprovementPermissionRequest,
 } from './consentDtos';

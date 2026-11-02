@@ -47,12 +47,13 @@ interface UseJobCardsResult {
      * lie for another.
      */
     loadFailed: boolean;
-    createJobCard: (req: CreateJobCardRequest) => Promise<JobCard>;
-    assignJobCard: (id: string, req: AssignWorkerRequest) => Promise<JobCard>;
-    startJobCard: (id: string) => Promise<JobCard>;
-    completeJobCard: (id: string, req: CompleteJobCardRequest) => Promise<JobCard>;
-    settleJobCard: (id: string, req: SettleJobCardRequest) => Promise<JobCard>;
-    cancelJobCard: (id: string, req: CancelJobCardRequest) => Promise<JobCard>;
+    /** Each change answers the card's id; the list is then read back from the server (the card itself is not sent). */
+    createJobCard: (req: CreateJobCardRequest) => Promise<string>;
+    assignJobCard: (id: string, req: AssignWorkerRequest) => Promise<string>;
+    startJobCard: (id: string) => Promise<string>;
+    completeJobCard: (id: string, req: CompleteJobCardRequest) => Promise<string>;
+    settleJobCard: (id: string, req: SettleJobCardRequest) => Promise<string>;
+    cancelJobCard: (id: string, req: CancelJobCardRequest) => Promise<string>;
     refresh: () => void;
 }
 
@@ -118,51 +119,49 @@ export function useJobCards({ farmId, statusFilter }: UseJobCardsOptions): UseJo
     }, [farmId, statusFilter, tick]);
 
     // -------------------------------------------------------------------------
-    // Mutators — write to Dexie first, then sync server, then refresh
+    // Mutators — the server decides, then the list is read back from it
     // -------------------------------------------------------------------------
-
-    const upsertLocal = useCallback(async (card: JobCard) => {
-        const db = getDatabase();
-        await db.jobCards.put(card as unknown as DexieJobCard);
-        setJobCards(prev => {
-            const idx = prev.findIndex(c => c.id === card.id);
-            if (idx === -1) return [card, ...prev];
-            const next = [...prev];
-            next[idx] = card;
-            return next;
-        });
-        return card;
-    }, []);
+    //
+    // spec: plr-d10 lane F99 fix pass 1 (F100) — a change answers `{ jobCardId }`, never the card: these routes answered
+    // 404 until now (no /shramsafal prefix), so nothing had ever read their answer. Writing that answer into Dexie as a
+    // card stored a row with no id. The server is the truth: after a change the farm's list is read again (`refresh`),
+    // the same read that fills the screen, with the money rules the server applies to this seat.
 
     const doCreate = useCallback(async (req: CreateJobCardRequest) => {
-        const card = await createJobCard(req);
-        return upsertLocal(card);
-    }, [upsertLocal]);
+        const { jobCardId } = await createJobCard(req);
+        refresh();
+        return jobCardId;
+    }, [refresh]);
 
     const doAssign = useCallback(async (id: string, req: AssignWorkerRequest) => {
-        const card = await assignJobCard(id, req);
-        return upsertLocal(card);
-    }, [upsertLocal]);
+        const { jobCardId } = await assignJobCard(id, req);
+        refresh();
+        return jobCardId;
+    }, [refresh]);
 
     const doStart = useCallback(async (id: string) => {
-        const card = await startJobCard(id);
-        return upsertLocal(card);
-    }, [upsertLocal]);
+        const { jobCardId } = await startJobCard(id);
+        refresh();
+        return jobCardId;
+    }, [refresh]);
 
     const doComplete = useCallback(async (id: string, req: CompleteJobCardRequest) => {
-        const card = await completeJobCard(id, req);
-        return upsertLocal(card);
-    }, [upsertLocal]);
+        const { jobCardId } = await completeJobCard(id, req);
+        refresh();
+        return jobCardId;
+    }, [refresh]);
 
     const doSettle = useCallback(async (id: string, req: SettleJobCardRequest) => {
-        const card = await settleJobCard(id, req);
-        return upsertLocal(card);
-    }, [upsertLocal]);
+        const { jobCardId } = await settleJobCard(id, req);
+        refresh();
+        return jobCardId;
+    }, [refresh]);
 
     const doCancel = useCallback(async (id: string, req: CancelJobCardRequest) => {
-        const card = await cancelJobCard(id, req);
-        return upsertLocal(card);
-    }, [upsertLocal]);
+        const { jobCardId } = await cancelJobCard(id, req);
+        refresh();
+        return jobCardId;
+    }, [refresh]);
 
     return {
         jobCards,

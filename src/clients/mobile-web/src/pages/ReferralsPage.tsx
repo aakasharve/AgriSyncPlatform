@@ -31,19 +31,19 @@ const ReferralsPage: React.FC = () => {
                     return;
                 }
 
-                // Fetch referral code from Accounts module.
-                // Uses the ownerAccountId resolved from the farm context.
-                // Note: /me/context will expose ownerAccountId directly in Phase 7.3.1;
-                // for now we derive it via the farm's subscription (temporary).
-                const me = await agriSyncClient.getCurrentUser() as { ownerAccountId?: string; displayName?: string };
+                // spec: plr-d10 lane F99 fix pass 1 (F100, row 16) — this read `/user/auth/me`, a route the server never
+                // had, so the page always ended on "Unable to resolve account". `/user/auth/me/context` carries what it
+                // needs: the person's name, and the owner account of the farm he is primary owner of.
+                const context = await agriSyncClient.getMeContext();
                 if (cancelled) return;
 
-                if (!me?.ownerAccountId) {
+                const ownerAccountId = context.farms.find(f => f.farmId === primaryOwnerFarm.farmId)?.ownerAccountId;
+                if (!ownerAccountId) {
                     setError('Unable to resolve account. Please try again.');
                     return;
                 }
 
-                setOwnerName(me.displayName);
+                setOwnerName(context.me.displayName);
 
                 const [codeData, statsData, eventsData] = await Promise.all([
                     agriSyncClient.generateReferralCode(),

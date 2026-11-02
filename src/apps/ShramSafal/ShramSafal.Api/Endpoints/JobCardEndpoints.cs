@@ -107,7 +107,8 @@ public static class JobCardEndpoints
         // POST /job-cards/{id}/start → 200
         group.MapPost("/job-cards/{id:guid}/start", async (
             Guid id,
-            StartJobCardRequest request,
+            // lane F99 fix pass 1 — optional: the phone (1.0.17 and current) sends no body here, which answered 400.
+            StartJobCardRequest? request,
             HttpContext httpContext,
             ClaimsPrincipal user,
             StartJobCardHandler handler,
@@ -131,7 +132,7 @@ public static class JobCardEndpoints
             var command = new StartJobCardCommand(
                 JobCardId: id,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId,
+                ClientCommandId: request?.ClientCommandId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash);
@@ -186,7 +187,8 @@ public static class JobCardEndpoints
         // POST /job-cards/{id}/verify-for-payout → 200
         group.MapPost("/job-cards/{id:guid}/verify-for-payout", async (
             Guid id,
-            VerifyJobCardForPayoutRequest request,
+            // lane F99 fix pass 1 — optional: the phone sends no body here, which answered 400.
+            VerifyJobCardForPayoutRequest? request,
             HttpContext httpContext,
             ClaimsPrincipal user,
             VerifyJobCardForPayoutHandler handler,
@@ -210,7 +212,7 @@ public static class JobCardEndpoints
             var command = new VerifyJobCardForPayoutCommand(
                 JobCardId: id,
                 CallerUserId: new UserId(actorUserId),
-                ClientCommandId: request.ClientCommandId,
+                ClientCommandId: request?.ClientCommandId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash);

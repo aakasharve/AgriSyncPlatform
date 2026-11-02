@@ -189,10 +189,20 @@ import {
  * Notice moved with it (§3 and §7 described the old absolute promise), so
  * `privacy-2026-10-30.1`. A farmer who accepted `.25.1` is asked ONCE, on the phone
  * (`features/consent/reask`); the server never refuses him for the older acceptance.
+ *
+ * `notice-2026-11-02.1` - the ERASURE-WAIT pass (founder D-71, 2026-11-02: "option 2 not 7 days but
+ * 30 days"; lane F99 fix pass 1, item 11). The words on this screen did not change. Both documents
+ * did: an erasure request now waits 30 days and can be cancelled until then, and the Privacy Notice
+ * (§6 note 3, §8) and the Terms (§8) say so, so `privacy-2026-11-02.1` and `terms-2026-11-02.1`, and
+ * the version inside `canonicalNoticeText` moved with them. Classed NOT material under D-13 (lane F99
+ * call, flagged to the founder): no new use of anyone's data and no new permission; it adds a wait
+ * and a way to take the request back. So `notice-2026-10-30.1` stays accepted below and nobody is
+ * asked to tick again. If the founder rules it material, drop `notice-2026-10-30.1` from
+ * `ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT` and everyone is asked once.
  */
-export const NOTICE_VERSION = 'notice-2026-10-30.1';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-10-30.1';
-export const TERMS_VERSION = 'terms-2026-10-25.1';
+export const NOTICE_VERSION = 'notice-2026-11-02.1';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-11-02.1';
+export const TERMS_VERSION = 'terms-2026-11-02.1';
 
 /**
  * Founder D-13: "Ask again only when data use or terms materially change. Spelling, formatting
@@ -202,9 +212,10 @@ export const TERMS_VERSION = 'terms-2026-10-25.1';
  * name exactly the text that was shown). This list says which accepted versions still cover
  * the terms in force, so nobody is re-asked for a typo: a NON-material rewording adds its new
  * version here and keeps the old ones; a MATERIAL change replaces the list with the new
- * version alone. `notice-2026-10-30.1` is material, so it stands alone.
+ * version alone. `notice-2026-10-30.1` is material, so it replaced every earlier version;
+ * `notice-2026-11-02.1` (the 30-day erasure wait, D-71) is not, so `.10-30.1` stays beside it.
  */
-export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION];
+export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION, 'notice-2026-10-30.1'];
 
 /**
  * The data fiduciary, as registered. One copy, shared by both languages, because a

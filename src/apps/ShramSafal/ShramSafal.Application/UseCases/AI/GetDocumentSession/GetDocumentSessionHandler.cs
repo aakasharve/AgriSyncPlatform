@@ -7,6 +7,9 @@ namespace ShramSafal.Application.UseCases.AI.GetDocumentSession;
 
 public sealed class GetDocumentSessionHandler(IDocumentExtractionSessionRepository sessionRepository)
 {
+    private static readonly Error SessionNotFound =
+        Error.NotFound("ShramSafal.SessionNotFound", "Document extraction session was not found.");
+
     public async Task<Result<GetDocumentSessionResult>> HandleAsync(
         GetDocumentSessionQuery query,
         CancellationToken ct = default)
@@ -16,16 +19,12 @@ public sealed class GetDocumentSessionHandler(IDocumentExtractionSessionReposito
             return Result.Failure<GetDocumentSessionResult>(ShramSafalErrors.InvalidCommand);
         }
 
+        // spec: plr-d10 lane F99 fix pass 1 (review F-7; E4) — another person's session answers exactly as a made-up one:
+        // no hint that it exists.
         var session = await sessionRepository.GetByIdAsync(query.SessionId, ct);
-        if (session is null)
+        if (session is null || session.UserId != query.UserId)
         {
-            return Result.Failure<GetDocumentSessionResult>(
-                Error.NotFound("ShramSafal.SessionNotFound", "Document extraction session was not found."));
-        }
-
-        if (session.UserId != query.UserId)
-        {
-            return Result.Failure<GetDocumentSessionResult>(ShramSafalErrors.Forbidden);
+            return Result.Failure<GetDocumentSessionResult>(SessionNotFound);
         }
 
         return Result.Success(new GetDocumentSessionResult(

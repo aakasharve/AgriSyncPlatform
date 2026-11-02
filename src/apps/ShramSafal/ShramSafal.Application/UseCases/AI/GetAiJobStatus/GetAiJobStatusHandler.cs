@@ -31,9 +31,12 @@ public sealed class GetAiJobStatusHandler(
     /// <summary>The parse was withheld: it mentions money and the reader does not see the farm's money (F3).</summary>
     public const string ResultWithheldMoney = "money";
 
-    /// <summary>lane F99 — public so the route answers a job it cannot find under the caller's own farms exactly as this does.</summary>
+    /// <summary>
+    /// lane F99 — public so the route answers a job it cannot find under the caller's own farms exactly as this does.
+    /// Fix pass 1 (review F-11): a NotFound (404), as every made-up id is; it was an untyped error that answered 400.
+    /// </summary>
     public static readonly Error AiJobNotFound =
-        new("ShramSafal.AiJobNotFound", "AI job was not found.");
+        Error.NotFound("ShramSafal.AiJobNotFound", "AI job was not found.");
 
     public async Task<Result<AiJobStatusDto>> HandleAsync(
         GetAiJobStatusQuery query,

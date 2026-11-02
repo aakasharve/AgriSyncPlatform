@@ -52,10 +52,6 @@ vi.mock('../../../infrastructure/security/tenantDekClient', () => ({
     clearCachedDek: vi.fn(),
 }));
 
-vi.mock('../../../infrastructure/consent/ConsentTokenClient', () => ({
-    clearCachedConsentToken: vi.fn(),
-}));
-
 vi.mock('../../../infrastructure/storage/RememberDeviceStore', () => ({
     getRememberDevice: vi.fn(() => false),
     setRememberDevice: vi.fn(),

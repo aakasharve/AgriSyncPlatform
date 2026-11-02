@@ -19,13 +19,15 @@ public sealed class GetScheduleLineageHandlerTests
     {
         var author = UserId.New();
         var root = ScheduleTemplate.Create(Guid.NewGuid(), "Root", "S1", Now, createdByUserId: author);
-        var clone = root.Clone(Guid.NewGuid(), UserId.New(), TenantScope.Private, "test", Now);
+        var cloner = UserId.New();
+        var clone = root.Clone(Guid.NewGuid(), cloner, TenantScope.Private, "test", Now);
 
         var repo = new FakeRepo([root, clone]);
         var dir = new FakeUserDirectory([]);
         var handler = new GetScheduleLineageHandler(repo, dir);
 
-        var result = await handler.HandleAsync(new GetScheduleLineageQuery(root.Id));
+        // lane F99 fix pass 1 — the cloner's own view: his Private clone is his.
+        var result = await handler.HandleAsync(new GetScheduleLineageQuery(root.Id, cloner.Value));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().HaveCount(2);
@@ -40,7 +42,7 @@ public sealed class GetScheduleLineageHandlerTests
         var dir = new FakeUserDirectory([]);
         var handler = new GetScheduleLineageHandler(repo, dir);
 
-        var result = await handler.HandleAsync(new GetScheduleLineageQuery(Guid.NewGuid()));
+        var result = await handler.HandleAsync(new GetScheduleLineageQuery(Guid.NewGuid(), Guid.NewGuid()));
 
         result.IsSuccess.Should().BeTrue();
         result.Value.Should().BeEmpty();
@@ -50,9 +52,39 @@ public sealed class GetScheduleLineageHandlerTests
     public async Task GetLineage_EmptyRootId_Returns_InvalidCommand()
     {
         var handler = new GetScheduleLineageHandler(new FakeRepo([]), new FakeUserDirectory([]));
-        var result = await handler.HandleAsync(new GetScheduleLineageQuery(Guid.Empty));
+        var result = await handler.HandleAsync(new GetScheduleLineageQuery(Guid.Empty, Guid.NewGuid()));
         result.IsSuccess.Should().BeFalse();
         result.Error.Should().Be(ShramSafalErrors.InvalidCommand);
+    }
+
+    // spec: plr-d10 lane F99 fix pass 1 (review F-8) — only the templates the caller may see.
+    [Fact]
+    public async Task GetLineage_answers_only_Public_his_own_and_his_teams_templates()
+    {
+        var root = ScheduleTemplate.Create(Guid.NewGuid(), "Root", "S1", Now, createdByUserId: UserId.New());
+        var farmOwner = UserId.New();
+        var member = UserId.New();
+        var stranger = UserId.New();
+        var ownersTeamClone = root.Clone(Guid.NewGuid(), farmOwner, TenantScope.Team, "team", Now);
+        var ownersPrivateClone = root.Clone(Guid.NewGuid(), farmOwner, TenantScope.Private, "mine", Now);
+        var strangersTeamClone = root.Clone(Guid.NewGuid(), stranger, TenantScope.Team, "other team", Now);
+        var membersOwnClone = root.Clone(Guid.NewGuid(), member, TenantScope.Private, "his", Now);
+        var farm = Domain.Farms.Farm.Create(new FarmId(Guid.NewGuid()), "शेत", farmOwner, Now);
+
+        var repo = new FakeRepo([root, ownersTeamClone, ownersPrivateClone, strangersTeamClone, membersOwnClone])
+        {
+            Farms = { [(Guid)farm.Id] = farm },
+            FarmsOf = { [member.Value] = [(Guid)farm.Id] },
+        };
+        var handler = new GetScheduleLineageHandler(repo, new FakeUserDirectory([]));
+
+        var seen = await handler.HandleAsync(new GetScheduleLineageQuery(root.Id, member.Value));
+
+        seen.Value!.Select(d => d.Id).Should().BeEquivalentTo(
+            [root.Id, ownersTeamClone.Id, membersOwnClone.Id],
+            "Public, his own, and his farm owner's Team template; never another farmer's Private or Team template");
+        (await handler.HandleAsync(new GetScheduleLineageQuery(root.Id, stranger.Value))).Value!.Select(d => d.Id)
+            .Should().BeEquivalentTo([root.Id, strangersTeamClone.Id], "a stranger sees Public and his own only");
     }
 
     // ---------------------------------------------------------------------------
@@ -66,7 +98,11 @@ public sealed class GetScheduleLineageHandlerTests
 
         // All other interface methods throw
         public Task AddFarmAsync(Domain.Farms.Farm farm, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<Domain.Farms.Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Dictionary<Guid, Domain.Farms.Farm> Farms { get; } = new();
+        public Dictionary<Guid, List<Guid>> FarmsOf { get; } = new();
+
+        public Task<Domain.Farms.Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) =>
+            Task.FromResult(Farms.TryGetValue(farmId, out var farm) ? farm : null);
         public Task AddFarmMembershipAsync(Domain.Farms.FarmMembership membership, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Domain.Farms.FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<AgriSync.SharedKernel.Contracts.Roles.AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
@@ -119,7 +155,8 @@ public sealed class GetScheduleLineageHandlerTests
         public Task<List<Domain.Audit.AuditEvent>> GetAuditEventsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Domain.Audit.AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Domain.Audit.AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(FarmsOf.TryGetValue(userId, out var farms) ? farms : new List<Guid>());
         public Task<IReadOnlyList<Application.Contracts.Dtos.SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddCropScheduleTemplateAsync(Domain.Schedules.CropScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Domain.Schedules.CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(AgriSync.SharedKernel.Contracts.Ids.ScheduleTemplateId templateId, CancellationToken ct = default) => throw new NotSupportedException();

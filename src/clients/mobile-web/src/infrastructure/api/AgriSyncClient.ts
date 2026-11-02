@@ -78,7 +78,6 @@ import type {
     UpdateAiProviderConfigRequest,
     ConsentStateDto,
     UpdateConsentRequest,
-    IssueConsentTokenResponse,
     ImprovementPermissionDto,
     SetImprovementPermissionRequest,
 } from './dtos';
@@ -169,7 +168,6 @@ export type {
 export type {
     ConsentStateDto,
     UpdateConsentRequest,
-    IssueConsentTokenResponse,
     ImprovementPermissionDto,
     SetImprovementPermissionRequest,
 } from './dtos';
@@ -242,10 +240,6 @@ export class AgriSyncClient implements HttpTransport {
 
     register(request: { phone: string; password: string; displayName: string; appId?: string; role?: string }): Promise<AuthResponseDto> {
         return Auth.register(this, request);
-    }
-
-    getCurrentUser(): Promise<unknown> {
-        return Auth.getCurrentUser(this);
     }
 
     generateReferralCode(): Promise<{ code: string }> {
@@ -454,9 +448,8 @@ export class AgriSyncClient implements HttpTransport {
     //
     // spec: data-principle-spine-2026-05-05/06.4
     //
-    // NOTE: assumes 06.2 backend lands GET/PUT /shramsafal/consent/me and
-    // 06.3 backend lands POST /shramsafal/consent/token/issue. If wire
-    // shapes diverge, fix ConsentResource.ts + dtos.ts in a follow-up.
+    // GET/PUT /shramsafal/consent/me. (lane F99 fix pass 1, row 18: the consent-token issue call is gone; the server
+    // never had that route.)
 
     getConsent(): Promise<ConsentStateDto> {
         return Consent.getConsent(this);
@@ -485,10 +478,6 @@ export class AgriSyncClient implements HttpTransport {
 
     setImprovementPermission(request: SetImprovementPermissionRequest): Promise<ImprovementPermissionDto> {
         return Consent.setImprovementPermission(this, request);
-    }
-
-    issueConsentToken(): Promise<IssueConsentTokenResponse> {
-        return Consent.issueConsentToken(this);
     }
 
     // --- Admin ------------------------------------------------------------

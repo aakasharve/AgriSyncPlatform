@@ -34,9 +34,12 @@ import ErasureRequestScreen from '../ErasureRequestScreen';
 describe('ErasureRequestScreen', () => {
     beforeEach(() => {
         vi.resetAllMocks();
+        // lane F99 fix pass 1 (D-71): the screen also reads his requests; this server has none.
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', { status: 200 })));
     });
     afterEach(() => {
         cleanup();
+        vi.unstubAllGlobals();
     });
 
     it('renders the open-confirm button without any review marker', async () => {
@@ -64,6 +67,8 @@ describe('ErasureRequestScreen', () => {
         expect(sla.textContent ?? '').toContain('Request received');
         // Nothing enforces a deadline, so the copy must not state one.
         expect(sla.textContent ?? '').not.toMatch(/d+s*hours?/i);
+        // lane F99 fix pass 1 (D-71): an older server sent no date, so the 30 days and the cancel are said plainly.
+        expect(sla.textContent ?? '').toContain('Erasure starts in 30 days; until then you can cancel it.');
     });
 });
 
@@ -83,11 +88,15 @@ describe('ErasureRequestScreen — the shipped request, not the injected one', (
     let fetchSpy: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
-        fetchSpy = vi.fn().mockResolvedValue(
-            new Response(JSON.stringify({ requestId: 'r-real' }), { status: 202 }),
-        );
+        // lane F99 fix pass 1 (D-71): the screen also reads his requests (GET); the request itself is the POST.
+        fetchSpy = vi.fn().mockImplementation(async (_url: string, init?: RequestInit) =>
+            init?.method === 'POST'
+                ? new Response(JSON.stringify({ requestId: 'r-real' }), { status: 202 })
+                : new Response('[]', { status: 200 }));
         vi.stubGlobal('fetch', fetchSpy);
     });
+
+    const theRequest = () => fetchSpy.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === 'POST');
 
     afterEach(() => {
         // The outer describe's cleanup is scoped to that describe, so without
@@ -100,9 +109,9 @@ describe('ErasureRequestScreen — the shipped request, not the injected one', (
         render(<ErasureRequestScreen forceLocale="en-IN" />);
         fireEvent.click(await screen.findByTestId('erasure-open-confirm'));
         fireEvent.click(await screen.findByTestId('erasure-confirm-submit'));
-        await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(theRequest()).toHaveLength(1));
 
-        const url = String(fetchSpy.mock.calls[0][0]);
+        const url = String(theRequest()[0][0]);
         expect(url).toBe('https://api.test.invalid/shramsafal/me/erasure/request');
         // The regression in one line: a URL with no host is a request to the app
         // itself, and on a phone that can never reach the server.
@@ -113,9 +122,9 @@ describe('ErasureRequestScreen — the shipped request, not the injected one', (
         render(<ErasureRequestScreen forceLocale="en-IN" />);
         fireEvent.click(await screen.findByTestId('erasure-open-confirm'));
         fireEvent.click(await screen.findByTestId('erasure-confirm-submit'));
-        await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(theRequest()).toHaveLength(1));
 
-        const headers = new Headers(fetchSpy.mock.calls[0][1].headers);
+        const headers = new Headers((theRequest()[0][1] as RequestInit).headers);
         expect(headers.get('Authorization')).toBe('Bearer tok-test');
     });
 });

@@ -74,15 +74,3 @@ export interface SetImprovementPermissionRequest {
     wordingVersion: string;
     languageShown: string;
 }
-
-/**
- * POST `/shramsafal/consent/token/issue` response — short-lived HS256
- * token (24h TTL per plan §6.3.2). `kid` lives in the JWT protected
- * header, NOT in this payload. The client stashes the token in-memory
- * (see `ConsentTokenClient`) and stamps the kid onto each voice clip
- * row at seal time.
- */
-export interface IssueConsentTokenResponse {
-    token: string;
-    expiresAtUtc: string;
-}

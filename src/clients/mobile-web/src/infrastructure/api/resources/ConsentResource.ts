@@ -1,22 +1,19 @@
 // spec: data-principle-spine-2026-05-05/06.4
 //
-// Consent resource — three endpoints on the ShramSafal backend
-// (06.2 / 06.3 in flight in parallel — see plan
-// `_COFOUNDER/.../06_[30]_CONSENT_DOMAIN.md` §6.2.2 + §6.3):
+// Consent resource — the caller's own consent on the ShramSafal backend:
 //
 //   GET  /shramsafal/consent/me               -> ConsentStateDto
 //   PUT  /shramsafal/consent/me               -> ConsentStateDto (updated)
-//   POST /shramsafal/consent/token/issue      -> IssueConsentTokenResponse
+//   GET  /shramsafal/consent/improvement      -> ImprovementPermissionDto
+//   PUT  /shramsafal/consent/improvement      -> ImprovementPermissionDto (updated)
 //
-// NOTE: assumes 06.3 backend lands /shramsafal/consent/token/issue. If
-// the wire path differs, fix this file in a follow-up; no other module
-// mirrors these strings.
+// spec: plr-d10 lane F99 fix pass 1 (F100, row 18) — `POST /shramsafal/consent/token/issue` is gone from here: the server
+// never had that route (06.3 did not land it) and nothing on the phone ever used the token it would have issued.
 
 import type { HttpTransport } from '../transport';
 import type {
     ConsentStateDto,
     UpdateConsentRequest,
-    IssueConsentTokenResponse,
     ImprovementPermissionDto,
     SetImprovementPermissionRequest,
 } from '../dtos';
@@ -59,15 +56,5 @@ export async function setImprovementPermission(
     request: SetImprovementPermissionRequest,
 ): Promise<ImprovementPermissionDto> {
     const response = await t.http.put<ImprovementPermissionDto>('/shramsafal/consent/improvement', request);
-    return response.data;
-}
-
-export async function issueConsentToken(
-    t: HttpTransport,
-): Promise<IssueConsentTokenResponse> {
-    const response = await t.http.post<IssueConsentTokenResponse>(
-        '/shramsafal/consent/token/issue',
-        {},
-    );
     return response.data;
 }

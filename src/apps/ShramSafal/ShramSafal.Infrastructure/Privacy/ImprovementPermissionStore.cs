@@ -46,13 +46,16 @@ internal sealed class ImprovementPermissionStore(
         }
 
         // ErasureRequest.TargetUserId = OnBehalfOfUserId ?? RequestedByUserId, spelled out so
-        // EF can translate it. Any status counts — even a failed erasure was asked for.
+        // EF can translate it. Any status counts — even a failed erasure was asked for, and one still
+        // WAITING its 30 days (D-71) counts from the moment it is asked. Except a CANCELLED one
+        // (lane F99 fix pass 1, item 11): he took it back before anything was erased, so it asks nothing.
         return userScope.RunForCallerAsync(
             userId,
             token => db.ErasureRequests
                 .AsNoTracking()
-                .AnyAsync(r => r.OnBehalfOfUserId == userId
-                    || (r.OnBehalfOfUserId == null && r.RequestedByUserId == userId), token),
+                .AnyAsync(r => r.Status != ShramSafal.Domain.Privacy.ErasureStatus.Cancelled
+                    && (r.OnBehalfOfUserId == userId
+                        || (r.OnBehalfOfUserId == null && r.RequestedByUserId == userId)), token),
             ct);
     }
 

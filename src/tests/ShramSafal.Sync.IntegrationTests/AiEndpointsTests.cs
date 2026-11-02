@@ -891,6 +891,13 @@ public sealed class AiEndpointsTests
             var dbName = $"ai-tests-{Guid.NewGuid()}";
             builder.Services.AddDbContext<ShramSafalDbContext>(options =>
                 options.UseInMemoryDatabase(dbName, dbRoot));
+            // lane F99 fix pass 1 (review F-5): /ai/dashboard reads through the privileged admin context. In this host the
+            // database is the in-memory store above, so the admin context opens that same store (the real factory would
+            // open the configured Postgres, which this host does not use).
+            builder.Services.RemoveAll<AgriSync.BuildingBlocks.Persistence.IAdminDbContextFactory<ShramSafalDbContext>>();
+            builder.Services.AddScoped<AgriSync.BuildingBlocks.Persistence.IAdminDbContextFactory<ShramSafalDbContext>>(_ =>
+                new SameStoreAdminDbContextFactory(new DbContextOptionsBuilder<ShramSafalDbContext>()
+                    .UseInMemoryDatabase(dbName, dbRoot).Options));
 
             var app = builder.Build();
             app.UseAuthentication();
@@ -1162,4 +1169,15 @@ public sealed class AiEndpointsTests
                 EntitlementReason.SubscriptionExpired,
                 SubscriptionStatus: 4));
     }
+}
+
+/// <summary>
+/// lane F99 fix pass 1 — the admin context of a host whose database is an in-memory store: the same store, no tenant
+/// interceptor (as the real factory), and no audit row of its own (nothing here reads one).
+/// </summary>
+internal sealed class SameStoreAdminDbContextFactory(DbContextOptions<ShramSafalDbContext> options)
+    : AgriSync.BuildingBlocks.Persistence.IAdminDbContextFactory<ShramSafalDbContext>
+{
+    public Task<ShramSafalDbContext> CreateAsync(string reason, Guid actorUserId, CancellationToken ct)
+        => Task.FromResult(new ShramSafalDbContext(options));
 }

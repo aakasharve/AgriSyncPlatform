@@ -9,6 +9,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.UseCases.Work.CreateJobCard;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Work;
 using Xunit;
 
@@ -318,6 +319,10 @@ public sealed class CreateJobCardPipelineTests
 
         public void SetMembership(Guid farmId, Guid userId, AppRole role)
             => _memberships[(farmId, userId)] = role;
+
+        // lane F99 fix pass 1 — the handler asks that the plot is the named farm's: every plot here is on the test farm.
+        public override Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default)
+            => Task.FromResult<Plot?>(Plot.Create(plotId, Farm, "प्लॉट", 1m, Now));
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult<AppRole?>(_memberships.TryGetValue((farmId, userId), out var r) ? r : null);

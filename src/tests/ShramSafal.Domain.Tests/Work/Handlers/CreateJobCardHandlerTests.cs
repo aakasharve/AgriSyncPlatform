@@ -84,6 +84,61 @@ public sealed class CreateJobCardHandlerTests
         repo.SavedJobCards.Should().ContainSingle();
     }
 
+    // spec: plr-d10 lane F99 fix pass 1 (review F-9; E4) — the plot and the season must be the named farm's.
+    [Fact]
+    public async Task CreateJobCard_another_farms_plot_is_not_found()
+    {
+        var repo = new FakeRepo(MukadamGuid, AppRole.Mukadam) { PlotFarm = Guid.NewGuid() };
+        var result = await new CreateJobCardHandler(repo, new SequentialIdGenerator(), new FixedClock(Now))
+            .HandleAsync(Command(cropCycleId: null));
+
+        result.Error.Should().Be(ShramSafal.Domain.Common.ShramSafalErrors.PlotNotFound);
+        repo.SavedJobCards.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(true, false)] // a season of another farm
+    [InlineData(false, true)] // a season of another plot of this farm
+    [InlineData(false, false)] // a made-up season
+    public async Task CreateJobCard_a_season_that_is_not_this_plots_is_not_found(bool otherFarm, bool otherPlot)
+    {
+        var seasonId = Guid.NewGuid();
+        var repo = new FakeRepo(MukadamGuid, AppRole.Mukadam);
+        if (otherFarm || otherPlot)
+        {
+            repo.Seasons[seasonId] = CropCycle.Create(seasonId, otherFarm ? new FarmId(Guid.NewGuid()) : FarmId,
+                otherPlot ? Guid.NewGuid() : PlotGuid, "Grapes", "Vegetative", new DateOnly(2026, 1, 1), null, Now);
+        }
+
+        var result = await new CreateJobCardHandler(repo, new SequentialIdGenerator(), new FixedClock(Now))
+            .HandleAsync(Command(cropCycleId: seasonId));
+
+        result.Error.Should().Be(ShramSafal.Domain.Common.ShramSafalErrors.CropCycleNotFound);
+        repo.SavedJobCards.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateJobCard_this_plots_own_season_is_taken()
+    {
+        var seasonId = Guid.NewGuid();
+        var repo = new FakeRepo(MukadamGuid, AppRole.Mukadam);
+        repo.Seasons[seasonId] = CropCycle.Create(seasonId, FarmId, PlotGuid, "Grapes", "Vegetative", new DateOnly(2026, 1, 1), null, Now);
+
+        var result = await new CreateJobCardHandler(repo, new SequentialIdGenerator(), new FixedClock(Now))
+            .HandleAsync(Command(cropCycleId: seasonId));
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
+    private static CreateJobCardCommand Command(Guid? cropCycleId) => new(
+        FarmId: FarmId,
+        PlotId: PlotGuid,
+        CropCycleId: cropCycleId,
+        PlannedDate: new DateOnly(2026, 4, 21),
+        LineItems: DefaultLineItems,
+        CallerUserId: MukadamUserId,
+        ClientCommandId: null);
+
     // ─── Test doubles ────────────────────────────────────────────────────────
 
     private sealed class SequentialIdGenerator : IIdGenerator
@@ -101,6 +156,16 @@ public sealed class CreateJobCardHandlerTests
     {
         public List<JobCard> SavedJobCards { get; } = [];
         public List<AuditEvent> AuditEvents { get; } = [];
+
+        /// <summary>lane F99 fix pass 1 — the farm the plot is on (this farm unless a test says otherwise), and the seasons.</summary>
+        public Guid PlotFarm { get; set; } = FarmGuid;
+        public Dictionary<Guid, CropCycle> Seasons { get; } = new();
+
+        public override Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default)
+            => Task.FromResult<Plot?>(Plot.Create(plotId, new FarmId(PlotFarm), "प्लॉट", 1m, Now));
+
+        public override Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default)
+            => Task.FromResult(Seasons.TryGetValue(cropCycleId, out var season) ? season : null);
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
         {

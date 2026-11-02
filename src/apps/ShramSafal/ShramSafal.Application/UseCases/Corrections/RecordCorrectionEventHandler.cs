@@ -23,6 +23,17 @@ public sealed class RecordCorrectionEventHandler : IRecordCorrectionEventHandler
     public async Task<Result<Guid>> HandleAsync(
         RecordCorrectionEventCommand command, CancellationToken ct = default)
     {
+        // spec: plr-d10 lane F99 fix pass 1 — a body the ledger cannot hold is refused as a bad request (400) before
+        // anything is written: a missing field used to be read as null, and text that is not JSON reached the json
+        // columns (22P02), both a 500.
+        if (string.IsNullOrWhiteSpace(command.PromptVersion)
+            || command.Locale is null
+            || !IsJson(command.OriginalParseRaw)
+            || !IsJson(command.CorrectedParse))
+        {
+            return Result.Failure<Guid>(ShramSafalErrors.InvalidCommand);
+        }
+
         // The endpoint hands these three through verbatim from the request body
         // and CorrectionEvent.Record only checks for whitespace, so an over-long
         // value used to reach Postgres and come back as 22001 ->
@@ -73,5 +84,25 @@ public sealed class RecordCorrectionEventHandler : IRecordCorrectionEventHandler
 
         await _repository.AddAsync(correction, ct);
         return Result.Success(correction.Id);
+    }
+
+    /// <summary>A JSON document (the drafts are stored in json columns); anything else is a bad request, said so above.</summary>
+    private static bool IsJson(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var _ = System.Text.Json.JsonDocument.Parse(text);
+            return true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent("corrections.draft_not_json"));
+            return false;
+        }
     }
 }

@@ -46,6 +46,15 @@ public sealed class CreateJobCardHandler(
         if (!IsEligibleToCreate(callerRole.Value))
             return Result.Failure<CreateJobCardResult>(ShramSafalErrors.JobCardRoleNotAllowed);
 
+        // spec: plr-d10 lane F99 fix pass 1 (review F-9; E4) — the plot and the season the card names must be this farm's,
+        // asked in application code for every seat, on REST and push alike: a card on farm A never points at farm B's plot
+        // or season. A foreign id answers exactly as a made-up one.
+        if (await repository.GetPlotByIdAsync(command.PlotId, ct) is not { } plot || (Guid)plot.FarmId != command.FarmId.Value)
+            return Result.Failure<CreateJobCardResult>(ShramSafalErrors.PlotNotFound);
+        var season = command.CropCycleId is { } seasonId ? await repository.GetCropCycleByIdAsync(seasonId, ct) : null;
+        if (command.CropCycleId is not null && (season is null || (Guid)season.FarmId != command.FarmId.Value))
+            return Result.Failure<CreateJobCardResult>(ShramSafalErrors.CropCycleNotFound);
+
         // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
         if (await Services.PlotScopeGate.RefuseAsync(
                 repository, command.FarmId.Value, command.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
@@ -56,6 +65,11 @@ public sealed class CreateJobCardHandler(
             && await Services.PlotScopeGate.RefuseCycleAsync(
                 repository, command.FarmId.Value, namedCycle, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsideSeason)
             return Result.Failure<CreateJobCardResult>(outsideSeason);
+
+        // lane F99 fix pass 1 (F-9) — and the season is this plot's. Asked AFTER the plot-scope rules, so a seat on chosen
+        // plots naming another plot's season of this farm is still told the plot rule in its words (MU-4 fix pass 2, N2).
+        if (season is not null && season.PlotId != command.PlotId)
+            return Result.Failure<CreateJobCardResult>(ShramSafalErrors.CropCycleNotFound);
 
         // 4. Map DTOs to domain line items.
         List<JobCardLineItem> lineItems;

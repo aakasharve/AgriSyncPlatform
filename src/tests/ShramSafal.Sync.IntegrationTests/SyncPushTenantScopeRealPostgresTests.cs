@@ -480,6 +480,23 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
 
         // 18. set_price_config — global lookup; only needs phase (a)
         // (user_id GUC) so GetFarmIdsForUserAsync sees Owner A's own farm.
+        // spec: plr-d10 lane F99 fix pass 1 (review F-4; D-72) — the price list is one list for every farm, so only the
+        // platform admin writes it. Owner A is made one here (a Platform organisation's Owner), so this step still proves
+        // the dispatcher's scope for the write; a farmer's refusal is proved in FixPass1RulesRealPostgresTests.
+        await using (var admin = new NpgsqlConnection(_superuserConn))
+        {
+            await admin.OpenAsync();
+            await using var seat = admin.CreateCommand();
+            seat.CommandText = """
+                INSERT INTO ssf.organizations (id, name, type, created_at_utc, is_active) VALUES (@org, 'ShramSafal', 0, NOW(), TRUE);
+                INSERT INTO ssf.organization_memberships (id, organization_id, user_id, role, added_by_user_id, joined_at_utc, is_active)
+                VALUES (gen_random_uuid(), @org, @user, 0, @user, NOW(), TRUE);
+                """;
+            seat.Parameters.AddWithValue("org", Guid.NewGuid());
+            seat.Parameters.AddWithValue("user", OwnerA);
+            await seat.ExecuteNonQueryAsync();
+        }
+
         var priceConfigResult = await RunSyncPushAsync(OwnerA, "owner", "d-A", "req-price", "set_price_config", new()
         {
             ["itemName"] = $"TenantScopeProof-{Guid.NewGuid():N}",

@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
     rates: [] as unknown[],
     exportOk: true,
     role: 'PrimaryOwner' as string,
+    platformAdmin: true,
 }));
 
 vi.mock('../../features/finance/financeSelectors', () => ({
@@ -49,6 +50,8 @@ vi.mock('../../features/export', () => ({
 vi.mock('../../core/session/FarmContext', () => ({ useFarmContext: () => ({ currentFarm: { role: h.role } }) }));
 vi.mock('../../application/usecases/sync/AllocateGlobalExpenseCommand', () => ({ AllocateGlobalExpenseCommand: { enqueue: vi.fn() } }));
 vi.mock('../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: vi.fn() } }));
+// lane F99 fix pass 1 (D-72): the price book's write controls are the platform admin's; both views are checked below.
+vi.mock('../../core/session/usePlatformAdmin', () => ({ usePlatformAdmin: () => h.platformAdmin }));
 
 import FinanceManagerHome from '../FinanceManagerHome';
 import LedgerPage from '../LedgerPage';
@@ -74,6 +77,7 @@ beforeEach(() => {
     h.rates = RATES;
     h.exportOk = true;
     h.role = 'PrimaryOwner';
+    h.platformAdmin = true;
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -102,6 +106,13 @@ describe('no English is left on the पैसे व हिशोब pages', () 
         fireEvent.click(screen.getByTestId('ledger-fix-e2'));
         // The sheet names the kind of cost in Marathi too (it was handed the stored `Input`).
         expect(screen.getByText('रक्कम दुरुस्त करा').parentElement).toHaveTextContent('खत-औषध');
+        expect(latinLeftovers()).toEqual([]);
+    });
+
+    it('the price book as a farmer reads it (not the platform admin): the read-only line is Marathi too', () => {
+        h.platformAdmin = false;
+        render(<PriceBookPage currentRoute="finance-price-book" onNavigate={vi.fn()} />);
+        expect(screen.getByTestId('price-read-only')).toBeInTheDocument();
         expect(latinLeftovers()).toEqual([]);
     });
 

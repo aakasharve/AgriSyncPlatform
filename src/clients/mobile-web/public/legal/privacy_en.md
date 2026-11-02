@@ -18,7 +18,7 @@
 
 # Privacy Notice — Shram Safal
 
-**Version `privacy-2026-10-30.1` · revised 30 October 2026**
+**Version `privacy-2026-11-02.1` · revised 2 November 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It
@@ -161,6 +161,10 @@ worse than none:
    voice files described in row two — those are removed by hand. We would rather write
    that down than let you assume otherwise.
 
+   An erasure request **waits 30 days** before anything is erased. During those 30 days
+   you can **cancel** it in **Settings → Data & Privacy**, and then nothing is erased.
+   Only after the 30 days does the erasure run.
+
 ---
 
 ## 7. Artificial intelligence, plainly
@@ -196,7 +200,8 @@ In **Settings → Data & Privacy**, or by writing to arvesystems@gmail.com, you 
 
 - Review or withdraw the permissions you gave.
 - Ask to see, correct or get a copy of your information.
-- Request deletion of your account and your data.
+- Request deletion of your account and your data. The request waits 30 days, and you
+  can cancel it until then.
 - Raise a grievance with us, or nominate someone to exercise these rights for you.
 
 Withdrawing essential consent may disable some or all of the app. It does not undo

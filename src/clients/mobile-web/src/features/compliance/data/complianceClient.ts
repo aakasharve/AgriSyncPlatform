@@ -33,6 +33,12 @@ const resolveBaseUrl = (): string => {
     return 'http://localhost:5048';
 };
 
+/**
+ * spec: plr-d10 lane F99 fix pass 1 (F100) — every warning route lives under `/shramsafal` on the server. This client left
+ * it out, so the warnings screen answered 404 and had never reached the server.
+ */
+const apiBase = (): string => `${resolveBaseUrl()}/shramsafal`;
+
 const authHeaders = (): Record<string, string> => {
     const session = getAuthSession();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -51,7 +57,7 @@ export async function getSignals(farmId: string, options?: {
     if (options?.includeAcknowledged) params.set('includeAcknowledged', 'true');
 
     const qs = params.toString();
-    const url = `${resolveBaseUrl()}/farms/${farmId}/compliance${qs ? `?${qs}` : ''}`;
+    const url = `${apiBase()}/farms/${farmId}/compliance${qs ? `?${qs}` : ''}`;
 
     const res = await fetch(url, { headers: authHeaders() });
     // TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) — this
@@ -67,13 +73,13 @@ export async function getSignals(farmId: string, options?: {
 }
 
 export async function acknowledgeSignal(signalId: string): Promise<boolean> {
-    const url = `${resolveBaseUrl()}/compliance/${signalId}/acknowledge`;
+    const url = `${apiBase()}/compliance/${signalId}/acknowledge`;
     const res = await fetch(url, { method: 'POST', headers: authHeaders() });
     return res.ok;
 }
 
 export async function resolveSignal(signalId: string, note: string): Promise<boolean> {
-    const url = `${resolveBaseUrl()}/compliance/${signalId}/resolve`;
+    const url = `${apiBase()}/compliance/${signalId}/resolve`;
     const res = await fetch(url, {
         method: 'POST',
         headers: authHeaders(),
@@ -83,6 +89,6 @@ export async function resolveSignal(signalId: string, note: string): Promise<boo
 }
 
 export async function triggerEvaluate(farmId: string): Promise<void> {
-    const url = `${resolveBaseUrl()}/compliance/evaluate/${farmId}`;
+    const url = `${apiBase()}/compliance/evaluate/${farmId}`;
     await fetch(url, { method: 'POST', headers: authHeaders() });
 }

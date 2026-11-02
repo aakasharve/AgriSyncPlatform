@@ -24,9 +24,10 @@ public interface IImprovementPermissionStore
     Task AppendAsync(ImprovementPermissionEvent choice, CancellationToken ct = default);
 
     /// <summary>
-    /// True when ANY erasure request exists for this account (requested, in progress,
-    /// completed or failed). An account someone asked to erase grants nothing: its permission
-    /// rows are kept as consent evidence, but they never license use.
+    /// True when an erasure request exists for this account (waiting, in progress, completed or
+    /// failed). An account someone asked to erase grants nothing: its permission rows are kept as
+    /// consent evidence, but they never license use. A CANCELLED request (founder D-71: taken back
+    /// while it waited, nothing erased) does not count.
     /// </summary>
     Task<bool> IsAccountErasureRequestedAsync(Guid userId, CancellationToken ct = default);
 }

@@ -99,7 +99,36 @@ public sealed class SetPriceConfigVersionPipelineTests
         Assert.Equal("Sugar Cane", repo.AddedConfigs[0].ItemName);
     }
 
+    // spec: plr-d10 lane F99 fix pass 1 (review F-4; D-72) — one list for every farm: only the platform admin writes it.
+    [Theory]
+    [InlineData(Admin.None)]
+    [InlineData(Admin.FpoOwner)]
+    [InlineData(Admin.PlatformViewer)]
+    public async Task Pipeline_refuses_anyone_but_the_platform_admin_and_writes_nothing(Admin who)
+    {
+        var (pipeline, repo) = BuildPipeline(who);
+        var r = await pipeline.HandleAsync(MakeCommand());
+
+        Assert.False(r.IsSuccess);
+        Assert.Equal(ShramSafalErrors.PriceListPlatformAdminOnly.Code, r.Error.Code);
+        Assert.Equal(ErrorKind.Forbidden, r.Error.Kind);
+        Assert.Empty(repo.AddedConfigs);
+        Assert.Empty(repo.AuditEvents);
+    }
+
+    [Fact]
+    public async Task Pipeline_takes_a_platform_admin_who_holds_other_admin_seats_too()
+    {
+        var (pipeline, repo) = BuildPipeline(Admin.PlatformOwnerAmongOthers);
+        var r = await pipeline.HandleAsync(MakeCommand());
+
+        Assert.True(r.IsSuccess);
+        Assert.Single(repo.AddedConfigs);
+    }
+
     // ---- helpers ----
+
+    public enum Admin { PlatformOwner, PlatformOwnerAmongOthers, PlatformViewer, FpoOwner, None }
 
     private static SetPriceConfigVersionCommand MakeCommand(
         string itemName = "Sugar Cane",
@@ -122,12 +151,12 @@ public sealed class SetPriceConfigVersionPipelineTests
 
     private static (
         IHandler<SetPriceConfigVersionCommand, PriceConfigDto> Pipeline,
-        InMemoryPriceConfigRepo Repo) BuildPipeline()
+        InMemoryPriceConfigRepo Repo) BuildPipeline(Admin who = Admin.PlatformOwner)
     {
         var repo = new InMemoryPriceConfigRepo();
         var clock = new FixedClock(Now);
         var ids = new SequentialIdGenerator();
-        var rawHandler = new SetPriceConfigVersionHandler(repo, ids, clock);
+        var rawHandler = new SetPriceConfigVersionHandler(repo, ids, clock, new FakeAdminResolver(who));
 
         var pipeline = HandlerPipeline.Build(
             rawHandler,
@@ -140,6 +169,34 @@ public sealed class SetPriceConfigVersionPipelineTests
                 Array.Empty<IAuthorizationCheck<SetPriceConfigVersionCommand>>()));
 
         return (pipeline, repo);
+    }
+
+    /// <summary>The admin seats the caller holds, as the real resolver answers them (one seat: resolved; several: ambiguous).</summary>
+    private sealed class FakeAdminResolver(Admin who) : ShramSafal.Application.Admin.Ports.IEntitlementResolver
+    {
+        public Task<ShramSafal.Application.Admin.Ports.ResolveResult> ResolveAsync(
+            AgriSync.SharedKernel.Contracts.Ids.UserId userId, Guid? activeOrgId, CancellationToken ct)
+        {
+            static ShramSafal.Application.Admin.Ports.MembershipSummary Seat(
+                ShramSafal.Domain.Organizations.OrganizationType type, ShramSafal.Domain.Organizations.OrganizationRole role)
+                => new(Guid.NewGuid(), type.ToString(), type, role);
+            var platformOwner = Seat(ShramSafal.Domain.Organizations.OrganizationType.Platform, ShramSafal.Domain.Organizations.OrganizationRole.Owner);
+            ShramSafal.Application.Admin.Ports.ResolveResult Single(ShramSafal.Application.Admin.Ports.MembershipSummary seat, bool platformAdmin) =>
+                ShramSafal.Application.Admin.Ports.ResolveResult.Resolved(
+                    new ShramSafal.Application.Admin.AdminScope(seat.OrganizationId, seat.OrganizationType, seat.OrganizationRole, [], platformAdmin),
+                    [seat]);
+            return Task.FromResult(who switch
+            {
+                Admin.PlatformOwner => Single(platformOwner, platformAdmin: true),
+                Admin.PlatformOwnerAmongOthers => ShramSafal.Application.Admin.Ports.ResolveResult.Ambiguous(
+                    [Seat(ShramSafal.Domain.Organizations.OrganizationType.FPO, ShramSafal.Domain.Organizations.OrganizationRole.Owner), platformOwner]),
+                Admin.PlatformViewer => Single(
+                    Seat(ShramSafal.Domain.Organizations.OrganizationType.Platform, ShramSafal.Domain.Organizations.OrganizationRole.Viewer), platformAdmin: false),
+                Admin.FpoOwner => Single(
+                    Seat(ShramSafal.Domain.Organizations.OrganizationType.FPO, ShramSafal.Domain.Organizations.OrganizationRole.Owner), platformAdmin: false),
+                _ => ShramSafal.Application.Admin.Ports.ResolveResult.Unauthorized(),
+            });
+        }
     }
 
     private sealed class FixedClock(DateTime utcNow) : IClock

@@ -182,7 +182,7 @@ public static class ScheduleTemplateEndpoints
             // lane F99 — a template's lineage belongs to no farm, so it is read under the caller's own user scope (the route
             // opened none: its first read failed closed, 500 for everyone).
             var result = await userScope.RunForCallerAsync(
-                actorUserId, token => handler.HandleAsync(new GetScheduleLineageQuery(rootId), token), ct);
+                actorUserId, token => handler.HandleAsync(new GetScheduleLineageQuery(rootId, actorUserId), token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetScheduleLineage");

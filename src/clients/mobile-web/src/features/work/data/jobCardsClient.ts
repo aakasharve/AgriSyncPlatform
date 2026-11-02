@@ -56,6 +56,21 @@ const resolveBaseUrl = (): string => {
     return 'http://localhost:5048';
 };
 
+/**
+ * spec: plr-d10 lane F99 fix pass 1 (F100) — every job-card route lives under `/shramsafal` on the server. This client left
+ * it out, so each call answered 404 and the work screens had never reached the server (the route table test,
+ * `phoneRestPathsMatchServer.test.ts`, now fails on any such path).
+ */
+const apiBase = (): string => `${resolveBaseUrl()}/shramsafal`;
+
+/**
+ * What the server answers to a change of a card (create, assign, start, complete, verify, settle, cancel): the card's id,
+ * never the card itself. The screens read the card back from the farm's list (`useJobCards` refreshes after a change).
+ */
+export interface JobCardChange {
+    jobCardId: string;
+}
+
 const authHeaders = (): Record<string, string> => {
     const session = getAuthSession();
     // lane MU-3 fix 2 (N1) — the server sends a withheld pay as null (shown "नियमानुसार दिसत नाही") only to a phone
@@ -71,15 +86,15 @@ const authHeaders = (): Record<string, string> => {
 // API calls
 // ============================================================================
 
-export async function createJobCard(req: CreateJobCardRequest): Promise<JobCard> {
-    const url = `${resolveBaseUrl()}/job-cards`;
+export async function createJobCard(req: CreateJobCardRequest): Promise<JobCardChange> {
+    const url = `${apiBase()}/job-cards`;
     const res = await fetch(url, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(req),
     });
     if (!res.ok) throw new Error(`createJobCard failed: ${res.status}`);
-    return res.json() as Promise<JobCard>;
+    return res.json() as Promise<JobCardChange>;
 }
 
 /** lane MU-4 fix pass 2 (N4) — the plot rule's refusal code, as the server sends it in a 403's body. */
@@ -102,8 +117,8 @@ async function refusalCodeOf(res: Response): Promise<string | null> {
     }
 }
 
-export async function assignJobCard(id: string, req: AssignWorkerRequest): Promise<JobCard> {
-    const url = `${resolveBaseUrl()}/job-cards/${id}/assign`;
+export async function assignJobCard(id: string, req: AssignWorkerRequest): Promise<JobCardChange> {
+    const url = `${apiBase()}/job-cards/${id}/assign`;
     const res = await fetch(url, {
         method: 'POST',
         headers: authHeaders(),
@@ -114,54 +129,54 @@ export async function assignJobCard(id: string, req: AssignWorkerRequest): Promi
         if (code) throw new JobCardRefusal(code, res.status);
         throw new Error(`assignJobCard failed: ${res.status}`);
     }
-    return res.json() as Promise<JobCard>;
+    return res.json() as Promise<JobCardChange>;
 }
 
-export async function startJobCard(id: string): Promise<JobCard> {
-    const url = `${resolveBaseUrl()}/job-cards/${id}/start`;
+export async function startJobCard(id: string): Promise<JobCardChange> {
+    const url = `${apiBase()}/job-cards/${id}/start`;
     const res = await fetch(url, { method: 'POST', headers: authHeaders() });
     if (!res.ok) throw new Error(`startJobCard failed: ${res.status}`);
-    return res.json() as Promise<JobCard>;
+    return res.json() as Promise<JobCardChange>;
 }
 
-export async function completeJobCard(id: string, req: CompleteJobCardRequest): Promise<JobCard> {
-    const url = `${resolveBaseUrl()}/job-cards/${id}/complete`;
+export async function completeJobCard(id: string, req: CompleteJobCardRequest): Promise<JobCardChange> {
+    const url = `${apiBase()}/job-cards/${id}/complete`;
     const res = await fetch(url, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(req),
     });
     if (!res.ok) throw new Error(`completeJobCard failed: ${res.status}`);
-    return res.json() as Promise<JobCard>;
+    return res.json() as Promise<JobCardChange>;
 }
 
-export async function verifyForPayout(id: string): Promise<JobCard> {
-    const url = `${resolveBaseUrl()}/job-cards/${id}/verify-for-payout`;
+export async function verifyForPayout(id: string): Promise<JobCardChange> {
+    const url = `${apiBase()}/job-cards/${id}/verify-for-payout`;
     const res = await fetch(url, { method: 'POST', headers: authHeaders() });
     if (!res.ok) throw new Error(`verifyForPayout failed: ${res.status}`);
-    return res.json() as Promise<JobCard>;
+    return res.json() as Promise<JobCardChange>;
 }
 
-export async function settleJobCard(id: string, req: SettleJobCardRequest): Promise<JobCard> {
-    const url = `${resolveBaseUrl()}/job-cards/${id}/settle`;
+export async function settleJobCard(id: string, req: SettleJobCardRequest): Promise<JobCardChange> {
+    const url = `${apiBase()}/job-cards/${id}/settle`;
     const res = await fetch(url, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(req),
     });
     if (!res.ok) throw new Error(`settleJobCard failed: ${res.status}`);
-    return res.json() as Promise<JobCard>;
+    return res.json() as Promise<JobCardChange>;
 }
 
-export async function cancelJobCard(id: string, req: CancelJobCardRequest): Promise<JobCard> {
-    const url = `${resolveBaseUrl()}/job-cards/${id}/cancel`;
+export async function cancelJobCard(id: string, req: CancelJobCardRequest): Promise<JobCardChange> {
+    const url = `${apiBase()}/job-cards/${id}/cancel`;
     const res = await fetch(url, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify(req),
     });
     if (!res.ok) throw new Error(`cancelJobCard failed: ${res.status}`);
-    return res.json() as Promise<JobCard>;
+    return res.json() as Promise<JobCardChange>;
 }
 
 export async function getFarmJobCards(
@@ -171,7 +186,7 @@ export async function getFarmJobCards(
     const params = new URLSearchParams();
     if (status) params.set('status', status);
     const qs = params.toString();
-    const url = `${resolveBaseUrl()}/farms/${farmId}/job-cards${qs ? `?${qs}` : ''}`;
+    const url = `${apiBase()}/farms/${farmId}/job-cards${qs ? `?${qs}` : ''}`;
     const res = await fetch(url, { headers: authHeaders() });
     // TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling R8) — this
     // was `return []`, and that one line manufactured the lie the whole task
@@ -191,7 +206,7 @@ export async function getFarmJobCards(
  * cards under that farm's scope (without it, only a person's OWN list can be read).
  */
 export async function getWorkerJobCards(userId: string, farmId?: string): Promise<JobCard[]> {
-    const url = `${resolveBaseUrl()}/workers/${userId}/job-cards${farmId ? `?farmId=${encodeURIComponent(farmId)}` : ''}`;
+    const url = `${apiBase()}/workers/${userId}/job-cards${farmId ? `?farmId=${encodeURIComponent(farmId)}` : ''}`;
     const res = await fetch(url, { headers: authHeaders() });
     // TASK 8 — same fabrication as `getFarmJobCards` above; see the note there.
     if (!res.ok) throw new Error(`getWorkerJobCards failed: ${res.status}`);
@@ -202,7 +217,7 @@ export async function getWorkerProfile(
     userId: string,
     farmId: string,
 ): Promise<WorkerProfileData> {
-    const url = `${resolveBaseUrl()}/workers/${userId}/profile?farmId=${farmId}`;
+    const url = `${apiBase()}/workers/${userId}/profile?farmId=${farmId}`;
     const res = await fetch(url, { headers: authHeaders() });
     if (!res.ok) throw new Error(`getWorkerProfile failed: ${res.status}`);
     return res.json() as Promise<WorkerProfileData>;

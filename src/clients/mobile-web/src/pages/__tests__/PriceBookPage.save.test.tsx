@@ -5,6 +5,9 @@
  * unit is still stored as `unit`). "दर बदला" fills the form from a rate and writes a NEW dated rate through
  * the same call — there is no in-place edit to call. A blank price is refused instead of being stored as
  * ₹ 0, and the page never claims the rate was kept (the payload is refused pending founder ruling D2).
+ *
+ * spec: plr-d10 lane F99 fix pass 1 (D-72) — the write controls are the platform admin's only: everyone else reads the
+ * list, with one line saying it is one list for every farm. The writing tests below run as the platform admin.
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -13,16 +16,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { RATES } from './financeFixtures';
 
-const h = vi.hoisted(() => ({ rates: [] as unknown[], create: vi.fn() }));
+const h = vi.hoisted(() => ({ rates: [] as unknown[], create: vi.fn(), platformAdmin: true }));
 
 vi.mock('../../features/finance/financeService', () => ({ financeService: { getPriceBook: () => h.rates } }));
 vi.mock('../../features/finance/financeCommandService', () => ({ financeCommandService: { createPriceBookItem: h.create } }));
+vi.mock('../../core/session/usePlatformAdmin', () => ({ usePlatformAdmin: () => h.platformAdmin }));
 
 import PriceBookPage from '../PriceBookPage';
 
 const type = (testId: string, value: string) => fireEvent.change(screen.getByTestId(testId), { target: { value } });
 
-beforeEach(() => { h.rates = RATES; });
+beforeEach(() => { h.rates = RATES; h.platformAdmin = true; });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('every rate is listed', () => {
@@ -119,6 +123,29 @@ describe('"दर बदला" writes a new dated rate through the same call', 
         expect(screen.getByText('नवीन दर')).toBeInTheDocument();
         expect(screen.getByTestId('price-item')).toHaveValue('');
         expect(h.create).not.toHaveBeenCalled();
+    });
+});
+
+describe('lane F99 fix pass 1 (D-72): only the platform admin sees the write controls', () => {
+    it('a farmer (not the platform admin) reads every rate, with no "दर बदला", no form and no "लवकरच" line', () => {
+        h.platformAdmin = false;
+        render(<PriceBookPage currentRoute="finance-price-book" onNavigate={vi.fn()} />);
+        expect(screen.getByTestId('price-row-pb1')).toHaveTextContent('फवारणी मजूर₹ 400 / दिवस');
+        expect(screen.getByTestId('price-row-pb2')).toBeInTheDocument();
+        expect(screen.queryByTestId('price-change-pb1')).toBeNull();
+        expect(screen.queryByText('दर बदला')).toBeNull();
+        expect(screen.queryByTestId('price-form')).toBeNull();
+        expect(screen.queryByTestId('price-save')).toBeNull();
+        expect(screen.queryByText('नवीन दर')).toBeNull();
+        expect(screen.getByTestId('price-read-only')).toHaveTextContent('हे दरपत्रक सगळ्या शेतांसाठी एकच आहे. ते फक्त श्रमसफल बदलू शकतं.');
+        expect(h.create).not.toHaveBeenCalled();
+    });
+
+    it('the platform admin sees the write controls and no read-only line', () => {
+        render(<PriceBookPage currentRoute="finance-price-book" onNavigate={vi.fn()} />);
+        expect(screen.getByTestId('price-change-pb1')).toBeInTheDocument();
+        expect(screen.getByTestId('price-form')).toBeInTheDocument();
+        expect(screen.queryByTestId('price-read-only')).toBeNull();
     });
 });
 

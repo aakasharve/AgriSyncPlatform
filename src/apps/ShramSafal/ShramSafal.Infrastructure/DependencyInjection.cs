@@ -470,6 +470,14 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.Privacy.Ports.IAccountErasureCheck,
             ShramSafal.Infrastructure.Privacy.IsolatedAccountErasureCheck>();
         services.AddScoped<IAiJobRepository, AiJobRepository>();
+        // spec: plr-d10 lane F99 fix pass 1 (review F-5) — the admin AI dashboard's cross-farm counts, through IAdminDbContextFactory.
+        services.AddScoped<IAdminAiJobRepositoryFactory, AdminAiJobRepositoryFactory>();
+
+        // spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — the ONE setting for how long an erasure request waits
+        // (whole days, 30 by default). The request answer, the list, the cancel and the worker all read this instance.
+        var erasureWaitDays = configuration.GetValue<int?>(ShramSafal.Application.Privacy.ErasureTiming.ConfigurationKey)
+            ?? ShramSafal.Application.Privacy.ErasureTiming.DefaultWaitDays;
+        services.AddSingleton(new ShramSafal.Application.Privacy.ErasureTiming(TimeSpan.FromDays(erasureWaitDays)));
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 
         // CEI Phase 3 §4.5 — EF Core-backed test-stack repositories.

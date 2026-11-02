@@ -530,6 +530,11 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
     {
     }
 
+    /// <summary>lane F99 fix pass 1 — routes the production host maps beside the module (Program.cs), for a subclass that needs them.</summary>
+    protected virtual void MapHostRoutes(WebApplication app)
+    {
+    }
+
     private async Task<WebApplication> BuildHostAsync(string appConn)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
@@ -555,6 +560,7 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
         app.UseAuthorization();
         app.UseMiddleware<TenantTransactionMiddleware>();
         app.MapShramSafalApi();
+        MapHostRoutes(app);
         await app.StartAsync();
         return app;
     }

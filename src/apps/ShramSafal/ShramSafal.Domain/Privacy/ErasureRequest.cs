@@ -3,8 +3,14 @@
 // Sub-phase 08.1 — DPDP §12 erasure request aggregate. Self-serve or
 // admin-on-behalf-of (OQ-2). Status FSM:
 //   Requested → InProgress → Completed
-//                       ├→ CompletedWithResidue
-//                       └→ Failed
+//       │               ├→ CompletedWithResidue
+//       │               └→ Failed
+//       └→ Cancelled (founder D-71: while it is still waiting)
+//
+// spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71, 2026-11-02: "option 2 not 7 days but 30 days") — a
+// request WAITS before anything is erased (ErasureTiming.WaitBeforeErasure, 30 days by default): the worker takes it only
+// once RequestedAtUtc + that wait has passed, and until the worker has taken it the person who asked may cancel it.
+// Once it has started (InProgress or later) it can no longer be cancelled.
 //
 // CompletedWithResidue: the database manifest ran and the row count is
 // real, but a named part of the erasure did not happen (today: the
@@ -52,6 +58,11 @@ public sealed class ErasureRequest
 
     public DateTime RequestedAtUtc { get; private set; }
 
+    /// <summary>
+    /// When the request ended: erased (<see cref="ErasureStatus.Completed"/> /
+    /// <see cref="ErasureStatus.CompletedWithResidue"/>), <see cref="ErasureStatus.Failed"/>, or — lane F99 fix pass 1
+    /// (D-71) — <see cref="ErasureStatus.Cancelled"/> (the time it was cancelled). Null while it waits or runs.
+    /// </summary>
     public DateTime? CompletedAtUtc { get; private set; }
 
     /// <summary>
@@ -114,6 +125,15 @@ public sealed class ErasureRequest
     /// behalf-of flows this is <see cref="OnBehalfOfUserId"/>.
     /// </summary>
     public Guid TargetUserId => OnBehalfOfUserId ?? RequestedByUserId;
+
+    /// <summary>
+    /// lane F99 fix pass 1 (D-71) — still waiting: nothing has been erased and the worker has not taken it. Only a
+    /// waiting request may be cancelled.
+    /// </summary>
+    public bool IsWaiting => Status == ErasureStatus.Requested;
+
+    /// <summary>When the worker may take this request: <see cref="RequestedAtUtc"/> plus the wait (D-71).</summary>
+    public DateTime ErasureStartsAtUtc(TimeSpan waitBeforeErasure) => RequestedAtUtc + waitBeforeErasure;
 
     public void MarkInProgress()
     {
@@ -261,4 +281,12 @@ public enum ErasureStatus
     /// </para>
     /// </summary>
     CompletedWithResidue = 4,
+
+    /// <summary>
+    /// spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — the person who asked cancelled it while it was still
+    /// waiting (Requested). NOTHING was erased. Terminal. Reachable only from <see cref="Requested"/>. Like 4, it needs no
+    /// migration (the column is an integer with no CHECK constraint). A cancelled request is not "an erasure asked for":
+    /// it no longer withholds the account's improvement permission or its voice from reviewers.
+    /// </summary>
+    Cancelled = 5,
 }

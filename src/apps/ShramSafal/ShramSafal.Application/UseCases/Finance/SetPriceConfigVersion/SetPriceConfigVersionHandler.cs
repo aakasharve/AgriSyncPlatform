@@ -1,6 +1,8 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
@@ -11,9 +13,20 @@ namespace ShramSafal.Application.UseCases.Finance.SetPriceConfigVersion;
 public sealed class SetPriceConfigVersionHandler(
     IShramSafalRepository repository,
     IIdGenerator idGenerator,
-    IClock clock)
+    IClock clock,
+    IEntitlementResolver adminResolver)
     : IHandler<SetPriceConfigVersionCommand, PriceConfigDto>
 {
+    /// <summary>A Platform organisation's Owner — whichever of his admin memberships is active (no org header needed).</summary>
+    private async Task<bool> IsPlatformAdminAsync(Guid userId, CancellationToken ct)
+    {
+        var admin = await adminResolver.ResolveAsync(new UserId(userId), activeOrgId: null, ct);
+        return admin.Scope is { IsPlatformAdmin: true }
+            || admin.Memberships.Any(m =>
+                m.OrganizationType == Domain.Organizations.OrganizationType.Platform
+                && m.OrganizationRole == Domain.Organizations.OrganizationRole.Owner);
+    }
+
     public async Task<Result<PriceConfigDto>> HandleAsync(SetPriceConfigVersionCommand command, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(command.ItemName) ||
@@ -26,6 +39,14 @@ public sealed class SetPriceConfigVersionHandler(
         if (command.PriceConfigId.HasValue && command.PriceConfigId.Value == Guid.Empty)
         {
             return Result.Failure<PriceConfigDto>(ShramSafalErrors.InvalidCommand);
+        }
+
+        // spec: plr-d10 lane F99 fix pass 1 (review F-4; orchestrator call D-72) — the price list is one list for every farm
+        // (every farmer's pull carries it), so only ShramSafal's platform admin (a Platform organisation's Owner) writes it.
+        // Here, in the handler, so the REST door and the push door obey one rule.
+        if (!await IsPlatformAdminAsync(command.CreatedByUserId, ct))
+        {
+            return Result.Failure<PriceConfigDto>(ShramSafalErrors.PriceListPlatformAdminOnly);
         }
 
         var config = Domain.Finance.PriceConfig.Create(

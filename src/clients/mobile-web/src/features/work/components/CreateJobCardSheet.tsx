@@ -101,10 +101,11 @@ const CreateJobCardSheet: React.FC<CreateJobCardSheetProps> = ({
                 plannedDate,
                 lineItems: lineItems.filter(item => item.activityType),
             };
-            const card = await createJobCard(req);
+            // lane F99 fix pass 1 — the server answers the new card's id, not the card.
+            const { jobCardId } = await createJobCard(req);
             onCreated();
             if (andAssign && onAssignAfterCreate) {
-                onAssignAfterCreate(card.id);
+                onAssignAfterCreate(jobCardId);
             }
             onClose();
         } catch (err) {
