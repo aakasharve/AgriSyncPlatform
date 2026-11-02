@@ -82,6 +82,14 @@ public sealed class AddCostEntryHandler(
             return Result.Failure<AddCostEntryResultDto>(outsidePlots);
         }
 
+        // fix pass 2 (N2) — and the crop season it names: a season on a plot not his is refused like the plot itself.
+        if (command.CropCycleId is { } namedCycle
+            && await Services.PlotScopeGate.RefuseCycleAsync(
+                repository, command.FarmId, namedCycle, command.CreatedByUserId, clock.UtcNow, ct) is { } outsideSeason)
+        {
+            return Result.Failure<AddCostEntryResultDto>(outsideSeason);
+        }
+
         // spec: pre-launch-repair L2b (R-1; founder D-41 phase A) — ONE stored entry per money entry id.
         // The phone derives the id from the entry's own source (a bill line, a log entry), so a double tap,
         // a retry under a new device id, a reopen of खरेदी or a recovery send all carry the SAME id.

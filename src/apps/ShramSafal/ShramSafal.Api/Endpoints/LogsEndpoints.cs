@@ -215,6 +215,13 @@ public static class LogsEndpoints
                 return Results.Forbid();
             }
 
+            // spec: plr-d10 lane MU-4 fix pass 2 (N1, §11.7) — an own-records seat reads only his own records' state, unless
+            // he takes हजेरी or confirms records (MU-3's rule: the review inbox and the people he acts on stay his).
+            if (!await OwnRecordsGate.MayReadRecordAsync(repository, log, callerUserId, clock.UtcNow, ct))
+            {
+                return Results.Forbid();
+            }
+
             var resolvedCallerRole = callerRole.Value;
 
             // spec: 2026-08-25-prod-cutover-waves — founder ruling 2026-08-27. This

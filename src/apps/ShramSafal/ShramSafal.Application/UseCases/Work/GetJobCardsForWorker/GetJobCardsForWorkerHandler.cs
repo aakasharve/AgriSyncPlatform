@@ -84,10 +84,11 @@ public sealed class GetJobCardsForWorkerHandler(IShramSafalRepository repository
                 : (await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, permitted.ToList(), ct))
                     .ToDictionary(kv => kv.Key, kv => FarmReadScope.Of(kv.Key, kv.Value, clock?.UtcNow ?? DateTime.UtcNow))
             : scopes;
+        // fix pass 2 (N1) — every card asks the pull's own task rule (FarmReadScope.MayReadTask): an own-records seat reads
+        // only the cards assigned to him, so another worker's cards (plots, days, work, pay) never reach him by this route.
         jobCards = jobCards
             .Where(j => placeScopes.GetValueOrDefault(j.FarmId.Value) is not { } s
-                || s.OwnRecordsOnly
-                || s.CoversPlot(j.PlotId))
+                || s.MayReadTask(query.CallerUserId.Value, j.PlotId, j.AssignedWorkerUserId?.Value))
             .ToList();
 
         var whole = jobCards.Select(j => j.ToJobCardDto()).ToList();

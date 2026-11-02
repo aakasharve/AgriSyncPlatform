@@ -83,8 +83,18 @@ public sealed class GetWorkerProfileHandler(
         if (!earningsShown)
         {
             var scopes = await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, farmIds.ToList(), ct);
-            earningsShown = farmIds.Count > 0
-                && farmIds.All(id => Services.FarmReadScope.Of(id, scopes.GetValueOrDefault(id), clock.UtcNow)?.SeeWages == true);
+            var readScopes = farmIds.ToDictionary(id => id, id => Services.FarmReadScope.Of(id, scopes.GetValueOrDefault(id), clock.UtcNow));
+
+            // spec: plr-d10 lane MU-4 fix pass 2 (N1, §11.7) — on a farm where he reads only his own records (the कामगार
+            // label or the स्वतःचं काम scope) nothing of another worker is his: not his counts, not his pay. None left =
+            // refused, as a withheld profile is (an installed phone shows its own "could not load", never a made-up number).
+            farmIds = farmIds.Where(id => readScopes[id] is not { OwnRecordsOnly: true }).ToList();
+            if (farmIds.Count == 0)
+            {
+                return Result.Failure<WorkerProfileDto>(ShramSafalErrors.Forbidden);
+            }
+
+            earningsShown = farmIds.All(id => readScopes[id]?.SeeWages == true);
         }
 
         // lane MU-3 fix 2 (N1) — a phone that would draw withheld earnings as "0k" (1.0.17) is refused, as edee6667

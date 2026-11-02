@@ -61,8 +61,13 @@ public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, I
         // keeps the people he acts on.
         var access = await repository.GetFarmAccessForUserAsync(query.FarmId.Value, query.CallerUserId.Value, ct);
         var now = clock.UtcNow;
-        var seesWages = FarmReadScope.Of(query.FarmId.Value, access, now)?.SeeWages == true;
-        if (GetLabourDataHandler.ResolveRegisterView(callerRole.Value, seesWages) == LabourRegisterView.OwnRow
+        var readScope = FarmReadScope.Of(query.FarmId.Value, access, now);
+        var seesWages = readScope?.SeeWages == true;
+        // spec: plr-d10 lane MU-4 fix pass 2 (N1) — an own-records seat (a मुकादम or सहमालक label on स्वतःचं काम too) reads the
+        // own-row view, as the labour page does (fix pass 1, H2): no crew names unless he takes हजेरी or confirms records.
+        var ownRow = readScope?.OwnRecordsOnly == true
+            || GetLabourDataHandler.ResolveRegisterView(callerRole.Value, seesWages) == LabourRegisterView.OwnRow;
+        if (ownRow
             && !FarmAccessPolicy.Holds(access, FarmAuthority.TakeAttendance, now)
             && !FarmAccessPolicy.Holds(access, FarmAuthority.ConfirmRecords, now))
         {

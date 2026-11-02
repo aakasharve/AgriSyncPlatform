@@ -40,7 +40,12 @@ public sealed record LabourDataDto(
     // someone from whom a record of that day was kept, and the day's records disagree. Only for a reader who may see every
     // record named and may take हजेरी (the holder always); never to the sender or to anyone a named record is kept from.
     // Clears when someone who sees the whole day rules it. Additive; absent/null = none (an older server).
-    IReadOnlyList<LabourDayToRuleDto>? DaysToRule = null);
+    IReadOnlyList<LabourDayToRuleDto>? DaysToRule = null,
+    // spec: plr-d10 lane MU-4 fix pass 2 (M1 label; D-26, design §11.6) — true when this reader covers CHOSEN plots: every
+    // money figure on the page (paid, wages, owed, work done, per person, the home cards) counts his plots' job cards,
+    // payouts and records only, so the phone labels them "तुमच्या प्लॉटचे". हजेरी itself stays the farm-day's (D-70; no
+    // money on the page comes from it). Additive: absent/false = the whole farm's (an older server: as before).
+    bool ScopedToPlots = false);
 
 /// <summary>spec: plr-d10 lane PRV fix pass 3 (M-B) — one person's day that needs the reader's ruling. No record named.</summary>
 public sealed record LabourDayToRuleDto(Guid FieldOperatorId, DateOnly WorkDate);

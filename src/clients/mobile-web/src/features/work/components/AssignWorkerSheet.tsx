@@ -12,6 +12,16 @@ import type { AssignWorkerRequest } from '../data/jobCardsClient';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { errorTextIn } from '../../../shared/names/namesIn';
+import { JobCardRefusal, PLOT_SCOPE_REFUSAL } from '../data/jobCardsClient';
+
+/**
+ * lane MU-4 fix pass 2 (N4) — the owner tried to give a task to someone whose plots do not include its plot. Said as
+ * ShramSafal's rule, in one language at a time; never pointing at anyone. PROPOSED (Marathi) / PROPOSED (English).
+ */
+const ASSIGN_OUTSIDE_PLOTS = {
+    mr: 'हा प्लॉट या व्यक्तीच्या प्लॉटमध्ये नाही, म्हणून हे काम त्यांना देता आलं नाही.',
+    en: "This plot is not one of this person's plots, so the task could not be given to them.",
+} as const;
 
 interface FarmMember {
     userId: string;
@@ -61,7 +71,9 @@ const AssignWorkerSheet: React.FC<AssignWorkerSheetProps> = ({
         try {
             await onAssigned({ workerUserId: selectedUserId });
         } catch (err) {
-            setError(errorTextIn(err, language));
+            setError(err instanceof JobCardRefusal && err.code === PLOT_SCOPE_REFUSAL
+                ? ASSIGN_OUTSIDE_PLOTS[language === 'en' ? 'en' : 'mr']
+                : errorTextIn(err, language));
             setIsSaving(false);
         }
     };

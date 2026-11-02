@@ -78,6 +78,19 @@ public sealed class GetWorkerReputationHandler(
 
         var permitted = access.PermittedFarmIds.ToHashSet();
 
+        // spec: plr-d10 lane MU-4 fix pass 2 (N1, §11.7) — on a farm where he reads only his own records, the farm's word
+        // about another worker and that worker's counts are not his. None left = refused (the same answer as no shared farm).
+        if (query.CallerUserId.Value != query.WorkerUserId.Value)
+        {
+            var accesses = await repository.GetFarmAccessesForUserAsync(query.CallerUserId.Value, permitted.ToList(), ct);
+            permitted.RemoveWhere(id => Services.FarmReadScope.Of(id, accesses.GetValueOrDefault(id), DateTime.UtcNow) is { OwnRecordsOnly: true });
+            if (permitted.Count == 0)
+            {
+                return Result.Failure<WorkerReputationDto>(ShramSafalErrors.Forbidden);
+            }
+        }
+
+
         // TIER 2 — the employers' own words, each still carrying the farm that wrote it.
         //
         // An empty list here is SILENCE, not a bad review and not a zero. Nothing writes
@@ -102,7 +115,7 @@ public sealed class GetWorkerReputationHandler(
         // it would be the worst possible thing to make portable.
         var jobCards = await repository.GetJobCardsForWorkerAsync(query.WorkerUserId, ct);
         var derived = WorkerDerivedCounts.FromJobCards(
-            jobCards, query.WorkerUserId, access.PermittedFarmIds);
+            jobCards, query.WorkerUserId, permitted.ToList());
 
         return Result.Success(new WorkerReputationDto(
             WorkerUserId: query.WorkerUserId.Value,

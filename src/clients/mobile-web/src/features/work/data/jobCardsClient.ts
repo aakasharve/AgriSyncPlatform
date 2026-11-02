@@ -82,6 +82,26 @@ export async function createJobCard(req: CreateJobCardRequest): Promise<JobCard>
     return res.json() as Promise<JobCard>;
 }
 
+/** lane MU-4 fix pass 2 (N4) — the plot rule's refusal code, as the server sends it in a 403's body. */
+export const PLOT_SCOPE_REFUSAL = 'ShramSafal.PlotScope.Forbidden';
+
+/** lane MU-4 fix pass 2 (N4) — a refusal the server explained by its code (read from the body of the answer). */
+export class JobCardRefusal extends Error {
+    constructor(public readonly code: string, status: number) {
+        super(`job card refused: ${status} ${code}`);
+        this.name = 'JobCardRefusal';
+    }
+}
+
+async function refusalCodeOf(res: Response): Promise<string | null> {
+    try {
+        const body = (await res.json()) as { error?: unknown } | null;
+        return typeof body?.error === 'string' ? body.error : null;
+    } catch {
+        return null; // a body that is not JSON (a bare 403): no code to read
+    }
+}
+
 export async function assignJobCard(id: string, req: AssignWorkerRequest): Promise<JobCard> {
     const url = `${resolveBaseUrl()}/job-cards/${id}/assign`;
     const res = await fetch(url, {
@@ -89,7 +109,11 @@ export async function assignJobCard(id: string, req: AssignWorkerRequest): Promi
         headers: authHeaders(),
         body: JSON.stringify(req),
     });
-    if (!res.ok) throw new Error(`assignJobCard failed: ${res.status}`);
+    if (!res.ok) {
+        const code = await refusalCodeOf(res);
+        if (code) throw new JobCardRefusal(code, res.status);
+        throw new Error(`assignJobCard failed: ${res.status}`);
+    }
     return res.json() as Promise<JobCard>;
 }
 

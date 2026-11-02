@@ -167,3 +167,16 @@ describe('the plot row on a joining request', () => {
         expect(approveMember.mock.calls[0][2]).toEqual({ role: 'Mukadam', grantLabour: true, plotScope: 'ChosenPlots', plotIds: [P1] });
     });
 });
+
+describe('lane MU-4 fix pass 2 (N7): a joining request never reads "सर्व प्लॉट" for what a कामगार would get as his own work', () => {
+    it('choosing every plot on the request keeps the preset line: काम सांगणे is his own work, काम + हजेरी every plot', async () => {
+        render(<Harness />);
+        const card = await screen.findByTestId('join-request-sunil');
+        fireEvent.click(within(card).getByTestId('plot-scope-row-sunil'));
+        fireEvent.click(within(card).getByTestId('plot-scope-choice-AllPlots-sunil'));
+        fireEvent.click(within(card).getByTestId('plot-scope-save-sunil'));
+        const summary = within(card).getByTestId('plot-scope-summary-sunil').textContent ?? '';
+        expect(summary).not.toBe('सर्व प्लॉट');
+        expect(summary).toContain('काम सांगणे: स्वतःचं काम');
+    });
+});

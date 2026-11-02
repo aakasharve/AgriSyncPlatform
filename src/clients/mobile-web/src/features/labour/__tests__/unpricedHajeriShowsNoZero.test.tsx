@@ -24,6 +24,8 @@ import type { DailyLog, LedgerDefaults } from '../../../types';
 
 vi.mock('../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'mr', setLanguage: () => { }, t: (k: string) => k }),
+    // lane MU-4 fix pass 2 (M1 label) — the hub reads the language for its "तुमच्या प्लॉटचे" line.
+    useOptionalLanguage: () => ({ language: 'mr', setLanguage: () => { }, t: (k: string) => k }),
 }));
 
 // Phase 4 tsc fix — this used to read `LABOUR_MOCK.ledgerDefaults`, a member

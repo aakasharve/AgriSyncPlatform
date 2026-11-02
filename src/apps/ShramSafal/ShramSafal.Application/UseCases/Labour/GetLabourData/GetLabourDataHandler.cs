@@ -829,7 +829,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 .Select(l => l.Id.ToString())
                 .ToHashSet()
             : null;
-        return Result.Success(ApplyRegisterView(
+        var projected = ApplyRegisterView(
             built,
             registerView,
             narrowToCaller ? query.CallerUserId.Value.ToString() : null,
@@ -845,7 +845,10 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 resolvedCallerRole, hasConfirmAuthority),
             // lane MU-3 fix 1 (F4): crew totals to a seat that sees money (a कामगार narrowed to his row never).
             seesMoney: !narrowToCaller && registerView != LabourRegisterView.OwnRow
-                && FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc)?.SeeMoney == true));
+                && FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc)?.SeeMoney == true);
+
+        // spec: plr-d10 lane MU-4 fix pass 2 (M1 label) — his money figures are his plots' only: said, never left to guess.
+        return Result.Success(projected with { ScopedToPlots = callerReadScope is { PlotIds: not null, IsPrimaryAccountHolder: false } });
     }
 
     /// <summary>

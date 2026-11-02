@@ -30,7 +30,8 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// his farm again — a WIDENING of what his phone receives on the next pull. The audit rows that recorded each change
     /// (MemberPlotScopeChanged: who, when, from and to) stay. Rolling back past this migration after a holder has used it is
     /// a founder decision. It also drops the four move columns: a later pull no longer tells a narrowed phone that a record
-    /// moved off its plots (the record itself, its place and its history are untouched).</para>
+    /// moved off its plots, and each record's <c>former_plot_ids</c> (the plots it stood on before its moves) is LOST — the
+    /// record itself, its place and its <c>LogMoved</c> audit rows are untouched.</para>
     /// </summary>
     public partial class AddMembershipPlotScope : Migration
     {

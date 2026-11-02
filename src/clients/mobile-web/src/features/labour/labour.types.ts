@@ -301,6 +301,11 @@ export interface LabourData {
      * record of the day and may take हजेरी (the holder always). Absent = none.
      */
     daysToRule?: { fieldOperatorId: string; workDate: string }[];
+    /**
+     * lane MU-4 fix pass 2 (M1 label; D-26, design §11.6) — the server says this reader covers CHOSEN plots: every money
+     * figure on the page is his plots' only, so it is labelled "तुमच्या प्लॉटचे". Absent/false = the whole farm's.
+     */
+    scopedToPlots?: boolean;
     review: ReviewItem[];
     /**
      * Attendance draft for "today" (a plot's gang). Task 5 (founder Global

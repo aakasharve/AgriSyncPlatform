@@ -51,6 +51,12 @@ public sealed class CreateJobCardHandler(
                 repository, command.FarmId.Value, command.PlotId, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsidePlots)
             return Result.Failure<CreateJobCardResult>(outsidePlots);
 
+        // fix pass 2 (N2) — and the crop season it names, the same way.
+        if (command.CropCycleId is { } namedCycle
+            && await Services.PlotScopeGate.RefuseCycleAsync(
+                repository, command.FarmId.Value, namedCycle, command.CallerUserId.Value, clock.UtcNow, ct) is { } outsideSeason)
+            return Result.Failure<CreateJobCardResult>(outsideSeason);
+
         // 4. Map DTOs to domain line items.
         List<JobCardLineItem> lineItems;
         try

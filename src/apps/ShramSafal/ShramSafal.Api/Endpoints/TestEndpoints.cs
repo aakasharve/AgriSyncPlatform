@@ -96,10 +96,29 @@ public static class TestEndpoints
 
             // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots schedules tests on his plots only (asked
             // under his own user scope; the handler answers a count, so the refusal is made here, visibly: 403).
+            // fix pass 2 (N2) — first the check plan generation makes before it schedules the same due dates (a member of
+            // the farm), then the season: it must be this plot's season on this farm, and on a plot of his.
             var outsidePlots = await userScope.RunForCallerAsync(
                 actorUserId,
-                token => ShramSafal.Application.Services.PlotScopeGate.RefuseAsync(
-                    repository, request.FarmId, request.PlotId, actorUserId, clock.UtcNow, token),
+                async token =>
+                {
+                    if (!await repository.IsUserMemberOfFarmAsync(request.FarmId, actorUserId, token))
+                    {
+                        return ShramSafal.Domain.Common.ShramSafalErrors.Forbidden;
+                    }
+
+                    if (await repository.GetCropCycleByIdAsync(request.CropCycleId, token) is not { } season
+                        || (Guid)season.FarmId != request.FarmId
+                        || season.PlotId != request.PlotId)
+                    {
+                        return ShramSafal.Domain.Common.ShramSafalErrors.InvalidCommand;
+                    }
+
+                    return await ShramSafal.Application.Services.PlotScopeGate.RefuseAsync(
+                            repository, request.FarmId, request.PlotId, actorUserId, clock.UtcNow, token)
+                        ?? await ShramSafal.Application.Services.PlotScopeGate.RefuseCycleAsync(
+                            repository, request.FarmId, request.CropCycleId, actorUserId, clock.UtcNow, token);
+                },
                 ct);
             if (outsidePlots is { } refused)
             {
@@ -415,6 +434,12 @@ public static class TestEndpoints
 
     private static IResult ToErrorResult(Error error)
     {
+        // lane MU-4 fix pass 2 (N4) — the plot rule's refusal carries its code and words.
+        if (PlotRefusalResult.For(error) is { } plotRefusal)
+        {
+            return plotRefusal;
+        }
+
         if (error.Code.EndsWith("RoleNotAllowed", StringComparison.Ordinal) ||
             error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {

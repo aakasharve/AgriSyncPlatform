@@ -62,7 +62,7 @@ export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, bus
             {via && <p className="m-0 text-[13px] font-bold text-stone-600">{via}</p>}
             {farmPlots && (
                 <PlotScopePicker memberId={row.userId} value={plots ?? defaultPlotScopeFor('work')} farmPlots={farmPlots} busy={busy}
-                    summary={plots ? undefined : copy.presetDefaults} onSave={setPlots} />
+                    summary={!plots || plots.plotScope === 'AllPlots' ? copy.presetDefaults : undefined} onSave={setPlots} />
             )}
             <p className="m-0 text-[14px] font-extrabold text-stone-800">{TEAM_COPY.quick}</p>
             <div className="grid grid-cols-1 gap-2">

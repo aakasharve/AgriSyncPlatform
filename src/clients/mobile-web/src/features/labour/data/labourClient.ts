@@ -223,6 +223,8 @@ export interface LabourDataDto {
     home: { rojandariStated: number | null; ukteAgreed: number | null; onFarmToday: number | null; rojandariToday: number | null; ukteToday: number | null; };
     // lane PRV fix pass 3 (M-B) — the days that need THIS reader's ruling (additive; absent/null = none, an older server).
     daysToRule?: Array<{ fieldOperatorId: string; workDate: string }> | null;
+    // lane MU-4 fix pass 2 (M1 label) — his money figures are his plots' only (additive; absent = the whole farm's).
+    scopedToPlots?: boolean | null;
 }
 
 /**
@@ -424,6 +426,7 @@ export async function fetchLabourData(
         // lane PRV fix pass 3 (M-B) — only well-formed days; the server decides who is told.
         daysToRule: (dto.daysToRule ?? []).filter((d) => typeof d?.fieldOperatorId === 'string' && typeof d?.workDate === 'string')
             .map((d) => ({ fieldOperatorId: d.fieldOperatorId, workDate: d.workDate })),
+        scopedToPlots: dto.scopedToPlots === true,
         review: dto.review.map(mapReview),
         attendance: {
             plot: dto.attendance.plot,

@@ -58,6 +58,8 @@ import { RuleNotCountedNote } from '../../recordAudience/RuleNotCountedNote';
 // is always on (`alltime`). Both come from the same closed, founder-approved
 // table so neither can drift into a word nobody approved.
 import { LABOUR_WINDOW_LABELS, type LabourWindow } from '../labourWindow';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { plotScopeCopy } from '../../profile/team/plotScopeCopy';
 
 const SHOW_ADVANCE_STAT = false;
 
@@ -118,6 +120,9 @@ const MONEY_EPSILON = 0.005;
 
 const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow, onTimeWindowChange, farmId }) => {
     const d = data.dashboard;
+    // lane MU-4 fix pass 2 (M1 label; D-26, §11.6) — on a seat with chosen plots the figures are his plots' only: said.
+    const language = useOptionalLanguage()?.language;
+    const plotsOnly = data.scopedToPlots === true ? plotScopeCopy(language).totalsLabel : null;
     // See the money card's own note below for what each clause is defending.
     // Phase 4 (D-H8) — `d.money === null` means the whole card was WITHHELD
     // by view; no bar can be drawn from a card that was not sent.
@@ -181,6 +186,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
               */}
             <GroupLabel>
                 <span data-testid="labour-window-heading">{LABOUR_WINDOW_LABELS[timeWindow]}</span>
+                {plotsOnly && <span data-testid="labour-plots-only"> · {plotsOnly}</span>}
             </GroupLabel>
             <div data-testid="labour-stat-grid" className="grid grid-cols-2 gap-2.5">
                 {/* TASK 6 (spec: 2026-08-28-labour-v2-release-1, P4) — `d.manDays`
@@ -349,7 +355,7 @@ const WeeklyDashboard: React.FC<Props> = ({ data, onReview, onLedger, timeWindow
               * omitted outright: the same "leave the gap" treatment the
               * बाकी देणं stat tile above already gets, and no new copy.
               */}
-            <GroupLabel>पैसे</GroupLabel>
+            <GroupLabel>पैसे{plotsOnly && <span data-testid="labour-money-plots-only"> · {plotsOnly}</span>}</GroupLabel>
             <div data-testid="labour-money-card" className="rounded-[20px] border border-slate-100 bg-white p-3.5 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                 {/* Phase 4 (D-H8) — a `null` money card was WITHHELD by view
                   * (मुकादम/worker projection): the whole card body is `—`,

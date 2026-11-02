@@ -159,6 +159,13 @@ public sealed class ReviseLogContentHandler(
         var editorScope = current is null || isCreator
             ? null
             : await FarmReadGate.ScopeAsync(repository, farmId, command.ActorUserId, now, ct);
+        // spec: plr-d10 lane MU-4 fix pass 2 (N5) — a record that also stands on plots outside his chosen plots reached him
+        // narrowed to his plots and WITHOUT its money (ReadScopeProjection.Record): the server's own rule, never only the
+        // phone's flag, so his edit carries the record's amounts and money words, exactly as for money kept from him.
+        if (editorScope?.PlotIds is { } hisPlots && log.PlotIds.Count > 0 && !log.PlotIds.All(hisPlots.Contains))
+        {
+            editorScope = RecordMoneyAccess.WithoutMoney(editorScope);
+        }
         // lane PRV fix pass 2 (D-69) — or when the record's own money is kept from him: his copy came without its amounts.
         var moneyKeptFromEditor = current is not null && !isCreator
             && await RecordMoneyAccess.MoneyHiddenFromAsync(repository, log, command.ActorUserId, now, ct);

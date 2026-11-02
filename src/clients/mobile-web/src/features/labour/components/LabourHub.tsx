@@ -27,6 +27,8 @@ import { generateDayWorkSummary } from '../../analysis/dayWorkSummary';
 import { formatCurrency } from '../../../shared/utils/currency';
 import { statedLabourMoney } from '../../../domain/logs/labourMoney';
 import { GroupLabel, PersonRow, HelpNote, EmptyState, Avatar } from './LabourUiKit';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { plotScopeCopy } from '../../profile/team/plotScopeCopy';
 import { toMr } from './LabourDataPoints';
 import type { LabourAnchor } from '../labourAnchor';
 import { NO_ANCHOR_TEST_IDS, serverStatesLabourToday } from '../labourAnchor';
@@ -343,6 +345,9 @@ const LabourJustLogged: React.FC<{ logs: DailyLog[]; defaults: LedgerDefaults }>
 };
 
 const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAttendance, onNoWorkAttendance, onDashboard, onLedger, onReview, onGoToLog, onInviteWorker, anchor, history, ledgerDefaults, lastLabourLogIds, rosterPeople, onOpenCell, onToast, ownAttendanceComingSoon }) => {
+    // lane MU-4 fix pass 2 (M1 label; D-26, §11.6) — on a seat with chosen plots these money cards are his plots' only.
+    const plotsLanguage = useOptionalLanguage()?.language;
+    const plotsOnly = data.scopedToPlots === true ? plotScopeCopy(plotsLanguage).totalsLabel : null;
     const justLoggedLogs = (history && ledgerDefaults && lastLabourLogIds && lastLabourLogIds.length > 0)
         ? lastLabourLogIds
             .map((id) => history.find((log) => log.id === id))
@@ -499,6 +504,9 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
             one figure. Owner view only: D-H8 keeps money off every non-owner
             surface, and the server has already stripped it — this gate only
             spares the owner-shaped empty shells. Blanks are '—', never ₹0. */}
+        {data.view === 'owner' && plotsOnly && (
+            <p className="m-0 px-1 text-[13px] font-bold text-stone-500" data-testid="labour-home-plots-only">{plotsOnly}</p>
+        )}
         {data.view === 'owner' && (
             <div className="grid grid-cols-2 gap-2.5">
                 <div className="flex min-w-0 flex-col rounded-[20px] border border-white/70 bg-white/85 p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
