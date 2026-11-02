@@ -35,6 +35,8 @@ export interface DataRightsRequestRow {
     mayCancel?: boolean;
     /** False when someone else (ShramSafal) asked for it on his behalf. */
     askedByMe?: boolean;
+    /** fix pass 2 (N-6): false when the reader filed it for SOMEONE ELSE's data (the platform admin's own list). */
+    aboutMe?: boolean;
 }
 
 interface Props {
@@ -91,10 +93,12 @@ const RecentRequestsList: React.FC<Props> = ({ requests, locale, onCancel, cance
                         >
                             <div>
                                 <p className="text-sm font-bold text-stone-800">
-                                    {tDataRights(locale, r.kind === 'erasure' ? 'recent.kindErasure' : 'recent.kindExport')}
+                                    {tDataRights(locale, r.kind !== 'erasure'
+                                        ? 'recent.kindExport'
+                                        : r.aboutMe === false ? 'recent.kindErasureForOther' : 'recent.kindErasure')}
                                 </p>
                                 <p className="text-xs text-stone-500" data-testid={`recent-request-status-${r.id}`}>{statusFor(r)}</p>
-                                {r.askedByMe === false && (
+                                {r.askedByMe === false && r.aboutMe !== false && (
                                     <p className="text-xs text-stone-500">{tDataRights(locale, 'recent.askedOnBehalf')}</p>
                                 )}
                             </div>

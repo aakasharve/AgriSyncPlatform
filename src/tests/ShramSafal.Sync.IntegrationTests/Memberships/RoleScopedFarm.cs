@@ -525,6 +525,21 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
     }
 
+    /// <summary>
+    /// lane F99 fix pass 2 — a person holding one organisation seat: by default an active Owner of an active Platform
+    /// organisation, i.e. ShramSafal's platform admin (type 0 = Platform, 1 = FPO; role 0 = Owner, 4 = Viewer).
+    /// </summary>
+    protected Task SeedPlatformOwnerAsync(
+        Guid user, Guid org, int orgType = 0, int role = 0, bool orgActive = true, string phone = "9300000992")
+        => ExecOnSuperuserAsync("""
+            INSERT INTO public.users ("Id", phone, display_name, password_hash, credential_created_at_utc, created_at_utc, is_active, auth_mode, preferred_language)
+            VALUES (@user, @phone, 'शेतसाथी-प्रशासक', 'x', NOW(), NOW(), TRUE, 0, 'mr')
+            ON CONFLICT DO NOTHING;
+            INSERT INTO ssf.organizations (id, name, type, created_at_utc, is_active) VALUES (@org, 'ShramSafal', @type, NOW(), @active);
+            INSERT INTO ssf.organization_memberships (id, organization_id, user_id, role, added_by_user_id, joined_at_utc, is_active)
+            VALUES (gen_random_uuid(), @org, @user, @role, @user, NOW(), TRUE);
+            """, ("user", user), ("org", org), ("type", orgType), ("role", role), ("active", orgActive), ("phone", phone));
+
     /// <summary>lane F99 — what the production host registers outside the module (Program.cs), for a subclass that needs it.</summary>
     protected virtual void AddHostServices(IServiceCollection services)
     {

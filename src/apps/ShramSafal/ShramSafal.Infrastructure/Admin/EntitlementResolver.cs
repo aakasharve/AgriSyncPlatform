@@ -108,6 +108,20 @@ internal sealed class EntitlementResolver(
         return ResolveResult.Resolved(scope, memberships);
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// lane F99 fix pass 2 (review N-8): the same seats <see cref="ResolveAsync"/> reads (active seat, active organisation),
+    /// asked directly and without an analytics event.
+    /// </remarks>
+    public async Task<bool> IsPlatformOwnerAsync(UserId userId, CancellationToken ct)
+        => await (
+            from m in db.OrganizationMemberships
+            join o in db.Organizations on m.OrganizationId equals o.Id
+            where m.UserId == userId && m.IsActive && o.IsActive
+                && o.Type == OrganizationType.Platform && m.Role == OrganizationRole.Owner
+            select m.Id)
+            .AnyAsync(ct);
+
     private Task EmitAsync(string eventType, UserId userId, object props, CancellationToken ct)
         => analytics.EmitAsync(new AnalyticsEvent(
                 EventId: Guid.NewGuid(),

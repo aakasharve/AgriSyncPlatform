@@ -83,9 +83,44 @@ describe('after he asks: the day erasure starts, and his waiting request with a 
         const day = formatDataRightsDate('mr-IN', STARTS);
         expect(day).not.toBe('');
         expect(await screen.findByTestId('erasure-success-sla')).toHaveTextContent(`${day} रोजी मिटवणे सुरू होईल`);
-        expect(await screen.findByTestId('recent-request-status-r-new')).toHaveTextContent(`थांबलेली — ${day} रोजी मिटवणे सुरू होईल`);
+        expect(await screen.findByTestId('recent-request-status-r-new')).toHaveTextContent(`प्रतीक्षेत — ${day} रोजी मिटवणे सुरू होईल`);
         expect(screen.getByTestId('recent-request-r-new')).toHaveTextContent('माहिती मिटवणे');
         expect(screen.getByTestId('recent-request-cancel-r-new')).toHaveTextContent('विनंती रद्द करा');
+    });
+});
+
+describe('lane F99 fix pass 2 (N-1): while his request waits, the screen shows it instead of a new erase button', () => {
+    it('his waiting request, its date and "विनंती रद्द करा" — and no erase button to make a second one', async () => {
+        list = [waiting('r-1')];
+        render(<ErasureRequestScreen forceLocale="mr-IN" />);
+        const day = formatDataRightsDate('mr-IN', STARTS);
+        expect(await screen.findByTestId('erasure-waiting')).toHaveTextContent(
+            `तुमची माहिती मिटवण्याची विनंती प्रतीक्षेत आहे. ${day} रोजी मिटवणे सुरू होईल. तोपर्यंत तुम्ही ती रद्द करू शकता.`);
+        expect(screen.queryByTestId('erasure-open-confirm')).toBeNull();
+
+        // Cancelled from there: nothing is erased, and the erase button is back.
+        fireEvent.click(screen.getByTestId('erasure-waiting-cancel'));
+        await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/shramsafal/me/erasure/r-1/cancel', expect.objectContaining({ method: 'POST' })));
+        expect(await screen.findByTestId('erasure-notice-cancelDone')).toBeInTheDocument();
+        expect(await screen.findByTestId('erasure-open-confirm')).toBeInTheDocument();
+        expect(screen.queryByTestId('erasure-waiting')).toBeNull();
+    });
+
+    it('a request he filed for someone else (the admin) never hides his own erase button, and is not called "erase my data"', async () => {
+        list = [waiting('r-9', { aboutMe: false, askedByMe: true })];
+        render(<ErasureRequestScreen forceLocale="en-IN" />);
+        expect(await screen.findByTestId('recent-request-r-9')).toHaveTextContent("Erasing someone else's data (filed by you)");
+        expect(screen.getByTestId('recent-request-r-9')).not.toHaveTextContent('Erase my data');
+        expect(screen.getByTestId('erasure-open-confirm')).toBeInTheDocument();
+        expect(screen.queryByTestId('erasure-waiting')).toBeNull();
+    });
+
+    it('N-6: a request ShramSafal filed on his behalf can be stopped by him', async () => {
+        list = [waiting('r-8', { askedByMe: false, mayCancel: true })];
+        render(<ErasureRequestScreen forceLocale="en-IN" />);
+        expect(await screen.findByTestId('recent-request-r-8')).toHaveTextContent('Asked on your behalf by ShramSafal');
+        expect(screen.getByTestId('recent-request-cancel-r-8')).toBeInTheDocument();
+        expect(screen.getByTestId('erasure-waiting-cancel')).toBeInTheDocument();
     });
 });
 
@@ -111,9 +146,9 @@ describe('the cancel action', () => {
     });
 
     it('no cancel action where the server says he may not cancel (asked on his behalf, or no longer waiting)', async () => {
-        list = [waiting('r-2', { mayCancel: false, askedByMe: false }), waiting('r-3', { status: 'InProgress', mayCancel: false })];
+        list = [waiting('r-2', { mayCancel: false, askedByMe: false, aboutMe: false }), waiting('r-3', { status: 'InProgress', mayCancel: false })];
         render(<ErasureRequestScreen forceLocale="en-IN" />);
-        expect(await screen.findByTestId('recent-request-r-2')).toHaveTextContent('Asked on your behalf by ShramSafal');
+        expect(await screen.findByTestId('recent-request-r-2')).toHaveTextContent("Erasing someone else's data (filed by you)");
         expect(screen.queryByTestId('recent-request-cancel-r-2')).toBeNull();
         expect(screen.getByTestId('recent-request-status-r-3')).toHaveTextContent('In progress');
         expect(screen.queryByTestId('recent-request-cancel-r-3')).toBeNull();

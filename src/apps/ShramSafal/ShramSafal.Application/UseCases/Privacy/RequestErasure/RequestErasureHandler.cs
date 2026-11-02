@@ -33,6 +33,20 @@ public sealed class RequestErasureHandler(
             return Result.Failure<RequestErasureResult>(ShramSafalErrors.InvalidCommand);
         }
 
+        // spec: plr-d10 lane F99 fix pass 2 (review N-1) — ONE waiting request per person. While a request for this person
+        // (whoever filed it: he himself, the platform admin on his behalf, an installed 1.0.17) still waits, asking again
+        // answers THAT request and its date: nothing new is made and the 30 days do not restart. So "cancel" always ends
+        // the only thing that would erase him. A cancelled or finished request does not count.
+        var targetUserId = command.OnBehalfOfUserId ?? command.RequestedByUserId;
+        if (await repository.GetWaitingErasureRequestForAsync(targetUserId, ct).ConfigureAwait(false) is { } waiting)
+        {
+            return Result.Success(new RequestErasureResult(
+                RequestId: waiting.Id,
+                RequestedAtUtc: waiting.RequestedAtUtc,
+                ErasureStartsAtUtc: timing.ErasureStartsAtUtc(waiting),
+                AlreadyWaiting: true));
+        }
+
         var nowUtc = clock.GetUtcNow().UtcDateTime;
         var request = ErasureRequest.Submit(
             requestedByUserId: command.RequestedByUserId,

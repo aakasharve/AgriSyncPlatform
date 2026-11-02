@@ -484,7 +484,14 @@ public sealed class ErasureWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("ErasureWorker started.");
+        // lane F99 fix pass 2 (review N-5): the wait this worker runs with, said once at start-up.
+        using (var startScope = scopeFactory.CreateScope())
+        {
+            var timing = startScope.ServiceProvider.GetService<ErasureTiming>() ?? new ErasureTiming();
+            logger.LogInformation(
+                "ErasureWorker started. A request waits {WaitDays} days before anything is erased ({Setting}).",
+                timing.WaitBeforeErasure.TotalDays, ErasureTiming.ConfigurationKey);
+        }
 
         while (!stoppingToken.IsCancellationRequested)
         {

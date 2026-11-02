@@ -9,10 +9,15 @@
  *
  * spec: plr-d10 lane F99 fix pass 1 (F100, row 15) — wired to the server's real route; no CSV (the server has none) and no
  * template or resolved-warning filter (it takes a period only).
+ *
+ * spec: plr-d10 lane F99 fix pass 2 (review N-7) — the whole page and its period sheet speak his language, Marathi or
+ * English, never both (`i18n/serviceProofTranslations.ts`); the refusal is ShramSafal's rule. No arrow-glyph buttons.
  */
 
 import React, { useState } from 'react';
 import { useFarmContext } from '../../../core/session/FarmContext';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { SERVICE_PROOF_WORDS, toServiceProofLang } from '../../../i18n/serviceProofTranslations';
 import ServiceProofFilterSheet from '../components/ServiceProofFilterSheet';
 import { generateServiceProof, type ServiceProofParams } from '../data/serviceProofClient';
 import type { AppRoute } from '../../../domain/types/farm.types';
@@ -31,6 +36,8 @@ interface RecentExport {
 
 const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
     const { currentFarm } = useFarmContext();
+    const lang = toServiceProofLang(useOptionalLanguage()?.language);
+    const w = SERVICE_PROOF_WORDS[lang];
     const [showFilterSheet, setShowFilterSheet] = useState(false);
     const [filterSummary, setFilterSummary] = useState<{
         fromDate: string;
@@ -50,11 +57,8 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
     if (!canAccess) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
-                <p style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }} className="text-base font-semibold text-stone-700">
-                    ही सुविधा उपलब्ध नाही
-                </p>
-                <p style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-sm text-stone-400 mt-1">
-                    Service proof is available to Agronomist, Consultant, and Primary Owner only.
+                <p className="text-base font-semibold text-stone-700" data-testid="service-proof-not-for-seat">
+                    {w.notForThisSeat}
                 </p>
             </div>
         );
@@ -75,12 +79,11 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
         setIsGenerating(false);
 
         if (result.kind === 'refused') {
-            // PROPOSED words (lane F99 fix pass 1): the server's rule, said as a refusal, not as a connection failure.
-            setErrorMsg('This farm\'s report goes only to someone who sees the farm\'s money and records.');
+            setErrorMsg(w.refused);
             return;
         }
         if (result.kind === 'failed') {
-            setErrorMsg('Could not generate export. Please check your connection.');
+            setErrorMsg(w.failed);
             return;
         }
 
@@ -99,7 +102,7 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
     };
 
     return (
-        <div className="flex flex-col min-h-screen bg-stone-50 pb-24">
+        <div className="flex flex-col min-h-screen bg-stone-50 pb-24" data-testid="service-proof-page">
             {/* Header */}
             <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-stone-100 px-4 pt-safe-area">
                 <div className="flex items-center gap-2 py-3">
@@ -108,70 +111,54 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7" /></svg>
                         </button>
                     )}
-                    <div>
-                        <h1 style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }} className="text-base font-bold text-stone-900">
-                            सेवेचा पुरावा
-                        </h1>
-                        <p style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-xs text-stone-500">
-                            Service Proof Export
-                        </p>
-                    </div>
+                    <h1 className="text-base font-bold text-stone-900" data-testid="service-proof-title">{w.title}</h1>
                 </div>
             </div>
 
             <div className="flex-1 px-4 py-5 flex flex-col gap-5">
                 {/* Intro banner */}
                 <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4">
-                    <p style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }} className="text-sm font-semibold text-emerald-800 leading-snug">
-                        नियोजन, अंमलबजावणी आणि पडताळणी — सल्लागार नोंदीसाठी
-                    </p>
-                    <p style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-xs text-emerald-700 mt-1">
-                        Show what was planned, what was done, and what was verified — for your consulting record.
-                    </p>
+                    <p className="text-sm font-semibold text-emerald-800 leading-snug">{w.intro}</p>
                 </div>
 
-                {/* Filter summary */}
+                {/* The period */}
                 <div className="rounded-2xl bg-white border border-stone-200 p-4">
                     <div className="flex items-center justify-between mb-3">
-                        <h3 style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-sm font-bold text-stone-800">Filters</h3>
+                        <h3 className="text-sm font-bold text-stone-800">{w.period}</h3>
                         <button
                             onClick={() => setShowFilterSheet(true)}
                             className="text-xs font-semibold text-emerald-600"
-                            style={{ fontFamily: "'DM Sans', sans-serif" }}
+                            data-testid="service-proof-change-period"
                         >
-                            Edit →
+                            {w.change}
                         </button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-                            {filterSummary.fromDate} → {filterSummary.toDate}
-                        </span>
-                    </div>
+                    <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-600">
+                        {w.periodText(filterSummary.fromDate, filterSummary.toDate)}
+                    </span>
                 </div>
 
                 {/* Error */}
                 {errorMsg && (
-                    <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-xs text-rose-700" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+                    <div className="rounded-xl bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-700" role="status" data-testid="service-proof-error">
                         {errorMsg}
                     </div>
                 )}
 
-                {/* Generate buttons */}
-                <div className="flex flex-col gap-3">
-                    <button
-                        onClick={() => { void handleGenerate(); }}
-                        disabled={isGenerating || !currentFarm}
-                        className="w-full rounded-2xl bg-stone-900 py-4 text-sm font-bold text-white disabled:opacity-60"
-                        style={{ fontFamily: "'DM Sans', sans-serif" }}
-                    >
-                        {isGenerating ? 'Generating…' : '⬇ Generate PDF'}
-                    </button>
-                </div>
+                {/* Make the report */}
+                <button
+                    onClick={() => { void handleGenerate(); }}
+                    disabled={isGenerating || !currentFarm}
+                    className="w-full rounded-2xl bg-stone-900 py-4 text-sm font-bold text-white disabled:opacity-60"
+                    data-testid="service-proof-make"
+                >
+                    {isGenerating ? w.making : w.make}
+                </button>
 
-                {/* Recent exports */}
+                {/* Recent reports */}
                 {recentExports.length > 0 && (
                     <div className="rounded-2xl bg-white border border-stone-200 p-4">
-                        <h3 style={{ fontFamily: "'DM Sans', sans-serif" }} className="text-sm font-bold text-stone-800 mb-3">Recent exports</h3>
+                        <h3 className="text-sm font-bold text-stone-800 mb-3">{w.recent}</h3>
                         <div className="flex flex-col gap-2">
                             {recentExports.map((exp, i) => (
                                 <a
@@ -179,10 +166,9 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
                                     href={exp.url}
                                     download
                                     className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2"
-                                    style={{ fontFamily: "'DM Sans', sans-serif" }}
                                 >
-                                    <span className="text-xs text-stone-600">PDF · {exp.fromDate} → {exp.toDate}</span>
-                                    <span className="text-xs font-semibold text-emerald-600">↓</span>
+                                    <span className="text-xs text-stone-600">{w.periodText(exp.fromDate, exp.toDate)}</span>
+                                    <span className="text-xs font-semibold text-emerald-600">{w.open}</span>
                                 </a>
                             ))}
                         </div>
@@ -190,7 +176,7 @@ const ServiceProofPage: React.FC<ServiceProofPageProps> = ({ onBack }) => {
                 )}
             </div>
 
-            {/* Filter sheet */}
+            {/* The period sheet */}
             {showFilterSheet && (
                 <ServiceProofFilterSheet
                     onApply={params => {

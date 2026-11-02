@@ -886,6 +886,20 @@ public interface IShramSafalRepository
     Task<List<ErasureRequest>> GetErasureRequestsForUserAsync(Guid userId, CancellationToken ct = default)
         => Task.FromResult(new List<ErasureRequest>());
 
+    /// <summary>
+    /// lane F99 fix pass 2 (review N-1) — the request still WAITING for this person (the one whose data it is), oldest
+    /// first, or null. One person has at most one: asking again answers this one.
+    /// </summary>
+    Task<ErasureRequest?> GetWaitingErasureRequestForAsync(Guid targetUserId, CancellationToken ct = default)
+        => Task.FromResult<ErasureRequest?>(null);
+
+    /// <summary>
+    /// lane F99 fix pass 2 (review N-1) — cancel every OTHER request still waiting for this person, as one guarded UPDATE
+    /// (a request made twice at the same instant by two phones). Returns how many.
+    /// </summary>
+    Task<int> CancelOtherWaitingErasureRequestsForAsync(Guid targetUserId, Guid exceptRequestId, DateTime nowUtc, CancellationToken ct = default)
+        => Task.FromResult(0);
+
     /// <summary>lane F99 fix pass 1, item 11 (D-71) — one erasure request by id (no tracking), or null.</summary>
     Task<ErasureRequest?> GetErasureRequestByIdAsync(Guid requestId, CancellationToken ct = default)
         => Task.FromResult<ErasureRequest?>(null);

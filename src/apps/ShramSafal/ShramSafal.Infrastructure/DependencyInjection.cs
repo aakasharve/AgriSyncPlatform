@@ -475,8 +475,18 @@ public static class DependencyInjection
 
         // spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — the ONE setting for how long an erasure request waits
         // (whole days, 30 by default). The request answer, the list, the cancel and the worker all read this instance.
+        // lane F99 fix pass 2 (review N-5): a value under 1 day is REFUSED here, at start-up, with this message in the
+        // startup failure log ("AgriSync.Bootstrapper failed to start"); the worker logs the wait it runs with.
         var erasureWaitDays = configuration.GetValue<int?>(ShramSafal.Application.Privacy.ErasureTiming.ConfigurationKey)
             ?? ShramSafal.Application.Privacy.ErasureTiming.DefaultWaitDays;
+        if (erasureWaitDays < ShramSafal.Application.Privacy.ErasureTiming.MinimumWaitDays)
+        {
+            throw new InvalidOperationException(
+                $"Refusing to start: {ShramSafal.Application.Privacy.ErasureTiming.ConfigurationKey} = {erasureWaitDays}. "
+                + $"An erasure request must wait at least {ShramSafal.Application.Privacy.ErasureTiming.MinimumWaitDays} day "
+                + $"(founder D-71: {ShramSafal.Application.Privacy.ErasureTiming.DefaultWaitDays}); a lower value would erase almost at once.");
+        }
+
         services.AddSingleton(new ShramSafal.Application.Privacy.ErasureTiming(TimeSpan.FromDays(erasureWaitDays)));
         services.AddScoped<ISyncMutationStore, SyncMutationStore>();
 

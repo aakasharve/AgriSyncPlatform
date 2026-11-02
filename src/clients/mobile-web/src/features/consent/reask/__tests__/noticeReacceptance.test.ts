@@ -68,6 +68,12 @@ describe('who is asked', () => {
         expect(await needsNoticeReacceptance(async () => OLD_NOTICE)).toBe(true);
     });
 
+    it('lane F99 fix pass 2 (D-71, material): a farmer who accepted notice-2026-10-30.1 is asked once, and keeps no new voice until he ticks', async () => {
+        await getDatabase().uiPrefs.put({ key: ACCEPTED_NOTICE_PREF_KEY, value: 'notice-2026-10-30.1' });
+        expect(await hasCoreConsent()).toBe(false);
+        expect(await needsNoticeReacceptance(async () => 'notice-2026-10-30.1')).toBe(true);
+    });
+
     it('a phone that already holds the notice in force is not asked, and the server is not called', async () => {
         await getDatabase().uiPrefs.put({ key: ACCEPTED_NOTICE_PREF_KEY, value: NOTICE_VERSION });
         const server = vi.fn(async () => null);

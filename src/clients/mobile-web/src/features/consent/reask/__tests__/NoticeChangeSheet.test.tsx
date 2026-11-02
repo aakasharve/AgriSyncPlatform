@@ -83,6 +83,10 @@ describe('NoticeChangeSheet', () => {
     it('asks once: the founder’s changed promise, the improvement switch, Continue held until ticked', async () => {
         await openAsked();
         expect(screen.getByTestId('notice-change-promise')).toHaveTextContent(D36_MR);
+        // lane F99 fix pass 2 (D-71, material): the erasure line he now ticks, word for word.
+        expect(screen.getByTestId('notice-change-erasure')).toHaveTextContent(
+            'खातं आणि माहिती मिटवायची विनंती करा. विनंतीनंतर ३० दिवस काहीही मिटवलं जात नाही आणि तोपर्यंत ती रद्द करता येते.');
+        expect(screen.getByTestId('notice-change-sheet')).toHaveTextContent('माहिती वापराची सूचना बदलली आहे. त्यातले मुख्य बदल असे:');
         expect(box()).not.toBeChecked();
         expect(screen.getByText(IMPROVEMENT_COPY.mr.title)).toBeInTheDocument();
         expect(screen.getByText(IMPROVEMENT_COPY.mr.body)).toBeInTheDocument();

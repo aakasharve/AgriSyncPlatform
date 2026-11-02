@@ -191,18 +191,22 @@ import {
  * (`features/consent/reask`); the server never refuses him for the older acceptance.
  *
  * `notice-2026-11-02.1` - the ERASURE-WAIT pass (founder D-71, 2026-11-02: "option 2 not 7 days but
- * 30 days"; lane F99 fix pass 1, item 11). The words on this screen did not change. Both documents
- * did: an erasure request now waits 30 days and can be cancelled until then, and the Privacy Notice
- * (§6 note 3, §8) and the Terms (§8) say so, so `privacy-2026-11-02.1` and `terms-2026-11-02.1`, and
- * the version inside `canonicalNoticeText` moved with them. Classed NOT material under D-13 (lane F99
- * call, flagged to the founder): no new use of anyone's data and no new permission; it adds a wait
- * and a way to take the request back. So `notice-2026-10-30.1` stays accepted below and nobody is
- * asked to tick again. If the founder rules it material, drop `notice-2026-10-30.1` from
- * `ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT` and everyone is asked once.
+ * 30 days"; lane F99 fix pass 1, item 11): the Privacy Notice (§6 note 3, §8) and the Terms (§8) said
+ * that an erasure request waits 30 days and can be cancelled until then. Never released.
+ *
+ * `notice-2026-11-02.2` - the same change, made MATERIAL (orchestrator call, lane F99 fix pass 2,
+ * overruling the builder's "not material": what happens to a person's data after he asks to erase it
+ * is a term of its use). So this screen says it too: the erasure line under "तुमचे हक्क" names the 30
+ * days and the cancel, and the Marathi "where" names the in-app place "गोपनीयता व संमती". The Marathi
+ * documents use one erasing verb, "मिटवणे", as the app does. `privacy-2026-11-02.2` and
+ * `terms-2026-11-02.2`. `.1` was never released, but a build carrying it exists, so `.2` names the new
+ * text. Everyone signed in is asked ONCE (`features/consent/reask`); until he ticks, the phone keeps
+ * no new raw voice recording (`assertCoreConsentForVoiceStorage`). The server never refuses him for
+ * the older acceptance (P11).
  */
-export const NOTICE_VERSION = 'notice-2026-11-02.1';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-11-02.1';
-export const TERMS_VERSION = 'terms-2026-11-02.1';
+export const NOTICE_VERSION = 'notice-2026-11-02.2';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-11-02.2';
+export const TERMS_VERSION = 'terms-2026-11-02.2';
 
 /**
  * Founder D-13: "Ask again only when data use or terms materially change. Spelling, formatting
@@ -212,10 +216,10 @@ export const TERMS_VERSION = 'terms-2026-11-02.1';
  * name exactly the text that was shown). This list says which accepted versions still cover
  * the terms in force, so nobody is re-asked for a typo: a NON-material rewording adds its new
  * version here and keeps the old ones; a MATERIAL change replaces the list with the new
- * version alone. `notice-2026-10-30.1` is material, so it replaced every earlier version;
- * `notice-2026-11-02.1` (the 30-day erasure wait, D-71) is not, so `.10-30.1` stays beside it.
+ * version alone. `notice-2026-11-02.2` (the 30-day erasure wait, D-71) is material, so it stands
+ * alone: an acceptance of `notice-2026-10-30.1` or older is asked once more.
  */
-export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION, 'notice-2026-10-30.1'];
+export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION];
 
 /**
  * The data fiduciary, as registered. One copy, shared by both languages, because a
@@ -387,11 +391,12 @@ const mr: NoticeCopy = {
     processors: 'OTP, सुरक्षित क्लाउड, आवाज समजणे, हवामान, फाइल, सूचना आणि तांत्रिक मदत — या कामांसाठी काही सेवा पुरवठादार मर्यादित माहिती हाताळू शकतात. आम्ही त्यांना त्या कामासाठी लागणारी माहितीच पाठवतो. त्यांच्याकडे असलेल्या माहितीला त्यांच्या स्वतःच्या अटी लागू होतात.',
     rights: {
         heading: 'तुमचे हक्क',
-        where: 'Settings → Data & Privacy मध्ये, किंवा arvesystems@gmail.com वर लिहून:',
+        // lane F99 fix pass 2 (N-7, D-71): the in-app place by its Marathi name; one erasing verb; the 30 days. PROPOSED.
+        where: 'ॲपमधील "गोपनीयता व संमती" मध्ये, किंवा arvesystems@gmail.com वर लिहून:',
         items: [
             'दिलेली परवानगी पाहा किंवा मागे घ्या.',
             'तुमची माहिती पाहण्याची, दुरुस्त करण्याची किंवा तिची प्रत मिळण्याची विनंती करा.',
-            'खातं आणि माहिती हटवायची विनंती करा.',
+            'खातं आणि माहिती मिटवायची विनंती करा. विनंतीनंतर ३० दिवस काहीही मिटवलं जात नाही आणि तोपर्यंत ती रद्द करता येते.',
             'तक्रार करा, किंवा तुमच्या वतीने हक्क वापरायला कुणाला नेमा.',
         ],
         withdrawal: 'मुख्य परवानगी मागे घेतल्यास काही किंवा सर्व सुविधा बंद होऊ शकतात. आधी कायदेशीररीत्या झालेली प्रक्रिया रद्द होत नाही; कायद्याने आवश्यक तेवढी माहिती ठरावीक काळ ठेवावी लागू शकते.',
@@ -480,7 +485,8 @@ const en: NoticeCopy = {
         items: [
             'Review or withdraw your consent.',
             'Ask to see, correct or get a copy of your information.',
-            'Request deletion of your account and data.',
+            // lane F99 fix pass 2 (D-71): the 30 days and the cancel, on the screen he ticks. PROPOSED.
+            'Request deletion of your account and data. The request waits 30 days before anything is deleted, and you can cancel it until then.',
             'Raise a grievance, or nominate someone to act for you.',
         ],
         withdrawal: 'Withdrawing essential consent may disable some or all services. It does not undo processing already lawfully done; limited information may be retained where the law requires it.',

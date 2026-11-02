@@ -3056,6 +3056,27 @@ internal sealed class ShramSafalRepository(
             .ToListAsync(ct);
     }
 
+    // spec: plr-d10 lane F99 fix pass 2 (review N-1) — one waiting request per person (the one whose data it is:
+    // ErasureRequest.TargetUserId = OnBehalfOfUserId ?? RequestedByUserId, spelled out so EF can translate it).
+    public async Task<ErasureRequest?> GetWaitingErasureRequestForAsync(Guid targetUserId, CancellationToken ct = default)
+        => targetUserId == Guid.Empty
+            ? null
+            : await db.ErasureRequests.AsNoTracking()
+                .Where(r => r.Status == ErasureStatus.Requested
+                    && (r.OnBehalfOfUserId == targetUserId || (r.OnBehalfOfUserId == null && r.RequestedByUserId == targetUserId)))
+                .OrderBy(r => r.RequestedAtUtc)
+                .FirstOrDefaultAsync(ct);
+
+    public async Task<int> CancelOtherWaitingErasureRequestsForAsync(
+        Guid targetUserId, Guid exceptRequestId, DateTime nowUtc, CancellationToken ct = default)
+        => await db.ErasureRequests
+            .Where(r => r.Id != exceptRequestId
+                && r.Status == ErasureStatus.Requested
+                && (r.OnBehalfOfUserId == targetUserId || (r.OnBehalfOfUserId == null && r.RequestedByUserId == targetUserId)))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(r => r.Status, ErasureStatus.Cancelled)
+                .SetProperty(r => r.CompletedAtUtc, nowUtc), ct);
+
     // spec: plr-d10 lane F99 fix pass 1, item 11 (founder D-71) — read one request; cancel one that still waits.
     public async Task<ErasureRequest?> GetErasureRequestByIdAsync(Guid requestId, CancellationToken ct = default)
         => requestId == Guid.Empty

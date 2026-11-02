@@ -20,6 +20,12 @@ public sealed class ErasureTiming
     /// <summary>Founder D-71.</summary>
     public const int DefaultWaitDays = 30;
 
+    /// <summary>
+    /// lane F99 fix pass 2 (review N-5) — the setting may never make erasure (nearly) immediate: below one day it is
+    /// refused at start-up. Tests move the CLOCK, never this floor.
+    /// </summary>
+    public const int MinimumWaitDays = 1;
+
     public ErasureTiming()
         : this(TimeSpan.FromDays(DefaultWaitDays))
     {
@@ -27,9 +33,10 @@ public sealed class ErasureTiming
 
     public ErasureTiming(TimeSpan waitBeforeErasure)
     {
-        if (waitBeforeErasure < TimeSpan.Zero)
+        if (waitBeforeErasure < TimeSpan.FromDays(MinimumWaitDays))
         {
-            throw new ArgumentOutOfRangeException(nameof(waitBeforeErasure), waitBeforeErasure, "The wait cannot be negative.");
+            throw new ArgumentOutOfRangeException(nameof(waitBeforeErasure), waitBeforeErasure,
+                $"{ConfigurationKey} must be at least {MinimumWaitDays} day; founder D-71 sets {DefaultWaitDays}.");
         }
 
         WaitBeforeErasure = waitBeforeErasure;

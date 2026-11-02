@@ -18,7 +18,7 @@
 
 # Privacy Notice — Shram Safal
 
-**Version `privacy-2026-11-02.1` · revised 2 November 2026**
+**Version `privacy-2026-11-02.2` · revised 2 November 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It

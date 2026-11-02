@@ -41,7 +41,7 @@ const COPY: Record<NoticeLanguage, {
 }> = {
     mr: {
         heading: 'माहिती वापराच्या सूचनेत बदल', // PROPOSED (Marathi)
-        intro: 'तुमच्या आवाजाबद्दलचं आमचं वचन बदललं आहे. आता ते असं आहे:', // PROPOSED (Marathi)
+        intro: 'माहिती वापराची सूचना बदलली आहे. त्यातले मुख्य बदल असे:', // PROPOSED (Marathi; lane F99 fix pass 2)
         tickToContinue: 'पुढे जाण्यासाठी खूण करा.', // PROPOSED (Marathi)
         continue: 'पुढे', // PROPOSED (Marathi)
         ok: 'ठीक आहे', // PROPOSED (Marathi)
@@ -49,7 +49,7 @@ const COPY: Record<NoticeLanguage, {
     },
     en: {
         heading: 'The data notice has changed', // PROPOSED (English)
-        intro: 'Our promise about your voice has changed. It now reads:', // PROPOSED (English)
+        intro: 'The data notice has changed. These are the main changes:', // PROPOSED (English; lane F99 fix pass 2)
         tickToContinue: 'Tick the box to continue.', // PROPOSED (English)
         continue: 'Continue', // PROPOSED (English)
         ok: 'OK', // PROPOSED (English)
@@ -117,6 +117,8 @@ const NoticeChangeSheet: React.FC<{ userId: string }> = ({ userId }) => {
 
     const c = COPY[lang];
     const changedPromise = CONSENT_NOTICE[lang].willNotDo.items[2];
+    // lane F99 fix pass 2 (D-71, material): the erasure line, word for word from the notice he ticks.
+    const erasureLine = CONSENT_NOTICE[lang].rights.items[2];
 
     const sendImprovement = (allowed: boolean) => agriSyncClient.setImprovementPermission({
         allowed,
@@ -173,6 +175,12 @@ const NoticeChangeSheet: React.FC<{ userId: string }> = ({ userId }) => {
                     className="rounded-xl bg-white px-4 py-3 text-[15px] font-semibold leading-snug text-stone-900 ring-1 ring-emerald-200"
                 >
                     {changedPromise}
+                </p>
+                <p
+                    data-testid="notice-change-erasure"
+                    className="rounded-xl bg-white px-4 py-3 text-[15px] font-semibold leading-snug text-stone-900 ring-1 ring-emerald-200"
+                >
+                    {erasureLine}
                 </p>
 
                 <ImprovementPermissionToggle

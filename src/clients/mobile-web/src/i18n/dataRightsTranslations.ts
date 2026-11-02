@@ -39,6 +39,8 @@ export interface DataRightsBundle {
         sla: string;
         /** After the request: `{date}` is the server's erasureStartsAtUtc. */
         slaWithDate: string;
+        /** fix pass 2 (N-1): his request is waiting; shown in place of a new "erase" button. `{date}`: when erasure starts. */
+        waitingNow: string;
         error: string;
     };
     export: {
@@ -61,6 +63,8 @@ export interface DataRightsBundle {
         statusFailed: string;
         statusCancelled: string;
         kindErasure: string;
+        /** fix pass 2 (N-6): a request the reader (the platform admin) filed for someone else's data. */
+        kindErasureForOther: string;
         kindExport: string;
         askedOnBehalf: string;
         cancelAction: string;
@@ -83,6 +87,7 @@ const mr: DataRightsBundle = {
         cancel: 'नाही, रद्द करा',
         sla: 'तुमची विनंती मिळाली आहे. ३० दिवसांनी मिटवणे सुरू होईल; तोपर्यंत तुम्ही ती रद्द करू शकता.',
         slaWithDate: 'तुमची विनंती मिळाली आहे. {date} रोजी मिटवणे सुरू होईल. तोपर्यंत खालील यादीतून तुम्ही ती रद्द करू शकता.',
+        waitingNow: 'तुमची माहिती मिटवण्याची विनंती प्रतीक्षेत आहे. {date} रोजी मिटवणे सुरू होईल. तोपर्यंत तुम्ही ती रद्द करू शकता.',
         error: 'विनंती पाठवता आली नाही. पुन्हा प्रयत्न करा.',
     },
     export: {
@@ -97,13 +102,14 @@ const mr: DataRightsBundle = {
         title: 'अलीकडील विनंत्या',
         empty: 'अद्याप कोणतीही विनंती नाही.',
         statusRequested: 'प्राप्त झाली',
-        statusWaiting: 'थांबलेली — {date} रोजी मिटवणे सुरू होईल',
+        statusWaiting: 'प्रतीक्षेत — {date} रोजी मिटवणे सुरू होईल',
         statusInProgress: 'चालू आहे',
         statusCompleted: 'पूर्ण',
-        statusCompletedWithResidue: 'मिटवली — काही आवाज-फाइली अजून काढायच्या आहेत',
+        statusCompletedWithResidue: 'मिटवली — काही आवाज नोंदी अजून काढायच्या आहेत',
         statusFailed: 'अयशस्वी',
         statusCancelled: 'रद्द केली — काहीही मिटवले नाही',
         kindErasure: 'माहिती मिटवणे',
+        kindErasureForOther: 'दुसऱ्याची माहिती मिटवण्याची विनंती (तुम्ही केलेली)',
         kindExport: 'माहितीची प्रत',
         askedOnBehalf: 'श्रमसफलने तुमच्या वतीने केलेली विनंती',
         cancelAction: 'विनंती रद्द करा',
@@ -126,6 +132,7 @@ const en: DataRightsBundle = {
         cancel: 'No, cancel',
         sla: 'Request received. Erasure starts in 30 days; until then you can cancel it.',
         slaWithDate: 'Request received. Erasure starts on {date}. Until then you can cancel it from the list below.',
+        waitingNow: 'Your request to erase your data is waiting. Erasure starts on {date}. Until then you can cancel it.',
         error: 'Could not submit request. Please try again.',
     },
     export: {
@@ -143,10 +150,11 @@ const en: DataRightsBundle = {
         statusWaiting: 'Waiting — erasure starts on {date}',
         statusInProgress: 'In progress',
         statusCompleted: 'Completed',
-        statusCompletedWithResidue: 'Erased — some voice files are still to be removed',
+        statusCompletedWithResidue: 'Erased — some voice recordings are still to be removed',
         statusFailed: 'Failed',
         statusCancelled: 'Cancelled — nothing was erased',
         kindErasure: 'Erase my data',
+        kindErasureForOther: 'Erasing someone else\'s data (filed by you)',
         kindExport: 'Copy of my data',
         askedOnBehalf: 'Asked on your behalf by ShramSafal',
         cancelAction: 'Cancel request',

@@ -22,11 +22,12 @@ public static class CurrentConsentWording
     /// absolute voice promise was replaced, so the change is material and everyone is asked
     /// once). Exposed on <c>GET /consent/me</c> so a phone and a report can tell who has
     /// accepted the notice in force.
-    /// <para>lane F99 fix pass 1, item 11 (founder D-71): <c>notice-2026-11-02.1</c> — the Privacy
-    /// Notice and the Terms now say an erasure request waits 30 days and can be cancelled until then.
-    /// Not material under D-13 (the phone keeps <c>notice-2026-10-30.1</c> accepted beside it).</para>
+    /// <para>lane F99 fix pass 2 (founder D-71; orchestrator call): <c>notice-2026-11-02.2</c> — the notice,
+    /// the Privacy Notice and the Terms now say an erasure request waits 30 days and can be cancelled
+    /// until then. A MATERIAL change: everyone who accepted an older notice is asked once, on the phone;
+    /// this server still never refuses an older acceptance.</para>
     /// </summary>
-    public const string NoticeVersion = "notice-2026-11-02.1";
+    public const string NoticeVersion = "notice-2026-11-02.2";
 
     /// <summary>
     /// The words of the optional improvement switch, "माझ्या अनुभवातून श्रमसफल अधिक सक्षम

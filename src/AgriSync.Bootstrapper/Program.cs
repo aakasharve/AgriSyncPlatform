@@ -748,6 +748,15 @@ try
     // Sub-plan 05 Task 2: maps /__e2e/* only if ALLOW_E2E_SEED=true.
     app.MapE2eEndpoints();
 
+    // spec: plr-d10 lane F99 fix pass 2 (review N-3) - `--list-routes <file>`: every route this host serves, read from
+    // its own endpoint data sources AFTER all the mapping above, then exit without serving (no hosted service, no port,
+    // no database). The server route table the phone's path test reads is checked against this, so a mapping removed
+    // here leaves the table.
+    if (args.Contains(AgriSync.Bootstrapper.Infrastructure.RouteTableCommand.Flag, StringComparer.Ordinal))
+    {
+        return AgriSync.Bootstrapper.Infrastructure.RouteTableCommand.Write(app, args, Console.Out);
+    }
+
     // Step 0c (spec 2026-09-04-independent-db-verification; founder ruling
     // 2026-09-05). READ-ONLY migration census, then exit without serving.
     //

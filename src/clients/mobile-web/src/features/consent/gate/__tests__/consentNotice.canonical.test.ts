@@ -79,21 +79,22 @@ describe('NOTICE_VERSION — the words moved, so the version moved', () => {
     it('is a new version, never the one the old full-screen gate recorded', () => {
         expect(NOTICE_VERSION).not.toBe('notice-2026-10-13.2');
         // D-36 replaced the voice promise: a material change, so the version moved again.
-        expect(NOTICE_VERSION).toBe('notice-2026-11-02.1');
+        expect(NOTICE_VERSION).toBe('notice-2026-11-02.2');
         expect(NOTICE_VERSION).not.toBe('notice-2026-10-25.1');
     });
 
     it('D-13 — only the material version counts as accepted: the older tick is asked once more', () => {
-        // lane F99 fix pass 1 (D-71): the 30-day erasure wait moved the documents, not material (no re-ask), so the
-        // last material version (notice-2026-10-30.1) stays accepted beside it; anything older is still asked once.
-        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual([NOTICE_VERSION, 'notice-2026-10-30.1']);
+        // lane F99 fix pass 2 (D-71, orchestrator call): the 30-day erasure wait is a MATERIAL change, so the new version
+        // stands alone and everyone who accepted notice-2026-10-30.1 (or older) is asked once.
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual([NOTICE_VERSION]);
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-10-30.1');
         expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).not.toContain('notice-2026-10-25.1');
     });
 
     it('AC18 — the Terms and Privacy versions move too (the documents were reworded for the tick)', () => {
-        expect(TERMS_VERSION).toBe('terms-2026-11-02.1');
+        expect(TERMS_VERSION).toBe('terms-2026-11-02.2');
         // D-36: the Privacy Notice's §3 and §7 described the old absolute promise.
-        expect(PRIVACY_POLICY_VERSION).toBe('privacy-2026-11-02.1');
+        expect(PRIVACY_POLICY_VERSION).toBe('privacy-2026-11-02.2');
         expect(TERMS_VERSION).not.toBe('terms-2026-08-17.1');
         expect(PRIVACY_POLICY_VERSION).not.toBe('privacy-2026-10-13.2');
     });

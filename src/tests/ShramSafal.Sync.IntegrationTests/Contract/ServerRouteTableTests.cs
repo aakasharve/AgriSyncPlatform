@@ -1,40 +1,31 @@
-// spec: plr-d10-redesign-real-integration-2026-10-25 — lane F99 fix pass 1 (F100; review F-1).
+// spec: plr-d10-redesign-real-integration-2026-10-25 — lane F99 fix pass 1 (F100; review F-1), fix pass 2 (review N-3).
 //
-// The phone called 18 REST routes the server does not have (a missing /shramsafal prefix, or a path that never existed), and
-// nothing noticed: each screen answered 404 and showed its failure. The phone's own test now checks every REST path it calls
-// against the server's route table (src/clients/mobile-web/src/infrastructure/api/__tests__/phoneRestPathsMatchServer.test.ts).
-// That table is a checked-in file, sync-contract/routes/server-rest-routes.txt, and THIS test keeps it current: it builds the
-// production host's route table the way Program.cs maps it (every module and Bootstrapper mapping, plus the routes Program.cs
-// maps inline, read from its own source) and fails when the file differs. A server change that adds, moves or removes a route
-// therefore fails here until the file is regenerated, and the phone test then checks the phone against the new table.
+// The phone called 18 REST routes the server does not have, and nothing noticed. The phone's own test checks every REST
+// path (and method) it calls against the server's route table
+// (src/clients/mobile-web/src/infrastructure/api/__tests__/phoneRestPathsMatchServer.test.ts). That table is a checked-in
+// file, sync-contract/routes/server-rest-routes.txt, and THIS test keeps it equal to the server.
+//
+// Fix pass 2 (N-3): the table is no longer built from a hand copy of Program.cs's mapping calls (a mapping REMOVED from
+// Program.cs stayed in it). It runs the real Bootstrapper with `--list-routes`: Program.cs builds the production host
+// exactly as it serves, maps everything, writes every endpoint of the built host and exits before serving (no hosted
+// service, no port, no database). A mapping added, moved or removed in Program.cs or in any module therefore fails here
+// until the file is regenerated, and the phone test then checks the phone against the new table.
 //
 // Regenerate the file: set AGRISYNC_WRITE_ROUTE_TABLE=1 and run this test once.
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
-using Accounts.Api;
-using AgriSync.BuildingBlocks;
-using AgriSync.BuildingBlocks.Analytics;
-using AgriSync.Bootstrapper;
-using AgriSync.Bootstrapper.Endpoints;
-using Analytics.Application;
+using AgriSync.Bootstrapper.Infrastructure;
 using FluentAssertions;
-using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http.Metadata;
-using Microsoft.AspNetCore.Routing;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using ShramSafal.Api;
-using User.Api;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace ShramSafal.Sync.IntegrationTests.Contract;
 
-public sealed class ServerRouteTableTests
+public sealed class ServerRouteTableTests(ITestOutputHelper output)
 {
     private const string TableRelativePath = "sync-contract/routes/server-rest-routes.txt";
     private const string RegenerateVariable = "AGRISYNC_WRITE_ROUTE_TABLE";
@@ -44,13 +35,16 @@ public sealed class ServerRouteTableTests
     {
         var live = LiveRouteTable();
         live.Count.Should().BeGreaterThan(150, "the host must map every module, or the table proves nothing");
+        live.Should().Contain("POST /telemetry/client-error", "Program.cs's own inline routes are in the built host");
+        live.Should().Contain("GET /shramsafal/me/erasure/requests", "the module routes are in the built host");
+        live.Should().NotContain(r => r.Contains(" /test/", StringComparison.Ordinal) || r.Contains(" /__e2e", StringComparison.Ordinal),
+            "the development and E2E harness routes are never served by the production host");
 
         var path = Path.Combine(RequiresPostgresConnection.RepoRoot(), TableRelativePath);
-        var rendered = Render(live);
         if (Environment.GetEnvironmentVariable(RegenerateVariable) == "1")
         {
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, rendered, new UTF8Encoding(false));
+            File.WriteAllText(path, Render(live), new UTF8Encoding(false));
         }
 
         File.Exists(path).Should().BeTrue($"{TableRelativePath} is the table the phone's path test reads");
@@ -66,71 +60,66 @@ public sealed class ServerRouteTableTests
             + $"Missing from the file: [{string.Join(", ", missing)}]. In the file but not on the server: [{string.Join(", ", stale)}].");
     }
 
-    /// <summary>"METHOD /path" for every route the production host serves, sorted.</summary>
-    private static List<string> LiveRouteTable()
+    /// <summary>
+    /// "METHOD /path" for every route the PRODUCTION host serves: the real Bootstrapper, run with `--list-routes`. The
+    /// configuration it needs only to BUILD (it never connects) is placeholder values; its content root is an empty folder,
+    /// so no local appsettings or secrets are read.
+    /// </summary>
+    private List<string> LiveRouteTable()
     {
-        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
-        // No database is opened: the host is built, its endpoints are read, and it is never started.
+        var bootstrapper = typeof(RouteTableCommand).Assembly.Location;
+        var work = Path.Combine(Path.GetTempPath(), $"agrisync-route-table-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(work);
+        var outFile = Path.Combine(work, "routes.txt");
         const string NoDatabase = "Host=127.0.0.1;Port=1;Database=route_table;Username=route_table";
-        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        try
         {
-            ["ConnectionStrings:ShramSafalDb"] = NoDatabase,
-            ["ConnectionStrings:UserDb"] = NoDatabase,
-            // A placeholder key only so the JWT options validate; nothing is ever signed here.
-            ["Jwt:SigningKey"] = "route-table-test-only-placeholder-signing-key-0000",
-        });
+            var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
+            {
+                WorkingDirectory = work,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            foreach (var arg in new[]
+            {
+                bootstrapper, RouteTableCommand.Flag, outFile,
+                "--environment", "Production",
+                "--contentRoot", work,
+                $"--ConnectionStrings:ShramSafalDb={NoDatabase}",
+                $"--ConnectionStrings:UserDb={NoDatabase}",
+                "--Cors:AllowedOrigins:0=https://route-table.invalid",
+                // A placeholder key only so the JWT options validate; nothing is ever signed here.
+                "--Jwt:SigningKey=route-table-test-only-placeholder-signing-key-0000",
+            })
+            {
+                start.ArgumentList.Add(arg);
+            }
 
-        // The modules in Program.cs order.
-        builder.Services.AddBuildingBlocks();
-        builder.Services.AddUserApi(builder.Configuration);
-        builder.Services.AddShramSafalApi(builder.Configuration);
-        builder.Services.AddAccountsModule(builder.Configuration);
-        builder.Services.AddAnalyticsApplication();
-        builder.Services.AddAnalytics(o => o.UseInMemoryDatabase($"route-table-{Guid.NewGuid()}"));
-        builder.Services.AddAppReleaseOptions(builder.Configuration);
+            using var process = Process.Start(start)!;
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            process.WaitForExit(120_000).Should().BeTrue("listing the routes builds the host and exits; it never serves");
+            output.WriteLine($"[ROUTE-TABLE] exit {process.ExitCode}\n{stdout.Result}\n{stderr.Result}");
+            process.ExitCode.Should().Be(0, "the Bootstrapper must build and list its routes");
 
-        var app = builder.Build();
-
-        // The mappings in Program.cs order (the env-gated eval and e2e routes are never served to a phone).
-        app.MapAppRelease();
-        app.MapUserApi();
-        app.MapShramSafalApi();
-        app.MapAccountsModuleEndpoints();
-        app.MapFirstFarmBootstrapEndpoints();
-        app.MapAccessExtensionAdminEndpoints();
-        app.MapAnalyticsIngest();
-        app.MapAdminFarmerHealth();
-
-        // The host is never started, so its routes are read from its own route builder (the global EndpointDataSource is
-        // filled only when the pipeline is built at start).
-        var mapped = ((IEndpointRouteBuilder)app).DataSources.SelectMany(source => source.Endpoints)
-            .OfType<RouteEndpoint>()
-            .SelectMany(e => (e.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? ["GET"])
-                .Select(m => $"{m} /{(e.RoutePattern.RawText ?? string.Empty).TrimStart('/')}"));
-
-        return mapped.Concat(InlineProgramRoutes()).Distinct().OrderBy(r => r, StringComparer.Ordinal).ToList();
-    }
-
-    /// <summary>The routes Program.cs maps inline (health, version, the client-error telemetry), read from its own source.</summary>
-    private static IEnumerable<string> InlineProgramRoutes()
-    {
-        var program = Path.Combine(RequiresPostgresConnection.RepoRoot(), "src", "AgriSync.Bootstrapper", "Program.cs");
-        var source = File.ReadAllText(program);
-        var routes = Regex.Matches(source, @"\bapp\.Map(Get|Post|Put|Patch|Delete)\(\s*""([^""]+)""")
-            .Select(m => $"{m.Groups[1].Value.ToUpperInvariant()} {m.Groups[2].Value}")
-            .Where(r => !r.Contains(" /test/", StringComparison.Ordinal)) // development-only harness routes
-            .ToList();
-        routes.Should().Contain("POST /telemetry/client-error", "the inline routes are read from Program.cs itself");
-        return routes;
+            return File.ReadAllLines(outFile).Select(l => l.Trim()).Where(l => l.Length > 0).ToList();
+        }
+        finally
+        {
+            try { Directory.Delete(work, recursive: true); }
+            catch (IOException) { /* a leftover temp folder is harmless; the next run uses a new one */ }
+        }
     }
 
     private static string Render(IReadOnlyList<string> routes)
     {
         var text = new StringBuilder();
-        text.Append("# The server's REST route table: every route the production host serves (METHOD /path).\n");
-        text.Append("# GENERATED by ServerRouteTableTests (src/tests/ShramSafal.Sync.IntegrationTests/Contract), which fails when this\n");
-        text.Append("# file differs from the server; regenerate with AGRISYNC_WRITE_ROUTE_TABLE=1. Read by the phone's path test\n");
-        text.Append("# (src/clients/mobile-web/src/infrastructure/api/__tests__/phoneRestPathsMatchServer.test.ts). Do not edit by hand.\n");
+        text.Append("# The server's REST route table: every route the production host serves (METHOD /path; * = any method).\n");
+        text.Append("# GENERATED by ServerRouteTableTests (src/tests/ShramSafal.Sync.IntegrationTests/Contract) from the real\n");
+        text.Append("# Bootstrapper (--list-routes); that test fails when this file differs. Regenerate with AGRISYNC_WRITE_ROUTE_TABLE=1.\n");
+        text.Append("# Read by the phone's path test (src/clients/mobile-web/src/infrastructure/api/__tests__/phoneRestPathsMatchServer.test.ts).\n");
+        text.Append("# Do not edit by hand.\n");
         foreach (var route in routes)
         {
             text.Append(route).Append('\n');

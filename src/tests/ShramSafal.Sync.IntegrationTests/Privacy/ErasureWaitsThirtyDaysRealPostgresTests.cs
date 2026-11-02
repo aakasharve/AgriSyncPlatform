@@ -9,6 +9,8 @@
 //   2. cancelling while it waits stops it: nothing is erased, ever, and it no longer counts as an erasure asked for;
 //   3. cancelling after it has started is refused, with its reason;
 //   4. another person's request cannot be cancelled (answered as a made-up id), and is not in his list.
+// Fix pass 2 (review N-1, N-6): one waiting request per person, whoever asks; the person whose data it is may stop a
+// request the platform admin filed for him; a cancel ends everything still waiting for him.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -143,7 +145,123 @@ public sealed class ErasureWaitsThirtyDaysRealPostgresTests(ITestOutputHelper ou
         (await CancelAsync(Worker, requestId)).Status.Should().Be(HttpStatusCode.OK);
     }
 
+    // ── Fix pass 2, N-1: one waiting request per person ──────────────────────────────────────
+
+    [Fact]
+    public async Task Asking_twice_keeps_one_request_and_its_date_and_one_cancel_means_nothing_is_ever_erased()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var first = await RequestAsync(Worker);
+        // The second ask (here from an installed 1.0.17) answers THE SAME request: same id, same date, the 30 days do not restart.
+        var (secondId, secondAsked, secondStarts, alreadyWaiting) = await RequestFullAsync(Worker, appVersion: "1.0.17");
+        secondId.Should().Be(first.Id);
+        secondAsked.Should().BeCloseTo(first.RequestedAt, TimeSpan.FromMilliseconds(1));
+        secondStarts.Should().BeCloseTo(first.StartsAt, TimeSpan.FromMilliseconds(1));
+        alreadyWaiting.Should().BeTrue();
+        (await WaitingCountAsync(Worker)).Should().Be(1, "nothing new is made");
+        (await ListAsync(Worker)).Should().ContainSingle();
+
+        // He cancels "his request": nothing is left waiting, and nothing is erased, ever.
+        (await CancelAsync(Worker, first.Id)).Status.Should().Be(HttpStatusCode.OK);
+        (await WaitingCountAsync(Worker)).Should().Be(0);
+        await RunWorkerPassAsync(first.RequestedAt + Wait + TimeSpan.FromDays(5));
+        (await OperatorOfAsync(WorkerLog)).Should().Be(Worker, "a cancelled request erases nothing");
+
+        // A cancelled request does not count: asking again makes a new one, with its own 30 days.
+        var again = await RequestAsync(Worker);
+        again.Id.Should().NotBe(first.Id);
+        (await StatusAsync(again.Id)).Should().Be(ErasureStatus.Requested);
+    }
+
+    [Fact]
+    public async Task Filed_by_the_admin_then_asked_by_the_person_is_one_request_and_the_person_may_stop_it()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await SeedPlatformOwnerAsync(Admin, AdminOrg);
+
+        // The platform admin files it for the कामगार.
+        using (var filed = await SendAsync(HttpMethod.Post, "/shramsafal/admin/erasure/request", Admin, new { targetUserId = Worker }))
+        {
+            var text = await filed.Content.ReadAsStringAsync();
+            Output.WriteLine($"[D-71] admin files for {Worker} -> {(int)filed.StatusCode} {text}");
+            filed.StatusCode.Should().Be(HttpStatusCode.Accepted, text);
+        }
+
+        var adminFiled = await WaitingIdAsync(Worker);
+        var (asked, _, _, alreadyWaiting) = await RequestFullAsync(Worker);
+        asked.Should().Be(adminFiled, "the person's own ask answers the request already waiting for him");
+        alreadyWaiting.Should().BeTrue();
+        (await WaitingCountAsync(Worker)).Should().Be(1);
+
+        // His list: the request is about him, filed by someone else, and HE may stop it (N-6).
+        var mine = (await ListAsync(Worker)).Single();
+        mine.GetProperty("aboutMe").GetBoolean().Should().BeTrue();
+        mine.GetProperty("askedByMe").GetBoolean().Should().BeFalse();
+        mine.GetProperty("mayCancel").GetBoolean().Should().BeTrue();
+        // The admin's own list says it is for someone else (never "erase my data").
+        var adminRow = (await ListAsync(Admin)).Single(r => r.GetProperty("requestId").GetGuid() == adminFiled);
+        adminRow.GetProperty("aboutMe").GetBoolean().Should().BeFalse();
+        adminRow.GetProperty("askedByMe").GetBoolean().Should().BeTrue();
+
+        // The admin asking again for him is the same request too.
+        using (var again = await SendAsync(HttpMethod.Post, "/shramsafal/admin/erasure/request", Admin, new { targetUserId = Worker }))
+        {
+            Json(await again.Content.ReadAsStringAsync()).GetProperty("requestId").GetGuid().Should().Be(adminFiled);
+        }
+
+        var (stopped, stoppedBody) = await CancelAsync(Worker, adminFiled);
+        stopped.Should().Be(HttpStatusCode.OK, stoppedBody);
+        (await StatusAsync(adminFiled)).Should().Be(ErasureStatus.Cancelled);
+        (await ScalarAsync<string>(
+            "SELECT actor_role FROM ssf.audit_events WHERE entity_type = 'ErasureRequest' AND entity_id = @id AND action = 'Cancelled'",
+            ("id", adminFiled))).Should().Be("data_principal");
+    }
+
+    [Fact]
+    public async Task A_cancel_ends_every_request_still_waiting_for_him()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var (requestId, requestedAt, _) = await RequestAsync(Worker);
+        // Two phones asking at the same instant could each have made one before either saw the other.
+        var twin = Guid.NewGuid();
+        await ExecOnSuperuserAsync(
+            "INSERT INTO ssf.erasure_requests (id, requested_by_user_id, on_behalf_of_user_id, status, requested_at_utc) VALUES (@id, @u, NULL, 0, now())",
+            ("id", twin), ("u", Worker));
+        (await WaitingCountAsync(Worker)).Should().Be(2);
+
+        (await CancelAsync(Worker, requestId)).Status.Should().Be(HttpStatusCode.OK);
+        (await WaitingCountAsync(Worker)).Should().Be(0, "a cancel ends everything still waiting for him");
+        (await StatusAsync(twin)).Should().Be(ErasureStatus.Cancelled);
+        await RunWorkerPassAsync(requestedAt + Wait + TimeSpan.FromDays(1));
+        (await OperatorOfAsync(WorkerLog)).Should().Be(Worker);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────────────────────
+
+    private static readonly Guid Admin = Guid.Parse("3d099200-0000-4000-8000-000000000001");
+    private static readonly Guid AdminOrg = Guid.Parse("3d099200-0000-4000-8000-0000000000f0");
+
+    private async Task<(Guid Id, DateTime RequestedAt, DateTime StartsAt, bool AlreadyWaiting)> RequestFullAsync(
+        Guid user, string appVersion = "1.0.18")
+    {
+        using var response = await SendAsync(HttpMethod.Post, "/shramsafal/me/erasure/request", user, appVersion: appVersion);
+        var text = await response.Content.ReadAsStringAsync();
+        Output.WriteLine($"[D-71] {user} ({appVersion}) POST /shramsafal/me/erasure/request -> {(int)response.StatusCode} {text}");
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted, text);
+        var body = Json(text);
+        return (body.GetProperty("requestId").GetGuid(),
+            body.GetProperty("requestedAtUtc").GetDateTime().ToUniversalTime(),
+            body.GetProperty("erasureStartsAtUtc").GetDateTime().ToUniversalTime(),
+            body.GetProperty("alreadyWaiting").GetBoolean());
+    }
+
+    private Task<long> WaitingCountAsync(Guid target) => ScalarAsync<long>(
+        "SELECT count(*) FROM ssf.erasure_requests WHERE status = 0 AND COALESCE(on_behalf_of_user_id, requested_by_user_id) = @u",
+        ("u", target));
+
+    private Task<Guid> WaitingIdAsync(Guid target) => ScalarAsync<Guid>(
+        "SELECT id FROM ssf.erasure_requests WHERE status = 0 AND COALESCE(on_behalf_of_user_id, requested_by_user_id) = @u",
+        ("u", target));
 
     /// <summary>The phone's request (1.0.17 and later): 202, with the date erasure starts.</summary>
     private async Task<(Guid Id, DateTime RequestedAt, DateTime StartsAt)> RequestAsync(Guid user)

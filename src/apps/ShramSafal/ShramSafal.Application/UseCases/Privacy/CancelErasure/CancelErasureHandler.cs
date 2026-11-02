@@ -22,9 +22,12 @@ public sealed record CancelErasureResult(Guid RequestId, string Status, DateTime
 /// nothing will be.
 ///
 /// <list type="bullet">
-/// <item><b>Who:</b> only the person who ASKED (<see cref="ErasureRequest.RequestedByUserId"/>): the data principal for
-/// his own request, the platform admin for one he asked on someone's behalf. Anyone else's request, and a made-up id,
-/// answer exactly the same <see cref="ShramSafalErrors.ErasureRequestNotFound"/> (E4).</item>
+/// <item><b>Who:</b> the person who ASKED (<see cref="ErasureRequest.RequestedByUserId"/>), and — lane F99 fix pass 2
+/// (review N-6, orchestrator call) — the person whose data it is (<see cref="ErasureRequest.TargetUserId"/>), so a request
+/// the platform admin filed on his behalf can be stopped by him too. Anyone else's request, and a made-up id, answer
+/// exactly the same <see cref="ShramSafalErrors.ErasureRequestNotFound"/> (E4).</item>
+/// <item><b>All of it:</b> a cancel also ends any OTHER request still waiting for the same person (two phones asking at
+/// the same instant), so "cancel" always means nothing will be erased (review N-1).</item>
 /// <item><b>When:</b> only while it waits. Once the worker has taken it, it is refused with
 /// <see cref="ShramSafalErrors.ErasureAlreadyStarted"/>. A second cancel of a cancelled request answers as the first
 /// (a phone that sends it twice is told the truth).</item>
@@ -42,7 +45,8 @@ public sealed class CancelErasureHandler(IShramSafalRepository repository, TimeP
         }
 
         var request = await repository.GetErasureRequestByIdAsync(command.RequestId, ct).ConfigureAwait(false);
-        if (request is null || request.RequestedByUserId != command.CallerUserId)
+        if (request is null
+            || (request.RequestedByUserId != command.CallerUserId && request.TargetUserId != command.CallerUserId))
         {
             return Result.Failure<CancelErasureResult>(ShramSafalErrors.ErasureRequestNotFound);
         }
@@ -64,17 +68,21 @@ public sealed class CancelErasureHandler(IShramSafalRepository repository, TimeP
             return Result.Failure<CancelErasureResult>(ShramSafalErrors.ErasureAlreadyStarted);
         }
 
+        var othersEnded = await repository.CancelOtherWaitingErasureRequestsForAsync(
+            request.TargetUserId, request.Id, nowUtc, ct).ConfigureAwait(false);
+
         await repository.AddAuditEventAsync(AuditEventFactory.Create(
             entityType: "ErasureRequest",
             entityId: request.Id,
             action: "Cancelled",
             actorUserId: command.CallerUserId,
-            actorRole: request.OnBehalfOfUserId is null ? "data_principal" : "admin_security_responder",
+            actorRole: command.CallerUserId == request.TargetUserId ? "data_principal" : "admin_security_responder",
             payload: new
             {
                 requestId = request.Id,
                 requestedAtUtc = request.RequestedAtUtc,
                 cancelledAtUtc = nowUtc,
+                otherWaitingRequestsEnded = othersEnded,
             },
             farmId: null,
             clientCommandId: null,

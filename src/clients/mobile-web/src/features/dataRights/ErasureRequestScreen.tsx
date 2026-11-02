@@ -7,6 +7,10 @@
 // days and can be cancelled until then. The screen says so before he asks, the
 // answer names the day erasure starts (the server's erasureStartsAtUtc), and his
 // requests are listed below with a cancel action (MyErasureRequests).
+//
+// lane F99 fix pass 2 (review N-1): while his request waits, the screen shows THAT request (its date and "विनंती
+// रद्द करा") in place of a new "erase" button, so a second tap cannot make a second request he would not know to cancel
+// (the server also answers a second ask with the same request).
 
 import React, { useCallback, useState } from 'react';
 import { useLanguage } from '../../i18n/LanguageContext';
@@ -19,6 +23,7 @@ import {
 } from '../../i18n/dataRightsTranslations';
 import { PageBar } from '../../shared/components/ui/placeUi';
 import MyErasureRequests from './MyErasureRequests';
+import { useMyErasureRequests, waitingRequestFor } from './useMyErasureRequests';
 
 interface Props {
     onBack?: () => void;
@@ -56,6 +61,8 @@ const ErasureRequestScreen: React.FC<Props> = ({ onBack, forceLocale, submitFn, 
     const [status, setStatus] = useState<SubmitStatus>('idle');
     const [startsAt, setStartsAt] = useState<string | null>(null);
     const [listKey, setListKey] = useState(0);
+    const requests = useMyErasureRequests(listKey);
+    const waiting = waitingRequestFor(requests.rows);
 
     const submit = useCallback(async () => {
         setStatus('submitting');
@@ -81,6 +88,9 @@ const ErasureRequestScreen: React.FC<Props> = ({ onBack, forceLocale, submitFn, 
         ? tDataRights(locale, 'erasure.slaWithDate').replace('{date}', startsOn)
         : tDataRights(locale, 'erasure.sla');
     const errorLabel = tDataRights(locale, 'erasure.error');
+    const waitingLabel = waiting
+        ? tDataRights(locale, 'erasure.waitingNow').replace('{date}', formatDataRightsDate(locale, waiting.erasureStartsAtUtc))
+        : '';
 
     return (
         <div
@@ -95,7 +105,22 @@ const ErasureRequestScreen: React.FC<Props> = ({ onBack, forceLocale, submitFn, 
             <p className="text-sm text-stone-600 leading-relaxed">{intro}</p>
             <p className="text-sm font-semibold text-stone-800 leading-relaxed" data-testid="erasure-wait-note">{waitLabel}</p>
 
-            {status === 'idle' && (
+            {waiting && status !== 'confirming' && status !== 'submitting' && (
+                <div className="glass-panel p-4 space-y-3 bg-amber-50" data-testid="erasure-waiting">
+                    <p className="text-sm font-bold text-stone-900 leading-relaxed">{waitingLabel}</p>
+                    <button
+                        type="button"
+                        onClick={() => { void requests.cancel(waiting.id); }}
+                        disabled={requests.cancellingId === waiting.id}
+                        className="w-full py-3 px-4 rounded-xl bg-white text-red-700 font-bold ring-1 ring-red-300 disabled:opacity-60"
+                        data-testid="erasure-waiting-cancel"
+                    >
+                        {tDataRights(locale, 'recent.cancelAction')}
+                    </button>
+                </div>
+            )}
+
+            {status === 'idle' && !waiting && (
                 <div>
                     <button
                         type="button"
@@ -159,7 +184,7 @@ const ErasureRequestScreen: React.FC<Props> = ({ onBack, forceLocale, submitFn, 
                 </p>
             )}
 
-            <MyErasureRequests locale={locale} refreshKey={listKey} />
+            <MyErasureRequests locale={locale} requests={requests} />
         </div>
     );
 };

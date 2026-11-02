@@ -8,8 +8,9 @@ namespace ShramSafal.Application.UseCases.Privacy.GetErasureRequests;
 /// <summary>One erasure request as its reader sees it: what state it is in, and when erasure starts (D-71).</summary>
 /// <param name="ErasureStartsAtUtc">When the worker may take it (requested + the wait).</param>
 /// <param name="EndedAtUtc">When it was erased, failed or cancelled; null while it waits or runs.</param>
-/// <param name="MayCancel">True only while it waits AND the reader is the person who asked for it.</param>
+/// <param name="MayCancel">True only while it waits AND the reader asked for it or it is his data (fix pass 2, N-6).</param>
 /// <param name="AskedByMe">False when someone else (the platform admin) asked for it on the reader's behalf.</param>
+/// <param name="AboutMe">False when the reader (the platform admin) filed it for SOMEONE ELSE's data (fix pass 2, N-6).</param>
 public sealed record ErasureRequestView(
     Guid RequestId,
     string Status,
@@ -17,7 +18,8 @@ public sealed record ErasureRequestView(
     DateTime ErasureStartsAtUtc,
     DateTime? EndedAtUtc,
     bool MayCancel,
-    bool AskedByMe);
+    bool AskedByMe,
+    bool AboutMe);
 
 /// <summary>
 /// The caller's erasure requests, newest first: the ones he asked for, and any asked on his behalf. Read under his own
@@ -41,8 +43,9 @@ public sealed class GetMyErasureRequestsHandler(IShramSafalRepository repository
                 r.RequestedAtUtc,
                 timing.ErasureStartsAtUtc(r),
                 r.CompletedAtUtc,
-                MayCancel: r.IsWaiting && r.RequestedByUserId == callerUserId,
-                AskedByMe: r.RequestedByUserId == callerUserId))
+                MayCancel: r.IsWaiting && (r.RequestedByUserId == callerUserId || r.TargetUserId == callerUserId),
+                AskedByMe: r.RequestedByUserId == callerUserId,
+                AboutMe: r.TargetUserId == callerUserId))
             .ToList();
     }
 }

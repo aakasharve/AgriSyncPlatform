@@ -1,95 +1,39 @@
-// spec: plr-d10-redesign-real-integration-2026-10-25 — lane F99 fix pass 1, item 11 (founder D-71, 2026-11-02).
+// spec: plr-d10-redesign-real-integration-2026-10-25 — lane F99 fix pass 1, item 11 (founder D-71); fix pass 2 (N-1).
 //
-// His erasure requests, from the server (GET /shramsafal/me/erasure/requests): a waiting one shows the day erasure
-// starts and "विनंती रद्द करा"; the cancel is POST /shramsafal/me/erasure/{id}/cancel. The server decides: 200 =
-// cancelled (nothing erased), 409 = it has already started (said so, not as a failure), anything else = could not.
+// His erasure requests and what the last cancel did, drawn from `useMyErasureRequests` (which the screen owns, so it can
+// also show his waiting request in place of a new "erase" button). A waiting one shows the day erasure starts and
+// "विनंती रद्द करा".
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { apiFetch } from '../../infrastructure/api/apiFetch';
+import React from 'react';
 import { tDataRights, type DataRightsLocale } from '../../i18n/dataRightsTranslations';
-import RecentRequestsList, { type DataRightsRequestRow, type DataRightsRequestStatus } from './RecentRequestsList';
-
-interface ErasureRequestView {
-    requestId: string;
-    status: DataRightsRequestStatus;
-    requestedAtUtc: string;
-    erasureStartsAtUtc: string | null;
-    endedAtUtc: string | null;
-    mayCancel: boolean;
-    askedByMe: boolean;
-}
-
-type Notice = 'cancelDone' | 'cancelStarted' | 'cancelError' | 'loadError' | null;
+import RecentRequestsList from './RecentRequestsList';
+import type { MyErasureRequests as Requests } from './useMyErasureRequests';
 
 interface Props {
     locale: DataRightsLocale;
-    /** Changes when a new request was just made, so the list is read again. */
-    refreshKey?: number;
+    requests: Requests;
 }
 
-async function loadRequests(): Promise<DataRightsRequestRow[]> {
-    const res = await apiFetch('/shramsafal/me/erasure/requests', { method: 'GET' });
-    if (!res.ok) throw new Error(`erasure list failed: ${res.status}`);
-    const body = (await res.json()) as ErasureRequestView[];
-    return body.map(r => ({
-        id: r.requestId,
-        kind: 'erasure' as const,
-        status: r.status,
-        requestedAtUtc: r.requestedAtUtc,
-        completedAtUtc: r.endedAtUtc,
-        erasureStartsAtUtc: r.erasureStartsAtUtc,
-        mayCancel: r.mayCancel,
-        askedByMe: r.askedByMe,
-    }));
-}
-
-const MyErasureRequests: React.FC<Props> = ({ locale, refreshKey = 0 }) => {
-    const [rows, setRows] = useState<DataRightsRequestRow[] | null>(null);
-    const [notice, setNotice] = useState<Notice>(null);
-    const [cancellingId, setCancellingId] = useState<string | null>(null);
-    const [tick, setTick] = useState(0);
-
-    useEffect(() => {
-        let cancelled = false;
-        loadRequests().then(
-            list => { if (!cancelled) setRows(list); },
-            () => { if (!cancelled) setNotice(n => n ?? 'loadError'); },
-        );
-        return () => { cancelled = true; };
-    }, [refreshKey, tick]);
-
-    const cancel = useCallback(async (id: string) => {
-        setCancellingId(id);
-        try {
-            const res = await apiFetch(`/shramsafal/me/erasure/${id}/cancel`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-            setNotice(res.ok ? 'cancelDone' : res.status === 409 ? 'cancelStarted' : 'cancelError');
-        } catch {
-            setNotice('cancelError');
-        } finally {
-            setCancellingId(null);
-            setTick(t => t + 1);
-        }
-    }, []);
-
-    return (
-        <div className="space-y-2" data-testid="my-erasure-requests">
-            {notice && (
-                <p
-                    className={`text-sm font-bold ${notice === 'cancelDone' ? 'text-emerald-800' : 'text-red-700'}`}
-                    role="status"
-                    data-testid={`erasure-notice-${notice}`}
-                >
-                    {tDataRights(locale, `recent.${notice}`)}
-                </p>
-            )}
-            {rows && (
-                <RecentRequestsList requests={rows} locale={locale} onCancel={cancel} cancellingId={cancellingId} />
-            )}
-        </div>
-    );
-};
+const MyErasureRequests: React.FC<Props> = ({ locale, requests }) => (
+    <div className="space-y-2" data-testid="my-erasure-requests">
+        {requests.notice && (
+            <p
+                className={`text-sm font-bold ${requests.notice === 'cancelDone' ? 'text-emerald-800' : 'text-red-700'}`}
+                role="status"
+                data-testid={`erasure-notice-${requests.notice}`}
+            >
+                {tDataRights(locale, `recent.${requests.notice}`)}
+            </p>
+        )}
+        {requests.rows && (
+            <RecentRequestsList
+                requests={requests.rows}
+                locale={locale}
+                onCancel={id => { void requests.cancel(id); }}
+                cancellingId={requests.cancellingId}
+            />
+        )}
+    </div>
+);
 
 export default MyErasureRequests;

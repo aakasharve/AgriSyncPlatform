@@ -17,15 +17,9 @@ public sealed class SetPriceConfigVersionHandler(
     IEntitlementResolver adminResolver)
     : IHandler<SetPriceConfigVersionCommand, PriceConfigDto>
 {
-    /// <summary>A Platform organisation's Owner — whichever of his admin memberships is active (no org header needed).</summary>
-    private async Task<bool> IsPlatformAdminAsync(Guid userId, CancellationToken ct)
-    {
-        var admin = await adminResolver.ResolveAsync(new UserId(userId), activeOrgId: null, ct);
-        return admin.Scope is { IsPlatformAdmin: true }
-            || admin.Memberships.Any(m =>
-                m.OrganizationType == Domain.Organizations.OrganizationType.Platform
-                && m.OrganizationRole == Domain.Organizations.OrganizationRole.Owner);
-    }
+    /// <summary>A Platform organisation's Owner (the one rule: <see cref="IEntitlementResolver.IsPlatformOwnerAsync"/>).</summary>
+    private Task<bool> IsPlatformAdminAsync(Guid userId, CancellationToken ct)
+        => adminResolver.IsPlatformOwnerAsync(new UserId(userId), ct);
 
     public async Task<Result<PriceConfigDto>> HandleAsync(SetPriceConfigVersionCommand command, CancellationToken ct = default)
     {

@@ -10,6 +10,21 @@ namespace ShramSafal.Application.Admin.Ports;
 public interface IEntitlementResolver
 {
     Task<ResolveResult> ResolveAsync(UserId userId, Guid? activeOrgId, CancellationToken ct);
+
+    /// <summary>
+    /// spec: plr-d10 lane F99 fix pass 2 (review N-8) — ShramSafal's platform admin: an ACTIVE Owner seat of an ACTIVE
+    /// Platform organisation, whichever of his seats is selected (no org header). The one rule for the global price list
+    /// (D-72): the write and the phone's "may I edit it" both ask this. QUIET: unlike <see cref="ResolveAsync"/> it records
+    /// no admin-scope analytics event, so a farmer opening the price book is not counted as an unauthorised admin.
+    /// The default (for test doubles) reads the resolved scope; the real resolver asks the database directly.
+    /// </summary>
+    async Task<bool> IsPlatformOwnerAsync(UserId userId, CancellationToken ct)
+    {
+        var resolved = await ResolveAsync(userId, activeOrgId: null, ct);
+        return resolved.Scope is { IsPlatformAdmin: true }
+            || resolved.Memberships.Any(m =>
+                m.OrganizationType == OrganizationType.Platform && m.OrganizationRole == OrganizationRole.Owner);
+    }
 }
 
 public enum ResolveOutcome

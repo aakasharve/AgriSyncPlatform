@@ -12,7 +12,7 @@
 
 # Terms of Use — Shram Safal
 
-**Version `terms-2026-11-02.1` · in force from 2 November 2026**
+**Version `terms-2026-11-02.2` · in force from 2 November 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It

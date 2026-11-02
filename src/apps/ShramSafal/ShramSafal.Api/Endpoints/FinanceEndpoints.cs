@@ -79,6 +79,26 @@ public static class FinanceEndpoints
         // save, and analytics. PushSyncBatchHandler stays on the raw
         // handler in this rollout pass (per the "only-with-tests"
         // guardrail).
+        // spec: plr-d10 lane F99 fix pass 2 (review N-8) — may this person edit the global price list (D-72)? The phone's
+        // price book asks this to show or hide its edit controls. It asks the one rule the write obeys, quietly: a farmer
+        // opening the price book is not recorded as an unauthorised admin (it used to ask /admin/me/scope, which is).
+        group.MapGet("/finance/price-config/may-write", async (
+            ClaimsPrincipal user,
+            ShramSafal.Application.Admin.Ports.IEntitlementResolver adminResolver,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var mayWrite = await userScope.RunForCallerAsync(actorUserId,
+                token => adminResolver.IsPlatformOwnerAsync(new AgriSync.SharedKernel.Contracts.Ids.UserId(actorUserId), token), ct);
+            return Results.Ok(new { mayWrite });
+        })
+        .WithName("MayWritePriceList");
+
         group.MapPost("/finance/cost-entry", async (
             AddCostEntryRequest request,
             HttpContext httpContext,
