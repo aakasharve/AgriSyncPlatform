@@ -1922,6 +1922,26 @@ html.motion .final:not(.is-live) { animation-play-state: paused; }
 .rd-cols { display: grid; gap: 12px; padding: 14px 22px 22px; }
 @media (min-width: 720px) { .rd-cols { grid-template-columns: 1fr 1fr; } }
 
+/* ---------- ARVE logo and join-and-follow links (2 Nov) ---------- */
+.arve-logo { display: block; width: 220px; max-width: 100%; height: auto; }
+.legal-co { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.legal-co .arve-logo { width: 150px; padding: 6px 10px; border-radius: 10px; background: #fff; box-sizing: content-box; }
+.fact-logo { align-items: center; gap: 12px; flex-wrap: wrap; }
+.fact-logo .arve-logo { width: 170px; }
+.social { display: flex; flex-wrap: wrap; gap: 10px; }
+.soc { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: #fff; color: var(--ink);
+  font-weight: 700; font-size: 15px; line-height: 1.3; text-decoration: none; }
+.soc svg { width: 20px; height: 20px; flex: none; }
+.soc.wa svg { color: #1f9d55; } .soc.ig svg { color: #c13584; } .soc.fb svg { color: #1877f2; }
+.soc:hover { border-color: var(--green2); }
+.social-foot { margin-top: 10px; }
+.social-foot .soc { background: transparent; border-color: rgba(255, 255, 255, .3); color: #fff; font-size: 14px; }
+.social-foot .soc svg { color: #fff; }
+.foot-follow { margin: 18px 0 0; color: var(--lime); font-weight: 800; font-size: 14.5px; }
+.contact-follow { margin: 14px 0 8px; font-weight: 700; color: var(--ink2); }
+.soc-cta { gap: 8px; }
+.soc-cta svg { width: 20px; height: 20px; flex: none; color: #7ee2a8; }
+
 /* ---------- Speed ---------- */
 /* Every section after a page's first one is drawn only as the visitor approaches it (the page paints and scrolls lighter). */
 .section ~ .section > .wrap { content-visibility: auto; contain-intrinsic-size: auto 900px; }

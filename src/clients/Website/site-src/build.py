@@ -28,6 +28,10 @@ PUBLISH = "--publish" in sys.argv
 PUBLISH_DROP = {"pv-note", "preview-bar"} if PUBLISH else set()
 HAS_BLOG = any((SRC / "blog" / "posts").glob("*.json"))
 PLAY = "https://play.google.com/store/apps/details?id=com.agrisync.shramsafal&pcampaignid=web_share"
+# Where people join and follow Shram Safal (founder, 2 Nov). Put the Facebook page address here when it exists.
+WHATSAPP_GROUP = "https://chat.whatsapp.com/FoCaiUdK82vFAauQxgrgOs"
+INSTAGRAM = "https://www.instagram.com/shramsafal/"
+FACEBOOK = None
 # Google Play stays hidden while the app still has open bugs: nobody should be sent to it yet (founder, 2 Nov).
 # True brings back every badge, line and link exactly as written in the sources.
 SHOW_PLAY = False
@@ -51,9 +55,10 @@ DEFINITION_EN = ("Shram Safal is a trust-governed Daily Farm Execution System. T
 ORG = {
     "@type": "Organization",
     "@id": SITE + "/#org",
-    "name": "Agriryot Value Enterprises Private Limited",
-    "alternateName": ["Shram Safal", "श्रम सफल"],
-    "description": ("Agriryot Value Enterprises Private Limited, a DPIIT-recognised startup in "
+    "name": "ARVE (Agri Ryot Value Enterprises Pvt. Ltd.)",
+    "legalName": "Agriryot Value Enterprises Private Limited",
+    "alternateName": ["ARVE", "Agri Ryot Value Enterprises", "Agriryot Value Enterprises Private Limited", "Shram Safal", "श्रम सफल"],
+    "description": ("ARVE (Agri Ryot Value Enterprises Pvt. Ltd.), a DPIIT-recognised startup in "
                     "Maharashtra, India, builds Shram Safal, a trust-governed Daily Farm Execution System: a multi-user farm app for people with "
                     "low or no literacy that turns each day's farm work into a trusted digital replica of the farm."),
     "brand": {"@type": "Brand", "name": "Shram Safal", "alternateName": "श्रम सफल"},
@@ -61,7 +66,8 @@ ORG = {
                    "Farm labour attendance and wages", "Farm traceability", "Spray records for export",
                    "Digital replica of a smallholder farm", "Farmer producer organisations (FPO/FPC)"],
     "url": SITE + "/",
-    "logo": SITE + "/assets/img/app-icon-512.png",
+    "logo": SITE + "/assets/img/arve-logo.png",
+    "sameAs": [u for u in (INSTAGRAM, FACEBOOK) if u],
     "email": "arvesystems@gmail.com",
     "identifier": [{"@type": "PropertyValue", "propertyID": "CIN", "value": "U62099PN2026PTC256337"},
                    {"@type": "PropertyValue", "propertyID": "DPIIT startup recognition", "value": "DIPP285496"}],
@@ -369,6 +375,30 @@ def hide_play(doc):
     return re.sub(r"<html([^>]*)>", r'<html\1 data-play="off">', doc, count=1)  # last, so the language attributes stay first
 
 
+# Join-and-follow links: <!--SOCIAL:foot|card|cta--> markers become the links (WhatsApp group, Instagram, Facebook when set).
+IG_PATH = ("M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7z"
+           "m5 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM17.3 5.4a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z")
+
+
+def social(doc):
+    links = [("wa", WHATSAPP_GROUP, BRAND["wa"][1], "WhatsApp गटात सामील व्हा", "Join our WhatsApp group"),
+             ("ig", INSTAGRAM, IG_PATH, "Instagram वर फॉलो करा", "Follow on Instagram")]
+    if FACEBOOK:
+        links.append(("fb", FACEBOOK, BRAND["fb"][1], "Facebook वर फॉलो करा", "Follow on Facebook"))
+
+    def render(kind):
+        tag = "btn btn-ghost light soc-cta" if kind == "cta" else "soc"
+        items = "".join(
+            f'<a class="{tag} {k}" href="{html.escape(url)}" target="_blank" rel="noopener">'
+            f'<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor" fill-rule="evenodd"><path d="{path}"/></svg>{both(mr, en)}</a>'
+            for k, url, path, mr, en in links)
+        return items if kind == "cta" else f'<div class="social social-{kind}">{items}</div>'
+
+    for kind in ("foot", "card", "cta"):
+        doc = doc.replace(f"<!--SOCIAL:{kind}-->", render(kind))
+    return doc
+
+
 PAGES = []  # (path, title_en, desc_en) for sitemap / llms.txt
 IMAGES = {}  # path -> (image url, alt mr, alt en) for the image sitemap
 TITLES_MR = {}  # path -> Marathi title, for llms.txt
@@ -376,7 +406,7 @@ TITLES_MR = {}  # path -> Marathi title, for llms.txt
 
 def emit(path, source, meta=None):
     meta = meta or {}
-    full = hide_play(source.replace("<!--HEADER-->", HEADER).replace("<!--FOOTER-->", FOOTER))
+    full = social(hide_play(source.replace("<!--HEADER-->", HEADER).replace("<!--FOOTER-->", FOOTER)))
     # The script loads from the head with defer: it downloads early but never holds up the first paint.
     full = full.replace("</head>", '<script defer src="assets/js/site.js"></script>\n</head>', 1)
     if not HAS_BLOG:  # no posts yet: no page may link to a Blog address that does not exist
@@ -609,7 +639,7 @@ def render_post(post, others):
       <h1 class="h1 post-h1">{both(post['h1_mr'], post['h1_en'])}</h1>
       <p class="answer">{both(post['answer_mr'], post['answer_en'])}</p>
       <figure class="post-fig"><img src="assets/blog/{slug}.svg" alt="{html.escape(post['illustration_alt_en'])}" width="1200" height="630"></figure>
-      <p class="post-by">{both('Agriryot Value Enterprises Pvt Ltd · २ नोव्हेंबर २०२६', 'Agriryot Value Enterprises Pvt Ltd · 2 November 2026')}</p>
+      <p class="post-by">{both('ARVE (Agri Ryot Value Enterprises) · २ नोव्हेंबर २०२६', 'ARVE (Agri Ryot Value Enterprises) · 2 November 2026')}</p>
       {share_bar(post, "top")}
     </div>
   </header>
@@ -621,7 +651,7 @@ def render_post(post, others):
       <p class="h3">{both('रोजच्या शेतकामाची व्यवस्था, तुमच्या फोनवर.', 'A Daily Farm Execution System, on your phone.')}</p>
       <p>{both('शेतात आज काय झालं ते बोला. ती नोंद तुमच्या शेताची विश्वासार्ह आठवण बनते.', "Say what happened on your farm today. It becomes your farm's trusted memory.")}</p>
       <div class="btn-row"><a class="gp-badge on-dark" href="{html.escape(PLAY)}" target="_blank" rel="noopener"><span class="mr"><img src="assets/img/google-play-mr.svg" alt="Google Play वर ते मिळवा" width="169" height="50"></span><span class="en"><img src="assets/img/google-play-en.svg" alt="Get it on Google Play" width="169" height="50"></span></a>
-      <a class="btn btn-ghost light" href="contact.html">{both('आमच्याशी बोला', 'Talk to us')}</a></div>
+      <a class="btn btn-ghost light" href="contact.html">{both('आमच्याशी बोला', 'Talk to us')}</a><!--SOCIAL:cta--></div>
     </aside>
     {srcs}
     <section class="post-related"><h2>{both('आणखी वाचा', 'Read next')}</h2><div class="rel-grid">{rel}</div></section>
@@ -770,7 +800,7 @@ def sitemap_robots_llms(posts):
     pages = [p for p in PAGES if not p[0].startswith("blog/") or p[0] == "blog/index.html"]
     posts_ = [p for p in PAGES if p[0].startswith("blog/") and p[0] != "blog/index.html"]
     lines = ["# Shram Safal (श्रम सफल)", "",
-             f"> {DEFINITION_EN} Made by Agriryot Value Enterprises Private Limited, Maharashtra, India.", "",
+             f"> {DEFINITION_EN} Made by ARVE (Agri Ryot Value Enterprises Pvt. Ltd.; registered as Agriryot Value Enterprises Private Limited), Maharashtra, India.", "",
              "## Key facts", "",
              "- Category: a trust-governed Daily Farm Execution System (Marathi: रोजच्या शेतकामाची विश्वासार्ह व्यवस्था). Made in Maharashtra, India.",
              "- Trust rules: nothing becomes a record until a person confirms it; the owner approves records made by others; corrections are added as new entries, never silently overwritten; each person sees only what the owner allows.",
@@ -779,7 +809,7 @@ def sitemap_robots_llms(posts):
              "- How: speak in Marathi or tap; Shram Sathi shows what it understood; nothing becomes a record until a person confirms it; records by others wait for the owner's approval; corrections are added, never silently overwritten.",
              "- What it covers today: work done, attendance (हजेरी) kept separate from wages, spending per plot, upcoming work, spray records, planned versus done, worker ID and QR card. Works without network.",
              "- Crops and place: for all crops (pomegranate, sugarcane, grapes, onion, banana, vegetables and more); the first phase runs in Solapur district and Nashik, Maharashtra, for all farmers and all kinds of FPOs and FPCs.",
-             "- Company: Agriryot Value Enterprises Private Limited, CIN U62099PN2026PTC256337, Maharashtra; a DPIIT-recognised startup (certificate no. DIPP285496).",
+             "- Company: ARVE, Agri Ryot Value Enterprises Pvt. Ltd. (registered name Agriryot Value Enterprises Private Limited), CIN U62099PN2026PTC256337, Maharashtra; a DPIIT-recognised startup (certificate no. DIPP285496).",
              ("- App: Android, on Google Play: " + PLAY) if SHOW_PLAY else "- App: Android; sign in with a phone number and an SMS code; daily use starts on 1 December 2026.",
              "- Data: stored in India; users can download or erase their data; built with India's DPDP law in mind.",
              "- Being developed: FPO/FPC views of member farms, only with each farmer's approval; AgriStack Farmer ID.",
