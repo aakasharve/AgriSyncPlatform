@@ -1,0 +1,235 @@
+{
+ "slug": "farm-traceability-with-trust-india",
+ "primary_keyword_en": "farm traceability with trust in India",
+ "primary_keyword_mr": "शेतमालाचा माग — ट्रेसेबिलिटी म्हणजे काय",
+ "keywords": [
+  "farm traceability with trust in India",
+  "शेतमालाचा माग — ट्रेसेबिलिटी म्हणजे काय",
+  "traceability in agriculture",
+  "what is traceability in agriculture",
+  "farm to fork traceability india",
+  "food traceability in india",
+  "food traceability system in india",
+  "blockchain traceability in agriculture",
+  "farm level traceability",
+  "hortinet",
+  "hortinet registration",
+  "farmer connect app",
+  "traceability meaning in marathi",
+  "ट्रेसेबिलिटी म्हणजे काय",
+  "विश्वासार्ह नोंद",
+  "पुरावा",
+  "APEDA traceability",
+  "GrapeNet",
+  "AnarNet",
+  "Shram Safal",
+  "श्रम सफल",
+  "daily farm execution system",
+  "Solapur farmers"
+ ],
+ "title_en": "Farm Traceability with Trust in India: A Farmer's Guide",
+ "title_mr": "शेतमालाचा माग — ट्रेसेबिलिटी म्हणजे काय? नोंदीपासून सुरुवात",
+ "meta_description_en": "What is traceability in agriculture? How APEDA's HortiNet works, why buyers ask for it, and why farm traceability with trust starts with the daily record.",
+ "meta_description_mr": "ट्रेसेबिलिटी म्हणजे शेतमालाचा माग. व्यापारी तो का विचारतात, APEDA चं हॉर्टिनेट कसं चालतं, आणि खरा माग रोजच्या नोंदीपासून कसा सुरू होतो.",
+ "h1_en": "Farm Traceability with Trust in India Starts at the Plot",
+ "h1_mr": "शेतमालाचा माग — ट्रेसेबिलिटी म्हणजे काय, आणि तो विश्वासार्ह कसा होतो?",
+ "answer_en": "Traceability in agriculture means being able to follow produce back to the farm and plot it came from, and to see what was done there: sprays, fertiliser, labour, dates. Farm traceability with trust in India starts with an honest daily record at the plot, made by the people who did the work and approved by the owner.",
+ "answer_mr": "ट्रेसेबिलिटी म्हणजे शेतमालाचा माग. हा माल कोणत्या शेतातून, कोणत्या प्लॉटमधून आला आणि तिथं काय काय झालं — कोणती फवारणी, कोणतं खत, कोणी काम केलं, कधी — हे मागे जाऊन दाखवता येणं. हा माग खरा ठरतो तो शेतातल्या रोजच्या नोंदीवरून. काम करणाऱ्यानं सांगितलेली आणि मालकानं मंजूर केलेली नोंद — हाच त्या मागाचा पाया.",
+ "sections": [
+  {
+   "h2_en": "What is traceability in agriculture?",
+   "h2_mr": "ट्रेसेबिलिटी म्हणजे काय? शेतमालाचा माग सोप्या भाषेत",
+   "status": "none",
+   "paras_en": [
+    "Traceability in agriculture means you can follow produce in both directions. Backward: from a crate at a market or a port to the farm, the plot and the work done on it. Forward: from a plot to wherever its harvest went.",
+    "For a farmer, it simply means answering a buyer's questions. Which plot is this from? What was sprayed, and when? Who did the work? How long before harvest was the last spray?",
+    "Food traceability in India, from farm to fork, passes through many hands: the farmer, the Mukadam and workers, the pack house, the lab, the exporter, the transporter and the shop. Each keeps one piece. A trace is only as strong as its first link, and the first link is the farm."
+   ],
+   "paras_mr": [
+    "ट्रेसेबिलिटी म्हणजे शेतमालाचा माग. माल कुठून आला आणि पुढे कुठं गेला, हे दोन्ही बाजूंनी सांगता येणं. बाजारातल्या किंवा बंदरावरच्या एका क्रेटपासून थेट शेतापर्यंत, प्लॉटपर्यंत आणि तिथं झालेल्या कामापर्यंत मागे जाता आलं पाहिजे.",
+    "शेतकऱ्यासाठी याचा अर्थ साधा आहे — खरेदीदाराच्या प्रश्नांची उत्तरं. हा माल कोणत्या प्लॉटचा? कोणती फवारणी झाली, कधी झाली? काम कोणी केलं? काढणीच्या किती दिवस आधी शेवटची फवारणी झाली?",
+    "शेतापासून ताटापर्यंत माल अनेक हातांतून जातो — शेतकरी, मुकादम आणि कामगार, पॅक हाऊस, लॅब, निर्यातदार, वाहतूकदार, दुकानदार. प्रत्येकाकडे माहितीचा एक तुकडा असतो. साखळी तेवढीच मजबूत, जेवढी तिची पहिली कडी. आणि पहिली कडी म्हणजे आपलं शेत."
+   ]
+  },
+  {
+   "h2_en": "Why do buyers and exporters ask for farm traceability?",
+   "h2_mr": "व्यापारी आणि निर्यातदार शेताचा माग का विचारतात?",
+   "status": "none",
+   "paras_en": [
+    "Buyers want to know that produce is safe and that what is said about it is true. If a lot fails a residue test, they need to know which farm and which plot it came from, and what happened there.",
+    "Maharashtra's grape growers know this well. APEDA brought in GrapeNet, a web-based traceability system for grapes exported to the European Union, in the 2006 and 2007 grape seasons. The same idea has since spread to pomegranate, onion, vegetables and other produce.",
+    "Traceability can also protect the farmer. A clear record helps keep your plot apart from someone else's mistake, and lets you show your care, not only claim it."
+   ],
+   "paras_mr": [
+    "खरेदीदाराला दोन गोष्टींची खात्री हवी असते: माल खायला सुरक्षित आहे, आणि मालाबद्दल जे सांगितलं जातं ते खरं आहे. एखाद्या लॉटमध्ये औषधाचे अंश (रेसिड्यू) जास्त निघाले, तर तो माल कोणत्या शेतातून, कोणत्या प्लॉटमधून आला आणि तिथं काय झालं, हे त्यांना कळावं लागतं.",
+    "आपल्या द्राक्ष बागायतदारांना हे नवं नाही. युरोपला निर्यात होणाऱ्या द्राक्षांसाठी APEDA ने 2006 आणि 2007 च्या हंगामांत ग्रेपनेट ही ऑनलाइन मागोवा घेणारी व्यवस्था आणली. पुढे हीच पद्धत डाळिंब, कांदा, भाजीपाला आणि इतर मालापर्यंत पोहोचली.",
+    "माग शेतकऱ्याचंही रक्षण करू शकतो. स्पष्ट नोंद असली की दुसऱ्याच्या चुकीचं खापर तुमच्या प्लॉटवर फोडणं अवघड जातं. आणि तुम्ही घेतलेली काळजी फक्त तोंडानं सांगावी लागत नाही — दाखवता येते."
+   ]
+  },
+  {
+   "h2_en": "How does APEDA traceability (GrapeNet, AnarNet, HortiNet) work?",
+   "h2_mr": "APEDA चं ग्रेपनेट, अनारनेट, हॉर्टिनेट कसं काम करतात?",
+   "status": "none",
+   "paras_en": [
+    "APEDA's HortiNet page describes it as an internet-based service for certification and traceability of fresh horticulture produce exported from India: grapes, pomegranates, mangoes, vegetables, betel leaves, citrus, onions and other fruits. GrapeNet is its grape module; AnarNet is its pomegranate module.",
+    "HortiNet registration of farms is done by the State Horticulture Department. For vegetables, APEDA notes that a pack house can also register farmers. Laboratories enter residue test results, which registered farmers can view. Exporters create lots, and certificates follow from there.",
+    "APEDA's separate Farmer Connect portal and app link FPOs with exporters.",
+    "These systems are built around the registered farm, the lab test and the export lot. The daily story of a plot, each spray, each irrigation, each crew, has to come from the farm itself, often from a notebook, loose chits or memory."
+   ],
+   "paras_mr": [
+    "APEDA च्या हॉर्टिनेट (HortiNet) पानावर सांगितलं आहे की, भारतातून निर्यात होणाऱ्या ताज्या फळ-भाजीपाल्याच्या प्रमाणपत्रासाठी आणि मागासाठी ही इंटरनेटवरची सेवा आहे. यात द्राक्ष, डाळिंब, आंबा, भाजीपाला, विड्याची पानं, लिंबूवर्गीय फळं, कांदा आणि इतर फळं येतात. द्राक्षासाठी ग्रेपनेट (GrapeNet) आणि डाळिंबासाठी अनारनेट (AnarNet) असे वेगळे भाग आहेत.",
+    "हॉर्टिनेट नोंदणी, म्हणजे शेताची नोंदणी, राज्याच्या फलोत्पादन विभागाकडून होते. भाजीपाल्यासाठी पॅक हाऊसही शेतकऱ्यांची नोंदणी करू शकतं, असं APEDA सांगतं. लॅब रेसिड्यू तपासणीचे निकाल भरते, आणि नोंदणी झालेला शेतकरी आपला अहवाल पाहू शकतो. निर्यातदार लॉट तयार करतो, आणि मग पुढची प्रमाणपत्रं निघतात.",
+    "APEDA ची Farmer Connect नावाची वेगळी वेबसाइट आणि मोबाईल ॲपही आहे. ती FPO आणि निर्यातदारांना एकमेकांशी जोडते.",
+    "या सगळ्या व्यवस्था नोंदणी झालेलं शेत, लॅबची तपासणी आणि निर्यातीचा लॉट यांच्याभोवती उभ्या आहेत. पण प्लॉटमधली रोजची गोष्ट — प्रत्येक फवारणी, प्रत्येक पाण्याची पाळी, कोणती टोळी कधी आली — ती शेतातूनच यावी लागते. अनेकदा ती वहीत, सुट्ट्या चिठ्ठ्यांवर किंवा कोणाच्या तरी लक्षातच असते."
+   ]
+  },
+  {
+   "h2_en": "Is blockchain needed for farm traceability?",
+   "h2_mr": "शेतमालाच्या मागासाठी ब्लॉकचेन लागतं का?",
+   "status": "none",
+   "paras_en": [
+    "Blockchain traceability in agriculture is often in the news. It stores records so that many parties can see them and old entries are hard to change quietly. That can help when many companies share one chain.",
+    "But no tool can make a wrong first entry right. If a spray date was guessed a week later, locking it only locks in the guess. Even APEDA's HortiNet page notes that APEDA is not responsible for errors in data entered by users. Trust begins where the work happens.",
+    "So the real question is not which technology to use. It is this: was the record made on the day, by the person who did the work, for the right plot, and checked by the owner? If yes, the trace can be trusted, whatever food traceability system in India carries it later."
+   ],
+   "paras_mr": [
+    "शेतीतल्या ब्लॉकचेन ट्रेसेबिलिटीची चर्चा खूप ऐकू येते. ब्लॉकचेन म्हणजे नोंदी अशा पद्धतीने ठेवणं की अनेक जण त्या पाहू शकतात आणि जुनी नोंद गुपचूप बदलणं अवघड जातं. अनेक कंपन्या एकाच साखळीत काम करत असतील, तर याचा उपयोग होऊ शकतो.",
+    "पण पहिलीच नोंद चुकीची असेल, तर कोणतंही तंत्र ती बरोबर करू शकत नाही. फवारणीची तारीख आठवडाभराने अंदाजाने लिहिली असेल, तर ती कुलूपबंद केल्याने फक्त अंदाजच कुलूपबंद होतो. APEDA च्या हॉर्टिनेट पानावरही अशी सूचना आहे की वापरणाऱ्यांनी भरलेल्या माहितीतल्या चुकांची जबाबदारी APEDA ची नाही. म्हणजे विश्वास सुरू होतो तो काम जिथं होतं तिथूनच.",
+    "म्हणून खरा प्रश्न 'कोणतं तंत्र?' हा नाही. खरे प्रश्न असे आहेत: नोंद त्याच दिवशी झाली का? काम करणाऱ्यानेच सांगितली का? योग्य प्लॉटची आहे का? मालकाने तपासली का? उत्तरं 'हो' असतील, तर ती नोंद पुढे कशातूनही गेली तरी माग विश्वासार्ह राहतो."
+   ]
+  },
+  {
+   "h2_en": "How do you keep a trace from the farm itself?",
+   "h2_mr": "शेतमालाचा माग शेतापासून कसा ठेवायचा?",
+   "status": "now",
+   "paras_en": [
+    "This is where Shram Safal, India's innovative Daily Farm Execution System, comes in. Each day's farm work, spoken in Marathi or tapped, becomes the farm's trusted memory. It is a multi-user system built for people with low or no literacy: owner, family, Mukadam and workers keep one shared record by speaking or tapping. Daily use begins on 1 December 2026, and the first phase runs in Solapur district and Nashik. It is made for every crop: pomegranate, grapes, sugarcane, onion, banana, vegetables, cereals.",
+    "You say the day's work: a spray, irrigation, pruning, fertiliser, harvest. Shram Sathi shows what it understood: what work, who did it, when, and on which plot. You confirm it or correct it. Each entry is tied to a plot and a day, with that day's weather. It works without network and syncs later.",
+    "Shram Safal does not replace HortiNet registration or lab tests; those stay with the State Horticulture Department, accredited labs and your exporter. It keeps the plot's daily memory, so when someone asks what was done here, the answer exists. Such records protect both sides: the owner, and the Mukadam and workers whose work is on record.",
+    "Trust is built into how the record is kept, making it a trusted digital replica of the farm's daily work, not a story written later:"
+   ],
+   "paras_mr": [
+    "इथंच श्रम सफल कामाला येतं. श्रम सफल ही भारतातली नव्या पद्धतीची रोजच्या शेतकामाची व्यवस्था आहे. दिवसाचं काम मराठीत बोलून किंवा बटण दाबून नोंदवलं की ते शेताची विश्वासार्ह आठवण बनतं. लिहिता-वाचता येत नसेल तरी चालतं — मालक, घरचे, मुकादम आणि कामगार, सगळे बोलून किंवा बटण दाबून एकच नोंद ठेवतात. 1 डिसेंबर 2026 पासून रोजचा वापर सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. आणि हे फक्त द्राक्षासाठी नाही — डाळिंब, ऊस, कांदा, केळी, भाजीपाला, धान्य, सगळ्या पिकांसाठी आहे.",
+    "तुम्ही दिवसाचं काम सांगायचं — फवारणी, पाणी, छाटणी, खत, काढणी. श्रम साथी त्याला काय समजलं ते दाखवतो: कोणतं काम, कोणी केलं, कधी आणि कोणत्या प्लॉटवर. तुम्ही 'बरोबर' म्हणायचं किंवा दुरुस्त करायचं. प्रत्येक नोंद एका प्लॉटशी आणि एका दिवसाशी जोडलेली असते, त्या दिवसाच्या हवामानासकट. नेटवर्क नसलं तरी नोंद होते; नेटवर्क आलं की ती पुढे जाते.",
+    "श्रम सफल हॉर्टिनेटची नोंदणी किंवा लॅब तपासणीची जागा घेत नाही. ते काम फलोत्पादन विभाग, मान्यताप्राप्त लॅब आणि तुमचा निर्यातदार यांच्याकडेच राहतं. श्रम सफल प्लॉटची रोजची आठवण जपतं. कोणी विचारलं 'इथं काय काय झालं?', तर उत्तर आधीच तयार असतं. अशी नोंद दोन्ही बाजूंचं रक्षण करते — मालकाचं, आणि ज्यांचं काम आता नोंदीत आहे त्या मुकादम-कामगारांचंही.",
+    "विश्वास नोंद ठेवण्याच्या पद्धतीतच आहे. ही नंतर आठवून लिहिलेली गोष्ट नाही, तर रोजच्या कामाची खरी नोंद आहे:"
+   ],
+   "bullets_en": [
+    "The owner invites family, the Mukadam and workers with a role, chosen plots and an end date. Each person sees only what the owner allows.",
+    "Records made by others are approved (मंजूर) or questioned (शंका) by the owner.",
+    "Corrections never erase history.",
+    "The original voice can be replayed, with consent.",
+    "Every worker gets a permanent ID and QR card, even without a phone of their own.",
+    "Spending is kept per plot. Attendance (हजेरी) is kept apart from wages, and wages are never guessed from headcount.",
+    "Data is stored in India, and you can download or erase it. Built for India's DPDP law, and ready to carry your AgriStack Farmer ID."
+   ],
+   "bullets_mr": [
+    "मालक घरच्यांना, मुकादमाला आणि कामगारांना सोबत घेतो — प्रत्येकाचं काम काय, कोणते प्लॉट आणि कोणत्या तारखेपर्यंत, हे ठरवून. मालक जेवढं दाखवेल, तेवढंच प्रत्येकाला दिसतं.",
+    "दुसऱ्यांनी केलेली नोंद मालक मंजूर करतो, किंवा त्यावर शंका घेतो.",
+    "दुरुस्ती केली तरी आधीचा इतिहास पुसला जात नाही.",
+    "मूळ आवाज परत ऐकता येतो — संमती असेल तरच.",
+    "प्रत्येक कामगाराला कायमचा ओळख क्रमांक आणि QR कार्ड मिळतं. स्वतःचा फोन नसला तरी चालतं.",
+    "खर्च प्लॉटनुसार राहतो. हजेरी मजुरीपासून वेगळी ठेवली जाते; किती माणसं आली यावरून मजुरीचा अंदाज कधीच बांधला जात नाही.",
+    "माहिती भारतातच ठेवली जाते; ती डाउनलोड करायची की पुसून टाकायची, हे तुमच्या हातात. भारताच्या DPDP कायद्याचा विचार करून बनवलेलं, आणि AgriStack शेतकरी ओळख क्रमांक सोबत ठेवण्यासाठी तयार."
+   ]
+  },
+  {
+   "h2_en": "How can an FPO trace member farms without taking control?",
+   "h2_mr": "FPO ला सभासदांच्या शेतांचा माग कसा दिसेल?",
+   "status": "dev",
+   "paras_en": [
+    "Many farmers sell through an FPO or FPC. For them, traceability means seeing many member farms together. Shram Safal is developing a view for FPOs and FPCs, with a farmer-approval flow at its centre.",
+    "The rule is simple: the FPO sees only what the farmer approves. Staff see masked worker names and no GPS location. Also being developed: a suggest-and-adopt change trail showing who suggested a change and who adopted it, and next-season reminders at the same crop stage.",
+    "These parts are being developed and will come after the 1 December release."
+   ],
+   "paras_mr": [
+    "बरेच शेतकरी FPO किंवा FPC मार्फत माल विकतात. त्यांच्यासाठी माग म्हणजे अनेक सभासदांची शेतं एकत्र पाहता येणं. श्रम सफल FPO आणि FPC साठी अशी एकत्र पाहण्याची सोय बनवत आहे, आणि तिच्या केंद्रस्थानी शेतकऱ्याची मंजुरी आहे.",
+    "नियम सोपा आहे: शेतकरी जेवढं मंजूर करेल, तेवढंच FPO ला दिसेल. कर्मचाऱ्यांना कामगारांची नावं झाकलेली दिसतील, आणि GPS ठिकाण दिसणार नाही. सोबत आणखी दोन गोष्टी बनत आहेत: नोंदीत बदल कोणी सुचवला आणि कोणी स्वीकारला, हे दाखवणारा मागोवा; आणि पुढच्या हंगामात पिकाच्या त्याच टप्प्यावर येणारी आठवण.",
+    "हे भाग सध्या बनवले जात आहेत. ते 1 डिसेंबरच्या सुरुवातीनंतर येतील."
+   ]
+  },
+  {
+   "h2_en": "Where could farm traceability with trust lead next?",
+   "h2_mr": "विश्वासार्ह नोंदीतून पुढे काय उघडू शकतं?",
+   "status": "future",
+   "paras_en": [
+    "Records come first; services come later. Everything in this section is a future possibility, not a service today. Today's job is plainer: keep the farm's daily memory honest, so your plot can answer when the question comes.",
+    "The same habits (who did what, where, when, and who confirmed it) will matter for any future claim about how land is farmed, such as carbon-credit style claims. Shram Safal is building the record-keeping principles of accountability for such claims. It is not a carbon credit product and promises no carbon income.",
+    "With trusted daily records over a season or more, some doors could open later, always with the farmer's permission:"
+   ],
+   "paras_mr": [
+    "आधी नोंद, मग सेवा. या भागात सांगितलेलं सगळं पुढच्या काळातलं आहे, आज मिळणारी सेवा नाही. आजचं काम साधं आहे: शेताची रोजची आठवण प्रामाणिक ठेवायची, म्हणजे प्रश्न येईल तेव्हा तुमचा प्लॉट स्वतःच उत्तर देईल.",
+    "कोणी काय केलं, कुठं, कधी, आणि कोणी खात्री केली — ही सवय पुढे शेती कशी केली गेली याबद्दलच्या दाव्यांसाठी, अगदी कार्बन क्रेडिटसारख्या दाव्यांसाठीही, महत्त्वाची ठरेल. अशा नोंदी कशा ठेवायच्या, याची जबाबदारीची तत्त्वं श्रम सफल आत्ता उभी करत आहे. पण श्रम सफल कार्बन क्रेडिट मिळवून देत नाही, आणि त्यातून कमाई होईल असं आश्वासनही देत नाही.",
+    "हंगामभर किंवा त्याहून जास्त काळाची विश्वासार्ह रोजची नोंद तयार झाली, की पुढे काही दारं उघडू शकतात — तीही नेहमी शेतकऱ्याच्या परवानगीनेच:"
+   ],
+   "bullets_en": [
+    "Traceability for buyers, built on the farm's own record.",
+    "Links to buyers and exporters, banks, insurers and research, only if the farmer allows.",
+    "Expert access to chosen plots.",
+    "Seeing fellow farmers' recorded practice, with their consent: real practice, not just advice."
+   ],
+   "bullets_mr": [
+    "शेताच्या स्वतःच्या नोंदीवर उभा राहिलेला, खरेदीदारांसाठीचा माग.",
+    "खरेदीदार, निर्यातदार, बँका, विमा कंपन्या आणि संशोधन संस्थांशी जोड — शेतकरी परवानगी देईल तरच.",
+    "निवडलेल्या प्लॉटवर तज्ज्ञांची नजर.",
+    "इतर शेतकऱ्यांनी प्रत्यक्ष काय केलं ते पाहता येणं, त्यांच्या संमतीने — फक्त सल्ला नाही, खरी केलेली पद्धत."
+   ]
+  }
+ ],
+ "faq": [
+  {
+   "q_en": "What is traceability in agriculture?",
+   "a_en": "It is the ability to follow produce back to the farm and plot it came from, and to see what was done there: sprays, fertiliser, labour and dates. It also shows where the harvest went next.",
+   "q_mr": "शेतीत ट्रेसेबिलिटी म्हणजे काय?",
+   "a_mr": "माल कोणत्या शेतातून, कोणत्या प्लॉटमधून आला आणि तिथं काय झालं — फवारणी, खत, मजूर, तारखा — हे मागे जाऊन सांगता येणं. आणि तो माल पुढे कुठं गेला, हेही सांगता येणं."
+  },
+  {
+   "q_en": "Can I do Hortinet registration through Shram Safal?",
+   "a_en": "No. HortiNet farm registration is done by your State Horticulture Department, and for vegetables a pack house can also register farmers. Shram Safal keeps your plot's daily work record; it does not replace HortiNet, lab tests or export certificates.",
+   "q_mr": "हॉर्टिनेट नोंदणी श्रम सफलमधून होते का?",
+   "a_mr": "नाही. हॉर्टिनेटमधली शेत नोंदणी राज्याच्या फलोत्पादन विभागाकडून होते; भाजीपाल्यासाठी पॅक हाऊसही नोंदणी करू शकतं. श्रम सफल तुमच्या प्लॉटच्या रोजच्या कामाची नोंद ठेवतं. ते हॉर्टिनेट, लॅब तपासणी किंवा निर्यातीच्या प्रमाणपत्रांची जागा घेत नाही."
+  },
+  {
+   "q_en": "Is blockchain needed for farm level traceability?",
+   "a_en": "Not by itself. Blockchain can make shared records hard to change quietly, but it cannot fix a wrong first entry. Farm level traceability depends on a record made on the day, by the person who did the work, and checked by the owner.",
+   "q_mr": "शेत पातळीवरच्या मागासाठी ब्लॉकचेन लागतं का?",
+   "a_mr": "फक्त ब्लॉकचेनने काम होत नाही. त्यामुळे नोंद गुपचूप बदलणं अवघड जातं, पण पहिलीच नोंद चुकीची असेल तर ती बरोबर होत नाही. विश्वासार्ह माग त्याच दिवशी, काम करणाऱ्याने सांगितलेल्या आणि मालकाने तपासलेल्या नोंदीवर उभा राहतो."
+  },
+  {
+   "q_en": "What is the meaning of traceability in Marathi?",
+   "a_en": "In Marathi, traceability is best said as शेतमालाचा माग: being able to trace produce back to its farm and plot, and to show what was done there. A trusted record (विश्वासार्ह नोंद) is the proof (पुरावा) behind that trace.",
+   "q_mr": "ट्रेसेबिलिटी म्हणजे काय, मराठीत कसं सांगायचं?",
+   "a_mr": "सोप्या मराठीत ट्रेसेबिलिटी म्हणजे शेतमालाचा माग. माल कुठून आला आणि तिथं काय झालं, हे दाखवता येणं. आणि त्या मागाचा पुरावा म्हणजे विश्वासार्ह नोंद."
+  },
+  {
+   "q_en": "Can workers without a phone be part of the farm's record?",
+   "a_en": "Yes. In Shram Safal every worker gets a permanent ID and a QR card, so they do not need a phone of their own. Workers who do have a phone can see their own days.",
+   "q_mr": "फोन नसलेले कामगार नोंदीत येऊ शकतात का?",
+   "a_mr": "हो. श्रम सफलमध्ये प्रत्येक कामगाराला कायमचा ओळख क्रमांक आणि QR कार्ड मिळतं, त्यामुळे स्वतःचा फोन लागत नाही. ज्या कामगाराकडे फोन आहे, त्याला स्वतःचे दिवस पाहता येतात."
+  },
+  {
+   "q_en": "Will my FPO or a buyer see my farm records?",
+   "a_en": "Only if you allow it. In Shram Safal each person sees only what the owner allows. An FPO view with a farmer-approval flow is being developed, and buyer traceability is a future possibility; neither will show anything the farmer has not approved.",
+   "q_mr": "माझ्या FPO ला किंवा खरेदीदाराला माझी नोंद दिसेल का?",
+   "a_mr": "तुम्ही परवानगी दिली तरच. श्रम सफलमध्ये मालक जेवढं दाखवेल तेवढंच प्रत्येकाला दिसतं. शेतकऱ्याच्या मंजुरीने चालणारी FPO ची सोय सध्या बनवली जात आहे, आणि खरेदीदारांसाठीचा माग ही पुढची शक्यता आहे. दोन्हीत शेतकऱ्याने मंजूर केलेलंच दिसेल."
+  }
+ ],
+ "sources": [
+  {
+   "name": "APEDA — HortiNet traceability (GrapeNet, AnarNet and other produce)",
+   "url": "https://apeda.gov.in/hortinet-static"
+  },
+  {
+   "name": "APEDA Farmer Connect — About (portal and mobile applications linking FPOs with exporters)",
+   "url": "https://farmerconnect.apeda.gov.in/Home/AboutFarmerConnect"
+  },
+  {
+   "name": "Press Information Bureau: APEDA on traceability for grapes exported to the European Union (GrapeNet)",
+   "url": "https://www.pib.gov.in/newsite/erelcontent.aspx?relid=28740"
+  }
+ ],
+ "illustration_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 630\" role=\"img\"><defs><radialGradient id=\"ga\" cx=\"50%\" cy=\"50%\" r=\"50%\"><stop offset=\"0\" stop-color=\"#ffffff\"/><stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/></radialGradient><radialGradient id=\"gb\" cx=\"50%\" cy=\"50%\" r=\"50%\"><stop offset=\"0\" stop-color=\"#b9dc71\" stop-opacity=\".38\"/><stop offset=\"1\" stop-color=\"#b9dc71\" stop-opacity=\"0\"/></radialGradient><radialGradient id=\"gc\" cx=\"50%\" cy=\"50%\" r=\"50%\"><stop offset=\"0\" stop-color=\"#eaf4ec\"/><stop offset=\"1\" stop-color=\"#eaf4ec\" stop-opacity=\"0\"/></radialGradient></defs><rect width=\"1200\" height=\"630\" fill=\"#f4f9f4\"/><circle cx=\"605\" cy=\"305\" r=\"330\" fill=\"url(#ga)\"/><circle cx=\"605\" cy=\"300\" r=\"190\" fill=\"url(#gb)\"/><ellipse cx=\"280\" cy=\"475\" rx=\"290\" ry=\"160\" fill=\"url(#gc)\"/><g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"605\" cy=\"305\" r=\"228\" stroke=\"#b9dc71\" stroke-width=\"2\" stroke-dasharray=\"2 12\"/><path d=\"M50 470 L280 390 L500 470 L270 560 Z\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"4\"/><path d=\"M111 482 L307 414 M155 500 L351 432 M199 518 L395 450 M243 536 L439 468\" stroke=\"#b9dc71\" stroke-width=\"3\"/><path d=\"M111 482 L307 414 M155 500 L351 432 M199 518 L395 450 M243 536 L439 468\" stroke=\"#62a83a\" stroke-width=\"5\" stroke-dasharray=\"0 16\"/><ellipse cx=\"280\" cy=\"474\" rx=\"28\" ry=\"10\" stroke=\"#1847d6\" stroke-width=\"2.5\"/><path d=\"M280 474 C268 460 262 451 262 440 A18 18 0 1 1 298 440 C298 451 292 460 280 474 Z\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"3\"/><circle cx=\"280\" cy=\"440\" r=\"6\" fill=\"#178b55\"/><circle cx=\"134\" cy=\"300\" r=\"22\" fill=\"#eaf4ec\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><rect x=\"102\" y=\"334\" width=\"64\" height=\"92\" rx=\"30\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><path d=\"M222 262 L168 298 L252 272\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><rect x=\"206\" y=\"186\" width=\"170\" height=\"90\" rx=\"30\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><path d=\"M230 226 V236 M242 220 V242 M254 213 V249 M266 222 V240 M278 209 V253 M290 217 V245 M302 224 V238 M314 215 V247 M326 221 V241 M338 225 V237 M350 228 V234\" stroke=\"#178b55\" stroke-width=\"5\"/><path d=\"M378 232 C430 232 470 250 518 252\" stroke=\"#178b55\" stroke-width=\"3\" stroke-dasharray=\"1 10\"/><rect x=\"520\" y=\"120\" width=\"170\" height=\"372\" rx=\"28\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"5\"/><rect x=\"536\" y=\"152\" width=\"138\" height=\"306\" rx=\"14\" fill=\"#f4f9f4\"/><path d=\"M588 136 H622 M592 474 H618\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><rect x=\"548\" y=\"166\" width=\"114\" height=\"76\" rx=\"12\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"2.5\"/><path d=\"M560 196 L576 188 L592 196 L576 204 Z\" fill=\"#eaf4ec\" stroke=\"#62a83a\" stroke-width=\"2.5\"/><path d=\"M602 188 H648 M602 202 H634\" stroke=\"#0d6e3f\" stroke-width=\"4\"/><circle cx=\"568\" cy=\"226\" r=\"5\" stroke=\"#a86412\" stroke-width=\"2\"/><path d=\"M568 215 V217 M568 235 V237 M557 226 H559 M577 226 H579\" stroke=\"#a86412\" stroke-width=\"2\"/><path d=\"M586 226 H620\" stroke=\"#b9dc71\" stroke-width=\"4\"/><circle cx=\"646\" cy=\"226\" r=\"9\" fill=\"#178b55\"/><path d=\"M641 226 L645 230 L651 222\" stroke=\"#ffffff\" stroke-width=\"2.5\"/><rect x=\"548\" y=\"254\" width=\"114\" height=\"76\" rx=\"12\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"3\"/><circle cx=\"567\" cy=\"276\" r=\"7\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"2.5\"/><path d=\"M556 300 C556 290 560 286 567 286 C574 286 578 290 578 300 Z\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"2.5\"/><path d=\"M590 274 H648 M590 288 H630\" stroke=\"#0d6e3f\" stroke-width=\"4\"/><path d=\"M560 311 V317 M568 308 V320 M576 305 V323 M584 309 V319 M592 307 V321 M600 311 V317\" stroke=\"#178b55\" stroke-width=\"3\"/><circle cx=\"646\" cy=\"314\" r=\"9\" fill=\"#178b55\"/><path d=\"M641 314 L645 318 L651 310\" stroke=\"#ffffff\" stroke-width=\"2.5\"/><rect x=\"548\" y=\"342\" width=\"114\" height=\"76\" rx=\"12\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"2.5\"/><path d=\"M560 372 L576 364 L592 372 L576 380 Z\" fill=\"#eaf4ec\" stroke=\"#62a83a\" stroke-width=\"2.5\"/><path d=\"M602 364 H648 M602 378 H626\" stroke=\"#0d6e3f\" stroke-width=\"4\"/><path d=\"M560 402 H612\" stroke=\"#b9dc71\" stroke-width=\"4\"/><circle cx=\"646\" cy=\"402\" r=\"9\" fill=\"#178b55\"/><path d=\"M641 402 L645 406 L651 398\" stroke=\"#ffffff\" stroke-width=\"2.5\"/><circle cx=\"605\" cy=\"440\" r=\"12\" fill=\"#0d6e3f\"/><rect x=\"601\" y=\"432\" width=\"8\" height=\"12\" rx=\"4\" fill=\"#ffffff\"/><path d=\"M597 442 C597 450 613 450 613 442 M605 449 V452\" stroke=\"#ffffff\" stroke-width=\"2\"/><path d=\"M700 104 L732 116 V140 C732 162 718 176 700 186 C682 176 668 162 668 140 V116 Z\" fill=\"#0d6e3f\" stroke=\"#0a4a2b\" stroke-width=\"3\"/><path d=\"M685 144 L696 155 L716 132\" stroke=\"#ffffff\" stroke-width=\"5\"/><path d=\"M692 300 H782 M898 300 H922 M1038 300 H1052\" stroke=\"#178b55\" stroke-width=\"3\" stroke-dasharray=\"1 10\"/><circle cx=\"840\" cy=\"300\" r=\"56\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/><circle cx=\"980\" cy=\"300\" r=\"56\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/><circle cx=\"1110\" cy=\"300\" r=\"56\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/><circle cx=\"826\" cy=\"284\" r=\"8\" fill=\"#62a83a\" stroke=\"#0d6e3f\" stroke-width=\"2\"/><circle cx=\"841\" cy=\"279\" r=\"9\" fill=\"#62a83a\" stroke=\"#0d6e3f\" stroke-width=\"2\"/><circle cx=\"856\" cy=\"284\" r=\"8\" fill=\"#62a83a\" stroke=\"#0d6e3f\" stroke-width=\"2\"/><rect x=\"810\" y=\"288\" width=\"60\" height=\"38\" rx=\"5\" fill=\"#f7f3e8\" stroke=\"#9b7a52\" stroke-width=\"3\"/><path d=\"M814 301 H866 M814 314 H866\" stroke=\"#9b7a52\" stroke-width=\"2.5\"/><rect x=\"846\" y=\"303\" width=\"14\" height=\"14\" rx=\"2\" fill=\"#ffffff\" stroke=\"#1847d6\" stroke-width=\"2\"/><path d=\"M924 292 H934 M920 302 H932\" stroke=\"#b9dc71\" stroke-width=\"3\"/><rect x=\"944\" y=\"282\" width=\"44\" height=\"30\" rx=\"4\" fill=\"#eaf4ec\" stroke=\"#0a4a2b\" stroke-width=\"3\"/><path d=\"M988 290 H1002 L1014 302 V312 H988 Z\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"3\"/><circle cx=\"958\" cy=\"318\" r=\"7\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"3\"/><circle cx=\"1002\" cy=\"318\" r=\"7\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"3\"/><circle cx=\"1110\" cy=\"282\" r=\"13\" fill=\"#eaf4ec\" stroke=\"#0a4a2b\" stroke-width=\"3.5\"/><path d=\"M1088 330 C1088 310 1097 300 1110 300 C1123 300 1132 310 1132 330 Z\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"3.5\"/><circle cx=\"1150\" cy=\"262\" r=\"13\" fill=\"#178b55\" stroke=\"#ffffff\" stroke-width=\"3\"/><path d=\"M1144 262 L1149 267 L1157 257\" stroke=\"#ffffff\" stroke-width=\"3\"/><path d=\"M1110 362 C1104 560 640 610 312 482\" stroke=\"#178b55\" stroke-width=\"3\" stroke-dasharray=\"2 11\" opacity=\".85\"/><path d=\"M317.5 492.8 L310 481 L323.7 478\" stroke=\"#1847d6\" stroke-width=\"3\"/></g></svg>",
+ "illustration_alt_en": "Line drawing: a farmer standing beside a field plot speaks into a speech bubble with sound bars; a phone shows ticked plot records and a trust shield; a dotted chain links that record to a crate, a truck and a buyer, while a dotted line ending in an arrow traces the produce back to a pin on the plot.",
+ "illustration_alt_mr": "रेषाचित्र: प्लॉटजवळ उभा शेतकरी बोलतो आहे; फोनवर टिक केलेल्या प्लॉटच्या नोंदी आणि विश्वासाची ढाल दिसते; ठिपक्यांची साखळी त्या नोंदीपासून क्रेट, ट्रक आणि खरेदीदारापर्यंत जाते, आणि बाणाची ठिपक्यांची रेषा माल परत प्लॉटवरच्या खुणेपर्यंत नेते.",
+ "read_minutes": 6
+}

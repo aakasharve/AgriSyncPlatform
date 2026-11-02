@@ -1,0 +1,234 @@
+{
+ "slug": "farm-expense-tracking-per-plot",
+ "primary_keyword_en": "farm expense tracking per plot",
+ "primary_keyword_mr": "प्लॉटप्रमाणे शेती खर्चाचा हिशोब",
+ "keywords": [
+  "farm expense tracking per plot",
+  "प्लॉटप्रमाणे शेती खर्चाचा हिशोब",
+  "farm expense tracker app",
+  "farm expenses list",
+  "how to keep track of farm expenses",
+  "farm accounting app",
+  "cost of cultivation",
+  "cost of production",
+  "daily farm execution system",
+  "cost of cultivation of sugarcane per acre",
+  "pomegranate farming profit per acre",
+  "grape farming cost per acre",
+  "banana farming profit per acre",
+  "शेती खर्च",
+  "शेती खर्च हिशोब",
+  "रोजच्या शेतकामाची व्यवस्था",
+  "कमी खर्चात शेती कशी करावी",
+  "एकरी खर्च",
+  "एकरी लागवड खर्च",
+  "डाळिंब एकरी खर्च",
+  "ऊस एकरी खर्च",
+  "कांदा एकरी खर्च",
+  "केळी एकरी खर्च",
+  "डाळिंब लागवड एकरी खर्च",
+  "द्राक्ष लागवड एकरी खर्च",
+  "एकरी ऊस उत्पादन खर्च",
+  "उत्पादन खर्च म्हणजे काय",
+  "sheti kharch"
+ ],
+ "title_en": "Farm Expense Tracking Per Plot: Know Your Own Cost",
+ "title_mr": "प्लॉटप्रमाणे शेती खर्चाचा हिशोब — तुमचा खरा एकरी खर्च",
+ "meta_description_en": "Track farm expenses plot by plot by speaking in Marathi. What cost of cultivation means, why your number is your own, and why costs rise in a season.",
+ "meta_description_mr": "प्रत्येक प्लॉटचा शेती खर्च बोलून नोंदवा. उत्पादन खर्च म्हणजे काय, एकरी खर्च प्रत्येकाचा वेगळा का, आणि हंगामात खर्च का वाढतो — सोप्या भाषेत.",
+ "h1_en": "Farm expense tracking per plot: find your own cost of cultivation",
+ "h1_mr": "प्लॉटप्रमाणे शेती खर्चाचा हिशोब: तुमचा खरा एकरी खर्च तुमच्याच नोंदीतून",
+ "answer_en": "To track farm expenses per plot, record each spend on the day it happens and tie it to one plot: inputs, sprays, diesel, hired labour, machine hire and family work days. A season's total for that plot, divided by its area, is your own cost per acre. Shram Safal lets you record it by speaking in Marathi or by tapping.",
+ "answer_mr": "प्लॉटप्रमाणे शेती खर्चाचा हिशोब ठेवायचा असेल, तर प्रत्येक खर्च त्याच दिवशी, त्याच प्लॉटच्या नावानं नोंदवा — खत, औषध फवारणी, डिझेल, मजुरी, ट्रॅक्टर भाडं, आणि घरच्यांचे कामाचे दिवससुद्धा. हंगामभरचा त्या प्लॉटचा एकूण खर्च त्याच्या एकरानं भागला, की तुमचा स्वतःचा एकरी खर्च मिळतो. श्रम सफलमध्ये ही नोंद मराठीत बोलून किंवा बटण दाबून करता येते.",
+ "sections": [
+  {
+   "h2_en": "What is cost of cultivation, and why is your number your own?",
+   "h2_mr": "एकरी लागवड खर्च म्हणजे काय, आणि तुमचा आकडा तुमचाच का?",
+   "status": "none",
+   "paras_en": [
+    "Cost of cultivation is everything a crop takes before it gives anything back, counted per acre. Seed or plants, fertiliser, sprays, water, diesel, labour, machine hire, transport. It also includes what never leaves your pocket as cash: the days you and your family work, and the use of your own land. Spread over the harvest, per quintal, the same cost is called cost of production.",
+    "India's Commission for Agricultural Costs and Prices (CACP) counts cost in layers. In the government's own explanation of how MSP is worked out, A2+FL means all paid-out costs plus the value of family labour, and C2 is a fuller cost the Commission uses as a benchmark, which also counts what the farmer's own land and capital are worth. You do not need the codes. The idea is enough: real cost is more than the cash you remember.",
+    "One thing is worth saying plainly. There is no standard per-acre number that fits every farm. Two pomegranate orchards in the same village can differ in soil, water, plant age, variety, the season's weather and the owner's own experience. A figure you read online belongs to someone else's farm. Your plot's number has to come from your plot."
+   ],
+   "paras_mr": [
+    "एकरी लागवड खर्च म्हणजे पीक हातात येईपर्यंत एका एकरावर गेलेलं सगळं. बी किंवा रोपं, खत, औषध फवारणी, पाणी, डिझेल, मजुरी, ट्रॅक्टरचं भाडं, वाहतूक. आणि जे खिशातून रोख जात नाही तेही धरायचं — तुमचे आणि घरच्यांचे कामाचे दिवस, आणि स्वतःच्या जमिनीचा वापर. हाच खर्च निघालेल्या मालाच्या क्विंटलमागे मोजला, की त्याला उत्पादन खर्च म्हणतात.",
+    "केंद्र सरकारचा कृषी खर्च व मूल्य आयोग (CACP) हा खर्च टप्प्याटप्प्यानं मोजतो. MSP कसा ठरतो, याच्या सरकारच्या स्वतःच्या स्पष्टीकरणानुसार, A2+FL म्हणजे रोख गेलेला सगळा खर्च अधिक घरच्या मजुरीची किंमत. C2 हा आयोग तुलनेसाठी वापरतो तो पूर्ण खर्च, ज्यात स्वतःच्या जमिनीची आणि भांडवलाची किंमतही धरली जाते. ही नावं पाठ करायची गरज नाही. मुद्दा एवढाच — खरा खर्च आठवणीतल्या रोख खर्चापेक्षा जास्तच असतो.",
+    "आणि सगळ्यात महत्त्वाचं — सगळ्या शेतांना लागू होईल असा एकच ठरलेला एकरी खर्च नसतोच. एकाच गावातल्या दोन डाळिंब बागांचा खर्च वेगळा येतो. माती वेगळी, पाणी वेगळं, झाडांचं वय, वाण, त्या वर्षीचं हवामान आणि मालकाचा स्वतःचा अनुभवही वेगळा. मोबाईलवर वाचलेला आकडा दुसऱ्याच्या शेताचा असतो. तुमच्या प्लॉटचा आकडा तुमच्या प्लॉटमधूनच यायला हवा."
+   ]
+  },
+  {
+   "h2_en": "How do I track farm expenses for each plot?",
+   "h2_mr": "प्लॉटप्रमाणे शेती खर्चाचा हिशोब कसा ठेवायचा?",
+   "status": "now",
+   "paras_en": [
+    "The method is simple: one spend, one plot, one day. The hard part is doing it daily, with mud on your hands and no time to write.",
+    "With Shram Safal, you speak the day's work and spending in Marathi, or tap. Shram Sathi shows what it understood: what work, who did it, when, and on which plot. You confirm or correct it. The entry is then saved against that plot and that day, along with that day's weather.",
+    "Shram Safal is a trust-governed Daily Farm Execution System: each day's work, spoken in Marathi or tapped, becomes the farm's trusted memory, shared by owner, family, Mukadam and workers, even those who cannot read or write.",
+    "It works without network and syncs later, so a spend at the far end of the field is not lost. Through the season, Shram Safal shows spending per plot. Once you know the plot's area, cost per acre is a simple division, and every line behind it is there to check."
+   ],
+   "paras_mr": [
+    "पद्धत सोपी आहे: एक खर्च, एक प्लॉट, एक दिवस. अडचण एकच — रोज लिहायला वेळ कुठाय? हात मातीत असतात, आणि संध्याकाळपर्यंत अर्धं विसरून जातं.",
+    "श्रम सफलमध्ये दिवसभराचं काम आणि खर्च मराठीत बोलून सांगायचा, किंवा बटण दाबायचं. श्रम साथी दाखवतो त्याला काय समजलं — कोणतं काम, कोणी केलं, कधी, कोणत्या प्लॉटवर. बरोबर असेल तर हो म्हणायचं, चुकलं असेल तर दुरुस्त करायचं. मग ती नोंद त्या प्लॉटवर, त्या दिवसावर, त्या दिवसाच्या हवामानासकट जमा होते.",
+    "श्रम सफल म्हणजे रोजच्या शेतकामाची व्यवस्था — रोजचं काम बोलून किंवा बटण दाबून नोंदवलं, की तीच शेताची विश्वासार्ह आठवण बनते. मालक, घरचे, मुकादम आणि कामगार — लिहिता-वाचता येत नसलं तरी — सगळे एकाच नोंदीवर.",
+    "रेंज नसली तरी नोंद होते; नेट आलं की आपोआप जमा होते. हंगामभर श्रम सफलमध्ये प्रत्येक प्लॉटचा खर्च वेगळा दिसतो. प्लॉट किती एकराचा आहे हे माहीत असलं, की एकरी खर्च एका भागाकारात निघतो — आणि त्यामागची प्रत्येक नोंद तपासायला समोर असते."
+   ],
+   "bullets_en": [
+    "Speak or tap: what was done, on which plot, and what it cost.",
+    "Check what Shram Sathi understood, then confirm or correct it.",
+    "See spending for each plot, not one mixed total for the whole farm."
+   ],
+   "bullets_mr": [
+    "बोलून किंवा बटण दाबून सांगा: काय काम, कोणत्या प्लॉटवर, किती खर्च.",
+    "श्रम साथीला काय समजलं ते बघा; बरोबर असेल तर हो म्हणा, नाहीतर दुरुस्त करा.",
+    "सगळ्या शेताचा एकच गोळाबेरीज आकडा नाही — प्रत्येक प्लॉटचा खर्च वेगळा."
+   ]
+  },
+  {
+   "h2_en": "Farm expenses list: what belongs in a plot's cost?",
+   "h2_mr": "शेती खर्चाची यादी: एका प्लॉटच्या खर्चात काय काय धरायचं?",
+   "status": "none",
+   "paras_en": [
+    "A missed item makes the cost look lower than it is, until the accounts stop matching. Check each plot against this list.",
+    "Two things are most often forgotten: family work days and small cash spends made in a hurry. A daily record catches both, because it is made on the day, not remembered at the end of the season."
+   ],
+   "paras_mr": [
+    "यादीतली एखादी गोष्ट सुटली, की खर्च कमी दिसतो — आणि हंगामाच्या शेवटी हिशोब जुळत नाही. प्रत्येक प्लॉटसाठी ही यादी एकदा तपासून बघा.",
+    "दोन गोष्टी हमखास सुटतात — घरच्यांचे कामाचे दिवस, आणि घाईत केलेले छोटे रोख खर्च. रोजची नोंद दोन्ही पकडते, कारण ती त्याच दिवशी होते; हंगाम संपल्यावर आठवून नाही."
+   ],
+   "bullets_en": [
+    "Seed, seedlings, cane sets or saplings",
+    "Fertiliser and bought manure",
+    "Sprays, and the labour to spray them",
+    "Irrigation: electricity, diesel, drip repairs, bought water",
+    "Hired labour wages, by the day or by contract",
+    "Tractor, machine or bullock hire",
+    "Family work days, even though no wage is paid",
+    "Transport, crates, packing and market charges",
+    "Interest on loans taken for the crop",
+    "Lease rent, if the land is leased"
+   ],
+   "bullets_mr": [
+    "बी, रोपं, उसाचं बेणं किंवा कलमं",
+    "खत आणि विकत घेतलेलं शेणखत",
+    "औषध फवारणी, आणि फवारणीची मजुरी",
+    "पाणी: वीजबिल, डिझेल, ठिबकची दुरुस्ती, विकतचं पाणी",
+    "मजुरांची मजुरी — रोजंदारीवर किंवा उक्त्यानं",
+    "ट्रॅक्टर, यंत्र किंवा बैलजोडीचं भाडं",
+    "घरच्या माणसांचे कामाचे दिवस — मजुरी दिली नसली तरी",
+    "वाहतूक, क्रेट, पॅकिंग आणि बाजारातला खर्च",
+    "पिकासाठी घेतलेल्या कर्जाचं व्याज",
+    "जमीन खंडानं घेतली असेल, तर त्याचा खंड"
+   ]
+  },
+  {
+   "h2_en": "Why did my farm cost go up this season?",
+   "h2_mr": "या हंगामात शेतीचा खर्च का वाढला?",
+   "status": "now",
+   "paras_en": [
+    "Costs rarely rise in one jump. They rise in small steps: one extra spray after unseasonal rain, a few more labour days for weeding, a pipe repair, a higher input price. By harvest, all those steps hide inside one large total.",
+    "Because every Shram Safal entry carries its plot, its day and that day's weather, you can walk back through the season and see where the steps happened. Planned work sits beside work actually done, and an attention list shows what still needs a look.",
+    "Labour stays clear too. Attendance (हजेरी) is recorded by voice and kept separate from wages, and wages are never guessed from a headcount. That protects the owner and the worker alike, because both see the same days.",
+    "If your question is how to farm at lower cost, the first step is not cutting. It is seeing. A cost that is visible plot by plot can be discussed, planned and managed."
+   ],
+   "paras_mr": [
+    "खर्च एकदम उडी मारून वाढत नाही. थोडा थोडा वाढतो — अवकाळी पावसानंतर एक जादा फवारणी, खुरपणीला आणखी काही मजूरदिवस, पाइपची दुरुस्ती, खताचा वाढलेला भाव. काढणीपर्यंत हे सगळे छोटे टप्पे एका मोठ्या आकड्यात लपून जातात.",
+    "श्रम सफलमधली प्रत्येक नोंद तिचा प्लॉट, तिचा दिवस आणि त्या दिवसाचं हवामान घेऊनच जमा होते. त्यामुळे हंगामात मागं जाऊन बघता येतं, खर्च नेमका कुठं वाढला. ठरवलेलं काम आणि प्रत्यक्ष झालेलं काम शेजारी शेजारी दिसतं, आणि ज्याकडं लक्ष द्यायचं त्याची यादी समोर येते.",
+    "मजुरीचा हिशोबही स्वच्छ राहतो. हजेरी बोलून घेतली जाते, आणि ती मजुरीपासून वेगळी ठेवली जाते. डोकी मोजून मजुरीचा अंदाज कधीच लावला जात नाही. यात मालक आणि कामगार दोघांचीही बाजू सुरक्षित राहते, कारण दोघांना तेच दिवस दिसतात.",
+    "कमी खर्चात शेती कशी करावी, असा प्रश्न असेल, तर पहिली पायरी काटकसर नाही — आधी खर्च दिसायला हवा. जो खर्च प्लॉटप्रमाणे दिसतो, त्यावरच बोलता येतं, नियोजन करता येतं, नियंत्रण ठेवता येतं."
+   ]
+  },
+  {
+   "h2_en": "Is pomegranate or sugarcane farming profitable per acre?",
+   "h2_mr": "डाळिंब, ऊस, द्राक्ष — एकरी खर्च आणि नफा किती येतो?",
+   "status": "none",
+   "paras_en": [
+    "Farmers ask this about every crop: pomegranate, sugarcane, grapes, banana, onion. The honest answer is that no published figure can tell you whether your own plot is profitable.",
+    "Profit per acre depends on two things: your cost per acre, and the price on the day you sell. Weather and market price are outside anyone's control. Almost everything else can be managed once it is measured: how many sprays, how many labour days, which work was done on time. No record can promise profit. But without a clear cost, profit is only a guess.",
+    "Shram Safal is made for all crops, not one. Sugarcane, pomegranate, grapes, onion, banana, vegetables or cereals: the method is the same. Record the season honestly, and your next decision can rest on your own numbers instead of an average from somewhere else."
+   ],
+   "paras_mr": [
+    "डाळिंब, ऊस, द्राक्ष, केळी, कांदा — प्रत्येक पिकाबद्दल हाच प्रश्न विचारला जातो: एकरी खर्च किती, नफा किती? खरं उत्तर असं — तुमच्या प्लॉटवर नफा होतोय की नाही, हे कुठलाही छापलेला आकडा सांगू शकत नाही.",
+    "एकरी नफा दोन गोष्टींवर ठरतो: तुमचा एकरी खर्च, आणि माल विकायच्या दिवशीचा भाव. हवामान आणि बाजारभाव कोणाच्याच हातात नाहीत. पण बाकी जवळपास सगळं — किती फवारण्या, किती मजूरदिवस, कोणतं काम वेळेवर झालं — मोजलं की सांभाळता येतं. नफा हमीने मिळत नाही. पण खर्च स्पष्ट नसेल, तर नफा फक्त अंदाजच राहतो.",
+    "श्रम सफल एका पिकासाठी नाही, सगळ्या पिकांसाठी आहे. प्लॉटमध्ये ऊस असो, डाळिंब, द्राक्ष, कांदा, केळी, भाजीपाला किंवा धान्य — पद्धत तीच. हंगामाची प्रामाणिक नोंद ठेवा; पुढचा निर्णय दुसरीकडच्या सरासरीवरून नाही, तुमच्या स्वतःच्या आकड्यांवरून घेता येईल."
+   ]
+  },
+  {
+   "h2_en": "Who sees the money, and can the record be trusted?",
+   "h2_mr": "खर्च कोण बघणार, आणि नोंदीवर विश्वास का ठेवायचा?",
+   "status": "now",
+   "paras_en": [
+    "Money stays private. The owner can invite family, a Mukadam and workers, each with a role, chosen plots and an end date. Each person sees only what the owner allows, and spending stays hidden unless the owner chooses to share it.",
+    "When someone else adds a record, the owner can approve it (मंजूर) or question it (शंका). Correcting an entry never erases what was there before; the earlier version stays. With consent, the original voice can be replayed. That makes a cost record believable: first to you, then to anyone you choose to show.",
+    "Separately, your data is yours: you can download it, or have all of it erased. It is stored in India, and Shram Safal is built for India's DPDP law."
+   ],
+   "paras_mr": [
+    "पैशाचा हिशोब खाजगी राहतो. मालक घरच्यांना, मुकादमाला आणि कामगारांना जोडू शकतो — प्रत्येकाला त्याची जबाबदारी, ठरलेले प्लॉट आणि शेवटची तारीख देऊन. ज्याला जेवढं दाखवायचं, तेवढंच तो बघतो. मालकानं परवानगी दिल्याशिवाय खर्च कोणालाही दिसत नाही.",
+    "दुसऱ्या कोणी नोंद केली, तर मालक ती मंजूर करू शकतो किंवा त्यावर शंका घेऊ शकतो. नोंद दुरुस्त केली तरी आधीची नोंद पुसली जात नाही; आधी काय होतं तेही राहतं. संमती असेल तर मूळ आवाज पुन्हा ऐकता येतो. म्हणूनच खर्चाची नोंद विश्वासार्ह ठरते — आधी तुमच्यासाठी, आणि मग तुम्ही ज्याला दाखवाल त्याच्यासाठी.",
+    "आणि नोंदी तुमच्याच आहेत — त्या उतरवून घेऊ शकता, किंवा सगळ्या पुसून टाकू शकता. नोंदी भारतातच ठेवल्या जातात. श्रम सफल भारताचा DPDP कायदा डोळ्यासमोर ठेवून बनवलं आहे."
+   ]
+  },
+  {
+   "h2_en": "What is being developed next for cost records?",
+   "h2_mr": "खर्चाच्या नोंदीसाठी पुढं काय तयार होतंय?",
+   "status": "dev",
+   "paras_en": [
+    "Being developed: reminders next season at the same crop stage, so what a plot taught you last year comes back when it matters.",
+    "Also being developed: a dashboard for FPOs and FPCs covering member farms, with a farmer-approval flow. The FPO sees only what each farmer approves.",
+    "Later, and only with the farmer's permission, the same trusted record could support conversations with banks, insurers or buyers. That is a future possibility, not a service today. Records come first. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik. Shram Safal is built by Agriryot Value Enterprises Private Limited, a company in Maharashtra."
+   ],
+   "paras_mr": [
+    "तयार होतंय: पुढच्या हंगामात पिकाच्या त्याच टप्प्यावर आठवण — मागच्या वर्षी त्या प्लॉटनं जे शिकवलं, ते योग्य वेळी पुन्हा समोर येईल.",
+    "हेही तयार होतंय: FPO आणि FPC साठी सभासदांच्या शेतांचा एकत्र आढावा, शेतकऱ्याच्या मंजुरीसह. शेतकरी जेवढं मंजूर करेल, तेवढंच FPO ला दिसेल.",
+    "पुढं कधीतरी, आणि फक्त शेतकऱ्याच्या परवानगीनं, हीच विश्वासार्ह नोंद बँक, विमा कंपनी किंवा खरेदीदाराशी बोलताना कामाला येऊ शकेल. ही पुढची शक्यता आहे, आजची सेवा नाही. आधी नोंद, मग बाकी. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. श्रम सफल महाराष्ट्रातली Agriryot Value Enterprises Private Limited ही कंपनी बनवते."
+   ]
+  }
+ ],
+ "faq": [
+  {
+   "q_en": "How do I calculate my own cost of cultivation per acre?",
+   "a_en": "Add every spend on one plot for the whole season: inputs, sprays, irrigation, hired labour, machine hire, transport and interest on crop loans. Add a fair value for your family's work days. Divide the total by the plot's area in acres. That is your own cost per acre for that crop and season.",
+   "q_mr": "माझा स्वतःचा एकरी लागवड खर्च कसा काढायचा?",
+   "a_mr": "एका प्लॉटवर हंगामभर झालेला सगळा खर्च बेरीज करा — खत, औषध, पाणी, मजुरी, ट्रॅक्टर भाडं, वाहतूक आणि पीक कर्जाचं व्याज. घरच्यांच्या कामाच्या दिवसांचीही योग्य किंमत धरा. ही बेरीज प्लॉटच्या एकरानं भागा. तोच तुमचा त्या पिकाचा, त्या हंगामाचा खरा एकरी खर्च."
+  },
+  {
+   "q_en": "Is there a standard cost per acre for sugarcane, pomegranate or grapes?",
+   "a_en": "No single number fits every farm. Soil, water, variety, plant age, weather and the farmer's experience all change the cost. Published figures are a rough reference at best. For decisions on your plot, the most reliable number is your plot's own record.",
+   "q_mr": "ऊस, डाळिंब किंवा द्राक्षाचा एकरी खर्च ठरलेला असतो का?",
+   "a_mr": "नाही. सगळ्या शेतांना लागू होईल असा एकच आकडा नसतो. माती, पाणी, वाण, झाडांचं वय, हवामान आणि शेतकऱ्याचा अनुभव — यानुसार खर्च बदलतो. छापलेले आकडे फार तर अंदाजासाठी. तुमच्या प्लॉटचा निर्णय तुमच्या प्लॉटच्याच नोंदीवरून घ्यायचा."
+  },
+  {
+   "q_en": "Can I track farm expenses without writing anything?",
+   "a_en": "Yes. In Shram Safal you speak in Marathi or tap. Shram Sathi shows what it understood, and you confirm or correct it. It works without network and syncs later, and each entry is tied to a plot and a day.",
+   "q_mr": "लिहिता येत नसलं तरी खर्चाची नोंद ठेवता येईल का?",
+   "a_mr": "हो. श्रम सफलमध्ये मराठीत बोलून किंवा बटण दाबून नोंद होते. श्रम साथी काय समजलं ते दाखवतो; तुम्ही हो म्हणायचं किंवा दुरुस्त करायचं. रेंज नसली तरी चालतं, नेट आल्यावर नोंद जमा होते. प्रत्येक नोंद एका प्लॉटशी आणि एका दिवसाशी जोडलेली असते."
+  },
+  {
+   "q_en": "Will my Mukadam or workers see how much I spend?",
+   "a_en": "Only if you allow it. Each person sees only what the owner allows, for chosen plots and until an end date. Money stays private unless the owner chooses to share it, and attendance is kept separate from wages.",
+   "q_mr": "माझा खर्च मुकादमाला किंवा कामगारांना दिसेल का?",
+   "a_mr": "तुम्ही परवानगी दिली तरच. मालक ज्याला जेवढं दाखवेल, तेवढंच तो बघतो — ठरलेल्या प्लॉटपुरतं आणि ठरलेल्या तारखेपर्यंत. पैशाचा हिशोब खाजगी राहतो, आणि हजेरी मजुरीपासून वेगळी ठेवली जाते."
+  },
+  {
+   "q_en": "What does cost of production mean?",
+   "a_en": "Cost of cultivation is what a crop costs per acre: inputs, labour, machine hire, water, transport and interest, plus a value for family work and your own land. Cost of production spreads that cost over the harvest, per quintal or tonne. Counting only the cash you remember shows a lower cost than the real one.",
+   "q_mr": "उत्पादन खर्च म्हणजे काय?",
+   "a_mr": "एकरी लागवड खर्च म्हणजे एका एकरावर पिकासाठी झालेला सगळा खर्च — खत, औषध, मजुरी, ट्रॅक्टर भाडं, पाणी, वाहतूक, व्याज, आणि घरच्यांच्या कामाची व स्वतःच्या जमिनीची किंमतसुद्धा. हा खर्च निघालेल्या मालानं (क्विंटलनं) भागला, की क्विंटलमागे उत्पादन खर्च मिळतो. फक्त आठवणीतला रोख खर्च धरला, तर खर्च खऱ्यापेक्षा कमीच दिसतो."
+  },
+  {
+   "q_en": "Is Shram Safal only for grape growers?",
+   "a_en": "No. It is made for all crops: pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik, with the Android app on Google Play.",
+   "q_mr": "श्रम सफल फक्त द्राक्ष बागायतदारांसाठी आहे का?",
+   "a_mr": "नाही. डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य — सगळ्या पिकांसाठी आहे. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. Android फोनसाठी Google Play वर मिळतं."
+  }
+ ],
+ "sources": [
+  {
+   "name": "Press Information Bureau (Ministry of Agriculture and Farmers Welfare): Calculation of MSP",
+   "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=1605054"
+  }
+ ],
+ "illustration_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 630\" role=\"img\">\n<defs>\n<radialGradient id=\"ga\" cx=\"50%\" cy=\"50%\" r=\"50%\"><stop offset=\"0\" stop-color=\"#b9dc71\" stop-opacity=\"0.42\"/><stop offset=\"1\" stop-color=\"#b9dc71\" stop-opacity=\"0\"/></radialGradient>\n<radialGradient id=\"gb\" cx=\"50%\" cy=\"50%\" r=\"50%\"><stop offset=\"0\" stop-color=\"#eaf4ec\"/><stop offset=\"1\" stop-color=\"#eaf4ec\" stop-opacity=\"0\"/></radialGradient>\n</defs>\n<rect width=\"1200\" height=\"630\" fill=\"#f4f9f4\"/>\n<circle cx=\"565\" cy=\"315\" r=\"290\" fill=\"url(#ga)\"/>\n<circle cx=\"960\" cy=\"315\" r=\"300\" fill=\"url(#gb)\"/>\n<circle cx=\"565\" cy=\"315\" r=\"236\" fill=\"none\" stroke=\"#b9dc71\" stroke-width=\"2\" stroke-dasharray=\"2 10\" stroke-linecap=\"round\"/>\n<path d=\"M70 556 H1130\" fill=\"none\" stroke=\"#9b7a52\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-dasharray=\"2 12\"/>\n<g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\">\n<path d=\"M150 430 V345 Q150 308 190 308 Q230 308 230 345 V430 Z\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"4\"/>\n<circle cx=\"190\" cy=\"268\" r=\"28\" fill=\"#f7f3e8\" stroke=\"#0a4a2b\" stroke-width=\"4\"/>\n<path d=\"M163 260 Q190 234 217 260\" stroke=\"#a86412\" stroke-width=\"4\"/>\n<path d=\"M228 352 Q258 374 284 344\" stroke=\"#0d6e3f\" stroke-width=\"4\"/>\n<path d=\"M172 430 V540 M208 430 V540\" stroke=\"#0a4a2b\" stroke-width=\"4\"/>\n<rect x=\"240\" y=\"168\" width=\"176\" height=\"72\" rx=\"36\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/>\n<path d=\"M264 236 L246 262 L288 239\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/>\n<path d=\"M270 199 V209 M284 192 V216 M298 185 V223 M312 194 V214 M326 181 V227 M340 190 V218 M354 196 V212 M368 187 V221 M382 198 V210\" stroke=\"#178b55\" stroke-width=\"5\"/>\n<path d=\"M416 204 Q446 204 466 226\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-dasharray=\"2 9\"/>\n<rect x=\"470\" y=\"118\" width=\"190\" height=\"394\" rx=\"28\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"5\"/>\n<rect x=\"486\" y=\"148\" width=\"158\" height=\"334\" rx=\"14\" fill=\"#f4f9f4\" stroke=\"none\"/>\n<path d=\"M545 133 H585\" stroke=\"#0a4a2b\" stroke-width=\"4\"/>\n<circle cx=\"565\" cy=\"497\" r=\"6\" stroke=\"#0a4a2b\" stroke-width=\"3\"/>\n<rect x=\"498\" y=\"162\" width=\"134\" height=\"86\" rx=\"10\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"2.5\"/>\n<circle cx=\"518\" cy=\"184\" r=\"7\" stroke=\"#a86412\" stroke-width=\"2.5\"/>\n<path d=\"M536 182 H612\" stroke=\"#12291c\" stroke-width=\"4\"/>\n<path d=\"M536 198 H590\" stroke=\"#62a83a\" stroke-width=\"4\"/>\n<rect x=\"510\" y=\"216\" width=\"42\" height=\"18\" rx=\"9\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"2\"/>\n<circle cx=\"610\" cy=\"225\" r=\"11\" fill=\"#0d6e3f\" stroke=\"none\"/>\n<path d=\"M604 225 L608 229 L616 220\" stroke=\"#ffffff\" stroke-width=\"3\"/>\n<rect x=\"498\" y=\"260\" width=\"134\" height=\"86\" rx=\"10\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"2.5\"/>\n<path d=\"M512 278 V290 M520 272 V296 M528 276 V292 M536 270 V298\" stroke=\"#178b55\" stroke-width=\"3\"/>\n<path d=\"M552 278 H612\" stroke=\"#12291c\" stroke-width=\"4\"/>\n<path d=\"M552 294 H598\" stroke=\"#62a83a\" stroke-width=\"4\"/>\n<rect x=\"510\" y=\"314\" width=\"42\" height=\"18\" rx=\"9\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"2\"/>\n<circle cx=\"610\" cy=\"323\" r=\"11\" fill=\"#0d6e3f\" stroke=\"none\"/>\n<path d=\"M604 323 L608 327 L616 318\" stroke=\"#ffffff\" stroke-width=\"3\"/>\n<rect x=\"498\" y=\"358\" width=\"134\" height=\"112\" rx=\"10\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"2.5\"/>\n<rect x=\"522\" y=\"400\" width=\"20\" height=\"52\" rx=\"4\" fill=\"#0d6e3f\" stroke=\"none\"/>\n<rect x=\"556\" y=\"422\" width=\"20\" height=\"30\" rx=\"4\" fill=\"#62a83a\" stroke=\"none\"/>\n<rect x=\"590\" y=\"386\" width=\"20\" height=\"66\" rx=\"4\" fill=\"#178b55\" stroke=\"none\"/>\n<path d=\"M512 453 H618\" stroke=\"#9b7a52\" stroke-width=\"2.5\"/>\n<path d=\"M696 132 A12 12 0 1 1 684 120\" stroke=\"#1847d6\" stroke-width=\"3\"/>\n<path d=\"M678 114 L684 120 L678 126\" stroke=\"#1847d6\" stroke-width=\"3\"/>\n<path d=\"M660 205 C712 205 740 175 788 175\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-dasharray=\"2 9\"/>\n<path d=\"M660 303 C712 303 740 315 788 315\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-dasharray=\"2 9\"/>\n<path d=\"M660 414 C712 414 740 455 788 455\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-dasharray=\"2 9\"/>\n<path d=\"M812 122 H1102 L1130 228 H840 Z\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"3.5\"/>\n<path d=\"M872 196 V212 M936 196 V212 M1000 196 V212 M1064 196 V212\" stroke=\"#0d6e3f\" stroke-width=\"3\"/>\n<circle cx=\"872\" cy=\"178\" r=\"18\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/>\n<circle cx=\"936\" cy=\"178\" r=\"18\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/>\n<circle cx=\"1000\" cy=\"178\" r=\"18\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/>\n<circle cx=\"1064\" cy=\"178\" r=\"18\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/>\n<circle cx=\"878\" cy=\"184\" r=\"4\" fill=\"#a86412\" stroke=\"none\"/>\n<circle cx=\"930\" cy=\"172\" r=\"4\" fill=\"#a86412\" stroke=\"none\"/>\n<circle cx=\"1006\" cy=\"184\" r=\"4\" fill=\"#a86412\" stroke=\"none\"/>\n<circle cx=\"1058\" cy=\"172\" r=\"4\" fill=\"#a86412\" stroke=\"none\"/>\n<path d=\"M812 262 H1102 L1130 368 H840 Z\" fill=\"#f7f3e8\" stroke=\"#9b7a52\" stroke-width=\"3.5\"/>\n<path d=\"M870 352 V280 M904 352 V284 M938 352 V278 M972 352 V284 M1006 352 V280 M1040 352 V284 M1074 352 V280\" stroke=\"#0d6e3f\" stroke-width=\"3\"/>\n<path d=\"M870 306 q12 -12 24 -8 M904 318 q-12 -12 -24 -8 M938 302 q12 -12 24 -8 M972 318 q-12 -12 -24 -8 M1006 306 q12 -12 24 -8 M1040 318 q-12 -12 -24 -8 M1074 302 q12 -12 24 -8\" stroke=\"#62a83a\" stroke-width=\"3\"/>\n<path d=\"M812 402 H1102 L1130 508 H840 Z\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"3.5\"/>\n<path d=\"M850 440 H1094 M856 466 H1100 M862 492 H1106\" stroke=\"#9b7a52\" stroke-width=\"2.5\"/>\n<path d=\"M880 440 l-5 -13 m5 13 l5 -13 M920 440 l-5 -13 m5 13 l5 -13 M960 440 l-5 -13 m5 13 l5 -13 M1000 440 l-5 -13 m5 13 l5 -13 M1040 440 l-5 -13 m5 13 l5 -13 M1080 440 l-5 -13 m5 13 l5 -13 M900 466 l-5 -13 m5 13 l5 -13 M940 466 l-5 -13 m5 13 l5 -13 M980 466 l-5 -13 m5 13 l5 -13 M1020 466 l-5 -13 m5 13 l5 -13 M1060 466 l-5 -13 m5 13 l5 -13 M886 492 l-5 -13 m5 13 l5 -13 M926 492 l-5 -13 m5 13 l5 -13 M966 492 l-5 -13 m5 13 l5 -13 M1006 492 l-5 -13 m5 13 l5 -13 M1046 492 l-5 -13 m5 13 l5 -13 M1086 492 l-5 -13 m5 13 l5 -13\" stroke=\"#178b55\" stroke-width=\"3\"/>\n<circle cx=\"800\" cy=\"175\" r=\"11\" fill=\"#0d6e3f\" stroke=\"#ffffff\" stroke-width=\"3\"/>\n<circle cx=\"800\" cy=\"315\" r=\"11\" fill=\"#62a83a\" stroke=\"#ffffff\" stroke-width=\"3\"/>\n<circle cx=\"800\" cy=\"455\" r=\"11\" fill=\"#178b55\" stroke=\"#ffffff\" stroke-width=\"3\"/>\n</g>\n</svg>",
+ "illustration_alt_en": "A farmer speaks the day's spending into a phone. Record cards on the phone connect by dotted lines to three separate plots of pomegranate, sugarcane and onion, and a small bar chart shows each plot with its own cost.",
+ "illustration_alt_mr": "शेतकरी दिवसाचा खर्च फोनमध्ये बोलून सांगतोय. फोनमधल्या नोंदी ठिपक्यांच्या रेषांनी डाळिंब, ऊस आणि कांद्याच्या तीन वेगळ्या प्लॉटशी जोडलेल्या आहेत, आणि छोट्या खांबांतून प्रत्येक प्लॉटचा खर्च वेगळा दिसतो.",
+ "read_minutes": 6
+}

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="mr" class="lang-mr" data-title-mr="संपर्क · श्रम सफल · Google Play वरून घ्या" data-title-en="Contact Shram Safal · Or get the app on Google Play">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>संपर्क · श्रम सफल</title>
+<meta name="description" content="Talk to the Shram Safal team: farmers, FPOs and FPCs, and partners in Solapur district and beyond. Or get Shram Safal on Google Play and start today." data-mr="श्रम सफल टीमशी बोला: शेतकरी, FPO / FPC आणि भागीदार. किंवा Google Play वरून श्रम सफल घ्या आणि आजच सुरुवात करा.">
+<link rel="icon" href="assets/img/favicon-96.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Noto+Sans+Devanagari:wght@400;500;600;700;800&family=Noto+Serif+Devanagari:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+</head>
+<body>
+<div class="progress" aria-hidden="true"></div>
+<!--HEADER-->
+<main>
+<section class="page-hero">
+  <span class="glow mint" style="right:-240px;top:-60px"></span>
+  <div class="wrap" style="position:relative;z-index:1">
+    <p class="kicker"><span class="mr">संपर्क</span><span class="en">Contact</span></p>
+    <h1 class="h1"><span class="mr">बोलायचं आहे? <em>आम्ही फोन करू.</em></span><span class="en">Want to talk? <em>We'll call you.</em></span></h1>
+    <p class="lede"><span class="mr">श्रम सफल वापरायचं असेल, तर थेट Google Play वरून घ्या. काही विचारायचं असेल, गावात येऊन दाखवायला हवं असेल, किंवा FPO / FPC / भागीदार म्हणून बोलायचं असेल, तर खाली नाव आणि नंबर द्या.</span>
+      <span class="en">To start using Shram Safal, get it straight from Google Play. If you have questions, want a demonstration in your village, or want to talk as an FPO, FPC or partner, leave your name and number below.</span></p>
+    <div class="btn-row"><a class="gp-badge" href="https://play.google.com/store/apps/details?id=com.agrisync.shramsafal&amp;pcampaignid=web_share" target="_blank" rel="noopener"><span class="mr"><img src="assets/img/google-play-mr.svg" alt="Google Play वर ते मिळवा" width="169" height="50"></span><span class="en"><img src="assets/img/google-play-en.svg" alt="Get it on Google Play" width="169" height="50"></span></a></div>
+  </div>
+</section>
+
+<section class="section tight">
+  <div class="wrap">
+    <div class="contact-grid">
+      <form class="cform glass" data-contact novalidate>
+        <h2 class="h3" style="margin:0 0 6px"><span class="mr">तुमची माहिती</span><span class="en">Your details</span></h2>
+        <p class="small" style="margin:0 0 16px"><span class="mr">फक्त नाव आणि मोबाईल नंबर पुरे. बाकी भरलं नाही तरी चालेल.</span><span class="en">Only your name and mobile number are needed. The rest is optional.</span></p>
+        <label class="field"><span><span class="mr">नाव</span><span class="en">Name</span> *</span><input name="name" autocomplete="name" required></label>
+        <label class="field"><span><span class="mr">मोबाईल नंबर</span><span class="en">Mobile number</span> *</span><input name="mobile" type="tel" inputmode="numeric" autocomplete="tel" pattern="[0-9+ ]{10,14}" required></label>
+        <label class="field"><span><span class="mr">गाव / तालुका</span><span class="en">Village / taluka</span></span><input name="village" autocomplete="address-level2"></label>
+        <label class="field"><span><span class="mr">जिल्हा</span><span class="en">District</span></span><input name="district" value="सोलापूर" data-en-value="Solapur"></label>
+        <label class="field"><span><span class="mr">तुम्ही कोण?</span><span class="en">You are</span></span>
+          <select name="role">
+            <option value="farmer">शेतकरी / Farmer</option>
+            <option value="fpo">FPO / FPC</option>
+            <option value="partner">भागीदार / Partner</option>
+            <option value="other">इतर / Other</option>
+          </select></label>
+        <label class="field"><span><span class="mr">मुख्य पीक</span><span class="en">Main crop</span></span><input name="crop"></label>
+        <label class="field wide"><span><span class="mr">काय बोलायचं आहे?</span><span class="en">What would you like to talk about?</span></span><textarea name="message" rows="3"></textarea></label>
+        <input class="hp" name="company_website" tabindex="-1" autocomplete="off" aria-hidden="true">
+        <label class="consent wide"><input type="checkbox" name="consent" required><span><span class="mr">याबद्दल श्रम सफलच्या टीमने मला फोन करावा. त्यासाठी माझी परवानगी आहे.</span><span class="en">I agree to be contacted by the Shram Safal team about this.</span>
+          <a href="trust.html"><span class="mr">माझ्या माहितीचं काय होतं</span><span class="en">What happens to my details</span></a></span></label>
+        <button class="btn btn-primary wide" type="submit"><span class="mr">पाठवा</span><span class="en">Send</span></button>
+        <p class="cstatus wide" role="status" aria-live="polite"></p>
+        <span class="pv-note wide">The form writes to your existing Google Sheet (same Apps Script as the old sign-up form). Message and village/type columns need the updated script in E:\FInal Website Design\tools\contact-apps-script.gs to be redeployed; until then only name, mobile, district, village, role and crop are saved.</span>
+      </form>
+      <div class="cside">
+        <div class="glass" style="border-radius:var(--r-l);padding:20px">
+          <h2 class="h3" style="margin:0 0 12px"><span class="mr">थेट संपर्क</span><span class="en">Reach us directly</span></h2>
+          <div class="facts" style="grid-template-columns:1fr;margin-top:0">
+            <div class="fact"><svg class="ic" aria-hidden="true"><use href="#i-mail"/></svg><a href="mailto:arvesystems@gmail.com">arvesystems@gmail.com</a></div>
+            <div class="fact"><svg class="ic" aria-hidden="true"><use href="#i-pin"/></svg><span><span class="mr">महाराष्ट्र</span><span class="en">Maharashtra</span></span></div>
+            <div class="fact"><svg class="ic" aria-hidden="true"><use href="#i-building"/></svg><span>Agriryot Value Enterprises Private Limited</span></div>
+          </div>
+          <span class="pv-note">WhatsApp number and company mailbox: decision 8.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+<!--FOOTER-->
+</body>
+</html>

@@ -1,0 +1,239 @@
+{
+ "slug": "smallholder-farm-digital-twin",
+ "primary_keyword_en": "digital twin of a smallholder farm",
+ "primary_keyword_mr": "शेताची रोजची विश्वासार्ह आठवण",
+ "keywords": [
+  "digital twin of a smallholder farm",
+  "digital twin in agriculture",
+  "digital twin farming",
+  "farm digital twin",
+  "agricultural digital twin",
+  "digital twin examples in agriculture",
+  "digital twin technology in agriculture",
+  "trusted digital replica of the farm",
+  "farm data ownership",
+  "smallholder farmers india",
+  "Daily Farm Execution System",
+  "Shram Safal",
+  "शेताची रोजची विश्वासार्ह आठवण",
+  "शेताची आठवण",
+  "रोजच्या कामाचं खरं चित्र",
+  "नोंदीवर चालणारी शेती",
+  "श्रम सफल"
+ ],
+ "title_en": "Trusted Digital Replica (Digital Twin) of a Smallholder Farm",
+ "title_mr": "शेताची रोजची विश्वासार्ह आठवण: सेन्सरशिवाय शेताचं खरं चित्र",
+ "meta_description_en": "Smallholder farm digital twin, no sensors needed: Shram Safal, a trust-governed Daily Farm Execution System, builds it from work spoken in Marathi or tapped.",
+ "meta_description_mr": "सेन्सर नसतानाही शेताचं रोजचं खरं चित्र तयार होतं. मराठीत बोलून किंवा बटण दाबून केलेल्या नोंदीतून श्रम सफल शेताची रोजची विश्वासार्ह आठवण उभी करतं.",
+ "h1_en": "A Trusted Digital Replica of a Smallholder Farm Starts With Daily Work",
+ "h1_mr": "शेताची रोजची विश्वासार्ह आठवण, बोलून किंवा बटण दाबून केलेल्या नोंदीतून",
+ "answer_en": "A trusted digital replica, or digital twin, of a smallholder farm is a day-by-day record of the real work on each plot: what was done, by whom, when, at what cost and in what weather. It needs no sensors. Shram Safal, a trust-governed Daily Farm Execution System, builds it from work spoken in Marathi or tapped, then confirmed on the farm.",
+ "answer_mr": "शेताची रोजची विश्वासार्ह आठवण म्हणजे प्रत्येक प्लॉटवर रोज झालेल्या खऱ्या कामाची नोंद: कोणतं काम, कोणी केलं, कधी, किती खर्च झाला आणि त्या दिवशी हवामान कसं होतं. सुरुवात करायला सेन्सर लागत नाहीत. श्रम सफलमध्ये ही आठवण मराठीत बोलून किंवा बटण दाबून तयार होते, आणि शेतावरची माणसंच ती खरी असल्याचं पक्कं करतात.",
+ "sections": [
+  {
+   "h2_en": "What is a digital twin in agriculture?",
+   "h2_mr": "शेताची हुबेहूब प्रत म्हणजे नेमकं काय?",
+   "status": "none",
+   "paras_en": [
+    "A digital twin is a living copy of something real, kept up to date with what actually happens to it. In a 2021 paper in the journal Agricultural Systems, Verdouw and colleagues describe it as \"a digital equivalent of a real-life object\" that mirrors its behaviour and state over time. For a farm, the promise of an agricultural digital twin is simple: if the copy is true, you can see, compare and plan without walking every plot every hour.",
+    "Most digital twin examples in agriculture come from research and large farms: soil sensors, drones, satellite images, weather stations and crop models. A 2022 review by Nasirahmadi and Hensel in the journal Sensors describes digital twin concepts in farming as still in their infancy and at an early demonstration stage.",
+    "That work on digital twin technology in agriculture matters. But it skips the question a family farm in Solapur asks first: what actually happened on my farm today, and can I trust that record?"
+   ],
+   "paras_mr": [
+    "जगभर शेतीच्या अभ्यासात एका कल्पनेची चर्चा आहे: शेताची हुबेहूब प्रत. म्हणजे खऱ्या शेताची अशी प्रत, जी शेतात जे घडतं त्याप्रमाणे सतत बदलत राहते. प्रत खरी असेल, तर प्रत्येक प्लॉटवर सारखं न जाताही शेत डोळ्यासमोर राहतं आणि पुढचं काम ठरवता येतं.",
+    "संशोधक सांगतात, अशी प्रत खऱ्या गोष्टीची स्थिती आणि तिच्यात होणारे बदल वेळोवेळी दाखवत राहते. पण जगभरच्या संशोधनात शेतीतली ही कल्पना अजून अगदी सुरुवातीच्या टप्प्यावर आहे. आत्ता कुठे ती प्रत्यक्ष करून दाखवायला सुरुवात झाली आहे.",
+    "आज बहुतेक उदाहरणं संशोधनाची आणि मोठ्या शेतांची आहेत: मातीतले सेन्सर, ड्रोन, उपग्रहाचे फोटो, हवामान केंद्रं, पिकाचे अंदाज. ते काम महत्त्वाचं आहे. पण सोलापूरच्या घरच्या शेतीचा पहिला प्रश्न वेगळा असतो: आज माझ्या शेतात नेमकं काय झालं, आणि त्या नोंदीवर मी विश्वास ठेवू शकतो का?"
+   ]
+  },
+  {
+   "h2_en": "Can a small farm have a digital twin without sensors?",
+   "h2_mr": "सेन्सर नसताना लहान शेताचं रोजचं खरं चित्र तयार होऊ शकतं का?",
+   "status": "none",
+   "paras_en": [
+    "Yes, if it starts from the right layer. In India, most farm holdings are small. According to the Agriculture Census 2015-16, small and marginal holdings, those of up to two hectares, made up about 86 per cent of all holdings, as the Press Information Bureau has reported. On such farms, the biggest moving part is not a machine. It is people and their daily work.",
+    "Spraying, pruning, irrigation, fertiliser, weeding, harvest. Which crew came, what advance was paid, how much diesel was bought. These events shape cost and quality, and the people on the farm already know them. They are just not kept in one place, in one form that everyone agrees on.",
+    "So a smallholder farm can have a working farm digital twin with no sensors at all: a daily record of execution, tied to each plot and each day. Sensors can come later. The record of work comes first, because only people can give it.",
+    "Farming is already a business. What it lacked was an easy instrument to measure daily execution. Weather cannot be controlled. Almost everything else can be managed once it is measured, and until now nothing measured it as easily as speaking."
+   ],
+   "paras_mr": [
+    "हो, होऊ शकतं. फक्त सुरुवात योग्य ठिकाणाहून करावी लागते. आपल्याकडे बहुतेक जमीनधारणा लहान आहेत. कृषी गणना 2015-16 नुसार, दोन हेक्टरपर्यंतच्या लहान आणि अल्प जमीनधारणा एकूण जमीनधारणांच्या सुमारे 86 टक्के होत्या, असं पत्र सूचना कार्यालयाने (PIB) सांगितलं आहे. अशा शेतात सगळ्यात जास्त हालचाल यंत्रांची नसते. ती माणसांची आणि त्यांच्या रोजच्या कामाची असते.",
+    "फवारणी, छाटणी, पाणी, खत, खुरपणी, तोडणी. कोणती टोळी आली, कोणाला किती उचल दिली, किती डिझेल आणलं. खर्च आणि मालाचा दर्जा याच गोष्टींवर ठरतो, आणि शेतावरच्या माणसांना हे सगळं आधीच माहीत असतं. फक्त ते एका ठिकाणी, सगळ्यांना मान्य होईल अशा रूपात ठेवलेलं नसतं.",
+    "म्हणून एकही सेन्सर नसताना रोजच्या कामाचं खरं चित्र तयार होऊ शकतं: प्रत्येक प्लॉटची, प्रत्येक दिवसाची कामाची नोंद. सेन्सर नंतर येऊ शकतात. आधी कामाची नोंद, कारण ती फक्त माणसंच देऊ शकतात.",
+    "शेती हा आधीपासूनच धंदा आहे. कमी होतं ते रोजचं काम मोजायचं सोपं साधन. हवामान आपल्या हातात नाही. पण बाकी जवळपास सगळं मोजलं की सांभाळता येतं. आणि बोलण्याइतकं सोपं मोजमाप आजवर कुठेच नव्हतं."
+   ]
+  },
+  {
+   "h2_en": "What does a 'trusted digital replica' of a farm mean?",
+   "h2_mr": "शेताची विश्वासार्ह आठवण म्हणजे काय?",
+   "status": "now",
+   "paras_en": [
+    "Shram Safal is India's innovative Daily Farm Execution System, built by Agriryot Value Enterprises Private Limited in Maharashtra. Each day's farm work, spoken in Marathi or tapped, becomes the farm's trusted memory. Daily use starts on 1 December 2026, with the first phase in Solapur district and Nashik, and it is made for all crops: pomegranate, sugarcane, grapes, onion, banana, vegetables, cereals and more.",
+    "Trusted is the key word. A replica is worth something only if people believe it, so every entry is built to be checked, not just stored.",
+    "Week after week, these entries add up to a faithful picture of the season on each plot. That picture is a trusted digital replica of the farm, and on it, running the farm becomes seamless and trusted."
+   ],
+   "paras_mr": [
+    "श्रम सफल ही भारतातली रोजच्या शेतकामाची नवी व्यवस्था आहे. महाराष्ट्रातली Agriryot Value Enterprises Private Limited ही कंपनी ती बनवते. रोजचं काम मराठीत बोलून किंवा बटण दाबून नोंदवलं, की ती शेताची विश्वासार्ह आठवण बनते. 1 डिसेंबर 2026 पासून रोजचा वापर सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य, सगळ्या पिकांसाठी.",
+    "इथे महत्त्वाचा शब्द आहे विश्वास. चित्र खरं वाटलं तरच त्याला किंमत. म्हणून प्रत्येक नोंद फक्त साठवली जात नाही, ती तपासता येते.",
+    "आठवड्यामागून आठवडे अशा नोंदी जमल्या की प्रत्येक प्लॉटच्या हंगामाचं खरं चित्र तयार होतं. हीच शेताची विश्वासार्ह आठवण. अशा आठवणीवर शेत चालवणं सोपं आणि भरवशाचं होतं. नोंदीवर चालणारी शेती ती हीच."
+   ],
+   "bullets_en": [
+    "Speak the day's work in Marathi, or tap. Shram Sathi shows what it understood (what work, who, when, which plot), and the person confirms or corrects it.",
+    "Each entry is tied to a plot and a day, with that day's weather.",
+    "It works without network and syncs later.",
+    "With consent, the original voice can be replayed.",
+    "Corrections never erase history. The earlier version stays visible.",
+    "Spending is kept per plot."
+   ],
+   "bullets_mr": [
+    "दिवसाचं काम मराठीत बोला, किंवा बटण दाबा. श्रम साथी काय समजलं ते दाखवतो: कोणतं काम, कोणी, कधी, कोणत्या प्लॉटवर. तुम्ही ते बरोबर म्हणता किंवा दुरुस्त करता.",
+    "प्रत्येक नोंद एका प्लॉटशी आणि एका दिवसाशी जोडलेली, त्या दिवसाच्या हवामानासकट.",
+    "रेंज नसली तरी नोंद होते. रेंज आली की आपोआप पुढे जाते.",
+    "परवानगी असेल तर मूळ आवाज पुन्हा ऐकता येतो.",
+    "दुरुस्ती केली तरी आधीचं पुसलं जात नाही. जुनी नोंद दिसत राहते.",
+    "खर्च प्रत्येक प्लॉटनुसार वेगळा ठेवला जातो."
+   ]
+  },
+  {
+   "h2_en": "How does one record stay true when many people add to it?",
+   "h2_mr": "अनेक जण नोंद करतात, तरी नोंद खरी कशी राहते?",
+   "status": "now",
+   "paras_en": [
+    "A farm runs on many hands, and many of them do not read or write comfortably. Shram Safal is a multi-user system made for that reality. The owner invites family, the Mukadam (crew lead) and workers, each with a role, chosen plots and an end date. Time-bound responsibility stops by itself.",
+    "Each person sees only what the owner allows. Money stays private unless the owner shares it. When someone else records work, the owner can approve it (मंजूर) or raise a question (शंका). Nothing is quietly overwritten.",
+    "Attendance (हजेरी) can be marked by voice and is kept separate from wages. Wages are never guessed from a headcount. Every worker gets a permanent ID and a QR card, so nobody needs their own phone to be counted. A worker who has a phone can see their own days. The record protects both sides: the owner's money and the worker's labour.",
+    "On this record, the owner can set a crop-stage schedule for each plot, plan and assign work, see planned work next to work done, and check an attention list of what needs a look today."
+   ],
+   "paras_mr": [
+    "शेत अनेक हातांनी चालतं, आणि त्यातल्या बऱ्याच जणांना लिहिणं-वाचणं सोपं जात नाही. श्रम सफल अशाच शेतासाठी बनवलं आहे, जिथे अनेक जण मिळून एकच नोंद ठेवतात. मालक घरच्यांना, मुकादमाला आणि कामगारांना जोडतो. प्रत्येक जण कोण आहे (घरचा, मुकादम की कामगार), त्याला कोणते प्लॉट दिसतील आणि किती दिवसांसाठी, हे मालक ठरवतो. मुदत संपली की ती जबाबदारी आपोआप थांबते.",
+    "मालक जेवढं दाखवेल तेवढंच प्रत्येकाला दिसतं. मालकाने परवानगी दिली नाही तर पैशाचा हिशोब खाजगीच राहतो. दुसऱ्याने केलेली नोंद मालक मंजूर करतो, किंवा त्यावर शंका विचारतो. काहीही गुपचूप बदललं जात नाही.",
+    "हजेरी बोलून लावता येते, आणि ती मजुरीपासून वेगळी ठेवली जाते. डोकी मोजून मजुरीचा अंदाज कधीच लावला जात नाही. प्रत्येक कामगाराला कायमचा ओळख क्रमांक आणि QR कार्ड मिळतं, म्हणून हजेरीसाठी त्याला स्वतःचा फोन लागत नाही. ज्याच्याकडे फोन आहे, त्याला आपले दिवस दिसतात. ही नोंद दोन्ही बाजू सांभाळते: मालकाचा पैसा आणि कामगाराचे श्रम.",
+    "याच नोंदीवर मालक प्रत्येक प्लॉटचं पिकाच्या टप्प्यानुसार वेळापत्रक लावू शकतो, काम ठरवून वाटून देऊ शकतो, ठरवलेलं काम आणि झालेलं काम समोरासमोर पाहू शकतो, आणि आज कशाकडे लक्ष द्यायचं त्याची यादी पाहू शकतो."
+   ]
+  },
+  {
+   "h2_en": "Who owns the farm's data?",
+   "h2_mr": "शेताच्या नोंदी कोणाच्या? मालकी कोणाची?",
+   "status": "now",
+   "paras_en": [
+    "The farm's records belong to the farm. The owner decides who sees what, and a worker who has a phone can see their own days. A replica of your farm is a picture of your business, your money and the people who work with you. Shram Safal stores data in India, and you can download your data or erase it. It is built for India's DPDP law, the Digital Personal Data Protection Act, and it is ready to carry the AgriStack Farmer ID.",
+    "Access can be set down to the plot. Nothing leaves the farm unless the owner chooses. Sharing with groups such as FPOs is still being developed and will need the farmer's approval. Farm data ownership is not a setting hidden at the back. It is the starting point.",
+    "This matters because a record is trusted only when the people in it feel safe."
+   ],
+   "paras_mr": [
+    "शेताच्या नोंदी त्या शेताच्याच असतात. कोणाला काय दिसेल हे मालक ठरवतो, आणि ज्या कामगाराकडे फोन आहे त्याला आपले दिवस दिसतात. तुमच्या शेताचं चित्र म्हणजे तुमचा धंदा, तुमचा पैसा आणि तुमच्यासोबत काम करणारी माणसं. श्रम सफलच्या नोंदी भारतातच ठेवल्या जातात. तुम्ही तुमच्या नोंदी डाउनलोड करू शकता किंवा पुसून टाकू शकता. भारताच्या DPDP कायद्याचा (वैयक्तिक माहिती संरक्षणाचा कायदा) विचार करून हे बनवलं आहे. AgriStack चा शेतकरी ओळख क्रमांक (Farmer ID) सोबत ठेवता येईल, अशी तयारी आहे.",
+    "अगदी प्लॉटपर्यंत कोणाला काय दिसेल ते ठरवता येतं. मालकाने ठरवल्याशिवाय कोणतीही नोंद शेताबाहेर जात नाही. FPO सारख्या गटांसोबत नोंदी वाटून घेण्याची सोय अजून तयार होत आहे, आणि त्यासाठी शेतकऱ्याची मंजुरी लागेल. नोंदींची मालकी हा कुठेतरी कोपऱ्यात लपवलेला पर्याय नाही. तीच सुरुवात आहे.",
+    "हे महत्त्वाचं आहे, कारण नोंदीत ज्यांचं नाव आहे त्यांना सुरक्षित वाटलं, तरच नोंदीवर विश्वास बसतो."
+   ]
+  },
+  {
+   "h2_en": "What is being built next on this memory?",
+   "h2_mr": "या आठवणीवर पुढे काय तयार होतंय?",
+   "status": "dev",
+   "paras_en": [
+    "These features are being developed. They are not part of the 1 December release.",
+    "Each one rests on the same base: a daily record that people already trust."
+   ],
+   "paras_mr": [
+    "खालच्या गोष्टी सध्या तयार होत आहेत. 1 डिसेंबरच्या सुरुवातीत त्या नाहीत.",
+    "या सगळ्यांचा पाया एकच: लोकांचा विश्वास असलेली रोजची नोंद."
+   ],
+   "bullets_en": [
+    "A suggest-and-adopt change trail, so a proposed change and its acceptance both stay visible.",
+    "Skill profiles drawn from approved work.",
+    "A worker's work history across farms, shared only with the worker's permission.",
+    "A dashboard for FPOs and FPCs covering member farms, with a farmer-approval flow. The FPO sees only what the farmer approves; its staff see masked worker names and no GPS.",
+    "Next-season reminders at the same crop stage, so last year's lesson returns at the right time."
+   ],
+   "bullets_mr": [
+    "सुचवलेला बदल आणि तो स्वीकारल्याची खूण, दोन्ही दिसत राहतील अशी बदलांची साखळी.",
+    "मंजूर झालेल्या कामावरून कामगाराचं कौशल्य दाखवणारी माहिती.",
+    "कामगाराच्या परवानगीने, वेगवेगळ्या शेतांवरचा त्याचा कामाचा इतिहास.",
+    "FPO/FPC साठी सभासद शेतांचं एकत्र चित्र, शेतकऱ्याच्या मंजुरीने. शेतकरी जे मंजूर करेल तेवढंच FPO ला दिसेल. त्यांच्या कर्मचाऱ्यांना कामगारांची नावं झाकलेली दिसतील, आणि GPS ठिकाण दिसणार नाही.",
+    "पुढच्या हंगामात पिकाच्या त्याच टप्प्यावर आठवण, म्हणजे मागच्या वर्षीचा धडा योग्य वेळी पुन्हा समोर येईल."
+   ]
+  },
+  {
+   "h2_en": "Where could a trusted farm record lead later?",
+   "h2_mr": "विश्वासार्ह नोंद पुढे कुठवर नेऊ शकते?",
+   "status": "future",
+   "paras_en": [
+    "These are future possibilities, not current services. Records come first. Services can follow only when the record is real and the farmer agrees.",
+    "When a farm has a trusted memory, the people around it can rely on it too. That is how a daily record could, over time, change how farming is run."
+   ],
+   "paras_mr": [
+    "या पुढच्या शक्यता आहेत, आजच्या सेवा नाहीत. आधी नोंद. नोंद खरी ठरली आणि शेतकऱ्याने होकार दिला, तरच पुढच्या सेवा.",
+    "शेताची आठवण विश्वासार्ह झाली, की शेताभोवतीचे लोकही तिच्यावर विसंबू शकतात. म्हणूनच आमचं म्हणणं साधं आहे: पुढची शेती अंदाजावर नाही, नोंदीवर चालणार आहे."
+   ],
+   "bullets_en": [
+    "Traceability for buyers built on the record: how a lot was grown, shown from the farm's own entries.",
+    "Links to buyers, exporters, banks, insurers and researchers, only with the farmer's permission.",
+    "Expert access to chosen plots, and a view of fellow farmers' recorded practice with their consent: real practice, not just advice.",
+    "Skilled crews matched to a plot on proven skill and performance.",
+    "Accountability principles that could later support carbon-credit style claims. Shram Safal is building the record-keeping principles such claims would need. It is not a carbon credit product and promises no carbon income."
+   ],
+   "bullets_mr": [
+    "खरेदीदारांसाठी मालाचा मागोवा: माल कसा पिकवला, ते शेताच्या स्वतःच्या नोंदीतून दाखवणं.",
+    "खरेदीदार, निर्यातदार, बँका, विमा कंपन्या आणि संशोधक यांच्याशी जोडणी, फक्त शेतकऱ्याच्या परवानगीने.",
+    "निवडलेल्या प्लॉटवर जाणकारांची नजर, आणि शेजारच्या शेतकऱ्यांच्या संमतीने त्यांची नोंदवलेली प्रत्यक्ष पद्धत पाहणं. फक्त सल्ला नाही, खरं केलेलं काम.",
+    "कौशल्य आणि कामाच्या नोंदीवरून प्लॉटसाठी योग्य, कुशल टोळी.",
+    "कार्बन क्रेडिटसारख्या दाव्यांना पुढे आधार देऊ शकतील अशी जबाबदारीची तत्त्वं. श्रम सफल त्यासाठी लागणारी नोंद ठेवण्याची तत्त्वं उभी करत आहे. कार्बन क्रेडिट देणं किंवा विकणं हे श्रम सफलचं काम नाही, आणि त्यातून कोणत्याही कमाईचं आश्वासन नाही."
+   ]
+  }
+ ],
+ "faq": [
+  {
+   "q_en": "Do I need sensors or a drone to start?",
+   "a_en": "No. Install Shram Safal from Google Play on an Android phone, sign in with your phone number and an SMS code, and speak or tap the day's work. Each entry is tied to a plot, a day and that day's weather. No sensors are needed to begin.",
+   "q_mr": "सुरुवात करायला सेन्सर किंवा ड्रोन लागतो का?",
+   "a_mr": "नाही. अँड्रॉइड फोनवर Google Play वरून श्रम सफल घ्या, फोन नंबर आणि SMS ने आलेल्या कोडने आत या, आणि दिवसाचं काम बोला किंवा बटण दाबून नोंदवा. प्रत्येक नोंद प्लॉट, दिवस आणि त्या दिवसाच्या हवामानाशी जोडली जाते. सुरुवातीला सेन्सरची गरज नाही."
+  },
+  {
+   "q_en": "Is Shram Safal only for grape farmers?",
+   "a_en": "No. It is made for all crops, including pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik.",
+   "q_mr": "श्रम सफल फक्त द्राक्ष बागायतदारांसाठी आहे का?",
+   "a_mr": "नाही. डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य, सगळ्या पिकांसाठी आहे. 1 डिसेंबर 2026 पासून रोजचा वापर सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये."
+  },
+  {
+   "q_en": "What if a worker or family member cannot read?",
+   "a_en": "They can speak in Marathi. Shram Sathi shows what it understood, and the person confirms or corrects it. Every worker also gets a permanent ID and a QR card, so a worker without a phone is still counted for attendance.",
+   "q_mr": "कामगाराला किंवा घरच्या कोणाला वाचता येत नसेल तर?",
+   "a_mr": "मराठीत बोलून नोंद करता येते. श्रम साथी काय समजलं ते दाखवतो, आणि ती व्यक्ती बरोबर म्हणते किंवा दुरुस्त करते. प्रत्येक कामगाराला कायमचा ओळख क्रमांक आणि QR कार्ड मिळतं, त्यामुळे फोन नसला तरी त्याची हजेरी लागते."
+  },
+  {
+   "q_en": "Can a record be changed later?",
+   "a_en": "It can be corrected, but corrections never erase history; the earlier version stays visible. When someone else records work, the owner can approve it (मंजूर) or raise a question (शंका).",
+   "q_mr": "केलेली नोंद नंतर बदलता येते का?",
+   "a_mr": "दुरुस्त करता येते, पण आधीची नोंद पुसली जात नाही, ती दिसत राहते. दुसऱ्याने केलेली नोंद मालक मंजूर करतो, किंवा त्यावर शंका विचारतो."
+  },
+  {
+   "q_en": "Who can see my farm's money and records?",
+   "a_en": "Only the people you allow. The owner sets each person's role, plots and end date, and money stays private unless shared. Data is stored in India, and you can download or erase it.",
+   "q_mr": "माझ्या शेताचा पैसा आणि नोंदी कोणाला दिसतात?",
+   "a_mr": "तुम्ही ज्यांना परवानगी द्याल त्यांनाच. प्रत्येक जण कोण आहे (घरचा, मुकादम की कामगार), त्याला कोणते प्लॉट दिसतील आणि किती दिवसांसाठी, हे मालक ठरवतो. तुम्ही परवानगी दिल्याशिवाय पैशाचा हिशोब खाजगी राहतो. नोंदी भारतातच ठेवल्या जातात, आणि तुम्ही त्या डाउनलोड करू शकता किंवा पुसून टाकू शकता."
+  },
+  {
+   "q_en": "Does Shram Safal offer carbon credits or better prices?",
+   "a_en": "No. Shram Safal promises no carbon income, prices or yield. It is building record-keeping principles that could later support buyer traceability and carbon-credit style claims. Today, it is a daily farm record you can trust.",
+   "q_mr": "श्रम सफलमधून कार्बन क्रेडिट किंवा जास्त भाव मिळतो का?",
+   "a_mr": "नाही. श्रम सफल कार्बनमधून कमाई, भाव किंवा उत्पादन यांचं कोणतंही आश्वासन देत नाही. पुढे खरेदीदारांसाठी मालाचा मागोवा आणि कार्बन क्रेडिटसारखे दावे यांना आधार देऊ शकतील अशी नोंद ठेवण्याची तत्त्वं ते उभी करत आहे. आज ते रोजच्या शेतकामाची विश्वासार्ह नोंद आहे."
+  }
+ ],
+ "sources": [
+  {
+   "name": "Verdouw, Tekinerdogan, Beulens and Wolfert (2021), \"Digital twins in smart farming\", Agricultural Systems 189 (IDEAS/RePEc record)",
+   "url": "https://ideas.repec.org/a/eee/agisys/v189y2021ics0308521x20309070.html"
+  },
+  {
+   "name": "Nasirahmadi and Hensel (2022), Toward the Next Generation of Digitalization in Agriculture Based on Digital Twin Paradigm, Sensors (PMC)",
+   "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8780442/"
+  },
+  {
+   "name": "Press Information Bureau (Ministry of Agriculture and Farmers Welfare): small and marginal holders under Agriculture Census 2015-16",
+   "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=1906888"
+  }
+ ],
+ "illustration_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 630\" role=\"img\"><defs><radialGradient id=\"ga\" cx=\"0.5\" cy=\"0.5\" r=\"0.5\"><stop offset=\"0\" stop-color=\"#b9dc71\" stop-opacity=\"0.42\"/><stop offset=\"1\" stop-color=\"#b9dc71\" stop-opacity=\"0\"/></radialGradient><radialGradient id=\"gb\" cx=\"0.5\" cy=\"0.5\" r=\"0.5\"><stop offset=\"0\" stop-color=\"#eaf4ec\" stop-opacity=\"1\"/><stop offset=\"1\" stop-color=\"#eaf4ec\" stop-opacity=\"0\"/></radialGradient></defs><rect width=\"1200\" height=\"630\" fill=\"#f4f9f4\"/><circle cx=\"605\" cy=\"300\" r=\"330\" fill=\"url(#ga)\"/><circle cx=\"210\" cy=\"440\" r=\"250\" fill=\"url(#gb)\"/><circle cx=\"990\" cy=\"440\" r=\"250\" fill=\"url(#gb)\"/><path d=\"M90 592H1110\" fill=\"none\" stroke=\"#b9dc71\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"0.1 18\"/><g fill=\"#62a83a\"><circle cx=\"160\" cy=\"592\" r=\"6\"/><circle cx=\"250\" cy=\"592\" r=\"6\"/><circle cx=\"340\" cy=\"592\" r=\"6\"/><circle cx=\"430\" cy=\"592\" r=\"6\"/><circle cx=\"520\" cy=\"592\" r=\"6\"/><circle cx=\"610\" cy=\"592\" r=\"6\"/><circle cx=\"700\" cy=\"592\" r=\"6\"/><circle cx=\"790\" cy=\"592\" r=\"6\"/><circle cx=\"880\" cy=\"592\" r=\"6\"/><circle cx=\"970\" cy=\"592\" r=\"6\"/></g><circle cx=\"1060\" cy=\"592\" r=\"9\" fill=\"#ffffff\" stroke=\"#1847d6\" stroke-width=\"3\"/><g fill=\"none\" stroke=\"#a86412\" stroke-width=\"3\" stroke-linecap=\"round\"><circle cx=\"318\" cy=\"124\" r=\"24\"/><path d=\"M318 86V74M278 124H266M370 124H358M290 96L282 88M346 96L354 88M290 152L282 160\"/></g><path d=\"M246 182a18 18 0 0 1 4-35a28 28 0 0 1 52-6a24 24 0 0 1 24 41Z\" fill=\"#ffffff\" stroke=\"#0d6e3f\" stroke-width=\"3\" stroke-linejoin=\"round\"/><path d=\"M108 432H332L392 540H48Z\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"3\" stroke-linejoin=\"round\"/><path d=\"M140 442L106 530M180 442L167 530M220 442L220 530M260 442L273 530M300 442L334 530\" fill=\"none\" stroke=\"#62a83a\" stroke-width=\"5\" stroke-linecap=\"round\" stroke-dasharray=\"0.1 15\"/><path d=\"M40 556H400\" stroke=\"#9b7a52\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"150\" cy=\"318\" r=\"22\" fill=\"#9b7a52\"/><path d=\"M129 312a21 21 0 0 1 42 0\" fill=\"none\" stroke=\"#f7f3e8\" stroke-width=\"4\" stroke-linecap=\"round\"/><path d=\"M116 420V376a34 34 0 0 1 68 0V420Z\" fill=\"#0d6e3f\"/><path d=\"M206 228H348a18 18 0 0 1 18 18V292a18 18 0 0 1-18 18H226L190 330L204 310H206a18 18 0 0 1-18-18V246a18 18 0 0 1 18-18Z\" fill=\"#ffffff\" stroke=\"#0d6e3f\" stroke-width=\"3\" stroke-linejoin=\"round\"/><path d=\"M214 264v10M228 258v22M242 252v34M256 260v18M270 249v40M284 256v26M298 262v14M312 254v30M326 259v20M340 265v8\" stroke=\"#178b55\" stroke-width=\"5\" stroke-linecap=\"round\"/><path d=\"M372 268C430 262 470 270 512 288\" fill=\"none\" stroke=\"#62a83a\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"0.1 12\"/><circle cx=\"605\" cy=\"300\" r=\"214\" fill=\"none\" stroke=\"#b9dc71\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-dasharray=\"2 12\"/><path d=\"M416 300a189 189 0 1 0 378 0a189 189 0 1 0-378 0ZM430 300a175 175 0 1 0 350 0a175 175 0 1 0-350 0Z\" fill=\"#ffffff\" fill-rule=\"evenodd\" opacity=\"0.85\"/><rect x=\"520\" y=\"132\" width=\"170\" height=\"336\" rx=\"28\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><path d=\"M585 152H625M585 448H625\" stroke=\"#0a4a2b\" stroke-width=\"4\" stroke-linecap=\"round\"/><rect x=\"538\" y=\"174\" width=\"134\" height=\"76\" rx=\"14\" fill=\"#eaf4ec\" stroke=\"#178b55\" stroke-width=\"2\"/><circle cx=\"562\" cy=\"200\" r=\"10\" fill=\"#62a83a\"/><circle cx=\"658\" cy=\"188\" r=\"4\" fill=\"#1847d6\"/><path d=\"M582 198H636M582 216H620M552 232H596\" stroke=\"#0d6e3f\" stroke-width=\"4\" stroke-linecap=\"round\"/><circle cx=\"650\" cy=\"230\" r=\"11\" fill=\"#0d6e3f\"/><path d=\"M645 230l4 4l7-8\" fill=\"none\" stroke=\"#ffffff\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"538\" y=\"262\" width=\"134\" height=\"76\" rx=\"14\" fill=\"#eaf4ec\" stroke=\"#178b55\" stroke-width=\"2\"/><circle cx=\"562\" cy=\"288\" r=\"10\" fill=\"#9b7a52\"/><path d=\"M582 286H640M582 304H612M552 320H604\" stroke=\"#0d6e3f\" stroke-width=\"4\" stroke-linecap=\"round\"/><circle cx=\"650\" cy=\"318\" r=\"11\" fill=\"#0d6e3f\"/><path d=\"M645 318l4 4l7-8\" fill=\"none\" stroke=\"#ffffff\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"538\" y=\"350\" width=\"134\" height=\"76\" rx=\"14\" fill=\"#ffffff\" stroke=\"#62a83a\" stroke-width=\"2\" stroke-dasharray=\"6 6\"/><path d=\"M556 382v12M568 376v24M580 370v36M592 378v20M604 373v30M616 381v14\" stroke=\"#178b55\" stroke-width=\"5\" stroke-linecap=\"round\"/><circle cx=\"650\" cy=\"388\" r=\"11\" fill=\"none\" stroke=\"#178b55\" stroke-width=\"3\"/><path d=\"M645 388l4 4l7-8\" fill=\"none\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path d=\"M694 300C760 300 792 360 822 426\" fill=\"none\" stroke=\"#62a83a\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"0.1 12\"/><path d=\"M828 432H1052L1112 540H768Z\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"3\" stroke-linejoin=\"round\"/><path d=\"M798 486H1082M903 432L883 540M977 432L997 540\" fill=\"none\" stroke=\"#178b55\" stroke-width=\"2\" stroke-dasharray=\"6 8\"/><path d=\"M845 459l7 7l13-14M930 459l7 7l13-14M1014 459l7 7l13-14M825 513l7 7l13-14M930 513l7 7l13-14\" fill=\"none\" stroke=\"#178b55\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"1044\" cy=\"513\" r=\"6\" fill=\"#a86412\"/><circle cx=\"1098\" cy=\"430\" r=\"34\" fill=\"none\" stroke=\"#b9dc71\" stroke-width=\"3\"/><circle cx=\"1098\" cy=\"430\" r=\"25\" fill=\"#0d6e3f\"/><path d=\"M1087 430l8 8l14-16\" fill=\"none\" stroke=\"#ffffff\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><circle cx=\"870\" cy=\"300\" r=\"20\" fill=\"#9b7a52\"/><path d=\"M840 394V354a30 30 0 0 1 60 0V394Z\" fill=\"#0a4a2b\"/><circle cx=\"950\" cy=\"292\" r=\"20\" fill=\"#9b7a52\"/><path d=\"M920 394V346a30 30 0 0 1 60 0V394Z\" fill=\"#178b55\"/><circle cx=\"1030\" cy=\"310\" r=\"18\" fill=\"#9b7a52\"/><path d=\"M1003 394V358a27 27 0 0 1 54 0V394Z\" fill=\"#62a83a\"/><rect x=\"1050\" y=\"354\" width=\"28\" height=\"34\" rx=\"5\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"2.5\"/><path d=\"M1056 360h7v7h-7ZM1066 370h7v7h-7ZM1056 378h7v5h-7Z\" fill=\"#0a4a2b\"/><path d=\"M870 400L874 426M950 400V426M1030 400L1022 426\" fill=\"none\" stroke=\"#62a83a\" stroke-width=\"4\" stroke-linecap=\"round\" stroke-dasharray=\"0.1 9\"/><path d=\"M890 270C920 252 980 252 1010 274\" fill=\"none\" stroke=\"#b9dc71\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-dasharray=\"0.1 10\"/></svg>",
+ "illustration_alt_en": "Line drawing: a farmer on a field plot speaks the day's work; dotted lines carry it to a phone of confirmed record cards, which forms a matching replica of the plot shared by an owner, a Mukadam and a worker holding a QR card, marked with a trust tick.",
+ "illustration_alt_mr": "रेखाचित्र: शेतकरी प्लॉटवर उभा राहून दिवसाचं काम बोलतो; ते फोनमधल्या पक्क्या नोंदींमध्ये जातं, आणि त्यातून त्याच प्लॉटचं हुबेहूब चित्र तयार होतं. ते चित्र मालक, मुकादम आणि QR कार्ड असलेला कामगार मिळून पाहतात, आणि त्यावर विश्वासाची खूण आहे.",
+ "read_minutes": 6
+}

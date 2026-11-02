@@ -1,78 +1,97 @@
-// One-command publish of the site to shramsafal.in (S3 + CloudFront).
+// Static_V2 no longer publishes shramsafal.in. Since 2026-11-02 the site is src/clients/Website
+// (python deploy.py there). The old full upload would put these old pages back over it, so it is gone.
 //
-//   npm run deploy                      build, test, then show what WOULD change. Touches nothing.
-//   npm run deploy -- --confirm PUBLISH build, test, upload, clear the CloudFront cache.
+// Static_V2 still owns three pages on the bucket: the privacy notice (/privacy/, /privacy-mr/) and the
+// account-deletion page (/delete-account/), which the app and the Google Play listing link to. This
+// script republishes only those:
 //
-// Same five steps as the README "Deploy" section, in the same order, so a rollback
-// is still "check out the old commit, run this again". Nothing is ever deleted from
-// the bucket (no --delete): a file removed from the site stays online until removed
-// by hand, which is deliberately the safer failure.
+//   npm run deploy -- --privacy-only                     shows what WOULD change. Touches nothing.
+//   npm run deploy -- --privacy-only --confirm PUBLISH   uploads the three pages, clears their cache.
+//
+// It uploads the COMMITTED bytes (git show HEAD:...), not the working copy: a Windows checkout turns
+// the LF line endings into CRLF, and the live pages are the committed LF bytes. Nothing is ever
+// deleted from the bucket.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const DIST = join(ROOT, 'dist');
-const BUCKET = 's3://shramsafal-marketing-prod';
+const BUCKET = 'shramsafal-marketing-prod';
 const DISTRIBUTION = 'E2M06A2B71ZW1O';
-const IMMUTABLE = 'public, max-age=31536000, immutable';
+const PAGES = ['privacy/index.html', 'privacy-mr/index.html', 'delete-account/index.html'];
 
 const args = process.argv.slice(2);
 const confirmIdx = args.indexOf('--confirm');
 const publish = confirmIdx !== -1 && args[confirmIdx + 1] === 'PUBLISH';
-if (confirmIdx !== -1 && !publish) {
-  console.error('To publish, pass exactly:  --confirm PUBLISH');
-  process.exit(1);
-}
-
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-// MSYS_NO_PATHCONV stops Git Bash rewriting "/*" into a Windows path.
-const env = { ...process.env, MSYS_NO_PATHCONV: '1' };
-
-function run(cmd, cmdArgs, opts = {}) {
-  console.log(`\n$ ${cmd} ${cmdArgs.join(' ')}`);
-  return execFileSync(cmd, cmdArgs, { cwd: ROOT, env, stdio: 'inherit', shell: process.platform === 'win32' && cmd === npm, ...opts });
-}
 
 function fail(message) {
   console.error(`\nSTOPPED: ${message}`);
   process.exit(1);
 }
 
-// 1. Build and test. A failing copy contract or hydration check stops here.
-run(npm, ['test']);
-run(npm, ['run', 'build']);
+if (!args.includes('--privacy-only')) {
+  fail(`Static_V2 no longer publishes shramsafal.in, and this script will not upload its pages.
+The live site is src/clients/Website. To publish it:
 
-// 2. Sanity-check what was built, before anything is uploaded.
-const mustExist = ['index.html', '404.html', 'robots.txt', 'sitemap.xml', 'privacy/index.html', 'delete-account/index.html'];
-for (const f of mustExist) {
-  if (!existsSync(join(DIST, f))) fail(`dist/${f} is missing - refusing to upload an incomplete site.`);
+  cd src/clients/Website
+  python deploy.py                      (dry run; add  --confirm PUBLISH  to go live)
+
+To republish only the privacy and delete-account pages, which Static_V2 still owns:
+
+  npm run deploy -- --privacy-only      (dry run; add  --confirm PUBLISH  to go live)`);
 }
-if (readFileSync(join(DIST, 'index.html'), 'utf8').length < 400) fail('dist/index.html looks empty.');
+if (confirmIdx !== -1 && !publish) fail('To publish, pass exactly:  --confirm PUBLISH');
 
-// 3. Who is uploading? Prints the AWS identity (no secrets) so a wrong profile is obvious.
+// MSYS_NO_PATHCONV stops Git Bash rewriting "/privacy*" into a Windows path.
+const env = { ...process.env, MSYS_NO_PATHCONV: '1' };
+const run = (cmd, cmdArgs, opts = {}) => execFileSync(cmd, cmdArgs, { cwd: ROOT, env, encoding: 'utf8', ...opts });
+
+// 1. The committed pages only. Edits that are not committed would silently not go up, so stop instead.
+const dirty = run('git', ['status', '--porcelain', '--', ...PAGES.map((page) => `public/${page}`)]).trim();
+if (dirty) fail(`these pages have uncommitted changes; commit them first:\n${dirty}`);
+const dir = mkdtempSync(join(tmpdir(), 'static-v2-privacy-'));
+const pages = PAGES.map((page) => {
+  const bytes = run('git', ['show', `HEAD:./public/${page}`], { encoding: 'buffer' });
+  const file = join(dir, page);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, bytes);
+  return { page, file, md5: createHash('md5').update(bytes).digest('hex') };
+});
+
+// 2. Who is uploading? Prints the AWS identity (no secrets) so a wrong profile is obvious.
 try {
-  const who = execFileSync('aws', ['sts', 'get-caller-identity', '--query', 'Arn', '--output', 'text'], { env, encoding: 'utf8' }).trim();
-  console.log(`\nAWS identity: ${who}`);
+  console.log(`AWS identity: ${run('aws', ['sts', 'get-caller-identity', '--query', 'Arn', '--output', 'text']).trim()}`);
 } catch {
   fail('AWS CLI is not signed in. Sign in (aws configure / aws sso login) and run again.');
 }
 
-console.log(publish ? '\n=== PUBLISHING to shramsafal.in ===' : '\n=== DRY RUN - nothing will be uploaded. Add  --confirm PUBLISH  to go live. ===');
-const dry = publish ? [] : ['--dryrun'];
-const sync = (extra) => run('aws', ['s3', 'sync', ...extra, ...dry], { cwd: DIST });
+// 3. Compare with what is live (the ETag is the MD5 of a single-part upload).
+console.log(publish ? '\n=== PUBLISHING the privacy and delete-account pages ===' : '\n=== DRY RUN - nothing will be uploaded. Add  --confirm PUBLISH  to go live. ===');
+for (const p of pages) {
+  let live = 'not on S3';
+  try {
+    live = run('aws', ['s3api', 'head-object', '--bucket', BUCKET, '--key', p.page, '--query', 'ETag', '--output', 'text'], { stdio: 'pipe' }).trim().replace(/"/g, '');
+  } catch {}
+  console.log(`  ${p.page.padEnd(28)} ${live === p.md5 ? 'unchanged' : 'CHANGED  '}  committed ${p.md5}, live ${live}`);
+}
 
-// 4. Upload. Hashed assets/fonts are immutable; HTML is never cached so edits show at once.
-sync(['assets', `${BUCKET}/assets`, '--cache-control', IMMUTABLE]);
-sync(['fonts', `${BUCKET}/fonts`, '--cache-control', IMMUTABLE, '--content-type', 'font/woff2']);
-sync(['.', `${BUCKET}/`, '--exclude', '*', '--include', '*.html', '--exclude', 'nav-*.html', '--cache-control', 'no-cache', '--content-type', 'text/html; charset=utf-8']);
-sync(['.', `${BUCKET}/`, '--exclude', '*.html', '--exclude', 'assets/*', '--exclude', 'fonts/*', '--cache-control', 'public, max-age=3600']);
+// 4. Upload exactly these three files; pages are never cached so an edit shows at once.
+for (const p of pages) {
+  run('aws', ['s3', 'cp', p.file, `s3://${BUCKET}/${p.page}`, '--cache-control', 'no-cache', '--content-type', 'text/html; charset=utf-8',
+    '--no-progress', ...(publish ? [] : ['--dryrun'])], { stdio: 'inherit' });
+}
+rmSync(dir, { recursive: true, force: true });
 
-// 5. Clear the CloudFront cache so visitors get the new pages.
+// 5. Clear only these pages from the CloudFront cache, and wait until that is done.
 if (publish) {
-  run('aws', ['cloudfront', 'create-invalidation', '--distribution-id', DISTRIBUTION, '--paths', '/*']);
-  console.log('\nDone. Live in about a minute at https://shramsafal.in - hard-refresh to see it.');
+  const id = run('aws', ['cloudfront', 'create-invalidation', '--distribution-id', DISTRIBUTION, '--paths', '/privacy*', '/delete-account*',
+    '--query', 'Invalidation.Id', '--output', 'text']).trim();
+  console.log(`\nInvalidation ${id} created; waiting for it to complete...`);
+  run('aws', ['cloudfront', 'wait', 'invalidation-completed', '--distribution-id', DISTRIBUTION, '--id', id], { stdio: 'inherit' });
+  console.log('Done. Hard-refresh https://shramsafal.in/privacy/ to see it.');
 } else {
   console.log('\nDry run finished. Nothing was uploaded or invalidated.');
 }

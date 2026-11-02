@@ -357,7 +357,7 @@ When the agency needs to answer "is this real / can we trust it," here is the su
 
 ## Appendix — Asset & reference index
 
-- **Archived marketing site** (canonical narrative, bilingual): `G:\Site_Redesign\OLD_Site\` — 9-chapter scroll story, EN + MR, plus a "future scope" page. Moved out of the repo on 2026-09-30 and superseded by the Static_V2 redesign. It was never deployed. The site live at https://shramsafal.in since 2026-10-03 is `src/clients/Static_V2/`.
+- **Archived marketing site** (canonical narrative, bilingual): `G:\Site_Redesign\OLD_Site\` — 9-chapter scroll story, EN + MR, plus a "future scope" page. Moved out of the repo on 2026-09-30 and superseded by the Static_V2 redesign. It was never deployed. The site live at https://shramsafal.in from 2026-10-03 was `src/clients/Static_V2/`; since 2026-11-02 it is the bilingual static site in `src/clients/Website/` (Static_V2 still serves only the privacy and delete-account pages).
 - **The app:** `src/clients/mobile-web/` — React 19 + Vite; Android APK packaged via Capacitor.
 - **Canonical positioning copy:** `G:\Site_Redesign\OLD_Site\src\i18n	ranslations.ts` (EN + MR — the source of truth for approved lines).
 - **Brand assets:** `src/clients/mobile-web/public/brand/` (logo lockups, WebP).

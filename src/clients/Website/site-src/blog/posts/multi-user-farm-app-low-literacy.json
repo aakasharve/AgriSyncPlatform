@@ -1,0 +1,218 @@
+{
+ "slug": "multi-user-farm-app-low-literacy",
+ "primary_keyword_en": "multi-user farm app for low-literacy and no-literacy users",
+ "primary_keyword_mr": "बोलून नोंद",
+ "keywords": [
+  "multi-user farm app for low-literacy and no-literacy users",
+  "बोलून नोंद",
+  "लिहिता येत नसेल तरी चालेल",
+  "app for illiterate people",
+  "apps for illiterate adults",
+  "voice based app for farmers",
+  "farm app in Marathi",
+  "multi user farm app",
+  "family farm app roles",
+  "farm owner worker app permissions",
+  "worker ID card QR",
+  "बोलून टाईप करणे",
+  "घरच्यांना परवानगी",
+  "कामगार ओळखपत्र",
+  "Shram Safal",
+  "श्रम सफल",
+  "daily farm execution system",
+  "Solapur district farm record"
+ ],
+ "title_en": "Multi-User Farm App for Low & No Literacy | Shram Safal",
+ "title_mr": "लिहिता येत नसेल तरी चालेल — बोलून नोंद | श्रम सफल",
+ "meta_description_en": "A multi-user farm app for low- and no-literacy users: owner, family, Mukadam and workers keep one record by speaking Marathi or tapping.",
+ "meta_description_mr": "दिवसाचं काम मराठीत बोलून नोंद करा, किंवा बटण दाबा. मालक, घरचे, मुकादम, कामगार — सगळ्यांची एकच नोंद; मालक ठरवेल तेवढंच प्रत्येकाला दिसतं.",
+ "h1_en": "A multi-user farm app for low-literacy and no-literacy users: one record for owner, family, Mukadam and workers",
+ "h1_mr": "लिहिता-वाचता येत नसलं तरी चालेल — बोलून नोंद करा; घरचे, मुकादम, कामगार सगळ्यांची नोंद एकच",
+ "answer_en": "Shram Safal is a multi-user farm app for low-literacy and no-literacy users, and India's innovative daily farm execution system. You record the day's farm work by speaking Marathi or tapping, without typing. Owner, family, Mukadam (crew lead) and workers share one record; each sees only what the owner allows. A worker without a phone still gets an ID card.",
+ "answer_mr": "लिहिता-वाचता येत नसलं तरी चालेल. श्रम सफल ही रोजच्या शेतकामाची नवी व्यवस्था आहे. दिवसाचं काम मराठीत बोलून किंवा बटण दाबून नोंदवता येतं; एक अक्षरही टाईप करावं लागत नाही. मालक, घरचे, मुकादम आणि कामगार यांची एकच नोंद राहते, आणि मालक ठरवेल तेवढंच प्रत्येकाला दिसतं. फोन नसलेल्या कामगारालाही कायमचं ओळखपत्र मिळतं.",
+ "sections": [
+  {
+   "h2_en": "Is there a farm app for people who cannot read or write?",
+   "h2_mr": "लिहिता येत नसेल तर मोबाईलवर नोंद कशी करायची?",
+   "status": "now",
+   "paras_en": [
+    "Yes. Shram Safal is a farm app in Marathi first, and it starts with a simple idea: record the day's work the way it is already talked about, out loud. You press the button and say it in Marathi. For example: \"Today six workers did weeding in the sugarcane plot.\" Nothing needs to be typed.",
+    "Voice is the doorway here, not the whole house. If speaking is not comfortable at that moment, you can tap instead. Voice first, never voice only.",
+    "Shram Sathi, the helper inside Shram Safal, then shows what it understood: what work, who did it, when, and on which plot. The person confirms it or corrects it. Each entry is tied to that plot and that day, with that day's weather. It works where the network is weak too: the entry is saved on the phone and syncs when the network returns. With consent, the original voice is kept, so anyone allowed can replay exactly what was said.",
+    "Sometimes a son or daughter looks for an app for a parent who cannot read. On a farm, that parent is often the most experienced hand in the field. Missing school is not the same as not knowing the work. Shram Safal is built so that this knowledge gets recorded too."
+   ],
+   "paras_mr": [
+    "बोलून. शेतातलं काम आपण रोज तोंडीच सांगतो — तसंच इथे. श्रम सफलमध्ये बटण दाबायचं आणि दिवसाचं काम मराठीत सांगायचं. उदाहरणार्थ: 'आज उसाच्या प्लॉटमध्ये सहा कामगारांनी खुरपणी केली.' एक अक्षरही टाईप करावं लागत नाही.",
+    "मोबाईलवर बोलून टाईप करता येतं, हे बऱ्याच जणांना माहीत असतं. इथे त्याच्याही पुढे — टाईप करायचीच गरज नाही, बोललं की नोंद होते. बोलायचं नसेल तेव्हा बटण दाबूनही नोंद करता येते. बोलणं सोयीचं, पण बोलायलाच हवं असं नाही.",
+    "मग श्रम साथी दाखवतो की त्याला काय समजलं — कोणतं काम, कोणी केलं, कधी आणि कोणत्या प्लॉटवर. बरोबर असेल तर हो म्हणायचं, चुकलं असेल तर दुरुस्त करायचं. प्रत्येक नोंद त्या प्लॉटला आणि त्या दिवसाला जोडली जाते, त्या दिवशीच्या हवामानासकट. शेतात रेंज नसली तरी अडचण नाही: नोंद फोनमध्येच राहते आणि रेंज आली की पोहोचते. तुमची परवानगी असेल तर मूळ आवाजही राहतो, आणि ज्यांना परवानगी आहे ते तो परत ऐकू शकतात.",
+    "एक गोष्ट मनापासून सांगायची. शाळा शिकायची संधी मिळाली नाही, म्हणजे काम कळत नाही असं नाही. शेतात सगळ्यात जास्त अनुभव बहुतेक वेळा त्याच माणसाकडे असतो. त्याचा अनुभवही नोंदीत यायला हवा. म्हणूनच नोंद करायची पहिली सोय बोलण्याची ठेवली आहे."
+   ]
+  },
+  {
+   "h2_en": "Why does one farm need one shared record?",
+   "h2_mr": "एका शेतासाठी एकच नोंद का लागते?",
+   "status": "none",
+   "paras_en": [
+    "A farm is rarely run by one person. The owner decides. A family member may keep the money or stay on the field. The Mukadam brings the crew and leads the work. Workers do the work. Each of them carries a part of the day in memory.",
+    "Memory is honest, but it fades. By the end of the week, two people can remember the same day differently: how many came, for how long, which plot was sprayed. When the record lives in five heads and three notebooks, small gaps turn into arguments. Nobody has to be cheating for this to happen.",
+    "Farming is already a business. What it lacked was an easy instrument to measure daily execution. Weather cannot be controlled. Almost everything else, from work and spending to attendance and timing, can be managed once it is measured. Shram Safal makes that measuring as easy as speaking. One shared record protects both sides: the person who pays and the person who works."
+   ],
+   "paras_mr": [
+    "शेत एकट्याच्या जिवावर चालत नाही. निर्णय मालक घेतो. घरातलं कोणी पैशांचा हिशोब बघतं, कोणी शेतावर थांबतं. मुकादम टोळी आणतो, कामाला लावतो. कामगार प्रत्यक्ष काम करतात. दिवसाचा एक-एक तुकडा प्रत्येकाच्या लक्षात असतो.",
+    "आठवण खरी असते, पण टिकत नाही. आठवडा संपेपर्यंत एकाच दिवसाबद्दल दोघांना वेगवेगळं आठवतं — किती जण आले, किती वेळ काम झालं, कोणत्या प्लॉटवर फवारणी झाली. नोंद पाच डोक्यांत आणि तीन वह्यांत विखुरलेली असली, की छोट्या फरकावरून वाद होतात. यात कोणी फसवत असतं असं नाही. फक्त आठवण कमी पडते.",
+    "शेती हा व्यवसायच आहे. कमी पडत होतं ते रोजचं काम मोजायचं सोपं साधन. हवामान आपल्या हातात नाही. पण बाकी बहुतेक गोष्टी — काम, खर्च, हजेरी, वेळ — मोजल्या की सांभाळता येतात. श्रम सफल हे मोजणं बोलण्याइतकं सोपं करतं. एकच नोंद दोन्ही बाजूंना जपते: पैसे देणाऱ्यालाही आणि काम करणाऱ्यालाही."
+   ]
+  },
+  {
+   "h2_en": "How can a farm owner share records with family and the crew lead safely?",
+   "h2_mr": "घरच्यांना आणि मुकादमाला परवानगी कशी द्यायची?",
+   "status": "now",
+   "paras_en": [
+    "A multi-user farm app is only as good as its permissions. In Shram Safal, the owner invites each person with a role: family, Mukadam or worker. The owner picks which plots they can see and sets an end date. A Mukadam who comes for the harvest season can be given two plots until the season ends. When the date passes, access stops by itself. Nobody has to remember to remove it.",
+    "Each person sees only what the owner allows. Money stays private unless the owner chooses to share it. A family member might see spending. A Mukadam might see only attendance and work on their own plots.",
+    "When someone else records work, the owner can approve it (मंजूर) or raise a question (शंका). Corrections never erase history: the earlier entry and the change both stay visible. That is what makes the record trustworthy for everyone. In practice, the family farm roles look like this:"
+   ],
+   "bullets_en": [
+    "Owner: sees everything, invites people, approves or questions entries.",
+    "Family: sees what the owner allows, such as spending or chosen plots.",
+    "Mukadam: records the crew's attendance and work on the plots given.",
+    "Worker: has a permanent ID card; with a phone, sees their own days."
+   ],
+   "paras_mr": [
+    "अनेक जण एकाच नोंदीवर काम करणार असतील, तर परवानगी नीट हवी. श्रम सफलमध्ये मालक प्रत्येकाला बोलावताना ठरवतो — हा घरातला, हा मुकादम, हा कामगार. त्याला कोणते प्लॉट दिसतील ते निवडतो, आणि कधीपर्यंत ते तारीख टाकून ठरवतो. घरच्यांना परवानगी देतानाही हेच. काढणीच्या हंगामासाठी आलेल्या मुकादमाला दोन प्लॉट, हंगाम संपेपर्यंत — असं देता येतं. तारीख संपली की परवानगी आपोआप थांबते. काढून टाकायचं लक्षात ठेवावं लागत नाही.",
+    "प्रत्येकाला मालक ठरवेल तेवढंच दिसतं. पैशाचा हिशोब मालकापुरताच राहतो; मालकाने दाखवायचं ठरवलं तरच इतरांना दिसतो. घरच्यांना खर्च दिसू शकतो. मुकादमाला फक्त त्याच्या प्लॉटवरची हजेरी आणि काम दिसू शकतं.",
+    "दुसऱ्या कोणी नोंद केली, तर मालक ती मंजूर करू शकतो किंवा त्यावर शंका घेऊ शकतो. दुरुस्ती केली तरी जुनी नोंद पुसली जात नाही — आधीचं आणि बदललेलं दोन्ही दिसत राहतं. म्हणूनच ही नोंद सगळ्यांना विश्वासाची वाटते. कोणाला काय दिसतं, ते असं:"
+   ],
+   "bullets_mr": [
+    "मालक: सगळं बघतो, लोकांना बोलावतो, नोंदी मंजूर करतो किंवा शंका घेतो.",
+    "घरचे: मालक दाखवेल तेवढं — खर्च किंवा निवडलेले प्लॉट.",
+    "मुकादम: दिलेल्या प्लॉटवर टोळीची हजेरी आणि काम नोंदवतो.",
+    "कामगार: कायमचं ओळखपत्र; फोन असेल तर स्वतःचे दिवस बघतो."
+   ]
+  },
+  {
+   "h2_en": "Can farm workers use it without their own phone?",
+   "h2_mr": "कामगाराकडे फोन नसेल तर त्याची नोंद कशी?",
+   "status": "now",
+   "paras_en": [
+    "Yes. Every worker gets a permanent ID and a QR card. They do not need their own phone. The owner or Mukadam records their attendance (हजेरी) by voice, and those days stay against that worker's ID. Two workers in a village may share a name. This worker ID card with its QR code keeps them apart.",
+    "Attendance is kept separate from wages. Shram Safal never guesses wages from a headcount. Wages are recorded as wages, not worked out from how many people came.",
+    "A worker who has a phone can see their own days. That small view matters. A worker can look at their own record without having to ask anyone."
+   ],
+   "paras_mr": [
+    "प्रत्येक कामगाराला कायमचा ओळख क्रमांक आणि QR असलेलं ओळखपत्र मिळतं. त्याच्याकडे स्वतःचा फोन असायलाच हवा असं नाही. मालक किंवा मुकादम बोलून त्याची हजेरी लावतो, आणि ते दिवस त्याच्याच ओळख क्रमांकावर राहतात. गावात दोन बाळू असले, तरी हे कामगार ओळखपत्र दोघांना वेगळं ठेवतं.",
+    "हजेरी आणि मजुरी वेगळी ठेवली आहे. किती जण आले यावरून मजुरीचा अंदाज कधीच बांधला जात नाही. मजुरीची नोंद वेगळीच होते.",
+    "ज्या कामगाराकडे फोन आहे, तो स्वतःचे दिवस स्वतः बघू शकतो. गोष्ट छोटी आहे, पण महत्त्वाची: आपली नोंद बघायला त्याला कोणाला विचारावं लागत नाही."
+   ]
+  },
+  {
+   "h2_en": "What does the owner see in the daily record?",
+   "h2_mr": "मालकाला रोजच्या नोंदीत काय दिसतं?",
+   "status": "now",
+   "paras_en": [
+    "Spending per plot, attendance, and the work done each day. Each plot can follow its crop-stage schedule. The owner can plan and assign work, then compare what was planned with what was done. An attention list shows what needs a look today."
+   ],
+   "paras_mr": [
+    "प्रत्येक प्लॉटवरचा खर्च, हजेरी आणि रोज झालेलं काम. प्रत्येक प्लॉटला पिकाच्या टप्प्यानुसार वेळापत्रक लावता येतं. मालक काम ठरवू शकतो, ते कोणाकडे द्यायचं ते सांगू शकतो, आणि ठरवलेलं काम आणि झालेलं काम समोरासमोर बघू शकतो. आज कशाकडे लक्ष द्यायचं, त्याची यादीही समोर येते."
+   ]
+  },
+  {
+   "h2_en": "Who makes Shram Safal, and where can you use it?",
+   "h2_mr": "श्रम सफल कोण बनवतं, आणि कुठे वापरता येतं?",
+   "status": "now",
+   "paras_en": [
+    "Shram Safal is built by Agriryot Value Enterprises Private Limited, a company in Maharashtra. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik. It is made for all crops: pomegranate, sugarcane, grapes, onion, banana, vegetables, cereals and more. The Android app is on Google Play; you sign in with your phone number and an SMS code.",
+    "The record is the farm's own. Data is stored in India, and you can download or erase your data. Shram Safal is built for India's DPDP law, and it is ready to carry the AgriStack Farmer ID."
+   ],
+   "paras_mr": [
+    "श्रम सफल महाराष्ट्रातली Agriryot Value Enterprises Private Limited ही कंपनी बनवते. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. पीक कुठलंही असो — डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्यं आणि इतरही — सगळ्या पिकांच्या कामाची नोंद इथे ठेवता येते. श्रम सफल अँड्रॉइड फोनसाठी Google Play वर मिळतं. फोन नंबर आणि SMS वर आलेला कोड — एवढ्यावर आत जाता येतं.",
+    "नोंद तुमच्या शेताची आहे. माहिती भारतातच ठेवली जाते. तुमची माहिती तुम्ही स्वतःकडे उतरवून घेऊ शकता, किंवा पुसून टाकू शकता. भारताचा DPDP कायदा लक्षात ठेवून ही व्यवस्था बांधली आहे, आणि AgriStack चा शेतकरी ओळख क्रमांक (Farmer ID) नोंदीत ठेवता येईल, अशी तयारी आहे."
+   ]
+  },
+  {
+   "h2_en": "What is being developed next?",
+   "h2_mr": "पुढे काय तयार होतंय?",
+   "status": "dev",
+   "paras_en": [
+    "Some parts are still being developed. They are not in the 1 December release, and they are labelled that way on purpose.",
+    "All of them follow one rule: nothing leaves the farm's record without permission. Here is what is being built:"
+   ],
+   "bullets_en": [
+    "A suggest-and-adopt change trail, so a suggested change stays visible before and after it is adopted.",
+    "Skill profiles built from approved work.",
+    "A worker's work history across farms, shared only with their permission.",
+    "An FPO/FPC dashboard for member farms. The FPO sees only what each farmer approves; staff see masked worker names and no GPS.",
+    "Next-season reminders when the crop reaches the same stage."
+   ],
+   "paras_mr": [
+    "काही गोष्टी अजून तयार होत आहेत. त्या १ डिसेंबरच्या सुरुवातीत नाहीत, आणि तसं स्पष्ट लिहिलं आहे.",
+    "या सगळ्यात एकच नियम आहे: परवानगीशिवाय नोंद शेताबाहेर जात नाही. तयार होत असलेल्या गोष्टी:"
+   ],
+   "bullets_mr": [
+    "बदल आधी सुचवायचा, मग स्वीकारायचा — आणि त्याचा सगळा माग दिसत राहणार.",
+    "मंजूर झालेल्या कामावरून कामगाराच्या कौशल्याची ओळख.",
+    "कामगाराच्या परवानगीने, वेगवेगळ्या शेतांवर त्याने केलेल्या कामाचा इतिहास.",
+    "FPO/FPC साठी सभासद शेतांचा एकत्र आढावा. शेतकरी मंजूर करेल तेवढंच FPO ला दिसेल; कर्मचाऱ्यांना कामगारांची नावं झाकलेली दिसतील, आणि GPS दिसणार नाही.",
+    "पुढच्या हंगामात पीक त्याच टप्प्यावर आलं, की कामाची आठवण."
+   ]
+  },
+  {
+   "h2_en": "Where could a trusted farm record lead later?",
+   "h2_mr": "विश्वासाची नोंद पुढे कुठपर्यंत नेऊ शकते?",
+   "status": "future",
+   "paras_en": [
+    "These are future possibilities, not services today. Records come first. Services may follow.",
+    "After seasons of recorded and approved work, skilled crews could one day be matched to a plot on their skill and recorded performance. Experts could be given access to chosen plots. Farmers could see fellow farmers' recorded practice, with their consent: real practice, not just advice. Buyers, exporters, banks, insurers or researchers could be linked, only with the farmer's permission, and buyers could trace produce back to the recorded work.",
+    "Shram Safal is also building record-keeping principles for future accountability, the kind that could later support carbon-credit style claims. To be clear: Shram Safal is not a carbon credit product, and it promises no carbon income."
+   ],
+   "paras_mr": [
+    "या पुढच्या शक्यता आहेत, आजच्या सेवा नाहीत. आधी नोंद. सेवा नंतर.",
+    "हंगामामागून हंगाम काम नोंदवलं गेलं आणि मंजूर होत गेलं, तर पुढे कधीतरी कौशल्य आणि नोंदलेल्या कामाच्या आधारावर कुशल टोळी योग्य प्लॉटला जोडता येईल. तज्ज्ञांना निवडक प्लॉट बघायला देता येतील. इतर शेतकऱ्यांनी प्रत्यक्ष काय केलं, ते त्यांच्या परवानगीने बघता येईल — नुसता सल्ला नाही, खरंच केलेलं काम. खरेदीदार, निर्यातदार, बँका, विमा कंपन्या किंवा संशोधक यांच्याशीही पुढे जोडता येईल — पण फक्त शेतकऱ्याच्या परवानगीने. आणि खरेदीदाराला माल कोणत्या कामातून आला, ते नोंदीवरून मागे जाऊन बघता येईल.",
+    "पुढे कधी कार्बन क्रेडिटसारखे दावे करायचे झाले, तर त्यामागे विश्वासाची नोंद लागेल. अशी नोंद कशी ठेवायची, याची तत्त्वं श्रम सफल आत्ता तयार करतंय. स्पष्ट सांगायचं तर: श्रम सफल कार्बन क्रेडिटची योजना नाही, आणि त्यातून पैसे मिळतील असं कोणतंही आश्वासन नाही."
+   ]
+  }
+ ],
+ "faq": [
+  {
+   "q_en": "Do I need to read or write to use Shram Safal?",
+   "a_en": "No. You speak the day's work in Marathi or tap. Shram Sathi shows what it understood, and you confirm or correct it. No typing is needed.",
+   "q_mr": "श्रम सफल वापरायला लिहिता-वाचता यायला हवं का?",
+   "a_mr": "नाही. दिवसाचं काम मराठीत बोला किंवा बटण दाबा. श्रम साथी काय समजलं ते दाखवतो; बरोबर असेल तर हो म्हणा, नसेल तर दुरुस्त करा. टाईप काहीच करावं लागत नाही."
+  },
+  {
+   "q_en": "Can each person see only what the owner allows?",
+   "a_en": "Yes. The owner chooses each person's role, which plots they can see, and an end date. Money stays private unless the owner shares it. When the end date passes, access stops by itself.",
+   "q_mr": "प्रत्येकाला मालक ठरवेल तेवढंच दिसतं का?",
+   "a_mr": "हो. कोण घरातला, कोण मुकादम, कोणाला कोणते प्लॉट आणि कधीपर्यंत — हे मालक ठरवतो. पैशाचा हिशोब मालकाने दाखवला तरच दिसतो. ठरलेली तारीख संपली की परवानगी आपोआप थांबते."
+  },
+  {
+   "q_en": "What if Shram Sathi understands my words wrongly?",
+   "a_en": "Shram Sathi first shows what it understood: the work, who did it, when, and on which plot. You confirm it or correct it. A correction never erases history; the earlier entry and the change both stay visible.",
+   "q_mr": "श्रम साथीला माझं बोलणं चुकीचं समजलं तर?",
+   "a_mr": "श्रम साथी आधी दाखवतो की त्याला काय समजलं — काम, कोणी, कधी आणि कोणत्या प्लॉटवर. बरोबर असेल तर हो म्हणा, नसेल तर दुरुस्त करा. दुरुस्ती केली तरी जुनी नोंद पुसली जात नाही; आधीचं आणि बदललेलं दोन्ही दिसतं."
+  },
+  {
+   "q_en": "Does it work in fields with no network?",
+   "a_en": "Yes. Entries are saved on the phone and sync when the network returns. Each entry stays tied to its plot and its day, with that day's weather.",
+   "q_mr": "शेतात रेंज नसेल तर नोंद होते का?",
+   "a_mr": "हो. नोंद फोनमध्ये राहते आणि रेंज आली की पोहोचते. प्रत्येक नोंद त्या प्लॉटला आणि त्या दिवसाला जोडलेली राहते, त्या दिवशीच्या हवामानासकट."
+  },
+  {
+   "q_en": "Is Shram Safal only for grape farms?",
+   "a_en": "No. It is made for all crops, including pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik.",
+   "q_mr": "श्रम सफल फक्त द्राक्षबागेसाठी आहे का?",
+   "a_mr": "नाही. सगळ्या पिकांसाठी आहे — डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्यं. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये."
+  },
+  {
+   "q_en": "Where is the farm's data kept?",
+   "a_en": "Data is stored in India. You can download or erase your data. Shram Safal is built for India's DPDP law and is ready to carry the AgriStack Farmer ID.",
+   "q_mr": "माझ्या शेताची माहिती कुठे ठेवली जाते?",
+   "a_mr": "माहिती भारतातच ठेवली जाते. तुमची माहिती तुम्ही उतरवून घेऊ शकता किंवा पुसून टाकू शकता. भारताचा DPDP कायदा लक्षात ठेवून ही व्यवस्था बांधली आहे, आणि AgriStack चा शेतकरी ओळख क्रमांक ठेवता येईल अशी तयारी आहे."
+  }
+ ],
+ "sources": [],
+ "illustration_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 630\" role=\"img\"><defs><radialGradient id=\"ga\"><stop offset=\"0\" stop-color=\"#ffffff\"/><stop offset=\"1\" stop-color=\"#ffffff\" stop-opacity=\"0\"/></radialGradient><radialGradient id=\"gb\"><stop offset=\"0\" stop-color=\"#b9dc71\" stop-opacity=\"0.4\"/><stop offset=\"1\" stop-color=\"#b9dc71\" stop-opacity=\"0\"/></radialGradient><radialGradient id=\"gc\"><stop offset=\"0\" stop-color=\"#eaf4ec\"/><stop offset=\"1\" stop-color=\"#eaf4ec\" stop-opacity=\"0\"/></radialGradient></defs><rect width=\"1200\" height=\"630\" fill=\"#f4f9f4\"/><circle cx=\"600\" cy=\"280\" r=\"340\" fill=\"url(#ga)\"/><circle cx=\"150\" cy=\"590\" r=\"280\" fill=\"url(#gb)\"/><circle cx=\"1080\" cy=\"100\" r=\"240\" fill=\"url(#gc)\"/><g fill=\"none\" stroke-linecap=\"round\"><circle cx=\"600\" cy=\"270\" r=\"214\" stroke=\"#b9dc71\" stroke-width=\"2.5\" stroke-dasharray=\"2 12\"/><circle cx=\"600\" cy=\"270\" r=\"252\" stroke=\"#eaf4ec\" stroke-width=\"3\"/></g><g stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M60 604 L210 522 L470 522 L400 604 Z\" fill=\"#eaf4ec\" stroke=\"#62a83a\" stroke-width=\"3\"/><path d=\"M800 604 L740 522 L1000 522 L1150 604 Z\" fill=\"#eaf4ec\" stroke=\"#62a83a\" stroke-width=\"3\"/><path d=\"M496 614 L536 556 L664 556 L704 614 Z\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\"/><path d=\"M128 596 L260 530 M196 596 L312 530 M264 596 L364 530 M332 596 L416 530 M870 596 L794 530 M940 596 L846 530 M1010 596 L898 530 M1080 596 L950 530 M552 606 L566 564 M600 606 L600 564 M648 606 L634 564\" fill=\"none\" stroke=\"#b9dc71\" stroke-width=\"3\"/></g><path d=\"M600 442 V546\" fill=\"none\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-dasharray=\"1 10\"/><circle cx=\"600\" cy=\"552\" r=\"5\" fill=\"#0d6e3f\"/><g fill=\"none\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-dasharray=\"1 11\"><path d=\"M344 222 C420 218 460 226 512 236\"/><path d=\"M398 448 C450 440 470 360 512 344\"/><path d=\"M856 222 C780 218 740 226 688 236\"/><path d=\"M868 440 C780 430 730 360 688 344\"/></g><g fill=\"#ffffff\" stroke=\"#62a83a\" stroke-width=\"3\"><circle cx=\"459\" cy=\"399\" r=\"9\"/><circle cx=\"763\" cy=\"224\" r=\"9\"/><circle cx=\"761\" cy=\"394\" r=\"9\"/></g><g fill=\"#0d6e3f\"><circle cx=\"459\" cy=\"399\" r=\"3.5\"/><circle cx=\"763\" cy=\"224\" r=\"3.5\"/><circle cx=\"761\" cy=\"394\" r=\"3.5\"/></g><rect x=\"520\" y=\"110\" width=\"160\" height=\"322\" rx=\"26\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><rect x=\"536\" y=\"140\" width=\"128\" height=\"264\" rx=\"12\" fill=\"#eaf4ec\"/><path d=\"M586 125 H614\" stroke=\"#0a4a2b\" stroke-width=\"4\" stroke-linecap=\"round\"/><circle cx=\"556\" cy=\"162\" r=\"7\" fill=\"none\" stroke=\"#a86412\" stroke-width=\"3\"/><path d=\"M574 162 H642\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linecap=\"round\"/><g fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"2\"><rect x=\"546\" y=\"180\" width=\"108\" height=\"50\" rx=\"10\"/><rect x=\"546\" y=\"242\" width=\"108\" height=\"50\" rx=\"10\"/><rect x=\"546\" y=\"304\" width=\"108\" height=\"50\" rx=\"10\"/></g><g fill=\"#b9dc71\" stroke=\"#0a4a2b\" stroke-width=\"2\"><circle cx=\"562\" cy=\"197\" r=\"7\"/><circle cx=\"562\" cy=\"259\" r=\"7\"/><circle cx=\"562\" cy=\"321\" r=\"7\"/></g><g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"3\"><path d=\"M578 196 H638 M578 258 H638 M578 320 H630\" stroke=\"#0a4a2b\"/><path d=\"M578 212 H610 M578 274 H610\" stroke=\"#62a83a\"/><path d=\"M622 212 L628 218 L640 206 M622 274 L628 280 L640 268\" stroke=\"#0d6e3f\"/><path d=\"M580 334 V340 M588 331 V343 M596 328 V346 M604 332 V342 M612 330 V344 M620 334 V340\" stroke=\"#1847d6\"/></g><circle cx=\"600\" cy=\"382\" r=\"15\" fill=\"#0d6e3f\"/><rect x=\"596\" y=\"373\" width=\"8\" height=\"12\" rx=\"4\" fill=\"#ffffff\"/><path d=\"M593 381 Q600 392 607 381 M600 388 V391\" fill=\"none\" stroke=\"#ffffff\" stroke-width=\"2\" stroke-linecap=\"round\"/><rect x=\"550\" y=\"374\" width=\"18\" height=\"16\" rx=\"4\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"2\"/><circle cx=\"559\" cy=\"382\" r=\"2.5\" fill=\"#178b55\"/><g stroke=\"#0a4a2b\" stroke-width=\"4\" stroke-linejoin=\"round\"><path d=\"M260 280 C260 230 340 230 340 280 Z\" fill=\"#0d6e3f\"/><circle cx=\"300\" cy=\"210\" r=\"24\" fill=\"#ffffff\"/><path d=\"M262 490 C262 440 338 440 338 490 Z\" fill=\"#eaf4ec\"/><circle cx=\"300\" cy=\"420\" r=\"24\" fill=\"#ffffff\"/><path d=\"M346 490 C346 458 394 458 394 490 Z\" fill=\"#b9dc71\"/><circle cx=\"370\" cy=\"444\" r=\"16\" fill=\"#ffffff\"/><path d=\"M860 280 C860 230 940 230 940 280 Z\" fill=\"#62a83a\"/><circle cx=\"900\" cy=\"210\" r=\"24\" fill=\"#ffffff\"/><path d=\"M860 490 C860 440 940 440 940 490 Z\" fill=\"#eaf4ec\"/><circle cx=\"900\" cy=\"420\" r=\"24\" fill=\"#ffffff\"/></g><g fill=\"none\" stroke=\"#a86412\" stroke-width=\"3\" stroke-linecap=\"round\"><circle cx=\"356\" cy=\"264\" r=\"8\"/><path d=\"M364 264 H390 M382 264 V272 M390 264 V270\"/></g><path d=\"M166 96 H246 Q262 96 262 112 V134 Q262 150 246 150 H244 L272 176 L226 150 H166 Q150 150 150 134 V112 Q150 96 166 96 Z\" fill=\"#ffffff\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linejoin=\"round\"/><path d=\"M172 123 V123 M184 118 V128 M196 112 V134 M208 116 V130 M220 110 V136 M232 117 V129 M244 121 V125\" stroke=\"#1847d6\" stroke-width=\"4\" stroke-linecap=\"round\"/><rect x=\"948\" y=\"238\" width=\"30\" height=\"38\" rx=\"5\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"3\"/><path d=\"M956 236 H970\" stroke=\"#0a4a2b\" stroke-width=\"5\" stroke-linecap=\"round\"/><path d=\"M955 252 H971 M955 262 H967\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M914 446 L956 436\" stroke=\"#9b7a52\" stroke-width=\"2.5\" stroke-linecap=\"round\"/><rect x=\"950\" y=\"436\" width=\"50\" height=\"50\" rx=\"8\" fill=\"#ffffff\" stroke=\"#0a4a2b\" stroke-width=\"3\"/><g fill=\"#0a4a2b\"><rect x=\"958\" y=\"444\" width=\"10\" height=\"10\" rx=\"2\"/><rect x=\"982\" y=\"444\" width=\"10\" height=\"10\" rx=\"2\"/><rect x=\"958\" y=\"468\" width=\"10\" height=\"10\" rx=\"2\"/><rect x=\"982\" y=\"468\" width=\"5\" height=\"5\"/><rect x=\"988\" y=\"474\" width=\"4\" height=\"4\"/><rect x=\"973\" y=\"458\" width=\"5\" height=\"5\"/></g><g fill=\"none\" stroke=\"#a86412\" stroke-width=\"3\" stroke-linecap=\"round\"><circle cx=\"1060\" cy=\"96\" r=\"16\"/><path d=\"M1084 96 H1092 M1036 96 H1028 M1060 72 V64 M1060 120 V128 M1077 79 L1083 73 M1043 79 L1037 73 M1077 113 L1083 119 M1043 113 L1037 119\"/></g></svg>",
+ "illustration_alt_en": "Line illustration: a phone in the centre shows one shared farm record with ticked entries and a voice wave. Dotted lines connect it to the owner speaking and holding a key, a family, a crew lead with a clipboard, and a worker holding a QR ID card, above field plots.",
+ "illustration_alt_mr": "रेखाचित्र: मध्यभागी एकच नोंद दाखवणारा फोन — त्यात मंजूर नोंदी आणि आवाजाची लहर. ठिपक्यांच्या रेषांनी त्याला जोडलेले — बोलणारा आणि हातात किल्ली असलेला मालक, घरचे, हातात वही घेतलेला मुकादम आणि QR ओळखपत्र घेतलेला कामगार; खाली शेताचे प्लॉट.",
+ "read_minutes": 6
+}

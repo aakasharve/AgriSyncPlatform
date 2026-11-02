@@ -1,0 +1,4 @@
+# Stored byte-for-byte, never converted. site.css and site.js are uploaded exactly as they are and their bytes set the
+# ?v= cache-busting hash in every page, so a CRLF/LF conversion on checkout would publish different files (and a
+# different hash) depending on which machine ran the deploy.
+* -text

@@ -82,8 +82,10 @@ node_modules/
 # Capacitor native — ios stays ignored; android is tracked (granular exclusions in mobile-web/.gitignore)
 src/clients/mobile-web/ios/
 
-# Static_V2 (the live shramsafal.in site) is committed since 2026-10-03; its own
-# .gitignore keeps node_modules/, dist/ and the 44 MB of design drafts out.
+# Static_V2 (shramsafal.in from 2026-10-03 to 2026-11-02; now only its privacy and
+# delete-account pages) — its own .gitignore keeps node_modules/, dist/ and the 44 MB of
+# design drafts out. The live site is src/clients/Website, whose .gitignore keeps its
+# generated pages out.
 
 # Cofounder OS audit labs (clean-room rounds) — local working material
 .audit-*/
