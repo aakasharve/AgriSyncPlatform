@@ -96,12 +96,12 @@
    "status": "now",
    "paras_en": [
     "Planned vs actual becomes easy to see once two things sit side by side: what was planned for this stage, and what was really done, on which plot, by whom and on which day. The second half has always been the hard part. After a long day in the field, nobody wants to sit and write. If you are choosing a crop planning app, ask one question: does it show what was done, or only what was planned?",
-    "Shram Safal, an innovative Daily Farm Execution System built in Maharashtra by ARVE (Agri Ryot Value Enterprises), is made for that second half. From 1 December 2026, with the first phase in Solapur district and Nashik, a farmer can speak the day's work in Marathi or tap it. Shram Sathi shows what it understood: what work, who, when, which plot. The person confirms or corrects it. Each entry is tied to the plot and the day, with that day's weather, and it saves without network and syncs later.",
+    "Shram Safal, an innovative Daily Farm Execution System built in Maharashtra by ARVE (Agri Ryot Value Enterprises), is made for that second half. From 1 December 2026, with the first phase only in Solapur district, a farmer can speak the day's work in Marathi or tap it. Shram Sathi shows what it understood: what work, who, when, which plot. The person confirms or corrects it. Each entry is tied to the plot and the day, with that day's weather, and it saves without network and syncs later.",
     "Each plot carries its own crop-stage schedule. You can plan and assign work, and see planned versus done for that plot. Missed or overdue work comes up in an attention list, so it is noticed in time, not at harvest. It works for every crop: pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals."
    ],
    "paras_mr": [
     "दोन गोष्टी एकमेकांसमोर असल्या की फरक लगेच दिसतो: या अवस्थेला काय ठरवलं होतं, आणि प्रत्यक्ष काय झालं — कोणत्या प्लॉटवर, कोणी, कोणत्या दिवशी. अडचण नेहमी दुसऱ्या भागाची होती. दिवसभर रानात राबल्यावर संध्याकाळी बसून लिहायला कुणाला सुचतं?",
-    "श्रम सफल नेमकं याच कामासाठी बनवलं आहे — रोजच्या शेतकामाची व्यवस्था. १ डिसेंबर २०२६ पासून, पहिल्या टप्प्यात सोलापूर जिल्हा आणि नाशिकमध्ये, शेतकरी दिवसाचं काम मराठीत बोलून किंवा स्क्रीनवर दाबून नोंदवू शकतो. श्रम साथी त्याला काय समजलं ते दाखवतो: कोणतं काम, कोणी, कधी, कोणत्या प्लॉटवर. बरोबर असेल तर हो म्हणायचं, चुकलं असेल तर दुरुस्त करायचं. प्रत्येक नोंद त्या प्लॉटशी आणि त्या दिवसाशी जोडली जाते, त्या दिवसाच्या हवामानासकट. रेंज नसली तरी नोंद होते, रेंज आली की आपोआप पोहोचते.",
+    "श्रम सफल नेमकं याच कामासाठी बनवलं आहे — रोजच्या शेतकामाची व्यवस्था. १ डिसेंबर २०२६ पासून, पहिल्या टप्प्यात फक्त सोलापूर जिल्ह्यात, शेतकरी दिवसाचं काम मराठीत बोलून किंवा स्क्रीनवर दाबून नोंदवू शकतो. श्रम साथी त्याला काय समजलं ते दाखवतो: कोणतं काम, कोणी, कधी, कोणत्या प्लॉटवर. बरोबर असेल तर हो म्हणायचं, चुकलं असेल तर दुरुस्त करायचं. प्रत्येक नोंद त्या प्लॉटशी आणि त्या दिवसाशी जोडली जाते, त्या दिवसाच्या हवामानासकट. रेंज नसली तरी नोंद होते, रेंज आली की आपोआप पोहोचते.",
     "प्रत्येक प्लॉटचं पीक-अवस्थेनुसार स्वतःचं वेळापत्रक असतं. काम ठरवता येतं, कुणाला द्यायचं ते सांगता येतं, आणि त्या प्लॉटवर ठरवलेलं आणि झालेलं काम शेजारी-शेजारी दिसतं. राहिलेलं किंवा उशिरा चाललेलं काम ‘लक्ष द्या’ या यादीत येतं, म्हणजे ते काढणीला नाही, वेळेवरच लक्षात येतं. डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य — सगळ्या पिकांसाठी हे चालतं."
    ],
    "bullets_en": [
@@ -175,9 +175,9 @@
   },
   {
    "q_en": "Is Shram Safal only for grapes or pomegranate?",
-   "a_en": "No. It is made for all crops, including sugarcane, onion, banana, vegetables and cereals. Daily use begins on 1 December 2026, and the first phase runs in Solapur district and Nashik.",
+   "a_en": "No. It is made for all crops, including sugarcane, onion, banana, vegetables and cereals. Daily use begins on 1 December 2026, and the first phase runs only in Solapur district.",
    "q_mr": "श्रम सफल फक्त द्राक्ष किंवा डाळिंबासाठी आहे का?",
-   "a_mr": "नाही. ऊस, कांदा, केळी, भाजीपाला, धान्य — सगळ्या पिकांसाठी आहे. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतो, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये."
+   "a_mr": "नाही. ऊस, कांदा, केळी, भाजीपाला, धान्य — सगळ्या पिकांसाठी आहे. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतो, पहिला टप्पा फक्त सोलापूर जिल्ह्यात."
   },
   {
    "q_en": "Do I need to read or write to use Shram Safal?",

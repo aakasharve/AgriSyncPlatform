@@ -31,7 +31,7 @@ PLAY = "https://play.google.com/store/apps/details?id=com.agrisync.shramsafal&pc
 # Where people join and follow Shram Safal (founder, 2 Nov). Put the Facebook page address here when it exists.
 WHATSAPP_GROUP = "https://chat.whatsapp.com/FoCaiUdK82vFAauQxgrgOs"
 INSTAGRAM = "https://www.instagram.com/shramsafal/"
-FACEBOOK = None
+FACEBOOK = "https://www.facebook.com/share/1FtMKp1YmA/"
 # Google Play stays hidden while the app still has open bugs: nobody should be sent to it yet (founder, 2 Nov).
 # True brings back every badge, line and link exactly as written in the sources.
 SHOW_PLAY = False
@@ -72,7 +72,7 @@ ORG = {
     "identifier": [{"@type": "PropertyValue", "propertyID": "CIN", "value": "U62099PN2026PTC256337"},
                    {"@type": "PropertyValue", "propertyID": "DPIIT startup recognition", "value": "DIPP285496"}],
     "address": {"@type": "PostalAddress", "addressRegion": "Maharashtra", "addressCountry": "IN"},
-    "areaServed": [{"@type": "AdministrativeArea", "name": "Solapur district, Maharashtra"}, {"@type": "AdministrativeArea", "name": "Nashik district, Maharashtra"}, {"@type": "Country", "name": "India"}],
+    "areaServed": [{"@type": "AdministrativeArea", "name": "Solapur district, Maharashtra"}, {"@type": "Country", "name": "India"}],
 }
 APP = {
     "@type": "SoftwareApplication",
@@ -87,7 +87,7 @@ APP = {
     "downloadUrl": PLAY,
     "installUrl": PLAY,
     "publisher": {"@id": SITE + "/#org"},
-    "description": DEFINITION_EN + " For all crops and all farmers; the first phase runs in Solapur district and Nashik.",
+    "description": DEFINITION_EN + " For all crops; the first phase runs only in Solapur district, with farmers the team verifies in person on their farms.",
     "sameAs": [PLAY],
     "countriesSupported": "IN",
     "featureList": [
@@ -313,7 +313,7 @@ if not SHOW_PLAY:
     for _k in ("downloadUrl", "installUrl", "sameAs"):
         APP.pop(_k, None)
 
-TALK = '<span class="mr">आमच्याशी बोला</span><span class="en">Talk to us</span>'
+TALK = '<span class="mr">पहिल्या टप्प्यासाठी नाव नोंदवा</span><span class="en">Register for the first phase</span>'
 # (text that mentions Play, the same text without it). Applied to every built page and post; each pair must be found.
 PLAY_SWAPS = [
     # contact page
@@ -321,11 +321,9 @@ PLAY_SWAPS = [
      'data-title-mr="संपर्क · श्रम सफल" data-title-en="Contact Shram Safal"'),
     (" Or get Shram Safal on Google Play and start today.", ""),
     (" किंवा Google Play वरून श्रम सफल घ्या आणि आजच सुरुवात करा.", ""),
-    ("श्रम सफल वापरायचं असेल, तर थेट Google Play वरून घ्या. काही विचारायचं असेल,", "श्रम सफल तुमच्या शेतावर वापरायचं असेल, काही विचारायचं असेल,"),
-    ("To start using Shram Safal, get it straight from Google Play. If you have questions,", "If you want to use Shram Safal on your farm, have questions,"),
     # home FAQ: how do I start?
-    ("Google Play वरून श्रम सफल घ्या. फोन नंबर आणि SMS कोडने सुरुवात करा.", "संपर्क पानावर नाव आणि नंबर द्या. आमची टीम फोन करून सुरुवात करून देईल. फोन नंबर आणि SMS कोडने आत या."),
-    ("Get Shram Safal on Google Play, sign in with", "Leave your name and number on the contact page, and our team will call you to get started. Then sign in with"),
+    ("Google Play वरून श्रम सफल घ्या. फोन नंबर आणि SMS कोडने सुरुवात करा.", "पहिल्या टप्प्यासाठी नाव नोंदवा. आमची टीम फोन करून सगळं आधीच सांगेल, मग शेतावर येऊन सुरुवात करून देईल. फोन नंबर आणि SMS कोडने आत या."),
+    ("Get Shram Safal on Google Play, sign in with", "Register for the first phase. Our team will call and explain everything first, then visit your farm to get you started. Then sign in with"),
     # blog posts
     ("Install the Shram Safal app from Google Play on an Android phone, sign in", "The Shram Safal app will be given to you on your Android phone. Sign in"),
     ("Android मोबाईलवर Google Play वरून श्रम सफल घ्या.", "श्रम सफल तुम्हाला तुमच्या Android मोबाईलवर दिलं जाईल."),
@@ -349,8 +347,8 @@ PLAY_SWAPS = [
     ("Shram Safal is an Android app on Google Play.", "Shram Safal is an Android app, and it will be given to you."),
     ("श्रम सफल Google Play वरून Android फोनवर घेता येतं.", "श्रम सफल तुम्हाला Android फोनवर दिलं जाईल."),
     ('Where can I download a labour attendance app for my farm?', 'How do I get a labour attendance app for my farm?'),
-    ('शेतात आज काय झालं ते बोला. ती नोंद तुमच्या शेताची विश्वासार्ह आठवण बनते.</span>', 'शेतात आज काय झालं ते बोला. ती नोंद तुमच्या शेताची विश्वासार्ह आठवण बनते. श्रम सफल तुम्हाला दिलं जाईल. सुरुवात करण्यासाठी आमच्याशी बोला.</span>'),
-    ("Say what happened on your farm today. It becomes your farm's trusted memory.</span>", "Say what happened on your farm today. It becomes your farm's trusted memory. The app will be given to you; talk to us to start.</span>"),
+    ('शेतात आज काय झालं ते बोला. ती नोंद तुमच्या शेताची विश्वासार्ह आठवण बनते.</span>', 'शेतात आज काय झालं ते बोला. ती नोंद तुमच्या शेताची विश्वासार्ह आठवण बनते. श्रम सफल तुम्हाला दिलं जाईल. सुरुवात करण्यासाठी आधी नाव नोंदवा.</span>'),
+    ("Say what happened on your farm today. It becomes your farm's trusted memory.</span>", "Say what happened on your farm today. It becomes your farm's trusted memory. The app will be given to you; register for the first phase to start.</span>"),
 ]
 PLAY_HITS = set()
 
@@ -404,9 +402,24 @@ IMAGES = {}  # path -> (image url, alt mr, alt en) for the image sitemap
 TITLES_MR = {}  # path -> Marathi title, for llms.txt
 
 
+# Text readers that ignore layout (search engines, answer engines, copy-paste, screen-reader browse mode in some apps) glue
+# neighbouring boxes together when the HTML has no space between them: "...का?मालक", "काय कामपाणी". A line break after
+# block-level closes costs nothing on screen (white space between blocks is not drawn) and keeps the words apart.
+SEPARATE = re.compile(r"(</(?:p|li|h[1-6]|summary|dt|dd|td|th|tr|div|small|figcaption|blockquote|label|b|strong|button|a)>|<br\s*/?>)(?=<)")
+
+
+# Side-by-side labelled pieces (chips, pills, status words) are spans with their own class; the mr/en language spans are not.
+SEPARATE_SPANS = re.compile(r'(</span>)(?=<span class="(?!mr"|en")[^"]+"|<span>|<span style=|<(?:h[1-6]|p|div|ul|ol|li|figure|b|strong)\b)')
+
+
+def separate(doc):
+    head, sep, body = doc.partition("<body")
+    return head + sep + SEPARATE_SPANS.sub(r"\1\n", SEPARATE.sub(r"\1\n", body))
+
+
 def emit(path, source, meta=None):
     meta = meta or {}
-    full = social(hide_play(source.replace("<!--HEADER-->", HEADER).replace("<!--FOOTER-->", FOOTER)))
+    full = separate(social(hide_play(source.replace("<!--HEADER-->", HEADER).replace("<!--FOOTER-->", FOOTER))))
     # The script loads from the head with defer: it downloads early but never holds up the first paint.
     full = full.replace("</head>", '<script defer src="assets/js/site.js"></script>\n</head>', 1)
     if not HAS_BLOG:  # no posts yet: no page may link to a Blog address that does not exist
@@ -480,6 +493,12 @@ def js_literal(name):
     return json.loads("".join(out))
 
 
+def answer(q):
+    """The answer as plain text: the fuller line only. The headline is a short restatement of it, and printing both read as
+    the same sentence twice to anyone reading the page without the script (search engines, copy-paste, text readers)."""
+    return both(q["x"]["mr"], q["x"]["en"]) if q.get("x") else both(q["h"]["mr"], q["h"]["en"])
+
+
 def crawl_text(source):
     st = {"now": ("आता उपलब्ध", "Available now"), "dev": ("तयार होत आहे", "Being developed"), "future": ("पुढची शक्यता", "Future possibility")}
     reasons = "".join(
@@ -493,20 +512,20 @@ def crawl_text(source):
     questions = "".join(
         f'<p><b>{both(c["n"]["mr"] + ": " + c["a"]["mr"], c["n"]["en"] + ": " + c["a"]["en"])}</b></p><ul>' + "".join(
             f'<li>{both(q["q"]["mr"], q["q"]["en"])}<br>{both(q["t"]["mr"], q["t"]["en"])}'
-            f'<br>{both("श्रम सफलसोबत: ", "With Shram Safal: ")}{both(q["h"]["mr"], q["h"]["en"])} {both(q["x"]["mr"], q["x"]["en"])}'
+            f'<br>{both("श्रम सफलसोबत: ", "With Shram Safal: ")}{answer(q)}'
             + (f'<br>{both(*st["future"])}: {both(q["later"]["mr"], q["later"]["en"])}' if q.get("later") else "") + "</li>"
             for q in qs if q["c"] == ci) + "</ul>"
         for ci, c in enumerate(cats))
-    rings = {1: ("तुमची टीम", "Your team"), 2: ("शेताभोवतीचे", "Around the farm"), 3: ("संस्था", "Institutions")}
+    rings = {1: ("तुमची टीम", "Your team"), 2: ("शेताभोवतीचे लोक", "People around the farm"), 3: ("संस्था", "Institutions")}
     orb = js_literal("ORB")
     orbit = "".join(
         f'<p><b>{both(*rings[r])}</b></p><ul>' + "".join(
             f'<li><b>{both(n["t"]["mr"], n["t"]["en"])}</b>: {both("आज त्यांना दिसतं: ", "What they see today: ")}{both(n["today"]["mr"], n["today"]["en"])} '
-            f'{both("नोंद असली की, तुमच्या परवानगीने: ", "With the record, with your permission: ")}{both(n["withr"]["mr"], n["withr"]["en"])} '
+            f'{both("नोंद असली की (परवानगीनुसार): ", "With the record (as permitted): ")}{both(n["withr"]["mr"], n["withr"]["en"])} '
             f'({", ".join(both(*st[k]) for k in n["s"])})</li>'
             for n in orb if n["r"] == r) + "</ul>"
         for r in (1, 2, 3))
-    orbit += f'<p>{both("फक्त बोलून नोंद केल्याने कर्ज, जास्त भाव किंवा प्रमाणपत्र मिळत नाही. त्यासाठी पुढच्या पायऱ्या आणि पडताळणी लागते.", "Speaking alone does not bring credit, better prices or certificates. Those need further systems and verification.")}</p>'
+    orbit += f'<p>{both("फक्त नोंद ठेवल्याने कर्ज, विम्याची भरपाई, जास्त भाव किंवा प्रमाणपत्र मिळत नाही. ते निर्णय बँक, विमा कंपनी, खरेदीदार किंवा प्रमाणपत्र देणारी संस्थाच घेते.", "A record alone does not bring a loan, an insurance payout, a better price or a certificate. Those decisions stay with the bank, insurer, buyer or certifier.")}</p>'
     roles = "".join(
         f'<p><b>{both(r["name"]["mr"] + " · " + r["role"]["mr"], r["name"]["en"] + " · " + r["role"]["en"])}</b></p>'
         f'<p>{both("हे करू शकतात:", "Can do:")}</p><ul>' + "".join(f"<li>{both(c['mr'], c['en'])}</li>" for c in r["can"]) + "</ul>"
@@ -651,7 +670,7 @@ def render_post(post, others):
       <p class="h3">{both('रोजच्या शेतकामाची व्यवस्था, तुमच्या फोनवर.', 'A Daily Farm Execution System, on your phone.')}</p>
       <p>{both('शेतात आज काय झालं ते बोला. ती नोंद तुमच्या शेताची विश्वासार्ह आठवण बनते.', "Say what happened on your farm today. It becomes your farm's trusted memory.")}</p>
       <div class="btn-row"><a class="gp-badge on-dark" href="{html.escape(PLAY)}" target="_blank" rel="noopener"><span class="mr"><img src="assets/img/google-play-mr.svg" alt="Google Play वर ते मिळवा" width="169" height="50"></span><span class="en"><img src="assets/img/google-play-en.svg" alt="Get it on Google Play" width="169" height="50"></span></a>
-      <a class="btn btn-ghost light" href="contact.html">{both('आमच्याशी बोला', 'Talk to us')}</a><!--SOCIAL:cta--></div>
+      <a class="btn btn-ghost light" href="contact.html">{both('पहिल्या टप्प्यासाठी नाव नोंदवा', 'Register for the first phase')}</a><!--SOCIAL:cta--></div>
     </aside>
     {srcs}
     <section class="post-related"><h2>{both('आणखी वाचा', 'Read next')}</h2><div class="rel-grid">{rel}</div></section>
@@ -808,7 +827,7 @@ def sitemap_robots_llms(posts):
              "- Who uses it: farm owners, family members, the Mukadam (crew lead) and farm workers, on one shared record; each person sees only the plots and powers the owner allows. Built for people with low or no literacy.",
              "- How: speak in Marathi or tap; Shram Sathi shows what it understood; nothing becomes a record until a person confirms it; records by others wait for the owner's approval; corrections are added, never silently overwritten.",
              "- What it covers today: work done, attendance (हजेरी) kept separate from wages, spending per plot, upcoming work, spray records, planned versus done, worker ID and QR card. Works without network.",
-             "- Crops and place: for all crops (pomegranate, sugarcane, grapes, onion, banana, vegetables and more); the first phase runs in Solapur district and Nashik, Maharashtra, for all farmers and all kinds of FPOs and FPCs.",
+             "- Crops and place: for all crops (pomegranate, sugarcane, grapes, onion, banana, vegetables and more); the first phase runs only in Solapur district, Maharashtra, with farmers the team verifies in person on their farms; for all crops and all kinds of FPOs and FPCs.",
              "- Company: ARVE, Agri Ryot Value Enterprises Pvt. Ltd. (registered name Agriryot Value Enterprises Private Limited), CIN U62099PN2026PTC256337, Maharashtra; a DPIIT-recognised startup (certificate no. DIPP285496).",
              ("- App: Android, on Google Play: " + PLAY) if SHOW_PLAY else "- App: Android; sign in with a phone number and an SMS code; daily use starts on 1 December 2026.",
              "- Data: stored in India; users can download or erase their data; built with India's DPDP law in mind.",

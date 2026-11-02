@@ -134,7 +134,7 @@
     "The best one is the one your people will actually use every day. Before you choose any workers attendance app or hajeri app, ask a few practical questions.",
     "Shram Safal was built around these questions. It is India's innovative Daily Farm Execution System: each day's farm work, spoken in Marathi or tapped, becomes the farm's trusted memory. Shram Sathi shows what it understood (what work, who, when, which plot), and the person confirms or corrects it. It works without network and syncs later.",
     "Every worker gets a permanent ID and a QR card, so nobody needs their own phone to be counted. A worker who has a phone can see their own days. Money stays private unless the owner allows it. Data is stored in India, and you can download or erase your data.",
-    "The Android app is on Google Play; sign in with your phone number and an SMS code. Daily use starts on 1 December 2026, with the first phase in Solapur district and Nashik, for every crop, not just grapes."
+    "The Android app is on Google Play; sign in with your phone number and an SMS code. Daily use starts on 1 December 2026, with the first phase only in Solapur district, for every crop, not just grapes."
    ],
    "bullets_en": [
     "Can someone who cannot read or type use it by speaking?",
@@ -148,7 +148,7 @@
     "जे तुमची माणसं रोज खरंच वापरतील, तेच चांगलं. निवडण्याआधी हे साधे प्रश्न विचारा.",
     "श्रम सफल याच प्रश्नांवर उभं केलं आहे. ही भारतातली रोजच्या शेतकामाची नवी व्यवस्था आहे: दिवसाचं काम मराठीत बोलून किंवा बटण दाबून नोंदवलं, की ती नोंद शेताची विश्वासार्ह आठवण बनते. श्रम साथी त्याला काय समजलं ते दाखवतो: कोणतं काम, कोणी, कधी, कोणत्या प्लॉटवर. बरोबर असेल तर हो म्हणा, चुकलं असेल तर दुरुस्त करा. रेंज नसली तरी नोंद होते; रेंज आली की ती पुढे जाते.",
     "प्रत्येक कामगाराला कायमचा ओळख क्रमांक आणि QR कार्ड मिळतं, त्यामुळे हजेरी लागण्यासाठी कामगाराकडे स्वतःचा फोन असावा लागत नाही. ज्याच्याकडे फोन आहे, तो आपले दिवस स्वतः बघू शकतो. मालकाने परवानगी दिल्याशिवाय पैशाचा हिशोब कोणाला दिसत नाही. नोंदी भारतातच ठेवल्या जातात. तुमची माहिती तुम्ही डाउनलोड करू शकता, आणि तुमची वैयक्तिक माहिती पुसून टाकायला सांगू शकता.",
-    "श्रम सफल Google Play वर Android फोनसाठी आहे; फोन नंबर आणि SMS कोडने आत येता येतं. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. सगळ्या पिकांसाठी, फक्त द्राक्षासाठी नाही."
+    "श्रम सफल Google Play वर Android फोनसाठी आहे; फोन नंबर आणि SMS कोडने आत येता येतं. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा फक्त सोलापूर जिल्ह्यात. सगळ्या पिकांसाठी, फक्त द्राक्षासाठी नाही."
    ],
    "bullets_mr": [
     "लिहिता-वाचता येत नसेल, तर बोलून नोंद करता येते का?",
@@ -211,9 +211,9 @@
   },
   {
    "q_en": "Is Shram Safal only for grape farms?",
-   "a_en": "No. It is made for all crops, including pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik.",
+   "a_en": "No. It is made for all crops, including pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs only in Solapur district.",
    "q_mr": "श्रम सफल फक्त द्राक्ष बागांसाठी आहे का?",
-   "a_mr": "नाही. ते सगळ्या पिकांसाठी आहे: डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये."
+   "a_mr": "नाही. ते सगळ्या पिकांसाठी आहे: डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा फक्त सोलापूर जिल्ह्यात."
   },
   {
    "q_en": "Where can I download a labour attendance app for my farm?",

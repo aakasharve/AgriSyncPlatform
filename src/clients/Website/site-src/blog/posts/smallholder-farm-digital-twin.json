@@ -67,12 +67,12 @@
    "h2_mr": "शेताची विश्वासार्ह आठवण म्हणजे काय?",
    "status": "now",
    "paras_en": [
-    "Shram Safal is India's innovative Daily Farm Execution System, built by ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) in Maharashtra. Each day's farm work, spoken in Marathi or tapped, becomes the farm's trusted memory. Daily use starts on 1 December 2026, with the first phase in Solapur district and Nashik, and it is made for all crops: pomegranate, sugarcane, grapes, onion, banana, vegetables, cereals and more.",
+    "Shram Safal is India's innovative Daily Farm Execution System, built by ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) in Maharashtra. Each day's farm work, spoken in Marathi or tapped, becomes the farm's trusted memory. Daily use starts on 1 December 2026, with the first phase only in Solapur district, and it is made for all crops: pomegranate, sugarcane, grapes, onion, banana, vegetables, cereals and more.",
     "Trusted is the key word. A replica is worth something only if people believe it, so every entry is built to be checked, not just stored.",
     "Week after week, these entries add up to a faithful picture of the season on each plot. That picture is a trusted digital replica of the farm, and on it, running the farm becomes seamless and trusted."
    ],
    "paras_mr": [
-    "श्रम सफल ही भारतातली रोजच्या शेतकामाची नवी व्यवस्था आहे. महाराष्ट्रातली ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) ही कंपनी ती बनवते. रोजचं काम मराठीत बोलून किंवा बटण दाबून नोंदवलं, की ती शेताची विश्वासार्ह आठवण बनते. 1 डिसेंबर 2026 पासून रोजचा वापर सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य, सगळ्या पिकांसाठी.",
+    "श्रम सफल ही भारतातली रोजच्या शेतकामाची नवी व्यवस्था आहे. महाराष्ट्रातली ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) ही कंपनी ती बनवते. रोजचं काम मराठीत बोलून किंवा बटण दाबून नोंदवलं, की ती शेताची विश्वासार्ह आठवण बनते. 1 डिसेंबर 2026 पासून रोजचा वापर सुरू होतोय, पहिला टप्पा फक्त सोलापूर जिल्ह्यात. डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य, सगळ्या पिकांसाठी.",
     "इथे महत्त्वाचा शब्द आहे विश्वास. चित्र खरं वाटलं तरच त्याला किंमत. म्हणून प्रत्येक नोंद फक्त साठवली जात नाही, ती तपासता येते.",
     "आठवड्यामागून आठवडे अशा नोंदी जमल्या की प्रत्येक प्लॉटच्या हंगामाचं खरं चित्र तयार होतं. हीच शेताची विश्वासार्ह आठवण. अशा आठवणीवर शेत चालवणं सोपं आणि भरवशाचं होतं. नोंदीवर चालणारी शेती ती हीच."
    ],
@@ -189,9 +189,9 @@
   },
   {
    "q_en": "Is Shram Safal only for grape farmers?",
-   "a_en": "No. It is made for all crops, including pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik.",
+   "a_en": "No. It is made for all crops, including pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs only in Solapur district.",
    "q_mr": "श्रम सफल फक्त द्राक्ष बागायतदारांसाठी आहे का?",
-   "a_mr": "नाही. डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य, सगळ्या पिकांसाठी आहे. 1 डिसेंबर 2026 पासून रोजचा वापर सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये."
+   "a_mr": "नाही. डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य, सगळ्या पिकांसाठी आहे. 1 डिसेंबर 2026 पासून रोजचा वापर सुरू होतोय, पहिला टप्पा फक्त सोलापूर जिल्ह्यात."
   },
   {
    "q_en": "What if a worker or family member cannot read?",

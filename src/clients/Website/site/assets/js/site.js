@@ -235,7 +235,7 @@
       var s = st.step, h = "";
       stepsEl.forEach(function (li, i) { li.classList.toggle("on", i + 1 === s); li.classList.toggle("done", i + 1 < s); });
       if (bar) bar.style.width = ((s - 1) / 4 * 80) + "%";
-      var head = '<div class="demo-head"><div class="who"><span class="face f1">अ</span>' +
+      var head = '<div class="demo-head"><div class="who"><span class="face f1" data-i="अ" aria-hidden="true"></span>' +
         L("अनिल पवार · मालक, बोलत आहेत", "Anil Pawar · owner, speaking") + "</div>" +
         '<div class="demo-ctrl">' +
         (st.playing ? '<button class="btn btn-ghost btn-sm" type="button" data-pause>' + I("pause") + L("थांबवा", "Pause") + "</button>"
@@ -349,7 +349,7 @@
       return '<li class="' + (yes ? "yes" : "no") + '">' + I(p.i) + "<span>" + T(p.t) + '</span><b class="yn">' + (yes ? L("हो", "Yes") : L("नाही", "No")) + "</b></li>";
     }).join("");
     return '<div class="access fade">' +
-      '<div class="access-head"><span class="face ' + o.fc + '">' + o.face + "</span><div><b>" + T(o.name) + "</b><small>" + T(o.farm) + "</small></div>" +
+      '<div class="access-head"><span class="face ' + o.fc + '" data-i="' + o.face + '" aria-hidden="true"></span><div><b>' + T(o.name) + "</b><small>" + T(o.farm) + "</small></div>" +
       '<span class="pill now">' + T(o.role) + "</span></div>" +
       (o.until ? '<div class="until-line">' + I("clock") + T(o.until) + "</div>" : "") +
       '<p class="list-title">' + L("कोणते प्लॉट", "Which plots") + '</p><div class="plotmap">' + plots + "</div>" +
@@ -506,30 +506,30 @@
 
   /* ---------- Beat 8: the larger picture — three rings around the farm's true record ---------- */
   var ORB = [
-    { r: 1, i: "user", t: { mr: "तुम्ही", en: "You" }, today: { mr: "फोनवर जे सांगितलं तेवढंच.", en: "Only what someone told you on the phone." },
-      withr: { mr: "आजचं पूर्ण चित्र, प्लॉटनुसार. मंजुरी तुमच्या हातात.", en: "The whole day, plot by plot. Approval stays in your hands." }, s: ["now"] },
+    { r: 1, i: "user", t: { mr: "तुम्ही", en: "You" }, today: { mr: "फोनवर कोणी सांगितलं तेवढंच.", en: "Only what someone told you on the phone." },
+      withr: { mr: "आज नोंदलेलं काम, प्लॉटनुसार. मंजुरी तुमच्या हातात.", en: "Today's recorded work, plot by plot. Approval stays in your hands." }, s: ["now"] },
     { r: 1, i: "home", t: { mr: "घरचे", en: "Family" }, today: { mr: "वहीतली बिलं, अर्धवट माहिती.", en: "Bills in a notebook, half the picture." },
       withr: { mr: "तीच नोंद, मालकाने दिलेल्या प्लॉट आणि अधिकारांपुरती.", en: "The same record, limited to the plots and powers the owner gave." }, s: ["now"] },
     { r: 1, i: "list", t: { mr: "मुकादम", en: "Mukadam" }, today: { mr: "“चार मजूर, दोन दिवस” डोक्यात.", en: "“Four workers, two days” in his head." },
       withr: { mr: "ठरलेल्या प्लॉटसाठी, ठरलेल्या तारखेपर्यंत हजेरी आणि कामाची नोंद.", en: "Attendance and work records for set plots, until a set date." }, s: ["now"] },
     { r: 1, i: "hand", t: { mr: "कामगार", en: "Worker" }, today: { mr: "“मंगळवारची मजुरी मिळाली का?” पुरावा नाही.", en: "“Was I paid for Tuesday?” No proof." },
-      withr: { mr: "स्वतःचे दिवस, स्वतःचं काम आणि कायमचा ओळख क्रमांक.", en: "Their own days and work, and a permanent ID." }, s: ["now"] },
+      withr: { mr: "स्वतःचे दिवस, स्वतःचं काम आणि स्वतःचा ओळख क्रमांक.", en: "Their own days and work, and their own ID number." }, s: ["now"] },
     { r: 2, i: "users", t: { mr: "शेतकरी गट", en: "FPO" }, today: { mr: "सदस्य सांगतात तेवढंच.", en: "Only what members say." },
-      withr: { mr: "सदस्य शेतांचं एकत्र चित्र, शेतकऱ्याच्या परवानगीने.", en: "A combined view of member farms, with each farmer's permission." }, s: ["dev"] },
+      withr: { mr: "सदस्यांच्या शेतांचं एकत्र चित्र, प्रत्येक शेतकऱ्याच्या परवानगीने.", en: "A combined view of member farms, with each farmer's permission." }, s: ["dev"] },
     { r: 2, i: "book", t: { mr: "तज्ज्ञ", en: "Experts" }, today: { mr: "सगळ्यांसाठी एकच वेळापत्रक.", en: "One schedule for everyone." },
-      withr: { mr: "तुम्ही निवडलेल्या प्लॉटचा इतिहास. सल्ला आणि प्रत्यक्ष झालेलं काम एकमेकांशी जोडलेलं.", en: "The history of plots you choose. Advice and what was actually done, linked." }, s: ["future"] },
+      withr: { mr: "तुम्ही दाखवायचं ठरवलं, तर प्लॉटचा इतिहास पाहून सल्ला देता येईल.", en: "If you choose to show it, advice could be based on your plot's history." }, s: ["future"] },
     { r: 2, i: "sprout", t: { mr: "कुशल टीम", en: "Skilled crews" }, today: { mr: "“आज दहा माणसं पाहिजेत.”", en: "“Need ten people today.”" },
-      withr: { mr: "कामाचा खात्रीशीर इतिहास असलेल्या टीम. गरज पडली की शेतकरी त्यांना बोलवू शकतो.", en: "Crews with a proven work history that farmers can call on." }, s: ["future"] },
+      withr: { mr: "कामाच्या नोंदीवरून कुशल टीम ओळखता येऊ शकेल.", en: "Skilled crews could one day be recognised from their recorded work." }, s: ["future"] },
     { r: 3, i: "building", t: { mr: "बँक", en: "Bank" }, today: { mr: "सातबारा आणि कागदपत्रं.", en: "Land papers and documents." },
-      withr: { mr: "तुम्ही ठरवलं तर, शेत किती नियमित चालतं याचा नोंदीतून पुरावा.", en: "If you choose, proof from the record of how steadily your farm runs." }, s: ["future"] },
+      withr: { mr: "तुम्ही ठरवलं तर, शेतात वेळोवेळी झालेल्या कामाची नोंद बँकेला दाखवता येऊ शकेल. कर्ज द्यायचं की नाही, हा निर्णय बँकेचाच.", en: "If you choose, you could show the bank your farm's work record over time. Whether to lend is still the bank's decision." }, s: ["future"] },
     { r: 3, i: "umbrella", t: { mr: "विमा", en: "Insurer" }, today: { mr: "मंडळातल्या हवामान केंद्राचे आकडे.", en: "Numbers from the revenue circle's weather station." },
-      withr: { mr: "नुकसानाआधी आणि नंतर तुमच्या प्लॉटवर काय झालं, याच्या तारखेसह नोंदी. नोंद आता तयार असते; जोडणी ही पुढची शक्यता.", en: "Dated records of what happened on your plot before and after a loss. The record exists now; a link to insurers is a future possibility." }, s: ["now", "future"] },
+      withr: { mr: "नुकसानाआधी आणि नंतर तुमच्या प्लॉटवर काय झालं, याच्या तारखेसह नोंदी. नोंद आता तयार असते; जोडणी ही पुढची शक्यता. दाव्याचा निर्णय विमा कंपनीचाच.", en: "Dated records of what happened on your plot before and after a loss. The record exists now; a link to insurers is a future possibility, and the claim decision stays with the insurer." }, s: ["future"] },
     { r: 3, i: "truck", t: { mr: "निर्यातदार", en: "Exporters" }, today: { mr: "काढणीच्या दिवशीचा माल.", en: "The produce on harvest day." },
-      withr: { mr: "तारीख, औषध आणि मात्रेसह फवारणीची नोंद. नोंद आता तयार असते; थेट जोडणी ही पुढची शक्यता.", en: "A spray record with dates, products and doses. The record exists now; a direct link to exporters is a future possibility." }, s: ["now", "future"] },
+      withr: { mr: "तारीख, औषध आणि मात्रेसह फवारणीची नोंद. नोंद आता तयार असते; थेट जोडणी ही पुढची शक्यता.", en: "A spray record with dates, products and doses. The record exists now; a direct link to exporters is a future possibility." }, s: ["future"] },
     { r: 3, i: "shield", t: { mr: "सरकार", en: "Government" }, today: { mr: "सातबाऱ्यावरची माहिती.", en: "What is on the land record." },
-      withr: { mr: "AgriStack शेतकरी ओळख क्रमांक आणि सर्व्हे नंबर नोंदीत ठेवण्याची तयारी.", en: "Getting ready to carry the AgriStack Farmer ID and survey numbers." }, s: ["dev"] },
+      withr: { mr: "ॲग्रीस्टॅक शेतकरी ओळख क्रमांक आणि सर्व्हे नंबर नोंदीत ठेवण्याची तयारी.", en: "Getting ready to carry the AgriStack Farmer ID and survey numbers." }, s: ["dev"] },
     { r: 3, i: "network", t: { mr: "संशोधन", en: "Research" }, today: { mr: "सर्वेक्षणातले अंदाज.", en: "Estimates from surveys." },
-      withr: { mr: "अभ्यासासाठी नाव काढून टाकलेली माहिती. तीही फक्त स्पष्ट परवानगीने.", en: "De-identified data for study, only with clear permission." }, s: ["future"] },
+      withr: { mr: "अभ्यासासाठी, ओळख पटणार नाही अशी केलेली माहिती. तीही फक्त स्पष्ट परवानगीने.", en: "De-identified data for study, only with clear permission." }, s: ["future"] },
     { r: 2, i: "leaf", t: { mr: "इतर शेतकरी", en: "Fellow farmers" }, today: { mr: "ऐकीव गोष्टी आणि सल्ला.", en: "Hearsay and advice." },
       withr: { mr: "त्यांच्या परवानगीने, त्याच टप्प्यावर त्यांनी प्रत्यक्ष काय केलं ते. नुसता सल्ला नाही, नोंदलेला अनुभव.", en: "With their permission, what they actually did at the same stage. Real practice, not just advice." }, s: ["future"] }
   ];
@@ -562,16 +562,16 @@
       html += '<button type="button" class="onode r' + n.r + '" data-on="' + i + '" style="left:' + pos[i][0].toFixed(2) + "%;top:" + pos[i][1].toFixed(2) + '%" aria-pressed="false" title="' + n.t[PL] + '" aria-label="' + n.t[PL] + '"><span class="ring">' + I(n.i) + "</span>" + T(n.t) + "</button>";
     });
     orbit.innerHTML = html;
-    var ringName = { 1: L("तुमची टीम", "Your team"), 2: L("शेताभोवतीचे", "Around the farm"), 3: L("संस्था", "Institutions") };
+    var ringName = { 1: L("तुमची टीम", "Your team"), 2: L("शेताभोवतीचे लोक", "People around the farm"), 3: L("संस्था", "Institutions") };
     function show(i) {
       var n = ORB[i];
       $$("[data-on]", orbit).forEach(function (b) { b.setAttribute("aria-pressed", String(+b.getAttribute("data-on") === i)); });
       $$("[data-sp]", orbit).forEach(function (l) { l.classList.toggle("on", +l.getAttribute("data-sp") === i); });
       detail.innerHTML = '<div class="fade"><div class="head"><span class="ring solid">' + I(n.i) + "</span><div><b>" + T(n.t) + "</b><small>" + ringName[n.r] + "</small></div></div>" +
         '<div class="row today">' + I("eyeoff") + "<div><small>" + L("आज त्यांना दिसतं", "WHAT THEY SEE TODAY") + "</small><p>" + T(n.today) + "</p></div></div>" +
-        '<div class="row with">' + I("eye") + "<div><small>" + L("नोंद असली की, तुमच्या परवानगीने", "WITH THE RECORD, WITH YOUR PERMISSION") + "</small><p>" + T(n.withr) + "</p></div></div>" +
+        '<div class="row with">' + I("eye") + "<div><small>" + L("नोंद असली की (परवानगीनुसार)", "WITH THE RECORD (AS PERMITTED)") + "</small><p>" + T(n.withr) + "</p></div></div>" +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">' + n.s.map(function (k) { return STATUS[k]; }).join("") + "</div>" +
-        (n.r === 3 ? '<p class="small" style="margin:14px 0 0">' + L("फक्त बोलून नोंद केल्याने कर्ज, जास्त भाव किंवा प्रमाणपत्र मिळत नाही. त्यासाठी पुढच्या पायऱ्या आणि पडताळणी लागते.", "Speaking alone does not bring credit, better prices or certificates. Those need further systems and verification.") + "</p>" : "") +
+        (n.r === 3 ? '<p class="small" style="margin:14px 0 0">' + L("फक्त नोंद ठेवल्याने कर्ज, विम्याची भरपाई, जास्त भाव किंवा प्रमाणपत्र मिळत नाही. ते निर्णय बँक, विमा कंपनी, खरेदीदार किंवा प्रमाणपत्र देणारी संस्थाच घेते.", "A record alone does not bring a loan, an insurance payout, a better price or a certificate. Those decisions stay with the bank, insurer, buyer or certifier.") + "</p>" : "") +
         "</div>";
     }
     orbit.addEventListener("click", function (e) { var b = e.target.closest("[data-on]"); if (b) show(+b.getAttribute("data-on")); });
@@ -1196,7 +1196,7 @@
   /* ---------- The real problem: eight questions in four groups, each answered by what Shram Safal does ---------- */
   // Copy deck: 09-PROBLEM-DISCOVERY-COPY.md. r = the matching person in "Your reason" (REASONS index).
   var QCATS = [
-    { sky: "morning", i: "users", n: { mr: "एकच खरं", en: "One truth" }, a: { mr: "सगळ्यांना एकच खरं दिसतं का?", en: "Does everyone see the same truth?" } },
+    { sky: "morning", i: "users", n: { mr: "एकत्र माहिती", en: "All in one place" }, a: { mr: "सगळ्यांची माहिती एका ठिकाणी येते का?", en: "Does everyone's information come to one place?" } },
     { sky: "noon", i: "sprout", n: { mr: "जमिनीची शिकवण", en: "What your land teaches" }, a: { mr: "तुमची जमीन काय सांगते, हे कोणी विचारतं का?", en: "Does anyone ask what your land is telling you?" } },
     { sky: "evening", i: "shield", n: { mr: "भरवसा", en: "Trust" }, a: { mr: "भरवसा कोणावर ठेवायचा?", en: "Whom do you trust?" } },
     { sky: "night", i: "rupee", n: { mr: "खर्चाचा हिशोब", en: "Where the money goes" }, a: { mr: "शेतात गेलेला प्रत्येक रुपया दिसतो का?", en: "Can you see every rupee spent on the farm?" } }
@@ -1541,31 +1541,70 @@
     });
   });
 
-  /* ---------- Contact form: same Google Sheet receiver as the old sign-up form ---------- */
+  /* ---------- Role tables: each cell carries its column name, so on phones a row becomes a card ---------- */
+  $$(".rtable").forEach(function (t) {
+    var heads = $$("thead th", t).map(function (th) { return th.textContent.trim(); });
+    $$("tbody tr", t).forEach(function (tr) { $$("td", tr).forEach(function (td, i) { if (i && heads[i]) td.setAttribute("data-label", heads[i]); }); });
+  });
+
+  /* ---------- Counting (Google Analytics, live site only): register buttons by place, registrations, WhatsApp shares ---------- */
+  // analytics.js defines gtag only in the live build, and sends only on shramsafal.in; anywhere else this does nothing.
+  function track(name, params) { if (typeof window.gtag === "function") { try { window.gtag("event", name, params); } catch (e) { /* never block a click */ } } }
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a) return;
+    if (a.hasAttribute("data-wa-share")) { track("whatsapp_share", { page_lang: PL }); return; }
+    if (!/(^|\/)contact\.html($|[?#])/.test(a.getAttribute("href")) || !(a.classList.contains("btn") || a.classList.contains("top-strip"))) return;
+    var kind = (/[?&]type=(fpo|partner)(?:&|#|$)/.exec(a.getAttribute("href")) || [])[1];  // FPO and partner enquiry buttons are counted apart
+    var where = kind || (a.classList.contains("top-strip") ? "top_strip" : a.closest(".mobile-nav") ? "menu" : a.closest(".site-header") ? "header" :
+      a.closest(".hero") ? "hero" : a.closest(".persona-cta") ? "persona" : a.closest("#start") ? "final" : a.closest(".post-cta") ? "blog" :
+      a.closest("#how") ? "demo" : "other");
+    track("register_click", { cta_location: where, page_lang: PL });
+  }, true);
+
+  /* ---------- Registration form: same Google Sheet receiver as before. Taluka goes in the village/taluka column. ---------- */
   var CONTACT_ENDPOINT = "https://script.google.com/macros/s/AKfycbz46TEB86d8PIv1ovonsQlICEzMe21sbxuNYmyUPrGKYkNsMhsMPXM_RPZXte17Ey9J/exec";
   var form = $("[data-contact]");
   if (form) (function () {
     var F = function (k) { return form.elements.namedItem(k); };
     var status = $(".cstatus", form), btn = $("button[type=submit]", form), sending = false;
+    var distBox = $("[data-district]", form), thanks = $("[data-thanks]");
     var type = new URLSearchParams(location.search).get("type");
-    if (type && F("role")) F("role").value = type;
-    function say(cls, mr, en) { status.className = "cstatus wide " + cls; status.innerHTML = L(mr, en); }
+    if (/^(fpo|partner)$/.test(type || "")) F("role").value = type;
+    function say(cls, mr, en) { status.className = "cstatus wide " + cls; status.innerHTML = cls || mr ? L(mr, en) : ""; }
+    // A typed value starting with = + - or @ would become a formula in the Google Sheet; a leading ' keeps it plain text
+    function cell(v) { return /^[=+\-@]/.test(v) ? "'" + v : v; }
+    function outside() { var o = F("taluka").selectedOptions[0]; return !!(o && o.hasAttribute("data-outside")); }
+    // An Indian mobile: 10 digits starting 6-9, with an optional +91, 91 or 0 in front
+    function mobileOf(v) { var d = v.replace(/\D/g, ""); if (d.length === 12 && d.indexOf("91") === 0) d = d.slice(2); else if (d.length === 11 && d[0] === "0") d = d.slice(1); return /^[6-9]\d{9}$/.test(d) ? d : ""; }
+    F("taluka").addEventListener("change", function () {
+      var show = outside();
+      distBox.hidden = !show; F("district").required = show;  // it is the next field; focus stays where the person is
+    });
     form.addEventListener("submit", function (e) {
       e.preventDefault();
       if (sending) return;
-      var name = F("name").value.trim(), mobile = F("mobile").value.replace(/\D/g, "");
-      F("name").parentNode.classList.toggle("bad", !name);
-      F("mobile").parentNode.classList.toggle("bad", mobile.length < 10);
-      if (!name || mobile.length < 10) { say("err", "कृपया नाव आणि १० अंकी मोबाईल नंबर लिहा.", "Please enter your name and a 10-digit mobile number."); return; }
-      if (!F("consent").checked) { say("err", "पुढे जाण्यासाठी संमतीच्या चौकटीत खूण करा.", "Please tick the consent box to continue."); return; }
-      var payload = { language: doc.getAttribute("lang") || "mr", page: location.pathname, consent: "yes" };
-      ["name", "mobile", "village", "district", "role", "crop", "message", "company_website"].forEach(function (k) { if (F(k)) payload[k] = F(k).value.trim(); });
+      var name = F("name").value.trim(), mobile = mobileOf(F("mobile").value), taluka = F("taluka").value;
+      var out = outside(), district = out ? F("district").value.trim() : "सोलापूर / Solapur";
+      var bad = { name: !name, mobile: !mobile, taluka: !taluka, district: out && !district };
+      Object.keys(bad).forEach(function (k) { F(k).closest(".field").classList.toggle("bad", bad[k]); });
+      $(".field-err", form).hidden = !bad.mobile || !F("mobile").value.trim();
+      var first = ["name", "mobile", "taluka", "district"].filter(function (k) { return bad[k]; })[0];
+      if (first === "district") { say("err", "तुमचा जिल्हा लिहा.", "Please write your district."); F(first).focus(); return; }
+      if (first) { say("err", "नाव, १० अंकी मोबाईल नंबर आणि तालुका भरा.", "Please fill in your name, a 10-digit mobile number and your taluka."); F(first).focus(); return; }
+      // Registering is the consent to be called: the line above the button says so.
+      var payload = { language: doc.getAttribute("lang") || "mr", page: location.pathname, consent: "yes",
+        name: cell(name), mobile: mobile, village: taluka, district: cell(district), role: F("role").value, company_website: F("company_website").value };
       sending = true; btn.disabled = true;
       say("", "पाठवत आहोत…", "Sending…");
       fetch(CONTACT_ENDPOINT, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(payload), redirect: "follow" })
         .then(function (r) { return r.json().then(function (d) { if (!r.ok || !d || !d.ok) throw new Error("not saved"); }); })
-        .then(function () { form.reset(); if (type && F("role")) F("role").value = type; say("ok", "धन्यवाद! तुमची माहिती आम्हाला मिळाली. आम्ही लवकरच फोन करू.", "Thank you! We have your details and will call you soon."); })
-        .catch(function () { say("err", "माहिती पोचली नाही. थोड्या वेळाने पुन्हा पाठवा, किंवा arvesystems@gmail.com वर लिहा.", "It didn't go through. Please try again shortly, or write to arvesystems@gmail.com."); })
+        .then(function () {
+          track("register_submit", { taluka: taluka.split(" / ").pop(), district: out ? district.replace(/[^\p{L}\p{M} ]/gu, "").trim().slice(0, 40) : "Solapur", page_lang: PL });
+          form.hidden = true; thanks.hidden = false;
+          thanks.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" }); thanks.focus({ preventScroll: true });
+        })
+        .catch(function () { say("err", "नाव पोचलं नाही. थोड्या वेळाने पुन्हा पाठवा, किंवा arvesystems@gmail.com वर लिहा.", "It didn't go through. Please try again shortly, or write to arvesystems@gmail.com."); })
         .then(function () { sending = false; btn.disabled = false; });
     });
   })();
@@ -1588,7 +1627,7 @@
     document.body.insertBefore(sky, document.body.firstChild);
     var sun = sky.firstChild;
     // dawn, morning, day, field-green afternoon, dusk
-    var SKY = [[255, 246, 230], [255, 252, 244], [255, 255, 255], [244, 250, 246], [255, 241, 226]];
+    var SKY = [[255, 255, 255], [255, 255, 255], [255, 255, 255], [255, 255, 255], [255, 255, 255]];
     var SUN = [[255, 196, 120], [255, 226, 160], [230, 245, 200], [200, 235, 190], [255, 170, 110]];
     function at(stops, p) {
       var seg = p * (stops.length - 1), i = Math.min(stops.length - 2, Math.floor(seg)), t = seg - i;

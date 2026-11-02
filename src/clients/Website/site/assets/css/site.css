@@ -1952,3 +1952,314 @@ html.motion .final:not(.is-live) { animation-play-state: paused; }
   .chapter-chip { background: rgba(255, 255, 255, .96); }
   .site-header { background: rgba(251, 250, 245, .97); }
 }
+
+/* ---------- Decorative initials and step numbers: drawn from data-i so text readers never pick them up ---------- */
+[data-i]::before { content: attr(data-i); }
+
+/* ---------- First phase: top strip, hero lines, persona and trust lines, final box ---------- */
+.top-strip {
+  display: block; background: var(--deep); color: #eaf5ee; text-align: center; text-decoration: none;
+  font-size: 13px; font-weight: 600; line-height: 1.45; padding: 7px var(--gutter);
+}
+.top-strip:hover, .top-strip:focus-visible { color: #fff; text-decoration: underline; }
+.btn { max-width: 100%; text-align: center; line-height: 1.3; }
+.phase-note {
+  margin: 20px 0 0; padding: 12px 16px; max-width: 620px; font-size: 16px; line-height: 1.65; color: var(--ink);
+  background: rgba(255, 255, 255, .78); border-left: 4px solid var(--green2); border-radius: 0 14px 14px 0;
+}
+.phase-note + .btn-row { margin-top: 22px; }
+.outside-note { margin: 12px 0 0; max-width: 560px; font-size: 14.5px; line-height: 1.55; color: var(--muted); }
+.final .phase-paid { margin: 12px 0 0; font-size: 17px; font-weight: 700; color: var(--lime); }
+.final .outside-note { margin: 14px 0 0; color: #cfe3d5; }
+.persona-cta {
+  margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px 22px;
+  padding: 20px 22px; border-radius: var(--r-l); background: var(--mint); border: 1px solid #cfe5d5;
+}
+.persona-cta p { margin: 0; flex: 1 1 320px; font-size: 18px; font-weight: 700; line-height: 1.55; color: var(--deep); }
+.why-verify {
+  margin: 30px 0 0; max-width: 780px; padding-left: 16px; border-left: 4px solid var(--lime);
+  font-size: 18px; font-weight: 700; line-height: 1.6; color: var(--deep);
+}
+
+/* ---------- Registration page ---------- */
+.reg-col { display: grid; gap: 16px; min-width: 0; }
+.reg-steps { border-radius: var(--r-l); padding: 20px 22px; }
+.reg-steps .h3 { margin: 0 0 14px; }
+.reg-steps ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.reg-steps li { display: flex; gap: 12px; align-items: flex-start; font-size: 16.5px; line-height: 1.5; color: var(--ink); }
+.reg-steps .n {
+  flex: none; width: 28px; height: 28px; margin-top: 1px; border-radius: 50%; background: var(--deep); color: #fff;
+  display: grid; place-items: center; font-weight: 800; font-size: 14px; line-height: 1;
+}
+.reg-docs { margin: 14px 0 0; font-weight: 700; color: var(--green); }
+.reg-note { margin: 0; font-size: 16px; line-height: 1.6; color: var(--ink2); }
+.reg-consent { margin: 0; font-size: 14.5px; line-height: 1.55; color: var(--ink2); }
+.reg-consent a { display: inline-block; margin-left: 4px; }
+.field-err { color: #b04a3a; font-weight: 600; font-size: 14px; }
+.field.bad select { border-color: #c0533f; }
+.cform[hidden], .cform [hidden], .thanks[hidden] { display: none !important; }
+.thanks { border-radius: var(--r-l); padding: 28px 22px; text-align: center; display: grid; gap: 12px; justify-items: center; }
+.thanks:focus { outline: none; }
+.thanks p { margin: 0; max-width: 460px; font-size: 17px; line-height: 1.6; }
+.thanks .h3 { color: var(--deep); }
+.thanks-ic .ic { width: 46px; height: 46px; color: var(--green2); }
+.btn-wa { margin-top: 6px; width: 100%; max-width: 360px; min-height: 56px; font-size: 18px; background: #157a41; color: #fff; box-shadow: 0 8px 20px rgba(31, 157, 85, .28); }
+.btn-wa:hover { background: var(--deep); }
+.btn-wa svg { width: 24px; height: 24px; flex: none; }
+/* A light page even before the script paints the sky (and if it never does) */
+html { background-color: #fff; }
+/* Phones: the floating chapter chip sat on top of the text it was describing; the thin progress bar at the top already shows the place */
+@media (max-width: 720px) { .chapter-chip { display: none; } }
+
+/* ---------- Phones: nothing runs off the screen edge ----------
+   The person picker and the four question groups were side-scrolling strips whose next card was cut by the screen edge.
+   On phones they wrap into a two-column grid, so every card is whole and visible. */
+@media (max-width: 900px) {
+  .rs-people { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; padding: 2px 0 4px; gap: 8px; }
+  .rs-person { flex: none; min-width: 0; padding: 6px 8px 6px 6px; gap: 8px; border-radius: 16px; }
+  .rs-person:hover { transform: none; }
+  .rs-av, .rs-av svg { width: 40px; height: 40px; }
+  .rs-pt small { font-size: 12.5px; }
+  .rs-pt b, .lang-mr .rs-pt b { font-size: 15px; }
+  .qc-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: visible; padding: 8px 0 4px; gap: 10px; }
+  .qc-col { flex: none; min-width: 0; padding: 0 8px 10px; }
+  .qc-col.on { transform: none; }
+  .qc-sky { height: 40px; margin: 0 -8px 12px; }
+  .qc-ch { font-size: 13px; }
+  .qc-ch b { font-size: 15.5px; }
+  .qc-f { grid-template-columns: 30px minmax(0, 1fr); gap: 6px; padding: 6px 22px 6px 6px; }
+  .qc-av svg { width: 30px; height: 30px; }
+  .qc-s { font-size: 13.5px; }
+  .qc-st { position: absolute; top: 5px; right: 5px; width: 16px; height: 16px; }
+  .qc-st .q { font-size: 11px; }
+  .qc-st .ic { width: 10px; height: 10px; }
+}
+/* Phones: the plan-vs-done fortnight fits the screen (all 14 days, icons only; tapping a day still explains it below) */
+@media (max-width: 720px) {
+  .cmp { padding: 16px 12px; }
+  .cmp-grid { overflow-x: visible; }
+  .cmp-inner { min-width: 0; grid-template-columns: 54px repeat(14, minmax(0, 1fr)); gap: 5px 2px; }
+  .cmp-day { font-size: 9.5px; }
+  .cmp-lane { font-size: 11.5px; line-height: 1.25; }
+  .cmp-cell, .cmp-item { height: 30px; border-radius: 6px; }
+  .cmp-item { padding: 0; min-width: 0; }
+  .cmp-item > span { display: none; }
+  .cmp-item .ic { width: 13px; height: 13px; }
+}
+/* Header: the longer register button needs room. Full menu from 1300px; between 1140 and 1299 the menu button stays,
+   with the register button beside it. Menu words and the button never break into two lines. */
+.nav a, .head-cta { white-space: nowrap; }
+@media (min-width: 1140px) and (max-width: 1299px) {
+  .nav { display: none; }
+  .head-tools { margin-left: auto; }
+  .menu-btn { display: grid; }
+}
+/* Phones: the large outline chapter numbers ran into the small heading above each section; the text needs the room */
+@media (max-width: 720px) { .ch-num { display: none; } }
+/* Menu: the register button kept the menu's dark link colour (dark text on dark green); it is a button, not a menu row */
+.mobile-nav a.btn { display: flex; color: #fff; border-bottom: 0; padding: 10px 20px; min-height: 52px; }
+/* Menu: it opens inside the sticky header, so a long menu ran below the screen with no way to reach its last rows
+   (the register button). It now scrolls within the screen. */
+.mobile-nav.open { max-height: calc(100vh - 124px); max-height: calc(100dvh - 124px); overflow-y: auto; overscroll-behavior: contain; }
+.mobile-nav a:not(.btn) { padding-top: 12px; padding-bottom: 12px; }
+/* Phones: the FPO role table (eight columns) ran past the screen edge; each role becomes a card of "permission: yes/no" */
+@media (max-width: 720px) {
+  .table-wrap { overflow: visible; }
+  .rtable, .rtable tbody { display: block; border: 0; background: none; border-radius: 0; overflow: visible; }
+  .rtable thead { display: none; }
+  .rtable tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; margin-top: 12px; padding: 12px 14px; background: #fff; border: 1px solid var(--line2); border-radius: 14px; }
+  .rtable td { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--line2); }
+  .rtable td:first-child { grid-column: 1 / -1; padding: 0 0 8px; border-bottom: 1px solid var(--line2); font-size: 16px; color: var(--deep); }
+  .rtable td[data-label]::before { content: attr(data-label); color: var(--ink2); font-weight: 600; }
+}
+/* Phones: "Shram + Safal" — the big words were squeezed narrower than themselves, so the plus sat on top of "Shram" */
+.nc-w { min-width: min-content; }
+@media (max-width: 600px) { .nc-w b, .lang-en .nc-w b { font-size: 36px; } }
+/* Phones: the voice demo was wider than its card (the speaker line, the restart button and each "waiting for you" label were cut
+   at the right edge). Everything inside now fits the card: long lines wrap and the status label drops under the text. */
+.demo-stage > *, .demo-cards > *, .dcard > * { min-width: 0; }
+@media (max-width: 600px) {
+  .demo-stage { padding: 18px 14px; }
+  .demo-head .who { flex: 1 1 100%; min-width: 0; }
+  .demo-head .who > span:not(.face) { min-width: 0; overflow-wrap: anywhere; }
+  .demo-ctrl { margin-left: 0; flex-wrap: wrap; }
+  .dcard { grid-template-columns: auto minmax(0, 1fr); padding: 12px; }
+  .dcard > .pill, .dcard > .fixwrap { grid-column: 2; justify-self: start; }
+}
+
+/* ---------- Phones, second pass (independent review of every phone screen) ---------- */
+/* A solid header: the text scrolling underneath used to show through behind the logo */
+@media (max-width: 900px) { .site-header { background: #fff; } }
+@media (max-width: 720px) {
+  /* Status labels wrap instead of pushing their card past the screen edge (partners "five parts", change trail) */
+  .pill { max-width: 100%; white-space: normal; text-align: left; }
+  .pillars > *, .grid-3 > *, .grid-2 > * { min-width: 0; }
+  /* Headcount-to-skilled-crew ladder: the status label sits under the title, so the title keeps the full width */
+  .lstep { grid-template-columns: 36px minmax(0, 1fr); }
+  .lstep > .pill { grid-column: 2; justify-self: start; }
+  /* The centre of the "bigger picture" circle stays a circle */
+  .orbit-core { width: 27%; padding: 4px; }
+  .orbit-core b { font-size: 11px; line-height: 1.2; }
+  .orbit-core small { font-size: 9px; }
+  /* Switches and joining buttons keep their labels on one line */
+  .seg button { padding: 8px 12px; font-size: 14px; }
+  .rs-ph { font-size: 14px; padding: 0 8px; }
+  .soc-cta { font-size: 15px; padding: 0 16px; }
+  .id-table th, .id-table td { display: block; width: auto; }
+  .id-table th { padding-bottom: 2px; border-bottom: 0; }
+  .id-table td { padding-top: 2px; }
+}
+/* The voice demo's single column may never grow past the card (it did by a few pixels on phones, cutting the speaker line) */
+.demo-stage, .demo-stage > .fade { grid-template-columns: minmax(0, 1fr); }
+.demo-head .who { max-width: 100%; min-width: 0; }
+.demo-head .who > span:not(.face) { flex: 1 1 0; min-width: 0; }
+@media (max-width: 720px) {
+  /* "Invited to someone's farm" card: the role label moves under the name instead of squeezing it */
+  .access-head { flex-wrap: wrap; }
+  .access-head .face { flex: none; }
+  .access-head > div { flex: 1 1 150px; min-width: 0; }
+  /* "Today / With Shram Safal" toggle on one line each */
+  .rs-ph { white-space: nowrap; font-size: 13.5px; gap: 6px; }
+}
+
+/* =====================  Clean white, brand-colour glass, fine grain (founder, 2 Nov evening)  =====================
+   The page is plain white from top to bottom. Colour comes only from the brand green and blue, as soft glass light behind
+   the content, and a fine grain gives glass cards and dark panels a calm, tactile surface. No lime, no warm sky tint. */
+:root { --lime: #8fe0b0; }
+.sky { background: #fff; }
+.sky .sun { display: none; }
+.glow, .glow.mint { background: radial-gradient(circle, rgba(23, 139, 85, .12), rgba(23, 139, 85, 0) 66%); }
+.glow.blue, .glow.lime { background: radial-gradient(circle, rgba(24, 71, 214, .09), rgba(24, 71, 214, 0) 66%); }
+.eyebrow { background: linear-gradient(90deg, #dff0e4, #e6edfc); }
+
+/* Top of each page: brand glass light with grain, fading into clean white */
+.hero::before, .page-hero::before, .fpo-hero::before, .post-hero::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    url("../img/grain-dark.png") 0 0 / 120px 120px,
+    radial-gradient(55% 65% at 88% 8%, rgba(23, 139, 85, .11), rgba(23, 139, 85, 0) 70%),
+    radial-gradient(45% 55% at 6% 92%, rgba(24, 71, 214, .07), rgba(24, 71, 214, 0) 70%);
+  -webkit-mask-image: linear-gradient(#000 50%, transparent); mask-image: linear-gradient(#000 50%, transparent);
+}
+.hero > .wrap, .page-hero > .wrap, .fpo-hero > .wrap, .post-hero > .wrap { position: relative; z-index: 1; }
+
+/* Grain only on the tinted glass bands; plain white text cards and forms stay clean white */
+.persona-cta { background-image: url("../img/grain-dark.png"); background-size: 120px 120px; }
+
+/* Dark panels: deep brand green into brand blue, with a light grain (no olive or lime) */
+.final {
+  background: url("../img/grain-light.png") 0 0 / 120px 120px, linear-gradient(120deg, #0a4a2b, #11643c 45%, #0f4a6e);
+  background-size: 120px 120px, 220% 220%;
+}
+.qc-close { background: url("../img/grain-light.png") 0 0 / 120px 120px, linear-gradient(120deg, #0a4a2b, #11643c 60%, #0f4a6e); }
+.banner, .dignity .d1, .wcard .match, .top-strip { background-image: url("../img/grain-light.png"); background-size: 120px 120px; }
+/* Final box: one alignment for everything in it (heading, lines and buttons all start at the left) */
+.final, .final .terms, .final .lede { text-align: left; }
+.final .lede, .final .terms { margin-left: 0; margin-right: 0; }
+/* Footer: plain deep colour (no grain) and brighter small print, so the company details read easily */
+.legal { color: #b9cabf; font-size: 13.5px; }
+.foot-idea { color: var(--lime); }
+/* "Before" panels: cool neutral white instead of cream; the amber stays only in small labels and borders */
+.qc-prob { background: linear-gradient(170deg, #ffffff, #f5f8f6); }
+.rd-old, .practice .adv, .scrap { background: #fafbfa; border-color: #e2e8e4; box-shadow: 0 2px 0 #e2e8e4; }
+.scrap.note { background: repeating-linear-gradient(#fafbfa 0 27px, #e4e9e5 27px 28px); }
+.rs-scene { background: #f6f8f7; }
+.ringfill.r2 { fill: rgba(234, 244, 236, .25); }
+.qx { --qpb: #fbf8f2; }
+.rs { --rs-pbg: #fbf8f2; }
+/* Sections drawn only when near the screen (speed) also clip what spills past them, which cut the soft shadow under a card
+   that ends a section. A little room at the bottom, given back by the margin, keeps every shadow whole without moving anything. */
+.section ~ .section > .wrap { padding-bottom: 72px; margin-bottom: -72px; }
+/* Last touches of the clean-white pass */
+.hundred-q em { color: var(--green2); }                  /* brand green, not rust red */
+.persona-cta { background-image: none; }                 /* grain stays on page tops and dark panels only */
+.site-header { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }   /* plain white header, nothing shows through */
+/* The floating section chip covered the start of headings wherever the page margin is narrower than the chip */
+@media (max-width: 1480px) { .chapter-chip { display: none; } }
+
+/* ---------- No green text on green (founder, 2 Nov evening) ----------
+   On the dark green panels every word is white: headings, highlights and labels pure white, smaller lines a softer
+   neutral white. Icons on dark green are white too. */
+.final .h2 em, .final .phase-paid, .banner .lab, .ledger-head .tag, .eco-core small, .orbit-core small,
+.qc-close .qx-bridge, .foot-col h3, .foot-idea, .foot-follow, .legal .dpiit, .top-strip { color: #fff; }
+.final .lede, .final .terms, .final .outside-note, .dignity .d1 p, .post-cta p, .dfes-step.core small,
+.site-footer, .legal { color: rgba(255, 255, 255, .86); }
+.sensor-col.human li .ic, .dfes-step.core .ring, .eyebrow .dot, .legal .dpiit .ic, .rs-badge, .hm-one .ic, .soc-cta svg { color: #fff; }
+.final .h2 em { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 8px; text-decoration-color: rgba(255, 255, 255, .45); }
+
+/* =====================  Logo colours only, no glow effects (founder, 2 Nov night)  =====================
+   No soft colour blobs, no spotlight vignettes, no sun glows. The only colours are the two of the "Shram Safal" wordmark:
+   Shram green #1a8a42 and Safal blue #0a34c0 (with their light tints), on clean white. Grain stays as a fine texture only. */
+.glow, .rs-spot, .rs-sunh, .qc-sky i { display: none; }
+.hero::before, .page-hero::before, .fpo-hero::before, .post-hero::before { background: url("../img/grain-dark.png") 0 0 / 120px 120px; }
+/* Story-scene skies and the four question-group bands: light tints of the logo green and blue instead of sunrise and sunset colours */
+.rs-sky i[data-k="dawn"], .rs-sky i[data-k="morning"] { background: linear-gradient(180deg, #e2f2e7 0%, #f7fbf8 70%); }
+.rs-sky i[data-k="noon"] { background: linear-gradient(180deg, #e2e9fb 0%, #f8faff 70%); }
+.rs-sky i[data-k="evening"] { background: linear-gradient(180deg, #dcebe2 0%, #e9effc 70%); }
+.rs-sky i[data-k="night"] { background: linear-gradient(180deg, #0a2b86 0%, #1f4fbf 70%); }
+[data-sky="morning"] > .qc-sky { background: linear-gradient(180deg, #d6eedd, #f3faf5); }
+[data-sky="noon"] > .qc-sky { background: linear-gradient(180deg, #d9e3fb, #f5f8ff); }
+[data-sky="evening"] > .qc-sky { background: linear-gradient(180deg, #d3ebdc, #e3ebfb); }
+[data-sky="night"] > .qc-sky { background: linear-gradient(180deg, #0a34c0, #1a8a42); }
+/* Dark panels: Shram green into Safal blue */
+.final { background: url("../img/grain-light.png") 0 0 / 120px 120px, linear-gradient(120deg, #0d5a2c, #1a8a42 45%, #0a34c0); background-size: 120px 120px, 220% 220%; }
+.qc-close { background: url("../img/grain-light.png") 0 0 / 120px 120px, linear-gradient(120deg, #0d5a2c, #1a8a42 55%, #0a34c0); }
+/* Founder correction, same night: he WANTS the soft glow effect (like his two reference pictures), only in the wordmark colours.
+   Green orb: Shram green, bright at the centre and melting into white. Edge orb: Safal blue at the core, ringed by Shram green,
+   melting into white, half outside the page edge. No yellow, brown or maroon anywhere; spotlights and sun glows stay off. */
+.glow { display: block; width: 640px; height: 640px; }
+.glow, .glow.mint {
+  background: radial-gradient(circle, rgba(40, 168, 64, .42) 0%, rgba(26, 138, 66, .24) 30%, rgba(26, 138, 66, .08) 52%, rgba(26, 138, 66, 0) 68%);
+}
+.glow.blue, .glow.lime {
+  background: radial-gradient(circle, rgba(16, 64, 216, .34) 0%, rgba(10, 52, 192, .2) 26%, rgba(26, 138, 66, .14) 44%, rgba(40, 168, 64, .05) 58%, rgba(40, 168, 64, 0) 70%);
+}
+@media (max-width: 720px) { .glow { width: 460px; height: 460px; } }
+/* Glow strength, tuned so the logo colours read clearly (closer to the references) while text on top stays dark-on-light */
+.glow, .glow.mint {
+  background: radial-gradient(circle, rgba(40, 168, 64, .55) 0%, rgba(26, 138, 66, .32) 28%, rgba(26, 138, 66, .1) 50%, rgba(26, 138, 66, 0) 68%);
+}
+.glow.blue, .glow.lime {
+  background: radial-gradient(circle, rgba(10, 52, 192, .46) 0%, rgba(16, 64, 216, .28) 24%, rgba(26, 138, 66, .2) 42%, rgba(40, 168, 64, .07) 56%, rgba(40, 168, 64, 0) 70%);
+}
+
+/* =====================  Glow, final form (founder, 2 Nov night)  =====================
+   Aesthetic and minimal: only a few glows, where they help (top of each page, the bigger-picture circle, the "in short" loop),
+   lighter everywhere. The grain and a soft gloss live INSIDE each glow only; nothing else on the page carries grain. */
+.hero::before, .page-hero::before, .fpo-hero::before, .post-hero::before { content: none; }
+.final { background: linear-gradient(120deg, #0d5a2c, #1a8a42 45%, #0a34c0); background-size: 220% 220%; }
+.qc-close { background: linear-gradient(120deg, #0d5a2c, #1a8a42 55%, #0a34c0); }
+.banner, .dignity .d1, .wcard .match, .top-strip, .persona-cta { background-image: none; }
+#reality .glow, #reasons .glow, #hundred .glow, #compare .glow, #how .glow, #team .glow, #skills .glow,
+#changes .glow, #together .glow, #possibilities .glow + .glow, #dfes .glow + .glow { display: none; }
+.glow, .glow.mint {
+  background:
+    radial-gradient(circle at 36% 30%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 20%),
+    url("../img/grain-dark.png") 0 0 / 120px 120px,
+    radial-gradient(circle, rgba(40, 168, 64, .3) 0%, rgba(26, 138, 66, .17) 28%, rgba(26, 138, 66, .05) 50%, rgba(26, 138, 66, 0) 68%);
+  -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, .75) 40%, transparent 68%);
+  mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, .75) 40%, transparent 68%);
+}
+.glow.blue, .glow.lime {
+  background:
+    radial-gradient(circle at 36% 30%, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0) 20%),
+    url("../img/grain-dark.png") 0 0 / 120px 120px,
+    radial-gradient(circle, rgba(10, 52, 192, .26) 0%, rgba(16, 64, 216, .15) 24%, rgba(26, 138, 66, .11) 42%, rgba(40, 168, 64, .04) 56%, rgba(40, 168, 64, 0) 70%);
+  -webkit-mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, .75) 40%, transparent 70%);
+  mask-image: radial-gradient(circle, #000 0%, rgba(0, 0, 0, .75) 40%, transparent 70%);
+}
+
+/* ---------- "खरी अडचण" question cards in the logo colours (founder, 2 Nov night) ----------
+   One calm light-green band on every card (no sunrise / sunset / night colours), and the card or question in focus is
+   marked in Shram green instead of amber. */
+.qx { --qp: #0d5a2c; --qpl: #9fd3b0; --qpb: #eef7f1; }
+[data-sky] > .qc-sky { background: linear-gradient(180deg, #dcefe2, #f5faf7); }
+.qc-col.on { border-color: #1a8a42; box-shadow: 0 16px 34px rgba(13, 90, 44, .14); }
+.qc-f.on { border-color: #1a8a42; background: #eef7f1; }
+.qc-f.on .qc-st { border-color: #1a8a42; }
+.qc-st .q { color: #1a8a42; }
+.qc-truth { border-left-color: #1a8a42; color: var(--ink); }
+/* "मोठं चित्र" circle: inner ring Shram green, middle ring a lighter Shram green, outer ring Safal blue (no amber) */
+.ringc.r2 { stroke: rgba(26, 138, 66, .38); }
+.ringfill.r2 { fill: rgba(220, 239, 226, .3); }
+.onode.r2 .ring { background: #e6f3ea; color: #1a8a42; }

@@ -175,10 +175,10 @@
    "h2_mr": "श्रम सफलमागे कोण आहे, आणि सुरुवात कुठून होते?",
    "status": "none",
    "paras_en": [
-    "Shram Safal is built by ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) in Maharashtra. Daily use begins on 1 December 2026, and the first phase runs in Solapur district and Nashik. It is made for all crops: pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals."
+    "Shram Safal is built by ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) in Maharashtra. Daily use begins on 1 December 2026, and the first phase runs only in Solapur district. It is made for all crops: pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals."
    ],
    "paras_mr": [
-    "श्रम सफल महाराष्ट्रातली ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) ही कंपनी बनवते. १ डिसेंबर २०२६ पासून रोजचा वापर सुरू होतोय — पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. आणि श्रम सफल सगळ्या पिकांसाठी आहे: डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य."
+    "श्रम सफल महाराष्ट्रातली ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) ही कंपनी बनवते. १ डिसेंबर २०२६ पासून रोजचा वापर सुरू होतोय — पहिला टप्पा फक्त सोलापूर जिल्ह्यात. आणि श्रम सफल सगळ्या पिकांसाठी आहे: डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य."
    ]
   }
  ],
@@ -203,9 +203,9 @@
   },
   {
    "q_en": "Is Shram Safal only for grape or pomegranate growers?",
-   "a_en": "No. It is made for all crops, including sugarcane, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik.",
+   "a_en": "No. It is made for all crops, including sugarcane, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs only in Solapur district.",
    "q_mr": "श्रम सफल फक्त द्राक्ष किंवा डाळिंब बागायतदारांसाठी आहे का?",
-   "a_mr": "नाही. ऊस, कांदा, केळी, भाजीपाला, धान्य — सगळ्या पिकांसाठी आहे. १ डिसेंबर २०२६ पासून रोजचा वापर सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये."
+   "a_mr": "नाही. ऊस, कांदा, केळी, भाजीपाला, धान्य — सगळ्या पिकांसाठी आहे. १ डिसेंबर २०२६ पासून रोजचा वापर सुरू होतोय, पहिला टप्पा फक्त सोलापूर जिल्ह्यात."
   },
   {
    "q_en": "Who can see my farm records?",

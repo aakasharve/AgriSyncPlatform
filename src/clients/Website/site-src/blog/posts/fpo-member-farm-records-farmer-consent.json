@@ -26,12 +26,12 @@
  ],
  "title_en": "FPO Dashboard & Software with Farmer Consent | Shram Safal",
  "title_mr": "शेतकरी उत्पादक कंपनी माहिती: सभासदाची नोंद, त्याच्याच संमतीने | श्रम सफल",
- "meta_description_en": "FPO dashboard and management software, with farmer consent: the farmer will decide what the FPO sees. How Shram Safal is developing this, starting in Solapur district and Nashik.",
+ "meta_description_en": "FPO dashboard and management software, with farmer consent: the farmer will decide what the FPO sees. How Shram Safal is developing this, starting in Solapur district.",
  "meta_description_mr": "शेतकरी उत्पादक कंपनी माहिती: सभासदाच्या शेताची नोंद कंपनीला दिसावी, पण सभासदाच्या संमतीनेच. काय दाखवायचं, ते शेतकरी ठरवेल. श्रम सफल हे कसं आखतंय, ते वाचा.",
  "h1_en": "FPO dashboard and management software with farmer consent: the farmer decides what the FPO sees",
  "h1_mr": "शेतकरी उत्पादक कंपनी माहिती: सभासदाची नोंद कंपनीला दिसेल, पण त्याच्याच संमतीने",
- "answer_en": "FPO member farm management with farmer consent means the farmer stays the owner of the farm record and approves what the FPO sees. Shram Safal records each farm's daily work from 1 December 2026; the first phase runs in Solapur district and Nashik. Its FPO dashboard, still being developed, will show the FPO only what each farmer approves, and nothing else.",
- "answer_mr": "श्रम सफलमध्ये शेतकरी उत्पादक कंपनी माहिती पाहू शकेल, पण सभासदाच्या संमतीनेच. शेताची रोजची नोंद शेतकऱ्याची, आणि हक्कही त्याचाच. कंपनीला काय दाखवायचं, ते शेतकरी स्वतः मंजूर करेल; त्याबाहेरचं काहीच दिसणार नाही. कंपनीसाठीचा हा भाग सध्या तयार होत आहे. पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये.",
+ "answer_en": "FPO member farm management with farmer consent means the farmer stays the owner of the farm record and approves what the FPO sees. Shram Safal records each farm's daily work from 1 December 2026; the first phase runs only in Solapur district. Its FPO dashboard, still being developed, will show the FPO only what each farmer approves, and nothing else.",
+ "answer_mr": "श्रम सफलमध्ये शेतकरी उत्पादक कंपनी माहिती पाहू शकेल, पण सभासदाच्या संमतीनेच. शेताची रोजची नोंद शेतकऱ्याची, आणि हक्कही त्याचाच. कंपनीला काय दाखवायचं, ते शेतकरी स्वतः मंजूर करेल; त्याबाहेरचं काहीच दिसणार नाही. कंपनीसाठीचा हा भाग सध्या तयार होत आहे. पहिला टप्पा फक्त सोलापूर जिल्ह्यात.",
  "sections": [
   {
    "h2_en": "What is an FPO, and what is its role?",
@@ -185,12 +185,12 @@
    "h2_mr": "श्रम सफल कुठून सुरू होतंय?",
    "status": "now",
    "paras_en": [
-    "Shram Safal's daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik. It is built by ARVE (Agri Ryot Value Enterprises Pvt. Ltd.), a company in Maharashtra, and it is made for all crops.",
-    "If your FPO or FPC works with members in Solapur district or Nashik, of any kind or size, the farmer's own daily record is the place to begin. Each member keeps it for their own farm first; sharing with the FPO comes later, and only with the farmer's approval."
+    "Shram Safal's daily use starts on 1 December 2026, and the first phase runs only in Solapur district. It is built by ARVE (Agri Ryot Value Enterprises Pvt. Ltd.), a company in Maharashtra, and it is made for all crops.",
+    "If your FPO or FPC works with members in Solapur district, of any kind or size, the farmer's own daily record is the place to begin. Each member keeps it for their own farm first; sharing with the FPO comes later, and only with the farmer's approval."
    ],
    "paras_mr": [
-    "श्रम सफलचा रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये. श्रम सफल महाराष्ट्रातल्या ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) या कंपनीने बनवलं आहे, आणि ते सगळ्या पिकांसाठी आहे.",
-    "तुमची FPO किंवा FPC, कोणत्याही प्रकारची असो, सोलापूर जिल्ह्यात किंवा नाशिकमध्ये सभासदांसोबत काम करत असेल, तर सुरुवात शेतकऱ्याच्या स्वतःच्या रोजच्या नोंदीपासून करा. प्रत्येक सभासद ती आधी आपल्या शेतासाठी ठेवतो; कंपनीला दाखवणं नंतर, आणि तेही शेतकऱ्याच्या मंजुरीनेच."
+    "श्रम सफलचा रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतोय, पहिला टप्पा फक्त सोलापूर जिल्ह्यात. श्रम सफल महाराष्ट्रातल्या ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) या कंपनीने बनवलं आहे, आणि ते सगळ्या पिकांसाठी आहे.",
+    "तुमची FPO किंवा FPC, कोणत्याही प्रकारची असो, सोलापूर जिल्ह्यात सभासदांसोबत काम करत असेल, तर सुरुवात शेतकऱ्याच्या स्वतःच्या रोजच्या नोंदीपासून करा. प्रत्येक सभासद ती आधी आपल्या शेतासाठी ठेवतो; कंपनीला दाखवणं नंतर, आणि तेही शेतकऱ्याच्या मंजुरीनेच."
    ]
   }
  ],
@@ -221,9 +221,9 @@
   },
   {
    "q_en": "Is Shram Safal only for grape farmers?",
-   "a_en": "No. Shram Safal is made for all crops, including pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs in Solapur district and Nashik.",
+   "a_en": "No. Shram Safal is made for all crops, including pomegranate, sugarcane, grapes, onion, banana, vegetables and cereals. Daily use starts on 1 December 2026, and the first phase runs only in Solapur district.",
    "q_mr": "श्रम सफल फक्त द्राक्ष बागायतदारांसाठी आहे का?",
-   "a_mr": "नाही. श्रम सफल सगळ्या पिकांसाठी आहे — डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतो, पहिला टप्पा सोलापूर जिल्हा आणि नाशिकमध्ये."
+   "a_mr": "नाही. श्रम सफल सगळ्या पिकांसाठी आहे — डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, धान्य. रोजचा वापर १ डिसेंबर २०२६ पासून सुरू होतो, पहिला टप्पा फक्त सोलापूर जिल्ह्यात."
   },
   {
    "q_en": "How does Shram Safal relate to AgriStack?",
