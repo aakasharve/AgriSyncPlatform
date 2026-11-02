@@ -1,0 +1,256 @@
+{
+ "slug": "farm-records-by-voice-marathi",
+ "primary_keyword_en": "farm record keeping by voice in Marathi",
+ "primary_keyword_mr": "शेतीकामाची रोजची नोंद — बोलून",
+ "keywords": [
+  "farm record keeping by voice in Marathi",
+  "शेतीकामाची रोजची नोंद — बोलून",
+  "farm record keeping app",
+  "farm record keeping app free",
+  "how to keep farm records",
+  "importance of farm records",
+  "types of farm records",
+  "why is record keeping important in farming",
+  "farm diary record",
+  "शेती हिशोब वही",
+  "शेतकरी डायरी",
+  "हिशोब वही",
+  "जमा खर्च नोंदवही",
+  "हिशोब कसा लिहावा",
+  "बोलून नोंद",
+  "sheti hishob vahi",
+  "daily farm execution system",
+  "Shram Safal",
+  "श्रम सफल"
+ ],
+ "title_en": "Farm Record Keeping by Voice in Marathi: A Practical Guide",
+ "title_mr": "शेतीकामाची रोजची नोंद — बोलून | शेती हिशोब वही कशी ठेवायची",
+ "meta_description_en": "Can't write daily farm records? Speak them in Marathi. Learn why farm records matter, what to record, and how Shram Safal keeps one trusted farm diary.",
+ "meta_description_mr": "लिहिता येत नसेल तरी चालेल. शेतीकामाची रोजची नोंद मराठीत बोलून ठेवा. कोणत्या नोंदी ठेवायच्या, हिशोब वही कशी ठेवायची आणि श्रम सफल कसं उपयोगी पडतं ते वाचा.",
+ "h1_en": "Farm Record Keeping by Voice in Marathi: Your Farm's Daily Record, Without Writing",
+ "h1_mr": "शेतीकामाची रोजची नोंद — बोलून. लिहिता येत नसेल तरी चालेल.",
+ "answer_en": "Yes. Farm record keeping by voice in Marathi works without writing. In Shram Safal, a Daily Farm Execution System, you speak the day's work or tap. Shram Sathi shows what it understood: what work, who, when, which plot. You confirm or correct it. With no network, your recording is kept safely and understood when the network returns.",
+ "answer_mr": "हो. लिहिता न येताही शेतीकामाची रोजची नोंद बोलून ठेवता येते. श्रम सफल या रोजच्या शेतकामाच्या व्यवस्थेत दिवसभराचं काम मराठीत बोलायचं, किंवा बटन दाबायचं. श्रम साथी काय समजलं ते दाखवतो — कोणतं काम, कोणी, कधी, कोणत्या प्लॉटमध्ये. तुम्ही पक्कं करा किंवा दुरुस्त करा. रेंज नसली तरी बोललेलं सुरक्षित राहतं; रेंज आली की श्रम साथी ते समजून दाखवतो, मग तुम्ही पक्कं करा.",
+ "sections": [
+  {
+   "h2_en": "Why is record keeping important in farming?",
+   "h2_mr": "शेतीत रोजची नोंद का महत्त्वाची आहे?",
+   "status": "none",
+   "paras_en": [
+    "Farming is already a business. Every season, money and effort go into seed, fertiliser, sprays, water, diesel and many days of labour. What was missing was not effort. It was a simple way to measure each day's work while it happens.",
+    "Weather cannot be controlled. Almost everything else can be managed once it is measured. And until now, nobody could measure it as easily as speaking.",
+    "Most farmers carry the whole season in their head. That works, until the details fade. By evening it is hard to say which plot got the spray, how many people came, or what was paid in cash. By next season, much of it is gone.",
+    "The University of Wisconsin–Madison Division of Extension makes the same point: farm records give owners the information behind decisions that affect profit, and lenders, insurers and government agencies may ask to see them. It also advises keeping records simple and timely, because a complicated method makes mistakes, or skipping records altogether, more likely."
+   ],
+   "paras_mr": [
+    "शेती हा आधीपासूनच धंदा आहे. दर हंगामात बी, खत, औषध फवारणी, पाणी, डिझेल आणि कित्येक दिवसांची मजुरी यात पैसा आणि मेहनत जाते. कमी पडत होती ती मेहनत नाही. कमी पडत होती ती रोजचं काम त्याच दिवशी, सोप्या पद्धतीने मोजण्याची सोय.",
+    "हवामान आपल्या हातात नाही. पण बाकी बरंच काही मोजलं की सांभाळता येतं. आजवर ते बोलण्याइतक्या सहज मोजता येत नव्हतं, एवढंच.",
+    "बहुतेक शेतकरी पूर्ण हंगाम डोक्यात ठेवतात. ते चालतं — बारीक गोष्टी विसरेपर्यंत. संध्याकाळ झाली की आठवत नाही: फवारणी कोणत्या प्लॉटला झाली, किती माणसं आली, रोख किती दिले. पुढच्या हंगामापर्यंत तर बरंचसं पुसट होतं.",
+    "अमेरिकेतल्या विस्कॉन्सिन विद्यापीठाच्या शेती विस्तार विभागाचंही हेच सांगणं आहे: शेतीच्या नोंदींमुळे नफ्यावर परिणाम करणारे निर्णय नीट घेता येतात, आणि कर्ज देणारे, विमा कंपन्या व सरकारी कार्यालयं या नोंदी मागू शकतात. नोंद सोपी आणि वेळेवर ठेवा, असंही ते सांगतात — कारण किचकट पद्धत असली की चुका होऊ शकतात, किंवा नोंदच राहून जाऊ शकते."
+   ]
+  },
+  {
+   "h2_en": "What types of farm records should a farmer keep?",
+   "h2_mr": "शेतकऱ्याने कोणकोणत्या नोंदी ठेवाव्यात?",
+   "status": "none",
+   "paras_en": [
+    "You do not need an accountant's ledger. The same Extension guidance covers production, labour, weather and financial records. On an Indian farm, that becomes a short list.",
+    "Pomegranate, sugarcane, grapes, onion, banana, vegetables or cereals: the questions are the same few. The habit that matters is answering them every day, in writing or by speaking."
+   ],
+   "bullets_en": [
+    "Work: what was done, on which plot, on which day. Pruning, spraying, irrigation, weeding, harvest.",
+    "Attendance (हजेरी): who came and for how long. Count family members too; unpaid family work is still work.",
+    "Wages and advances (उचल): who was paid what, kept separate from attendance.",
+    "Inputs: which seed, fertiliser or spray went to which plot, and how much.",
+    "Spending per plot: what each plot really costs you.",
+    "Weather and crop stage: rain, heat, hail, and where the crop stood that day.",
+    "Sales and income: what was sold, when, and at what rate."
+   ],
+   "paras_mr": [
+    "यासाठी मोठी खातेवही लागत नाही. तोच शेती विस्तार विभाग उत्पादन, मजूर, हवामान आणि पैसा या नोंदींबद्दल सांगतो. आपल्या शेतावर त्याची छोटी यादी अशी होते.",
+    "डाळिंब असो, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला किंवा ज्वारी-बाजरी — प्रश्न हेच मोजके. खरी सवय एकच: हे प्रश्न रोज सोडवायचे, लिहून किंवा बोलून."
+   ],
+   "bullets_mr": [
+    "कामाची नोंद: कोणतं काम, कोणत्या प्लॉटमध्ये, कोणत्या दिवशी — छाटणी, फवारणी, पाणी, खुरपणी, काढणी.",
+    "हजेरी: कोण आलं, किती वेळ. घरची माणसंही धरून — घरच्यांचं बिनपगारी कामसुद्धा कामच आहे.",
+    "मजुरी आणि उचल: कोणाला किती दिले, हजेरीपासून वेगळं.",
+    "खत, औषध, बी: कोणत्या प्लॉटला काय आणि किती दिलं.",
+    "प्लॉटनुसार खर्च: कोणत्या प्लॉटवर खरं किती गेलं.",
+    "हवामान आणि पिकाची अवस्था: पाऊस, कडक ऊन, गारपीट, आणि त्या दिवशी पीक कोणत्या टप्प्यात होतं.",
+    "विक्री आणि जमा: काय विकलं, कधी, कोणत्या भावाने."
+   ]
+  },
+  {
+   "h2_en": "How do I keep farm records if I can't write?",
+   "h2_mr": "लिहिता येत नसेल तर शेतीची नोंद कशी ठेवायची?",
+   "status": "now",
+   "paras_en": [
+    "Many people who work hardest on a farm do not find writing easy. Some did not get much schooling. Some have no time left in the evening. Some cannot read their own notebook later. None of this makes anyone less of a farmer. It only means the record should come from speaking, not from a pen.",
+    "Shram Safal, India's innovative Daily Farm Execution System, is built on that idea. In the Android app, you speak the day's work in Marathi, the way you would tell your family at home. If tapping is easier, you tap.",
+    "Shram Sathi, the helper inside the app, then shows what it understood: what work, who did it, when, and on which plot. You confirm it or correct it. Nothing is saved behind your back.",
+    "Each entry is tied to a plot and a day, along with that day's weather. Tapped entries save even without network. A spoken entry made without network is kept safely and understood once the network returns; then you confirm it. With consent, the original voice can be replayed, so the people you allow can check what was actually said."
+   ],
+   "paras_mr": [
+    "शेतात सगळ्यात जास्त राबणाऱ्यांपैकी अनेकांना लिहिणं सोपं जात नाही. कोणाला शाळा फार लाभली नाही, कोणाला संध्याकाळी वेळच उरत नाही, कोणाला स्वतःच्या वहीतलं अक्षर नंतर लागत नाही. यात कुणाचाही कमीपणा नाही. एवढंच की नोंद पेनाने नाही, तोंडाने व्हायला हवी.",
+    "श्रम सफल ही रोजच्या शेतकामाची व्यवस्था याच विचारावर उभी आहे. फोनवर दिवसभराचं काम मराठीत बोलून सांगायचं — जसं घरी सांगता तसं. बोलायचं नसेल तर बटन दाबूनही नोंद होते.",
+    "मग श्रम साथी जे समजलं ते समोर दाखवतो: कोणतं काम, कोणी केलं, कधी, आणि कोणत्या प्लॉटमध्ये. बरोबर असेल तर पक्कं करा, चुकलं असेल तर दुरुस्त करा. तुमच्या नकळत काहीही जमा होत नाही.",
+    "प्रत्येक नोंद त्या प्लॉटला आणि त्या दिवसाला जोडली जाते, त्या दिवशीच्या हवामानासकट. बटन दाबून केलेली नोंद रेंज नसतानाही होते; रेंज आली की ती आपोआप पोहोचते. रेंज नसताना बोललेलं फोनमध्ये सुरक्षित राहतं; रेंज आली की श्रम साथी ते समजून दाखवतो, मग तुम्ही पक्कं करा. संमती असेल तर मूळ आवाज नंतर पुन्हा ऐकता येतो, म्हणजे ज्यांना तुम्ही परवानगी दिली आहे त्यांना नेमकं काय सांगितलं होतं ते तपासता येतं."
+   ]
+  },
+  {
+   "h2_en": "What does a day's record look like when you speak it?",
+   "h2_mr": "बोलून केलेली दिवसाची नोंद कशी दिसते?",
+   "status": "now",
+   "paras_en": [
+    "Picture a farmer in Solapur district after the morning's work. She speaks: \"Today we sprayed plot two of the pomegranate. Five people came.\" Shram Sathi lays it out: spraying, plot two, today, five people present. She checks it and confirms. When she speaks the spray or diesel bill, it is counted as spending on that plot.",
+    "Attendance (हजेरी) by voice is kept separate from wages. Shram Safal never guesses wages from headcount. Who came is one fact. What was paid is another. Both are recorded as they really happened.",
+    "Day by day, these small entries become the farm's trusted memory. You see spending per plot and a crop-stage schedule for each plot. You see what work was planned and assigned, how much got done, and what is left. An attention list shows what needs a look today. Put simply, it is a trusted digital replica of the farm's daily work."
+   ],
+   "paras_mr": [
+    "समजा सोलापूर जिल्ह्यातल्या एक ताई सकाळचं काम आटपून बोलतात: 'आज डाळिंबाच्या दोन नंबर प्लॉटला फवारणी केली. पाच माणसं होती.' श्रम साथी ते नीट मांडून दाखवतो — फवारणी, दोन नंबर प्लॉट, आज, पाच जण हजर. ताई बघतात आणि पक्कं करतात. औषधाचं किंवा डिझेलचं बिल बोललं, तर तो खर्च त्याच प्लॉटवर लागतो.",
+    "हजेरी बोलून घेतली जाते, पण ती मजुरीपासून वेगळी ठेवली जाते. किती माणसं आली यावरून मजुरीचा अंदाज श्रम सफल कधीच बांधत नाही. कोण आलं ही एक गोष्ट; कोणाला किती दिले ही दुसरी. दोन्ही जशा घडल्या तशाच नोंदल्या जातात.",
+    "दिवसागणिक या छोट्या नोंदी जमत जातात आणि शेताची विश्वासार्ह आठवण तयार होते. प्लॉटनुसार खर्च दिसतो. प्रत्येक प्लॉटचं पिकाच्या अवस्थेनुसार कामाचं वेळापत्रक दिसतं. कोणतं काम ठरवलं, कोणाला दिलं, किती झालं आणि किती राहिलं ते दिसतं. आणि आज कशाकडे लक्ष द्यायला हवं, त्याची यादी समोर येते."
+   ]
+  },
+  {
+   "h2_en": "Who can add records? Only the owner?",
+   "h2_mr": "नोंद फक्त मालकच करू शकतो का?",
+   "status": "now",
+   "paras_en": [
+    "A farm runs on many hands. Shram Safal is a multi-user system made for people with low or no literacy. The owner invites family members, the Mukadam (crew lead) and workers, each with a role, chosen plots and an end date. When the end date comes, that responsibility stops by itself.",
+    "Each person sees only what the owner allows. Money stays private unless the owner chooses to share it. When someone else makes a record, the owner can approve it (मंजूर) or question it (शंका).",
+    "Corrections never erase history. If a figure changes, the earlier one stays visible. This protects everyone: the owner, the Mukadam and the worker alike. A record is not about suspicion. It lets both sides say calmly, \"this is what happened.\"",
+    "Every worker gets a permanent ID and a QR card, so their days count even without a phone of their own. A worker who does have a phone can see their own days."
+   ],
+   "paras_mr": [
+    "शेत अनेक हातांनी चालतं. श्रम सफल अनेकांनी मिळून वापरायची व्यवस्था आहे — कमी शिकलेल्यांसाठी आणि अजिबात लिहिता-वाचता न येणाऱ्यांसाठीसुद्धा. मालक घरच्यांना, मुकादमाला आणि कामगारांना जोडतो; प्रत्येकाला त्याचं काम, ठराविक प्लॉट आणि शेवटची तारीख देतो. तारीख संपली की ती जबाबदारी आपोआप थांबते.",
+    "मालक जेवढं दाखवेल तेवढंच प्रत्येकाला दिसतं. पैशाचा हिशोब मालकाने परवानगी दिल्याशिवाय कोणाला दिसत नाही. दुसऱ्याने केलेली नोंद मालक मंजूर करू शकतो, किंवा त्यावर शंका घेऊ शकतो.",
+    "दुरुस्ती केली तरी आधीची नोंद पुसली जात नाही. आकडा बदलला तर जुना आकडाही दिसत राहतो. यात मालकाचंही रक्षण आहे, मुकादमाचंही आणि कामगाराचंही. नोंद म्हणजे संशय नाही. 'हे असं झालं होतं' हे दोन्ही बाजूंनी शांतपणे सांगता यावं, यासाठीचा तो पुरावा आहे.",
+    "प्रत्येक कामगाराला कायमचा ओळख क्रमांक आणि QR कार्ड मिळतं. त्यामुळे स्वतःचा फोन नसला तरी त्याचे दिवस मोजले जातात. ज्या कामगाराकडे फोन आहे, त्याला स्वतःचे दिवस स्वतः बघता येतात."
+   ]
+  },
+  {
+   "h2_en": "How should I write a jama-kharch (income and expense) record?",
+   "h2_mr": "शेती हिशोब वही कशी ठेवायची? जमा-खर्च कसा लिहावा?",
+   "status": "none",
+   "paras_en": [
+    "A paper hishob vahi has served farm families for generations, and it still works. If you keep one, a few habits help."
+   ],
+   "bullets_en": [
+    "A separate page for each plot.",
+    "The date on every line.",
+    "Money received on one side, money spent on the other.",
+    "Wage advances (उचल) in their own column.",
+    "A total at the end of each week, carried forward to the next page."
+   ],
+   "paras_mr": [
+    "कागदी हिशोब वहीने पिढ्यान्‌पिढ्या शेतकरी घरांना साथ दिली आहे, आणि ती आजही कामाची आहे. वही ठेवत असाल तर या सवयी उपयोगी पडतात."
+   ],
+   "bullets_mr": [
+    "प्रत्येक प्लॉटसाठी वेगळं पान.",
+    "प्रत्येक ओळीवर तारीख.",
+    "एका बाजूला जमा, दुसऱ्या बाजूला खर्च.",
+    "मजुरांची उचल वेगळ्या रकान्यात.",
+    "दर आठवड्याला बेरीज, आणि ती पुढच्या पानावर ओढायची."
+   ]
+  },
+  {
+   "h2_en": "Paper hishob vahi or phone: what should I check?",
+   "h2_mr": "वहीत नोंद की फोनवर? काय तपासून घ्यायचं?",
+   "status": "none",
+   "paras_en": [
+    "Paper has limits too. It gets wet, torn or lost. It cannot show who wrote a line, or whether a figure was changed later. And adding up each plot at the end of the season takes many evenings.",
+    "Many people search for a free farm record keeping app. Whatever you choose, paper or phone, check these four things."
+   ],
+   "bullets_en": [
+    "Can I record without writing?",
+    "Does it work without network?",
+    "Can I see who recorded what, and correct it without erasing the past?",
+    "Can I download or erase my own data?"
+   ],
+   "paras_mr": [
+    "कागदालाही मर्यादा आहेत. वही भिजते, फाटते, हरवते. कोणती ओळ कोणी लिहिली, नंतर आकडा कोणी बदलला, हे वहीत दिसत नाही. आणि हंगाम संपल्यावर प्लॉटनुसार बेरीज करायला कित्येक संध्याकाळी जातात.",
+    "फोनवर मोफत हिशोब ठेवायची सोय शोधणारेही बरेच आहेत. वही असो की फोन, या चार गोष्टी नक्की तपासा."
+   ],
+   "bullets_mr": [
+    "लिहिता न येता नोंद होते का?",
+    "रेंज नसताना चालतं का?",
+    "कोणी काय नोंदवलं ते दिसतं का, आणि जुनं न पुसता दुरुस्ती होते का?",
+    "माझी माहिती मला डाउनलोड करता येते का, आणि हवी तेव्हा पुसता येते का?"
+   ]
+  },
+  {
+   "h2_en": "What is being built next for farm records?",
+   "h2_mr": "शेतीच्या नोंदींसाठी पुढे काय तयार होत आहे?",
+   "status": "dev",
+   "paras_en": [
+    "Records come first; everything else is built on them. The aim is simple: when daily work is recorded as easily as speaking, running the farm becomes clearer and more trusted for everyone who works on it.",
+    "These pieces are being developed now. They are not part of the 1 December release."
+   ],
+   "bullets_en": [
+    "Next-season reminders at the same crop stage: when the crop reaches that stage again, what you did this season comes back to you.",
+    "A suggest-and-adopt change trail, so you can see what was suggested and what was adopted.",
+    "Skill profiles from approved work, and a worker's work history across farms, only with permission.",
+    "A dashboard for FPOs and FPCs that shows only what each member farmer approves. Staff see masked worker names and no GPS."
+   ],
+   "paras_mr": [
+    "आधी नोंद, मग बाकी सगळं. हेतू साधा आहे: रोजचं काम बोलण्याइतक्या सहज नोंदलं गेलं, तर शेतात राबणाऱ्या प्रत्येकासाठी शेती चालवणं अधिक स्पष्ट आणि विश्वासाचं होतं.",
+    "नोंदीवर उभ्या राहणाऱ्या या गोष्टी सध्या तयार होत आहेत. 1 डिसेंबरपासून सुरू होणाऱ्या वापरात त्या अजून नाहीत."
+   ],
+   "bullets_mr": [
+    "पुढच्या हंगामाची आठवण: पीक पुन्हा त्याच अवस्थेत आलं की, या हंगामात त्या वेळी काय केलं होतं ते समोर येईल.",
+    "कोणी काय सुचवलं आणि काय स्वीकारलं गेलं, याचा मागोवा.",
+    "मंजूर झालेल्या कामावरून कामगाराच्या कौशल्याची ओळख, आणि परवानगी असेल तर वेगवेगळ्या शेतांवर केलेल्या कामाचा इतिहास.",
+    "शेतकरी उत्पादक संस्था/कंपन्यांसाठी (FPO/FPC) एकत्र पाहणी — सभासद शेतकरी मंजूर करेल तेवढंच दिसेल; तिथल्या कर्मचाऱ्यांना कामगारांची नावं झाकलेली दिसतील, आणि शेताचं ठिकाण (GPS) दिसणार नाही."
+   ]
+  }
+ ],
+ "faq": [
+  {
+   "q_en": "Does Shram Safal work without internet?",
+   "a_en": "Yes. Tapped entries save without network. What you speak is kept safely on the phone and understood when the network returns. Everything syncs then.",
+   "q_mr": "रेंज नसताना श्रम सफल चालतं का?",
+   "a_mr": "हो. बटन दाबून केलेली नोंद रेंज नसतानाही होते. बोललेलं फोनमध्ये सुरक्षित राहतं. रेंज आली की श्रम साथी ते समजून दाखवतो, आणि सगळं आपोआप पोहोचतं."
+  },
+  {
+   "q_en": "Do workers need their own phone?",
+   "a_en": "No. Every worker gets a permanent ID and a QR card, so their attendance can be recorded even if they have no phone of their own. A worker who has a phone can see their own days.",
+   "q_mr": "कामगारांकडे स्वतःचा फोन लागतो का?",
+   "a_mr": "नाही. प्रत्येक कामगाराला कायमचा ओळख क्रमांक आणि QR कार्ड मिळतं, त्यामुळे स्वतःचा फोन नसला तरी त्याची हजेरी लागते. ज्याच्याकडे फोन आहे, तो स्वतःचे दिवस स्वतः बघू शकतो."
+  },
+  {
+   "q_en": "What if Shram Sathi understands something wrongly?",
+   "a_en": "You see what it understood before anything is saved, and you can correct it. Later corrections are kept alongside the original; the earlier record is never erased.",
+   "q_mr": "श्रम साथीला चुकीचं समजलं तर?",
+   "a_mr": "नोंद जमा होण्याआधीच श्रम साथीला काय समजलं ते तुम्हाला दिसतं, आणि तुम्ही ते दुरुस्त करू शकता. नंतर दुरुस्ती केली तरी आधीची नोंद पुसली जात नाही; ती तशीच दिसत राहते."
+  },
+  {
+   "q_en": "Who can see my farm's money and records?",
+   "a_en": "Only the people you invite, and only what you allow. Money stays private unless you share it. Data is stored in India, you can download or erase it, and Shram Safal is built for India's DPDP law.",
+   "q_mr": "माझा पैशाचा हिशोब आणि नोंदी कोणाला दिसतात?",
+   "a_mr": "तुम्ही ज्यांना जोडता त्यांनाच, आणि तुम्ही परवानगी देता तेवढंच. पैशाचा हिशोब तुम्ही दाखवल्याशिवाय कोणाला दिसत नाही. माहिती भारतातच ठेवली जाते; ती तुम्हाला डाउनलोड करता येते किंवा पुसता येते. श्रम सफल भारताच्या DPDP कायद्याचा विचार करून बनवलं आहे."
+  },
+  {
+   "q_en": "Which crops and areas is Shram Safal for?",
+   "a_en": "All crops: pomegranate, sugarcane, grapes, onion, banana, vegetables, cereals and more. Daily use starts on 1 December 2026, and the first phase runs only in Solapur district. Shram Safal is built by ARVE (Agri Ryot Value Enterprises Pvt. Ltd.), a company in Maharashtra.",
+   "q_mr": "श्रम सफल कोणत्या पिकांसाठी आणि कुठे सुरू होत आहे?",
+   "a_mr": "सगळ्या पिकांसाठी — डाळिंब, ऊस, द्राक्ष, कांदा, केळी, भाजीपाला, ज्वारी-बाजरी आणि इतरही. रोजचा वापर 1 डिसेंबर 2026 पासून सुरू होत आहे, पहिला टप्पा फक्त सोलापूर जिल्ह्यात. ARVE (Agri Ryot Value Enterprises Pvt. Ltd.) ही महाराष्ट्रातली कंपनी श्रम सफल बनवते."
+  },
+  {
+   "q_en": "How do I start?",
+   "a_en": "Install Shram Safal from Google Play and sign in with your phone number and the SMS code. Then speak or tap your first day's work.",
+   "q_mr": "सुरुवात कशी करायची?",
+   "a_mr": "Google Play वरून श्रम सफल घ्या आणि तुमचा फोन नंबर व SMS ने आलेला कोड टाकून आत या. मग पहिल्या दिवसाचं काम बोलून किंवा बटन दाबून नोंदवा."
+  }
+ ],
+ "sources": [
+  {
+   "name": "University of Wisconsin–Madison Division of Extension: Recordkeeping for your food or farm business",
+   "url": "https://farms.extension.wisc.edu/articles/recordkeeping-for-your-food-or-farm-business"
+  }
+ ],
+ "illustration_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1200 630\" role=\"img\"><defs><radialGradient id=\"ga\" cx=\"0.2\" cy=\"0.28\" r=\"0.45\"><stop offset=\"0\" stop-color=\"#b9dc71\" stop-opacity=\"0.35\"/><stop offset=\"1\" stop-color=\"#b9dc71\" stop-opacity=\"0\"/></radialGradient><radialGradient id=\"gb\" cx=\"0.82\" cy=\"0.7\" r=\"0.45\"><stop offset=\"0\" stop-color=\"#eaf4ec\"/><stop offset=\"1\" stop-color=\"#eaf4ec\" stop-opacity=\"0\"/></radialGradient><radialGradient id=\"gc\" cx=\"0.5\" cy=\"0.5\" r=\"0.5\"><stop offset=\"0\" stop-color=\"#62a83a\" stop-opacity=\"0.16\"/><stop offset=\"1\" stop-color=\"#62a83a\" stop-opacity=\"0\"/></radialGradient></defs><rect width=\"1200\" height=\"630\" fill=\"#f4f9f4\"/><rect width=\"1200\" height=\"630\" fill=\"url(#ga)\"/><rect width=\"1200\" height=\"630\" fill=\"url(#gb)\"/><circle cx=\"665\" cy=\"330\" r=\"270\" fill=\"url(#gc)\"/><circle cx=\"665\" cy=\"330\" r=\"232\" fill=\"none\" stroke=\"#b9dc71\" stroke-width=\"2\" stroke-dasharray=\"1 12\" stroke-linecap=\"round\"/><g fill=\"none\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M120 520H360\" stroke=\"#9b7a52\" stroke-width=\"3\" opacity=\"0.6\"/><path d=\"M146 520V500M146 507Q138 497 130 499M146 507Q154 497 162 499\" stroke=\"#62a83a\" stroke-width=\"3\"/><path d=\"M334 520V504M334 510Q327 502 320 504M334 510Q341 502 348 504\" stroke=\"#62a83a\" stroke-width=\"3\"/><path d=\"M496 176C530 176 540 214 556 236\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-dasharray=\"2 10\"/><path d=\"M774 210C850 196 940 214 1004 232\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-dasharray=\"2 10\"/><path d=\"M774 330C860 330 916 372 938 419\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-dasharray=\"2 10\"/><path d=\"M1108 226C1120 214 1122 200 1118 188\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-dasharray=\"2 10\"/></g><path d=\"M176 520V378Q176 312 230 312Q284 312 284 378V520\" fill=\"#eaf4ec\" stroke=\"#0a4a2b\" stroke-width=\"4\" stroke-linejoin=\"round\"/><path d=\"M200 330Q230 360 262 322\" fill=\"none\" stroke=\"#178b55\" stroke-width=\"4\" stroke-linecap=\"round\"/><circle cx=\"230\" cy=\"262\" r=\"34\" fill=\"#f7f3e8\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><path d=\"M318 120H462Q490 120 490 148V202Q490 230 462 230H356L280 262L326 230H318Q290 230 290 202V148Q290 120 318 120Z\" fill=\"#fff\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linejoin=\"round\"/><g stroke-linecap=\"round\" stroke-width=\"5\" fill=\"none\"><path d=\"M320 166V184M360 144V206M400 148V202M440 152V198\" stroke=\"#0d6e3f\"/><path d=\"M340 155V195M380 158V192M420 162V188M460 167V183\" stroke=\"#62a83a\"/></g><rect x=\"560\" y=\"140\" width=\"210\" height=\"380\" rx=\"30\" fill=\"#fff\" stroke=\"#0a4a2b\" stroke-width=\"4\"/><rect x=\"578\" y=\"172\" width=\"174\" height=\"316\" rx=\"16\" fill=\"#f4f9f4\"/><path d=\"M642 156H688\" stroke=\"#0a4a2b\" stroke-width=\"4\" stroke-linecap=\"round\"/><rect x=\"592\" y=\"190\" width=\"146\" height=\"124\" rx=\"14\" fill=\"#fff\" stroke=\"#178b55\" stroke-width=\"3\"/><path d=\"M606 222L632 213L652 225L626 234Z\" fill=\"#eaf4ec\" stroke=\"#0d6e3f\" stroke-width=\"3\" stroke-linejoin=\"round\"/><g stroke-linecap=\"round\" stroke-width=\"4\" fill=\"none\"><path d=\"M666 216H722M666 232H704\" stroke=\"#0d6e3f\"/><path d=\"M606 258H722M606 276H690\" stroke=\"#b9dc71\"/><path d=\"M628 298H668\" stroke=\"#62a83a\"/></g><circle cx=\"614\" cy=\"298\" r=\"7\" fill=\"#62a83a\"/><circle cx=\"716\" cy=\"296\" r=\"8\" fill=\"none\" stroke=\"#a86412\" stroke-width=\"3\"/><circle cx=\"665\" cy=\"392\" r=\"54\" fill=\"none\" stroke=\"#b9dc71\" stroke-width=\"3\"/><circle cx=\"665\" cy=\"392\" r=\"42\" fill=\"#0d6e3f\"/><path d=\"M646 393L659 406L685 378\" fill=\"none\" stroke=\"#fff\" stroke-width=\"5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><rect x=\"592\" y=\"456\" width=\"146\" height=\"20\" rx=\"10\" fill=\"#eaf4ec\"/><rect x=\"1004\" y=\"190\" width=\"96\" height=\"84\" rx=\"14\" fill=\"#fff\" stroke=\"#0d6e3f\" stroke-width=\"3\"/><path d=\"M1004 216H1100\" stroke=\"#0d6e3f\" stroke-width=\"3\"/><path d=\"M1026 182V198M1078 182V198\" stroke=\"#0d6e3f\" stroke-width=\"4\" stroke-linecap=\"round\"/><circle cx=\"1052\" cy=\"246\" r=\"12\" fill=\"#b9dc71\"/><g fill=\"#62a83a\"><circle cx=\"1024\" cy=\"236\" r=\"3\"/><circle cx=\"1080\" cy=\"236\" r=\"3\"/><circle cx=\"1024\" cy=\"258\" r=\"3\"/><circle cx=\"1080\" cy=\"258\" r=\"3\"/></g><circle cx=\"1140\" cy=\"158\" r=\"14\" fill=\"none\" stroke=\"#a86412\" stroke-width=\"3\"/><path d=\"M1140 132V138M1140 178V184M1114 158H1120M1160 158H1166M1122 140L1126 144M1154 172L1158 176M1158 140L1154 144M1126 172L1122 176\" stroke=\"#a86412\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M820 430L960 390L1060 440L920 485Z\" fill=\"#eaf4ec\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linejoin=\"round\"/><path d=\"M960 390L1090 352L1150 395L1060 440Z\" fill=\"#f7f3e8\" stroke=\"#9b7a52\" stroke-width=\"3\" stroke-linejoin=\"round\"/><path d=\"M920 485L1060 440L1140 490L1000 540Z\" fill=\"#fff\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linejoin=\"round\"/><path d=\"M859 440L971 407M884 453L996 419M909 467L1021 432\" stroke=\"#62a83a\" stroke-width=\"3\" stroke-linecap=\"round\"/><path d=\"M1005 402L1098 370M1036 419L1119 385\" stroke=\"#9b7a52\" stroke-width=\"3\" stroke-dasharray=\"6 8\" stroke-linecap=\"round\"/><path d=\"M960 498L1072 461M987 517L1099 478\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linecap=\"round\"/><circle cx=\"940\" cy=\"437\" r=\"16\" fill=\"#fff\" stroke=\"#1847d6\" stroke-width=\"3\"/><circle cx=\"940\" cy=\"437\" r=\"5\" fill=\"#1847d6\"/><path d=\"M776 520V490Q776 472 792 472Q808 472 808 490V520\" fill=\"#eaf4ec\" stroke=\"#178b55\" stroke-width=\"3\" stroke-linejoin=\"round\"/><circle cx=\"792\" cy=\"454\" r=\"12\" fill=\"#fff\" stroke=\"#178b55\" stroke-width=\"3\"/></svg>",
+ "illustration_alt_en": "Line illustration: a farmer speaks, and a speech bubble with sound waves leads to a phone showing a confirmed work record. Dotted lines link that record to a marked field plot and to the day on a calendar, which links on to that day's weather.",
+ "illustration_alt_mr": "रेखाचित्र: शेतकरी बोलतो आहे; आवाजाच्या लहरी असलेला बोलण्याचा फुगा फोनकडे जातो. फोनवर पक्की झालेली कामाची नोंद दिसते. ठिपक्यांच्या रेषा ती नोंद शेतातल्या खूण केलेल्या प्लॉटला आणि त्या दिवसाच्या तारखेला जोडतात, आणि तारखेपासून एक रेषा त्या दिवसाच्या हवामानाकडे जाते.",
+ "read_minutes": 6
+}

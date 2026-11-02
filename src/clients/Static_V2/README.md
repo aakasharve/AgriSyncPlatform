@@ -1,6 +1,10 @@
 # Static_V2 — shramsafal.in
 
-The public ShramSafal site, live since 2026-10-03. React 19 + Vite, prerendered
+> **Not the live site any more.** shramsafal.in was replaced on 2026-11-02 by
+> [`src/clients/Website`](../Website/README.md). Static_V2 now publishes only the privacy
+> and delete-account pages (see Deploy below).
+
+The public ShramSafal site from 2026-10-03 to 2026-11-02. React 19 + Vite, prerendered
 to static HTML per route. English by default (the copy search and answer
 engines index); first-time visitors are offered Marathi.
 
@@ -16,31 +20,27 @@ npm run perf:load # LCP / CLS / hydration warnings per route, throttled phone
 `npm run build` fails if any route prerenders under 400 characters, and prints
 any Marathi string the English dictionary missed.
 
-## Deploy
+## Deploy — Static_V2 no longer publishes the site
 
-Hosting is S3 `shramsafal-marketing-prod` behind CloudFront `E2M06A2B71ZW1O`
-(the `shramsafal-index-rewrite` function maps `/vision` → `/vision/index.html`).
+Since 2026-11-02 shramsafal.in is the site in [`src/clients/Website`](../Website/README.md),
+published with `python deploy.py` there. Uploading this folder's `dist/` would put the old
+pages back over it, so `npm run deploy` now refuses and points there. Do not run the old
+manual `aws s3 sync` commands from this folder's history either.
 
-One command does build, test, upload and cache-clear (needs the AWS CLI signed in):
-
-```bash
-npm run deploy                       # dry run: builds, tests, lists what WOULD change
-npm run deploy -- --confirm PUBLISH  # goes live on shramsafal.in
-```
-
-It never deletes anything from the bucket. The manual equivalent, for reference:
+Static_V2 still owns three pages on the bucket, which the app and the Google Play listing
+link to: the privacy notice (`public/privacy/`, `public/privacy-mr/`) and the
+account-deletion page (`public/delete-account/`). The new site's deploy never touches them.
+To republish only those three (needs the AWS CLI signed in):
 
 ```bash
-cd dist
-aws s3 sync assets s3://shramsafal-marketing-prod/assets --cache-control "public, max-age=31536000, immutable"
-aws s3 sync fonts  s3://shramsafal-marketing-prod/fonts  --cache-control "public, max-age=31536000, immutable" --content-type font/woff2
-aws s3 sync . s3://shramsafal-marketing-prod/ --exclude "*" --include "*.html" --cache-control "no-cache" --content-type "text/html; charset=utf-8"
-aws s3 sync . s3://shramsafal-marketing-prod/ --exclude "*.html" --exclude "assets/*" --exclude "fonts/*" --cache-control "public, max-age=3600"
-MSYS_NO_PATHCONV=1 aws cloudfront create-invalidation --distribution-id E2M06A2B71ZW1O --paths "/*"
+npm run deploy -- --privacy-only                     # dry run: compares with live, uploads nothing
+npm run deploy -- --privacy-only --confirm PUBLISH   # uploads the three pages, clears their cache
 ```
 
-`MSYS_NO_PATHCONV=1` matters in Git Bash, which otherwise rewrites `/*` into a
-Windows path and the invalidation is rejected.
+It uploads the committed bytes (`git show HEAD:...`), refuses if those files have
+uncommitted edits, and never deletes anything. Committed bytes, not the working copy,
+because a Windows checkout turns their LF line endings into CRLF and the live pages are
+the LF ones.
 
 ## How the language works — read before changing it
 

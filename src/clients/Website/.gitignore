@@ -1,0 +1,18 @@
+# build.py --publish writes these into site/, next to the hand-kept assets. They are rebuilt on every deploy from
+# site-src/, so they are never committed.
+/site/*.html
+/site/*.txt
+/site/*.xml
+/site/en/
+/site/blog/
+/site/vision/
+/site/farmers/
+/site/join/
+/site/privacy-trust/
+# Blog illustrations are written from each post's illustration_svg (the .jpg photos next to them are hand-kept).
+/site/assets/blog/*.svg
+
+# Design previews (_*.html) and local working material
+_*
+/archive/
+__pycache__/
