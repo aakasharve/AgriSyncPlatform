@@ -627,7 +627,10 @@ public sealed partial class PurveshDemoSeeder
         List<DayLedger> DayLedgers,
         List<PlannedActivity> PlannedOnSeedCycles,
         List<CropCycle> SeedCycles,
-        List<Attachment> Attachments);
+        List<Attachment> Attachments,
+        // spec: plr-d10 lane WID — workers whose ShramSafal identity was touched in the app (a card, a phone, a PIN,
+        // a link). Their append-only identity events point at the farm record (RESTRICT), so such a worker is kept.
+        List<Guid> IdentityOperatorIds);
 
     private async Task<DemoFarmCensus> TakeDemoFarmCensusAsync(FarmId farmId, DemoLabourPlan plan, CancellationToken ct)
     {
@@ -664,6 +667,11 @@ public sealed partial class PurveshDemoSeeder
             .Where(c => c.FarmId == farmId)
             .Select(c => c.DailyLogId)
             .ToListAsync(ct);
+        var identityOperatorIds = await _ssfContext.ShramIdentityEvents.AsNoTracking()
+            .Where(e => e.FarmId == farmId.Value && e.FieldOperatorId != null)
+            .Select(e => e.FieldOperatorId!.Value)
+            .Distinct()
+            .ToListAsync(ct);
 
         var costs = await _ssfContext.CostEntries.Where(c => c.FarmId == farmId).ToListAsync(ct);
         var costIds = costs.Select(c => c.Id).ToList();
@@ -689,7 +697,7 @@ public sealed partial class PurveshDemoSeeder
         return new DemoFarmCensus(
             seedLogs, nonSeedLogIds, farmAssignments, workRows, operators, marks,
             markCorrections.ToHashSet(), markCorrections.Count, labourCorrections, contentLogIds,
-            costs, corrections, dayLedgers, planned, seedCycles, attachments);
+            costs, corrections, dayLedgers, planned, seedCycles, attachments, identityOperatorIds);
     }
 
     // ── what must be retained ───────────────────────────────────────────────────────────
@@ -807,6 +815,11 @@ public sealed partial class PurveshDemoSeeder
             {
                 RetainOperator(op.Id, "was renamed or retired in the app");
             }
+        }
+
+        foreach (var operatorId in census.IdentityOperatorIds)
+        {
+            RetainOperator(operatorId, "has a ShramSafal identity (card, phone, PIN or link) given in the app");
         }
 
         foreach (var row in census.WorkRows)

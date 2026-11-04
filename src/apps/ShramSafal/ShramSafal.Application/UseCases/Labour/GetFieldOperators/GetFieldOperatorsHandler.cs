@@ -5,6 +5,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Labour.GetLabourData;
+using ShramSafal.Application.UseCases.Labour.WorkerIdentity;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
 
@@ -33,7 +34,7 @@ namespace ShramSafal.Application.UseCases.Labour.GetFieldOperators;
 /// trust the caller.
 /// </para>
 /// </summary>
-public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, IClock clock)
+public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, IClock clock, IShramIdentityStore? identity = null)
     : IHandler<GetFieldOperatorsQuery, IReadOnlyList<FieldOperatorSummaryDto>>
 {
     public async Task<Result<IReadOnlyList<FieldOperatorSummaryDto>>> HandleAsync(
@@ -76,8 +77,22 @@ public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, I
 
         var operators = await repository.GetFieldOperatorsForFarmAsync(query.FarmId, ct);
 
+        // lane WID — each worker's card, level and completeness, and (R10) only what THIS farm entered of his phone and
+        // PIN. Read through the one identity door, which is closed again before the request goes on.
+        var views = identity is null || operators.Count == 0
+            ? new Dictionary<Guid, WorkerIdentityView>()
+            : await WorkerIdentityReads.ViewsAsync(identity, query.FarmId.Value, operators, ct);
+        if (identity is not null && operators.Count > 0)
+        {
+            await identity.CloseAsync(ct);
+        }
+
         IReadOnlyList<FieldOperatorSummaryDto> dtos = operators
-            .Select(o => new FieldOperatorSummaryDto(o.Id, o.DisplayName, o.FullName, o.IsActive))
+            .Select(o => views.TryGetValue(o.Id, out var v)
+                ? new FieldOperatorSummaryDto(
+                    o.Id, o.DisplayName, o.FullName, o.IsActive, v.CardCode, v.IdentityLevel, v.NeedsPhoneAndPin,
+                    v.PhoneWhose, v.PhoneTail, v.HomePin)
+                : new FieldOperatorSummaryDto(o.Id, o.DisplayName, o.FullName, o.IsActive))
             .ToList();
 
         return Result.Success(dtos);

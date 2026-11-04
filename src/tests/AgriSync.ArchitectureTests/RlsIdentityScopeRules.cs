@@ -150,6 +150,30 @@ public sealed class RlsIdentityScopeRules
             "farm visible to a caller who is not its member");
     }
 
+    /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID. <c>agrisync.identity_scope</c> opens the ShramSafal-wide
+    /// person tables (no farm id — the F8 exception; their only FORCE-RLS policy keys on this setting). Only
+    /// <c>IdentityTenantScope</c> may set it, so no other path can make a person's phones, PIN or cards readable from a
+    /// farm session.
+    /// </summary>
+    [Fact]
+    public void The_identity_scope_guc_is_written_only_by_the_identity_scope()
+    {
+        var identityWrite = new Regex(
+            @"set_config\(\s*'agrisync\.identity_scope'|SET\s+LOCAL\s+agrisync\.identity_scope",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        var writers = ProductionSourceFiles()
+            .Where(file => identityWrite.IsMatch(StripComments(File.ReadAllText(file))))
+            .Select(Relative)
+            .ToList();
+
+        writers.Should().Equal(
+            new[] { "apps/ShramSafal/ShramSafal.Infrastructure/Auth/CallerFarmTenantScope.cs" },
+            "agrisync.identity_scope may be set only by IdentityTenantScope — any other writer could open every worker's "
+            + "identity to a farm session");
+    }
+
     [Fact]
     public void Discarding_a_privileged_context_requires_establishing_a_real_identity()
     {

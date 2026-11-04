@@ -16,6 +16,18 @@ public interface ISmsSender
         string phoneNumberInternational,
         string otpCode,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// spec: plr-d10 lane WID — the same gateway with ANOTHER DLT-approved template (a worker's one-time code; never the
+    /// login OTP's template). Default: refused, so an adapter that cannot do it says so rather than sending the wrong text.
+    /// </summary>
+    Task<Result<SmsDispatchReceipt>> SendCodeWithTemplateAsync(
+        string phoneNumberInternational,
+        string code,
+        string templateId,
+        CancellationToken cancellationToken = default)
+        => Task.FromResult(Result.Failure<SmsDispatchReceipt>(
+            Error.Internal("sms.template_not_supported", "This SMS adapter cannot send with another template.")));
 }
 
 /// <summary>

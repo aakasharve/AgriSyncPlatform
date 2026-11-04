@@ -46,6 +46,13 @@ export interface FieldOperatorSummaryDto {
     displayName: string;
     fullName: string | null;
     isActive: boolean;
+    /** lane WID — his card (SS-XXXX-XXXX), level and completeness; whose phone / tail / PIN only as THIS farm entered them. */
+    cardCode?: string | null;
+    identityLevel?: string;
+    needsPhoneAndPin?: boolean;
+    phoneWhose?: string | null;
+    phoneTail?: string | null;
+    homePin?: string | null;
 }
 
 /**
@@ -65,6 +72,10 @@ export interface FieldOperatorCreatedDto {
     createdByUserId: string;
     createdAtUtc: string;
     isActive: boolean;
+    /** lane WID — the card made on add. */
+    cardCode?: string | null;
+    identityLevel?: string | null;
+    needsPhoneAndPin?: boolean | null;
 }
 
 /**
@@ -93,6 +104,24 @@ export interface FieldOperator {
     displayName: string;
     fullName?: string;
     isActive: boolean;
+    /**
+     * lane WID (founder D-54) — his ShramSafal card and level. Optional: a roster cached before this release, or an
+     * older server, simply has none and the screens show no badge (never an invented level).
+     */
+    cardCode?: string;
+    identityLevel?: string;
+    needsPhoneAndPin?: boolean;
+    phoneWhose?: string;
+    phoneTail?: string;
+    homePin?: string;
+}
+
+/** lane WID — what the team page's add form sends with the name (the हजेरी quick add sends none of it, P9). */
+export interface NewWorkerIdentity {
+    phone: string;
+    phoneWhose: 'Own' | 'Family' | 'Mukadam';
+    homePin: string;
+    isFarmPinToo?: boolean;
 }
 
 /**
@@ -115,6 +144,12 @@ const mapFieldOperator = (dto: FieldOperatorSummaryDto): FieldOperator => ({
     displayName: dto.displayName,
     fullName: dto.fullName ?? undefined,
     isActive: dto.isActive,
+    ...(dto.cardCode ? { cardCode: dto.cardCode } : {}),
+    ...(dto.identityLevel ? { identityLevel: dto.identityLevel } : {}),
+    ...(typeof dto.needsPhoneAndPin === 'boolean' ? { needsPhoneAndPin: dto.needsPhoneAndPin } : {}),
+    ...(dto.phoneWhose ? { phoneWhose: dto.phoneWhose } : {}),
+    ...(dto.phoneTail ? { phoneTail: dto.phoneTail } : {}),
+    ...(dto.homePin ? { homePin: dto.homePin } : {}),
 });
 
 /**
@@ -158,6 +193,7 @@ export async function createFieldOperator(
     displayName: string,
     fullName?: string,
     clientId?: string,
+    identity?: NewWorkerIdentity,
 ): Promise<FieldOperator> {
     const trimmedFullName = fullName?.trim();
     const response = await agriSyncClient.http.post<FieldOperatorCreatedDto>(
@@ -166,6 +202,12 @@ export async function createFieldOperator(
             displayName: displayName.trim(),
             ...(trimmedFullName ? { fullName: trimmedFullName } : {}),
             ...(clientId ? { id: clientId } : {}),
+            ...(identity ? {
+                phone: identity.phone,
+                phoneWhose: identity.phoneWhose,
+                homePin: identity.homePin,
+                ...(identity.isFarmPinToo ? { isFarmPinToo: true } : {}),
+            } : {}),
         },
     );
     const dto = response.data;
@@ -174,6 +216,10 @@ export async function createFieldOperator(
         displayName: dto.displayName,
         fullName: dto.fullName ?? undefined,
         isActive: dto.isActive,
+        ...(dto.cardCode ? { cardCode: dto.cardCode } : {}),
+        ...(dto.identityLevel ? { identityLevel: dto.identityLevel } : {}),
+        ...(typeof dto.needsPhoneAndPin === 'boolean' ? { needsPhoneAndPin: dto.needsPhoneAndPin } : {}),
+        ...(identity ? { phoneWhose: identity.phoneWhose, phoneTail: identity.phone.slice(-4), homePin: identity.homePin } : {}),
     };
 }
 

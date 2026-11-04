@@ -161,6 +161,16 @@ try
 
     builder.Services.AddUserApi(builder.Configuration);
     builder.Services.AddShramSafalApi(builder.Configuration);
+    // spec: plr-d10 lane WID — a worker's one-time code goes by REAL SMS only once its own DLT template is approved
+    // (founder, with D-52) and ShramSafal:WorkerPhoneCode:SmsEnabled is set; until then the module's default stands
+    // (Production: switched off and says so; elsewhere: the dev stub). Registered after the module so it wins.
+    if (builder.Configuration.GetValue<bool>(ShramSafal.Infrastructure.Identity.WorkerPhoneCodeSms.EnabledKey))
+    {
+        builder.Services.AddScoped<ShramSafal.Application.Ports.External.IWorkerPhoneCodeSender>(sp =>
+            new AgriSync.Bootstrapper.Adapters.WorkerPhoneCodeSmsBridge(
+                sp.GetRequiredService<User.Application.Ports.External.ISmsSender>(),
+                builder.Configuration[ShramSafal.Infrastructure.Identity.WorkerPhoneCodeSms.TemplateIdKey] ?? string.Empty));
+    }
     builder.Services.AddAccountsModule(builder.Configuration);
     // DWC v2 §2.4 — analytics ingest handler + validator. Writer
     // (IAnalyticsWriter) is registered by AddAnalytics(...) below.

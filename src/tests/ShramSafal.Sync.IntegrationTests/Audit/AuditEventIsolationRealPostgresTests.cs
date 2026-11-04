@@ -1297,6 +1297,13 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    audit row, MemberPlotScopeChanged). Fix pass 1 (M2): also the four additive move columns (place_changed_at_utc,
         //    former_plot_ids) on daily_logs and cost_entries, dropped by Down(). Safe mid-proof.
         "20261101221236_AddMembershipPlotScope",
+
+        // ── Reviewed 2026-11-02 (spec: plr-d10 lane WID, founder D-54); Down() read in full: drops the five worker-identity
+        //    tables (shram_persons, shram_person_phones, shram_cards, shram_phone_challenges, shram_identity_events), their
+        //    policies, the nullable field_operators.person_id and farms.pin_code (with its CHECK). Up() creates them and
+        //    back-fills a person and a card for every field operator. Never touches ssf.audit_events, its policies or its
+        //    grants (identity changes are recorded in their own append-only table). Safe mid-proof.
+        "20261102163914_AddWorkerIdentity",
     ];
 
     /// <summary>

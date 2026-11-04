@@ -11,13 +11,25 @@
  * Follows server truth: a row appears only after the server accepted the add; a row leaves only after
  * the server retired it. Remove RETIRES (he is no longer offered for new marks); his past attendance,
  * money and the name on them stay, so the confirmation says exactly that.
+ *
+ * lane WID (founder D-54): each row shows his level (फोन पडताळलेला / कार्ड / पूर्ण करा — फोन व पिन) and opens his
+ * card (QR, share, print, phone check, new card); adding needs name + phone + PIN, or his card ("कोड किंवा QR ने
+ * जोडा"); name-only workers get the calm "यांचा फोन व पिन भरा" list at most once a day.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Users } from 'lucide-react';
 import { useFarmWorkers, type WorkerActionFailure } from '../hooks/useFarmWorkers';
 import { AddMemberWizard } from '../../people/components/AddMemberWizard';
 import { buildPickerRows, toneForOperatorId } from '../../labour/components/FieldOperatorPicker';
 import { Avatar, EmptyState, LoadErrorBanner, LoadingState } from '../../labour/components/LabourUiKit';
+import type { FieldOperator } from '../../labour/data/fieldOperatorClient';
+import { checkPhone, fetchFarmPin } from '../../labour/data/workerIdentityClient';
+import { IdentityLevelBadge } from '../../labour/identity/IdentityLevelBadge';
+import { WorkerCardSheet } from '../../labour/identity/WorkerCardSheet';
+import { LinkByCardSheet } from '../../labour/identity/LinkByCardSheet';
+import { NameOnlyNudge } from '../../labour/identity/NameOnlyNudge';
+import { CompleteIdentitySheet } from '../../labour/identity/CompleteIdentitySheet';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 const REMOVE_FAILURE_COPY: Record<WorkerActionFailure, string> = {
     offline: 'इंटरनेट नसल्यामुळे आत्ता काढता आलं नाही.',
@@ -31,9 +43,27 @@ interface FarmWorkersCardProps {
 
 export const FarmWorkersCard: React.FC<FarmWorkersCardProps> = ({ farmId }) => {
     const farm = useFarmWorkers(farmId);
+    const language = useOptionalLanguage()?.language;
     const [wizardOpen, setWizardOpen] = useState(false);
     const [confirmId, setConfirmId] = useState<string | null>(null);
     const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
+    // lane WID — the farm's own PIN (the chip), his card, the link-by-card sheet and the phone-and-PIN sheet.
+    const [farmPinCode, setFarmPinCode] = useState<string | null>(null);
+    const [cardFor, setCardFor] = useState<FieldOperator | null>(null);
+    const [linkOpen, setLinkOpen] = useState(false);
+    const [completeFor, setCompleteFor] = useState<FieldOperator | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        // No PIN on record (or no network) = no chip, never a guessed one.
+        fetchFarmPin(farmId).then((pin) => { if (!cancelled) setFarmPinCode(pin); }).catch(() => undefined);
+        return () => { cancelled = true; };
+    }, [farmId]);
+
+    const onCheckPhone = useCallback(
+        (phone: string) => checkPhone(farmId, phone).catch(() => null),
+        [farmId],
+    );
 
     const rows = useMemo(() => buildPickerRows((farm.workers ?? []).filter((w) => w.isActive)), [farm.workers]);
 
@@ -54,11 +84,43 @@ export const FarmWorkersCard: React.FC<FarmWorkersCardProps> = ({ farmId }) => {
                 <AddMemberWizard
                     blocked={farm.loadFailed || farm.loading}
                     onAdd={farm.add}
+                    farmPinCode={farmPinCode}
+                    onCheckPhone={onCheckPhone}
+                    onLinkByCard={() => { setWizardOpen(false); setLinkOpen(true); }}
                     onAdded={(name) => {
                         setWizardOpen(false);
                         setNotice({ kind: 'ok', text: `${name} ✓ जोडलं` });
                     }}
                     onCancel={() => setWizardOpen(false)}
+                />
+            )}
+            {linkOpen && (
+                <LinkByCardSheet
+                    farmId={farmId}
+                    onCancel={() => setLinkOpen(false)}
+                    onLinked={(worker) => {
+                        setLinkOpen(false);
+                        farm.replace(worker);
+                        setNotice({ kind: 'ok', text: `${worker.displayName} ✓ जोडलं` });
+                    }}
+                />
+            )}
+            {cardFor && (
+                <WorkerCardSheet
+                    farmId={farmId}
+                    worker={cardFor}
+                    onClose={() => setCardFor(null)}
+                    onChanged={(worker) => farm.replace(worker)}
+                />
+            )}
+            {completeFor && (
+                <CompleteIdentitySheet
+                    farmId={farmId}
+                    worker={completeFor}
+                    farmPinCode={farmPinCode}
+                    onCheckPhone={onCheckPhone}
+                    onCancel={() => setCompleteFor(null)}
+                    onSaved={(worker) => { setCompleteFor(null); farm.replace(worker); }}
                 />
             )}
 
@@ -87,6 +149,8 @@ export const FarmWorkersCard: React.FC<FarmWorkersCardProps> = ({ farmId }) => {
                 </p>
             )}
 
+            {farm.workers && <NameOnlyNudge farmId={farmId} workers={farm.workers} onOpen={(w) => setCompleteFor(w)} />}
+
             {farm.loading && farm.workers === null && <LoadingState label="नावांची यादी येत आहे…" compact />}
             {farm.loadFailed && <LoadErrorBanner onRetry={() => void farm.reload()} compact />}
 
@@ -107,14 +171,18 @@ export const FarmWorkersCard: React.FC<FarmWorkersCardProps> = ({ farmId }) => {
                         <div key={w.id} className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
                             <div className="flex items-center gap-3">
                                 <Avatar tone={toneForOperatorId(w.id)} initial={w.displayName.trim().slice(0, 1)} />
-                                <span className="min-w-0 flex-1">
+                                <button type="button" data-testid={`worker-open-${w.id}`} onClick={() => (w.needsPhoneAndPin ? setCompleteFor(w) : setCardFor(w))}
+                                    className="min-w-0 flex-1 text-left">
                                     <span className="block truncate text-[15px] font-bold text-slate-800">
                                         {w.displayName}
                                         {row.tag && <span className="ml-2 rounded-lg bg-stone-100 px-2 py-0.5 text-[12px] font-bold text-stone-500">#{row.tag}</span>}
                                     </span>
                                     {row.fullName && <span className="block truncate text-xs text-slate-500">{row.fullName}</span>}
                                     {row.ambiguous && <span className="block text-xs text-slate-500">सारखं नाव — माणूस वेगळा</span>}
-                                </span>
+                                    <span className="mt-1 flex">
+                                        <IdentityLevelBadge level={w.identityLevel} needsPhoneAndPin={w.needsPhoneAndPin} language={language} />
+                                    </span>
+                                </button>
                                 {!confirming && (
                                     <button
                                         type="button"

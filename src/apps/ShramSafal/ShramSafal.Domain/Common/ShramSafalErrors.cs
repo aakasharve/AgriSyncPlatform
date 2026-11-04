@@ -394,4 +394,53 @@ public static class ShramSafalErrors
     public static readonly Error MembershipWrongStatus = Error.Conflict(
         "membership.wrong_status",
         "This person's membership is not in a state where that decision applies.");
+
+    // spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID (founder D-54). The worker-identity answers. Each
+    // is a QUESTION the phone asks calmly in its own words (section 9: questions, never errors); none names a person,
+    // a number or another farm (R6, case 11).
+    public static readonly Error FieldOperatorNotFound = Error.NotFound(
+        "ShramSafal.FieldOperatorNotFound", "No such worker on this farm.");
+
+    public static readonly Error IdentityNotFound = Error.NotFound(
+        "identity.not_found", "No working ShramSafal card or verified number matches.");
+
+    public static readonly Error IdentityProofNeeded = Error.Validation(
+        "identity.proof_needed", "Linking needs the worker's own proof: his card, or a code sent to his phone.");
+
+    public static readonly Error IdentityCodeWrong = Error.Validation(
+        "identity.code_wrong", "That code is not the one sent.");
+
+    public static readonly Error IdentityCodeExpired = Error.Validation(
+        "identity.code_expired", "That code has expired or was already used; send a new one.");
+
+    public static readonly Error IdentityNumberHeldByVerified = Error.Conflict(
+        "identity.number_verified_elsewhere",
+        "This number belongs to a verified ShramSafal identity: scan his card, or enter the code sent to him.");
+
+    public static readonly Error IdentityAlreadyOnTeam = Error.Conflict(
+        "identity.already_on_team", "This person is already on this farm's team.");
+
+    public static readonly Error IdentityNothingToUndo = Error.Conflict(
+        "identity.nothing_to_undo", "There is nothing to undo here.");
+
+    public static readonly Error IdentityCardRetired = Error.Conflict(
+        "identity.card_retired", "This card no longer works.");
+
+    public static readonly Error IdentityTooManyCodes = Error.Conflict(
+        "identity.too_many_codes", "Too many codes were sent to this number; try again later.");
+
+    public static readonly Error IdentityUseMove = Error.Conflict(
+        "identity.use_move", "His verified number changes only by moving it to the new number with a code.");
+
+    public static readonly Error IdentityNoPhone = Error.Conflict(
+        "identity.no_phone", "No phone is on record for this worker on this farm.");
+
+    public static readonly Error IdentityErased = Error.Conflict(
+        "identity.erased", "This worker's identity has been erased.");
+
+    public static readonly Error WorkerCodeSmsOff = Error.Conflict(
+        "identity.sms_off", "Sending the worker's code by SMS is not switched on yet.");
+
+    public static readonly Error WorkerCodeSmsFailed = Error.Conflict(
+        "identity.sms_failed", "The code could not be sent just now.");
 }

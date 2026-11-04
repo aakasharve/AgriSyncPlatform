@@ -26,6 +26,8 @@ public static class ModuleEndpoints
         // Task 1.3 (spec: 2026-07-13-labour-attendance-approval-design) —
         // GET /shramsafal/farms/{farmId}/labour read-model.
         group.MapLabourEndpoints();
+        // spec: plr-d10 lane WID (founder D-54) — the narrow worker-identity routes (card, link, phone, merge, erasure).
+        group.MapWorkerIdentityEndpoints();
         group.MapAiEndpoints();
         group.MapAiStreamingEndpoints();
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 2.3 — SSE endpoint

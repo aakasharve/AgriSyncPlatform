@@ -27,10 +27,29 @@ internal sealed class Msg91SmsSender(
     private const string ProviderName = "msg91";
     private readonly Msg91Options _options = options.Value;
 
-    public async Task<Result<SmsDispatchReceipt>> SendOtpAsync(
+    public Task<Result<SmsDispatchReceipt>> SendOtpAsync(
         string phoneNumberInternational,
         string otpCode,
         CancellationToken cancellationToken = default)
+        => SendAsync(phoneNumberInternational, otpCode, _options.TemplateId, _options.OtpLength, cancellationToken);
+
+    /// <summary>
+    /// spec: plr-d10 lane WID — the same MSG91 OTP call with another DLT-approved template (a worker's 4-digit code, which
+    /// its template carries as the OTP variable). The login OTP template is never used for it.
+    /// </summary>
+    public Task<Result<SmsDispatchReceipt>> SendCodeWithTemplateAsync(
+        string phoneNumberInternational,
+        string code,
+        string templateId,
+        CancellationToken cancellationToken = default)
+        => SendAsync(phoneNumberInternational, code, templateId, code.Length, cancellationToken);
+
+    private async Task<Result<SmsDispatchReceipt>> SendAsync(
+        string phoneNumberInternational,
+        string otpCode,
+        string templateId,
+        int otpLength,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_options.AuthKey))
         {
@@ -38,17 +57,17 @@ internal sealed class Msg91SmsSender(
                 Error.Internal("msg91.missing_authkey", "MSG91 AuthKey is not configured."));
         }
 
-        if (string.IsNullOrWhiteSpace(_options.TemplateId))
+        if (string.IsNullOrWhiteSpace(templateId))
         {
             return Result.Failure<SmsDispatchReceipt>(
                 Error.Internal("msg91.missing_template", "MSG91 DLT TemplateId is not configured."));
         }
 
         var payload = new Msg91SendOtpPayload(
-            TemplateId: _options.TemplateId,
+            TemplateId: templateId,
             Mobile: phoneNumberInternational,
             Otp: otpCode,
-            OtpLength: _options.OtpLength,
+            OtpLength: otpLength,
             OtpExpiry: _options.OtpExpiryMinutes,
             SenderId: _options.SenderId);
 

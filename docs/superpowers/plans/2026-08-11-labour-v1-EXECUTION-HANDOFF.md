@@ -59,7 +59,7 @@ Frozen by the founder. **Do not reopen these.** If implementation evidence contr
 8. **Fast entry, forgiving correction, trustworthy history.** Correction is a launch requirement, not an advanced feature — but it is never silent mutation: a correction states this **was** X and, after verification, **is now** Y.
 9. **Easy to correct, hard to falsify history.** Corrections are append-only and auditable.
 10. RLS proofs run as `agrisync_app`. A proof run as `postgres` is void.
-11. **Absent by design:** Aadhaar, QR, `LinkedUserId`, worker reputation, marketplace, payment authority, generic DailyLog versioning, AI auto-correction, approval hierarchies.
+11. **Absent by design:** Aadhaar, QR, `LinkedUserId`, worker reputation, marketplace, payment authority, generic DailyLog versioning, AI auto-correction, approval hierarchies. **[AMENDED 2026-10-30 by the founder — spec amendment A4 (D-54, lane WID): a worker's ShramSafal card with its QR, his phones and a link proven by the worker are now permitted; Aadhaar and `LinkedUserId` stay absent.]**
 
 ---
 

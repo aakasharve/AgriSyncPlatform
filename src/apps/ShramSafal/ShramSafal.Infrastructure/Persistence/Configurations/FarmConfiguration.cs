@@ -74,6 +74,11 @@ internal sealed class FarmConfiguration : IEntityTypeConfiguration<Farm>
             .HasConversion(TypedIdConverters.OwnerAccountId)
             .IsRequired();
 
+        // lane WID - the farm's own PIN code, only when the owner said so; never guessed.
+        builder.Property(x => x.PinCode)
+            .HasColumnName("pin_code")
+            .HasMaxLength(6);
+
         builder.Property(x => x.FarmCode)
             .HasColumnName("farm_code")
             .HasMaxLength(12);

@@ -14,6 +14,7 @@ using ShramSafal.Application.UseCases.Labour.CorrectLabour;
 using ShramSafal.Application.UseCases.Labour.DeactivateFieldOperator;
 using ShramSafal.Application.UseCases.Labour.RecordAttendanceMark;
 using ShramSafal.Application.UseCases.Labour.RenameFieldOperator;
+using ShramSafal.Application.UseCases.Labour.WorkerIdentity;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
@@ -55,6 +56,9 @@ public sealed class PurveshDemoReseedFounderActionsRealPostgresTests(
     [InlineData("mark-on-a-demo-worker")]
     [InlineData("rename-a-demo-worker")]
     [InlineData("retire-a-demo-worker")]
+    // lane WID — the founder gives a demo worker his phone and PIN (his card is made then): the re-seed must keep him,
+    // because the worker's identity history (append-only, RESTRICT) points at that farm record.
+    [InlineData("give-a-demo-worker-his-phone")]
     public async Task A_seed_row_the_founder_acted_on_is_kept_as_he_left_it_and_reported_while_the_rest_reanchors(string action)
     {
         await using var s = await PurveshDemoReseedScratch.CloneAsync(fixture.Template);
@@ -111,6 +115,7 @@ public sealed class PurveshDemoReseedFounderActionsRealPostgresTests(
         "mark-on-a-demo-worker" => MarkDemoWorkerAsync(s, founder),
         "rename-a-demo-worker" => RenameOrRetireAsync(s, founder, rename: true),
         "retire-a-demo-worker" => RenameOrRetireAsync(s, founder, rename: false),
+        "give-a-demo-worker-his-phone" => GiveIdentityAsync(s, founder),
         _ => throw new ArgumentOutOfRangeException(nameof(action), action, null),
     };
 
@@ -264,12 +269,42 @@ public sealed class PurveshDemoReseedFounderActionsRealPostgresTests(
             return true;
         });
 
-        // field_operators renders is_active last: ",f)" is a retired worker.
+        // field_operators renders is_active then (lane WID) person_id last: ",f,)" is a retired worker with no
+        // ShramSafal person yet (a demo worker is seeded without one), ",f,<uuid>)" one with a person.
         var keep = rename
             ? new Keep("ssf.field_operators", r => StartsWithId(r, op) && r.Contains("नवीन नाव", StringComparison.Ordinal))
-            : new Keep("ssf.field_operators", r => StartsWithId(r, op) && r.EndsWith(",f)", StringComparison.Ordinal));
+            : new Keep("ssf.field_operators", r => StartsWithId(r, op) && RetiredRow.IsMatch(r));
         return new Acted("field_operators", op, new List<Keep> { keep });
     }
+
+    private static readonly System.Text.RegularExpressions.Regex RetiredRow =
+        new(@",f,([0-9a-f-]{36})?\)$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>lane WID — "यांचा फोन व पिन भरा" on a seeded worker: his phone, its tag and his PIN (and so his card).</summary>
+    private async Task<Acted> GiveIdentityAsync(PurveshDemoReseedScratch s, IServiceProvider founder)
+    {
+        var op = (Guid)(await H.ScalarAsync(s.SuperuserConn, """
+            SELECT o."Id" FROM ssf.field_operators o
+            WHERE o.originating_farm_id = @farm AND o."Id" <> @keep AND o.is_active
+              AND NOT EXISTS (SELECT 1 FROM ssf.labour_assignments a WHERE a.engaged_through_field_operator_id = o."Id")
+            ORDER BY o."Id"
+            LIMIT 1
+            """, FarmParam, NonSeedOperatorParam))!;
+        await H.AsCallerAsync(founder, Farm, Owner, async sp =>
+        {
+            var r = await sp.GetRequiredService<WorkerIdentityService>()
+                .RecordContactAsync(Farm, Owner, op, "6000000201", "Own", "413304", default);
+            r.IsSuccess.Should().BeTrue("the owner records a demo worker's phone and PIN: {0}", r.Error);
+            return true;
+        });
+
+        // The record now points at his person (person_id rendered last): kept exactly as the app left it.
+        var keep = new Keep("ssf.field_operators", r => StartsWithId(r, op) && Regex36Tail.IsMatch(r));
+        return new Acted("field_operators", op, new List<Keep> { keep });
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex Regex36Tail =
+        new(@",t,[0-9a-f-]{36}\)$", System.Text.RegularExpressions.RegexOptions.Compiled);
 
     private static bool StartsWithId(string row, Guid id) =>
         row.StartsWith("(" + id.ToString("D") + ",", StringComparison.Ordinal);

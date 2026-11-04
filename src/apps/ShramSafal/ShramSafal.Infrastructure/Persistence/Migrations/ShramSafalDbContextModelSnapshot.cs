@@ -2106,6 +2106,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
 
+                    b.Property<string>("PinCode")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("pin_code");
+
                     b.Property<decimal?>("TotalGovtAreaAcres")
                         .HasPrecision(18, 4)
                         .HasColumnType("numeric(18,4)")
@@ -3470,6 +3475,268 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("price_configs", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramCard", b =>
+                {
+                    b.Property<string>("Code")
+                        .HasMaxLength(8)
+                        .HasColumnType("character(8)")
+                        .HasColumnName("code")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("IssuedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("issued_at_utc");
+
+                    b.Property<Guid?>("IssuedByFarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("issued_by_farm_id");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("person_id");
+
+                    b.Property<string>("ReplacedByCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("character(8)")
+                        .HasColumnName("replaced_by_code")
+                        .IsFixedLength();
+
+                    b.Property<DateTime?>("RetiredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("retired_at_utc");
+
+                    b.HasKey("Code");
+
+                    b.HasIndex("PersonId")
+                        .HasDatabaseName("ix_shram_cards_person");
+
+                    b.ToTable("shram_cards", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramIdentityEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_user_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid?>("FieldOperatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("field_operator_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTime>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at_utc");
+
+                    b.Property<Guid?>("OtherPersonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("other_person_id");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("person_id");
+
+                    b.Property<string>("Proof")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("proof");
+
+                    b.Property<Guid?>("ReversesEventId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reverses_event_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FieldOperatorId");
+
+                    b.HasIndex("FarmId", "FieldOperatorId")
+                        .HasDatabaseName("ix_shram_identity_events_farm_record");
+
+                    b.ToTable("shram_identity_events", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramPerson", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CardName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("card_name");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<DateTime?>("ErasedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at_utc");
+
+                    b.Property<DateTime?>("ErasureRequestedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erasure_requested_at_utc");
+
+                    b.Property<Guid?>("ErasureRequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("erasure_requested_by_user_id");
+
+                    b.Property<string>("HomePinCode")
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)")
+                        .HasColumnName("home_pin_code");
+
+                    b.Property<Guid?>("HomePinSetByFarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("home_pin_set_by_farm_id");
+
+                    b.Property<Guid?>("MergedIntoPersonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("merged_into_person_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ErasureRequestedAtUtc")
+                        .HasDatabaseName("ix_shram_persons_erasure_requested");
+
+                    b.HasIndex("MergedIntoPersonId")
+                        .HasDatabaseName("ix_shram_persons_merged_into");
+
+                    b.ToTable("shram_persons", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramPersonPhone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AddedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at_utc");
+
+                    b.Property<Guid?>("AddedByFarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("added_by_farm_id");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("person_id");
+
+                    b.Property<string>("PhoneE164")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("phone_e164");
+
+                    b.Property<DateTime?>("ReleasedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("released_at_utc");
+
+                    b.Property<DateTime?>("VerifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("verified_at_utc");
+
+                    b.Property<string>("Whose")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("whose");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId")
+                        .HasDatabaseName("ix_shram_person_phones_person");
+
+                    b.HasIndex("PhoneE164")
+                        .IsUnique()
+                        .HasDatabaseName("ux_shram_person_phones_verified_number")
+                        .HasFilter("verified_at_utc IS NOT NULL AND released_at_utc IS NULL AND phone_e164 IS NOT NULL");
+
+                    b.ToTable("shram_person_phones", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramPhoneChallenge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<string>("CodeHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("code_hash");
+
+                    b.Property<DateTime?>("ConsumedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("consumed_at_utc");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("person_id");
+
+                    b.Property<string>("PhoneE164")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("phone_e164");
+
+                    b.Property<string>("Purpose")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("purpose");
+
+                    b.Property<Guid>("RequestedByFarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_farm_id");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId")
+                        .HasDatabaseName("ix_shram_phone_challenges_person");
+
+                    b.HasIndex("PhoneE164", "CreatedAtUtc")
+                        .HasDatabaseName("ix_shram_phone_challenges_number_created");
+
+                    b.ToTable("shram_phone_challenges", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Labour.AttendanceMark", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3619,10 +3886,17 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("originating_farm_id");
 
+                    b.Property<Guid?>("PersonId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("person_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("OriginatingFarmId")
                         .HasDatabaseName("ix_field_operators_originating_farm_id");
+
+                    b.HasIndex("PersonId")
+                        .HasDatabaseName("ix_field_operators_person_id");
 
                     b.ToTable("field_operators", "ssf");
                 });
@@ -5949,6 +6223,54 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Navigation("Allocations");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramCard", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Identity.ShramPerson", null)
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_shram_cards_person");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramIdentityEvent", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Labour.FieldOperator", null)
+                        .WithMany()
+                        .HasForeignKey("FieldOperatorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_shram_identity_events_field_operator");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramPerson", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Identity.ShramPerson", null)
+                        .WithMany()
+                        .HasForeignKey("MergedIntoPersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_shram_persons_merged_into");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramPersonPhone", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Identity.ShramPerson", null)
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_shram_person_phones_person");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Identity.ShramPhoneChallenge", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Identity.ShramPerson", null)
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_shram_phone_challenges_person");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Labour.FieldOperator", b =>
                 {
                     b.HasOne("ShramSafal.Domain.Farms.Farm", null)
@@ -5956,6 +6278,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OriginatingFarmId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("ShramSafal.Domain.Identity.ShramPerson", null)
+                        .WithMany()
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_field_operators_person");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Labour.FieldOperatorWorkRow", b =>

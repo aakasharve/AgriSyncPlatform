@@ -10,6 +10,9 @@
  * through the existing field-operator routes, are offered only to owner/co-owner, show a row only
  * after the server has accepted it, and say so honestly when the phone is offline (there is no
  * queued mutation for field operators, so nothing is "remembered on phone").
+ *
+ * lane WID (founder D-54 section 10): adding a NAMED worker now needs his phone and home PIN too ("जोडा" stays off
+ * until all three are right), so the add steps below fill them; his card is made by the server.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -28,6 +31,11 @@ vi.mock('../../../labour/data/fieldOperatorClient', () => ({
     fetchFieldOperators: (...a: unknown[]) => fetchFieldOperators(...a),
     createFieldOperator: (...a: unknown[]) => createFieldOperator(...a),
     deactivateFieldOperator: (...a: unknown[]) => deactivateFieldOperator(...a),
+}));
+// lane WID — the farm has no PIN on record (no chip) and the number is on nobody else here.
+vi.mock('../../../labour/data/workerIdentityClient', () => ({
+    fetchFarmPin: async () => null,
+    checkPhone: async () => ({ sameFarmNames: [], verifiedHolderExists: false }),
 }));
 const writeCachedRoster = vi.fn();
 vi.mock('../../../labour/data/fieldOperatorRosterCache', () => ({
@@ -68,6 +76,8 @@ const ADD = 'कामगाराचं नाव जोडा';
 function openAndType(name: string) {
     fireEvent.click(screen.getByRole('button', { name: new RegExp(ADD) }));
     fireEvent.change(screen.getByPlaceholderText('नाव'), { target: { value: name } });
+    fireEvent.change(screen.getByTestId('add-worker-phone'), { target: { value: '6000000101' } });
+    fireEvent.change(screen.getByTestId('add-worker-pin'), { target: { value: '413304' } });
 }
 
 beforeEach(() => {

@@ -125,3 +125,33 @@ export function workTypeNameIn(value: string | null | undefined, language: Lang,
  */
 export const errorTextIn = (error: unknown, language: Lang): string =>
     (typeof error === 'string' ? readableError(clean(error), language) : farmerErrorText(error, language));
+
+/**
+ * spec: plr-d10 lane WID (founder D-54, screens 2 and 7) — a worker's identity level, as the server stores it
+ * (`Name` / `Card` / `PhoneVerified`), in this language. Words from the approved screens (Marathi); English PROPOSED.
+ */
+const IDENTITY_LEVELS: Readonly<Record<string, readonly [string, string]>> = {
+    Name: ['नाव', 'Name'],
+    Card: ['कार्ड', 'Card'],
+    PhoneVerified: ['फोन पडताळलेला', 'Phone verified'],
+};
+
+export const identityLevelIn = (level: string | null | undefined, language: Lang): string => {
+    const hit = IDENTITY_LEVELS[clean(level)];
+    return hit ? (isEn(language) ? hit[1] : hit[0]) : '';
+};
+
+/**
+ * spec: plr-d10 lane WID (founder D-54 screen 1, R12) — whose phone a worker's number is (`Own` / `Family` / `Mukadam`),
+ * in this language. Marathi from the approved screen; English PROPOSED.
+ */
+const PHONE_WHOSE: Readonly<Record<string, readonly [string, string]>> = {
+    Own: ['स्वतःचा', 'His own'],
+    Family: ['घरचा', 'Family'],
+    Mukadam: ['मुकादमचा', "Mukadam's"],
+};
+
+export const phoneWhoseIn = (whose: string | null | undefined, language: Lang): string => {
+    const hit = PHONE_WHOSE[clean(whose)];
+    return hit ? (isEn(language) ? hit[1] : hit[0]) : '';
+};

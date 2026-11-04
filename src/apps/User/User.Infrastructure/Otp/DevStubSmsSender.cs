@@ -29,4 +29,12 @@ internal sealed class DevStubSmsSender(ILogger<DevStubSmsSender> logger) : ISmsS
         var receipt = new SmsDispatchReceipt($"devstub-{Guid.NewGuid():N}", ProviderName);
         return Task.FromResult(Result.Success(receipt));
     }
+
+    /// <summary>spec: plr-d10 lane WID — another template's code, logged the same way (nothing is sent).</summary>
+    public Task<Result<SmsDispatchReceipt>> SendCodeWithTemplateAsync(
+        string phoneNumberInternational,
+        string code,
+        string templateId,
+        CancellationToken cancellationToken = default)
+        => SendOtpAsync(phoneNumberInternational, code, cancellationToken);
 }

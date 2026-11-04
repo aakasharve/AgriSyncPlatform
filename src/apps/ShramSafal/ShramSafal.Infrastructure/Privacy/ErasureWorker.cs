@@ -192,6 +192,22 @@
 //     founder Decision 5 ("5b — ship names, but do the erasure work FIRST")
 //     gates on. Stating otherwise here would be a knowingly false compliance
 //     claim, which this file holds to be worse than a tracked gap.
+//   - ssf.shram_persons / ssf.shram_person_phones / ssf.shram_cards / ssf.shram_phone_challenges /
+//     ssf.shram_identity_events — ADDED 2026-11-02 (lane WID, founder D-54; migration
+//     20261102163914_AddWorkerIdentity). A worker's ShramSafal identity: the name on his card and his home
+//     PIN (shram_persons.card_name / .home_pin_code), his phone numbers (shram_person_phones.phone_e164),
+//     his card codes (shram_cards.code) and the numbers his one-time codes went to
+//     (shram_phone_challenges.phone_e164). HAS PII. Like ssf.field_operators above, DELIBERATELY ABSENT
+//     FROM THE CREATOR-ERASURE SEQUENCE: the farmer who added a worker is not that worker's data subject.
+//     THE WORKER'S OWN ERASURE (R8, case 16) is WorkerPersonErasure, run by RunPassAsync after the same
+//     D-71 wait (ErasureTiming): an owner asks on his behalf, it waits and may be cancelled, then the
+//     person and every alias merged into him are ANONYMISED — card_name -> sentinel, home_pin_code NULL,
+//     every phone_e164 NULL (the row stays, released), every card RETIRED (the code row stays, so it is
+//     never issued again), every challenge's phone_e164 NULL — and every farm record that is him goes
+//     through AnonymizeFieldOperatorAsync below. NEVER THE WORK: no field operator, work row, हजेरी mark
+//     or headcount is deleted or changed except the name text. ssf.shram_identity_events names nobody
+//     (ids, a kind, a proof, a time) and is append-only by GRANT: KEEP; one 'Erased' event per farm record
+//     is appended.
 //   - ssf.attendance_marks — ADDED 2026-08-31 (founder decision D-H3: what somebody
 //     RULED about a person on a farm-day; day mark full/half/absent/unmarked plus
 //     night mark worked/not-worked/unmarked).
@@ -556,6 +572,18 @@ public sealed class ErasureWorker(
                 logger.LogError(ex, "ErasureWorker failed processing request {RequestId}.", requestId);
                 await MarkFailedSafelyAsync(sp, requestId, ex.Message, ct).ConfigureAwait(false);
             }
+        }
+
+        // spec: plr-d10 lane WID (R8, D-71) — a WORKER's ShramSafal identity whose erasure was asked and whose wait has
+        // passed: the person anonymised, never the work. Same wait, same clock; a failure is logged and retried next pass.
+        try
+        {
+            var clock = sp.GetService<TimeProvider>() ?? TimeProvider.System;
+            await WorkerPersonErasure.RunAsync(sp, dueIfRequestedAtOrBefore, clock.GetUtcNow().UtcDateTime, logger, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "ErasureWorker failed erasing a worker identity.");
         }
     }
 

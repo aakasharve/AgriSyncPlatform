@@ -14,6 +14,12 @@ namespace ShramSafal.Domain.Labour;
 /// <c>FieldOperatorWorkRow</c> (Task 10) later attributes work to this
 /// identity without ever changing the reported headcount on the underlying
 /// <c>LabourAssignment</c> (Constraint 3).
+/// <para>
+/// <b>AMENDED by the founder, 2026-10-30 (D-54, lane WID; Labour V1 amendment A4).</b> A farm record now points at one
+/// ShramSafal-wide person (<see cref="PersonId"/>, श्रम ओळख) that carries his card code and phones. This record stays the
+/// farm's ONLY work subject (Constraint 1 unchanged): linking or unlinking a person never moves or rewrites work (R2, P7),
+/// and it is never a user account. Aadhaar stays absent in every form (D-55).
+/// </para>
 /// </summary>
 /// <remarks>
 /// <para>
@@ -76,6 +82,12 @@ public sealed class FieldOperator : Entity<Guid>
     public DateTime CreatedAtUtc { get; private set; }
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// lane WID — the ShramSafal person this record is (his card, his phones). Null only for a row an older server made
+    /// before its card was issued; every add issues one, and the migration back-fills every existing row.
+    /// </summary>
+    public Guid? PersonId { get; private set; }
+
     public static FieldOperator Create(
         Guid id,
         string displayName,
@@ -123,5 +135,19 @@ public sealed class FieldOperator : Entity<Guid>
     public void Deactivate(DateTime atUtc)
     {
         IsActive = false;
+    }
+
+    /// <summary>
+    /// lane WID — points this farm record at a person (his own new card on add, or a person proven by link). Touches
+    /// nothing else: no work row, attendance mark or headcount ever moves (R2, P7).
+    /// </summary>
+    public void AttachPerson(Guid personId)
+    {
+        if (personId == Guid.Empty)
+        {
+            throw new ArgumentException("A person id is required.", nameof(personId));
+        }
+
+        PersonId = personId;
     }
 }

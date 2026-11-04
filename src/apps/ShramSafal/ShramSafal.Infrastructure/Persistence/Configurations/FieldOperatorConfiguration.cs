@@ -60,6 +60,17 @@ internal sealed class FieldOperatorConfiguration : IEntityTypeConfiguration<Fiel
         builder.HasIndex(x => x.OriginatingFarmId)
             .HasDatabaseName("ix_field_operators_originating_farm_id");
 
+        // lane WID — the ShramSafal person this farm record is. RESTRICT: a person is anonymised, never deleted.
+        builder.Property(x => x.PersonId)
+            .HasColumnName("person_id");
+        builder.HasOne<ShramSafal.Domain.Identity.ShramPerson>()
+            .WithMany()
+            .HasForeignKey(x => x.PersonId)
+            .HasConstraintName("fk_field_operators_person")
+            .OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.PersonId)
+            .HasDatabaseName("ix_field_operators_person_id");
+
         builder.Ignore(x => x.DomainEvents);
     }
 }

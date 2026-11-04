@@ -43,13 +43,38 @@ Companion ruling file: `docs/superpowers/handoffs/2026-08-28-LABOUR-V2-LOCKED-DE
 
 ---
 
+## ⚠️ FOUNDER AMENDMENT A4 — 2026-10-30 (D-54 FINAL, D-55; lane WID) — read before Global Constraint 2
+
+Patched in place per `W5`; **no V6 was created.** The founder amended Constraint 2 himself (MU-design Q1, 2026-10-30,
+verbatim: *"before going to live I want to build a unique data set of name and number linking that should not be
+repeated. A unique QR code will be generated for each worker …"*), approved the screens
+(`G:\VALIDATION\PRODUCT CHANGES\D54-D55-worker-identity`) as D-54 FINAL, and dropped Aadhaar (D-55). The design:
+`_COFOUNDER/Projects/AgriSync/Operations/PreLaunchRepair/plans/WID-worker-identity-DESIGN.md` (its §10 overrides its R9,
+§9 and case 1). This is the step §G already foresaw: *"several historical Field Operators can later reconcile to one
+real User once actual evidence exists"*.
+
+| # | What it amends | The amendment |
+|---|---|---|
+| **A4** | **Constraint 2** — *"Absent by design: `LinkedUserId`, any claim/link table, OTP or QR claim, account reconciliation, Aadhaar in any form …"* | **A ShramSafal-wide worker identity is permitted, linked by the worker's own proof.** Each `FieldOperator` points at one person (`field_operators.person_id` → `ssf.shram_persons`) that carries a random, never-reused card code (QR = `shramsafal.in/w/<code>` only) and his phones; a farm record links to an existing person only on his card shown in person or a one-time code on his verified phone (R1 — never a name, never a number alone), and every link, unlink, merge, number move and card reissue is an append-only, farm-scoped event (`ssf.shram_identity_events`, R5). **Still absent:** `LinkedUserId` (a person is not attached to a login account in this release), Aadhaar in any form (D-55, R7), and any alternative work anchor. |
+
+**Unchanged and still binding:** Constraint 1 — `FieldOperatorId` is the ONLY work subject. Linking or unlinking a person
+re-points the farm record and never moves or rewrites a work row, a हजेरी mark or a headcount (R2, `P7`). `P9`: work
+records never require a phone, a PIN or a card (only ADDING A NAMED WORKER on the team page asks for name + phone +
+PIN, §10). `P6`: erasure anonymises the person (name, PIN, phones, card) and never the work (R8, after the D-71 wait).
+
+The ShramSafal-wide person tables carry no `farm_id` — an explicit `F8` exception ruled by the orchestrator on
+2026-11-02: they are FORCE-RLS on a dedicated transaction-local setting that only the narrow identity endpoints open,
+so a normal farm-scoped session reads nothing from them (migration `20261102163914_AddWorkerIdentity`).
+
+---
+
 ## Global Constraints
 
 Binding on every task. Frozen by the founder, 2026-08-11.
 
 0. **THE PHASE RULE.** *Phase 1 stores what the farmer confirmed. Phase 2 derives what the system inferred. Neither may impersonate the other.* A voice-originated log is **not** automatically AI data: once the farmer confirms a structured labour payload, that labour is farmer-asserted truth and belongs in Phase 1 beside the DailyLog. Canonical data must never live in the best-effort side-car.
 1. **One work subject.** `FieldOperatorId` only — no `UserId OR FieldOperatorId` polymorphism.
-2. **Absent by design:** `LinkedUserId`, any claim/link table, OTP or QR claim, account reconciliation, Aadhaar in any form, and any alternative work anchor (`ManualLabourAssignment`, `AiLabourAssignment`, `AttendanceWork`, `DailyLogWorkerWork`).
+2. **Absent by design:** `LinkedUserId`, any claim/link table, OTP or QR claim, account reconciliation, Aadhaar in any form, and any alternative work anchor (`ManualLabourAssignment`, `AiLabourAssignment`, `AttendanceWork`, `DailyLogWorkerWork`). **[AMENDED 2026-10-30 by the founder — A4 above: the worker identity (card + QR, phones, a link proven by the worker, its append-only events) is now permitted; `LinkedUserId`, Aadhaar and any alternative work anchor stay absent.]**
 3. **Attribution never changes headcount.** `WorkerCount = 8` with 3 attributed people stays 8. Regression-tested.
 4. **Units stay honest.** `LabourHours = WorkerCount × DurationHours`. **ManDays is NOT redefined here** — V1 fixes only the existing gender-split fallback defect and introduces no man-day formula.
 5. **Time is atomic and server-authoritative.** `DurationHours` and `TimeBasis` are one fact. The client may display the default; it must never invent the persisted value.
@@ -970,7 +995,7 @@ Copy the harness wholesale from `LedgerDerivationSupersessionRealPostgresTests.c
 
 Not built. Each is safe to defer because **no historical row needs migration to add it later** — that is the test this section applies.
 
-- **Account linking** (`LinkedUserId`, claim ledger, OTP/QR claim). Absent so several historical Field Operators can later reconcile to one real User once actual evidence exists.
+- **Account linking** (`LinkedUserId`, claim ledger, OTP/QR claim). Absent so several historical Field Operators can later reconcile to one real User once actual evidence exists. **[AMENDED 2026-10-30 — A4: the card/QR and OTP link between farm records and one ShramSafal person is built (lane WID); attaching a person to a LOGIN account (`LinkedUserId`) is still deferred.]**
 - **Aadhaar / any verified-credential layer.**
 - **Farmer-configured working day** (`FarmWorkingHours`, effective dating, breaks, shift calendar). Snapshotting `duration_hours` + `time_basis` per assignment already confines a future per-farm default to future rows.
 - **Model-emitted `durationHours`** on the AI path — needs the `outputContract.md` edit, registry bump and golden-set delta (A5). Until then the AI path is honestly `Assumed`.

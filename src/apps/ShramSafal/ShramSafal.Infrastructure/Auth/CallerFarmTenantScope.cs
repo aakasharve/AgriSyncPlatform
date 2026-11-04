@@ -239,3 +239,56 @@ internal sealed class JoinCodeTenantScope(
             $"SELECT set_config('agrisync.user_id', {joinerUserId.ToString()}, true)", ct);
     }
 }
+
+/// <summary>
+/// spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID. Opens the ONE door to the ShramSafal-wide person tables
+/// (<c>ssf.shram_persons</c>, <c>_person_phones</c>, <c>_cards</c>, <c>_phone_challenges</c>): the transaction-local
+/// <c>agrisync.identity_scope</c> setting their FORCE-RLS policies key on (migration <c>20261102163914_AddWorkerIdentity</c>).
+/// Lives in this file for the same reason as <see cref="JoinCodeTenantScope"/>: the single reviewed home of the
+/// transaction-local <c>set_config</c> technique (<c>RlsIdentityScopeRules.GucWriteAllowlist</c>), and its own test pins
+/// this file as the only writer of that setting.
+///
+/// <para><b>Why a setting and not security-definer functions</b> (the orchestrator's two options). The tables need ordinary
+/// reads AND writes from a handful of narrow use cases (resolve, link, verify, move, reissue, merge, erase), through the
+/// same EF unit of work as the farm record — a set of definer functions would be a second data-access layer with its own
+/// grants for every one of them. A policy keyed on a setting keeps EF, keeps the request's one transaction, and fails
+/// CLOSED: a session that never set it — every normal farm- or user-scoped request — reads and writes nothing there.</para>
+///
+/// <para><b>Only after the farm scope.</b> It is opened by <c>ShramIdentityStore</c> alone, inside the request's
+/// transaction, after the route opened and checked the caller's farm scope. Outside a transaction it refuses to open
+/// (a <c>set_config(..., true)</c> there would last one statement and the next read would silently see nothing).</para>
+/// </summary>
+internal sealed class IdentityTenantScope(ShramSafalDbContext db)
+{
+    private bool _open;
+
+    public async Task OpenAsync(CancellationToken ct = default)
+    {
+        if (_open || !db.Database.IsRelational())
+        {
+            return;
+        }
+
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException(
+                "The identity scope opens only inside the request's transaction, after its farm scope.");
+        }
+
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.identity_scope', 'on', true)", ct);
+        _open = true;
+    }
+
+    public async Task CloseAsync(CancellationToken ct = default)
+    {
+        if (!_open || !db.Database.IsRelational())
+        {
+            return;
+        }
+
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.identity_scope', '', true)", ct);
+        _open = false;
+    }
+}

@@ -20,7 +20,10 @@
  *
  * "नाव जोडा" mints a real work identity through the existing create path and
  * does NOTHING else: it never attaches the person to an engagement and never
- * marks them. Attribution is a separate opt-in (P9); naming never changes a
+ * marks them. lane WID (founder D-54 section 10): it asks a NAME ONLY — never a
+ * phone or a PIN (P9: हजेरी is never blocked); such a worker still gets his card
+ * and shows "पूर्ण करा — फोन व पिन". Each name shows its level (screen 7) —
+ * information, never a gate. Attribution is a separate opt-in (P9); naming never changes a
  * count (rule 2). Identical names are real, different people (B2): the rows
  * are built with `buildPickerRows`, which never merges them.
  */
@@ -45,6 +48,8 @@ import {
     type PersonSelection,
 } from '../attendanceManual';
 import { ATTENDANCE_COPY } from '../attendanceCopy';
+import { IdentityLevelBadge } from '../identity/IdentityLevelBadge';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 const DAY_CHIPS: ReadonlyArray<{ k: DayChoice; label: string; on: string }> = [
     { k: 'Full', label: 'आला', on: 'border-emerald-300 bg-emerald-50 text-emerald-700' },
@@ -69,6 +74,7 @@ interface Props {
 }
 
 const AttendanceRoster: React.FC<Props> = ({ farmId, selections, prefills, onChange, onToast, disabled }) => {
+    const language = useOptionalLanguage()?.language;
     const [roster, setRoster] = useState<FieldOperator[] | null>(() => (farmId ? readCachedRoster(farmId) : null));
     const [loading, setLoading] = useState<boolean>(Boolean(farmId));
     /** True when the LAST fetch failed (the roster, if any, is a cached copy). */
@@ -174,6 +180,7 @@ const AttendanceRoster: React.FC<Props> = ({ farmId, selections, prefills, onCha
                                         <span className="rounded-lg bg-stone-100 px-2 py-0.5 text-[15px] font-bold text-stone-500">#{row.tag}</span>
                                     )}
                                     {row.ambiguous && !row.fullName && <NameOnlyBadge />}
+                                    <IdentityLevelBadge level={row.operator.identityLevel} needsPhoneAndPin={row.operator.needsPhoneAndPin} language={language} />
                                 </span>
                                 {row.fullName && <span className="mt-0.5 block truncate text-[16px] text-stone-500">{row.fullName}</span>}
                                 {row.ambiguous && <span className="mt-0.5 block text-[16px] text-stone-500">सारखं नाव — माणूस वेगळा</span>}

@@ -23,8 +23,19 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// must never be treated as an identity field.
 /// </para>
 /// </summary>
+/// <remarks>
+/// lane WID — appended (with defaults, so positional callers and older phones are unaffected, P11): his card code
+/// (<c>SS-XXXX-XXXX</c>), his level (<c>Name</c> / <c>Card</c> / <c>PhoneVerified</c>), whether his phone and PIN are on
+/// record, and — ONLY when this farm entered them (R10) — whose phone it is, its last four digits and his home PIN.
+/// </remarks>
 public sealed record FieldOperatorSummaryDto(
     Guid Id,
     string DisplayName,
     string? FullName,
-    bool IsActive);
+    bool IsActive,
+    string? CardCode = null,
+    string IdentityLevel = "Name",
+    bool NeedsPhoneAndPin = true,
+    string? PhoneWhose = null,
+    string? PhoneTail = null,
+    string? HomePin = null);

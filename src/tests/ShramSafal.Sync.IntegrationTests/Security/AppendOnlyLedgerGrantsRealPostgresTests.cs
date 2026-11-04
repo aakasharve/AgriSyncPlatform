@@ -82,6 +82,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.improvement_permission_events",
         // plr-d10 lane F1 — what Sathi understood, one unchangeable row per record version.
         "ssf.daily_log_contents",
+        // plr-d10 lane WID (R5) — every link, unlink, merge, number move and card reissue, one unchangeable row each.
+        "ssf.shram_identity_events",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -167,6 +169,15 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    and former_plot_ids (uuid[] NOT NULL DEFAULT '{}') on ssf.daily_logs and ssf.cost_entries; Down() drops those
         //    four. No table, append-only ledger, policy or privilege is touched. Safe to revert and re-apply mid-proof.
         "20261101221236_AddMembershipPlotScope",
+
+        // ── Reviewed 2026-11-02 (spec: plr-d10 lane WID, founder D-54); Down() read in full. Up() CREATEs five tables:
+        //    shram_persons, shram_person_phones, shram_cards and shram_phone_challenges (FORCE RLS on the identity setting;
+        //    SELECT/INSERT/UPDATE for the app role, DELETE and TRUNCATE revoked) and shram_identity_events (farm-scoped FORCE
+        //    RLS, APPEND-ONLY BY PRIVILEGE with this migration's own effective-privilege guard; it is on AppendOnlyLedgers
+        //    above). It ADDs the nullable field_operators.person_id (FK, back-filled) and farms.pin_code (CHECK). Down()
+        //    drops the five policies, the five tables, both columns and the farm CHECK — only what Up() added. Touches no
+        //    other ledger's grants. Safe to revert and re-apply mid-proof.
+        "20261102163914_AddWorkerIdentity",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

@@ -115,7 +115,9 @@ public static class LabourEndpoints
             }
 
             var command = new CreateFieldOperatorCommand(
-                new FarmId(farmId), request.DisplayName, request.FullName, new UserId(userId), request.Id);
+                new FarmId(farmId), request.DisplayName, request.FullName, new UserId(userId), request.Id,
+                Phone: request.Phone, PhoneWhose: request.PhoneWhose, HomePin: request.HomePin,
+                FarmPinToo: request.IsFarmPinToo ?? false);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -331,8 +333,19 @@ public static class LabourEndpoints
     }
 }
 
-/// <summary>Task 11 — POST /farms/{farmId}/labour/field-operators body.</summary>
-public sealed record CreateFieldOperatorRequest(string DisplayName, string? FullName, Guid? Id = null);
+/// <summary>
+/// Task 11 — POST /farms/{farmId}/labour/field-operators body. lane WID (D-54): <c>phone</c> (tagged by
+/// <c>phoneWhose</c>), <c>homePin</c> and <c>isFarmPinToo</c> are appended and OPTIONAL on the wire, so 1.0.17's body
+/// (name only) is still accepted (P11); the new phone always sends them when adding a named worker.
+/// </summary>
+public sealed record CreateFieldOperatorRequest(
+    string DisplayName,
+    string? FullName,
+    Guid? Id = null,
+    string? Phone = null,
+    string? PhoneWhose = null,
+    string? HomePin = null,
+    bool? IsFarmPinToo = null);
 
 /// <summary>Task 11 — POST /farms/{farmId}/labour/field-operators/{id}/attach body.</summary>
 public sealed record AttachFieldOperatorRequest(Guid LabourAssignmentId);

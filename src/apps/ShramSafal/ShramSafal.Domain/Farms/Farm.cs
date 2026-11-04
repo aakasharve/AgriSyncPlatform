@@ -72,6 +72,13 @@ public sealed class Farm : Entity<FarmId>
     /// </summary>
     public bool LabourHeavyCorpusEnabled { get; private set; }
 
+    /// <summary>
+    /// spec: plr-d10 lane WID (founder D-54, section 9/10) - the PIN code of the place the farm is in, recorded only when
+    /// the owner says so ("this is the farm's PIN too"), never guessed. When on record, adding a worker offers the
+    /// one-tap "farm's own PIN" chip; when absent the chip is not shown. 6 digits, the first 1-9.
+    /// </summary>
+    public string? PinCode { get; private set; }
+
     public static Farm Create(FarmId id, string name, UserId ownerUserId, DateTime createdAtUtc)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -105,6 +112,21 @@ public sealed class Farm : Entity<FarmId>
 
         OwnerAccountId = ownerAccountId;
         ModifiedAtUtc = utcNow;
+    }
+
+    /// <summary>lane WID - records the farm's PIN once, when none is on record; never overwrites one silently.</summary>
+    public bool RecordPinCodeOnce(string pinCode, DateTime utcNow)
+    {
+        var pin = ShramSafal.Domain.Identity.HomePinCode.Normalize(pinCode)
+            ?? throw new ArgumentException("A PIN code is 6 digits and does not start with 0.", nameof(pinCode));
+        if (PinCode is not null)
+        {
+            return false;
+        }
+
+        PinCode = pin;
+        ModifiedAtUtc = utcNow;
+        return true;
     }
 
     public void AssignFarmCode(string farmCode, DateTime utcNow)

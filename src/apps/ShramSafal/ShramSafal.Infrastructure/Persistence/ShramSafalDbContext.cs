@@ -147,6 +147,14 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // itself, and never a source of headcount (Constraint 3).
     public DbSet<FieldOperatorWorkRow> FieldOperatorWorkRows => Set<FieldOperatorWorkRow>();
 
+    // spec: plr-d10 lane WID - the ShramSafal-wide person tables (FORCE-RLS on agrisync.identity_scope; reached only
+    // through IShramIdentityStore) and the farm-scoped, append-only identity events.
+    public DbSet<ShramSafal.Domain.Identity.ShramPerson> ShramPersons => Set<ShramSafal.Domain.Identity.ShramPerson>();
+    public DbSet<ShramSafal.Domain.Identity.ShramPersonPhone> ShramPersonPhones => Set<ShramSafal.Domain.Identity.ShramPersonPhone>();
+    public DbSet<ShramSafal.Domain.Identity.ShramCard> ShramCards => Set<ShramSafal.Domain.Identity.ShramCard>();
+    public DbSet<ShramSafal.Domain.Identity.ShramPhoneChallenge> ShramPhoneChallenges => Set<ShramSafal.Domain.Identity.ShramPhoneChallenge>();
+    public DbSet<ShramSafal.Domain.Identity.ShramIdentityEvent> ShramIdentityEvents => Set<ShramSafal.Domain.Identity.ShramIdentityEvent>();
+
     /// <summary>D-H3 — what somebody RULED about a person on a farm-day.</summary>
     public DbSet<AttendanceMark> AttendanceMarks => Set<AttendanceMark>();
 

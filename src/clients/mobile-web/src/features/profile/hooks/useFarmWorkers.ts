@@ -28,6 +28,7 @@ import {
     type FieldOperator,
 } from '../../labour/data/fieldOperatorClient';
 import { writeCachedRoster } from '../../labour/data/fieldOperatorRosterCache';
+import type { AddWorkerInput } from '../../people/components/AddMemberWizard';
 
 export type WorkerActionFailure = 'offline' | 'refused' | 'failed';
 
@@ -55,8 +56,11 @@ export interface UseFarmWorkersResult {
     removingId: string | null;
     adding: boolean;
     reload: () => Promise<void>;
-    add: (displayName: string, fullName: string | undefined, clientId: string) => Promise<WorkerActionResult>;
+    /** lane WID — the name with his phone (tagged) and home PIN; his card is made by the server on add. */
+    add: (input: AddWorkerInput, clientId: string) => Promise<WorkerActionResult>;
     remove: (id: string) => Promise<WorkerActionResult>;
+    /** lane WID — puts the SERVER's answer for one worker in the list (a verified phone, a new card, a linked worker). */
+    replace: (worker: FieldOperator) => void;
 }
 
 export function useFarmWorkers(farmId: string | null | undefined): UseFarmWorkersResult {
@@ -100,14 +104,19 @@ export function useFarmWorkers(farmId: string | null | undefined): UseFarmWorker
 
     useEffect(() => { void load(); }, [load]);
 
-    const add = useCallback(async (displayName: string, fullName: string | undefined, clientId: string): Promise<WorkerActionResult> => {
-        const name = displayName.trim();
+    const add = useCallback(async (input: AddWorkerInput, clientId: string): Promise<WorkerActionResult> => {
+        const name = input.displayName.trim();
         if (!farmId || !name || addingRef.current) return { ok: false, reason: 'failed' };
         if (typeof navigator !== 'undefined' && navigator.onLine === false) return { ok: false, reason: 'offline' };
         addingRef.current = true;
         setAdding(true);
         try {
-            const created = await createFieldOperator(farmId, name, fullName, clientId);
+            const created = await createFieldOperator(farmId, name, input.fullName, clientId, {
+                phone: input.phone,
+                phoneWhose: input.phoneWhose,
+                homePin: input.homePin,
+                isFarmPinToo: input.isFarmPinToo,
+            });
             if (mountedRef.current && farmRef.current === farmId) {
                 setWorkers((prev) => {
                     const base = (prev ?? []).filter((w) => w.id !== created.id);
@@ -148,5 +157,17 @@ export function useFarmWorkers(farmId: string | null | undefined): UseFarmWorker
         }
     }, [farmId]);
 
-    return { workers, loading, loadFailed, removingId, adding, reload: load, add, remove };
+    const replace = useCallback((worker: FieldOperator) => {
+        if (!farmId) return;
+        setWorkers((prev) => {
+            const base = prev ?? [];
+            const next = base.some((w) => w.id === worker.id)
+                ? base.map((w) => (w.id === worker.id ? { ...w, ...worker } : w))
+                : [...base, worker];
+            writeCachedRoster(farmId, next);
+            return next;
+        });
+    }, [farmId]);
+
+    return { workers, loading, loadFailed, removingId, adding, reload: load, add, remove, replace };
 }

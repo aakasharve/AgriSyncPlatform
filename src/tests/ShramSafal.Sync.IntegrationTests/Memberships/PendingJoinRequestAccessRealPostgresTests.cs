@@ -498,6 +498,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // table, no farm_join_requests object; a seat's status is never touched. Re-Up re-adds them with their defaults.
         // Fix pass 1 (M2): also the four additive move columns on daily_logs / cost_entries (no policy, no grant).
         "20261101221236_AddMembershipPlotScope",
+
+        // spec plr-d10 lane WID — Down() read in full: drops the five worker-identity tables and their policies, the nullable
+        // field_operators.person_id and the nullable farms.pin_code (with its CHECK). No farm_memberships or
+        // farm_join_requests object, no ssf.farms policy; a seat's status is never touched. Re-Up re-creates them and
+        // back-fills a person and a card for every field operator.
+        "20261102163914_AddWorkerIdentity",
     ];
 
     /// <summary>

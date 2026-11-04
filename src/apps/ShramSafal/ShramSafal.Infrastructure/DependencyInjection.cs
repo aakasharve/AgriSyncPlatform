@@ -452,6 +452,17 @@ public static class DependencyInjection
         services.AddScoped<IJoinClaimTenantScope, JoinClaimTenantScope>();
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — typed farm-code join.
         services.AddScoped<IJoinCodeTenantScope, JoinCodeTenantScope>();
+        // spec: plr-d10 lane WID — the ONE door to the ShramSafal-wide person tables (the identity setting is opened only
+        // by this store, after the route's farm scope) and the worker-code sender: the dev stub outside Production; in
+        // Production SWITCHED OFF until the worker-code DLT template is approved (the host then registers the real one
+        // when ShramSafal:WorkerPhoneCode:SmsEnabled is true).
+        services.AddScoped<IdentityTenantScope>();
+        services.AddScoped<IShramIdentityStore, ShramIdentityStore>();
+        services.AddScoped<IWorkerPhoneCodeSender>(sp =>
+            sp.GetService<Microsoft.Extensions.Hosting.IHostEnvironment>() is { } environment
+            && Microsoft.Extensions.Hosting.HostEnvironmentEnvExtensions.IsProduction(environment)
+                ? new ShramSafal.Infrastructure.Identity.SwitchedOffWorkerPhoneCodeSender()
+                : ActivatorUtilities.CreateInstance<ShramSafal.Infrastructure.Identity.DevStubWorkerPhoneCodeSender>(sp));
         // spec: dfes-companion-2026-07-11 — user-scoped (no farm dimension)
         // tenant scope for POST /shramsafal/corrections. See
         // ICallerUserTenantScope for why this is a distinct port from

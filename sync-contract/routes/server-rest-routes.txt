@@ -50,6 +50,7 @@ GET /shramsafal/farms/{farmId:guid}/job-cards
 GET /shramsafal/farms/{farmId:guid}/labour
 GET /shramsafal/farms/{farmId:guid}/labour-permissions
 GET /shramsafal/farms/{farmId:guid}/labour/field-operators
+GET /shramsafal/farms/{farmId:guid}/labour/identity/farm-pin
 GET /shramsafal/farms/{farmId:guid}/missing-tests
 GET /shramsafal/farms/{farmId:guid}/weather/current
 GET /shramsafal/farms/{farmId:guid}/weather/forecast
@@ -120,7 +121,20 @@ POST /shramsafal/farms/{farmId:guid}/invite-qr/rotate
 POST /shramsafal/farms/{farmId:guid}/labour/assignments/{id:guid}/corrections
 POST /shramsafal/farms/{farmId:guid}/labour/field-operators
 POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/attach
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/card/reissue
 POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/deactivate
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/erasure
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/erasure/cancel
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/merge
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/phone/move
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/phone/send-code
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/phone/verify
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/unlink
+POST /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/unmerge
+POST /shramsafal/farms/{farmId:guid}/labour/identity/link
+POST /shramsafal/farms/{farmId:guid}/labour/identity/link/start
+POST /shramsafal/farms/{farmId:guid}/labour/identity/phone-check
+POST /shramsafal/farms/{farmId:guid}/labour/identity/resolve
 POST /shramsafal/farms/{farmId:guid}/memberships/self-exit
 POST /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/approve
 POST /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/decline
@@ -181,6 +195,7 @@ PUT /shramsafal/consent/improvement
 PUT /shramsafal/consent/me
 PUT /shramsafal/farms/{farmId:guid}/boundary
 PUT /shramsafal/farms/{farmId:guid}/labour-permissions/{targetUserId:guid}
+PUT /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/identity
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/access
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/authorities
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/plot-scope
