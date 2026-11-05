@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
@@ -87,11 +88,20 @@ public sealed class GetFieldOperatorsHandler(IShramSafalRepository repository, I
             await identity.CloseAsync(ct);
         }
 
+        // Fix pass 1 (review L2) — his card code, whose phone, its last digits and his PIN go only to the seats that
+        // act on them: the owner tier and a seat that takes हजेरी. Every other reader of the roster gets the name and the
+        // level only (the card code alone would let a reader link him on another farm while he has no verified phone).
+        var seesIdentityDetails = callerRole is AppRole.PrimaryOwner or AppRole.SecondaryOwner
+            || FarmAccessPolicy.Holds(access, FarmAuthority.TakeAttendance, now);
+
         IReadOnlyList<FieldOperatorSummaryDto> dtos = operators
             .Select(o => views.TryGetValue(o.Id, out var v)
-                ? new FieldOperatorSummaryDto(
-                    o.Id, o.DisplayName, o.FullName, o.IsActive, v.CardCode, v.IdentityLevel, v.NeedsPhoneAndPin,
-                    v.PhoneWhose, v.PhoneTail, v.HomePin)
+                ? seesIdentityDetails
+                    ? new FieldOperatorSummaryDto(
+                        o.Id, o.DisplayName, o.FullName, o.IsActive, v.CardCode, v.IdentityLevel, v.NeedsPhoneAndPin,
+                        v.PhoneWhose, v.PhoneTail, v.HomePin)
+                    : new FieldOperatorSummaryDto(
+                        o.Id, o.DisplayName, o.FullName, o.IsActive, null, v.IdentityLevel, v.NeedsPhoneAndPin)
                 : new FieldOperatorSummaryDto(o.Id, o.DisplayName, o.FullName, o.IsActive))
             .ToList();
 

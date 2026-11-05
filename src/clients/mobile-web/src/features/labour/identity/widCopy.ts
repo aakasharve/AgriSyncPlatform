@@ -26,6 +26,8 @@ const T = {
     farmPinToo: ['हाच शेताचाही पिन आहे', 'This is the farm\'s PIN too'], // PROPOSED
     phoneLabel: ['फोन नंबर', 'Phone number'], // SCREEN
     phoneNote: ['स्वतःचा फोन नसेल तर घरच्या माणसाचा किंवा मुकादमचा नंबर द्या.', 'No phone of his own? Give a family member\'s or the mukadam\'s number.'], // SCREEN
+    phonePlaceholder: ['10 अंकी नंबर', '10-digit number'], // PROPOSED (fix pass 1, L6: no Latin "x")
+    pinPlaceholder: ['6 अंकी पिन', '6-digit PIN'], // PROPOSED (fix pass 1, L6: never a real PIN)
     whose: ['हा फोन कोणाचा?', 'Whose phone is this?'], // SCREEN
     add: ['जोडा', 'Add'], // SCREEN
     requiredNote: ['नाव, पिन कोड आणि फोन नंबर — तिन्ही भरल्याशिवाय "जोडा" चालू होत नाही. आजचं काम मात्र कधीच अडत नाही.', 'Name, PIN code and phone number — "Add" turns on once all three are filled. Today\'s work is never held up.'], // SCREEN
@@ -53,6 +55,10 @@ const T = {
     newCard: ['नवीन कार्ड द्या', 'Issue a new card'], // PROPOSED (case 13)
     newCardAsk: ['जुनं कार्ड चालणार नाही. नवीन कार्ड द्यायचं?', 'The old card will stop working. Issue a new one?'], // PROPOSED
     newCardDone: ['नवीन कार्ड तयार. जुनं कार्ड आता चालत नाही.', 'New card ready. The old card no longer works.'], // PROPOSED
+    newCardOwnerOnly: ['नवीन कार्ड फक्त शेताचे मालकच देऊ शकतात.', 'Only the farm\'s owner can issue a new card.'], // PROPOSED (fix pass 1, L6)
+    newCardNotHere: ['ज्या शेतावर याचं कार्ड बनलं किंवा फोन पडताळला, तेच शेत नवीन कार्ड देऊ शकतं.', 'Only the farm that made his card or verified his phone can issue a new card.'], // PROPOSED (fix pass 1, H1)
+    useMove: ['याचा एक नंबर आधीच पडताळलेला आहे — दुसरा नंबर पडताळता येत नाही.', 'He already has a verified number — a second one cannot be verified.'], // PROPOSED (fix pass 1, H2)
+    erased: ['या कामगाराची ओळख मिटवली आहे.', 'This worker\'s identity has been erased.'], // PROPOSED (fix pass 1, L6)
     shareFailed: ['चित्र पाठवता आलं नाही — QR स्क्रीनवर दाखवा', 'Could not send the picture — show the QR on screen'], // PROPOSED
     linkCopied: ['कार्डचा पत्ता कॉपी केला', 'Card address copied'], // PROPOSED
 
@@ -66,6 +72,7 @@ const T = {
     smsOff: ['कोड पाठवणं अजून सुरू झालेलं नाही — नंतर करा', 'Sending codes has not started yet — later'], // PROPOSED (DLT pending)
     noPhone: ['आधी फोन नंबर भरा', 'Enter a phone number first'], // PROPOSED
     tooMany: ['आज खूप कोड पाठवले — थोड्या वेळाने', 'Too many codes today — try a little later'], // PROPOSED
+    tooManyTries: ['आज खूप चुकीचे कोड टाकले गेले — उद्या पुन्हा करा.', 'Too many wrong codes today — try again tomorrow.'], // PROPOSED (fix pass 1, M2)
 
     // ── link on another farm (screen 5) ──
     linkTitle: ['आधीच श्रमसफलवर आहे?', 'Already on ShramSafal?'], // SCREEN
@@ -76,10 +83,12 @@ const T = {
     find: ['शोधा', 'Find'], // PROPOSED
     cameraOff: ['कॅमेरा चालू झाला नाही — कोड टाका', 'The camera did not start — type the code'], // PROPOSED
     linkCodeSent: ['{name}च्या फोनवर कोड पाठवला — त्याची परवानगी लागेल.', 'A code was sent to {name}\'s phone — his consent is needed.'], // SCREEN
+    linkCodeSentToNumber: ['या नंबरवर कोड पाठवला — त्याची परवानगी लागेल.', 'A code was sent to this number — his consent is needed.'], // PROPOSED (fix pass 1, L6: the number path names nobody)
     sameMan: ['तोच माणूस — जोडा', 'Same person — add'], // SCREEN
     otherFarmsHidden: ['तुम्हाला त्याचं दुसऱ्या शेतावरचं काम किंवा पगार दिसणार नाही.', 'You will not see his work or pay on any other farm.'], // PROPOSED (screen 5 sentence, generalised)
     cardRetired: ['हे कार्ड आता चालत नाही', 'This card no longer works'], // design case 13
     cardUnknown: ['या कोडचं कार्ड सापडलं नाही', 'No card has this code'], // PROPOSED
+    numberUnknown: ['हा नंबर सापडला नाही', 'Number not found'], // PROPOSED (fix pass 1, L6)
     alreadyOnTeam: ['हा माणूस आधीच तुमच्या टीममध्ये आहे', 'This person is already on your team'], // PROPOSED
 
     // ── the name-only list (section 10) ──
@@ -89,7 +98,6 @@ const T = {
 
     // ── failures (reused shape of the team page) ──
     offline: ['इंटरनेट नसल्यामुळे आत्ता करता आलं नाही — नेट आल्यावर पुन्हा करा.', 'No internet right now — try again when online.'],
-    refused: ['हे तुम्हाला करता येत नाही.', 'You cannot do this.'],
     failed: ['झालं नाही — पुन्हा प्रयत्न करा', 'That did not work — try again'],
 } as const satisfies Record<string, Twin>;
 

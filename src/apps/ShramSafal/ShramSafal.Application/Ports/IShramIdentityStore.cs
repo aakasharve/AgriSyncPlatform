@@ -44,6 +44,15 @@ public interface IShramIdentityStore
 
     Task<int> CountChallengesSinceAsync(string phoneE164, DateTime sinceUtc, CancellationToken ct = default);
 
+    /// <summary>Codes this FARM asked for since <paramref name="sinceUtc"/> (fix pass 1, M2).</summary>
+    Task<int> CountChallengesByFarmSinceAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default);
+
+    /// <summary>Codes this USER asked for since <paramref name="sinceUtc"/> (fix pass 1, M2).</summary>
+    Task<int> CountChallengesByUserSinceAsync(Guid userId, DateTime sinceUtc, CancellationToken ct = default);
+
+    /// <summary>Wrong tries at any code this farm asked for since <paramref name="sinceUtc"/> (fix pass 1, M2).</summary>
+    Task<int> CountWrongTriesByFarmSinceAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default);
+
     Task AddChallengeAsync(ShramPhoneChallenge challenge, CancellationToken ct = default);
 
     /// <summary>This farm's events about one of its records (farm-scoped; another farm's are never visible).</summary>

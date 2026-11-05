@@ -71,7 +71,8 @@ function mount(role: string | null, rows: LabourPermission[] = []) {
     );
 }
 
-const ADD = 'कामगाराचं नाव जोडा';
+// lane WID fix pass 1 (L6): the form asks name, phone and PIN, so the button says what screen 1 says.
+const ADD = 'कामगार जोडा';
 
 function openAndType(name: string) {
     fireEvent.click(screen.getByRole('button', { name: new RegExp(ADD) }));
@@ -119,6 +120,10 @@ describe.each([['PrimaryOwner']])('Team page as %s', (role) => {
         resolve(op(clientId, 'Ramesh'));
         expect(await screen.findByText('Ramesh')).toBeTruthy();
         expect(writeCachedRoster).toHaveBeenCalled();
+        // lane WID fix pass 1 (L6): the success line carries a real icon, never a typed check-mark glyph.
+        const notice = screen.getByTestId('farm-workers-notice');
+        expect(notice.textContent).toBe('Ramesh जोडलं');
+        expect(within(notice).getByTestId('farm-workers-notice-icon')).toBeTruthy();
     });
 
     it('Add failing: no row, an honest failure, and the retry reuses the SAME id (idempotent)', async () => {

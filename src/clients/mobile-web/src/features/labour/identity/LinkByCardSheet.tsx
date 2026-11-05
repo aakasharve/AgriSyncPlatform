@@ -45,7 +45,11 @@ const ERRORS: Record<string, WidWord> = {
     'identity.already_on_team': 'alreadyOnTeam',
     'identity.sms_off': 'smsOff',
     'identity.too_many_codes': 'tooMany',
+    'identity.too_many_tries': 'tooManyTries',
 };
+
+/** Fix pass 1 (L6): on the NUMBER path nobody is named and no card was read, so "no such card" would be wrong. */
+const NUMBER_ERRORS: Record<string, WidWord> = { ...ERRORS, 'identity.not_found': 'numberUnknown' };
 
 export const LinkByCardSheet: React.FC<Props> = ({ farmId, onLinked, onCancel }) => {
     const language = useOptionalLanguage()?.language;
@@ -57,7 +61,8 @@ export const LinkByCardSheet: React.FC<Props> = ({ farmId, onLinked, onCancel })
     const clientIdRef = useRef(idGenerator.generate());
     useBackDismiss(true, onCancel);
 
-    const say = (error: unknown) => setNote(widText(ERRORS[identityErrorCode(error) ?? ''] ?? 'failed', language));
+    const say = (error: unknown, path: 'card' | 'number') =>
+        setNote(widText((path === 'number' ? NUMBER_ERRORS : ERRORS)[identityErrorCode(error) ?? ''] ?? 'failed', language));
 
     const byCard = async (body: string) => {
         if (busy) return;
@@ -74,7 +79,7 @@ export const LinkByCardSheet: React.FC<Props> = ({ farmId, onLinked, onCancel })
             setFound({ cardCode: body, name: card.displayName, level: card.level, ticket: started?.ticket ?? null });
             setCode('');
         } catch (error) {
-            say(error);
+            say(error, 'card');
         } finally {
             setBusy(false);
         }
@@ -90,7 +95,7 @@ export const LinkByCardSheet: React.FC<Props> = ({ farmId, onLinked, onCancel })
             setFound({ name: null, level: null, ticket: started.ticket });
             setCode('');
         } catch (error) {
-            say(error);
+            say(error, 'number');
         } finally {
             setBusy(false);
         }
@@ -115,7 +120,7 @@ export const LinkByCardSheet: React.FC<Props> = ({ farmId, onLinked, onCancel })
                 needsPhoneAndPin: view.needsPhoneAndPin,
             });
         } catch (error) {
-            say(error);
+            say(error, found.cardCode ? 'card' : 'number');
         } finally {
             setBusy(false);
         }
@@ -168,8 +173,10 @@ export const LinkByCardSheet: React.FC<Props> = ({ farmId, onLinked, onCancel })
                         )}
                         {found.ticket && (
                             <div>
-                                <p className="text-[14px] font-bold text-stone-700">
-                                    {widText('linkCodeSent', language, { name: found.name ?? '' })}
+                                <p data-testid="link-code-sent" className="text-[14px] font-bold text-stone-700">
+                                    {found.name
+                                        ? widText('linkCodeSent', language, { name: found.name })
+                                        : widText('linkCodeSentToNumber', language)}
                                 </p>
                                 <input data-testid="link-code" inputMode="numeric" maxLength={4} value={code}
                                     onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}

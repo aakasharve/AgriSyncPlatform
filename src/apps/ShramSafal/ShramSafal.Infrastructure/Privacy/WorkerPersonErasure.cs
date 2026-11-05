@@ -17,6 +17,10 @@ namespace ShramSafal.Infrastructure.Privacy;
 /// farm record, work row, हजेरी mark and headcount keeps its id, dates and numbers.
 /// </summary>
 /// <remarks>
+/// <para><b>Fix pass 1 (review M1): never silent on a connection row-level security filters.</b> Every read and write
+/// runs under <c>SET LOCAL row_security = off</c>, the way the F1 scrub does (<c>ErasureWorker.ScrubDailyLogContentWordsAsync</c>):
+/// on an identity RLS would filter, PostgreSQL then REFUSES the statement instead of quietly showing no rows, and the
+/// pass throws, naming why. It never reports "nothing due" over rows it could not see.</para>
 /// Runs on the worker's privileged admin context, as every other erasure step does. The claim is ONE guarded UPDATE (still
 /// waiting, wait passed, not yet erased), so an owner's cancel and this pass can never both win. Each person is one
 /// transaction; a person whose anonymisation touches no person row fails loudly instead of being recorded as erased.
@@ -33,14 +37,25 @@ internal static class WorkerPersonErasure
             reason: $"{nameof(ErasureWorker)}.worker-persons",
             actorUserId: SystemActor.ErasedFarmer,
             ct: ct).ConfigureAwait(false);
+        return await RunAsync(admin, dueIfRequestedAtOrBefore, nowUtc, logger, ct).ConfigureAwait(false);
+    }
 
-        var due = await admin.ShramPersons
-            .Where(p => p.ErasedAtUtc == null && p.ErasureRequestedAtUtc != null && p.ErasureRequestedAtUtc <= dueIfRequestedAtOrBefore)
-            .OrderBy(p => p.ErasureRequestedAtUtc)
-            .Select(p => p.Id)
-            .Take(BatchSize)
-            .ToListAsync(ct)
-            .ConfigureAwait(false);
+    /// <summary>The pass on a given context (the worker's admin context; a test hands it any identity).</summary>
+    internal static async Task<int> RunAsync(
+        ShramSafalDbContext admin, DateTime dueIfRequestedAtOrBefore, DateTime nowUtc, ILogger logger, CancellationToken ct)
+    {
+        List<Guid> due;
+        await using (var read = await admin.Database.BeginTransactionAsync(ct).ConfigureAwait(false))
+        {
+            await RowSecurityOffAsync(admin, ct).ConfigureAwait(false);
+            due = await Unfiltered(() => admin.ShramPersons
+                .Where(p => p.ErasedAtUtc == null && p.ErasureRequestedAtUtc != null && p.ErasureRequestedAtUtc <= dueIfRequestedAtOrBefore)
+                .OrderBy(p => p.ErasureRequestedAtUtc)
+                .Select(p => p.Id)
+                .Take(BatchSize)
+                .ToListAsync(ct)).ConfigureAwait(false);
+            await read.CommitAsync(ct).ConfigureAwait(false);
+        }
 
         var erased = 0;
         foreach (var personId in due)
@@ -59,6 +74,7 @@ internal static class WorkerPersonErasure
         ShramSafalDbContext admin, Guid personId, DateTime dueIfRequestedAtOrBefore, DateTime nowUtc, CancellationToken ct)
     {
         await using var transaction = await admin.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await RowSecurityOffAsync(admin, ct).ConfigureAwait(false);
 
         // The claim: still waiting, its wait passed, not erased. Zero rows = cancelled meanwhile, or taken by another pass.
         var claimed = await admin.ShramPersons
@@ -127,5 +143,25 @@ internal static class WorkerPersonErasure
 
         await transaction.CommitAsync(ct).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>RLS may not quietly hide a row from this pass: with it off, a filtered identity is refused instead.</summary>
+    private static Task RowSecurityOffAsync(ShramSafalDbContext admin, CancellationToken ct)
+        => admin.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", ct);
+
+    private static async Task<T> Unfiltered<T>(Func<Task<T>> read)
+    {
+        try
+        {
+            return await read().ConfigureAwait(false);
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == Npgsql.PostgresErrorCodes.InsufficientPrivilege)
+        {
+            throw new InvalidOperationException(
+                "Worker-identity erasure cannot read every person on this connection: row-level security would filter "
+                + $"ssf.shram_persons ({ex.MessageText}). It must run on the migration connection (ShramSafalDb_Migration), "
+                + "as an identity row-level security does not filter.",
+                ex);
+        }
     }
 }

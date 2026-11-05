@@ -39,6 +39,11 @@ public static class RateLimitingConfig
     /// <summary>"join": the fixed window (all three "join" limits share it).</summary>
     public static readonly TimeSpan JoinWindow = TimeSpan.FromMinutes(10);
 
+    /// <summary>lane WID fix pass 1 — identity lookups and code sends per signed-in user per <see cref="IdentityWindow"/>.</summary>
+    public const int IdentityPermitLimit = 30;
+
+    public static readonly TimeSpan IdentityWindow = TimeSpan.FromMinutes(10);
+
     /// <summary>The one partition every request that is not on the "join" route falls into in the
     /// global limiter: a no-op limiter, so the global limiter changes nothing for any other route.</summary>
     private const string NotAJoinRequest = "not-join";
@@ -50,6 +55,7 @@ public static class RateLimitingConfig
         var joinPermitLimit = e2eHarnessEnabled ? 100_000 : JoinPermitLimit;
         var joinPerClientNetworkPermitLimit = e2eHarnessEnabled ? 100_000 : JoinPerClientNetworkPermitLimit;
         var joinAllCallersPermitLimit = e2eHarnessEnabled ? 100_000 : JoinAllCallersPermitLimit;
+        var identityPermitLimit = e2eHarnessEnabled ? 100_000 : IdentityPermitLimit;
 
         services.AddRateLimiter(options =>
         {
@@ -81,6 +87,21 @@ public static class RateLimitingConfig
                         Window = TimeSpan.FromMinutes(1),
                         QueueLimit = 0,
                         AutoReplenishment = true
+                    }));
+
+            // spec: plr-d10 lane WID fix pass 1 (review M2, L1) — the worker-identity lookups and code sends: per
+            // signed-in user (the same resolver as "ai"), 30 a 10-minute window — plenty for an owner adding a gang by
+            // their cards, far too few to list cards or verified numbers, or to loop SMS at numbers. The per-farm and
+            // per-user DAILY code caps and the wrong-try bound live in WorkerIdentityService beside the per-number ones.
+            options.AddPolicy(ShramSafal.Api.Endpoints.WorkerIdentityEndpoints.IdentityRateLimitPolicy, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ResolveAiRateLimitPartitionKey(httpContext),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = identityPermitLimit,
+                        Window = IdentityWindow,
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
                     }));
 
             // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — POST /shramsafal/join/by-code. A farm

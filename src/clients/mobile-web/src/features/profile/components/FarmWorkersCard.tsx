@@ -17,7 +17,7 @@
  * जोडा"); name-only workers get the calm "यांचा फोन व पिन भरा" list at most once a day.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Users } from 'lucide-react';
+import { Check, Plus, Trash2, Users } from 'lucide-react';
 import { useFarmWorkers, type WorkerActionFailure } from '../hooks/useFarmWorkers';
 import { AddMemberWizard } from '../../people/components/AddMemberWizard';
 import { buildPickerRows, toneForOperatorId } from '../../labour/components/FieldOperatorPicker';
@@ -29,6 +29,7 @@ import { WorkerCardSheet } from '../../labour/identity/WorkerCardSheet';
 import { LinkByCardSheet } from '../../labour/identity/LinkByCardSheet';
 import { NameOnlyNudge } from '../../labour/identity/NameOnlyNudge';
 import { CompleteIdentitySheet } from '../../labour/identity/CompleteIdentitySheet';
+import { widText } from '../../labour/identity/widCopy';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 const REMOVE_FAILURE_COPY: Record<WorkerActionFailure, string> = {
@@ -72,7 +73,7 @@ export const FarmWorkersCard: React.FC<FarmWorkersCardProps> = ({ farmId }) => {
         const result = await farm.remove(id);
         if (result.ok) {
             setConfirmId(null);
-            setNotice({ kind: 'ok', text: `${name} ✓ काढलं` });
+            setNotice({ kind: 'ok', text: `${name} काढलं` });
         } else {
             setNotice({ kind: 'error', text: REMOVE_FAILURE_COPY[result.reason] });
         }
@@ -89,7 +90,7 @@ export const FarmWorkersCard: React.FC<FarmWorkersCardProps> = ({ farmId }) => {
                     onLinkByCard={() => { setWizardOpen(false); setLinkOpen(true); }}
                     onAdded={(name) => {
                         setWizardOpen(false);
-                        setNotice({ kind: 'ok', text: `${name} ✓ जोडलं` });
+                        setNotice({ kind: 'ok', text: `${name} जोडलं` });
                     }}
                     onCancel={() => setWizardOpen(false)}
                 />
@@ -101,7 +102,7 @@ export const FarmWorkersCard: React.FC<FarmWorkersCardProps> = ({ farmId }) => {
                     onLinked={(worker) => {
                         setLinkOpen(false);
                         farm.replace(worker);
-                        setNotice({ kind: 'ok', text: `${worker.displayName} ✓ जोडलं` });
+                        setNotice({ kind: 'ok', text: `${worker.displayName} जोडलं` });
                     }}
                 />
             )}
@@ -134,17 +135,20 @@ export const FarmWorkersCard: React.FC<FarmWorkersCardProps> = ({ farmId }) => {
 
             <button
                 type="button"
+                data-testid="add-worker-open"
                 onClick={() => { setNotice(null); setWizardOpen(true); }}
                 className="mb-4 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-900 shadow-sm transition-all active:scale-95"
             >
-                <Plus size={16} /> कामगाराचं नाव जोडा
+                <Plus size={16} aria-hidden /> {widText('addTitle', language)}
             </button>
 
             {notice && (
                 <p
                     role="status"
-                    className={`mb-3 rounded-xl border px-3 py-2 text-xs font-semibold ${notice.kind === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-100 bg-rose-50 text-rose-700'}`}
+                    data-testid="farm-workers-notice"
+                    className={`mb-3 flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold ${notice.kind === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-rose-100 bg-rose-50 text-rose-700'}`}
                 >
+                    {notice.kind === 'ok' && <Check size={14} aria-hidden data-testid="farm-workers-notice-icon" />}
                     {notice.text}
                 </p>
             )}

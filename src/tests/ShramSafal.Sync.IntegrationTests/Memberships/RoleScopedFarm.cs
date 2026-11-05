@@ -559,6 +559,12 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
         {
             ["ConnectionStrings:ShramSafalDb"] = appConn,
             ["ConnectionStrings:UserDb"] = appConn,
+            // lane WID fix pass 1 (review M4, F103): the admin / migration and read-only connections too, so nothing in
+            // this host can fall through to an inherited or appsettings connection string (a developer's own database).
+            ["ConnectionStrings:ShramSafalDb_Migration"] = SuperuserConn,
+            ["ConnectionStrings:UserDb_Migration"] = SuperuserConn,
+            ["ConnectionStrings:ShramSafalDb_ReadOnly"] = appConn,
+            ["ConnectionStrings:UserDb_ReadOnly"] = appConn,
             ["ShramSafal:Storage:DataDirectory"] = storageDir,
         });
 

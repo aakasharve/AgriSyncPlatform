@@ -722,10 +722,10 @@ public sealed class RawBlobSubjectLinkageRealPostgresTests : IAsyncLifetime
         //    rest of the RequiresPostgres suites use).
         // 2. Local dev: the migration connection, which by repo convention runs
         //    as the superuser role.
+        // lane WID fix pass 1 (M4, F103): the environment only — never an appsettings file naming a developer's database.
         var candidates = new[]
         {
             Environment.GetEnvironmentVariable("REQUIRES_POSTGRES_ROOT_CONN"),
-            ReadConnectionStringOrNull("ShramSafalDb_Migration"),
         };
 
         foreach (var candidate in candidates.Where(c => !string.IsNullOrWhiteSpace(c)))
@@ -752,22 +752,7 @@ public sealed class RawBlobSubjectLinkageRealPostgresTests : IAsyncLifetime
             "RequiresPostgres/§P0.9: no reachable Postgres connection whose role can bypass RLS. " +
             "Every ssf table is FORCE ROW LEVEL SECURITY, so a non-superuser verification connection " +
             "would read zero rows and every assertion in this suite would pass vacuously. This suite " +
-            "must FAIL rather than silently prove nothing. Set REQUIRES_POSTGRES_ROOT_CONN to a " +
-            "superuser/BYPASSRLS connection, or provide ConnectionStrings:ShramSafalDb_Migration in " +
-            "src/AgriSync.Bootstrapper/appsettings.Development.json.");
-    }
-
-    private static string? ReadConnectionStringOrNull(string name)
-    {
-        var path = Path.Combine(
-            RequiresPostgresConnection.RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json");
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        var cfg = new ConfigurationBuilder().AddJsonFile(path, optional: true).Build();
-        var conn = cfg.GetConnectionString(name);
-        return string.IsNullOrWhiteSpace(conn) ? null : conn;
+            "must FAIL rather than silently prove nothing. Set REQUIRES_POSTGRES_ROOT_CONN to a THROWAWAY " +
+            "superuser/BYPASSRLS connection.");
     }
 }

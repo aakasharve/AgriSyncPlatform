@@ -43,13 +43,25 @@ public sealed class WorkerIdentityService(
     IHandler<CreateFieldOperatorCommand, FieldOperatorDto> createWorker,
     IIdGenerator ids,
     IClock clock,
-    ErasureTiming? erasureTiming = null)
+    ErasureTiming? erasureTiming = null,
+    WorkerIdentityFlows? flows = null)
 {
+    private bool UnscreenedOpen => flows?.UnscreenedFlowsEnabled == true;
+
     /// <summary>Per number: at most 3 codes in 15 minutes and 6 in a day (the login OTP's limits).</summary>
     private const int ShortWindowCodes = 3;
     private const int LongWindowCodes = 6;
     private static readonly TimeSpan ShortWindow = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan LongWindow = TimeSpan.FromHours(24);
+
+    /// <summary>
+    /// Fix pass 1 (review M2) — before real SMS is ever switched on: per requesting FARM at most 20 codes a day, per
+    /// requesting USER at most 10, and per farm at most 10 wrong tries at any of its codes a day (a 4-digit code then
+    /// stays out of reach). The per-number limits above stay; the routes also carry the per-user request limiter.
+    /// </summary>
+    public const int FarmCodesPerDay = 20;
+    public const int UserCodesPerDay = 10;
+    public const int FarmWrongTriesPerDay = 10;
 
     // ── scan-resolve (R6) ───────────────────────────────────────────────────────────────────────────
 
@@ -144,6 +156,12 @@ public sealed class WorkerIdentityService(
         }
 
         FieldOperator? record = null;
+        if (fieldOperatorId is not null && !UnscreenedOpen)
+        {
+            // Re-pointing an EXISTING farm record has no approved screen yet (M3): only a new team member links.
+            return Result.Failure<(WorkerIdentityView, bool)>(ShramSafalErrors.IdentityFlowOff);
+        }
+
         if (fieldOperatorId is { } recordId)
         {
             record = await RecordOnFarmAsync(farmId, recordId, ct);
@@ -220,6 +238,11 @@ public sealed class WorkerIdentityService(
     /// <summary>R2 + R5 — undoes this farm's last link of the record: it goes back to the person it was (or a new card).</summary>
     public async Task<Result<WorkerIdentityView>> UnlinkAsync(Guid farmId, Guid userId, Guid fieldOperatorId, CancellationToken ct)
     {
+        if (!UnscreenedOpen)
+        {
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityFlowOff);
+        }
+
         var (record, refused) = await ManagedRecordAsync(farmId, userId, fieldOperatorId, ct);
         if (record is null)
         {
@@ -361,6 +384,11 @@ public sealed class WorkerIdentityService(
             return Result.Failure<CodeSentView>(ShramSafalErrors.InvalidCommand);
         }
 
+        if (why is ChallengePurpose.MoveNew or ChallengePurpose.MoveOld && !UnscreenedOpen)
+        {
+            return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityFlowOff);
+        }
+
         var group = await EnsureGroupAsync(farmId, userId, record, ct);
         if (group.Root.IsErased)
         {
@@ -383,7 +411,7 @@ public sealed class WorkerIdentityService(
 
                 break;
             default:
-                target = phones.FirstOrDefault(p => p.IsActiveVerified)?.PhoneE164;
+                target = OldestVerified(phones)?.PhoneE164;
                 break;
         }
 
@@ -397,6 +425,13 @@ public sealed class WorkerIdentityService(
         {
             await store.TrySaveChangesAsync(ct);
             return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityNumberHeldByVerified);
+        }
+
+        // H2 — one verified number at a time: a second one only by the case-5 move, never by a verify.
+        if (why == ChallengePurpose.Verify && phones.Any(p => p.IsActiveVerified && p.PhoneE164 != target))
+        {
+            await store.TrySaveChangesAsync(ct);
+            return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityUseMove);
         }
 
         return await SendCodeAsync(group.Root.Id, target, why, farmId, userId, ct);
@@ -434,6 +469,13 @@ public sealed class WorkerIdentityService(
             return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityNumberHeldByVerified);
         }
 
+        // H2 (R3) — he already has a verified number: a different one becomes his only by the case-5 move.
+        if (phones.Any(p => p.IsActiveVerified && p.PhoneE164 != row.PhoneE164))
+        {
+            await store.TrySaveChangesAsync(ct);
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityUseMove);
+        }
+
         var now = clock.UtcNow;
         row.MarkVerified(now);
         await store.AddEventAsync(ShramIdentityEvent.Record(
@@ -454,6 +496,11 @@ public sealed class WorkerIdentityService(
         Guid farmId, Guid userId, Guid fieldOperatorId, string? newPhone, string? newWhose, Guid newTicket, string? newCode,
         string? proof, Guid? oldTicket, string? oldCode, string? cardCode, CancellationToken ct)
     {
+        if (!UnscreenedOpen)
+        {
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityFlowOff);
+        }
+
         var (record, refused) = await ManagedRecordAsync(farmId, userId, fieldOperatorId, ct);
         if (record is null)
         {
@@ -473,6 +520,18 @@ public sealed class WorkerIdentityService(
             return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityErased);
         }
 
+        // H1 — his card or an owner's word confirms him only on the farm that holds his proof; any other farm is
+        // answered exactly as for a person it does not know (R6, E4). His own old-number code works from any farm.
+        if (second is IdentityProof.CardShown or IdentityProof.OwnerConfirms && !await HoldsHisProofAsync(farmId, group, ct))
+        {
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityNotFound);
+        }
+
+        if (second == IdentityProof.OwnerConfirms && !await IsOwnerTierAsync(farmId, userId, ct))
+        {
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityOwnerOnly);
+        }
+
         var newProof = await ConsumeAsync(farmId, newTicket, newCode, ChallengePurpose.MoveNew, group, ct);
         if (newProof.Error is { } badNew)
         {
@@ -489,7 +548,7 @@ public sealed class WorkerIdentityService(
         {
             IdentityProof.PhoneCode => (await ConsumeAsync(farmId, oldTicket ?? Guid.Empty, oldCode, ChallengePurpose.MoveOld, group, ct)).Error is null,
             IdentityProof.CardShown => await CardBelongsAsync(cardCode, group, ct),
-            IdentityProof.OwnerConfirms => await IsOwnerTierAsync(farmId, userId, ct),
+            IdentityProof.OwnerConfirms => true,
             _ => false,
         };
         if (!secondOk)
@@ -551,10 +610,25 @@ public sealed class WorkerIdentityService(
             return Result.Failure<CardReissuedView>(ShramSafalErrors.InvalidCommand);
         }
 
+        if (how == IdentityProof.OwnerConfirms)
+        {
+            // H1 — an owner's word reissues his card only on the farm that holds his proof (his verified number was
+            // entered there, or, with none, it issued his card). Any other farm: as for a person it does not know.
+            if (!await HoldsHisProofAsync(farmId, group, ct))
+            {
+                return Result.Failure<CardReissuedView>(ShramSafalErrors.IdentityNotFound);
+            }
+
+            if (!await IsOwnerTierAsync(farmId, userId, ct))
+            {
+                return Result.Failure<CardReissuedView>(ShramSafalErrors.IdentityOwnerOnly);
+            }
+        }
+
         var proven = how switch
         {
             IdentityProof.PhoneCode => (await ConsumeAsync(farmId, ticket ?? Guid.Empty, code, ChallengePurpose.Reissue, group, ct)).Error is null,
-            IdentityProof.OwnerConfirms => await IsOwnerTierAsync(farmId, userId, ct),
+            IdentityProof.OwnerConfirms => true,
             _ => false,
         };
         if (!proven)
@@ -591,6 +665,11 @@ public sealed class WorkerIdentityService(
         Guid farmId, Guid userId, Guid fieldOperatorId, string? sourceCardCode, string? targetCardCode, Guid? ticket,
         string? code, CancellationToken ct)
     {
+        if (!UnscreenedOpen)
+        {
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityFlowOff);
+        }
+
         var (record, refused) = await ManagedRecordAsync(farmId, userId, fieldOperatorId, ct);
         if (record is null)
         {
@@ -598,6 +677,13 @@ public sealed class WorkerIdentityService(
         }
 
         var source = await EnsureGroupAsync(farmId, userId, record, ct);
+        // H2 — a person who holds a verified number is never merged away: his number would follow him into another
+        // person without the case-5 move, and the farm that merged would then hold the gate to that person.
+        if ((await store.GetPhonesAsync(source.Ids, ct)).Any(p => p.IsActiveVerified))
+        {
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityUseMove);
+        }
+
         if (!await CardBelongsAsync(sourceCardCode, source, ct))
         {
             return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityProofNeeded);
@@ -634,6 +720,11 @@ public sealed class WorkerIdentityService(
 
     public async Task<Result<WorkerIdentityView>> UnmergeAsync(Guid farmId, Guid userId, Guid fieldOperatorId, CancellationToken ct)
     {
+        if (!UnscreenedOpen)
+        {
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityFlowOff);
+        }
+
         var (record, refused) = await ManagedRecordAsync(farmId, userId, fieldOperatorId, ct);
         if (record is null)
         {
@@ -670,6 +761,11 @@ public sealed class WorkerIdentityService(
     /// </summary>
     public async Task<Result<PersonErasureView>> RequestErasureAsync(Guid farmId, Guid userId, Guid fieldOperatorId, CancellationToken ct)
     {
+        if (!UnscreenedOpen)
+        {
+            return Result.Failure<PersonErasureView>(ShramSafalErrors.IdentityFlowOff);
+        }
+
         var (record, refused) = await OwnerRecordAsync(farmId, userId, fieldOperatorId, ct);
         if (record is null)
         {
@@ -677,6 +773,14 @@ public sealed class WorkerIdentityService(
         }
 
         var group = await EnsureGroupAsync(farmId, userId, record, ct);
+        // H1 — erasing a person reaches every farm's record of him: only the farm that holds his proof may ask it on
+        // the owner's word. Any other farm: as for a person it does not know (R6, E4).
+        if (!await HoldsHisProofAsync(farmId, group, ct))
+        {
+            await store.TrySaveChangesAsync(ct);
+            return Result.Failure<PersonErasureView>(ShramSafalErrors.IdentityNotFound);
+        }
+
         var now = clock.UtcNow;
         if (!group.Root.RequestErasure(userId, now))
         {
@@ -693,6 +797,11 @@ public sealed class WorkerIdentityService(
 
     public async Task<Result> CancelErasureAsync(Guid farmId, Guid userId, Guid fieldOperatorId, CancellationToken ct)
     {
+        if (!UnscreenedOpen)
+        {
+            return Result.Failure(ShramSafalErrors.IdentityFlowOff);
+        }
+
         var (record, refused) = await OwnerRecordAsync(farmId, userId, fieldOperatorId, ct);
         if (record is null)
         {
@@ -700,6 +809,13 @@ public sealed class WorkerIdentityService(
         }
 
         var group = await EnsureGroupAsync(farmId, userId, record, ct);
+        // H1 — only the person who asked may withdraw it; anyone else is answered as for a person he does not know.
+        if (group.Root.ErasureRequestedAtUtc is not null && group.Root.ErasureRequestedByUserId != userId)
+        {
+            await store.TrySaveChangesAsync(ct);
+            return Result.Failure(ShramSafalErrors.IdentityNotFound);
+        }
+
         if (!group.Root.CancelErasure())
         {
             await store.TrySaveChangesAsync(ct);
@@ -811,7 +927,27 @@ public sealed class WorkerIdentityService(
     }
 
     private async Task<ShramPersonPhone?> VerifiedPhoneOfAsync(PersonGroup group, CancellationToken ct)
-        => (await store.GetPhonesAsync(group.Ids, ct)).FirstOrDefault(p => p.IsActiveVerified);
+        => OldestVerified(await store.GetPhonesAsync(group.Ids, ct));
+
+    /// <summary>H2 — his consent codes always go to the same number: the one verified first (ties by id).</summary>
+    private static ShramPersonPhone? OldestVerified(IEnumerable<ShramPersonPhone> phones)
+        => phones.Where(p => p.IsActiveVerified).OrderBy(p => p.VerifiedAtUtc).ThenBy(p => p.Id).FirstOrDefault();
+
+    /// <summary>
+    /// H1 — "an owner where he is verified" (design cases 5 and 13): the farm whose OWN entered number is his active
+    /// verified number; while he has no verified number anywhere, the farm that issued his working card. Nobody else.
+    /// </summary>
+    private async Task<bool> HoldsHisProofAsync(Guid farmId, PersonGroup group, CancellationToken ct)
+    {
+        var members = group.Ids;
+        var verified = (await store.GetPhonesAsync(members, ct)).Where(p => p.IsActiveVerified).ToList();
+        if (verified.Count > 0)
+        {
+            return verified.Any(p => p.AddedByFarmId == farmId);
+        }
+
+        return ActiveCardOf(group, await store.GetCardsAsync(members, ct))?.IssuedByFarmId == farmId;
+    }
 
     /// <summary>
     /// R1 — the worker's own proof: his card (enough only while he has no verified phone), or the code sent to his
@@ -872,6 +1008,12 @@ public sealed class WorkerIdentityService(
     private async Task<Consumed> ConsumeAsync(
         Guid farmId, Guid ticket, string? code, ChallengePurpose purpose, PersonGroup group, CancellationToken ct)
     {
+        // M2 — a farm that has spent its wrong tries for the day reads no more codes until tomorrow.
+        if (await store.CountWrongTriesByFarmSinceAsync(farmId, clock.UtcNow - LongWindow, ct) >= FarmWrongTriesPerDay)
+        {
+            return new Consumed(null, ShramSafalErrors.IdentityTooManyTries);
+        }
+
         // A code proves only for the person it went to, and only on the farm whose owner asked for it.
         var challenge = ticket == Guid.Empty ? null : await store.GetChallengeAsync(ticket, ct);
         if (challenge is null || !group.Ids.Contains(challenge.PersonId) || challenge.RequestedByFarmId != farmId)
@@ -897,9 +1039,16 @@ public sealed class WorkerIdentityService(
     {
         var now = clock.UtcNow;
         if (await store.CountChallengesSinceAsync(e164, now - ShortWindow, ct) >= ShortWindowCodes
-            || await store.CountChallengesSinceAsync(e164, now - LongWindow, ct) >= LongWindowCodes)
+            || await store.CountChallengesSinceAsync(e164, now - LongWindow, ct) >= LongWindowCodes
+            || await store.CountChallengesByFarmSinceAsync(farmId, now - LongWindow, ct) >= FarmCodesPerDay
+            || await store.CountChallengesByUserSinceAsync(userId, now - LongWindow, ct) >= UserCodesPerDay)
         {
             return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityTooManyCodes);
+        }
+
+        if (await store.CountWrongTriesByFarmSinceAsync(farmId, now - LongWindow, ct) >= FarmWrongTriesPerDay)
+        {
+            return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityTooManyTries);
         }
 
         var code = ShramPhoneChallenge.NewCode();

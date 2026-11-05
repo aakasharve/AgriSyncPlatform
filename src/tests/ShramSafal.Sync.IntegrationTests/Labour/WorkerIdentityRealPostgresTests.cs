@@ -45,7 +45,7 @@ using Xunit.Abstractions;
 namespace ShramSafal.Sync.IntegrationTests.Labour;
 
 [Trait("Category", "RequiresPostgres")]
-public sealed class WorkerIdentityRealPostgresTests(ITestOutputHelper output) : RoleScopedFarm(output)
+public sealed partial class WorkerIdentityRealPostgresTests(ITestOutputHelper output) : RoleScopedFarm(output)
 {
     /// <summary>The migration this lane adds, and the one before it (the backfill is proved by running down, then up).</summary>
     private const string ThisMigration = "20261102163914_AddWorkerIdentity";
@@ -66,8 +66,16 @@ public sealed class WorkerIdentityRealPostgresTests(ITestOutputHelper output) : 
 
     private readonly CodeCapture _codes = new();
 
+    /// <summary>
+    /// The worker-code log reader, and (fix pass 1, M3) the flows that have no approved screen yet switched ON for this
+    /// suite only — they stay off in every real host until the founder has seen them
+    /// (<c>WorkerIdentityUnscreenedFlowsOffRealPostgresTests</c> proves the default).
+    /// </summary>
     protected override void AddHostServices(IServiceCollection services)
-        => services.AddSingleton<ILoggerProvider>(_codes);
+    {
+        services.AddSingleton<ILoggerProvider>(_codes);
+        services.AddSingleton(new ShramSafal.Application.UseCases.Labour.WorkerIdentity.WorkerIdentityFlows(UnscreenedFlowsEnabled: true));
+    }
 
     // ── 1. A card on add and by backfill; codes never repeat; an old phone's add still works ─────────────────
 
@@ -826,6 +834,8 @@ public sealed class WorkerIdentityRealPostgresTests(ITestOutputHelper output) : 
     private sealed class CodeCapture : ILoggerProvider
     {
         private readonly ConcurrentDictionary<string, string> _lastByTail = new();
+
+        public bool Has(string tail) => _lastByTail.ContainsKey(tail);
 
         public string Last(string tail) =>
             _lastByTail.TryGetValue(tail, out var code) ? code : throw new InvalidOperationException($"no worker code was sent to …{tail}");

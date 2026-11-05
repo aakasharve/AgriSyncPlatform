@@ -8,7 +8,7 @@
  *     फोन पडताळलेला);
  *   - "WhatsApp वर पाठवा": the card PICTURE through the phone's own share sheet (the owner's WhatsApp); where the phone
  *     cannot share a picture, the card address as text; where it cannot share at all, the address is copied;
- *   - "छापा" where printing exists (a browser). The installed app has no print, so the button is not shown there (P5:
+ *   - "छापा" where printing exists (a browser), printing the card alone. The installed app has no print, so the button is not shown there (P5:
  *     never a control that does nothing) — the shared picture can go to any print app;
  *   - "फोन पडताळा": a 4-digit code to the number this farm entered; he reads it out (screen 3). Until the SMS template is
  *     approved, production says so calmly ("नंतर करा") — nothing pretends to be sent;
@@ -45,7 +45,32 @@ const CODE_ERRORS: Record<string, WidWord> = {
     'identity.no_phone': 'noPhone',
     'identity.too_many_codes': 'tooMany',
     'identity.number_verified_elsewhere': 'verifiedElsewhere',
+    'identity.too_many_tries': 'tooManyTries',
+    'identity.use_move': 'useMove',
+    'identity.erased': 'erased',
 };
+
+/**
+ * Fix pass 1 (H1, L6): a new card that cannot be given is said as ShramSafal's rule, never "try again" — only the
+ * owner may confirm him on his word, and only on the farm that holds his proof (any other farm hears the rule, not
+ * which farm that is).
+ */
+const NEW_CARD_ERRORS: Record<string, WidWord> = {
+    ...CODE_ERRORS,
+    'identity.owner_only': 'newCardOwnerOnly',
+    'identity.proof_needed': 'newCardOwnerOnly',
+    'identity.not_found': 'newCardNotHere',
+};
+
+/**
+ * Fix pass 1 (L6) — "छापा" prints the CARD only, in its colours (the page around it and the sheet's buttons are not
+ * printed). Without this the browser printed the whole page and the white-on-green card came out mostly blank.
+ */
+const PRINT_CARD_ONLY = `@media print {
+  body * { visibility: hidden !important; }
+  #wid-print-card, #wid-print-card * { visibility: visible !important; }
+  #wid-print-card { position: fixed; left: 0; top: 0; width: 86mm; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}`;
 
 /** One rung of the ladder (screen 2): done, or still pending. */
 const LevelRow: React.FC<{ id: string; label: string; done: boolean; language?: string | null }> = ({ id, label, done, language }) => (
@@ -84,8 +109,8 @@ export const WorkerCardSheet: React.FC<Props> = ({ farmId, worker, onClose, onCh
         return () => { cancelled = true; };
     }, [payload]);
 
-    const say = (error: unknown) => {
-        const key = CODE_ERRORS[identityErrorCode(error) ?? ''] ?? 'failed';
+    const say = (error: unknown, errors: Record<string, WidWord> = CODE_ERRORS) => {
+        const key = errors[identityErrorCode(error) ?? ''] ?? 'failed';
         setNote({ kind: 'ask', text: widText(key, language) });
     };
 
@@ -155,7 +180,8 @@ export const WorkerCardSheet: React.FC<Props> = ({ farmId, worker, onClose, onCh
             changed({ cardCode: issued.cardCode });
             setNote({ kind: 'ok', text: widText('newCardDone', language) });
         } catch (error) {
-            say(error);
+            setConfirmNewCard(false);
+            say(error, NEW_CARD_ERRORS);
         } finally {
             setBusy(false);
         }
@@ -171,6 +197,7 @@ export const WorkerCardSheet: React.FC<Props> = ({ farmId, worker, onClose, onCh
                     </button>
                 </div>
 
+                {!native && <style data-testid="card-print-style">{PRINT_CARD_ONLY}</style>}
                 <div id="wid-print-card" className="rounded-[20px] bg-gradient-to-br from-emerald-900 to-emerald-700 p-4 text-white">
                     <div className="text-[13px] font-extrabold tracking-wide opacity-85">{widText('cardBrand', language)}</div>
                     <div data-testid="card-name" className="mt-1.5 text-[22px] font-extrabold">{current.displayName}</div>

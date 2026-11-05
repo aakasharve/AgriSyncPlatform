@@ -86,18 +86,11 @@ internal static class IntegrationPostgres
             }
         }
 
-        var appsettings = Path.Combine(RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json");
-        if (File.Exists(appsettings))
-        {
-            var conn = new ConfigurationBuilder().AddJsonFile(appsettings, optional: true).Build()
-                .GetConnectionString("ShramSafalDb");
-            if (!string.IsNullOrWhiteSpace(conn))
-            {
-                return Maintenance(conn);
-            }
-        }
-
-        return "Host=localhost;Port=5433;Database=postgres;Username=postgres;Password=SET_VIA_ENV_OR_secrets_local_credentials_json";
+        // lane WID fix pass 1 (review M4, F103): no appsettings fallback and no built-in default. Both named a
+        // developer's own database (the founder's :5433); nothing configured now FAILS instead of reaching it.
+        throw new InvalidOperationException(
+            "RequiresPostgres: set ADMIN_TESTS_ADMIN_ROOT_CONN or REQUIRES_POSTGRES_ROOT_CONN to a THROWAWAY Postgres. "
+            + "There is deliberately no fallback: the appsettings files name a developer's own database.");
     }
 
     private static string Maintenance(string conn) =>

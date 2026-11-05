@@ -429,6 +429,15 @@ public static class ShramSafalErrors
     public static readonly Error IdentityTooManyCodes = Error.Conflict(
         "identity.too_many_codes", "Too many codes were sent to this number; try again later.");
 
+    public static readonly Error IdentityTooManyTries = Error.Conflict(
+        "identity.too_many_tries", "Too many wrong codes from this farm today; try again tomorrow.");
+
+    public static readonly Error IdentityOwnerOnly = Error.Conflict(
+        "identity.owner_only", "Only the farm's owner may confirm this on his word.");
+
+    public static readonly Error IdentityFlowOff = Error.NotFound(
+        "identity.flow_off", "This step is not open yet.");
+
     public static readonly Error IdentityUseMove = Error.Conflict(
         "identity.use_move", "His verified number changes only by moving it to the new number with a code.");
 

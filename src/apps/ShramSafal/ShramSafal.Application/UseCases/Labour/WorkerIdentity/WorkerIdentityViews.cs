@@ -19,6 +19,17 @@ public sealed record WorkerIdentityView(
     string? HomePin,
     IReadOnlyList<string>? SameNumberNames = null);
 
+/// <summary>
+/// Fix pass 1 (review M3; founder mandate: nothing live that he cannot test) — the worker-identity flows with NO approved
+/// screen yet: number move (case 5), merge and its undo (case 9), unlink (case 10), a person's erasure and its cancel
+/// (case 16), and re-pointing an EXISTING farm record by link. Off unless <c>ShramSafal:WorkerIdentity:UnscreenedFlowsEnabled</c>
+/// is true; while off each answers as if its route did not exist. Turn on only after the founder has seen the screens.
+/// </summary>
+public sealed record WorkerIdentityFlows(bool UnscreenedFlowsEnabled)
+{
+    public const string ConfigurationKey = "ShramSafal:WorkerIdentity:UnscreenedFlowsEnabled";
+}
+
 /// <summary>R6 — a scan answers the name on the card and its level, and nothing else.</summary>
 public sealed record CardResolveView(string Status, string? DisplayName, string? Level);
 

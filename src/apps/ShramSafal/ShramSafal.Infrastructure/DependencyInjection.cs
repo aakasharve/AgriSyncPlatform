@@ -458,6 +458,9 @@ public static class DependencyInjection
         // when ShramSafal:WorkerPhoneCode:SmsEnabled is true).
         services.AddScoped<IdentityTenantScope>();
         services.AddScoped<IShramIdentityStore, ShramIdentityStore>();
+        // Fix pass 1 (M3) — the flows with no approved screen stay OFF until the founder has seen them.
+        services.AddSingleton(new ShramSafal.Application.UseCases.Labour.WorkerIdentity.WorkerIdentityFlows(
+            configuration.GetValue<bool>(ShramSafal.Application.UseCases.Labour.WorkerIdentity.WorkerIdentityFlows.ConfigurationKey)));
         services.AddScoped<IWorkerPhoneCodeSender>(sp =>
             sp.GetService<Microsoft.Extensions.Hosting.IHostEnvironment>() is { } environment
             && Microsoft.Extensions.Hosting.HostEnvironmentEnvExtensions.IsProduction(environment)

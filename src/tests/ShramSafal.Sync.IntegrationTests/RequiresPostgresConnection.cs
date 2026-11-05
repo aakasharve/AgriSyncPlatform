@@ -72,16 +72,15 @@ internal static class RequiresPostgresConnection
     /// </summary>
     public static async Task<string> ResolveReachableConnectionOrThrowAsync()
     {
-        var envConn = Environment.GetEnvironmentVariable(EnvVarName);
-        var baseConn = !string.IsNullOrWhiteSpace(envConn) ? envConn : ResolveFromAppSettingsOrNull();
+        var baseConn = ResolveConfiguredOrNull(Environment.GetEnvironmentVariable(EnvVarName));
 
         if (baseConn is null)
         {
             throw new InvalidOperationException(
                 "RequiresPostgres: no Postgres connection is configured. This suite asserts a tenant-security " +
                 $"or money invariant and must FAIL rather than silently pass when it cannot run. Set the " +
-                $"{EnvVarName} environment variable (as CI does), or provide ConnectionStrings:ShramSafalDb in " +
-                "src/AgriSync.Bootstrapper/appsettings.Development.json (local dev).");
+                $"{EnvVarName} environment variable (as CI does) to a THROWAWAY server. There is deliberately no " +
+                "fallback to an appsettings file: those name a developer's own database.");
         }
 
         try
@@ -101,18 +100,14 @@ internal static class RequiresPostgresConnection
         return baseConn;
     }
 
-    private static string? ResolveFromAppSettingsOrNull()
-    {
-        var path = Path.Combine(RepoRoot(), "src", "AgriSync.Bootstrapper", "appsettings.Development.json");
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        var cfg = new ConfigurationBuilder().AddJsonFile(path, optional: true).Build();
-        var conn = cfg.GetConnectionString("ShramSafalDb");
-        return string.IsNullOrWhiteSpace(conn) ? null : conn;
-    }
+    /// <summary>
+    /// spec: plr-d10 lane WID fix pass 1 (review M4, register F103) — the ONLY source of the root connection is
+    /// <c>REQUIRES_POSTGRES_ROOT_CONN</c>. The old fallback read <c>appsettings.Development.json</c>, whose connection
+    /// strings name a developer's own database (the founder's :5433): with the variable unset, a suite would have run
+    /// CREATE DATABASE / DROP DATABASE there. Nothing set now means nothing reached: the caller throws.
+    /// </summary>
+    internal static string? ResolveConfiguredOrNull(string? environmentValue)
+        => string.IsNullOrWhiteSpace(environmentValue) ? null : environmentValue;
 
     /// <summary>
     /// Walks up from the test bin dir to the repo root (the folder that holds

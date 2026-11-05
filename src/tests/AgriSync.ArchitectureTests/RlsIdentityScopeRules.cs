@@ -61,7 +61,9 @@ public sealed class RlsIdentityScopeRules
     /// trip the rule.
     /// </summary>
     private static readonly Regex GucWriteSql = new(
-        @"set_config\(\s*'agrisync\.|SET\s+LOCAL\s+agrisync\.",
+        // lane WID fix pass 1 (review L4): a plain or SESSION `SET agrisync.…` too — worse than SET LOCAL, it outlives
+        // the transaction on a pooled connection.
+        @"set_config\(\s*'agrisync\.|\bSET\s+(LOCAL\s+|SESSION\s+)?agrisync\.",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
@@ -136,7 +138,7 @@ public sealed class RlsIdentityScopeRules
     public void The_join_code_guc_is_written_only_by_the_typed_join_scope()
     {
         var joinCodeWrite = new Regex(
-            @"set_config\(\s*'agrisync\.join_code'|SET\s+LOCAL\s+agrisync\.join_code",
+            @"set_config\(\s*'agrisync\.join_code'|\bSET\s+(LOCAL\s+|SESSION\s+)?agrisync\.join_code",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         var writers = ProductionSourceFiles()
@@ -160,7 +162,7 @@ public sealed class RlsIdentityScopeRules
     public void The_identity_scope_guc_is_written_only_by_the_identity_scope()
     {
         var identityWrite = new Regex(
-            @"set_config\(\s*'agrisync\.identity_scope'|SET\s+LOCAL\s+agrisync\.identity_scope",
+            @"set_config\(\s*'agrisync\.identity_scope'|\bSET\s+(LOCAL\s+|SESSION\s+)?agrisync\.identity_scope",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         var writers = ProductionSourceFiles()
@@ -172,6 +174,36 @@ public sealed class RlsIdentityScopeRules
             new[] { "apps/ShramSafal/ShramSafal.Infrastructure/Auth/CallerFarmTenantScope.cs" },
             "agrisync.identity_scope may be set only by IdentityTenantScope — any other writer could open every worker's "
             + "identity to a farm session");
+    }
+
+    /// <summary>
+    /// lane WID fix pass 1 (review L4) — the one door to the person tables is taken only by the narrow identity use cases
+    /// (and its own wiring): any other production file that takes <c>IShramIdentityStore</c> could read every worker's
+    /// phones, PIN and cards inside a farm request.
+    /// </summary>
+    [Fact]
+    public void Only_the_narrow_identity_use_cases_take_the_identity_store()
+    {
+        var allowed = new[]
+        {
+            "apps/ShramSafal/ShramSafal.Application/Ports/IShramIdentityStore.cs",
+            "apps/ShramSafal/ShramSafal.Application/UseCases/Labour/CreateFieldOperator/CreateFieldOperatorHandler.cs",
+            "apps/ShramSafal/ShramSafal.Application/UseCases/Labour/GetFieldOperators/GetFieldOperatorsHandler.cs",
+            "apps/ShramSafal/ShramSafal.Application/UseCases/Labour/WorkerIdentity/WorkerIdentityReads.cs",
+            "apps/ShramSafal/ShramSafal.Application/UseCases/Labour/WorkerIdentity/WorkerIdentityService.cs",
+            "apps/ShramSafal/ShramSafal.Infrastructure/DependencyInjection.cs",
+            "apps/ShramSafal/ShramSafal.Infrastructure/Persistence/Repositories/ShramIdentityStore.cs",
+        };
+
+        var takers = ProductionSourceFiles()
+            .Where(file => StripComments(File.ReadAllText(file)).Contains("IShramIdentityStore", StringComparison.Ordinal))
+            .Select(Relative)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToList();
+
+        takers.Should().BeSubsetOf(allowed,
+            "only the worker-identity use cases may open the ShramSafal-wide person tables; anything else that takes the "
+            + "store reaches every worker's phones, PIN and cards");
     }
 
     [Fact]

@@ -19,6 +19,13 @@ namespace ShramSafal.Api.Endpoints;
 /// </summary>
 public static class WorkerIdentityEndpoints
 {
+    /// <summary>
+    /// Fix pass 1 (review M2, L1) — the per-user request limit on the identity lookups and code sends (scan-resolve, the
+    /// number check, link/start, send-code), so none of them can be looped to list cards or verified numbers, or to make
+    /// ShramSafal's SMS header spam a number. Registered by <c>RateLimitingConfig</c> under this one name.
+    /// </summary>
+    public const string IdentityRateLimitPolicy = "identity";
+
     public static RouteGroupBuilder MapWorkerIdentityEndpoints(this RouteGroupBuilder group)
     {
         const string Identity = "/farms/{farmId:guid}/labour/identity";
@@ -27,17 +34,17 @@ public static class WorkerIdentityEndpoints
         group.MapPost($"{Identity}/resolve", (Guid farmId, CodeRequest body, ClaimsPrincipal user, ICallerFarmTenantScope scope,
                 WorkerIdentityService service, CancellationToken ct) =>
             RunAsync(user, scope, farmId, ct, caller => service.ResolveAsync(farmId, caller, body.Code, ct)))
-            .WithName("ResolveWorkerCard").RequireAuthorization();
+            .WithName("ResolveWorkerCard").RequireAuthorization().RequireRateLimiting(IdentityRateLimitPolicy);
 
         group.MapPost($"{Identity}/phone-check", (Guid farmId, PhoneRequest body, ClaimsPrincipal user, ICallerFarmTenantScope scope,
                 WorkerIdentityService service, CancellationToken ct) =>
             RunAsync(user, scope, farmId, ct, caller => service.CheckPhoneAsync(farmId, caller, body.Phone, ct)))
-            .WithName("CheckWorkerPhone").RequireAuthorization();
+            .WithName("CheckWorkerPhone").RequireAuthorization().RequireRateLimiting(IdentityRateLimitPolicy);
 
         group.MapPost($"{Identity}/link/start", (Guid farmId, LinkStartRequest body, ClaimsPrincipal user, ICallerFarmTenantScope scope,
                 WorkerIdentityService service, CancellationToken ct) =>
             RunAsync(user, scope, farmId, ct, caller => service.StartLinkAsync(farmId, caller, body.CardCode, body.Phone, ct)))
-            .WithName("StartWorkerLink").RequireAuthorization();
+            .WithName("StartWorkerLink").RequireAuthorization().RequireRateLimiting(IdentityRateLimitPolicy);
 
         group.MapPost($"{Identity}/link", async Task<IResult> (Guid farmId, LinkRequest body, ClaimsPrincipal user,
             ICallerFarmTenantScope scope, WorkerIdentityService service, CancellationToken ct) =>
@@ -81,7 +88,7 @@ public static class WorkerIdentityEndpoints
                 ICallerFarmTenantScope scope, WorkerIdentityService service, CancellationToken ct) =>
             RunAsync(user, scope, farmId, ct, caller =>
                 service.SendRecordCodeAsync(farmId, caller, id, body.Purpose, body.Phone, ct)))
-            .WithName("SendWorkerPhoneCode").RequireAuthorization();
+            .WithName("SendWorkerPhoneCode").RequireAuthorization().RequireRateLimiting(IdentityRateLimitPolicy);
 
         group.MapPost($"{Worker}/phone/verify", (Guid farmId, Guid id, VerifyRequest body, ClaimsPrincipal user,
                 ICallerFarmTenantScope scope, WorkerIdentityService service, CancellationToken ct) =>

@@ -100,7 +100,7 @@ export const IdentityFields: React.FC<Props> = ({ value, onChange, farmPinCode, 
                 </div>
                 {typingPin && (
                     <input data-testid="add-worker-pin" inputMode="numeric" maxLength={6} disabled={disabled}
-                        value={value.pin} aria-label={widText('pinLabel', language)} placeholder="413304"
+                        value={value.pin} aria-label={widText('pinLabel', language)} placeholder={widText('pinPlaceholder', language)}
                         onChange={(e) => set({ pin: e.target.value.replace(/\D/g, '').slice(0, 6) })}
                         className={`${INPUT} mt-2 tracking-[0.2em]`} />
                 )}
@@ -120,7 +120,7 @@ export const IdentityFields: React.FC<Props> = ({ value, onChange, farmPinCode, 
             <div>
                 <div className={LABEL}><Phone size={14} aria-hidden /> {widText('phoneLabel', language)} *</div>
                 <input data-testid="add-worker-phone" inputMode="tel" maxLength={16} disabled={disabled}
-                    value={value.phone} aria-label={widText('phoneLabel', language)} placeholder="98xxx xx412"
+                    value={value.phone} aria-label={widText('phoneLabel', language)} placeholder={widText('phonePlaceholder', language)}
                     onChange={(e) => set({ phone: e.target.value })}
                     className={INPUT} />
                 <p className="ml-1 mt-1 text-[12.5px] font-semibold text-stone-500">{widText('phoneNote', language)}</p>

@@ -113,6 +113,28 @@ internal sealed class ShramIdentityStore(ShramSafalDbContext db, IdentityTenantS
         return await db.ShramPhoneChallenges.CountAsync(c => c.PhoneE164 == phoneE164 && c.CreatedAtUtc >= sinceUtc, ct);
     }
 
+    public async Task<int> CountChallengesByFarmSinceAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        await scope.OpenAsync(ct);
+        return await db.ShramPhoneChallenges.CountAsync(c => c.RequestedByFarmId == farmId && c.CreatedAtUtc >= sinceUtc, ct);
+    }
+
+    public async Task<int> CountChallengesByUserSinceAsync(Guid userId, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        await scope.OpenAsync(ct);
+        return await db.ShramPhoneChallenges.CountAsync(c => c.RequestedByUserId == userId && c.CreatedAtUtc >= sinceUtc, ct);
+    }
+
+    public async Task<int> CountWrongTriesByFarmSinceAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        await scope.OpenAsync(ct);
+
+        // Every try counts; the one right try that spent a code is not a wrong one.
+        return await db.ShramPhoneChallenges
+            .Where(c => c.RequestedByFarmId == farmId && c.CreatedAtUtc >= sinceUtc)
+            .SumAsync(c => c.Attempts - (c.ConsumedAtUtc == null ? 0 : 1), ct);
+    }
+
     public async Task AddChallengeAsync(ShramPhoneChallenge challenge, CancellationToken ct = default)
     {
         await scope.OpenAsync(ct);
