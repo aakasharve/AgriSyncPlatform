@@ -1,15 +1,21 @@
 /**
  * PayoutEligibilityStrip — shows whether a job card is eligible for payout.
- * Reads card.status and card.linkedDailyLogId.
+ * Reads card.status, card.linkedDailyLogId and (lane L4b fix round 1) the linked record's state.
  *
- * CEI Phase 4 §4.8
+ * CEI Phase 4 §4.8. Lane L4b fix round 1 (H-1 / CTO D-89, founder D-33, M-2): after D-33 a मंजूर confirms the WORK
+ * and leaves the card Completed, so a Completed card whose record is approved says so ("काम मंजूर · पेआउट तपासा
+ * बाकी"); "नोंद तपासणीची प्रतीक्षा" stays only while the record is not approved; a card a शंका or a correction took
+ * back from "ready to pay" says that. One language at a time (Marathi mode = Marathi only). New lines are PROPOSED.
  */
 
 import React from 'react';
 import type { JobCard } from '../../../domain/work/JobCard';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 interface PayoutEligibilityStripProps {
-    card: Pick<JobCard, 'status' | 'linkedDailyLogId'>;
+    card: Pick<JobCard, 'status' | 'linkedDailyLogId' | 'linkedDailyLogStatus' | 'payoutCheckWithdrawn'>;
+    /** The screen's language; defaults to the app's. */
+    language?: 'mr' | 'en';
 }
 
 interface StripConfig {
@@ -37,6 +43,22 @@ const getStripConfig = (card: PayoutEligibilityStripProps['card']): StripConfig 
         };
     }
     if (card.status === 'Completed') {
+        if (card.linkedDailyLogId && card.linkedDailyLogStatus === 'Verified') {
+            return {
+                colorClass: 'bg-emerald-50 text-emerald-800',
+                iconPath: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+                labelEn: 'Work approved · payout check pending',
+                labelMr: 'काम मंजूर · पेआउट तपासा बाकी',
+            };
+        }
+        if (card.linkedDailyLogId && card.payoutCheckWithdrawn) {
+            return {
+                colorClass: 'bg-rose-50 text-rose-700',
+                iconPath: 'M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
+                labelEn: 'Record questioned or corrected — payout check withdrawn',
+                labelMr: 'नोंदीवर शंका / दुरुस्ती — पेआउटची खात्री परत घेतली',
+            };
+        }
         if (card.linkedDailyLogId) {
             return {
                 colorClass: 'bg-amber-50 text-amber-700',
@@ -77,11 +99,16 @@ const getStripConfig = (card: PayoutEligibilityStripProps['card']): StripConfig 
     };
 };
 
-const PayoutEligibilityStrip: React.FC<PayoutEligibilityStripProps> = ({ card }) => {
+const PayoutEligibilityStrip: React.FC<PayoutEligibilityStripProps> = ({ card, language }) => {
+    const appLanguage = useOptionalLanguage()?.language;
+    const isEnglish = (language ?? appLanguage) === 'en';
     const config = getStripConfig(card);
 
     return (
-        <div className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${config.colorClass}`}>
+        <div
+            data-testid="payout-strip"
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${config.colorClass}`}
+        >
             <svg
                 width="14"
                 height="14"
@@ -96,12 +123,11 @@ const PayoutEligibilityStrip: React.FC<PayoutEligibilityStripProps> = ({ card })
             >
                 <path d={config.iconPath} />
             </svg>
-            <span style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>
-                {config.labelMr}
-            </span>
-            <span style={{ fontFamily: "'DM Sans', sans-serif" }} className="opacity-70">
-                · {config.labelEn}
-            </span>
+            {isEnglish ? (
+                <span style={{ fontFamily: "'DM Sans', sans-serif" }}>{config.labelEn}</span>
+            ) : (
+                <span style={{ fontFamily: "'Noto Sans Devanagari', sans-serif" }}>{config.labelMr}</span>
+            )}
         </div>
     );
 };

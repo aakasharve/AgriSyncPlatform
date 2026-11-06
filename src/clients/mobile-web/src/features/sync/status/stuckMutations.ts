@@ -65,6 +65,8 @@ export interface StuckMutationView {
     status: MutationQueueStatus;
     retryCount: number;
     lastError?: string;
+    /** lane L4b — the server's error CODE: the sheet explains a refusal by it, never by the server's English text. */
+    errorCode?: string;
     /**
      * Which remedy actually works for this row — the one thing the old drawer
      * could not say, and the reason it offered a dead button.
@@ -111,6 +113,7 @@ export function toStuckMutationView(row: MutationQueueItem): StuckMutationView {
         status: row.status,
         retryCount: row.retryCount,
         lastError: row.lastError,
+        ...(row.errorCode !== undefined && { errorCode: row.errorCode }),
         remedy: row.status === 'REJECTED_USER_REVIEW' ? 'NEEDS_REVIEW' : 'RETRY',
     };
 }

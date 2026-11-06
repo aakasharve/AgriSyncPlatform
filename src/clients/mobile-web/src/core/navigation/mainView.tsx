@@ -112,7 +112,6 @@ export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
             // chips, whose `assigneeId` nothing ever reads — is no longer reachable (P5; reported, not hidden).
             onSaveTask={ctx.handleSaveTask}
             onUpdateNote={ctx.handleUpdateNote}
-            onVerifyLog={ctx.handleVerifyLog}
             currentOperator={ctx.farmerProfile.operators.find(op => op.id === ctx.farmerProfile.activeOperatorId)}
             operators={ctx.farmerProfile.operators}
             navigate={ctx.setCurrentRoute}

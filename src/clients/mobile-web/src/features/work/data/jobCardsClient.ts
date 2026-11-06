@@ -108,6 +108,12 @@ export class JobCardRefusal extends Error {
     }
 }
 
+/**
+ * lane L4b fix round 1 (H-1) — the server answers a role refusal with a bare 403 (no body, `Results.Forbid()`): the
+ * client names it with this code so the screen can still say it in his language.
+ */
+export const FORBIDDEN_WITHOUT_CODE = 'http.403';
+
 async function refusalCodeOf(res: Response): Promise<string | null> {
     try {
         const body = (await res.json()) as { error?: unknown } | null;
@@ -153,7 +159,13 @@ export async function completeJobCard(id: string, req: CompleteJobCardRequest): 
 export async function verifyForPayout(id: string): Promise<JobCardChange> {
     const url = `${apiBase()}/job-cards/${id}/verify-for-payout`;
     const res = await fetch(url, { method: 'POST', headers: authHeaders() });
-    if (!res.ok) throw new Error(`verifyForPayout failed: ${res.status}`);
+    if (!res.ok) {
+        // lane L4b fix round 1 (H-1) — a refusal travels by its code, so the card says it in his language.
+        const code = await refusalCodeOf(res);
+        if (code) throw new JobCardRefusal(code, res.status);
+        if (res.status === 403) throw new JobCardRefusal(FORBIDDEN_WITHOUT_CODE, res.status);
+        throw new Error(`verifyForPayout failed: ${res.status}`);
+    }
     return res.json() as Promise<JobCardChange>;
 }
 

@@ -63,7 +63,9 @@ import OwnAttendanceComingSoon from './OwnAttendanceComingSoon';
 import HajeriCellDetail from './HajeriCellDetail';
 import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
 import RefusedLabourNotice from './RefusedLabourNotice';
-import ReviewSheet from './ReviewSheet';
+import { openApprovalReview } from '../../approval/openApprovalReview';
+import { useApprovalQueue } from '../../approval/useApprovalQueue';
+import { onApprovalSent } from '../../approval/approvalQueue';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 import { BOTTOM_BAR_CLEARANCE } from '../../../shared/utils/bottomBar';
 import { canTakeManualAttendance } from '../attendanceDoor';
@@ -165,7 +167,6 @@ export const LabourFeature: React.FC<{
     // Lane OF (founder D-57) — "बदला" on a हजेरी-door record opens THAT DAY in the वही, over the hub (मागे steps back to it).
     const [hajeriDay, setHajeriDay] = useState<string>(() => dayOpening(peekLabourOpening()) ?? getDateKey());
     const [stack, setStack] = useState<ScreenState[]>(() => (dayOpening(peekLabourOpening()) ? [{ name: 'hub' }, { name: 'day' }] : [{ name: 'hub' }]));
-    const [reviewOpen, setReviewOpen] = useState(false);
     // I23 — the day travels WITH the cell: a paged वही page is not the feature's own read-out, so the
     // detail must not look its date up in `data.ledger.days`.
     const [cellDetail, setCellDetail] = React.useState<{ row: LedgerRow; dayIndex: number; dayIso: string } | null>(null);
@@ -231,6 +232,15 @@ export const LabourFeature: React.FC<{
     // while the last `/me` failed: once `/me` answers, `farm` is the authority
     // (and if the answer excludes the remembered farm, it is no longer used).
     const farmId = farm?.farmId ?? (farmCtx?.loadFailed ? farmCtx.currentFarmId ?? undefined : undefined);
+    // lane L4b (D-40 §1) — the तपासा badge is the ONE list's size (the same number every door shows), refreshed by any
+    // door's मंजूर; this page's own read feeds the same list (`useLabourState` publishes it).
+    const approvalQueue = useApprovalQueue(farmId, { autoRefresh: false });
+    // lane L4b fix round 1 (L-8) — a मंजूर / शंका sent from the one sheet changes this page's own data (its marks and
+    // statuses): read it again, as it did when the sheet lived inside this page. Another farm's decision does not.
+    useEffect(() => onApprovalSent((sentFarmId) => { if (sentFarmId === farmId) refresh(); }), [farmId, refresh]);
+    const reviewBadgeData = approvalQueue.status === 'known' && approvalQueue.data
+        ? { ...data, dashboard: { ...data.dashboard, pending: approvalQueue.data.review.length } }
+        : data;
     // PLR-D10 L3a / D-35 — a plain worker (the server-told role) looking at his own view: his own हजेरी
     // is "coming soon" (it needs a safe login↔name link first, D-8). Never inferred from the view alone:
     // an owner offline also gets the 'own'-shaped local register.
@@ -559,7 +569,7 @@ export const LabourFeature: React.FC<{
                     <>
                         {cur.name === 'hub' && (
                             <LabourHub
-                                data={data}
+                                data={reviewBadgeData}
                                 onOpenMukadam={(id) => push({ name: 'mukadam', id })}
                                 onOpenPerson={(id) => push({ name: 'person', id })}
                                 onAttendance={() => openAttendance()}
@@ -569,7 +579,7 @@ export const LabourFeature: React.FC<{
                                 } : undefined}
                                 onDashboard={() => push({ name: 'dashboard' })}
                                 onLedger={openLedger}
-                                onReview={() => setReviewOpen(true)}
+                                onReview={() => openApprovalReview()}
                                 onGoToLog={goToLog}
                                 onInviteWorker={farm ? () => setInviteOpen(true) : undefined}
                                 anchor={anchor}
@@ -617,8 +627,8 @@ export const LabourFeature: React.FC<{
                         )}
                         {cur.name === 'dashboard' && (
                             <WeeklyDashboard
-                                data={data}
-                                onReview={() => setReviewOpen(true)}
+                                data={reviewBadgeData}
+                                onReview={() => openApprovalReview()}
                                 onLedger={openLedger}
                                 onToast={showToast}
                                 timeWindow={timeWindow}
@@ -650,7 +660,7 @@ export const LabourFeature: React.FC<{
                 roster belongs to, and the local log the engagement id was
                 minted on. Both already exist here; neither is required, and
                 without them the sheet renders exactly as it did before. */}
-            <ReviewSheet open={reviewOpen} data={data} onClose={() => setReviewOpen(false)} onToast={showToast} onApproved={refresh} farmId={farm?.farmId} history={history} reviewListUnknown={error} reviewListLoading={loading} />
+            {/* lane L4b (founder D-3) — तपासा / तपासायचं open THE one review sheet (router-mounted), not a second copy. */}
 
             {cellDetail && (
                 <HajeriCellDetail

@@ -23,7 +23,14 @@ public sealed record JobCardDto(
     Guid? PayoutCostEntryId,
     string? CancellationReason,
     DateTime CreatedAtUtc,
-    DateTime ModifiedAtUtc);
+    DateTime ModifiedAtUtc,
+    // lane L4b fix round 1 (H-1 / CTO D-89) — the linked record's verification state ("Draft", "Verified", "Disputed",
+    // …) as the farm's job-card list reads it, so the phone offers "पेआउट तपासा" only where the server would let it
+    // pass. null = no linked record, a record kept from this reader, or a read that does not fill it (the sync pull).
+    string? LinkedDailyLogStatus = null,
+    // lane L4b fix round 1 (M-2) — a शंका or a correction took this card back from "ready to pay" and its payout
+    // check has not been done again. Filled by the farm's job-card list; false elsewhere.
+    bool PayoutCheckWithdrawn = false);
 
 /// <summary>
 /// lane MU-3 fix 1 (F7) — one job-card line as a READER receives it. <see cref="RatePerHourAmount"/> is a

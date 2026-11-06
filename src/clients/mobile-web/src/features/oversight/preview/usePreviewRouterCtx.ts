@@ -69,7 +69,6 @@ import type {
     InputMode,
     LedgerDefaults,
     LogSegment,
-    LogVerificationStatus,
     PlannedTask,
     Person,
     ResourceItem,
@@ -141,9 +140,6 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
     }, [notify]);
     const handleUpdateNote = useCallback(() => {
         notify('Editing notes is disabled in this preview.');
-    }, [notify]);
-    const handleVerifyLog = useCallback((_logId: string, _status: LogVerificationStatus, _notes?: string) => {
-        notify('Verifying logs is disabled in this preview.');
     }, [notify]);
 
     // ── UI runtime ──
@@ -281,7 +277,7 @@ export function usePreviewRouterCtx(data: PreviewDataState): UsePreviewRouterCtx
         boundaryUnset: true,
         refetchWeather,
 
-        handleManualSubmit, handleUpdateNote, handleVerifyLog,
+        handleManualSubmit, handleUpdateNote,
 
         handleReset,
         lastSavedLogSummary: [],

@@ -6,7 +6,6 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Work.Handlers;
-using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.Logs;
@@ -47,29 +46,32 @@ public sealed class OnLogVerifiedAutoVerifyJobCardTests
         return (job, log);
     }
 
+    /// <summary>
+    /// lane L4b — founder D-33 (verbatim): "मंजूर no longer moves a काम कार्ड to 'ready to pay'". The record's मंजूर
+    /// confirms the work; the card's payment state is its own decision (verify-for-payout), so it stays Completed.
+    /// (This test used to assert the opposite: the old CEI-I9 auto-transition.)
+    /// </summary>
     [Fact]
-    public async Task OnLogVerified_WithLinkedJobCard_AutoTransitionsToVerifiedForPayout()
+    public async Task OnLogVerified_WithLinkedJobCard_LeavesItsPaymentStateUnchanged_D33()
     {
         var (job, log) = BuildCompletedJobCardAndVerifiedLog();
         var repo = new FakeAutoVerifyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
         repo.ReviewMoneyHolders.Add(AgronomistGuid); // lane 2b fix 1: review money from the seat, never the label
-        var verifyHandler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(3)));
         var handler = new OnLogVerifiedAutoVerifyJobCard(
-            repo, verifyHandler, new FixedClock(Now.AddHours(3)),
+            repo, new FixedClock(Now.AddHours(3)),
             NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
 
         await handler.HandleAsync(log.Id, VerificationStatus.Verified, AgronomistUserId);
 
-        job.Status.Should().Be(JobCardStatus.VerifiedForPayout);
+        job.Status.Should().Be(JobCardStatus.Completed);
     }
 
     [Fact]
     public async Task OnLogVerified_WithoutLinkedJobCard_IsNoOp()
     {
         var repo = new FakeAutoVerifyRepo(null, null, AgronomistGuid, AppRole.Agronomist);
-        var verifyHandler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(3)));
         var handler = new OnLogVerifiedAutoVerifyJobCard(
-            repo, verifyHandler, new FixedClock(Now.AddHours(3)),
+            repo, new FixedClock(Now.AddHours(3)),
             NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
 
         // Should not throw; returns without error.
@@ -87,15 +89,38 @@ public sealed class OnLogVerifiedAutoVerifyJobCardTests
 
         var repo = new FakeAutoVerifyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
         repo.ReviewMoneyHolders.Add(AgronomistGuid); // lane 2b fix 1: review money from the seat, never the label
-        var verifyHandler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(4)));
         var handler = new OnLogVerifiedAutoVerifyJobCard(
-            repo, verifyHandler, new FixedClock(Now.AddHours(4)),
+            repo, new FixedClock(Now.AddHours(4)),
             NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
 
         // Log transitioned from Verified to Disputed (de-verify)
         await handler.HandleAsync(log.Id, VerificationStatus.Disputed, AgronomistUserId);
 
         job.Status.Should().Be(JobCardStatus.Completed);
+
+        // Lane L4b fix round 1 (M-2) — the take-back is never silent: one audit row, the seat's role, the record and
+        // the state it is now in.
+        var withdrawn = repo.AuditEvents.Should().ContainSingle(a => a.Action == OnLogVerifiedAutoVerifyJobCard.PayoutReadinessWithdrawnAction).Subject;
+        withdrawn.EntityId.Should().Be(job.Id);
+        withdrawn.ActorUserId.Should().Be(AgronomistUserId);
+        withdrawn.ActorRole.Should().Be(nameof(AppRole.Agronomist));
+        withdrawn.Payload.Should().Contain(log.Id.ToString()).And.Contain("Disputed");
+    }
+
+    /// <summary>Lane L4b fix round 1 (M-2) — a card that was not ready to pay is not "taken back": no audit row.</summary>
+    [Fact]
+    public async Task OnLogDispute_WithACompletedCard_WritesNoWithdrawal()
+    {
+        var (job, log) = BuildCompletedJobCardAndVerifiedLog();
+        var repo = new FakeAutoVerifyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
+        var handler = new OnLogVerifiedAutoVerifyJobCard(
+            repo, new FixedClock(Now.AddHours(4)),
+            NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
+
+        await handler.HandleAsync(log.Id, VerificationStatus.Disputed, AgronomistUserId);
+
+        job.Status.Should().Be(JobCardStatus.Completed);
+        repo.AuditEvents.Should().BeEmpty();
     }
 
     [Fact]
@@ -109,9 +134,8 @@ public sealed class OnLogVerifiedAutoVerifyJobCardTests
 
         var repo = new FakeAutoVerifyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
         repo.ReviewMoneyHolders.Add(AgronomistGuid); // lane 2b fix 1: review money from the seat, never the label
-        var verifyHandler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(5)));
         var handler = new OnLogVerifiedAutoVerifyJobCard(
-            repo, verifyHandler, new FixedClock(Now.AddHours(5)),
+            repo, new FixedClock(Now.AddHours(5)),
             NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
 
         // Should not throw — logs warning only, does not reverse PaidOut.

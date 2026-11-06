@@ -198,8 +198,8 @@ describe('buildOversightModel', () => {
 
     // ── Finding F8 — "a zero meaning UNKNOWN was reported as NONE" ────────
     //
-    // `waitingCount === 0` is what turns `CanonicalStrip` into the REST
-    // state: a green tick plus "आज पर्यन्त सर्व कामे पूर्ण आहेत" ("all work is
+    // `waitingCount === 0` is what turned the old `CanonicalStrip` (deleted in lane L4b, founder D-3) into the
+    // REST state: a green tick plus "आज पर्यन्त सर्व कामे पूर्ण आहेत" ("all work is
     // complete as of today") and no count badge. These four tests pin that
     // this claim can only be reached when it is TRUE.
 

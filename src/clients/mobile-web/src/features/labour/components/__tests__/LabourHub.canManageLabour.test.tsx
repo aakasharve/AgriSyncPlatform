@@ -12,7 +12,7 @@
 // Real LabourHub + real ReviewSheet, fed through the real DTO mapper.
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
 const mockGet = vi.fn();
@@ -42,7 +42,8 @@ const person = (id: string, name: string, role: string) => ({
 });
 
 const reviewItem = (id: string) => ({
-    id, who: 'Raju', initial: 'R', tone: 'em', detail: '2026-10-10', status: 'Draft',
+    // version: the exact version the server sends (D-46) — it makes a complete card SELECTABLE for a bulk मंजूर.
+    id, who: 'Raju', initial: 'R', tone: 'em', detail: '2026-10-10', status: 'Draft', version: 1,
     points: { count: 2, shift: null, task: 'weeding', amount: null, names: [] },
     plot: null, plotScope: 'Farm',
 });
@@ -153,18 +154,26 @@ describe('ReviewSheet - approve / approve-all follow the same signal', () => {
         render(<ReviewSheet open data={data} onClose={noop} onToast={noop} />);
     };
 
-    it('canManageLabour=false: no मंजूर, no सगळं मंजूर, no शंका (the server refuses all three); the cards remain', async () => {
+    it('canManageLabour=false: no मंजूर, no bulk selection, no शंका (the server refuses all three); the cards remain', async () => {
         await sheet(false);
         expect(screen.getByTestId('review-card-l1')).toBeInTheDocument();
         expect(screen.queryByTestId('review-approve-l1')).toBeNull();
-        expect(screen.queryByTestId('review-approve-all')).toBeNull();
+        // lane L4b fix round 1 (review L-3) — the bulk path is "select, then approve the selected": neither is drawn.
+        expect(screen.queryByTestId('review-select-l1')).toBeNull();
+        expect(screen.queryByTestId('review-select-l2')).toBeNull();
+        expect(screen.queryByTestId('review-approve-selected')).toBeNull();
         expect(screen.queryByTestId('review-query-l1')).toBeNull();
     });
 
-    it.each([[true], [undefined]])('canManageLabour=%s keeps approve and approve-all', async (flag) => {
+    it.each([[true], [undefined]])('canManageLabour=%s keeps approve and शंका, and bulk only over cards he selects (lane L4b)', async (flag) => {
         await sheet(flag);
         expect(screen.getByTestId('review-approve-l1')).toBeInTheDocument();
-        expect(screen.getByTestId('review-approve-all')).toBeInTheDocument();
         expect(screen.getByTestId('review-query-l1')).toBeInTheDocument();
+        // The positive control for the test above: the same two complete cards ARE selectable here, and the bulk
+        // button appears only once he selected them.
+        expect(screen.queryByTestId('review-approve-selected')).toBeNull();
+        fireEvent.click(screen.getByTestId('review-select-l1'));
+        fireEvent.click(screen.getByTestId('review-select-l2'));
+        expect(screen.getByTestId('review-approve-selected')).toBeInTheDocument();
     });
 });

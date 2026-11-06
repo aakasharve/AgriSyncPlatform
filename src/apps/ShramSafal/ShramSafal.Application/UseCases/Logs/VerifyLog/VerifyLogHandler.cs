@@ -58,7 +58,11 @@ public sealed class VerifyLogHandler(
         // pipeline. Direct callers must enforce the same invariants
         // themselves.
 
-        var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
+        // lane L4b (L6 review S7; founder D-40 / D-46 §3) — the record is HELD for this decision (row lock, re-read
+        // after the hold), so the version compared below is one a correction cannot move underneath it: a correction
+        // that committed first is seen (the stale confirmation is refused), one arriving later waits and then re-opens
+        // what this confirmation covered. The same read the move and labour-correction doors use; no schema change.
+        var log = await repository.GetDailyLogForChangeAsync(command.DailyLogId, ct);
         if (log is null)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);
@@ -302,7 +306,12 @@ public sealed class VerifyLogHandler(
 
         await repository.SaveChangesAsync(ct);
 
-        await autoVerifyJobCard.HandleAsync(log.Id, verification.Status, new UserId(command.VerifiedByUserId), ct);
+        await autoVerifyJobCard.HandleAsync(
+            log.Id,
+            verification.Status,
+            new UserId(command.VerifiedByUserId),
+            new ChangeProvenance(command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+            ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),

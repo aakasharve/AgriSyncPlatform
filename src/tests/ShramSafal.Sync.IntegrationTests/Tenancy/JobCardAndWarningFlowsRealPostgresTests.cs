@@ -85,15 +85,18 @@ public sealed class JobCardAndWarningFlowsRealPostgresTests(ITestOutputHelper ou
         completed.Should().Be(HttpStatusCode.OK, completedBody);
         (await CardStatusAsync(card)).Should().Be("Completed");
 
-        // 5. Verify (the owner approves the day; the card is paid only on an approved record). Approving the linked record
-        //    moves the card to VerifiedForPayout by itself (OnLogVerifiedAutoVerifyJobCard), so the separate
-        //    verify-for-payout route, which no phone screen calls today, then answers "not in a valid state" (400). Its
-        //    rules still answer first: off the plot (MU-4) and without money review (MU-3) are refused.
+        // 5. Verify (the owner approves the day; the card is paid only on an approved record). lane L4b, founder D-33
+        //    (verbatim): "मंजूर no longer moves a काम कार्ड to 'ready to pay'": approving the linked record leaves the card
+        //    Completed, and the verify-for-payout route is the owner's own payment decision. Its rules answer first: off
+        //    the plot (MU-4) and without money review (MU-3) are refused.
         await ShouldRefuseByPlotAsync(Mukadam, "POST", $"/shramsafal/job-cards/{card}/verify-for-payout", null);
         (await PhoneAsync(CoOwner, "POST", $"/shramsafal/job-cards/{card}/verify-for-payout", null)).Status
             .Should().Be(HttpStatusCode.Forbidden, "the सहमालक holds no money review (MU-3)");
         await VerifyRecordAsync(WorkerLog);
-        (await CardStatusAsync(card)).Should().Be("VerifiedForPayout", "approving the record verifies the card for payout");
+        (await CardStatusAsync(card)).Should().Be("Completed", "D-33: approving the record does not make the card ready to pay");
+        var (payout, payoutBody) = await PhoneAsync(Owner, "POST", $"/shramsafal/job-cards/{card}/verify-for-payout", null);
+        payout.Should().Be(HttpStatusCode.OK, payoutBody);
+        (await CardStatusAsync(card)).Should().Be("VerifiedForPayout", "the owner verifies the card for payout himself");
         var (again, againBody) = await PhoneAsync(Owner, "POST", $"/shramsafal/job-cards/{card}/verify-for-payout", null);
         again.Should().Be(HttpStatusCode.BadRequest, againBody);
         Json(againBody).GetProperty("error").GetString().Should().Be("ShramSafal.JobCardInvalidState");

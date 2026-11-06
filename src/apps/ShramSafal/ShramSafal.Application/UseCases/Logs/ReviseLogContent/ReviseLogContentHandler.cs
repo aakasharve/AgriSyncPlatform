@@ -121,7 +121,9 @@ public sealed class ReviseLogContentHandler(
     /// <summary>One attempt. <c>null</c> = another edit took this version first; try again on top.</summary>
     private async Task<Result<ReviseLogContentResultDto>?> ReviseAsync(ReviseLogContentCommand command, CancellationToken ct)
     {
-        var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
+        // lane L4b (L6 review S7) — held for this change and re-read after the hold: a confirmation committing while
+        // this edit is made is seen by the re-open below (D-46 §4), never left standing over the new version.
+        var log = await repository.GetDailyLogForChangeAsync(command.DailyLogId, ct);
         if (log is null)
         {
             return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.DailyLogNotFound);
@@ -358,7 +360,11 @@ public sealed class ReviseLogContentHandler(
             && logVerificationChanged is not null)
         {
             await logVerificationChanged.HandleAsync(
-                log.Id, log.CurrentVerificationStatus, new UserId(command.ActorUserId), ct);
+                log.Id,
+                log.CurrentVerificationStatus,
+                new UserId(command.ActorUserId),
+                new Work.Handlers.ChangeProvenance(command.ClientRequestId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+                ct);
         }
 
         return Result.Success(await ForReaderAsync(answer, log, command.ActorUserId, now, ct));

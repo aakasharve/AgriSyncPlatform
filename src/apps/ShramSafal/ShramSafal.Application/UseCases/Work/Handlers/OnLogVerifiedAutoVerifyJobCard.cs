@@ -1,7 +1,7 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
-using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
+using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Work;
 using Microsoft.Extensions.Logging;
@@ -9,17 +9,22 @@ using Microsoft.Extensions.Logging;
 namespace ShramSafal.Application.UseCases.Work.Handlers;
 
 /// <summary>
-/// CEI Phase 4 §4.8 — Task 2.3.1 + 2.3.2.
+/// CEI Phase 4 §4.8 — Task 2.3.2, as narrowed by founder D-33 (lane L4b).
 ///
-/// Called from VerifyLogHandler after a log verification event is persisted.
-/// Implements CEI-I9 side effects:
+/// Called after a log's verification status changes (VerifyLogHandler, and the content-change doors).
 ///
-///   - When a DailyLog transitions TO Verified: find any Completed JobCard linked to it
-///     and auto-transition it to VerifiedForPayout.
+///   - When a DailyLog transitions TO Verified: NOTHING happens to its job card. Founder D-33 (verbatim): "मंजूर no
+///     longer moves a काम कार्ड to 'ready to pay'". The record's मंजूर confirms the WORK; the card's payment state is
+///     its own decision (verify-for-payout). Until lane L4b this auto-transitioned a Completed card to
+///     VerifiedForPayout (CEI-I9); that cascade is removed for every phone (verify_log, verify_log_v2, REST), and a
+///     card already VerifiedForPayout is left exactly as it is (P10: no rewrite of existing data).
 ///
-///   - When a DailyLog transitions OUT of Verified (edit → Draft, or Verified → Disputed):
-///     find any JobCard in VerifiedForPayout linked to it and revert it to Completed.
-///     If the card is already PaidOut, log a warning — manual reconciliation is required.
+///   - When a DailyLog transitions OUT of Verified (edit → Draft, or Verified → Disputed): a card in
+///     VerifiedForPayout linked to it is reverted to Completed (unchanged safety rule: payment is not authorised on a
+///     record that is no longer confirmed). Lane L4b fix round 1 (M-2): that take-back is a decision the ledger
+///     records — an audit row <see cref="PayoutReadinessWithdrawnAction"/> names the record, its new state and who
+///     moved it, and the farm's job-card read says "payout check withdrawn" on the card. If the card is already
+///     PaidOut, a warning is logged.
 ///
 /// DESIGN NOTE: There is no MediatR / domain-event-dispatch infrastructure in this codebase.
 /// Domain events are raised on entities but not automatically dispatched. This handler is
@@ -28,59 +33,42 @@ namespace ShramSafal.Application.UseCases.Work.Handlers;
 /// </summary>
 public sealed class OnLogVerifiedAutoVerifyJobCard(
     IShramSafalRepository repository,
-    VerifyJobCardForPayoutHandler verifyForPayoutHandler,
     IClock clock,
     ILogger<OnLogVerifiedAutoVerifyJobCard> logger)
 {
+    /// <summary>Lane L4b fix round 1 (M-2) — the audit action written when a ready-to-pay card is taken back.</summary>
+    public const string PayoutReadinessWithdrawnAction = "jobcard.payout-readiness-withdrawn";
+
     /// <summary>
-    /// Handle a log verification status change. Idempotent — safe to call on every verify.
+    /// Handle a log verification status change. Idempotent — safe to call on every verify. The audit row of a
+    /// take-back carries no request provenance (a caller that has it uses the overload below).
+    /// </summary>
+    public Task HandleAsync(
+        Guid dailyLogId,
+        VerificationStatus newStatus,
+        UserId actorUserId,
+        CancellationToken ct = default) =>
+        HandleAsync(dailyLogId, newStatus, actorUserId, ChangeProvenance.Unknown, ct);
+
+    /// <summary>
+    /// Handle a log verification status change, stamping a take-back's audit row with the request that caused it.
     /// </summary>
     public async Task HandleAsync(
         Guid dailyLogId,
         VerificationStatus newStatus,
         UserId actorUserId,
+        ChangeProvenance provenance,
         CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(provenance);
+
+        // Founder D-33 — a मंजूर (Verified) never moves the linked job card.
         if (newStatus == VerificationStatus.Verified)
         {
-            await HandleLogVerifiedAsync(dailyLogId, actorUserId, ct);
+            return;
         }
-        else
-        {
-            await HandleLogDeVerifiedAsync(dailyLogId, newStatus, ct);
-        }
-    }
 
-    // ── Auto-verify job card when log becomes Verified ──────────────────────
-
-    private async Task HandleLogVerifiedAsync(
-        Guid dailyLogId,
-        UserId actorUserId,
-        CancellationToken ct)
-    {
-        var linkedJobCard = await repository.GetJobCardByLinkedDailyLogIdAsync(dailyLogId, ct);
-        if (linkedJobCard is null)
-            return; // Most logs aren't linked to a job card — no-op.
-
-        if (linkedJobCard.Status != JobCardStatus.Completed)
-            return; // Already transitioned or in a terminal state — no-op.
-
-        // Auto-verify using the VerifyJobCardForPayoutHandler.
-        // The actor is the log verifier who triggered this transition.
-        var result = await verifyForPayoutHandler.HandleAsync(
-            new VerifyJobCardForPayoutCommand(
-                JobCardId: linkedJobCard.Id,
-                CallerUserId: actorUserId,
-                ClientCommandId: null),
-            ct);
-
-        if (result.IsFailure)
-        {
-            // Log the failure but don't surface it — the log verification already succeeded.
-            logger.LogWarning(
-                "Auto-verify for JobCard {JobCardId} linked to DailyLog {DailyLogId} failed: {Error}",
-                linkedJobCard.Id, dailyLogId, result.Error.Code);
-        }
+        await HandleLogDeVerifiedAsync(dailyLogId, newStatus, actorUserId, provenance, ct);
     }
 
     // ── Revert job card when log leaves Verified ─────────────────────────────
@@ -88,6 +76,8 @@ public sealed class OnLogVerifiedAutoVerifyJobCard(
     private async Task HandleLogDeVerifiedAsync(
         Guid dailyLogId,
         VerificationStatus newStatus,
+        UserId actorUserId,
+        ChangeProvenance provenance,
         CancellationToken ct)
     {
         // Only react to transitions that leave the Verified state.
@@ -104,6 +94,27 @@ public sealed class OnLogVerifiedAutoVerifyJobCard(
         {
             // Revert to Completed — the payout authorization is no longer valid.
             linkedJobCard.RevertToCompletedFromVerifiedForPayout(clock.UtcNow);
+
+            // Lane L4b fix round 1 (M-2) — never a silent take-back: who, which record, and the state it is now in.
+            // The role is the seat's, read from the farm (never the phone's claim).
+            var actorRole = await repository.GetUserRoleForFarmAsync(linkedJobCard.FarmId.Value, actorUserId.Value, ct);
+            await repository.AddAuditEventAsync(
+                AuditEventFactory.Create(
+                    entityType: "JobCard",
+                    entityId: linkedJobCard.Id,
+                    action: PayoutReadinessWithdrawnAction,
+                    actorUserId: actorUserId.Value,
+                    actorRole: actorRole?.ToString() ?? "unknown",
+                    payload: new { jobCardId = linkedJobCard.Id, dailyLogId, recordState = newStatus.ToString() },
+                    farmId: linkedJobCard.FarmId.Value,
+                    clientCommandId: provenance.ClientCommandId,
+                    appVersion: string.IsNullOrWhiteSpace(provenance.AppVersion)
+                        ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current
+                        : provenance.AppVersion,
+                    deviceId: provenance.DeviceId,
+                    ipHash: provenance.IpHash,
+                    sourceAiJobId: null),
+                ct);
             await repository.SaveChangesAsync(ct);
 
             logger.LogInformation(
@@ -130,4 +141,14 @@ public sealed class OnLogVerifiedAutoVerifyJobCard(
             // the existing LabourPayoutVerificationGap rule.
         }
     }
+}
+
+/// <summary>
+/// Lane L4b fix round 1 (M-2) — the request that changed a record, for the audit row of what that change did to its
+/// job card. <see cref="Unknown"/> carries the same stand-ins the log commands default to.
+/// </summary>
+public sealed record ChangeProvenance(string? ClientCommandId, string AppVersion, string DeviceId, string IpHash)
+{
+    /// <summary>No request provenance (a direct caller): the log commands' own defaults.</summary>
+    public static ChangeProvenance Unknown { get; } = new(null, "unknown", "unknown", "sha256:unknown");
 }

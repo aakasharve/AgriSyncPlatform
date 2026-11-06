@@ -118,6 +118,23 @@ vi.mock('../../../sync', () => ({
 
 import AppHeader from '../AppHeader';
 
+/**
+ * lane L4b fix round 1 (review L-3) — the strip's two rest lines. `RETIRED_ALL_CLEAR` is the old ring's rest state
+ * (founder D-3 retired it; lane L4b deleted its key): it must never come back. `EMPTY_LIST_LINE` is the founder's
+ * D-40 §6 line, said only once the farm's server list was read and was empty.
+ */
+const RETIRED_ALL_CLEAR = 'आज पर्यन्त सर्व कामे पूर्ण आहेत';
+const EMPTY_LIST_LINE = 'मंजुरीसाठी नोंदी बाकी नाहीत';
+import { publishApprovalQueue, resetApprovalQueueForTests } from '../../../approval/approvalQueue';
+import { EMPTY_LABOUR_DATA } from '../../../labour/labourMock';
+
+/** lane L4b (D-40 §1) — the drawer's approval row is the ONE server count for the farm: publish it as the server would. */
+const serverListOf = (n: number) => ({
+    ...EMPTY_LABOUR_DATA,
+    canConfirm: true,
+    review: Array.from({ length: n }, (_, i) => ({ id: `r${i}`, who: 'w', initial: 'w', tone: 'or' as const, detail: '2026-10-30', status: 'Draft' as const, points: {} })),
+});
+
 // The Setup Hub label the profile button now carries (founder ruling
 // 2026-08-30). Resolved from the table so a copy change moves the test with
 // it rather than leaving a literal to rot.
@@ -186,6 +203,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     localStorage.clear();
+    resetApprovalQueueForTests(); // lane L4b fix round 1 — a published farm list never leaks into the next test
     queueRef.current = {
         pendingCount: 0,
         failedCount: 0,
@@ -265,7 +283,8 @@ describe('AppHeader — the sync chip is gone', () => {
         // waiting button instead — one waiting KIND (failedSend), never a
         // fabricated literal.
         expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
-        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+        // lane L4b (D-40 §2) — what needs him is its own signal, with the failure words, never a bare ring number.
+        expect(screen.getByTestId('strip-needs-you')).toBeInTheDocument();
 
         // Ruling 12 fix-round: the retired `AppHeader.claim.test.tsx` also
         // asserted none of the three sync-honesty labels "leak in by another
@@ -291,16 +310,17 @@ describe('AppHeader — the sync chip is gone', () => {
                     logs: [],
                     operatorNameById: {},
                     plotCount: 4,
-                    unverifiedCount: 0,
                     yesterdayNotClosed: false,
                     approvalHolderName: null,
-                    dataLoaded: true,
                 },
             });
         });
 
         expect(screen.queryByTestId('sync-status-indicator')).not.toBeInTheDocument();
-        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+        // lane L4b (D-3 / D-40) — the strip never claims "all work is complete"; with nothing to show it says only
+        // what it read (here: the approval list for this farm was never read, so "the list cannot be seen").
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
+        expect(screen.getByTestId('strip-signals')).toBeInTheDocument();
     });
 });
 
@@ -382,10 +402,8 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
                     logs,
                     operatorNameById: { 'op-rokade': 'Rokade' },
                     plotCount: 4,
-                    unverifiedCount: 0,
                     yesterdayNotClosed: false,
                     approvalHolderName: null,
-                    dataLoaded: true,
                 },
             });
         });
@@ -402,7 +420,7 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         // 2. The waiting count reflects one real PERSON (no decisions were
         // supplied), and opening the drawer proves the briefing itself —
         // not just that a prop was passed — is populated.
-        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+        // lane L4b (D-3 / D-40): the strip has no ring number and never an all-clear; the drawer below carries the data.
         fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
 
         expect(screen.getByTestId('waiting-drawer-tally-people')).toHaveTextContent('1');
@@ -457,20 +475,18 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
                     logs,
                     operatorNameById: {},
                     plotCount: 4,
-                    unverifiedCount: 0,
                     yesterdayNotClosed: false,
                     approvalHolderName: null,
-                    dataLoaded: true,
                 },
             });
         });
 
         // 1. NO rest state — no green tick, no "all work complete" claim.
-        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
-        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
+        expect(screen.queryByText(RETIRED_ALL_CLEAR)).not.toBeInTheDocument();
 
         // 2. A real badge instead: the one अज्ञात row this fixture produces.
-        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+        // lane L4b (D-3 / D-40): the strip has no ring number and never an all-clear; the drawer below carries the data.
 
         // 3. Opening the drawer proves the count is standing for something
         //    real — the unattributed row, holding both records, with the
@@ -514,87 +530,54 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         expect(board).not.toHaveTextContent('0');
         expect(board).not.toHaveTextContent('4');
         expect(board.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
-        expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('strip-approval')).not.toBeInTheDocument();
 
         // Finding F7(a) — the honest fallback for "no data was supplied at
         // all" is the CHECKING state, not the rest state. A caller that
         // handed this header nothing has certainly not proven that all work
         // is complete, so the green tick and the founder's completion
         // sentence must both stay away.
-        expect(screen.getByTestId('canonical-strip-waiting-checking-icon')).toBeInTheDocument();
-        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
-        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent('यादी आत्ता दिसत नाही'); // lane L4b: unread is said as unread
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
+        expect(screen.queryByText(RETIRED_ALL_CLEAR)).not.toBeInTheDocument();
     });
 
-    it('the_rest_state_never_renders_before_the_data_behind_it_resolves', async () => {
-        // Finding F7(a), the first-load window, reproduced exactly:
-        // `useSyncQueueStatus` starts at `EMPTY_STATUS` (`hasLoaded: false`)
-        // and `useAppData` starts with empty arrays (`dataLoaded: false`).
-        // Every count reads 0, so `waitingCount` reads 0 — and 0 used to
-        // mean the green tick plus "आज पर्यन्त सर्व कामे पूर्ण आहेत" over
-        // data nobody had read.
+    it('the_rest_line_never_renders_before_the_farms_server_list_is_read', async () => {
+        // Finding F7(a), restated for lane L4b: the strip's only rest claim is the founder's D-40 §6 line
+        // "मंजुरीसाठी नोंदी बाकी नाहीत", and it rests on ONE fact — the farm's server list was read and is empty. The
+        // phone's own sync queue and its local records decide nothing (they are not the farm's list).
         //
-        // Each half is flipped independently below, so neither can carry
-        // the test on its own.
-        const unresolvedCases: Array<[string, boolean, boolean]> = [
-            ['neither source read', false, false],
-            ['queue read, app data not', true, false],
-            ['app data read, queue not', false, true],
-        ];
-
-        for (const [label, queueLoaded, appDataLoaded] of unresolvedCases) {
-            queueRef.current = { ...queueRef.current, hasLoaded: queueLoaded };
-
-            await act(async () => {
-                renderHeader({
-                    oversightData: {
-                        logs: [],
-                        operatorNameById: {},
-                        plotCount: 4,
-                        unverifiedCount: 0,
-                        yesterdayNotClosed: false,
-                        approvalHolderName: null,
-                        dataLoaded: appDataLoaded,
-                    },
-                });
-            });
-
-            expect(screen.queryByTestId('canonical-strip-waiting-rest-tick'), label).not.toBeInTheDocument();
-            expect(screen.queryByText(oversightTranslations.mr.restState), label).not.toBeInTheDocument();
-            // The strip keeps its place and its size — the layout never
-            // reshuffles when the data lands (spec §2.2).
-            const button = screen.getByTestId('canonical-strip-waiting-button');
-            expect(button, label).toBeInTheDocument();
-            // The 52px floor this used to pin was removed by the founder's
-            // 2026-08-30 ruling — height is content now. What the test is
-            // actually about, the rest state never appearing before the data
-            // resolves, is asserted below and is untouched.
-            expect(button.getAttribute('style') ?? '', label).not.toContain('min-height');
-
-            cleanup();
-        }
-
-        // Control: BOTH resolved, same otherwise-identical fixture -> the
-        // claim becomes legitimate and the rest state appears. Without this
-        // the assertions above would pass against a strip that had simply
-        // lost its rest state altogether.
+        // Each "not read" shape below has every local source resolved and zero, so only the server list can carry it.
         queueRef.current = { ...queueRef.current, hasLoaded: true };
-        await act(async () => {
-            renderHeader({
-                oversightData: {
-                    logs: [],
-                    operatorNameById: {},
-                    plotCount: 4,
-                    unverifiedCount: 0,
-                    yesterdayNotClosed: false,
-                    approvalHolderName: null,
-                    dataLoaded: true,
-                },
-            });
-        });
+        const resolvedZeros = {
+            logs: [],
+            operatorNameById: {},
+            plotCount: 4,
+            yesterdayNotClosed: false,
+            approvalHolderName: null,
+        };
 
-        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
-        expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
+        // (a) the list was never read for this farm.
+        await act(async () => { renderHeader({ oversightData: resolvedZeros }); });
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent('यादी आत्ता दिसत नाही');
+        expect(screen.queryByText(EMPTY_LIST_LINE)).not.toBeInTheDocument();
+        expect(screen.queryByText(RETIRED_ALL_CLEAR)).not.toBeInTheDocument();
+        cleanup();
+
+        // (b) another farm's list was read empty: it says nothing about this one.
+        publishApprovalQueue('farm-2', serverListOf(0));
+        await act(async () => { renderHeader({ oversightData: resolvedZeros }); });
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent('यादी आत्ता दिसत नाही');
+        expect(screen.queryByText(EMPTY_LIST_LINE)).not.toBeInTheDocument();
+        cleanup();
+
+        // Control: this farm's list read empty, same fixture otherwise -> the founder's empty line, and still never
+        // the retired all-clear. Without this the assertions above would pass against a strip that had lost its rest
+        // line altogether.
+        publishApprovalQueue('farm-1', serverListOf(0));
+        await act(async () => { renderHeader({ oversightData: resolvedZeros }); });
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent(EMPTY_LIST_LINE);
+        expect(screen.queryByText(RETIRED_ALL_CLEAR)).not.toBeInTheDocument();
     });
 });
 
@@ -854,29 +837,33 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
             logs: [],
             operatorNameById: {},
             plotCount: 4,
-            unverifiedCount: 0,
             yesterdayNotClosed: false,
             approvalHolderName: null,
-            dataLoaded: true,
         };
 
         await act(async () => {
             renderHeader({ farmContext: multiFarmContext, oversightData: resolvedNothingOutstanding });
         });
-        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
-        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
-        expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
+        expect(screen.queryByText(RETIRED_ALL_CLEAR)).not.toBeInTheDocument();
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
+        expect(screen.getByTestId('strip-signals')).toBeInTheDocument(); // lane L4b: the farm-scoped server count needs no multi-farm suppression
 
         cleanup();
 
-        // Control: one farm, everything else byte-identical -> the claim is
-        // scopeable and the rest state is back. Without this the assertions
-        // above would pass against a strip that had lost its rest state.
-        await act(async () => {
-            renderHeader({ farmContext: singleFarmContext, oversightData: resolvedNothingOutstanding });
-        });
-        expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
-        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+        // Control (lane L4b fix round 1, review L-3): the farm's own server list read empty -> the founder's D-40 §6
+        // line shows, for one farm and for many alike (the count is the farm's own, so a multi-farm account needs no
+        // suppression), and the retired all-clear never does. Without this the assertions above would pass against a
+        // strip that had lost its rest line altogether.
+        publishApprovalQueue('farm-1', serverListOf(0));
+        for (const context of [singleFarmContext, multiFarmContext]) {
+            await act(async () => {
+                renderHeader({ farmContext: context, oversightData: resolvedNothingOutstanding });
+            });
+            expect(screen.getByTestId('strip-rest')).toHaveTextContent(EMPTY_LIST_LINE);
+            expect(screen.queryByText(RETIRED_ALL_CLEAR)).not.toBeInTheDocument();
+            expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
+            cleanup();
+        }
     });
 
     // TRUTH FIX (truth audit, question 3) — the same rule, for the NUMBER.
@@ -899,10 +886,8 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
             logs: [],
             operatorNameById: {},
             plotCount: 4,
-            unverifiedCount: 0,
             yesterdayNotClosed: false,
             approvalHolderName: null,
-            dataLoaded: true,
         };
 
         await act(async () => {
@@ -957,7 +942,7 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
 // The comment these tests replace claimed `failedSend` was the only kind that
 // could ever be non-empty here "because the two inputs above are always
 // 0/false". Ruling 12 made that false: `AppContent.tsx` fills
-// `oversightData.unverifiedCount` / `.yesterdayNotClosed` from real records.
+// `oversightData.yesterdayNotClosed` from real records, and (lane L4b) the approval row is the farm's server count.
 // The `approval` and `dayNotClosed` rows therefore rendered as `<button>`s
 // with a chevron and did nothing on tap. These fixtures reproduce exactly
 // that data shape.
@@ -976,15 +961,13 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
         }
     > = {
         approval: {
-            arrange: () => ({
+            arrange: () => (publishApprovalQueue('farm-1', serverListOf(6)), {
                 oversightData: {
                     logs: [],
                     operatorNameById: {},
                     plotCount: 4,
-                    unverifiedCount: 6,
                     yesterdayNotClosed: false,
                     approvalHolderName: null,
-                    dataLoaded: true,
                 },
             }),
             // `ReviewInboxSheet` — the app's existing batch approve/dispute
@@ -999,10 +982,8 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
                     logs: [],
                     operatorNameById: {},
                     plotCount: 4,
-                    unverifiedCount: 0,
                     yesterdayNotClosed: true,
                     approvalHolderName: null,
-                    dataLoaded: true,
                 },
             }),
             // The Reflect view: the one screen showing (and able to resolve)
@@ -1047,6 +1028,7 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
 
     afterEach(() => {
         window.removeEventListener(OPEN_REVIEW_INBOX_EVENT, countReviewInboxRequest);
+        resetApprovalQueueForTests();
     });
 
     it.each(Object.keys(DESTINATION_CASES) as OversightDecisionKind[])(
@@ -1083,16 +1065,15 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
         // Spec §3's delegated case: same row, same position, NO action
         // affordance. This is the one shape that legitimately has no
         // destination, and it must not look like it has one.
+        publishApprovalQueue('farm-1', serverListOf(6));
         await act(async () => {
             renderHeader({
                 oversightData: {
                     logs: [],
                     operatorNameById: {},
                     plotCount: 4,
-                    unverifiedCount: 6,
                     yesterdayNotClosed: false,
                     approvalHolderName: 'Ganesh Mukadam',
-                    dataLoaded: true,
                 },
             });
         });

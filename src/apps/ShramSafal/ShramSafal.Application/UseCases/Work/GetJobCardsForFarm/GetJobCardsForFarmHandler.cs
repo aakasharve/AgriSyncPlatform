@@ -1,9 +1,13 @@
 using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Work.Handlers;
+using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Work;
 
 namespace ShramSafal.Application.UseCases.Work.GetJobCardsForFarm;
 
@@ -52,6 +56,52 @@ public sealed class GetJobCardsForFarmHandler(IShramSafalRepository repository, 
         // spec: plr-d10 lane PRV (founder D-26) — a card never names a record kept from him (after the pay rule above).
         var visibility = await RecordVisibility.ForFarmAsync(
             repository, query.FarmId.Value, query.CallerUserId.Value, clock?.UtcNow ?? DateTime.UtcNow, ct);
-        return Result.Success(dtos.Select(visibility.WithoutHiddenLinks).ToList());
+        var visible = dtos.Select(visibility.WithoutHiddenLinks).ToList();
+        return Result.Success(await WithPayoutStepFactsAsync(visible, query.FarmId, ct));
+    }
+
+    private static readonly string[] PayoutNotes =
+    [
+        VerifyJobCardForPayoutHandler.VerifiedForPayoutAction,
+        OnLogVerifiedAutoVerifyJobCard.PayoutReadinessWithdrawnAction,
+    ];
+
+    /// <summary>
+    /// spec: plr-d10 lane L4b fix round 1 (H-1 / CTO D-89, M-2) — what the phone needs to show the card's money step
+    /// truthfully: the linked record's state (after D-33 a मंजूर no longer makes a card ready to pay, so "पेआउट तपासा"
+    /// is offered only on a Completed card whose record is approved), and whether a शंका or a correction took the card
+    /// back from "ready to pay" (its latest payout note is a withdrawal). Read after the visibility rule: a record kept
+    /// from this reader has no link, so its state is not named either.
+    /// </summary>
+    private async Task<List<JobCardDto>> WithPayoutStepFactsAsync(List<JobCardDto> cards, FarmId farmId, CancellationToken ct)
+    {
+        var linked = cards
+            .Where(c => c.LinkedDailyLogId is not null)
+            .Select(c => c.LinkedDailyLogId!.Value)
+            .Distinct()
+            .ToList();
+        if (linked.Count == 0)
+            return cards;
+
+        var recordStates = (await repository.GetDailyLogsForFarmByIdsAsync(farmId, linked, ct))
+            .ToDictionary(l => l.Id, l => l.CurrentVerificationStatus.ToString());
+        var lastPayoutNote = (await repository.GetAuditEventsForFarmByActionsAsync(farmId.Value, PayoutNotes, ct))
+            .GroupBy(a => a.EntityId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.OccurredAtUtc).First().Action);
+
+        return cards
+            .Select(c => c with
+            {
+                LinkedDailyLogStatus = c.LinkedDailyLogId is { } logId && recordStates.TryGetValue(logId, out var state)
+                    ? state
+                    : null,
+                // Fix round 2 (re-review 2 L-a) — only where the record link survived the visibility rule for this
+                // reader: "a record behind this card was questioned" is itself a fact about a record kept from him.
+                PayoutCheckWithdrawn = c.LinkedDailyLogId is not null
+                    && c.Status == nameof(JobCardStatus.Completed)
+                    && lastPayoutNote.TryGetValue(c.Id, out var note)
+                    && note == OnLogVerifiedAutoVerifyJobCard.PayoutReadinessWithdrawnAction,
+            })
+            .ToList();
     }
 }

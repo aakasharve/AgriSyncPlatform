@@ -30,8 +30,8 @@
  * The Marathi is asserted by its LITERAL text, not by a `toBeTruthy()` on the
  * resolver. A test that reads the same module the component reads passes no
  * matter what that module says; a hand-written second copy of the string fails
- * the moment either side is edited alone. Same oracle as
- * `i18n/__tests__/approvalAvailabilityTranslations.test.ts`.
+ * the moment either side is edited alone. (The same oracle pinned the approval-availability copy, deleted with its
+ * notice in lane L4b.)
  */
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -223,8 +223,8 @@ describe('HarvestComingSoon', () => {
         });
 
         it('keeps the founder\'s spelling आजून, not अजून', () => {
-            // Transcribed from his own line at
-            // `i18n/approvalAvailabilityTranslations.ts:111`. Normalising it
+            // Transcribed from his own line (it first appeared in the approval-availability copy, deleted in
+            // lane L4b; this key keeps it). Normalising it
             // would be an agent overruling the founder on his own language.
             const title = harvestAvailabilityTranslations.mr.harvestUnavailableTitle;
             expect(title).toContain('आजून');

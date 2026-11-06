@@ -6,8 +6,8 @@
 // `WaitingDrawer` renders "६ कामे तपासायची आहेत" with a chevron; `AppHeader`
 // turns a tap on it into `requestOpenReviewInbox()`. That is only half a
 // destination — this file pins the other half: `AppRouter` really does hear
-// the request and really does open `ReviewInboxSheet`, the app's existing
-// batch approve/dispute surface.
+// the request and really does open the one review sheet (`ApprovalReviewHost`, lane L4b; it replaced the deleted
+// `ReviewInboxSheet`), where every मंजूर / शंका is made.
 //
 //   the_review_inbox_opens_when_the_waiting_drawer_requests_it
 //
@@ -16,7 +16,7 @@
 // four render modules are stubbed down to the minimum this one wiring
 // question needs. `renderGlobalSheets` is stubbed to expose ONLY
 // `ctx.showReviewInbox` — the exact boolean that drives the real
-// `ReviewInboxSheet`'s `isOpen` prop in `globalSheets.tsx` — so the assertion
+// `ApprovalReviewHost`'s `open` prop in `globalSheets.tsx` — so the assertion
 // is about the state this hop must set, not about the sheet's internals
 // (covered by its own suite).
 import React from 'react';
@@ -107,8 +107,8 @@ vi.mock('../MainViewTransition', () => ({
     default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 vi.mock('../globalSheets', () => ({
-    // Exposes ONLY the boolean that drives the real `ReviewInboxSheet`'s
-    // `isOpen` prop in the unmocked module.
+    // Exposes ONLY the boolean that drives the real `ApprovalReviewHost`'s
+    // `open` prop in the unmocked module.
     renderGlobalSheets: (ctx: AppRouterContext) =>
         ctx.showReviewInbox ? <div data-testid="review-inbox-open" /> : null,
 }));

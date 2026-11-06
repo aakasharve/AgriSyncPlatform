@@ -41,8 +41,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarDays, CalendarRange, LayoutGrid, ListChecks, PieChart, StickyNote } from 'lucide-react';
 import type { DailyLog } from '../../types';
-import { LogVerificationStatus } from '../../types';
-import ReviewInbox from '../analysis/components/ReviewInbox';
+import { ApprovalChip } from '../approval/ApprovalChip';
 import { isWholeFarmSelection } from '../analysis/components/costAnalysisHelpers';
 import { getHarvestSessions } from '../../services/harvestService';
 import { MoneyLensDrawer } from '../finance/components/MoneyLensDrawer';
@@ -82,7 +81,7 @@ import { buildDayNotes } from './overview/notesModel';
 import { NotesList } from './overview/NotesList';
 import { buildDayCardCore, buildPlotDayCard, placeDayLogs } from './overview/plotDayModel';
 import { PlotDayCards } from './overview/PlotDayCards';
-import { atNoon, fromDateKey, relLabel } from './overview/reflectDates';
+import { atNoon, relLabel } from './overview/reflectDates';
 import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
 import { buildTodoList, mergeTasks, newTodoTask, toggledTask, type NewTodo, type TodoItem } from './overview/todoModel';
 import { TodoCount, TodoSection } from './overview/TodoSection';
@@ -110,11 +109,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     onUpdateTask,
     onAddTask,
     onSaveTask,
-    // `onVerifyLog` is still declared on `ReflectPageProps` and still passed by `core/navigation/mainView.tsx`,
-    // but nothing on this page calls it: its only consumer was `ReviewInbox`'s Approve button, removed because it
-    // enqueued `verify_log_v2`, which the server answers with MUTATION_TYPE_UNIMPLEMENTED (see `ReviewInbox.tsx`).
-    // Delete both together when approval is re-enabled or retired. spec: owner-oversight-loop
-    currentOperator,
     operators = [],
     sessionUserId = null,
     farmRole = null,
@@ -241,8 +235,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const dayOf = useCallback((d: Date) => buildCalendarDay({ date: d, history, crops, scope, dueTasks: openTasks }), [history, crops, scope, openTasks]);
 
     // ── trust inbox (verifiers only, when something waits) ─────────────────────────────────────
-    const pendingLogs = history.filter(log => log.verification?.status === LogVerificationStatus.PENDING);
-    const showInbox = pendingLogs.length > 0 && currentOperator?.isVerifier;
 
     // DWC v2 §2.8 #6 — closure_summary.viewed once on mount (+ farm resolution); date scrubbing does not re-emit.
     useEffect(() => {
@@ -382,12 +374,12 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 <DayFeedSheet blocks={feedBlocks} isToday={isToday} dayLabel={dayLabel} listen={listen} onEdit={onOpenLog ? openLog : undefined} onClose={() => setFeedOpen(false)} />
             )}
 
-            {/* REVIEW INBOX (Trust Layer 2) — a read surface; visible only to a verifier when something waits. */}
-            {showInbox && (
-                <div className="px-3">
-                    <ReviewInbox pendingLogs={pendingLogs} operators={operators} onViewLog={log => pickDay(fromDateKey(log.date))} />
-                </div>
-            )}
+            {/* spec: plr-d10 (I28, lane L4b; founder D-3 / D-40) — the आढावा door of the ONE approval path: "मंजुरीसाठी N"
+                from the server's list for this farm, one tap to the one review sheet. It replaces the read-only inbox
+                that listed only PENDING records (a status the pull never produces) and approved nothing. */}
+            <div className="px-3">
+                <ApprovalChip farmId={currentFarmId} language={language === 'en' ? 'en' : 'mr'} data-testid="reflect-approval-chip" />
+            </div>
 
             {/* LABOUR_PHASE2 P2.4 — the whole-farm day. Only when the chosen day IS today: its line reads "आज: …". */}
             {isToday && (

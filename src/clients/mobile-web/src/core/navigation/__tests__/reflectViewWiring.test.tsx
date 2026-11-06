@@ -37,7 +37,7 @@ const ctxFor = (over: Partial<AppRouterContext> = {}) => ({
     ledgerDefaults: undefined, plannedTasks: TASKS,
     handleUpdateTask: vi.fn(), handleSaveTask: vi.fn(), setShowTaskCreationSheet: vi.fn(),
     status: 'idle', draftLog: null, handleReset: vi.fn(), setLogScope: vi.fn(), setMode: vi.fn(), setMainView: vi.fn(),
-    setStatus: vi.fn(), setDraftLog: vi.fn(), handleEditLog: vi.fn(), handleUpdateNote: vi.fn(), handleVerifyLog: vi.fn(),
+    setStatus: vi.fn(), setDraftLog: vi.fn(), handleEditLog: vi.fn(), handleUpdateNote: vi.fn(),
     farmerProfile: { operators: [], activeOperatorId: undefined }, setCurrentRoute: vi.fn(),
     reflectFocusRequest: null, setReflectFocusRequest: vi.fn(),
     reflectFocusPlotId: null, setReflectFocusPlotId: vi.fn(),

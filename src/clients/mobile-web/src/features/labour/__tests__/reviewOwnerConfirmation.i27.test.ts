@@ -88,11 +88,13 @@ describe('review sheet — the owner\'s confirmation (I27)', () => {
         expect(screen.queryByTestId('ov-play-r1')).toBeNull();
     });
 
-    it('शंका is unchanged: the v1 dispute walk with its reason, no confirmation evidence', async () => {
+    it('शंका is unchanged: the v1 dispute walk with its reason (his own, lane L4b), no confirmation evidence', async () => {
         mount(data([item('r1', { status: 'Confirmed' })], { canConfirm: true }));
         fireEvent.click(screen.getByTestId('review-query-r1'));
+        fireEvent.change(screen.getByTestId('review-reason-r1'), { target: { value: 'काम अपूर्ण' } });
+        fireEvent.click(screen.getByTestId('review-reason-send-r1'));
         await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS + PAST_UNDO_WINDOW_MS); });
         expect(enqueueOwnerConfirmation).not.toHaveBeenCalled();
-        expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ dailyLogId: 'r1', verificationStatus: 'disputed' }));
+        expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ dailyLogId: 'r1', verificationStatus: 'disputed', reason: 'काम अपूर्ण' }));
     });
 });

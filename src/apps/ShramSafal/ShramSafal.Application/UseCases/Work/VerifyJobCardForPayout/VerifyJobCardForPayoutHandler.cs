@@ -21,6 +21,9 @@ public sealed class VerifyJobCardForPayoutHandler(
     IClock clock)
     : IHandler<VerifyJobCardForPayoutCommand, VerifyJobCardForPayoutResult>
 {
+    /// <summary>The audit action of a card made ready to pay (read back by the farm's job-card list, lane L4b M-2).</summary>
+    public const string VerifiedForPayoutAction = "jobcard.verified-for-payout";
+
     public async Task<Result<VerifyJobCardForPayoutResult>> HandleAsync(
         VerifyJobCardForPayoutCommand command,
         CancellationToken ct = default)
@@ -39,7 +42,10 @@ public sealed class VerifyJobCardForPayoutHandler(
         if (jobCard.LinkedDailyLogId is null)
             return Result.Failure<VerifyJobCardForPayoutResult>(ShramSafalErrors.JobCardInvalidState);
 
-        var dailyLog = await repository.GetDailyLogByIdAsync(jobCard.LinkedDailyLogId.Value, ct);
+        // Lane L4b fix round 1 (L-1) — the ONLY door to "ready to pay" (founder D-33) reads the record under its row
+        // hold, like every other change to it: a शंका or a correction in flight finishes first, and this check sees the
+        // state it leaves (never a copy read before it).
+        var dailyLog = await repository.GetDailyLogForChangeAsync(jobCard.LinkedDailyLogId.Value, ct);
         if (dailyLog is null)
             return Result.Failure<VerifyJobCardForPayoutResult>(ShramSafalErrors.DailyLogNotFound);
 
@@ -81,7 +87,7 @@ public sealed class VerifyJobCardForPayoutHandler(
             AuditEventFactory.Create(
                 entityType: "JobCard",
                 entityId: jobCard.Id,
-                action: "jobcard.verified-for-payout",
+                action: VerifiedForPayoutAction,
                 actorUserId: command.CallerUserId.Value,
                 actorRole: callerRole.Value.ToString(),
                 payload: new { jobCard.Id, jobCard.LinkedDailyLogId },

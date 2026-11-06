@@ -36,6 +36,7 @@ import type { DailyLog } from '../../../../types';
 import { ACCESS_SCOPES_META_KEY, OUT_OF_SCOPE_FARMS_META_KEY, isReadableScope, readAccessScopes, readOutOfScopeFarmIds } from '../../../../infrastructure/storage/accessScopeStore';
 import { clearLabourReadoutsForFarm } from '../../../../infrastructure/storage/LabourReadoutCache';
 import { purgeLabourCachesForFarm } from '../../../../infrastructure/storage/labourFarmAccess';
+import { ApprovalSeenStore } from '../../../../infrastructure/storage/ApprovalSeenStore';
 import { dayLedgerMetaKey } from '../helpers/dayLedgerMetaKey';
 import { logMentionsMoney, MONEY_KEYS, textMentionsMoney, WORD_KEYS } from '../helpers/moneyMention';
 import { purgeOutsidePlots, removeCatalogPlots } from './plotScopePurge';
@@ -249,6 +250,8 @@ export async function reconcileAccessScopes(
         if (!s.seeWages && previous.get(s.farmId)?.seeWages !== false && ctx.userId) {
             clearLabourReadoutsForFarm(ctx.userId, s.farmId);
         }
+        // lane L4b fix round 2 (L-b) — the amounts he saw in the approval sheet go with the farm's money.
+        if (!s.seeMoney && ctx.userId) ApprovalSeenStore.dropAmounts(ctx.userId, s.farmId);
     }
 
     // ── Remember the server's answer (the save path reads it) ───────────────────────────

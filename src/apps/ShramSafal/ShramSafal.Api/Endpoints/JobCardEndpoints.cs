@@ -416,10 +416,13 @@ public static class JobCardEndpoints
             return plotRefusal;
         }
 
+        // spec: plr-d10 lane L4b fix round 2 (re-review 2 L-e) — a refusal carries its code (it was a bare 403), so the
+        // phone says WHY in his language: "this record is not open to you" (`ShramSafal.RecordAudience.Forbidden`) is
+        // not "you may not check payout" (`ShramSafal.JobCardRoleNotAllowed`). Still a 403.
         if (error.Code.EndsWith("RoleNotAllowed", StringComparison.Ordinal) ||
             error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
         {
-            return Results.Forbid();
+            return Results.Json(new { error = error.Code, message = error.Description }, statusCode: StatusCodes.Status403Forbidden);
         }
 
         return error.Code.EndsWith("NotFound", StringComparison.Ordinal)
