@@ -278,6 +278,16 @@ public sealed class PullSyncChangesHandler(
         var priceConfigs = (await repository.GetPriceConfigsChangedSinceAsync(sinceUtc, ct))
             .Where(p => (Guid)p.CreatedByUserId == query.UserId)
             .ToList();
+        // spec: plr-d10 lane RATE-1 part A (founder D-72) — each farm's OWN rate list, through the MU-3 window (a seat whose
+        // reading widened is re-sent from the beginning): read only for farms where this seat sees money; each row kept only
+        // when FarmRateGate admits its kind (a work rate is pay: see wages too). Farm-level by ruling: plots and a record's
+        // audience do not narrow it.
+        var farmRates = (await window.ReadAsync(
+                FarmRateGate.MayReadAnyRate,
+                (ids, since) => repository.GetFarmRatesChangedSinceAsync(ids, since, ct),
+                r => (Guid)r.FarmId))
+            .Where(r => FarmRateGate.MayReadRate(window.ScopeOf((Guid)r.FarmId), r.Kind))
+            .ToList();
         // lane MU-3 — the farm's planned work only to a seat that reads the farm's overview.
         var overviewCycleIds = cropCycles
             .Where(c => window.ScopeOf((Guid)c.FarmId) is { SeeFarmOverview: true })
@@ -338,6 +348,8 @@ public sealed class PullSyncChangesHandler(
             financeCorrections,
             dayLedgers,
             auditEvents);
+        // lane RATE-1 — who set each rate he receives (a person of that farm), so his phone can name them in its history.
+        operatorIds.UnionWith(farmRates.Select(r => r.CreatedByUserId.Value).Where(id => id != Guid.Empty));
         var operators = await repository.GetOperatorsByIdsAsync(operatorIds, ct);
 
         var nextCursorUtc = ComputeNextCursor(
@@ -354,6 +366,12 @@ public sealed class PullSyncChangesHandler(
             priceConfigs,
             plannedActivities,
             auditEvents);
+
+        // lane RATE-1 — and past the newest rate version sent (before every cap below, which still applies).
+        if (farmRates.Count > 0 && farmRates.Max(r => r.CreatedAtUtc) is var newestRate && newestRate > nextCursorUtc)
+        {
+            nextCursorUtc = newestRate;
+        }
 
         // Sub-plan 03 Task 10 — collect partial-failure components.
         // When this list is non-empty, the response carries
@@ -695,7 +713,9 @@ public sealed class PullSyncChangesHandler(
                 .Concat(notReadable)
                 .ToList(),
             // lane PRV — content-free: kind + id of each record taken back from this phone.
-            audience.Withdrawn.ToList());
+            audience.Withdrawn.ToList(),
+            // lane RATE-1 — each farm's own rate versions he may read (additive and last).
+            FarmRates: farmRates.Select(FarmRateDto.From).ToList());
 
         return Result.Success(response);
     }

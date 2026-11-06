@@ -160,6 +160,8 @@ function registerDefaultEditSurfaces(): void {
 
     // Finance settings / price book.
     registerEditSurface(SyncMutationName.SetPriceConfig, makeRouteHandler('finance-price-book'));
+    // lane RATE-1 part A — a parked change to the farm's own rate list opens the दरपत्रक, where it is shown with its reason.
+    registerEditSurface(SyncMutationName.SetFarmRate, makeRouteHandler('finance-price-book'));
 
     // Labour V2 R1 Task 3.5c — the attendance contradiction surfaces HERE on
     // the offline path: a PERMANENT ShramSafal.AttendanceContradiction parks

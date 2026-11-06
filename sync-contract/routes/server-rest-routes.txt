@@ -54,6 +54,8 @@ GET /shramsafal/farms/{farmId:guid}/labour/identity/farm-pin
 GET /shramsafal/farms/{farmId:guid}/missing-tests
 GET /shramsafal/farms/{farmId:guid}/weather/current
 GET /shramsafal/farms/{farmId:guid}/weather/forecast
+GET /shramsafal/finance/farm-rates
+GET /shramsafal/finance/farm-rates/suggestions
 GET /shramsafal/finance/plot-summary
 GET /shramsafal/finance/price-config/may-write
 GET /shramsafal/finance/summary
@@ -145,6 +147,7 @@ POST /shramsafal/finance/allocate
 POST /shramsafal/finance/cost-entry
 POST /shramsafal/finance/cost-entry/{id:guid}/correct
 POST /shramsafal/finance/duplicate-check
+POST /shramsafal/finance/farm-rates
 POST /shramsafal/finance/price-config
 POST /shramsafal/job-cards
 POST /shramsafal/job-cards/{id:guid}/assign

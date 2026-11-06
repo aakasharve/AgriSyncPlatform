@@ -1309,6 +1309,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    ssf.shram_person_phones (one verified number per person; the plain number index). No table, column,
         //    policy or grant; never touches ssf.audit_events. Safe mid-proof.
         "20261106060953_AddOneVerifiedNumberPerPerson",
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane RATE-1 part A, founder D-72); Down() read in full: drops the two policies
+        //    on ssf.farm_rates and the table (its CHECKs and indexes go with it). Up() creates that table only (FORCE RLS,
+        //    SELECT + INSERT for the app role). Never touches ssf.audit_events, its policies or its grants (a rate change
+        //    writes an ordinary audit row through the app role's existing INSERT). Safe mid-proof.
+        "20261106112244_AddFarmRates",
     ];
 
     /// <summary>

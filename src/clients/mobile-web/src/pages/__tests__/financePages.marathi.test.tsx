@@ -24,6 +24,9 @@ const h = vi.hoisted(() => ({
     exportOk: true,
     role: 'PrimaryOwner' as string,
     platformAdmin: true,
+    // lane RATE-1 part A (D-72) — the दरपत्रक reads the farm's OWN list through its hook; the views below are its answers.
+    rateView: null as unknown,
+    enqueueRate: vi.fn(async (input: unknown) => input),
 }));
 
 vi.mock('../../features/finance/financeSelectors', () => ({
@@ -47,11 +50,39 @@ vi.mock('../../features/finance/components/MoneyLensDrawer', () => ({ MoneyLensD
 vi.mock('../../features/export', () => ({
     useExportReport: () => ({ exportReport: async () => h.exportOk, isExporting: false, error: null }),
 }));
-vi.mock('../../core/session/FarmContext', () => ({ useFarmContext: () => ({ currentFarm: { role: h.role } }) }));
+vi.mock('../../core/session/FarmContext', () => ({
+    useFarmContext: () => ({ currentFarm: { role: h.role } }),
+    useOptionalFarmContext: () => ({ currentFarm: { role: h.role }, currentFarmId: 'farm-1' }),
+}));
+// lane RATE-1 part A (D-72) — the farm's own rate list: its hook and its outbox command.
+vi.mock('../../features/finance/farmRates/useFarmRates', () => ({ useFarmRates: () => ({ ...(h.rateView as object), reload: vi.fn() }) }));
+vi.mock('../../application/usecases/sync/SetFarmRateCommand', async importOriginal => ({
+    ...(await importOriginal<typeof import('../../application/usecases/sync/SetFarmRateCommand')>()),
+    SetFarmRateCommand: { enqueue: h.enqueueRate },
+}));
 vi.mock('../../application/usecases/sync/AllocateGlobalExpenseCommand', () => ({ AllocateGlobalExpenseCommand: { enqueue: vi.fn() } }));
 vi.mock('../../infrastructure/sync/BackgroundSyncWorker', () => ({ backgroundSyncWorker: { triggerNow: vi.fn() } }));
 // lane F99 fix pass 1 (D-72): the price book's write controls are the platform admin's; both views are checked below.
+// (lane RATE-1 part A: the price book no longer reads this; the mock stays harmless for the other pages.)
 vi.mock('../../core/session/usePlatformAdmin', () => ({ usePlatformAdmin: () => h.platformAdmin }));
+
+/** lane RATE-1 — the farm's own list as the hook answers it: one input price (changed once) and one work rate. */
+const RATE_ROWS = [
+    { id: 'v1', rateLineId: 'L1', farmId: 'farm-1', version: 1, kind: 'Input', itemName: 'युरिया', unit: 'पोते', basis: 'PerUnit',
+        workerCategory: null, amount: 1350, currencyCode: 'INR', effectiveFrom: '2026-10-01', season: null, endsOn: null, retired: false,
+        suggestionId: null, createdByUserId: 'u1', createdAtUtc: '2026-10-01T05:00:00.5Z' },
+    { id: 'v2', rateLineId: 'L1', farmId: 'farm-1', version: 2, kind: 'Input', itemName: 'युरिया', unit: 'पोते', basis: 'PerUnit',
+        workerCategory: null, amount: 1400, currencyCode: 'INR', effectiveFrom: '2026-10-20', season: null, endsOn: null, retired: false,
+        suggestionId: null, createdByUserId: 'u1', createdAtUtc: '2026-10-20T05:00:00.5Z' },
+    { id: 'w1', rateLineId: 'L2', farmId: 'farm-1', version: 1, kind: 'Work', itemName: 'फवारणी', unit: null, basis: 'PerDay',
+        workerCategory: 'बाई मजूर', amount: 400, currencyCode: 'INR', effectiveFrom: '2026-10-01', season: 'खरीप', endsOn: null,
+        retired: false, suggestionId: null, createdByUserId: 'u1', createdAtUtc: '2026-10-02T05:00:00.5Z' },
+];
+const rateView = (over: Record<string, unknown> = {}) => ({
+    loading: false, rows: RATE_ROWS, mayWrite: true, seeWorkRates: true, queued: [], drafts: [],
+    suggestions: [{ id: 's1', itemName: 'पोटॅश', unitPrice: 1700, currencyCode: 'INR', effectiveFrom: '2026-10-01' }],
+    fromServer: true, ...over,
+});
 
 import FinanceManagerHome from '../FinanceManagerHome';
 import LedgerPage from '../LedgerPage';
@@ -78,6 +109,7 @@ beforeEach(() => {
     h.exportOk = true;
     h.role = 'PrimaryOwner';
     h.platformAdmin = true;
+    h.rateView = rateView();
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -94,6 +126,7 @@ describe('no English is left on the पैसे व हिशोब pages', () 
             h.events = [];
             h.buckets = BUCKETS.map(b => ({ ...b, count: 0, total: 0 }));
             h.rates = [];
+            h.rateView = rateView({ rows: [], suggestions: [] });
             render(<Page currentRoute={route} onNavigate={vi.fn()} />);
             expect(latinLeftovers()).toEqual([]);
         });
@@ -109,19 +142,32 @@ describe('no English is left on the पैसे व हिशोब pages', () 
         expect(latinLeftovers()).toEqual([]);
     });
 
-    it('the price book as a farmer reads it (not the platform admin): the read-only line is Marathi too', () => {
-        h.platformAdmin = false;
+    // lane RATE-1 part A (D-72) — the दरपत्रक is the farm's own list now; the same "no English" rule holds on every view.
+    it('the price book as a seat that may not set rates reads it, with work rates withheld: the rule lines are Marathi too', () => {
+        h.rateView = rateView({ mayWrite: false, seeWorkRates: false, rows: RATE_ROWS.filter(r => r.kind === 'Input') });
         render(<PriceBookPage currentRoute="finance-price-book" onNavigate={vi.fn()} />);
-        expect(screen.getByTestId('price-read-only')).toBeInTheDocument();
+        expect(screen.getByTestId('rate-read-only')).toBeInTheDocument();
+        expect(screen.getByTestId('rate-work-withheld')).toBeInTheDocument();
         expect(latinLeftovers()).toEqual([]);
     });
 
-    it('the price book while a rate is being changed, and after one is written', () => {
+    it('the price book while a rate is being changed, its history, a suggestion and a refused change', async () => {
+        h.rateView = rateView({
+            queued: [{
+                payload: { farmRateId: 'q1', farmId: 'farm-1', rateLineId: 'L9', change: 'set', kind: 'Input', itemName: 'गंधक', unit: 'किलो',
+                    basis: 'PerUnit', amount: 60, effectiveFrom: '2026-10-20', changedAtUtc: '2026-10-20T05:00:00Z' },
+                state: 'refused', errorCode: 'ShramSafal.FarmRate.Forbidden',
+            }],
+        });
         render(<PriceBookPage currentRoute="finance-price-book" onNavigate={vi.fn()} />);
-        fireEvent.click(screen.getByTestId('price-change-pb1'));
+        fireEvent.click(screen.getByTestId('rate-history-toggle-L1'));
         expect(latinLeftovers()).toEqual([]);
-        fireEvent.click(screen.getByTestId('price-save'));
-        expect(screen.getByTestId('price-written')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('rate-change-L1'));
+        expect(latinLeftovers()).toEqual([]);
+        fireEvent.click(screen.getByTestId('rate-save'));
+        await waitFor(() => expect(h.enqueueRate).toHaveBeenCalledTimes(1));
+        fireEvent.click(await screen.findByTestId('rate-new'));
+        fireEvent.click(screen.getByTestId('rate-kind-Work'));
         expect(latinLeftovers()).toEqual([]);
     });
 

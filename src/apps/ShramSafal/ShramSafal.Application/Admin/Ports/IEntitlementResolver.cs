@@ -25,6 +25,25 @@ public interface IEntitlementResolver
             || resolved.Memberships.Any(m =>
                 m.OrganizationType == OrganizationType.Platform && m.OrganizationRole == OrganizationRole.Owner);
     }
+
+    /// <summary>
+    /// spec: plr-d10 lane RATE-1 fix round 1 (review F7) — which of these people are platform owners, by the SAME rule as
+    /// <see cref="IsPlatformOwnerAsync"/>: the suggestion door asks it once for every author of the shared price list. The
+    /// default (for test doubles) asks the one-person rule per person; the real resolver answers in one query.
+    /// </summary>
+    async Task<IReadOnlySet<Guid>> PlatformOwnersAmongAsync(IReadOnlyCollection<UserId> userIds, CancellationToken ct)
+    {
+        var owners = new HashSet<Guid>();
+        foreach (var userId in userIds.Distinct())
+        {
+            if (await IsPlatformOwnerAsync(userId, ct))
+            {
+                owners.Add(userId.Value);
+            }
+        }
+
+        return owners;
+    }
 }
 
 public enum ResolveOutcome

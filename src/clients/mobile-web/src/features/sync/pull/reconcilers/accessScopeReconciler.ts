@@ -39,6 +39,7 @@ import { purgeLabourCachesForFarm } from '../../../../infrastructure/storage/lab
 import { dayLedgerMetaKey } from '../helpers/dayLedgerMetaKey';
 import { logMentionsMoney, MONEY_KEYS, textMentionsMoney, WORD_KEYS } from '../helpers/moneyMention';
 import { purgeOutsidePlots, removeCatalogPlots } from './plotScopePurge';
+import { purgeFarmRatesOutOfScope } from '../../../finance/farmRates/farmRatesStore';
 
 export interface AccessScopeContext {
     /** This phone's signed-in person; `null` = unknown, then nothing is attributed to him or removed as another's. */
@@ -168,6 +169,8 @@ export async function reconcileAccessScopes(
     await trimMirror(db, 'shramsafal_finance_cost_entries_v1', row => !removedEntries.has(String(row.id ?? ''))
         && (!moneyWithheld(String(row.farmId ?? '')) || (!!ctx.userId && row.createdByUserId === ctx.userId && !goneSet.has(String(row.farmId ?? '')))), ctx.receivedAtUtc);
     await trimMirror(db, 'shramsafal_finance_corrections_v1', row => !removedEntries.has(String(row.costEntryId ?? '')), ctx.receivedAtUtc);
+    // spec: plr-d10 lane RATE-1 part A — the farm's own rate list: every rate without see money, work rates without see wages.
+    outcome.removedMoneyRows += await purgeFarmRatesOutOfScope(db, byFarm, goneSet, ctx.receivedAtUtc);
 
     // ── Attendance, tests, warnings ─────────────────────────────────────────────────────
     const withheld = (farmId: string, key: 'seeAttendance' | 'seeTests' | 'seeCompliance') =>

@@ -403,6 +403,9 @@ public static class FinanceEndpoints
         })
         .WithName("CheckDuplicateCostEntry");
 
+        // spec: plr-d10 lane RATE-1 part A (founder D-72) — each farm's own price and rate list (its own file).
+        group.MapFarmRateEndpoints();
+
         return group;
     }
 

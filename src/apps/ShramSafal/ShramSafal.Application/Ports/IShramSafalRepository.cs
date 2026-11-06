@@ -1964,4 +1964,43 @@ public interface IShramSafalRepository
 
         return result;
     }
+
+    // ── spec: plr-d10 lane RATE-1 part A (founder D-72 "Own farm prices") — each farm's own price and rate list ──────
+    // Default implementations (doctrine F7): the in-tree doubles keep compiling; ShramSafalRepository overrides each.
+
+    /// <summary>
+    /// lane RATE-1 — saves one version of a farm's rate with its audit row, or answers <c>false</c> when its id or its
+    /// (line, version) is already taken — by a change that landed first, or by another farm's row the caller cannot see
+    /// (a unique index sees across row security). Only this save is undone (a savepoint on the ambient transaction), so
+    /// the caller can look again. A store that cannot hold it REFUSES (never a silent no-op).
+    /// </summary>
+    Task<bool> TryAddFarmRateAsync(FarmRate rate, AuditEvent created, CancellationToken ct = default)
+        => throw new NotSupportedException("This store cannot hold a farm's rates.");
+
+    /// <summary>
+    /// lane RATE-1 — every version of one rate line the caller's row policies let through, oldest first. A line of
+    /// another farm the caller is ALSO on can come back: the caller checks each row's farm (E4).
+    /// </summary>
+    Task<IReadOnlyList<FarmRate>> GetFarmRateLineAsync(Guid rateLineId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FarmRate>>([]);
+
+    /// <summary>lane RATE-1 — one version by its id (a repeat of the same change), or null.</summary>
+    Task<FarmRate?> GetFarmRateByIdAsync(Guid farmRateId, CancellationToken ct = default)
+        => Task.FromResult<FarmRate?>(null);
+
+    /// <summary>lane RATE-1 — every version of every rate of one farm (the REST read), by line then version.</summary>
+    Task<IReadOnlyList<FarmRate>> GetFarmRatesForFarmAsync(Guid farmId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<FarmRate>>([]);
+
+    /// <summary>lane RATE-1 — the pull: versions made on these farms after <paramref name="sinceUtc"/>.</summary>
+    Task<List<FarmRate>> GetFarmRatesChangedSinceAsync(IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult(new List<FarmRate>());
+
+    /// <summary>lane RATE-1 — one row of ShramSafal's shared price list (a suggestion he confirms), or null.</summary>
+    Task<PriceConfig?> GetPriceConfigByIdAsync(Guid priceConfigId, CancellationToken ct = default)
+        => Task.FromResult<PriceConfig?>(null);
+
+    /// <summary>lane RATE-1 — the whole shared price list (the suggestion door filters it to ShramSafal's own rows).</summary>
+    Task<IReadOnlyList<PriceConfig>> GetPriceConfigsAsync(CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<PriceConfig>>([]);
 }
