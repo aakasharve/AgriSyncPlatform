@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Privacy;
 using ShramSafal.Application.Privacy.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
@@ -150,10 +151,7 @@ public sealed class GetLogOriginalVoiceHandler(
             return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.NoRecording));
         }
 
-        var consent = await repository.GetUserConsentStateAsync(speakerUserId, ct);
-        var keptUnderCurrentWords = consent is not null
-            && consent.FullHistoryJournal
-            && CurrentConsentWording.VoiceKeepWordsAllowPlayback(consent.FullHistoryJournalWordingVersion);
+        var keptUnderCurrentWords = await OriginalVoiceSwitch.IsOnAsync(repository, speakerUserId, ct);
         if (!keptUnderCurrentWords)
         {
             return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.NotKept));

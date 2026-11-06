@@ -58,6 +58,8 @@ BEGIN
            ) ranked
      WHERE rn > 1;
 
+    -- Nothing to cancel (the normal case): do not touch audit_events at all - no lock, no FORCE toggle (N13).
+    IF EXISTS (SELECT 1 FROM _ops1_duplicate_waiting) THEN
     IF v_audit_forced THEN
         ALTER TABLE ssf.audit_events NO FORCE ROW LEVEL SECURITY;
     END IF;
@@ -87,6 +89,7 @@ BEGIN
 
     IF v_audit_forced THEN
         ALTER TABLE ssf.audit_events FORCE ROW LEVEL SECURITY;
+    END IF;
     END IF;
 
     UPDATE ssf.erasure_requests e

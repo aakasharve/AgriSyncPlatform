@@ -7,9 +7,9 @@ emits a one-minute ZERO heartbeat (see MutationRejectedMetricCollector), and "no
 publisher is not running, which is NOT healthy.
 
 Input: the JSON printed by `aws cloudwatch get-metric-statistics ... --statistics Sum` (read from a file or stdin).
-What counts as a heartbeat: a datapoint that HAS a numeric `Sum` (a point with only `Average`, or with a NaN or missing
-Sum, is no evidence), and, when `--since <deploy time>` is given, a `Timestamp` at or after that time (heartbeats the OLD
-binary published before the deploy prove nothing about the new one).
+What counts as a heartbeat: a datapoint that HAS a numeric, non-negative `Sum` (a point with only `Average`, or with a NaN,
+missing or negative Sum, is no evidence) and a `Timestamp` at or after `--since <deploy time>`, which is REQUIRED: heartbeats the OLD
+binary published before the deploy prove nothing about the new one, and without a start time a year-old heartbeat would pass.
 
 Verdicts and exit codes:
     GREEN    0   at least --min-datapoints heartbeats and every Sum is 0
@@ -32,7 +32,7 @@ def parse_time(text: str) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-def verdict(document: dict, min_datapoints: int, since: datetime | None = None) -> tuple[str, str]:
+def verdict(document: dict, min_datapoints: int, since: datetime) -> tuple[str, str]:
     if min_datapoints < 1:
         raise ValueError("--min-datapoints must be at least 1: zero datapoints can never be a healthy heartbeat")
     points = document.get("Datapoints")
@@ -43,21 +43,20 @@ def verdict(document: dict, min_datapoints: int, since: datetime | None = None) 
     ignored = 0
     for point in points:
         value = point.get("Sum") if isinstance(point, dict) else None
-        if not isinstance(value, (int, float)) or isinstance(value, bool) or math.isnan(value):
-            ignored += 1  # no Sum, or not a number: not a heartbeat
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or math.isnan(value) or value < 0:
+            ignored += 1  # no Sum, not a number, or negative (a count cannot be): not a heartbeat
             continue
-        if since is not None:
-            stamp = point.get("Timestamp")
-            try:
-                when = parse_time(stamp) if isinstance(stamp, str) else None
-            except ValueError:
-                when = None
-            if when is None or when < since:
-                ignored += 1  # before the deploy (or undated): says nothing about the new binary
-                continue
+        stamp = point.get("Timestamp")
+        try:
+            when = parse_time(stamp) if isinstance(stamp, str) else None
+        except ValueError:
+            when = None
+        if when is None or when < since:
+            ignored += 1  # before the deploy (or undated): says nothing about the new binary
+            continue
         sums.append(float(value))
 
-    note = f" ({ignored} datapoints ignored: no numeric Sum" + (" or older than the deploy" if since else "") + ")" if ignored else ""
+    note = f" ({ignored} datapoints ignored: no usable Sum, or older than the deploy)" if ignored else ""
     if any(v > 0 for v in sums):
         return "RED", f"{sum(1 for v in sums if v > 0)} of {len(sums)} datapoints show rejected mutations (total {sum(sums):g}){note}"
     if len(sums) < min_datapoints:
@@ -69,10 +68,10 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("file", nargs="?", help="JSON file (default: stdin)")
     ap.add_argument("--min-datapoints", type=int, default=3)
-    ap.add_argument("--since", help="deploy time (ISO 8601): only heartbeats at or after it count")
+    ap.add_argument("--since", required=True, help="deploy time (ISO 8601): only heartbeats at or after it count (required)")
     args = ap.parse_args(argv)
     try:
-        since = parse_time(args.since) if args.since else None
+        since = parse_time(args.since)
         text = open(args.file, encoding="utf-8").read() if args.file else sys.stdin.read()
         word, why = verdict(json.loads(text), args.min_datapoints, since)
     except (OSError, ValueError) as err:

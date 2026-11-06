@@ -91,7 +91,7 @@ import {
     type CoreDataCategoryCode,
     type CorePurposeCode,
 } from '../../../domain/consent/CoreConsentScope';
-import { OFF_CONSEQUENCE_EN, OFF_CONSEQUENCE_NOTICE_MR, PROOF_KEPT_EN, PROOF_KEPT_NOTICE_MR } from '../../../i18n/voiceSwitchWords';
+import { OFF_CONSEQUENCE_EN, OFF_CONSEQUENCE_MR, PROOF_KEPT_EN, PROOF_KEPT_MR } from '../../../i18n/voiceSwitchWords';
 
 /**
  * Versions carried onto BOTH legal records. Bump the notice version on any change to
@@ -371,7 +371,7 @@ const mr: NoticeCopy = {
             title: 'आवाज आणि जोडलेली माहिती',
             data: 'तुम्ही बोललेलं, लिहिलेलं, फोटो, कागदपत्रं',
             // PROPOSED (D-50, CTO call D-101): the founder's own sentence about the evidence copy, then the one consequence of turning the switch off.
-            purpose: 'काम समजून योग्य ठिकाणी मांडण्यासाठी. माईक तुम्ही सुरू केल्यावरच वापरला जातो. ' + PROOF_KEPT_NOTICE_MR + ' ' + OFF_CONSEQUENCE_NOTICE_MR,
+            purpose: 'काम समजून योग्य ठिकाणी मांडण्यासाठी. माईक तुम्ही सुरू केल्यावरच वापरला जातो. ' + PROOF_KEPT_MR + ' ' + OFF_CONSEQUENCE_MR,
             purposes: ['VOICE_PROCESSING_FOR_WORK_RECORD'],
             dataCategories: ['VOICE_AUDIO_AND_TRANSCRIPT'],
         },

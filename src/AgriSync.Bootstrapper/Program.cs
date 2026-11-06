@@ -44,9 +44,6 @@ try
         // (env vars + appsettings) keeps working unchanged. See
         // AgriSync.Bootstrapper/Configuration/SecretsManagerConfigurationExtensions.cs.
         .AddAgriSyncSecretsManager();
-    // OPS-1 (F36): cap every connection pool and give the waits explicit values, through the Npgsql builder.
-    // Runs after every other source so it sees the final strings, and registers last so every reader gets them.
-    ConnectionPoolDefaults.ApplyToConfiguration(builder.Configuration, message => Log.Warning("{Message}", message));
     builder.WebHost.ConfigureKestrel(options =>
     {
         options.Limits.MaxRequestBodySize = 50L * 1024L * 1024L;

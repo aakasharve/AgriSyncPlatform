@@ -279,6 +279,7 @@ public static class DependencyInjection
         // adapter rebind); range query depends only on IRetainedBlobStore.
         services.AddScoped<PersistVoiceClipRetainedHandler>();
         services.AddScoped<GetVoiceDiaryByRangeHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryById.GetVoiceDiaryByIdHandler>();
         // spec: plr-d10 (I27; founder D-31) — the original voice of ONE record, for a person
         // allowed to review it. Reads the archive through the same IRetainedBlobStore.
         services.AddScoped<ShramSafal.Application.UseCases.Logs.GetLogOriginalVoice.GetLogOriginalVoiceHandler>();

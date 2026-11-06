@@ -94,6 +94,7 @@ const mr: ConsentBundle = {
     revoke: {
         button: 'सर्व रद्द करा',
         confirm: 'तुम्ही खात्रीने सर्व परवानग्या रद्द करू इच्छिता?',
+        // PROPOSED (D-50 / CTO call D-101): revoking turns the playback switch off - playback stops, the evidence copy is kept, nothing is deleted.
         whatStops: 'रद्द केल्यावर: मूळ आवाज ऐकता येणार नाही; पुराव्याची प्रत जतन राहते आणि काहीही मिटवलं जात नाही. सुधारणा व संशोधनाच्या दोन परवानग्या तुम्ही मागे घेता. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.',
     },
     save: {
@@ -127,6 +128,7 @@ const en: ConsentBundle = {
     revoke: {
         button: 'Revoke all',
         confirm: 'Are you sure you want to revoke every permission?',
+        // PROPOSED (D-50 / CTO call D-101): revoking turns the playback switch off - playback stops, the evidence copy is kept, nothing is deleted.
         whatStops: 'If you revoke: your original voice can no longer be played back; the evidence copy is still kept as proof and nothing is deleted. You also withdraw the two permissions for improving the app and for research. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.',
     },
     save: {

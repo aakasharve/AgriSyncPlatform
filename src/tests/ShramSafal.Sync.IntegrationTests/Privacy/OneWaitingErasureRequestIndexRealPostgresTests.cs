@@ -72,6 +72,23 @@ ALTER TABLE ssf.audit_events FORCE ROW LEVEL SECURITY;");
                     $"VALUES ('{id}', '{by}', {(onBehalf is null ? "NULL" : $"'{onBehalf}'")}, {status}, '{at}')");
 
     [Fact]
+    public async Task Up_with_nothing_to_cancel_does_not_touch_audit_events_at_all()
+    {
+        // N13: no duplicate waiting request (the normal case) -> no FORCE toggle on ssf.audit_events (a toggle takes an ACCESS EXCLUSIVE
+        // lock and rewrites its pg_class row). The catalog row's xmin proves it was never rewritten.
+        await Insert(Guid.NewGuid(), Guid.NewGuid(), null, 0, "2026-10-01T00:00:00Z");
+        await Insert(Guid.NewGuid(), Guid.NewGuid(), null, 0, "2026-10-02T00:00:00Z");
+        var before = await Scalar("SELECT xmin::text::bigint FROM pg_class WHERE oid = 'ssf.audit_events'::regclass");
+
+        await Exec(_conn, AddOneWaitingErasureRequestIndex.UpSql);
+
+        Assert.Equal(before, await Scalar("SELECT xmin::text::bigint FROM pg_class WHERE oid = 'ssf.audit_events'::regclass"));
+        Assert.Equal(0, await Scalar("SELECT count(*) FROM ssf.audit_events"));
+        Assert.Equal(2, await Scalar("SELECT count(*) FROM ssf.erasure_requests WHERE status = 0"));
+        Assert.Equal(1, await Scalar("SELECT relforcerowsecurity::int FROM pg_class WHERE oid = 'ssf.audit_events'::regclass"));
+    }
+
+    [Fact]
     public async Task Up_cleans_duplicates_then_the_index_allows_one_waiting_request_per_person_and_Down_removes_it()
     {
         var person = Guid.NewGuid();

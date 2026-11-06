@@ -12,18 +12,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { tConsent } from '../../../i18n/consentTranslations';
 import { tVoiceDiary } from '../../../i18n/voiceDiaryTranslations';
-import {
-    OFF_CONSEQUENCE_EN,
-    OFF_CONSEQUENCE_MR,
-    OFF_CONSEQUENCE_NOTICE_MR,
-    PROOF_KEPT_EN,
-    PROOF_KEPT_MR,
-    PROOF_KEPT_NOTICE_MR,
-    SWITCH_MEANING_EN,
-    SWITCH_MEANING_MR,
-    SWITCH_TITLE_EN,
-    SWITCH_TITLE_MR,
-} from '../../../i18n/voiceSwitchWords';
+import { OFF_CONSEQUENCE_EN, OFF_CONSEQUENCE_MR, PROOF_KEPT_EN, PROOF_KEPT_MR, SWITCH_MEANING_EN, SWITCH_MEANING_MR, SWITCH_TITLE_EN, SWITCH_TITLE_MR } from '../../../i18n/voiceSwitchWords';
 import {
     ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT,
     CONSENT_NOTICE,
@@ -44,6 +33,10 @@ const OLD_OR_CONTRADICTING = [
     /नवीन आवाजी नोंदी (तुमच्या खात्यात )?जतन/,
     /जतन केल्या जाणार नाहीत/,
     /जतन करण्याची सोय/,
+    // N11: ONE Marathi rendering of the founder's sentence everywhere outside Sathi's surface ("रेकॉर्डिंग", never the "नोंद" rendering).
+    /प्रत्येक नोंदीचा मूळ आवाज/,
+    /बंद असताना केलेली नोंद नंतर/,
+    /यापुढची नोंद नंतर/,
 ];
 
 const PUBLIC = resolve(__dirname, '../../../../public');
@@ -101,9 +94,9 @@ describe('D-50 - the founder\'s own sentence is what every screen says, and noth
         const voice = (lang: 'mr' | 'en') => CONSENT_NOTICE[lang].cards.find((p) => p.id === 'voiceUploads')!.purpose;
         expect(voice('en')).toContain(PROOF_KEPT_EN);
         expect(voice('en')).toContain(OFF_CONSEQUENCE_EN);
-        // founder decision 13: the Marathi notice copy has no "नोंद" - the same two sentences, worded with "रेकॉर्डिंग"
-        expect(voice('mr')).toContain(PROOF_KEPT_NOTICE_MR);
-        expect(voice('mr')).toContain(OFF_CONSEQUENCE_NOTICE_MR);
+        // N11: ONE Marathi rendering outside Sathi's surface - the same two sentences, worded with "रेकॉर्डिंग" (not "नोंद")
+        expect(voice('mr')).toContain(PROOF_KEPT_MR);
+        expect(voice('mr')).toContain(OFF_CONSEQUENCE_MR);
         expect(voice('mr')).not.toContain('नोंद');
     });
 });
@@ -131,12 +124,18 @@ describe('D-50 - the documents (M3, M4): meaning, evidence copy, the real in-app
         }
     });
 
+    it('N10: the speaker plays from Voice notes; reviewers play from the record (they cannot open his Voice notes)', () => {
+        expect(doc('consent/agreement_en.md')).toContain('authorized reviewers on this farm can play it from the record');
+        expect(doc('consent/agreement_en.md')).not.toMatch(/you and authorized reviewers[^.]*from Voice notes/i);
+        expect(doc('consent/agreement_mr.md')).toContain('त्या कामाच्या नोंदीतून ऐकता येतो');
+    });
+
     it('the Privacy Notice and the Terms say it too, in both languages', () => {
         expect(doc('legal/privacy_en.md')).toContain('ShramSafal keeps the original sound of every');
         expect(doc('legal/privacy_en.md')).toContain('cannot be played later');
         expect(doc('legal/terms_en.md')).toContain('A recording made while it is off cannot be played later.');
         expect(doc('legal/privacy_mr.md')).toContain('नंतर ऐकता येणार नाही');
-        expect(doc('legal/terms_mr.md')).toContain('बंद असताना केलेली नोंद नंतर ऐकता येणार नाही.');
+        expect(doc('legal/terms_mr.md')).toContain('बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.');
         expect(doc('legal/privacy_en.md')).toContain(SWITCH_TITLE_EN);
         expect(doc('legal/privacy_mr.md')).toContain(SWITCH_TITLE_MR);
     });

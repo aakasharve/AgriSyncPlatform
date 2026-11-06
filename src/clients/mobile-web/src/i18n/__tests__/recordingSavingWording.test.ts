@@ -17,7 +17,7 @@ const agreement = (lang: 'mr' | 'en') =>
 // fix round 1 (lane OPS-1; founder D-50 choice 2, CTO call D-101): the R-series below used to pin wording that said the switch decides
 // whether recordings are SAVED. The founder's D-50 sentence replaces it: ShramSafal keeps the original sound of every record as
 // proof; the switch only decides whether it can be played. The exact new lines are pinned here (PROPOSED words).
-const OFF_MR = 'हा पर्याय बंद असताना केलेली नोंद नंतर ऐकता येणार नाही.';
+const OFF_MR = 'हा पर्याय बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.';
 const OFF_EN = 'A recording made while this is off cannot be played later.';
 
 describe('R4 - playback on banner', () => {
@@ -45,7 +45,7 @@ describe('R5 - playback off banner', () => {
 
 describe('R7 - turning playback off', () => {
     it('exact Marathi on the confirmation', () => {
-        expect(tVoiceDiary('mr-IN', 'stopFutureConfirm.body')).toBe('बंद केल्यावर यापुढची नोंद नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.');
+        expect(tVoiceDiary('mr-IN', 'stopFutureConfirm.body')).toBe('बंद केल्यावर यापुढे केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.');
     });
     it('the revoke-all confirmation says playback stops and nothing is deleted', () => {
         expect(tConsent('mr-IN', 'revoke.whatStops')).toContain('मूळ आवाज ऐकता येणार नाही; पुराव्याची प्रत जतन राहते आणि काहीही मिटवलं जात नाही.');

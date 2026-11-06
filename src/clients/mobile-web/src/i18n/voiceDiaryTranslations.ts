@@ -194,7 +194,7 @@ const mr: VoiceDiaryBundle = {
         // left for the founder.
         // PROPOSED (Marathi), plr-d10 I25: the last sentence follows D-31 — saved recordings may be
         // heard by him AND by authorised reviewers on this farm (it said "only your account").
-        body: `तुमचा मूळ आवाज तुम्हाला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येईल. प्रत्येक नोंदीची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. प्रत्येक नोंदीची पुराव्याची प्रत नेहमी जतन केली जाते. ${OFF_CONSEQUENCE_MR}`, // PROPOSED
+        body: `तुमचा मूळ आवाज तुम्हाला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येईल. प्रत्येक नोंदीची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. प्रत्येक रेकॉर्डिंगची पुराव्याची प्रत नेहमी जतन केली जाते. ${OFF_CONSEQUENCE_MR}`, // PROPOSED
         bullet1: 'प्रत्येक नोंदीची जतन स्थिती दिसते',
         bullet2: 'कधीही बंद करता येते',
         bullet3: 'तुम्ही नोंदी मिटवायला सांगू शकता',
@@ -204,7 +204,7 @@ const mr: VoiceDiaryBundle = {
     },
     stopFutureConfirm: {
         headline: 'मूळ आवाज ऐकू देणे बंद करायचे?', // PROPOSED
-        body: 'बंद केल्यावर यापुढची नोंद नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.', // PROPOSED
+        body: 'बंद केल्यावर यापुढे केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.', // PROPOSED
         keptNote: 'आधी जतन झालेल्या नोंदी जशाच्या तशा राहतील. त्या मिटवायच्या असतील तर ती वेगळी कृती आहे.',
         primaryCta: 'होय, बंद करा', // PROPOSED
         secondaryCta: 'नको',

@@ -9,7 +9,7 @@
 //
 // When a new MATERIAL notice version ships, add its line here (and nowhere else).
 import { CONSENT_NOTICE, type NoticeLanguage } from '../gate/consentNotice';
-import { OFF_CONSEQUENCE_EN, OFF_CONSEQUENCE_NOTICE_MR, PROOF_KEPT_EN, PROOF_KEPT_NOTICE_MR } from '../../../i18n/voiceSwitchWords';
+import { OFF_CONSEQUENCE_EN, OFF_CONSEQUENCE_MR, PROOF_KEPT_EN, PROOF_KEPT_MR } from '../../../i18n/voiceSwitchWords';
 
 export interface NoticeChangeLine {
     /** The notice version that introduced this change: a farmer who accepted an OLDER version has not seen it. */
@@ -28,7 +28,7 @@ export const NOTICE_CHANGE_LINES: readonly NoticeChangeLine[] = [
     {
         since: 'notice-2026-11-06.1',
         id: 'proof',
-        text: (l) => (l === 'en' ? `${PROOF_KEPT_EN} ${OFF_CONSEQUENCE_EN}` : `${PROOF_KEPT_NOTICE_MR} ${OFF_CONSEQUENCE_NOTICE_MR}`),
+        text: (l) => (l === 'en' ? `${PROOF_KEPT_EN} ${OFF_CONSEQUENCE_EN}` : `${PROOF_KEPT_MR} ${OFF_CONSEQUENCE_MR}`),
     },
 ];
 

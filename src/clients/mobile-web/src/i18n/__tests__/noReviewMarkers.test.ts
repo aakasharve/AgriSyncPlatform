@@ -159,13 +159,16 @@ describe('statements that were measured against the code and found untrue stay o
         }
     });
 
-    it('does not say revoking makes older recordings unplayable', () => {
-        // GetVoiceDiaryByRangeHandler has no consent gate: saved clips stay listed after
-        // a revoke, and the stop-saving confirmation already says so.
+    it('the revoke sentence is TRUE for the code: playback stops (the server refuses a play while the switch is OFF) and nothing is deleted', () => {
+        // This guard exists to catch a sentence that is false for the code. It used to forbid "unplayable" because
+        // GetVoiceDiaryByRangeHandler / by-id had no consent gate (saved clips stayed playable after a revoke). Fix round 2 (N2) put the
+        // gate on (founder D-2: OFF stops replay, never deletes; GetVoiceDiaryByIdHandler, real-Postgres test
+        // Voice_diary_own_clip_is_refused_while_the_switch_is_off...), so the sentence below is now true - and the guard keeps its meaning
+        // by pinning BOTH halves: it must say playback stops AND that nothing is deleted, and must never promise deletion.
         const whatStops = CONSENT_BUNDLES['en-IN'].revoke.whatStops;
-        expect(whatStops).not.toMatch(/no longer be able to play/i);
-        // D-50 (lane OPS-1): revoking turns the playback switch off - playback stops, nothing is deleted.
+        expect(whatStops).toMatch(/can no longer be played back/i);
         expect(whatStops).toMatch(/nothing is deleted/i);
+        expect(whatStops).not.toMatch(/will be (deleted|erased)|are (deleted|erased)/i);
     });
 
     it('does not cite a statute as if it were a compliance statement', () => {

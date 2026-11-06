@@ -16,8 +16,11 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Mvc;
+using ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryById;
 using ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryByRange;
 using ShramSafal.Application.UseCases.VoiceDiary.PersistVoiceClipRetained;
+using ShramSafal.Application.Ports;
+using ShramSafal.Application.Privacy;
 using ShramSafal.Application.Privacy.Ports;
 
 namespace ShramSafal.Api.Endpoints;
@@ -25,6 +28,9 @@ namespace ShramSafal.Api.Endpoints;
 public static class VoiceDiaryEndpoints
 {
     private const int MaxCipherPayloadBase64Bytes = 16 * 1024 * 1024; // 16 MB base64 ceiling
+
+    /// <summary>The 403 code of a play request refused because the playback switch is OFF (the phone shows the founder's D-31 words).</summary>
+    public const string OriginalVoiceNotKeptCode = "ShramSafal.OriginalVoiceNotKept";
 
     public static RouteGroupBuilder MapVoiceDiaryEndpoints(this RouteGroupBuilder group)
     {
@@ -94,6 +100,7 @@ public static class VoiceDiaryEndpoints
         [FromQuery] DateOnly from,
         [FromQuery] DateOnly to,
         [FromServices] GetVoiceDiaryByRangeHandler handler,
+        [FromServices] IShramSafalRepository repository,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -110,10 +117,14 @@ public static class VoiceDiaryEndpoints
             return ToErrorResult(result.Error);
         }
 
+        // Fix round 2 (N2): the list still shows every kept recording (OFF never deletes); `playable` says whether the speaker's
+        // playback switch is ON, so a phone can show the founder's "मूळ आवाज उपलब्ध नाही" instead of a play button that will be refused.
+        var playable = await OriginalVoiceSwitch.IsOnForSpeakerAsync(repository, userId, ct);
         return Results.Ok(new
         {
             clips = result.Value!.Clips.Select(c => new
             {
+                playable,
                 clipId = c.ClipId,
                 recordedAtUtc = c.RecordedAtUtc,
                 durationSeconds = c.DurationSeconds,
@@ -126,7 +137,7 @@ public static class VoiceDiaryEndpoints
     private static async Task<IResult> HandleByIdAsync(
         [FromRoute] Guid clipId,
         ClaimsPrincipal user,
-        [FromServices] IRetainedBlobStore retainedBlobStore,
+        [FromServices] GetVoiceDiaryByIdHandler handler,
         CancellationToken ct)
     {
         if (!EndpointActorContext.TryGetUserId(user, out var userId))
@@ -139,7 +150,18 @@ public static class VoiceDiaryEndpoints
             return Results.BadRequest(new { error = "ShramSafal.InvalidCommand", message = "clipId required" });
         }
 
-        var clip = await retainedBlobStore.GetByIdAsync(clipId, userId, ct);
+        // Fix round 2 (N2) - founder D-2: OFF stops replay and never deletes the clip; D-50 choice 2: the switch is "who may listen". While it
+        // is OFF nobody plays a recording, the speaker included (the handler asks BEFORE the clip is read from storage). The clip stays kept;
+        // turning the switch ON again makes it playable again.
+        var outcome = await handler.HandleAsync(clipId, userId, ct);
+        if (outcome.Outcome == VoiceDiaryByIdOutcome.SwitchOff)
+        {
+            return Results.Json(
+                new { error = OriginalVoiceNotKeptCode, message = "Original recording unavailable." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        var clip = outcome.Clip;
         if (clip is null)
         {
             return Results.NotFound(new { error = "ShramSafal.AttachmentNotFound", message = "clip not found" });
