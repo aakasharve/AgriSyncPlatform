@@ -13,7 +13,21 @@ public static class RichnessStamper
 {
     private static readonly string[] RestReasons = ["rest", "festival", "personal"];
 
-    public static RewardStamp Stamp(DayClassification classification, ClassifierSignals s)
+    /// <param name="dayHasConfirmedRecord">
+    /// spec: dfes-input-truth-and-mix-check-2026-11-06 (item 7; founder D-46) — whether at least one of the day's
+    /// records is confirmed (मंजूर), as the caller read it off the records (the Domain has no database). A day advances
+    /// the streak only when it is: <c>false</c> takes the streak flag down and nothing else — the points, the bar and
+    /// the reasons are exactly what they would be confirmed (points are not this rule's business). Required, never
+    /// defaulted: a caller that has not looked must not imply a confirmation. Confirmation is a fact about the
+    /// records, not a scoring rule, so it applies on every recompute whatever engine version froze the day.
+    /// </param>
+    public static RewardStamp Stamp(DayClassification classification, ClassifierSignals s, bool dayHasConfirmedRecord)
+    {
+        var stamp = StampDay(classification, s);
+        return dayHasConfirmedRecord ? stamp : stamp with { AdvancesStreak = false };
+    }
+
+    private static RewardStamp StampDay(DayClassification classification, ClassifierSignals s)
     {
         var p = DfesTuning.Points;
 

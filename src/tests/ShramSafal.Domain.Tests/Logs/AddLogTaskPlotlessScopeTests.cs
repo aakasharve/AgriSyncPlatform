@@ -144,7 +144,8 @@ public sealed class AddLogTaskPlotlessScopeTests
             new SequentialIdGenerator(),
             new FixedClock(Now),
             new AllowAllEntitlementPolicy(),
-            new UnscheduledComplianceService());
+            new UnscheduledComplianceService(),
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         return (handler, repo, log.Id);
     }

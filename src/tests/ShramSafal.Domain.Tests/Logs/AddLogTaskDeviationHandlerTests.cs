@@ -49,7 +49,8 @@ public sealed class AddLogTaskDeviationHandlerTests
             new SequentialIdGenerator(),
             new FixedClock(Now),
             new AllowAllEntitlementPolicy(),
-            new NoopComplianceService());
+            new NoopComplianceService(),
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         return (handler, logId);
     }

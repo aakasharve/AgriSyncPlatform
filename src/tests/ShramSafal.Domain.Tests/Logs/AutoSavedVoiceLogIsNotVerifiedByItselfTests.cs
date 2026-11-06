@@ -454,7 +454,8 @@ public sealed class AutoSavedVoiceLogIsNotVerifiedByItselfTests
             clock,
             new AllowAllEntitlementPolicy(),
             new NoopAnalyticsWriter(),
-            JobCardHook(repo, clock));
+            JobCardHook(repo, clock),
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         return handler.HandleAsync(new VerifyLogCommand(
             logId, status, Reason: reason, VerifiedByUserId: callerGuid,
@@ -471,6 +472,7 @@ public sealed class AutoSavedVoiceLogIsNotVerifiedByItselfTests
             clock,
             new AllowAllEntitlementPolicy(),
             new NoopComplianceService(),
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService(),
             JobCardHook(repo, clock));
 
         return handler.HandleAsync(new AddLogTaskCommand(

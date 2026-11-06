@@ -6,9 +6,11 @@ using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Labour;
+using ShramSafal.Domain.Logs;
 
 namespace ShramSafal.Application.UseCases.Labour.CorrectLabour;
 
@@ -79,7 +81,11 @@ public sealed class CorrectLabourHandler(
     ISyncMutationStore syncMutationStore,
     IIdGenerator idGenerator,
     IClock clock,
-    ILogger<CorrectLabourHandler> logger)
+    ILogger<CorrectLabourHandler> logger,
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3a fix pass 1, B003) — rebuilds the day score of the
+    // record's work day inside this transaction. Optional ONLY because two real-Postgres suites outside this lane
+    // construct the handler directly; production resolves it from DI (ShramSafal.Api DependencyInjection).
+    IDailyRichnessDerivationService? dailyRichnessDerivation = null)
     : IHandler<CorrectLabourCommand, CorrectLabourResult>
 {
     /// <summary>
@@ -454,6 +460,7 @@ public sealed class CorrectLabourHandler(
         if (command.IdempotencyStoredByCaller)
         {
             await repository.SaveChangesAsync(ct);
+            await RecomputeWorkDayAsync(dailyLog, corrections.Count, ct);
             return Result.Success(result);
         }
 
@@ -485,7 +492,27 @@ public sealed class CorrectLabourHandler(
                 : Replay(winner.ResponsePayloadJson, assignment, liveRows));
         }
 
+        await RecomputeWorkDayAsync(dailyLog, corrections.Count, ct);
         return Result.Success(result);
+    }
+
+    /// <summary>
+    /// spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3a fix pass 1, B003; founder D-46) — the streak counts
+    /// confirmed records only, and a material correction re-opens a confirmed record (8c above); the engagement's
+    /// headcount and duration are also what the day score reads. So, when anything actually moved, the day score of the
+    /// record's WORK day (<c>LogDate</c>) is rebuilt from what was just flushed. Inside this transaction, after the
+    /// record's row hold taken at step 3, before the commit; database work only. Not a side-car: a failure fails the
+    /// correction, so the two commit together or neither does. Never on a replay (nothing was written).
+    /// </summary>
+    private async Task RecomputeWorkDayAsync(DailyLog dailyLog, int correctionsRecorded, CancellationToken ct)
+    {
+        if (correctionsRecorded == 0 || dailyRichnessDerivation is null)
+        {
+            return;
+        }
+
+        await dailyRichnessDerivation.RecomputeAsync((Guid)dailyLog.FarmId, dailyLog.LogDate, ct);
+        await repository.SaveChangesAsync(ct);
     }
 
     /// <summary>

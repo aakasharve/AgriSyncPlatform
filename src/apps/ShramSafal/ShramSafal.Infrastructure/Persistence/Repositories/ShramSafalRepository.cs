@@ -370,6 +370,7 @@ internal sealed class ShramSafalRepository(
         return await db.DailyLogs
             .AsNoTracking()
             .Include(l => l.Tasks)
+            .Include(l => l.VerificationEvents) // lane IT3a (D-46): the streak reads each record's confirmation
             .Where(l => l.FarmId == typedFarmId && l.LogDate == localDate)
             .OrderBy(l => l.Id)
             .ToListAsync(ct);

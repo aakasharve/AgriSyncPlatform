@@ -268,7 +268,8 @@ public sealed class VerifyLogPipelineTests
             fixedClock,
             new AllowAllEntitlementPolicy(),
             analytics,
-            autoVerify);
+            autoVerify,
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         var validator = new VerifyLogValidator();
         var authorizer = new VerifyLogAuthorizer(

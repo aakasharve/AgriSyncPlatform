@@ -155,7 +155,8 @@ public sealed class LogHandlerAnalyticsTests
             fixedClock,
             new AllowAllEntitlementPolicy(),
             analytics,
-            autoVerify);
+            autoVerify,
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         var command = new VerifyLogCommand(
             DailyLogId: log.Id,

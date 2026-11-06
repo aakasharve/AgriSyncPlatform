@@ -422,7 +422,8 @@ public sealed class OwnerConfirmationTests
             repo, clock,
             NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
         var handler = new VerifyLogHandler(
-            repo, new SequentialIds(), clock, new AllowAll(), new NoAnalytics(), autoVerify);
+            repo, new SequentialIds(), clock, new AllowAll(), new NoAnalytics(), autoVerify,
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
         return (handler, repo);
     }
 
