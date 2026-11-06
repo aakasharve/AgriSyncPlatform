@@ -181,6 +181,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261102163914_AddWorkerIdentity",
 
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane L8b-1); Down() read in full. Up() ADDs the nullable
+        //    schedule_subscriptions.reference_date and puts ssf.schedule_subscriptions and ssf.schedule_migration_events under
+        //    ENABLE + FORCE RLS with three policies (tenant on both, user-scoped select on subscriptions). Down() drops the
+        //    three policies, the RLS flags and the column — only what Up() added. No append-only ledger, privilege or grant
+        //    is touched. Safe to revert and re-apply mid-proof.
+        "20261106054532_AddScheduleSubscriptionDayZeroAndRls",
         // ── Reviewed 2026-11-06 (lane WID fix pass 2, N3); Down() read in full: drops only the two indexes Up() adds
         //    on ssf.shram_person_phones. No table, column, policy or grant; no ledger is touched. Safe mid-proof.
         "20261106060953_AddOneVerifiedNumberPerPerson",

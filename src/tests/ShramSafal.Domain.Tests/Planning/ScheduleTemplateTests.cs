@@ -21,6 +21,23 @@ public sealed class ScheduleTemplateTests
         v2.DomainEvents.OfType<ScheduleTemplateEditedEvent>().Should().HaveCount(1);
     }
 
+    // spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88: "each version shows who made it").
+    [Fact]
+    public void EditCopyOnWrite_records_the_editor_as_the_new_versions_maker_and_keeps_the_link()
+    {
+        var author = UserId.New();
+        var editor = UserId.New();
+        var v1 = ScheduleTemplate.Create(Guid.NewGuid(), "Grape May", "Flowering",
+            DateTime.UtcNow, createdByUserId: author, tenantScope: TenantScope.Team);
+
+        var v2 = v1.EditCopyOnWrite(Guid.NewGuid(), "Grape May (rev)", null, editor, DateTime.UtcNow);
+
+        v2.CreatedByUserId.Should().Be(editor, "the version records who made it, not the schedule's first author");
+        v2.PreviousVersionId.Should().Be(v1.Id, "the link to the version it was made from is kept");
+        v2.TenantScope.Should().Be(TenantScope.Team);
+        v1.CreatedByUserId.Should().Be(author, "the version before keeps its own maker");
+    }
+
     [Fact]
     public void Clone_preserves_root_lineage()
     {

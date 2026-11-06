@@ -97,7 +97,7 @@ public sealed class RemovePlannedActivityPipelineTests
     public async Task Authorizer_returns_PlannedActivityNotFound_when_id_resolves_to_nothing()
     {
         var repo = new FakeRemoveRepo(activity: null, role: AppRole.Mukadam);
-        var a = new RemovePlannedActivityAuthorizer(repo);
+        var a = new RemovePlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed(Guid.NewGuid()), default);
 
@@ -107,11 +107,11 @@ public sealed class RemovePlannedActivityPipelineTests
     }
 
     [Fact]
-    public async Task Authorizer_returns_Forbidden_when_caller_is_below_Mukadam()
+    public async Task Authorizer_returns_Forbidden_when_caller_holds_no_PlanWork()
     {
         var activity = MakeActivity();
         var repo = new FakeRemoveRepo(activity, AppRole.Worker);
-        var a = new RemovePlannedActivityAuthorizer(repo);
+        var a = new RemovePlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed(activity.Id) with { CallerUserId = WorkerId }, default);
 
@@ -121,11 +121,11 @@ public sealed class RemovePlannedActivityPipelineTests
     }
 
     [Fact]
-    public async Task Authorizer_returns_Success_when_caller_is_Mukadam()
+    public async Task Authorizer_returns_Success_when_caller_holds_PlanWork()
     {
         var activity = MakeActivity();
         var repo = new FakeRemoveRepo(activity, AppRole.Mukadam);
-        var a = new RemovePlannedActivityAuthorizer(repo);
+        var a = new RemovePlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed(activity.Id), default);
 
@@ -206,7 +206,7 @@ public sealed class RemovePlannedActivityPipelineTests
             new FakeClock(Now));
 
         var validator = new RemovePlannedActivityValidator();
-        var authorizer = new RemovePlannedActivityAuthorizer(repo);
+        var authorizer = new RemovePlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var pipeline = HandlerPipeline.Build<RemovePlannedActivityCommand>(
             rawHandler,
@@ -242,6 +242,29 @@ public sealed class RemovePlannedActivityPipelineTests
 
         public override Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(_activity?.Id == id ? _activity : null);
+
+        // lane L8b-1 (founder D-73) — the planning doors ask ScheduleChangeGate (PlanWork). In these tests the मुकादम is
+        // the seat the owner GAVE "कामाचं नियोजन करणे" (unless PlanWorkGiven is false); every other label holds only what
+        // the 2b migration stored for it (no PlanWork): a label grants nothing.
+        public bool PlanWorkGiven { get; init; } = true;
+
+        // lane L8b-1 fix round 1 (review H1) — the planned-work doors read the season's farm first. Every season here is on
+        // FarmId, unless a fact puts it on another farm (SeasonFarm).
+        public Guid SeasonFarm { get; init; } = FarmId;
+
+        public override Task<ShramSafal.Domain.Crops.CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult<ShramSafal.Domain.Crops.CropCycle?>(ShramSafal.Domain.Crops.CropCycle.Create(
+                cropCycleId, new AgriSync.SharedKernel.Contracts.Ids.FarmId(SeasonFarm), Guid.NewGuid(), "Grapes", "Flowering",
+                new DateOnly(2026, 1, 1), null, Now));
+
+        public override async Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default)
+        {
+            var access = await base.GetFarmAccessForUserAsync(farmId, userId, ct);
+            return access is { Role: AppRole.Mukadam } && PlanWorkGiven
+                ? access with { StoredPermissions = (access.StoredPermissions ?? ShramSafal.Domain.Farms.FarmPermission.None) | ShramSafal.Domain.Farms.FarmPermission.PlanWork }
+                : access;
+        }
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
             Task.FromResult(_role);

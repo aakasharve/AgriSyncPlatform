@@ -505,6 +505,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // back-fills a person and a card for every field operator.
         "20261102163914_AddWorkerIdentity",
 
+        // spec plr-d10 lane L8b-1 — Down() read in full: drops p_tenant_schedule_subscriptions,
+        // p_user_select_schedule_subscriptions (an Active-only data policy, created already narrowed: m.status = 3 — see
+        // PoliciesCreatedAfterActiveOnly) and p_tenant_schedule_migration_events, takes both tables out of RLS and drops
+        // schedule_subscriptions.reference_date. No farm_memberships or farm_join_requests object; a seat's status is
+        // never touched. Re-Up re-creates them.
+        "20261106054532_AddScheduleSubscriptionDayZeroAndRls",
         // lane WID fix pass 2 (N3) — Down() read in full: drops only the two shram_person_phones indexes Up() adds. No
         // farm_memberships or farm_join_requests object, no ssf.farms policy.
         "20261106060953_AddOneVerifiedNumberPerPerson",
@@ -524,6 +530,9 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
     [
         // spec plr-d10 lane F1 — 20261030102448_AddDailyLogContents.
         "p_user_select_daily_log_contents",
+        // spec plr-d10 lane L8b-1 — 20261106054532_AddScheduleSubscriptionDayZeroAndRls. Its table predates the Active-only
+        // migration; the policy is dropped by its OWN migration's Down() on the way back, so it is gone after Down() too.
+        "p_user_select_schedule_subscriptions",
         // spec plr-d10 lane RATE-1 part A — 20261106112244_AddFarmRates.
         "p_user_select_farm_rates",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the

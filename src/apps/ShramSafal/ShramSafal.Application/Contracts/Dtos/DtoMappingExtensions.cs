@@ -387,7 +387,8 @@ internal static class DtoMappingExtensions
             sub.MigratedFromSubscriptionId?.Value,
             sub.MigratedToSubscriptionId?.Value,
             sub.MigrationReason?.ToString(),
-            sub.StateChangedAtUtc);
+            sub.StateChangedAtUtc,
+            sub.ReferenceDate);
 
     public static FieldOperatorDto ToDto(this FieldOperator fieldOperator) =>
         new(

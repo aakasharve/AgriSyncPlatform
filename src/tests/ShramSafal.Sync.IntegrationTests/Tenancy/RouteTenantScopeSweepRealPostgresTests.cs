@@ -72,11 +72,8 @@ public sealed class RouteTenantScopeSweepRealPostgresTests(ITestOutputHelper out
             // grants the app role (or mis_reader) SELECT there. A grant is a schema change; registered for OPS-1.
             ["GET /shramsafal/reports/farm-week/{farmId:guid}"] = ("42501: permission denied for materialized view",
                 "the app role has no SELECT on mis.* (OPS-1)"),
-            // Not a scope fault: ShramSafalRepository.GetScheduleTemplateByIdAsync includes Stages, which the EF map
-            // ignores. Carried to lane L8b.
-            ["POST /shramsafal/schedule-templates/{id}/clone"] = ("is invalid inside an 'Include' operation", "Include of an unmapped navigation (L8b)"),
-            ["POST /shramsafal/schedule-templates/{id}/edit"] = ("is invalid inside an 'Include' operation", "Include of an unmapped navigation (L8b)"),
-            ["POST /shramsafal/schedule-templates/{id}/publish"] = ("is invalid inside an 'Include' operation", "Include of an unmapped navigation (L8b)"),
+            // (lane L8b-1: the three schedule-template routes left this list — GetScheduleTemplateByIdAsync no longer
+            // includes the unmapped Stages navigation.)
         };
 
     private static bool IsKnownOpen(Route route, string detail) =>

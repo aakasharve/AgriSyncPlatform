@@ -48,6 +48,7 @@ const mr: AuthorityCopy = {
         EditFarmSetup: 'शेताची रचना बदलणे (प्लॉट, हद्द)', // PROPOSED (Marathi)
         LabRecords: 'चाचण्यांच्या नोंदी', // PROPOSED (Marathi)
         ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने', // PROPOSED (Marathi)
+        PlanWork: 'कामाचं नियोजन करणे', // PROPOSED (Marathi) — lane L8b-1 (founder D-73: "the people you give it")
     },
     note: {
         SeeWages: 'यासोबत पैसे पाहणेही मिळते.', // PROPOSED (Marathi) — lane MU-3, the same line as below
@@ -80,6 +81,7 @@ const en: AuthorityCopy = {
         EditFarmSetup: 'Change farm setup (plots, boundary)', // PROPOSED (English)
         LabRecords: 'Lab test records', // PROPOSED (English)
         ScheduleTemplates: 'Crop schedule templates', // PROPOSED (English)
+        PlanWork: 'Plan the work', // PROPOSED (English) — lane L8b-1 (founder D-73)
     },
     note: {
         SeeWages: 'Comes with seeing money.', // PROPOSED (English) — lane MU-3

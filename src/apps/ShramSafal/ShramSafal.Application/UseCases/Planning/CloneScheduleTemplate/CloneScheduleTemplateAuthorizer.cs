@@ -33,6 +33,9 @@ namespace ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 /// </list>
 /// </para>
 /// </summary>
+/// <remarks><b>spec: plr-d10 lane L8b-1 fix round 1 (review H3).</b> Before the scope rule, the SOURCE must be one the
+/// caller may see (<see cref="ScheduleTemplateWriteGate.RefuseCopyAsync"/>): another account's Private or Team schedule is
+/// answered <see cref="ShramSafalErrors.ScheduleTemplateNotFound"/>, exactly like an unknown id (E4).</remarks>
 public sealed class CloneScheduleTemplateAuthorizer : IAuthorizationCheck<CloneScheduleTemplateCommand>
 {
     private readonly IShramSafalRepository _repository;
@@ -50,6 +53,12 @@ public sealed class CloneScheduleTemplateAuthorizer : IAuthorizationCheck<CloneS
         if (source is null)
         {
             return Result.Failure(ShramSafalErrors.ScheduleTemplateNotFound);
+        }
+
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H3) — a source he may not see answers like an unknown id (E4).
+        if (await ScheduleTemplateWriteGate.RefuseCopyAsync(_repository, source, command.CallerUserId, ct) is { } unseen)
+        {
+            return Result.Failure(unseen);
         }
 
         if (!await ScopeRoleGate.IsAllowedAsync(

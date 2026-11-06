@@ -25,7 +25,9 @@ namespace ShramSafal.Sync.IntegrationTests.Tenancy;
 public sealed class PhoneRestRoutesOpenTheFarmScopeRealPostgresTests(ITestOutputHelper output) : RoleScopedFarm(output)
 {
     private static readonly Guid FarmBTest = Guid.Parse("3d099000-0000-4000-8000-000000000057");
-    private static readonly Guid GrapesTemplate = Guid.Parse("3d099000-0000-4000-8000-0000000000e1");
+    // lane L8b-1 — adoption reads the LIBRARY the phone lists (ScheduleLibrary): the built-in Grapes schedule while the farm
+    // has no schedule rows. It used to read the compliance model (crop_schedule_templates), which nobody lists.
+    private static readonly Guid GrapesTemplate = Guid.Parse("f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77301");
 
     // ── Tests: collect and report ───────────────────────────────────────────────────────
 
@@ -147,11 +149,8 @@ public sealed class PhoneRestRoutesOpenTheFarmScopeRealPostgresTests(ITestOutput
         VALUES (@test, @protocol, 0, @cycleB, @farmB, @plotB, 'Vegetative', DATE '2026-10-01', NOW(), NOW(), 0);
         """, ("test", FarmBTest), ("protocol", Protocol), ("cycleB", CycleB), ("farmB", FarmB), ("plotB", PlotB));
 
-    /// <summary>A published grapes schedule (the adoptable model; no farmer write path makes one).</summary>
-    private Task SeedGrapesTemplateAsync() => ExecOnSuperuserAsync("""
-        INSERT INTO ssf.crop_schedule_templates (id, template_key, crop_key, region_code, name, version_tag, is_published, created_at_utc)
-        VALUES (@id, 'f99-grapes', 'grapes', NULL, 'द्राक्ष वेळापत्रक', 'v1', TRUE, NOW());
-        """, ("id", GrapesTemplate));
+    /// <summary>lane L8b-1 — the built-in library needs no seed (the farm has no schedule rows, so the catalog is listed).</summary>
+    private static Task SeedGrapesTemplateAsync() => Task.CompletedTask;
 
     private async Task<int> TestStatusAsync(Guid id)
     {

@@ -398,6 +398,23 @@
 //     path is OPEN for OPS-1 / GO-LIVE-REGISTER F98 (never closed by assertion here). An erased
 //     setter's opaque user id also stays on the rows he set, exactly as on ssf.audit_events; the
 //     phone names a setter only through the operator directory, which erasure anonymises.
+//
+//   - ssf.schedule_subscriptions (plr-d10 lane L8b-1) — KEEP. One row is which library
+//     schedule one plot's crop season follows and its day 0: (farm_id, plot_id,
+//     crop_cycle_id, crop_key, schedule_template_id, version tag, state, dates) — NO user
+//     column, NO free text. Like routine_patterns: a farm-level operational fact; one member's
+//     erasure must NOT take the farm's schedule choices with it. Who made the choice is in
+//     ssf.audit_events (actor_user_id), handled by that ledger's own disposition above.
+//     KEEP (survives, DPDP §12). No scrub action; conscious gate-4 disposition.
+//
+//   - ssf.schedule_migration_events (plr-d10 lane L8b-1) — KEEP, DISCLOSED. One row is one
+//     switch of a plot's schedule (I-16, append-only by design): the two subscriptions and
+//     templates, the farm / plot / season, the time, a reason code, an OPTIONAL reason_text
+//     and actor_user_id. DISCLOSED: an erased subject's opaque user id stays named here, as in
+//     ssf.farm_memberships (still on the pending-disposition baseline), and reason_text could
+//     hold his words — no phone sends one today (L8b-2's switch sends reason "Other" with no
+//     text, P8). Both should get their real disposition together with farm_memberships in the
+//     DPDP compliance slice (GO-LIVE-REGISTER F98).
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
 //   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a

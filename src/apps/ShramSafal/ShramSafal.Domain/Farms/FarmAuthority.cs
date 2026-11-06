@@ -34,7 +34,11 @@ public enum FarmAuthority
     /// <summary>Review money entries (<see cref="FarmPermission.ReviewMoney"/>): correct a cost, split a whole-farm cost, job-card payout verify / settle. Requires <see cref="SeeMoney"/>.</summary>
     ReviewMoney,
 
-    /// <summary>Plan work. STORED only — L8 enforces it (until then today's label rule decides); no phone switch (P5).</summary>
+    /// <summary>
+    /// Plan work ("कामाचं नियोजन करणे"): choose or change a plot's schedule, move a planned step ("पुढे ठरवा"), add / remove
+    /// planned work, generate a season's plan. ENFORCED since lane L8b-1 (founder D-73) by ScheduleChangeGate on every one
+    /// of those doors; the primary account holder always holds it.
+    /// </summary>
     PlanWork,
 
     /// <summary>Assign work. STORED only — L8 enforces it (until then today's label rule decides); no phone switch (P5).</summary>
@@ -81,7 +85,8 @@ public static class FarmAuthorities
 
     /// <summary>
     /// The authorities the server ENFORCES and therefore offers as a phone switch (P5): lane MU-3 made
-    /// see money / see wages real (the download and every money read follow them); plan / assign wait for L8.
+    /// see money / see wages real (the download and every money read follow them); lane L8b-1 (founder D-73) made plan
+    /// work real (ScheduleChangeGate). Assign work waits for L8c.
     /// </summary>
     public static readonly IReadOnlyList<FarmAuthority> Switchable =
     [
@@ -90,6 +95,7 @@ public static class FarmAuthorities
         FarmAuthority.SeeMoney,
         FarmAuthority.SeeWages,
         FarmAuthority.ReviewMoney,
+        FarmAuthority.PlanWork,
         FarmAuthority.EditFarmSetup,
         FarmAuthority.LabRecords,
         FarmAuthority.ScheduleTemplates,

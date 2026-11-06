@@ -46,18 +46,16 @@ public sealed class AddLocalPlannedActivityHandler(
             }
         }
 
-        // Step 3: auth — Mukadam+ required
-        var role = await repository.GetUserRoleForFarmAsync(command.FarmId, command.CallerUserId, ct);
-        if (role is null || role < AppRole.Mukadam)
+        // auth — the schedule gate's authority (PlanWork)
+        // spec: plr-d10 lane L8b-1 (founder D-73) — planning work is the primary owner's, or a seat he gave
+        // "कामाचं नियोजन करणे" (PlanWork); the label (मुकादम or above, the rule that stood here) grants nothing (D-26).
+        // Fix round 1 (review H1, E4): the season must be the named farm's first (else CropCycleNotFound); then the
+        // authority on that farm; then the MU-4 plot rule (a seat on chosen plots writes only on his plots).
+        if (await Services.ScheduleChangeGate.RefusePlannedWorkAsync(
+                repository, command.FarmId, command.CropCycleId, command.CallerUserId, clock.UtcNow,
+                ShramSafalErrors.CropCycleNotFound, ct) is { } refused)
         {
-            return Result.Failure(ShramSafalErrors.Forbidden);
-        }
-
-        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
-        if (await Services.PlotScopeGate.RefuseCycleAsync(
-                repository, command.FarmId, command.CropCycleId, command.CallerUserId, clock.UtcNow, ct) is { } outsidePlots)
-        {
-            return Result.Failure(outsidePlots);
+            return Result.Failure(refused);
         }
 
         // Step 4: create locally-added activity

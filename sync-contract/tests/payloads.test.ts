@@ -827,6 +827,47 @@ describe('AdoptSchedulePayload', () => {
         });
         expect(r.success).toBe(false);
     });
+    // lane L8b-1 — the plot's day 0: optional (1.0.17 never sends it, P11), a calendar day when present.
+    it('accepts a referenceDate day and its absence', () => {
+        const base = {
+            farmId: VALID_GUID_A,
+            plotId: VALID_GUID_B,
+            cropCycleId: VALID_GUID_C,
+            scheduleTemplateId: VALID_GUID_D,
+            actorUserId: VALID_GUID_E,
+        };
+        expect(payloads.AdoptSchedulePayload.safeParse({ ...base, referenceDate: '2026-09-15' }).success).toBe(true);
+        expect(payloads.AdoptSchedulePayload.safeParse(base).success).toBe(true);
+    });
+    it('rejects a referenceDate that is not YYYY-MM-DD', () => {
+        for (const referenceDate of ['15-09-2026', '2026-09-15T00:00:00Z', '', 20260915]) {
+            const r = payloads.AdoptSchedulePayload.safeParse({
+                farmId: VALID_GUID_A,
+                plotId: VALID_GUID_B,
+                cropCycleId: VALID_GUID_C,
+                scheduleTemplateId: VALID_GUID_D,
+                actorUserId: VALID_GUID_E,
+                referenceDate,
+            });
+            expect(r.success, String(referenceDate)).toBe(false);
+        }
+    });
+    // lane L8b-1 (founder D-73) — when the farmer made the change on the phone: optional, an ISO instant with offset.
+    it('accepts a decidedAtUtc instant and rejects one that is not ISO with an offset', () => {
+        const base = {
+            farmId: VALID_GUID_A,
+            plotId: VALID_GUID_B,
+            cropCycleId: VALID_GUID_C,
+            scheduleTemplateId: VALID_GUID_D,
+            actorUserId: VALID_GUID_E,
+        };
+        expect(payloads.AdoptSchedulePayload.safeParse({ ...base, decidedAtUtc: '2026-11-04T09:30:00.000Z' }).success).toBe(true);
+        expect(payloads.AdoptSchedulePayload.safeParse({ ...base, decidedAtUtc: '2026-11-04' }).success).toBe(false);
+        expect(payloads.AbandonSchedulePayload.safeParse({
+            farmId: VALID_GUID_A, plotId: VALID_GUID_B, cropCycleId: VALID_GUID_C, actorUserId: VALID_GUID_E,
+            decidedAtUtc: '2026-11-04T09:30:00+05:30',
+        }).success).toBe(true);
+    });
 });
 
 describe('MigrateSchedulePayload', () => {
@@ -851,6 +892,18 @@ describe('MigrateSchedulePayload', () => {
             actorUserId: VALID_GUID_E,
         });
         expect(r.success).toBe(false);
+    });
+    it('accepts a referenceDate day (lane L8b-1) and rejects a malformed one', () => {
+        const base = {
+            farmId: VALID_GUID_A,
+            plotId: VALID_GUID_B,
+            cropCycleId: VALID_GUID_C,
+            newScheduleTemplateId: VALID_GUID_D,
+            reason: 'Other',
+            actorUserId: VALID_GUID_E,
+        };
+        expect(payloads.MigrateSchedulePayload.safeParse({ ...base, referenceDate: '2026-09-15' }).success).toBe(true);
+        expect(payloads.MigrateSchedulePayload.safeParse({ ...base, referenceDate: '2026/09/15' }).success).toBe(false);
     });
 });
 

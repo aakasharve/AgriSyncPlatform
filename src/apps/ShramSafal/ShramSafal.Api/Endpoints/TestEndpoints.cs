@@ -108,6 +108,16 @@ public static class TestEndpoints
                         return ShramSafal.Domain.Common.ShramSafalErrors.Forbidden;
                     }
 
+                    // spec: plr-d10 lane L8b-1 Task 5 (MU-4 review R3-L3) — writing the farm's test due dates is a lab-records
+                    // act, like every other test write (collect, report, waive, a new protocol): the farm seat's authority
+                    // (the primary account holder always), never mere membership.
+                    if (!await ShramSafal.Application.Services.FarmAuthorityGate.HoldsAsync(
+                            repository, request.FarmId, actorUserId, ShramSafal.Domain.Farms.FarmAuthority.LabRecords,
+                            clock.UtcNow, token))
+                    {
+                        return ShramSafal.Domain.Common.ShramSafalErrors.TestRoleNotAllowed;
+                    }
+
                     if (await repository.GetCropCycleByIdAsync(request.CropCycleId, token) is not { } season
                         || (Guid)season.FarmId != request.FarmId
                         || season.PlotId != request.PlotId)

@@ -72,10 +72,12 @@ describe('the primary owner\'s responsibility switches', () => {
         render(<Harness />);
         const block = await openCard('fam');
         // lane MU-3 — see money / see wages are enforced on every download and money read now: real switches.
-        for (const name of ['TakeAttendance', 'ConfirmRecords', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'EditFarmSetup', 'LabRecords', 'ScheduleTemplates']) {
+        // lane L8b-1 (founder D-73) — plan work is enforced on every planning door now: a real switch too.
+        for (const name of ['TakeAttendance', 'ConfirmRecords', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'PlanWork', 'EditFarmSetup', 'LabRecords', 'ScheduleTemplates']) {
             expect(within(block).getByTestId(`authority-${name}-fam`)).toBeTruthy();
         }
-        for (const name of ['PlanWork', 'AssignWork']) {
+        expect(within(block).getByText('कामाचं नियोजन करणे')).toBeTruthy();
+        for (const name of ['AssignWork']) {
             expect(within(block).queryByTestId(`authority-${name}-fam`)).toBeNull();
         }
         expect(within(block).getByTestId('authority-TakeAttendance-fam').getAttribute('data-on')).toBe('yes');

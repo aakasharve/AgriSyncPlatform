@@ -96,7 +96,14 @@ describe('the लक्ष द्या route', () => {
         resetSpeakStoreForTests();
     });
 
-    it('"पुढे ठरवा" is for the primary owner alone (D-22)', () => {
+    it('"पुढे ठरवा" follows "कामाचं नियोजन करणे" (PlanWork, founder D-73), never the label', () => {
+        // a plain मुकादम: no PlanWork from the server → no button
+        const plain = { ...(ctxFor() as unknown as Record<string, unknown>), mayPlanWork: false } as unknown as AppRouterContext;
+        expect(pageOf(plain).canReschedule).toBe(false);
+        // the same मुकादम seat once the owner gave PlanWork → the button
+        const planner = { ...(ctxFor() as unknown as Record<string, unknown>), mayPlanWork: true } as unknown as AppRouterContext;
+        expect(pageOf(planner).canReschedule).toBe(true);
+        // an older context with no answer: the primary owner only (he holds every authority, D-26)
         expect(pageOf(ctxFor()).canReschedule).toBe(false);
         const owner = { ...(ctxFor() as unknown as Record<string, unknown>), farmRole: 'PrimaryOwner' } as unknown as AppRouterContext;
         expect(pageOf(owner).canReschedule).toBe(true);

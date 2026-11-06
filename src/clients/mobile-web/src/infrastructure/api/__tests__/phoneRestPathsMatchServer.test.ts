@@ -64,9 +64,10 @@ function serverRoutes(): Route[] {
  * must still be a mismatch (the test fails when it is fixed, so the entry is removed with the fix).
  */
 const CARRIED: Record<string, string> = {
-    // Review row 17: the crop-schedule-template picker, which its own comment says is never shown. Carried to lane L8b.
+    // Review row 17: the crop-schedule-template picker (the compliance model, not the library the phone lists). Lane
+    // L8b-1 kept it out of the flow: the schedule-in-planning integration is held by founder D-24e2 (plan question L8-3).
     'infrastructure/api/resources/ScheduleResource.ts /shramsafal/reference-data/crop-schedule-templates':
-        'row 17: schedule-template picker, never shown (lane L8b)',
+        'row 17: held by D-24e2 (L8-3)',
 };
 
 /**

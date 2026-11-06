@@ -15,7 +15,8 @@ public sealed class ScheduleSubscription : Entity<Guid>
         string cropKey,
         ScheduleTemplateId templateId,
         string scheduleVersionTag,
-        DateTime adoptedAtUtc)
+        DateTime adoptedAtUtc,
+        DateOnly? referenceDate)
         : base(id)
     {
         FarmId = farmId;
@@ -25,6 +26,7 @@ public sealed class ScheduleSubscription : Entity<Guid>
         ScheduleTemplateId = templateId;
         ScheduleVersionTag = scheduleVersionTag;
         AdoptedAtUtc = adoptedAtUtc;
+        ReferenceDate = referenceDate;
         State = ScheduleSubscriptionState.Active;
     }
 
@@ -42,6 +44,13 @@ public sealed class ScheduleSubscription : Entity<Guid>
     public ScheduleMigrationReason? MigrationReason { get; private set; }
     public DateTime? StateChangedAtUtc { get; private set; }
 
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 — the plot's day 0 the farmer set in "शेड्यूल बदला" (a pruning or planting day), from which
+    /// the schedule's days count. <c>null</c> = the crop cycle's own start date (every subscription made before this lane,
+    /// and every phone that does not send one: P11).
+    /// </summary>
+    public DateOnly? ReferenceDate { get; private set; }
+
     public static ScheduleSubscription Adopt(
         Guid id,
         FarmId farmId,
@@ -50,7 +59,8 @@ public sealed class ScheduleSubscription : Entity<Guid>
         string cropKey,
         ScheduleTemplateId templateId,
         string scheduleVersionTag,
-        DateTime adoptedAtUtc)
+        DateTime adoptedAtUtc,
+        DateOnly? referenceDate = null)
     {
         if (id == Guid.Empty)
         {
@@ -95,7 +105,8 @@ public sealed class ScheduleSubscription : Entity<Guid>
             cropKey.Trim().ToLowerInvariant(),
             templateId,
             scheduleVersionTag.Trim(),
-            adoptedAtUtc);
+            adoptedAtUtc,
+            referenceDate);
     }
 
     public void Migrate(

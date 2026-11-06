@@ -126,7 +126,7 @@ public sealed class GeneratePlanFromTemplatePipelineTests
     public async Task Authorizer_returns_CropCycleNotFound_when_id_resolves_to_nothing()
     {
         var repo = new FakeGenRepo(cropCycle: null);
-        var a = new GeneratePlanFromTemplateAuthorizer(repo);
+        var a = new GeneratePlanFromTemplateAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormedCommand(), default);
 
@@ -140,7 +140,7 @@ public sealed class GeneratePlanFromTemplatePipelineTests
     {
         var repo = new FakeGenRepo(MakeCropCycle());
         // No membership set.
-        var a = new GeneratePlanFromTemplateAuthorizer(repo);
+        var a = new GeneratePlanFromTemplateAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormedCommand() with { ActorUserId = StrangerId }, default);
 
@@ -154,7 +154,7 @@ public sealed class GeneratePlanFromTemplatePipelineTests
     {
         var repo = new FakeGenRepo(MakeCropCycle());
         repo.SetMembership(FarmId.Value, ActorId);
-        var a = new GeneratePlanFromTemplateAuthorizer(repo);
+        var a = new GeneratePlanFromTemplateAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormedCommand(), default);
 
@@ -218,6 +218,35 @@ public sealed class GeneratePlanFromTemplatePipelineTests
         Assert.Equal(1, repo.SaveCalls);
     }
 
+    // spec: plr-d10 lane L8b-1 fix round 1 (review H4) — the generated plan is its maker's private row, never a Public row
+    // with no author (which every farm's library listed).
+    [Fact]
+    public async Task The_generated_plan_is_its_makers_private_row()
+    {
+        var (pipeline, repo) = BuildPipeline(MakeCropCycle(), memberOfFarm: true);
+
+        var result = await pipeline.HandleAsync(WellFormedCommand());
+
+        Assert.True(result.IsSuccess);
+        var row = Assert.Single(repo.AddedTemplates);
+        Assert.Equal(TenantScope.Private, row.TenantScope);
+        Assert.Equal(new UserId(ActorId), row.CreatedByUserId);
+    }
+
+    // spec: plr-d10 lane L8b-1 fix round 1 (review L6) — the authorizer judges "plan work" on the INJECTED clock, as the
+    // handler does: a PlanWork that ends after the request's time (and before the wall clock's) still holds.
+    [Fact]
+    public async Task Authorizer_judges_the_authority_on_the_injected_clock()
+    {
+        var repo = new FakeGenRepo(MakeCropCycle()) { PlannerUntil = Now.AddDays(10) };
+        repo.SetMembership(FarmId.Value, ActorId);
+        Assert.True(Now.AddDays(10) < DateTime.UtcNow, "the fixture's time is before the wall clock's");
+
+        Assert.True((await new GeneratePlanFromTemplateAuthorizer(repo, new FakeClock(Now)).AuthorizeAsync(WellFormedCommand(), default)).IsSuccess);
+        var later = await new GeneratePlanFromTemplateAuthorizer(repo, new FakeClock(Now.AddDays(11))).AuthorizeAsync(WellFormedCommand(), default);
+        Assert.Equal(ShramSafalErrors.Forbidden, later.Error);
+    }
+
     // ---- Helpers ----
 
     private static (
@@ -236,7 +265,7 @@ public sealed class GeneratePlanFromTemplatePipelineTests
             new FakeClock(Now));
 
         var validator = new GeneratePlanFromTemplateValidator();
-        var authorizer = new GeneratePlanFromTemplateAuthorizer(repo);
+        var authorizer = new GeneratePlanFromTemplateAuthorizer(repo, new FakeClock(Now));
 
         var pipeline = HandlerPipeline.Build(
             rawHandler,
@@ -268,6 +297,32 @@ public sealed class GeneratePlanFromTemplatePipelineTests
 
         public override Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
             Task.FromResult(_memberships.Contains((farmId, userId)));
+
+        // lane L8b-1 (founder D-73) — plan generation also asks ScheduleChangeGate (PlanWork): the member in these tests is
+        // the farm's primary owner, who holds every authority. A plain member is the gate's own truth table.
+        public override Task<AgriSync.SharedKernel.Contracts.Roles.AppRole?> GetUserRoleForFarmAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult<AgriSync.SharedKernel.Contracts.Roles.AppRole?>(
+                !_memberships.Contains((farmId, userId)) ? null
+                : PlannerUntil is null ? AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner
+                : AgriSync.SharedKernel.Contracts.Roles.AppRole.Mukadam);
+
+        /// <summary>lane L8b-1 fix round 1 (L6) — set: the member is a मुकादम given PlanWork until this time.</summary>
+        public DateTime? PlannerUntil { get; init; }
+
+        public override async Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default)
+        {
+            var access = await base.GetFarmAccessForUserAsync(farmId, userId, ct);
+            return access is null || PlannerUntil is not { } until
+                ? access
+                : access with
+                {
+                    StoredPermissions = ShramSafal.Domain.Farms.FarmPermission.PlanWork,
+                    AuthorityExpiresAtJson = ShramSafal.Domain.Farms.FarmAuthorities.SerializeExpiries(
+                        new Dictionary<ShramSafal.Domain.Farms.FarmPermission, DateTime> { [ShramSafal.Domain.Farms.FarmPermission.PlanWork] = until }),
+                };
+        }
 
         public override Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default)
         {

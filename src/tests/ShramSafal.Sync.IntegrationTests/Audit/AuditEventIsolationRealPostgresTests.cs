@@ -1305,6 +1305,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    grants (identity changes are recorded in their own append-only table). Safe mid-proof.
         "20261102163914_AddWorkerIdentity",
 
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane L8b-1); Down() read in full: drops the three policies
+        //    p_tenant_schedule_subscriptions, p_user_select_schedule_subscriptions and p_tenant_schedule_migration_events,
+        //    takes ssf.schedule_subscriptions and ssf.schedule_migration_events back out of RLS (NO FORCE, DISABLE) and drops
+        //    the nullable column schedule_subscriptions.reference_date. Up() adds that column and those policies under
+        //    ENABLE + FORCE. Never touches ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261106054532_AddScheduleSubscriptionDayZeroAndRls",
         // ── Reviewed 2026-11-06 (lane WID fix pass 2, N3); Down() read in full: drops the two indexes Up() adds on
         //    ssf.shram_person_phones (one verified number per person; the plain number index). No table, column,
         //    policy or grant; never touches ssf.audit_events. Safe mid-proof.
