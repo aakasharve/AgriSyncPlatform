@@ -1,4 +1,4 @@
-// spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID fix pass 1 (review M2, L1) and fix pass 2 (N4). The identity lookups and
+// spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID fix pass 1 (review M2, L1), fix pass 2 (N4) and fix pass 3 (R1). The identity lookups and
 // code sends (scan-resolve, the number check, link/start, send-code) carry the per-user request limit, so none of them
 // can be looped to list cards or verified numbers, or to make ShramSafal's SMS header spam numbers. This host registers
 // the limiter through the SAME RateLimitingConfig.AddAgriSyncRateLimiting Program.cs calls.
@@ -37,6 +37,8 @@ public sealed class WorkerIdentityRateLimitRealPostgresTests(ITestOutputHelper o
                  {
                      "ResolveWorkerCard", "CheckWorkerPhone", "StartWorkerLink", "SendWorkerPhoneCode", "LinkWorkerIdentity",
                      "VerifyWorkerPhone",
+                     // Fix pass 3 (R1): the reissue reads a code too; the move (switched off) carries it before it opens.
+                     "ReissueWorkerCard", "MoveWorkerNumber",
                  })
         {
             var endpoint = endpoints.Single(e => e.Metadata.GetMetadata<IEndpointNameMetadata>()?.EndpointName == name);
@@ -80,6 +82,22 @@ public sealed class WorkerIdentityRateLimitRealPostgresTests(ITestOutputHelper o
 
         using var refused = await SendAsync(HttpMethod.Post, url, Owner, new { cardCode = "SS-ZZZZ-ZZZZ", id = Guid.NewGuid() });
         refused.StatusCode.Should().Be(HttpStatusCode.TooManyRequests, "a person cannot loop card codes through the link");
+    }
+
+    /// <summary>Fix pass 3 (R1) — the card reissue (which can read a code) is limited per person too.</summary>
+    [Fact]
+    public async Task The_31st_card_reissue_in_the_window_is_refused()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var url = $"/shramsafal/farms/{FarmA}/labour/field-operators/{FieldOperator}/card/reissue";
+        for (var i = 0; i < RateLimitingConfig.IdentityPermitLimit; i++)
+        {
+            using var tryN = await SendAsync(HttpMethod.Post, url, Owner, new { proof = "PhoneCode", ticket = Guid.NewGuid(), code = "1234" });
+            tryN.StatusCode.Should().NotBe(HttpStatusCode.TooManyRequests, $"reissue try {i + 1} is within the limit");
+        }
+
+        using var refused = await SendAsync(HttpMethod.Post, url, Owner, new { proof = "PhoneCode", ticket = Guid.NewGuid(), code = "1234" });
+        refused.StatusCode.Should().Be(HttpStatusCode.TooManyRequests, "a person cannot loop codes at the card reissue");
     }
 
     /// <summary>Fix pass 2 (N4) — and the phone verify (a code read back) is limited per person as well.</summary>

@@ -46,6 +46,7 @@ const ERRORS: Record<string, WidWord> = {
     'identity.sms_off': 'smsOff',
     'identity.too_many_codes': 'tooMany',
     'identity.too_many_tries': 'tooManyTries',
+    'identity.code_used_up': 'codeUsedUp',
 };
 
 /** Fix pass 1 (L6): on the NUMBER path nobody is named and no card was read, so "no such card" would be wrong. */

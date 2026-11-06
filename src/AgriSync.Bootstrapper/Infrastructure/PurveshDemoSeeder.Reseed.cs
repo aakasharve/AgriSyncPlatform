@@ -696,12 +696,19 @@ public sealed partial class PurveshDemoSeeder
             .ToListAsync(ct);
         var identityEvents = await _ssfContext.ShramIdentityEvents.AsNoTracking()
             .Where(e => e.FarmId == farmId.Value && e.FieldOperatorId != null)
-            .Select(e => new { OperatorId = e.FieldOperatorId!.Value, e.Kind, e.Proof })
+            .Select(e => new { e.Id, OperatorId = e.FieldOperatorId!.Value, e.Kind, e.Proof })
             .ToListAsync(ct);
         var byOperator = identityEvents.GroupBy(e => e.OperatorId).ToList();
+
+        // Fix pass 3 (review R3) — "the re-seed's own card" is exactly the CardIssued event the re-seed planned for that
+        // seed worker (its deterministic id). A card the app made (say, the founder tapping "फोन पडताळा" on a demo worker
+        // in Production, where the re-seed issues none) has another id: that worker is the founder's, retained.
+        var plannedCardEvents = plan.Operators.ToDictionary(
+            o => DemoOperatorId(o.Key), o => CreateDeterministicGuid($"{SeedVersion}:card-issued:{o.Key}"));
         var cardOnlyOperatorIds = byOperator
             .Where(g => g.Count() == 1 && g.Single().Kind == ShramSafal.Domain.Identity.IdentityEventKind.CardIssued
-                && g.Single().Proof == ShramSafal.Domain.Identity.IdentityProof.None)
+                && g.Single().Proof == ShramSafal.Domain.Identity.IdentityProof.None
+                && plannedCardEvents.TryGetValue(g.Key, out var planned) && planned == g.Single().Id)
             .Select(g => g.Key)
             .ToList();
         var identityOperatorIds = byOperator.Select(g => g.Key).Except(cardOnlyOperatorIds).ToList();

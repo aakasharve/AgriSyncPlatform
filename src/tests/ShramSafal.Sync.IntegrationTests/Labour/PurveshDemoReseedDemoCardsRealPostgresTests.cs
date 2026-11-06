@@ -1,4 +1,4 @@
-// spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID fix pass 2 (L5, the orchestrator's ruling). Demo
+// spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID fix pass 2 (L5, the orchestrator's ruling) and fix pass 3 (R3). Demo
 // workers' ShramSafal cards:
 //   - OUTSIDE Production the re-seed issues each new demo worker's card through the product's own create path and the
 //     identity store, inside its one transaction; a later re-seed KEEPS a seed worker whose only identity event is that
@@ -112,6 +112,43 @@ public sealed class PurveshDemoReseedDemoCardsRealPostgresTests(
             SELECT count(*) FROM ssf.field_operators WHERE originating_farm_id = @farm AND person_id IS NOT NULL AND "Id" <> @keep
             """, ("farm", Farm), ("keep", NonSeedOperator))).Should().Be(0L, "no demo worker is a ShramSafal person");
         PurveshDemoReseedCommand.DemoCardsAllowed(null).Should().BeFalse("no environment counts as Production");
+    }
+
+    /// <summary>
+    /// Fix pass 3 (review R3) — in Production the re-seed issues no card, so a card the APP made on a demo worker (the
+    /// founder taps "फोन पडताळा" on one with no phone: his card is issued and kept, the code is refused) is the founder's
+    /// action: that worker is retained and reported, never counted as "kept with card".
+    /// </summary>
+    [Fact]
+    public async Task In_Production_a_card_the_app_made_on_a_demo_worker_is_reported_as_retained_not_kept_with_card()
+    {
+        await using var s = await PurveshDemoReseedScratch.CloneAsync(fixture.Template);
+        var first = await H.RunReseedAsync(s.AppProvider(environmentName: "Production"), Day1, dryRun: false);
+        first.ExitCode.Should().Be(PurveshDemoReseedCommand.ExitOk, first.Output);
+
+        var op = (Guid)(await H.ScalarAsync(s.SuperuserConn, """
+            SELECT o."Id" FROM ssf.field_operators o
+            WHERE o.originating_farm_id = @farm AND o.person_id IS NULL AND o.is_active AND o."Id" <> @keep
+            ORDER BY o."Id" LIMIT 1
+            """, ("farm", Farm), ("keep", NonSeedOperator)))!;
+        await H.AsCallerAsync(s.AppProvider(clockUtc: FounderActsUtc), Farm, fixture.Template.OwnerUserId, async sp =>
+        {
+            var r = await sp.GetRequiredService<WorkerIdentityService>()
+                .SendRecordCodeAsync(Farm, fixture.Template.OwnerUserId, op, "Verify", null, default);
+            r.IsSuccess.Should().BeFalse("he has no phone on record, so no code is sent");
+            return true;
+        });
+        (await H.ScalarAsync(s.SuperuserConn, """
+            SELECT count(*) FROM ssf.shram_identity_events WHERE farm_id = @farm AND field_operator_id = @op AND kind = 'CardIssued'
+            """, ("farm", Farm), ("op", op))).Should().Be(1L, "arrange: the app issued his card");
+
+        var second = await H.RunReseedAsync(s.AppProvider(environmentName: "Production"), Day2, dryRun: false);
+        second.ExitCode.Should().Be(PurveshDemoReseedCommand.ExitOk, second.Output);
+        var report = second.RequireReport();
+        report.Prop("KeptWithCard").GetInt32().Should().Be(0, "the re-seed issued no card in Production");
+        report.Prop("Retained").EnumerateArray().Select(e => e.GetString()).Should().Contain(
+            line => line!.Contains(op.ToString("D"), StringComparison.OrdinalIgnoreCase),
+            "a card the founder's app made is his action: retained and reported");
     }
 
     /// <summary>"worker:card" for every SEED worker on the demo farm holding a working card (the template's own non-seed worker excluded).</summary>

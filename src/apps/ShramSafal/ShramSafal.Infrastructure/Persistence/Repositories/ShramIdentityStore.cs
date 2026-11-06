@@ -116,21 +116,75 @@ internal sealed class ShramIdentityStore(ShramSafalDbContext db, IdentityTenantS
             .ToListAsync(ct);
     }
 
-    public async Task<int> CountWrongTriesForPersonsSinceAsync(
+    public async Task<IReadOnlyDictionary<Guid, int>> CountWrongTriesForPersonsByFarmSinceAsync(
         IReadOnlyCollection<Guid> personIds, DateTime sinceUtc, CancellationToken ct = default)
     {
         if (personIds.Count == 0)
         {
-            return 0;
+            return new Dictionary<Guid, int>();
         }
 
         await scope.OpenAsync(ct);
         var ids = personIds.ToList();
 
         // Every try counts; the one right try that spent a code is not a wrong one (as for a farm).
-        return await db.ShramPhoneChallenges
+        var rows = await db.ShramPhoneChallenges.AsNoTracking()
             .Where(c => ids.Contains(c.PersonId) && c.CreatedAtUtc >= sinceUtc)
-            .SumAsync(c => c.Attempts - (c.ConsumedAtUtc == null ? 0 : 1), ct);
+            .GroupBy(c => c.RequestedByFarmId)
+            .Select(g => new { Farm = g.Key, Wrong = g.Sum(c => c.Attempts - (c.ConsumedAtUtc == null ? 0 : 1)) })
+            .ToListAsync(ct);
+        return rows.ToDictionary(r => r.Farm, r => r.Wrong);
+    }
+
+    public async Task LockPersonAsync(Guid personId, CancellationToken ct = default)
+    {
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        await scope.OpenAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT 1 FROM ssf.shram_persons WHERE id = {personId} FOR UPDATE", ct);
+    }
+
+    public async Task<CountedTry> CountTryAsync(ShramPhoneChallenge challenge, CancellationToken ct = default)
+    {
+        var entry = db.Entry(challenge);
+        if (!db.Database.IsRelational())
+        {
+            // In-memory host only: the domain's own rule.
+            if (challenge.ConsumedAtUtc is not null || challenge.Attempts >= ShramPhoneChallenge.MaxAttempts)
+            {
+                return new CountedTry(false, challenge.Attempts, challenge.ConsumedAtUtc is not null);
+            }
+
+            entry.Property(c => c.Attempts).CurrentValue = challenge.Attempts + 1;
+            return new CountedTry(true, challenge.Attempts, false);
+        }
+
+        await scope.OpenAsync(ct);
+        var id = challenge.Id;
+        var counted = await db.Database
+            .SqlQuery<int>($"""
+                UPDATE ssf.shram_phone_challenges SET attempts = attempts + 1
+                 WHERE id = {id} AND attempts < {ShramPhoneChallenge.MaxAttempts} AND consumed_at_utc IS NULL
+                RETURNING attempts AS "Value"
+                """)
+            .ToListAsync(ct);
+        if (counted.Count == 1)
+        {
+            // In line with the database, and NOT written again by the next save (the statement above is the count).
+            entry.Property(c => c.Attempts).CurrentValue = counted[0];
+            entry.Property(c => c.Attempts).OriginalValue = counted[0];
+            return new CountedTry(true, counted[0], false);
+        }
+
+        var now = await db.ShramPhoneChallenges.AsNoTracking()
+            .Where(c => c.Id == id)
+            .Select(c => new { c.Attempts, Spent = c.ConsumedAtUtc != null })
+            .FirstOrDefaultAsync(ct);
+        return new CountedTry(false, now?.Attempts ?? ShramPhoneChallenge.MaxAttempts, now?.Spent ?? true);
     }
 
     public async Task<IReadOnlyList<Guid>> GetFarmsLinkedByCodeAsync(IReadOnlyCollection<Guid> personIds, CancellationToken ct = default)

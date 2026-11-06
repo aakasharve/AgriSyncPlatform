@@ -440,6 +440,11 @@ public static class ShramSafalErrors
     public static readonly Error IdentityTooManyTries = Error.Conflict(
         "identity.too_many_tries", "Too many wrong codes from this farm today; try again tomorrow.");
 
+    // Fix pass 3 add-on (P5) — ONE code's five tries are spent: ask a new code (it works today). Not the daily cap, which
+    // stays IdentityTooManyTries ("try again tomorrow").
+    public static readonly Error IdentityCodeUsedUp = Error.Validation(
+        "identity.code_used_up", "This code can no longer be used; ask for a new code.");
+
     public static readonly Error IdentityOwnerOnly = Error.Conflict(
         "identity.owner_only", "Only the farm's owner may confirm this on his word.");
 
