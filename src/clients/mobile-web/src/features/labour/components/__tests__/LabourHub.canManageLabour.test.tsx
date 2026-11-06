@@ -161,10 +161,10 @@ describe('ReviewSheet - approve / approve-all follow the same signal', () => {
         expect(screen.queryByTestId('review-query-l1')).toBeNull();
     });
 
-    it.each([[true], [undefined]])('canManageLabour=%s keeps approve and approve-all', async (flag) => {
+    it.each([[true], [undefined]])('canManageLabour=%s keeps approve and शंका (bulk only over cards he selects, lane L4b)', async (flag) => {
         await sheet(flag);
         expect(screen.getByTestId('review-approve-l1')).toBeInTheDocument();
-        expect(screen.getByTestId('review-approve-all')).toBeInTheDocument();
+        expect(screen.queryByTestId('review-approve-all')).toBeNull();
         expect(screen.getByTestId('review-query-l1')).toBeInTheDocument();
     });
 });

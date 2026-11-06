@@ -129,7 +129,10 @@ describe('T4 — the approval screen claims only what a local enqueue can eviden
     it('शंका is reported in the tense it is actually in, not as an instruction', async () => {
         mount([makeItem('s4', 'Confirmed')]);
 
-        await runToCompletion('review-query-s4');
+        // lane L4b (D-40 §3) — a शंका now carries his own reason before it goes.
+        fireEvent.click(screen.getByTestId('review-query-s4'));
+        fireEvent.change(screen.getByTestId('review-reason-s4'), { target: { value: 'मजूर कमी होते' } });
+        await runToCompletion('review-reason-send-s4');
 
         expect(everyToast()).toContain('शंका नोंदवली');
         // The imperative `शंका नोंदवा` ("raise a doubt") used as a confirmation.
@@ -139,13 +142,20 @@ describe('T4 — the approval screen claims only what a local enqueue can eviden
     });
 
     it('bulk approval makes no bigger claim than a single one', async () => {
-        mount([makeItem('s5', 'Confirmed'), makeItem('s6', 'Confirmed')]);
+        // lane L4b (D-40 §4) — bulk goes only over the cards he SELECTS, eligible ones, the number confirmed first.
+        const eligible = (id: string): ReviewItem => ({
+            ...makeItem(id, 'Confirmed'), detail: '2026-10-30', version: 1, plot: 'प्लॉट A', plotScope: 'Plot', points: { task: 'फवारणी' },
+        });
+        mount([eligible('s5'), eligible('s6')]);
 
-        await runToCompletion('review-approve-all');
+        fireEvent.click(screen.getByTestId('review-select-s5'));
+        fireEvent.click(screen.getByTestId('review-select-s6'));
+        fireEvent.click(screen.getByTestId('review-approve-selected'));
+        await runToCompletion('review-bulk-yes');
 
         expect(everyToast()).not.toContain('निश्चित');
         expect(everyToast()).not.toContain(SERVER_HAS_IT);
-        expect(everyToast()).toContain('सगळं मंजूर केलं');
+        expect(everyToast()).toContain('नोंदी मंजूर केल्या');
     });
 
     it('the toast is not the overlay repeated — the farmer can tell the window has closed', async () => {

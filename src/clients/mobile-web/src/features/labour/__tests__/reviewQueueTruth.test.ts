@@ -159,26 +159,29 @@ describe('DEFECT 2 — the badge and the list are the same set, and nothing is h
         expect(screen.getByText(`${data.dashboard.pending} नोंदी — मंजूर करा`)).toBeInTheDocument();
     });
 
-    it('never claims "तपासायला काही उरलं नाही" while unapproved work exists', () => {
+    it('never claims the list is empty while unapproved work exists', () => {
         mount([item({ id: 'old-only', detail: daysAgoIso(45) })]);
 
-        expect(screen.queryByText(/तपासायला काही उरलं नाही/)).toBeNull();
-        expect(screen.queryByText('सगळं झालं ✓')).toBeNull();
+        expect(screen.queryByTestId('review-list-empty')).toBeNull();
+        expect(screen.queryByText('मंजुरीसाठी नोंदी बाकी नाहीत')).toBeNull();
     });
 
-    it('still says "सगळं झालं" when the queue really is empty', () => {
+    it('lane L4b (D-40 §6) — a list read empty says "मंजुरीसाठी नोंदी बाकी नाहीत", never an all-clear', () => {
         mount([]);
 
-        expect(screen.getByText('सगळं झालं ✓')).toBeInTheDocument();
-        expect(screen.getByText(/तपासायला काही उरलं नाही/)).toBeInTheDocument();
+        expect(screen.getByTestId('review-list-empty')).toHaveTextContent('मंजुरीसाठी नोंदी बाकी नाहीत');
+        expect(screen.queryByText(/सगळं झालं|तपासायला काही उरलं नाही/)).toBeNull();
     });
 
-    it('offers सगळं मंजूर over the WHOLE queue, not a silently narrowed slice', () => {
+    it('lane L4b (D-40 §4) — every eligible card of the WHOLE queue may be selected for a bulk मंजूर, none silently narrowed', () => {
+        const eligible = { version: 1, plot: 'प्लॉट A', plotScope: 'Plot' as const, points: { task: 'फवारणी' } };
         mount([
-            item({ id: 'x1', detail: daysAgoIso(2) }),
-            item({ id: 'x2', detail: daysAgoIso(60) }),
+            item({ id: 'x1', detail: daysAgoIso(2), ...eligible }),
+            item({ id: 'x2', detail: daysAgoIso(60), ...eligible }),
         ]);
 
-        expect(screen.getByTestId('review-approve-all')).toHaveTextContent('सगळं मंजूर (2)');
+        expect(screen.getByTestId('review-select-x1')).toBeInTheDocument();
+        expect(screen.getByTestId('review-select-x2')).toBeInTheDocument();
+        expect(screen.queryByTestId('review-approve-all')).toBeNull();
     });
 });

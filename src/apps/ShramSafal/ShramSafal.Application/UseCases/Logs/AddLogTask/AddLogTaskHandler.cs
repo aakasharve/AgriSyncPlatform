@@ -66,7 +66,9 @@ public sealed class AddLogTaskHandler(
         // below — that path is defense-in-depth and the only auth gate
         // for direct (non-pipeline) consumers.
 
-        var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
+        // lane L4b (L6 review S7) — held for this change and re-read after the hold, so a confirmation committing while
+        // this task is added is seen below and re-opened (D-46 §4), never left standing over the new version.
+        var log = await repository.GetDailyLogForChangeAsync(command.DailyLogId, ct);
         if (log is null)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);

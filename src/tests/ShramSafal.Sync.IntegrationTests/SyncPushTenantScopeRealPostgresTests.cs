@@ -19,6 +19,7 @@ using ShramSafal.Api;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
+using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Compliance;
 using ShramSafal.Domain.Tests;
 using ShramSafal.Infrastructure.Persistence;
@@ -362,9 +363,8 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
             "an approval must not survive work it never covered — the day re-opens into the owner's inbox");
 
         // 9-10. verify_log Draft→Confirmed→Verified — THE headline mutation.
-        // The Verified transition also exercises OnLogVerifiedAutoVerifyJobCard,
-        // which requires the job card to already be Completed (step 8) — auto-
-        // promotes it to VerifiedForPayout.
+        // lane L4b, founder D-33: the Verified transition no longer promotes the linked job card; step 10b verifies
+        // the card for payout explicitly, as its own decision.
         var verifyConfirmResult = await RunSyncPushAsync(OwnerA, "owner", "d-A", "req-verify-confirm", "verify_log", new()
         {
             ["dailyLogId"] = dailyLogId,
@@ -378,6 +378,28 @@ public sealed class SyncPushTenantScopeRealPostgresTests(Xunit.Abstractions.ITes
             ["status"] = "Verified",
         });
         AssertApplied(verifyResult, "verify_log (Verified)");
+        await using (var cardDb = new NpgsqlConnection(_superuserConn))
+        {
+            await cardDb.OpenAsync();
+            (await ScalarAsync(cardDb, "SELECT status FROM ssf.job_cards WHERE id = @id", ("id", jobCardId)))
+                .Should().Be("Completed", "D-33: मंजूर no longer moves a काम कार्ड to 'ready to pay'");
+        }
+
+        // 10b. The owner verifies the card for payout himself — the REST door's handler, under the farm scope the REST
+        //      door opens (ambient transaction + the caller's farm GUCs).
+        await using (var payoutScope = _rootProvider!.CreateAsyncScope())
+        {
+            var sp = payoutScope.ServiceProvider;
+            sp.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+            var db = sp.GetRequiredService<ShramSafalDbContext>();
+            await using var tx = await db.Database.BeginTransactionAsync();
+            var opened = await sp.GetRequiredService<ICallerFarmTenantScope>().EstablishForCallerAsync(FarmA, OwnerA);
+            opened.IsSuccess.Should().BeTrue("the owner opens his farm's scope");
+            var verified = await sp.GetRequiredService<VerifyJobCardForPayoutHandler>()
+                .HandleAsync(new VerifyJobCardForPayoutCommand(jobCardId, new UserId(OwnerA), ClientCommandId: null));
+            verified.IsSuccess.Should().BeTrue("the owner verifies the card for payout: {0}", verified.Error?.ToString() ?? "-");
+            await tx.CommitAsync();
+        }
 
         // 11. jobcard.settle — same shape; job card must now be VerifiedForPayout.
         var jobCardSettleResult = await RunSyncPushAsync(OwnerA, "owner", "d-A", "req-jc-settle", "jobcard.settle", new()

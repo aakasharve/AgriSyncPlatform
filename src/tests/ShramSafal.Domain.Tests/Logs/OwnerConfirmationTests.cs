@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Work.Handlers;
-using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Logs;
 using Xunit;
@@ -420,7 +419,7 @@ public sealed class OwnerConfirmationTests
 
         var clock = new FixedClock(Now);
         var autoVerify = new OnLogVerifiedAutoVerifyJobCard(
-            repo, new VerifyJobCardForPayoutHandler(repo, clock), clock,
+            repo, clock,
             NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
         var handler = new VerifyLogHandler(
             repo, new SequentialIds(), clock, new AllowAll(), new NoAnalytics(), autoVerify);

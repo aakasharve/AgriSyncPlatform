@@ -12,7 +12,6 @@ using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Work.Handlers;
-using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
@@ -486,7 +485,6 @@ public sealed class AutoSavedVoiceLogIsNotVerifiedByItselfTests
 
     private static OnLogVerifiedAutoVerifyJobCard JobCardHook(ScenarioRepo repo, IClock clock) => new(
         repo,
-        new VerifyJobCardForPayoutHandler(repo, clock),
         clock,
         NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
 

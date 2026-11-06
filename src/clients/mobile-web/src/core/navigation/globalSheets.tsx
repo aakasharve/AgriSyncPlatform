@@ -5,7 +5,8 @@
 
 import React from 'react';
 import type { BucketIssueType } from '../../types';
-import { TaskCreationSheet, ReviewInboxSheet, QuickLogSheet } from './lazyComponents';
+import { TaskCreationSheet, QuickLogSheet } from './lazyComponents';
+import { ApprovalReviewHost } from '../../features/approval/ApprovalReviewHost';
 import { AppRouterContext } from './routeContext';
 import { ConflictBadge } from '../../features/sync/conflict/ConflictBadge';
 import { NoWorkReasonSheet } from '../../features/logs/components/NoWorkReasonSheet';
@@ -94,19 +95,14 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                 people={farmerProfile.operators.map(op => ({ ...op, isActive: op.isActive ?? true }))}
             />
 
-            {/* The owner's read surface for unverified entries. It no longer
-                takes approve/dispute callbacks: those queued `verify_log_v2`,
-                whose server handler answers MUTATION_TYPE_UNIMPLEMENTED, so
-                every tap became a permanent rejection while the app showed a
-                tick. See `ReviewInboxSheet.tsx`'s header for the full trail and
-                for why the working v1 mutation is NOT the fix (it turns on a
-                job-card payout path). spec: owner-oversight-loop */}
-            <ReviewInboxSheet
-                isOpen={showReviewInbox}
+            {/* spec: plr-d10 (I28, lane L4b; founder D-3 / D-40) — THE ONE REVIEW SHEET, for the selected farm. Every
+                door (the strip, the waiting drawer, आढावा, हजेरी's तपासा, the dashboard, a job card) opens it
+                through `openApprovalReview` -> OPEN_REVIEW_INBOX_EVENT -> `showReviewInbox`. It replaces the read-only
+                `ReviewInboxSheet` (unscoped, phone-local, approved nothing). */}
+            <ApprovalReviewHost
+                open={showReviewInbox}
                 onClose={() => setShowReviewInbox(false)}
-                logs={history}
-                operators={farmerProfile.operators}
-                currentOperatorId={farmerProfile.activeOperatorId || 'owner'}
+                history={history}
             />
 
             {/* DFES: QuickLogSheet (INT-3 Voice Integration) */}

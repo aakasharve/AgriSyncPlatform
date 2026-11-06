@@ -76,7 +76,8 @@ import AppHeader from '../context/components/AppHeader';
 import BottomNavigation from '../context/components/BottomNavigation';
 import { renderCompareView, renderLogView, renderReflectView } from '../../core/navigation/mainView';
 import { SpeakHost } from '../../core/speak/SpeakHost';
-import { RouteLoader, ReviewInboxSheet } from '../../core/navigation/lazyComponents';
+import { RouteLoader } from '../../core/navigation/lazyComponents';
+import { ApprovalReviewHost } from '../approval/ApprovalReviewHost';
 import { SIMPLE_ROUTE_RENDERERS } from '../../core/navigation/simpleRoutes';
 import MainViewTransition from '../../core/navigation/MainViewTransition';
 import { isRecordingPathBusy } from '../../shared/utils/recordingPathBusy';
@@ -186,21 +187,11 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
 
     const activeOperator = farmerProfile.operators.find(op => op.id === farmerProfile.activeOperatorId);
 
-    // FINDING F2 — the waiting drawer's `approval` row opens
-    // `ReviewInboxSheet`. In the real app `AppRouter` owns that sheet
-    // (`core/navigation/globalSheets.tsx`); this preview deliberately does
-    // NOT mount `renderGlobalSheets` (it would also drag in the conflict
-    // badge and the QuickLog FAB, neither of which this preview is about),
-    // so without this listener + sheet the row would land nowhere HERE —
-    // in the exact surface the founder reviews on. Same wiring, same props
-    // as `globalSheets.tsx`.
-    //
-    // The three approve/dispute callbacks that used to be passed here are
-    // GONE from the sheet's own interface — they queued `verify_log_v2`,
-    // which no server handler accepts (see `ReviewInboxSheet.tsx`'s
-    // header). The preview therefore shows the founder exactly what a
-    // farmer now sees: the entries, and one line saying approving is not
-    // available yet. Nothing is faked as approved because nothing can be.
+    // FINDING F2 — the waiting drawer's `approval` row opens the review sheet. In the real app `AppRouter` owns it
+    // (`core/navigation/globalSheets.tsx`); this preview deliberately does NOT mount `renderGlobalSheets` (it would
+    // also drag in the conflict badge and the QuickLog FAB), so it mounts the SAME one sheet itself. lane L4b: that
+    // is the one approval path's `ApprovalReviewHost`; the preview has no server farm, so it says the list cannot be
+    // seen rather than inventing records.
     useOpenSurfaceRequest(OPEN_REVIEW_INBOX_EVENT, () => ctx.setShowReviewInbox(true));
 
     return (
@@ -307,15 +298,11 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                 onViewChange={ctx.setMainView}
             />
 
-            <Suspense fallback={null}>
-                <ReviewInboxSheet
-                    isOpen={ctx.showReviewInbox}
-                    onClose={() => ctx.setShowReviewInbox(false)}
-                    logs={ctx.history}
-                    operators={ctx.farmerProfile.operators}
-                    currentOperatorId={ctx.farmerProfile.activeOperatorId || 'owner'}
-                />
-            </Suspense>
+            <ApprovalReviewHost
+                open={ctx.showReviewInbox}
+                onClose={() => ctx.setShowReviewInbox(false)}
+                history={ctx.history}
+            />
 
             {notice && (
                 <ActionToast message={notice} type="partial" onDismiss={dismissNotice} />

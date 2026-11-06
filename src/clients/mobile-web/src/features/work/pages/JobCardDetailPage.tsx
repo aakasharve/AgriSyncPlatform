@@ -16,6 +16,10 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { JobCard, JobCardStatus } from '../../../domain/work/JobCard';
 import PayoutEligibilityStrip from '../components/PayoutEligibilityStrip';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import { useApprovalQueue } from '../../approval/useApprovalQueue';
+import { openApprovalReview } from '../../approval/openApprovalReview';
+import { approvalWords } from '../../approval/approvalWords';
 import { workTypeNameIn } from '../../../shared/names/namesIn';
 import { jobCardAmountText } from '../jobCardAmount';
 
@@ -67,6 +71,9 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
     const [card, setCard] = useState<JobCard | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const language = useOptionalLanguage()?.language ?? 'mr'; // spec I18 — work types in his language
+    // lane L4b (founder D-3 / D-40 §3) — the task-card door of the ONE approval path: its linked record, when it waits
+    // for this person's मंजूर, opens the one review sheet on that record.
+    const approvalQueue = useApprovalQueue(useOptionalFarmContext()?.currentFarmId ?? null);
 
     useEffect(() => {
         let cancelled = false;
@@ -319,6 +326,16 @@ const JobCardDetailPage: React.FC<JobCardDetailPageProps> = ({
                             >
                                 #{card.linkedDailyLogId.slice(-8).toUpperCase()}
                             </p>
+                            {approvalQueue.count !== null && approvalQueue.data?.review.some((r) => r.id === card.linkedDailyLogId) && (
+                                <button
+                                    type="button"
+                                    data-testid="jobcard-approval-pending"
+                                    onClick={() => openApprovalReview(card.linkedDailyLogId)}
+                                    className="text-xs font-bold text-amber-800 border border-amber-300 bg-amber-50 rounded-lg px-2 py-1"
+                                >
+                                    {approvalWords(language).jobCardPending}
+                                </button>
+                            )}
                             {onNavigateToLog && (
                                 <button
                                     onClick={() => onNavigateToLog(card.linkedDailyLogId!)}

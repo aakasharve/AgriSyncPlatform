@@ -28,7 +28,10 @@ import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 // button into an inset tray, and REMOVES the settings gear from row 1
 // entirely (measured — see the row-1 JSX below) — the Setup Hub is the
 // settings surface now, reachable from the profile avatar beside it.
-import CanonicalStrip from '../../oversight/components/CanonicalStrip';
+// lane L4b (founder D-3 / D-40) — the strip is now three separate signals (`StripSignals`), not one ring.
+import StripSignals from '../../oversight/components/StripSignals';
+import { useApprovalQueue } from '../../approval/useApprovalQueue';
+import { openApprovalReview } from '../../approval/openApprovalReview';
 import FarmNameBoard from './FarmNameBoard';
 import CompactWeatherChip from '../../oversight/components/CompactWeatherChip';
 // Task 14, change 9 — the waiting-drawer sheet's OWN chrome (backdrop,
@@ -49,10 +52,7 @@ import { scopeForFarm } from '../../../infrastructure/storage/accessScopeStore';
 import { buildOversightModel, type OversightDecision } from '../../oversight/oversightSelectors';
 // Findings F2/F3 — the two cross-tree "open this surface" hops. See that
 // module's header for why a window event and not a prop path.
-import {
-  OPEN_WAITING_DRAWER_EVENT,
-  requestOpenReviewInbox,
-} from '../../oversight/oversightNavigationEvents';
+import { OPEN_WAITING_DRAWER_EVENT } from '../../oversight/oversightNavigationEvents';
 import { useOpenSurfaceRequest } from '../../oversight/useOpenSurfaceRequest';
 import { useOversightAcknowledgement } from '../../oversight/useOversightAcknowledgement';
 import { LocalOversightAcknowledgementStore } from '../../../infrastructure/storage/LocalOversightAcknowledgementStore';
@@ -113,6 +113,11 @@ interface AppHeaderProps {
      * know whether it may claim that all work is complete.
      */
     dataLoaded: boolean;
+    /**
+     * lane L4b (founder D-1 / D-40 §2) — the लक्ष द्या preview the strip shows: the same list as its page and the
+     * bottom bar's count, summarised in his language. Omit to show no attention signal.
+     */
+    attention?: { total: number; summary: string };
   };
   /**
    * Weather chip data for row 1 (Task 11 — founder header restructure: the
@@ -254,12 +259,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // — asserting a wrong name would be a worse claim than naming no one.
   // A caller that omits `oversightData` entirely falls back to the same
   // honest empty/zero inputs this component used before this prop existed.
+  const approvalCount = useApprovalQueue(currentFarmId || null).count;
   const oversightModel = buildOversightModel({
     logs: oversightData?.logs ?? [],
     checkpointISO,
     nowISO: systemClock.nowISO(),
     operatorNameById: oversightData?.operatorNameById ?? {},
-    unverifiedCount: oversightData?.unverifiedCount ?? 0,
+    // lane L4b (D-40 §1) — the drawer's "N कामे तपासायची आहेत" is the ONE server count for this farm (the strip's
+    // "मंजुरीसाठी N"), never the phone's own unscoped tally; nothing when he may not confirm or it is unread.
+    unverifiedCount: approvalCount ?? 0,
     yesterdayNotClosed: oversightData?.yesterdayNotClosed ?? false,
     failedSendCount,
     // FINDING F6 — no `?? 0` and no prop: this is read directly from the
@@ -271,19 +279,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     approvalHolderName: oversightData?.approvalHolderName ?? null,
   });
 
-  // FINDING F7(a) — may the strip claim "all work is complete"?
-  //
-  // Only if BOTH asynchronous sources behind `waitingCount` have actually
-  // been read: the Dexie sync queue (`useSyncQueueStatus`, which starts at
-  // `EMPTY_STATUS` and fills in on its first poll) and the app's own
-  // hydration (`useAppData`, whose `history`/`crops` start empty). Either
-  // one still unread means every zero above is "unknown", not "none".
-  //
-  // A caller that omits `oversightData` entirely (every test but the "real
-  // data" ones) is UNRESOLVED by definition — it supplied no data at all,
-  // so it has certainly not proven that nothing is outstanding. `?? false`
-  // is the honest default here, exactly like the zeros above.
-  const dataResolved = (oversightData?.dataLoaded ?? false) && queueStatus.hasLoaded;
+  // lane L4b — the strip no longer claims "all work is complete" from anything (D-3 / D-40): the F7(a) gate that
+  // decided when it might is gone with the claim. Each signal states only what it read.
 
   // FINDING F2 — EVERY TAPPABLE DECISION ROW LANDS SOMEWHERE REAL.
   //
@@ -349,7 +346,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         setIsSyncDrawerOpen(true);
         return;
       case 'approval':
-        requestOpenReviewInbox();
+        openApprovalReview();
         return;
       case 'dayNotClosed':
         onViewChange('reflect');
@@ -558,28 +555,16 @@ const AppHeader: React.FC<AppHeaderProps> = ({
           error, per the task-12 brief's "inset ~12px from both edges". */}
       {farmContext && showOversightStrip && (
         <div className="mx-auto w-full max-w-[480px] px-3 pb-3 md:max-w-[600px] xl:max-w-[640px]">
-          <CanonicalStrip
+          <StripSignals
             language={language}
-            waitingCount={oversightModel.waitingCount}
-            dataResolved={dataResolved}
-            // CHANGE 3 — the SAME `farmCount` the farm chip above already
-            // uses, derived once (see its own comment). The strip needs it
-            // to know whether it may claim "all work is complete": the
-            // inputs it derives that from are NOT farm-scoped for an account
-            // with 2+ farms, which is `appContentOversightInputs.ts`'s own
-            // documented characteristic, not a new finding. See
-            // `CanonicalStrip`'s `farmCount` prop doc for the full argument
-            // and for why suppressing beats filtering here.
-            farmCount={farmCount}
-            // FOUNDER DECISION 2026-08-26 — the freshness chip's one fact,
-            // read straight off the hook this component already calls. NOT a
-            // new timestamp and NOT a new fetch: `SyncStatusDrawer` (mounted
-            // by this same component, below) already renders this exact
-            // value as "Last synced:". No `??` and no fallback — `null` is a
-            // real answer here and `CanonicalStrip` renders it as one; see
-            // its `lastSyncAt` prop doc.
-            lastSyncAt={queueStatus.lastSyncAt}
-            onToggleWaiting={() => setIsWaitingDrawerOpen(true)}
+            farmId={currentFarmId || null}
+            // The rows that really need him: the same two terms the deleted sync chip summed, plus the records
+            // nothing will send (finding F6). Ordinary offline is the separate "पाठवणे बाकी" signal.
+            needsYouCount={failedSendCount + unqueueableCount}
+            attention={oversightData?.attention}
+            onOpenSync={() => setIsSyncDrawerOpen(true)}
+            onOpenAttention={() => onNavigate('attention')}
+            onOpenWaiting={() => setIsWaitingDrawerOpen(true)}
           />
         </div>
       )}

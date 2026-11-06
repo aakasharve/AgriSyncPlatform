@@ -9,7 +9,6 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Work.Handlers;
-using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
@@ -212,7 +211,6 @@ public sealed class AddLogTaskAttestationCoversTheContentTests
             new NoopComplianceService(),
             new OnLogVerifiedAutoVerifyJobCard(
                 repo,
-                new VerifyJobCardForPayoutHandler(repo, clock),
                 clock,
                 NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance));
 

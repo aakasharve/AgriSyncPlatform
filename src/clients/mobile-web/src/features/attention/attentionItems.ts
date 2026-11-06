@@ -146,6 +146,21 @@ export function attentionSummaryMr(counts: AttentionCounts): string {
     return parts.join(' · ');
 }
 
+/**
+ * lane L4b fix round 0 — the same count line in English, one language at a time (the strip's third signal in English
+ * mode): "2 tasks late · 1 reminder today". PROPOSED (English)
+ */
+export function attentionSummaryEn(counts: AttentionCounts): string {
+    const one = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`;
+    const parts: string[] = [];
+    if (counts.lateSteps) parts.push(one(counts.lateSteps, 'task late', 'tasks late'));
+    if (counts.lateReminders) parts.push(one(counts.lateReminders, 'reminder late', 'reminders late'));
+    if (counts.todaySteps) parts.push(one(counts.todaySteps, 'task today', 'tasks today'));
+    if (counts.todayReminders) parts.push(one(counts.todayReminders, 'reminder today', 'reminders today'));
+    if (counts.decisions) parts.push(one(counts.decisions, 'decision pending', 'decisions pending'));
+    return parts.join(' · ');
+}
+
 /** The single most urgent item's words for the strip: "फवारणी · प्लॉट 2 — काल". PROPOSED (Marathi) */
 export function mostUrgentLineMr(model: AttentionModel): string | null {
     const first = model.late[0] ?? model.today[0] ?? model.decide[0];

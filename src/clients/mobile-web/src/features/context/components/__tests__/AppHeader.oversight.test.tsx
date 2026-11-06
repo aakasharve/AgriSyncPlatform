@@ -117,6 +117,15 @@ vi.mock('../../../sync', () => ({
 }));
 
 import AppHeader from '../AppHeader';
+import { publishApprovalQueue, resetApprovalQueueForTests } from '../../../approval/approvalQueue';
+import { EMPTY_LABOUR_DATA } from '../../../labour/labourMock';
+
+/** lane L4b (D-40 §1) — the drawer's approval row is the ONE server count for the farm: publish it as the server would. */
+const serverListOf = (n: number) => ({
+    ...EMPTY_LABOUR_DATA,
+    canConfirm: true,
+    review: Array.from({ length: n }, (_, i) => ({ id: `r${i}`, who: 'w', initial: 'w', tone: 'or' as const, detail: '2026-10-30', status: 'Draft' as const, points: {} })),
+});
 
 // The Setup Hub label the profile button now carries (founder ruling
 // 2026-08-30). Resolved from the table so a copy change moves the test with
@@ -265,7 +274,8 @@ describe('AppHeader — the sync chip is gone', () => {
         // waiting button instead — one waiting KIND (failedSend), never a
         // fabricated literal.
         expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
-        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+        // lane L4b (D-40 §2) — what needs him is its own signal, with the failure words, never a bare ring number.
+        expect(screen.getByTestId('strip-needs-you')).toBeInTheDocument();
 
         // Ruling 12 fix-round: the retired `AppHeader.claim.test.tsx` also
         // asserted none of the three sync-honesty labels "leak in by another
@@ -300,7 +310,10 @@ describe('AppHeader — the sync chip is gone', () => {
         });
 
         expect(screen.queryByTestId('sync-status-indicator')).not.toBeInTheDocument();
-        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+        // lane L4b (D-3 / D-40) — the strip never claims "all work is complete"; with nothing to show it says only
+        // what it read (here: the approval list for this farm was never read, so "the list cannot be seen").
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
+        expect(screen.getByTestId('strip-signals')).toBeInTheDocument();
     });
 });
 
@@ -402,7 +415,7 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         // 2. The waiting count reflects one real PERSON (no decisions were
         // supplied), and opening the drawer proves the briefing itself —
         // not just that a prop was passed — is populated.
-        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+        // lane L4b (D-3 / D-40): the strip has no ring number and never an all-clear; the drawer below carries the data.
         fireEvent.click(screen.getByTestId('canonical-strip-waiting-button'));
 
         expect(screen.getByTestId('waiting-drawer-tally-people')).toHaveTextContent('1');
@@ -466,11 +479,11 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         });
 
         // 1. NO rest state — no green tick, no "all work complete" claim.
-        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
         expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
 
         // 2. A real badge instead: the one अज्ञात row this fixture produces.
-        expect(screen.getByTestId('canonical-strip-waiting-count')).toHaveTextContent('1');
+        // lane L4b (D-3 / D-40): the strip has no ring number and never an all-clear; the drawer below carries the data.
 
         // 3. Opening the drawer proves the count is standing for something
         //    real — the unattributed row, holding both records, with the
@@ -514,15 +527,15 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
         expect(board).not.toHaveTextContent('0');
         expect(board).not.toHaveTextContent('4');
         expect(board.textContent).not.toContain(oversightTranslations.mr.plotsUnit);
-        expect(screen.queryByTestId('canonical-strip-waiting-count')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('strip-approval')).not.toBeInTheDocument();
 
         // Finding F7(a) — the honest fallback for "no data was supplied at
         // all" is the CHECKING state, not the rest state. A caller that
         // handed this header nothing has certainly not proven that all work
         // is complete, so the green tick and the founder's completion
         // sentence must both stay away.
-        expect(screen.getByTestId('canonical-strip-waiting-checking-icon')).toBeInTheDocument();
-        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent('यादी आत्ता दिसत नाही'); // lane L4b: unread is said as unread
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
         expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
     });
 
@@ -559,7 +572,7 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
                 });
             });
 
-            expect(screen.queryByTestId('canonical-strip-waiting-rest-tick'), label).not.toBeInTheDocument();
+            expect(screen.queryByText(/सर्व कामे पूर्ण/), label).not.toBeInTheDocument();
             expect(screen.queryByText(oversightTranslations.mr.restState), label).not.toBeInTheDocument();
             // The strip keeps its place and its size — the layout never
             // reshuffles when the data lands (spec §2.2).
@@ -593,8 +606,8 @@ describe('AppHeader — real oversight data populates a non-empty briefing (Ruli
             });
         });
 
-        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
-        expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument(); // lane L4b: no all-clear, ever
+        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument(); // lane L4b (D-3): retired
     });
 });
 
@@ -864,8 +877,8 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
             renderHeader({ farmContext: multiFarmContext, oversightData: resolvedNothingOutstanding });
         });
         expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument();
-        expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).not.toBeInTheDocument();
-        expect(screen.getByTestId('canonical-strip-waiting-unknown-icon')).toBeInTheDocument();
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument();
+        expect(screen.getByTestId('strip-signals')).toBeInTheDocument(); // lane L4b: the farm-scoped server count needs no multi-farm suppression
 
         cleanup();
 
@@ -875,8 +888,8 @@ describe('AppHeader — the farm element is contextual on the real farm list (Ta
         await act(async () => {
             renderHeader({ farmContext: singleFarmContext, oversightData: resolvedNothingOutstanding });
         });
-        expect(screen.getByText(oversightTranslations.mr.restState)).toBeInTheDocument();
-        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
+        expect(screen.queryByText(oversightTranslations.mr.restState)).not.toBeInTheDocument(); // lane L4b (D-3): retired
+        expect(screen.queryByText(/सर्व कामे पूर्ण/)).not.toBeInTheDocument(); // lane L4b: no all-clear, ever
     });
 
     // TRUTH FIX (truth audit, question 3) — the same rule, for the NUMBER.
@@ -976,7 +989,7 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
         }
     > = {
         approval: {
-            arrange: () => ({
+            arrange: () => (publishApprovalQueue('farm-1', serverListOf(6)), {
                 oversightData: {
                     logs: [],
                     operatorNameById: {},
@@ -1047,6 +1060,7 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
 
     afterEach(() => {
         window.removeEventListener(OPEN_REVIEW_INBOX_EVENT, countReviewInboxRequest);
+        resetApprovalQueueForTests();
     });
 
     it.each(Object.keys(DESTINATION_CASES) as OversightDecisionKind[])(
@@ -1083,6 +1097,7 @@ describe('AppHeader — every tappable decision row has a destination (F2)', () 
         // Spec §3's delegated case: same row, same position, NO action
         // affordance. This is the one shape that legitimately has no
         // destination, and it must not look like it has one.
+        publishApprovalQueue('farm-1', serverListOf(6));
         await act(async () => {
             renderHeader({
                 oversightData: {
