@@ -10,7 +10,7 @@
  *   WebCrypto AES-GCM open, bound to (clipId, the farm's owner account)   [voiceEnvelope.openVoiceClip]
  *
  * WHO MAY HEAR IT IS DECIDED BY THE SERVER, never here: the speaker himself, the primary owner, or a member holding
- * the owner's grant, and only while the speaker's "मूळ आवाज जतन करा" switch is ON under the current words. This file
+ * the owner's grant, and only while the speaker's "मूळ आवाज ऐकू देणे" switch is ON under the current words. This file
  * only turns the server's answer into one of four honest outcomes:
  *   - 'audio'        the recording, ready to play;
  *   - 'unavailable'  the server says there is nothing he may play (not kept, no recording, or he may not hear it) —

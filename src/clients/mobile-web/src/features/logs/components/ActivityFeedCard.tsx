@@ -22,6 +22,7 @@ import { AttachmentList } from '../../attachments';
 import { useAttachmentRetry } from '../../attachments/hooks/useAttachmentRetry';
 import LocationBadge from '../../location/components/LocationBadge';
 import VerificationStatusBadge from './verification/VerificationStatusBadge';
+import { PlaybackUnavailableNote, usePlaybackSwitch } from './voiceResult/playbackSwitch';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 const SERIF = "'Noto Serif Devanagari', serif";
@@ -80,6 +81,7 @@ const ActivityFeedCard: React.FC<ActivityFeedCardProps> = ({
     logId, workDone, plotName, cropName, cropColor, loggedBy, timeLabel, statusTone, counts, summaryLines = [], location,
     verificationStatus, attachmentCount, snippet, audio, chips, onClick,
 }) => {
+    const playbackOff = usePlaybackSwitch() === false; // fix round 3 (M1): OFF - no ▶, the founder's words instead
     const [attachmentsOpen, setAttachmentsOpen] = useState(false);
     const [attachments, setAttachments] = useState<number>(attachmentCount ?? 0);
     const { retryUpload } = useAttachmentRetry();
@@ -106,7 +108,8 @@ const ActivityFeedCard: React.FC<ActivityFeedCardProps> = ({
         <div data-testid="log-list-item" className="relative overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm" style={{ fontFamily: SANS }}>
             <div className={`absolute bottom-0 left-0 top-0 w-1.5 ${cropColor}`} aria-hidden="true" />
             <div className="flex items-stretch gap-2 py-2 pl-3.5 pr-2">
-                {audio && (
+                {audio && playbackOff && <PlaybackUnavailableNote testId="card-play-off" className="grid max-w-[7rem] shrink-0 place-items-center self-center rounded-xl border border-stone-200 bg-stone-50 px-2 py-1 text-center text-[12px] font-bold text-stone-700" />}
+                {audio && !playbackOff && (
                     <button type="button" onClick={audio.onToggle} aria-label={audio.playing ? CARD_STR.stop : CARD_STR.play} data-testid="card-play"
                         className="grid h-12 w-12 shrink-0 place-items-center self-center rounded-full bg-emerald-700 text-white active:scale-95">
                         {audio.playing ? <Pause size={22} /> : <Play size={22} />}
@@ -118,7 +121,7 @@ const ActivityFeedCard: React.FC<ActivityFeedCardProps> = ({
                         <span className="flex flex-wrap items-center gap-1.5">
                             {/* No time captured (a typed entry): no pill, never a made-up time (P4). */}
                             {timeLabel && <span className="inline-block shrink-0 rounded-full border border-stone-300 bg-stone-100 px-2 py-0.5 text-[12px] font-extrabold text-stone-700" data-testid="card-time">{timeLabel}</span>}
-                            {audio && <span className="text-[12px] font-bold tabular-nums text-stone-700" data-testid="card-duration">{audio.durationLabel}</span>}
+                            {audio && !playbackOff && <span className="text-[12px] font-bold tabular-nums text-stone-700" data-testid="card-duration">{audio.durationLabel}</span>}
                             {verificationStatus
                                 ? <VerificationStatusBadge status={verificationStatus} size="sm" />
                                 : <span className={`rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${TONE[statusTone]}`} data-testid="card-status">{CARD_STR.status[statusTone]}</span>}

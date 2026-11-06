@@ -89,7 +89,7 @@ describe('VoiceDiaryPage — the आवाज नोंदी place', () => {
         render(<VoiceDiaryPage onBack={() => undefined} />);
         const page = await screen.findByTestId('voice-diary-page', {}, SLOW);
         const keep = within(page).getByTestId('voice-retained-consent-toggle');
-        expect(keep).toHaveTextContent('मूळ आवाज जतन करा');
+        expect(keep).toHaveTextContent('मूळ आवाज ऐकू देणे');
         expect(keep.textContent ?? '').not.toMatch(/[A-Za-z]/);
 
         const cta = await screen.findByTestId('voice-diary-retention-banner-cta', {}, SLOW);
@@ -100,7 +100,7 @@ describe('VoiceDiaryPage — the आवाज नोंदी place', () => {
         // "turn on" does what it says: the same confirmation the switch opens — and nothing is saved
         // until he agrees there
         const confirm = await screen.findByTestId('voice-retained-first-grant-banner');
-        expect(confirm).toHaveTextContent('आवाजी नोंदी जतन करण्याची परवानगी');
+        expect(confirm).toHaveTextContent('मूळ आवाज ऐकू देण्याची परवानगी');
         expect(confirm).toHaveTextContent('मी सहमत आहे');
         expect(confirm.textContent ?? '').not.toMatch(/[A-Za-z]/);
         expect(agriSyncClient.updateConsent).not.toHaveBeenCalled();

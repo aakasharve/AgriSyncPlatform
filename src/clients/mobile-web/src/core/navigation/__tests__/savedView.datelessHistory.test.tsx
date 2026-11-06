@@ -22,10 +22,9 @@
  */
 import 'fake-indexeddb/auto';
 import React from 'react';
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeAll, describe, it, expect, vi } from 'vitest';
 import { cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
-import { t as translate } from '../../../i18n/translations';
 import type { AppRouterContext } from '../routeContext';
 import type { DailyLog } from '../../../types';
 
@@ -54,72 +53,76 @@ const legacyDateless = {
     date: undefined,
 } as unknown as DailyLog;
 
-const dataSource = {
-    crops: { getAll: vi.fn(async () => []), save: vi.fn(async () => { }) },
-    profile: { get: vi.fn(async () => null) },
-    logs: { getAll: vi.fn(async () => [justSaved, legacyDateless, priorSpray]) },
-};
+// F85 (lane OPS-1): the cost of this test is IMPORTING the whole log-view graph (mainView and everything under it).
+// It used to be imported inside the test body after vi.resetModules(), so a cold transform of that graph (12 s and more
+// on a loaded full run) was charged to the test's 15 s limit and it timed out with the render itself taking milliseconds.
+// The mocks are now hoisted (vi.mock) and the graph is imported ONCE, at the top of the file, in the collection phase -
+// no per-test limit applies to that, the work is the same, and the test itself measures only what it is about.
+const { dataSource, stub } = vi.hoisted(() => ({
+    dataSource: {
+        crops: { getAll: async () => [], save: async () => { } },
+        profile: { get: async () => null },
+        logs: { getAll: async () => [] as unknown[] },
+    },
+    stub: async (label: string) => {
+        const React = await import('react');
+        return { default: () => React.createElement('div', { 'data-stub': label }) };
+    },
+}));
 
-const stub = (label: string) => ({
-    default: () => React.createElement('div', { 'data-stub': label }),
-});
-
-async function loadSavedPath() {
-    vi.resetModules();
-
-    // Leaf children of the log view — same stubs as mainView.dayUnderstandingOrder.test.tsx.
-    vi.doMock('../../../features/context/components/CropSelector', () => ({
+// Leaf children of the log view - same stubs as mainView.dayUnderstandingOrder.test.tsx.
+vi.mock('../../../features/context/components/CropSelector', async () => {
+    const React = await import('react');
+    return {
         default: () => React.createElement('div', { 'data-stub': 'crop-selector' }),
         CropSymbol: () => null,
-    }));
-    vi.doMock('../../../shared/components/ui/InputMethodToggle', () => stub('input-toggle'));
-    vi.doMock('../../../features/weather/components/WeatherWidget', () => stub('weather'));
-    vi.doMock('../../../features/voice/components/AudioRecorder', () => stub('audio'));
-    vi.doMock('../../../features/voice/components/AudioRecorderStreaming', () => stub('audio-streaming'));
-    vi.doMock('../../../features/voice/components/LiveCaption', () => stub('live-caption'));
-    vi.doMock('../../../features/logs/components/shramsathi/VoiceSavedReassurance', () => stub('voice-saved'));
+    };
+});
+vi.mock('../../../shared/components/ui/InputMethodToggle', () => stub('input-toggle'));
+vi.mock('../../../features/weather/components/WeatherWidget', () => stub('weather'));
+vi.mock('../../../features/voice/components/AudioRecorder', () => stub('audio'));
+vi.mock('../../../features/voice/components/AudioRecorderStreaming', () => stub('audio-streaming'));
+vi.mock('../../../features/voice/components/LiveCaption', () => stub('live-caption'));
+vi.mock('../../../features/logs/components/shramsathi/VoiceSavedReassurance', () => stub('voice-saved'));
 
-    // The REAL recognition panel (it is where the crash lives). Only its server
-    // reads are neutralised, so the panel needs no network.
-    vi.doUnmock('../../../features/logs/components/LedgerRecognitionPanel');
-    vi.doMock('../../../features/logs/hooks/useFarmerEngagement', () => ({
-        useFarmerEngagement: () => ({ engagement: null, isLoading: false, error: null, refresh: vi.fn() }),
-    }));
-    vi.doMock('../../../features/logs/hooks/useDfesQuestion', () => ({
-        useDfesQuestion: () => ({ selected: null, loading: false, recordOutcome: vi.fn() }),
-    }));
-    vi.doMock('../../../features/logs/hooks/useDayUnderstanding', () => ({
-        useDayUnderstanding: () => ({ score: null, isLoading: false, error: null, refresh: vi.fn() }),
-    }));
-    vi.doMock('../../../i18n/LanguageContext', () => ({
+// The REAL recognition panel (it is where the crash lives). Only its server reads are neutralised, so the panel needs no network.
+vi.mock('../../../features/logs/hooks/useFarmerEngagement', () => ({
+    useFarmerEngagement: () => ({ engagement: null, isLoading: false, error: null, refresh: () => { } }),
+}));
+vi.mock('../../../features/logs/hooks/useDfesQuestion', () => ({
+    useDfesQuestion: () => ({ selected: null, loading: false, recordOutcome: () => { } }),
+}));
+vi.mock('../../../features/logs/hooks/useDayUnderstanding', () => ({
+    useDayUnderstanding: () => ({ score: null, isLoading: false, error: null, refresh: () => { } }),
+}));
+vi.mock('../../../i18n/LanguageContext', async () => {
+    const { t: translate } = await import('../../../i18n/translations');
+    return {
         useLanguage: () => ({ language: 'mr', setLanguage: () => { }, t: (k: string) => translate(k, 'mr') }),
-    }));
-    // Stage questions ON, as release-build.yml / release.yml set them: the panel
-    // runs computePreviousLog over `allLogs` only when this is on.
-    vi.doMock('../../../app/featureFlags', () => ({
-        FEATURE_FLAGS: { understandingMeter: true, stageQuestions: true, dailyLoop: false, voiceContinuity: false },
-        IS_E2E_HARNESS_ENABLED: false,
-        isE2EHarnessEnabled: () => false,
-        isFarmGeographyV2Enabled: () => false,
-        isWeatherBackendFetchEnabled: () => false,
-        isVoiceDoomLoopDetectorEnabled: () => true,
-    }));
+    };
+});
+// Stage questions ON, as release-build.yml / release.yml set them: the panel runs computePreviousLog over `allLogs` only when this is on.
+vi.mock('../../../app/featureFlags', () => ({
+    FEATURE_FLAGS: { understandingMeter: true, stageQuestions: true, dailyLoop: false, voiceContinuity: false },
+    IS_E2E_HARNESS_ENABLED: false,
+    isE2EHarnessEnabled: () => false,
+    isFarmGeographyV2Enabled: () => false,
+    isWeatherBackendFetchEnabled: () => false,
+    isVoiceDoomLoopDetectorEnabled: () => true,
+}));
+// The app's real history loader, over a stored ledger holding the 1.0.14 row.
+vi.mock('../../../app/providers/DataSourceProvider', () => ({
+    useDataSource: () => ({ dataSource, auditPort: {}, isDemoMode: false, setDemoMode: async () => { }, isLoading: false }),
+}));
+vi.mock('../../../app/providers/AuthProvider', () => ({
+    useAuth: () => ({ isAuthenticated: false, session: null }),
+}));
+vi.mock('../../../infrastructure/sync/BackgroundSyncWorker', () => ({
+    backgroundSyncWorker: { triggerNow: async () => { } },
+}));
 
-    // The app's real history loader, over a stored ledger holding the 1.0.14 row.
-    vi.doMock('../../../app/providers/DataSourceProvider', () => ({
-        useDataSource: () => ({ dataSource, auditPort: {}, isDemoMode: false, setDemoMode: async () => { }, isLoading: false }),
-    }));
-    vi.doMock('../../../app/providers/AuthProvider', () => ({
-        useAuth: () => ({ isAuthenticated: false, session: null }),
-    }));
-    vi.doMock('../../../infrastructure/sync/BackgroundSyncWorker', () => ({
-        backgroundSyncWorker: { triggerNow: vi.fn(async () => { }) },
-    }));
-
-    const { useAppData } = await import('../../../app/hooks/useAppData');
-    const { renderLogView } = await import('../mainView');
-    return { useAppData, renderLogView };
-}
+import { useAppData } from '../../../app/hooks/useAppData';
+import { renderLogView } from '../mainView';
 
 /** The success-card context, as mainView.dayUnderstandingOrder.test.tsx builds it, over the loaded history. */
 function makeCtx(history: DailyLog[]): AppRouterContext {
@@ -187,15 +190,16 @@ function makeCtx(history: DailyLog[]): AppRouterContext {
     } as unknown as AppRouterContext;
 }
 
+beforeAll(() => {
+    dataSource.logs.getAll = async () => [justSaved, legacyDateless, priorSpray];
+});
+
 afterEach(() => {
     cleanup();
-    vi.clearAllMocks();
-    vi.resetModules();
 });
 
 describe('saved screen — an old dateless diary row on the phone cannot crash it (1.0.16)', () => {
     it('opens, with the real recognition panel, over the history the app loads', async () => {
-        const { useAppData, renderLogView } = await loadSavedPath();
         const { result } = renderHook(() => useAppData());
         await waitFor(() => expect(result.current.dataLoaded).toBe(true));
 

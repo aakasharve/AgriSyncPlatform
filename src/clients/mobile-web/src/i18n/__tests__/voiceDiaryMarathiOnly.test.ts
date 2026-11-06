@@ -39,7 +39,7 @@ describe('voice recordings wording (mr-IN)', () => {
 
     it('the keep switch uses the same words as the consent of the same name on गोपनीयता व संमती', () => {
         // plr-d10 I25: the founder's D-2 title, on both screens.
-        expect(tVoiceDiary('mr-IN', 'consentToggle.title')).toBe('मूळ आवाज जतन करा');
+        expect(tVoiceDiary('mr-IN', 'consentToggle.title')).toBe('मूळ आवाज ऐकू देणे');
         expect(tConsent('mr-IN', 'toggles.fullHistoryJournal.title')).toBe(tVoiceDiary('mr-IN', 'consentToggle.title'));
         expect(tConsent('mr-IN', 'toggles.fullHistoryJournal.meaning')).toBe(tVoiceDiary('mr-IN', 'consentToggle.meaning'));
     });

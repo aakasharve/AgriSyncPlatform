@@ -14,10 +14,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 import { ConsentState } from '../../../domain/consent/ConsentState';
 import { observeArchiveConsentView } from '../../../infrastructure/voice/voiceArchiveConsent';
+import { publishPlaybackSwitch } from '../../logs/components/voiceResult/playbackSwitch';
 
 export interface UseFullHistoryJournalConsentResult {
     granted: boolean;
     loaded: boolean;
+    /** True once the server has answered at least once: only then is `granted` an answer rather than the default (OFF). */
+    known: boolean;
     state: ConsentState;
     /** Re-fetch the consent state from the server. */
     reload: () => Promise<void>;
@@ -26,6 +29,7 @@ export interface UseFullHistoryJournalConsentResult {
 export function useFullHistoryJournalConsent(): UseFullHistoryJournalConsentResult {
     const [state, setState] = useState<ConsentState>(() => ConsentState.default());
     const [loaded, setLoaded] = useState(false);
+    const [known, setKnown] = useState(false);
     const knownRef = useRef(false);
 
     const reload = useCallback(async () => {
@@ -35,6 +39,8 @@ export function useFullHistoryJournalConsent(): UseFullHistoryJournalConsentResu
             // current, so the diary labels use the same bound as the uploader.
             await observeArchiveConsentView(dto).catch(() => null);
             knownRef.current = true;
+            setKnown(true);
+            publishPlaybackSwitch(dto.fullHistoryJournal === true); // every other player on the phone follows this answer at once
             setState({
                 fullHistoryJournal: dto.fullHistoryJournal,
                 crossFarmAggregation: dto.crossFarmAggregation,
@@ -59,6 +65,7 @@ export function useFullHistoryJournalConsent(): UseFullHistoryJournalConsentResu
     return {
         granted: state.fullHistoryJournal,
         loaded,
+        known,
         state,
         reload,
     };

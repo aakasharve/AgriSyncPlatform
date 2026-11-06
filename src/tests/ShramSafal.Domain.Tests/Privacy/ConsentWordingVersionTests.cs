@@ -27,7 +27,27 @@ public sealed class ConsentWordingVersionTests
 {
     private static readonly Guid User = Guid.Parse("c3000000-0000-0000-0000-000000000003");
     private static readonly DateTime T0 = new(2026, 10, 30, 6, 0, 0, DateTimeKind.Utc);
-    private const string NewWords = "voice-keep-2026-10-30.1";
+    private const string NewWords = "voice-keep-2026-11-06.1";
+
+    // ── fix round 1, H5: the renamed switch is recorded against its new words, and the old words still allow playback ──
+
+    [Fact]
+    public void The_switch_words_version_moved_with_the_rename()
+    {
+        CurrentConsentWording.VoiceKeepVersion.Should().Be("voice-keep-2026-11-06.1");
+        CurrentConsentWording.VoiceKeepVersionBeforeRename.Should().Be("voice-keep-2026-10-30.1");
+    }
+
+    [Theory]
+    [InlineData("voice-keep-2026-11-06.1", true)]    // the new words
+    [InlineData("voice-keep-2026-10-30.1", true)]    // before the rename: same listeners, so an ON given then still plays
+    [InlineData(null, false)]                         // pre-L5 / older phone: words unknown
+    [InlineData("", false)]
+    [InlineData("voice-keep-2026-11-07.1", false)]    // a version nobody ever shipped
+    public void Playback_is_allowed_only_for_the_current_or_the_pre_rename_words(string? words, bool allowed)
+    {
+        CurrentConsentWording.VoiceKeepWordsAllowPlayback(words).Should().Be(allowed);
+    }
 
     // ── UserConsentState: the D-31 words version ─────────────────────────
 

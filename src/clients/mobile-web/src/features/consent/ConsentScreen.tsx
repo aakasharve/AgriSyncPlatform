@@ -35,6 +35,7 @@ import RevokeAllButton from './RevokeAllButton';
 import { APP_VERSION } from '../../infrastructure/api/transport';
 import { PageBar } from '../../shared/components/ui/placeUi';
 import ImprovementPermissionToggle from './improvement/ImprovementPermissionToggle';
+import { publishPlaybackSwitch } from '../logs/components/voiceResult/playbackSwitch';
 import {
     IMPROVEMENT_WORDING_VERSION,
     VOICE_RETENTION_WORDING_VERSION,
@@ -137,6 +138,8 @@ const ConsentScreen: React.FC<Props> = ({ onBack, forceLocale, embedded = false 
                     ...(voiceChoiceMade ? { fullHistoryJournalWordingVersion: VOICE_RETENTION_WORDING_VERSION } : {}),
                 });
                 stored.current = { ...stored.current, fullHistoryJournal: result.fullHistoryJournal };
+                // Fix round 4 (L1, D-101): the phone's players learn the new switch state AT ONCE, so turning it OFF here blocks playback now.
+                publishPlaybackSwitch(result.fullHistoryJournal === true);
                 // D-36: the improvement permission is its own record, sent when it changed — or
                 // always, when the caller forces it. A failed send lands in the catch below: the
                 // success line is never shown for a withdrawal that did not reach the server.

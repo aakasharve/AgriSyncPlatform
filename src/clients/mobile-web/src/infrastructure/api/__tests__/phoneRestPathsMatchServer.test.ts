@@ -82,7 +82,10 @@ const NOT_A_CALL: Record<string, string> = {
     // Fragments matched against the URL of a request that already failed (which failures to report); never requested.
     'infrastructure/telemetry/ClientErrorReporter.ts /logs': 'a failed-URL fragment, never requested',
     'infrastructure/telemetry/ClientErrorReporter.ts /ai/parse-voice': 'a failed-URL fragment, never requested',
-    'infrastructure/telemetry/ClientErrorReporter.ts /ai/extract': 'a failed-URL fragment, never requested',
+    'infrastructure/telemetry/ClientErrorReporter.ts /ai/voice-parse': 'a failed-URL fragment, never requested',
+    'infrastructure/telemetry/ClientErrorReporter.ts /ai/receipt-extract': 'a failed-URL fragment, never requested',
+    'infrastructure/telemetry/ClientErrorReporter.ts /ai/patti-extract': 'a failed-URL fragment, never requested',
+    'infrastructure/telemetry/ClientErrorReporter.ts /ai/document-sessions': 'a failed-URL fragment, never requested',
 };
 
 /** A `${…}` span inside a phone path. */

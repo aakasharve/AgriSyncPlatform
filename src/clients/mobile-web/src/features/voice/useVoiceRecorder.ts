@@ -12,6 +12,8 @@ import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { buildCanonicalVoiceInput } from './continuity/canonicalVoiceInput';
 import { buildPendingFromCanonical, type ContinuityLevel } from './continuity/voiceContinuityLadder';
 import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
+import { notKeptNoConsentMessage } from './voiceMessages';
+import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
 import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
@@ -27,6 +29,7 @@ export const useVoiceRecorder = ({
     parser,
     voicePreprocessor, onVoiceDraft,
 }: UseVoiceRecorderProps) => {
+    const language = useOptionalLanguage()?.language;
 
     const [status, setStatus] = useState<AppStatus>('idle');
     const [error, setError] = useState<string | null>(null);
@@ -348,12 +351,11 @@ export const useVoiceRecorder = ({
         } catch (err) {
             // spec: dfes-companion-2026-07-11 (wave-4.3) — no raw audio without core consent.
             // Reached only when this phone holds no acceptance of the CURRENT notice (it was
-            // hit by every signed-in farmer until coreConsentGate read the right database —
-            // plr-d10-redesign-real-integration I1). WE LOSE THE CLIP, not the farmer his app,
-            // so this reports and returns instead of throwing out of the save path.
-            // The clip is gone, and honestly so: without a basis we may not hold his voice.
+            // hit by every signed-in farmer until coreConsentGate read the right database - I1). WE LOSE THE CLIP,
+            // not the farmer his app: report and return, never throw out of the save path. Not silent (OPS-1, L-4).
             if (err instanceof CoreConsentMissingError) {
                 console.warn('[useVoiceRecorder] degraded capture discarded:', err.message);
+                setError(notKeptNoConsentMessage(language));
                 setStatus('idle');
                 return;
             }

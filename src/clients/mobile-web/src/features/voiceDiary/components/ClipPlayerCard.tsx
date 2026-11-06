@@ -17,6 +17,8 @@ import { CheckCircle2, Clock, AlertCircle, Loader2, Mic, Play, Pause, Cloud, Clo
 import type { VoiceClipCacheRecord, VoiceClipStatus } from '../../../infrastructure/storage/DexieDatabase';
 import { readVoiceClipPlaintext } from '../../../infrastructure/voice/VoiceClipRetention';
 import { openRetainedClip } from '../../../infrastructure/voice/retainedClipReader';
+import { usePlaybackSwitch } from '../../logs/components/voiceResult/playbackSwitch';
+import { ORIGINAL_VOICE_NOT_KEPT_ERROR } from '../../../infrastructure/voiceDiary/originalVoiceNotKept';
 import type { CloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
 import {
     type VoiceDiaryLocale,
@@ -69,6 +71,12 @@ export interface UnifiedClip {
 interface Props {
     locale: VoiceDiaryLocale;
     clip: UnifiedClip;
+    /**
+     * The playback switch as the phone holds it (`fullHistoryJournal` from the consent read; ON in ANY words version counts for his own
+     * clips). `false` = OFF: founder D-2, OFF stops replay and never deletes - this phone's own copy does not play either, the card shows
+     * the founder's "Original recording unavailable", the clip stays. `undefined` = the phone does not know the state: nothing is blocked.
+     */
+    playbackAllowed?: boolean;
 }
 
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I17, V-2) — in Marathi the clock reads the part of
@@ -141,7 +149,11 @@ const getStatusPresentation = (
     }
 };
 
-const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
+const ClipPlayerCard: React.FC<Props> = ({ locale, clip, playbackAllowed: passedAllowed }) => {
+    // The page that holds the consent read passes the state; a card shown elsewhere asks the shared store (fix round 3: one rule, every player).
+    const sharedAllowed = usePlaybackSwitch();
+    const playbackAllowed = passedAllowed ?? sharedAllowed;
+    const switchOff = playbackAllowed === false;
     const [audioUrl, setAudioUrl] = useState<string>('');
     const [isPlaying, setIsPlaying] = useState(false);
     const [fetchingCloud, setFetchingCloud] = useState(false);
@@ -151,7 +163,7 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
     // Local clips: synchronously open the plaintext via the V18 sealed
     // path (or fall back to the legacy plaintext blob if present).
     useEffect(() => {
-        if (clip.source !== 'local') {
+        if (clip.source !== 'local' || switchOff) {
             return;
         }
         const record = clip.localRecord;
@@ -186,7 +198,16 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
             cancelled = true;
             if (createdUrl) URL.revokeObjectURL(createdUrl);
         };
-    }, [clip]);
+    }, [clip, switchOff]);
+
+    // OFF while the audio is open: let go of it (the kept clip stays; ON again re-opens it through the effect above).
+    useEffect(() => {
+        if (!switchOff) return;
+        audioRef.current?.pause();
+        setIsPlaying(false);
+        setAudioUrl('');
+        setFetchError(null);
+    }, [switchOff]);
 
     // Cloud clips: lazy-fetch on first play to avoid hauling audio bytes for
     // every calendar paint. Also the fallback for a clip the server holds but
@@ -229,6 +250,7 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
     }, [audioUrl]);
 
     const handlePlayPause = useCallback(async () => {
+        if (switchOff) return; // OFF: nothing plays, from the server or from this phone; the words are already shown
         if (!audioUrl && (clip.source === 'cloud' || clip.localRecord?.s3RetainedKey)) {
             if (fetchingCloud) return; // taps while the recording is being opened are ignored
             playWhenReadyRef.current = true;
@@ -246,7 +268,7 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
             el.pause();
             setIsPlaying(false);
         }
-    }, [audioUrl, clip.source, clip.localRecord?.s3RetainedKey, ensureCloudAudioUrl, fetchingCloud]);
+    }, [switchOff, audioUrl, clip.source, clip.localRecord?.s3RetainedKey, ensureCloudAudioUrl, fetchingCloud]);
 
     const status = getStatusPresentation(locale, clip.status);
     const StatusIcon = status?.icon ?? CheckCircle2;
@@ -327,9 +349,9 @@ const ClipPlayerCard: React.FC<Props> = ({ locale, clip }) => {
                         </span>
                     )}
                 </div>
-                {fetchError && (
-                    <p data-testid={`voice-diary-clip-play-error-${clip.id}`} data-error={fetchError} className="mt-1 text-xs font-['DM_Sans'] text-rose-600 whitespace-normal break-words">
-                        {tVoiceDiary(locale, 'clipBadge.playbackUnavailable')}
+                {(switchOff || fetchError) && (
+                    <p data-testid={`voice-diary-clip-play-error-${clip.id}`} data-error={switchOff ? ORIGINAL_VOICE_NOT_KEPT_ERROR : fetchError} className="mt-1 text-xs font-['DM_Sans'] text-rose-600 whitespace-normal break-words">
+                        {tVoiceDiary(locale, switchOff || fetchError === ORIGINAL_VOICE_NOT_KEPT_ERROR ? 'replay.originalUnavailable' : 'clipBadge.playbackUnavailable')}
                     </p>
                 )}
                 {clip.lastError && !fetchError && (

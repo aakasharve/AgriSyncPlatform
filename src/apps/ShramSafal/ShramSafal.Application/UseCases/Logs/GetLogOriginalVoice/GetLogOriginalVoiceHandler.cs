@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Privacy;
 using ShramSafal.Application.Privacy.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Common;
@@ -67,7 +68,7 @@ public sealed record LogOriginalVoiceResult(
 /// the recording reached is only the one THIS record links to. Anyone else is refused; a
 /// person of another farm cannot even see the record (row-level security), so he gets
 /// "not found".</item>
-/// <item><b>Audio availability.</b> Playable only while the speaker's "मूळ आवाज जतन करा"
+/// <item><b>Audio availability.</b> Playable only while the speaker's "मूळ आवाज ऐकू देणे"
 /// switch is ON under the CURRENT words (<see cref="CurrentConsentWording.VoiceKeepVersion"/>),
 /// the words that disclose listening by reviewers. An ON chosen under older or unknown words
 /// (every choice made before those words existed) is not re-confirmed, so it does not
@@ -150,13 +151,10 @@ public sealed class GetLogOriginalVoiceHandler(
             return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.NoRecording));
         }
 
-        var consent = await repository.GetUserConsentStateAsync(speakerUserId, ct);
-        var keptUnderCurrentWords = consent is not null
-            && consent.FullHistoryJournal
-            && string.Equals(
-                consent.FullHistoryJournalWordingVersion,
-                CurrentConsentWording.VoiceKeepVersion,
-                StringComparison.Ordinal);
+        // D-101: his own recording needs only the switch ON (any words version); REVIEWERS need ON under the words that name them.
+        var keptUnderCurrentWords = query.CallerUserId == speakerUserId
+            ? await OriginalVoiceSwitch.IsOnForSpeakerAsync(repository, speakerUserId, ct)
+            : await OriginalVoiceSwitch.IsOnAsync(repository, speakerUserId, ct);
         if (!keptUnderCurrentWords)
         {
             return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.NotKept));

@@ -69,7 +69,7 @@ vi.mock('../../storage/AuthTokenStore', () => ({
 }));
 
 // reconcileSyncPull writes to localStorage; no-op it for this test.
-vi.mock('../SyncPullReconciler', () => ({
+vi.mock('../../../features/sync/pull/SyncPullReconciler', () => ({
     reconcileSyncPull: vi.fn().mockResolvedValue(undefined),
 }));
 

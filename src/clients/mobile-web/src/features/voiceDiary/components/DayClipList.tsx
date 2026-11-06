@@ -17,9 +17,11 @@ interface DayClipListProps {
     locale: VoiceDiaryLocale;
     dateKey: string;
     clips: UnifiedClip[];
+    /** The playback switch as the phone holds it (undefined = not known yet): passed to every card. */
+    playbackAllowed?: boolean;
 }
 
-const DayClipList: React.FC<DayClipListProps> = ({ locale, dateKey, clips }) => {
+const DayClipList: React.FC<DayClipListProps> = ({ locale, dateKey, clips, playbackAllowed }) => {
     // plr-d10 (I17, V-2): the day in his language (it was always English: "Monday, 26 Oct").
     const dayHeading = formatDayKey(dateKey, {
         weekday: 'long',
@@ -51,7 +53,7 @@ const DayClipList: React.FC<DayClipListProps> = ({ locale, dateKey, clips }) => 
             ) : (
                 <div className="space-y-3">
                     {clips.map(clip => (
-                        <ClipPlayerCard key={`${clip.source}_${clip.id}`} locale={locale} clip={clip} />
+                        <ClipPlayerCard key={`${clip.source}_${clip.id}`} locale={locale} clip={clip} playbackAllowed={playbackAllowed} />
                     ))}
                 </div>
             )}

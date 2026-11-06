@@ -29,6 +29,7 @@ using ShramSafal.Application.UseCases.Memberships.GetLabourPermissions;
 using ShramSafal.Application.UseCases.Memberships.ManageMembership;
 using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
+using ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryById;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 using ShramSafal.Domain.Privacy;
 using ShramSafal.Infrastructure.Persistence;
@@ -66,7 +67,8 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
 {
     private const string AppRoleUser = TestRoleCredentials.AppRoleUser;
     private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
-    private const string CurrentVoiceWords = "voice-keep-2026-10-30.1";
+    private const string CurrentVoiceWords = "voice-keep-2026-11-06.1";
+    private const string PreRenameVoiceWords = "voice-keep-2026-10-30.1";
 
     private static readonly Guid FarmA = Guid.Parse("27270000-0000-0000-0000-00000000000a");
     private static readonly Guid AccountA = Guid.Parse("27270000-0000-0000-0000-0000000000aa");
@@ -332,6 +334,13 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
 
         // ON, but chosen before the current words existed (pre-L5): not re-confirmed, so not counted.
         await SetVoiceKeepAsync(Worker, on: true, words: null);
+        (await ReplayAsync(Owner, logId)).UnavailableReason.Should().Be("not_kept");
+
+        // OPS-1 (H5): an ON chosen against the words before the D-50 rename names the same listeners, so it STILL plays: renaming
+        // the switch must not silently stop playback, and nobody has to re-confirm. Words nobody ever sent still do not count.
+        await SetVoiceKeepAsync(Worker, on: true, words: PreRenameVoiceWords);
+        (await ReplayAsync(Owner, logId)).Available.Should().BeTrue("an ON given under the pre-rename words keeps working");
+        await SetVoiceKeepAsync(Worker, on: true, words: "voice-keep-never-sent");
         (await ReplayAsync(Owner, logId)).UnavailableReason.Should().Be("not_kept");
 
         // ON under the current words: the speaker, the primary owner and the granted मुकादम hear it.
@@ -874,6 +883,79 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
         }
 
         return rows;
+    }
+
+    // ── fix round 2, N2 (founder D-2: OFF stops replay, never deletes; D-50 choice 2: the switch is "who may listen") ──
+    private async Task<(VoiceDiaryByIdOutcome Outcome, bool HasBytes)> VoiceDiaryByIdAsync(Guid caller, Guid clip)
+    {
+        await using var scope = _rootProvider!.CreateAsyncScope();
+        var sp = scope.ServiceProvider;
+        sp.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant(); // /voice-diary is on the admin skip-list, as in the real host
+        var r = await sp.GetRequiredService<GetVoiceDiaryByIdHandler>().HandleAsync(clip, caller);
+        return (r.Outcome, r.Clip is not null && r.Clip.CipherBytes.Length > 0);
+    }
+
+    [Fact]
+    public async Task Voice_diary_own_clip_is_refused_while_the_switch_is_off_kept_and_played_again_when_it_is_on()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var clip = Guid.NewGuid();
+        await SeedRetainedClipAsync(clip, Worker);
+
+        // OFF: the speaker's OWN clip is refused (before it is read from storage), but it is kept.
+        await SetVoiceKeepAsync(Worker, on: false, words: CurrentVoiceWords);
+        (await VoiceDiaryByIdAsync(Worker, clip)).Outcome.Should().Be(VoiceDiaryByIdOutcome.SwitchOff);
+        Convert.ToInt64(await ScalarOnSuperuserAsync("SELECT count(*) FROM ssf.voice_clips_retained WHERE clip_id = @c", ("c", clip)))
+            .Should().Be(1, "OFF never deletes the kept clip");
+
+        // ON under the current words: plays. ON under the pre-rename words: plays (the same listeners). ON with no words
+        // (before reviewers were disclosed): the speaker's own playback still works; only REVIEWERS need the words.
+        foreach (var words in new string?[] { CurrentVoiceWords, PreRenameVoiceWords, null })
+        {
+            await SetVoiceKeepAsync(Worker, on: true, words: words);
+            var on = await VoiceDiaryByIdAsync(Worker, clip);
+            on.Outcome.Should().Be(VoiceDiaryByIdOutcome.Found, "ON under {0} plays", words ?? "no words");
+            on.HasBytes.Should().BeTrue();
+        }
+
+        // Someone else's clip is never found, switch or no switch.
+        (await VoiceDiaryByIdAsync(Owner, clip)).Outcome.Should().Be(VoiceDiaryByIdOutcome.SwitchOff, "the owner's own switch is OFF (no row)");
+        await SetVoiceKeepAsync(Owner, on: true, words: CurrentVoiceWords);
+        (await VoiceDiaryByIdAsync(Owner, clip)).Outcome.Should().Be(VoiceDiaryByIdOutcome.NotFound);
+
+        // OFF again: refused again; ON again: playable again.
+        await SetVoiceKeepAsync(Worker, on: false, words: CurrentVoiceWords);
+        (await VoiceDiaryByIdAsync(Worker, clip)).Outcome.Should().Be(VoiceDiaryByIdOutcome.SwitchOff);
+        await SetVoiceKeepAsync(Worker, on: true, words: CurrentVoiceWords);
+        (await VoiceDiaryByIdAsync(Worker, clip)).Outcome.Should().Be(VoiceDiaryByIdOutcome.Found);
+    }
+
+    [Fact]
+    public async Task The_speaker_hears_his_own_record_with_the_switch_on_in_any_words_version_while_reviewers_still_need_the_words()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var clip = Guid.NewGuid();
+        var logId = Guid.NewGuid();
+        await PushAppliedAsync(Worker, "create_daily_log", "fx3-speaker-own-record", CreatePayload(logId, Worker, clip));
+        await SeedRetainedClipAsync(clip, Worker);
+
+        // OFF: nobody, the speaker included (D-101).
+        await SetVoiceKeepAsync(Worker, on: false, words: CurrentVoiceWords);
+        (await ReplayAsync(Worker, logId)).UnavailableReason.Should().Be("not_kept");
+
+        // ON with no words, and ON under words nobody ever sent: the speaker hears his OWN record; the reviewer does not.
+        foreach (var words in new string?[] { null, "voice-keep-never-sent" })
+        {
+            await SetVoiceKeepAsync(Worker, on: true, words: words);
+            (await ReplayAsync(Worker, logId)).Available.Should().BeTrue("his own record needs only the switch ON ({0})", words ?? "no words");
+            (await ReplayAsync(Owner, logId)).UnavailableReason.Should().Be("not_kept", "a reviewer still needs the words that name the reviewers");
+        }
+
+        // OFF again: refused again, and the clip is still there.
+        await SetVoiceKeepAsync(Worker, on: false, words: null);
+        (await ReplayAsync(Worker, logId)).UnavailableReason.Should().Be("not_kept");
+        Convert.ToInt64(await ScalarOnSuperuserAsync("SELECT count(*) FROM ssf.voice_clips_retained WHERE clip_id = @c", ("c", clip)))
+            .Should().Be(1, "OFF never deletes the kept clip");
     }
 
     private async Task SeedRetainedClipAsync(Guid clipId, Guid owner) => await ExecOnSuperuserAsync("""

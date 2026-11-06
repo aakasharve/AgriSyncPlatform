@@ -12,6 +12,7 @@
 import React from 'react';
 import { Pause, Play } from 'lucide-react';
 import { useResultStr } from './resultStrings';
+import { PlaybackUnavailableNote, usePlaybackSwitch } from './playbackSwitch';
 
 const WAVE_BARS = 64;
 const WAVE_GREEN = 'rgb(34, 176, 72)';
@@ -92,10 +93,13 @@ export interface ClipPlayerProps {
 
 export const ClipPlayer: React.FC<ClipPlayerProps> = ({ clipKey, durationSec, playing, progress, big, onToggle, testId }) => {
     const RS = useResultStr();
+    const playbackAllowed = usePlaybackSwitch();
     const env = React.useMemo(() => envelopeOf(clipKey, WAVE_BARS), [clipKey]);
     const colours = React.useMemo(() => colourRuns(clipKey, WAVE_BARS), [clipKey]);
     const prog = playing ? progress : 0;
     const lit = Math.round(prog * WAVE_BARS);
+    // Fix round 3 (M1): while the playback switch is OFF there is no ▶ - the founder's D-31 words stand where the player would be.
+    if (playbackAllowed === false) return <PlaybackUnavailableNote testId={`${testId}-off`} />;
     return (
         <div className="relative flex items-center gap-2.5 overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-2" data-testid={`${testId}-wave`}>
             <button type="button" onClick={onToggle} aria-label={playing ? RS.stop : RS.play} data-testid={testId} data-playing={playing ? 'yes' : 'no'}

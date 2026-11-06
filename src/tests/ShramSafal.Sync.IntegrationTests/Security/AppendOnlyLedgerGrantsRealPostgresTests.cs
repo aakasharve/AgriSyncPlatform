@@ -181,6 +181,13 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261102163914_AddWorkerIdentity",
 
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane OPS-1, L-1, fix round 2); Down() read in full: drops ONE partial unique index,
+        //    ux_erasure_requests_one_waiting_per_person, on ssf.erasure_requests. Up() DOES touch ssf.audit_events: it first marks
+        //    duplicate WAITING requests (the oldest per person is kept) Cancelled and INSERTS one audit row per cancelled duplicate
+        //    (actor system_migration), lifting FORCE ROW LEVEL SECURITY on ssf.audit_events for that single insert and restoring it exactly
+        //    as found (only when there is a duplicate to cancel); it then creates the index. No table, column, policy or grant is created,
+        //    changed or dropped; no ledger's grants are touched. Safe to revert and re-apply mid-proof.
+        "20261105190000_AddOneWaitingErasureRequestIndex",
         // ── Reviewed 2026-11-06 (spec: plr-d10 lane L8b-1); Down() read in full. Up() ADDs the nullable
         //    schedule_subscriptions.reference_date and puts ssf.schedule_subscriptions and ssf.schedule_migration_events under
         //    ENABLE + FORCE RLS with three policies (tenant on both, user-scoped select on subscriptions). Down() drops the

@@ -48,7 +48,7 @@ export type CoreDataCategoryCode = (typeof CORE_DATA_CATEGORY_CODES)[number];
 /**
  * Purposes that are NOT core and must never be bundled into the gate's single tap —
  * master plan §W4.3 step 4. Every one of these defaults to OFF and is granted, if ever,
- * from `Settings → Data & Privacy` as its own decision.
+ * from the app's Privacy and consent page as its own decision.
  *
  * The first three already exist as the three toggles on `ConsentScreen` (all default
  * false — see `ConsentState.default()`); they are named here so the boundary between

@@ -121,3 +121,30 @@ AppRelease__ApkUrl="https://shramsafal.in/apk"
 - Override `Serilog__WriteTo__1__Args__path` only if the production log file path needs to move off `/var/log/agrisync/api-.log`.
 - Production startup no longer auto-applies pending EF migrations unless `ALLOW_PRODUCTION_STARTUP_MIGRATIONS=true` is set intentionally for a controlled maintenance window.
 - Preferred production flow: run database migrations as a separate deployment step, then start the API and validate `/health` plus `/health/ready`.
+
+## Reverse proxy for 10-minute recordings (lane OPS-1, F73; the proxy is not in this repository)
+
+A 10-minute recording takes about 1 to 2.5 minutes to parse and is about 3 MB. Default nginx (60 s, 1 MB) cuts it. Set the timeouts for
+`/shramsafal/ai/` and the body limit PER LOCATION, so that the voice limit does not also cap the photo routes (receipt and sale-slip
+photos go to `/shramsafal/ai/document-sessions` and are not compressed by the app; Kestrel allows 50 MB):
+
+```
+location /shramsafal/ai/ {
+    client_max_body_size    10m;     # voice: covers a 10-minute clip with headroom
+    proxy_read_timeout      300s;    # twice the slowest measured parse
+    proxy_send_timeout      300s;
+    send_timeout            300s;
+    proxy_request_buffering off;     # stream the upload to Kestrel instead of spooling it on the proxy
+}
+location ~ ^/shramsafal/ai/(document-sessions/|receipt-extract|patti-extract) {
+    client_max_body_size    50m;     # photos: the phone posts receipt and sale-slip photos to document-sessions AND to the direct
+                                     # receipt-extract / patti-extract routes; the largest phone photo is not measured yet; Kestrel's own ceiling is 50 MB
+    proxy_read_timeout      300s;
+    proxy_send_timeout      300s;
+    send_timeout            300s;
+    proxy_request_buffering off;
+}
+```
+
+(The regex `location` wins over the `/shramsafal/ai/` prefix for the photo routes.) **nginx refuses a `proxy_pass` that has a URI path inside a regex `location`** ("`proxy_pass` cannot have URI part in location given by regular expression"), and the reload fails. If the existing prefix block says `proxy_pass http://upstream/some/path/;`, do not copy it into the regex block: use `proxy_pass http://upstream;` with no path there (the request URI is passed through unchanged). If an AWS load balancer sits in front, its idle timeout must also be at least 300
+seconds (default 60). Verify with a real 10-minute recording and with the largest receipt photo before release.

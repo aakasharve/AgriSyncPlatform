@@ -1861,6 +1861,56 @@ internal sealed class ShramSafalRepository(
         return true;
     }
 
+    public async Task<bool> TryAddErasureRequestAsync(
+        ErasureRequest request, AuditEvent requestedAudit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(requestedAudit);
+
+        await db.ErasureRequests.AddAsync(request, ct);
+        await db.AuditEvents.AddAsync(requestedAudit, ct);
+
+        // A refused insert would abort the surrounding request transaction, and the caller still has to read the
+        // winning request and write an audit row. A SAVEPOINT absorbs the refusal (same pattern as TryAddFieldOperatorAsync).
+        var transaction = db.Database.CurrentTransaction;
+        string? savepoint = null;
+        if (transaction is not null)
+        {
+            savepoint = "sp_erasure_request_" + Guid.NewGuid().ToString("N");
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ux_erasure_requests_one_waiting_per_person"))
+        {
+            db.Entry(request).State = EntityState.Detached;
+            db.Entry(requestedAudit).State = EntityState.Detached;
+            if (transaction is not null && savepoint is not null)
+            {
+                await RollBackQuietlyAsync(transaction, savepoint);
+            }
+
+            return false;
+        }
+
+        if (transaction is not null && savepoint is not null)
+        {
+            try
+            {
+                await transaction.ReleaseSavepointAsync(savepoint, ct);
+            }
+            catch (PostgresException)
+            {
+                // Housekeeping only; the savepoint is discarded at COMMIT.
+            }
+        }
+
+        return true;
+    }
+
     public async Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
     {
         return await db.FieldOperators.FindAsync([id], ct);

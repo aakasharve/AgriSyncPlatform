@@ -3,11 +3,12 @@
 We ask for three separate permissions to keep your data safe. Each permission is independent —
 you can say yes to one and no to another. You can revoke at any time.
 
-## 1. Keep original voice
+## 1. Allow playback of my original voice
 - Default: OFF
-- Meaning: Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.
-- If you say yes: Saving of new voice recordings to your account is turned on. Each recording shows its own saving status in the Voice Diary. Recordings that are saved stay until you erase them or close your account.
-- If you say no: New voice recordings will not be saved to your account.
+- Meaning: Allow me and authorized reviewers on this farm to play back my original voice.
+- ShramSafal keeps the original sound of every record as proof; this switch only decides whether it can be played.
+- If you say yes: you can play back your original voice from Voice notes, and authorized reviewers on this farm can play it from the record.
+- If you say no: playback stops and nothing is deleted. A recording made while this is off cannot be played later. <!-- PROPOSED (D-101) --> While your phone is offline, you may still hear your own recordings on your phone.
 
 ## 2. Let Shram Safal grow more capable from my experience
 - Default: OFF
@@ -22,6 +23,6 @@ you can say yes to one and no to another. You can revoke at any time.
 **Security:** Files in our cloud storage are kept encrypted. On your phone, recordings stay in the app's own storage.
 **Storage in India:** Your data is stored in India (Mumbai).
 **Cross-border transfer notice:** If our Indian speech service cannot handle a recording, the voice is sent to Google Gemini (outside India) to be understood. Only text comes back to us. We cannot tell you how long Google keeps it.
-**Your rights:** In Settings you can review your consent and ask us to erase your data or give you a copy.
+**Your rights:** In **Privacy and consent** (in the app: **गोपनीयता व संमती**) you can review your consent and ask us to erase your data or give you a copy.
 
-To revoke: Settings → Consent → "Revoke All"
+To revoke: **Privacy and consent** (in the app: **गोपनीयता व संमती**) → "Revoke all"

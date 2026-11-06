@@ -52,6 +52,12 @@ export const PENDING_REACCEPTANCE_PREF_KEY = 'shramsafal_consent_notice_reaccept
 export const LOCAL_WRITE_LIMIT_MS = 2_000;
 /** The one direct send tried when the queue cannot be written. */
 export const DIRECT_SEND_LIMIT_MS = 15_000;
+/**
+ * lane OPS-1 (F99 L-4): the sheet's "has the server already got his acceptance?" read. On a stalled network it used to wait
+ * for the platform's own (very long) timeout while the sheet showed nothing. Past this the answer is "could not tell", which
+ * means ask him (the same as a failed read).
+ */
+export const SERVER_CHECK_LIMIT_MS = 8_000;
 
 /**
  * `queued` — safely on the phone (and being sent in the background); `sent` — the queue could
@@ -71,12 +77,13 @@ export type ReacceptanceFlushOutcome = 'nothing-pending' | 'offline' | 'sent' | 
  */
 export async function needsNoticeReacceptance(
     readServerAcceptedVersion: () => Promise<string | null | undefined>,
+    serverCheckLimitMs: number = SERVER_CHECK_LIMIT_MS,
 ): Promise<boolean> {
     if (await hasCoreConsent()) return false;
 
     let accepted: string | null | undefined;
     try {
-        accepted = await readServerAcceptedVersion();
+        accepted = await withTimeout(readServerAcceptedVersion(), serverCheckLimitMs);
     } catch {
         return true; // could not tell → ask
     }

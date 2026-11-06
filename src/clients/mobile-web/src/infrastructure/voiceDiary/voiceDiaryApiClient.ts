@@ -29,6 +29,7 @@
 import { z } from 'zod';
 import { agriSyncClient } from '../api/AgriSyncClient';
 import { isGuidString } from '../voice/archiveClipId';
+import { ORIGINAL_VOICE_NOT_KEPT_CODE, ORIGINAL_VOICE_NOT_KEPT_ERROR } from './originalVoiceNotKept';
 
 // ---------------------------------------------------------------------------
 // Wire shapes (mirror VoiceDiaryEndpoints.cs / RetainedClipResult /
@@ -254,9 +255,14 @@ export async function getVoiceDiaryById(clipId: string): Promise<VoiceDiaryByIdR
         return parsed.data;
     } catch (error) {
         // Axios threw — peek at the response for a 404 to surface as `null`.
-        const status = (error as { response?: { status?: number } }).response?.status;
-        if (status === 404) {
+        const failed = (error as { response?: { status?: number; data?: { error?: string } } }).response;
+        if (failed?.status === 404) {
             return null;
+        }
+        // Fix round 2 (N2, founder D-2): while the playback switch is OFF the server refuses to play the clip. The clip is kept; the
+        // card shows the founder's "Original recording unavailable" instead of a generic failure.
+        if (failed?.status === 403 && failed.data?.error === ORIGINAL_VOICE_NOT_KEPT_CODE) {
+            throw new Error(ORIGINAL_VOICE_NOT_KEPT_ERROR);
         }
         throw error;
     }

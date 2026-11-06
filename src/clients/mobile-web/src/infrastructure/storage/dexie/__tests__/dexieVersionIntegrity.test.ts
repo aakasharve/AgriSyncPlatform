@@ -60,7 +60,7 @@ const VERSIONS_DIR = join(STORAGE_DIR, 'dexie', 'versions');
 function stripComments(source: string): string {
     return source
         .replace(/\/\*[\s\S]*?\*\//g, ' ')
-        .replace(/^[ 	]*\/\/.*$/gm, ' ')
+        .replace(/^[ \t]*\/\/.*$/gm, ' ')
         .replace(/([^:])\/\/.*$/gm, '$1');
 }
 

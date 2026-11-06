@@ -218,20 +218,28 @@ public sealed class ErasureWaitsThirtyDaysRealPostgresTests(ITestOutputHelper ou
     }
 
     [Fact]
-    public async Task A_cancel_ends_every_request_still_waiting_for_him()
+    public async Task The_database_refuses_a_second_waiting_request_and_a_cancel_ends_the_one_that_waits()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var (requestId, requestedAt, _) = await RequestAsync(Worker);
-        // Two phones asking at the same instant could each have made one before either saw the other.
+        // lane OPS-1 (L-4 of the review): this test used to prove "a cancel ends EVERY request still waiting" with two rows. With the
+        // one-waiting-request index two waiting rows for one person can no longer exist, so ShramSafalRepository.
+        // CancelOtherWaitingErasureRequestsForAsync (the handler's "cancel the others") now finds nothing to cancel; it stays as a safety
+        // net for a database where the index was dropped and has NO real-Postgres coverage of its own any more. The test is named for
+        // what it asserts now: the refusal, and the cancel of the single waiting request.
+        // lane OPS-1 (L-1): two phones asking at the same instant could once each make one before either saw the other.
+        // The database now refuses the second waiting row for the same person (partial unique index), so the "twin" can
+        // no longer exist; the cancel still ends the one request that waits.
         var twin = Guid.NewGuid();
-        await ExecOnSuperuserAsync(
+        var refusal = await Assert.ThrowsAsync<PostgresException>(() => ExecOnSuperuserAsync(
             "INSERT INTO ssf.erasure_requests (id, requested_by_user_id, on_behalf_of_user_id, status, requested_at_utc) VALUES (@id, @u, NULL, 0, now())",
-            ("id", twin), ("u", Worker));
-        (await WaitingCountAsync(Worker)).Should().Be(2);
+            ("id", twin), ("u", Worker)));
+        refusal.SqlState.Should().Be("23505");
+        refusal.ConstraintName.Should().Be("ux_erasure_requests_one_waiting_per_person");
+        (await WaitingCountAsync(Worker)).Should().Be(1);
 
         (await CancelAsync(Worker, requestId)).Status.Should().Be(HttpStatusCode.OK);
         (await WaitingCountAsync(Worker)).Should().Be(0, "a cancel ends everything still waiting for him");
-        (await StatusAsync(twin)).Should().Be(ErasureStatus.Cancelled);
         await RunWorkerPassAsync(requestedAt + Wait + TimeSpan.FromDays(1));
         (await OperatorOfAsync(WorkerLog)).Should().Be(Worker);
     }

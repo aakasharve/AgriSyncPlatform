@@ -19,6 +19,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const ROOT = process.cwd();
@@ -47,8 +48,12 @@ describe('Android safe-area insets below API 35 (source contract; real proof = e
         expect(css).toMatch(/\.pt-safe-area\s*\{\s*padding-top:\s*var\(--safe-area-inset-top,\s*env\(safe-area-inset-top/);
     });
 
-    it('no screen uses a raw env(safe-area-inset-*) that the native publisher cannot override', () => {
-        const offenders: string[] = [];
+    it('no screen uses a raw env(safe-area-inset-*) that the native publisher cannot override', async () => {
+        // F85 (lane OPS-1): the cost was never the check. It read ~1800 files one after another in a synchronous loop and
+        // decoded every one, so on a loaded full run each read waited its turn behind the other workers' I/O and the
+        // total blew the 15 s limit. Now: list the files (directory reads only), read them ALL CONCURRENTLY, and look for
+        // the literal in the raw bytes first (no decoding); only the few files that contain it are decoded and checked.
+        const files: string[] = [];
         const walk = (dir: string) => {
             for (const entry of readdirSync(dir, { withFileTypes: true })) {
                 const name = entry.name;
@@ -57,14 +62,20 @@ describe('Android safe-area insets below API 35 (source contract; real proof = e
                     if (name !== '__tests__' && name !== 'node_modules') walk(full);
                     continue;
                 }
-                if (!/\.(tsx?|css)$/.test(name) || name === 'global-theme.css') continue;
-                const text = readFileSync(full, 'utf8');
-                // every env(safe-area-inset-x) must sit inside var(--safe-area-inset-x, ...)
-                const raw = text.match(/(?<!var\(--safe-area-inset-[a-z]+,\s*)env\(safe-area-inset-/g);
-                if (raw) offenders.push(`${full} (${raw.length})`);
+                if (/\.(tsx?|css)$/.test(name) && name !== 'global-theme.css') files.push(full);
             }
         };
         walk(join(ROOT, 'src'));
+        expect(files.length).toBeGreaterThan(500); // the scan is not vacuous
+
+        const offenders: string[] = [];
+        await Promise.all(files.map(async (full) => {
+            const bytes = await readFile(full);
+            if (bytes.indexOf('env(safe-area-inset-') === -1) return;
+            // every env(safe-area-inset-x) must sit inside var(--safe-area-inset-x, ...)
+            const raw = bytes.toString('utf8').match(/(?<!var\(--safe-area-inset-[a-z]+,\s*)env\(safe-area-inset-/g);
+            if (raw) offenders.push(`${full} (${raw.length})`);
+        }));
         expect(offenders).toEqual([]);
     });
 });
