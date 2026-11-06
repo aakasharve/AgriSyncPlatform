@@ -22,6 +22,7 @@ import { DATA_RIGHTS_BUNDLES } from '../dataRightsTranslations';
 import { PII_REVIEW_BUNDLES } from '../piiReviewTranslations';
 import { VOICE_DIARY_BUNDLES } from '../voiceDiaryTranslations';
 import { translations } from '../translations';
+import { parseLegalMarkdown } from '../../features/legal/legalMarkdown';
 import { CONSENT_NOTICE, canonicalNoticeText } from '../../features/consent/gate/consentNotice';
 
 // Built by concatenation on purpose: .github/workflows/legal-review-gate.yml counts the
@@ -118,6 +119,21 @@ describe('no user-visible string carries an internal review marker', () => {
             ...filesContaining(join(root, 'legal'), (n) => /\.(md|txt|json|html|svg)$/i.test(n), [], (b) => b.includes(MARKER)),
         ];
         expect(hits).toEqual([]);
+    });
+
+    it('the PROPOSED mark beside the offline line in the six documents is an HTML comment and never reaches a farmer', () => {
+        const root = resolve(__dirname, '../../../public');
+        const docs = ['legal/privacy_en.md', 'legal/privacy_mr.md', 'legal/terms_en.md', 'legal/terms_mr.md', 'consent/agreement_en.md', 'consent/agreement_mr.md'];
+        for (const d of docs) {
+            const raw = readFileSync(join(root, d), 'utf8');
+            expect(raw, d).toContain('<!-- PROPOSED (D-101) -->');
+            // both renderers (legalMarkdown.ts, ConsentAgreement.tsx) strip comments first; assert the same strip leaves no marker
+            expect(raw.replace(/<!--[\s\S]*?-->/g, ''), d).not.toMatch(/PROPOSED/);
+        }
+        for (const d of docs.slice(0, 4)) {
+            const blocks = JSON.stringify(parseLegalMarkdown(readFileSync(join(root, d), 'utf8')));
+            expect(blocks, d).not.toMatch(/PROPOSED/);
+        }
     });
 
     it('no shipped source file builds the runtime prefix any more', () => {

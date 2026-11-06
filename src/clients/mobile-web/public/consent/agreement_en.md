@@ -8,7 +8,7 @@ you can say yes to one and no to another. You can revoke at any time.
 - Meaning: Allow me and authorized reviewers on this farm to play back my original voice.
 - ShramSafal keeps the original sound of every record as proof; this switch only decides whether it can be played.
 - If you say yes: you can play back your original voice from Voice notes, and authorized reviewers on this farm can play it from the record.
-- If you say no: playback stops and nothing is deleted. A recording made while this is off cannot be played later. While your phone is offline, you may still hear your own recordings on your phone.
+- If you say no: playback stops and nothing is deleted. A recording made while this is off cannot be played later. <!-- PROPOSED (D-101) --> While your phone is offline, you may still hear your own recordings on your phone.
 
 ## 2. Let Shram Safal grow more capable from my experience
 - Default: OFF

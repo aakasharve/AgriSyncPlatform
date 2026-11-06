@@ -16,6 +16,7 @@
  */
 import React, { useEffect, useSyncExternalStore } from 'react';
 import { agriSyncClient } from '../../../../infrastructure/api/AgriSyncClient';
+import { onFarmerSessionEnded } from '../../../../infrastructure/storage/endFarmerSession';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { tVoiceDiary } from '../../../../i18n/voiceDiaryTranslations';
 
@@ -24,6 +25,7 @@ type Listener = () => void;
 let known: boolean | undefined;
 let askedAtMs = 0;
 let inFlight: Promise<void> | null = null;
+let generation = 0;
 const listeners = new Set<Listener>();
 
 /** How long an answer is trusted before a newly mounted player asks again. */
@@ -42,9 +44,10 @@ export function publishPlaybackSwitch(granted: boolean): void {
 /** Ask the server once (concurrent callers share the one request). A failed read leaves the last answer as it was. */
 export function refreshPlaybackSwitch(): Promise<void> {
     if (inFlight) return inFlight;
+    const asked = generation;
     inFlight = Promise.resolve()
         .then(() => agriSyncClient.getConsent())
-        .then(dto => publishPlaybackSwitch(dto.fullHistoryJournal === true))
+        .then(dto => { if (asked === generation) publishPlaybackSwitch(dto.fullHistoryJournal === true); })
         .catch(() => undefined) // offline / unreachable: unknown stays unknown, a known answer stays known
         .finally(() => { inFlight = null; });
     return inFlight;
@@ -63,13 +66,25 @@ export function usePlaybackSwitch(): boolean | undefined {
     return value;
 }
 
-/** Tests only: forget what the phone knows. */
-export function resetPlaybackSwitchForTests(): void {
+/** The switch as the phone knows it right now, outside React (tests, non-React callers). */
+export function peekPlaybackSwitch(): boolean | undefined {
+    return known;
+}
+
+/** Forget what the phone knows (a different person is about to use it, or tests). A late answer for the previous person is dropped. */
+export function resetPlaybackSwitch(): void {
     known = undefined;
     askedAtMs = 0;
     inFlight = null;
+    generation += 1;
     emit();
 }
+
+/** Tests only. */
+export const resetPlaybackSwitchForTests = resetPlaybackSwitch;
+
+// Fix round 4 (OPS-1 L2): sign-out and an account switch (infrastructure/storage/endFarmerSession) reset the store.
+onFarmerSessionEnded(resetPlaybackSwitch);
 
 /** The founder's D-31 words, in the language the app is in (anything but English is Marathi). */
 export function usePlaybackUnavailableWords(): string {

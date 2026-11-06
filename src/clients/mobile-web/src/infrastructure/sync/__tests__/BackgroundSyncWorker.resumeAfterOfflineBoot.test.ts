@@ -30,7 +30,7 @@ vi.mock('../../api/AgriSyncClient', async () => {
 vi.mock('../../../features/sync/pull/SyncPullReconciler', () => ({ reconcileSyncPull: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../PayloadValidator', () => ({ validatePayload: vi.fn().mockReturnValue({ ok: true, errors: [] }) }));
 vi.mock('../AiJobWorker', () => ({ AiJobWorker: { run: vi.fn().mockResolvedValue(undefined) } }));
-vi.mock('../../storage/endFarmerSession', () => ({ endFarmerSessionLocally: vi.fn() }));
+vi.mock('../../storage/endFarmerSession', () => ({ endFarmerSessionLocally: vi.fn(), notifyFarmerSessionEnded: vi.fn(), onFarmerSessionEnded: vi.fn(() => () => undefined) }));
 
 Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true });
 

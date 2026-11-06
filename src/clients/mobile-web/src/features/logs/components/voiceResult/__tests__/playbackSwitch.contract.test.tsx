@@ -22,7 +22,8 @@ vi.mock('../../../../../infrastructure/storage/DexieDatabase', () => ({
     getDatabase: () => ({ attachments: { where: () => ({ equals: () => ({ count: async () => 0 }) }) } }),
 }));
 
-import { publishPlaybackSwitch, resetPlaybackSwitchForTests } from '../playbackSwitch';
+import { peekPlaybackSwitch, publishPlaybackSwitch, resetPlaybackSwitchForTests } from '../playbackSwitch';
+import { endFarmerSessionLocally, notifyFarmerSessionEnded } from '../../../../../infrastructure/storage/endFarmerSession';
 import { useClipPlayback } from '../useClipPlayback';
 import ClipPlayer from '../ClipPlayer';
 import ActivityFeedCard from '../../ActivityFeedCard';
@@ -139,5 +140,20 @@ describe('ActivityFeedCard (today\'s activity on आढावा)', () => {
         render(card(onToggle));
         fireEvent.click(screen.getByTestId('card-play'));
         expect(onToggle).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('fix round 4 (L2): the phone forgets the switch when the person changes', () => {
+    it('sign-out (endFarmerSessionLocally) forgets a known state, so the next person starts unknown', () => {
+        publishPlaybackSwitch(false);
+        expect(peekPlaybackSwitch()).toBe(false);
+        endFarmerSessionLocally();
+        expect(peekPlaybackSwitch()).toBeUndefined();
+    });
+
+    it('an account switch (notifyFarmerSessionEnded) forgets it too', async () => {
+        publishPlaybackSwitch(true);
+        notifyFarmerSessionEnded();
+        expect(peekPlaybackSwitch()).toBeUndefined();
     });
 });

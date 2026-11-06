@@ -145,7 +145,7 @@ document that actually tells you what happens to your voice.
 
 In short: an evidence copy of every recording is always kept as proof. The optional
 **"Allow playback of my original voice"** switch only decides whether your original voice
-can be played back; turning it off stops playback and never deletes anything. A recording made while it is off cannot be played later. While your phone is offline, you may still hear your own recordings on your phone.
+can be played back; turning it off stops playback and never deletes anything. A recording made while it is off cannot be played later. <!-- PROPOSED (D-101) --> While your phone is offline, you may still hear your own recordings on your phone.
 
 ---
 

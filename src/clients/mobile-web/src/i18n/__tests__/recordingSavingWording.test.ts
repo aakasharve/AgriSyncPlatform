@@ -10,6 +10,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { tVoiceDiary, VOICE_DIARY_BUNDLES } from '../voiceDiaryTranslations';
 import { tConsent, CONSENT_BUNDLES } from '../consentTranslations';
+import { D2_DESCRIPTION_MR } from '../voiceSwitchWords';
 
 const agreement = (lang: 'mr' | 'en') =>
     readFileSync(resolve(__dirname, `../../../public/consent/agreement_${lang}.md`), 'utf8');
@@ -144,9 +145,14 @@ describe('fix round 3 add-on - "रेकॉर्डिंग" for the sound re
         expect(tVoiceDiary('mr-IN', 'firstGrant.bullet1')).toBe('प्रत्येक रेकॉर्डिंगची जतन स्थिती दिसते');
         expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedBody')).toBe('प्रत्येक रेकॉर्डिंगची जतन स्थिती खाली पाहा.');
         const kept = tVoiceDiary('mr-IN', 'stopFutureConfirm.keptNote');
-        expect(kept).toContain('आधी जतन झालेली रेकॉर्डिंग');
+        expect(kept).toBe('आधी जतन झालेली रेकॉर्डिंग जशी आहे तशीच राहील. ती मिटवायची असेल तर ती वेगळी कृती आहे.');
+        // the switch helper paragraph on आवाज नोंदी: "रेकॉर्डिंग" throughout (the place name is not part of this paragraph)
+        const helper = tVoiceDiary('mr-IN', 'consentToggle.helper');
+        expect(helper).toContain('आधी जतन झालेली रेकॉर्डिंग तुम्ही मिटवेपर्यंत राहील.');
+        // the founder's own D-2 sentence says "आवाज नोंदीसोबत" = with the WORK record; that one stays, everything else in the paragraph is the recording
+        expect(helper.replace(D2_DESCRIPTION_MR, '')).not.toMatch(/नोंद/);
         for (const k of ['firstGrant.bullet1', 'retentionBanner.grantedBody', 'stopFutureConfirm.keptNote'] as const) {
-            expect(tVoiceDiary('mr-IN', k), k).not.toMatch(/नोंदी?ची|नोंदी/);
+            expect(tVoiceDiary('mr-IN', k), k).not.toMatch(/नोंदी?ची|नोंदी\b/);
         }
     });
 });
