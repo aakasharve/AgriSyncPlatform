@@ -23,8 +23,18 @@ internal sealed class AiOrchestrator(
     IAiPromptBuilder promptBuilder,
     IRawBlobStore blobStore,
     IShramSafalRepository shramSafalRepository,
-    ILogger<AiOrchestrator> logger) : IAiOrchestrator
+    ILogger<AiOrchestrator> logger,
+    // OPS-1 (F36): optional and last so every direct construction keeps compiling. When present (the web host),
+    // the request's database connections go back to the pool while a provider call or a retry back-off waits.
+    AgriSync.BuildingBlocks.Persistence.RequestTransactionRelease? requestRelease = null) : IAiOrchestrator
 {
+    /// <summary>
+    /// Runs a slow call that never touches the database with the request's connections handed back (F36).
+    /// Falls back to a plain call when no request transaction is open.
+    /// </summary>
+    private Task<T> WithoutDbConnectionsAsync<T>(Func<Task<T>> work, CancellationToken ct) =>
+        requestRelease is null ? work() : requestRelease.RunWithoutConnectionsAsync(work, ct);
+
     private const int MinProviderAttempts = 1;
     private const int MaxProviderAttempts = 5;
     private const int RetryBaseDelayMs = 200;
@@ -408,11 +418,13 @@ internal sealed class AiOrchestrator(
         try
         {
             await using var transcribeStream = new MemoryStream(payload, writable: false);
-            transcribeResult = await transcriber.TranscribeAsync(
-                transcribeStream,
-                mimeType,
-                languageHint,
-                transcribeMode,
+            transcribeResult = await WithoutDbConnectionsAsync(
+                () => transcriber.TranscribeAsync(
+                    transcribeStream,
+                    mimeType,
+                    languageHint,
+                    transcribeMode,
+                    ct),
                 ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1253,7 +1265,13 @@ internal sealed class AiOrchestrator(
                 retryDelay.TotalMilliseconds,
                 execution.FailureClass);
 
-            await Task.Delay(retryDelay, ct);
+            await WithoutDbConnectionsAsync(
+                async () =>
+                {
+                    await Task.Delay(retryDelay, ct);
+                    return 0;
+                },
+                ct);
         }
 
         return lastFailure ?? VoiceAttemptExecution.Failed(
@@ -1315,7 +1333,13 @@ internal sealed class AiOrchestrator(
                 retryDelay.TotalMilliseconds,
                 execution.FailureClass);
 
-            await Task.Delay(retryDelay, ct);
+            await WithoutDbConnectionsAsync(
+                async () =>
+                {
+                    await Task.Delay(retryDelay, ct);
+                    return 0;
+                },
+                ct);
         }
 
         return lastFailure ?? ReceiptAttemptExecution.Failed(
@@ -1363,7 +1387,9 @@ internal sealed class AiOrchestrator(
         try
         {
             await using var stream = new MemoryStream(payload, writable: false);
-            var result = await provider.ParseVoiceAsync(stream, mimeType, languageHint, systemPrompt, ct);
+            var result = await WithoutDbConnectionsAsync(
+                () => provider.ParseVoiceAsync(stream, mimeType, languageHint, systemPrompt, ct),
+                ct);
             var latencyMs = ToLatencyMs(stopwatch.Elapsed);
 
             if (!result.Success)
@@ -1495,7 +1521,9 @@ internal sealed class AiOrchestrator(
         try
         {
             await using var stream = new MemoryStream(payload, writable: false);
-            var result = await providerCall(provider, stream, mimeType, systemPrompt, ct);
+            var result = await WithoutDbConnectionsAsync(
+                () => providerCall(provider, stream, mimeType, systemPrompt, ct),
+                ct);
             var latencyMs = ToLatencyMs(stopwatch.Elapsed);
 
             if (!result.Success)

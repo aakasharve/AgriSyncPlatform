@@ -203,10 +203,21 @@ import {
  * text. Everyone signed in is asked ONCE (`features/consent/reask`); until he ticks, the phone keeps
  * no new raw voice recording (`assertCoreConsentForVoiceStorage`). The server never refuses him for
  * the older acceptance (P11).
+ *
+ * `notice-2026-11-06.1` - lane OPS-1, two changes in ONE version:
+ *   (a) F49 / F99 L-5, the WHERE-TO-GO correction: the English notice, Privacy Notice (§7, §8) and Terms (§8) sent a
+ *       farmer to "Settings → Data & Privacy", a place the app does not have; they now name "Privacy and consent"
+ *       (in the app: "गोपनीयता व संमती"). On its own that is NOT material (only an address).
+ *   (b) founder D-50 (2026-11-06, choice 2): every recording's evidence copy is ALWAYS kept as proof; the switch is
+ *       renamed "मूळ आवाज ऐकू देणे" / "Allow playback of my original voice" and decides only whether the original voice
+ *       can be played back; turning it OFF stops playback and never deletes. Nothing stored changes - but what a
+ *       person is told happens to his voice does, so this is MATERIAL (orchestrator call, F99 fix-pass-2 rules).
+ * Because (b) is material, the accepted list stands alone again: `notice-2026-11-02.2` and older are asked ONCE
+ * (the one-time notice sheet). `notice-2026-11-05.1` was never released.
  */
-export const NOTICE_VERSION = 'notice-2026-11-02.2';
-export const PRIVACY_POLICY_VERSION = 'privacy-2026-11-02.2';
-export const TERMS_VERSION = 'terms-2026-11-02.2';
+export const NOTICE_VERSION = 'notice-2026-11-06.1';
+export const PRIVACY_POLICY_VERSION = 'privacy-2026-11-06.1';
+export const TERMS_VERSION = 'terms-2026-11-06.1';
 
 /**
  * Founder D-13: "Ask again only when data use or terms materially change. Spelling, formatting
@@ -216,8 +227,9 @@ export const TERMS_VERSION = 'terms-2026-11-02.2';
  * name exactly the text that was shown). This list says which accepted versions still cover
  * the terms in force, so nobody is re-asked for a typo: a NON-material rewording adds its new
  * version here and keeps the old ones; a MATERIAL change replaces the list with the new
- * version alone. `notice-2026-11-02.2` (the 30-day erasure wait, D-71) is material, so it stands
- * alone: an acceptance of `notice-2026-10-30.1` or older is asked once more.
+ * version alone. `notice-2026-11-02.2` (the 30-day erasure wait, D-71) is material, so it stood
+ * alone: an acceptance of `notice-2026-10-30.1` or older is asked once more. `notice-2026-11-06.1` (D-50, the
+ * evidence copy is always kept / the switch renamed) is material too, so it stands alone: `.11-02.2` is asked once.
  */
 export const ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT: readonly string[] = [NOTICE_VERSION];
 
@@ -285,7 +297,7 @@ export interface NoticeCopy {
      * `boardComplaint` is the DPDP §5(1)(c) disclosure — his right to take a complaint
      * to the Data Protection Board of India. It is a sibling of `withdrawal` rather than
      * an entry in `items` on purpose: `where` promises that the items above it are done
-     * from `Settings → Data & Privacy`, and a complaint to the Board is not. Filing it
+     * from the app's Privacy and consent page, and a complaint to the Board is not. Filing it
      * under that promise would be a false statement about where to go.
      *
      * It states the RIGHT and nothing more. No Board address, email, portal URL or form
@@ -357,7 +369,7 @@ const mr: NoticeCopy = {
             id: 'voiceUploads',
             title: 'आवाज आणि जोडलेली माहिती',
             data: 'तुम्ही बोललेलं, लिहिलेलं, फोटो, कागदपत्रं',
-            purpose: 'काम समजून योग्य ठिकाणी मांडण्यासाठी. माईक तुम्ही सुरू केल्यावरच वापरला जातो',
+            purpose: 'काम समजून योग्य ठिकाणी मांडण्यासाठी. माईक तुम्ही सुरू केल्यावरच वापरला जातो. प्रत्येक आवाजाची पुराव्याची प्रत नेहमी जतन केली जाते; "मूळ आवाज ऐकू देणे" बंद केल्यास ऐकणं थांबतं, पण काहीही मिटवलं जात नाही',
             purposes: ['VOICE_PROCESSING_FOR_WORK_RECORD'],
             dataCategories: ['VOICE_AUDIO_AND_TRANSCRIPT'],
         },
@@ -445,7 +457,7 @@ const en: NoticeCopy = {
             id: 'voiceUploads',
             title: 'Voice and uploads',
             data: 'What you speak, type, photograph or upload',
-            purpose: 'to understand your work and place it correctly. The microphone runs only when you start it',
+            purpose: 'to understand your work and place it correctly. The microphone runs only when you start it. An evidence copy of every recording is always kept as proof; turning "Allow playback of my original voice" off stops playback but never deletes',
             purposes: ['VOICE_PROCESSING_FOR_WORK_RECORD'],
             dataCategories: ['VOICE_AUDIO_AND_TRANSCRIPT'],
         },
@@ -481,7 +493,7 @@ const en: NoticeCopy = {
     processors: 'Service providers may handle limited information for OTP, secure cloud hosting, speech processing, weather, file storage, notifications and technical support. We send them only what that task needs. Their own terms apply to what they hold.',
     rights: {
         heading: 'Your rights',
-        where: 'In Settings → Data & Privacy, or by writing to arvesystems@gmail.com:',
+        where: 'In Privacy and consent (गोपनीयता व संमती) in the app, or by writing to arvesystems@gmail.com:',
         items: [
             'Review or withdraw your consent.',
             'Ask to see, correct or get a copy of your information.',

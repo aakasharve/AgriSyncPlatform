@@ -67,7 +67,7 @@ public sealed record LogOriginalVoiceResult(
 /// the recording reached is only the one THIS record links to. Anyone else is refused; a
 /// person of another farm cannot even see the record (row-level security), so he gets
 /// "not found".</item>
-/// <item><b>Audio availability.</b> Playable only while the speaker's "मूळ आवाज जतन करा"
+/// <item><b>Audio availability.</b> Playable only while the speaker's "मूळ आवाज ऐकू देणे"
 /// switch is ON under the CURRENT words (<see cref="CurrentConsentWording.VoiceKeepVersion"/>),
 /// the words that disclose listening by reviewers. An ON chosen under older or unknown words
 /// (every choice made before those words existed) is not re-confirmed, so it does not

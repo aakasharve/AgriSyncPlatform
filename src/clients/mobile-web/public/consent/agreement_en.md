@@ -3,9 +3,9 @@
 We ask for three separate permissions to keep your data safe. Each permission is independent —
 you can say yes to one and no to another. You can revoke at any time.
 
-## 1. Keep original voice
+## 1. Allow playback of my original voice
 - Default: OFF
-- Meaning: Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.
+- Meaning: Allow me and authorized reviewers on this farm to play back my original voice.
 - If you say yes: Saving of new voice recordings to your account is turned on. Each recording shows its own saving status in the Voice Diary. Recordings that are saved stay until you erase them or close your account.
 - If you say no: New voice recordings will not be saved to your account.
 

@@ -106,7 +106,7 @@ describe('VoiceRetainedConsentToggle', () => {
         mockedClient.getConsent.mockResolvedValue(defaultConsentDto);
         render(<VoiceRetainedConsentToggle locale="en-IN" />);
         expect(await screen.findByTestId('voice-retained-consent-meaning')).toHaveTextContent(
-            'Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.',
+            'Allow me and authorized reviewers on this farm to play back my original voice.',
         );
         cleanup();
         render(<VoiceRetainedConsentToggle locale="mr-IN" />);

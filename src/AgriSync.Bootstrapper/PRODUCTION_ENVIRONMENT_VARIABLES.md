@@ -94,3 +94,33 @@ AppRelease__ApkUrl="https://shramsafal.in/apk"
 - Override `Serilog__WriteTo__1__Args__path` only if the production log file path needs to move off `/var/log/agrisync/api-.log`.
 - Production startup no longer auto-applies pending EF migrations unless `ALLOW_PRODUCTION_STARTUP_MIGRATIONS=true` is set intentionally for a controlled maintenance window.
 - Preferred production flow: run database migrations as a separate deployment step, then start the API and validate `/health` plus `/health/ready`.
+
+## Database pool cap and waits (lane OPS-1, F36)
+
+Every PostgreSQL connection string is capped when the API starts (through the Npgsql builder), unless the string
+already says otherwise. Optional settings (defaults in brackets):
+
+| Setting | Meaning |
+|---|---|
+| `Database__MaxPoolSize` [40] | Most connections one connection string may hold. Keep `(number of distinct strings) x this` below the server's `max_connections`. |
+| `Database__ConnectionTimeoutSeconds` [15] | How long a request waits for a free connection before it fails with a clear timeout. |
+| `Database__CommandTimeoutSeconds` [30] | Longest a single database command may run. |
+
+A value written in the connection string itself (`Maximum Pool Size=`, `Timeout=`, `Command Timeout=`) wins. A string the
+API cannot parse is left alone and a warning names its key.
+
+## Reverse proxy for 10-minute recordings (lane OPS-1, F73; the proxy is not in this repository)
+
+A 10-minute recording takes about 1 to 2.5 minutes to parse and is about 3 MB. Default nginx (60 s, 1 MB) cuts it.
+For the AI routes (`/shramsafal/ai/`) set at least:
+
+```
+client_max_body_size   10m;      # Kestrel's own ceiling is 50 MB; 10 MB covers a 10-minute clip with headroom
+proxy_read_timeout     300s;     # twice the slowest measured parse
+proxy_send_timeout     300s;
+send_timeout           300s;
+proxy_request_buffering off;     # stream the upload to Kestrel instead of spooling it on the proxy
+```
+
+If an AWS load balancer sits in front, its idle timeout must also be at least 300 seconds (default 60). Verify with a real
+10-minute recording before release.

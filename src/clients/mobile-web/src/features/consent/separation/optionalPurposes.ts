@@ -4,7 +4,7 @@
 //
 // Core consent (the one tap on the first-open gate) covers exactly six purposes and no
 // more — `CORE_PURPOSE_CODES`. Every other use of a farmer's data is a separate decision
-// with its own default of OFF, taken in `Settings → Data & Privacy` and withdrawable
+// with its own default of OFF, taken in the app's Privacy and consent page and withdrawable
 // there just as easily.
 //
 // This module is the single place that answers "may we do X?" for the non-core purposes,

@@ -150,7 +150,7 @@ describe('ConsentScreen', () => {
         mockedClient.getImprovementPermission.mockResolvedValue(improvementDto(false));
         render(<ConsentScreen forceLocale="en-IN" />);
         expect(await screen.findByTestId('consent-meaning-fullHistoryJournal')).toHaveTextContent(
-            'Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.',
+            'Allow me and authorized reviewers on this farm to play back my original voice.',
         );
     });
 

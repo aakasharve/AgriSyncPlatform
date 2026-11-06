@@ -178,6 +178,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    drops the five policies, the five tables, both columns and the farm CHECK — only what Up() added. Touches no
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261102163914_AddWorkerIdentity",
+
+        // ── Reviewed 2026-11-05 (spec: plr-d10 lane OPS-1, L-1); Down() read in full: drops ONE partial unique index,
+        //    ux_erasure_requests_one_waiting_per_person, on ssf.erasure_requests. Up() first marks duplicate WAITING requests
+        //    (keeping the oldest per person) Cancelled, then creates it. No table, column, policy or grant; never touches
+        //    ssf.audit_events or any ledger's grants. Safe to revert and re-apply mid-proof.
+        "20261105190000_AddOneWaitingErasureRequestIndex",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

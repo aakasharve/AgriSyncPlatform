@@ -66,12 +66,12 @@ const mr: ConsentBundle = {
     toggles: {
         fullHistoryJournal: {
             // Founder D-2, verbatim.
-            title: 'मूळ आवाज जतन करा',
+            title: 'मूळ आवाज ऐकू देणे',
             // PROPOSED (Marathi) rendering of the founder's D-31 meaning ("Keep my original voice
             // recordings so that I and authorized reviewers on this farm can listen to them.").
-            meaning: 'माझ्या आवाजाच्या मूळ नोंदी जतन करा, म्हणजे त्या मला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येतील.',
+            meaning: 'माझा मूळ आवाज मला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकू द्या.',
             // Founder D-2 description, verbatim, then the existing "if no" sentence.
-            body: 'श्रमसफलने तुमचे बोलणे समजून घेताना काही चूक केली किंवा माहिती सुटली, तर तुमचा मूळ आवाज पुन्हा ऐकून तुम्ही नेमके काय सांगितले होते ते तपासू शकता. तुमच्या कामाचा संदर्भ टिकून राहण्यासाठी हा आवाज नोंदीसोबत जतन केला जातो. नकार दिल्यास नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत.',
+            body: 'श्रमसफलने तुमचे बोलणे समजून घेताना काही चूक केली किंवा माहिती सुटली, तर तुमचा मूळ आवाज पुन्हा ऐकून तुम्ही नेमके काय सांगितले होते ते तपासू शकता. तुमच्या कामाचा संदर्भ टिकून राहण्यासाठी हा आवाज नोंदीसोबत जतन केला जातो. प्रत्येक आवाजाची पुराव्याची प्रत नेहमी जतन केली जाते. हे बटण फक्त ठरवतं की तुमचा मूळ आवाज पुन्हा ऐकता येईल का; बंद केल्यावर ऐकणं थांबतं, पण काहीही मिटवलं जात नाही. नकार दिल्यास नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत.',
         },
         researchCorpusExport: {
             title: 'संशोधन/निर्यातीसाठी डी-आयडेंटिफाईड वापर',
@@ -100,11 +100,11 @@ const en: ConsentBundle = {
     toggles: {
         fullHistoryJournal: {
             // PROPOSED (English) rendering of the founder's D-2 title.
-            title: 'Keep original voice',
+            title: 'Allow playback of my original voice',
             // Founder D-31, verbatim.
-            meaning: 'Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.',
+            meaning: 'Allow me and authorized reviewers on this farm to play back my original voice.',
             // PROPOSED (English) rendering of the founder's D-2 description, then the existing "if no" sentence.
-            body: 'If Shram Safal misunderstands what you said or misses something, you can listen to your original voice again and check exactly what you said. The voice is kept with the record so the context of your work is not lost. If no, new voice recordings will not be saved to your account.',
+            body: 'If Shram Safal misunderstands what you said or misses something, you can listen to your original voice again and check exactly what you said. The voice is kept with the record so the context of your work is not lost. An evidence copy of every recording is always kept as proof. This switch only decides whether your original voice can be played back; turning it off stops playback, but nothing is deleted. If no, new voice recordings will not be saved to your account.',
         },
         researchCorpusExport: {
             title: 'De-identified use for research / export',

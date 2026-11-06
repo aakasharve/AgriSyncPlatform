@@ -16,11 +16,17 @@ import { apiUrl } from '../api/transport';
  */
 
 /** Endpoints that directly block a farmer's core action if they fail. */
-const CRITICAL_ENDPOINTS = [
+// F99 L-5 (lane OPS-1): '/ai/extract' matched no server route, so a failed bill or sale-slip read was never reported.
+// The real extraction routes are receipt-extract, patti-extract and document-sessions; each fragment is checked
+// against the server's route list by ClientErrorReporter.criticalFragments.test.ts.
+export const CRITICAL_ENDPOINTS = [
     '/sync/push',
     '/logs',
     '/ai/parse-voice',
-    '/ai/extract',
+    '/ai/voice-parse',
+    '/ai/receipt-extract',
+    '/ai/patti-extract',
+    '/ai/document-sessions',
     '/schedule/adopt',
     '/schedule/migrate',
     '/verif',

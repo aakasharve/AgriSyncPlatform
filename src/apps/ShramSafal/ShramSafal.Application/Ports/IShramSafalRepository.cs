@@ -864,6 +864,21 @@ public interface IShramSafalRepository
         => Task.CompletedTask;
 
     /// <summary>
+    /// spec: plr-d10 lane OPS-1 (F99 leftover L-1) - store a new erasure request and its "Requested" audit row, unless the
+    /// database's one-waiting-request-per-person index (ux_erasure_requests_one_waiting_per_person) refuses it because
+    /// another request for the same person was stored first. Returns false in that case, with nothing stored and the
+    /// surrounding request transaction still usable. The default (test fakes) stores both and returns true.
+    /// </summary>
+    async Task<bool> TryAddErasureRequestAsync(
+        ErasureRequest request, AuditEvent requestedAudit, CancellationToken ct = default)
+    {
+        await AddErasureRequestAsync(request, ct);
+        await AddAuditEventAsync(requestedAudit, ct);
+        await SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
     /// Enqueue a fresh <see cref="ExportRequest"/> row for the async
     /// ExportWorker (08.3) to process.
     /// </summary>

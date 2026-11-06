@@ -19,6 +19,7 @@ import {
     __resetNoticeReacceptanceForTests,
     flushNoticeReacceptance,
     needsNoticeReacceptance,
+    SERVER_CHECK_LIMIT_MS,
     recordNoticeReacceptance,
 } from '../noticeReacceptance';
 
@@ -63,6 +64,16 @@ afterEach(async () => {
 });
 
 describe('who is asked', () => {
+    it('lane OPS-1 (L-4): a server read that never answers is cut off, and he is asked (could not tell)', async () => {
+        // Real timers on purpose (Dexie stalls under fake ones); the limit is a parameter so the wait is short.
+        const never = vi.fn(() => new Promise<string | null>(() => undefined));
+        const started = Date.now();
+        await expect(needsNoticeReacceptance(never, 60)).resolves.toBe(true);
+        expect(Date.now() - started).toBeLessThan(5_000);
+        expect(never).toHaveBeenCalledTimes(1);
+        expect(SERVER_CHECK_LIMIT_MS).toBeLessThanOrEqual(10_000);
+    });
+
     it('a farmer whose phone holds only the OLDER acceptance is asked', async () => {
         await getDatabase().uiPrefs.put({ key: ACCEPTED_NOTICE_PREF_KEY, value: OLD_NOTICE });
         expect(await needsNoticeReacceptance(async () => OLD_NOTICE)).toBe(true);

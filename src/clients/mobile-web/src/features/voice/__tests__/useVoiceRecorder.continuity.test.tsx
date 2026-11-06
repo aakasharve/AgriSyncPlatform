@@ -18,6 +18,7 @@ vi.mock('../../../infrastructure/ai/TranscribeStreamConsumer', () => ({
 }));
 
 import { useVoiceRecorder } from '../useVoiceRecorder';
+import { NOT_KEPT_NO_CONSENT_MESSAGE } from '../voiceMessages';
 import { getDatabase, resetDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { PendingInterpretationStore } from '../continuity/PendingInterpretationStore';
 import { ACCEPTED_NOTICE_PREF_KEY } from '../../consent/separation/coreConsentGate';
@@ -101,5 +102,7 @@ describe('useVoiceRecorder voice-continuity (flag ON)', () => {
         expect(pending).toHaveLength(0);
         expect(result.current.savedPendingCaptureId).toBeNull();
         expect(result.current.status).toBe('idle');
+        // lane OPS-1 (F99 L-4): a discard is never silent - he is told it was not kept.
+        expect(result.current.error).toBe(NOT_KEPT_NO_CONSENT_MESSAGE);
     });
 });

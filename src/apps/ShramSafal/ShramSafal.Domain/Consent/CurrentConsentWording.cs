@@ -27,7 +27,11 @@ public static class CurrentConsentWording
     /// until then. A MATERIAL change: everyone who accepted an older notice is asked once, on the phone;
     /// this server still never refuses an older acceptance.</para>
     /// </summary>
-    public const string NoticeVersion = "notice-2026-11-02.2";
+    /// <para>lane OPS-1: <c>notice-2026-11-06.1</c> — (a) the English documents name the real in-app page, "Privacy and
+    /// consent"; (b) founder D-50: every recording's evidence copy is always kept as proof and the switch is renamed
+    /// "Allow playback of my original voice". MATERIAL: everyone who accepted an older notice is asked once, on the
+    /// phone. Informational here: the server never refuses on this value.</para>
+    public const string NoticeVersion = "notice-2026-11-06.1";
 
     /// <summary>
     /// The words of the optional improvement switch, "माझ्या अनुभवातून श्रमसफल अधिक सक्षम
@@ -37,7 +41,7 @@ public static class CurrentConsentWording
     public const string ImprovementPermissionVersion = "improve-2026-10-30.1";
 
     /// <summary>
-    /// spec: plr-d10 (I27; founder D-31) — the words of the "मूळ आवाज जतन करा" switch that
+    /// spec: plr-d10 (I27; founder D-31) — the words of the "मूळ आवाज ऐकू देणे" switch that
     /// disclose listening by authorised reviewers on the farm ("Keep my original voice
     /// recordings so that I and authorized reviewers on this farm can listen to them"). The
     /// phone sends this string as <c>fullHistoryJournalWordingVersion</c>

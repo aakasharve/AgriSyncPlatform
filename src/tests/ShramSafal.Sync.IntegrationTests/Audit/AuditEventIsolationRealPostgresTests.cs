@@ -1304,6 +1304,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    back-fills a person and a card for every field operator. Never touches ssf.audit_events, its policies or its
         //    grants (identity changes are recorded in their own append-only table). Safe mid-proof.
         "20261102163914_AddWorkerIdentity",
+
+        // ── Reviewed 2026-11-05 (spec: plr-d10 lane OPS-1, L-1); Down() read in full: drops ONE partial unique index,
+        //    ux_erasure_requests_one_waiting_per_person, on ssf.erasure_requests. Up() first marks duplicate WAITING requests
+        //    (keeping the oldest per person) Cancelled, then creates it. No table, column, policy or grant; never touches
+        //    ssf.audit_events or any ledger's grants. Safe to revert and re-apply mid-proof.
+        "20261105190000_AddOneWaitingErasureRequestIndex",
     ];
 
     /// <summary>

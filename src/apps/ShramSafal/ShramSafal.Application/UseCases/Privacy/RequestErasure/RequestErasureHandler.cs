@@ -40,11 +40,7 @@ public sealed class RequestErasureHandler(
         var targetUserId = command.OnBehalfOfUserId ?? command.RequestedByUserId;
         if (await repository.GetWaitingErasureRequestForAsync(targetUserId, ct).ConfigureAwait(false) is { } waiting)
         {
-            return Result.Success(new RequestErasureResult(
-                RequestId: waiting.Id,
-                RequestedAtUtc: waiting.RequestedAtUtc,
-                ErasureStartsAtUtc: timing.ErasureStartsAtUtc(waiting),
-                AlreadyWaiting: true));
+            return await AnswerFromExistingAsync(command, waiting, ct).ConfigureAwait(false);
         }
 
         var nowUtc = clock.GetUtcNow().UtcDateTime;
@@ -52,8 +48,6 @@ public sealed class RequestErasureHandler(
             requestedByUserId: command.RequestedByUserId,
             onBehalfOfUserId: command.OnBehalfOfUserId,
             nowUtc: nowUtc);
-
-        await repository.AddErasureRequestAsync(request, ct).ConfigureAwait(false);
 
         // Audit at request time per OQ-6 (per-row Applied audits land
         // when the worker runs; this is the "request received" event).
@@ -75,14 +69,59 @@ public sealed class RequestErasureHandler(
             appVersion: command.ClientAppVersion,
             deviceId: command.AuditDeviceId,
             ipHash: command.AuditIpHash);
-        await repository.AddAuditEventAsync(audit, ct).ConfigureAwait(false);
 
-        await repository.SaveChangesAsync(ct).ConfigureAwait(false);
+        // spec: plr-d10 lane OPS-1 (L-1) - the database allows only one waiting request per person. If a second request
+        // for the same person arrived at the same moment and was stored first, the store refuses ours and we answer THAT
+        // request, exactly as the check above would have.
+        if (!await repository.TryAddErasureRequestAsync(request, audit, ct).ConfigureAwait(false))
+        {
+            if (await repository.GetWaitingErasureRequestForAsync(targetUserId, ct).ConfigureAwait(false) is { } winner)
+            {
+                return await AnswerFromExistingAsync(command, winner, ct).ConfigureAwait(false);
+            }
+
+            return Result.Failure<RequestErasureResult>(ShramSafalErrors.InvalidCommand);
+        }
 
         // lane F99 fix pass 1, item 11 (D-71) — nothing is erased now: the request waits, and the answer says until when.
         return Result.Success(new RequestErasureResult(
             RequestId: request.Id,
             RequestedAtUtc: nowUtc,
             ErasureStartsAtUtc: timing.ErasureStartsAtUtc(request)));
+    }
+
+    /// <summary>
+    /// A request for this person already waits: answer THAT request and its date, make nothing new, and leave an audit
+    /// row saying so (L-1) - a person asking again, or an admin on his behalf, is a fact worth keeping.
+    /// </summary>
+    private async Task<Result<RequestErasureResult>> AnswerFromExistingAsync(
+        RequestErasureCommand command, ErasureRequest waiting, CancellationToken ct)
+    {
+        var audit = AuditEventFactory.Create(
+            entityType: "ErasureRequest",
+            entityId: waiting.Id,
+            action: "RequestAnsweredFromExisting",
+            actorUserId: command.RequestedByUserId,
+            actorRole: command.OnBehalfOfUserId is null ? "data_principal" : "admin_security_responder",
+            payload: new
+            {
+                requestId = waiting.Id,
+                askedByUserId = command.RequestedByUserId,
+                onBehalfOfUserId = command.OnBehalfOfUserId,
+                originalRequestedAtUtc = waiting.RequestedAtUtc,
+            },
+            farmId: null,
+            clientCommandId: null,
+            appVersion: command.ClientAppVersion,
+            deviceId: command.AuditDeviceId,
+            ipHash: command.AuditIpHash);
+        await repository.AddAuditEventAsync(audit, ct).ConfigureAwait(false);
+        await repository.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        return Result.Success(new RequestErasureResult(
+            RequestId: waiting.Id,
+            RequestedAtUtc: waiting.RequestedAtUtc,
+            ErasureStartsAtUtc: timing.ErasureStartsAtUtc(waiting),
+            AlreadyWaiting: true));
     }
 }

@@ -12,7 +12,7 @@
 
 # Terms of Use — Shram Safal
 
-**Version `terms-2026-11-02.2` · in force from 2 November 2026**
+**Version `terms-2026-11-06.1` · in force from 6 November 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It
@@ -129,7 +129,7 @@ them.
 ## 8. Ending your use
 
 - You may stop at any time. You can ask us to delete your account and your data from
-  **Settings → Data & Privacy**. The request waits 30 days before anything is deleted, and
+  **Privacy and consent** (in the app: **गोपनीयता व संमती**). The request waits 30 days before anything is deleted, and
   you can cancel it there until then. The Privacy Notice §6 sets out exactly what is deleted,
   what is anonymised and what is kept.
 - We may suspend or close an account that is being used to break these Terms or the law,
@@ -142,6 +142,10 @@ them.
 Everything about what we collect, who else handles it, whether it leaves India and how
 long we keep it is in the **[Privacy Notice](/legal/privacy_en.md)**. Read it — it is the
 document that actually tells you what happens to your voice.
+
+In short: an evidence copy of every recording is always kept as proof. The optional
+**"Allow playback of my original voice"** switch only decides whether your original voice
+can be played back; turning it off stops playback and never deletes anything.
 
 ---
 

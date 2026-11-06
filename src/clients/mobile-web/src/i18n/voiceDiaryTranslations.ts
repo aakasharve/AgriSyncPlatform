@@ -157,18 +157,18 @@ const mr: VoiceDiaryBundle = {
         headline: 'अजून आवाजी नोंदी नाहीत',
         // PROPOSED (Marathi): the switch now sits on this page — no "Settings", no English setting name.
         // plr-d10 I25: the switch's name is now the founder's D-2 title.
-        body: 'आवाजी नोंदी खात्यात जतन करण्यासाठी खालचं "मूळ आवाज जतन करा" चालू करा.',
+        body: 'आवाजी नोंदी खात्यात जतन करण्यासाठी खालचं "मूळ आवाज ऐकू देणे" चालू करा.',
         // the banner's own "चालू करा" (retentionBanner.deniedCta) — the doubled "· Open Settings" is gone
         cta: 'चालू करा',
     },
     consentToggle: {
         // the गोपनीयता व संमती screen's words for the same consent (consentTranslations fullHistoryJournal)
         // Founder D-2, verbatim.
-        title: 'मूळ आवाज जतन करा',
+        title: 'मूळ आवाज ऐकू देणे',
         // PROPOSED (Marathi) rendering of the founder's D-31 meaning.
-        meaning: 'माझ्या आवाजाच्या मूळ नोंदी जतन करा, म्हणजे त्या मला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येतील.',
+        meaning: 'माझा मूळ आवाज मला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकू द्या.',
         // Founder D-2 description, verbatim, then the existing "can be turned off" sentence.
-        helper: 'श्रमसफलने तुमचे बोलणे समजून घेताना काही चूक केली किंवा माहिती सुटली, तर तुमचा मूळ आवाज पुन्हा ऐकून तुम्ही नेमके काय सांगितले होते ते तपासू शकता. तुमच्या कामाचा संदर्भ टिकून राहण्यासाठी हा आवाज नोंदीसोबत जतन केला जातो. कधीही बंद करता येते — आधी जतन झालेल्या नोंदी तुम्ही मिटवेपर्यंत राहतील.',
+        helper: 'श्रमसफलने तुमचे बोलणे समजून घेताना काही चूक केली किंवा माहिती सुटली, तर तुमचा मूळ आवाज पुन्हा ऐकून तुम्ही नेमके काय सांगितले होते ते तपासू शकता. तुमच्या कामाचा संदर्भ टिकून राहण्यासाठी हा आवाज नोंदीसोबत जतन केला जातो. प्रत्येक आवाजाची पुराव्याची प्रत नेहमी जतन केली जाते. हे बटण फक्त ठरवतं की तुमचा मूळ आवाज पुन्हा ऐकता येईल का; बंद केल्यावर ऐकणं थांबतं, पण काहीही मिटवलं जात नाही. कधीही बंद करता येते — आधी जतन झालेल्या नोंदी तुम्ही मिटवेपर्यंत राहतील.',
         expand: '+ अधिक',
     },
     replay: {
@@ -240,16 +240,16 @@ const en: VoiceDiaryBundle = {
     emptyState: {
         headline: 'No voice notes yet',
         // plr-d10 I25: the switch's name is now the D-2 title (PROPOSED English).
-        body: 'Turn on "Keep original voice" below to allow saving of recordings to your account.',
+        body: 'Turn on "Allow playback of my original voice" below to allow saving of recordings to your account.',
         cta: 'Turn on',
     },
     consentToggle: {
         // PROPOSED (English) rendering of the founder's D-2 title.
-        title: 'Keep original voice',
+        title: 'Allow playback of my original voice',
         // Founder D-31, verbatim.
-        meaning: 'Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.',
+        meaning: 'Allow me and authorized reviewers on this farm to play back my original voice.',
         // PROPOSED (English) rendering of the founder's D-2 description, then the existing sentence.
-        helper: 'If Shram Safal misunderstands what you said or misses something, you can listen to your original voice again and check exactly what you said. The voice is kept with the record so the context of your work is not lost. You can turn off any time — recordings saved earlier stay until you erase them.',
+        helper: 'If Shram Safal misunderstands what you said or misses something, you can listen to your original voice again and check exactly what you said. The voice is kept with the record so the context of your work is not lost. An evidence copy of every recording is always kept as proof. This switch only decides whether your original voice can be played back; turning it off stops playback, but nothing is deleted. You can turn off any time — recordings saved earlier stay until you erase them.',
         expand: '+ more',
     },
     replay: {

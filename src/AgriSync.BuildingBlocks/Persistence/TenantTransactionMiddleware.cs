@@ -411,6 +411,11 @@ public sealed class TenantTransactionMiddleware
     {
         var contexts = registry.GetWritingContexts(context.RequestServices);
         var transactions = new List<IDbContextTransaction>(contexts.Count);
+        // OPS-1 (F36): a handler may hand the connections back while it waits on a slow call that does not use
+        // the database (RequestTransactionRelease). It swaps the contents of `transactions` in place, so the
+        // commit, rollback and dispose below always act on whatever is open at that moment. Absent in hosts
+        // that do not register it, in which case behaviour is unchanged.
+        var release = context.RequestServices.GetService(typeof(RequestTransactionRelease)) as RequestTransactionRelease;
         try
         {
             foreach (var db in contexts)
@@ -419,9 +424,11 @@ public sealed class TenantTransactionMiddleware
                 transactions.Add(tx);
             }
 
+            release?.Attach(contexts, transactions);
+
             await _next(context);
 
-            foreach (var tx in transactions)
+            foreach (var tx in transactions.ToArray())
             {
                 await tx.CommitAsync(context.RequestAborted);
             }
