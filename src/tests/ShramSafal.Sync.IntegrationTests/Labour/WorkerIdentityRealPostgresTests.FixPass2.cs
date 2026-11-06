@@ -61,10 +61,10 @@ public sealed partial class WorkerIdentityRealPostgresTests
         var person = await PersonOfAsync(ramesh.Id);
         await VerifyPhoneAsync(FarmA, Owner, ramesh.Id, "0101");
 
-        // Farm A (his proof farm): a code for a new card by his own code, then 4 wrong tries at it.
+        // Farm A (his proof farm): a code for a new card by his own code, then 5 wrong tries at it (all that code allows).
         var aCode = await PostOkAsync($"{FieldOperators(FarmA)}/{ramesh.Id}/phone/send-code", Owner, new { purpose = "Reissue" });
         var wrongA = WrongCode(_codes.Last("0101"));
-        for (var t = 0; t < 4; t++)
+        for (var t = 0; t < 5; t++)
         {
             var r = await PostAsync($"{FieldOperators(FarmA)}/{ramesh.Id}/card/reissue", Owner,
                 new { proof = "PhoneCode", ticket = aCode.GetProperty("ticket").GetGuid(), code = wrongA });
@@ -74,7 +74,8 @@ public sealed partial class WorkerIdentityRealPostgresTests
         // Farms B and C have his card and ask to link him: a code to his verified number, then wrong tries at it.
         var bTicket = (await PostOkAsync($"{Identity(FarmB)}/link/start", OwnerB, new { cardCode = ramesh.Card })).GetProperty("ticket").GetGuid();
         var wrongB = WrongCode(_codes.Last("0101"));
-        for (var t = 0; t < 4; t++)
+        // Fix pass 3 (R2): farms without his trust share at most 5 of his 10, so B takes 3 and C 2.
+        for (var t = 0; t < 3; t++)
         {
             var r = await PostAsync($"{Identity(FarmB)}/link", OwnerB, new { cardCode = ramesh.Card, ticket = bTicket, code = wrongB, id = Guid.NewGuid() });
             r.Status.Should().Be(HttpStatusCode.BadRequest, r.Text);
@@ -90,7 +91,7 @@ public sealed partial class WorkerIdentityRealPostgresTests
         }
 
         WorkerIdentityService.PersonWrongTriesPerDay.Should().Be(10);
-        (await WrongTriesAtAsync(person)).Should().Be(10, "4 + 4 + 2 wrong tries, from three farms");
+        (await WrongTriesAtAsync(person)).Should().Be(10, "5 + 3 + 2 wrong tries, from three farms");
 
         // His day of wrong tries is spent: no farm reads a code for him — not even the RIGHT one — and none is sent.
         var eleventh = await PostAsync($"{Identity(FarmC)}/link", OwnerC, new { cardCode = ramesh.Card, ticket = cTicket, code = rightC, id = Guid.NewGuid() });
