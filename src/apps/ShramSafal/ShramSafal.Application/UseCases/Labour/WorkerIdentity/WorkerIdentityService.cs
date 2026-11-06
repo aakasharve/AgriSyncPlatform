@@ -48,9 +48,21 @@ public sealed class WorkerIdentityService(
 {
     private bool UnscreenedOpen => flows?.UnscreenedFlowsEnabled == true;
 
-    /// <summary>Per number: at most 3 codes in 15 minutes and 6 in a day (the login OTP's limits).</summary>
+    /// <summary>
+    /// Per number: at most 3 codes in 15 minutes and 6 in a day (the login OTP's limits). Fix pass 2 (N2): these count
+    /// only the codes asked by the farms he trusts — the farm holding his proof, and farms he linked with his own code —
+    /// so no other farm can use them up.
+    /// </summary>
     private const int ShortWindowCodes = 3;
     private const int LongWindowCodes = 6;
+
+    /// <summary>
+    /// Fix pass 2 (N2, builder's call) — any OTHER farm (one that has his card but not his trust: a farm asking to link
+    /// him) gets its own small budget for his number: 2 codes a day per farm and 6 a day for all such farms together. So
+    /// screen 5 still works, and those farms can never spend the trusted farms' codes.
+    /// </summary>
+    public const int OtherFarmCodesPerNumberPerDay = 2;
+    public const int OtherFarmsCodesPerNumberPerDay = 6;
     private static readonly TimeSpan ShortWindow = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan LongWindow = TimeSpan.FromHours(24);
 
@@ -61,7 +73,16 @@ public sealed class WorkerIdentityService(
     /// </summary>
     public const int FarmCodesPerDay = 20;
     public const int UserCodesPerDay = 10;
-    public const int FarmWrongTriesPerDay = 10;
+
+    /// <summary>Fix pass 2 (N2) — the orchestrator's call: raised from 10, so one member's typos cannot lock out a farm.</summary>
+    public const int FarmWrongTriesPerDay = 30;
+
+    /// <summary>
+    /// Fix pass 2 (N2) — the orchestrator's call: at most 10 wrong tries a day at ALL of one person's codes, from every
+    /// farm together. Then no code is sent to him or read for him until the day has passed, so guesses at his 4-digit
+    /// code stay bounded however many farms or logins try.
+    /// </summary>
+    public const int PersonWrongTriesPerDay = 10;
 
     // ── scan-resolve (R6) ───────────────────────────────────────────────────────────────────────────
 
@@ -110,7 +131,7 @@ public sealed class WorkerIdentityService(
                 return Result.Success(new LinkStartView(null, false, group.Root.CardName, found.Level.ToString()));
             }
 
-            var sent = await SendCodeAsync(group.Root.Id, verified.PhoneE164!, ChallengePurpose.Link, farmId, userId, ct);
+            var sent = await SendCodeAsync(group, verified.PhoneE164!, ChallengePurpose.Link, farmId, userId, ct);
             return sent.IsSuccess
                 ? Result.Success(new LinkStartView(sent.Value!.Ticket, true, group.Root.CardName, found.Level.ToString()))
                 : Result.Failure<LinkStartView>(sent.Error);
@@ -136,7 +157,7 @@ public sealed class WorkerIdentityService(
             return Result.Failure<LinkStartView>(ShramSafalErrors.IdentityNotFound);
         }
 
-        var code = await SendCodeAsync(holderGroup.Root.Id, e164, ChallengePurpose.Link, farmId, userId, ct);
+        var code = await SendCodeAsync(holderGroup, e164, ChallengePurpose.Link, farmId, userId, ct);
         return code.IsSuccess
             ? Result.Success(new LinkStartView(code.Value!.Ticket, true, null, null))
             : Result.Failure<LinkStartView>(code.Error);
@@ -396,6 +417,15 @@ public sealed class WorkerIdentityService(
         }
 
         var phones = await store.GetPhonesAsync(group.Ids, ct);
+
+        // N1 (fix pass 2) — his FIRST verified number is proved only through the farm that issued his card. Any other
+        // farm (one that linked him by card) cannot make itself the farm that holds his proof by verifying a number it
+        // entered — its own SIM, say. It is answered as for a person it does not know, and nothing is written.
+        if (why == ChallengePurpose.Verify && !phones.Any(p => p.IsActiveVerified) && !await HoldsHisProofAsync(farmId, group, ct))
+        {
+            return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityNotFound);
+        }
+
         string? target;
         switch (why)
         {
@@ -434,7 +464,7 @@ public sealed class WorkerIdentityService(
             return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityUseMove);
         }
 
-        return await SendCodeAsync(group.Root.Id, target, why, farmId, userId, ct);
+        return await SendCodeAsync(group, target, why, farmId, userId, ct);
     }
 
     /// <summary>Screen 3 — the code he read back proves this farm's number for him. It is now his alone (R3).</summary>
@@ -448,6 +478,14 @@ public sealed class WorkerIdentityService(
         }
 
         var group = await EnsureGroupAsync(farmId, userId, record, ct);
+
+        // N1 (fix pass 2) — as for the code: while he has no verified number, only the farm that issued his card proves
+        // one. Checked before the code is read, so a refused farm spends no try and writes nothing.
+        if (!(await store.GetPhonesAsync(group.Ids, ct)).Any(p => p.IsActiveVerified) && !await HoldsHisProofAsync(farmId, group, ct))
+        {
+            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityNotFound);
+        }
+
         var consumed = await ConsumeAsync(farmId, ticket, code, ChallengePurpose.Verify, group, ct);
         if (consumed.Error is { } wrong)
         {
@@ -480,9 +518,15 @@ public sealed class WorkerIdentityService(
         row.MarkVerified(now);
         await store.AddEventAsync(ShramIdentityEvent.Record(
             ids.New(), farmId, record.Id, group.Root.Id, IdentityEventKind.PhoneVerified, IdentityProof.PhoneCode, userId, now), ct);
-        if (!await store.TrySaveChangesAsync(ct))
+        switch (await store.SaveChangesOrClashAsync(ct))
         {
-            return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityNumberHeldByVerified);
+            case IdentitySaveClash.None:
+                break;
+            case IdentitySaveClash.PersonAlreadyVerified:
+                // N3 — another verify for him won at the same moment: one verified number at a time; a second only by the move.
+                return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityUseMove);
+            default:
+                return Result.Failure<WorkerIdentityView>(ShramSafalErrors.IdentityNumberHeldByVerified);
         }
 
         return Result.Success(await WorkerIdentityReads.ViewAsync(store, farmId, record, ct));
@@ -929,7 +973,10 @@ public sealed class WorkerIdentityService(
     private async Task<ShramPersonPhone?> VerifiedPhoneOfAsync(PersonGroup group, CancellationToken ct)
         => OldestVerified(await store.GetPhonesAsync(group.Ids, ct));
 
-    /// <summary>H2 — his consent codes always go to the same number: the one verified first (ties by id).</summary>
+    /// <summary>
+    /// H2 — his consent codes always go to his verified number. Since fix pass 2 (N3) the database keeps at most one per
+    /// person, so the order only matters for a merged person's alias rows; it is kept fixed (first verified, then id).
+    /// </summary>
     private static ShramPersonPhone? OldestVerified(IEnumerable<ShramPersonPhone> phones)
         => phones.Where(p => p.IsActiveVerified).OrderBy(p => p.VerifiedAtUtc).ThenBy(p => p.Id).FirstOrDefault();
 
@@ -938,15 +985,38 @@ public sealed class WorkerIdentityService(
     /// verified number; while he has no verified number anywhere, the farm that issued his working card. Nobody else.
     /// </summary>
     private async Task<bool> HoldsHisProofAsync(Guid farmId, PersonGroup group, CancellationToken ct)
+        => (await ProofFarmsAsync(group, ct)).Contains(farmId);
+
+    private async Task<HashSet<Guid>> ProofFarmsAsync(PersonGroup group, CancellationToken ct)
     {
         var members = group.Ids;
         var verified = (await store.GetPhonesAsync(members, ct)).Where(p => p.IsActiveVerified).ToList();
         if (verified.Count > 0)
         {
-            return verified.Any(p => p.AddedByFarmId == farmId);
+            return verified.Where(p => p.AddedByFarmId is not null).Select(p => p.AddedByFarmId!.Value).ToHashSet();
         }
 
-        return ActiveCardOf(group, await store.GetCardsAsync(members, ct))?.IssuedByFarmId == farmId;
+        return ActiveCardOf(group, await store.GetCardsAsync(members, ct))?.IssuedByFarmId is { } issuer ? [issuer] : [];
+    }
+
+    /// <summary>
+    /// N2 (fix pass 2) — the farms whose codes count against his number's own budget: the farm holding his proof, and
+    /// every farm he linked with his own code. Any other farm's codes to him are counted on their own (see
+    /// <see cref="OtherFarmCodesPerNumberPerDay"/>).
+    /// </summary>
+    private async Task<HashSet<Guid>> TrustedFarmsAsync(PersonGroup group, CancellationToken ct)
+    {
+        var trusted = await ProofFarmsAsync(group, ct);
+        trusted.UnionWith(await store.GetFarmsLinkedByCodeAsync(group.Ids, ct));
+        return trusted;
+    }
+
+    /// <summary>N2 (fix pass 2) — a farm over its wrong tries, or a person over his, reads and gets no more codes today.</summary>
+    private async Task<bool> TooManyWrongTriesAsync(Guid farmId, PersonGroup group, CancellationToken ct)
+    {
+        var since = clock.UtcNow - LongWindow;
+        return await store.CountWrongTriesByFarmSinceAsync(farmId, since, ct) >= FarmWrongTriesPerDay
+            || await store.CountWrongTriesForPersonsSinceAsync(group.Ids, since, ct) >= PersonWrongTriesPerDay;
     }
 
     /// <summary>
@@ -1008,8 +1078,9 @@ public sealed class WorkerIdentityService(
     private async Task<Consumed> ConsumeAsync(
         Guid farmId, Guid ticket, string? code, ChallengePurpose purpose, PersonGroup group, CancellationToken ct)
     {
-        // M2 — a farm that has spent its wrong tries for the day reads no more codes until tomorrow.
-        if (await store.CountWrongTriesByFarmSinceAsync(farmId, clock.UtcNow - LongWindow, ct) >= FarmWrongTriesPerDay)
+        // M2 / N2 — a farm that has spent its wrong tries for the day, or a person whose codes have taken his day's wrong
+        // tries from every farm together, gets no code read until the day has passed.
+        if (await TooManyWrongTriesAsync(farmId, group, ct))
         {
             return new Consumed(null, ShramSafalErrors.IdentityTooManyTries);
         }
@@ -1035,24 +1106,23 @@ public sealed class WorkerIdentityService(
 
     /// <summary>Issues and sends a code; the challenge is kept only once the SMS was accepted.</summary>
     private async Task<Result<CodeSentView>> SendCodeAsync(
-        Guid personId, string e164, ChallengePurpose purpose, Guid farmId, Guid userId, CancellationToken ct)
+        PersonGroup group, string e164, ChallengePurpose purpose, Guid farmId, Guid userId, CancellationToken ct)
     {
         var now = clock.UtcNow;
-        if (await store.CountChallengesSinceAsync(e164, now - ShortWindow, ct) >= ShortWindowCodes
-            || await store.CountChallengesSinceAsync(e164, now - LongWindow, ct) >= LongWindowCodes
+        if (await NumberBudgetSpentAsync(group, e164, farmId, now, ct)
             || await store.CountChallengesByFarmSinceAsync(farmId, now - LongWindow, ct) >= FarmCodesPerDay
             || await store.CountChallengesByUserSinceAsync(userId, now - LongWindow, ct) >= UserCodesPerDay)
         {
             return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityTooManyCodes);
         }
 
-        if (await store.CountWrongTriesByFarmSinceAsync(farmId, now - LongWindow, ct) >= FarmWrongTriesPerDay)
+        if (await TooManyWrongTriesAsync(farmId, group, ct))
         {
             return Result.Failure<CodeSentView>(ShramSafalErrors.IdentityTooManyTries);
         }
 
         var code = ShramPhoneChallenge.NewCode();
-        var challenge = ShramPhoneChallenge.Issue(ids.New(), personId, e164, purpose, farmId, userId, code, now);
+        var challenge = ShramPhoneChallenge.Issue(ids.New(), group.Root.Id, e164, purpose, farmId, userId, code, now);
         var sent = await sender.SendAsync(e164, code, ct);
         if (!sent.IsSuccess)
         {
@@ -1062,6 +1132,26 @@ public sealed class WorkerIdentityService(
         await store.AddChallengeAsync(challenge, ct);
         await store.TrySaveChangesAsync(ct);
         return Result.Success(new CodeSentView(challenge.Id, IndianMobile.Tail(e164)));
+    }
+
+    /// <summary>
+    /// N2 (fix pass 2) — this number's day of codes. A farm he trusts counts against his own 3-in-15-minutes and
+    /// 6-a-day, which only those farms' codes use up; any other farm counts against its own 2 a day and all such farms'
+    /// 6 a day (and the same 3 in 15 minutes among them).
+    /// </summary>
+    private async Task<bool> NumberBudgetSpentAsync(PersonGroup group, string e164, Guid farmId, DateTime now, CancellationToken ct)
+    {
+        var trusted = await TrustedFarmsAsync(group, ct);
+        var sent = await store.GetChallengesToNumberSinceAsync(e164, now - LongWindow, ct);
+        var pool = sent.Where(c => trusted.Contains(c.RequestedByFarmId) == trusted.Contains(farmId)).ToList();
+        if (pool.Count(c => c.CreatedAtUtc >= now - ShortWindow) >= ShortWindowCodes)
+        {
+            return true;
+        }
+
+        return trusted.Contains(farmId)
+            ? pool.Count >= LongWindowCodes
+            : pool.Count >= OtherFarmsCodesPerNumberPerDay || pool.Count(c => c.RequestedByFarmId == farmId) >= OtherFarmCodesPerNumberPerDay;
     }
 
     private async Task<bool> HeldByAnotherAsync(string e164, PersonGroup group, CancellationToken ct)

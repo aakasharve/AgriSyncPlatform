@@ -1,9 +1,11 @@
 // spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID fix pass 1 (review M4, register F103).
+// Fix pass 2: ONE copy, compiled into both real-Postgres test projects (ShramSafal.Sync.IntegrationTests and
+// ShramSafal.Admin.IntegrationTests) as a linked item, so the two guards can never drift apart.
 using System;
 using System.Collections;
 using System.Runtime.CompilerServices;
 
-namespace ShramSafal.Admin.IntegrationTests;
+namespace AgriSync.TestSupport;
 
 /// <summary>
 /// No test host in this process can reach a database it was not given. A developer's machine may carry

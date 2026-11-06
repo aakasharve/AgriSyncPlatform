@@ -106,17 +106,14 @@ public sealed partial class WorkerIdentityRealPostgresTests
         var inB = (await PostOkAsync($"{Identity(FarmB)}/link", OwnerB, new { cardCode = ramesh.Card, id = Guid.NewGuid() }))
             .GetProperty("fieldOperatorId").GetGuid();
 
-        // Farm B saves its OWN number for him and asks a code for it while he has none verified...
+        // Farm B saves its OWN number for him. (Fix pass 2, N1: while he has none verified, farm B cannot even ask a code
+        // for it — see N1_a_farm_that_linked_him_by_card_cannot_verify_a_number_for_him_first.)
         await PutOkAsync($"{FieldOperators(FarmB)}/{inB}/identity", OwnerB, new { phone = PhoneFarmB, phoneWhose = "Own" });
-        var bCode = await PostOkAsync($"{FieldOperators(FarmB)}/{inB}/phone/send-code", OwnerB, new { });
-        // ...farm A proves his real number...
+        // Farm A proves his real number; farm B's number can then never become a second verified one: no code is even
+        // sent for it (the second-verify refusal inside the verify itself is N3's fact).
         await VerifyPhoneAsync(FarmA, Owner, ramesh.Id, "0101");
-        // ...and farm B's code no longer makes farm B's number a second verified one: that is the case-5 move only.
-        var second = await PostAsync($"{FieldOperators(FarmB)}/{inB}/phone/verify", OwnerB,
-            new { ticket = bCode.GetProperty("ticket").GetGuid(), code = _codes.Last("0106") });
-        second.Status.Should().Be(HttpStatusCode.Conflict, second.Text);
-        second.Text.Should().Contain("identity.use_move");
         var again = await PostAsync($"{FieldOperators(FarmB)}/{inB}/phone/send-code", OwnerB, new { });
+        again.Status.Should().Be(HttpStatusCode.Conflict, again.Text);
         again.Text.Should().Contain("identity.use_move", "no new verify code is even sent");
         (await ScalarOnSuperuserAsync<long>("""
             SELECT count(*) FROM ssf.shram_person_phones WHERE person_id = @p AND verified_at_utc IS NOT NULL AND released_at_utc IS NULL
@@ -133,25 +130,9 @@ public sealed partial class WorkerIdentityRealPostgresTests
             .Should().BeNull();
     }
 
-    [Fact]
-    public async Task H2_his_consent_code_always_goes_to_the_number_he_verified_first()
-    {
-        await AssertAppRoleIsNotVacuousAsync();
-        var mahadev = await AddWorkerAsync(FarmA, Owner, "महादेव", PhoneMahadev, Pin);
-        var person = await PersonOfAsync(mahadev.Id);
-        // Two verified rows (only possible from before this fix): the NEWER one written first, so an unordered read meets
-        // it first. The code must still go to the one verified first.
-        await ExecOnSuperuserAsync("""
-            INSERT INTO ssf.shram_person_phones (id, person_id, phone_e164, whose, added_at_utc, verified_at_utc)
-            VALUES (gen_random_uuid(), @p, '+916000000211', 'Own', NOW(), NOW()),
-                   (gen_random_uuid(), @p, '+916000000222', 'Own', NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day');
-            """, ("p", person));
-
-        var start = await PostOkAsync($"{Identity(FarmB)}/link/start", OwnerB, new { cardCode = mahadev.Card });
-        start.GetProperty("codeSent").GetBoolean().Should().BeTrue();
-        _codes.Has("0222").Should().BeTrue("the oldest verified number receives his consent code");
-        _codes.Has("0211").Should().BeFalse();
-    }
+    // Fix pass 2 (N3): the fact "his consent code goes to the number he verified FIRST" is dropped. It needed two active
+    // verified rows for one person, which the database now refuses (ux_shram_person_phones_one_verified_per_person);
+    // N3_two_verifies_at_once_leave_one_verified_number_and_the_other_hears_use_the_move proves that refusal instead.
 
     // ── M2: codes capped per farm and per user; wrong tries bounded per farm ──────────────────────────────────────
 
@@ -184,23 +165,33 @@ public sealed partial class WorkerIdentityRealPostgresTests
         var farm21 = await SendAsync(CoOwner);
         farm21.Text.Should().Contain("identity.too_many_codes", "one farm sends at most 20 codes a day, whoever asks");
 
-        // Wrong tries, on farm B: two codes, five wrong tries each, and the farm reads no more codes today.
-        var x = await AddWorkerAsync(FarmB, OwnerB, "गणू", PhoneFarmB, "411001");
-        for (var round = 0; round < 2; round++)
+        // Wrong tries, on farm B (fix pass 2: the farm's cap is 30 a day, my call of the orchestrator's; 10 is ONE person's):
+        // three of its workers, two codes each, five wrong tries at each code — and the farm reads no more codes today.
+        var farmBWorkers = new (string Name, string Phone, string Tail)[]
         {
-            var sent = await PostOkAsync($"{FieldOperators(FarmB)}/{x.Id}/phone/send-code", OwnerB, new { });
-            var wrong = WrongCode(_codes.Last("0106"));
-            for (var t = 0; t < 5; t++)
+            ("गणू", PhoneFarmB, "0106"), ("बबन", "6000000107", "0107"), ("भिकू", "6000000108", "0108"),
+        };
+        foreach (var (name, phone, tail) in farmBWorkers)
+        {
+            var x = await AddWorkerAsync(FarmB, OwnerB, name, phone, "411001");
+            for (var round = 0; round < 2; round++)
             {
-                var r = await PostAsync($"{FieldOperators(FarmB)}/{x.Id}/phone/verify", OwnerB,
-                    new { ticket = sent.GetProperty("ticket").GetGuid(), code = wrong });
-                r.Status.Should().Be(HttpStatusCode.BadRequest, r.Text);
+                var sent = await PostOkAsync($"{FieldOperators(FarmB)}/{x.Id}/phone/send-code", OwnerB, new { });
+                var wrong = WrongCode(_codes.Last(tail));
+                for (var t = 0; t < 5; t++)
+                {
+                    var r = await PostAsync($"{FieldOperators(FarmB)}/{x.Id}/phone/verify", OwnerB,
+                        new { ticket = sent.GetProperty("ticket").GetGuid(), code = wrong });
+                    r.Status.Should().Be(HttpStatusCode.BadRequest, r.Text);
+                }
             }
         }
 
-        var third = await PostAsync($"{FieldOperators(FarmB)}/{x.Id}/phone/send-code", OwnerB, new { });
-        third.Status.Should().Be(HttpStatusCode.Conflict, third.Text);
-        third.Text.Should().Contain("identity.too_many_tries", "10 wrong tries in a day stop this farm's codes");
+        WorkerIdentityService.FarmWrongTriesPerDay.Should().Be(30, "3 workers x 2 codes x 5 tries is exactly the farm's day");
+        var fourth = await AddWorkerAsync(FarmB, OwnerB, "धोंडू", "6000000109", "411001");
+        var after = await PostAsync($"{FieldOperators(FarmB)}/{fourth.Id}/phone/send-code", OwnerB, new { });
+        after.Status.Should().Be(HttpStatusCode.Conflict, after.Text);
+        after.Text.Should().Contain("identity.too_many_tries", "30 wrong tries in a day stop this farm's codes, for every worker");
     }
 
     // ── M1: the worker erasure refuses loudly on a connection row-level security filters ───────────────────────────

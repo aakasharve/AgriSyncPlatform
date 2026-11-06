@@ -1304,6 +1304,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    back-fills a person and a card for every field operator. Never touches ssf.audit_events, its policies or its
         //    grants (identity changes are recorded in their own append-only table). Safe mid-proof.
         "20261102163914_AddWorkerIdentity",
+
+        // ── Reviewed 2026-11-06 (lane WID fix pass 2, N3); Down() read in full: drops the two indexes Up() adds on
+        //    ssf.shram_person_phones (one verified number per person; the plain number index). No table, column,
+        //    policy or grant; never touches ssf.audit_events. Safe mid-proof.
+        "20261106060953_AddOneVerifiedNumberPerPerson",
     ];
 
     /// <summary>

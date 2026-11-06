@@ -116,6 +116,17 @@ describe('WID fix pass 1 — a new card that cannot be given states the rule', (
     });
 });
 
+describe('WID fix pass 2 — a first verify on a farm that did not make his card (N1)', () => {
+    it('states the rule instead of "try again"', async () => {
+        mockSendCode.mockRejectedValue(refusal('identity.not_found'));
+        render(<WorkerCardSheet farmId={FARM} worker={worker} onClose={() => undefined} isNative={false} />);
+        fireEvent.click(screen.getByTestId('card-verify'));
+        const note = await screen.findByTestId('card-note');
+        expect(note).toHaveTextContent('याचा पहिला फोन फक्त याचं कार्ड बनवणारं शेतच पडताळू शकतं.');
+        expect(note).not.toHaveTextContent('पुन्हा प्रयत्न करा');
+    });
+});
+
 describe('WID fix pass 1 — "छापा" prints the card alone', () => {
     it('carries a print sheet that shows only the card, in its colours; the installed app has neither', () => {
         const { unmount } = render(<WorkerCardSheet farmId={FARM} worker={worker} onClose={() => undefined} isNative={false} />);

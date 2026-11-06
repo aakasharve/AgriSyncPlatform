@@ -49,4 +49,10 @@
     <ProjectReference Include="..\..\apps\ShramSafal\ShramSafal.Infrastructure\ShramSafal.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- spec: plr-d10 lane WID fix pass 2 — ONE copy of the F103 test-process connection guard, shared with the other
+         real-Postgres test project, so the two can never drift apart. -->
+    <Compile Include="..\Shared\TestProcessConnectionGuard.cs" Link="TestProcessConnectionGuard.cs" />
+  </ItemGroup>
+
 </Project>

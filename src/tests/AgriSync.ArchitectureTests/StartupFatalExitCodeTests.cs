@@ -105,9 +105,26 @@ public sealed class StartupFatalExitCodeTests
         };
         startInfo.ArgumentList.Add(dllPath);
         startInfo.Environment["ASPNETCORE_ENVIRONMENT"] = "Staging";
-        startInfo.Environment["ConnectionStrings__UserDb"] = malformedConnectionString;
-        startInfo.Environment["ConnectionStrings__ShramSafalDb"] = malformedConnectionString;
-        startInfo.Environment["ConnectionStrings__AccountsDb"] = malformedConnectionString;
+
+        // spec: plr-d10 lane WID fix pass 2 (review N5, F103) — EVERY connection name the host knows, so the child never
+        // inherits one from this machine (on a developer PC the _Migration and _ReadOnly names point at his own
+        // database). The child then can reach no database at all, whichever phase starts first.
+        foreach (var name in new[]
+                 {
+                     "UserDb", "UserDb_Migration", "UserDb_ReadOnly",
+                     "ShramSafalDb", "ShramSafalDb_Migration", "ShramSafalDb_ReadOnly",
+                     "AccountsDb",
+                 })
+        {
+            startInfo.Environment[$"ConnectionStrings__{name}"] = malformedConnectionString;
+        }
+
+        foreach (var inherited in startInfo.Environment.Keys
+                     .Where(k => k.StartsWith("ConnectionStrings__", StringComparison.OrdinalIgnoreCase))
+                     .ToList())
+        {
+            startInfo.Environment[inherited] = malformedConnectionString;
+        }
 
         using var process = Process.Start(startInfo)
             ?? throw new InvalidOperationException(

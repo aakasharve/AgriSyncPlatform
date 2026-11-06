@@ -57,6 +57,7 @@ const T = {
     newCardDone: ['नवीन कार्ड तयार. जुनं कार्ड आता चालत नाही.', 'New card ready. The old card no longer works.'], // PROPOSED
     newCardOwnerOnly: ['नवीन कार्ड फक्त शेताचे मालकच देऊ शकतात.', 'Only the farm\'s owner can issue a new card.'], // PROPOSED (fix pass 1, L6)
     newCardNotHere: ['ज्या शेतावर याचं कार्ड बनलं किंवा फोन पडताळला, तेच शेत नवीन कार्ड देऊ शकतं.', 'Only the farm that made his card or verified his phone can issue a new card.'], // PROPOSED (fix pass 1, H1)
+    firstVerifyNotHere: ['याचा पहिला फोन फक्त याचं कार्ड बनवणारं शेतच पडताळू शकतं.', 'Only the farm that made his card can verify his first phone.'], // PROPOSED (fix pass 2, N1)
     useMove: ['याचा एक नंबर आधीच पडताळलेला आहे — दुसरा नंबर पडताळता येत नाही.', 'He already has a verified number — a second one cannot be verified.'], // PROPOSED (fix pass 1, H2)
     erased: ['या कामगाराची ओळख मिटवली आहे.', 'This worker\'s identity has been erased.'], // PROPOSED (fix pass 1, L6)
     shareFailed: ['चित्र पाठवता आलं नाही — QR स्क्रीनवर दाखवा', 'Could not send the picture — show the QR on screen'], // PROPOSED

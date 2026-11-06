@@ -48,6 +48,8 @@ const CODE_ERRORS: Record<string, WidWord> = {
     'identity.too_many_tries': 'tooManyTries',
     'identity.use_move': 'useMove',
     'identity.erased': 'erased',
+    // Fix pass 2 (N1): his FIRST phone is verified only through the farm that made his card — said as the rule.
+    'identity.not_found': 'firstVerifyNotHere',
 };
 
 /**

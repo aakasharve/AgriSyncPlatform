@@ -64,13 +64,21 @@ internal sealed class ShramPersonPhoneConfiguration : IEntityTypeConfiguration<S
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.PersonId).HasDatabaseName("ix_shram_person_phones_person");
-        builder.HasIndex(x => x.PhoneE164).HasDatabaseName("ix_shram_person_phones_number");
 
         // R3 — one ACTIVE VERIFIED holder per number, kept by the database itself.
         builder.HasIndex(x => x.PhoneE164)
             .HasDatabaseName("ux_shram_person_phones_verified_number")
             .IsUnique()
             .HasFilter("verified_at_utc IS NOT NULL AND released_at_utc IS NULL AND phone_e164 IS NOT NULL");
+
+        // Fix pass 2 (N3) — ONE active verified number per PERSON, kept by the database too: two verifies of two numbers
+        // at the same moment cannot both win (the second gets the "use the move" answer). Named indexes, because two
+        // indexes on one column must be told apart (the plain number index below, written first in this file as an
+        // unnamed index, was folded into the unique one and never created; fix pass 2 creates it).
+        builder.HasIndex(x => x.PersonId, "ux_shram_person_phones_one_verified_per_person")
+            .IsUnique()
+            .HasFilter("verified_at_utc IS NOT NULL AND released_at_utc IS NULL AND phone_e164 IS NOT NULL");
+        builder.HasIndex(x => x.PhoneE164, "ix_shram_person_phones_number");
         builder.Ignore(x => x.DomainEvents);
     }
 }

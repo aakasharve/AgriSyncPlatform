@@ -47,6 +47,13 @@ public static class PurveshDemoReseedCommand
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
+    /// <summary>
+    /// spec: plr-d10 lane WID fix pass 2 (L5) — whether the re-seed may issue demo workers' ShramSafal cards: only in a
+    /// known environment that is not Production. An unknown environment counts as Production (no card).
+    /// </summary>
+    public static bool DemoCardsAllowed(IHostEnvironment? environment)
+        => environment is not null && !environment.IsProduction();
+
     public static async Task<int> RunAsync(
         IServiceProvider services,
         IReadOnlyCollection<string> args,
@@ -101,8 +108,18 @@ public static class PurveshDemoReseedCommand
 
             var seeder = provider.GetRequiredService<PurveshDemoSeeder>();
             var repository = provider.GetRequiredService<IShramSafalRepository>();
+
+            // spec: plr-d10 lane WID fix pass 2 (L5, the orchestrator's ruling) — demo workers get ShramSafal cards only
+            // OUTSIDE Production. A card is a permanent ShramSafal identity (append-only, never deleted, linkable from
+            // any farm by its code), so the production demo farm's workers show without one. No environment = Production.
+            var demoCards = DemoCardsAllowed(provider.GetService<IHostEnvironment>())
+                ? provider.GetRequiredService<IShramIdentityStore>()
+                : null;
+            await output.WriteLineAsync(demoCards is null
+                ? $"{Flag}: demo workers get NO ShramSafal card (Production)."
+                : $"{Flag}: demo workers get their ShramSafal card (not Production).");
             var report = await seeder.ReseedDemoContentAsync(
-                repository, new PurveshDemoReseedOptions(utcNow, dryRun), cancellationToken);
+                repository, new PurveshDemoReseedOptions(utcNow, dryRun), cancellationToken, demoCards);
 
             await output.WriteLineAsync(BeginFence);
             await output.WriteLineAsync(JsonSerializer.Serialize(report, JsonOptions));

@@ -3672,6 +3672,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_shram_person_phones_verified_number")
                         .HasFilter("verified_at_utc IS NOT NULL AND released_at_utc IS NULL AND phone_e164 IS NOT NULL");
 
+                    b.HasIndex(new[] { "PhoneE164" }, "ix_shram_person_phones_number");
+
+                    b.HasIndex(new[] { "PersonId" }, "ux_shram_person_phones_one_verified_per_person")
+                        .IsUnique()
+                        .HasFilter("verified_at_utc IS NOT NULL AND released_at_utc IS NULL AND phone_e164 IS NOT NULL");
+
                     b.ToTable("shram_person_phones", "ssf");
                 });
 

@@ -186,6 +186,10 @@ public sealed class RlsIdentityScopeRules
     {
         var allowed = new[]
         {
+            // lane WID fix pass 2 (L5, the orchestrator's ruling) — the demo re-seed hands the store to the product's own
+            // create path, so demo workers get their card OUTSIDE Production only (the command decides; it never reads).
+            "AgriSync.Bootstrapper/Infrastructure/PurveshDemoReseedCommand.cs",
+            "AgriSync.Bootstrapper/Infrastructure/PurveshDemoSeeder.Reseed.cs",
             "apps/ShramSafal/ShramSafal.Application/Ports/IShramIdentityStore.cs",
             "apps/ShramSafal/ShramSafal.Application/UseCases/Labour/CreateFieldOperator/CreateFieldOperatorHandler.cs",
             "apps/ShramSafal/ShramSafal.Application/UseCases/Labour/GetFieldOperators/GetFieldOperatorsHandler.cs",

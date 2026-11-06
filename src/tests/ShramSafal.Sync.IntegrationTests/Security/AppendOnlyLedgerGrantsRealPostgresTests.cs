@@ -178,6 +178,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    drops the five policies, the five tables, both columns and the farm CHECK — only what Up() added. Touches no
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261102163914_AddWorkerIdentity",
+
+        // ── Reviewed 2026-11-06 (lane WID fix pass 2, N3); Down() read in full: drops only the two indexes Up() adds
+        //    on ssf.shram_person_phones. No table, column, policy or grant; no ledger is touched. Safe mid-proof.
+        "20261106060953_AddOneVerifiedNumberPerPerson",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

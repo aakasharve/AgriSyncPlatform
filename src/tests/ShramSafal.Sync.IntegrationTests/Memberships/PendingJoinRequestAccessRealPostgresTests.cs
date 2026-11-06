@@ -504,6 +504,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // farm_join_requests object, no ssf.farms policy; a seat's status is never touched. Re-Up re-creates them and
         // back-fills a person and a card for every field operator.
         "20261102163914_AddWorkerIdentity",
+
+        // lane WID fix pass 2 (N3) — Down() read in full: drops only the two shram_person_phones indexes Up() adds. No
+        // farm_memberships or farm_join_requests object, no ssf.farms policy.
+        "20261106060953_AddOneVerifiedNumberPerPerson",
     ];
 
     /// <summary>
