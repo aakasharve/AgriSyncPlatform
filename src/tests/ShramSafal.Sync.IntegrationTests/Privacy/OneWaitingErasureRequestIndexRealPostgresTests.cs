@@ -35,7 +35,14 @@ CREATE TABLE ssf.erasure_requests (
     on_behalf_of_user_id uuid NULL,
     status integer NOT NULL,
     requested_at_utc timestamptz NOT NULL,
-    completed_at_utc timestamptz NULL);");
+    completed_at_utc timestamptz NULL);
+CREATE TABLE ssf.audit_events (
+    ""Id"" uuid PRIMARY KEY, entity_type text NOT NULL, entity_id uuid NOT NULL, action text NOT NULL,
+    actor_user_id uuid NOT NULL, actor_role text NOT NULL, payload text NOT NULL, occurred_at_utc timestamptz NOT NULL,
+    farm_id uuid NULL, client_command_id text NULL, app_version varchar(32) NOT NULL, device_id varchar(64) NOT NULL,
+    ip_hash varchar(80) NOT NULL, source_ai_job_id uuid NULL);
+ALTER TABLE ssf.audit_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ssf.audit_events FORCE ROW LEVEL SECURITY;");
     }
 
     public async Task DisposeAsync()
@@ -82,6 +89,20 @@ CREATE TABLE ssf.erasure_requests (
 
         Assert.Equal(1, await Scalar($"SELECT count(*) FROM ssf.erasure_requests WHERE status = 0 AND id = '{oldest}'"));
         Assert.Equal(2, await Scalar("SELECT count(*) FROM ssf.erasure_requests WHERE status = 5 AND completed_at_utc IS NOT NULL"));
+
+        // M6: each cancelled duplicate left an audit row (actor system_migration; the kept request and this migration in the payload),
+        // and FORCE row security on audit_events was put back exactly as found.
+        Assert.Equal(2, await Scalar("SELECT count(*) FROM ssf.audit_events WHERE entity_type = 'ErasureRequest' AND actor_role = 'system_migration'"));
+        foreach (var cancelled in new[] { duplicateSelf, duplicateOnBehalf })
+        {
+            Assert.Equal(1, await Scalar(
+                $"SELECT count(*) FROM ssf.audit_events WHERE entity_id = '{cancelled}' AND action = 'CancelledDuplicateWaiting' " +
+                $"AND payload::jsonb ->> 'keptRequestId' = '{oldest}' " +
+                $"AND payload::jsonb ->> 'migrationId' = '{AddOneWaitingErasureRequestIndex.MigrationId}'"));
+        }
+
+        Assert.Equal(0, await Scalar($"SELECT count(*) FROM ssf.audit_events WHERE entity_id = '{oldest}'"));
+        Assert.Equal(1, await Scalar("SELECT relforcerowsecurity::int FROM pg_class WHERE oid = 'ssf.audit_events'::regclass"));
 
         // A second waiting request about the same person: refused, on the named index, filed either way round.
         var self = await Assert.ThrowsAsync<PostgresException>(() => Insert(Guid.NewGuid(), person, null, 0, "2026-11-01T00:00:00Z"));

@@ -153,9 +153,11 @@ worse than none:
 1. The **no automatic deletion date** on server-held voice recordings is a deliberate
    decision, not an oversight. There is no timer on those files today, and deleting them
    is something a person at ARVE does when you ask.
-2. The optional **"Allow playback of my original voice"** switch decides only whether your original voice can be played back by you and authorized reviewers on this farm. **Turning it off stops playback, and never deletes anything: the evidence copy of every recording is always kept as proof.** It also **stops new recordings
-   being saved, but does not yet delete the ones already saved.** To have those removed,
-   ask us to erase your data.
+2. The optional **"Allow playback of my original voice"** switch only decides whether your original voice can
+   be played back by you and by authorized reviewers on this farm. ShramSafal keeps the original sound of every
+   record as proof either way. **Turning the switch off stops playback and never deletes anything; a recording made
+   while it is off cannot be played later.** The recordings already saved are not deleted automatically either: to
+   have those removed, ask us to erase your data.
 3. An erasure request today removes your account, your voice diary and your personal
    details, and anonymises your farm records. It does **not** currently reach the raw
    voice files described in row two — those are removed by hand. We would rather write

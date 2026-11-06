@@ -24,12 +24,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 import ConsentTick from '../gate/ConsentTick';
-import { CONSENT_NOTICE, type NoticeLanguage } from '../gate/consentNotice';
+import { type NoticeLanguage } from '../gate/consentNotice';
 import type { ConsentBeforeOtp } from '../gate/useConsentBeforeOtp';
 import ImprovementPermissionToggle from '../improvement/ImprovementPermissionToggle';
 import { IMPROVEMENT_WORDING_VERSION } from '../improvement/improvementPermissionCopy';
 import { flushNoticeReacceptance, needsNoticeReacceptance, recordNoticeReacceptance } from './noticeReacceptance';
 import { withTimeout } from './withTimeout';
+import { changesSince, NOTICE_CHANGE_LINES } from './noticeChanges';
 
 /** How long the sheet waits to learn what the server holds for the improvement switch. */
 const IMPROVEMENT_READ_LIMIT_MS = 3_000;
@@ -73,13 +74,19 @@ const NoticeChangeSheet: React.FC<{ userId: string }> = ({ userId }) => {
     const [serverImprovement, setServerImprovement] = useState<boolean | null>(null);
     const [improvementRead, setImprovementRead] = useState(false);
     const [improvement, setImprovement] = useState(false);
+    // The notice version the server holds for him (null when unknown): decides which changes the sheet shows (H4).
+    const [acceptedVersion, setAcceptedVersion] = useState<string | null>(null);
 
     // On open (and whenever the phone comes back online): send any acceptance still queued, then
     // decide whether he must be asked, and learn what the server holds for the improvement switch.
     useEffect(() => {
         let cancelled = false;
         void flushNoticeReacceptance();
-        void needsNoticeReacceptance(async () => (await agriSyncClient.getConsent()).acceptedNoticeVersion)
+        void needsNoticeReacceptance(async () => {
+            const accepted = (await agriSyncClient.getConsent()).acceptedNoticeVersion;
+            if (!cancelled) setAcceptedVersion(accepted ?? null);
+            return accepted;
+        })
             .then((needed) => { if (!cancelled) setPhase(needed ? 'ask' : 'done'); })
             .catch(() => { if (!cancelled) setPhase('ask'); });
         void withTimeout(agriSyncClient.getImprovementPermission(), IMPROVEMENT_READ_LIMIT_MS)
@@ -116,9 +123,12 @@ const NoticeChangeSheet: React.FC<{ userId: string }> = ({ userId }) => {
     if (phase === 'checking' || phase === 'done') return null;
 
     const c = COPY[lang];
-    const changedPromise = CONSENT_NOTICE[lang].willNotDo.items[2];
-    // lane F99 fix pass 2 (D-71, material): the erasure line, word for word from the notice he ticks.
-    const erasureLine = CONSENT_NOTICE[lang].rights.items[2];
+    // H4 (lane OPS-1): the changes of the version he is asked for - every material change AFTER the notice he last accepted
+    // (all of them when that is unknown; the newest one if the server holds something newer than every line).
+    const shownChanges = (() => {
+        const since = changesSince(acceptedVersion);
+        return since.length > 0 ? since : [NOTICE_CHANGE_LINES[NOTICE_CHANGE_LINES.length - 1]];
+    })();
 
     const sendImprovement = (allowed: boolean) => agriSyncClient.setImprovementPermission({
         allowed,
@@ -170,18 +180,15 @@ const NoticeChangeSheet: React.FC<{ userId: string }> = ({ userId }) => {
             <div className="mx-auto max-w-md space-y-4 pt-6">
                 <h1 id="notice-change-heading" className="text-xl font-bold text-stone-900">{c.heading}</h1>
                 <p className="text-sm text-stone-700">{c.intro}</p>
-                <p
-                    data-testid="notice-change-promise"
-                    className="rounded-xl bg-white px-4 py-3 text-[15px] font-semibold leading-snug text-stone-900 ring-1 ring-emerald-200"
-                >
-                    {changedPromise}
-                </p>
-                <p
-                    data-testid="notice-change-erasure"
-                    className="rounded-xl bg-white px-4 py-3 text-[15px] font-semibold leading-snug text-stone-900 ring-1 ring-emerald-200"
-                >
-                    {erasureLine}
-                </p>
+                {shownChanges.map((line) => (
+                    <p
+                        key={line.id}
+                        data-testid={line.id === 'improvement' ? 'notice-change-promise' : `notice-change-${line.id === 'erasure' ? 'erasure' : line.id}`}
+                        className="rounded-xl bg-white px-4 py-3 text-[15px] font-semibold leading-snug text-stone-900 ring-1 ring-emerald-200"
+                    >
+                        {line.text(lang)}
+                    </p>
+                ))}
 
                 <ImprovementPermissionToggle
                     language={lang}

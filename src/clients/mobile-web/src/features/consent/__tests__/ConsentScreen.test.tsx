@@ -140,7 +140,7 @@ describe('ConsentScreen', () => {
         expect(typeof callArg.consentTextVersion).toBe('number');
         expect(typeof callArg.clientAppVersion).toBe('string');
         // D-31: the "keep my original voice" choice was made, so the words are named.
-        expect(callArg.fullHistoryJournalWordingVersion).toBe('voice-keep-2026-10-30.1');
+        expect(callArg.fullHistoryJournalWordingVersion).toBe('voice-keep-2026-11-06.1');
         // D-36: the improvement permission did not change, so nothing is sent for it.
         expect(mockedClient.setImprovementPermission).not.toHaveBeenCalled();
     });

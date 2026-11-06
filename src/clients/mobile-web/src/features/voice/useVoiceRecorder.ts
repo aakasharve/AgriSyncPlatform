@@ -12,7 +12,8 @@ import { FEATURE_FLAGS } from '../../app/featureFlags';
 import { buildCanonicalVoiceInput } from './continuity/canonicalVoiceInput';
 import { buildPendingFromCanonical, type ContinuityLevel } from './continuity/voiceContinuityLadder';
 import { CoreConsentMissingError } from '../consent/separation/coreConsentGate';
-import { NOT_KEPT_NO_CONSENT_MESSAGE } from './voiceMessages';
+import { notKeptNoConsentMessage } from './voiceMessages';
+import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import type { PendingLadderLevel } from './continuity/pendingInterpretation';
 import { PendingInterpretationStore } from './continuity/PendingInterpretationStore';
 import { DeviceSpeechRecognizer } from '../../infrastructure/voice/DeviceSpeechRecognizer';
@@ -28,6 +29,7 @@ export const useVoiceRecorder = ({
     parser,
     voicePreprocessor, onVoiceDraft,
 }: UseVoiceRecorderProps) => {
+    const language = useOptionalLanguage()?.language;
 
     const [status, setStatus] = useState<AppStatus>('idle');
     const [error, setError] = useState<string | null>(null);
@@ -353,7 +355,7 @@ export const useVoiceRecorder = ({
             // not the farmer his app: report and return, never throw out of the save path. Not silent (OPS-1, L-4).
             if (err instanceof CoreConsentMissingError) {
                 console.warn('[useVoiceRecorder] degraded capture discarded:', err.message);
-                setError(NOT_KEPT_NO_CONSENT_MESSAGE);
+                setError(notKeptNoConsentMessage(language));
                 setStatus('idle');
                 return;
             }

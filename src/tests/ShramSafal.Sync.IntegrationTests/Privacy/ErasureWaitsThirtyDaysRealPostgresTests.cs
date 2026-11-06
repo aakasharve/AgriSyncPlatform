@@ -218,10 +218,15 @@ public sealed class ErasureWaitsThirtyDaysRealPostgresTests(ITestOutputHelper ou
     }
 
     [Fact]
-    public async Task A_cancel_ends_every_request_still_waiting_for_him()
+    public async Task The_database_refuses_a_second_waiting_request_and_a_cancel_ends_the_one_that_waits()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var (requestId, requestedAt, _) = await RequestAsync(Worker);
+        // lane OPS-1 (L-4 of the review): this test used to prove "a cancel ends EVERY request still waiting" with two rows. With the
+        // one-waiting-request index two waiting rows for one person can no longer exist, so ShramSafalRepository.
+        // CancelOtherWaitingErasureRequestsForAsync (the handler's "cancel the others") now finds nothing to cancel; it stays as a safety
+        // net for a database where the index was dropped and has NO real-Postgres coverage of its own any more. The test is named for
+        // what it asserts now: the refusal, and the cancel of the single waiting request.
         // lane OPS-1 (L-1): two phones asking at the same instant could once each make one before either saw the other.
         // The database now refuses the second waiting row for the same person (partial unique index), so the "twin" can
         // no longer exist; the cancel still ends the one request that waits.

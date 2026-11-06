@@ -123,6 +123,27 @@ class G5VerdictTests(unittest.TestCase):
     def test_any_rejection_is_red_even_with_few_points(self):
         self.assertEqual("RED", g5_verdict.verdict({"Datapoints": [{"Sum": 2}]}, 3)[0])
 
+    # fix round 1, M1: one test each
+    def test_points_without_a_Sum_are_not_a_heartbeat(self):
+        average_only = {"Datapoints": [{"Average": 0}] * 5}
+        self.assertEqual("NO_DATA", g5_verdict.verdict(average_only, 3)[0])
+
+    def test_zero_min_datapoints_is_refused(self):
+        with self.assertRaises(ValueError):
+            g5_verdict.verdict({"Datapoints": []}, 0)
+        self.assertEqual(4, g5_verdict.main(["--min-datapoints", "0", os.devnull]))
+
+    def test_nan_sums_are_no_data(self):
+        self.assertEqual("NO_DATA", g5_verdict.verdict({"Datapoints": [{"Sum": float("nan")}] * 5}, 3)[0])
+
+    def test_since_ignores_heartbeats_from_before_the_deploy(self):
+        old = {"Datapoints": [{"Sum": 0, "Timestamp": "2026-11-06T08:00:00Z"}] * 5}
+        since = g5_verdict.parse_time("2026-11-06T09:00:00Z")
+        self.assertEqual("NO_DATA", g5_verdict.verdict(old, 3, since)[0])
+        fresh = {"Datapoints": [{"Sum": 0, "Timestamp": f"2026-11-06T09:0{i}:00Z"} for i in range(4)]}
+        self.assertEqual("GREEN", g5_verdict.verdict(fresh, 3, since)[0])
+        self.assertEqual("GREEN", g5_verdict.verdict(old, 3)[0])  # without --since the old ones would have passed
+
     def test_malformed_input_raises(self):
         with self.assertRaises(ValueError):
             g5_verdict.verdict({}, 3)

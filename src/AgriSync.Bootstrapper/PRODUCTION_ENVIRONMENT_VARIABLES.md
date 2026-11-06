@@ -97,30 +97,45 @@ AppRelease__ApkUrl="https://shramsafal.in/apk"
 
 ## Database pool cap and waits (lane OPS-1, F36)
 
-Every PostgreSQL connection string is capped when the API starts (through the Npgsql builder), unless the string
-already says otherwise. Optional settings (defaults in brackets):
+A business request holds TWO database connections for its whole life (one per writing context, ShramSafal first, then User). Every
+PostgreSQL connection string is therefore given its own pool (a distinct `Application Name`, `agrisync-<key>`, so that `UserDb` and
+`ShramSafalDb` with identical text no longer share one pool) and a cap, when the API starts, through the Npgsql builder. A value
+written in the connection string itself (`Maximum Pool Size=`, `Timeout=`, `Command Timeout=`, `Application Name=`) wins. A string the API
+cannot parse is left alone and a warning names its key.
+
+Optional settings (defaults in brackets):
 
 | Setting | Meaning |
 |---|---|
-| `Database__MaxPoolSize` [40] | Most connections one connection string may hold. Keep `(number of distinct strings) x this` below the server's `max_connections`. |
-| `Database__ConnectionTimeoutSeconds` [15] | How long a request waits for a free connection before it fails with a clear timeout. |
+| `Database__MaxPoolSize` [24] | Cap of each WRITING pool (`ShramSafalDb`, `UserDb`). Keep the User pool at least as large as the ShramSafal pool. |
+| `Database__AuxiliaryMaxPoolSize` [2] | Cap of every other key (`AccountsDb`, `AnalyticsDb`, `*_Migration`, `*_ReadOnly`). |
+| `Database__ConnectionTimeoutSeconds` [15] | How long a request waits for a free connection before it fails ALONE with Npgsql's pool timeout. |
 | `Database__CommandTimeoutSeconds` [30] | Longest a single database command may run. |
 
-A value written in the connection string itself (`Maximum Pool Size=`, `Timeout=`, `Command Timeout=`) wins. A string the
-API cannot parse is left alone and a warning names its key.
+Arithmetic (production has `max_connections` 79, 76 usable): writing pools 24 + 24 = 48, auxiliary pools 6 x 2 = 12, idle baseline 12 =
+72, 4 spare = 76. If you raise a cap, redo this sum; it must stay at or below 76.
 
 ## Reverse proxy for 10-minute recordings (lane OPS-1, F73; the proxy is not in this repository)
 
-A 10-minute recording takes about 1 to 2.5 minutes to parse and is about 3 MB. Default nginx (60 s, 1 MB) cuts it.
-For the AI routes (`/shramsafal/ai/`) set at least:
+A 10-minute recording takes about 1 to 2.5 minutes to parse and is about 3 MB. Default nginx (60 s, 1 MB) cuts it. Set the timeouts for
+`/shramsafal/ai/` and the body limit PER LOCATION, so that the voice limit does not also cap the photo routes (receipt and sale-slip
+photos go to `/shramsafal/ai/document-sessions` and are not compressed by the app; Kestrel allows 50 MB):
 
 ```
-client_max_body_size   10m;      # Kestrel's own ceiling is 50 MB; 10 MB covers a 10-minute clip with headroom
-proxy_read_timeout     300s;     # twice the slowest measured parse
-proxy_send_timeout     300s;
-send_timeout           300s;
-proxy_request_buffering off;     # stream the upload to Kestrel instead of spooling it on the proxy
+location /shramsafal/ai/ {
+    client_max_body_size    10m;     # voice: covers a 10-minute clip with headroom
+    proxy_read_timeout      300s;    # twice the slowest measured parse
+    proxy_send_timeout      300s;
+    send_timeout            300s;
+    proxy_request_buffering off;     # stream the upload to Kestrel instead of spooling it on the proxy
+}
+location /shramsafal/ai/document-sessions/ {
+    client_max_body_size    50m;     # photos: the largest phone photo the app sends is not measured yet; Kestrel's own ceiling is 50 MB
+    proxy_read_timeout      300s;
+    proxy_send_timeout      300s;
+    proxy_request_buffering off;
+}
 ```
 
-If an AWS load balancer sits in front, its idle timeout must also be at least 300 seconds (default 60). Verify with a real
-10-minute recording before release.
+(A more specific `location` wins over `/shramsafal/ai/`.) If an AWS load balancer sits in front, its idle timeout must also be at least 300
+seconds (default 60). Verify with a real 10-minute recording and with the largest receipt photo before release.

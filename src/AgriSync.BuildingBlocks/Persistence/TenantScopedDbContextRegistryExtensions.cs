@@ -30,10 +30,6 @@ public static class TenantScopedDbContextRegistryExtensions
     public static TenantScopedDbContextRegistry EnsureTenantScopedRegistry(
         this IServiceCollection services)
     {
-        // OPS-1 (F36): one per request, so a handler can hand the request's connections back while it waits
-        // on a slow call that does not use the database. Idempotent (TryAdd).
-        services.TryAddScoped<RequestTransactionRelease>();
-
         var existing = services.LastOrDefault(sd =>
             sd.ServiceType == typeof(ITenantScopedDbContextRegistry));
         if (existing?.ImplementationInstance is TenantScopedDbContextRegistry instance)

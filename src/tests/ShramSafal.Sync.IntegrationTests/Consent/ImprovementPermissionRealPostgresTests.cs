@@ -303,7 +303,7 @@ public sealed class ImprovementPermissionRealPostgresTests(ITestOutputHelper out
     public async Task The_voice_choice_words_round_trip_and_an_older_phone_clears_them()
     {
         SkipIfPostgresUnavailable();
-        const string words = "voice-keep-2026-10-30.1";
+        const string words = "voice-keep-2026-11-06.1";
 
         await UpdateAsync(UserA, fullHistory: true, wording: words);
         (await GetConsentAsync(UserA)).FullHistoryJournalWordingVersion.Should().Be(words);

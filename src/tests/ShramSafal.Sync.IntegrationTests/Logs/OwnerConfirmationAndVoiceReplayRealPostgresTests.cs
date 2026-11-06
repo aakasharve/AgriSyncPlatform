@@ -66,7 +66,8 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
 {
     private const string AppRoleUser = TestRoleCredentials.AppRoleUser;
     private static string AppRolePassword => TestRoleCredentials.AppRolePassword;
-    private const string CurrentVoiceWords = "voice-keep-2026-10-30.1";
+    private const string CurrentVoiceWords = "voice-keep-2026-11-06.1";
+    private const string PreRenameVoiceWords = "voice-keep-2026-10-30.1";
 
     private static readonly Guid FarmA = Guid.Parse("27270000-0000-0000-0000-00000000000a");
     private static readonly Guid AccountA = Guid.Parse("27270000-0000-0000-0000-0000000000aa");
@@ -332,6 +333,13 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
 
         // ON, but chosen before the current words existed (pre-L5): not re-confirmed, so not counted.
         await SetVoiceKeepAsync(Worker, on: true, words: null);
+        (await ReplayAsync(Owner, logId)).UnavailableReason.Should().Be("not_kept");
+
+        // OPS-1 (H5): an ON chosen against the words before the D-50 rename names the same listeners, so it STILL plays: renaming
+        // the switch must not silently stop playback, and nobody has to re-confirm. Words nobody ever sent still do not count.
+        await SetVoiceKeepAsync(Worker, on: true, words: PreRenameVoiceWords);
+        (await ReplayAsync(Owner, logId)).Available.Should().BeTrue("an ON given under the pre-rename words keeps working");
+        await SetVoiceKeepAsync(Worker, on: true, words: "voice-keep-never-sent");
         (await ReplayAsync(Owner, logId)).UnavailableReason.Should().Be("not_kept");
 
         // ON under the current words: the speaker, the primary owner and the granted मुकादम hear it.

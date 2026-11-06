@@ -58,6 +58,19 @@ export interface ConsentBundle {
 }
 
 // -- mr-IN --------------------------------------------------------------
+import {
+    D2_DESCRIPTION_EN,
+    D2_DESCRIPTION_MR,
+    OFF_CONSEQUENCE_EN,
+    OFF_CONSEQUENCE_MR,
+    PROOF_KEPT_EN,
+    PROOF_KEPT_MR,
+    SWITCH_MEANING_EN,
+    SWITCH_MEANING_MR,
+    SWITCH_TITLE_EN,
+    SWITCH_TITLE_MR,
+} from './voiceSwitchWords';
+
 const mr: ConsentBundle = {
     screen: {
         title: 'संमती',
@@ -65,13 +78,12 @@ const mr: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            // Founder D-2, verbatim.
-            title: 'मूळ आवाज ऐकू देणे',
-            // PROPOSED (Marathi) rendering of the founder's D-31 meaning ("Keep my original voice
-            // recordings so that I and authorized reviewers on this farm can listen to them.").
-            meaning: 'माझा मूळ आवाज मला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकू द्या.',
-            // Founder D-2 description, verbatim, then the existing "if no" sentence.
-            body: 'श्रमसफलने तुमचे बोलणे समजून घेताना काही चूक केली किंवा माहिती सुटली, तर तुमचा मूळ आवाज पुन्हा ऐकून तुम्ही नेमके काय सांगितले होते ते तपासू शकता. तुमच्या कामाचा संदर्भ टिकून राहण्यासाठी हा आवाज नोंदीसोबत जतन केला जातो. प्रत्येक आवाजाची पुराव्याची प्रत नेहमी जतन केली जाते. हे बटण फक्त ठरवतं की तुमचा मूळ आवाज पुन्हा ऐकता येईल का; बंद केल्यावर ऐकणं थांबतं, पण काहीही मिटवलं जात नाही. नकार दिल्यास नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत.',
+            // PROPOSED (not the founder's words: he asked for "who may listen"); see voiceSwitchWords.ts.
+            title: SWITCH_TITLE_MR,
+            // PROPOSED.
+            meaning: SWITCH_MEANING_MR,
+            // Founder D-2 description, verbatim, then PROPOSED lines (D-50: the founder's own sentence; D-101: the one consequence of OFF).
+            body: `${D2_DESCRIPTION_MR} ${PROOF_KEPT_MR} ${OFF_CONSEQUENCE_MR}`,
         },
         researchCorpusExport: {
             title: 'संशोधन/निर्यातीसाठी डी-आयडेंटिफाईड वापर',
@@ -82,7 +94,7 @@ const mr: ConsentBundle = {
     revoke: {
         button: 'सर्व रद्द करा',
         confirm: 'तुम्ही खात्रीने सर्व परवानग्या रद्द करू इच्छिता?',
-        whatStops: 'रद्द केल्यावर: यापुढच्या नवीन आवाजी नोंदी तुमच्या खात्यात जतन केल्या जाणार नाहीत. आधी जतन झालेल्या नोंदी राहतील. सुधारणा व संशोधनाच्या दोन परवानग्या तुम्ही मागे घेता. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.',
+        whatStops: 'रद्द केल्यावर: मूळ आवाज ऐकता येणार नाही; पुराव्याची प्रत जतन राहते आणि काहीही मिटवलं जात नाही. सुधारणा व संशोधनाच्या दोन परवानग्या तुम्ही मागे घेता. बाकी सगळं तसंच चालू राहील — तुमचं शेत, तुमची कामं आणि तुमचा हिशोब जिथल्या तिथेच राहतो. हवं तेव्हा पुन्हा परवानगी देता येते.',
     },
     save: {
         button: 'जतन करा',
@@ -99,12 +111,12 @@ const en: ConsentBundle = {
     },
     toggles: {
         fullHistoryJournal: {
-            // PROPOSED (English) rendering of the founder's D-2 title.
-            title: 'Allow playback of my original voice',
-            // Founder D-31, verbatim.
-            meaning: 'Allow me and authorized reviewers on this farm to play back my original voice.',
-            // PROPOSED (English) rendering of the founder's D-2 description, then the existing "if no" sentence.
-            body: 'If Shram Safal misunderstands what you said or misses something, you can listen to your original voice again and check exactly what you said. The voice is kept with the record so the context of your work is not lost. An evidence copy of every recording is always kept as proof. This switch only decides whether your original voice can be played back; turning it off stops playback, but nothing is deleted. If no, new voice recordings will not be saved to your account.',
+            // PROPOSED.
+            title: SWITCH_TITLE_EN,
+            // PROPOSED.
+            meaning: SWITCH_MEANING_EN,
+            // PROPOSED English rendering of the founder's D-2 description, then the founder's D-50 sentence and one PROPOSED line (D-101).
+            body: `${D2_DESCRIPTION_EN} ${PROOF_KEPT_EN} ${OFF_CONSEQUENCE_EN}`,
         },
         researchCorpusExport: {
             title: 'De-identified use for research / export',
@@ -115,7 +127,7 @@ const en: ConsentBundle = {
     revoke: {
         button: 'Revoke all',
         confirm: 'Are you sure you want to revoke every permission?',
-        whatStops: 'If you revoke: new voice recordings from now on will not be saved to your account. Recordings saved earlier will stay. You also withdraw the two permissions for improving the app and for research. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.',
+        whatStops: 'If you revoke: your original voice can no longer be played back; the evidence copy is still kept as proof and nothing is deleted. You also withdraw the two permissions for improving the app and for research. Everything else keeps working — your farm, your work and your accounts stay exactly where they are. You can grant permission again whenever you like.',
     },
     save: {
         button: 'Save',

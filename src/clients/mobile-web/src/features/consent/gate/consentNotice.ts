@@ -91,6 +91,7 @@ import {
     type CoreDataCategoryCode,
     type CorePurposeCode,
 } from '../../../domain/consent/CoreConsentScope';
+import { OFF_CONSEQUENCE_EN, OFF_CONSEQUENCE_NOTICE_MR, PROOF_KEPT_EN, PROOF_KEPT_NOTICE_MR } from '../../../i18n/voiceSwitchWords';
 
 /**
  * Versions carried onto BOTH legal records. Bump the notice version on any change to
@@ -369,7 +370,8 @@ const mr: NoticeCopy = {
             id: 'voiceUploads',
             title: 'आवाज आणि जोडलेली माहिती',
             data: 'तुम्ही बोललेलं, लिहिलेलं, फोटो, कागदपत्रं',
-            purpose: 'काम समजून योग्य ठिकाणी मांडण्यासाठी. माईक तुम्ही सुरू केल्यावरच वापरला जातो. प्रत्येक आवाजाची पुराव्याची प्रत नेहमी जतन केली जाते; "मूळ आवाज ऐकू देणे" बंद केल्यास ऐकणं थांबतं, पण काहीही मिटवलं जात नाही',
+            // PROPOSED (D-50, CTO call D-101): the founder's own sentence about the evidence copy, then the one consequence of turning the switch off.
+            purpose: 'काम समजून योग्य ठिकाणी मांडण्यासाठी. माईक तुम्ही सुरू केल्यावरच वापरला जातो. ' + PROOF_KEPT_NOTICE_MR + ' ' + OFF_CONSEQUENCE_NOTICE_MR,
             purposes: ['VOICE_PROCESSING_FOR_WORK_RECORD'],
             dataCategories: ['VOICE_AUDIO_AND_TRANSCRIPT'],
         },
@@ -457,7 +459,8 @@ const en: NoticeCopy = {
             id: 'voiceUploads',
             title: 'Voice and uploads',
             data: 'What you speak, type, photograph or upload',
-            purpose: 'to understand your work and place it correctly. The microphone runs only when you start it. An evidence copy of every recording is always kept as proof; turning "Allow playback of my original voice" off stops playback but never deletes',
+            // PROPOSED (D-50, CTO call D-101): the founder's own sentence about the evidence copy, then the one consequence of turning the switch off.
+            purpose: 'to understand your work and place it correctly. The microphone runs only when you start it. ' + PROOF_KEPT_EN + ' ' + OFF_CONSEQUENCE_EN,
             purposes: ['VOICE_PROCESSING_FOR_WORK_RECORD'],
             dataCategories: ['VOICE_AUDIO_AND_TRANSCRIPT'],
         },

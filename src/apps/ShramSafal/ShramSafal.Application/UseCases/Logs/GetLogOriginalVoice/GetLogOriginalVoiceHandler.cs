@@ -153,10 +153,7 @@ public sealed class GetLogOriginalVoiceHandler(
         var consent = await repository.GetUserConsentStateAsync(speakerUserId, ct);
         var keptUnderCurrentWords = consent is not null
             && consent.FullHistoryJournal
-            && string.Equals(
-                consent.FullHistoryJournalWordingVersion,
-                CurrentConsentWording.VoiceKeepVersion,
-                StringComparison.Ordinal);
+            && CurrentConsentWording.VoiceKeepWordsAllowPlayback(consent.FullHistoryJournalWordingVersion);
         if (!keptUnderCurrentWords)
         {
             return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.NotKept));

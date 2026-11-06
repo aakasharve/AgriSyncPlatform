@@ -97,6 +97,41 @@ describe('NoticeChangeSheet', () => {
         expect(screen.getByTestId('notice-change-continue')).toBeEnabled();
     });
 
+    // ── H4 (lane OPS-1): the sheet shows the changes of the version he is asked for ───────────────────────────────
+    async function openAskedHaving(accepted: string | null) {
+        client.getConsent.mockResolvedValue({ acceptedNoticeVersion: accepted });
+        needs.mockImplementation(async (read) => { await read(); return true; });
+        render(<NoticeChangeSheet userId="u-1" />);
+        await screen.findByTestId('notice-change-sheet');
+        await waitFor(() => expect(box()).toBeEnabled());
+    }
+
+    it('someone who accepted notice-2026-11-02.2 is shown the D-50 line, and not the two changes he already accepted', async () => {
+        await openAskedHaving('notice-2026-11-02.2');
+        expect(screen.getByTestId('notice-change-proof')).toHaveTextContent(
+            'श्रमसफल प्रत्येक रेकॉर्डिंगचा मूळ आवाज पुराव्यासाठी जतन करते; हे बटण फक्त तो ऐकता येईल की नाही हे ठरवते.');
+        expect(screen.getByTestId('notice-change-proof')).toHaveTextContent(
+            'हा पर्याय बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.');
+        expect(screen.queryByTestId('notice-change-promise')).toBeNull();
+        expect(screen.queryByTestId('notice-change-erasure')).toBeNull();
+    });
+
+    it('someone who accepted notice-2026-10-30.1 is shown the erasure change and the D-50 line', async () => {
+        await openAskedHaving('notice-2026-10-30.1');
+        expect(screen.getByTestId('notice-change-erasure')).toBeInTheDocument();
+        expect(screen.getByTestId('notice-change-proof')).toBeInTheDocument();
+        expect(screen.queryByTestId('notice-change-promise')).toBeNull();
+    });
+
+    it('someone whose accepted version is unknown is shown every change, and English mode shows English only', async () => {
+        mockLanguage = 'en';
+        await openAskedHaving(null);
+        expect(screen.getByTestId('notice-change-promise')).toBeInTheDocument();
+        expect(screen.getByTestId('notice-change-erasure')).toBeInTheDocument();
+        expect(screen.getByTestId('notice-change-proof')).toHaveTextContent(
+            'ShramSafal keeps the original sound of every record as proof; this switch only decides whether it can be played. A recording made while this is off cannot be played later.');
+    });
+
     // ── P10: the network never holds him ─────────────────────────────────
 
     it('closes as soon as the acceptance is on the phone (the send is not awaited)', async () => {

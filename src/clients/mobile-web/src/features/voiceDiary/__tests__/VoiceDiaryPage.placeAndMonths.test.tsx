@@ -100,7 +100,7 @@ describe('VoiceDiaryPage — the आवाज नोंदी place', () => {
         // "turn on" does what it says: the same confirmation the switch opens — and nothing is saved
         // until he agrees there
         const confirm = await screen.findByTestId('voice-retained-first-grant-banner');
-        expect(confirm).toHaveTextContent('आवाजी नोंदी जतन करण्याची परवानगी');
+        expect(confirm).toHaveTextContent('मूळ आवाज ऐकू देण्याची परवानगी');
         expect(confirm).toHaveTextContent('मी सहमत आहे');
         expect(confirm.textContent ?? '').not.toMatch(/[A-Za-z]/);
         expect(agriSyncClient.updateConsent).not.toHaveBeenCalled();
