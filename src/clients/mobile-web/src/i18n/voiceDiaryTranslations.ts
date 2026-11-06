@@ -161,7 +161,7 @@ const mr: VoiceDiaryBundle = {
     },
     retentionBanner: {
         grantedTitle: 'मूळ आवाज ऐकू देणे सुरू आहे.', // PROPOSED
-        grantedBody: 'प्रत्येक नोंदीची जतन स्थिती खाली पाहा.',
+        grantedBody: 'प्रत्येक रेकॉर्डिंगची जतन स्थिती खाली पाहा.',
         deniedTitle: 'मूळ आवाज ऐकू देणे बंद आहे.', // PROPOSED
         deniedBody: `${OFF_CONSEQUENCE_MR} काहीही मिटवलं जात नाही.`, // PROPOSED
         deniedCta: 'चालू करा',
@@ -194,8 +194,8 @@ const mr: VoiceDiaryBundle = {
         // left for the founder.
         // PROPOSED (Marathi), plr-d10 I25: the last sentence follows D-31 — saved recordings may be
         // heard by him AND by authorised reviewers on this farm (it said "only your account").
-        body: `तुमचा मूळ आवाज तुम्हाला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येईल. प्रत्येक नोंदीची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. प्रत्येक रेकॉर्डिंगची पुराव्याची प्रत नेहमी जतन केली जाते. ${OFF_CONSEQUENCE_MR}`, // PROPOSED
-        bullet1: 'प्रत्येक नोंदीची जतन स्थिती दिसते',
+        body: `तुमचा मूळ आवाज तुम्हाला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येईल. प्रत्येक रेकॉर्डिंगची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. प्रत्येक रेकॉर्डिंगची पुराव्याची प्रत नेहमी जतन केली जाते. ${OFF_CONSEQUENCE_MR}`, // PROPOSED
+        bullet1: 'प्रत्येक रेकॉर्डिंगची जतन स्थिती दिसते',
         bullet2: 'कधीही बंद करता येते',
         bullet3: 'तुम्ही नोंदी मिटवायला सांगू शकता',
         primaryCta: 'मी सहमत आहे',
@@ -205,7 +205,7 @@ const mr: VoiceDiaryBundle = {
     stopFutureConfirm: {
         headline: 'मूळ आवाज ऐकू देणे बंद करायचे?', // PROPOSED
         body: 'बंद केल्यावर यापुढे केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.', // PROPOSED
-        keptNote: 'आधी जतन झालेल्या नोंदी जशाच्या तशा राहतील. त्या मिटवायच्या असतील तर ती वेगळी कृती आहे.',
+        keptNote: 'आधी जतन झालेली रेकॉर्डिंग जशी आहेत तशीच राहतील. त्या मिटवायच्या असतील तर ती वेगळी कृती आहे.',
         primaryCta: 'होय, बंद करा', // PROPOSED
         secondaryCta: 'नको',
     },

@@ -930,6 +930,34 @@ public sealed class OwnerConfirmationAndVoiceReplayRealPostgresTests(Xunit.Abstr
         (await VoiceDiaryByIdAsync(Worker, clip)).Outcome.Should().Be(VoiceDiaryByIdOutcome.Found);
     }
 
+    [Fact]
+    public async Task The_speaker_hears_his_own_record_with_the_switch_on_in_any_words_version_while_reviewers_still_need_the_words()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var clip = Guid.NewGuid();
+        var logId = Guid.NewGuid();
+        await PushAppliedAsync(Worker, "create_daily_log", "fx3-speaker-own-record", CreatePayload(logId, Worker, clip));
+        await SeedRetainedClipAsync(clip, Worker);
+
+        // OFF: nobody, the speaker included (D-101).
+        await SetVoiceKeepAsync(Worker, on: false, words: CurrentVoiceWords);
+        (await ReplayAsync(Worker, logId)).UnavailableReason.Should().Be("not_kept");
+
+        // ON with no words, and ON under words nobody ever sent: the speaker hears his OWN record; the reviewer does not.
+        foreach (var words in new string?[] { null, "voice-keep-never-sent" })
+        {
+            await SetVoiceKeepAsync(Worker, on: true, words: words);
+            (await ReplayAsync(Worker, logId)).Available.Should().BeTrue("his own record needs only the switch ON ({0})", words ?? "no words");
+            (await ReplayAsync(Owner, logId)).UnavailableReason.Should().Be("not_kept", "a reviewer still needs the words that name the reviewers");
+        }
+
+        // OFF again: refused again, and the clip is still there.
+        await SetVoiceKeepAsync(Worker, on: false, words: null);
+        (await ReplayAsync(Worker, logId)).UnavailableReason.Should().Be("not_kept");
+        Convert.ToInt64(await ScalarOnSuperuserAsync("SELECT count(*) FROM ssf.voice_clips_retained WHERE clip_id = @c", ("c", clip)))
+            .Should().Be(1, "OFF never deletes the kept clip");
+    }
+
     private async Task SeedRetainedClipAsync(Guid clipId, Guid owner) => await ExecOnSuperuserAsync("""
         INSERT INTO ssf.voice_clips_retained (clip_id, user_id, recorded_at_utc, s3_key, dek_id, iv_b64, auth_tag_b64, duration_seconds, language, created_at_utc)
         VALUES (@clip, @user, NOW(), @key, 'dek-1', 'aXY=', 'dGFn', 4, 'mr-IN', NOW());

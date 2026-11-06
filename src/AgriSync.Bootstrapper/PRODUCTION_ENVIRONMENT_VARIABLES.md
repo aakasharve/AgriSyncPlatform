@@ -114,9 +114,10 @@ location ~ ^/shramsafal/ai/(document-sessions/|receipt-extract|patti-extract) {
                                      # receipt-extract / patti-extract routes; the largest phone photo is not measured yet; Kestrel's own ceiling is 50 MB
     proxy_read_timeout      300s;
     proxy_send_timeout      300s;
+    send_timeout            300s;
     proxy_request_buffering off;
 }
 ```
 
-(The regex `location` wins over the `/shramsafal/ai/` prefix for the photo routes.) If an AWS load balancer sits in front, its idle timeout must also be at least 300
+(The regex `location` wins over the `/shramsafal/ai/` prefix for the photo routes.) **nginx refuses a `proxy_pass` that has a URI path inside a regex `location`** ("`proxy_pass` cannot have URI part in location given by regular expression"), and the reload fails. If the existing prefix block says `proxy_pass http://upstream/some/path/;`, do not copy it into the regex block: use `proxy_pass http://upstream;` with no path there (the request URI is passed through unchanged). If an AWS load balancer sits in front, its idle timeout must also be at least 300
 seconds (default 60). Verify with a real 10-minute recording and with the largest receipt photo before release.

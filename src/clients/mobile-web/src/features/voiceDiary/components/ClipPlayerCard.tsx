@@ -17,6 +17,7 @@ import { CheckCircle2, Clock, AlertCircle, Loader2, Mic, Play, Pause, Cloud, Clo
 import type { VoiceClipCacheRecord, VoiceClipStatus } from '../../../infrastructure/storage/DexieDatabase';
 import { readVoiceClipPlaintext } from '../../../infrastructure/voice/VoiceClipRetention';
 import { openRetainedClip } from '../../../infrastructure/voice/retainedClipReader';
+import { usePlaybackSwitch } from '../../logs/components/voiceResult/playbackSwitch';
 import { ORIGINAL_VOICE_NOT_KEPT_ERROR } from '../../../infrastructure/voiceDiary/originalVoiceNotKept';
 import type { CloudArchiveState } from '../../../infrastructure/voice/voiceArchiveState';
 import {
@@ -148,7 +149,10 @@ const getStatusPresentation = (
     }
 };
 
-const ClipPlayerCard: React.FC<Props> = ({ locale, clip, playbackAllowed }) => {
+const ClipPlayerCard: React.FC<Props> = ({ locale, clip, playbackAllowed: passedAllowed }) => {
+    // The page that holds the consent read passes the state; a card shown elsewhere asks the shared store (fix round 3: one rule, every player).
+    const sharedAllowed = usePlaybackSwitch();
+    const playbackAllowed = passedAllowed ?? sharedAllowed;
     const switchOff = playbackAllowed === false;
     const [audioUrl, setAudioUrl] = useState<string>('');
     const [isPlaying, setIsPlaying] = useState(false);

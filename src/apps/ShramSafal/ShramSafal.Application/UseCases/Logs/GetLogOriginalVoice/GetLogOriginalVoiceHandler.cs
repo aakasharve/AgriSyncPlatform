@@ -151,7 +151,10 @@ public sealed class GetLogOriginalVoiceHandler(
             return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.NoRecording));
         }
 
-        var keptUnderCurrentWords = await OriginalVoiceSwitch.IsOnAsync(repository, speakerUserId, ct);
+        // D-101: his own recording needs only the switch ON (any words version); REVIEWERS need ON under the words that name them.
+        var keptUnderCurrentWords = query.CallerUserId == speakerUserId
+            ? await OriginalVoiceSwitch.IsOnForSpeakerAsync(repository, speakerUserId, ct)
+            : await OriginalVoiceSwitch.IsOnAsync(repository, speakerUserId, ct);
         if (!keptUnderCurrentWords)
         {
             return Result.Success(LogOriginalVoiceResult.Unavailable(OriginalVoiceUnavailableReason.NotKept));

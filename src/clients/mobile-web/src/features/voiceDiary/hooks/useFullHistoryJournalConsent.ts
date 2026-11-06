@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 import { ConsentState } from '../../../domain/consent/ConsentState';
 import { observeArchiveConsentView } from '../../../infrastructure/voice/voiceArchiveConsent';
+import { publishPlaybackSwitch } from '../../logs/components/voiceResult/playbackSwitch';
 
 export interface UseFullHistoryJournalConsentResult {
     granted: boolean;
@@ -39,6 +40,7 @@ export function useFullHistoryJournalConsent(): UseFullHistoryJournalConsentResu
             await observeArchiveConsentView(dto).catch(() => null);
             knownRef.current = true;
             setKnown(true);
+            publishPlaybackSwitch(dto.fullHistoryJournal === true); // every other player on the phone follows this answer at once
             setState({
                 fullHistoryJournal: dto.fullHistoryJournal,
                 crossFarmAggregation: dto.crossFarmAggregation,

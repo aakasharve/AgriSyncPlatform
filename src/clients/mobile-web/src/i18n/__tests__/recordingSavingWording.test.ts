@@ -23,7 +23,7 @@ const OFF_EN = 'A recording made while this is off cannot be played later.';
 describe('R4 - playback on banner', () => {
     it('exact Marathi, two lines', () => {
         expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedTitle')).toBe('मूळ आवाज ऐकू देणे सुरू आहे.');
-        expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedBody')).toBe('प्रत्येक नोंदीची जतन स्थिती खाली पाहा.');
+        expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedBody')).toBe('प्रत्येक रेकॉर्डिंगची जतन स्थिती खाली पाहा.');
     });
     it('English says playback is on and points at the per-recording status', () => {
         expect(tVoiceDiary('en-IN', 'retentionBanner.grantedTitle')).toBe('Playback of your original voice is on.');
@@ -127,5 +127,26 @@ describe('no string claims saved history or success from consent alone', () => {
         const all = JSON.stringify([VOICE_DIARY_BUNDLES, CONSENT_BUNDLES], (_k, v) => v).replace(/"[A-Za-z]+":/g, '');
         expect(all).not.toMatch(/श्रम साथी/);
         expect(all).not.toMatch(/cloud|क्लाउड/i);
+    });
+});
+
+describe('fix round 3 - one word for one recording on the first turn-on sheet (CTO call D-101)', () => {
+    it('firstGrant.body in Marathi says "रेकॉर्डिंग" and never "नोंद" for the recording', () => {
+        const body = tVoiceDiary('mr-IN', 'firstGrant.body');
+        expect(body).toContain('प्रत्येक रेकॉर्डिंगची जतन स्थिती');
+        expect(body).toContain('प्रत्येक रेकॉर्डिंगची पुराव्याची प्रत');
+        expect(body.replace(/आवाज नोंदी/g, '')).not.toMatch(/नोंद/);
+    });
+});
+
+describe('fix round 3 add-on - "रेकॉर्डिंग" for the sound recording on the same page (CTO call D-101)', () => {
+    it('bullet1, grantedBody and keptNote name the recording "रेकॉर्डिंग", not "नोंद"', () => {
+        expect(tVoiceDiary('mr-IN', 'firstGrant.bullet1')).toBe('प्रत्येक रेकॉर्डिंगची जतन स्थिती दिसते');
+        expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedBody')).toBe('प्रत्येक रेकॉर्डिंगची जतन स्थिती खाली पाहा.');
+        const kept = tVoiceDiary('mr-IN', 'stopFutureConfirm.keptNote');
+        expect(kept).toContain('आधी जतन झालेली रेकॉर्डिंग');
+        for (const k of ['firstGrant.bullet1', 'retentionBanner.grantedBody', 'stopFutureConfirm.keptNote'] as const) {
+            expect(tVoiceDiary('mr-IN', k), k).not.toMatch(/नोंदी?ची|नोंदी/);
+        }
     });
 });

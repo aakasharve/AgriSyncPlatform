@@ -505,11 +505,7 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // back-fills a person and a card for every field operator.
         "20261102163914_AddWorkerIdentity",
 
-        // ── Reviewed 2026-11-05 (spec: plr-d10 lane OPS-1, L-1); Down() read in full: drops ONE partial unique index,
-        //    ux_erasure_requests_one_waiting_per_person, on ssf.erasure_requests. Up() first marks duplicate WAITING requests
-        //    (keeping the oldest per person) Cancelled, then creates it. No table, column, policy or grant; never touches
-        //    ssf.audit_events or any ledger's grants. Safe to revert and re-apply mid-proof.
-                // ── Reviewed 2026-11-06 (spec: plr-d10 lane OPS-1, L-1, fix round 2); Down() read in full: drops ONE partial unique index,
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane OPS-1, L-1, fix round 2); Down() read in full: drops ONE partial unique index,
         //    ux_erasure_requests_one_waiting_per_person, on ssf.erasure_requests. Up() DOES touch ssf.audit_events: it first marks
         //    duplicate WAITING requests (the oldest per person is kept) Cancelled and INSERTS one audit row per cancelled duplicate
         //    (actor system_migration), lifting FORCE ROW LEVEL SECURITY on ssf.audit_events for that single insert and restoring it exactly

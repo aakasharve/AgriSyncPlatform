@@ -171,6 +171,39 @@ describe('statements that were measured against the code and found untrue stay o
         expect(whatStops).not.toMatch(/will be (deleted|erased)|are (deleted|erased)/i);
     });
 
+    it('the revoke sentence is TRUE for the BEHAVIOUR too: every file that can play a recording is gated by the switch or is on the reviewed list', () => {
+        // fix round 3 (M1): the sentence above was true for the server and false for two phone screens, and a wording test could not see it.
+        // This scans the shipped source for anything that can make sound or play a clip. A NEW player has to be added here WITH its reason,
+        // and the behaviour itself is pinned by features/logs/components/voiceResult/__tests__/playbackSwitch.contract.test.tsx (fails if
+        // any player plays while the switch is OFF). Phone players: useClipPlayback (result screen, today's activity on आढावा, the day
+        // listen) and ClipPlayerCard (आवाज नोंदी, the schedule day sheet) read the shared switch from voiceResult/playbackSwitch.
+        const reviewed: Record<string, string> = {
+            'features/logs/components/voiceResult/useClipPlayback.ts': 'GATED: usePlaybackSwitch(); OFF blocks toggle and stops playing',
+            'features/voiceDiary/components/ClipPlayerCard.tsx': 'GATED: playbackAllowed / usePlaybackSwitch(); OFF blocks and shows the founder words',
+            'features/logs/components/originalVoice/OriginalVoiceButton.tsx': 'SERVER-GATED: the audio comes from GetLogOriginalVoice, which refuses while OFF',
+            'features/consent/ConsentScreen.tsx': 'NOT A RECORDING: the narration element of the consent screen',
+            'features/labour/identity/CardScanner.tsx': 'NOT A RECORDING: camera video preview',
+            'features/logs/components/shramsathi/understandingRing/cinematicEngine.ts': 'NOT A RECORDING: animation timing',
+            'features/logs/components/shramsathi/understandingRing/understandingEngine.ts': 'NOT A RECORDING: animation timing',
+            'features/voice/hooks/useMicLevel.ts': 'NOT PLAYBACK: reads the microphone level while recording',
+            'infrastructure/voice/SegmentCompressor.ts': 'NOT PLAYBACK: compresses a clip being recorded',
+        };
+        const srcRoot = resolve(__dirname, '../..');
+        const hits = filesContaining(
+            srcRoot,
+            (n) => /\.(ts|tsx)$/.test(n) && !/\.test\./.test(n),
+            ['__tests__', 'node_modules'],
+            (b) => /new Audio\(|<audio|\.play\(|createElement\('audio'\)|AudioContext\(/.test(b),
+        ).map((f) => f.split(String.fromCharCode(92)).join('/').replace(/^.*\/src\//, ''));
+        const unreviewed = hits.filter((f) => !(f in reviewed));
+        expect(unreviewed, `new code that can play sound - gate it on usePlaybackSwitch() and add it to this list: ${unreviewed.join(', ')}`).toEqual([]);
+
+        // The two gated phone players must still read the switch (a refactor that drops the call is caught here, the behaviour test does the rest).
+        for (const f of ['features/logs/components/voiceResult/useClipPlayback.ts', 'features/voiceDiary/components/ClipPlayerCard.tsx']) {
+            expect(readFileSync(join(srcRoot, f), 'utf8'), f).toMatch(/usePlaybackSwitch\(/);
+        }
+    });
+
     it('does not cite a statute as if it were a compliance statement', () => {
         for (const [path, value] of allLegal) {
             expect(value, path).not.toMatch(/DPDP/);
