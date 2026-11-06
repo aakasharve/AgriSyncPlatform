@@ -631,9 +631,10 @@ internal sealed class ShramSafalRepository(
         await db.ScheduleTemplates.AddAsync(template, ct);
     }
 
+    // spec: plr-d10 lane L8b-1 Task 5 — no Include of Stages: the EF map ignores it (ScheduleTemplateConfiguration), and
+    // including it threw before the first row was read, so every clone / edit / publish answered 500.
     public async Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) =>
         await db.ScheduleTemplates
-            .Include(t => t.Stages)
             .Include(t => t.Activities)
             .FirstOrDefaultAsync(t => t.Id == templateId, ct);
 
@@ -1457,8 +1458,10 @@ internal sealed class ShramSafalRepository(
     {
         var normalizedCrop = cropKey.Trim().ToLowerInvariant();
 
+        // spec: plr-d10 lane L8b-1 — TRACKED: migrate / abandon / complete change this row's state and save it. Read
+        // untracked, the state change was never written (an abandon answered "Abandoned" and kept the row Active; a
+        // migrate then hit the one-active index), unseen while no adopt could succeed.
         return await db.ScheduleSubscriptions
-            .AsNoTracking()
             .FirstOrDefaultAsync(
                 s => s.PlotId == plotId
                      && s.CropKey == normalizedCrop

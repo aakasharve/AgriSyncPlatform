@@ -1,7 +1,7 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.4.0",
-  "lastUpdated": "2026-11-01",
+  "version": "1.5.0",
+  "lastUpdated": "2026-11-06",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
     { "name": "create_plot",            "ownerAggregate": "Plot",             "sinceVersion": "0.1.0", "payloadSchema": "CreatePlot" },

@@ -107,7 +107,7 @@ public sealed class RemovePlannedActivityPipelineTests
     }
 
     [Fact]
-    public async Task Authorizer_returns_Forbidden_when_caller_is_below_Mukadam()
+    public async Task Authorizer_returns_Forbidden_when_caller_holds_no_PlanWork()
     {
         var activity = MakeActivity();
         var repo = new FakeRemoveRepo(activity, AppRole.Worker);
@@ -121,7 +121,7 @@ public sealed class RemovePlannedActivityPipelineTests
     }
 
     [Fact]
-    public async Task Authorizer_returns_Success_when_caller_is_Mukadam()
+    public async Task Authorizer_returns_Success_when_caller_holds_PlanWork()
     {
         var activity = MakeActivity();
         var repo = new FakeRemoveRepo(activity, AppRole.Mukadam);
@@ -242,6 +242,20 @@ public sealed class RemovePlannedActivityPipelineTests
 
         public override Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(_activity?.Id == id ? _activity : null);
+
+        // lane L8b-1 (founder D-73) — the planning doors ask ScheduleChangeGate (PlanWork). In these tests the मुकादम is
+        // the seat the owner GAVE "कामाचं नियोजन करणे" (unless PlanWorkGiven is false); every other label holds only what
+        // the 2b migration stored for it (no PlanWork): a label grants nothing.
+        public bool PlanWorkGiven { get; init; } = true;
+
+        public override async Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default)
+        {
+            var access = await base.GetFarmAccessForUserAsync(farmId, userId, ct);
+            return access is { Role: AppRole.Mukadam } && PlanWorkGiven
+                ? access with { StoredPermissions = (access.StoredPermissions ?? ShramSafal.Domain.Farms.FarmPermission.None) | ShramSafal.Domain.Farms.FarmPermission.PlanWork }
+                : access;
+        }
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
             Task.FromResult(_role);

@@ -52,7 +52,9 @@ const HANDLER_PATH = resolve(
 // 16 -> 18 on 2026-10-31 (lane OF-S): move_daily_log and correct_labour_assignment are two NEW
 // server-side key contracts, each guarded by its own PayloadHasOnly and named below.
 // 18 -> 19 on 2026-11-01 (lane PRV, founder D-26): set_record_audience, its own PayloadHasOnly.
-const EXPECTED_ALLOWLIST_COUNT = 19;
+// 19 -> 22 on 2026-11-06 (lane L8b-1): adopt_schedule, migrate_schedule and abandon_schedule are WIRED (they answered
+// MUTATION_TYPE_UNIMPLEMENTED before), each guarded by its own PayloadHasOnly and named below.
+const EXPECTED_ALLOWLIST_COUNT = 22;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -84,6 +86,10 @@ const EXPECTED_GUARDED_MUTATIONS = [
     'create_attachment',
     'testinstance.collected',
     'testinstance.reported',
+    // lane L8b-1 — a plot's schedule choice (on the same handlers as the REST routes).
+    'adopt_schedule',
+    'migrate_schedule',
+    'abandon_schedule',
 ].sort();
 
 interface CatalogEntry {

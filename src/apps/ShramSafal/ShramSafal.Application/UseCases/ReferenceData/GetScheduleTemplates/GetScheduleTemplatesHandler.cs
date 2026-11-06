@@ -28,14 +28,16 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         ct.ThrowIfCancellationRequested();
 
         var dbTemplates = await repository.GetScheduleTemplatesAsync(ct);
-        if (dbTemplates.Count == 0)
-        {
-            return Result.Success<IReadOnlyList<ScheduleTemplateDto>>(ReferenceDataCatalog.ScheduleTemplates);
-        }
-
-        var mapped = MapFromDb(dbTemplates);
-        return Result.Success<IReadOnlyList<ScheduleTemplateDto>>(mapped);
+        return Result.Success(Listing(dbTemplates));
     }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 — THE library, from the rows <see cref="IShramSafalRepository.GetScheduleTemplatesAsync"/>
+    /// returns: the rows when there are any, else the built-in catalog. The phone lists exactly this (the reference route
+    /// and the pull both answer it), and <c>ScheduleLibrary</c> adopts from exactly this — one library, never two.
+    /// </summary>
+    public static IReadOnlyList<ScheduleTemplateDto> Listing(IReadOnlyList<ScheduleTemplate> rows) =>
+        rows.Count == 0 ? ReferenceDataCatalog.ScheduleTemplates : MapFromDb(rows);
 
     public static IReadOnlyList<CropTypeDto> BuildCropTypes(IReadOnlyList<ScheduleTemplateDto> templates)
     {

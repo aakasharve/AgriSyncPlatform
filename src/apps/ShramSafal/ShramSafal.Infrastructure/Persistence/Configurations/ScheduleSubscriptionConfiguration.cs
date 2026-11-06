@@ -69,6 +69,11 @@ internal sealed class ScheduleSubscriptionConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.StateChangedAtUtc)
             .HasColumnName("state_changed_at_utc");
 
+        // spec: plr-d10 lane L8b-1 — the plot's day 0 (NULL = the crop season's start).
+        builder.Property(x => x.ReferenceDate)
+            .HasColumnName("reference_date")
+            .HasColumnType("date");
+
         builder.Ignore(x => x.SubscriptionId);
         builder.Ignore(x => x.DomainEvents);
 

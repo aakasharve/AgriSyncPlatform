@@ -3,6 +3,8 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 using ShramSafal.Application.UseCases.Schedules.AdoptSchedule;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Audit;
@@ -21,7 +23,8 @@ namespace ShramSafal.Domain.Tests.Schedules;
 /// Phase 3 MIS — AdoptScheduleHandler invariant coverage:
 ///   - Happy path writes subscription + audit event + SaveChanges.
 ///   - I-14: duplicate active subscription on same (plot, crop, cycle) is rejected.
-///   - Unpublished templates are rejected.
+///   - lane L8b-1: the schedule comes from the LIBRARY (rows, else the built-in catalog); another account's private
+///     schedule answers like an unknown id; the day 0 is kept; the schedule gate refuses a कामगार.
 ///   - Template crop mismatch is rejected.
 /// </summary>
 public sealed class AdoptScheduleHandlerTests
@@ -38,6 +41,7 @@ public sealed class AdoptScheduleHandlerTests
         var repo = BuildRepoWithBasics();
         var template = BuildPublishedTemplate(cropKey: "grapes");
         repo.Templates[template.TemplateId] = template;
+        var listed = GetScheduleTemplatesHandler.Listing(repo.Templates.Values.Select(t => t.Row).ToList()).Single(t => t.Id == template.Id);
 
         var handler = CreateHandler(repo, subscriptionIdSeed: Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"));
 
@@ -54,7 +58,8 @@ public sealed class AdoptScheduleHandlerTests
         Assert.Equal("Active", dto.State);
         Assert.Equal(template.Id, dto.ScheduleTemplateId);
         Assert.Equal("grapes", dto.CropKey);
-        Assert.Equal(template.VersionTag, dto.ScheduleVersionTag);
+        Assert.Equal(ScheduleLibrary.VersionTagOf(listed), dto.ScheduleVersionTag);
+        Assert.Null(dto.ReferenceDate);
 
         Assert.Single(repo.Subscriptions);
         Assert.Single(repo.AuditEvents);
@@ -91,7 +96,7 @@ public sealed class AdoptScheduleHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_UnpublishedTemplate_ReturnsTemplateUnpublished()
+    public async Task HandleAsync_AnotherAccountsPrivateTemplate_ReturnsTemplateNotFound()
     {
         var repo = BuildRepoWithBasics();
         var template = BuildTemplate(cropKey: "grapes", publish: false);
@@ -107,9 +112,50 @@ public sealed class AdoptScheduleHandlerTests
             ActorUserId: ActorIdVal));
 
         Assert.True(result.IsFailure);
-        Assert.Equal(ShramSafalErrors.ScheduleTemplateUnpublished, result.Error);
+        Assert.Equal(ShramSafalErrors.ScheduleTemplateNotFound, result.Error);
         Assert.Empty(repo.Subscriptions);
         Assert.Equal(0, repo.SaveCalls);
+    }
+
+    [Fact]
+    public async Task HandleAsync_BuiltInLibraryTemplate_AdoptsWithDayZero()
+    {
+        // No rows: the library is the built-in catalog, exactly as the phone lists it.
+        var repo = BuildRepoWithBasics();
+        var builtIn = ReferenceDataCatalog.ScheduleTemplates.Single(t => t.CropType == "Grapes");
+        var handler = CreateHandler(repo);
+
+        var result = await handler.HandleAsync(new AdoptScheduleCommand(
+            FarmId: FarmIdVal.Value,
+            PlotId: PlotIdVal,
+            CropCycleId: CycleIdVal,
+            ScheduleTemplateId: builtIn.Id,
+            ActorUserId: ActorIdVal,
+            ReferenceDate: new DateOnly(2026, 2, 20)));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(builtIn.Id, result.Value.ScheduleTemplateId);
+        Assert.Equal(new DateOnly(2026, 2, 20), result.Value.ReferenceDate);
+        Assert.Equal(new DateOnly(2026, 2, 20), Assert.Single(repo.Subscriptions).ReferenceDate);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WorkerSeat_IsRefusedByTheScheduleGate()
+    {
+        var repo = BuildRepoWithBasics();
+        repo.Role = AppRole.Worker;
+        var builtIn = ReferenceDataCatalog.ScheduleTemplates.Single(t => t.CropType == "Grapes");
+
+        var result = await CreateHandler(repo).HandleAsync(new AdoptScheduleCommand(
+            FarmId: FarmIdVal.Value,
+            PlotId: PlotIdVal,
+            CropCycleId: CycleIdVal,
+            ScheduleTemplateId: builtIn.Id,
+            ActorUserId: ActorIdVal));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ShramSafalErrors.Forbidden, result.Error);
+        Assert.Empty(repo.Subscriptions);
     }
 
     [Fact]
@@ -149,29 +195,32 @@ public sealed class AdoptScheduleHandlerTests
         return repo;
     }
 
-    private static CropScheduleTemplate BuildPublishedTemplate(string cropKey) =>
+    private static LibraryTemplate BuildPublishedTemplate(string cropKey) =>
         BuildTemplate(cropKey, publish: true);
 
-    private static CropScheduleTemplate BuildTemplate(string cropKey, bool publish)
+    private static LibraryTemplate BuildTemplate(string cropKey, bool publish) =>
+        BuildLibraryTemplate(cropKey, "v1", publish);
+
+    /// <summary>lane L8b-1 — a library schedule ROW (ssf.schedule_templates) as the handlers now adopt it.</summary>
+    private sealed record LibraryTemplate(ScheduleTemplate Row, string VersionTag)
     {
-        var templateId = ScheduleTemplateId.New();
-        var task = PrescribedTask.Create(
-            PrescribedTaskId.New(),
-            taskType: "fertigation",
-            stage: "flowering",
-            dayOffsetFromCycleStart: 10,
-            toleranceDaysPlusMinus: 2);
-        var template = CropScheduleTemplate.Create(
-            templateId.Value,
-            templateKey: $"{cropKey}_standard_v1",
-            cropKey: cropKey,
-            regionCode: null,
-            name: $"{cropKey} standard",
-            versionTag: "v1",
-            createdAtUtc: Now.AddDays(-30),
-            tasks: new[] { task });
-        if (publish) template.Publish();
-        return template;
+        public Guid Id => Row.Id;
+        public ScheduleTemplateId TemplateId => new(Row.Id);
+    }
+
+    /// <summary>
+    /// A library row named the way the library reads its crop ("grapes - v1" → Grapes). <paramref name="publish"/> false:
+    /// another account's PRIVATE schedule (the library has no "unpublished" — it lists every row; what a caller may not
+    /// adopt is a schedule he may not see).
+    /// </summary>
+    private static LibraryTemplate BuildLibraryTemplate(string cropKey, string versionTag, bool publish)
+    {
+        var row = ScheduleTemplate.Create(
+            Guid.NewGuid(), $"{cropKey} - {versionTag}", "flowering", Now.AddDays(-30),
+            createdByUserId: publish ? null : new UserId(Guid.Parse("99999999-9999-9999-9999-999999999999")),
+            tenantScope: publish ? TenantScope.Public : TenantScope.Private);
+        row.AddActivity(Guid.NewGuid(), "fertigation", 10);
+        return new LibraryTemplate(row, versionTag);
     }
 
     private static AdoptScheduleHandler CreateHandler(FakeAdoptRepo repo, Guid? subscriptionIdSeed = null)
@@ -208,7 +257,7 @@ public sealed class AdoptScheduleHandlerTests
         public Dictionary<Guid, Farm> Farms { get; } = new();
         public Dictionary<Guid, Plot> Plots { get; } = new();
         public Dictionary<Guid, CropCycle> CropCycles { get; } = new();
-        public Dictionary<ScheduleTemplateId, CropScheduleTemplate> Templates { get; } = new();
+        public Dictionary<ScheduleTemplateId, LibraryTemplate> Templates { get; } = new();
         public List<ScheduleSubscription> Subscriptions { get; } = new();
         public List<AuditEvent> AuditEvents { get; } = new();
         public HashSet<(Guid farmId, Guid userId)> FarmMembers { get; } = new();
@@ -226,9 +275,16 @@ public sealed class AdoptScheduleHandlerTests
         public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
             Task.FromResult(FarmMembers.Contains((farmId, userId)));
 
+        // lane L8b-1 — the compliance model is not the library: a handler that still read it would fail here.
         public Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(
             ScheduleTemplateId templateId, CancellationToken ct = default) =>
-            Task.FromResult(Templates.TryGetValue(templateId, out var t) ? t : null);
+            throw new NotSupportedException("adoption reads the library (ScheduleLibrary), never crop_schedule_templates");
+
+        public Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default) =>
+            Task.FromResult(Templates.Values.Select(t => t.Row).ToList());
+
+        public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(FarmMembers.Where(m => m.userId == userId).Select(m => m.farmId).ToList());
 
         public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
             Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default)
@@ -264,7 +320,9 @@ public sealed class AdoptScheduleHandlerTests
         public Task AddFarmAsync(Farm farm, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
+        // lane L8b-1 — the schedule doors ask ScheduleChangeGate (founder D-73: the primary owner, or a PlanWork seat).
+        public AppRole? Role { get; set; } = AppRole.PrimaryOwner;
+        public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => Task.FromResult(Role);
         public Task<bool> IsUserOwnerOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPlotAsync(Plot plot, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
@@ -287,7 +345,6 @@ public sealed class AdoptScheduleHandlerTests
         public Task<List<Attachment>> GetAttachmentsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPriceConfigAsync(PriceConfig config, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
@@ -307,7 +364,6 @@ public sealed class AdoptScheduleHandlerTests
         public Task<List<AuditEvent>> GetAuditEventsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> CountActivePrimaryOwnersAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddCropScheduleTemplateAsync(CropScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();

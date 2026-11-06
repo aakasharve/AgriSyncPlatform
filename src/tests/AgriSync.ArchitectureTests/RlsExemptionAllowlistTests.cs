@@ -154,16 +154,17 @@ public sealed class RlsExemptionAllowlistTests
         // poll batch.
         "outbox_messages",
 
-        // Schedule templates + their subscriptions are author-owned
-        // not farm-owned (CEI §4.5). The template author can be a
-        // platform admin and the same template instance is shared
-        // across many farms via ScheduleSubscription. A farm-scoped
-        // RLS policy would not represent the access shape; a future
-        // author-scoped policy is the right tool.
+        // Schedule templates are author-owned, not farm-owned (CEI §4.5):
+        // the template author can be a platform admin and the same
+        // template is shared across many farms. A farm-scoped RLS policy
+        // would not represent the access shape; a future author-scoped
+        // policy is the right tool.
+        // spec: plr-d10 lane L8b-1 — schedule_subscriptions and
+        // schedule_migration_events LEFT this list: they are ONE farm's
+        // choices (each row carries farm_id), not author-owned, and are
+        // FORCE-RLS'd on farm_id by 2026110*_AddScheduleSubscriptionDayZeroAndRls.
         "crop_schedule_templates",
         "crop_schedule_prescribed_tasks",
-        "schedule_subscriptions",
-        "schedule_migration_events",
 
         // Organization tables (W0 admin spine). Multi-tenant by
         // org_id not farm_id; a future Phase 09 RLS policy will key

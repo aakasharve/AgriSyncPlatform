@@ -46,6 +46,14 @@ public sealed class GeneratePlanFromTemplateHandler(
             return Result.Failure<PlanGenerationResultDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane L8b-1 (founder D-73) — generating a season's plan is planning work: the primary owner, or a seat
+        // he gave "कामाचं नियोजन करणे" (PlanWork). Membership alone (the rule that stood here) is not enough.
+        if (!await Services.ScheduleChangeGate.MayChangeAsync(
+                repository, (Guid)cropCycle.FarmId, command.ActorUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<PlanGenerationResultDto>(ShramSafalErrors.Forbidden);
+        }
+
         // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
         if (await Services.PlotScopeGate.RefuseAsync(
                 repository, (Guid)cropCycle.FarmId, cropCycle.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } outsidePlots)

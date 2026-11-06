@@ -395,9 +395,10 @@ export const renderAttentionRoute = (ctx: AppRouterContext): React.ReactNode => 
                         returnTo: { route: 'attention', mainView: ctx.mainView },
                     });
                 }}
-                // "पुढे ठरवा" — the primary owner only (founder D-22: planning authority starts there; the
-                // server's own check still applies).
-                canReschedule={ctx.farmRole === 'PrimaryOwner'}
+                // "पुढे ठरवा" — lane L8b-1 (founder D-73): whoever holds "कामाचं नियोजन करणे" (PlanWork) on this farm, as
+                // the server answers it — the primary owner always; a मुकादम or सहमालक only when the owner gave it. The
+                // server's ScheduleChangeGate asks the same authority on the move itself.
+                canReschedule={ctx.mayPlanWork ?? ctx.farmRole === 'PrimaryOwner'}
             />
         </div>
     );

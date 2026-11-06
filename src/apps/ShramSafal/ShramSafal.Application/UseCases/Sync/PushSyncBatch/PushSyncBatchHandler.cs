@@ -161,7 +161,11 @@ public sealed class PushSyncBatchHandler(
     // handler the online route (POST …/labour/assignments/{id}/corrections) resolves — never a copy of its rule.
     IHandler<CorrectLabourCommand, CorrectLabourResult> correctLabourHandler,
     // spec: plr-d10 lane PRV (founder D-26) — the primary account holder chooses who sees one record (set_record_audience).
-    ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler setRecordAudienceHandler)
+    ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler setRecordAudienceHandler,
+    // spec: plr-d10 lane L8b-1 — a plot's schedule choice (adopt / migrate / abandon), the SAME handlers the REST routes call.
+    ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleHandler adoptScheduleHandler,
+    ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleHandler migrateScheduleHandler,
+    ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleHandler abandonScheduleHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1119,16 +1123,20 @@ public sealed class PushSyncBatchHandler(
                 return MutationExecutionOutcome.Failure(
                     "ShramSafal.InvalidMutationType",
                     "Mutation type 'add_location' is not allowed as standalone command. Send location with create_daily_log.");
-            // Schedule + Plan mutations (Sub-plan 03 wires real handlers).
+            // spec: plr-d10 lane L8b-1 — a plot's schedule choice, on the same handlers as the REST routes.
+            case "adopt_schedule":
+                return await HandleAdoptScheduleAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "migrate_schedule":
+                return await HandleMigrateScheduleAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "abandon_schedule":
+                return await HandleAbandonScheduleAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // Schedule-template + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "schedule.edit":
             case "schedule.clone":
             case "plan.add":
             case "plan.override":
             case "plan.remove":
-            case "adopt_schedule":
-            case "migrate_schedule":
-            case "abandon_schedule":
                 return MutationExecutionOutcome.Failure(
                     MutationTypeUnimplementedCode,
                     $"Mutation type '{mutationType}' is registered in the catalog but its server handler is not yet wired. Tracked in Sub-plan 03.");
@@ -2962,6 +2970,185 @@ public sealed class PushSyncBatchHandler(
             ct);
 
         return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 Task 2 — <c>adopt_schedule</c> on the REST door's own handler. The actor is the token's
+    /// user, never the payload's <c>actorUserId</c> / <c>actorRole</c> (kept in the contract for the phones that send them,
+    /// read by nobody). <c>referenceDate</c> is optional: 1.0.17's shape (none) adopts with the season's start as day 0 (P11).
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleAdoptScheduleAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "scheduleTemplateId", "actorUserId", "actorRole", "clientCommandId", "subscriptionId", "referenceDate", "decidedAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "adopt_schedule payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<AdoptSchedulePayload>(payload, out var request) || request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for adopt_schedule.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await adoptScheduleHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleCommand(
+                FarmId: request.FarmId,
+                PlotId: request.PlotId,
+                CropCycleId: request.CropCycleId,
+                ScheduleTemplateId: request.ScheduleTemplateId,
+                ActorUserId: actorUserId,
+                ActorRole: actorRole,
+                ClientCommandId: request.ClientCommandId ?? clientRequestId,
+                SubscriptionId: request.SubscriptionId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId,
+                ReferenceDate: request.ReferenceDate,
+                DecidedAtUtc: request.DecidedAtUtc),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 Task 2 — <c>migrate_schedule</c> (switch a plot to another library schedule) on the REST
+    /// door's own handler. Same actor rule as adopt; the reason is one of the contract's five names exactly.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleMigrateScheduleAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "newScheduleTemplateId", "reason", "actorUserId", "reasonText", "actorRole", "clientCommandId", "newSubscriptionId", "migrationEventId", "referenceDate", "decidedAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "migrate_schedule payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<MigrateSchedulePayload>(payload, out var request) || request is null
+            || !Enum.GetNames<Domain.Schedules.ScheduleMigrationReason>().Contains(request.Reason, StringComparer.Ordinal))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for migrate_schedule.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await migrateScheduleHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleCommand(
+                FarmId: request.FarmId,
+                PlotId: request.PlotId,
+                CropCycleId: request.CropCycleId,
+                NewScheduleTemplateId: request.NewScheduleTemplateId,
+                Reason: Enum.Parse<Domain.Schedules.ScheduleMigrationReason>(request.Reason),
+                ActorUserId: actorUserId,
+                ReasonText: request.ReasonText,
+                ActorRole: actorRole,
+                ClientCommandId: request.ClientCommandId ?? clientRequestId,
+                NewSubscriptionId: request.NewSubscriptionId,
+                MigrationEventId: request.MigrationEventId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId,
+                ReferenceDate: request.ReferenceDate,
+                DecidedAtUtc: request.DecidedAtUtc),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>spec: plr-d10 lane L8b-1 Task 2 — <c>abandon_schedule</c> on the REST door's own handler (same actor rule).</summary>
+    private async Task<MutationExecutionOutcome> HandleAbandonScheduleAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "actorUserId", "reasonText", "actorRole", "clientCommandId", "decidedAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "abandon_schedule payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<AbandonSchedulePayload>(payload, out var request) || request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for abandon_schedule.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await abandonScheduleHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleCommand(
+                FarmId: request.FarmId,
+                PlotId: request.PlotId,
+                CropCycleId: request.CropCycleId,
+                ActorUserId: actorUserId,
+                ReasonText: request.ReasonText,
+                ActorRole: actorRole,
+                ClientCommandId: request.ClientCommandId ?? clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId,
+                DecidedAtUtc: request.DecidedAtUtc),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// lane L8b-1 — a schedule payload whose values do not read (a malformed id or day) is a refused payload the phone
+    /// parks for the farmer (SyncInvalidPayload, permanent), never an unexplained fault it would retry for ever. Not a
+    /// silent catch: the caller answers the refusal, and the rejection chokepoint logs it. The catch also names its
+    /// landing place (the same pattern as "sync.rejection_emit_failed"): only the exception TYPE and the payload type
+    /// are recorded, because exception messages can carry payload text.
+    /// </summary>
+    private static bool TryDeserializeSchedulePayload<TPayload>(JsonElement payload, out TPayload? request)
+        where TPayload : class
+    {
+        try
+        {
+            request = DeserializePayload<TPayload>(payload);
+            return request is not null;
+        }
+        catch (JsonException ex)
+        {
+            Activity.Current?.AddEvent(new ActivityEvent(
+                "sync.schedule_payload_unreadable",
+                tags: new ActivityTagsCollection
+                {
+                    { "exception.type", ex.GetType().Name },
+                    { "payload_type", typeof(TPayload).Name }
+                }));
+            request = null;
+            return false;
+        }
     }
 
     /// <summary>

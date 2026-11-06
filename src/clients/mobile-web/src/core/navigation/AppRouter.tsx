@@ -22,6 +22,7 @@ import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useFarmContext } from '../session/FarmContext';
 import { mayChangeRecordedMoney } from '../session/farmPermissions';
 import { seeMoneyDoor, useStoredAccessScopes } from '../session/storedFarmScope';
+import { AUTHORITY, holdsAuthority } from '../session/farmAuthorities';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
@@ -291,6 +292,8 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         // lane MU-3 — the money doors follow the server's see-money answer, never the label: the pull's stored answer
         // (fix 1, F11), `/me/context` only before it.
         maySeeMoney: seeMoneyDoor(storedAccessScopes, currentFarmId, currentFarm),
+        // lane L8b-1 (founder D-73) — the planning doors follow the server's PlanWork answer, never the label.
+        mayPlanWork: holdsAuthority(currentFarm, AUTHORITY.planWork),
         canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,

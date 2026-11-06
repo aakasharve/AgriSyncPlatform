@@ -178,6 +178,13 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    drops the five policies, the five tables, both columns and the farm CHECK — only what Up() added. Touches no
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261102163914_AddWorkerIdentity",
+
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane L8b-1); Down() read in full. Up() ADDs the nullable
+        //    schedule_subscriptions.reference_date and puts ssf.schedule_subscriptions and ssf.schedule_migration_events under
+        //    ENABLE + FORCE RLS with three policies (tenant on both, user-scoped select on subscriptions). Down() drops the
+        //    three policies, the RLS flags and the column — only what Up() added. No append-only ledger, privilege or grant
+        //    is touched. Safe to revert and re-apply mid-proof.
+        "20261106054532_AddScheduleSubscriptionDayZeroAndRls",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

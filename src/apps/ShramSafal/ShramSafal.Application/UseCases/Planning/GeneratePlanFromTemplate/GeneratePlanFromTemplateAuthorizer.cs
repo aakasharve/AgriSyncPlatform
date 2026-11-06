@@ -75,6 +75,13 @@ public sealed class GeneratePlanFromTemplateAuthorizer : IAuthorizationCheck<Gen
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane L8b-1 (founder D-73) — and the planning authority: the primary owner, or a PlanWork seat.
+        if (!await Services.ScheduleChangeGate.MayChangeAsync(
+                _repository, (Guid)cropCycle.FarmId, command.ActorUserId, DateTime.UtcNow, ct))
+        {
+            return Result.Failure(ShramSafalErrors.Forbidden);
+        }
+
         return Result.Success();
     }
 }

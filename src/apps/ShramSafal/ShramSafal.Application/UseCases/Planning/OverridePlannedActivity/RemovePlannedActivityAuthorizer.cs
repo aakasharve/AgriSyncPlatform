@@ -44,14 +44,20 @@ namespace ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 /// cache makes the body's defense-in-depth re-lookup effectively free in
 /// the pipeline-consumer path.
 /// </para>
+/// <para><b>spec: plr-d10 lane L8b-1 (founder D-73).</b> The rule is now <see cref="Services.ScheduleChangeGate"/>: the
+/// primary owner, or a seat holding PlanWork ("कामाचं नियोजन करणे"). The role wording above describes the rule it replaced
+/// (a मुकादम-or-above label), kept for the record; a label grants nothing (D-26).</para>
 /// </summary>
 public sealed class RemovePlannedActivityAuthorizer : IAuthorizationCheck<RemovePlannedActivityCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly AgriSync.BuildingBlocks.Abstractions.IClock? _clock;
 
-    public RemovePlannedActivityAuthorizer(IShramSafalRepository repository)
+    // lane L8b-1 — the clock is optional so the authority is read at the request's own time when DI provides one.
+    public RemovePlannedActivityAuthorizer(IShramSafalRepository repository, AgriSync.BuildingBlocks.Abstractions.IClock? clock = null)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(RemovePlannedActivityCommand command, CancellationToken ct)
@@ -62,8 +68,9 @@ public sealed class RemovePlannedActivityAuthorizer : IAuthorizationCheck<Remove
             return Result.Failure(ShramSafalErrors.PlannedActivityNotFound);
         }
 
-        var role = await _repository.GetUserRoleForFarmAsync(command.FarmId, command.CallerUserId, ct);
-        if (role is null || role < AppRole.Mukadam)
+        // spec: plr-d10 lane L8b-1 (founder D-73) — the primary owner, or a seat holding PlanWork (never a label, D-26).
+        if (!await Services.ScheduleChangeGate.MayChangeAsync(
+                _repository, command.FarmId, command.CallerUserId, _clock?.UtcNow ?? DateTime.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

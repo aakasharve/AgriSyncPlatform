@@ -59,11 +59,14 @@ public sealed class AdoptScheduleHandler(
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.Forbidden);
         }
 
-        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
-        if (await Services.PlotScopeGate.RefuseAsync(
-                repository, command.FarmId, command.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } outsidePlots)
+        // spec: plr-d10 lane L8b-1 Task 3 (founder D-73) — who may change a plot's schedule: the primary owner, or a seat the
+        // owner gave "कामाचं नियोजन करणे" (PlanWork), with the MU-4 plot rule inside the gate. A change made offline before
+        // the authority ended counts inside the late window and is flagged for the owner below (MU design §11.2).
+        var decision = await Services.ScheduleChangeGate.DecideAsync(
+            repository, command.FarmId, command.PlotId, command.ActorUserId, clock.UtcNow, command.DecidedAtUtc, ct);
+        if (decision.Refusal is { } refused)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(outsidePlots);
+            return Result.Failure<ScheduleSubscriptionDto>(refused);
         }
 
         // Phase 5 entitlement gate — schedule adoption is a setup-level
@@ -73,23 +76,23 @@ public sealed class AdoptScheduleHandler(
             PaidFeature.CreatePlot, ct);
         if (gate is not null) return gate;
 
+        // spec: plr-d10 lane L8b-1 Task 1 — the schedule is looked up in the library the phone lists (ScheduleLibrary),
+        // never in the compliance model (crop_schedule_templates) nobody lists. A schedule he may not see answers exactly
+        // like an unknown id (E4). The crop rule is the phone's own (one shared fixture pins both).
         var templateId = new ScheduleTemplateId(command.ScheduleTemplateId);
-        var template = await repository.GetCropScheduleTemplateByIdAsync(templateId, ct);
+        var template = await new Services.ScheduleLibrary(repository).FindAsync(command.ScheduleTemplateId, command.ActorUserId, ct);
         if (template is null)
         {
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
-        if (!template.IsPublished)
-        {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateUnpublished);
-        }
-
-        var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
-        if (!string.Equals(template.CropKey, cropKey, StringComparison.Ordinal))
+        if (!Services.ScheduleLibrary.MatchesCrop(template, cropCycle.CropName))
         {
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateCropMismatch);
         }
+
+        var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
+        var versionTag = Services.ScheduleLibrary.VersionTagOf(template);
 
         // Invariant I-14: at most one Active subscription per (plot, cropKey, cycle).
         var existingActive = await repository.GetActiveScheduleSubscriptionAsync(
@@ -107,8 +110,9 @@ public sealed class AdoptScheduleHandler(
             command.CropCycleId,
             cropKey,
             templateId,
-            template.VersionTag,
-            nowUtc);
+            versionTag,
+            nowUtc,
+            command.ReferenceDate);
 
         await repository.AddScheduleSubscriptionAsync(subscription, ct);
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
@@ -130,8 +134,9 @@ public sealed class AdoptScheduleHandler(
                     cropCycleId = command.CropCycleId,
                     cropKey,
                     templateId = template.Id,
-                    templateKey = template.TemplateKey,
-                    versionTag = template.VersionTag
+                    templateName = template.Name,
+                    versionTag,
+                    referenceDate = command.ReferenceDate
                 },
                 farmId: command.FarmId,
                 clientCommandId: command.ClientCommandId,
@@ -140,6 +145,10 @@ public sealed class AdoptScheduleHandler(
                 ipHash: command.AuditIpHash,
                 sourceAiJobId: null),
             ct);
+
+        await Services.ScheduleChangeGate.FlagIfLateAsync(
+            repository, decision, subscription.Id, "Adopted", command.FarmId, command.ActorUserId, command.ActorRole ?? "unknown",
+            clock.UtcNow, command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash, ct);
 
         await repository.SaveChangesAsync(ct);
         return Result.Success(subscription.ToDto());

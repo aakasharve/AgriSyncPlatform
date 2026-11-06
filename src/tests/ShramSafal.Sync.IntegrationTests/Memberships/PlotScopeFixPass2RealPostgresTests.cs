@@ -199,7 +199,10 @@ public sealed class PlotScopeFixPass2RealPostgresTests(ITestOutputHelper output)
     private async Task SeedNarrowedAsync()
     {
         await SeedAsync();
-        await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.TakeAttendance, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney);
+        // lane L8b-1 (MU-4 review R3-L3): schedule-from-plan now needs the seat's lab records, so the narrowed मुकादम holds
+        // it — the N2 / N4 facts below are about the season and plot rules, not about that authority.
+        await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.TakeAttendance, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney,
+            FarmAuthority.LabRecords);
         await SetPlotScopeAsync(Mukadam, "ChosenPlots", P2, P4);
     }
 
@@ -315,8 +318,9 @@ public sealed class PlotScopeFixPass2RealPostgresTests(ITestOutputHelper output)
     {
         await AssertAppRoleIsNotVacuousAsync();
         await SeedAsync();
+        // lane L8b-1 (founder D-73): and "plan work", so the planning doors refuse him by the PLOT rule, not for want of it.
         await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.TakeAttendance, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney,
-            FarmAuthority.ConfirmRecords, FarmAuthority.LabRecords);
+            FarmAuthority.ConfirmRecords, FarmAuthority.LabRecords, FarmAuthority.PlanWork);
         var unplaced = Guid.NewGuid();
         var unplacedCost = CostPayload(unplaced, FarmA, P2, CycleP2, 4242.42m);
         unplacedCost.Remove("plotId");

@@ -1,0 +1,27 @@
+{
+  "_comment": "lane L8b-1 (plr-d10) - the ONE crop <-> schedule rule, pinned on both sides. `cycleCrop` is a crop name as a farm stores it (a crop season's crop_name; the phone's CropProfile.name). `cropCode` is the crop the rule reads it as: the name read through the founder's crop master (any of its English or Marathi names, canonical or alternate), then the phone's canonical crop code. A schedule matches a season when both read as the same code. The phone's TemplateCatalog vitest (getTemplatesForCrop / scheduleCropCode) and the server's ScheduleLibrary (domain test + real-Postgres adopt test) read THIS file; change either side and one goes red.",
+  "builtInTemplates": [
+    { "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77301", "cropType": "Grapes", "cropCode": "grape" },
+    { "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77302", "cropType": "Pomegranate", "cropCode": "pomegranate" },
+    { "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77303", "cropType": "Sugarcane", "cropCode": "sugarcane" },
+    { "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77304", "cropType": "Onion", "cropCode": "onion" }
+  ],
+  "cases": [
+    { "name": "crop master English name (a crop picked from the master)", "cycleCrop": "Grapes", "cropCode": "grape" },
+    { "name": "crop master Marathi name", "cycleCrop": "द्राक्ष", "cropCode": "grape" },
+    { "name": "crop master Marathi alternate", "cycleCrop": "द्राक्षे", "cropCode": "grape" },
+    { "name": "crop master Marathi alternate (vineyard)", "cycleCrop": "द्राक्षबाग", "cropCode": "grape" },
+    { "name": "crop master English alternate", "cycleCrop": "Grapevine", "cropCode": "grape" },
+    { "name": "singular English", "cycleCrop": "grape", "cropCode": "grape" },
+    { "name": "case and spaces never decide", "cycleCrop": "  GRAPES ", "cropCode": "grape" },
+    { "name": "Pomegranate, Marathi", "cycleCrop": "डाळिंब", "cropCode": "pomegranate" },
+    { "name": "Pomegranate, Marathi alternate", "cycleCrop": "अनार", "cropCode": "pomegranate" },
+    { "name": "Sugarcane, Marathi", "cycleCrop": "ऊस", "cropCode": "sugarcane" },
+    { "name": "Sugarcane, two English words (crop master alternate)", "cycleCrop": "Sugar cane", "cropCode": "sugarcane" },
+    { "name": "Onion, Marathi", "cycleCrop": "कांदा", "cropCode": "onion" },
+    { "name": "Onion, English plural", "cycleCrop": "Onions", "cropCode": "onion" },
+    { "name": "a master crop with no schedule", "cycleCrop": "टोमॅटो", "cropCode": "tomato" },
+    { "name": "an English name the master does not know is read as typed", "cycleCrop": "Dragon fruit X", "cropCode": "dragon_fruit_x" },
+    { "name": "a Marathi name the master does not know matches nothing", "cycleCrop": "माझे पीक", "cropCode": "unknown_crop" }
+  ]
+}

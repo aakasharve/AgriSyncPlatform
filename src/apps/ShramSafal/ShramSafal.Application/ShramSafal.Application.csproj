@@ -33,4 +33,14 @@
     </Compile>
   </ItemGroup>
 
+  <!-- spec: plr-d10 lane L8b-1 — the crop master's names (generated from the phone's cropMasterData.ts by
+       sync-contract/scripts/generate-crop-names.ts), so ScheduleLibrary reads a crop name exactly as the phone's
+       schedule library does. Linked, never copied: one file. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\..\sync-contract\schemas\crop-names.json">
+      <LogicalName>ShramSafal.Application.CropNames.json</LogicalName>
+      <Link>Services\CropNames.json</Link>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

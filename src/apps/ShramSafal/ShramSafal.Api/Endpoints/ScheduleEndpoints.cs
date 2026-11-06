@@ -59,7 +59,8 @@ public static class ScheduleEndpoints
                 SubscriptionId: request.SubscriptionId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                ReferenceDate: request.ReferenceDate);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -115,7 +116,8 @@ public static class ScheduleEndpoints
                 MigrationEventId: request.MigrationEventId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                ReferenceDate: request.ReferenceDate);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -239,7 +241,9 @@ public sealed record AdoptScheduleRequest(
     Guid FarmId,
     Guid ScheduleTemplateId,
     string? ClientCommandId = null,
-    Guid? SubscriptionId = null);
+    Guid? SubscriptionId = null,
+    // spec: plr-d10 lane L8b-1 — the plot's day 0 (optional; the push contract carries the same field).
+    DateOnly? ReferenceDate = null);
 
 public sealed record MigrateScheduleRequest(
     Guid FarmId,
@@ -248,7 +252,9 @@ public sealed record MigrateScheduleRequest(
     string? ReasonText = null,
     string? ClientCommandId = null,
     Guid? NewSubscriptionId = null,
-    Guid? MigrationEventId = null);
+    Guid? MigrationEventId = null,
+    // spec: plr-d10 lane L8b-1 — the plot's day 0 (optional; none keeps the plot's current day 0).
+    DateOnly? ReferenceDate = null);
 
 public sealed record AbandonScheduleRequest(
     Guid FarmId,

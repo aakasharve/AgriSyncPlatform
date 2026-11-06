@@ -46,9 +46,10 @@ public sealed class AddLocalPlannedActivityHandler(
             }
         }
 
-        // Step 3: auth — Mukadam+ required
-        var role = await repository.GetUserRoleForFarmAsync(command.FarmId, command.CallerUserId, ct);
-        if (role is null || role < AppRole.Mukadam)
+        // auth — the schedule gate's authority (PlanWork)
+        // spec: plr-d10 lane L8b-1 (founder D-73) — planning work is the primary owner's, or a seat he gave
+        // "कामाचं नियोजन करणे" (PlanWork); the label (मुकादम or above, the rule that stood here) grants nothing (D-26).
+        if (!await Services.ScheduleChangeGate.MayChangeAsync(repository, command.FarmId, command.CallerUserId, clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

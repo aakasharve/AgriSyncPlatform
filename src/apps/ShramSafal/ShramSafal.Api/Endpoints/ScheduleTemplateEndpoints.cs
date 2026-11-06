@@ -22,6 +22,7 @@ public static class ScheduleTemplateEndpoints
             ClaimsPrincipal user,
             CloneScheduleTemplateHandler handler,
             ICallerFarmTenantScope scope,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -61,7 +62,12 @@ public static class ScheduleTemplateEndpoints
                 AuditIpHash: auditIpHash,
                 FarmId: farmId);
 
-            var result = await handler.HandleAsync(command, ct);
+            // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
+            // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
+            // fault in front of it was gone; F99 sweep, BareRequest).
+            var result = farmId is null
+                ? await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct)
+                : await handler.HandleAsync(command, ct);
             return result.IsSuccess
                 ? Results.Created($"/schedule-templates/{result.Value.NewTemplateId}", result.Value)
                 : ToErrorResult(result.Error);
@@ -76,6 +82,7 @@ public static class ScheduleTemplateEndpoints
             ClaimsPrincipal user,
             EditScheduleTemplateHandler handler,
             ICallerFarmTenantScope scope,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -113,7 +120,12 @@ public static class ScheduleTemplateEndpoints
                 AuditIpHash: auditIpHash,
                 FarmId: farmId);
 
-            var result = await handler.HandleAsync(command, ct);
+            // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
+            // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
+            // fault in front of it was gone; F99 sweep, BareRequest).
+            var result = farmId is null
+                ? await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct)
+                : await handler.HandleAsync(command, ct);
             return result.IsSuccess
                 ? Results.Created($"/schedule-templates/{result.Value.NewTemplateId}", result.Value)
                 : ToErrorResult(result.Error);
@@ -128,6 +140,7 @@ public static class ScheduleTemplateEndpoints
             ClaimsPrincipal user,
             PublishScheduleTemplateHandler handler,
             ICallerFarmTenantScope scope,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -162,7 +175,12 @@ public static class ScheduleTemplateEndpoints
                 AuditIpHash: auditIpHash,
                 FarmId: farmId);
 
-            var result = await handler.HandleAsync(command, ct);
+            // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
+            // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
+            // fault in front of it was gone; F99 sweep, BareRequest).
+            var result = farmId is null
+                ? await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct)
+                : await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("PublishScheduleTemplate");

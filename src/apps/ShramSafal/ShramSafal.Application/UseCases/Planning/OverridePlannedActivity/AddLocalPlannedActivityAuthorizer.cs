@@ -35,20 +35,27 @@ namespace ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 /// defense-in-depth re-lookup; EF's first-level cache makes it free on
 /// the pipeline-consumer path.
 /// </para>
+/// <para><b>spec: plr-d10 lane L8b-1 (founder D-73).</b> The rule is now <see cref="Services.ScheduleChangeGate"/>: the
+/// primary owner, or a seat holding PlanWork ("कामाचं नियोजन करणे"). The role wording above describes the rule it replaced
+/// (a मुकादम-or-above label), kept for the record; a label grants nothing (D-26).</para>
 /// </summary>
 public sealed class AddLocalPlannedActivityAuthorizer : IAuthorizationCheck<AddLocalPlannedActivityCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly AgriSync.BuildingBlocks.Abstractions.IClock? _clock;
 
-    public AddLocalPlannedActivityAuthorizer(IShramSafalRepository repository)
+    // lane L8b-1 — the clock is optional so the authority is read at the request's own time when DI provides one.
+    public AddLocalPlannedActivityAuthorizer(IShramSafalRepository repository, AgriSync.BuildingBlocks.Abstractions.IClock? clock = null)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(AddLocalPlannedActivityCommand command, CancellationToken ct)
     {
-        var role = await _repository.GetUserRoleForFarmAsync(command.FarmId, command.CallerUserId, ct);
-        if (role is null || role < AppRole.Mukadam)
+        // spec: plr-d10 lane L8b-1 (founder D-73) — the primary owner, or a seat holding PlanWork (never a label, D-26).
+        if (!await Services.ScheduleChangeGate.MayChangeAsync(
+                _repository, command.FarmId, command.CallerUserId, _clock?.UtcNow ?? DateTime.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

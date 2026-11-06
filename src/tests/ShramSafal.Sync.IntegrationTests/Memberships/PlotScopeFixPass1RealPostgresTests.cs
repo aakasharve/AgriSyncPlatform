@@ -72,8 +72,10 @@ public sealed class PlotScopeFixPass1RealPostgresTests(ITestOutputHelper output)
     {
         await AssertAppRoleIsNotVacuousAsync();
         await SeedAsync();
+        // lane L8b-1 (founder D-73): and "plan work", so the planning doors refuse him by the PLOT rule this test is about,
+        // not for want of the planning authority.
         await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.TakeAttendance, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney,
-            FarmAuthority.ConfirmRecords, FarmAuthority.LabRecords);
+            FarmAuthority.ConfirmRecords, FarmAuthority.LabRecords, FarmAuthority.PlanWork);
         await SetPlotScopeAsync(Mukadam, "ChosenPlots", P2, P4);
         var him = new UserId(Mukadam);
 

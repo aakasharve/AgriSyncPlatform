@@ -269,6 +269,13 @@ public sealed class GeneratePlanFromTemplatePipelineTests
         public override Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
             Task.FromResult(_memberships.Contains((farmId, userId)));
 
+        // lane L8b-1 (founder D-73) — plan generation also asks ScheduleChangeGate (PlanWork): the member in these tests is
+        // the farm's primary owner, who holds every authority. A plain member is the gate's own truth table.
+        public override Task<AgriSync.SharedKernel.Contracts.Roles.AppRole?> GetUserRoleForFarmAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult<AgriSync.SharedKernel.Contracts.Roles.AppRole?>(
+                _memberships.Contains((farmId, userId)) ? AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner : null);
+
         public override Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default)
         {
             AddedTemplates.Add(template);

@@ -115,6 +115,18 @@ public sealed class AddRemovePlannedActivityHandlerTests
         public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
             Task.FromResult(_role);
 
+        // lane L8b-1 (founder D-73) — the planning doors ask ScheduleChangeGate (PlanWork): the मुकादम in these tests is the
+        // seat the owner GAVE "कामाचं नियोजन करणे"; any other label holds nothing stored (a label grants nothing, D-26).
+        public Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(_role is { } role
+                ? new ShramSafal.Application.Services.FarmAccess(
+                    role,
+                    ShramSafal.Domain.Farms.MembershipStatus.Active,
+                    IsRegistrant: false,
+                    StoredPermissions: role == AppRole.Mukadam ? ShramSafal.Domain.Farms.FarmPermission.PlanWork : null)
+                : null);
+
         public Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default)
         {
             AddedActivities.AddRange(plannedActivities);

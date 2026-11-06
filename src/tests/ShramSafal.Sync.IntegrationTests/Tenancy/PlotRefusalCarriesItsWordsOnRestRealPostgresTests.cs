@@ -135,8 +135,10 @@ public sealed class PlotRefusalCarriesItsWordsOnRestRealPostgresTests(ITestOutpu
                     NOW(), NOW());
             """,
             ("p2", P2), ("p4", P4), ("farm", FarmA), ("cycleP2", CycleP2), ("warning", WarningOnP1), ("p1", PlotA), ("cycleA", CycleA));
+        // lane L8b-1 (founder D-73): and "plan work", so the planning doors (schedule adopt, plan add, plan generate) refuse
+        // him by the PLOT rule this test is about, not for want of the planning authority.
         await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.TakeAttendance, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney,
-            FarmAuthority.ConfirmRecords, FarmAuthority.LabRecords);
+            FarmAuthority.ConfirmRecords, FarmAuthority.LabRecords, FarmAuthority.PlanWork);
 
         var unplaced = Guid.NewGuid();
         var cost = CostPayload(unplaced, FarmA, P2, CycleP2, 4242.42m);

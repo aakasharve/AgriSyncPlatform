@@ -5294,6 +5294,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("plot_id");
 
+                    b.Property<DateOnly?>("ReferenceDate")
+                        .HasColumnType("date")
+                        .HasColumnName("reference_date");
+
                     b.Property<Guid>("ScheduleTemplateId")
                         .HasColumnType("uuid")
                         .HasColumnName("schedule_template_id");
