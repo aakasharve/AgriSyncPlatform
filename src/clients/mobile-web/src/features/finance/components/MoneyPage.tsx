@@ -20,12 +20,14 @@ interface MoneyPageProps {
     onBack?: () => void;
     /** The home opens the pages through its own rows, so it never needs the chip row. */
     withNav?: boolean;
+    /** lane RATE-1 fix round 1 (F6) — a page that speaks English in English mode names its back button in English too. */
+    backLabel?: string;
     children: React.ReactNode;
 }
 
-export const MoneyPage: React.FC<MoneyPageProps> = ({ title, testId, currentRoute, onNavigate, onBack, withNav = true, children }) => (
+export const MoneyPage: React.FC<MoneyPageProps> = ({ title, testId, currentRoute, onNavigate, onBack, withNav = true, backLabel, children }) => (
     <div className="mx-auto max-w-4xl px-4 pb-24 sm:px-6" style={{ fontFamily: SANS }} data-testid={testId}>
-        <PageBar title={title} onBack={onBack} />
+        <PageBar title={title} onBack={onBack} {...(backLabel ? { backLabel } : {})} />
         {withNav && !onBack && <FinanceManagerNav currentRoute={currentRoute} onNavigate={onNavigate} />}
         <div className="space-y-3">{children}</div>
     </div>

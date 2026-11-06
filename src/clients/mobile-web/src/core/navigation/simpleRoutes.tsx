@@ -324,6 +324,11 @@ export const renderFinancePriceBookRoute = (ctx: AppRouterContext): React.ReactN
             currentRoute={ctx.currentRoute}
             onNavigate={ctx.setCurrentRoute}
             onBack={() => ctx.goBackOr('finance-manager')}
+            // lane RATE-1 part A (D-72) — the farm's OWN list: which farm, who he is, and the names of who set each rate.
+            farmId={ctx.activeFarmId}
+            isPrimaryHolder={ctx.farmRole === 'PrimaryOwner'}
+            selfUserId={getSessionUserId()}
+            operatorNameById={ctx.operatorNameById}
         />
     );
 };

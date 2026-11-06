@@ -143,6 +143,12 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     'InvalidVerificationReason',
     'InvalidVerificationStatus',
     'ComplianceSignalNoteRequired',
+    // lane RATE-1 fix round 1 (review F2 / F3) — the farm's own rate list: a named "suggestion" that is not ShramSafal's
+    // own row, and a change of a rate's kind. Command shape: the same bytes get the same answer forever, so they park
+    // (shown as not saved, with the reason) instead of burning retries. `ShramSafal.FarmRate.LineNotFound` is NOT here:
+    // a stop that arrived before its rate self-heals.
+    'UnknownSuggestion',
+    'KindChangeNotAllowed',
 ];
 
 const PERMANENT_SET = new Set(

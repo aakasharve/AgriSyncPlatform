@@ -490,6 +490,9 @@ export interface SyncPullResponse extends PullAudienceFields {
     // phone named (`farms=`) and may no longer read comes with an explicit status; only that is purged, never a
     // farm merely absent. Additive: absent from an older server = nothing is purged (the phone does not guess).
     accessScopes?: FarmAccessScopeDto[];
+    // spec: plr-d10 lane RATE-1 part A (founder D-72) — each farm's OWN rate versions made since the cursor, as this person
+    // may read them. Additive: absent from an older server = nothing to merge. Read by `farmRatesStore` (Zod per row).
+    farmRates?: unknown[];
 }
 
 export interface AiParseResponse {
