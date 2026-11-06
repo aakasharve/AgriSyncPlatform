@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { CROP_MASTER_ROWS, CROP_MASTER_SOURCE } from '../cropMasterData';
 import {
-    ALL_CROPS, CROP_VISIBILITY_POLICY, cropById, cropByName, cropLabel, cropTiles, offerOf, resolveCrop, searchCrops,
+    ALL_CROPS, CROP_VISIBILITY_POLICY, cropById, cropByName, cropLabel, cropTiles, normName, offerOf, resolveCrop, searchCrops,
 } from '../cropMaster';
 
 const ids = (rows: readonly { id: string }[]) => rows.map(r => r.id);
@@ -84,5 +84,121 @@ describe('search and visibility (PENDING D-25 default, one config)', () => {
         expect(cropTiles()).toHaveLength(43);
         expect(cropTiles().every(r => r.vis === 'core')).toBe(true);
         expect(ids(cropTiles(new Set(['MHCR-0116'])))).toContain('MHCR-0116');
+    });
+});
+
+describe('D-25 — a crop appears from 2 typed letters (founder: "2-3 letters, that crop name must appear")', () => {
+    const find = (q: string, opts?: Parameters<typeof searchCrops>[1]) => searchCrops(q, opts).map(r => r.en);
+
+    it('Marathi with a matra: "द्रा" finds द्राक्ष first', () => {
+        expect(searchCrops('द्रा')[0].mr).toBe('द्राक्ष');
+        expect(searchCrops('द्रा', { limit: 5 }).map(r => r.mr)).toContain('द्राक्ष');
+    });
+
+    it('a zero-width joiner or non-joiner a phone keyboard may add does not break the match', () => {
+        expect(searchCrops('द्‍रा')[0]?.mr).toBe('द्राक्ष');
+        expect(searchCrops('ऊ‌')[0]?.mr).toBe('ऊस');
+    });
+
+    it('"us" (the way ऊस is said in English letters) finds Sugarcane / ऊस first', () => {
+        expect(find('us')[0]).toBe('Sugarcane');
+        expect(find('oos')[0]).toBe('Sugarcane');
+    });
+
+    it('a local name from the master list: "Cane" (Sugarcane alternate) and the local Marathi "उं" (उंस)', () => {
+        expect(find('ca')).toContain('Sugarcane');
+        expect(find('cane')[0]).toBe('Sugarcane');
+        expect(searchCrops('उं')[0].en).toBe('Sugarcane');
+    });
+
+    it('starts-with ranks above contains', () => {
+        const mr = searchCrops('द्रा').map(r => r.mr);
+        expect(mr.indexOf('द्राक्ष')).toBeLessThan(mr.indexOf('कोद्रा'));
+        expect(mr.indexOf('कोद्रा')).toBeGreaterThan(-1);
+    });
+
+    it('a short search is capped so it never floods', () => {
+        expect(searchCrops('a').length).toBeLessThanOrEqual(20);
+        expect(searchCrops('ca').length).toBeLessThanOrEqual(20);
+        expect(searchCrops('ca', { limit: 100 }).length).toBeGreaterThan(0);
+    });
+
+    it('a hidden crop stays hidden in search, and shows when it is already on the farm', () => {
+        const grapefruit = cropById('MHCR-0125')!;
+        expect(grapefruit.vis).toBe('hidden');
+        expect(find('grapef')).not.toContain('Grapefruit');
+        expect(searchCrops('चको').map(r => r.id)).not.toContain('MHCR-0125');
+        expect(find('grapef', { onFarm: new Set(['MHCR-0125']) })).toContain('Grapefruit');
+        expect(searchCrops('चको', { onFarm: new Set(['MHCR-0125']) }).map(r => r.id)).toContain('MHCR-0125');
+    });
+});
+
+describe('D-25 fix round 1 - nasal sounds (anusvara) in English letters', () => {
+    const ids1 = (q: string, opts?: Parameters<typeof searchCrops>[1]) => searchCrops(q, opts).map(r => r.id);
+
+    it('a consonant before an anusvara keeps its "a": "sa", "san", "santra" find संत्री', () => {
+        for (const q of ['sa', 'san', 'santra', 'santri']) expect(ids1(q), q).toContain('MHCR-0120');
+        expect(ids1('santra')[0]).toBe('MHCR-0120');
+    });
+
+    it('anusvara before a labial is said "m": "amb", "amba" find आंबा; "dalimb", "dalim" find डाळिंब', () => {
+        expect(ids1('amba').slice(0, 3)).toContain('MHCR-0114');
+        expect(ids1('amb')).toContain('MHCR-0114');
+        expect(ids1('dalimb')[0]).toBe('MHCR-0117');
+        expect(ids1('dalim')).toContain('MHCR-0117');
+    });
+
+    it('"lim" finds कागदी लिंबू; the hidden लिंबू stays hidden unless it is on the farm', () => {
+        expect(ids1('lim')).toContain('MHCR-0122');
+        expect(ids1('lim')).not.toContain('MHCR-0123');
+        expect(ids1('limbu')).not.toContain('MHCR-0123');
+        expect(ids1('lim', { onFarm: new Set(['MHCR-0123']) })).toContain('MHCR-0123');
+    });
+});
+
+describe('D-25 fix round 1 - Devanagari vowel length, aksharas, normName untouched', () => {
+    it('"उस" (short u) finds ऊस / Sugarcane; "द्रा" still ranks द्राक्ष first', () => {
+        expect(searchCrops('उस').map(r => r.en)).toContain('Sugarcane');
+        expect(searchCrops('द्रा')[0].mr).toBe('द्राक्ष');
+    });
+
+    it('the short cap counts aksharas: a 2-akshara Devanagari query (4+ code points) gets the short cap', () => {
+        const q = 'का'; // 1 akshara, 2 code points
+        expect(searchCrops(q).length).toBeLessThanOrEqual(20);
+        expect(searchCrops('काक').length).toBeLessThanOrEqual(20); // 2 aksharas, 4 code points
+        expect(searchCrops('का').length).toBeGreaterThan(0);
+    });
+
+    it('normName is not changed by search: a stored name with a zero-width character is not silently re-resolved', () => {
+        expect(cropByName('द्‍राक्ष')).toBeUndefined();
+        expect(searchCrops('द्‍रा')[0]?.mr).toBe('द्राक्ष');
+    });
+});
+
+describe('D-25 review fix - a sound-alike never outranks a real name match', () => {
+    const names = (row: (typeof ALL_CROPS)[number]) => [row.en, row.mr, ...row.altEn, ...row.altMr].filter(Boolean).map(n => normName(n));
+    /** A real (not sound-alike) whole / starts-with / word-start match on any of the crop's names. */
+    const strong = (row: (typeof ALL_CROPS)[number], q: string) =>
+        names(row).some(n => n.startsWith(q) || n.split(' ').some(w => w.startsWith(q)));
+
+    it('every real whole / starts-with / word-start match comes before every other result', () => {
+        for (const q of ['aa', 'am', 'an', 'ba', 'bi', 'bo', 'ka', 'ra', 'us', 'उस', 'का']) {
+            const rows = searchCrops(q, { limit: 400 });
+            const firstWeak = rows.findIndex(r => !strong(r, normName(q)));
+            if (firstWeak < 0) continue;
+            const strongAfter = rows.slice(firstWeak).filter(r => strong(r, normName(q))).map(r => r.en);
+            expect(strongAfter, q).toEqual([]);
+        }
+    });
+
+    it('"an": Fig (अंजीर, a real starts-with) ranks above Pomegranate (found only by sound and a contains)', () => {
+        const en = searchCrops('an', { limit: 400 }).map(r => r.en);
+        expect(en.indexOf('Fig')).toBeGreaterThan(-1);
+        expect(en.indexOf('Fig')).toBeLessThan(en.indexOf('Pomegranate'));
+    });
+
+    it('a sound only inside a name is not a match: "उस" does not bring कापूस, "us" still finds ऊस first', () => {
+        expect(searchCrops('उस', { limit: 400 }).map(r => r.mr)).not.toContain('कापूस');
+        for (const q of ['उस', 'us', 'oos']) expect(searchCrops(q)[0].mr, q).toBe('ऊस');
     });
 });

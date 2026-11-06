@@ -123,3 +123,45 @@ describe('ATT-LOG — the quiet way to the हजेरी place, and English mo
         expect(text).not.toMatch(/[ऀ-ॿ]/);
     });
 });
+
+describe('D-62 — the card on a declared rest day', () => {
+    const REST: TodayAttendance = { work: null, headcount: null, provisional: false, restDay: true };
+
+    it('Marathi: "आज कामाला सुट्टी नोंदली आहे" and ONLY "हजेरी वही बघा"', () => {
+        const onOpenRegister = vi.fn();
+        const onTell = vi.fn();
+        render(<TodayAttendanceCard state={REST} onTell={onTell} onOpenNames={vi.fn()} onOpenRegister={onOpenRegister} />);
+        const card = screen.getByTestId('attendance-card');
+        expect(card).toHaveAttribute('data-state', 'rest');
+        expect(card).toHaveTextContent('आज कामाला सुट्टी नोंदली आहे');
+        expect(document.body.textContent).not.toContain('आधी आजचं काम सांगा');
+        expect(screen.queryByTestId('attendance-card-tell')).toBeNull();
+        expect(screen.queryByTestId('attendance-card-count')).toBeNull();
+        expect(screen.getAllByRole('button')).toHaveLength(1);
+        expect(screen.getByTestId('attendance-card-register')).toHaveTextContent('हजेरी वही बघा');
+        fireEvent.click(screen.getByTestId('attendance-card-register'));
+        expect(onOpenRegister).toHaveBeenCalledTimes(1);
+        expect(onTell).not.toHaveBeenCalled();
+    });
+
+    it('English: "Today is recorded as a rest day" and "Open the attendance book", no Marathi', () => {
+        language = 'en';
+        render(<TodayAttendanceCard state={REST} onTell={vi.fn()} onOpenRegister={vi.fn()} />);
+        expect(screen.getByTestId('attendance-card')).toHaveTextContent('Today is recorded as a rest day');
+        expect(screen.getByTestId('attendance-card-register')).toHaveTextContent('See the attendance register');
+        expect(document.body.textContent).not.toMatch(/[ऀ-ॿ]/);
+        expect(screen.queryByTestId('attendance-card-tell')).toBeNull();
+    });
+
+    it('a paid rest day (headcount told, no work) still shows the rest-day card, not the ask', () => {
+        render(<TodayAttendanceCard state={{ ...REST, headcount: 3 }} onTell={vi.fn()} onOpenRegister={vi.fn()} />);
+        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'rest');
+        expect(screen.queryByTestId('attendance-card-tell')).toBeNull();
+    });
+
+    it('a day that is not a rest day is unchanged', () => {
+        render(<TodayAttendanceCard state={NOTHING} onTell={vi.fn()} onOpenRegister={vi.fn()} />);
+        expect(screen.getByTestId('attendance-card')).toHaveAttribute('data-state', 'empty');
+        expect(screen.getByTestId('attendance-card-tell')).toHaveTextContent('आधी आजचं काम सांगा');
+    });
+});

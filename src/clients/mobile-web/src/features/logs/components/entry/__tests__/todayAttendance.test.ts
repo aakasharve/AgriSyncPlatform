@@ -140,3 +140,27 @@ describe('ATT-LOG — ONE rule, two readers', () => {
         expect(routes).not.toContain('resolveLabourAnchor(');
     });
 });
+
+describe('D-62 — a declared rest day is known from the day own stored log (dayOutcome NO_WORK_PLANNED)', () => {
+    const rest = (over: Partial<DailyLog> = {}) => log({ dayOutcome: 'NO_WORK_PLANNED', ...over });
+
+    it('today has a NO_WORK_PLANNED log and no work: restDay is true', () => {
+        expect(todayAttendance([rest()])).toMatchObject({ restDay: true, work: null });
+    });
+
+    it('a paid rest day (people came, no work) is still a rest day', () => {
+        expect(todayAttendance([rest({ labour: [people(3)] })])).toMatchObject({ restDay: true, work: null, headcount: 3 });
+    });
+
+    it('work recorded later the same day wins: not a rest day (my call)', () => {
+        const s = todayAttendance([rest(), log({ cropActivities: [weeding] })]);
+        expect(s.restDay).toBeFalsy();
+        expect(s.work).not.toBeNull();
+    });
+
+    it('not today, or deleted, or a plain work day: not a rest day (field absent, so old shapes stay equal)', () => {
+        expect(todayAttendance([rest({ date: YESTERDAY })])).toEqual({ work: null, headcount: null, provisional: false });
+        expect(todayAttendance([rest({ deletion: { at: 'x' } } as unknown as Partial<DailyLog>)]).restDay).toBeFalsy();
+        expect(todayAttendance([log({ cropActivities: [weeding] })]).restDay).toBeFalsy();
+    });
+});

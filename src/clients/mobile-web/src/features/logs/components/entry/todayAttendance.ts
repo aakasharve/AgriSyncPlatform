@@ -19,6 +19,7 @@
  */
 import type { DailyLog } from '../../../../types';
 import { resolveLabourAnchor, type LabourAnchor } from '../../../labour/labourAnchor';
+import { hasDeclaredNoWorkDay } from '../../../../core/navigation/noWorkDay';
 import { attendanceCaptureDay } from '../../attendanceDraft';
 
 /** The parts of a day that are work done but carry no job name of their own (a crop job with no name is 'crop'). */
@@ -40,6 +41,12 @@ export interface TodayAttendance {
     headcount: number | null;
     /** The count comes (in part) from an entry nobody has confirmed yet (D-46): shown, and marked so. */
     provisional: boolean;
+    /**
+     * D-62: today was declared a rest day ("आज काम नाही") and no work was recorded after it. Present only when true, so
+     * every other shape is unchanged. Known the same way the "आज काम नाही" sheet knows it (`hasDeclaredNoWorkDay`):
+     * a stored log of today with `dayOutcome: 'NO_WORK_PLANNED'`. Work recorded the same day wins (my call).
+     */
+    restDay?: true;
 }
 
 /** THE day's हजेरी anchor: the stored logs of the day a capture made now is filed under. One call, two readers. */
@@ -91,10 +98,14 @@ export function workOf(logs: readonly DailyLog[]): DayWork | null {
 export function todayAttendance(history: readonly DailyLog[]): TodayAttendance {
     const day = attendanceCaptureDay(null);
     const anchor = todaysLabourAnchor(history);
+    const today = history.filter(l => l.date === day);
+    const work = workOf(today);
+    const restDay = !work && hasDeclaredNoWorkDay(today.filter(l => !l.deletion), day);
     return {
-        work: workOf(history.filter(l => l.date === day)),
+        work,
         headcount: anchor.state === 'anchored' ? anchor.headcount : null,
         provisional: anchor.state === 'anchored' && anchor.provisional === true,
+        ...(restDay ? { restDay: true as const } : {}),
     };
 }
 
