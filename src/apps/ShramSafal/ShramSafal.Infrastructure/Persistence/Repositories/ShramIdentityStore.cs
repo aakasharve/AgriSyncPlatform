@@ -107,10 +107,46 @@ internal sealed class ShramIdentityStore(ShramSafalDbContext db, IdentityTenantS
         return await db.ShramPhoneChallenges.FirstOrDefaultAsync(c => c.Id == challengeId, ct);
     }
 
-    public async Task<int> CountChallengesSinceAsync(string phoneE164, DateTime sinceUtc, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ShramPhoneChallenge>> GetChallengesToNumberSinceAsync(
+        string phoneE164, DateTime sinceUtc, CancellationToken ct = default)
     {
         await scope.OpenAsync(ct);
-        return await db.ShramPhoneChallenges.CountAsync(c => c.PhoneE164 == phoneE164 && c.CreatedAtUtc >= sinceUtc, ct);
+        return await db.ShramPhoneChallenges.AsNoTracking()
+            .Where(c => c.PhoneE164 == phoneE164 && c.CreatedAtUtc >= sinceUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<int> CountWrongTriesForPersonsSinceAsync(
+        IReadOnlyCollection<Guid> personIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        if (personIds.Count == 0)
+        {
+            return 0;
+        }
+
+        await scope.OpenAsync(ct);
+        var ids = personIds.ToList();
+
+        // Every try counts; the one right try that spent a code is not a wrong one (as for a farm).
+        return await db.ShramPhoneChallenges
+            .Where(c => ids.Contains(c.PersonId) && c.CreatedAtUtc >= sinceUtc)
+            .SumAsync(c => c.Attempts - (c.ConsumedAtUtc == null ? 0 : 1), ct);
+    }
+
+    public async Task<IReadOnlyList<Guid>> GetFarmsLinkedByCodeAsync(IReadOnlyCollection<Guid> personIds, CancellationToken ct = default)
+    {
+        if (personIds.Count == 0)
+        {
+            return [];
+        }
+
+        await scope.OpenAsync(ct);
+        var ids = personIds.ToList();
+        return await db.ShramPhoneChallenges.AsNoTracking()
+            .Where(c => ids.Contains(c.PersonId) && c.Purpose == ChallengePurpose.Link && c.ConsumedAtUtc != null)
+            .Select(c => c.RequestedByFarmId)
+            .Distinct()
+            .ToListAsync(ct);
     }
 
     public async Task<int> CountChallengesByFarmSinceAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default)
@@ -151,10 +187,19 @@ internal sealed class ShramIdentityStore(ShramSafalDbContext db, IdentityTenantS
         => await db.ShramIdentityEvents.AddAsync(identityEvent, ct);
 
     public async Task<bool> TrySaveChangesAsync(CancellationToken ct = default)
+        => await SaveChangesOrClashAsync(ct) == IdentitySaveClash.None;
+
+    /// <summary>The per-number one-holder index (R3, the AddWorkerIdentity migration).</summary>
+    internal const string VerifiedNumberIndex = "ux_shram_person_phones_verified_number";
+
+    /// <summary>The per-person one-verified-number index (fix pass 2, N3: the AddOneVerifiedNumberPerPerson migration).</summary>
+    internal const string VerifiedPerPersonIndex = "ux_shram_person_phones_one_verified_per_person";
+
+    public async Task<IdentitySaveClash> SaveChangesOrClashAsync(CancellationToken ct = default)
     {
         if (!db.ChangeTracker.HasChanges())
         {
-            return true;
+            return IdentitySaveClash.None;
         }
 
         await scope.OpenAsync(ct);
@@ -171,9 +216,11 @@ internal sealed class ShramIdentityStore(ShramSafalDbContext db, IdentityTenantS
 
         try
         {
+            await ReleaseNumbersFirstAsync(ct);
             await db.SaveChangesAsync(ct);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        catch (Exception ex) when (ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } }
+                                   || ex is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
             if (transaction is not null && savepoint is not null)
             {
@@ -185,7 +232,13 @@ internal sealed class ShramIdentityStore(ShramSafalDbContext db, IdentityTenantS
                 entry.State = entry.State == EntityState.Added ? EntityState.Detached : EntityState.Unchanged;
             }
 
-            return false;
+            var constraint = (ex as PostgresException ?? ex.InnerException as PostgresException)?.ConstraintName;
+            return constraint switch
+            {
+                VerifiedPerPersonIndex => IdentitySaveClash.PersonAlreadyVerified,
+                VerifiedNumberIndex => IdentitySaveClash.NumberAlreadyVerified,
+                _ => IdentitySaveClash.Other,
+            };
         }
 
         if (transaction is not null && savepoint is not null)
@@ -193,7 +246,37 @@ internal sealed class ShramIdentityStore(ShramSafalDbContext db, IdentityTenantS
             await transaction.ReleaseSavepointAsync(savepoint, ct);
         }
 
-        return true;
+        return IdentitySaveClash.None;
+    }
+
+    /// <summary>
+    /// Fix pass 2 (N3) — a number being RELEASED is written before anything else in the same save, so the one-verified-
+    /// number-per-person index never sees the old and the new verified number together (the case-5 move releases one and
+    /// verifies another in one unit of work; EF's own statement order would not know the index's filter). Same savepoint,
+    /// so a refusal later in the save rolls the release back too.
+    /// </summary>
+    private async Task ReleaseNumbersFirstAsync(CancellationToken ct)
+    {
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        var releases = db.ChangeTracker.Entries<ShramPersonPhone>()
+            .Where(e => e.State == EntityState.Modified
+                && e.Property(p => p.ReleasedAtUtc).IsModified
+                && e.Property(p => p.ReleasedAtUtc).OriginalValue is null
+                && e.Entity.ReleasedAtUtc is not null)
+            .ToList();
+        foreach (var entry in releases)
+        {
+            var id = entry.Entity.Id;
+            var releasedAt = entry.Entity.ReleasedAtUtc;
+            await db.ShramPersonPhones.Where(p => p.Id == id && p.ReleasedAtUtc == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.ReleasedAtUtc, releasedAt), ct);
+            entry.Property(p => p.ReleasedAtUtc).OriginalValue = releasedAt;
+            entry.Property(p => p.ReleasedAtUtc).IsModified = false;
+        }
     }
 
     public Task CloseAsync(CancellationToken ct = default) => scope.CloseAsync(ct);

@@ -166,19 +166,31 @@ namespace AgriSync.Bootstrapper.Jobs
                 {
                     if (ct.IsCancellationRequested) return;
 
-                    try
+                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    var result = await MisViewRefresher.RefreshAsync(
+                        viewName,
+                        async (sql, token) =>
+                        {
+                            await using var cmd = conn.CreateCommand();
+                            cmd.CommandText = sql;
+                            await cmd.ExecuteNonQueryAsync(token);
+                        },
+                        ct);
+                    stopwatch.Stop();
+
+                    switch (result.Outcome)
                     {
-                        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                        await using var cmd = conn.CreateCommand();
-                        cmd.CommandText = $"REFRESH MATERIALIZED VIEW CONCURRENTLY {viewName};";
-                        await cmd.ExecuteNonQueryAsync(ct);
-                        stopwatch.Stop();
-                        _logger.LogInformation("Refreshed {ViewName} concurrently in {ElapsedMilliseconds}ms.", viewName, stopwatch.ElapsedMilliseconds);
-                    }
-                    catch (Exception ex)
-                    {
-                        // Failure isolation: 1 failing view does not block others.
-                        _logger.LogError(ex, "Failed to refresh materialized view {ViewName}. Continuing with remaining.", viewName);
+                        case MisViewRefreshOutcome.Concurrent:
+                            _logger.LogInformation("Refreshed {ViewName} concurrently in {ElapsedMilliseconds}ms.", viewName, stopwatch.ElapsedMilliseconds);
+                            break;
+                        case MisViewRefreshOutcome.InitiallyPopulated:
+                            // Created WITH NO DATA: CONCURRENTLY is refused until a first plain refresh.
+                            _logger.LogInformation("Initially populated {ViewName} (was never populated; plain refresh) in {ElapsedMilliseconds}ms.", viewName, stopwatch.ElapsedMilliseconds);
+                            break;
+                        default:
+                            // Failure isolation: 1 failing view does not block others.
+                            _logger.LogError(result.Error, "Failed to refresh materialized view {ViewName}. Continuing with remaining.", viewName);
+                            break;
                     }
                 }
                 _logger.LogInformation("Completed nightly MIS materalized view refreshes.");

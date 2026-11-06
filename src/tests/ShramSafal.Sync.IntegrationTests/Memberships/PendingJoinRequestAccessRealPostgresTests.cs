@@ -505,6 +505,9 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // back-fills a person and a card for every field operator.
         "20261102163914_AddWorkerIdentity",
 
+        // lane WID fix pass 2 (N3) — Down() read in full: drops only the two shram_person_phones indexes Up() adds. No
+        // farm_memberships or farm_join_requests object, no ssf.farms policy.
+        "20261106060953_AddOneVerifiedNumberPerPerson",
         // spec plr-d10 lane MU-2 — Down() read in full: drops the three policies on ssf.farm_personal_invitations (a
         // farm-id tenant policy and two SELECT-only invitee doors keyed on agrisync.invitee_phone / agrisync.invite_code;
         // none names a membership status, so none is an "open" or an "active" predicate here), the table, the

@@ -16,6 +16,22 @@ namespace ShramSafal.Application.Ports;
 /// identity rows commit (or roll back) together with the request's transaction.</para>
 /// <para>The append-only events table is farm-scoped (F8) and is read and written under the farm scope.</para>
 /// </remarks>
+/// <summary>Which database one-holder rule refused an identity write (fix pass 2, N3).</summary>
+public enum IdentitySaveClash
+{
+    /// <summary>Saved.</summary>
+    None = 0,
+
+    /// <summary>The number is already another person's active verified number (R3).</summary>
+    NumberAlreadyVerified = 1,
+
+    /// <summary>The person already holds an active verified number (H2/N3: one at a time; a second only by the move).</summary>
+    PersonAlreadyVerified = 2,
+
+    /// <summary>Another unique rule (nothing was written either way).</summary>
+    Other = 3,
+}
+
 public interface IShramIdentityStore
 {
     Task<ShramPerson?> GetPersonAsync(Guid personId, CancellationToken ct = default);
@@ -42,7 +58,17 @@ public interface IShramIdentityStore
 
     Task<ShramPhoneChallenge?> GetChallengeAsync(Guid challengeId, CancellationToken ct = default);
 
-    Task<int> CountChallengesSinceAsync(string phoneE164, DateTime sinceUtc, CancellationToken ct = default);
+    /// <summary>
+    /// Every code sent to this number since <paramref name="sinceUtc"/>, by any farm (fix pass 2, N2: the caller splits
+    /// them into the sends of the farms he trusts and everyone else's).
+    /// </summary>
+    Task<IReadOnlyList<ShramPhoneChallenge>> GetChallengesToNumberSinceAsync(string phoneE164, DateTime sinceUtc, CancellationToken ct = default);
+
+    /// <summary>Wrong tries at any code sent for these persons (one human) since <paramref name="sinceUtc"/>, from every farm (fix pass 2, N2).</summary>
+    Task<int> CountWrongTriesForPersonsSinceAsync(IReadOnlyCollection<Guid> personIds, DateTime sinceUtc, CancellationToken ct = default);
+
+    /// <summary>The farms that linked these persons with HIS code (a link code he read back), ever (fix pass 2, N2).</summary>
+    Task<IReadOnlyList<Guid>> GetFarmsLinkedByCodeAsync(IReadOnlyCollection<Guid> personIds, CancellationToken ct = default);
 
     /// <summary>Codes this FARM asked for since <paramref name="sinceUtc"/> (fix pass 1, M2).</summary>
     Task<int> CountChallengesByFarmSinceAsync(Guid farmId, DateTime sinceUtc, CancellationToken ct = default);
@@ -65,6 +91,12 @@ public interface IShramIdentityStore
     /// index (R3) is answered <c>false</c> with nothing written, never a 500.
     /// </summary>
     Task<bool> TrySaveChangesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// As <see cref="TrySaveChangesAsync"/>, naming WHICH one-holder rule refused the write (fix pass 2, N3): his number is
+    /// already another person's verified number, or he already has a verified number.
+    /// </summary>
+    Task<IdentitySaveClash> SaveChangesOrClashAsync(CancellationToken ct = default);
 
     /// <summary>Closes the identity door for the rest of the request (a read that only needed it for one projection).</summary>
     Task CloseAsync(CancellationToken ct = default);

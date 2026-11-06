@@ -1,0 +1,11 @@
+{
+  "_readme": [
+    "Register of ACCEPTED NuGet vulnerabilities. Empty means nothing is accepted: every high/critical finding blocks CI.",
+    "Enforced by .github/scripts/check-nuget-audit.py. One entry = one advisory + one package + one exact version + one project (.csproj).",
+    "Required: advisory (GHSA id), package, version, project, owner, issue (#123 or /issues/123 URL), reason, granted, expires (YYYY-MM-DD, max 60 days after granted).",
+    "A matching <NuGetAuditSuppress Include=\"https://github.com/advisories/GHSA-...\" /> goes in THAT project's own .csproj, nowhere else.",
+    "An entry that matches no current finding fails the gate, so fixed exceptions cannot linger. An entry past 'expires' fails the gate.",
+    "Adding an entry needs the founder's explicit approval in the PR; development dependencies get no category exemption."
+  ],
+  "exceptions": []
+}

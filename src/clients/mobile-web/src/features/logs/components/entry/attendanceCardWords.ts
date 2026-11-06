@@ -33,6 +33,8 @@ export interface AttendanceCardWords {
     /** The quiet way to the हजेरी place (its वही, आढावा, people), kept from the old door. */
     register: string;
     wholeFarm: string;
+    /** D-62: a declared rest day — the card's one sentence (the only link is `register`). */
+    restDay: string;
 }
 
 const mr: AttendanceCardWords = {
@@ -49,6 +51,7 @@ const mr: AttendanceCardWords = {
     take: 'हजेरी घ्या', // FOUNDER (design page)
     provisional: ATTENDANCE_COPY.provisionalChip, // REUSED — founder D-46 "खात्री बाकी"
     register: 'हजेरी वही बघा', // PROPOSED (Marathi) — the old door's own line "हजेरी घ्या आणि हजेरी वही बघा", its second half
+    restDay: 'आज कामाला सुट्टी नोंदली आहे', // FOUNDER (D-62, verbatim)
     wholeFarm: RESULT_STR.wholeFarm, // REUSED
 };
 
@@ -66,6 +69,7 @@ const en: AttendanceCardWords = {
     take: 'Take attendance', // PROPOSED (English)
     provisional: 'Not confirmed yet', // PROPOSED (English)
     register: 'See the attendance register', // PROPOSED (English)
+    restDay: 'Today is recorded as a rest day', // PROPOSED (English)
     wholeFarm: 'Whole farm', // PROPOSED (English) — the ONE mic's own English for it
 };
 

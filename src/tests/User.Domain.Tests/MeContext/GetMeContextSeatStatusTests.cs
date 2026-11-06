@@ -137,21 +137,24 @@ public sealed class GetMeContextSeatStatusTests
 
     /// <summary>
     /// The capability flags say what the server allows — fixed before any screen reads them
-    /// (plan §4): canVerify = owner tier or a live labour grant; canAddCost = every Active seat
+    /// (plan §4): canVerify = the primary account holder, take हजेरी or confirm records (lane 2b: a
+    /// label grants nothing, D-26); canInvite = the primary account holder only; canAddCost = every Active seat
     /// (recording a purchase is open to every Active member — founder D-24d / D-12, alignment M-5);
     /// the effective permission names (correcting money = AddCost) travel as they are.
     /// </summary>
     [Fact]
     public async Task Capabilities_are_what_the_server_allows()
     {
-        var farms = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
+        var farms = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() };
         var context = await RunAsync(
             includePending: false,
             Seat(farms[0], "a", "Active", role: "Mukadam") with { Permissions = [] },
             Seat(farms[1], "b", "Active", role: "Mukadam") with { Permissions = [], HasLabourGrant = true },
             Seat(farms[2], "c", "Active", role: "Mukadam") with { Permissions = [], HasLabourGrant = true, LabourGrantExpiresAtUtc = Now.AddMinutes(-1) },
             Seat(farms[3], "d", "Active", role: "Worker") with { Permissions = [] },
-            Seat(farms[4], "e", "Active", role: "SecondaryOwner") with { Permissions = ["SeeMoney", "PlanWork"] });
+            Seat(farms[4], "e", "Active", role: "SecondaryOwner") with { Permissions = ["SeeMoney", "PlanWork"] },
+            Seat(farms[5], "f", "Active", role: "SecondaryOwner") with { Permissions = [], Authorities = [new MeAuthoritySnapshot("ConfirmRecords", null)] },
+            Seat(farms[6], "g", "Active", role: "PrimaryOwner") with { IsPrimaryAccountHolder = true });
 
         MeCapabilitiesDto Caps(int i) => context.Farms.Single(f => f.FarmId == farms[i]).Capabilities;
 
@@ -165,8 +168,14 @@ public sealed class GetMeContextSeatStatusTests
 
         Caps(3).CanInvite.Should().BeFalse();
         Caps(3).CanVerify.Should().BeFalse("a plain worker verifies nothing");
-        Caps(4).CanVerify.Should().BeTrue("owner tier verifies (the labour rule, unchanged until step 2b)");
-        Caps(4).CanInvite.Should().BeTrue();
+        // Lane 2b (founder D-26): a सहमालक label grants nothing. Verifying needs the primary account
+        // holder, take हजेरी or confirm records; inviting is the primary account holder only.
+        Caps(4).CanVerify.Should().BeFalse("a सहमालक label without take हजेरी or confirm records verifies nothing (D-26)");
+        Caps(4).CanInvite.Should().BeFalse("people and permissions belong to the primary account holder only (D-26)");
+        Caps(5).CanVerify.Should().BeTrue("a सहमालक given confirm records may verify");
+        Caps(5).CanInvite.Should().BeFalse("confirm records grants nothing else");
+        Caps(6).CanVerify.Should().BeTrue("the primary account holder verifies");
+        Caps(6).CanInvite.Should().BeTrue("the primary account holder invites");
         context.Farms.Single(f => f.FarmId == farms[3]).Permissions.Should().BeEmpty("a worker holds no stored power");
         context.Farms.Single(f => f.FarmId == farms[4]).Permissions.Should().Equal("SeeMoney", "PlanWork");
     }

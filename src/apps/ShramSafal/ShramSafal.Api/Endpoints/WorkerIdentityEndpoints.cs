@@ -22,7 +22,8 @@ public static class WorkerIdentityEndpoints
     /// <summary>
     /// Fix pass 1 (review M2, L1) — the per-user request limit on the identity lookups and code sends (scan-resolve, the
     /// number check, link/start, send-code), so none of them can be looped to list cards or verified numbers, or to make
-    /// ShramSafal's SMS header spam a number. Registered by <c>RateLimitingConfig</c> under this one name.
+    /// ShramSafal's SMS header spam a number. Registered by <c>RateLimitingConfig</c> under this one name. Fix pass 2 (N4):
+    /// also on the link itself (it looks the typed card up too) and on the phone verify.
     /// </summary>
     public const string IdentityRateLimitPolicy = "identity";
 
@@ -71,7 +72,7 @@ public static class WorkerIdentityEndpoints
                 ? Results.Created($"/shramsafal/farms/{farmId}/labour/field-operators/{view.FieldOperatorId}", view)
                 : Results.Ok(view);
         })
-        .WithName("LinkWorkerIdentity").RequireAuthorization();
+        .WithName("LinkWorkerIdentity").RequireAuthorization().RequireRateLimiting(IdentityRateLimitPolicy);
 
         group.MapGet($"{Identity}/farm-pin", (Guid farmId, ClaimsPrincipal user, ICallerFarmTenantScope scope,
                 WorkerIdentityService service, CancellationToken ct) =>
@@ -93,7 +94,7 @@ public static class WorkerIdentityEndpoints
         group.MapPost($"{Worker}/phone/verify", (Guid farmId, Guid id, VerifyRequest body, ClaimsPrincipal user,
                 ICallerFarmTenantScope scope, WorkerIdentityService service, CancellationToken ct) =>
             RunAsync(user, scope, farmId, ct, caller => service.VerifyAsync(farmId, caller, id, body.Ticket, body.Code, ct)))
-            .WithName("VerifyWorkerPhone").RequireAuthorization();
+            .WithName("VerifyWorkerPhone").RequireAuthorization().RequireRateLimiting(IdentityRateLimitPolicy);
 
         group.MapPost($"{Worker}/phone/move", (Guid farmId, Guid id, MoveRequest body, ClaimsPrincipal user,
                 ICallerFarmTenantScope scope, WorkerIdentityService service, CancellationToken ct) =>

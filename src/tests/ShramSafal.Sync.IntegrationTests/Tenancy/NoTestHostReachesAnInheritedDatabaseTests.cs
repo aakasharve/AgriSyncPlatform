@@ -9,6 +9,7 @@ using System;
 using System.Collections;
 using System.Linq;
 using System.Threading.Tasks;
+using AgriSync.TestSupport;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;

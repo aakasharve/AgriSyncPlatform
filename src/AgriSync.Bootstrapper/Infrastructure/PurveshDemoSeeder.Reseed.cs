@@ -56,6 +56,12 @@ public sealed record PurveshDemoReseedTableCounts(
 /// part of the command's safety contract. It is an opaque internal id written only to the
 /// operator's own console, never to an application log; no account id, phone or name is printed.
 /// </param>
+/// <param name="KeptWithCard">
+/// spec: plr-d10 lane WID fix pass 2 (L5) — seed workers kept as they are because each holds a ShramSafal card the
+/// re-seed itself issued (his only identity event: one <c>CardIssued</c> with proof <c>None</c>). A card is permanent
+/// (append-only, RESTRICT), so such a worker is never deleted; he is not "retained" for anything the founder did.
+/// Cards are issued only outside Production — in Production this stays 0 and demo workers show without a card.
+/// </param>
 /// <param name="OtherMembers">
 /// Active members of the demo farm OTHER than the demo owner, counted by role (e.g.
 /// <c>{"Mukadam": 1, "Worker": 2}</c>). Counts only — no ids, phones or names. Report only: the
@@ -78,7 +84,8 @@ public sealed record PurveshDemoReseedReport(
     IReadOnlyList<string> Retained,
     IReadOnlyList<string> Skipped,
     IReadOnlyDictionary<string, bool> DemoCrewLoginsPresent,
-    int DomainEventsSuppressed);
+    int DomainEventsSuppressed,
+    int KeptWithCard = 0);
 
 /// <summary>
 /// spec: 2026-08-25-prod-cutover-waves (demo-seed-v3) — the ONE-SHOT, production-safe re-seed of
@@ -173,10 +180,16 @@ public sealed partial class PurveshDemoSeeder
         RecentPending = 1,
     }
 
+    /// <param name="demoCards">
+    /// spec: plr-d10 lane WID fix pass 2 (L5) — when given (outside Production only; the command decides), each new demo
+    /// worker gets his ShramSafal card through the product's own create path and this identity store, inside this one
+    /// transaction. Null: no card is issued (Production).
+    /// </param>
     public async Task<PurveshDemoReseedReport> ReseedDemoContentAsync(
         IShramSafalRepository repository,
         PurveshDemoReseedOptions options,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IShramIdentityStore? demoCards = null)
     {
         ArgumentNullException.ThrowIfNull(repository);
         ArgumentNullException.ThrowIfNull(options);
@@ -270,7 +283,7 @@ public sealed partial class PurveshDemoSeeder
                 actorUserId: null,
                 ct => ReseedInsideDemoFarmScopeAsync(
                     repository, farmId, ownerUserId, userIdsByKey, crewPresent, runUtc,
-                    options.DryRun, ct),
+                    options.DryRun, demoCards, ct),
                 cancellationToken);
 
             if (options.DryRun)
@@ -298,6 +311,7 @@ public sealed partial class PurveshDemoSeeder
         IReadOnlyDictionary<string, bool> crewPresent,
         DateTime runUtc,
         bool dryRun,
+        IShramIdentityStore? demoCards,
         CancellationToken ct)
     {
         var today = FarmLocalDay.From(runUtc);
@@ -398,13 +412,22 @@ public sealed partial class PurveshDemoSeeder
         foreach (var op in plan.Operators)
         {
             var operatorId = DemoOperatorId(op.Key);
-            if (pins.OperatorIds.Contains(operatorId))
+            if (pins.OperatorIds.Contains(operatorId) || pins.KeptWithCardOperatorIds.Contains(operatorId))
             {
                 continue;
             }
 
+            // L5 — outside Production the product's own create path also issues his card (demoCards); in Production
+            // it is null and no card is issued.
+            // Ids stay PLANNED (the queue refuses any other): with a card, his person and its CardIssued event get
+            // deterministic ids too — nothing else may be minted.
+            var ids = demoCards is null
+                ? new QueuedIdGenerator()
+                : new QueuedIdGenerator(
+                    CreateDeterministicGuid($"{SeedVersion}:person:{op.Key}"),
+                    CreateDeterministicGuid($"{SeedVersion}:card-issued:{op.Key}"));
             var handler = new CreateFieldOperatorHandler(
-                repository, new QueuedIdGenerator(), new FixedClock(anchorUtc.AddDays(-op.KnownForDays)));
+                repository, ids, new FixedClock(anchorUtc.AddDays(-op.KnownForDays)), demoCards);
             var result = await handler.HandleAsync(
                 new CreateFieldOperatorCommand(farmId, op.DisplayName, op.FullName, ownerUserId, operatorId), ct);
             if (!result.IsSuccess || result.Value!.Id != operatorId)
@@ -604,7 +627,8 @@ public sealed partial class PurveshDemoSeeder
             Retained: retained,
             Skipped: skipped,
             DemoCrewLoginsPresent: crewPresent,
-            DomainEventsSuppressed: eventsSuppressed);
+            DomainEventsSuppressed: eventsSuppressed,
+            KeptWithCard: pins.KeptWithCardOperatorIds.Count);
     }
 
     // ── census ──────────────────────────────────────────────────────────────────────────
@@ -630,7 +654,10 @@ public sealed partial class PurveshDemoSeeder
         List<Attachment> Attachments,
         // spec: plr-d10 lane WID — workers whose ShramSafal identity was touched in the app (a card, a phone, a PIN,
         // a link). Their append-only identity events point at the farm record (RESTRICT), so such a worker is kept.
-        List<Guid> IdentityOperatorIds);
+        List<Guid> IdentityOperatorIds,
+        // lane WID fix pass 2 (L5) — workers whose ONLY identity event is one CardIssued with proof None: the card the
+        // re-seed issues (outside Production). Kept with their card, not reported as retained.
+        List<Guid> CardOnlyOperatorIds);
 
     private async Task<DemoFarmCensus> TakeDemoFarmCensusAsync(FarmId farmId, DemoLabourPlan plan, CancellationToken ct)
     {
@@ -667,11 +694,17 @@ public sealed partial class PurveshDemoSeeder
             .Where(c => c.FarmId == farmId)
             .Select(c => c.DailyLogId)
             .ToListAsync(ct);
-        var identityOperatorIds = await _ssfContext.ShramIdentityEvents.AsNoTracking()
+        var identityEvents = await _ssfContext.ShramIdentityEvents.AsNoTracking()
             .Where(e => e.FarmId == farmId.Value && e.FieldOperatorId != null)
-            .Select(e => e.FieldOperatorId!.Value)
-            .Distinct()
+            .Select(e => new { OperatorId = e.FieldOperatorId!.Value, e.Kind, e.Proof })
             .ToListAsync(ct);
+        var byOperator = identityEvents.GroupBy(e => e.OperatorId).ToList();
+        var cardOnlyOperatorIds = byOperator
+            .Where(g => g.Count() == 1 && g.Single().Kind == ShramSafal.Domain.Identity.IdentityEventKind.CardIssued
+                && g.Single().Proof == ShramSafal.Domain.Identity.IdentityProof.None)
+            .Select(g => g.Key)
+            .ToList();
+        var identityOperatorIds = byOperator.Select(g => g.Key).Except(cardOnlyOperatorIds).ToList();
 
         var costs = await _ssfContext.CostEntries.Where(c => c.FarmId == farmId).ToListAsync(ct);
         var costIds = costs.Select(c => c.Id).ToList();
@@ -697,7 +730,7 @@ public sealed partial class PurveshDemoSeeder
         return new DemoFarmCensus(
             seedLogs, nonSeedLogIds, farmAssignments, workRows, operators, marks,
             markCorrections.ToHashSet(), markCorrections.Count, labourCorrections, contentLogIds,
-            costs, corrections, dayLedgers, planned, seedCycles, attachments, identityOperatorIds);
+            costs, corrections, dayLedgers, planned, seedCycles, attachments, identityOperatorIds, cardOnlyOperatorIds);
     }
 
     // ── what must be retained ───────────────────────────────────────────────────────────
@@ -707,6 +740,9 @@ public sealed partial class PurveshDemoSeeder
         public HashSet<Guid> DailyLogIds { get; } = [];
         public HashSet<Guid> LabourAssignmentIds { get; } = [];
         public HashSet<Guid> OperatorIds { get; } = [];
+
+        /// <summary>L5 — seed workers kept only because they hold the re-seed's own card (never deleted, never re-made).</summary>
+        public HashSet<Guid> KeptWithCardOperatorIds { get; } = [];
         public HashSet<Guid> AttendanceMarkIds { get; } = [];
         public HashSet<Guid> CostEntryIds { get; } = [];
         public HashSet<Guid> PlannedActivityIds { get; } = [];
@@ -859,6 +895,18 @@ public sealed partial class PurveshDemoSeeder
             }
         }
 
+        // L5 (lane WID fix pass 2) — a seed worker whose only identity event is the card the re-seed issued is KEPT with
+        // it: his card is permanent (append-only, RESTRICT), so he is never deleted and never re-made. Not "retained"
+        // (nothing the founder did); counted in the report as KeptWithCard. A worker with anything more (a phone, a PIN,
+        // a link, a new card) was already retained above as a founder action.
+        foreach (var operatorId in census.CardOnlyOperatorIds)
+        {
+            if (seedOperators.ContainsKey(operatorId) && !pins.OperatorIds.Contains(operatorId))
+            {
+                pins.KeptWithCardOperatorIds.Add(operatorId);
+            }
+        }
+
         // Money: a seed cost is retained when a correction or day ledger it did not write
         // points at it, or its own day ledger gained an allocation it did not write.
         var seedCostIds = BuildCostEntrySeeds()
@@ -974,7 +1022,8 @@ public sealed partial class PurveshDemoSeeder
 
         // 5. Seed workers.
         var operators = census.Operators
-            .Where(o => plan.OperatorIds.Contains(o.Id) && !pins.OperatorIds.Contains(o.Id))
+            .Where(o => plan.OperatorIds.Contains(o.Id) && !pins.OperatorIds.Contains(o.Id)
+                && !pins.KeptWithCardOperatorIds.Contains(o.Id))
             .ToList();
         _ssfContext.FieldOperators.RemoveRange(operators);
         manifest.UnionWith(operators.Select(o => o.Id));

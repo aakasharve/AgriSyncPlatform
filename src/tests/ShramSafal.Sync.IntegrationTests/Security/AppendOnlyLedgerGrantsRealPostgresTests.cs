@@ -179,6 +179,9 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261102163914_AddWorkerIdentity",
 
+        // ── Reviewed 2026-11-06 (lane WID fix pass 2, N3); Down() read in full: drops only the two indexes Up() adds
+        //    on ssf.shram_person_phones. No table, column, policy or grant; no ledger is touched. Safe mid-proof.
+        "20261106060953_AddOneVerifiedNumberPerPerson",
         // ── Reviewed 2026-11-06 (spec: plr-d10 lane MU-2); Down() read in full. Up() CREATEs ssf.farm_personal_invitations
         //    (FORCE RLS on its own farm_id, three policies; SELECT + INSERT + UPDATE for the app role, DELETE and TRUNCATE
         //    revoked — current state with a status, not a ledger) and ADDs three nullable farm_memberships columns with one
