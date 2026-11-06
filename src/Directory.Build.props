@@ -28,30 +28,26 @@
   <PropertyGroup>
     <WarningsNotAsErrors>
       $(WarningsNotAsErrors);
-      CS0618;
-      NU1901;
-      NU1903
+      CS0618
     </WarningsNotAsErrors>
     <!--
-      NU1901 (2026-05-17, spec: data-principle-spine-2026-05-05/05.2):
-      Transitive AWSSDK.Core 4.0.0.24 carries a known low-severity advisory
-      (GHSA-9cvc-h2w8-phrp). Pulled in by AWSSDK.S3 (Phase 02) and
-      AWSSDK.KeyManagementService 4.0.4 (Phase 05.2). dotnet-ci treats
-      warnings as errors via /warnaserror, which would otherwise block
-      every Phase 05 commit on a transitive low-sev advisory we don't
-      control. AWS has not shipped a 4.x without this transitive yet.
-      Re-evaluate quarterly; remove this suppression when AWSSDK.Core
-      ships a non-vulnerable 4.x revision.
+      NuGet vulnerability audit (spec: nuget-audit-hardening-2026-11-01).
+      NU1901-NU1904 are NOT exempted: a known vulnerability in any direct or
+      transitive package fails `/warnaserror`. History: NU1901 (AWSSDK.Core,
+      2026-05-17) and NU1903 (SQLitePCLRaw 2026-06-25, then SSH.NET and
+      System.Security.Cryptography.Xml) were blanket-exempted here, which let
+      three high-severity advisories on shipping assemblies go unseen. All were
+      fixed by upgrading instead (see the package comments in the csproj files).
+
+      If a finding truly cannot be fixed yet, the ONLY accepted route is an entry
+      in .github/security/nuget-audit-exceptions.json (one advisory + package +
+      version + project, named owner, tracking issue, expiry date) plus a
+      matching <NuGetAuditSuppress> in that one project's own .csproj.
+      .github/scripts/check-nuget-audit.py enforces expiry and rejects any
+      re-introduced category-wide exemption.
     -->
-    <!--
-      NU1903 (2026-06-25): transitive SQLitePCLRaw.lib.e_sqlite3 2.1.11 in the
-      TEST-ONLY project AgriSync.BuildingBlocks.Tests (via EF Core Sqlite 10.0.3,
-      used only for in-memory SQLite tests) carries a newly-published high-severity
-      advisory (GHSA-2m69-gcr7-jv3q). It is NOT in the shipped app — prod uses
-      Postgres. Suppressed-as-error so a freshly-published transitive advisory can't
-      block every merge on the trunk; still visible as a warning + caught by the
-      Dependency Review / CodeQL workflows. FOLLOW-UP: bump EF Core Sqlite or pin a
-      patched SQLitePCLRaw.lib.e_sqlite3, then remove this line.
-    -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>low</NuGetAuditLevel>
   </PropertyGroup>
 </Project>
