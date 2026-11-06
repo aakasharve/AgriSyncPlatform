@@ -80,6 +80,27 @@ export const TodayAttendanceCard: React.FC<TodayAttendanceCardProps> = ({ state,
         </button>
     ) : null;
 
+    // D-62: a declared rest day says so and keeps only the way to the हजेरी वही (paid rest days stay possible there).
+    if (state.restDay && !state.work) {
+        return (
+            <div style={{ fontFamily: SANS }}>
+                <section data-testid="attendance-card" data-state="rest"
+                    className="rounded-[18px] border-[3px] border-dashed border-stone-300 bg-white p-[14px]">
+                    <div className="mb-2 flex items-center gap-2 text-[15px] font-extrabold text-stone-500">
+                        <Hand size={22} strokeWidth={2} aria-hidden="true" />{W.title}
+                    </div>
+                    <p className="m-0 text-[21px] font-extrabold leading-snug text-stone-900" data-testid="attendance-card-rest">{W.restDay}</p>
+                </section>
+                {onOpenRegister && (
+                    <button type="button" onClick={onOpenRegister} data-testid="attendance-card-register"
+                        className="mx-auto mt-1 block min-h-[44px] px-3 text-[15px] font-bold text-stone-700 underline decoration-stone-400 underline-offset-4">
+                        {W.register}
+                    </button>
+                )}
+            </div>
+        );
+    }
+
     if (state.work && state.headcount !== null) {
         const inside = (
             <>

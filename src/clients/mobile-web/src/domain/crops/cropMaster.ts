@@ -12,6 +12,7 @@
  */
 import { CROP_MASTER_GROUPS, CROP_MASTER_ROWS } from './cropMasterData';
 import type { CropMasterRow, CropVisibility } from './cropMaster.types';
+import { romanizeMarathi, soundKey } from './romanizeMarathi';
 
 export type { CropMasterRow, CropVisibility } from './cropMaster.types';
 
@@ -98,27 +99,56 @@ export const cropTiles = (onFarm?: ReadonlySet<string>): CropMasterRow[] => ALL_
 
 const namesOf = (row: CropMasterRow): string[] => [row.en, row.mr, ...row.altEn, ...row.altMr].filter(Boolean);
 
+/** The Marathi names of a crop as English letters (D-25): "ऊस" is found by "us". Built once per crop. */
+const SOUNDS = new Map<string, string[]>();
+const soundsOf = (row: CropMasterRow): string[] => {
+    let list = SOUNDS.get(row.id);
+    if (!list) { list = [row.mr, ...row.altMr].map(romanizeMarathi).filter(Boolean); SOUNDS.set(row.id, list); }
+    return list;
+};
+
+const scoreName = (name: string, q: string): number =>
+    name === q ? 4 : name.startsWith(q) ? 3 : name.split(' ').some(w => w.startsWith(q)) ? 2 : name.includes(q) ? 1 : 0;
+
+/** Letters as a farmer sees them (aksharas): "द्रा" is one, though it is four code points. */
+const lettersOf = (text: string): number => {
+    const Seg = (Intl as unknown as { Segmenter?: new (l?: string, o?: { granularity: string }) => { segment: (t: string) => Iterable<unknown> } }).Segmenter;
+    return Seg ? Array.from(new Seg('mr', { granularity: 'grapheme' }).segment(text)).length : Array.from(text).length;
+};
+
+/** A search of 1-2 letters shows at most this many crops (my call: enough to see the crop, not a flood). */
+export const SHORT_SEARCH_CAP = 20;
+
 /**
- * The crops a typed (or said) word finds — by English, Marathi or any alternate name — best first: a whole name,
- * then a name starting with it, then a word of a name starting with it, then a name containing it. A crop the
- * policy hides is never found (unless it is already on the farm).
+ * The crops a typed (or said) word finds - by English, Marathi or any alternate name, and by a Marathi name typed in
+ * English letters ("us" = ऊस) - best first: a whole name, then a name starting with it, then a word of a name starting
+ * with it, then a name containing it; the sheet's order inside each group. One or two letters are enough; such a short
+ * search shows at most SHORT_SEARCH_CAP crops. A crop the policy hides is never found (unless it is already on the farm).
  */
 export function searchCrops(query: string, opts: { onFarm?: ReadonlySet<string>; limit?: number } = {}): CropMasterRow[] {
-    const q = normName(query);
+    // search-only key: zero-width joiners / non-joiners a phone keyboard may add inside a word never decide a match
+    // (normName itself is read app-wide and stays untouched)
+    const q = normName(query.replace(/[\u200B-\u200D\u2060\uFEFF]/g, ''));
     if (!q) return [];
+    // sound key: English letters directly; a Devanagari query by its own sound-alike (उस = us meets ऊस = us)
+    const sound = /^[a-z ]+$/.test(q) ? soundKey(q) : /[ऀ-ॿ]/.test(q) ? romanizeMarathi(q) : '';
     const scored: Array<{ row: CropMasterRow; score: number; at: number }> = [];
     ALL_CROPS.forEach((row, at) => {
         if (offerOf(row, opts.onFarm) === 'off') return;
         let best = 0;
-        for (const raw of namesOf(row)) {
-            const name = normName(raw);
-            const score = name === q ? 4 : name.startsWith(q) ? 3 : name.split(' ').some(w => w.startsWith(q)) ? 2 : name.includes(q) ? 1 : 0;
-            if (score > best) best = score;
+        for (const raw of namesOf(row)) best = Math.max(best, scoreName(normName(raw), q));
+        // a Marathi name by its sound (English letters, or a Devanagari query's own sound-alike): a sound-only match counts
+        // at most 2.5, so it never outranks a native starts-with / word-start match; when a native match exists, the best
+        // of the two counts
+        if (sound) {
+            const heard = Math.max(0, ...soundsOf(row).map(h => scoreName(h, sound)));
+            if (heard > 0) best = best === 0 ? Math.min(heard - 0.5, 2.5) : Math.max(best, heard);
         }
         if (best > 0) scored.push({ row, score: best, at });
     });
     scored.sort((a, b) => b.score - a.score || a.at - b.at);
-    return scored.slice(0, opts.limit ?? 40).map(s => s.row);
+    const cap = opts.limit ?? (lettersOf(q) <= 2 ? SHORT_SEARCH_CAP : 40);
+    return scored.slice(0, cap).map(s => s.row);
 }
 
 /** The other names a crop is known by, in this language (search shows why a crop was found). */
