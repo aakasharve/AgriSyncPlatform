@@ -72,6 +72,13 @@ export function scheduleCropCode(value: string): string {
     return canonicalCropCode(cropByName(value)?.en ?? value);
 }
 
+/**
+ * spec: plr-d10 lane L8b-1 fix round 1 (review L5) — the code of a name the rule cannot read. It is never a crop: no
+ * schedule is matched to it, not even one whose own crop reads the same (the server's ScheduleLibrary.MatchesCrop
+ * answers the same; the shared fixture's `neverMatch` list pins both).
+ */
+export const UNKNOWN_CROP = 'unknown_crop';
+
 function canonicalCropCode(value: string): string {
     const normalized = normalizeCropCode(value);
     const aliases: Record<string, string> = {
@@ -95,7 +102,7 @@ function canonicalCropCode(value: string): string {
         return aliases[normalized.slice(0, -1)];
     }
 
-    return normalized || 'unknown_crop';
+    return normalized || UNKNOWN_CROP;
 }
 
 function toDisplayName(cropCode: string): string {
@@ -554,7 +561,8 @@ export function getTemplatesForCrop(
     sortBy: TemplateCatalogSort = 'HIGHEST_ADOPTION'
 ): CropScheduleTemplate[] {
     const cropCode = scheduleCropCode(cropName);
-    const fromCatalog = templatesByCrop.get(cropCode);
+    // lane L8b-1 fix round 1 (L5) — an unreadable name matches no schedule (only the stand-in, never shown as one).
+    const fromCatalog = cropCode === UNKNOWN_CROP ? undefined : templatesByCrop.get(cropCode);
     if (fromCatalog && fromCatalog.length > 0) {
         return sortTemplates(fromCatalog, sortBy);
     }

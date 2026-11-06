@@ -23,5 +23,11 @@
     { "name": "a master crop with no schedule", "cycleCrop": "टोमॅटो", "cropCode": "tomato" },
     { "name": "an English name the master does not know is read as typed", "cycleCrop": "Dragon fruit X", "cropCode": "dragon_fruit_x" },
     { "name": "a Marathi name the master does not know matches nothing", "cycleCrop": "माझे पीक", "cropCode": "unknown_crop" }
+  ],
+  "_neverMatchComment": "lane L8b-1 fix round 1 (review L5) - a name the rule cannot read (unknown_crop) is never a crop: two such names never match each other, nor the same such name itself. Both sides read THIS list.",
+  "neverMatch": [
+    { "name": "two different Marathi names the master does not know", "templateCrop": "दुसरे पीक", "cycleCrop": "माझे पीक" },
+    { "name": "the same Marathi name the master does not know", "templateCrop": "माझे पीक", "cycleCrop": "माझे पीक" },
+    { "name": "an unreadable schedule crop and a real crop", "templateCrop": "माझे पीक", "cycleCrop": "Grapes" }
   ]
 }

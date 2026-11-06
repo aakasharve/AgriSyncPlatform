@@ -97,7 +97,7 @@ public sealed class RemovePlannedActivityPipelineTests
     public async Task Authorizer_returns_PlannedActivityNotFound_when_id_resolves_to_nothing()
     {
         var repo = new FakeRemoveRepo(activity: null, role: AppRole.Mukadam);
-        var a = new RemovePlannedActivityAuthorizer(repo);
+        var a = new RemovePlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed(Guid.NewGuid()), default);
 
@@ -111,7 +111,7 @@ public sealed class RemovePlannedActivityPipelineTests
     {
         var activity = MakeActivity();
         var repo = new FakeRemoveRepo(activity, AppRole.Worker);
-        var a = new RemovePlannedActivityAuthorizer(repo);
+        var a = new RemovePlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed(activity.Id) with { CallerUserId = WorkerId }, default);
 
@@ -125,7 +125,7 @@ public sealed class RemovePlannedActivityPipelineTests
     {
         var activity = MakeActivity();
         var repo = new FakeRemoveRepo(activity, AppRole.Mukadam);
-        var a = new RemovePlannedActivityAuthorizer(repo);
+        var a = new RemovePlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed(activity.Id), default);
 
@@ -206,7 +206,7 @@ public sealed class RemovePlannedActivityPipelineTests
             new FakeClock(Now));
 
         var validator = new RemovePlannedActivityValidator();
-        var authorizer = new RemovePlannedActivityAuthorizer(repo);
+        var authorizer = new RemovePlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var pipeline = HandlerPipeline.Build<RemovePlannedActivityCommand>(
             rawHandler,
@@ -247,6 +247,15 @@ public sealed class RemovePlannedActivityPipelineTests
         // the seat the owner GAVE "कामाचं नियोजन करणे" (unless PlanWorkGiven is false); every other label holds only what
         // the 2b migration stored for it (no PlanWork): a label grants nothing.
         public bool PlanWorkGiven { get; init; } = true;
+
+        // lane L8b-1 fix round 1 (review H1) — the planned-work doors read the season's farm first. Every season here is on
+        // FarmId, unless a fact puts it on another farm (SeasonFarm).
+        public Guid SeasonFarm { get; init; } = FarmId;
+
+        public override Task<ShramSafal.Domain.Crops.CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult<ShramSafal.Domain.Crops.CropCycle?>(ShramSafal.Domain.Crops.CropCycle.Create(
+                cropCycleId, new AgriSync.SharedKernel.Contracts.Ids.FarmId(SeasonFarm), Guid.NewGuid(), "Grapes", "Flowering",
+                new DateOnly(2026, 1, 1), null, Now));
 
         public override async Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
             Guid farmId, Guid userId, CancellationToken ct = default)

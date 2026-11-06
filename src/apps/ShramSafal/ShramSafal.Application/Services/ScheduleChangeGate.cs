@@ -19,6 +19,16 @@ namespace ShramSafal.Application.Services;
 /// (<see cref="LateAuthorityAudit.AcceptedAfterEnd"/>) — only inside <see cref="LateArrivalWindow"/>, judged on the time
 /// the phone states it was decided (<c>decidedAtUtc</c>, never later than the server's now). Anything else is refused
 /// with <see cref="ShramSafalErrors.Forbidden"/>, which the sync layer keeps whole for the owner (nothing is dropped).</para>
+/// <para><b>What the late window trusts (fix round 1, review L4).</b> Inside the window the server takes the phone's word
+/// for when the change was decided: up to <see cref="LateArrivalWindow.DoneWithinDaysBeforeEnd"/> days before the end. So
+/// a seat whose "plan work" has ended can still send a change it dates before the end, for up to
+/// <see cref="LateArrivalWindow.ReceivedWithinDaysAfterEnd"/> days after it; that change is accepted AND flagged, by design
+/// (MU §11.2: work done offline is not lost). A statement "in the future" is read as now; since the window needs the
+/// change to have happened before the end, such a statement is always refused once the authority has ended, so that clamp
+/// never decides an outcome on its own. Online doors never carry a statement: for them only "held now" counts.</para>
+/// <para><b>Planned work names its farm (fix round 1, review H1).</b> A planned step carries no farm of its own (only its
+/// season), so the planned-work doors first resolve the season's farm and refuse a season of another farm as not found
+/// (<see cref="RefusePlannedWorkAsync"/>), before asking the authority on that farm.</para>
 /// </summary>
 public static class ScheduleChangeGate
 {
@@ -82,9 +92,46 @@ public static class ScheduleChangeGate
         FarmAuthorityGate.HoldsAsync(repository, farmId, userId, Authority, nowUtc, ct);
 
     /// <summary>
-    /// The owner's flag for a change accepted after "plan work" ended (MU design §11.2; the phone words it
-    /// "जबाबदारी संपल्यानंतर पोहोचलं", PROPOSED in lane 2b): one audit row on the subscription it changed. Nothing when the
-    /// decision was an ordinary one.
+    /// spec: plr-d10 lane L8b-1 fix round 1 (review H1, E4 both ways) — the gate of the planned-work doors (add, move and
+    /// remove a step: "पुढे ठरवा"), asked by their authorizers and their handlers alike. A step and its season name no farm
+    /// the phone may choose: the season <paramref name="cropCycleId"/> (the one a new step goes into, or the step's own) is
+    /// read under the named farm's scope and must BE that farm's — missing, or another farm's, it is
+    /// <paramref name="notFound"/> (so nothing tells a caller another farm's step exists). Only then: the authority on that
+    /// farm (<see cref="MayChangeAsync"/>), then the MU-4 plot rule on the season's plot.
+    /// <para>Before this, the doors asked PlanWork on whichever farm the body named, and <c>ssf.planned_activities</c> has
+    /// no farm of its own and no row policy: the owner of ANY farm, naming his own, moved, removed or added steps of
+    /// another farm's season.</para>
+    /// </summary>
+    public static async Task<Error?> RefusePlannedWorkAsync(
+        IShramSafalRepository repository,
+        Guid farmId,
+        Guid cropCycleId,
+        Guid userId,
+        DateTime nowUtc,
+        Error notFound,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(notFound);
+        if (farmId == Guid.Empty || cropCycleId == Guid.Empty
+            || await repository.GetCropCycleByIdAsync(cropCycleId, ct) is not { } season
+            || (Guid)season.FarmId != farmId)
+        {
+            return notFound;
+        }
+
+        if (!await MayChangeAsync(repository, farmId, userId, nowUtc, ct))
+        {
+            return ShramSafalErrors.Forbidden;
+        }
+
+        return await PlotScopeGate.RefuseCycleAsync(repository, farmId, cropCycleId, userId, nowUtc, ct);
+    }
+
+    /// <summary>
+    /// The owner's flag for a change accepted after "plan work" ended (MU design §11.2): one audit row on the subscription
+    /// it changed. Nothing when the decision was an ordinary one. It is a RECORD only: no phone and no server read shows it
+    /// to the owner yet (fix round 1, review L2: the orchestrator routes it to lane MU-1's kept-work card).
     /// </summary>
     public static async Task FlagIfLateAsync(
         IShramSafalRepository repository,

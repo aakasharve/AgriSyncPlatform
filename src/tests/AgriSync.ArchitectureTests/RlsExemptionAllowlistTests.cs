@@ -277,6 +277,42 @@ public sealed class RlsExemptionAllowlistTests
         // (Task 3.4) drops rows where user_id matches the target
         // user.
         "golden_set_candidate",
+
+        // ── Raw-SQL incumbents (surfaced by plr-d10 lane L8b-1 fix round 1, review H1) ──
+        // These tables were created by RAW SQL (CREATE TABLE IF NOT EXISTS ssf.… inside migrationBuilder.Sql) in the
+        // February 2026 migrations, so this scan, which read only migrationBuilder.CreateTable, never saw them: they sat
+        // outside both the RLS set and this list without anyone choosing that. The scan now reads raw SQL too. Each entry
+        // below is an INVENTORY of a gap that was already open, NOT a reviewed exemption: the orchestrator registers each
+        // for a later RLS lane, and removing one here means putting it under FORCE RLS in a migration.
+
+        // KNOWN OPEN — carries no farm_id: a planned step of a crop season (crop_cycle_id → crop_cycles.farm_id). Its
+        // doors (add / move / remove a step, plan generation) resolve the season's farm under the named farm's scope and
+        // refuse another farm's (ScheduleChangeGate.RefusePlannedWorkAsync; lane L8b-1 fix round 1, H1). An EXISTS policy
+        // through crop_cycles (the verification_events shape) is the later lane's choice.
+        "planned_activities",
+
+        // KNOWN OPEN — carries a DIRECT farm_id and has no policy: the day ledger (finance). Its children follow it.
+        "day_ledgers",
+        "day_ledger_allocations",
+        "day_ledger_plot_allocations",
+
+        // KNOWN OPEN — carries no farm_id: a task line of a daily log (daily_log_id → daily_logs.farm_id).
+        "log_tasks",
+
+        // Author-owned, not farm-owned (the same reason as crop_schedule_templates above): a schedule row belongs to the
+        // account that made it, and the library is shared. The wall is the application's one visibility rule
+        // (ShramSafal.Application.Services.ScheduleViewer: Public, his own, his team's), asked by every door that lists,
+        // adopts, copies or changes a row (lane L8b-1 fix round 1, H2/H3). Its tasks follow it.
+        "schedule_templates",
+        "template_activities",
+
+        // The idempotency store: keyed on (device id, client request id); written and read by the sync layer inside the
+        // caller's request. No farm dimension.
+        "sync_mutations",
+
+        // Global lookups / settings with no farm dimension (the cost_categories pattern without its explicit policies).
+        "price_configs",
+        "ai_provider_configs",
     };
 
     [Fact]
@@ -310,6 +346,17 @@ public sealed class RlsExemptionAllowlistTests
         var createTablePattern = new Regex(
             """CreateTable\s*\(\s*name:\s*"(?<table>[a-zA-Z0-9_]+)"\s*,\s*schema:\s*"ssf"\s*,""",
             RegexOptions.Compiled | RegexOptions.Singleline);
+
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H1) — tables created by RAW SQL inside migrationBuilder.Sql(...)
+        // count too. The early migrations (20260218073025_FinanceV2, 20260222080909_AddAuditEvents, ...) created tables
+        // with `CREATE TABLE IF NOT EXISTS ssf.name (...)`, which the CreateTable pattern above never saw: ten tables,
+        // ssf.planned_activities among them, sat outside both the RLS set and this list without anyone choosing that.
+        // Example matches:
+        //   CREATE TABLE IF NOT EXISTS ssf.planned_activities (
+        //   CREATE TABLE ssf."some_table" (
+        var rawCreateTablePattern = new Regex(
+            """CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"?ssf"?\."?(?<table>[a-zA-Z0-9_]+)"?\s*\(""",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         // ENABLE ROW LEVEL SECURITY statements inside raw SQL.
         // Example matches:
@@ -348,6 +395,11 @@ public sealed class RlsExemptionAllowlistTests
         {
             var text = File.ReadAllText(file);
             foreach (Match m in createTablePattern.Matches(text))
+            {
+                allCreatedTables.Add(m.Groups["table"].Value);
+            }
+
+            foreach (Match m in rawCreateTablePattern.Matches(text))
             {
                 allCreatedTables.Add(m.Groups["table"].Value);
             }

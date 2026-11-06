@@ -54,10 +54,13 @@ namespace ShramSafal.Application.UseCases.Planning.GeneratePlanFromTemplate;
 public sealed class GeneratePlanFromTemplateAuthorizer : IAuthorizationCheck<GeneratePlanFromTemplateCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly AgriSync.BuildingBlocks.Abstractions.IClock _clock;
 
-    public GeneratePlanFromTemplateAuthorizer(IShramSafalRepository repository)
+    // spec: plr-d10 lane L8b-1 fix round 1 (review L6) — the authority is judged on the injected clock, as in the handler.
+    public GeneratePlanFromTemplateAuthorizer(IShramSafalRepository repository, AgriSync.BuildingBlocks.Abstractions.IClock clock)
     {
         _repository = repository;
+        _clock = clock;
     }
 
     public async Task<Result> AuthorizeAsync(GeneratePlanFromTemplateCommand command, CancellationToken ct)
@@ -77,7 +80,7 @@ public sealed class GeneratePlanFromTemplateAuthorizer : IAuthorizationCheck<Gen
 
         // spec: plr-d10 lane L8b-1 (founder D-73) — and the planning authority: the primary owner, or a PlanWork seat.
         if (!await Services.ScheduleChangeGate.MayChangeAsync(
-                _repository, (Guid)cropCycle.FarmId, command.ActorUserId, DateTime.UtcNow, ct))
+                _repository, (Guid)cropCycle.FarmId, command.ActorUserId, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.Forbidden);
         }

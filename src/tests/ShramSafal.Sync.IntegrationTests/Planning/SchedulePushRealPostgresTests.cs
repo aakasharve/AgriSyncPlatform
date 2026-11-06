@@ -107,9 +107,11 @@ public sealed class SchedulePushRealPostgresTests(ITestOutputHelper output) : Sc
     public async Task Push_migrate_then_abandon_keeps_one_active_choice_and_the_history()
     {
         await AssertAppRoleIsNotVacuousAsync();
+        // Two library rows: with rows, the library lists rows only, and only what is listed can be adopted (fix round 1, H2).
+        var first = await SeedTemplateRowAsync("Grapes - L8b-1 first");
         var second = await SeedTemplateRowAsync("Grapes - L8b-1 second");
 
-        var adopt = OldAdopt(FarmA, PlotA, CycleA, BuiltInGrapes, Owner);
+        var adopt = OldAdopt(FarmA, PlotA, CycleA, first, Owner);
         adopt["referenceDate"] = "2026-09-15";
         (await PushAsync(Owner, "adopt_schedule", "l8b1-m-adopt", adopt)).Status.Should().Be("applied");
 
@@ -126,7 +128,7 @@ public sealed class SchedulePushRealPostgresTests(ITestOutputHelper output) : Sc
 
         var rows = await SubscriptionsAsync();
         rows.Should().HaveCount(2);
-        var before = rows.Single(r => r.Template == BuiltInGrapes);
+        var before = rows.Single(r => r.Template == first);
         var now = rows.Single(r => r.Template == second);
         before.State.Should().Be(1, "the earlier choice is Migrated, not deleted");
         now.State.Should().Be(0, "exactly one choice is active");

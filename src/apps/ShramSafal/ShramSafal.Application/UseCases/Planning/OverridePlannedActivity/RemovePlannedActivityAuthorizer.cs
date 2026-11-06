@@ -51,10 +51,10 @@ namespace ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 public sealed class RemovePlannedActivityAuthorizer : IAuthorizationCheck<RemovePlannedActivityCommand>
 {
     private readonly IShramSafalRepository _repository;
-    private readonly AgriSync.BuildingBlocks.Abstractions.IClock? _clock;
+    private readonly AgriSync.BuildingBlocks.Abstractions.IClock _clock;
 
-    // lane L8b-1 — the clock is optional so the authority is read at the request's own time when DI provides one.
-    public RemovePlannedActivityAuthorizer(IShramSafalRepository repository, AgriSync.BuildingBlocks.Abstractions.IClock? clock = null)
+    // lane L8b-1 fix round 1 (review L6) — the authority is judged on the injected clock, as in the handler body.
+    public RemovePlannedActivityAuthorizer(IShramSafalRepository repository, AgriSync.BuildingBlocks.Abstractions.IClock clock)
     {
         _repository = repository;
         _clock = clock;
@@ -69,12 +69,12 @@ public sealed class RemovePlannedActivityAuthorizer : IAuthorizationCheck<Remove
         }
 
         // spec: plr-d10 lane L8b-1 (founder D-73) — the primary owner, or a seat holding PlanWork (never a label, D-26).
-        if (!await Services.ScheduleChangeGate.MayChangeAsync(
-                _repository, command.FarmId, command.CallerUserId, _clock?.UtcNow ?? DateTime.UtcNow, ct))
-        {
-            return Result.Failure(ShramSafalErrors.Forbidden);
-        }
-
-        return Result.Success();
+        // Fix round 1 (review H1, E4): first, the step's own season must be the named farm's (another farm's step is
+        // PlannedActivityNotFound, like an unknown id); the authority is then asked on that farm, then the plot rule.
+        return await Services.ScheduleChangeGate.RefusePlannedWorkAsync(
+                _repository, command.FarmId, activity.CropCycleId, command.CallerUserId, _clock.UtcNow,
+                ShramSafalErrors.PlannedActivityNotFound, ct) is { } refused
+            ? Result.Failure(refused)
+            : Result.Success();
     }
 }

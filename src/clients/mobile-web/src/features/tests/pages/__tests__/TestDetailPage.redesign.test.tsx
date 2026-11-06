@@ -75,8 +75,8 @@ function latinLeftovers(): string[] {
     return found;
 }
 
-const openPage = async (onBack = vi.fn()) => {
-    render(<TestDetailPage testInstanceId="t-rep" onBack={onBack} />);
+const openPage = async (onBack = vi.fn(), mayPlanWork = true) => {
+    render(<TestDetailPage testInstanceId="t-rep" onBack={onBack} mayPlanWork={mayPlanWork} />);
     await act(async () => { await Promise.resolve(); });
     return onBack;
 };
@@ -195,5 +195,23 @@ describe('one test — योजनेत घाला still calls the real clie
         expect(screen.getByTestId('test-detail-error')).toHaveTextContent('योजनेत घालता आलं नाही. पुन्हा प्रयत्न करा.');
         expect(screen.getByTestId('test-rec-add-rec-1')).toBeEnabled();
         expect(latinLeftovers()).toEqual([]);
+    });
+});
+
+// spec: plr-d10 lane L8b-1 fix round 1 (review L1; founder D-73) — "योजनेत घाला" plans work, which the server allows only
+// to the primary owner and the people he gives "कामाचं नियोजन करणे" (PlanWork). A seat without it sees the suggestion but
+// no button that cannot work (P5).
+describe('one test — योजनेत घाला follows "कामाचं नियोजन करणे"', () => {
+    it('a seat without PlanWork sees the suggestion and no button', async () => {
+        await openPage(vi.fn(), false);
+        expect(await screen.findByTestId('test-rec-rec-1')).toHaveTextContent('युरिया द्या');
+        expect(screen.queryByTestId('test-rec-add-rec-1')).toBeNull();
+        expect(screen.getByTestId('test-detail-recs').parentElement).not.toHaveTextContent('योजनेत घाला');
+        expect(latinLeftovers()).toEqual([]);
+    });
+
+    it('a seat with PlanWork has the button', async () => {
+        await openPage(vi.fn(), true);
+        expect(await screen.findByTestId('test-rec-add-rec-1')).toHaveTextContent('योजनेत घाला');
     });
 });

@@ -72,9 +72,10 @@ public abstract class ScheduleLaneFarm(ITestOutputHelper output) : RoleScopedFar
         SendJsonAsync(HttpMethod.Post, $"/shramsafal/plots/{plot}/cycles/{cycle}/schedule/adopt", user,
             new { farmId = farm, scheduleTemplateId = template });
 
-    protected async Task<(HttpStatusCode Status, string Body)> SendJsonAsync(HttpMethod method, string url, Guid user, object? body)
+    protected async Task<(HttpStatusCode Status, string Body)> SendJsonAsync(
+        HttpMethod method, string url, Guid user, object? body, string? globalRole = null)
     {
-        using var response = await SendAsync(method, url, user, body);
+        using var response = await SendAsync(method, url, user, body, "1.0.18", globalRole);
         var text = await response.Content.ReadAsStringAsync();
         Output.WriteLine($"[L8b-1] {user} {method} {url} -> {(int)response.StatusCode} {(text.Length > 400 ? text[..400] + "…" : text)}");
         return (response.StatusCode, text);

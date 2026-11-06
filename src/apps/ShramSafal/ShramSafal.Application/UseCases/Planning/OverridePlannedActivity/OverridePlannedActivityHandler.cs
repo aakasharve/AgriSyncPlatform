@@ -52,16 +52,13 @@ public sealed class OverridePlannedActivityHandler(
         // auth — the schedule gate's authority (PlanWork)
         // spec: plr-d10 lane L8b-1 (founder D-73) — planning work is the primary owner's, or a seat he gave
         // "कामाचं नियोजन करणे" (PlanWork); the label (मुकादम or above, the rule that stood here) grants nothing (D-26).
-        if (!await Services.ScheduleChangeGate.MayChangeAsync(repository, command.FarmId, command.CallerUserId, clock.UtcNow, ct))
+        // Fix round 1 (review H1, E4): the step's season must be the named farm's first (another farm's step answers
+        // PlannedActivityNotFound, like an unknown id); then the authority on that farm; then the MU-4 plot rule.
+        if (await Services.ScheduleChangeGate.RefusePlannedWorkAsync(
+                repository, command.FarmId, activity.CropCycleId, command.CallerUserId, clock.UtcNow,
+                ShramSafalErrors.PlannedActivityNotFound, ct) is { } refused)
         {
-            return Result.Failure(ShramSafalErrors.Forbidden);
-        }
-
-        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
-        if (await Services.PlotScopeGate.RefuseCycleAsync(
-                repository, command.FarmId, activity.CropCycleId, command.CallerUserId, clock.UtcNow, ct) is { } outsidePlots)
-        {
-            return Result.Failure(outsidePlots);
+            return Result.Failure(refused);
         }
 
         // Step 5: apply override

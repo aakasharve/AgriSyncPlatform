@@ -33,7 +33,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     ///
     /// <para><b>Down()</b> drops the three policies, takes both tables back out of RLS, and drops <c>reference_date</c>:
     /// it DESTROYS every day 0 recorded since this migration (the subscriptions themselves are kept; their day 0 falls
-    /// back to the crop season's start). Nothing else is touched.</para>
+    /// back to the crop season's start). Nothing else is touched.
+    /// <b>It also RE-OPENS THE FARM WALL on both tables</b> (fix round 1, review L9): with their policies and RLS gone, any
+    /// farm's scope reads and writes EVERY farm's schedule choices and migration events, as before this migration. Roll back
+    /// only together with the code (which then also stops writing day 0), and re-apply Up() as soon as the code returns.</para>
     /// </summary>
     public partial class AddScheduleSubscriptionDayZeroAndRls : Migration
     {

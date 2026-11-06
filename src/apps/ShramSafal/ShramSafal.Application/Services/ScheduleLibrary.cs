@@ -18,10 +18,13 @@ namespace ShramSafal.Application.Services;
 /// (<c>ssf.crop_schedule_templates</c>), so every adopt from the library answered "not found". That model stays for
 /// compliance only, until CMP-D2 re-points compliance.
 /// <list type="bullet">
-/// <item><b>Which rows a caller may adopt</b> — the F99 F-8 rule (<see cref="MaySeeAsync"/>, shared with the schedule
-/// lineage read): Public, his own (any scope), and Team rows written by the owner of a farm he works on. Any other row
-/// (another account's Private or Team, a Licensed one) is answered exactly like an unknown id (E4).</item>
-/// <item><b>Built-in ids stay resolvable</b> after rows exist: a phone may still hold one.</item>
+/// <item><b>Which rows a caller may list and adopt</b> — the ONE visibility rule (<see cref="ScheduleViewer"/>, shared with
+/// the schedule lineage read, clone and edit): Public; his own schedules (any scope); a Team schedule of the owner of a farm
+/// he works on. Any other row (another account's Private, Team or Licensed one) is never listed to him and is answered
+/// exactly like an unknown id (E4).</item>
+/// <item><b>Listed = adoptable</b> (fix round 1, review H2): his library is <see cref="ListingForAsync"/> — the rows he may
+/// see, else the built-in catalog — and <see cref="FindAsync"/> reads exactly that list. So a built-in id is adoptable while
+/// his library is the built-in one, and not once it lists rows (it would answer a schedule his phone no longer shows).</item>
 /// <item><b>The crop rule</b> (<see cref="MatchesCrop"/>) is the phone's own (<c>TemplateCatalog.getTemplatesForCrop</c>):
 /// a name is read through the founder's crop master (<c>sync-contract/schemas/crop-names.json</c>, generated from the
 /// phone's <c>cropMasterData.ts</c>), then reduced to the phone's crop code. One shared fixture pins both sides
@@ -35,7 +38,7 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
 
     /// <summary>
     /// The library schedule <paramref name="templateId"/> as <paramref name="callerUserId"/>'s phone lists it, or
-    /// <c>null</c> when there is none he may see (an unknown id and a schedule he may not see answer alike).
+    /// <c>null</c> when his library does not list it (an unknown id and a schedule he may not see answer alike).
     /// </summary>
     public async Task<ScheduleTemplateDto?> FindAsync(Guid templateId, Guid callerUserId, CancellationToken ct = default)
     {
@@ -44,15 +47,22 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
             return null;
         }
 
-        var rows = await repository.GetScheduleTemplatesAsync(ct);
-        if (rows.FirstOrDefault(r => r.Id == templateId) is { } row)
-        {
-            return await MaySeeAsync(repository, row, callerUserId, ct)
-                ? GetScheduleTemplatesHandler.Listing(rows).FirstOrDefault(t => t.Id == templateId)
-                : null;
-        }
+        var listed = await ListingForAsync(repository, await repository.GetScheduleTemplatesAsync(ct), callerUserId, ct);
+        return listed.FirstOrDefault(t => t.Id == templateId);
+    }
 
-        return ReferenceDataCatalog.ScheduleTemplates.FirstOrDefault(t => t.Id == templateId);
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 fix round 1 (review H2) — <paramref name="callerUserId"/>'s library, exactly as his phone
+    /// receives it (the reference route and the pull): the rows of <paramref name="rows"/> he may see
+    /// (<see cref="ScheduleViewer"/>), else the built-in catalog. Its version hash is computed over THIS list, so it is his
+    /// list's version: a row he may not see never changes what his phone is told.
+    /// </summary>
+    public static async Task<IReadOnlyList<ScheduleTemplateDto>> ListingForAsync(
+        IShramSafalRepository repository, IReadOnlyList<ScheduleTemplate> rows, Guid callerUserId, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        var visible = await new ScheduleViewer(repository, callerUserId, rows).VisibleAsync(rows, ct);
+        return GetScheduleTemplatesHandler.Listing(visible);
     }
 
     /// <summary>
@@ -69,11 +79,17 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     /// <summary>The width of <c>schedule_version_tag</c> (ScheduleSubscriptionConfiguration).</summary>
     public const int MaxVersionTagLength = 32;
 
-    /// <summary>Does <paramref name="template"/> belong to the crop of a season named <paramref name="cycleCropName"/>?</summary>
+    /// <summary>
+    /// Does <paramref name="template"/> belong to the crop of a season named <paramref name="cycleCropName"/>? A name the
+    /// rule cannot read (<see cref="UnknownCrop"/>) is never a crop, so it matches nothing — not even another unreadable
+    /// name, nor itself (fix round 1, review L5; the phone's <c>getTemplatesForCrop</c> answers the same).
+    /// </summary>
     public static bool MatchesCrop(ScheduleTemplateDto template, string? cycleCropName)
     {
         ArgumentNullException.ThrowIfNull(template);
-        return string.Equals(CropCode(template.CropType), CropCode(cycleCropName), StringComparison.Ordinal);
+        var crop = CropCode(cycleCropName);
+        return !string.Equals(crop, UnknownCrop, StringComparison.Ordinal)
+            && string.Equals(CropCode(template.CropType), crop, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -85,43 +101,6 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     {
         var english = CropMasterNames.EnglishNameOf(name) ?? name ?? string.Empty;
         return CanonicalCropCode(english);
-    }
-
-    /// <summary>
-    /// The F99 F-8 visibility rule for a schedule ROW: Public; the caller's own (any scope); a Team row written by the
-    /// owner of a farm the caller works on. Never a Licensed row (not sold yet), never another account's Private one.
-    /// </summary>
-    public static async Task<bool> MaySeeAsync(
-        IShramSafalRepository repository, ScheduleTemplate template, Guid callerUserId, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(repository);
-        ArgumentNullException.ThrowIfNull(template);
-        var author = template.CreatedByUserId?.Value;
-        if (template.TenantScope == TenantScope.Public || (callerUserId != Guid.Empty && author == callerUserId))
-        {
-            return true;
-        }
-
-        return template.TenantScope == TenantScope.Team
-            && author is { } teamAuthor
-            && callerUserId != Guid.Empty
-            && (await TeamAuthorsAsync(repository, callerUserId, ct)).Contains(teamAuthor);
-    }
-
-    /// <summary>The owners of the farms the caller works on (his team's schedules are theirs).</summary>
-    public static async Task<HashSet<Guid>> TeamAuthorsAsync(IShramSafalRepository repository, Guid callerUserId, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(repository);
-        var owners = new HashSet<Guid>();
-        foreach (var farmId in await repository.GetFarmIdsForUserAsync(callerUserId, ct))
-        {
-            if (await repository.GetFarmByIdAsync(farmId, ct) is { } farm)
-            {
-                owners.Add(farm.OwnerUserId.Value);
-            }
-        }
-
-        return owners;
     }
 
     // ── The phone's crop code (TemplateCatalog.ts canonicalCropCode), character for character ──

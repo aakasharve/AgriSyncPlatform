@@ -208,10 +208,23 @@ public static class ScheduleTemplateEndpoints
         return group;
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 fix round 1 (review M1) — the Marathi twin of a refusal this door words itself (PROPOSED;
+    /// the English twin is the error's description). No phone calls these doors yet; when one does, it shows these.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> MarathiWords = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [ShramSafal.Domain.Common.ShramSafalErrors.ScheduleCopyExists.Code] = "ही प्रत आधीच बनवलेली आहे.",
+    };
+
     private static IResult ToErrorResult(AgriSync.BuildingBlocks.Results.Error error)
     {
         if (error.Code.EndsWith("NotFound", StringComparison.Ordinal))
             return Results.NotFound(new { error = error.Code, message = error.Description });
+
+        // lane L8b-1 fix round 1 (review M1) — a second copy of the same schedule: 409 with its words, never a 500.
+        if (error.Code.EndsWith("Conflict", StringComparison.Ordinal))
+            return Results.Conflict(new { error = error.Code, message = error.Description, messageMr = MarathiWords.GetValueOrDefault(error.Code) });
 
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
             return Results.Forbid();

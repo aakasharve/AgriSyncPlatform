@@ -16,7 +16,7 @@
 import React, { useMemo, useState } from 'react';
 import { CheckCircle2, Eye, Search } from 'lucide-react';
 import { CropProfile, CropScheduleTemplate } from '../../../types';
-import { getAllTemplates, scheduleCropCode, sortTemplates } from '../../../infrastructure/reference/TemplateCatalog';
+import { UNKNOWN_CROP, getAllTemplates, scheduleCropCode, sortTemplates } from '../../../infrastructure/reference/TemplateCatalog';
 import { getOperationCategory } from '../planning/ClientPlanEngine';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../shared/components/ui/placeUi';
@@ -60,7 +60,8 @@ export function libraryTemplates(allCrops: readonly CropProfile[]): CropSchedule
     const byCrop = new Map<string, CropScheduleTemplate[]>();
     getAllTemplates().forEach(t => {
         const code = canonicalCropCode(t.cropCode);
-        if (allowed.size > 0 && !allowed.has(code)) return;
+        // lane L8b-1 fix round 1 (L5) — an unreadable crop is never a crop: it matches none of the farm's crops.
+        if (allowed.size > 0 && (code === UNKNOWN_CROP || !allowed.has(code))) return;
         byCrop.set(code, [...(byCrop.get(code) ?? []), t]);
     });
     const out: CropScheduleTemplate[] = [];

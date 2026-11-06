@@ -384,10 +384,22 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
     /// A request as <paramref name="user"/>. <paramref name="appVersion"/>: what the phone says it is (MU-3 fix 2, N1) —
     /// the new phone by default; <c>null</c> sends no version at all, as 1.0.17's job-card and worker-page calls do.
     /// </summary>
-    protected async Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, Guid user, object? body = null, string? appVersion = "1.0.18")
+    protected Task<HttpResponseMessage> SendAsync(HttpMethod method, string url, Guid user, object? body = null, string? appVersion = "1.0.18") =>
+        SendAsync(method, url, user, body, appVersion, globalRole: null);
+
+    /// <summary>
+    /// lane L8b-1 fix round 1 — the same, signed in with the account's global role in the token (e.g. "PrimaryOwner", what
+    /// every farm owner's real token carries); <c>null</c> carries none, as <see cref="SendAsync(HttpMethod, string, Guid, object?, string?)"/>.
+    /// </summary>
+    protected async Task<HttpResponseMessage> SendAsync(
+        HttpMethod method, string url, Guid user, object? body, string? appVersion, string? globalRole)
     {
         var request = new HttpRequestMessage(method, url);
         request.Headers.Add("X-Test-UserId", user.ToString());
+        if (globalRole is not null)
+        {
+            request.Headers.Add("X-Test-GlobalRole", globalRole);
+        }
         if (appVersion is not null)
         {
             request.Headers.Add("X-App-Version", appVersion);
@@ -601,9 +613,16 @@ public abstract class RoleScopedFarm(ITestOutputHelper output) : IAsyncLifetime
             }
 
             var id = userId.ToString();
-            var identity = new ClaimsIdentity(
-                [new Claim("sub", id), new Claim(ClaimTypes.NameIdentifier, id), new Claim("phone_verified", "true")],
-                Scheme.Name);
+            List<Claim> claims = [new Claim("sub", id), new Claim(ClaimTypes.NameIdentifier, id), new Claim("phone_verified", "true")];
+
+            // lane L8b-1 fix round 1 — optional: the account's global role as a real token carries it (the "membership"
+            // claim), for the doors that still read it (the schedule-template author rule). No header: no such claim, as before.
+            if (Request.Headers.TryGetValue("X-Test-GlobalRole", out var role) && !string.IsNullOrWhiteSpace(role))
+            {
+                claims.Add(new Claim("membership", $"shramsafal:{role}"));
+            }
+
+            var identity = new ClaimsIdentity(claims, Scheme.Name);
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme.Name)));
         }
     }

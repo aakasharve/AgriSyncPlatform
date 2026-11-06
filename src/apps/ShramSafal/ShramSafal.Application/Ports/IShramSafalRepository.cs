@@ -1342,6 +1342,19 @@ public interface IShramSafalRepository
         => Task.CompletedTask;
 
     /// <summary>
+    /// spec: plr-d10 lane L8b-1 fix round 1 (review M1) — saves a staged schedule COPY (a clone and its audit row). Returns
+    /// <c>false</c>, having discarded everything this unit of work staged, when a copy of the same source and version is
+    /// already kept (unique index <c>ix_schedule_templates_derived_version</c>, error 23505: one copy per source and
+    /// version, which lane SCH-OWN re-keys); the clone door answers 409 with words instead of a 500. Any other failure is
+    /// thrown as before. The default (test doubles) saves and answers <c>true</c>.
+    /// </summary>
+    async Task<bool> TrySaveScheduleCopyAsync(CancellationToken ct = default)
+    {
+        await SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
     /// spec: plr-d10 (lane F1, review N1) — saves a staged content revision. Returns <c>false</c>,
     /// having discarded everything this unit of work staged, when another writer took the same
     /// record version first (unique key <c>ux_daily_log_contents_log_version</c>, error 23505): the

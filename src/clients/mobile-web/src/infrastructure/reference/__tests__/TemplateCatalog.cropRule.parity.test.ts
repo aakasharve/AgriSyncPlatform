@@ -23,6 +23,7 @@ import type { CropProfile } from '../../../types';
 interface Fixture {
     builtInTemplates: Array<{ id: string; cropType: string; cropCode: string }>;
     cases: Array<{ name: string; cycleCrop: string; cropCode: string }>;
+    neverMatch: Array<{ name: string; templateCrop: string; cycleCrop: string }>;
 }
 
 const fixturePath = resolve(__dirname, '../../../../../../../sync-contract/tests/fixtures/crop-schedule-match.json');
@@ -68,6 +69,19 @@ describe('the crop <-> schedule rule (shared with the server)', () => {
 
             // The library page lists the same schedules for a farm growing this crop.
             expect(libraryTemplates([cropNamed(c.cycleCrop)]).map(t => t.id)).toEqual(own ? [own.id] : []);
+        });
+    }
+});
+
+// lane L8b-1 fix round 1 (review L5) — a name the rule cannot read (unknown_crop) is never a crop: no schedule is matched
+// to it, on the phone as on the server (ScheduleLibraryCropRuleTests.An_unreadable_crop_never_matches reads the same list).
+describe('an unreadable crop never matches (shared with the server)', () => {
+    for (const c of fixture.neverMatch) {
+        it(`${c.name}: a "${c.templateCrop}" schedule is not listed for "${c.cycleCrop}"`, () => {
+            setScheduleTemplatesFromReferenceData([{ ...referenceTemplates[0], id: 'l5-unreadable', name: `${c.templateCrop} - Standard`, cropType: c.templateCrop }]);
+
+            expect(getTemplatesForCrop(c.cycleCrop).map(t => t.id)).not.toContain('l5-unreadable');
+            expect(libraryTemplates([cropNamed(c.cycleCrop)]).map(t => t.id)).not.toContain('l5-unreadable');
         });
     }
 });

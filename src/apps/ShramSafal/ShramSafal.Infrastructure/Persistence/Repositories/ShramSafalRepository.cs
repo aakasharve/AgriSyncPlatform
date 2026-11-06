@@ -1937,6 +1937,29 @@ internal sealed class ShramSafalRepository(
         await db.DailyLogContents.AddAsync(content, ct);
     }
 
+    // spec: plr-d10 lane L8b-1 fix round 1 (review M1) — see IShramSafalRepository.TrySaveScheduleCopyAsync.
+    public async Task<bool> TrySaveScheduleCopyAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ix_schedule_templates_derived_version"))
+        {
+            // A copy of this source and version is already kept. Discard everything this unit staged (the copy, its
+            // tasks, its audit row) so a later SaveChanges cannot replay the doomed INSERTs; the caller answers 409.
+            foreach (var entry in db.ChangeTracker.Entries()
+                         .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return false;
+        }
+    }
+
     public async Task<bool> TrySaveContentRevisionAsync(CancellationToken ct = default)
     {
         try

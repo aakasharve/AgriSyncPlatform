@@ -317,7 +317,8 @@ public sealed class PullSyncChangesHandler(
         // it risks a parse failure that breaks sync entirely. Deleting the field
         // is a later change gated on client rollout.
         IReadOnlyList<Domain.Audit.AuditEvent> auditEvents = [];
-        var templatesResult = await getScheduleTemplatesHandler.HandleAsync(ct);
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H2) — HIS library (the rows he may see), never every account's.
+        var templatesResult = await getScheduleTemplatesHandler.HandleAsync(query.UserId, ct);
         if (!templatesResult.IsSuccess)
         {
             return Result.Failure<SyncPullResponseDto>(templatesResult.Error);

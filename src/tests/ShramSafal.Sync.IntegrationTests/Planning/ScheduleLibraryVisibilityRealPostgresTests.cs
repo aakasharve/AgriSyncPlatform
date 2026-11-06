@@ -1,0 +1,130 @@
+// spec: plr-d10-redesign-real-integration-2026-10-25 — lane L8b-1 fix round 1 (review H2, H4).
+//
+// H2: the library listing (the reference route AND the pull, one read) sent every account's Private and Team schedules
+// to every phone (ssf.schedule_templates has no row policy: it is author-owned), while adoption already asked whose
+// schedule it is. So a phone showed schedules that answered "not found" when tapped (P5), and their names and tasks
+// reached every farm (E4). H4: POST /plan/generate wrote a Public row with no author into that shared library on every call.
+// Here, on a real Postgres as agrisync_app (E3 first), through the real host: a phone receives only what its person may
+// see, what is listed is exactly what can be adopted, the version hash is the caller's own list's, and a generated plan
+// is its maker's private row that no other farm lists.
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text.Json;
+using System.Threading.Tasks;
+using FluentAssertions;
+using ShramSafal.Domain.Planning;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace ShramSafal.Sync.IntegrationTests.Planning;
+
+[Trait("Category", "RequiresPostgres")]
+public sealed class ScheduleLibraryVisibilityRealPostgresTests(ITestOutputHelper output) : ScheduleLaneFarm(output)
+{
+    private static HashSet<Guid> Ids(IEnumerable<JsonElement> templates) =>
+        templates.Select(t => t.GetProperty("id").GetGuid()).ToHashSet();
+
+    private async Task<(HashSet<Guid> Ids, string? Hash)> PulledLibraryAsync(Guid user)
+    {
+        var (_, root) = await PullAsync(user);
+        return (Ids(ArrayOf(root, "scheduleTemplates")), root.GetProperty("referenceDataVersionHash").GetString());
+    }
+
+    private static string? HashOf(IReadOnlyList<JsonElement> library) =>
+        library.Count == 0 ? null : library[0].GetProperty("versionHash").GetString();
+
+    [Fact]
+    public async Task Another_accounts_private_and_team_rows_never_reach_a_phone()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var shared = await SeedTemplateRowAsync("Grapes - L8b-1 shared");
+        var bPrivate = await SeedTemplateRowAsync("Grapes - L8b-1 private of farm B", TenantScope.Private, author: OwnerB);
+        var bTeam = await SeedTemplateRowAsync("Grapes - L8b-1 team of farm B", TenantScope.Team, author: OwnerB);
+
+        foreach (var farmA in new[] { Owner, Mukadam, Worker })
+        {
+            var listed = Ids(await LibraryAsync(farmA));
+            listed.Should().Contain(shared, "a Public schedule is everyone's");
+            listed.Should().NotContain(new[] { bPrivate, bTeam }, $"{farmA}: another account's private and team schedules stay his (E4)");
+
+            var pulled = await PulledLibraryAsync(farmA);
+            pulled.Ids.Should().BeEquivalentTo(listed, "the pull sends exactly the library the reference route lists");
+        }
+
+        // His own are his: farm B's owner lists all three.
+        var ownerB = await LibraryAsync(OwnerB);
+        Ids(ownerB).Should().Contain(new[] { shared, bPrivate, bTeam });
+
+        // The version hash is the caller's own list's: farm B's private work never changes what farm A's phone is told.
+        var aLibrary = await LibraryAsync(Owner);
+        var aHash = HashOf(aLibrary);
+        aHash.Should().NotBe(HashOf(ownerB), "two different lists never share one version");
+        await SeedTemplateRowAsync("Grapes - L8b-1 another private of farm B", TenantScope.Private, author: OwnerB);
+        HashOf(await LibraryAsync(Owner)).Should().Be(aHash, "a row he may not see is not part of his library's version");
+        (await PulledLibraryAsync(Owner)).Hash.Should().Be(aHash);
+    }
+
+    [Fact]
+    public async Task What_is_listed_is_exactly_what_can_be_adopted()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var shared = await SeedTemplateRowAsync("Grapes - L8b-1 shared");
+        var aTeam = await SeedTemplateRowAsync("Grapes - L8b-1 team of farm A", TenantScope.Team, author: Owner);
+        var bPrivate = await SeedTemplateRowAsync("Grapes - L8b-1 private of farm B", TenantScope.Private, author: OwnerB);
+        var bTeam = await SeedTemplateRowAsync("Grapes - L8b-1 team of farm B", TenantScope.Team, author: OwnerB);
+
+        var listed = Ids(await LibraryAsync(Owner));
+        listed.Should().BeEquivalentTo(new[] { shared, aTeam }, "farm A's owner lists the public schedule and his team's");
+
+        // Every listed schedule is adopted ...
+        foreach (var id in listed)
+        {
+            var (plot, cycle) = await SeedSeasonAsync("Grapes");
+            var (status, body) = await AdoptAsync(Owner, FarmA, plot, cycle, id);
+            status.Should().Be(HttpStatusCode.OK, $"{id} is listed: {body}");
+        }
+
+        // ... and nothing that is not listed: another account's private and team rows, and the built-in schedule his
+        // library no longer lists (it lists rows now). Each answers like a made-up id.
+        foreach (var id in new[] { bPrivate, bTeam, BuiltInGrapes, Guid.NewGuid() })
+        {
+            var (plot, cycle) = await SeedSeasonAsync("Grapes");
+            var (status, body) = await AdoptAsync(Owner, FarmA, plot, cycle, id);
+            status.Should().Be(HttpStatusCode.NotFound, $"{id} is not listed: {body}");
+            ErrorCode(body).Should().Be("ShramSafal.ScheduleTemplateNotFound");
+        }
+
+        (await SubscriptionsAsync()).Select(s => s.Template).Should().BeEquivalentTo(listed, "exactly the listed schedules were kept");
+    }
+
+    [Fact]
+    public async Task Plan_generate_writes_its_makers_private_row_that_no_other_farm_lists()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        Ids(await LibraryAsync(OwnerB)).Should().Contain(BuiltInGrapes, "with no row he may see, his library is the built-in one");
+
+        var (status, body) = await SendJsonAsync(HttpMethod.Post, "/shramsafal/plan/generate", Owner, new
+        {
+            cropCycleId = CycleA,
+            templateName = "Grapes - L8b-1 season plan",
+            stage = "Vegetative",
+            planStartDate = "2026-01-01",
+            activities = new[] { new { activityName = "फवारणी", offsetDays = 0 }, new { activityName = "पाणी", offsetDays = 3 } },
+        });
+        status.Should().Be(HttpStatusCode.OK, body);
+        var generated = Json(body).GetProperty("templateId").GetGuid();
+
+        (await CountAsync(
+                "SELECT count(*) FROM ssf.schedule_templates WHERE \"Id\" = @id AND tenant_scope = 0 AND created_by_user_id = @owner",
+                ("id", generated), ("owner", Owner)))
+            .Should().Be(1, "a season's plan is its maker's private record, never a Public row with no author");
+
+        var other = await LibraryAsync(OwnerB);
+        Ids(other).Should().NotContain(generated, "another farm never lists it (E4)");
+        Ids(other).Should().Contain(BuiltInGrapes, "and his library is unchanged: one request never changes every farmer's library");
+        (await PulledLibraryAsync(OwnerB)).Ids.Should().NotContain(generated);
+    }
+}

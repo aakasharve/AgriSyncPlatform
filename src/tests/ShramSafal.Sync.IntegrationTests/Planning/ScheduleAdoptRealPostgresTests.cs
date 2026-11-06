@@ -56,10 +56,12 @@ public sealed class ScheduleAdoptRealPostgresTests(ITestOutputHelper output) : S
         row.Template.Should().Be(rowTemplate);
         listed.GetProperty("versionHash").GetString().Should().StartWith(row.VersionTag);
 
-        // The built-in ids stay resolvable after rows exist (a phone may still hold one): a second season adopts it.
+        // Listed = adoptable (fix round 1, review H2): once his library lists rows, a built-in id it no longer lists is
+        // answered like any id it does not list (round 1 kept built-in ids adoptable after rows existed; that let a phone
+        // adopt a schedule its own library no longer showed).
         var (plot2, cycle2) = await SeedSeasonAsync("Grapes");
         var builtIn = await AdoptAsync(Owner, FarmA, plot2, cycle2, BuiltInGrapes);
-        builtIn.Status.Should().Be(HttpStatusCode.OK, builtIn.Body);
+        builtIn.Status.Should().Be(HttpStatusCode.NotFound, builtIn.Body);
     }
 
     [Fact]

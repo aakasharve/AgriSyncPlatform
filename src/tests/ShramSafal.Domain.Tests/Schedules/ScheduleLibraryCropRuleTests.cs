@@ -51,6 +51,26 @@ public sealed class ScheduleLibraryCropRuleTests
         Assert.Equal(catalog, builtIns);
     }
 
+    public static TheoryData<string, string, string> NeverMatch()
+    {
+        var data = new TheoryData<string, string, string>();
+        foreach (var c in Fixture().RootElement.GetProperty("neverMatch").EnumerateArray())
+        {
+            data.Add(c.GetProperty("name").GetString()!, c.GetProperty("templateCrop").GetString()!, c.GetProperty("cycleCrop").GetString()!);
+        }
+
+        return data;
+    }
+
+    // lane L8b-1 fix round 1 (review L5) — a name the rule cannot read is never a crop, on the server as on the phone.
+    [Theory]
+    [MemberData(nameof(NeverMatch))]
+    public void An_unreadable_crop_never_matches(string name, string templateCrop, string cycleCrop)
+    {
+        var template = ReferenceDataCatalog.ScheduleTemplates[0] with { CropType = templateCrop };
+        Assert.False(ScheduleLibrary.MatchesCrop(template, cycleCrop), name);
+    }
+
     [Fact]
     public void A_listed_schedules_version_tag_fits_the_subscription_column()
     {

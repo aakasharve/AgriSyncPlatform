@@ -52,25 +52,16 @@ public sealed class EditScheduleTemplateHandler(
         }
 
         // Step 4: authz
-        if (source.TenantScope == TenantScope.Private)
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88) — whose schedule the source is: one he may not see
+        // is not found; a Private one is its maker's; a Team or Licensed one needs the farm named, and is that farm's
+        // schedule edited by a holder of "पीक वेळापत्रकाचे नमुने" there, or his own (ScheduleTemplateWriteGate).
+        if (await ScheduleTemplateWriteGate.RefuseEditAsync(
+                repository, source, command.FarmId, command.CallerUserId, command.CallerRole, clock.UtcNow, ct) is { } refused)
         {
-            // Private templates: only the author may edit
-            if (source.CreatedByUserId is null || source.CreatedByUserId.Value.Value != command.CallerUserId)
-            {
-                return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.Forbidden);
-            }
-        }
-        else
-        {
-            // Non-private: apply the scope/role gate (CEI Phase 2 §4.7)
-            if (!await ScopeRoleGate.IsAllowedAsync(
-                repository, source.TenantScope, command.FarmId, command.CallerUserId, command.CallerRole, clock.UtcNow, ct))
-            {
-                return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.Forbidden);
-            }
+            return Result.Failure<EditScheduleTemplateResult>(refused);
         }
 
-        // Step 5: copy-on-write edit
+        // Step 5: copy-on-write edit — the new version records its maker, the editor (D-88: "each version shows who made it")
         var newTemplate = source.EditCopyOnWrite(
             command.NewTemplateId,
             command.NewName,

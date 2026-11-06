@@ -125,7 +125,7 @@ public sealed class AddLocalPlannedActivityPipelineTests
     public async Task Authorizer_returns_Forbidden_when_caller_holds_no_PlanWork()
     {
         var repo = new FakeAddRepo(AppRole.Worker);
-        var a = new AddLocalPlannedActivityAuthorizer(repo);
+        var a = new AddLocalPlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed() with { CallerUserId = WorkerId }, default);
 
@@ -138,7 +138,7 @@ public sealed class AddLocalPlannedActivityPipelineTests
     public async Task Authorizer_returns_Forbidden_when_caller_has_no_role_on_farm()
     {
         var repo = new FakeAddRepo(role: null);
-        var a = new AddLocalPlannedActivityAuthorizer(repo);
+        var a = new AddLocalPlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed(), default);
 
@@ -147,10 +147,23 @@ public sealed class AddLocalPlannedActivityPipelineTests
     }
 
     [Fact]
+    public async Task Authorizer_returns_CropCycleNotFound_for_a_season_of_another_farm_even_for_a_planner()
+    {
+        // lane L8b-1 fix round 1 (review H1, E4) — the farm named is never taken on trust: the season must be its own.
+        var repo = new FakeAddRepo(AppRole.Mukadam) { SeasonFarm = Guid.NewGuid() };
+        var a = new AddLocalPlannedActivityAuthorizer(repo, new FakeClock(Now));
+
+        var result = await a.AuthorizeAsync(WellFormed(), default);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ShramSafalErrors.CropCycleNotFound, result.Error);
+    }
+
+    [Fact]
     public async Task Authorizer_returns_Success_when_caller_holds_PlanWork()
     {
         var repo = new FakeAddRepo(AppRole.Mukadam);
-        var a = new AddLocalPlannedActivityAuthorizer(repo);
+        var a = new AddLocalPlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var result = await a.AuthorizeAsync(WellFormed(), default);
 
@@ -221,7 +234,7 @@ public sealed class AddLocalPlannedActivityPipelineTests
             new FakeClock(Now));
 
         var validator = new AddLocalPlannedActivityValidator();
-        var authorizer = new AddLocalPlannedActivityAuthorizer(repo);
+        var authorizer = new AddLocalPlannedActivityAuthorizer(repo, new FakeClock(Now));
 
         var pipeline = HandlerPipeline.Build<AddLocalPlannedActivityCommand>(
             rawHandler,
@@ -258,6 +271,15 @@ public sealed class AddLocalPlannedActivityPipelineTests
         // the seat the owner GAVE "कामाचं नियोजन करणे" (unless PlanWorkGiven is false); every other label holds only what
         // the 2b migration stored for it (no PlanWork): a label grants nothing.
         public bool PlanWorkGiven { get; init; } = true;
+
+        // lane L8b-1 fix round 1 (review H1) — the planned-work doors read the season's farm first. Every season here is on
+        // FarmId, unless a fact puts it on another farm (SeasonFarm).
+        public Guid SeasonFarm { get; init; } = FarmId;
+
+        public override Task<ShramSafal.Domain.Crops.CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult<ShramSafal.Domain.Crops.CropCycle?>(ShramSafal.Domain.Crops.CropCycle.Create(
+                cropCycleId, new AgriSync.SharedKernel.Contracts.Ids.FarmId(SeasonFarm), Guid.NewGuid(), "Grapes", "Flowering",
+                new DateOnly(2026, 1, 1), null, Now));
 
         public override async Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
             Guid farmId, Guid userId, CancellationToken ct = default)

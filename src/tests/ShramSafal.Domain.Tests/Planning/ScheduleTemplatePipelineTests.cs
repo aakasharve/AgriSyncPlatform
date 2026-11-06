@@ -241,7 +241,8 @@ public sealed class ScheduleTemplatePipelineTests
             NewName: null, NewStage: null, ClientCommandId: null), default);
         Assert.Equal(ShramSafalErrors.ScheduleTemplateNotFound, r1.Error);
 
-        // Private + non-author => Forbidden
+        // lane L8b-1 fix round 1 (review H3; founder D-88) — another account's Private or Licensed schedule is one he may
+        // not see: answered exactly like an unknown id (E4), whatever his role or seat.
         var privateTpl = MakeTemplate(AuthorId, TenantScope.Private);
         repo.Seed(privateTpl);
         var r2 = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
@@ -250,32 +251,42 @@ public sealed class ScheduleTemplatePipelineTests
             CallerUserId: OtherId,
             CallerRole: AppRole.PrimaryOwner,
             NewName: null, NewStage: null, ClientCommandId: null), default);
-        Assert.Equal(ShramSafalErrors.Forbidden, r2.Error);
+        Assert.Equal(ShramSafalErrors.ScheduleTemplateNotFound, r2.Error);
 
-        // Non-Private + role gate fails => Forbidden
-        var licensedTpl = MakeTemplate(AuthorId, TenantScope.Licensed);
-        repo.Seed(licensedTpl);
+        var othersLicensed = MakeTemplate(AuthorId, TenantScope.Licensed);
+        repo.Seed(othersLicensed);
+        repo.SeatPrimaryOwner(TemplateFarm, OtherId);
         var r3 = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
-            SourceTemplateId: licensedTpl.Id,
+            SourceTemplateId: othersLicensed.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: OtherId,
-            CallerRole: AppRole.Worker,
-            NewName: null, NewStage: null, ClientCommandId: null), default);
-        Assert.Equal(ShramSafalErrors.Forbidden, r3.Error);
+            CallerRole: AppRole.PrimaryOwner,
+            NewName: null, NewStage: null, ClientCommandId: null, FarmId: TemplateFarm), default);
+        Assert.Equal(ShramSafalErrors.ScheduleTemplateNotFound, r3.Error);
 
-        // fix 1 (LOW-1): his own farm's seat does not open a template that belongs to no farm
-        repo.SeatPrimaryOwner(TemplateFarm, OtherId);
+        // His OWN Licensed schedule: never with no farm named (D-88's approach) ...
+        var ownLicensed = MakeTemplate(OtherId, TenantScope.Licensed);
+        repo.Seed(ownLicensed);
+        var unnamed = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
+            SourceTemplateId: ownLicensed.Id,
+            NewTemplateId: Guid.NewGuid(),
+            CallerUserId: OtherId,
+            CallerRole: AppRole.PrimaryOwner,
+            NewName: null, NewStage: null, ClientCommandId: null), default);
+        Assert.Equal(ShramSafalErrors.Forbidden, unnamed.Error);
+
+        // ... fix 1 (LOW-1): his own farm's seat does not let a Worker sign-up write it ...
         var r4Worker = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
-            SourceTemplateId: licensedTpl.Id,
+            SourceTemplateId: ownLicensed.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: OtherId,
             CallerRole: AppRole.Worker,
             NewName: null, NewStage: null, ClientCommandId: null, FarmId: TemplateFarm), default);
         Assert.Equal(ShramSafalErrors.Forbidden, r4Worker.Error);
 
-        // Non-Private + the expert role AND the named seat holding schedule templates => Success
+        // ... and the expert role AND the named seat holding schedule templates => Success
         var r4 = await a.AuthorizeAsync(new EditScheduleTemplateCommand(
-            SourceTemplateId: licensedTpl.Id,
+            SourceTemplateId: ownLicensed.Id,
             NewTemplateId: Guid.NewGuid(),
             CallerUserId: OtherId,
             CallerRole: AppRole.PrimaryOwner,
@@ -514,6 +525,11 @@ public sealed class ScheduleTemplatePipelineTests
 
         public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
             => Task.FromResult(_primaryOwners.Contains((farmId, userId)) ? AppRole.PrimaryOwner : (AppRole?)null);
+
+        // lane L8b-1 fix round 1 — no farm record in this double: a named farm's owner is unknown, so a template is never
+        // "that farm's schedule" here (the real-Postgres ScheduleTemplateWhoseSchedule suite proves that branch).
+        public override Task<ShramSafal.Domain.Farms.Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Farms.Farm?>(null);
 
         public override Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default)
             => Task.FromResult(_templates.TryGetValue(templateId, out var t) ? t : null);

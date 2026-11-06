@@ -45,6 +45,14 @@ public static class ShramSafalErrors
     public static readonly Error RetainedClipIdTaken = Error.Conflict("ShramSafal.RetainedClipIdTaken", "This recording id belongs to another account.");
     public static readonly Error ScheduleAlreadyAdopted = Error.Conflict("ShramSafal.ScheduleAlreadyAdopted", "An active schedule subscription already exists for this plot-crop-cycle.");
     public static readonly Error ScheduleTemplateUnpublished = Error.Conflict("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
+
+    // spec: plr-d10 lane L8b-1 fix round 1 (review M1) — a copy of this schedule (this source and version) is already kept:
+    // the one-copy-per-version index (ix_schedule_templates_derived_version) allows no second, until lane SCH-OWN re-keys
+    // it. THREE SEGMENTS, tail CONFLICT: every shipped phone classifies it PERMANENT (P11). Words PROPOSED, twinned at the
+    // REST door (ScheduleTemplateEndpoints): "ही प्रत आधीच बनवलेली आहे." / this description.
+    public static readonly Error ScheduleCopyExists = Error.Conflict(
+        "ShramSafal.ScheduleCopy.Conflict",
+        "A copy of this schedule already exists.");
     public static readonly Error ScheduleNotActive = Error.Conflict("ShramSafal.ScheduleNotActive", "Schedule subscription is not active and cannot transition.");
 
     // spec: pre-launch-repair L2b (R-1; founder D-41 phase A). A money entry's id is now DERIVED on the

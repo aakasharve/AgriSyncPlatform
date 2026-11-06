@@ -62,11 +62,17 @@ public sealed class GeneratePlanFromTemplateHandler(
         }
 
         var utcNow = clock.UtcNow;
+
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H4) — a season's generated plan is its MAKER's private record. It
+        // was written Public with no author (Create's defaults), so one request put a schedule into every farm's library
+        // (and, as the first row, replaced the built-in one there). Public rows come from the backend seed only.
         var template = Domain.Planning.ScheduleTemplate.Create(
             idGenerator.New(),
             command.TemplateName,
             command.Stage,
-            utcNow);
+            utcNow,
+            createdByUserId: new UserId(command.ActorUserId),
+            tenantScope: Domain.Planning.TenantScope.Private);
 
         var plannedActivities = new List<Domain.Planning.PlannedActivity>(command.Activities.Count);
 

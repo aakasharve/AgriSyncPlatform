@@ -15,6 +15,9 @@
  * come; and suggestions exist on the phone only after a result is saved from it, so an empty list is not
  * drawn as "no suggestions". A failed "योजनेत घाला" says no-permission (403) or try-again in Marathi
  * (`failureWords`, review B003). Read-mostly: changing a test's state happens from the list's sheets.
+ * spec: plr-d10 lane L8b-1 fix round 1 (review L1; founder D-73) — "योजनेत घाला" plans work, which the server allows only to
+ * the primary owner and the people he gives "कामाचं नियोजन करणे" (PlanWork): a seat without it sees the suggestions and no
+ * button (P5: never a button that cannot work).
  * Server words (test, stage, parameter codes) are shown as they come.
  */
 
@@ -47,9 +50,11 @@ const NUMBERS_NOT_SHOWN = 'निकाल नोंदवला आहे. त�
 interface TestDetailPageProps {
     testInstanceId: string;
     onBack: () => void;
+    /** This seat holds "कामाचं नियोजन करणे" (PlanWork) on the current farm (lane L8b-1 fix round 1, L1). */
+    mayPlanWork: boolean;
 }
 
-const TestDetailPage: React.FC<TestDetailPageProps> = ({ testInstanceId, onBack }) => {
+const TestDetailPage: React.FC<TestDetailPageProps> = ({ testInstanceId, onBack, mayPlanWork }) => {
     const [instance, setInstance] = useState<DexieTestInstance | null>(null);
     const [protocol, setProtocol] = useState<DexieTestProtocol | null>(null);
     const [plotName, setPlotName] = useState<string | undefined>(undefined);
@@ -199,7 +204,7 @@ const TestDetailPage: React.FC<TestDetailPageProps> = ({ testInstanceId, onBack 
 
             {recommendations.length > 0 && (
                 <>
-                    <SectionHead title="सल्ला" hint="निकालावरून सुचवलेली कामं — योजनेत घाला." />
+                    <SectionHead title="सल्ला" hint={mayPlanWork ? 'निकालावरून सुचवलेली कामं — योजनेत घाला.' : 'निकालावरून सुचवलेली कामं.'} />
                     <div className="space-y-2" data-testid="test-detail-recs">
                         {recommendations.map(rec => {
                             const isPlanned = plannedRecIds.has(rec.id);
@@ -215,7 +220,7 @@ const TestDetailPage: React.FC<TestDetailPageProps> = ({ testInstanceId, onBack 
                                             <span data-testid={`test-rec-planned-${rec.id}`}>
                                                 <Chip tone="green"><Check size={14} aria-hidden="true" />योजनेत घातलं</Chip>
                                             </span>
-                                        ) : (
+                                        ) : !mayPlanWork ? null : (
                                             <BigButton onClick={() => handleAddToPlan(rec)} tone="white" disabled={planningRecId !== null}
                                                 testId={`test-rec-add-${rec.id}`}>
                                                 <CalendarPlus size={20} aria-hidden="true" />

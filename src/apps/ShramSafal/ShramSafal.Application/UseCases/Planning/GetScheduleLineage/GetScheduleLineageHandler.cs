@@ -48,20 +48,10 @@ public sealed class GetScheduleLineageHandler(
         return Result.Success<IReadOnlyList<ScheduleLineageDto>>(dtos);
     }
 
-    // spec: plr-d10 lane L8b-1 — the F-8 rule now lives in ONE place (ScheduleLibrary.MaySeeAsync), asked here and by every
-    // schedule adoption, so what a lineage shows and what a farmer may adopt cannot drift apart.
-    private async Task<List<Domain.Planning.ScheduleTemplate>> VisibleAsync(
-        IReadOnlyList<Domain.Planning.ScheduleTemplate> templates, Guid callerUserId, CancellationToken ct)
-    {
-        var visible = new List<Domain.Planning.ScheduleTemplate>(templates.Count);
-        foreach (var template in templates)
-        {
-            if (await Services.ScheduleLibrary.MaySeeAsync(repository, template, callerUserId, ct))
-            {
-                visible.Add(template);
-            }
-        }
-
-        return visible;
-    }
+    // spec: plr-d10 lane L8b-1 — the F-8 rule now lives in ONE place (Services.ScheduleViewer), asked here, by the library
+    // listing and adoption, and by clone and edit, so what a lineage shows and what a farmer may adopt cannot drift apart.
+    // Fix round 1 (review L7): ONE viewer for the whole lineage, so whose team he is on is read once, not once per row.
+    private Task<List<Domain.Planning.ScheduleTemplate>> VisibleAsync(
+        IReadOnlyList<Domain.Planning.ScheduleTemplate> templates, Guid callerUserId, CancellationToken ct) =>
+        new Services.ScheduleViewer(repository, callerUserId, templates).VisibleAsync(templates, ct);
 }

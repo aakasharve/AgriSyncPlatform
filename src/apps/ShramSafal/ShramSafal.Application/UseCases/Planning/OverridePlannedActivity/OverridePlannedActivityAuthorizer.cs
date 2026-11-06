@@ -49,6 +49,8 @@ namespace ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 /// record" would require a CropCycle lookup and is deliberately
 /// deferred to a follow-up — consistent with the rule "preserve error
 /// ordering, do not change semantics" for pipeline rollouts.
+/// <b>Done in plr-d10 lane L8b-1 fix round 1 (review H1, E4):</b> the step's season must be the supplied farm's
+/// (<see cref="Services.ScheduleChangeGate.RefusePlannedWorkAsync"/>), else <see cref="ShramSafalErrors.PlannedActivityNotFound"/>.
 /// </para>
 /// <para><b>spec: plr-d10 lane L8b-1 (founder D-73).</b> The rule is now <see cref="Services.ScheduleChangeGate"/>: the
 /// primary owner, or a seat holding PlanWork ("कामाचं नियोजन करणे"). The role wording above describes the rule it replaced
@@ -57,10 +59,10 @@ namespace ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 public sealed class OverridePlannedActivityAuthorizer : IAuthorizationCheck<OverridePlannedActivityCommand>
 {
     private readonly IShramSafalRepository _repository;
-    private readonly AgriSync.BuildingBlocks.Abstractions.IClock? _clock;
+    private readonly AgriSync.BuildingBlocks.Abstractions.IClock _clock;
 
-    // lane L8b-1 — the clock is optional so the authority is read at the request's own time when DI provides one.
-    public OverridePlannedActivityAuthorizer(IShramSafalRepository repository, AgriSync.BuildingBlocks.Abstractions.IClock? clock = null)
+    // lane L8b-1 fix round 1 (review L6) — the authority is judged on the injected clock, as in the handler body.
+    public OverridePlannedActivityAuthorizer(IShramSafalRepository repository, AgriSync.BuildingBlocks.Abstractions.IClock clock)
     {
         _repository = repository;
         _clock = clock;
@@ -75,12 +77,12 @@ public sealed class OverridePlannedActivityAuthorizer : IAuthorizationCheck<Over
         }
 
         // spec: plr-d10 lane L8b-1 (founder D-73) — the primary owner, or a seat holding PlanWork (never a label, D-26).
-        if (!await Services.ScheduleChangeGate.MayChangeAsync(
-                _repository, command.FarmId, command.CallerUserId, _clock?.UtcNow ?? DateTime.UtcNow, ct))
-        {
-            return Result.Failure(ShramSafalErrors.Forbidden);
-        }
-
-        return Result.Success();
+        // Fix round 1 (review H1, E4): first, the step's own season must be the named farm's (another farm's step is
+        // PlannedActivityNotFound, like an unknown id); the authority is then asked on that farm, then the plot rule.
+        return await Services.ScheduleChangeGate.RefusePlannedWorkAsync(
+                _repository, command.FarmId, activity.CropCycleId, command.CallerUserId, _clock.UtcNow,
+                ShramSafalErrors.PlannedActivityNotFound, ct) is { } refused
+            ? Result.Failure(refused)
+            : Result.Success();
     }
 }

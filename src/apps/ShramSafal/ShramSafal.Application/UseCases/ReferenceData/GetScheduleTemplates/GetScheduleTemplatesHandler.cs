@@ -23,18 +23,22 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             ["pre-flowering"] = 2,
         };
 
-    public async Task<Result<IReadOnlyList<ScheduleTemplateDto>>> HandleAsync(CancellationToken ct = default)
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 fix round 1 (review H2) — <paramref name="callerUserId"/>'s library: the rows he may see,
+    /// else the built-in catalog (<see cref="Services.ScheduleLibrary.ListingForAsync"/>). The reference route and the pull
+    /// both answer it, and adoption reads exactly it. It used to be every row of every account, for everyone.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<ScheduleTemplateDto>>> HandleAsync(Guid callerUserId, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
         var dbTemplates = await repository.GetScheduleTemplatesAsync(ct);
-        return Result.Success(Listing(dbTemplates));
+        return Result.Success(await Services.ScheduleLibrary.ListingForAsync(repository, dbTemplates, callerUserId, ct));
     }
 
     /// <summary>
-    /// spec: plr-d10 lane L8b-1 — THE library, from the rows <see cref="IShramSafalRepository.GetScheduleTemplatesAsync"/>
-    /// returns: the rows when there are any, else the built-in catalog. The phone lists exactly this (the reference route
-    /// and the pull both answer it), and <c>ScheduleLibrary</c> adopts from exactly this — one library, never two.
+    /// spec: plr-d10 lane L8b-1 — a library from the rows ONE caller may see (never all rows: see
+    /// <see cref="Services.ScheduleLibrary.ListingForAsync"/>): the rows when there are any, else the built-in catalog.
     /// </summary>
     public static IReadOnlyList<ScheduleTemplateDto> Listing(IReadOnlyList<ScheduleTemplate> rows) =>
         rows.Count == 0 ? ReferenceDataCatalog.ScheduleTemplates : MapFromDb(rows);

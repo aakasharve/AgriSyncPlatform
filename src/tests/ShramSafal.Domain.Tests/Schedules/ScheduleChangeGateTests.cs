@@ -138,6 +138,16 @@ public sealed class ScheduleChangeGateTests
     }
 
     [Fact]
+    public async Task A_chosen_plots_seat_is_never_allowed_on_a_season_the_gate_cannot_see()
+    {
+        // lane L8b-1 fix round 1 (review H1) — a season id the farm's scope cannot see (missing, or another farm's under
+        // RLS) used to answer "allowed": the plot rule then asked nothing. It is refused, never waved through.
+        var repo = new GateRepo(Seat(AppRole.Mukadam, FarmPermission.PlanWork, chosenPlots: [HisPlot])) { ReadsByPlace = true };
+
+        Assert.NotNull(await PlotScopeGate.RefuseCycleAsync(repo, Farm, Guid.NewGuid(), Person, Now));
+    }
+
+    [Fact]
     public void PlanWork_is_a_switch_the_owner_gives()
     {
         Assert.Contains(FarmAuthority.PlanWork, FarmAuthorities.Switchable);
@@ -156,5 +166,9 @@ public sealed class ScheduleChangeGateTests
         public Task<IReadOnlyList<Guid>> GetFarmsMaybeReadByPlaceAsync(
             Guid userId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<Guid>>(ReadsByPlace ? farmIds.ToList() : []);
+
+        // No season is visible to this double: what a farm's scope answers for a season it cannot see.
+        public override Task<ShramSafal.Domain.Crops.CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult<ShramSafal.Domain.Crops.CropCycle?>(null);
     }
 }

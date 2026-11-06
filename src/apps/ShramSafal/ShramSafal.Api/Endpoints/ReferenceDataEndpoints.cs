@@ -27,7 +27,7 @@ public static class ReferenceDataEndpoints
                 return Results.Unauthorized();
             }
 
-            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(token), ct);
+            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(callerUserId, token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetScheduleTemplates");
@@ -44,7 +44,7 @@ public static class ReferenceDataEndpoints
                 return Results.Unauthorized();
             }
 
-            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(token), ct);
+            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(callerUserId, token), ct);
             if (!result.IsSuccess)
             {
                 return ToErrorResult(result.Error);
@@ -69,7 +69,7 @@ public static class ReferenceDataEndpoints
                 return Results.Unauthorized();
             }
 
-            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(token), ct);
+            var result = await userScope.RunForCallerAsync(callerUserId, token => handler.HandleAsync(callerUserId, token), ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetCropTypes");

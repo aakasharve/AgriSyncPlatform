@@ -30,8 +30,10 @@ public sealed class ScheduleSubscriptionRlsRealPostgresTests(ITestOutputHelper o
     public async Task Subscription_rows_are_invisible_to_another_farm_as_agrisync_app()
     {
         await AssertAppRoleIsNotVacuousAsync();
+        // Two library rows: with rows, only what is listed can be adopted (fix round 1, H2).
+        var first = await SeedTemplateRowAsync("Grapes - L8b-1 rls first");
         var second = await SeedTemplateRowAsync("Grapes - L8b-1 rls");
-        (await AdoptAsync(Owner, FarmA, PlotA, CycleA, BuiltInGrapes)).Status.Should().Be(HttpStatusCode.OK);
+        (await AdoptAsync(Owner, FarmA, PlotA, CycleA, first)).Status.Should().Be(HttpStatusCode.OK);
         var migrate = await SendJsonAsync(System.Net.Http.HttpMethod.Post, $"/shramsafal/plots/{PlotA}/cycles/{CycleA}/schedule/migrate", Owner,
             new { farmId = FarmA, newScheduleTemplateId = second, reason = "Other" });
         migrate.Status.Should().Be(HttpStatusCode.OK, migrate.Body);
