@@ -3544,6 +3544,93 @@ internal sealed class ShramSafalRepository(
                 .ToListAsync(ct);
     }
 
+    // ── spec: plr-d10 lane RATE-1 part A (founder D-72) — each farm's own price and rate list ─────────────────────────
+    // Rows are only ever appended (the app role holds SELECT + INSERT on ssf.farm_rates), so every read is AsNoTracking.
+
+    public async Task<bool> TryAddFarmRateAsync(FarmRate rate, AuditEvent created, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(rate);
+        ArgumentNullException.ThrowIfNull(created);
+
+        // A SAVEPOINT on the ambient transaction (the push's per-mutation one, or the request's), so a clash rolls back only
+        // this version and the caller can look again — the shape of TryAddRecordMoneyAsync above.
+        var transaction = db.Database.IsRelational() ? db.Database.CurrentTransaction : null;
+        const string savepoint = "ssf_farm_rate";
+        if (transaction is not null)
+        {
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        await db.FarmRates.AddAsync(rate, ct);
+        await db.AuditEvents.AddAsync(created, ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "PK_farm_rates") || IsUniqueViolationOn(ex, "ux_farm_rates_line_version"))
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackToSavepointAsync(savepoint, ct);
+            }
+
+            db.Entry(rate).State = EntityState.Detached;
+            db.Entry(created).State = EntityState.Detached;
+            logger?.LogWarning(
+                "Farm rate {FarmRateId} (line {RateLineId}, version {Version}) was not saved: its id or version is already taken.",
+                rate.Id, rate.RateLineId, rate.Version);
+            return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<FarmRate>> GetFarmRateLineAsync(Guid rateLineId, CancellationToken ct = default) =>
+        await db.FarmRates
+            .AsNoTracking()
+            .Where(r => r.RateLineId == rateLineId)
+            .OrderBy(r => r.Version)
+            .ToListAsync(ct);
+
+    public async Task<FarmRate?> GetFarmRateByIdAsync(Guid farmRateId, CancellationToken ct = default) =>
+        await db.FarmRates.AsNoTracking().FirstOrDefaultAsync(r => r.Id == farmRateId, ct);
+
+    public async Task<IReadOnlyList<FarmRate>> GetFarmRatesForFarmAsync(Guid farmId, CancellationToken ct = default)
+    {
+        var farm = new FarmId(farmId);
+        return await db.FarmRates
+            .AsNoTracking()
+            .Where(r => r.FarmId == farm)
+            .OrderBy(r => r.RateLineId)
+            .ThenBy(r => r.Version)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<FarmRate>> GetFarmRatesChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.FarmRates
+            .AsNoTracking()
+            .Where(r => ids.Contains((Guid)r.FarmId) && r.CreatedAtUtc > sinceUtc)
+            .OrderBy(r => r.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<PriceConfig?> GetPriceConfigByIdAsync(Guid priceConfigId, CancellationToken ct = default) =>
+        await db.PriceConfigs.AsNoTracking().FirstOrDefaultAsync(c => c.Id == priceConfigId, ct);
+
+    public async Task<IReadOnlyList<PriceConfig>> GetPriceConfigsAsync(CancellationToken ct = default) =>
+        await db.PriceConfigs
+            .AsNoTracking()
+            .OrderBy(c => c.ItemName)
+            .ThenBy(c => c.Version)
+            .ToListAsync(ct);
+
     private static List<Guid> NormalizeFarmIds(IEnumerable<Guid> farmIds)
     {
         return farmIds

@@ -122,6 +122,27 @@ internal sealed class EntitlementResolver(
             select m.Id)
             .AnyAsync(ct);
 
+    /// <inheritdoc />
+    /// <remarks>lane RATE-1 fix round 1 (F7): the predicate of <see cref="IsPlatformOwnerAsync"/>, for many people in one query.</remarks>
+    public async Task<IReadOnlySet<Guid>> PlatformOwnersAmongAsync(IReadOnlyCollection<UserId> userIds, CancellationToken ct)
+    {
+        var ids = userIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new HashSet<Guid>();
+        }
+
+        var owners = await (
+            from m in db.OrganizationMemberships
+            join o in db.Organizations on m.OrganizationId equals o.Id
+            where ids.Contains(m.UserId) && m.IsActive && o.IsActive
+                && o.Type == OrganizationType.Platform && m.Role == OrganizationRole.Owner
+            select m.UserId)
+            .Distinct()
+            .ToListAsync(ct);
+        return owners.Select(u => u.Value).ToHashSet();
+    }
+
     private Task EmitAsync(string eventType, UserId userId, object props, CancellationToken ct)
         => analytics.EmitAsync(new AnalyticsEvent(
                 EventId: Guid.NewGuid(),

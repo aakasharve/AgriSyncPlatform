@@ -386,6 +386,20 @@
 //     slice (GO-LIVE-REGISTER F98).
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.farm_rates (plr-d10 lane RATE-1 part A, founder D-72 / D-17 / D-43) — KEEP. One row
+//     is one version of one rate of a FARM's own price list: the farm, what the rate is for
+//     (item_name, the farmer's own words), its unit / basis, an optional worker category or crew
+//     (worker_category), an optional season, the amount, its dates, and who set it as an opaque
+//     user id ONLY. It is the farm's business record, append-only by GRANT (SELECT + INSERT).
+//     DISCLOSED (fix round 1, review F4): item_name, worker_category and season are FREE TEXT the
+//     farmer types, and they MAY hold a person's name — a crew is commonly named after its
+//     मुकादम ("अनिलची टोळी"). That text is KEPT as the farm's business record: this worker does not
+//     scrub it, and nothing here can tell a name from a crop. Whether it needs a surgical scrub
+//     path is OPEN for OPS-1 / GO-LIVE-REGISTER F98 (never closed by assertion here). An erased
+//     setter's opaque user id also stays on the rows he set, exactly as on ssf.audit_events; the
+//     phone names a setter only through the operator directory, which erasure anonymises.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a
 //     disposition comment; see step 5 of the delete block in ProcessOneAsync.
 //     This table is not merely adjacent to the ownership link, it IS the

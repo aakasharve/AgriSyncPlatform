@@ -84,6 +84,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.daily_log_contents",
         // plr-d10 lane WID (R5) — every link, unlink, merge, number move and card reissue, one unchangeable row each.
         "ssf.shram_identity_events",
+        // plr-d10 lane RATE-1 part A (founder D-72) — each farm's own rate list, one unchangeable row per version of a rate.
+        "ssf.farm_rates",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -178,6 +180,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    drops the five policies, the five tables, both columns and the farm CHECK — only what Up() added. Touches no
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261102163914_AddWorkerIdentity",
+
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane RATE-1 part A, founder D-72); Down() read in full: drops the two policies
+        //    on ssf.farm_rates and the table (with its CHECKs and indexes) — only what Up() added. Up() creates the table
+        //    FORCE-RLS and APPEND-ONLY BY PRIVILEGE with its own effective-privilege guard (it is on AppendOnlyLedgers above).
+        //    Touches no other ledger's grants. Safe to revert and re-apply mid-proof.
+        "20261106112244_AddFarmRates",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

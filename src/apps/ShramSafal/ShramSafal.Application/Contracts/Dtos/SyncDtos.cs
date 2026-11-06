@@ -92,7 +92,11 @@ public sealed record SyncPullResponseDto(
     // spec: plr-d10 lane PRV (founder D-26) — records this person held (they were made before his cursor) whose
     // audience changed after it and that he may no longer see: kind + id, NOTHING else. The phone removes them and
     // everything that hangs from them. Additive and last (P11): an older phone ignores it and keeps its copy (D-65).
-    IReadOnlyList<WithdrawnRecordDto>? WithdrawnRecords = null);
+    IReadOnlyList<WithdrawnRecordDto>? WithdrawnRecords = null,
+    // spec: plr-d10 lane RATE-1 part A (founder D-72) — the versions of each farm's OWN rate list made since this phone's
+    // cursor, as he may read them (input prices with see money; work rates also need see wages). Additive and last (P11):
+    // 1.0.17 parses the pull with no schema and never reads it; `priceConfigs` above keeps its F99 answer exactly.
+    IReadOnlyList<FarmRateDto>? FarmRates = null);
 
 /// <summary>
 /// lane PRV — one record taken back from a phone: its kind (<c>DailyLog</c> / <c>CostEntry</c>) and id. Content-free.

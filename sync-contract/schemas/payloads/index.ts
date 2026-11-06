@@ -20,6 +20,8 @@ export { ReviseLogContentPayload } from './revise_log_content.zod';
 // lane OF-S — move a saved entry's place / day, and a queued worker-count correction.
 export { MoveDailyLogPayload } from './move_daily_log.zod';
 export { SetRecordAudiencePayload } from './set_record_audience.zod';
+// lane RATE-1 part A (founder D-72) — one change to one rate of a farm's own price and rate list.
+export { SetFarmRatePayload } from './set_farm_rate.zod';
 export { CorrectLabourAssignmentPayload } from './correct_labour_assignment.zod';
 export {
     LogContentSchema,

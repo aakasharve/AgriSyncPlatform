@@ -504,6 +504,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // farm_join_requests object, no ssf.farms policy; a seat's status is never touched. Re-Up re-creates them and
         // back-fills a person and a card for every field operator.
         "20261102163914_AddWorkerIdentity",
+
+        // spec plr-d10 lane RATE-1 part A (founder D-72) — Down() read in full: drops the two policies on ssf.farm_rates and
+        // the table. Up() creates that table only, with its user-select policy written ALREADY narrowed (m.status = 3) — see
+        // PoliciesCreatedAfterActiveOnly. No farm_memberships or farm_join_requests object, no other policy. Re-Up recreates them.
+        "20261106112244_AddFarmRates",
     ];
 
     /// <summary>
@@ -516,6 +521,8 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
     [
         // spec plr-d10 lane F1 — 20261030102448_AddDailyLogContents.
         "p_user_select_daily_log_contents",
+        // spec plr-d10 lane RATE-1 part A — 20261106112244_AddFarmRates.
+        "p_user_select_farm_rates",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
     ];

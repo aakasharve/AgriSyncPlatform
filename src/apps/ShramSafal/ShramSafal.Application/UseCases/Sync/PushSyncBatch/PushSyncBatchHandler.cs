@@ -161,7 +161,10 @@ public sealed class PushSyncBatchHandler(
     // handler the online route (POST …/labour/assignments/{id}/corrections) resolves — never a copy of its rule.
     IHandler<CorrectLabourCommand, CorrectLabourResult> correctLabourHandler,
     // spec: plr-d10 lane PRV (founder D-26) — the primary account holder chooses who sees one record (set_record_audience).
-    ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler setRecordAudienceHandler)
+    ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler setRecordAudienceHandler,
+    // spec: plr-d10 lane RATE-1 part A (founder D-72) — a change to the farm's own rate list (set_farm_rate). The SAME
+    // handler the REST door (POST /shramsafal/finance/farm-rates) resolves.
+    ShramSafal.Application.UseCases.Finance.SetFarmRate.SetFarmRateHandler setFarmRateHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1078,6 +1081,9 @@ public sealed class PushSyncBatchHandler(
                 return await HandleCorrectLabourAssignmentAsync(deviceId, clientRequestId, payload, actorUserId, ct);
             case "set_record_audience":
                 return await HandleSetRecordAudienceAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 lane RATE-1 part A (founder D-72) — the farm's own rate list.
+            case "set_farm_rate":
+                return await HandleSetFarmRateAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
@@ -3533,6 +3539,70 @@ public sealed class PushSyncBatchHandler(
                     return false;
             }
         }
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane RATE-1 part A (founder D-72 "Own farm prices" = D-17 / D-43) — one change to one rate of a farm's own
+    /// list. The payload names its farm, so the farm's scope is opened from it (a farm the sender is not an Active member of
+    /// is refused with no farm GUC ever set); who may (the primary account holder in part A), the line's farm (E4) and the
+    /// values are <see cref="ShramSafal.Application.UseCases.Finance.SetFarmRate.SetFarmRateHandler"/>'s — the REST door's
+    /// handler. A refusal ends ".Forbidden": every phone parks it visibly (P10), never retried, never dropped.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleSetFarmRateAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with set_farm_rate.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line — so it must stay on one line.
+        if (!PayloadHasOnly(payload, "farmRateId", "rateLineId", "farmId", "change", "kind", "itemName", "unit", "basis", "workerCategory", "amount", "currencyCode", "effectiveFrom", "season", "endsOn", "suggestionId", "changedAtUtc"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "set_farm_rate payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<SetFarmRatePayload>(payload);
+        if (request is null || request.FarmRateId == Guid.Empty || request.RateLineId == Guid.Empty || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for set_farm_rate.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await setFarmRateHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Finance.SetFarmRate.SetFarmRateCommand(
+                request.FarmRateId,
+                request.RateLineId,
+                request.FarmId,
+                request.Change,
+                request.Kind,
+                request.ItemName,
+                request.Unit,
+                request.Basis,
+                request.WorkerCategory,
+                request.Amount,
+                request.CurrencyCode,
+                request.EffectiveFrom,
+                request.Season,
+                request.EndsOn,
+                request.SuggestionId,
+                actorUserId,
+                actorRole,
+                clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId),
+            ct);
+
+        return ToOutcome(result);
     }
 
     /// <summary>
