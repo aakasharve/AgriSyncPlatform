@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { CROP_MASTER_ROWS, CROP_MASTER_SOURCE } from '../cropMasterData';
 import {
-    ALL_CROPS, CROP_VISIBILITY_POLICY, cropById, cropByName, cropLabel, cropTiles, offerOf, resolveCrop, searchCrops,
+    ALL_CROPS, CROP_VISIBILITY_POLICY, cropById, cropByName, cropLabel, cropTiles, normName, offerOf, resolveCrop, searchCrops,
 } from '../cropMaster';
 
 const ids = (rows: readonly { id: string }[]) => rows.map(r => r.id);
@@ -172,5 +172,33 @@ describe('D-25 fix round 1 - Devanagari vowel length, aksharas, normName untouch
     it('normName is not changed by search: a stored name with a zero-width character is not silently re-resolved', () => {
         expect(cropByName('द्‍राक्ष')).toBeUndefined();
         expect(searchCrops('द्‍रा')[0]?.mr).toBe('द्राक्ष');
+    });
+});
+
+describe('D-25 review fix - a sound-alike never outranks a real name match', () => {
+    const names = (row: (typeof ALL_CROPS)[number]) => [row.en, row.mr, ...row.altEn, ...row.altMr].filter(Boolean).map(n => normName(n));
+    /** A real (not sound-alike) whole / starts-with / word-start match on any of the crop's names. */
+    const strong = (row: (typeof ALL_CROPS)[number], q: string) =>
+        names(row).some(n => n.startsWith(q) || n.split(' ').some(w => w.startsWith(q)));
+
+    it('every real whole / starts-with / word-start match comes before every other result', () => {
+        for (const q of ['aa', 'am', 'an', 'ba', 'bi', 'bo', 'ka', 'ra', 'us', 'उस', 'का']) {
+            const rows = searchCrops(q, { limit: 400 });
+            const firstWeak = rows.findIndex(r => !strong(r, normName(q)));
+            if (firstWeak < 0) continue;
+            const strongAfter = rows.slice(firstWeak).filter(r => strong(r, normName(q))).map(r => r.en);
+            expect(strongAfter, q).toEqual([]);
+        }
+    });
+
+    it('"an": Fig (अंजीर, a real starts-with) ranks above Pomegranate (found only by sound and a contains)', () => {
+        const en = searchCrops('an', { limit: 400 }).map(r => r.en);
+        expect(en.indexOf('Fig')).toBeGreaterThan(-1);
+        expect(en.indexOf('Fig')).toBeLessThan(en.indexOf('Pomegranate'));
+    });
+
+    it('a sound only inside a name is not a match: "उस" does not bring कापूस, "us" still finds ऊस first', () => {
+        expect(searchCrops('उस', { limit: 400 }).map(r => r.mr)).not.toContain('कापूस');
+        for (const q of ['उस', 'us', 'oos']) expect(searchCrops(q)[0].mr, q).toBe('ऊस');
     });
 });

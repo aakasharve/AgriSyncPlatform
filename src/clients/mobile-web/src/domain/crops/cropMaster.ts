@@ -137,12 +137,13 @@ export function searchCrops(query: string, opts: { onFarm?: ReadonlySet<string>;
         if (offerOf(row, opts.onFarm) === 'off') return;
         let best = 0;
         for (const raw of namesOf(row)) best = Math.max(best, scoreName(normName(raw), q));
-        // a Marathi name by its sound (English letters, or a Devanagari query's own sound-alike): a sound-only match counts
-        // at most 2.5, so it never outranks a native starts-with / word-start match; when a native match exists, the best
-        // of the two counts
+        // a Marathi name by its sound (English letters, or a Devanagari query's own sound-alike) counts only when the sound
+        // is the whole name, starts it, or starts one of its words (a sound merely inside a name is noise). It ranks below
+        // every real whole / starts-with / word-start match (2 and up) and above a real contains match (1):
+        // whole 1.8, starts-with 1.6, word-start 1.4
         if (sound) {
             const heard = Math.max(0, ...soundsOf(row).map(h => scoreName(h, sound)));
-            if (heard > 0) best = best === 0 ? Math.min(heard - 0.5, 2.5) : Math.max(best, heard);
+            if (heard >= 2) best = Math.max(best, 1 + heard / 5);
         }
         if (best > 0) scored.push({ row, score: best, at });
     });
