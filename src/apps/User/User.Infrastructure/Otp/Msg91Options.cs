@@ -23,7 +23,7 @@ public sealed class Msg91Options
     /// <summary>DLT-registered template id (from MSG91 dashboard after DLT approval).</summary>
     public string TemplateId { get; set; } = string.Empty;
 
-    /// <summary>Optional sender id (6-char DLT-approved header). Defaults to the template's bound sender.</summary>
+    /// <summary>Informational sender id (6-char DLT-approved header). Not sent: MSG91 uses the sender bound to the template.</summary>
     public string? SenderId { get; set; }
 
     /// <summary>OTP length. Matches plan §5.2 — defaults to 6 digits.</summary>
