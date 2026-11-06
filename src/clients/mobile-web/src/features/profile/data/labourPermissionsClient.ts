@@ -164,6 +164,13 @@ export interface LabourPermission {
     effectivePlotScope?: 'AllPlots' | 'ChosenPlots' | 'OwnWork' | null;
     plotScopeChoices?: ('AllPlots' | 'ChosenPlots' | 'OwnWork')[] | null;
     authoritiesNotInForce?: string[] | null;
+    /**
+     * spec: plr-d10 lane MU-2 — ADDITIVE: the label the owner chose on a personal invitation ("CoOwner" / "Family" /
+     * "Mukadam" / "Worker"; absent / null for every older seat, which keeps reading its role), and, on a waiting
+     * request, the invitation it was claimed from — the owner lets him in with ONE tap that applies exactly that grant.
+     */
+    label?: string | null;
+    personalInvitationId?: string | null;
 }
 
 /** lane 2b — one authority on the wire: the server's name and its end (ISO UTC, null = कायम). */

@@ -29,6 +29,8 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<FarmMembership> FarmMemberships => Set<FarmMembership>();
     public DbSet<FarmInvitation> FarmInvitations => Set<FarmInvitation>();
     public DbSet<FarmJoinToken> FarmJoinTokens => Set<FarmJoinToken>();
+    // spec: plr-d10 lane MU-2 — the personal invitations (label, plots, authorities chosen before he joins).
+    public DbSet<PersonalInvitation> PersonalInvitations => Set<PersonalInvitation>();
     public DbSet<SubscriptionProjection> SubscriptionProjections => Set<SubscriptionProjection>();
 
     /// <summary>spec R-11 (b) — view over accounts.access_extensions (read-only).</summary>

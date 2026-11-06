@@ -283,6 +283,9 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 pendingSeats={pendingFarms}
                 onWithdrawRequest={handleWithdrawRequest}
                 onBack={() => { void logout(); }}
+                /* spec: plr-d10 lane MU-2 — an invitation answered on the 0-farm screen re-reads the farm lists (the same
+                   refresh as the join door): Active opens the farm, a request stays waiting. */
+                onInvitationAnswered={() => handleJoinComplete({ farmId: '', farmName: '', status: 'PendingApproval' })}
             />
 
             {/* Heavy wizard — still available from AppHeader "create farm" CTA

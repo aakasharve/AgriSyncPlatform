@@ -23,7 +23,7 @@
  * holder's alone — the server now refuses a सहमालक all three, so a सहमालक sees the same view-only list
  * a मुकादम sees. Each let-in person's card carries one switch per enforced responsibility.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import type { FarmOperator } from '../../../types';
 import { Chip, SANS, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
 import { isPhoneLocalOnlyMember } from '../helpers/teamRoster';
@@ -36,6 +36,12 @@ import { TeamPersonCard } from './TeamPersonCard';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { TEAM_COPY, phonesGetNote } from './teamCopy';
 import { useFarmPlots } from './useFarmPlots';
+import { useFarmWorkers } from '../hooks/useFarmWorkers';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import { InviteBuilderSheet } from '../../invitations/InviteBuilderSheet';
+import { SentInvitations } from '../../invitations/SentInvitations';
+import { invitationCopy } from '../../invitations/invitationCopy';
+import { approveInvitationClaim, type PersonalInvitationView } from '../../invitations/personalInvitationClient';
 import {
     isPrimaryOwner, nameFor, rightsOver, roleTone, roleWord, serverRoleOf, splitRoster,
 } from './teamModel';
@@ -70,6 +76,23 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
     const farmPlots = useFarmPlots(decidesPeople ? farmId : null);
     const language = useOptionalLanguage()?.language;
     const busy = (userId: string) => decisions.busyUserId === userId || roster.savingUserId === userId;
+    // spec: plr-d10 lane MU-2 — the invite builder (owner defines first, delivery second) and the invitations he sent.
+    const [builderOpen, setBuilderOpen] = useState(false);
+    const [showing, setShowing] = useState<PersonalInvitationView | null>(null);
+    const [sentKey, setSentKey] = useState(0);
+    const farmName = useOptionalFarmContext()?.currentFarm?.name ?? '';
+    const builderWorkers = useFarmWorkers(builderOpen && decidesPeople ? farmId : null).workers;
+    const invite = invitationCopy(language);
+    const letInFromInvitation = async (invitationId: string) => {
+        if (!farmId) return;
+        try {
+            roster.adoptRow(await approveInvitationClaim(farmId, invitationId));
+        } catch {
+            /* the roster reload below says what the server holds */
+        }
+        await roster.reload();
+        setSentKey(k => k + 1);
+    };
 
     return (
         <div className="space-y-3 pb-6" style={{ fontFamily: SANS }} data-testid="team-page">
@@ -97,11 +120,34 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                         {requests.map(row => (
                             <JoinRequestCard key={row.userId} row={row} name={nameFor(row, operators)} busy={busy(row.userId)}
                                 farmPlots={farmPlots}
+                                onLetInFromInvitation={row.personalInvitationId
+                                    ? () => void letInFromInvitation(row.personalInvitationId as string)
+                                    : undefined}
                                 onApprove={(preset, plots) => void decisions.approve(row.userId, preset, plots)}
                                 onDecline={reason => void decisions.decline(row.userId, reason)} />
                         ))}
                     </ul>
                 </section>
+            )}
+
+            {decidesPeople && farmId && (
+                <section className="space-y-2" data-testid="team-invitations">
+                    <button type="button" data-testid="team-invite-person" onClick={() => { setShowing(null); setBuilderOpen(true); }}
+                        className="min-h-[56px] w-full rounded-2xl bg-emerald-600 text-[17px] font-extrabold text-white">
+                        {invite.inviteButton}
+                    </button>
+                    <SentInvitations farmId={farmId} refreshKey={sentKey}
+                        onShowAgain={row => { setShowing(row); setBuilderOpen(true); }}
+                        onLetIn={() => void roster.reload()} />
+                </section>
+            )}
+
+            {builderOpen && decidesPeople && farmId && (
+                <InviteBuilderSheet farmId={farmId} farmName={farmName} farmPlots={farmPlots}
+                    workers={(builderWorkers ?? []).filter(w => w.isActive).map(w => ({ id: w.id, displayName: w.displayName }))}
+                    showing={showing}
+                    onMade={() => setSentKey(k => k + 1)}
+                    onClose={() => { setBuilderOpen(false); setShowing(null); setSentKey(k => k + 1); }} />
             )}
 
             {ownerTier && roster.rows && (

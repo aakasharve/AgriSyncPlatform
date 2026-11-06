@@ -11,7 +11,24 @@ public sealed record MeContextDto(
     IReadOnlyList<MeFarmDto> Farms,
     MeShareDto Share,
     IReadOnlyList<MeAlertDto> Alerts,
-    DateTime ServerTimeUtc);
+    DateTime ServerTimeUtc,
+    // spec: plr-d10 lane MU-2 (MU design §6) — ADDITIVE, last: the waiting personal invitations that named the person's
+    // proven number (his card: स्वीकारा / नको). Only with includePending (this release's phone); absent otherwise. A
+    // waiting invitation is never a farm: it is not in Farms and carries nothing of the farm's data.
+    IReadOnlyList<MeInvitationDto>? Invitations = null);
+
+/// <summary>spec: plr-d10 lane MU-2 — one waiting invitation on the wire (no code, no farm id, no number).</summary>
+public sealed record MeInvitationDto(
+    Guid InvitationId,
+    string FarmName,
+    string? InvitedByName,
+    string Label,
+    string? Name,
+    string PlotScope,
+    IReadOnlyList<string> PlotNames,
+    IReadOnlyList<MeAuthorityDto> Authorities,
+    DateTime ExpiresAtUtc,
+    bool NamesAWorker);
 
 public sealed record MeIdentityDto(
     Guid UserId,

@@ -44,6 +44,12 @@ public static class RateLimitingConfig
 
     public static readonly TimeSpan IdentityWindow = TimeSpan.FromMinutes(10);
 
+    /// <summary>spec: plr-d10 lane MU-2 — invitation-code tries per signed-in person per hour (my call).</summary>
+    public const int InvitationCodePermitLimit = 10;
+
+    /// <summary>spec: plr-d10 lane MU-2 — the invitation-code window: one hour.</summary>
+    public static readonly TimeSpan InvitationCodeWindow = TimeSpan.FromHours(1);
+
     /// <summary>The one partition every request that is not on the "join" route falls into in the
     /// global limiter: a no-op limiter, so the global limiter changes nothing for any other route.</summary>
     private const string NotAJoinRequest = "not-join";
@@ -56,6 +62,7 @@ public static class RateLimitingConfig
         var joinPerClientNetworkPermitLimit = e2eHarnessEnabled ? 100_000 : JoinPerClientNetworkPermitLimit;
         var joinAllCallersPermitLimit = e2eHarnessEnabled ? 100_000 : JoinAllCallersPermitLimit;
         var identityPermitLimit = e2eHarnessEnabled ? 100_000 : IdentityPermitLimit;
+        var invitationCodePermitLimit = e2eHarnessEnabled ? 100_000 : InvitationCodePermitLimit;
 
         services.AddRateLimiter(options =>
         {
@@ -100,6 +107,21 @@ public static class RateLimitingConfig
                     {
                         PermitLimit = identityPermitLimit,
                         Window = IdentityWindow,
+                        QueueLimit = 0,
+                        AutoReplenishment = true,
+                    }));
+
+            // spec: plr-d10 lane MU-2 — the personal invitation's code routes (find, accept, decline). Eight digits are
+            // 10^8 values; per signed-in person (the same resolver as "ai") 10 tries an hour, and the join door's
+            // per-network and all-callers limits below apply to these routes too (IsJoinRequest), so fresh accounts from
+            // one network share one budget. A guessed code still only ASKS unless it named the guesser's own proven number.
+            options.AddPolicy(ShramSafal.Api.Endpoints.PersonalInvitationEndpoints.InvitationCodeRateLimitPolicy, httpContext =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: ResolveAiRateLimitPartitionKey(httpContext),
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = invitationCodePermitLimit,
+                        Window = InvitationCodeWindow,
                         QueueLimit = 0,
                         AutoReplenishment = true,
                     }));
@@ -217,10 +239,10 @@ public static class RateLimitingConfig
 
     /// <summary>True for a request routed to an endpoint that carries the "join" policy.</summary>
     private static bool IsJoinRequest(HttpContext context) =>
-        string.Equals(
-            context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName,
-            MembershipEndpoints.JoinRateLimitPolicy,
-            StringComparison.Ordinal);
+        context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName is
+            MembershipEndpoints.JoinRateLimitPolicy
+            // spec: plr-d10 lane MU-2 — the invitation-code routes are a code door too: same network and global budgets.
+            or ShramSafal.Api.Endpoints.PersonalInvitationEndpoints.InvitationCodeRateLimitPolicy;
 
     private static FixedWindowRateLimiterOptions JoinWindowLimit(int permitLimit) => new()
     {

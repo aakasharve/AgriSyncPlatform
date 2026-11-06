@@ -504,6 +504,13 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // farm_join_requests object, no ssf.farms policy; a seat's status is never touched. Re-Up re-creates them and
         // back-fills a person and a card for every field operator.
         "20261102163914_AddWorkerIdentity",
+
+        // spec plr-d10 lane MU-2 — Down() read in full: drops the three policies on ssf.farm_personal_invitations (a
+        // farm-id tenant policy and two SELECT-only invitee doors keyed on agrisync.invitee_phone / agrisync.invite_code;
+        // none names a membership status, so none is an "open" or an "active" predicate here), the table, the
+        // relationship-label CHECK and the three nullable farm_memberships columns. No farm_join_requests object, no
+        // ssf.farms policy; a seat's status is never touched. Re-Up re-creates them.
+        "20261106063315_AddPersonalInvitations",
     ];
 
     /// <summary>

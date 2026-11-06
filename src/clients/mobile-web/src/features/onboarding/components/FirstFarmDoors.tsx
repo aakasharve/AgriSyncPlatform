@@ -32,9 +32,11 @@ export interface FirstFarmDoorsProps {
     onBack?: () => void;
     pendingSeats?: WaitingSeat[];
     onWithdrawRequest?: (farmId: string) => Promise<void>;
+    /** spec: plr-d10 lane MU-2 — the waiting personal invitations that named his number, drawn above the doors. */
+    invitations?: React.ReactNode;
 }
 
-const FirstFarmDoors: React.FC<FirstFarmDoorsProps> = ({ onStartOwnFarm, onJoin, onBack, pendingSeats = [], onWithdrawRequest }) => {
+const FirstFarmDoors: React.FC<FirstFarmDoorsProps> = ({ onStartOwnFarm, onJoin, onBack, pendingSeats = [], onWithdrawRequest, invitations }) => {
     const language = useOptionalLanguage()?.language ?? 'mr';
     const c = firstRunCopy(language);
     // The join door's own "request sent" words, in the chosen language (`joinByCodeCopy`).
@@ -115,6 +117,7 @@ const FirstFarmDoors: React.FC<FirstFarmDoorsProps> = ({ onStartOwnFarm, onJoin,
                     </Tap>
                 </Rise>
             </div>
+            {invitations && <div className="mt-6">{invitations}</div>}
             {pendingSeats.length > 0 && (
                 <div className="mt-6">
                     <PendingJoinRequests seats={pendingSeats} onWithdraw={onWithdrawRequest} testId="minimal-onboarding-pending" language={language} />

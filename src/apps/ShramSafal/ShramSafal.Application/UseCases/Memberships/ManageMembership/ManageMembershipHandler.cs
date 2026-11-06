@@ -141,6 +141,14 @@ public sealed class ManageMembershipHandler(
             return await AnswerEndedSeatAsync(command, now, ct);
         }
 
+        // ── 5b. spec: plr-d10 lane MU-2 — a request claimed from a personal invitation is let in with EXACTLY that
+        //        invitation's grant, by its own one-tap route (POST …/personal-invitations/{id}/approve). The general
+        //        approval would choose a role and authorities afresh, so it refuses that seat (409); नको stays here.
+        if (command.Decision == MembershipDecision.Approve && seat.PersonalInvitationId is not null)
+        {
+            return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipWrongStatus);
+        }
+
         // ── 6. The last Active primary owner stays (I3) ──────────────────────
         var isLastActivePrimaryOwner = false;
         if (seat.Role == AppRole.PrimaryOwner && seat.Status == MembershipStatus.Active)

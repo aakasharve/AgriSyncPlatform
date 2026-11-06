@@ -145,7 +145,10 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_valid_token_makes_the_worker_an_Active_Worker_of_THAT_farm_only_with_an_audit_row()
+    // CONSCIOUS CHANGE — spec: plr-d10 lane MU-2 (MU design §5): the farm QR only ASKS to join. A valid token makes a
+    // waiting request (PendingApproval, 2) under the QR's invitation — never an Active seat. The owner chooses label, plots
+    // and authorities when he approves it.
+    public async Task A_valid_token_makes_a_waiting_request_on_THAT_farm_only_with_an_audit_row()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var invite = await IssueOkAsync(OwnerA, FarmA);
@@ -161,11 +164,13 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         doc.RootElement.GetProperty("farmId").GetGuid().Should().Be(FarmA);
         doc.RootElement.GetProperty("role").GetString().Should().Be("Worker");
         doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean().Should().BeFalse();
+        doc.RootElement.GetProperty("status").GetString().Should().Be("PendingApproval");
 
-        (await MembershipsAsync(FarmA, Worker)).Should().Equal(("Worker", 3, 3));
+        (await MembershipsAsync(FarmA, Worker)).Should().Equal(("Worker", 2, 3));
         (await MembershipsAsync(FarmB, Worker)).Should().BeEmpty("the token authorises farm A only");
-        (await AuditCountAsync(FarmA, Worker, "MemberJoined")).Should().Be(1);
-        (await AuditCountAsync(FarmB, Worker, "MemberJoined")).Should().Be(0);
+        (await AuditCountAsync(FarmA, Worker, "MemberJoinRequested")).Should().Be(1);
+        (await AuditCountAsync(FarmA, Worker, "MemberJoined")).Should().Be(0, "nobody is let in by a wall QR");
+        (await AuditCountAsync(FarmB, Worker, "MemberJoinRequested")).Should().Be(0);
     }
 
     [Fact]
@@ -183,11 +188,11 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         using var doc = JsonDocument.Parse(body);
         doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean().Should().BeTrue();
         (await MembershipsAsync(FarmA, Worker)).Should().HaveCount(1);
-        (await AuditCountAsync(FarmA, Worker, "MemberJoined")).Should().Be(1);
+        (await AuditCountAsync(FarmA, Worker, "MemberJoinRequested")).Should().Be(1);
     }
 
     [Fact]
-    public async Task A_rotated_away_token_is_refused_404_and_writes_nothing_while_the_new_token_joins()
+    public async Task A_rotated_away_token_is_refused_404_and_writes_nothing_while_the_new_token_asks()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var oldInvite = await IssueOkAsync(OwnerA, FarmA);
@@ -201,7 +206,7 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
 
         using var live = await ClaimAsync(Worker, rotated.Token, rotated.FarmCode);
         live.StatusCode.Should().Be(HttpStatusCode.OK, await live.Content.ReadAsStringAsync());
-        (await MembershipsAsync(FarmA, Worker)).Should().Equal(("Worker", 3, 3));
+        (await MembershipsAsync(FarmA, Worker)).Should().Equal(("Worker", 2, 3));
     }
 
     [Fact]
@@ -278,7 +283,7 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Revoked_prior_members_PINNED_get_a_waiting_request_and_Exited_ones_a_fresh_Active_Worker_row_the_terminal_row_is_kept()
+    public async Task Revoked_and_Exited_prior_members_PINNED_get_a_waiting_request_the_terminal_row_is_kept()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var invite = await IssueOkAsync(OwnerA, FarmA);
@@ -289,7 +294,10 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         // CONSCIOUS CHANGE — spec: plr-d7-m1-multiuser-2026-10-26 (step 2, SEC-2): a REVOKED seat
         // means the owner removed (or declined) this person, so his re-scan is now a request that
         // waits for the owner (PendingApproval, status 2), never a fresh Active seat. A person who
-        // LEFT on his own (Exited, no owner decision behind it) still gets straight back in.
+        // LEFT on his own (Exited, no owner decision behind it) still got straight back in until lane MU-2.
+        //
+        // CONSCIOUS CHANGE — spec: plr-d10 lane MU-2: the farm QR only asks, so the Exited person's re-scan is a waiting
+        // request too.
         foreach (var who in new[] { RevokedBefore, ExitedBefore })
         {
             using var response = await ClaimAsync(who, invite.Token, invite.FarmCode);
@@ -299,7 +307,7 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         var revoked = await MembershipsAsync(FarmA, RevokedBefore);
         revoked.Select(m => (m.Role, m.Status)).Should().BeEquivalentTo(new[] { ("Worker", 5), ("Worker", 2) });
         var exited = await MembershipsAsync(FarmA, ExitedBefore);
-        exited.Select(m => (m.Role, m.Status)).Should().BeEquivalentTo(new[] { ("Worker", 6), ("Worker", 3) });
+        exited.Select(m => (m.Role, m.Status)).Should().BeEquivalentTo(new[] { ("Worker", 6), ("Worker", 2) });
     }
 
     [Fact]
@@ -324,18 +332,19 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
             using var doc = JsonDocument.Parse(o.Body);
             return doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean();
         }).ToList();
-        flags.Count(f => !f).Should().Be(1, "exactly one racer actually created the membership");
-        (await MembershipsAsync(FarmA, Racer)).Should().Equal(("Worker", 3, 3));
-        (await AuditCountAsync(FarmA, Racer, "MemberJoined")).Should().Be(1);
+        flags.Count(f => !f).Should().Be(1, "exactly one racer actually created the request");
+        (await MembershipsAsync(FarmA, Racer)).Should().Equal(("Worker", 2, 3));
+        (await AuditCountAsync(FarmA, Racer, "MemberJoinRequested")).Should().Be(1);
     }
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a person who TYPED the farm's code holds a
-    // waiting request (PendingApproval + SelfJoin). The owner's QR is the owner's own consent, so
-    // a scan must let him in exactly as a fresh scan would — not answer "already requested" and
-    // leave him outside (the typed code would otherwise BLOCK the QR: one live seat per person per
-    // farm). Planted as superuser, so the plant never depends on the code under test.
+    // waiting request (PendingApproval + SelfJoin). Until lane MU-2 the QR activated it.
+    //
+    // CONSCIOUS CHANGE — spec: plr-d10 lane MU-2: the farm QR only ASKS, so it answers his request as it is — the same
+    // seat, still waiting for the owner, nothing written. Planted as superuser, so the plant never depends on the code
+    // under test.
     [Fact]
-    public async Task A_QR_scan_answers_an_earlier_typed_code_request_the_same_seat_becomes_an_Active_Worker()
+    public async Task A_QR_scan_leaves_an_earlier_typed_code_request_waiting_for_the_owner()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var requestId = await SeedTypedCodeRequestAsync(FarmA, AccountA, Requester);
@@ -347,21 +356,13 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
 
         using var doc = JsonDocument.Parse(body);
         doc.RootElement.GetProperty("membershipId").GetGuid().Should().Be(requestId, "the request's own seat is answered; no second seat");
-        doc.RootElement.GetProperty("status").GetString().Should().Be("Active");
-        doc.RootElement.GetProperty("role").GetString().Should().Be("Worker");
-        doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean().Should().BeFalse("a waiting request is not membership");
+        doc.RootElement.GetProperty("status").GetString().Should().Be("PendingApproval");
+        doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean().Should().BeTrue("his seat existed; nothing was written");
 
-        // The exact shape a fresh claim stores: Worker, Active (3), QrScan (3), under this QR's invitation.
-        (await MembershipsAsync(FarmA, Requester)).Should().Equal(("Worker", 3, 3));
-        (await InvitationOfAsync(requestId)).Should().Be(invite.InvitationId);
-        (await AuditCountAsync(FarmA, Requester, "MemberJoined")).Should().Be(1);
-
-        // A repeat scan is the ordinary idempotent answer.
-        using var again = await ClaimAsync(Requester, invite.Token, invite.FarmCode);
-        using var againDoc = JsonDocument.Parse(await again.Content.ReadAsStringAsync());
-        againDoc.RootElement.GetProperty("wasAlreadyMember").GetBoolean().Should().BeTrue();
-        againDoc.RootElement.GetProperty("status").GetString().Should().Be("Active");
-        (await AuditCountAsync(FarmA, Requester, "MemberJoined")).Should().Be(1);
+        // Unchanged: the Worker placeholder, PendingApproval (2), SelfJoin (4), no invitation.
+        (await MembershipsAsync(FarmA, Requester)).Should().Equal(("Worker", 2, 4));
+        (await InvitationOfAsync(requestId)).Should().BeNull();
+        (await AuditCountAsync(FarmA, Requester, "MemberJoined")).Should().Be(0);
     }
 
     [Fact]
@@ -383,14 +384,13 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Concurrent_scans_over_a_typed_code_request_activate_it_once()
+    public async Task Concurrent_scans_over_a_typed_code_request_leave_it_waiting()
     {
         await AssertAppRoleIsNotVacuousAsync();
         await SeedTypedCodeRequestAsync(FarmA, AccountA, RequestRacer);
         var invite = await IssueOkAsync(OwnerA, FarmA);
 
-        // The seat row is locked before it is re-read, so the losers wait, then read the winner's
-        // committed Active seat: one activation, one audit row, everyone answered 200.
+        // spec: plr-d10 lane MU-2 — the QR only asks: every scan answers the same waiting seat, writes nothing.
         var outcomes = await Task.WhenAll(Enumerable.Range(0, 4).Select(async _ =>
         {
             using var r = await ClaimAsync(RequestRacer, invite.Token, invite.FarmCode);
@@ -404,10 +404,10 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
             using var doc = JsonDocument.Parse(o.Body);
             return !doc.RootElement.GetProperty("wasAlreadyMember").GetBoolean();
         });
-        fresh.Should().Be(1, "exactly one scan let him in");
-        outcomes.Should().OnlyContain(o => o.Body.Contains("\"Active\""));
-        (await MembershipsAsync(FarmA, RequestRacer)).Should().Equal(("Worker", 3, 3));
-        (await AuditCountAsync(FarmA, RequestRacer, "MemberJoined")).Should().Be(1);
+        fresh.Should().Be(0, "no scan lets him in");
+        outcomes.Should().OnlyContain(o => o.Body.Contains("\"PendingApproval\""));
+        (await MembershipsAsync(FarmA, RequestRacer)).Should().Equal(("Worker", 2, 4));
+        (await AuditCountAsync(FarmA, RequestRacer, "MemberJoined")).Should().Be(0);
     }
 
     // -- Harness ----------------------------------------------------------------

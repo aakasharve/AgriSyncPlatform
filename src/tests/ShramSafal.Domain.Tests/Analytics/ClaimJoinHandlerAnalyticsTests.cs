@@ -54,24 +54,26 @@ public sealed class ClaimJoinHandlerAnalyticsTests
 
         Assert.True(result.IsSuccess);
         Assert.False(result.Value.WasAlreadyMember);
+        // spec: plr-d10 lane MU-2 — the farm QR only asks: a waiting request, and the event says so.
+        Assert.Equal(MembershipStatus.PendingApproval, result.Value.Status);
         Assert.Single(analytics.Events);
 
         var evt = analytics.Events[0];
         Assert.Equal(AnalyticsEventType.InvitationClaimed, evt.EventType);
         Assert.Equal(workerUserId, evt.ActorUserId!.Value.Value);
         Assert.Equal(farmIdGuid, evt.FarmId!.Value.Value);
-        Assert.Equal("worker", evt.ActorRole);
+        Assert.Equal("joiner", evt.ActorRole);
         Assert.Equal("v1", evt.SchemaVersion);
         Assert.Contains("claimedByUserId", evt.PropsJson);
-        Assert.Contains("role", evt.PropsJson);
+        Assert.Contains("\"outcome\":\"requested\"", evt.PropsJson);
     }
 
     // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — a person who TYPED the code earlier holds a
-    // waiting request. The owner's QR answers it: the SAME seat becomes Active (no second seat),
-    // and the claim is a genuine one (wasAlreadyMember=false, one analytics event, one
-    // MemberJoined audit row).
+    // waiting request. Until lane MU-2 the owner's QR activated it.
+    // CONSCIOUS CHANGE — spec: plr-d10 lane MU-2: the farm QR only ASKS, so it answers the request as it is: the same
+    // seat, still waiting, nothing written, no event.
     [Fact]
-    public async Task HandleAsync_OverATypedCodeRequest_ActivatesThatSeatAndEmitsOnce()
+    public async Task HandleAsync_OverATypedCodeRequest_LeavesThatSeatWaitingAndEmitsNothing()
     {
         var analytics = new CapturingAnalyticsWriter();
         var farmRepo = new StubShramSafalRepository();
@@ -111,19 +113,17 @@ public sealed class ClaimJoinHandlerAnalyticsTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(request.Id, result.Value.MembershipId);
-        Assert.False(result.Value.WasAlreadyMember);
-        Assert.Equal(MembershipStatus.Active, result.Value.Status);
-        Assert.Equal("Worker", result.Value.Role);
+        Assert.True(result.Value.WasAlreadyMember);
+        Assert.Equal(MembershipStatus.PendingApproval, result.Value.Status);
 
         Assert.Single(farmRepo.Memberships);
-        Assert.Equal(MembershipStatus.Active, request.Status);
-        Assert.Equal(JoinedVia.QrScan, request.JoinedVia);
-        Assert.Equal(invitation.Id, request.InvitationId);
-        Assert.Single(farmRepo.AuditEvents, a => a.Action == "MemberJoined" && a.EntityId == request.Id);
-        Assert.Single(analytics.Events);
-        Assert.Equal(AnalyticsEventType.InvitationClaimed, analytics.Events[0].EventType);
+        Assert.Equal(MembershipStatus.PendingApproval, request.Status);
+        Assert.Equal(JoinedVia.SelfJoin, request.JoinedVia);
+        Assert.Null(request.InvitationId);
+        Assert.DoesNotContain(farmRepo.AuditEvents, a => a.Action == "MemberJoined");
+        Assert.Empty(analytics.Events);
 
-        // A second scan is the ordinary idempotent answer: nothing more is written.
+        // A second scan is the same answer: nothing is written.
         var again = await handler.HandleAsync(new ClaimJoinCommand(
             Token: rawToken,
             FarmCode: "PATIL1",
@@ -132,9 +132,9 @@ public sealed class ClaimJoinHandlerAnalyticsTests
 
         Assert.True(again.IsSuccess);
         Assert.True(again.Value.WasAlreadyMember);
-        Assert.Equal(MembershipStatus.Active, again.Value.Status);
-        Assert.Single(farmRepo.AuditEvents, a => a.Action == "MemberJoined");
-        Assert.Single(analytics.Events);
+        Assert.Equal(MembershipStatus.PendingApproval, again.Value.Status);
+        Assert.DoesNotContain(farmRepo.AuditEvents, a => a.Action == "MemberJoined");
+        Assert.Empty(analytics.Events);
     }
 
     private static string ComputeTokenHash(string rawToken)

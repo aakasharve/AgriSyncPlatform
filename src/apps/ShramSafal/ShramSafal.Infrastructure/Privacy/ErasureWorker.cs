@@ -208,6 +208,16 @@
 //     or headcount is deleted or changed except the name text. ssf.shram_identity_events names nobody
 //     (ids, a kind, a proof, a time) and is append-only by GRANT: KEEP; one 'Erased' event per farm record
 //     is appended.
+//   - ssf.farm_personal_invitations — ADDED 2026-11-06 (lane MU-2; migration 20261106063315_AddPersonalInvitations).
+//     The owner's invitation that carries the relationship: who invited (invited_by_user_id), the label, plots and
+//     authorities, a seven-day eight-digit code, who claimed it (claimed_by_user_id) and when. HAS PII of a THIRD
+//     PARTY: person_name and invited_phone_e164 are what the OWNER typed about the person he invited (the farm_name
+//     and scope_plot_names snapshots are farm data). Like ssf.field_operators above, DELIBERATELY ABSENT FROM THE
+//     CREATOR-ERASURE SEQUENCE: the farmer who typed a person's number is not that person's data subject (P6), and the
+//     row is the farm's record of who it let in and with what grant (a seat's provenance). KEEP. DISCLOSED GAP, not
+//     built: the INVITED person's own erasure (and a retention rule that clears person_name / invited_phone_e164 once
+//     an invitation has ended or expired) is a tracked follow-up for the privacy review — an unanswered invitation is
+//     only ever useful for seven days.
 //   - ssf.attendance_marks — ADDED 2026-08-31 (founder decision D-H3: what somebody
 //     RULED about a person on a farm-day; day mark full/half/absent/unmarked plus
 //     night mark worked/not-worked/unmarked).

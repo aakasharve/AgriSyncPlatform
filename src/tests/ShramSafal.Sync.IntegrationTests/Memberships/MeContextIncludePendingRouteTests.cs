@@ -45,6 +45,7 @@ public sealed class MeContextIncludePendingRouteTests : IAsyncLifetime
     private WebApplication? _app;
     private HttpClient _client = default!;
     private readonly FixedMemberships _memberships = new();
+    private readonly FixedInvitations _invitations = new();
 
     public async Task InitializeAsync()
     {
@@ -76,6 +77,7 @@ public sealed class MeContextIncludePendingRouteTests : IAsyncLifetime
         builder.Services.AddScoped<IAccountsSnapshotReader, NoAccounts>();
         builder.Services.AddScoped<IAffiliationSnapshotReader, NoAffiliation>();
         builder.Services.AddSingleton<IFarmMembershipSnapshotReader>(_memberships);
+        builder.Services.AddSingleton<IMeInvitationSnapshotReader>(_invitations);
         builder.Services.AddSingleton<IClock, SystemClockFake>();
 
         _app = builder.Build();
@@ -134,6 +136,33 @@ public sealed class MeContextIncludePendingRouteTests : IAsyncLifetime
             .GetProperty("farmCode").GetString().Should().Be("K7M2QP");
     }
 
+    // spec: plr-d10 lane MU-2 (MU design §6) — the person's waiting invitations ride /me/context for this release's phone,
+    // beside the farms and never among them (visible ≠ operational); an older app's body is unchanged.
+    [Fact]
+    public async Task With_includePending_the_waiting_invitations_are_listed_apart_from_the_farms()
+    {
+        var invitation = Guid.Parse("e1e30001-0000-0000-0000-0000000000d1");
+        _memberships.Seats = new[] { Seat(ActiveFarm, "Active") };
+        _invitations.Waiting = new[]
+        {
+            new MeInvitationSnapshot(invitation, "पाटील फार्म", "Ramrao", "Family", "रमेश", "ChosenPlots", new[] { "प्लॉट 1" },
+                new[] { new MeAuthoritySnapshot("TakeAttendance", null) }, DateTime.UtcNow.AddDays(6), NamesAWorker: false),
+        };
+
+        using var doc = await GetJsonAsync("/user/auth/me/context?includePending=true");
+        doc.RootElement.GetProperty("farms").EnumerateArray().Select(f => f.GetProperty("farmId").GetGuid())
+            .Should().Equal(new[] { ActiveFarm }, "an invitation is never a farm");
+        var card = doc.RootElement.GetProperty("invitations").EnumerateArray().Single();
+        card.GetProperty("invitationId").GetGuid().Should().Be(invitation);
+        card.GetProperty("label").GetString().Should().Be("Family");
+        card.GetProperty("plotNames").EnumerateArray().Select(p => p.GetString()).Should().Equal("प्लॉट 1");
+        card.TryGetProperty("code", out _).Should().BeFalse();
+
+        using var old = await GetJsonAsync("/user/auth/me/context");
+        old.RootElement.TryGetProperty("invitations", out var none).Should().BeTrue();
+        none.ValueKind.Should().Be(JsonValueKind.Null, "an older app's request reads nothing new");
+    }
+
     private async Task<List<Guid>> FarmIdsAsync(string url)
     {
         using var doc = await GetJsonAsync(url);
@@ -168,6 +197,14 @@ public sealed class MeContextIncludePendingRouteTests : IAsyncLifetime
 
         public Task<IReadOnlyList<FarmMembershipSnapshot>> GetForUserAsync(UserId userId, CancellationToken ct = default)
             => Task.FromResult(Seats);
+    }
+
+    private sealed class FixedInvitations : IMeInvitationSnapshotReader
+    {
+        public IReadOnlyList<MeInvitationSnapshot> Waiting { get; set; } = Array.Empty<MeInvitationSnapshot>();
+
+        public Task<IReadOnlyList<MeInvitationSnapshot>> GetWaitingForUserAsync(UserId userId, CancellationToken ct = default)
+            => Task.FromResult(Waiting);
     }
 
     private sealed class NoAccounts : IAccountsSnapshotReader

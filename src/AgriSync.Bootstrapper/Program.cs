@@ -331,6 +331,9 @@ try
         AgriSync.Bootstrapper.Adapters.FarmMembershipSnapshotReader>();
     builder.Services.AddScoped<User.Application.Ports.IAffiliationSnapshotReader,
         AgriSync.Bootstrapper.Adapters.AffiliationSnapshotReader>();
+    // spec: plr-d10 lane MU-2 — the waiting personal invitations /me/context lists (ShramSafal's own reader).
+    builder.Services.AddScoped<User.Application.Ports.IMeInvitationSnapshotReader,
+        AgriSync.Bootstrapper.Adapters.MeInvitationSnapshotReader>();
 
     var analyticsConnection =
         builder.Configuration.GetConnectionString("AnalyticsDb")

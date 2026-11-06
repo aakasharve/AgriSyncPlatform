@@ -121,6 +121,10 @@ internal static class LabourPermissionProjection
                 : null,
             EffectivePlotScope: effectiveScope.ToString(),
             PlotScopeChoices: choices,
-            AuthoritiesNotInForce: notInForce);
+            AuthoritiesNotInForce: notInForce,
+            // spec: plr-d10 lane MU-2 — the owner's chosen label (null for older seats) and, while it waits, the
+            // personal invitation the request was claimed from.
+            Label: membership.Label?.ToString(),
+            PersonalInvitationId: membership.Status == MembershipStatus.PendingApproval ? membership.PersonalInvitationId : null);
     }
 }

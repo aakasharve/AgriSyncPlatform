@@ -146,6 +146,24 @@ public sealed class FarmMembership : Entity<Guid>
     /// </summary>
     public MembershipPlotScope PlotScope { get; private set; } = MembershipPlotScope.AllPlots;
 
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 (register F79) — the label the owner chose on a personal invitation (सहमालक, कुटुंब,
+    /// मुकादम, कामगार). It grants nothing. <c>null</c> for every seat made before MU-2 and every seat not made from a
+    /// personal invitation: those keep reading their <see cref="Role"/>, and no label is ever guessed for them (D-8, P4).
+    /// </summary>
+    public RelationshipLabel? Label { get; private set; }
+
+    /// <summary>spec: plr-d10 lane MU-2 — the personal invitation this seat was claimed from, if any. A waiting seat with
+    /// one is answered by the owner's one tap, which applies exactly that invitation's grant.</summary>
+    public Guid? PersonalInvitationId { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 + WID — "this login is रमेश from the हजेरी list": one of THIS farm's worker records, set
+    /// only by a claim the worker proved himself (the invitation named his number and his verified number claimed it).
+    /// Never moves or rewrites work (WID R2, P7): the worker record stays the work subject.
+    /// </summary>
+    public Guid? FieldOperatorId { get; private set; }
+
     private readonly List<Guid> _scopePlotIds = [];
 
     /// <summary>
@@ -379,6 +397,119 @@ public sealed class FarmMembership : Entity<Guid>
     /// </summary>
     public bool IsTypedCodeJoinRequest =>
         Status == MembershipStatus.PendingApproval && JoinedVia == JoinedVia.SelfJoin;
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 — a request that only ASKS (a typed farm code, or the farm QR since MU-2): waiting, with no
+    /// personal invitation behind it. The owner chooses label, plots and authorities when he approves it.
+    /// </summary>
+    public bool IsGenericJoinRequest =>
+        Status == MembershipStatus.PendingApproval
+        && PersonalInvitationId is null
+        && JoinedVia is JoinedVia.SelfJoin or JoinedVia.QrScan;
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 — the person claimed a personal invitation. The seat is ALWAYS made waiting
+    /// (<see cref="MembershipStatus.PendingApproval"/>) under the invitation's label, with nothing granted; the claim then
+    /// either activates it at once (<see cref="ActivateFromPersonalInvitation"/>: the named verified number — the owner's
+    /// approval given in advance) or leaves it for the owner's one tap.
+    /// </summary>
+    public static FarmMembership CreateFromPersonalInvitation(
+        Guid id, PersonalInvitation invitation, UserId claimantUserId, DateTime claimedAtUtc)
+    {
+        ArgumentNullException.ThrowIfNull(invitation);
+        EnsureValidIds(id, invitation.FarmId, claimantUserId);
+
+        var seat = new FarmMembership(
+            id,
+            invitation.FarmId,
+            claimantUserId,
+            RelationshipLabels.RoleOf(invitation.Label),
+            MembershipStatus.PendingApproval,
+            JoinedVia.PersonalInvitation,
+            invitationId: null,
+            claimedAtUtc);
+        seat.Label = invitation.Label;
+        seat.PersonalInvitationId = invitation.Id;
+        return seat;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 — the person's earlier generic request (typed code or farm QR) is answered by the personal
+    /// invitation he now claims: the request carries that invitation from here on (its label now; exactly its grant on
+    /// activation). Nothing is granted by this step, and whatever the waiting request held is cleared.
+    /// </summary>
+    public void AttachPersonalInvitation(PersonalInvitation invitation, DateTime utcNow)
+    {
+        ArgumentNullException.ThrowIfNull(invitation);
+        if (!IsGenericJoinRequest)
+        {
+            throw new InvalidOperationException(
+                $"Membership '{Id}' is not a generic join request (status {Status}, joined via {JoinedVia}).");
+        }
+
+        if (invitation.FarmId != FarmId)
+        {
+            throw new InvalidOperationException("An invitation of another farm cannot answer this request.");
+        }
+
+        Role = RelationshipLabels.RoleOf(invitation.Label);
+        Label = invitation.Label;
+        PersonalInvitationId = invitation.Id;
+        JoinedVia = JoinedVia.PersonalInvitation;
+        CanManageLabourRecords = false;
+        LabourGrantExpiresAtUtc = null;
+        Permissions = null;
+        AuthorityExpiresAtJson = null;
+        PlotScope = MembershipPlotScope.AllPlots;
+        _scopePlotIds.Clear();
+        ModifiedAtUtc = utcNow;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 — the seat claimed from <paramref name="invitation"/> becomes Active with EXACTLY its grant:
+    /// its label's role, the authorities still alive now (each with its end) and its plots. <paramref name="approverUserId"/>
+    /// is the owner — his tap now, or the approval he gave in advance by naming the number. Only a waiting seat claimed
+    /// from this same invitation moves.
+    /// </summary>
+    public void ActivateFromPersonalInvitation(UserId approverUserId, PersonalInvitation invitation, DateTime utcNow)
+    {
+        ArgumentNullException.ThrowIfNull(invitation);
+        if (Status != MembershipStatus.PendingApproval || PersonalInvitationId != invitation.Id || invitation.FarmId != FarmId)
+        {
+            throw new InvalidOperationException(
+                $"Membership '{Id}' is not a waiting claim of invitation '{invitation.Id}'.");
+        }
+
+        Approve(approverUserId, RelationshipLabels.RoleOf(invitation.Label), permissions: null, utcNow);
+        Label = invitation.Label;
+        SetAuthorities(invitation.AuthoritiesAliveAt(utcNow), utcNow);
+        SetPlotScope(invitation.PlotScope, invitation.ScopePlotIds.ToList(), utcNow);
+        LastSeenAtUtc = utcNow;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 + WID — this Active seat's person is one of this farm's worker records. Set once, by a claim
+    /// he proved himself; the caller has checked the record is this farm's (E4) and WID's link rules (R1, R3).
+    /// </summary>
+    public void LinkWorkerRecord(Guid fieldOperatorId)
+    {
+        if (Status != MembershipStatus.Active)
+        {
+            throw new InvalidOperationException("Only an Active seat is linked to a worker record.");
+        }
+
+        if (fieldOperatorId == Guid.Empty)
+        {
+            throw new ArgumentException("A worker record id is required.", nameof(fieldOperatorId));
+        }
+
+        if (FieldOperatorId is { } existing && existing != fieldOperatorId)
+        {
+            throw new InvalidOperationException("This seat is already linked to another worker record.");
+        }
+
+        FieldOperatorId = fieldOperatorId;
+    }
 
     /// <summary>
     /// Direct (no-invitation) factory producing an immediately

@@ -108,6 +108,20 @@ export function roleWord(role: string): string {
     }
 }
 
+/**
+ * spec: plr-d10 lane MU-2 (register F79) — the word for a seat: the label the owner chose on its invitation when it has one
+ * (so कुटुंब and सहमालक read apart), else its role's word (every older seat, no label guessed — D-8).
+ */
+export function seatWord(row: { role: string; label?: string | null }): string {
+    switch (row.label) {
+        case 'CoOwner': return 'सहमालक';
+        case 'Family': return 'कुटुंब';
+        case 'Mukadam': return 'मुकादम';
+        case 'Worker': return 'कामगार';
+        default: return roleWord(row.role);
+    }
+}
+
 /** The role's own colour (preview ROLE_TONE), in the shared look kit's tones. */
 export function roleTone(role: string): Tone {
     switch (role) {

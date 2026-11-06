@@ -317,3 +317,22 @@ public sealed class AffiliationSnapshotReader(AccountsDbContext accountsDb) : IA
             BenefitsEarned: benefitsEarned);
     }
 }
+
+/// <summary>
+/// spec: plr-d10 lane MU-2 (MU design §6, "one read model") — the person's waiting personal invitations for
+/// <c>/me/context</c>, read by ShramSafal's own reader (the invitee door on his PROVEN number, the same card projection the
+/// invitee routes answer with). This adapter only reshapes; it decides nothing.
+/// </summary>
+public sealed class MeInvitationSnapshotReader(
+    ShramSafal.Application.Ports.IPersonalInvitationInviteeReader reader) : IMeInvitationSnapshotReader
+{
+    public async Task<IReadOnlyList<MeInvitationSnapshot>> GetWaitingForUserAsync(UserId userId, CancellationToken ct = default)
+    {
+        var cards = await reader.ListWaitingForUserAsync(userId.Value, ct);
+        return cards.Select(c => new MeInvitationSnapshot(
+                c.InvitationId, c.FarmName, c.InvitedByName, c.Label, c.Name, c.PlotScope, c.PlotNames,
+                c.Authorities.Select(a => new MeAuthoritySnapshot(a.Name, a.ExpiresAtUtc)).ToList(),
+                c.ExpiresAtUtc, c.NamesAWorker))
+            .ToList();
+    }
+}

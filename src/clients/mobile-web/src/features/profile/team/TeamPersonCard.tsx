@@ -33,7 +33,7 @@ import { AuthoritySwitches, type AuthorityAccessView } from './AuthoritySwitches
 import { PlotScopePicker } from './PlotScopePicker';
 import type { PlotScopeChoice, PlotScopeName } from '../data/membershipAdminClient';
 import type { FarmPlot } from './useFarmPlots';
-import { PRESETS, arrivalLine, doLine, phoneLine, presetOf, roleTone, roleWord, type DecisionRights } from './teamModel';
+import { PRESETS, arrivalLine, doLine, phoneLine, presetOf, roleTone, seatWord, type DecisionRights } from './teamModel';
 import { ReasonStep } from './ReasonStep';
 import { TEAM_COPY } from './teamCopy';
 
@@ -105,7 +105,7 @@ export const TeamPersonCard: React.FC<TeamPersonCardProps> = ({
                         </p>
                     )}
                 </div>
-                <Chip tone={roleTone(row.role)}><User size={13} aria-hidden="true" />{roleWord(row.role)}</Chip>
+                <Chip tone={roleTone(row.role)}><User size={13} aria-hidden="true" />{seatWord(row)}</Chip>
             </div>
             {line && <p className="m-0 mt-1.5 text-[14px] font-bold leading-snug text-stone-900" data-testid="team-person-line">{line}</p>}
             {arrival && <p className="m-0 mt-0.5 text-[12.5px] font-semibold text-stone-500" data-testid="team-person-arrival">{arrival}</p>}

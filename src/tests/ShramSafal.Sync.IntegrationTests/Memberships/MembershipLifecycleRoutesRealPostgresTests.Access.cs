@@ -66,13 +66,15 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         await SelfExitAsync(Worker);
         (await ClaimAsync(Worker, token, farmCode)).Should().Be("PendingApproval");
 
-        // CONTROL: once the OWNER lets him in again, leaving later on his own is no stop — the QR
-        // lets him straight back, exactly as for anyone who left on his own.
+        // CONTROL: once the OWNER lets him in again, he reads the farm; leaving later on his own and scanning again is
+        // an ordinary request.
+        // CONSCIOUS CHANGE — spec: plr-d10 lane MU-2: until MU-2 the QR let him straight back (Active); the farm QR now
+        // only ASKS for everyone, so his re-scan waits like anyone's and reads nothing until the owner answers.
         await DecideOkAsync(HttpMethod.Post, $"{Worker}/approve", Owner, new { role = "Worker" });
         (await PullAsync(Worker)).Should().Contain(FarmName);
         await SelfExitAsync(Worker);
-        (await ClaimAsync(Worker, token, farmCode)).Should().Be("Active");
-        (await PullAsync(Worker)).Should().Contain(FarmName);
+        (await ClaimAsync(Worker, token, farmCode)).Should().Be("PendingApproval");
+        AssertNothingOfTheFarm(await PullAsync(Worker), "a waiting re-scan reads nothing");
     }
 
     /// <summary>

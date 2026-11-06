@@ -16,7 +16,10 @@ public sealed class GetMeContextHandler(
     IAccountsSnapshotReader accountsReader,
     IFarmMembershipSnapshotReader membershipReader,
     IAffiliationSnapshotReader affiliationReader,
-    IClock clock)
+    IClock clock,
+    // spec: plr-d10 lane MU-2 — optional, so an older composition (and the unit tests) need not supply it: absent =
+    // no invitations listed, never a guess.
+    IMeInvitationSnapshotReader? invitationReader = null)
 {
     private const int PlanExpiringWindowDays = 7;
 
@@ -68,6 +71,19 @@ public sealed class GetMeContextHandler(
             .ToList();
         var alerts = BuildAlerts(user.PhoneVerifiedAtUtc, activeFarms, utcNow);
 
+        // spec: plr-d10 lane MU-2 — his waiting invitations (one read model with the invitee routes). Only for this
+        // release's phone (includePending); an older app keeps today's exact body.
+        IReadOnlyList<MeInvitationDto>? invitations = null;
+        if (includePending && invitationReader is not null)
+        {
+            invitations = (await invitationReader.GetWaitingForUserAsync(userId, ct))
+                .Select(i => new MeInvitationDto(
+                    i.InvitationId, i.FarmName, i.InvitedByName, i.Label, i.Name, i.PlotScope, i.PlotNames,
+                    i.Authorities.Select(a => new MeAuthorityDto(a.Name, a.ExpiresAtUtc)).ToList(),
+                    i.ExpiresAtUtc, i.NamesAWorker))
+                .ToList();
+        }
+
         var dto = new MeContextDto(
             Me: new MeIdentityDto(
                 UserId: user.Id.Value,
@@ -83,7 +99,8 @@ public sealed class GetMeContextHandler(
                 ReferralsQualified: affiliation.ReferralsQualified,
                 BenefitsEarned: affiliation.BenefitsEarned),
             Alerts: alerts,
-            ServerTimeUtc: utcNow);
+            ServerTimeUtc: utcNow,
+            Invitations: invitations);
 
         return Result.Success(dto);
     }
