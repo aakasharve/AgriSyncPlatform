@@ -29,7 +29,7 @@ import { SetupHubMenu, type HubMenuItem } from './components/SetupHubMenu';
 import { useCropPlotState } from './hooks/useCropPlotState';
 import { useFarmAdminState } from './hooks/useFarmAdminState';
 import SubscriptionCard from '../admin/billing/SubscriptionCard';
-import { buildSettingsExtraIds, OFFLINE_NOTES_TITLE, PRIVACY_TITLE } from './settingsItems';
+import { buildSettingsExtraIds, OFFLINE_NOTES_TITLE, OPEN_BILLING_HANDOFF, PRIVACY_TITLE } from './settingsItems';
 import { useWaitingDraftCount } from './hooks/useWaitingDraftCount';
 import { useWaitingVoiceNotes } from '../voiceDiary/waiting/useWaitingVoiceNotes';
 import { voiceNotesWords } from '../voiceDiary/waiting/voiceNotesWords';
@@ -144,6 +144,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
             window.sessionStorage.removeItem('open_farm_boundary');
             setActiveTab('identity');
             pendingOpenBoundary.current = true;
+        }
+        // lane L4b fix round 1 (M-3; founder D-40) — the strip's "मंजुरीसाठी सदस्यता सुरू असावी लागते" opens the
+        // farm's existing subscription / trial screen (the billing page below), by the same one-shot handoff.
+        if (window.sessionStorage.getItem(OPEN_BILLING_HANDOFF)) {
+            window.sessionStorage.removeItem(OPEN_BILLING_HANDOFF);
+            setActiveExtra('billing');
         }
     }, []);
     useEffect(() => {

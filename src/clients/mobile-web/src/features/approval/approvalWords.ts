@@ -15,13 +15,14 @@
  */
 import type { Language } from '../../i18n/language';
 import { parseReviewDetailDate, formatReviewDetail } from '../labour/reviewDetailDate';
+import { toMarathiDigits } from '../labour/marathiDate';
 
-const MR_DIGITS = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
-
-/** A count in the reader's own digits: Devanagari in Marathi, plain in English. */
+/**
+ * A count in the reader's own digits: Devanagari in Marathi (the founder's D-1 example "२"; the app's existing
+ * `toMarathiDigits`), plain in English.
+ */
 export function numberIn(n: number, language: Language): string {
-    const text = String(n);
-    return language === 'mr' ? text.replace(/[0-9]/g, (d) => MR_DIGITS[Number(d)]) : text;
+    return language === 'mr' ? toMarathiDigits(n) : String(n);
 }
 
 const EN_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -97,11 +98,18 @@ export interface ApprovalWords {
     /** FOUNDER D-40 §2 — this phone's unsent records only. */
     unsentChip: (n: number) => string;
     jobCardPending: string;
+    // ── lane L4b fix round 1 ──
+    /** H-2 — the list's only records are his own decisions still on this phone: never "nothing left". */
+    listSending: string;
+    /** M-3 (D-40 "trial expiry explained with a working action") — a मंजूर held for the farm's subscription. */
+    heldApprovals: string;
+    /** M-3 — the way to the subscription screen. */
+    heldApprovalsOpen: string;
 }
 
 const MR: ApprovalWords = {
     title: 'तपासणी',
-    countLine: (n) => `${n} नोंदी — मंजूर करा`, // EXISTING, digits as the sheet always showed them
+    countLine: (n) => `${numberIn(n, 'mr')} नोंदी — मंजूर करा`, // EXISTING words; Devanagari digits (L4b fix round 1, L-6)
     explanation: 'मंजुरी म्हणजे कामाच्या नोंदीची खात्री. पैसे दिल्याची नोंद वेगळी आहे.',
     empty: 'मंजुरीसाठी नोंदी बाकी नाहीत',
     listUnknown: 'यादी आत्ता दिसत नाही',
@@ -150,6 +158,9 @@ const MR: ApprovalWords = {
     approvalChip: (n) => `मंजुरीसाठी ${numberIn(n, 'mr')}`,
     unsentChip: (n) => `पाठवणे बाकी ${numberIn(n, 'mr')}`,
     jobCardPending: 'मंजुरी बाकी — पाहा', // PROPOSED
+    listSending: 'तुमचे निर्णय या फोनवर आहेत — पाठवले जात आहेत', // PROPOSED
+    heldApprovals: 'मंजुरीसाठी सदस्यता सुरू असावी लागते', // PROPOSED
+    heldApprovalsOpen: 'सदस्यता पाहा', // PROPOSED
 };
 
 const EN: ApprovalWords = {
@@ -203,6 +214,9 @@ const EN: ApprovalWords = {
     approvalChip: (n) => `For approval ${n}`, // PROPOSED
     unsentChip: (n) => `Not sent yet ${n}`, // PROPOSED
     jobCardPending: 'Approval pending — look', // PROPOSED
+    listSending: 'Your decisions are on this phone — being sent', // PROPOSED
+    heldApprovals: 'Approvals need an active subscription', // PROPOSED
+    heldApprovalsOpen: 'See subscription', // PROPOSED
 };
 
 export function approvalWords(language: Language | null | undefined): ApprovalWords {

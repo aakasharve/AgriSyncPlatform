@@ -63,7 +63,6 @@ import path from 'node:path';
 import React from 'react';
 
 import { t as translate, type Language } from '../../../i18n/translations';
-import { oversightTranslations } from '../../../i18n/oversightTranslations';
 import type { SyncQueueStatus } from '../../sync/hooks/useSyncQueueStatus';
 import type { DailyLog } from '../../../domain/types/log.types';
 
@@ -102,6 +101,15 @@ vi.mock('../../sync', () => ({
 }));
 
 import AppHeader from '../../context/components/AppHeader';
+import { publishApprovalQueue, resetApprovalQueueForTests } from '../../approval/approvalQueue';
+import { EMPTY_LABOUR_DATA } from '../../labour/labourMock';
+
+/** lane L4b — the farm's server approval list, as the server would answer it (the strip's only count). */
+const serverListOf = (n: number) => ({
+    ...EMPTY_LABOUR_DATA,
+    canConfirm: true,
+    review: Array.from({ length: n }, (_, i) => ({ id: `r${i}`, who: 'w', initial: 'w', tone: 'or' as const, detail: '2026-10-30', status: 'Draft' as const, points: {} })),
+});
 
 /** The exact settled sentence the founder saw, and had removed. Read from the
  * table, never retyped — the key survives in `dfesTranslations.ts` (approved
@@ -109,8 +117,13 @@ import AppHeader from '../../context/components/AppHeader';
  * must not silently pass. */
 const SETTLED_LINE = translate('dfes.dailyLoopDaySettled', 'mr');
 
-/** The strip's own all-clear — the ONE that is allowed to remain. */
-const STRIP_REST_LINE = oversightTranslations.mr.restState;
+/**
+ * lane L4b fix round 1 (review L-3) — the strip's two rest lines. `RETIRED_ALL_CLEAR` is the old ring's rest state
+ * (founder D-3 retired it; lane L4b deleted its key). `EMPTY_LIST_LINE` is the founder's D-40 §6 line — the ONE rest
+ * line allowed to remain, and only on the farm's server list read empty.
+ */
+const RETIRED_ALL_CLEAR = 'आज पर्यन्त सर्व कामे पूर्ण आहेत';
+const EMPTY_LIST_LINE = 'मंजुरीसाठी नोंदी बाकी नाहीत';
 
 const SINGLE_FARM = [
     { farmId: 'farm-1', name: 'Arve Farm', role: 'PrimaryOwner', farmCode: 'ABC123', subscription: null },
@@ -182,10 +195,8 @@ const NOTHING_WAITING: React.ComponentProps<typeof AppHeader>['oversightData'] =
     logs: [],
     operatorNameById: {},
     plotCount: 4,
-    unverifiedCount: 0,
     yesterdayNotClosed: false,
     approvalHolderName: null,
-    dataLoaded: true,
 };
 
 /** Four waiting rows, the number the founder actually read: two decision rows
@@ -195,10 +206,8 @@ const FOUR_WAITING: React.ComponentProps<typeof AppHeader>['oversightData'] = {
     logs: [makeLog('log-1', 'op-1'), makeLog('log-2', 'op-2')],
     operatorNameById: { 'op-1': 'Ramesh', 'op-2': 'Sunita' },
     plotCount: 4,
-    unverifiedCount: 4,
     yesterdayNotClosed: true,
     approvalHolderName: null,
-    dataLoaded: true,
 };
 
 beforeEach(() => {
@@ -208,20 +217,23 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     localStorage.clear();
+    resetApprovalQueueForTests();
     queueRef.current = { ...queueRef.current, failedCount: 0, failedUploads: 0, hasLoaded: true };
     unqueueableRef.current = 0;
 });
 
 describe('the home screen carries exactly ONE all-clear claim (founder rulings 2026-08-27 and 2026-08-29)', () => {
     it('the_settled_line_cannot_render_while_the_strip_shows_a_positive_count', async () => {
+        publishApprovalQueue('farm-1', serverListOf(4));
         await act(async () => {
             renderHomeScreen(FOUR_WAITING);
         });
 
         // The strip is genuinely reporting waiting work — this is the founder's
-        // screen, not an empty one that would pass by accident. lane L4b (D-40 §2):
-        // the strip's signals replaced the ring number; the drawer opener remains.
-        expect(screen.getByTestId('strip-signals')).toBeInTheDocument();
+        // screen, not an empty one that would pass by accident. lane L4b fix round 1 (review L-3): its approval
+        // signal carries the farm's server count ("मंजुरीसाठी ४"), so an empty strip fails here.
+        expect(screen.getByTestId('strip-approval')).toHaveTextContent('मंजुरीसाठी ४');
+        expect(screen.queryByTestId('strip-rest')).toBeNull();
         expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
 
         // ...and the sentence he read underneath it is nowhere on the screen.
@@ -237,16 +249,17 @@ describe('the home screen carries exactly ONE all-clear claim (founder rulings 2
         // the strip is in its rest state, so the old code spoke the hero's
         // sentence beneath it. That is the duplication the founder read on
         // `?preview=oversight&waiting=none`, and it is what he removed.
+        publishApprovalQueue('farm-1', serverListOf(0));
         await act(async () => {
             renderHomeScreen(NOTHING_WAITING);
         });
 
         // lane L4b (founder D-3 / D-40 §6) — the strip's own all-clear is RETIRED too: it said
         // "आज पर्यन्त सर्व कामे पूर्ण आहेत" while late work waited (D-3). With nothing to show it
-        // states only what it read (the approval list), never that all work is complete.
-        expect(screen.queryByText(STRIP_REST_LINE)).toBeNull();
+        // states only what it read: the farm's approval list, read empty (the founder's D-40 §6 line).
+        expect(screen.queryByText(RETIRED_ALL_CLEAR)).toBeNull();
         expect(document.body.textContent).not.toMatch(/सर्व कामे पूर्ण/);
-        expect(screen.getByTestId('strip-signals')).toBeInTheDocument();
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent(EMPTY_LIST_LINE);
 
         // And it is the ONLY one. No second sentence, no second card.
         expect(screen.queryByText(SETTLED_LINE)).toBeNull();
@@ -255,14 +268,15 @@ describe('the home screen carries exactly ONE all-clear claim (founder rulings 2
     });
 
     it('the_settled_line_is_absent_while_the_strip_cannot_yet_confirm (unknown is not none)', async () => {
-        // `dataLoaded: false` — the same zeros, but nobody has read them. The
-        // strip refuses its rest state here (finding F7(a)), and there is no
-        // longer any other surface that could make the stronger claim in its
-        // place.
+        // The same zeros, but the farm's list was never read (lane L4b: the strip's only rest claim rests on that
+        // list). The strip says so (finding F7(a)), and there is no longer any other surface that could make the
+        // stronger claim in its place.
         await act(async () => {
-            renderHomeScreen({ ...NOTHING_WAITING, dataLoaded: false });
+            renderHomeScreen({ ...NOTHING_WAITING });
         });
 
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent('यादी आत्ता दिसत नाही');
+        expect(screen.queryByText(EMPTY_LIST_LINE)).toBeNull();
         expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).toBeNull();
         expect(screen.queryByText(SETTLED_LINE)).toBeNull();
     });

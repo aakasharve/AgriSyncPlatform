@@ -99,11 +99,12 @@ describe('the one review sheet (lane L4b)', () => {
     });
 
     it('a record that changed after he saw it shows the new version, the reason and what changed; his मंजूर covers THAT version', async () => {
-        ApprovalSeenStore.write('a', { version: 1, count: 5, task: 'फवारणी', plot: 'प्लॉट A', amount: null });
+        // lane L4b fix round 1 (L-4) — what he saw is HIS, on THIS farm.
+        ApprovalSeenStore.write(ME, FARM, 'a', { version: 1, count: 5, task: 'फवारणी', plot: 'प्लॉट A', amount: null });
         const settled = vi.fn();
         mount({
             data: data([complete('a', { version: 2, points: { count: 6, task: 'फवारणी' } })]),
-            conflicts: [{ rowId: 7, logId: 'a', seenVersion: 1 }],
+            conflicts: [{ rowId: 7, logId: 'a', seenVersion: 1, farmId: FARM }],
             onConflictSettled: settled,
         });
         const notice = screen.getByTestId('review-changed-a');

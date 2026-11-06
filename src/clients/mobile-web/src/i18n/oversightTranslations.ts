@@ -3,7 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Owner's Oversight Loop copy — the canonical strip (`AppHeader`) and the
- * waiting drawer. Spec: `docs/superpowers/specs/2026-08-15-owner-oversight-loop-design.md`
+ * waiting drawer.
+ *
+ * LANE L4b FIX ROUND 1 (review ruling 2) — nine keys DELETED: `restState`, `checkingState`, `unknownState`,
+ * `waitingSubtitle`, `yourFarms` (their only reader was the deleted `CanonicalStrip.tsx`) and `allFarmsOnTrack`,
+ * `bandSinceLastLookedHeader`, `createFarm`, `joinByQr` (unread before lane L4b). The history notes below that name
+ * them record how they came to be; none of them is a live key any more. Spec: `docs/superpowers/specs/2026-08-15-owner-oversight-loop-design.md`
  * §6 ("MARATHI — THE HARD RULE") is the binding authority for every string
  * in this file. Task: `.superpowers/sdd/2026-08-15-owner-oversight-loop-plan/task-3-brief.md`.
  *
@@ -388,12 +393,7 @@ export interface OversightTranslations extends LabourOversightTranslations {
     /** Also the tallies'/briefing's "records" unit word (Ruling 7). dfesTranslations.entries. */
     entries: string;
 
-    /** Farm-chip trigger — names the sheet it opens (spec §2.1). */
-    yourFarms: string;
-    createFarm: string;
-    joinByQr: string;
     attention: string;
-    allFarmsOnTrack: string;
 
     // ── The spec §6.2 block. It began as eight (b) placeholders; all but
     // `seenControl` and `delegatedLine` have since been ruled on by the
@@ -402,51 +402,6 @@ export interface OversightTranslations extends LabourOversightTranslations {
 
     /** Canonical-strip waiting button label (spec §2.2, §6.2). */
     waitingLabel: string;
-    /**
-     * Canonical-strip rest state, once nothing is waiting (spec §2.2, §6.2).
-     *
-     * The `mr` value is founder-authored and asserts that work is COMPLETE,
-     * not merely that a queue is empty — so it may only render when that is
-     * actually known to be true. See `checkingState` for the state that
-     * covers "not known yet" (finding F7(a)).
-     */
-    restState: string;
-    /**
-     * Canonical-strip state while the data behind the rest state is still
-     * being read — Dexie's sync queue (`useSyncQueueStatus.hasLoaded`) and
-     * the app's own hydration (`useAppData.dataLoaded`). Shipped as category
-     * (c) (`mr: ''`) under finding F7; GRADUATED to the founder's own
-     * Marathi 2026-08-24 (see this file's header, "THE LAST THREE (c) KEYS
-     * GRADUATE"), so it is no longer pending and no longer reads through to
-     * English.
-     */
-    checkingState: string;
-    /**
-     * Canonical-strip state once the app has STOPPED trying to read the data
-     * behind the rest state (change 2). `checkingState` says "reading";
-     * this says "we could not establish it, and we will not pretend
-     * otherwise" — the honest terminus a spinner has to have, because the
-     * two sources behind `waitingCount` can both fail permanently
-     * (`useAppData`'s load pass never retries; `useSyncQueueStatus.hasLoaded`
-     * only ever flips on a fully successful Dexie read).
-     *
-     * Deliberately NOT worded as a transient ("…right now") and NOT worded
-     * as a fault ("something went wrong"): it is the exact negation of
-     * `restState`'s claim and nothing more, so it stays true whatever caused
-     * it. That wording is load-bearing — change 3 gives the same key a
-     * SECOND cause, an account holding more than one farm, where the app's
-     * data is not farm-scoped and so the completion claim has no statable
-     * subject (`app/helpers/appContentOversightInputs.ts`). One is a failed
-     * read, the other is a structural limit; naming either cause in the
-     * string would make it false for the other. The founder's Marathi below
-     * keeps that property: it names only the outcome.
-     *
-     * Shipped as category (c) (`mr: ''`) under change 2; GRADUATED to the
-     * founder's own Marathi 2026-08-24 (see this file's header, "THE LAST
-     * THREE (c) KEYS GRADUATE"). No longer pending, no longer reads through
-     * to English.
-     */
-    unknownState: string;
     /**
      * Drawer Band 2's acknowledgement control (spec §3, §6.2). Must never
      * read as a decision — see the file-header note on `मंजूर`/`खात्री`.
@@ -507,8 +462,6 @@ export interface OversightTranslations extends LabourOversightTranslations {
     retryAffordance: string;
     /** Drawer Band 1's section header (spec §3). */
     bandDecisionsHeader: string;
-    /** Drawer Band 2's section header (spec §3). */
-    bandSinceLastLookedHeader: string;
     /**
      * Task 5 / Ruling 8. Briefing sub-line tail (spec §3): "since you last
      * looked — N days". Template — `{days}`. `null` `sinceDays` (no
@@ -542,9 +495,6 @@ export interface OversightTranslations extends LabourOversightTranslations {
      * (`translations.ts`), independently declared here per this file's own
      * no-cross-import convention for founder copy. */
     navCompare: string;
-    /** Waiting-bar subtitle, new under the (now approved) `waitingLabel`
-     * title. Only rendered in the waiting state, never rest. */
-    waitingSubtitle: string;
     /** Sathi guide card — greeting line, beside the leaf mark. */
     guideGreeting: string;
     /**
@@ -599,24 +549,9 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         activitiesLogged: 'activities logged',
         entries: 'entries',
 
-        yourFarms: 'Your farms',
-        createFarm: 'Create farm',
-        joinByQr: 'Join via QR',
         attention: 'Attention',
-        allFarmsOnTrack: 'All your farms are on track today',
 
         waitingLabel: 'Waiting for you',
-        // Finding F7 — reconciled with the founder's Marathi in the same
-        // slot ("आज पर्यन्त सर्व कामे पूर्ण आहेत"), which asserts completed
-        // work, not an empty queue. Was 'Nothing waiting'.
-        restState: 'All work is complete as of today',
-        checkingState: 'Checking…',
-        // Change 2 — the exact negation of `restState` above, and nothing
-        // more. No cause named (there are two, and neither is the farmer's
-        // doing), no "right now" (one of the two is not transient), no
-        // apology. Short enough to render unclipped in the strip's title
-        // slot at 320px — measured, see the change-2 report.
-        unknownState: 'Cannot confirm all work is done',
         seenControl: 'I have seen this',
         decisionLine: '{count} tasks need review',
         delegatedLine: '{count} tasks — {name} will decide',
@@ -630,7 +565,6 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         seenControlHint: 'Records only that you looked. It approves nothing.',
         retryAffordance: 'Retry',
         bandDecisionsHeader: 'Needs your decision',
-        bandSinceLastLookedHeader: 'Since you last looked',
         sinceLastLookedTail: 'since you last looked — {days} days',
         // Founder message 2026-08-26. Ordinary English translation of his
         // 'अंदाजे'; reads as one word before the count ("about 3 days").
@@ -640,7 +574,6 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         navToday: "Today's Tasks",
         navMyFarm: 'Whole farm overview',
         navCompare: 'Compare',
-        waitingSubtitle: 'You still have some tasks to finish.',
         guideGreeting: 'Hello!',
         guideHeadline: 'Which plot did you work on today?',
         guideLine1: 'Select one or more plots.',
@@ -666,20 +599,9 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         activitiesLogged: 'कामे नोंदवली',
         entries: 'कामे',
 
-        yourFarms: 'तुमच्या शेती',
-        createFarm: 'शेती तयार करा',
-        joinByQr: 'QR ने जोडा',
         attention: 'लक्ष द्या',
-        allFarmsOnTrack: 'सगळ्या शेती आज व्यवस्थित आहेत',
 
         waitingLabel: 'तुमच्यासाठी बाकी',
-        restState: 'आज पर्यन्त सर्व कामे पूर्ण आहेत',
-        // GRADUATED 2026-08-24 — founder-approved, transcribed verbatim from
-        // his own coordinator message (see this file's header, "THE LAST
-        // THREE (c) KEYS GRADUATE"). These three were the module's last
-        // `mr: ''` keys; none is empty and none is pending any more.
-        checkingState: 'तपासात आहे',
-        unknownState: 'निश्चित सांगता येत नाही की सर्व कामे झाली',
         seenControl: 'मी हे पाहिलं',
         decisionLine: '{count} कामे तपासायची आहेत',
         delegatedLine: '{count} कामे — {name} ठरवतील',
@@ -700,7 +622,6 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         seenControlHint: 'यानं फक्त ‘पाहिलं’ एवढंच कळतं — मंजुरी मिळत नाही.',
         retryAffordance: 'पुन्हा पाठवा',
         bandDecisionsHeader: 'तुम्ही ठरवायचं आहे',
-        bandSinceLastLookedHeader: 'तुम्ही शेवटचं पाहिल्यानंतर',
         sinceLastLookedTail: 'तुम्ही शेवटचं पाहिल्यानंतर — {days} दिवस',
         // FOUNDER-SUPPLIED 2026-08-26, category (d) — his own word, from the
         // coordinator message that overruled `aacdd16c`'s deletion of the
@@ -714,7 +635,6 @@ export const oversightTranslations: Record<Language, OversightTranslations> = {
         navToday: 'आजची कामे',
         navMyFarm: 'पूर्ण शेतीचा आढावा', // founder 2026-10-25 (was 'माझं शेत')
         navCompare: 'तुलना',
-        waitingSubtitle: 'काही राहिलेल्या कामांकडे तुमचे लक्ष देणे गरजेचे आहे',
         guideGreeting: 'नमस्कार!',
         guideHeadline: 'आज कोणत्या प्लॉटवर काम केलं?',
         guideLine1: 'एक किंवा अनेक प्लॉट निवडा.',

@@ -13,6 +13,9 @@
  * Driven through the REAL `buildOversightHeaderInputs` and the REAL strip model (`buildOversightModel`), whose
  * 'approval' row renders '{count} कामे तपासायची आहेत' and whose 'dayNotClosed' row renders 'कालचा दिवस बंद झाला
  * नाही'. The same frozen clock as `appContentOversightInputs.test.ts`.
+ *
+ * Lane L4b fix round 1: the 'approval' row is now the farm's ONE server count (`approvalQueue`, founder D-40 §1),
+ * so the phone's own approval tally this file once pinned was deleted; the 'dayNotClosed' half is unchanged.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
@@ -72,7 +75,8 @@ function stripRows(history: DailyLog[], youIds: ReadonlySet<string> = YOU) {
         checkpointISO: null,
         nowISO: FROZEN_NOW.toISOString(),
         operatorNameById: inputs.operatorNameById,
-        unverifiedCount: inputs.unverifiedCount,
+        // lane L4b — the approval row is the farm's server count now; this file pins the phone-local half only.
+        unverifiedCount: 0,
         yesterdayNotClosed: inputs.yesterdayNotClosed,
         failedSendCount: 0,
         unqueueableCount: 0,
@@ -91,19 +95,16 @@ afterEach(() => {
 });
 
 describe('his own voice auto-save is not "waiting on him"', () => {
-    it('an unconfirmed recording of his from yesterday raises no approval row and no "day not closed" row', () => {
+    it('an unconfirmed recording of his from yesterday raises no "day not closed" row', () => {
         const { inputs, kinds } = stripRows([myAutoSave('mine-y', YESTERDAY), myAutoSave('mine-t', TODAY)]);
 
-        expect(inputs.unverifiedCount).toBe(0);
         expect(inputs.yesterdayNotClosed).toBe(false);
-        expect(kinds).not.toContain('approval');
         expect(kinds).not.toContain('dayNotClosed');
     });
 
     it('is recognised by his signed-in id too (a pulled copy carries the server id, the phone may still say "owner")', () => {
         const { inputs } = stripRows([myAutoSave('mine-pulled', YESTERDAY, MY_SESSION)], new Set(['owner', MY_SESSION]));
 
-        expect(inputs.unverifiedCount).toBe(0);
         expect(inputs.yesterdayNotClosed).toBe(false);
     });
 
@@ -123,32 +124,28 @@ describe('his own voice auto-save is not "waiting on him"', () => {
 });
 
 describe('everything else counts exactly as before', () => {
-    it('another person\'s draft still raises the approval row and still holds yesterday open', () => {
+    it('another person\'s draft still holds yesterday open', () => {
         const { inputs, kinds } = stripRows([myAutoSave('mine-y', YESTERDAY), log('ramesh-y', YESTERDAY, RAMESH, DRAFT)]);
 
-        expect(inputs.unverifiedCount).toBe(1);
         expect(inputs.yesterdayNotClosed).toBe(true);
-        expect(kinds).toEqual(['approval', 'dayNotClosed']);
+        expect(kinds).toEqual(['dayNotClosed']);
     });
 
     it('a log carrying the auto-save marker but made by someone else still counts', () => {
         const { inputs } = stripRows([myAutoSave('ramesh-auto', YESTERDAY, RAMESH)]);
 
-        expect(inputs.unverifiedCount).toBe(1);
         expect(inputs.yesterdayNotClosed).toBe(true);
     });
 
     it('his own typed (not auto-saved) draft still counts, as it did before', () => {
         const { inputs } = stripRows([log('mine-typed', YESTERDAY, ME, DRAFT)]);
 
-        expect(inputs.unverifiedCount).toBe(1);
         expect(inputs.yesterdayNotClosed).toBe(true);
     });
 
     it('his own reviewed (verified) log neither counts nor holds the day open, as before', () => {
         const { inputs, kinds } = stripRows([log('mine-reviewed', YESTERDAY, ME, VERIFIED)]);
 
-        expect(inputs.unverifiedCount).toBe(0);
         expect(inputs.yesterdayNotClosed).toBe(false);
         expect(kinds).toEqual([]);
     });
@@ -157,7 +154,6 @@ describe('everything else counts exactly as before', () => {
         const history = [myAutoSave('mine-y', YESTERDAY)];
         const inputs = buildOversightHeaderInputs(history, [], [], []);
 
-        expect(inputs.unverifiedCount).toBe(1);
         expect(inputs.yesterdayNotClosed).toBe(true);
     });
 });

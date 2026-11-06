@@ -10,7 +10,7 @@
  * `useSyncQueueStatus` starts at `EMPTY_STATUS` and only fills in after its
  * first Dexie read resolves. Every count in that initial object is 0 — and
  * one layer up, `AppHeader` turns those zeros into `waitingCount === 0`,
- * which `CanonicalStrip` renders as the REST state: a green tick and
+ * which the old `CanonicalStrip` (deleted in lane L4b, founder D-3) rendered as the REST state: a green tick and
  * "आज पर्यन्त सर्व कामे पूर्ण आहेत" ("all work is complete as of today").
  *
  * That is the strongest claim in the feature, made from the weakest possible

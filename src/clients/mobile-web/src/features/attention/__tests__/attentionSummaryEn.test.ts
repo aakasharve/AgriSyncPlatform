@@ -12,7 +12,8 @@ const counts = (over: Partial<AttentionCounts>): AttentionCounts => ({
 describe('attentionSummaryEn — the English twin of the strip\'s लक्ष द्या line', () => {
     it('names the same kinds in the same order as the Marathi line', () => {
         const c = counts({ lateSteps: 2, todayReminders: 1 });
-        expect(attentionSummaryMr(c)).toBe('2 कामे उशिराची · 1 आठवण आज');
+        // lane L4b fix round 1 (L-6) — Marathi digits, as the founder's own D-1 example ("२ कामे उशिराची").
+        expect(attentionSummaryMr(c)).toBe('२ कामे उशिराची · १ आठवण आज');
         expect(attentionSummaryEn(c)).toBe('2 tasks late · 1 reminder today');
     });
 

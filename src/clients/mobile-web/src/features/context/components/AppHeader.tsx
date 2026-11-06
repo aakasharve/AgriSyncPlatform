@@ -30,6 +30,8 @@ import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 // settings surface now, reachable from the profile avatar beside it.
 // lane L4b (founder D-3 / D-40) — the strip is now three separate signals (`StripSignals`), not one ring.
 import StripSignals from '../../oversight/components/StripSignals';
+import { isPrimaryAccountHolderRole } from '../../../core/session/farmAuthorities';
+import { OPEN_BILLING_HANDOFF } from '../../profile/settingsItems';
 import { useApprovalQueue } from '../../approval/useApprovalQueue';
 import { openApprovalReview } from '../../approval/openApprovalReview';
 import FarmNameBoard from './FarmNameBoard';
@@ -98,21 +100,11 @@ interface AppHeaderProps {
     logs: DailyLog[];
     operatorNameById: Record<string, string>;
     plotCount: number;
-    unverifiedCount: number;
     yesterdayNotClosed: boolean;
     /** Always `null` today — see the comment above this component's
      * `oversightModel` construction for why naming a delegate is not yet
      * something this task can honestly do. */
     approvalHolderName: string | null;
-    /**
-     * `useAppData.dataLoaded` — whether the arrays above are a MEASURED
-     * empty or merely not loaded yet (finding F7(a)). Required, so `tsc`
-     * names every construction site rather than letting one default it to
-     * `true` by omission. Combined with `useSyncQueueStatus.hasLoaded`
-     * below into the single `dataResolved` flag `CanonicalStrip` needs to
-     * know whether it may claim that all work is complete.
-     */
-    dataLoaded: boolean;
     /**
      * lane L4b (founder D-1 / D-40 §2) — the लक्ष द्या preview the strip shows: the same list as its page and the
      * bottom bar's count, summarised in his language. Omit to show no attention signal.
@@ -288,9 +280,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   // that can ever be non-empty from AppHeader's reachable data (the two
   // inputs above are always 0/false)". That was true only before Ruling 12.
   // It is false now, and provably so twenty lines up: `buildOversightModel`
-  // is fed `oversightData.unverifiedCount` and `oversightData.yesterdayNotClosed`,
-  // which `AppContent.tsx` fills from `buildOversightHeaderInputs(...)` —
-  // real counts off `data.history`/`data.crops`/`data.plannedTasks`. So
+  // is fed the farm's server approval count (lane L4b) and
+  // `oversightData.yesterdayNotClosed`, which `AppContent.tsx` fills from
+  // `buildOversightHeaderInputs(...)` off `data.history`/`data.crops`/`data.plannedTasks`. So
   // `oversightSelectors.ts` really does push `approval` and `dayNotClosed`
   // rows, `WaitingDrawer` really does render them as `<button>`s with a
   // chevron, and this handler used to ignore both. An owner saw
@@ -317,8 +309,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   //                   `isClosed` from exactly two terms (pending planned
   //                   tasks, unverified entries) and `ReflectPage` is the
   //                   one screen that shows and can resolve both
-  //                   (`onUpdateTask` + `onVerifyLog`, see
-  //                   `core/navigation/mainView.tsx`'s `renderReflectView`).
+  //                   (`onUpdateTask`, see `core/navigation/mainView.tsx`'s
+  //                   `renderReflectView`; approvals go to the one review sheet, lane L4b).
   //                   It is also the destination the deleted "Yesterday not
   //                   fully closed" block's own "Review summary" button used
   //                   before commit 0e4ad118 — not a new idea, the same one.
@@ -365,6 +357,16 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     window.sessionStorage.setItem('open_farm_boundary', '1');
     onNavigate('profile');
   };
+
+  // lane L4b fix round 1 (M-3; founder D-40 "trial expiry explained with a working action") — the strip's held-approval
+  // line opens the farm's existing subscription / trial screen (Profile's billing page), by the same handoff. Only for
+  // the primary account holder: that screen is his (`SubscriptionCard` renders for no one else).
+  const openSubscription = isPrimaryAccountHolderRole(currentFarm?.role)
+    ? () => {
+      window.sessionStorage.setItem(OPEN_BILLING_HANDOFF, '1');
+      onNavigate('profile');
+    }
+    : undefined;
 
   // Task 12 — `farmContext.farms` is the real list `AppContent.tsx` already
   // fetches (`getMyFarms()`); this is the ONLY place `farmCount` is
@@ -565,6 +567,8 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             onOpenSync={() => setIsSyncDrawerOpen(true)}
             onOpenAttention={() => onNavigate('attention')}
             onOpenWaiting={() => setIsWaitingDrawerOpen(true)}
+            lastSyncAt={queueStatus.lastSyncAt}
+            onOpenSubscription={openSubscription}
           />
         </div>
       )}

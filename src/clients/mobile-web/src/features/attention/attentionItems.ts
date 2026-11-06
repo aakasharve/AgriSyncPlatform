@@ -25,6 +25,7 @@ import type { AttentionCardCacheRecord } from '../../infrastructure/storage/Dexi
 import type { TodoItem } from '../reflect/overview/todoModel';
 import { fromDateKey, offsetOf } from '../reflect/overview/reflectDates';
 import { attentionRankOrder, suggestedActionOf } from './attentionWire';
+import { toMarathiDigits } from '../labour/marathiDate';
 import { isRescheduledLocally, stepDueTextMr, stepLabelMr, type ScheduledWorkItem, type StoredScheduledWork } from './scheduledWork';
 
 export type AttentionGroupKey = 'late' | 'today' | 'decide';
@@ -133,10 +134,11 @@ export function buildAttentionModel({ cards, scheduledWork, todos, farmId, today
 
 /**
  * The strip's count line, most urgent kind first, only the kinds that are there:
- * "2 कामे उशिराची · 1 आठवण आज" (the founder's own example, D-1). PROPOSED (Marathi)
+ * "२ कामे उशिराची · १ आठवण आज" (the founder's own example, D-1). PROPOSED (Marathi)
  */
 export function attentionSummaryMr(counts: AttentionCounts): string {
-    const one = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`;
+    // lane L4b fix round 1 (L-6) — Devanagari digits in Marathi, as in the founder's own D-1 example ("२").
+    const one = (n: number, singular: string, plural: string) => `${toMarathiDigits(n)} ${n === 1 ? singular : plural}`;
     const parts: string[] = [];
     if (counts.lateSteps) parts.push(one(counts.lateSteps, 'काम उशिराचे', 'कामे उशिराची'));
     if (counts.lateReminders) parts.push(one(counts.lateReminders, 'आठवण उशिराची', 'आठवणी उशिराच्या'));

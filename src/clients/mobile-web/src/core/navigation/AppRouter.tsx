@@ -5,7 +5,6 @@ import {
     useAppDataState,
     useAppLogState,
     useAppNavigationState,
-    useAppTrustState,
     useAppUiRuntime,
     useAppViewHelpers,
     useAppVoiceState,
@@ -75,7 +74,6 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const voice = useAppVoiceState();
     const commands = useAppCommandsState();
     const weather = useAppWeatherState();
-    const trust = useAppTrustState();
     const { handleReset, lastSavedLogSummary, lastSavedLogIds } = useAppUiRuntime();
 
     // The same two once-only prefs as before (installed users who passed them see neither again —
@@ -147,7 +145,6 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const refetchWeather = weather.refetchWeather;
     const handleManualSubmit = commands.handleManualSubmit;
     const handleUpdateNote = commands.handleUpdateNote;
-    const handleVerifyLog = trust.handleVerifyLog;
     const history = isDemoMode ? mockHistory : realHistory;
 
     // DFES Phase 0: Review Inbox / QuickLog / Reflect-focus modals.
@@ -313,7 +310,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         weatherStatus,
         boundaryUnset,
         refetchWeather,
-        handleManualSubmit, handleUpdateNote, handleVerifyLog,
+        handleManualSubmit, handleUpdateNote,
         handleReset, lastSavedLogSummary, lastSavedLogIds,
         getTodayCounts, getContextColorIndicator,
         showReviewInbox, setShowReviewInbox,

@@ -15,7 +15,6 @@ import {
     useAppDataState,
     useAppLogState,
     useAppNavigationState,
-    useAppTrustState,
     useAppUiRuntime,
     useAppViewHelpers,
     useAppVoiceState,
@@ -28,7 +27,6 @@ type DataState = ReturnType<typeof useAppDataState>;
 type VoiceState = ReturnType<typeof useAppVoiceState>;
 type CommandsState = ReturnType<typeof useAppCommandsState>;
 type WeatherState = ReturnType<typeof useAppWeatherState>;
-type TrustState = ReturnType<typeof useAppTrustState>;
 type UiRuntime = ReturnType<typeof useAppUiRuntime>;
 type ViewHelpers = ReturnType<typeof useAppViewHelpers>;
 
@@ -188,7 +186,6 @@ export interface AppRouterContext {
     // commands / trust
     handleManualSubmit: CommandsState['handleManualSubmit'];
     handleUpdateNote: CommandsState['handleUpdateNote'];
-    handleVerifyLog: TrustState['handleVerifyLog'];
 
     // ui runtime
     handleReset: UiRuntime['handleReset'];

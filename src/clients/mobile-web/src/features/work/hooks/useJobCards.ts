@@ -14,6 +14,7 @@ import {
     assignJobCard,
     startJobCard,
     completeJobCard,
+    verifyForPayout,
     settleJobCard,
     cancelJobCard,
     getFarmJobCards,
@@ -52,6 +53,8 @@ interface UseJobCardsResult {
     assignJobCard: (id: string, req: AssignWorkerRequest) => Promise<string>;
     startJobCard: (id: string) => Promise<string>;
     completeJobCard: (id: string, req: CompleteJobCardRequest) => Promise<string>;
+    /** lane L4b fix round 1 (H-1 / D-89) — the card's payout check (the server's verify-for-payout). */
+    verifyJobCardForPayout: (id: string) => Promise<string>;
     settleJobCard: (id: string, req: SettleJobCardRequest) => Promise<string>;
     cancelJobCard: (id: string, req: CancelJobCardRequest) => Promise<string>;
     refresh: () => void;
@@ -151,6 +154,12 @@ export function useJobCards({ farmId, statusFilter }: UseJobCardsOptions): UseJo
         return jobCardId;
     }, [refresh]);
 
+    const doVerifyForPayout = useCallback(async (id: string) => {
+        const { jobCardId } = await verifyForPayout(id);
+        refresh();
+        return jobCardId;
+    }, [refresh]);
+
     const doSettle = useCallback(async (id: string, req: SettleJobCardRequest) => {
         const { jobCardId } = await settleJobCard(id, req);
         refresh();
@@ -171,6 +180,7 @@ export function useJobCards({ farmId, statusFilter }: UseJobCardsOptions): UseJo
         assignJobCard: doAssign,
         startJobCard: doStart,
         completeJobCard: doComplete,
+        verifyJobCardForPayout: doVerifyForPayout,
         settleJobCard: doSettle,
         cancelJobCard: doCancel,
         refresh,

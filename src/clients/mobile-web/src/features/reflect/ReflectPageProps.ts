@@ -4,7 +4,7 @@
 */
 
 import { DailyLog } from '../logs/logs.types';
-import { CropProfile, LedgerDefaults, LogVerificationStatus, FarmOperator } from '../../types';
+import { CropProfile, LedgerDefaults, FarmOperator } from '../../types';
 import type { PlannedTask } from '../../types';
 import type { SpeakRequestInput } from '../../core/speak/speakStore';
 
@@ -25,8 +25,6 @@ export interface ReflectPageProps {
     onSpeak?: (request: Omit<SpeakRequestInput, 'returnTo'>) => void;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing prop shape (not part of the Activity Feed change); typing it is a separate cleanup
     onUpdateNote?: (logId: string, noteId: string, updates: any) => void;
-    // Trust Layer
-    onVerifyLog?: (logId: string, status: LogVerificationStatus, notes?: string) => void;
     currentOperator?: FarmOperator;
     operators?: FarmOperator[];
     /**

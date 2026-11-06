@@ -62,9 +62,9 @@ internal static class ClientRingContractMirror
     /// <summary>
     /// Mirrors <c>VERIFIED_STATUSES</c> — the set <c>computeDayState</c> consults when
     /// deciding whether a log closes the day. CONFIRMED is deliberately NOT in it:
-    /// <c>ReviewInboxSheet.tsx:40-45</c> still shows a CONFIRMED log as waiting for
-    /// review, so counting it as done would have the ring and the inbox contradicting
-    /// each other about the same log.
+    /// the review list (the server's <c>review</c>, lane L4b) still shows a CONFIRMED log as waiting
+    /// for the owner's मंजूर, so counting it as done would have the ring and the review sheet
+    /// contradicting each other about the same log.
     /// </summary>
     public static bool TheRingCountsIt(string localStatus)
         => localStatus is "VERIFIED" or "APPROVED";

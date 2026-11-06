@@ -17,12 +17,24 @@
  * "This record changed" (D-46 §3): a confirmation the server refused with `ShramSafal.LogVersion.Conflict` parks in
  * this phone's queue (`REJECTED_USER_REVIEW`, tail CONFLICT is permanent). This store reads those rows so the sheet
  * shows the new version beside what he saw, instead of leaving his मंजूर parked silently.
+ *
+ * Lane L4b fix round 1:
+ *  - M-1: a parked conflict belongs to its record's farm (the farm stamped on the queued row); each farm's state holds
+ *    only its own, so a read of one farm never touches another farm's;
+ *  - H-2: each read also carries this farm's decisions still on this phone (`pendingDecisionIds`) and a read ticket
+ *    taken when the read STARTED (`readTicket`), so the sheet hides a card only while its own send is pending and shows
+ *    it again once a list read after the send still carries it;
+ *  - L-4: what he saw is kept per user and farm, and dropped once the record is decided;
+ *  - L-10: a failed refresh marks the older answer as not current (`lastReadFailed`);
+ *  - L-8: a मंजूर sent from the one sheet is announced (`notifyApprovalSent`) so the हजेरी page reads its data again.
  */
 import { fetchLabourData } from '../labour/data/labourClient';
 import type { LabourData, ReviewItem } from '../labour/labour.types';
-import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
+import { mutationQueue, queuedRowFarmId } from '../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../infrastructure/sync/SyncMutationCatalog';
 import { ApprovalSeenStore } from '../../infrastructure/storage/ApprovalSeenStore';
+import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
+import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
 
 export type ApprovalQueueStatus = 'idle' | 'loading' | 'known' | 'unknown';
 
@@ -31,6 +43,8 @@ export interface ApprovalConflict {
     rowId: number;
     logId: string;
     seenVersion: number | null;
+    /** The farm stamped on the queued row (M-1); a row that names no farm belongs to none. */
+    farmId: string | null;
 }
 
 export interface ApprovalQueueState {
@@ -38,19 +52,39 @@ export interface ApprovalQueueState {
     status: ApprovalQueueStatus;
     data: LabourData | null;
     fetchedAt: number | null;
+    /** THIS farm's parked "record changed" confirmations. */
     conflicts: readonly ApprovalConflict[];
+    /** H-2 — records of this farm whose मंजूर / शंका is still on this phone (not sent, or being sent). */
+    pendingDecisionIds: readonly string[];
+    /** H-2 — the ticket of the read that produced `data`, taken when that read started; null before any read. */
+    readTicket: number | null;
+    /** L-10 — the last attempt to read failed: `data` is an older answer, not "now". */
+    lastReadFailed: boolean;
 }
 
 /** The server code a stale confirmation is refused with (`ShramSafalErrors.LogChangedSinceReview`). */
 export const VERSION_CONFLICT_CODE = 'ShramSafal.LogVersion.Conflict';
 const VERIFY_V2 = SyncMutationName.VerifyLogV2;
+const DECISION_MUTATIONS: ReadonlySet<string> = new Set([SyncMutationName.VerifyLog, SyncMutationName.VerifyLogV2]);
+/** A decision still on this phone: waiting to go, going, or failed and to be tried again. */
+const OPEN_DECISION_STATUSES = ['PENDING', 'SENDING', 'FAILED'] as const;
 const STALE_AFTER_MS = 30_000;
 
-const EMPTY: ApprovalQueueState = { farmId: null, status: 'idle', data: null, fetchedAt: null, conflicts: [] };
+const EMPTY: ApprovalQueueState = {
+    farmId: null, status: 'idle', data: null, fetchedAt: null, conflicts: [], pendingDecisionIds: [], readTicket: null,
+    lastReadFailed: false,
+};
 const entries = new Map<string, ApprovalQueueState>();
 const inflight = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
+const sentListeners = new Set<(farmId: string) => void>();
 let focusLogId: string | null = null;
+let readTickets = 0;
+
+/** H-2 — the latest read ticket handed out: a read whose ticket is above this one started after now. */
+export function approvalReadTicket(): number {
+    return readTickets;
+}
 
 function emit(): void {
     listeners.forEach((l) => l());
@@ -88,12 +122,17 @@ export function approvalCountOf(state: ApprovalQueueState): number | null {
     return state.data.review.length;
 }
 
-/** Any fresh read of the farm's labour page carries the same list: it refreshes every door at once. */
+/**
+ * Any fresh read of the farm's labour page carries the same list: it refreshes every door at once. Its ticket is taken
+ * at publish (the page's read began a little earlier); the sheet's own read after a send is the one H-2 relies on.
+ */
 export function publishApprovalQueue(farmId: string, data: LabourData): void {
-    put(farmId, { status: 'known', data, fetchedAt: Date.now() });
+    readTickets += 1;
+    put(farmId, { status: 'known', data, fetchedAt: Date.now(), readTicket: readTickets, lastReadFailed: false });
 }
 
-async function readVersionConflicts(): Promise<ApprovalConflict[]> {
+/** M-1 — this farm's parked "record changed" confirmations only. */
+async function readVersionConflicts(farmId: string): Promise<ApprovalConflict[]> {
     try {
         const rows = await mutationQueue.getRejectedUserReview();
         return rows
@@ -104,33 +143,80 @@ async function readVersionConflicts(): Promise<ApprovalConflict[]> {
                     rowId: r.id as number,
                     logId: typeof payload.logId === 'string' ? payload.logId : '',
                     seenVersion: typeof payload.logVersion === 'number' ? payload.logVersion : null,
+                    farmId: queuedRowFarmId(r) ?? null,
                 };
             })
-            .filter((c) => c.logId !== '');
+            .filter((c) => c.logId !== '' && c.farmId === farmId);
+    } catch {
+        return [];
+    }
+}
+
+/** H-2 — the records of this farm whose मंजूर / शंका is still on this phone. An unreadable queue names none. */
+async function readOpenDecisions(farmId: string): Promise<string[]> {
+    try {
+        const rows = await getDatabase().mutationQueue.where('status').anyOf([...OPEN_DECISION_STATUSES]).toArray();
+        const ids = rows
+            .filter((r) => DECISION_MUTATIONS.has(r.mutationType) && queuedRowFarmId(r) === farmId)
+            .map((r) => {
+                const payload = (r.payload ?? {}) as { logId?: unknown; dailyLogId?: unknown };
+                if (typeof payload.logId === 'string') return payload.logId;
+                return typeof payload.dailyLogId === 'string' ? payload.dailyLogId : '';
+            })
+            .filter((id) => id !== '');
+        return Array.from(new Set(ids));
     } catch {
         return [];
     }
 }
 
 /**
+ * L-4 — what he saw is needed only while the record still waits for him or something of his is parked or on its way
+ * for it; once the server's list no longer carries it (decided), its entry goes.
+ */
+function forgetDecided(farmId: string, data: LabourData, conflicts: readonly ApprovalConflict[], pending: readonly string[]): void {
+    const userId = getSessionUserId();
+    if (!userId) return;
+    const keep = new Set<string>([...data.review.map((r) => r.id), ...conflicts.map((c) => c.logId), ...pending]);
+    ApprovalSeenStore.logIdsOf(userId, farmId)
+        .filter((id) => !keep.has(id))
+        .forEach((id) => ApprovalSeenStore.remove(userId, farmId, id));
+}
+
+/**
  * Reads the farm's list from the server (and this phone's parked "record changed" confirmations). Concurrent calls
  * for one farm share one request. A failed read keeps the last answer when there is one; with none it is `unknown`.
+ * `afterNow` (H-2, after a send): a read already running started before the send, so a NEW read follows it.
  */
-export function refreshApprovalQueue(farmId: string | null | undefined): Promise<void> {
+export function refreshApprovalQueue(farmId: string | null | undefined, options: { afterNow?: boolean } = {}): Promise<void> {
     if (!farmId) return Promise.resolve();
     const running = inflight.get(farmId);
+    if (running && options.afterNow) return running.then(() => refreshApprovalQueue(farmId));
     if (running) return running;
     const prev = getApprovalQueue(farmId);
     if (!prev.data) put(farmId, { status: 'loading' });
+    readTickets += 1;
+    const ticket = readTickets;
     const job = (async () => {
-        const conflicts = await readVersionConflicts();
+        const conflicts = await readVersionConflicts(farmId);
+        const pendingDecisionIds = await readOpenDecisions(farmId);
+        // An answer that STARTED later may have landed first (another door's read, the labour page's publish): this
+        // older read then neither replaces it nor marks it stale.
+        const newerLanded = () => (getApprovalQueue(farmId).readTicket ?? 0) > ticket;
         try {
             // `today` is the lightest window; the review list itself is never windowed (server §8).
             const data = await fetchLabourData(farmId, 'today');
-            put(farmId, { status: 'known', data, fetchedAt: Date.now(), conflicts });
+            if (!newerLanded()) {
+                put(farmId, {
+                    status: 'known', data, fetchedAt: Date.now(), conflicts, pendingDecisionIds, readTicket: ticket, lastReadFailed: false,
+                });
+                forgetDecided(farmId, data, conflicts, pendingDecisionIds);
+            }
         } catch {
-            const now = getApprovalQueue(farmId);
-            put(farmId, { status: now.data ? now.status : 'unknown', conflicts });
+            if (!newerLanded()) {
+                const now = getApprovalQueue(farmId);
+                put(farmId, { status: now.data ? now.status : 'unknown', conflicts, pendingDecisionIds, lastReadFailed: true });
+            }
         } finally {
             inflight.delete(farmId);
         }
@@ -164,6 +250,16 @@ export async function settleVersionConflict(farmId: string | null | undefined, r
     }
 }
 
+/** L-8 — a मंजूर / शंका from the one sheet was sent for this farm: pages that show its records read them again. */
+export function notifyApprovalSent(farmId: string): void {
+    sentListeners.forEach((l) => l(farmId));
+}
+
+export function onApprovalSent(listener: (farmId: string) => void): () => void {
+    sentListeners.add(listener);
+    return () => { sentListeners.delete(listener); };
+}
+
 /** A door that opens the sheet on one record (a job card's linked record) names it here first. */
 export function setApprovalFocus(logId: string | null): void {
     focusLogId = logId;
@@ -195,22 +291,27 @@ export function factsOf(item: ReviewItem): SeenFacts {
     };
 }
 
-export function rememberSeen(item: ReviewItem): void {
-    ApprovalSeenStore.write(item.id, factsOf(item));
+/** L-4 — kept for the signed-in user on this farm only; nothing is kept without both. */
+export function rememberSeen(item: ReviewItem, farmId: string | null | undefined): void {
+    const userId = getSessionUserId();
+    if (userId && farmId) ApprovalSeenStore.write(userId, farmId, item.id, factsOf(item));
 }
 
-export function seenFactsOf(logId: string): SeenFacts | null {
-    return ApprovalSeenStore.read<SeenFacts>(logId);
+export function seenFactsOf(logId: string, farmId: string | null | undefined): SeenFacts | null {
+    const userId = getSessionUserId();
+    return userId && farmId ? ApprovalSeenStore.read<SeenFacts>(userId, farmId, logId) : null;
 }
 
-export function forgetSeen(logId: string): void {
-    ApprovalSeenStore.remove(logId);
+export function forgetSeen(logId: string, farmId: string | null | undefined): void {
+    const userId = getSessionUserId();
+    if (userId && farmId) ApprovalSeenStore.remove(userId, farmId, logId);
 }
 
 /** Test seam: forget every farm's answer. */
 export function resetApprovalQueueForTests(): void {
     entries.clear();
     inflight.clear();
+    sentListeners.clear();
     focusLogId = null;
     emit();
 }

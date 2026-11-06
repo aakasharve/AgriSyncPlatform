@@ -238,16 +238,10 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     logs: data.history,
                     operatorNameById: oversightHeaderInputs.operatorNameById,
                     plotCount: oversightHeaderInputs.plotCount,
-                    unverifiedCount: oversightHeaderInputs.unverifiedCount,
                     yesterdayNotClosed: oversightHeaderInputs.yesterdayNotClosed,
                     // Genuinely unreachable honestly, not fabricated — see
                     // AppHeader.tsx's own doc comment on this field.
                     approvalHolderName: null,
-                    // Finding F7(a) — whether `data.history`/`data.crops`
-                    // above are a measured empty or simply not hydrated
-                    // yet. The strip may not claim "all work is complete"
-                    // from arrays nobody has read.
-                    dataLoaded: data.dataLoaded,
                     attention: attentionSignal,
                 }}
                 // spec: owner-oversight-loop (Task 11) — the weather chip

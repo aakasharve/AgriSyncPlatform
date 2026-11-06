@@ -52,12 +52,21 @@ describe('the sync sheet in Marathi mode shows Marathi', () => {
         setQueue([refused({}), refused({ clientRequestId: 'req-2', mutationType: SyncMutationName.CreateDailyLog, errorCode: 'Some.Unknown.Code', lastError: 'Internal server error' })]);
         render(<SyncStatusDrawer isOpen onClose={vi.fn()} onOpenConflicts={vi.fn()} />);
         expect(screen.getByTestId('sync-reason-req-1')).toHaveTextContent('ही नोंद बदलली आहे — नवीन नोंद पाहून मंजूर करा');
-        expect(screen.getByTestId('sync-reason-req-2')).toHaveTextContent('श्रम सफलने हे स्वीकारलं नाही');
+        expect(screen.getByTestId('sync-reason-req-2')).toHaveTextContent('श्रमसफलने हे स्वीकारलं नाही');
         expect(screen.getByTestId('sync-unsent')).toHaveTextContent('पाठवणे बाकी २');
         const text = document.body.textContent ?? '';
         expect(text).not.toMatch(/This record changed|Internal server error|verify_log_v2|create_daily_log/);
         expect(text).not.toMatch(/Sync Status|Retry|need you|Offline|Never|Sync Now/);
         expect(text).not.toMatch(/अडकल/);
+    });
+
+    it('lane L4b fix round 1 (L-5) — a row that only failed to send (no code) is a send failure, never "refused"', () => {
+        setQueue([refused({ clientRequestId: 'req-3', status: 'FAILED', remedy: 'RETRY', errorCode: undefined, lastError: 'Network Error' })]);
+        render(<SyncStatusDrawer isOpen onClose={vi.fn()} onOpenConflicts={vi.fn()} />);
+        const reason = screen.getByTestId('sync-reason-req-3');
+        expect(reason).toHaveTextContent('पाठवता आलं नाही — नेट आल्यावर पुन्हा पाठवा');
+        expect(reason).not.toHaveTextContent('स्वीकारलं नाही');
+        expect(document.body.textContent).not.toMatch(/Network Error/);
     });
 
     it('in English mode the same row is explained in English (one language at a time)', () => {

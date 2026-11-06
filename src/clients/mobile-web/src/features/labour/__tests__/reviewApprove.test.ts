@@ -323,7 +323,7 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
             open: true, data: dataWith([makeItem('t1', 'Confirmed'), makeItem('t2', 'Confirmed')]), onClose: vi.fn(), onToast: vi.fn(),
         }));
 
-        expect(screen.getByText('2 नोंदी — मंजूर करा')).toBeInTheDocument();
+        expect(screen.getByText('२ नोंदी — मंजूर करा')).toBeInTheDocument();
         expect(screen.queryByText(/टीमच्या/)).toBeNull();
     });
 
@@ -352,7 +352,7 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
 
         expect(screen.getByTestId('review-card-recent-1')).toBeInTheDocument();
         expect(screen.getByTestId('review-card-old-1')).toBeInTheDocument();
-        expect(screen.getByText('2 नोंदी — मंजूर करा')).toBeInTheDocument();
+        expect(screen.getByText('२ नोंदी — मंजूर करा')).toBeInTheDocument();
     });
 
     it('reformats a real backend ISO-date detail (आज) instead of leaking the raw yyyy-MM-dd string', () => {

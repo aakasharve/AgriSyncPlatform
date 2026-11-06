@@ -97,7 +97,7 @@ const LANGUAGES: Language[] = ['en', 'mr'];
 // dfesTranslations.ts (spec §6.1). See oversightTranslations.ts's header
 // comment for the file+line each was transcribed from. Typed against
 // BOTH interfaces so `dfesTranslations[language][key]` below indexes
-// safely — `attention`/`yourFarms`/etc. (OversightTranslations-only keys)
+// safely — `attention` etc. (OversightTranslations-only keys)
 // are deliberately excluded from this list.
 const DFES_SOURCED_KEYS: (keyof OversightTranslations & keyof DfesTranslations)[] = [
     'welcomeBack',
@@ -117,7 +117,7 @@ const GROUP_A_GRADUATED_KEYS: (keyof OversightTranslations)[] = [
     'talliesPeopleUnit',
     'plotsUnit',
     'bandDecisionsHeader',
-    'bandSinceLastLookedHeader',
+    // `bandSinceLastLookedHeader` was here; deleted in lane L4b fix round 1 (it had no reader).
     'sinceLastLookedTail',
     'dayNotClosedLine',
     'seenControlHint',
@@ -142,8 +142,7 @@ const FOUNDER_APPROVED_KEYS: (keyof OversightTranslations)[] = [
     // Founder message 2026-08-26 — 'अंदाजे', his word, overruling
     // `aacdd16c`'s deletion of the day-count tail.
     'approximately',
-    'restState',
-    'waitingSubtitle',
+    // `restState` and `waitingSubtitle` were here; deleted in lane L4b fix round 1 with the strip that showed them.
     'navToday',
     'navMyFarm',
     'navCompare',
@@ -185,8 +184,7 @@ const KEYLESS_BUT_DECLARED_KEYS: (keyof OversightTranslations)[] = [];
 // `mr: ''`. Named as a group so the byte-pinning below addresses them
 // directly, the way Groups A and B are addressed.
 const GRADUATED_2026_08_24_KEYS: (keyof OversightTranslations)[] = [
-    'checkingState',
-    'unknownState',
+    // `checkingState` and `unknownState` were here; deleted in lane L4b fix round 1 with the strip that showed them.
     'unsendableRecordsLine',
 ];
 
@@ -197,6 +195,14 @@ const GRADUATED_2026_08_24_KEYS: (keyof OversightTranslations)[] = [
 // diff. `as string[]` because these are no longer `keyof
 // OversightTranslations` — that is the point of the test.
 const DELETED_2026_08_24_KEYS: string[] = ['recordBarIdle', 'recordBarActive'];
+
+// Lane L4b fix round 1 (review ruling 2) — deleted because nothing reads them: the first five went with the deleted
+// `CanonicalStrip.tsx` (D-3 retired its rest state), the last four were unread before the lane. Asserted absent by
+// name for the same reason as the two above.
+const DELETED_L4B_KEYS: string[] = [
+    'restState', 'checkingState', 'unknownState', 'waitingSubtitle', 'yourFarms',
+    'allFarmsOnTrack', 'bandSinceLastLookedHeader', 'createFarm', 'joinByQr',
+];
 
 // THE ORACLE (finding F7(b)). One literal per key, for EVERY key —
 // `Record<keyof OversightTranslations, string>` makes a missing entry a
@@ -216,16 +222,11 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     activitiesLogged: 'कामे नोंदवली',
     entries: 'कामे',
 
-    // (a) reused from FarmContextSwitcher.tsx / AttentionPage.tsx.
-    yourFarms: 'तुमच्या शेती',
-    createFarm: 'शेती तयार करा',
-    joinByQr: 'QR ने जोडा',
+    // (a) reused from AttentionPage.tsx.
     attention: 'लक्ष द्या',
-    allFarmsOnTrack: 'सगळ्या शेती आज व्यवस्थित आहेत',
 
     // (d) founder-approved — his own words. F7(b): unpinned until now.
     waitingLabel: 'तुमच्यासाठी बाकी',
-    restState: 'आज पर्यन्त सर्व कामे पूर्ण आहेत',
 
     // (d) founder-approved 2026-08-24 — the last three ex-`mr: ''` keys.
     // `unsendableRecordsLine` carries the `{count}` token
@@ -233,8 +234,6 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     // which matches no token and would have printed those nine characters
     // to a farmer. Token corrected, space moved outside the braces, not one
     // Devanagari character changed.
-    checkingState: 'तपासात आहे',
-    unknownState: 'निश्चित सांगता येत नाही की सर्व कामे झाली',
     unsendableRecordsLine: '{count} श्रम सफल पर्यन्त पोहचू शकले नाहीत',
 
     // (b) spec §6.2 placeholders, still pending the founder.
@@ -251,7 +250,6 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     seenControlHint: 'यानं फक्त ‘पाहिलं’ एवढंच कळतं — मंजुरी मिळत नाही.',
     retryAffordance: 'पुन्हा पाठवा',
     bandDecisionsHeader: 'तुम्ही ठरवायचं आहे',
-    bandSinceLastLookedHeader: 'तुम्ही शेवटचं पाहिल्यानंतर',
     sinceLastLookedTail: 'तुम्ही शेवटचं पाहिल्यानंतर — {days} दिवस',
     // (d) founder-supplied 2026-08-26 — the one word that softens the tail
     // above when `boundaryApproximate` is true. His own, transcribed
@@ -264,7 +262,6 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     navToday: 'आजची कामे',
     navMyFarm: 'पूर्ण शेतीचा आढावा',
     navCompare: 'तुलना',
-    waitingSubtitle: 'काही राहिलेल्या कामांकडे तुमचे लक्ष देणे गरजेचे आहे',
     guideGreeting: 'नमस्कार!',
     guideHeadline: 'आज कोणत्या प्लॉटवर काम केलं?',
     guideLine1: 'एक किंवा अनेक प्लॉट निवडा.',
@@ -294,27 +291,6 @@ const EXPECTED_MR: Record<keyof OversightTranslations, string> = {
     plotCountUnitPlural: 'प्लॉट',
     selectedCountUnitSingular: 'निवडला',
     selectedCountUnitPlural: 'निवडलेत',
-};
-
-// English is NOT founder-gated, so it is deliberately left unpinned —
-// except for the two values that make a CLAIM instead of translating one.
-//
-// `restState` is finding F7's English reconciliation: it read "Nothing
-// waiting" while the founder's Marathi in the same slot says work is
-// COMPLETE. One key, two languages, two different statements — an
-// English-reading user and a Marathi-reading user were told different
-// things by the same line. `checkingState` is the state that must exist so
-// neither of them is told either thing before the data is read.
-//
-// `unknownState` (change 2) is pinned for the same reason as those two: it
-// is the strip's third statement about the same fact, and the three must
-// stay mutually consistent — "complete" / "still reading" / "cannot say".
-// It is also the string a Marathi-reading farmer actually sees today, since
-// its `mr` is deliberately empty and reads through to this value.
-const EXPECTED_EN: Partial<Record<keyof OversightTranslations, string>> = {
-    restState: 'All work is complete as of today',
-    checkingState: 'Checking…',
-    unknownState: 'Cannot confirm all work is done',
 };
 
 describe('oversightTranslations — every_key_has_both_mr_and_en', () => {
@@ -459,6 +435,15 @@ describe('oversightTranslations — pending_founder_strings_are_all_declared_key
         }
     });
 
+    it('the nine keys lane L4b fix round 1 deleted stay deleted (nothing reads them)', () => {
+        for (const key of DELETED_L4B_KEYS) {
+            expect(Object.keys(oversightTranslations.mr), `mr still declares ${key}`).not.toContain(key);
+            expect(Object.keys(oversightTranslations.en), `en still declares ${key}`).not.toContain(key);
+            expect([...PENDING_FOUNDER_STRINGS], `${key} is still flagged pending`).not.toContain(key);
+            expect(Object.keys(EXPECTED_MR), `the oracle still pins ${key}`).not.toContain(key);
+        }
+    });
+
     it('no Group A or Group B (2026-08-23 graduated) key is ever flagged pending', () => {
         for (const key of [...GROUP_A_GRADUATED_KEYS, ...GROUP_B_REWORDED_KEYS]) {
             expect(PENDING_FOUNDER_STRINGS.includes(key), `${key} is founder-approved copy and must not be pending`).toBe(false);
@@ -521,7 +506,10 @@ describe('oversightTranslations — every_mr_value_is_byte_pinned (finding F7b)'
         // remaining English dev copy. The COUNT is asserted, not just the
         // loop, so a key added to his list without a matching oracle entry
         // fails here rather than passing vacuously.
-        expect(FOUNDER_APPROVED_KEYS).toHaveLength(25);
+        //
+        // TWENTY-THREE as of lane L4b fix round 1: `restState` and `waitingSubtitle` were deleted with the strip that
+        // showed them (nothing reads them).
+        expect(FOUNDER_APPROVED_KEYS).toHaveLength(23);
         for (const key of FOUNDER_APPROVED_KEYS) {
             expect(oversightTranslations.mr[key], `mr.${key} drifted from the founder's own words`).toBe(EXPECTED_MR[key]);
             expect(oversightTranslations.mr[key].length, `mr.${key} must not be empty`).toBeGreaterThan(0);
@@ -530,17 +518,6 @@ describe('oversightTranslations — every_mr_value_is_byte_pinned (finding F7b)'
                 `${key} is the founder's own copy and must not be flagged pending`,
             ).toBe(false);
         }
-    });
-
-    it('the_english_rest_state_makes_the_same_claim_as_the_founders_marathi', () => {
-        // Finding F7. `en.restState` used to read "Nothing waiting" while
-        // the Marathi beside it asserted that all work is COMPLETE — the
-        // same key telling two users two different things. The Marathi is
-        // founder-authored and untouched; the English moved to match it.
-        for (const [key, value] of Object.entries(EXPECTED_EN)) {
-            expect(oversightTranslations.en[key as keyof OversightTranslations]).toBe(value);
-        }
-        expect(oversightTranslations.en.restState).not.toBe('Nothing waiting');
     });
 });
 
@@ -573,27 +550,12 @@ describe('oversightTranslations — the last three (c) keys, founder-approved 20
         }
     });
 
-    it('restState and unknownState keep his spelling पर्यन्त / आजून untouched', () => {
+    it('unsendableRecordsLine keeps his spelling पर्यन्त untouched', () => {
         // His spelling, not the more common "पर्यंत". Normalising it would
         // be the exact "correction" the Hard Rule forbids, and it is the
         // kind of edit a spell-checking agent makes without noticing.
-        expect(oversightTranslations.mr.restState).toContain('पर्यन्त');
         expect(oversightTranslations.mr.unsendableRecordsLine).toContain('पर्यन्त');
         expect(oversightTranslations.mr.unsendableRecordsLine).not.toContain('पर्यंत');
-    });
-
-    it('unknownState still names only the outcome, never either cause', () => {
-        // The wording is load-bearing: ONE key carries two different
-        // situations — a read that never finished, and a multi-farm account
-        // whose completion claim has no statable subject
-        // (`CanonicalStrip.tsx`'s `farmCount` prop doc). Naming either cause
-        // would make the line false for the other. The founder's Marathi
-        // keeps that property; these assertions stop a future "clarifying"
-        // reword from breaking it.
-        const mr = oversightTranslations.mr.unknownState;
-        expect(mr).not.toContain('शेत');      // no farm/scope named
-        expect(mr).not.toContain('चूक');      // not phrased as a fault
-        expect(mr).not.toContain('इंटरनेट');  // no cause named
     });
 
     it('unsendableRecordsLine substitutes a real count and never promises a retry', () => {
@@ -649,7 +611,6 @@ describe('oversightTranslations — graduated_group_a_and_b_strings_never_fall_b
         // win when it actually exists.
         expect(resolveOversightString('mr', 'welcomeBack')).toBe(oversightTranslations.mr.welcomeBack);
         expect(resolveOversightString('mr', 'waitingLabel')).toBe(oversightTranslations.mr.waitingLabel);
-        expect(resolveOversightString('mr', 'restState')).toBe(oversightTranslations.mr.restState);
     });
 
     it('resolveOversightString never returns a blank label, for any key, in either language', () => {

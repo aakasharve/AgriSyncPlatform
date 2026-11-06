@@ -333,7 +333,11 @@ public sealed class AddLogTaskHandler(
             && logVerificationChanged is not null)
         {
             await logVerificationChanged.HandleAsync(
-                log.Id, log.CurrentVerificationStatus, new UserId(command.ActorUserId), ct);
+                log.Id,
+                log.CurrentVerificationStatus,
+                new UserId(command.ActorUserId),
+                new Work.Handlers.ChangeProvenance(command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+                ct);
         }
 
         // lane MU-3 fix 1 (F5) — the record as the PULL would send it to this person.

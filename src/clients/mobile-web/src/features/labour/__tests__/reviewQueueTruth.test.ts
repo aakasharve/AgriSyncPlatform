@@ -41,6 +41,7 @@ import ReviewSheet from '../components/ReviewSheet';
 import { EMPTY_LABOUR_DATA } from '../labourMock';
 import type { LabourData, ReviewItem } from '../labourMock';
 import { oversightTranslations } from '../../../i18n/oversightTranslations';
+import { toMarathiDigits } from '../marathiDate';
 
 const ENTIRE_FARM = oversightTranslations.mr.entireFarmLabel;
 
@@ -156,7 +157,8 @@ describe('DEFECT 2 — the badge and the list are the same set, and nothing is h
             open: true, data, onClose: vi.fn(), onToast: vi.fn(),
         }));
 
-        expect(screen.getByText(`${data.dashboard.pending} नोंदी — मंजूर करा`)).toBeInTheDocument();
+        // lane L4b fix round 1 (L-6) — the count in Devanagari digits in Marathi mode (the founder's D-1 "२").
+        expect(screen.getByText(`${toMarathiDigits(data.dashboard.pending)} नोंदी — मंजूर करा`)).toBeInTheDocument();
     });
 
     it('never claims the list is empty while unapproved work exists', () => {

@@ -360,7 +360,11 @@ public sealed class ReviseLogContentHandler(
             && logVerificationChanged is not null)
         {
             await logVerificationChanged.HandleAsync(
-                log.Id, log.CurrentVerificationStatus, new UserId(command.ActorUserId), ct);
+                log.Id,
+                log.CurrentVerificationStatus,
+                new UserId(command.ActorUserId),
+                new Work.Handlers.ChangeProvenance(command.ClientRequestId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+                ct);
         }
 
         return Result.Success(await ForReaderAsync(answer, log, command.ActorUserId, now, ct));

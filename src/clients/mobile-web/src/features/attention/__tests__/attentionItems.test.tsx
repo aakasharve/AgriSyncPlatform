@@ -62,7 +62,7 @@ describe('buildAttentionModel — the one list', () => {
             cards: [], scheduledWork: stored([step('a', 'Foliar Spray', 1), step('b', 'Drip Irrigation', 2)]),
             todos: todosOf([task('r', 'पंप दुरुस्तीसाठी फोन करा', TODAY)]), farmId: 'f1', todayKey: TODAY,
         });
-        expect(attentionSummaryMr(model.counts)).toBe('2 कामे उशिराची · 1 आठवण आज');
+        expect(attentionSummaryMr(model.counts)).toBe('२ कामे उशिराची · १ आठवण आज');
         expect(model.total).toBe(model.late.length + model.today.length + model.decide.length);
         expect(model.total).toBe(3);
         expect(mostUrgentLineMr(model)).toBe('ठिबकने पाणी · प्लॉट 2 — 2 दिवस उशीर');
@@ -75,7 +75,7 @@ describe('buildAttentionModel — the one list', () => {
         });
         expect(model.late).toHaveLength(0);
         expect(model.decide.map(i => i.id)).toEqual(['step-m']);
-        expect(attentionSummaryMr(model.counts)).toBe('1 निर्णय बाकी');
+        expect(attentionSummaryMr(model.counts)).toBe('१ निर्णय बाकी');
     });
 
     it('disputes never; late-work cards only when the server sent no step list', () => {
@@ -122,7 +122,7 @@ describe('AttentionStrip — लक्ष द्या\'s preview on आढा�
         const onOpen = vi.fn();
         render(<AttentionStrip tasks={[task('r', 'फोन करा', TODAY)]} crops={[]} onOpen={onOpen} />);
         await waitFor(() => expect(screen.getByTestId('attention-strip')).toBeInTheDocument());
-        expect(screen.getByTestId('attention-strip-summary')).toHaveTextContent('2 कामे उशिराची · 1 आठवण आज');
+        expect(screen.getByTestId('attention-strip-summary')).toHaveTextContent('२ कामे उशिराची · १ आठवण आज');
         expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('3');
         expect(screen.getByTestId('attention-strip-first')).toHaveTextContent('फवारणी · प्लॉट 2 — काल');
         fireEvent.click(screen.getByTestId('attention-strip'));

@@ -22,6 +22,11 @@
  *  - "this record changed" (D-46 §3): a मंजूर the server refused as a stale version shows the new version, the
  *    reason and what changed, and he approves THAT one — nothing parked silently;
  *  - every word in his language (Marathi / English twins, `approvalWords.ts`).
+ *
+ * Lane L4b fix round 1 (review H-2): a card is hidden only while ITS OWN decision is pending — in the undo window, being
+ * sent, or still on this phone (`pendingDecisionIds`) — and comes back once a list read AFTER that send still carries
+ * it (a "this record changed" after a conflict, a record re-opened by a correction after a शंका). It used to stay
+ * hidden for the whole app session, so the changed record and its new version never showed in the same sheet.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Check, MessageSquare, Undo2, Square, CheckSquare } from 'lucide-react';
@@ -38,7 +43,7 @@ import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import type { Language } from '../../../i18n/language';
 import { SYNC_HONESTY_I18N_KEYS } from '../../sync/status/syncHonestyState';
 import { approvalWords, workDateIn, type ApprovalWords } from '../../approval/approvalWords';
-import { rememberSeen, seenFactsOf, forgetSeen, type ApprovalConflict } from '../../approval/approvalQueue';
+import { approvalReadTicket, rememberSeen, seenFactsOf, forgetSeen, type ApprovalConflict } from '../../approval/approvalQueue';
 import { enqueueVerificationSteps, sendVerification, triggerSyncBestEffort } from './reviewSend';
 import { BulkConfirmPanel, ChangedNotice, ConfirmOverlay, DisputeReasonPanel, ReviewFacts, type ConfirmKind } from './ReviewCardParts';
 
@@ -65,6 +70,10 @@ interface Props {
     onConflictSettled?: (rowId: number) => void;
     /** L4b — a door about one record (a job card) puts it first. */
     focusLogId?: string | null;
+    /** L4b fix round 1 (H-2) — records whose मंजूर / शंका is still on this phone: hidden, never "nothing left". */
+    pendingDecisionIds?: readonly string[];
+    /** L4b fix round 1 (H-2) — the read ticket of `data` (`approvalReadTicket` when that read started). */
+    listTicket?: number | null;
     /** Overrides the app language (tests, previews). */
     language?: Language;
 }
@@ -125,14 +134,17 @@ export function isBulkEligible(item: ReviewItem, changed: boolean): boolean {
 
 const ReviewSheet: React.FC<Props> = ({
     open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown, reviewListLoading,
-    conflicts = [], onConflictSettled, focusLogId, language: languageOverride,
+    conflicts = [], onConflictSettled, focusLogId, language: languageOverride, pendingDecisionIds = [], listTicket = null,
 }) => {
     const appLanguage = useOptionalLanguage()?.language;
     const language: Language = languageOverride ?? (appLanguage === 'en' ? 'en' : 'mr');
     const words = approvalWords(language);
     const onPhone = translate(SYNC_HONESTY_I18N_KEYS.ON_PHONE, language);
 
-    const [gone, setGone] = useState<Record<string, boolean>>({});
+    // H-2 — `inFlight`: his decision on this card is in the undo window or being sent. `sentMark`: it was sent when the
+    // read ticket stood at this value; the card stays hidden until a list read after that (a higher ticket) arrives.
+    const [inFlight, setInFlight] = useState<Record<string, boolean>>({});
+    const [sentMark, setSentMark] = useState<Record<string, number>>({});
     const [confirming, setConfirming] = useState<Record<string, ConfirmKind>>({});
     const [undoQueue, setUndoQueue] = useState<UndoEntry[]>([]);
     const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
@@ -144,8 +156,13 @@ const ReviewSheet: React.FC<Props> = ({
     const batchSeqRef = useRef(0);
     const mountedRef = useRef(true);
 
-    /** The whole server list, minus what this session has just acted on; a focused record first. */
-    const visible = data.review.filter((i) => !gone[i.id]);
+    /** The whole server list, minus the cards whose own decision is still pending; a focused record first. */
+    const hiddenForSend = (id: string): boolean =>
+        !!inFlight[id]
+        || pendingDecisionIds.includes(id)
+        || (sentMark[id] !== undefined && (listTicket ?? 0) <= sentMark[id]);
+    const visible = data.review.filter((i) => !hiddenForSend(i.id));
+    const sendingCount = data.review.length - visible.length;
     const items = focusLogId
         ? [...visible.filter((i) => i.id === focusLogId), ...visible.filter((i) => i.id !== focusLogId)]
         : visible;
@@ -171,7 +188,7 @@ const ReviewSheet: React.FC<Props> = ({
                 batch.items.forEach((it) => { delete next[it.id]; });
                 return next;
             });
-            setGone((g) => {
+            setInFlight((g) => {
                 const next = { ...g };
                 batch.items.forEach((it) => { next[it.id] = true; });
                 return next;
@@ -203,18 +220,23 @@ const ReviewSheet: React.FC<Props> = ({
         // He acted on the NEW version of a changed record: its old, refused confirmation is settled (D-46 §3).
         batch.items.forEach((it) => {
             if (!failedIds.has(it.id) && it.conflictRowId !== undefined) onConflictSettled?.(it.conflictRowId);
-            if (!failedIds.has(it.id) && batch.finalStatus === 'disputed') forgetSeen(it.id);
+            if (!failedIds.has(it.id) && batch.finalStatus === 'disputed') forgetSeen(it.id, farmId);
         });
 
         if (!mountedRef.current) return;
 
-        if (failedIds.size > 0) {
-            setGone((g) => {
-                const next = { ...g };
-                failedIds.forEach((id) => { delete next[id]; });
-                return next;
-            });
-        }
+        // H-2 — its send is over: a sent card waits for a list read after now; a failed one is back at once.
+        const mark = approvalReadTicket();
+        setSentMark((m) => {
+            const next = { ...m };
+            batch.items.forEach((it) => { if (!failedIds.has(it.id)) next[it.id] = mark; });
+            return next;
+        });
+        setInFlight((g) => {
+            const next = { ...g };
+            batch.items.forEach((it) => { delete next[it.id]; });
+            return next;
+        });
         onToast(toastFor(batch.kind, failedIds.size, words, onPhone));
         if (failedIds.size < batch.items.length) onApproved?.();
     };
@@ -261,7 +283,7 @@ const ReviewSheet: React.FC<Props> = ({
         const batch: PendingBatch = {
             items: targets.map((t) => {
                 const conflict = conflictOf(t.id);
-                if (finalStatus === 'verified') rememberSeen(t);
+                if (finalStatus === 'verified') rememberSeen(t, farmId);
                 return {
                     id: t.id,
                     status: t.status,
@@ -296,7 +318,7 @@ const ReviewSheet: React.FC<Props> = ({
                 ids.forEach((id) => { delete next[id]; });
                 return next;
             });
-            setGone((g) => {
+            setInFlight((g) => {
                 const next = { ...g };
                 ids.forEach((id) => { next[id] = true; });
                 return next;
@@ -313,7 +335,7 @@ const ReviewSheet: React.FC<Props> = ({
         batchesRef.current.delete(batchId);
         if (batch.timer != null) clearTimeout(batch.timer);
         setUndoQueue((q) => q.filter((e) => e.batchId !== batchId));
-        setGone((g) => {
+        setInFlight((g) => {
             const next = { ...g };
             batch.items.forEach((it) => { delete next[it.id]; });
             return next;
@@ -370,7 +392,7 @@ const ReviewSheet: React.FC<Props> = ({
                 <div className="flex items-center justify-between border-b border-stone-200 px-4 pb-3 pt-2">
                     <div>
                         <h2 className="text-[22px] font-bold text-stone-800">{words.title}</h2>
-                        <p data-testid="review-sheet-count" className="text-[16px] text-stone-500">{items.length ? words.countLine(items.length) : reviewListLoading ? '' : reviewListUnknown ? words.listUnknown : words.empty}</p>
+                        <p data-testid="review-sheet-count" className="text-[16px] text-stone-500">{items.length ? words.countLine(items.length) : reviewListLoading ? '' : reviewListUnknown ? words.listUnknown : sendingCount > 0 ? words.listSending : words.empty}</p>
                     </div>
                     <button type="button" onClick={onClose} aria-label={words.close} className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full bg-stone-100 text-stone-500"><X size={26} /></button>
                 </div>
@@ -395,7 +417,7 @@ const ReviewSheet: React.FC<Props> = ({
                         return (
                             <div key={it.id} data-testid={`review-card-${it.id}`} data-focused={it.id === focusLogId ? 'true' : undefined} className={`review-card-shell shrink-0 rounded-2xl ${kind ? 'is-collapsing' : ''}`}>
                                 <div className={`relative rounded-2xl border bg-white p-3.5 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md ${isSelected ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-stone-200'}`}>
-                                    {changed && <ChangedNotice item={it} seen={seenFactsOf(it.id)} words={words} language={language} />}
+                                    {changed && <ChangedNotice item={it} seen={seenFactsOf(it.id, farmId)} words={words} language={language} />}
                                     <div className="flex items-center gap-3">
                                         <Avatar tone={it.tone} initial={it.initial} size="sm" />
                                         <div className="min-w-0 flex-1">
@@ -437,7 +459,12 @@ const ReviewSheet: React.FC<Props> = ({
                             <p className="mt-1.5 text-[17px] text-stone-500">{words.listUnknownHint}</p>
                         </div>
                     )}
-                    {items.length === 0 && listKnown && (
+                    {items.length === 0 && listKnown && sendingCount > 0 && (
+                        <div data-testid="review-list-sending" className="py-8 text-center">
+                            <p className="text-[20px] font-bold text-stone-800">{words.listSending}</p>
+                        </div>
+                    )}
+                    {items.length === 0 && listKnown && sendingCount === 0 && (
                         <div data-testid="review-list-empty" className="py-8 text-center">
                             <p className="text-[20px] font-bold text-stone-800">{words.empty}</p>
                         </div>

@@ -306,7 +306,12 @@ public sealed class VerifyLogHandler(
 
         await repository.SaveChangesAsync(ct);
 
-        await autoVerifyJobCard.HandleAsync(log.Id, verification.Status, new UserId(command.VerifiedByUserId), ct);
+        await autoVerifyJobCard.HandleAsync(
+            log.Id,
+            verification.Status,
+            new UserId(command.VerifiedByUserId),
+            new ChangeProvenance(command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+            ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),

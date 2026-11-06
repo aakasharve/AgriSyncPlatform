@@ -9,14 +9,18 @@
  *
  * A confirmation the server refused as a stale version whose record no longer waits for anyone's मंजूर (someone else
  * decided it, or it was disputed) is settled here once the list is known — his decision concerned a version that is
- * gone, and the record itself is in the farm's history (my call, reported).
+ * gone, and the record itself is in the farm's history (my call, reported). Lane L4b fix round 1 (M-1): only THIS
+ * farm's parked rows (the queue store keeps each farm's own), and only once the sheet was opened and the list was read
+ * after that — never on a read made while he was not looking.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { DailyLog } from '../../types';
 import ReviewSheet from '../labour/components/ReviewSheet';
 import { EMPTY_LABOUR_DATA } from '../labour/labourMock';
 import { useOptionalFarmContext } from '../../core/session/FarmContext';
-import { refreshApprovalQueue, settleVersionConflict, takeApprovalFocus } from './approvalQueue';
+import {
+    approvalReadTicket, notifyApprovalSent, refreshApprovalQueue, settleVersionConflict, takeApprovalFocus,
+} from './approvalQueue';
 import { useApprovalQueue } from './useApprovalQueue';
 
 export interface ApprovalReviewHostProps {
@@ -35,19 +39,29 @@ export const ApprovalReviewHost: React.FC<ApprovalReviewHostProps> = ({ open, on
     const queue = useApprovalQueue(farmId, { autoRefresh: false });
     const [focusLogId, setFocusLogId] = useState<string | null>(null);
     const [toast, setToast] = useState<string | null>(null);
+    // M-1 — the read ticket when the sheet opened: only a list read after it may settle a parked conflict.
+    const openedAtTicketRef = useRef<number | null>(null);
 
     // Opening reads the list again: the sheet shows what the server holds NOW, the same list as every door's count.
     useEffect(() => {
-        if (!open) return;
+        if (!open) {
+            openedAtTicketRef.current = null;
+            return;
+        }
         setFocusLogId(takeApprovalFocus());
+        openedAtTicketRef.current = approvalReadTicket();
         void refreshApprovalQueue(farmId);
     }, [open, farmId]);
 
     useEffect(() => {
+        const openedAt = openedAtTicketRef.current;
+        if (!open || openedAt === null || queue.readTicket === null || queue.readTicket <= openedAt) return;
         if (queue.status !== 'known' || !queue.data) return;
         const waiting = new Set(queue.data.review.map((r) => r.id));
-        queue.conflicts.filter((c) => !waiting.has(c.logId)).forEach((c) => { void settleVersionConflict(farmId, c.rowId); });
-    }, [queue.status, queue.data, queue.conflicts, farmId]);
+        queue.conflicts
+            .filter((c) => c.farmId === farmId && !waiting.has(c.logId))
+            .forEach((c) => { void settleVersionConflict(farmId, c.rowId); });
+    }, [open, queue.status, queue.data, queue.conflicts, queue.readTicket, farmId]);
 
     useEffect(() => {
         if (!toast) return;
@@ -62,7 +76,12 @@ export const ApprovalReviewHost: React.FC<ApprovalReviewHostProps> = ({ open, on
                 data={queue.data ?? EMPTY_LABOUR_DATA}
                 onClose={onClose}
                 onToast={setToast}
-                onApproved={() => { void refreshApprovalQueue(farmId); }}
+                onApproved={() => {
+                    // H-2 — a read that started after the send, so a card still carried comes back.
+                    void refreshApprovalQueue(farmId, { afterNow: true });
+                    // L-8 — the हजेरी page (and any page showing this farm's records) reads its own data again.
+                    if (farmId) notifyApprovalSent(farmId);
+                }}
                 reviewListUnknown={queue.status === 'unknown' || (queue.status === 'idle' && !queue.data)}
                 reviewListLoading={queue.status === 'loading' && !queue.data}
                 farmId={farmId ?? undefined}
@@ -70,6 +89,8 @@ export const ApprovalReviewHost: React.FC<ApprovalReviewHostProps> = ({ open, on
                 conflicts={queue.conflicts}
                 onConflictSettled={(rowId) => { void settleVersionConflict(farmId, rowId); }}
                 focusLogId={focusLogId}
+                pendingDecisionIds={queue.pendingDecisionIds}
+                listTicket={queue.readTicket}
             />
             {toast && (
                 <div role="status" data-testid="approval-toast" className="fixed inset-x-4 top-4 z-[70] mx-auto max-w-[440px] rounded-2xl bg-stone-900 px-4 py-3 text-center text-[16px] font-bold text-white shadow-xl">

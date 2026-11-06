@@ -17,11 +17,17 @@ import PayoutEligibilityStrip from './PayoutEligibilityStrip';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { workTypeNameIn } from '../../../shared/names/namesIn';
 import { jobCardAmountText } from '../jobCardAmount';
+import { payoutCheckIsDue } from '../payoutCheckWords';
 
 interface JobCardRowProps {
     card: JobCard;
     onAction?: (card: JobCard, action: string) => void;
     onPress?: (card: JobCard) => void;
+    /**
+     * lane L4b fix round 1 (H-1 / CTO D-89) — this seat may take the payout check (the primary account holder, or a
+     * seat holding review money: `mayCheckPayout`). Without it a Completed card offers no "पेआउट तपासा".
+     */
+    mayCheckPayout?: boolean;
 }
 
 const formatDate = (iso: string): string => {
@@ -39,7 +45,7 @@ const getInitials = (name: string): string => {
         .join('');
 };
 
-const getPrimaryAction = (card: JobCard): { label: string; labelMr: string; action: string; color: string } | null => {
+const getPrimaryAction = (card: JobCard, mayCheckPayout: boolean): { label: string; labelMr: string; action: string; color: string } | null => {
     switch (card.status) {
         case 'Draft':
             return { label: 'Assign', labelMr: 'नेमणूक करा', action: 'assign', color: 'bg-stone-800 text-white' };
@@ -48,7 +54,10 @@ const getPrimaryAction = (card: JobCard): { label: string; labelMr: string; acti
         case 'InProgress':
             return { label: 'Complete', labelMr: 'पूर्ण करा', action: 'complete', color: 'bg-blue-600 text-white' };
         case 'Completed':
-            return { label: 'Verify for payout', labelMr: 'पेआउट तपासा', action: 'verify', color: 'bg-emerald-700 text-white' };
+            // lane L4b fix round 1 (H-1) — only where the server would take it: the record approved, a seat it lets pass.
+            return mayCheckPayout && payoutCheckIsDue(card)
+                ? { label: 'Verify for payout', labelMr: 'पेआउट तपासा', action: 'verify', color: 'bg-emerald-700 text-white' }
+                : null;
         case 'VerifiedForPayout':
             return { label: 'Settle now', labelMr: 'आता सेटल करा', action: 'settle', color: 'bg-rose-600 text-white' };
         default:
@@ -56,10 +65,10 @@ const getPrimaryAction = (card: JobCard): { label: string; labelMr: string; acti
     }
 };
 
-const JobCardRow: React.FC<JobCardRowProps> = ({ card, onAction, onPress }) => {
+const JobCardRow: React.FC<JobCardRowProps> = ({ card, onAction, onPress, mayCheckPayout = false }) => {
     // spec I18 — a work type in his language ("Spraying" ↔ "फवारणी"), never uppercase English in Marathi mode.
     const language = useOptionalLanguage()?.language ?? 'mr';
-    const action = getPrimaryAction(card);
+    const action = getPrimaryAction(card, mayCheckPayout);
     const workerName = card.assignedWorkerDisplayName ?? 'Unassigned';
     const initials = card.assignedWorkerDisplayName
         ? getInitials(card.assignedWorkerDisplayName)
@@ -148,9 +157,10 @@ const JobCardRow: React.FC<JobCardRowProps> = ({ card, onAction, onPress }) => {
 
             {/* Footer: eligibility strip + action */}
             <div className="flex items-center justify-between gap-2 flex-wrap">
-                <PayoutEligibilityStrip card={card} />
+                <PayoutEligibilityStrip card={card} language={language === 'en' ? 'en' : 'mr'} />
                 {action && (
                     <button
+                        data-testid={`jobcard-action-${action.action}-${card.id}`}
                         onClick={e => {
                             e.stopPropagation();
                             onAction?.(card, action.action);
@@ -158,7 +168,7 @@ const JobCardRow: React.FC<JobCardRowProps> = ({ card, onAction, onPress }) => {
                         className={`rounded-xl px-3 py-1.5 text-xs font-bold ${action.color} shrink-0`}
                         style={{ fontFamily: "'DM Sans', sans-serif" }}
                     >
-                        {action.label}
+                        {language === 'en' ? action.label : action.labelMr}
                     </button>
                 )}
             </div>

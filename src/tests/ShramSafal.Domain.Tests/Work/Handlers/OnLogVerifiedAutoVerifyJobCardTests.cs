@@ -97,6 +97,30 @@ public sealed class OnLogVerifiedAutoVerifyJobCardTests
         await handler.HandleAsync(log.Id, VerificationStatus.Disputed, AgronomistUserId);
 
         job.Status.Should().Be(JobCardStatus.Completed);
+
+        // Lane L4b fix round 1 (M-2) — the take-back is never silent: one audit row, the seat's role, the record and
+        // the state it is now in.
+        var withdrawn = repo.AuditEvents.Should().ContainSingle(a => a.Action == OnLogVerifiedAutoVerifyJobCard.PayoutReadinessWithdrawnAction).Subject;
+        withdrawn.EntityId.Should().Be(job.Id);
+        withdrawn.ActorUserId.Should().Be(AgronomistUserId);
+        withdrawn.ActorRole.Should().Be(nameof(AppRole.Agronomist));
+        withdrawn.Payload.Should().Contain(log.Id.ToString()).And.Contain("Disputed");
+    }
+
+    /// <summary>Lane L4b fix round 1 (M-2) — a card that was not ready to pay is not "taken back": no audit row.</summary>
+    [Fact]
+    public async Task OnLogDispute_WithACompletedCard_WritesNoWithdrawal()
+    {
+        var (job, log) = BuildCompletedJobCardAndVerifiedLog();
+        var repo = new FakeAutoVerifyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
+        var handler = new OnLogVerifiedAutoVerifyJobCard(
+            repo, new FixedClock(Now.AddHours(4)),
+            NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
+
+        await handler.HandleAsync(log.Id, VerificationStatus.Disputed, AgronomistUserId);
+
+        job.Status.Should().Be(JobCardStatus.Completed);
+        repo.AuditEvents.Should().BeEmpty();
     }
 
     [Fact]

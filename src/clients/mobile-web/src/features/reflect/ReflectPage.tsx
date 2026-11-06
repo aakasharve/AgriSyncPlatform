@@ -109,10 +109,6 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     onUpdateTask,
     onAddTask,
     onSaveTask,
-    // `onVerifyLog` is still declared on `ReflectPageProps` and still passed by `core/navigation/mainView.tsx`,
-    // but nothing on this page calls it: its only consumer was `ReviewInbox`'s Approve button, removed because it
-    // enqueued `verify_log_v2`, which the server answers with MUTATION_TYPE_UNIMPLEMENTED (see `ReviewInbox.tsx`).
-    // Delete both together when approval is re-enabled or retired. spec: owner-oversight-loop
     operators = [],
     sessionUserId = null,
     farmRole = null,

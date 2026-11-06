@@ -221,25 +221,17 @@ const PreviewMain: React.FC<PreviewMainProps> = (props) => {
                     // `?waiting=none` (see this file's header) zeroes every
                     // input `buildOversightModel` turns into a waiting item
                     // — an empty `logs` array (no people/unattributed rows),
-                    // `unverifiedCount: 0`, `yesterdayNotClosed: false` —
+                    // `yesterdayNotClosed: false` (the approval count is the farm's server list) —
                     // without touching `history` itself, which the main
                     // views below still render unmodified either way.
                     logs: IS_ZERO_WAITING_PREVIEW ? [] : history,
                     operatorNameById: oversightHeaderInputs.operatorNameById,
                     plotCount: oversightHeaderInputs.plotCount,
-                    unverifiedCount: IS_ZERO_WAITING_PREVIEW ? 0 : oversightHeaderInputs.unverifiedCount,
                     yesterdayNotClosed: IS_ZERO_WAITING_PREVIEW ? false : oversightHeaderInputs.yesterdayNotClosed,
                     // Same honest `null` AppContent.tsx passes — naming a
                     // delegate needs a server-governed permission grant this
                     // preview (and the shipped app) cannot honestly assert.
                     approvalHolderName: null,
-                    // Finding F7(a) — this preview's data is a SYNCHRONOUS
-                    // in-memory fixture (`previewAppFixtures.ts`), already
-                    // fully present at first render, so `true` here is a
-                    // measured fact about this tree, not a default. It is
-                    // what keeps `?waiting=none` able to show the founder
-                    // the real rest state.
-                    dataLoaded: true,
                 }}
                 // spec: owner-oversight-loop (Task 11) — same seeded honest
                 // "no-location" weather stub `usePreviewRouterCtx` already

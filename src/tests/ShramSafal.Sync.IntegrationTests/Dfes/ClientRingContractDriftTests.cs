@@ -104,8 +104,8 @@ public sealed class ClientRingContractDriftTests(Xunit.Abstractions.ITestOutputH
             "this is the whole wave-1.3 fix: the server lands the owner's log on Verified " +
             "precisely because the ring already counts VERIFIED");
         counted.Should().NotContain("CONFIRMED",
-            "ReviewInboxSheet.tsx:40-45 lists a CONFIRMED log as still awaiting review — if the " +
-            "ring counted it too, two screens would disagree about the same log");
+            "the review list (the server's, lane L4b) still lists a CONFIRMED log as awaiting the owner's " +
+            "मंजूर — if the ring counted it too, two screens would disagree about the same log");
     }
 
     // ── Parsing the client source ────────────────────────────────────────────

@@ -133,11 +133,6 @@ const ALREADY_VERIFIED: DailyLog['verification'] = {
     required: true,
 };
 
-const NO_APPROVAL_REQUIRED: DailyLog['verification'] = {
-    status: LogVerificationStatus.DRAFT,
-    required: false,
-};
-
 beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(FROZEN_NOW);
@@ -209,53 +204,8 @@ describe('buildOversightHeaderInputs — operator names (spec §P-F, no fabricat
     });
 });
 
-describe('buildOversightHeaderInputs — outstanding approvals (spec §3 decision row)', () => {
-    it('counts only records whose approval is REQUIRED and still outstanding', () => {
-        const history = [
-            log({ id: 'log-1', date: TODAY, verification: NEEDS_APPROVAL, createdByOperatorId: 'op-ramesh' }),
-            log({ id: 'log-2', date: TODAY, verification: NEEDS_APPROVAL }),
-            log({ id: 'log-3', date: TODAY, verification: ALREADY_VERIFIED, createdByOperatorId: 'op-ramesh' }),
-            log({ id: 'log-4', date: TODAY, verification: NO_APPROVAL_REQUIRED }),
-            log({ id: 'log-5', date: TODAY }),
-        ];
-
-        const result = buildOversightHeaderInputs(history, CROPS, OPERATORS, []);
-
-        // Only log-1 and log-2: required AND not yet verified. A verified
-        // one, a not-required one and one with no verification block at all
-        // are all excluded.
-        expect(result.unverifiedCount).toBe(2);
-    });
-
-    it('counts an outstanding record whose creator was never captured — unknown is not none', () => {
-        const history = [log({ id: 'log-nobody', date: TODAY, verification: NEEDS_APPROVAL })];
-
-        const result = buildOversightHeaderInputs(history, CROPS, OPERATORS, []);
-
-        expect(result.unverifiedCount).toBe(1);
-    });
-
-    it('counts outstanding records from every date, not just today', () => {
-        const history = [
-            log({ id: 'log-old', date: '2026-07-01', verification: NEEDS_APPROVAL }),
-            log({ id: 'log-yesterday', date: YESTERDAY, verification: NEEDS_APPROVAL }),
-            log({ id: 'log-today', date: TODAY, verification: NEEDS_APPROVAL }),
-        ];
-
-        const result = buildOversightHeaderInputs(history, CROPS, OPERATORS, []);
-
-        expect(result.unverifiedCount).toBe(3);
-    });
-
-    it('reports zero when every required approval has been given', () => {
-        const history = [
-            log({ id: 'log-1', date: TODAY, verification: ALREADY_VERIFIED }),
-            log({ id: 'log-2', date: YESTERDAY, verification: ALREADY_VERIFIED }),
-        ];
-
-        expect(buildOversightHeaderInputs(history, CROPS, OPERATORS, []).unverifiedCount).toBe(0);
-    });
-});
+// lane L4b fix round 1 — "outstanding approvals" (`unverifiedCount`) was tested here. The phone's own tally was deleted:
+// the drawer's approval row is the farm's ONE server count (`approvalQueue`, founder D-40 §1; its own tests).
 
 describe('buildOversightHeaderInputs — yesterday not closed (spec §4.2)', () => {
     it('is TRUE when yesterday still holds an unverified record', () => {
@@ -327,14 +277,13 @@ describe('buildOversightHeaderInputs — the empty case', () => {
         expect(result).toEqual({
             plotCount: 0,
             operatorNameById: {},
-            unverifiedCount: 0,
             yesterdayNotClosed: false,
         });
     });
 });
 
 describe('buildOversightHeaderInputs — a whole realistic farm at once', () => {
-    it('derives all four values together from one history, and none of them is zero', () => {
+    it('derives all three values together from one history, and none of them is zero', () => {
         // The end-to-end shape the drawer actually renders: yesterday left
         // unfinished, two approvals outstanding, four plots, two named
         // people — plus one record nobody was recorded for.
@@ -350,7 +299,6 @@ describe('buildOversightHeaderInputs — a whole realistic farm at once', () => 
         expect(result).toEqual({
             plotCount: 4,
             operatorNameById: { 'op-purvesh': 'पुर्वेश', 'op-ramesh': 'रमेश' },
-            unverifiedCount: 2,
             yesterdayNotClosed: true,
         });
     });

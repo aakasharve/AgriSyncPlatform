@@ -65,6 +65,7 @@ import AttendanceContradictionPrompt from './AttendanceContradictionPrompt';
 import RefusedLabourNotice from './RefusedLabourNotice';
 import { openApprovalReview } from '../../approval/openApprovalReview';
 import { useApprovalQueue } from '../../approval/useApprovalQueue';
+import { onApprovalSent } from '../../approval/approvalQueue';
 import FarmInviteQrSheet from '../../onboarding/qr/FarmInviteQrSheet';
 import { BOTTOM_BAR_CLEARANCE } from '../../../shared/utils/bottomBar';
 import { canTakeManualAttendance } from '../attendanceDoor';
@@ -234,6 +235,9 @@ export const LabourFeature: React.FC<{
     // lane L4b (D-40 §1) — the तपासा badge is the ONE list's size (the same number every door shows), refreshed by any
     // door's मंजूर; this page's own read feeds the same list (`useLabourState` publishes it).
     const approvalQueue = useApprovalQueue(farmId, { autoRefresh: false });
+    // lane L4b fix round 1 (L-8) — a मंजूर / शंका sent from the one sheet changes this page's own data (its marks and
+    // statuses): read it again, as it did when the sheet lived inside this page. Another farm's decision does not.
+    useEffect(() => onApprovalSent((sentFarmId) => { if (sentFarmId === farmId) refresh(); }), [farmId, refresh]);
     const reviewBadgeData = approvalQueue.status === 'known' && approvalQueue.data
         ? { ...data, dashboard: { ...data.dashboard, pending: approvalQueue.data.review.length } }
         : data;

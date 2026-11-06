@@ -49,6 +49,8 @@ export interface SyncDrawerWords {
     minutesAgo: (n: number) => string;
     hoursAgo: (n: number) => string;
     unknownError: string;
+    /** lane L4b fix round 1 (L-5) — a row with no refusal code only failed to SEND: never "refused". */
+    sendFailed: string;
 }
 
 const plural = (n: number, one: string, many: string) => (n > 1 ? many : one);
@@ -90,6 +92,7 @@ const EN: SyncDrawerWords = {
     minutesAgo: (n) => `${n}m ago`,
     hoursAgo: (n) => `${n}h ago`,
     unknownError: 'Unknown error',
+    sendFailed: 'Could not send — it goes again when you have internet', // PROPOSED
 };
 
 const m = (n: number) => numberIn(n, 'mr');
@@ -107,7 +110,7 @@ const MR: SyncDrawerWords = {
     canBeSentAndNeedYou: (s, n) => `${m(s)} पाठवता येतील · ${m(n)} तुम्ही पाहायचे`, // PROPOSED
     retryAll: 'पुन्हा पाठवा',
     retrying: 'पाठवत आहे…', // PROPOSED
-    refusedHint: 'श्रम सफलने हे स्वीकारलं नाही. उघडून दुरुस्त करा, पुन्हा पाठवा किंवा काढून टाका.', // PROPOSED
+    refusedHint: 'श्रमसफलने हे स्वीकारलं नाही. उघडून दुरुस्त करा, पुन्हा पाठवा किंवा काढून टाका.', // PROPOSED (brand as the founder writes it, D-36)
     review: 'उघडा', // PROPOSED
     retry: 'पुन्हा पाठवा',
     sending: 'पाठवत आहे…', // PROPOSED
@@ -130,7 +133,8 @@ const MR: SyncDrawerWords = {
     secondsAgo: (n) => `${m(n)} सेकंदांपूर्वी`, // PROPOSED
     minutesAgo: (n) => `${m(n)} मिनिटांपूर्वी`, // PROPOSED
     hoursAgo: (n) => `${m(n)} तासांपूर्वी`, // PROPOSED
-    unknownError: 'श्रम सफलने हे स्वीकारलं नाही', // PROPOSED
+    unknownError: 'श्रमसफलने हे स्वीकारलं नाही', // PROPOSED (brand as the founder writes it, D-36)
+    sendFailed: 'पाठवता आलं नाही — नेट आल्यावर पुन्हा पाठवा', // PROPOSED
 };
 
 export function syncDrawerWords(language: Language | null | undefined): SyncDrawerWords {
@@ -164,7 +168,9 @@ const REASON_BY_CODE: Record<string, { mr: string; en: string }> = {
         en: 'This record changed — look at the new version and approve it',
     },
     'ShramSafal.Forbidden': { mr: 'हे करण्याची परवानगी तुम्हाला नाही', en: 'You do not have permission for this' },
-    'ShramSafal.RecordAudienceClosed': { mr: 'ही नोंद तुम्हाला दाखवली जात नाही', en: 'This record is not shown to you' },
+    // lane L4b fix round 1 — the server's code is `ShramSafal.RecordAudience.Forbidden` (`RecordAudienceClosed` is its
+    // C# name); the old key never matched.
+    'ShramSafal.RecordAudience.Forbidden': { mr: 'ही नोंद तुम्हाला दाखवली जात नाही', en: 'This record is not shown to you' },
     'ShramSafal.InvalidVerificationReason': { mr: 'शंकेचं कारण सांगावं लागतं', en: 'A doubt needs a reason' },
     'ShramSafal.VerificationTransitionNotAllowedForRole': { mr: 'या नोंदीवर आता हे करता येत नाही', en: 'This cannot be done on this record now' },
     'ShramSafal.DailyLogNotFound': { mr: 'ही नोंद सापडली नाही', en: 'This record was not found' },
@@ -174,9 +180,12 @@ const REASON_BY_CODE: Record<string, { mr: string; en: string }> = {
 /**
  * The row's reason in his language. Marathi: by code, or a plain sentence — NEVER the server's English text.
  * English: by code, else the server's own (English) message, else "Unknown error".
+ * Lane L4b fix round 1 (L-5): a row that carries NO code was never refused by the server — it only failed to send (no
+ * network, a timeout, past the retry cap) — so it gets the send-failure line in both languages, never "refused".
  */
 export function reasonForRow(row: { errorCode?: string; lastError?: string }, language: Language | null | undefined): string {
-    const known = row.errorCode ? REASON_BY_CODE[row.errorCode] : undefined;
+    if (!row.errorCode) return language === 'en' ? EN.sendFailed : MR.sendFailed;
+    const known = REASON_BY_CODE[row.errorCode];
     if (language === 'en') return known?.en ?? (row.lastError || EN.unknownError);
     return known?.mr ?? MR.unknownError;
 }
