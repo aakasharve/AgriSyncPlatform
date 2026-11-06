@@ -117,6 +117,23 @@ const csOutPath = fileURLToPath(new URL('../../src/apps/ShramSafal/ShramSafal.Ap
 await mkdir(dirname(csOutPath), { recursive: true });
 await writeFile(csOutPath, csLines.join('\n'), 'utf8');
 
+// ---------- Input reference data (spec dfes-input-truth-and-mix-check-2026-11-06, lane IT1) ----------
+// The catalogue and the mixing rules live ONCE in reference/inputs/. Copied byte-for-byte (no parse,
+// no re-serialise) to the phone and to the server domain, which embeds them as resources.
+const inputCopies = [
+  ['catalog.json', '../../src/clients/mobile-web/src/domain/inputs/generated/catalog.json'],
+  ['mix-rules.json', '../../src/clients/mobile-web/src/domain/inputs/generated/mixRules.json'],
+  ['catalog.json', '../../src/apps/ShramSafal/ShramSafal.Domain/Inputs/Generated/catalog.json'],
+  ['mix-rules.json', '../../src/apps/ShramSafal/ShramSafal.Domain/Inputs/Generated/mix-rules.json'],
+];
+for (const [ref, out] of inputCopies) {
+  const bytes = await readFile(new URL(`../reference/inputs/${ref}`, import.meta.url));
+  const outPath = fileURLToPath(new URL(out, import.meta.url));
+  await mkdir(dirname(outPath), { recursive: true });
+  await writeFile(outPath, bytes);
+  console.log(`Wrote: ${outPath}`);
+}
+
 console.log(`Wrote: ${tsOutPath}`);
 console.log(`Wrote: ${csOutPath}`);
 console.log(`OK — generated ${json.mutationTypes.length} mutations across TS + C#.`);

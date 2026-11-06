@@ -1,0 +1,75 @@
+{
+  "version": "mix-rules-1",
+  "rules": [
+    {
+      "id": "R1",
+      "verdict": "never",
+      "a": { "tag": "calcium-source" },
+      "b": { "tag": "phosphate-source" },
+      "appliesTo": ["fertigation", "spray"],
+      "why": {
+        "mr": "कॅल्शियम आणि फॉस्फेट मिळून घट्ट साका बनतो. नळ्या आणि फिल्टर बंद होऊ शकतात आणि पिकाला दोन्ही खतं कमी मिळतात.",
+        "en": "Calcium and phosphate together form a hard deposit. Pipes and filters can block, and the crop gets less of both fertilisers."
+      },
+      "nowDo": {
+        "mr": "टाकी, पंप आणि फिल्टरमध्ये साका दिसतो का ते पाहा. असेल तर धुवा.",
+        "en": "Check the tank, pump and filter for a deposit. If there is one, wash it out."
+      },
+      "nextTime": {
+        "mr": "पुढच्या वेळी कॅल्शियम असलेलं खत वेगळ्या टाकीतून किंवा वेगळ्या वेळी द्या.",
+        "en": "Next time, give the calcium fertiliser from a separate tank or at a separate time."
+      },
+      "sources": [
+        {
+          "title": "How to Reduce Clogging Problems in Fertigation (UF/IFAS EDIS HS1202, Liu and McAvoy, 2012)",
+          "publisher": "University of Florida, IFAS Extension (EDIS)",
+          "url": "https://edis.ifas.ufl.edu/publication/HS1202",
+          "retrievedOn": "2026-11-06"
+        },
+        {
+          "title": "Maintenance of Microirrigation Systems: Interactions which can cause precipitation",
+          "publisher": "University of California Agriculture and Natural Resources (UC ANR)",
+          "url": "https://www.ucanr.edu/site/maintenance-microirrigation-systems/interactions-which-can-cause-precipitation",
+          "retrievedOn": "2026-11-06"
+        }
+      ],
+      "reviewedBy": null,
+      "reviewedOn": null
+    },
+    {
+      "id": "R2",
+      "verdict": "never",
+      "a": { "tag": "calcium-source" },
+      "b": { "tag": "sulphate-source" },
+      "appliesTo": ["fertigation", "spray"],
+      "why": {
+        "mr": "कॅल्शियम आणि सल्फेट मिळून घट्ट साका बनतो. नळ्या आणि फिल्टर बंद होऊ शकतात आणि पिकाला दोन्ही खतं कमी मिळतात.",
+        "en": "Calcium and sulphate together form a hard deposit. Pipes and filters can block, and the crop gets less of both fertilisers."
+      },
+      "nowDo": {
+        "mr": "टाकी, पंप आणि फिल्टरमध्ये साका दिसतो का ते पाहा. असेल तर धुवा.",
+        "en": "Check the tank, pump and filter for a deposit. If there is one, wash it out."
+      },
+      "nextTime": {
+        "mr": "पुढच्या वेळी कॅल्शियम असलेलं खत वेगळ्या टाकीतून किंवा वेगळ्या वेळी द्या.",
+        "en": "Next time, give the calcium fertiliser from a separate tank or at a separate time."
+      },
+      "sources": [
+        {
+          "title": "Fertilizer Compatibility",
+          "publisher": "Purdue University Vegetable Crops Hotline",
+          "url": "https://vegcropshotline.org/article/fertilizer-compatibility/",
+          "retrievedOn": "2026-11-06"
+        },
+        {
+          "title": "SASRI Information Sheet 5.6",
+          "publisher": "South African Sugarcane Research Institute (SASRI)",
+          "url": "https://sasri.org.za/wp-content/uploads/Information_Sheets/IS_5.6-Irrig-Chemigation-chemicals.pdf",
+          "retrievedOn": "2026-11-06"
+        }
+      ],
+      "reviewedBy": null,
+      "reviewedOn": null
+    }
+  ]
+}

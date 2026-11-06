@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\AgriSync.SharedKernel\AgriSync.SharedKernel.csproj" />
     <ProjectReference Include="..\..\..\AgriSync.BuildingBlocks\AgriSync.BuildingBlocks.csproj" />
+    <EmbeddedResource Include="Inputs\Generated\*.json" />
   </ItemGroup>
 
   <PropertyGroup>
