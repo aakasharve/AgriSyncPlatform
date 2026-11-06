@@ -99,12 +99,13 @@ export interface ApprovalWords {
     unsentChip: (n: number) => string;
     jobCardPending: string;
     // ── lane L4b fix round 1 ──
-    /** H-2 — the list's only records are his own decisions still on this phone: never "nothing left". */
+    /**
+     * H-2 — the list's only records are his own decisions still on this phone: never "nothing left". Fix round 2
+     * (L-d): neutral — a row past the retry cap or held for the plan is not "being sent".
+     */
     listSending: string;
-    /** M-3 (D-40 "trial expiry explained with a working action") — a मंजूर held for the farm's subscription. */
+    /** M-3 (D-40) — a मंजूर held for the farm's subscription (a plain line; fix round 2, N-2). */
     heldApprovals: string;
-    /** M-3 — the way to the subscription screen. */
-    heldApprovalsOpen: string;
 }
 
 const MR: ApprovalWords = {
@@ -158,9 +159,8 @@ const MR: ApprovalWords = {
     approvalChip: (n) => `मंजुरीसाठी ${numberIn(n, 'mr')}`,
     unsentChip: (n) => `पाठवणे बाकी ${numberIn(n, 'mr')}`,
     jobCardPending: 'मंजुरी बाकी — पाहा', // PROPOSED
-    listSending: 'तुमचे निर्णय या फोनवर आहेत — पाठवले जात आहेत', // PROPOSED
+    listSending: 'तुमचे निर्णय या फोनवर आहेत', // PROPOSED
     heldApprovals: 'मंजुरीसाठी सदस्यता सुरू असावी लागते', // PROPOSED
-    heldApprovalsOpen: 'सदस्यता पाहा', // PROPOSED
 };
 
 const EN: ApprovalWords = {
@@ -214,9 +214,8 @@ const EN: ApprovalWords = {
     approvalChip: (n) => `For approval ${n}`, // PROPOSED
     unsentChip: (n) => `Not sent yet ${n}`, // PROPOSED
     jobCardPending: 'Approval pending — look', // PROPOSED
-    listSending: 'Your decisions are on this phone — being sent', // PROPOSED
+    listSending: 'Your decisions are on this phone', // PROPOSED
     heldApprovals: 'Approvals need an active subscription', // PROPOSED
-    heldApprovalsOpen: 'See subscription', // PROPOSED
 };
 
 export function approvalWords(language: Language | null | undefined): ApprovalWords {

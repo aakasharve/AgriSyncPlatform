@@ -166,6 +166,8 @@ export const DataSourceProvider: React.FC<{ children: React.ReactNode }> = ({ ch
                     clearLabourReadoutsExcept(session.userId);
                     // lane L4b fix round 1 (L-4) — and what anyone else saw in the approval sheet.
                     ApprovalSeenStore.purgeExceptUser(session.userId);
+                    // lane L4b fix round 2 (L-b) — and the unscoped keys an earlier build wrote.
+                    ApprovalSeenStore.dropUnscoped();
                     // 7-day cap on cached Labour names: purge expired copies at boot.
                     purgeExpiredLabourCaches();
                     await settleOwnershipClaims();

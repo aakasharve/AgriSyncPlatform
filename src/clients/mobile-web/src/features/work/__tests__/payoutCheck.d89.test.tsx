@@ -88,6 +88,29 @@ describe('"पेआउट तपासा" is the real payout step, for the sea
         expect(screen.getByTestId('jobcard-action-verify-card-0001')).toBeInTheDocument();
     });
 
+    // lane L4b fix round 2 (L-e) — the server now sends the code in the 403's body, so the record-closed words can show.
+    it.each([
+        ['ShramSafal.RecordAudience.Forbidden', 'ही नोंद तुमच्यासाठी उघडी नाही'],
+        ['ShramSafal.JobCardRoleNotAllowed', 'पेआउट तपासण्याची परवानगी तुम्हाला नाही'],
+    ])('a 403 carrying %s reaches the card as its own words', async (code, words) => {
+        h.cards = [completed({ linkedDailyLogStatus: 'Verified' })];
+        h.verify.mockImplementation(async () => {
+            const { verifyForPayout } = await vi.importActual<typeof import('../data/jobCardsClient')>('../data/jobCardsClient');
+            const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: code, message: 'Forbidden.' }), { status: 403 }));
+            vi.stubGlobal('fetch', fetchMock);
+            try {
+                return await verifyForPayout('card-0001');
+            } finally {
+                vi.unstubAllGlobals();
+            }
+        });
+        render(<JobCardsPage />);
+        fireEvent.click(screen.getByTestId('jobcard-action-verify-card-0001'));
+        const said = await screen.findByTestId('jobcard-refusal');
+        expect(said).toHaveTextContent(words);
+        expect(said.textContent).not.toMatch(/Forbidden|403/);
+    });
+
     it('a refusal is said in Marathi by its code, never the server English', async () => {
         h.cards = [completed({ linkedDailyLogStatus: 'Verified' })];
         h.verify.mockRejectedValue(new JobCardRefusal('ShramSafal.JobCardRoleNotAllowed', 403));

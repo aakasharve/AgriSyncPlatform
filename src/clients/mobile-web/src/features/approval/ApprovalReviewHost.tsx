@@ -55,13 +55,14 @@ export const ApprovalReviewHost: React.FC<ApprovalReviewHostProps> = ({ open, on
 
     useEffect(() => {
         const openedAt = openedAtTicketRef.current;
-        if (!open || openedAt === null || queue.readTicket === null || queue.readTicket <= openedAt) return;
+        // M-1 / N-1 — only the sheet's own facts read after it opened settle anything (a publish carries none).
+        if (!open || openedAt === null || queue.factsTicket === null || queue.factsTicket <= openedAt) return;
         if (queue.status !== 'known' || !queue.data) return;
         const waiting = new Set(queue.data.review.map((r) => r.id));
         queue.conflicts
             .filter((c) => c.farmId === farmId && !waiting.has(c.logId))
             .forEach((c) => { void settleVersionConflict(farmId, c.rowId); });
-    }, [open, queue.status, queue.data, queue.conflicts, queue.readTicket, farmId]);
+    }, [open, queue.status, queue.data, queue.conflicts, queue.factsTicket, farmId]);
 
     useEffect(() => {
         if (!toast) return;
@@ -90,7 +91,7 @@ export const ApprovalReviewHost: React.FC<ApprovalReviewHostProps> = ({ open, on
                 onConflictSettled={(rowId) => { void settleVersionConflict(farmId, rowId); }}
                 focusLogId={focusLogId}
                 pendingDecisionIds={queue.pendingDecisionIds}
-                listTicket={queue.readTicket}
+                listTicket={queue.factsTicket}
             />
             {toast && (
                 <div role="status" data-testid="approval-toast" className="fixed inset-x-4 top-4 z-[70] mx-auto max-w-[440px] rounded-2xl bg-stone-900 px-4 py-3 text-center text-[16px] font-bold text-white shadow-xl">

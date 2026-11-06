@@ -17,8 +17,9 @@
  *
  * Lane L4b fix round 1:
  *  - M-3 (D-40 "trial expiry explained with a working action"): a मंजूर the server holds for the farm's subscription is
- *    not "पाठवणे बाकी"; it is its own line, "मंजुरीसाठी सदस्यता सुरू असावी लागते", which opens the farm's existing
- *    subscription / trial screen when this seat may see it (the primary account holder) — a plain line otherwise;
+ *    not "पाठवणे बाकी"; it is its own line, "मंजुरीसाठी सदस्यता सुरू असावी लागते". Fix round 2 (re-review 2 N-2,
+ *    orchestrator ruling): a plain line with NO button, in both languages, until the billing / trial lane gives it a real
+ *    action — the billing page is English-only and its "Renew" only pops an alert (P5);
  *  - L-6: every count in Devanagari digits in Marathi mode;
  *  - L-10: after a failed refresh the rest line of an OLDER read is not shown (the list is "not known" now), and the
  *    drawer button says how fresh the picture is (its aria-label, as the old strip's did).
@@ -47,14 +48,12 @@ export interface StripSignalsProps {
     onOpenWaiting: () => void;
     /** The sync cursor the picture is "up to" (`useSyncQueueStatus().lastSyncAt`); null = not known. */
     lastSyncAt?: string | null;
-    /** Opens the farm's subscription / trial screen; absent = this seat cannot open it (the line has no button). */
-    onOpenSubscription?: () => void;
 }
 
 const chipBase = 'flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-extrabold';
 
 const StripSignals: React.FC<StripSignalsProps> = ({
-    language, farmId, needsYouCount, attention, onOpenSync, onOpenAttention, onOpenWaiting, lastSyncAt = null, onOpenSubscription,
+    language, farmId, needsYouCount, attention, onOpenSync, onOpenAttention, onOpenWaiting, lastSyncAt = null,
 }) => {
     const words = approvalWords(language);
     const approval = useApprovalQueue(farmId);
@@ -96,18 +95,12 @@ const StripSignals: React.FC<StripSignalsProps> = ({
                         <span>{formatOversightTemplate(resolveOversightString(language, 'failedSends'), { count: numberIn(needsYouCount, language) })}</span>
                     </button>
                 )}
-                {showHeld && (onOpenSubscription ? (
-                    <button type="button" onClick={onOpenSubscription} data-testid="strip-held-approvals" aria-label={`${words.heldApprovals} — ${words.heldApprovalsOpen}`}
-                        className={`${chipBase} border-violet-200 bg-violet-50 text-violet-900`}>
-                        <CreditCard size={16} aria-hidden="true" className="shrink-0" />
-                        <span>{words.heldApprovals}</span>
-                    </button>
-                ) : (
+                {showHeld && (
                     <span data-testid="strip-held-approvals" className={`${chipBase} border-violet-200 bg-violet-50 text-violet-900`}>
                         <CreditCard size={16} aria-hidden="true" className="shrink-0" />
                         <span>{words.heldApprovals}</span>
                     </span>
-                ))}
+                )}
                 {showAttention && attention && (
                     <button type="button" onClick={onOpenAttention} data-testid="strip-attention" className={`${chipBase} border-amber-200 bg-amber-50 text-amber-900`}>
                         <CircleAlert size={16} aria-hidden="true" className="shrink-0" />

@@ -187,7 +187,7 @@ describe('M-1 — a conflict belongs to its record\'s farm', () => {
 });
 
 describe('M-3 — a मंजूर held by an expired trial', () => {
-    it('is not "पाठवणे बाकी", and the strip says approvals need an active subscription, with the way there', () => {
+    it('is not "पाठवणे बाकी", and the strip says approvals need an active subscription', () => {
         const held = { clientRequestId: 'h', status: 'FAILED', retryCount: 0, errorCode: 'entitlement.subscriptionexpired', payload: { logId: 'x' }, farmId: FARM, mutationType: SyncMutationName.VerifyLogV2 };
         const offline = { clientRequestId: 'o', status: 'PENDING', retryCount: 0, payload: { dailyLogId: 'L1' }, farmId: FARM, mutationType: SyncMutationName.CreateDailyLog };
         expect(unsentRecordCount([held, offline], 0, 0)).toBe(1);
@@ -196,16 +196,11 @@ describe('M-3 — a मंजूर held by an expired trial', () => {
 
         h.held.n = 1;
         publishApprovalQueue(FARM, list([]));
-        const onOpenSubscription = vi.fn();
-        const base = { language: 'mr' as const, farmId: FARM, needsYouCount: 0, onOpenSync: vi.fn(), onOpenWaiting: vi.fn(), lastSyncAt: null };
-        render(<StripSignals {...base} onOpenSubscription={onOpenSubscription} />);
+        // Fix round 2 (re-review 2 N-2, ruling): a plain line, no button, until the trial lane gives it a real action.
+        render(<StripSignals language="mr" farmId={FARM} needsYouCount={0} onOpenSync={vi.fn()} onOpenWaiting={vi.fn()} lastSyncAt={null} />);
         const line = screen.getByTestId('strip-held-approvals');
         expect(line).toHaveTextContent('मंजुरीसाठी सदस्यता सुरू असावी लागते');
-        fireEvent.click(line);
-        expect(onOpenSubscription).toHaveBeenCalledTimes(1);
-        cleanup();
-        render(<StripSignals {...base} />);
-        expect(screen.getByTestId('strip-held-approvals').tagName).not.toBe('BUTTON');
+        expect(line.tagName).not.toBe('BUTTON');
     });
 });
 

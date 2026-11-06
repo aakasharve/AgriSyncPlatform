@@ -27,6 +27,11 @@
  *  - L-4: what he saw is kept per user and farm, and dropped once the record is decided;
  *  - L-10: a failed refresh marks the older answer as not current (`lastReadFailed`);
  *  - L-8: a मंजूर sent from the one sheet is announced (`notifyApprovalSent`) so the हजेरी page reads its data again.
+ *
+ * Lane L4b fix round 2 (re-review 2 N-1): a publish (the हजेरी page's own read) carries a list but not this phone's
+ * parked conflicts or pending decisions. So a refresh ALWAYS applies the conflicts and pending decisions it read
+ * (unless a refresh that started later already did), even when a newer list landed first; and `factsTicket` — the
+ * refresh whose facts are on screen — is what tells the sheet a read after its send has landed.
  */
 import { fetchLabourData } from '../labour/data/labourClient';
 import type { LabourData, ReviewItem } from '../labour/labour.types';
@@ -58,6 +63,11 @@ export interface ApprovalQueueState {
     pendingDecisionIds: readonly string[];
     /** H-2 — the ticket of the read that produced `data`, taken when that read started; null before any read. */
     readTicket: number | null;
+    /**
+     * N-1 — the ticket of the successful refresh whose `conflicts` and `pendingDecisionIds` are held (a publish never
+     * moves it): the sheet shows a card it sent only once this passes the ticket at its send.
+     */
+    factsTicket: number | null;
     /** L-10 — the last attempt to read failed: `data` is an older answer, not "now". */
     lastReadFailed: boolean;
 }
@@ -72,7 +82,7 @@ const STALE_AFTER_MS = 30_000;
 
 const EMPTY: ApprovalQueueState = {
     farmId: null, status: 'idle', data: null, fetchedAt: null, conflicts: [], pendingDecisionIds: [], readTicket: null,
-    lastReadFailed: false,
+    factsTicket: null, lastReadFailed: false,
 };
 const entries = new Map<string, ApprovalQueueState>();
 const inflight = new Map<string, Promise<void>>();
@@ -200,23 +210,31 @@ export function refreshApprovalQueue(farmId: string | null | undefined, options:
     const job = (async () => {
         const conflicts = await readVersionConflicts(farmId);
         const pendingDecisionIds = await readOpenDecisions(farmId);
-        // An answer that STARTED later may have landed first (another door's read, the labour page's publish): this
-        // older read then neither replaces it nor marks it stale.
-        const newerLanded = () => (getApprovalQueue(farmId).readTicket ?? 0) > ticket;
+        // A LIST that started later may have landed first (another door's read, the labour page's publish): this older
+        // read then neither replaces it nor marks it stale. Its own FACTS (parked conflicts, decisions still on the
+        // phone) are applied all the same — a publish carries none (N-1) — unless a refresh started later applied its own.
+        const newerList = () => (getApprovalQueue(farmId).readTicket ?? 0) > ticket;
+        const newerFacts = () => (getApprovalQueue(farmId).factsTicket ?? 0) > ticket;
+        const facts = () => (newerFacts() ? {} : { conflicts, pendingDecisionIds });
         try {
             // `today` is the lightest window; the review list itself is never windowed (server §8).
             const data = await fetchLabourData(farmId, 'today');
-            if (!newerLanded()) {
+            const ownFacts = facts();
+            const factsTicket = newerFacts() ? {} : { factsTicket: ticket };
+            if (!newerList()) {
                 put(farmId, {
-                    status: 'known', data, fetchedAt: Date.now(), conflicts, pendingDecisionIds, readTicket: ticket, lastReadFailed: false,
+                    status: 'known', data, fetchedAt: Date.now(), ...ownFacts, ...factsTicket, readTicket: ticket, lastReadFailed: false,
                 });
-                forgetDecided(farmId, data, conflicts, pendingDecisionIds);
+            } else {
+                put(farmId, { ...ownFacts, ...factsTicket });
             }
+            const now = getApprovalQueue(farmId);
+            if (now.data) forgetDecided(farmId, now.data, now.conflicts, now.pendingDecisionIds);
         } catch {
-            if (!newerLanded()) {
-                const now = getApprovalQueue(farmId);
-                put(farmId, { status: now.data ? now.status : 'unknown', conflicts, pendingDecisionIds, lastReadFailed: true });
-            }
+            const now = getApprovalQueue(farmId);
+            put(farmId, newerList()
+                ? facts()
+                : { status: now.data ? now.status : 'unknown', ...facts(), lastReadFailed: true });
         } finally {
             inflight.delete(farmId);
         }

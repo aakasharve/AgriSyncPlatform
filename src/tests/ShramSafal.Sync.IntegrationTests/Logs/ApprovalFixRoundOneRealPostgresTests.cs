@@ -12,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.ReviseLogContent;
+using ShramSafal.Domain.Farms;
 using ShramSafal.Infrastructure.Persistence;
 using ShramSafal.Sync.IntegrationTests.Memberships;
 using Xunit;
@@ -160,7 +161,112 @@ public sealed class ApprovalFixRoundOneRealPostgresTests(ITestOutputHelper outpu
         (await VerifiedCountAsync(logId)).Should().Be(0, "nothing is confirmed on the older version");
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Fix round 2 — L-a / L-f: a record kept from the reader names nothing on its card
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_card_whose_record_is_kept_from_the_reader_names_neither_its_state_nor_a_withdrawn_check()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var logId = Guid.NewGuid();
+        var card = Guid.NewGuid();
+        await PushAppliedAsync(Owner, "create_daily_log", "l4b-f2-la-create", Log(logId, Owner));
+        await SeedJobCardAsync(card, logId, "Completed");
+        await SeedWithdrawnAuditAsync(card, logId);
+        await SetAudienceAsync(Owner, "DailyLog", logId, "OnlyMe");
+        // A second card whose record the co-owner DOES see: the farm's list then has links to read for him too.
+        var openLog = Guid.NewGuid();
+        await PushAppliedAsync(Worker, "create_daily_log", "l4b-f2-la-open", Log(openLog, Worker));
+        await SeedJobCardAsync(Guid.NewGuid(), openLog, "Completed");
+
+        // Control: the record's own audience (the owner) sees the state and the withdrawn check.
+        var owners = await CardJsonAsync(Owner, card);
+        Prop(owners, "linkedDailyLogId").Should().Be(logId.ToString());
+        Prop(owners, "linkedDailyLogStatus").Should().Be("Draft");
+        Prop(owners, "payoutCheckWithdrawn").Should().Be("True");
+
+        // A co-owner outside the record's audience: no link, so no state and no hint that it was questioned.
+        var coOwners = await CardJsonAsync(CoOwner, card);
+        Output.WriteLine($"[EVIDENCE] L-a co-owner: link={Prop(coOwners, "linkedDailyLogId")} status={Prop(coOwners, "linkedDailyLogStatus")} withdrawn={Prop(coOwners, "payoutCheckWithdrawn")}");
+        Prop(coOwners, "linkedDailyLogId").Should().BeNull("PRV: the card never names a record kept from him");
+        Prop(coOwners, "linkedDailyLogStatus").Should().BeNull();
+        Prop(coOwners, "payoutCheckWithdrawn").Should().Be("False", "a withdrawn check would say a hidden record was questioned");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Fix round 2 — L-e: a job-card refusal carries its code
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_refused_payout_check_says_why_by_its_code()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+
+        // (a) the record is kept from him: he holds review money, but may not see the record behind the card.
+        var hiddenLog = Guid.NewGuid();
+        var hiddenCard = Guid.NewGuid();
+        await PushAppliedAsync(Owner, "create_daily_log", "l4b-f2-le-hidden", Log(hiddenLog, Owner));
+        await SeedJobCardAsync(hiddenCard, hiddenLog, "Completed");
+        await SetAudienceAsync(Owner, "DailyLog", hiddenLog, "OnlyMe");
+        await SetAuthoritiesAsync(FarmA, CoOwner, FarmAuthority.SeeMoney, FarmAuthority.SeeWages, FarmAuthority.ReviewMoney,
+            FarmAuthority.ConfirmRecords);
+        var (closedStatus, closedBody) = await VerifyForPayoutAsync(CoOwner, hiddenCard);
+        Output.WriteLine($"[EVIDENCE] L-e record closed: {closedStatus} {closedBody}");
+        closedStatus.Should().Be(HttpStatusCode.Forbidden);
+        closedBody.Should().Contain("ShramSafal.RecordAudience.Forbidden", "the phone says the record-closed words by this code");
+
+        // (b) a seat without review money.
+        var openLog = Guid.NewGuid();
+        var openCard = Guid.NewGuid();
+        await PushAppliedAsync(Worker, "create_daily_log", "l4b-f2-le-open", Log(openLog, Worker));
+        await SeedJobCardAsync(openCard, openLog, "Completed");
+        var (roleStatus, roleBody) = await VerifyForPayoutAsync(Mukadam, openCard);
+        Output.WriteLine($"[EVIDENCE] L-e role: {roleStatus} {roleBody}");
+        roleStatus.Should().Be(HttpStatusCode.Forbidden);
+        roleBody.Should().Contain("ShramSafal.JobCardRoleNotAllowed");
+    }
+
     // ── Harness ─────────────────────────────────────────────────────────────────────────
+
+    private async Task<(HttpStatusCode Status, string Body)> VerifyForPayoutAsync(Guid user, Guid cardId)
+    {
+        using var response = await SendAsync(HttpMethod.Post, $"/shramsafal/job-cards/{cardId}/verify-for-payout", user);
+        return (response.StatusCode, await response.Content.ReadAsStringAsync());
+    }
+
+    private async Task SetAudienceAsync(Guid actor, string kind, Guid recordId, string audience)
+    {
+        var result = await PushAsync(actor, "set_record_audience", $"l4b-f2-aud-{recordId:N}-{audience}", new Dictionary<string, object?>
+        {
+            ["recordKind"] = kind,
+            ["recordId"] = recordId,
+            ["audience"] = audience,
+            ["selectedUserIds"] = Array.Empty<Guid>(),
+            ["changedAtUtc"] = DateTime.UtcNow.ToString("O"),
+        });
+        result.Status.Should().Be("applied", "{0} -> {1}: {2}", recordId, audience, result.ErrorCode ?? "-");
+    }
+
+    private async Task SeedWithdrawnAuditAsync(Guid cardId, Guid logId)
+    {
+        await using var raw = new NpgsqlConnection(SuperuserConn);
+        await raw.OpenAsync();
+        await using var cmd = raw.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO ssf.audit_events
+                ("Id", farm_id, entity_type, entity_id, action, actor_user_id, actor_role,
+                 payload, occurred_at_utc, client_command_id, app_version, device_id, ip_hash)
+            VALUES (@id, @farm, 'JobCard', @card, 'jobcard.payout-readiness-withdrawn', @actor, 'PrimaryOwner',
+                    @payload, NOW(), NULL, 'test', 'test-device', 'sha256:test');
+            """;
+        cmd.Parameters.AddWithValue("id", Guid.NewGuid());
+        cmd.Parameters.AddWithValue("farm", FarmA);
+        cmd.Parameters.AddWithValue("card", cardId);
+        cmd.Parameters.AddWithValue("actor", Owner);
+        cmd.Parameters.AddWithValue("payload", $"{{\"jobCardId\":\"{cardId}\",\"dailyLogId\":\"{logId}\",\"recordState\":\"Disputed\"}}");
+        await cmd.ExecuteNonQueryAsync();
+    }
 
     private async Task<JsonElement> CardJsonAsync(Guid user, Guid cardId)
     {

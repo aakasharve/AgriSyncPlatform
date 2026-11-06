@@ -95,7 +95,10 @@ public sealed class GetJobCardsForFarmHandler(IShramSafalRepository repository, 
                 LinkedDailyLogStatus = c.LinkedDailyLogId is { } logId && recordStates.TryGetValue(logId, out var state)
                     ? state
                     : null,
-                PayoutCheckWithdrawn = c.Status == nameof(JobCardStatus.Completed)
+                // Fix round 2 (re-review 2 L-a) — only where the record link survived the visibility rule for this
+                // reader: "a record behind this card was questioned" is itself a fact about a record kept from him.
+                PayoutCheckWithdrawn = c.LinkedDailyLogId is not null
+                    && c.Status == nameof(JobCardStatus.Completed)
                     && lastPayoutNote.TryGetValue(c.Id, out var note)
                     && note == OnLogVerifiedAutoVerifyJobCard.PayoutReadinessWithdrawnAction,
             })

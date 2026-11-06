@@ -30,8 +30,6 @@ import type { WeatherStatus } from '../../weather/useWeatherMonitor';
 // settings surface now, reachable from the profile avatar beside it.
 // lane L4b (founder D-3 / D-40) — the strip is now three separate signals (`StripSignals`), not one ring.
 import StripSignals from '../../oversight/components/StripSignals';
-import { isPrimaryAccountHolderRole } from '../../../core/session/farmAuthorities';
-import { OPEN_BILLING_HANDOFF } from '../../profile/settingsItems';
 import { useApprovalQueue } from '../../approval/useApprovalQueue';
 import { openApprovalReview } from '../../approval/openApprovalReview';
 import FarmNameBoard from './FarmNameBoard';
@@ -358,16 +356,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     onNavigate('profile');
   };
 
-  // lane L4b fix round 1 (M-3; founder D-40 "trial expiry explained with a working action") — the strip's held-approval
-  // line opens the farm's existing subscription / trial screen (Profile's billing page), by the same handoff. Only for
-  // the primary account holder: that screen is his (`SubscriptionCard` renders for no one else).
-  const openSubscription = isPrimaryAccountHolderRole(currentFarm?.role)
-    ? () => {
-      window.sessionStorage.setItem(OPEN_BILLING_HANDOFF, '1');
-      onNavigate('profile');
-    }
-    : undefined;
-
   // Task 12 — `farmContext.farms` is the real list `AppContent.tsx` already
   // fetches (`getMyFarms()`); this is the ONLY place `farmCount` is
   // derived, never a literal, so `FarmIdentityElement`'s label-vs-button
@@ -568,7 +556,6 @@ const AppHeader: React.FC<AppHeaderProps> = ({
             onOpenAttention={() => onNavigate('attention')}
             onOpenWaiting={() => setIsWaitingDrawerOpen(true)}
             lastSyncAt={queueStatus.lastSyncAt}
-            onOpenSubscription={openSubscription}
           />
         </div>
       )}

@@ -11,6 +11,10 @@
  * long as it is needed. It goes with the labour caches (another user signs in, the session ends, access to the farm
  * ends) and once the record is decided (the approval list no longer carries it and nothing of his is parked for it),
  * so no money amount he saw outlives the question it answers.
+ *
+ * Fix round 2 (re-review 2 L-b): when a farm's money stops being his (see money off), the amounts he saw there are
+ * cleared at once (`dropAmounts`); and the unscoped keys an earlier build wrote (`agrisync.approval.seen.<record>`)
+ * are dropped on the next load (`dropUnscoped`).
  */
 const PREFIX = 'agrisync.approval.seen.';
 
@@ -93,5 +97,27 @@ export const ApprovalSeenStore = {
     /** The session ended: every entry goes. */
     clearAll(): void {
         removeWhere(() => false);
+    },
+    /** Money is no longer his on this farm: every amount he saw there becomes `null`; the other facts stay. */
+    dropAmounts(userId: string, farmId: string): void {
+        const s = storage();
+        if (!s) return;
+        const mine = `${PREFIX}${encodeURIComponent(userId)}.${encodeURIComponent(farmId)}.`;
+        try {
+            for (let i = 0; i < s.length; i++) {
+                const k = s.key(i);
+                if (k === null || !k.startsWith(mine)) continue;
+                const value = JSON.parse(s.getItem(k) ?? 'null') as Record<string, unknown> | null;
+                if (value && typeof value === 'object' && value.amount != null) {
+                    s.setItem(k, JSON.stringify({ ...value, amount: null }));
+                }
+            }
+        } catch {
+            // The cache is disposable.
+        }
+    },
+    /** The keys an earlier build wrote with no user or farm (`<prefix><record>`): gone. */
+    dropUnscoped(): void {
+        removeWhere((k) => k.slice(PREFIX.length).includes('.'));
     },
 };

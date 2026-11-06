@@ -72,7 +72,10 @@ interface Props {
     focusLogId?: string | null;
     /** L4b fix round 1 (H-2) — records whose मंजूर / शंका is still on this phone: hidden, never "nothing left". */
     pendingDecisionIds?: readonly string[];
-    /** L4b fix round 1 (H-2) — the read ticket of `data` (`approvalReadTicket` when that read started). */
+    /**
+     * L4b fix round 1 (H-2) — the read ticket of the facts behind this list (`approvalReadTicket` when that read started).
+     * Fix round 2 (N-1): the host passes the ticket of its own refresh's facts, never a publish's.
+     */
     listTicket?: number | null;
     /** Overrides the app language (tests, previews). */
     language?: Language;

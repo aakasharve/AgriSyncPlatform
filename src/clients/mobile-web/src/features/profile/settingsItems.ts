@@ -10,12 +10,6 @@ export const PRIVACY_TITLE = 'गोपनीयता व संमती';
 // PROPOSED (Marathi)
 export const OFFLINE_NOTES_TITLE = 'नेट नसताना केलेल्या नोंदी';
 
-/**
- * lane L4b fix round 1 (M-3) — the one-shot sessionStorage handoff that opens the billing page (the farm's existing
- * subscription / trial screen) when Profile mounts, like `open_farm_boundary`.
- */
-export const OPEN_BILLING_HANDOFF = 'open_billing';
-
 /** The Hub "अ‍ॅप" group row ids, in display order. `billing` is owner-only. */
 export type SettingsExtraId = 'language' | 'voice-diary' | 'consent' | 'billing' | 'ai-drafts';
 
