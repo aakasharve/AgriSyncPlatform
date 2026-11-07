@@ -33,21 +33,61 @@ interface Product {
     npkGrade: string | null;
     tags: string[];
     aliases: string[];
-    guideLine: number;
+    sourceRefs: Array<{ source: string; ref: string; entry?: string }>;
     benefits: Array<{ crop: string; mr: string; en: string; url: string; retrievedOn: string; checkedBy: string | null }>;
 }
 
-const catalog = readJson<{ version: string; source: string; nonMatchingWords: string[]; products: Product[] }>(resolve(refDir, 'catalog.json'));
+const catalog = readJson<{ version: string; sources: Array<{ id: string; title: string; kind: string; receivedOn: string; checkedBy: string | null }>; nonMatchingWords: string[]; products: Product[] }>(resolve(refDir, 'catalog.json'));
 const mixRules = readJson<{ version: string; rules: MixRule[] }>(resolve(refDir, 'mix-rules.json'));
 
 describe('reference/inputs/catalog.json', () => {
-    it('is version inputs-1', () => {
-        expect(catalog.version).toBe('inputs-1');
+    it('is version inputs-2', () => {
+        expect(catalog.version).toBe('inputs-2');
+    });
+
+    // IT1b: the library is ShramSafal's; no source owns an id. Sources are listed, each product points at them.
+    it('Catalog_EveryProduct_HasAtLeastOneSourceRef', () => {
+        for (const p of catalog.products) expect(p.sourceRefs?.length ?? 0, p.id).toBeGreaterThanOrEqual(1);
+    });
+
+    it('Catalog_Ids_AreUniqueAndCarryNoSourcePrefix', () => {
+        const ids = catalog.products.map(p => p.id);
+        expect(new Set(ids).size).toBe(ids.length);
+        for (const id of ids) {
+            expect(id, id).not.toMatch(/^gd+$/);
+            expect(id, id).toMatch(/^p-[a-z0-9-]+$/);
+        }
+    });
+
+    it('Catalog_SourceRef_PointsAtAListedSource', () => {
+        const listed = new Set((catalog.sources ?? []).map(s => s.id));
+        expect(listed.size).toBeGreaterThan(0);
+        for (const s of catalog.sources) expect(['guide', 'company-list', 'university', 'label']).toContain(s.kind);
+        for (const p of catalog.products) {
+            for (const r of p.sourceRefs ?? []) {
+                expect(listed.has(r.source), p.id).toBe(true);
+                expect(r.ref.trim().length, p.id).toBeGreaterThan(0);
+            }
+        }
+    });
+
+    it('Catalog_IdsAreStoredNotDerived', () => {
+        // Pinned: a regenerate that moves an id fails here. Ids are data from the day they were written.
+        const pinned: Record<string, string> = {
+            'line 38': 'p-abamectin-1-9-ec',
+            'line 55': 'p-acephate-50-imidacloprid-1-8-sp',
+            'line 1485': 'p-brand-dhaman-bio-303',
+            'line 3149': 'p-npk-19-19-19',
+            'line 3227': 'p-calcium-nitrate',
+        };
+        for (const [line, id] of Object.entries(pinned)) {
+            expect(catalog.products.find(p => p.sourceRefs?.[0]?.ref === line)?.id).toBe(id);
+        }
     });
 
     // The guide names only a brand for these five, no ingredient; inventing one would put a false fact
     // on his record (review B002). Each still carries its brand, so it can be found by name.
-    const NO_INGREDIENT_IN_GUIDE = ['g126', 'g224', 'g253', 'g262', 'g263'];
+    const NO_INGREDIENT_IN_GUIDE = ['p-brand-dhaman-bio-303', 'p-brand-orondis-ultra', 'p-brand-diamore-combine', 'p-brand-mc-extra', 'p-brand-ralligold'];
 
     it('catalog has 297 products, unique ids, every product has >=1 activeIngredient (except the guide\'s brand-only five)', () => {
         expect(catalog.products).toHaveLength(297);
@@ -66,7 +106,7 @@ describe('reference/inputs/catalog.json', () => {
 
     it('a strength that is a bare number is only one the guide itself prints without a unit', () => {
         // The guide prints these three SC/OD/EC strengths with no unit; every other strength carries one.
-        const GUIDE_PRINTS_NO_UNIT = ['g068', 'g115', 'g211'];
+        const GUIDE_PRINTS_NO_UNIT = ['p-flubendiamide-90-deltamethrin-60-sc', 'p-spirotetramat-150-od', 'p-tebuconazole-250-ec'];
         for (const p of catalog.products) {
             for (const a of p.activeIngredients) {
                 if (a.pct !== null && /^[\d\s.]+$/.test(a.pct)) {
@@ -91,9 +131,9 @@ describe('reference/inputs/catalog.json', () => {
         for (const p of catalog.products) {
             for (const b of p.brands) expect((b.en ?? '').trim().length, p.id).toBeGreaterThan(0);
         }
-        const g129 = catalog.products.find(p => p.id === 'g129')!;
-        expect(g129.company).toBe('Dr. Anand');
-        expect(g129.brands).toEqual([]);
+        const neem = catalog.products.find(p => p.id === 'p-neem-oil-3000-ppm')!;
+        expect(neem.company).toBe('Dr. Anand');
+        expect(neem.brands).toEqual([]);
     });
 
     it('no ingredient string joins two ingredients (review B008)', () => {
@@ -179,16 +219,16 @@ describe('reference/inputs/catalog.json', () => {
             for (const t of p.tags) expect(known.has(t), `${p.id} ${t}`).toBe(true);
         }
         const tagged = (t: string) => catalog.products.filter(p => p.tags.includes(t)).map(p => p.id);
-        expect(tagged('calcium-source')).toEqual(expect.arrayContaining(['g280', 'g297', 'g293', 'g294']));
-        expect(tagged('sulphate-source')).toEqual(expect.arrayContaining(['g281', 'g279', 'g277', 'g284', 'g293', 'g294']));
-        expect(tagged('phosphate-source')).toEqual(expect.arrayContaining(['g273', 'g272', 'g282']));
+        expect(tagged('calcium-source')).toEqual(expect.arrayContaining(['p-calcium-nitrate', 'p-cab-calcium-27', 'p-ssp', 'p-polysulphate']));
+        expect(tagged('sulphate-source')).toEqual(expect.arrayContaining(['p-magnesium-sulphate', 'p-npk-0-0-50', 'p-potassium-schoenite-ko-23-mgo-11', 'p-npk-20-20-0-13', 'p-ssp', 'p-polysulphate']));
+        expect(tagged('phosphate-source')).toEqual(expect.arrayContaining(['p-npk-19-19-19', 'p-mono-ammonium-phosphate-12-61-0', 'p-dap-18-46-0']));
     });
 
     it('every tagged id is listed under its tag in TAGS.md, and TAGS.md lists no untagged id', () => {
         const md = readFileSync(resolve(refDir, 'TAGS.md'), 'utf8');
         for (const tag of ['calcium-source', 'phosphate-source', 'sulphate-source']) {
             const section = md.split(`## ${tag}`)[1]?.split('\n## ')[0] ?? '';
-            const listed = [...section.matchAll(/^- (g\d{3}) /gm)].map(m => m[1]).sort();
+            const listed = [...section.matchAll(/^- (p-[a-z0-9-]+) /gm)].map(m => m[1]).sort();
             const tagged = catalog.products.filter(p => p.tags.includes(tag)).map(p => p.id).sort();
             expect(listed, tag).toEqual(tagged);
         }

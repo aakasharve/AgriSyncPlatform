@@ -10,6 +10,8 @@ import { describe, it, expect } from 'vitest';
 import matchCases from '../../../../../../../sync-contract/reference/inputs/match-cases.json';
 import referenceCatalog from '../../../../../../../sync-contract/reference/inputs/catalog.json';
 import {
+    CATALOG_PRODUCTS,
+    CATALOG_SOURCES,
     CATALOG_VERSION,
     NON_MATCHING_WORDS,
     getProduct,
@@ -50,11 +52,11 @@ describe('matchProduct — pinned behaviour', () => {
         const m = matchProduct('ga3');
         expect(m.state).toBe('ambiguous');
         expect(m.productId).toBeNull();
-        expect(m.candidateIds).toEqual(['g249', 'g250', 'g255']);
+        expect(m.candidateIds).toEqual(['p-gibberellic-acid-technical-90', 'p-gibberellic-acid-40-wsg', 'p-gibberellic-acid-0-001']);
     });
 
     it('npkGrade wins over the name', () => {
-        expect(matchProduct('Contof Plus', '19:19:19').productId).toBe('g273');
+        expect(matchProduct('Contof Plus', '19:19:19').productId).toBe('p-npk-19-19-19');
     });
 
     it('an omitted npkGrade behaves like null', () => {
@@ -82,12 +84,28 @@ describe('normalisation', () => {
 
 describe('catalogue access', () => {
     it('CATALOG_VERSION is the reference version', () => {
-        expect(CATALOG_VERSION).toBe('inputs-1');
+        expect(CATALOG_VERSION).toBe('inputs-2');
         expect(CATALOG_VERSION).toBe((referenceCatalog as { version: string }).version);
     });
 
+    it('the library lists its sources, and every product points at one', () => {
+        expect(CATALOG_SOURCES.map(s => s.id)).toEqual(['agro-dosage-guide-en']);
+        expect(getProduct('p-abamectin-1-9-ec')?.sourceRefs[0]).toMatchObject({ source: 'agro-dosage-guide-en', ref: 'line 38' });
+    });
+
+    it('each sourceRef names a listed source through the typed field (review B001)', () => {
+        const listed = new Set(CATALOG_SOURCES.map(s => s.id));
+        for (const p of CATALOG_PRODUCTS) {
+            expect(p.sourceRefs.length, p.id).toBeGreaterThan(0);
+            for (const r of p.sourceRefs) {
+                const id: string = r.source;
+                expect(listed.has(id), `${p.id} -> ${id}`).toBe(true);
+            }
+        }
+    });
+
     it('getProduct returns the facts for an id, undefined otherwise', () => {
-        const p = getProduct('g172');
+        const p = getProduct('p-hexaconazole-5-sc');
         expect(p?.activeIngredients[0]).toMatchObject({ en: 'Hexaconazole', mr: 'हेक्साकोनाझोल', pct: '5%' });
         expect(p?.formulation).toEqual({ code: 'sc', mr: 'एससी' });
         expect(p?.brands[0]).toMatchObject({ company: 'tata', companyMr: 'टाटा' });
@@ -109,20 +127,20 @@ describe('common words never match (review B008)', () => {
     });
 
     it('the brand still shows on its card', () => {
-        expect(getProduct('g259')?.brands.map(b => b.en)).toContain('Root');
+        expect(getProduct('p-humic-acid-98')?.brands.map(b => b.en)).toContain('Root');
     });
 });
 
 describe('brand-only products and a company with no brand (B009, B010)', () => {
     it('the five brand-only products say ingredientUnknown', () => {
-        for (const id of ['g126', 'g224', 'g253', 'g262', 'g263']) {
+        for (const id of ['p-brand-dhaman-bio-303', 'p-brand-orondis-ultra', 'p-brand-diamore-combine', 'p-brand-mc-extra', 'p-brand-ralligold']) {
             expect(getProduct(id)?.activeIngredients, id).toEqual([]);
             expect(getProduct(id)?.ingredientUnknown, id).toBe(true);
         }
     });
 
-    it('g129 carries its company on the product, with no nameless brand', () => {
-        const p = getProduct('g129');
+    it('the neem-oil product carries its company on the product, with no nameless brand', () => {
+        const p = getProduct('p-neem-oil-3000-ppm');
         expect(p?.company).toBe('Dr. Anand');
         expect(p?.brands).toEqual([]);
     });

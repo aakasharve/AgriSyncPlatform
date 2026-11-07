@@ -74,13 +74,13 @@ public sealed class InputCatalogMatchTests
 
         Assert.Equal(MatchState.Ambiguous, match.State);
         Assert.Null(match.ProductId);
-        Assert.Equal(["g249", "g250", "g255"], match.CandidateIds);
+        Assert.Equal(["p-gibberellic-acid-technical-90", "p-gibberellic-acid-40-wsg", "p-gibberellic-acid-0-001"], match.CandidateIds);
     }
 
     [Fact]
     public void Match_NpkGrade_WinsOverTheName()
     {
-        Assert.Equal("g273", InputCatalog.Match("Contof Plus", "19:19:19").ProductId);
+        Assert.Equal("p-npk-19-19-19", InputCatalog.Match("Contof Plus", "19:19:19").ProductId);
     }
 
     [Theory]
@@ -107,10 +107,10 @@ public sealed class InputCatalogMatchTests
     [Fact]
     public void Version_And_Get_ReadTheEmbeddedCatalogue()
     {
-        Assert.Equal("inputs-1", InputCatalog.Version);
+        Assert.Equal("inputs-2", InputCatalog.Version);
         Assert.Equal(297, InputCatalog.Products.Count);
 
-        var p = InputCatalog.Get("g172");
+        var p = InputCatalog.Get("p-hexaconazole-5-sc");
         Assert.NotNull(p);
         Assert.Equal("Hexaconazole", p!.ActiveIngredients[0].En);
         Assert.Equal("5%", p.ActiveIngredients[0].Pct);
@@ -151,23 +151,23 @@ public sealed class InputCatalogMatchTests
     {
         Assert.Contains("root", InputCatalog.NonMatchingWords);
         Assert.Contains("double", InputCatalog.NonMatchingWords);
-        // The brand is not removed from its product: g259 still shows "Root".
-        Assert.Contains(InputCatalog.Get("g259")!.Brands, b => b.En == "Root");
+        // The brand is not removed from its product: p-humic-acid-98 (was g259) still shows "Root".
+        Assert.Contains(InputCatalog.Get("p-humic-acid-98")!.Brands, b => b.En == "Root");
     }
 
     [Fact]
     public void BrandOnlyProducts_CarryIngredientUnknown_AndCompanyMovesToTheProduct()
     {
-        foreach (var id in new[] { "g126", "g224", "g253", "g262", "g263" })
+        foreach (var id in new[] { "p-brand-dhaman-bio-303", "p-brand-orondis-ultra", "p-brand-diamore-combine", "p-brand-mc-extra", "p-brand-ralligold" })
         {
             var p = InputCatalog.Get(id)!;
             Assert.Empty(p.ActiveIngredients);
             Assert.True(p.IngredientUnknown, id);
         }
 
-        var g129 = InputCatalog.Get("g129")!;
-        Assert.Equal("Dr. Anand", g129.Company);
-        Assert.Empty(g129.Brands);
-        Assert.False(g129.IngredientUnknown);
+        var neem = InputCatalog.Get("p-neem-oil-3000-ppm")!;
+        Assert.Equal("Dr. Anand", neem.Company);
+        Assert.Empty(neem.Brands);
+        Assert.False(neem.IngredientUnknown);
     }
 }

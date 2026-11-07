@@ -285,19 +285,9 @@ public sealed class RlsExemptionAllowlistTests
         // below is an INVENTORY of a gap that was already open, NOT a reviewed exemption: the orchestrator registers each
         // for a later RLS lane, and removing one here means putting it under FORCE RLS in a migration.
 
-        // KNOWN OPEN — carries no farm_id: a planned step of a crop season (crop_cycle_id → crop_cycles.farm_id). Its
-        // doors (add / move / remove a step, plan generation) resolve the season's farm under the named farm's scope and
-        // refuse another farm's (ScheduleChangeGate.RefusePlannedWorkAsync; lane L8b-1 fix round 1, H1). An EXISTS policy
-        // through crop_cycles (the verification_events shape) is the later lane's choice.
-        "planned_activities",
-
-        // KNOWN OPEN — carries a DIRECT farm_id and has no policy: the day ledger (finance). Its children follow it.
-        "day_ledgers",
-        "day_ledger_allocations",
-        "day_ledger_plot_allocations",
-
-        // KNOWN OPEN — carries no farm_id: a task line of a daily log (daily_log_id → daily_logs.farm_id).
-        "log_tasks",
+        // spec: plr-d10 lane RLS-2 (F113) — planned_activities, day_ledgers, day_ledger_allocations, log_tasks and the
+        // February share lines (live name day_ledger_plot_allocations_legacy_financev2, see the rename note in the scan)
+        // LEFT this list: 20261107034303_AddRlsToDayLedgersLogTasksAndPlannedActivities puts them under FORCE RLS.
 
         // Author-owned, not farm-owned (the same reason as crop_schedule_templates above): a schedule row belongs to the
         // account that made it, and the library is shared. The wall is the application's one visibility rule
@@ -391,17 +381,33 @@ public sealed class RlsExemptionAllowlistTests
             """ "(?<s>[^"]+)" """,
             RegexOptions.Compiled | RegexOptions.IgnorePatternWhitespace);
 
-        foreach (var file in migrationFiles)
+        // spec: plr-d10 lane RLS-2 — a table RENAMED by raw SQL is judged under the name it LIVES under. FinanceV2 created
+        // ssf.day_ledgers and ssf.day_ledger_plot_allocations; AddPhase7DayLedgerAndModifiedAt renamed both to
+        // *_legacy_financev2 and created a new ssf.day_ledgers. Read by creation name only, the scan demanded RLS on a
+        // table no database has (day_ledger_plot_allocations) and never saw the two tables every database does have.
+        // Statements are applied in migration order (file name = timestamp), and in text order within a file.
+        //   ALTER TABLE ssf.day_ledgers RENAME TO day_ledgers_legacy_financev2;
+        var renameTablePattern = new Regex(
+            """ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?"?ssf"?\."?(?<from>[a-zA-Z0-9_]+)"?\s+RENAME\s+TO\s+"?(?<to>[a-zA-Z0-9_]+)"?""",
+            RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        foreach (var file in migrationFiles.OrderBy(Path.GetFileName, StringComparer.Ordinal))
         {
             var text = File.ReadAllText(file);
-            foreach (Match m in createTablePattern.Matches(text))
+            var tableStatements = createTablePattern.Matches(text)
+                .Concat(rawCreateTablePattern.Matches(text))
+                .Select(m => (m.Index, Created: m.Groups["table"].Value, From: (string?)null))
+                .Concat(renameTablePattern.Matches(text)
+                    .Select(m => (m.Index, Created: m.Groups["to"].Value, From: (string?)m.Groups["from"].Value)))
+                .OrderBy(s => s.Index);
+            foreach (var (_, created, from) in tableStatements)
             {
-                allCreatedTables.Add(m.Groups["table"].Value);
-            }
+                if (from is not null && !allCreatedTables.Remove(from))
+                {
+                    continue; // a rename of a table this scan never saw created: not an ssf table it tracks
+                }
 
-            foreach (Match m in rawCreateTablePattern.Matches(text))
-            {
-                allCreatedTables.Add(m.Groups["table"].Value);
+                allCreatedTables.Add(created);
             }
 
             foreach (Match m in enableRlsPattern.Matches(text))

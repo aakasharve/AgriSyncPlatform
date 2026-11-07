@@ -148,23 +148,23 @@ describe('judgeMix', () => {
         const r = judgeMix(tank(['calcium nitrate'], ['प्रेम गोल्ड'], ['19:19:19', '19:19:19']), [fixture({})]);
         expect(r.state).toBe('red');
         expect(r.ruleId).toBe('T-NEVER');
-        expect(r.pairProductIds).toEqual(['g280', 'g273']);
+        expect(r.pairProductIds).toEqual(['p-calcium-nitrate', 'p-npk-19-19-19']);
     });
 
     it('Verdict_AnyNeverPair_IsRed_EvenIfOtherPairsOk', () => {
-        const okRule = fixture({ id: 'T-OK', verdict: 'ok', a: { productId: 'g172' }, b: { tag: 'calcium-source' } });
+        const okRule = fixture({ id: 'T-OK', verdict: 'ok', a: { productId: 'p-hexaconazole-5-sc' }, b: { tag: 'calcium-source' } });
         const neverRule = fixture({});
-        const r = judgeProducts(['g172', 'g280', 'g273'], 'Drip', [okRule, neverRule]);
+        const r = judgeProducts(['p-hexaconazole-5-sc', 'p-calcium-nitrate', 'p-npk-19-19-19'], 'Drip', [okRule, neverRule]);
         expect(r.state).toBe('red');
         expect(r.ruleId).toBe('T-NEVER');
-        expect(r.pairProductIds).toEqual(['g280', 'g273']);
+        expect(r.pairProductIds).toEqual(['p-calcium-nitrate', 'p-npk-19-19-19']);
         // Green only when EVERY pair has an ok rule.
-        const green = judgeProducts(['g172', 'g280'], 'Drip', [okRule, neverRule]);
+        const green = judgeProducts(['p-hexaconazole-5-sc', 'p-calcium-nitrate'], 'Drip', [okRule, neverRule]);
         expect(green.state).toBe('green');
         expect(green.pairProductIds).toEqual([]);
-        expect(judgeProducts(['g172', 'g280', 'g249'], 'Drip', [okRule, neverRule]).state).toBe('grey');
+        expect(judgeProducts(['p-hexaconazole-5-sc', 'p-calcium-nitrate', 'p-gibberellic-acid-technical-90'], 'Drip', [okRule, neverRule]).state).toBe('grey');
         // An unknown member never lets a combination be green.
-        expect(judgeProducts(['g172', 'g280', null], 'Drip', [okRule, neverRule]).state).toBe('grey');
+        expect(judgeProducts(['p-hexaconazole-5-sc', 'p-calcium-nitrate', null], 'Drip', [okRule, neverRule]).state).toBe('grey');
     });
 
     it('Verdict_UnreviewedRule_IsGrey (fixtures)', () => {
@@ -180,7 +180,7 @@ describe('judgeMix', () => {
             + '(SKIPPED once the founder reviews a rule — then red is expected and this pin no longer applies)',
         () => {
             expect(judgeMix(tank(['calcium nitrate'], ['19:19:19', '19:19:19'])).state).toBe('grey');
-            expect(judgeProducts(['g280', 'g281'], 'Drip').state).toBe('grey');
+            expect(judgeProducts(['p-calcium-nitrate', 'p-magnesium-sulphate'], 'Drip').state).toBe('grey');
         },
     );
 
@@ -239,10 +239,10 @@ describe('tank method (review B007)', () => {
         const names: Array<[string, string?]> = [['calcium nitrate'], ['19:19:19', '19:19:19']];
         const drip = judgeMix(tankBy('fertigation', ...names), [fixture({})]);
         expect(drip.state).toBe('red');
-        expect(drip.pairProductIds).toEqual(['g280', 'g273']);
+        expect(drip.pairProductIds).toEqual(['p-calcium-nitrate', 'p-npk-19-19-19']);
         expect(judgeMix(tankBy('spray', ...names), [fixture({})]).state).toBe('red');
         expect(judgeMix(tankBy(null, ...names), [fixture({})]).state).toBe('grey');
-        expect(judgeProducts(['g280', 'g273'], 'Soil', [fixture({})]).state).toBe('grey');
+        expect(judgeProducts(['p-calcium-nitrate', 'p-npk-19-19-19'], 'Soil', [fixture({})]).state).toBe('grey');
         // A rule that names no method never fires.
         expect(judgeMix(tankBy('fertigation', ...names), [fixture({ appliesTo: undefined })]).state).toBe('grey');
         expect(judgeMix(tankBy('spray', ...names), [fixture({ appliesTo: ['fertigation'] })]).state).toBe('grey');
@@ -250,10 +250,10 @@ describe('tank method (review B007)', () => {
 
     it('Verdict_SameProductTwice_IsNeverAPair', () => {
         // SSP carries calcium, phosphate and sulphate; two lines of it are still not a pair.
-        expect(judgeProducts(['g293', 'g293'], 'Drip', [fixture({})]).state).toBe('grey');
-        expect(judgeProducts(['g294', 'g294'], 'Drip', [fixture({})]).state).toBe('grey');
-        expect(judgeProducts(['g280', 'g280'], 'Drip', [fixture({})]).state).toBe('grey');
-        expect(judgeProducts(['g293', 'g282'], 'Soil', [fixture({})]).state).toBe('grey');
+        expect(judgeProducts(['p-ssp', 'p-ssp'], 'Drip', [fixture({})]).state).toBe('grey');
+        expect(judgeProducts(['p-polysulphate', 'p-polysulphate'], 'Drip', [fixture({})]).state).toBe('grey');
+        expect(judgeProducts(['p-calcium-nitrate', 'p-calcium-nitrate'], 'Drip', [fixture({})]).state).toBe('grey');
+        expect(judgeProducts(['p-ssp', 'p-dap-18-46-0'], 'Soil', [fixture({})]).state).toBe('grey');
     });
 });
 

@@ -201,7 +201,7 @@ public sealed class MixVerdictTests
 
         var drip = MixVerdict.Judge(TankBy("Drip", cnPlus191919), [NeverFixture]);
         Assert.Equal(MixState.Red, drip.State);
-        Assert.Equal(new[] { "g280", "g273" }, drip.PairProductIds.ToArray());
+        Assert.Equal(new[] { "p-calcium-nitrate", "p-npk-19-19-19" }, drip.PairProductIds.ToArray());
         Assert.Equal(MixState.Red, MixVerdict.Judge(TankBy("Spray", cnPlus191919), [NeverFixture]).State);
         Assert.Equal(MixState.Grey, MixVerdict.Judge(TankBy(null, cnPlus191919), [NeverFixture]).State);
         Assert.Equal(MixState.Grey, MixVerdict.Judge(TankBy("Soil", cnPlus191919), [NeverFixture]).State);
@@ -214,10 +214,10 @@ public sealed class MixVerdictTests
     public void Verdict_SameProductTwice_IsNeverAPair()
     {
         // SSP carries calcium, phosphate and sulphate; two lines of it are still not a pair.
-        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["g293", "g293"], "Drip", [NeverFixture]).State);
-        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["g294", "g294"], "Drip", [NeverFixture]).State);
-        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["g280", "g280"], "Drip", [NeverFixture]).State);
-        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["g293", "g282"], "Soil", [NeverFixture]).State);
+        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["p-ssp", "p-ssp"], "Drip", [NeverFixture]).State);
+        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["p-polysulphate", "p-polysulphate"], "Drip", [NeverFixture]).State);
+        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["p-calcium-nitrate", "p-calcium-nitrate"], "Drip", [NeverFixture]).State);
+        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["p-ssp", "p-dap-18-46-0"], "Soil", [NeverFixture]).State);
     }
 
     [Fact]
@@ -240,7 +240,7 @@ public sealed class MixVerdictTests
 
         Assert.Equal(MixState.Red, result.State);
         Assert.Equal("T-NEVER", result.RuleId);
-        Assert.Equal(new[] { "g280", "g273" }, result.PairProductIds.ToArray());
+        Assert.Equal(new[] { "p-calcium-nitrate", "p-npk-19-19-19" }, result.PairProductIds.ToArray());
     }
 
     [Fact]
@@ -250,22 +250,22 @@ public sealed class MixVerdictTests
         {
             Id = "T-OK",
             Verdict = "ok",
-            A = new RuleSelector(null, "g172"),
+            A = new RuleSelector(null, "p-hexaconazole-5-sc"),
             B = new RuleSelector("calcium-source", null),
         };
         MixRule[] rules = [okRule, NeverFixture];
 
-        var red = MixVerdict.JudgeProducts(["g172", "g280", "g273"], "Drip", rules);
+        var red = MixVerdict.JudgeProducts(["p-hexaconazole-5-sc", "p-calcium-nitrate", "p-npk-19-19-19"], "Drip", rules);
         Assert.Equal(MixState.Red, red.State);
         Assert.Equal("T-NEVER", red.RuleId);
-        Assert.Equal(new[] { "g280", "g273" }, red.PairProductIds.ToArray());
+        Assert.Equal(new[] { "p-calcium-nitrate", "p-npk-19-19-19" }, red.PairProductIds.ToArray());
         // Green only when EVERY pair has an ok rule.
-        var green = MixVerdict.JudgeProducts(["g172", "g280"], "Drip", rules);
+        var green = MixVerdict.JudgeProducts(["p-hexaconazole-5-sc", "p-calcium-nitrate"], "Drip", rules);
         Assert.Equal(MixState.Green, green.State);
         Assert.Empty(green.PairProductIds);
-        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["g172", "g280", "g249"], "Drip", rules).State);
+        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["p-hexaconazole-5-sc", "p-calcium-nitrate", "p-gibberellic-acid-technical-90"], "Drip", rules).State);
         // An unknown member never lets a combination be green.
-        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["g172", "g280", null], "Drip", rules).State);
+        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["p-hexaconazole-5-sc", "p-calcium-nitrate", null], "Drip", rules).State);
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public sealed class MixVerdictTests
             "A rule in mix-rules.json has been reviewed, so calcium nitrate + 19:19:19 may now be red; this pin of the unreviewed state no longer applies.");
 
         Assert.Equal(MixState.Grey, MixVerdict.Judge(Tank(("calcium nitrate", null), ("19:19:19", "19:19:19"))).State);
-        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["g280", "g281"], "Drip").State);
+        Assert.Equal(MixState.Grey, MixVerdict.JudgeProducts(["p-calcium-nitrate", "p-magnesium-sulphate"], "Drip").State);
     }
 
     [Fact]

@@ -28,11 +28,11 @@ namespace ShramSafal.Domain.Inputs;
 /// "root" or "double") is <see cref="MatchState.NotFound"/>, so he gets the photo option. The brand still
 /// shows on its product card.</para>
 ///
-/// <para>Pure: it reads only the embedded catalogue and never changes what he said (P7).</para>
+/// <para>Pure: it reads only the library (today the embedded catalogue, through one loader function) and never changes what he said (P7).</para>
 /// </summary>
 public static class InputCatalog
 {
-    private sealed record CatalogFile(string Version, string Source, IReadOnlyList<string>? NonMatchingWords, IReadOnlyList<CatalogProduct> Products);
+    private sealed record CatalogFile(string Version, IReadOnlyList<CatalogSource> Sources, IReadOnlyList<string>? NonMatchingWords, IReadOnlyList<CatalogProduct> Products);
 
     private static readonly Regex Whitespace = new(
         "[ \\t\\n\\r\\f\\v\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]+",
@@ -40,8 +40,11 @@ public static class InputCatalog
 
     private static readonly Regex Digits = new("[0-9]+", RegexOptions.CultureInvariant);
 
-    private static readonly byte[] Raw = InputReferenceResource.ReadBytes("catalog.json");
-    private static readonly CatalogFile Data = InputReferenceResource.Read<CatalogFile>("catalog.json");
+    // THE LOADER SEAM: the one place the library is read. Today it is the embedded resource; a later lane
+    // swaps only LoadLibrary to read the server's copy. Nothing else in this class reads the JSON.
+    private static readonly (byte[] Raw, CatalogFile Data) Library = LoadLibrary();
+    private static readonly byte[] Raw = Library.Raw;
+    private static readonly CatalogFile Data = Library.Data;
     private static readonly Dictionary<string, CatalogProduct> ById = Data.Products.ToDictionary(p => p.Id, StringComparer.Ordinal);
     private static readonly Dictionary<string, int> Order = Data.Products.Select((p, i) => (p.Id, i)).ToDictionary(x => x.Id, x => x.i, StringComparer.Ordinal);
     private static readonly Dictionary<string, List<string>> NameIndex = BuildNameIndex(Data.Products);
@@ -50,8 +53,11 @@ public static class InputCatalog
     private static readonly HashSet<string> NonMatching = new(
         (Data.NonMatchingWords ?? []).Select(NormaliseSpokenName).Where(w => w.Length > 0), StringComparer.Ordinal);
 
-    /// <summary>The catalogue version (<c>inputs-1</c>), stored with every identity answer.</summary>
+    /// <summary>The catalogue version (<c>inputs-2</c>), stored with every identity answer.</summary>
     public static string Version => Data.Version;
+
+    /// <summary>The sources the library lists (the founder's dosage guide is source 1).</summary>
+    public static IReadOnlyList<CatalogSource> Sources => Data.Sources;
 
     /// <summary>Common words that never match a product, as listed in the catalogue.</summary>
     public static IReadOnlyList<string> NonMatchingWords => Data.NonMatchingWords ?? [];
@@ -96,6 +102,14 @@ public static class InputCatalog
         return ids.Count == 0
             ? new ProductMatch(MatchState.NotFound, null, [])
             : From(ids.OrderBy(id => Order[id]).ToList());
+    }
+
+    private static (byte[] Raw, CatalogFile Data) LoadLibrary()
+    {
+        var raw = InputReferenceResource.ReadBytes("catalog.json");
+        var data = System.Text.Json.JsonSerializer.Deserialize<CatalogFile>(raw, InputReferenceResource.JsonOptions)
+            ?? throw new InvalidOperationException("Embedded resource 'catalog.json' is empty.");
+        return (raw, data);
     }
 
     /// <summary>NFC, lowercase, drop <c>- . ,</c>, Devanagari digits to ASCII, collapse whitespace, trim.</summary>
