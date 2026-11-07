@@ -8,6 +8,7 @@ using ShramSafal.Domain.Compliance;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Inputs;
 using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Organizations;
@@ -48,6 +49,15 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     /// Mapped to <c>ssf.cost_categories</c>.
     /// </summary>
     public DbSet<CostCategory> CostCategories => Set<CostCategory>();
+
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT1c) - the input library: ShramSafal-wide reference data in
+    // `ssf.input_library_*` (no farm column; the cost_categories policy shape). Read by every farm, written only by the
+    // admin intake command (never through agrisync_app).
+    public DbSet<InputLibrarySource> InputLibrarySources => Set<InputLibrarySource>();
+    public DbSet<InputLibraryProduct> InputLibraryProducts => Set<InputLibraryProduct>();
+    public DbSet<InputLibrarySourceRef> InputLibrarySourceRefs => Set<InputLibrarySourceRef>();
+    public DbSet<InputLibraryConflict> InputLibraryConflicts => Set<InputLibraryConflict>();
+    public DbSet<InputLibraryMeta> InputLibraryMeta => Set<InputLibraryMeta>();
     public DbSet<FinanceCorrection> FinanceCorrections => Set<FinanceCorrection>();
     public DbSet<DayLedger> DayLedgers => Set<DayLedger>();
     public DbSet<Attachment> Attachments => Set<Attachment>();

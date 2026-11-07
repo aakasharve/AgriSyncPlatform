@@ -4063,6 +4063,236 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("shram_phone_challenges", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibraryConflict", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("DecidedBy")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("decided_by");
+
+                    b.Property<DateTime?>("DecidedOn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("decided_on");
+
+                    b.Property<string>("ExistingValue")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("existing_value");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("field");
+
+                    b.Property<string>("IncomingProductId")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("incoming_product_id");
+
+                    b.Property<string>("IncomingRef")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("incoming_ref");
+
+                    b.Property<string>("IncomingSourceId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("incoming_source_id");
+
+                    b.Property<string>("IncomingValue")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("incoming_value");
+
+                    b.Property<string>("ProductId")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IncomingSourceId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_input_library_conflicts_status");
+
+                    b.HasIndex("ProductId", "Field", "IncomingSourceId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_input_library_conflicts_product_field_source");
+
+                    b.ToTable("input_library_conflicts", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_input_library_conflicts_status", "status IN ('open','real_difference','error')");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibraryMeta", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    b.Property<string>("NonMatchingWords")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("non_matching_words");
+
+                    b.Property<int>("PublishedVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("published_version");
+
+                    b.Property<string>("ShapeVersion")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("shape_version");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("input_library_meta", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_input_library_meta_single_row", "id = 1");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibraryProduct", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Facts")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("facts");
+
+                    b.Property<string>("MatchKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("match_key");
+
+                    b.Property<int>("Ordinal")
+                        .HasColumnType("integer")
+                        .HasColumnName("ordinal");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MatchKey")
+                        .HasDatabaseName("ix_input_library_products_match_key");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_input_library_products_status");
+
+                    b.ToTable("input_library_products", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_input_library_products_status", "status IN ('draft','published')");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibrarySource", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CheckedBy")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("checked_by");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("kind");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<DateOnly>("ReceivedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("received_on");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("title");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("input_library_sources", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_input_library_sources_kind", "kind IN ('guide','company-list','university','label')");
+
+                            t.HasCheckConstraint("ck_input_library_sources_status", "status IN ('draft','published')");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibrarySourceRef", b =>
+                {
+                    b.Property<string>("ProductId")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("source_id");
+
+                    b.Property<string>("Ref")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("ref");
+
+                    b.Property<string>("Entry")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("entry");
+
+                    b.HasKey("ProductId", "SourceId", "Ref");
+
+                    b.HasIndex("SourceId")
+                        .HasDatabaseName("ix_input_library_source_refs_source_id");
+
+                    b.ToTable("input_library_source_refs", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Labour.AttendanceMark", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6623,6 +6853,36 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_shram_phone_challenges_person");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibraryConflict", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Inputs.InputLibrarySource", null)
+                        .WithMany()
+                        .HasForeignKey("IncomingSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShramSafal.Domain.Inputs.InputLibraryProduct", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibrarySourceRef", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Inputs.InputLibraryProduct", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ShramSafal.Domain.Inputs.InputLibrarySource", null)
+                        .WithMany()
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Labour.FieldOperator", b =>

@@ -72,6 +72,7 @@ GET /shramsafal/reference/activity-categories
 GET /shramsafal/reference/cost-categories
 GET /shramsafal/reference/crop-types
 GET /shramsafal/reference/deviation-reason-codes
+GET /shramsafal/reference/input-library
 GET /shramsafal/reference/schedule-templates
 GET /shramsafal/reference/schedule-templates/{id:guid}
 GET /shramsafal/reports/farm-week/{farmId:guid}

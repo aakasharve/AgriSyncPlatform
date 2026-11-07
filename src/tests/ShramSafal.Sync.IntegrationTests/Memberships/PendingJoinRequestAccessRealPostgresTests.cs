@@ -546,6 +546,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // (m.status = 3) — see PoliciesCreatedAfterActiveOnly. Down() drops exactly those policies and takes the tables back
         // out of RLS. No farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched. Re-Up recreates them.
         "20261107034303_AddRlsToDayLedgersLogTasksAndPlannedActivities",
+        // spec plr-d10 lane IT1c (D-107 B / D-108 3) - Up() and Down() read in full: Up() creates the five ssf.input_library_* tables,
+        // seeds source 1, puts them under ENABLE + FORCE RLS in the cost_categories shape (global read, deny-write for the app
+        // role) and grants SELECT on them to the app role. It touches no farm_memberships or farm_join_requests object, no ssf.farms policy, no seat, and creates no
+        // p_user_select_* policy. Down() drops only those five tables. Re-Up recreates and re-seeds them.
+        "20261107080000_AddInputLibrary",
     ];
 
     /// <summary>
