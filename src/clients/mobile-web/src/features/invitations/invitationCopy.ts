@@ -7,6 +7,14 @@
  * string is PROPOSED unless marked as the brief's / design's own words; nothing here says "AI", and there is no emoji.
  */
 import type { ClaimOutcome, InvitationLabel, InvitationRefusal, InvitationStatus } from './personalInvitationClient';
+import type { AuthorityName } from '../../core/session/farmAuthorities';
+
+/**
+ * Every authority the server enforces must have its card words, or a Marathi screen would show the raw English name
+ * (MU-2 re-review 2, N-1: PlanWork became enforced with lane L8b-1 and had none). AssignWork is not enforced yet (L8c);
+ * when it is, drop it from this Exclude and the word tables below stop compiling until it has words.
+ */
+type AuthorityWithWords = Exclude<AuthorityName, 'AssignWork'>;
 
 export interface InvitationCopy {
     labels: Record<InvitationLabel, string>;
@@ -94,10 +102,11 @@ const mr: InvitationCopy = {
         SeeMoney: 'पैसे दिसतात', // PROPOSED (Marathi)
         SeeWages: 'इतरांची मजुरी दिसते', // PROPOSED (Marathi)
         ReviewMoney: 'पैशांच्या नोंदी तपासू शकतात', // PROPOSED (Marathi)
+        PlanWork: 'कामाचं नियोजन करू शकतात', // the founder's word "कामाचं नियोजन करणे" (D-73), in the card's form
         EditFarmSetup: 'शेताची रचना बदलू शकतात', // PROPOSED (Marathi)
         LabRecords: 'चाचण्यांच्या नोंदी करू शकतात', // PROPOSED (Marathi)
         ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने बनवू शकतात', // PROPOSED (Marathi)
-    },
+    } satisfies Record<AuthorityWithWords, string>,
     noMoney: 'पैसे दिसत नाहीत', // the design's words (MU §6)
     allPlots: 'सर्व प्लॉट', // the design's words (MU §6)
     ownWork: 'स्वतःचं काम', // the design's words (MU §6)
@@ -195,10 +204,11 @@ const en: InvitationCopy = {
         SeeMoney: 'Sees money', // PROPOSED (English)
         SeeWages: "Sees other people's wages", // PROPOSED (English)
         ReviewMoney: 'Can check money entries', // PROPOSED (English)
+        PlanWork: 'Can plan the work', // PROPOSED (English), the twin of the founder's D-73 word
         EditFarmSetup: 'Can change farm setup', // PROPOSED (English)
         LabRecords: 'Can record lab tests', // PROPOSED (English)
         ScheduleTemplates: 'Can make crop schedule templates', // PROPOSED (English)
-    },
+    } satisfies Record<AuthorityWithWords, string>,
     noMoney: 'Does not see money', // PROPOSED (English)
     allPlots: 'All plots', // PROPOSED (English)
     ownWork: 'Own work', // PROPOSED (English)

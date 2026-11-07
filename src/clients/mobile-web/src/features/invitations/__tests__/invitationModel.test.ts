@@ -115,6 +115,19 @@ describe("the card's words come from the grant the server sent", () => {
         expect(lines.authorities[0]).toMatch(/^Can confirm records \(until .+\)$/);
         expect(lines.authorities[1]).toBe('Sees money');
     });
+
+    // MU-2 re-review 2, N-1: PlanWork became enforced with lane L8b-1 (D-73); its card words must be there in both languages,
+    // and the raw English authority name must never reach the card.
+    it.each([
+        ['mr', 'कामाचं नियोजन करू शकतात'],
+        ['en', 'Can plan the work'],
+    ] as const)('the planning permission has its own words (%s)', (language, word) => {
+        const lines = cardLines(
+            { label: 'Mukadam', plotScope: 'AllPlots', plotNames: [], authorities: [{ name: 'PlanWork', expiresAtUtc: null }] },
+            INVITATION_COPY_FOR_TESTS[language], language);
+        expect(lines.authorities).toContain(word);
+        expect(lines.authorities.join(' ')).not.toContain('PlanWork');
+    });
 });
 
 describe('the eight-digit code', () => {
