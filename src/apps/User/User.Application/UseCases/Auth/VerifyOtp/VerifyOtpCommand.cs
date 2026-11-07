@@ -14,4 +14,7 @@ public sealed record VerifyOtpResult(
     string RefreshToken,
     DateTime ExpiresAtUtc,
     bool CreatedNewUser,
-    DateTime RefreshExpiresAtUtc);
+    DateTime RefreshExpiresAtUtc,
+    // spec: plr-d10 lane NP-1 — see AuthResponse: the question is open on this phone, and the name it shows.
+    bool DeviceCheckRequired = false,
+    string? AccountName = null);

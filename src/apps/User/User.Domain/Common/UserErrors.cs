@@ -50,4 +50,11 @@ public static class UserErrors
     /// </summary>
     public static readonly Error RegisterRoleNotAllowed =
         Error.Validation("auth.register_role_not_allowed", "An account role cannot be chosen at sign-up.");
+
+    /// <summary>
+    /// spec: plr-d10 lane NP-1 — "नाही" from a phone that is not being asked the new-phone question (it is known,
+    /// or already answered). Refused, so a known phone can never end up carrying a "number changed hands" mark. HTTP 409.
+    /// </summary>
+    public static readonly Error DeviceCheckNotAsked =
+        Error.Conflict("auth.device_check_not_asked", "This phone is not being asked whether the account is yours.");
 }

@@ -4,6 +4,7 @@
 // (`from '../../infrastructure/api/AgriSyncClient'`) continue to compile
 // without any changes at call sites.
 
+import type { HeldSignInFields } from '../storage/PendingDeviceCheckStore';
 import type { VisibleBucketId } from '../../domain/ai/BucketId';
 import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostCategory';
 // LABOUR_PHASE2 Phase 3 — see the LABOUR ENGAGEMENT DTOS section below.
@@ -28,7 +29,7 @@ export interface LoginRequest {
     platform: 'web' | 'android' | 'unknown';
 }
 
-export interface AuthResponseDto {
+export interface AuthResponseDto extends HeldSignInFields { // + lane NP-1's two fields
     userId: string;
     accessToken: string;
     expiresAtUtc: string;

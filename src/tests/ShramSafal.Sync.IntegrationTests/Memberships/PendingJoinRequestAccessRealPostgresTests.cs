@@ -535,6 +535,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // the table. Up() creates that table only, with its user-select policy written ALREADY narrowed (m.status = 3) — see
         // PoliciesCreatedAfterActiveOnly. No farm_memberships or farm_join_requests object, no other policy. Re-Up recreates them.
         "20261106112244_AddFarmRates",
+        // spec plr-d10 lane NP-1 (founder D-56, CTO call D-85) — Down() read in full: drops one CHECK and two nullable columns on
+        // public.refresh_tokens (USER context; the ShramSafal migrator never reverts or re-applies it, it only shares the scratch
+        // database's history table). No farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched.
+        "20261107061500_AddNewPhoneQuestion",
     ];
 
     /// <summary>

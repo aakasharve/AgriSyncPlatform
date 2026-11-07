@@ -139,10 +139,10 @@ public class VerifyOtpDeviceSessionTests
 
     private sealed class FakeJwt(string rawRefreshToken = "refresh") : IJwtTokenService
     {
-        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified)
+        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending)
             => new("access", rawRefreshToken, DateTime.UtcNow.AddMinutes(15));
 
-        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified)
+        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
             => new("access", rawRefreshToken, DateTime.UtcNow.AddMinutes(15));
     }
 
@@ -196,6 +196,9 @@ public class VerifyOtpDeviceSessionTests
             RevokeAllCalled = true;
             return Task.CompletedTask;
         }
+
+        // lane NP-1: every phone counts as known here (these tests are about sessions, not the new-phone question).
+        public Task<bool> HasUnheldSessionOnDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default) => Task.FromResult(true);
 
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }

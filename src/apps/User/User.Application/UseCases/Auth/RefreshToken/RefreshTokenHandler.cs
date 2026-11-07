@@ -55,7 +55,10 @@ public sealed class RefreshTokenHandler(
             .Select(m => new MembershipClaim(m.AppId, m.Role.ToString()))
             .ToList();
 
-        var tokens = jwtTokenService.GenerateTokens(user.Id, user.Phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
+        // spec: plr-d10 lane NP-1 — the new-phone hold rides the session: a held session's refresh stays held (its
+        // token still opens nothing) until the phone answers; a known phone's refresh is never held.
+        var held = existingToken.IsHeldForDeviceCheck;
+        var tokens = jwtTokenService.GenerateTokens(user.Id, user.Phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue, deviceCheckPending: held);
 
         // Store new refresh token — preserve device metadata from the old token
         var newRefreshTokenId = idGenerator.New();
@@ -68,6 +71,10 @@ public sealed class RefreshTokenHandler(
             existingToken.Platform,
             utcNow,
             utcNow.Add(RefreshTokenPolicy.Lifetime));
+        if (held)
+        {
+            newRefreshToken.HoldForDeviceCheck(existingToken.DeviceCheck!.Value);
+        }
 
         // Stamp last_used_at_utc before rotating so the column reflects the final use.
         existingToken.MarkUsed(utcNow);
@@ -78,6 +85,9 @@ public sealed class RefreshTokenHandler(
         await refreshTokenRepository.AddAsync(newRefreshToken, ct);
         await refreshTokenRepository.SaveChangesAsync(ct);
 
-        return Result.Success(new AuthResponse(user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc, newRefreshToken.ExpiresAtUtc));
+        return Result.Success(new AuthResponse(
+            user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc, newRefreshToken.ExpiresAtUtc,
+            DeviceCheckRequired: held,
+            AccountName: held ? user.DisplayName : null));
     }
 }

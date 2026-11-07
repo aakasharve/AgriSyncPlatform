@@ -20,7 +20,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, ArrowRight, Phone, MessageCircleMore, Leaf } from 'lucide-react';
 import { parseJoinPayload } from '../features/onboarding/qr/qrTokenClient';
 import { recordJoinAttempt } from '../features/onboarding/qr/farmInviteStore';
-import { setAuthSession } from '../infrastructure/storage/AuthTokenStore';
+import { setAuthSession, type AuthSession } from '../infrastructure/storage/AuthTokenStore';
 import { setRememberDevice } from '../infrastructure/storage/RememberDeviceStore';
 import { getOrCreateDeviceId } from '../infrastructure/storage/DeviceIdStore';
 import { startOtp, verifyOtp, isOtpError } from '../features/auth/data/otpClient';
@@ -39,6 +39,8 @@ import { useLanguage } from '../i18n/LanguageContext';
 // consent anywhere. The tick now sits on the phone step and is recorded before the send.
 import ConsentTick from '../features/consent/gate/ConsentTick';
 import { useConsentBeforeOtp } from '../features/consent/gate/useConsentBeforeOtp';
+// spec: plr-d10 lane NP-1 (founder D-56) — the one-time "is this your account?" question on a new phone.
+import DeviceCheckQuestion from '../features/auth/deviceCheck/DeviceCheckQuestion';
 
 type Step = 'phone' | 'otp' | 'done' | 'invalid' | 'checking' | 'revoked';
 
@@ -181,6 +183,8 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
     // and the second claim for a consumed token answers "invalid" - which used
     // to throw a worker who HAD joined back to Step 1.
     const claimingRef = useRef(false);
+    // spec: plr-d10 lane NP-1 — the one-time new-phone question, asked between the code and the claim.
+    const [deviceCheck, setDeviceCheck] = useState<{ accountName: string } | null>(null);
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -323,69 +327,50 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
         }
     };
 
-    const handleOtpSubmit = async () => {
-        if (claimingRef.current || joined) return;
-        setError(null);
-        if (otp.length !== 6) {
-            setError({ key: 'otpLength' });
-            return;
+    // Step 2 of a join, once he is signed in with a session that opens his account: redeem the QR token.
+    const claimSignedIn = async (userId: string) => {
+        setPermissionsGranted(true);
+
+        // Step 2: redeem the QR token to create the FarmMembership.
+        // The auth session from step 1 is already stored so this
+        // fetch carries the Authorization: Bearer header.
+        const claim = await claimFarmJoin(context.token, context.farmCode);
+
+        setLastJoinedFarm({
+            farmCode: context.farmCode,
+            farmId: claim.farmId,
+            farmName: claim.farmName,
+            role: claim.role,
+            membershipId: claim.membershipId,
+            joinedAtUtc: new Date().toISOString(),
+            phone,
+            userId,
+        });
+        recordJoinAttempt(context.farmCode, context.token, 'verified');
+
+        // The claim answered 200 (server truth). Cross-check it against the
+        // server's own membership list: if that list ANSWERS and omits the
+        // farm, this is not a join - fall to the failure/retry path below.
+        // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F3) — unless the claim itself
+        // says the seat is NOT Active (an earlier typed-code request still waiting for
+        // the owner): that is an honest answer, shown as "waiting", not as a failure
+        // and never as "joined".
+        const listed = isActiveSeat(claim) ? await askServerIfMember({ farmId: claim.farmId }) : null;
+        if (listed === false) {
+            throw { error: 'join.not_confirmed', message: '', status: 0 };
         }
+        confirmJoin(context, claim);
+        setJoined(claim);
+        setStep('done');
+    };
+
+    // One press = one sign-in-and-claim; every failure of either half lands in the one catch below.
+    const runJoinStep = async (work: () => Promise<void>) => {
         claimingRef.current = true;
         joinFailures.delete(context.token);
         setIsSubmitting(true);
-
         try {
-            // Step 1: verify the OTP. This creates/fetches the User and
-            // returns an identity-only JWT with phone_verified=true.
-            const deviceId = getOrCreateDeviceId();
-            const result = await verifyOtp(phone, otp, undefined, {
-                rememberDevice,
-                deviceId,
-                platform: 'web',
-            });
-
-            // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
-            // Persist the flag so AgriSyncClient.refreshSession() picks it up.
-            setRememberDevice(rememberDevice);
-            setAuthSession({
-                userId: result.userId,
-                accessToken: result.accessToken,
-                expiresAtUtc: result.expiresAtUtc,
-            });
-
-            setPermissionsGranted(true);
-
-            // Step 2: redeem the QR token to create the FarmMembership.
-            // The auth session from step 1 is already stored so this
-            // fetch carries the Authorization: Bearer header.
-            const claim = await claimFarmJoin(context.token, context.farmCode);
-
-            setLastJoinedFarm({
-                farmCode: context.farmCode,
-                farmId: claim.farmId,
-                farmName: claim.farmName,
-                role: claim.role,
-                membershipId: claim.membershipId,
-                joinedAtUtc: new Date().toISOString(),
-                phone,
-                userId: result.userId,
-            });
-            recordJoinAttempt(context.farmCode, context.token, 'verified');
-
-            // The claim answered 200 (server truth). Cross-check it against the
-            // server's own membership list: if that list ANSWERS and omits the
-            // farm, this is not a join - fall to the failure/retry path below.
-            // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F3) — unless the claim itself
-            // says the seat is NOT Active (an earlier typed-code request still waiting for
-            // the owner): that is an honest answer, shown as "waiting", not as a failure
-            // and never as "joined".
-            const listed = isActiveSeat(claim) ? await askServerIfMember({ farmId: claim.farmId }) : null;
-            if (listed === false) {
-                throw { error: 'join.not_confirmed', message: '', status: 0 };
-            }
-            confirmJoin(context, claim);
-            setJoined(claim);
-            setStep('done');
+            await work();
         } catch (err) {
             // A join already confirmed for this token outranks any later failure
             // (a second claim answering "invalid" for the token the first one
@@ -423,6 +408,65 @@ const JoinFarmLandingPage: React.FC<JoinFarmLandingPageProps> = ({ onComplete, o
             setIsSubmitting(false);
         }
     };
+
+    const handleOtpSubmit = async () => {
+        if (claimingRef.current || joined) return;
+        setError(null);
+        if (otp.length !== 6) {
+            setError({ key: 'otpLength' });
+            return;
+        }
+        await runJoinStep(async () => {
+            // Step 1: verify the OTP. This creates/fetches the User and
+            // returns an identity-only JWT with phone_verified=true.
+            const deviceId = getOrCreateDeviceId();
+            const result = await verifyOtp(phone, otp, undefined, {
+                rememberDevice,
+                deviceId,
+                platform: 'web',
+            });
+
+            // spec: secure-remembered-device-sessions-2026-06-24 — Task 4.2
+            // Persist the flag so AgriSyncClient.refreshSession() picks it up.
+            setRememberDevice(rememberDevice);
+            if (result.deviceCheckRequired === true) {
+                // spec: plr-d10 lane NP-1 (D-56) — an existing account on a phone it has never confirmed: its token
+                // opens nothing, so nothing is stored and nothing is claimed until he answers the question below.
+                setDeviceCheck({ accountName: result.accountName ?? '' });
+                return;
+            }
+            setAuthSession({
+                userId: result.userId,
+                accessToken: result.accessToken,
+                expiresAtUtc: result.expiresAtUtc,
+            });
+            await claimSignedIn(result.userId);
+        });
+    };
+
+    // spec: plr-d10 lane NP-1 — होय: the session opens his account now; the join continues with no second code.
+    const handleDeviceConfirmed = (session: AuthSession) => {
+        setDeviceCheck(null);
+        setAuthSession(session);
+        void runJoinStep(() => claimSignedIn(session.userId));
+    };
+
+    // नाही (or the question expired): this phone did not open the account; back to the number.
+    const handleDeviceCheckFinished = () => {
+        setDeviceCheck(null);
+        setOtp('');
+        setStep('phone');
+    };
+
+    if (deviceCheck) {
+        return (
+            <DeviceCheckQuestion
+                accountName={deviceCheck.accountName}
+                onConfirmed={handleDeviceConfirmed}
+                onFinished={handleDeviceCheckFinished}
+            />
+        );
+    }
 
     // Said in the screen's language when drawn, so the consent notice's language switch changes it too.
     const errorText = error === null ? null

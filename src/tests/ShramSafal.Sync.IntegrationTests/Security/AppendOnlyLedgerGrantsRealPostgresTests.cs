@@ -212,6 +212,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    FORCE-RLS and APPEND-ONLY BY PRIVILEGE with its own effective-privilege guard (it is on AppendOnlyLedgers above).
         //    Touches no other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261106112244_AddFarmRates",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane NP-1, founder D-56 / CTO call D-85); Down() read in full: drops the CHECK
+        //    ck_refresh_tokens_device_check and the two nullable columns device_check / device_check_answered_at_utc on
+        //    public.refresh_tokens (USER context; the ShramSafal migrator never reverts or re-applies it, it only shares the
+        //    scratch database's history table). No grant, policy or append-only ledger is touched. Safe mid-proof.
+        "20261107061500_AddNewPhoneQuestion",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

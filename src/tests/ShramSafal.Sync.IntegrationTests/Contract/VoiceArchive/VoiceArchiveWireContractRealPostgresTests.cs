@@ -374,7 +374,7 @@ public sealed class VoiceArchiveWireContractRealPostgresTests(Xunit.Abstractions
         var request = new HttpRequestMessage(method, url) { Content = content };
         if (userId is { } id)
         {
-            var tokens = _app!.Services.GetRequiredService<IJwtTokenService>().GenerateIdentityTokens(id, phoneVerified: true);
+            var tokens = _app!.Services.GetRequiredService<IJwtTokenService>().GenerateIdentityTokens(id, phoneVerified: true, deviceCheckPending: false);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
         }
 

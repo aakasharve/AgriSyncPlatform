@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using AgriSync.BuildingBlocks.Auth.DeviceCheck;
 using AgriSync.BuildingBlocks.Auth.Jwt;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -18,7 +19,8 @@ internal sealed class JwtTokenIssuer(
         string phone,
         string displayName,
         IReadOnlyCollection<MembershipClaim> memberships,
-        bool phoneVerified)
+        bool phoneVerified,
+        bool deviceCheckPending)
     {
         var utcNow = DateTime.UtcNow;
         var expiresAt = utcNow.AddMinutes(_options.AccessTokenMinutes);
@@ -39,6 +41,8 @@ internal sealed class JwtTokenIssuer(
         {
             claims.Add(new Claim("membership", $"{m.AppId}:{m.Role}"));
         }
+
+        AddDeviceCheckClaim(claims, deviceCheckPending);
 
         // Note: prior to W0-B, this issuer also stamped a `membership: shramsafal:admin`
         // claim for userIds listed in appsettings.Admins[]. That path is removed.
@@ -65,7 +69,7 @@ internal sealed class JwtTokenIssuer(
         return new TokenPair(accessToken, refreshToken, expiresAt);
     }
 
-    public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified)
+    public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
     {
         var utcNow = DateTime.UtcNow;
         var expiresAt = utcNow.AddMinutes(_options.AccessTokenMinutes);
@@ -78,6 +82,8 @@ internal sealed class JwtTokenIssuer(
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("phone_verified", phoneVerified ? "true" : "false"),
         };
+
+        AddDeviceCheckClaim(claims, deviceCheckPending);
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_options.SigningKey));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -95,5 +101,17 @@ internal sealed class JwtTokenIssuer(
             + Convert.ToBase64String(Guid.NewGuid().ToByteArray());
 
         return new TokenPair(accessToken, refreshToken, expiresAt);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane NP-1 — a phone that has not answered the new-phone question gets a token the
+    /// server's <see cref="DeviceCheckGateMiddleware"/> serves nothing to. A known phone's token has no such claim.
+    /// </summary>
+    private static void AddDeviceCheckClaim(List<Claim> claims, bool deviceCheckPending)
+    {
+        if (deviceCheckPending)
+        {
+            claims.Add(new Claim(DeviceCheckClaims.Type, DeviceCheckClaims.Pending));
+        }
     }
 }

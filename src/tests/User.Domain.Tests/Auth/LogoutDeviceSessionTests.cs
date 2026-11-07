@@ -190,6 +190,9 @@ public class LogoutDeviceSessionTests
             return Task.CompletedTask;
         }
 
+        // lane NP-1: every phone counts as known here (these tests are about sessions, not the new-phone question).
+        public Task<bool> HasUnheldSessionOnDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default) => Task.FromResult(true);
+
         public Task SaveChangesAsync(CancellationToken ct = default)
         {
             SaveChangesCalls++;

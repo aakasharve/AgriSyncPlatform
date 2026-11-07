@@ -66,7 +66,8 @@ public sealed class RegisterUserHandler(
         await userRepository.AddAsync(user, ct);
 
         // No membership claims (none were written) and phone_verified=false (never stamped here).
-        var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, [], phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
+        // Never held (lane NP-1): the phone that makes an account is its first known phone — there is no one to ask.
+        var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, [], phoneVerified: user.PhoneVerifiedAtUtc.HasValue, deviceCheckPending: false);
 
         // Store refresh token hashed. Use real device metadata from the command when available.
         var session = command.Session;

@@ -43,6 +43,14 @@ internal sealed class RefreshTokenRepository(UserDbContext db) : IRefreshTokenRe
         }
     }
 
+    public async Task<bool> HasUnheldSessionOnDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default)
+    {
+        var typedUserId = new UserId(userId);
+        return await db.RefreshTokens.AnyAsync(
+            t => t.UserId == typedUserId && t.DeviceId == deviceId && t.DeviceCheck == null,
+            ct);
+    }
+
     public async Task SaveChangesAsync(CancellationToken ct = default)
     {
         await db.SaveChangesAsync(ct);

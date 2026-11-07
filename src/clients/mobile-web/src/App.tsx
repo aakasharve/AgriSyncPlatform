@@ -28,6 +28,8 @@ import { hasSeenFirstRunWelcome, markFirstRunWelcomeSeen } from './infrastructur
 import { useConsentGateLinkReconciliation } from './features/consent/gate/useConsentGateLink';
 // spec: plr-d10 I25 (founder D-13, D-36) — a signed-in farmer is asked ONCE when the notice changes.
 import NoticeChangeSheet from './features/consent/reask/NoticeChangeSheet';
+// spec: plr-d10 lane NP-1 (founder D-56) — the one-time "is this your account?" question on a new phone.
+import DeviceCheckQuestion from './features/auth/deviceCheck/DeviceCheckQuestion';
 import { IS_OVERSIGHT_PREVIEW_ENABLED } from './app/featureFlags';
 
 const hasJoinDeepLink = (): boolean => {
@@ -47,7 +49,7 @@ const AppFrame: React.FC<{
     // spec: secure-remembered-device-sessions-2026-06-24
     // Use authStatus (not isAuthenticated) so we can show a neutral loading
     // shell during 'checking' and never flash LoginPage before boot validation.
-    const { isAuthenticated, authStatus, session } = useAuth();
+    const { isAuthenticated, authStatus, session, deviceCheck, completeDeviceCheck, endDeviceCheck } = useAuth();
     const [joinActive, setJoinActive] = useState<boolean>(hasJoinDeepLink);
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — FR-1, FR-8) — स्वागत is the FIRST
     // screen, before login, once per phone. The login screen's "← मागे" brings it back (that is
@@ -74,6 +76,21 @@ const AppFrame: React.FC<{
     // fires on every authenticated app start, so a farmer who was offline when he
     // registered is linked the next time he opens the app with signal.
     useConsentGateLinkReconciliation(authStatus === 'authenticated' ? session?.userId : null);
+
+    // spec: plr-d10 lane NP-1 (founder D-56, CTO call D-85) — a phone the account has never confirmed is asked ONCE,
+    // before anything of the farm is shown or downloaded: until होय the app is not signed in (no farm list, no sync),
+    // and the server serves that phone nothing. His own phone never sees this (the server never asks it).
+    if (deviceCheck) {
+        return (
+            <AppShell>
+                <DeviceCheckQuestion
+                    accountName={deviceCheck.accountName}
+                    onConfirmed={completeDeviceCheck}
+                    onFinished={endDeviceCheck}
+                />
+            </AppShell>
+        );
+    }
 
     // The QR deep-link wins over login. Semi-literate workers must never
     // see a generic password screen when they scan a farm QR.

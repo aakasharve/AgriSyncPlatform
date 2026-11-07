@@ -385,7 +385,7 @@ public sealed class TenantDekEndpointRealPostgresTests : IAsyncLifetime
             // A REAL access token from the real IJwtTokenService (identity-only claims: sub +
             // phone_verified, exactly what a logged-in farmer holds), validated by the real
             // JwtBearer scheme. No owner-account claim exists in it - that is the whole defect.
-            var tokens = _app!.Services.GetRequiredService<IJwtTokenService>().GenerateIdentityTokens(id, phoneVerified: true);
+            var tokens = _app!.Services.GetRequiredService<IJwtTokenService>().GenerateIdentityTokens(id, phoneVerified: true, deviceCheckPending: false);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
         }
 

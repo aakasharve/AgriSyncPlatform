@@ -58,6 +58,16 @@ internal sealed class RefreshTokenConfiguration : IEntityTypeConfiguration<Refre
         builder.Property(t => t.ReplacedByTokenId)
             .HasColumnName("replaced_by_token_id");
 
+        // spec: plr-d10 lane NP-1 — the new-phone question rides the session row (the server's existing
+        // registry of a person's phones); NULL = not held. Stored by name so support can read the mark.
+        builder.Property(t => t.DeviceCheck)
+            .HasColumnName("device_check")
+            .HasConversion<string>()
+            .HasMaxLength(32);
+
+        builder.Property(t => t.DeviceCheckAnsweredAtUtc)
+            .HasColumnName("device_check_answered_at_utc");
+
         builder.HasIndex(t => t.TokenHash)
             .IsUnique();
 

@@ -1337,6 +1337,13 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    SELECT + INSERT for the app role). Never touches ssf.audit_events, its policies or its grants (a rate change
         //    writes an ordinary audit row through the app role's existing INSERT). Safe mid-proof.
         "20261106112244_AddFarmRates",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane NP-1, founder D-56 / CTO call D-85); Down() read in full: drops the CHECK
+        //    ck_refresh_tokens_device_check and the two nullable columns device_check / device_check_answered_at_utc on
+        //    public.refresh_tokens (USER context). Up() adds them NULL, so no row is rewritten. It is a User-context migration
+        //    that shares the scratch database's history table with this context's migrator, so it is only LISTED here: the
+        //    ShramSafal migrator never reverts or re-applies it. Never touches ssf.audit_events, its policies or its grants.
+        //    Safe mid-proof.
+        "20261107061500_AddNewPhoneQuestion",
     ];
 
     /// <summary>

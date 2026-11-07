@@ -46,6 +46,10 @@ public sealed class LoginHandler(
         // mark them verified on purpose (PurveshDemoSeeder, BlankTestUserSeeder, E2eFixtureSeeder);
         // the token below simply reports the stored state.
 
+        // spec: plr-d10 lane NP-1 (founder D-56) — the test-only password sign-in asks on a new phone exactly like SMS,
+        // so the phone shows the same screens; a sign-in that names no phone (the admin console) is not held.
+        var hold = await NewPhoneQuestion.HoldForPasswordSignInAsync(refreshTokenRepository, user.Id, command.Session.DeviceId, ct);
+
         // Revoke existing session for the same device only — other device sessions are preserved.
         await refreshTokenRepository.RevokeActiveForUserDeviceAsync(
             user.Id, command.Session.DeviceId, utcNow, "same_device_login", ct);
@@ -56,7 +60,7 @@ public sealed class LoginHandler(
             .Select(m => new MembershipClaim(m.AppId, m.Role.ToString()))
             .ToList();
 
-        var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue);
+        var tokens = jwtTokenService.GenerateTokens(user.Id, phone.Value, user.DisplayName, memberships, phoneVerified: user.PhoneVerifiedAtUtc.HasValue, deviceCheckPending: hold is not null);
 
         // Store new refresh token (hashed), with device metadata
         var newRefreshTokenId = idGenerator.New();
@@ -69,10 +73,17 @@ public sealed class LoginHandler(
             command.Session.Platform,
             utcNow,
             utcNow.Add(RefreshTokenPolicy.Lifetime));
+        if (hold is { } asked)
+        {
+            refreshToken.HoldForDeviceCheck(asked);
+        }
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
         await refreshTokenRepository.SaveChangesAsync(ct);
 
-        return Result.Success(new AuthResponse(user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc, refreshToken.ExpiresAtUtc));
+        return Result.Success(new AuthResponse(
+            user.Id, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAtUtc, refreshToken.ExpiresAtUtc,
+            DeviceCheckRequired: hold is not null,
+            AccountName: hold is not null ? user.DisplayName : null));
     }
 }
