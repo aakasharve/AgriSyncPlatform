@@ -167,7 +167,15 @@ public sealed class DailyRichnessDerivationService(
             var scores = probe.Scores;
 
             var classification = DayClassifier.Classify(signals);
-            var stamp = RichnessStamper.Stamp(classification, signals);
+            // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3a, item 7; founder D-46) — the streak counts
+            // confirmed records only. "Confirmed" is L4b's मंजूर and nothing else: the record's current status (the
+            // fold of its verification events) is Verified. That status already IS "of the current version": a
+            // confirmation of a version the record has moved past is refused (VerifyLogHandler), and every change to
+            // what the record says re-opens it (MaterialChangeReopen, the labour-correction door). A शंका, or a
+            // correction that re-opens it, therefore leaves it unconfirmed here. Read off the logs just loaded for the
+            // day, so a confirmation counts on its WORK day whenever it was given. The rule itself is RichnessStamper's.
+            var dayHasConfirmedRecord = logs.Any(l => l.CurrentVerificationStatus == VerificationStatus.Verified);
+            var stamp = RichnessStamper.Stamp(classification, signals, dayHasConfirmedRecord);
             var componentsJson = JsonSerializer.Serialize(input);
 
             var flags = new ContributingFlags(

@@ -314,7 +314,8 @@ public sealed class AddLogTaskPipelineTests
             new AddLogTaskFixedIdGenerator(Guid.Parse("88888888-8888-8888-8888-888888888888")),
             clock,
             new AllowAllEntitlementPolicy(),
-            new NoopComplianceService());
+            new NoopComplianceService(),
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         var validator = new AddLogTaskValidator();
         var authorizer = new AddLogTaskAuthorizer(repo);

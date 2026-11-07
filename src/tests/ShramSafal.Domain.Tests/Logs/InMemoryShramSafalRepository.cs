@@ -200,6 +200,13 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
             .OrderBy(e => e.CreatedAtUtc)
             .FirstOrDefault());
 
+    // lane IT3a fix pass 1 — the day recompute reads a log's disturbance back from the same captured list, so a
+    // declared no-work day (a full-day blocker) can be scored end to end here, as it is from ssf.disturbance_events.
+    public Task<IReadOnlyList<DisturbanceEvent>> GetDisturbanceEventsForDailyLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DisturbanceEvent>>(
+            CapturedDisturbances.Where(e => dailyLogIds.Contains(e.DailyLogId)).OrderBy(e => e.CreatedAtUtc).ToList());
+
     // ── WP-2d (D5) RoutineMemory upsert ──────────────────────────────────────
     // Captures the routine_patterns the derivation upserts so the reinforce
     // assertion can inspect them. GetRoutinePatternAsync returns the live
@@ -290,7 +297,10 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
     // should use a more capable stub or a real DbContext.
     public Task AddCostEntryAsync(CostEntry costEntry, CancellationToken ct = default) => Task.CompletedTask;
     public Task<CostEntry?> GetCostEntryByIdAsync(Guid costEntryId, CancellationToken ct = default) => throw new NotImplementedException();
-    public Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default) => throw new NotImplementedException();
+    // lane IT3a — a content revision asks for the record's money by its derived ids (EditMoney). No cost entry is ever
+    // stored here (AddCostEntryAsync above keeps nothing), so the honest answer is "none".
+    public Task<List<CostEntry>> GetCostEntriesByIdsAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
+        => Task.FromResult(new List<CostEntry>());
     // T-IGH-03-PIPELINE-ROLLOUT (AddCostEntry): the AddCostEntry
     // handler body calls this for duplicate detection on every save.
     // The pipeline tests don't seed any CostEntries, so an empty list
@@ -313,7 +323,9 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
     public Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<List<LogTask>> GetExecutedTasksByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<List<CostEntry>> GetCostEntriesAsync(DateOnly? fromDate, DateOnly? toDate, CancellationToken ct = default) => throw new NotImplementedException();
-    public Task<List<FinanceCorrection>> GetCorrectionsForEntriesAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default) => throw new NotImplementedException();
+    // lane IT3a — as GetCostEntriesByIdsAsync: no money is stored here, so it has no corrections either.
+    public Task<List<FinanceCorrection>> GetCorrectionsForEntriesAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
+        => Task.FromResult(new List<FinanceCorrection>());
     public Task<List<Farm>> GetFarmsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<List<Plot>> GetPlotsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotImplementedException();
     public Task<List<CropCycle>> GetCropCyclesChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotImplementedException();

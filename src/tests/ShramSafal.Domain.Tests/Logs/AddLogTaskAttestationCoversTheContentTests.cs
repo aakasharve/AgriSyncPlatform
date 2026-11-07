@@ -209,6 +209,7 @@ public sealed class AddLogTaskAttestationCoversTheContentTests
             clock,
             new AllowAllEntitlementPolicy(),
             new NoopComplianceService(),
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService(),
             new OnLogVerifiedAutoVerifyJobCard(
                 repo,
                 clock,
