@@ -3353,6 +3353,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("client_attachment_ids_json");
 
+                    b.Property<int>("ContentVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1)
+                        .HasColumnName("content_version");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
@@ -3483,6 +3489,52 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.HasIndex("FarmId", "EntryDate");
 
                     b.ToTable("cost_entries", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Finance.CostEntryApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("app_version");
+
+                    b.Property<DateTime>("ApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("approved_at_utc");
+
+                    b.Property<Guid>("ApprovedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("approved_by_user_id");
+
+                    b.Property<int>("BillVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("bill_version");
+
+                    b.Property<string>("ClientRequestId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("client_request_id");
+
+                    b.Property<Guid>("CostEntryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cost_entry_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_cost_entry_approvals_farm_id");
+
+                    b.HasIndex("CostEntryId", "ApprovedAtUtc")
+                        .HasDatabaseName("ix_cost_entry_approvals_entry_approved");
+
+                    b.ToTable("cost_entry_approvals", "ssf");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Finance.DayLedger", b =>
@@ -6451,6 +6503,21 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Navigation("Location");
 
                     b.Navigation("Provenance")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Finance.CostEntryApproval", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Finance.CostEntry", null)
+                        .WithMany()
+                        .HasForeignKey("CostEntryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("ShramSafal.Domain.Farms.Farm", null)
+                        .WithMany()
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

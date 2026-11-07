@@ -111,7 +111,16 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
             var refused = await PushAllocationAsync(who, billA);
             Output.WriteLine($"[EVIDENCE] {label} allocate_global_expense: {refused.Status} {refused.ErrorCode}");
             refused.Status.Should().Be("failed", $"a {label} does not split money unless the primary owner said so");
-            refused.ErrorCode.Should().EndWith("Forbidden");
+            // lane BILL-1 add-on (re-review 2, N1): a कामगार seat reads only its own money, so another person's bill is not
+            // there for it (not found, as a bill of another farm); the others see it and lack the authority.
+            if (who == Worker)
+            {
+                refused.ErrorCode.Should().Be("ShramSafal.CostEntryNotFound");
+            }
+            else
+            {
+                refused.ErrorCode.Should().EndWith("Forbidden");
+            }
             (await DayLedgerCountAsync(billA)).Should().Be(0, $"nothing is written for the {label}");
         }
 

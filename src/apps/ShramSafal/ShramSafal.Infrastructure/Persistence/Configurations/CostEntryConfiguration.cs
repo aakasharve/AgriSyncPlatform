@@ -154,6 +154,14 @@ internal sealed class CostEntryConfiguration : IEntityTypeConfiguration<CostEntr
             .HasColumnName("is_corrected")
             .HasDefaultValue(false);
 
+        // spec: plr-d10 lane BILL-1 (founder D-12) — which version of the bill this is (a reviewer's stamp names the one he saw).
+        // Every bill saved before the column existed is version 1: nobody had approved any of them, so no stamp can name an
+        // older number for it.
+        builder.Property(x => x.ContentVersion)
+            .HasColumnName("content_version")
+            .HasDefaultValue(1)
+            .IsRequired();
+
         builder.Property(x => x.IsFlagged)
             .HasColumnName("is_flagged")
             .HasDefaultValue(false)

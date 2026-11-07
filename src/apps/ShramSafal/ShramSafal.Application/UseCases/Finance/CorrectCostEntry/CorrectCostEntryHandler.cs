@@ -40,8 +40,18 @@ public sealed class CorrectCostEntryHandler(
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.InvalidCommand);
         }
 
-        var entry = await repository.GetCostEntryByIdAsync(command.CostEntryId, ct);
+        // spec: plr-d10 lane BILL-1 — read under the bill's row hold (the approval door's read): a correction makes a new
+        // version of the bill, so it and an approval in flight never both read the version the other is about to move.
+        var entry = await repository.GetCostEntryForChangeAsync(command.CostEntryId, ct);
         if (entry is null)
+        {
+            return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
+        }
+
+        // spec: plr-d10 lane BILL-1 fix round 1 (review H1) — THE place rule the read side uses, for every seat it narrows: an
+        // own-records seat (स्वतःचं काम, कामगार) holding review money corrects only his own money, a chosen-plots seat only his
+        // plots' (or his own). A bill his pull never sends him is not there: not found, as a bill of another farm.
+        if (await CostEntryPlaceGate.HiddenFromAsync(repository, entry, command.CorrectedByUserId, clock.UtcNow, ct))
         {
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
         }

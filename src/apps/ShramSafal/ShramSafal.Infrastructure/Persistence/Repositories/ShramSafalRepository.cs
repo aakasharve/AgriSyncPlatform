@@ -252,6 +252,70 @@ internal sealed class ShramSafalRepository(
         return await db.CostEntries.FirstOrDefaultAsync(c => c.Id == costEntryId, ct);
     }
 
+    // spec: plr-d10 lane BILL-1 — see IShramSafalRepository: the bill's row held for the rest of the transaction, re-read.
+    public async Task<CostEntry?> GetCostEntryForChangeAsync(Guid costEntryId, CancellationToken ct = default)
+    {
+        if (db.Database.IsRelational())
+        {
+            // A second change to this bill waits here and reads the version THIS change leaves behind. RLS still applies
+            // (the caller has set the farm scope).
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM ssf.cost_entries WHERE \"Id\" = {costEntryId} FOR UPDATE", ct);
+
+            var tracked = db.ChangeTracker.Entries<CostEntry>().FirstOrDefault(e => e.Entity.Id == costEntryId);
+            if (tracked is not null)
+            {
+                await tracked.ReloadAsync(ct);
+            }
+        }
+
+        return await GetCostEntryByIdAsync(costEntryId, ct);
+    }
+
+    // lane BILL-1 fix round 1 (M2) — see IShramSafalRepository: every row held in id order, then re-read.
+    public async Task<List<CostEntry>> GetCostEntriesForChangeAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
+    {
+        var ids = costEntryIds.Distinct().OrderBy(id => id).ToArray();
+        if (ids.Length == 0)
+        {
+            return [];
+        }
+
+        if (db.Database.IsRelational())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM ssf.cost_entries WHERE \"Id\" = ANY({ids}) ORDER BY \"Id\" FOR UPDATE", ct);
+
+            foreach (var tracked in db.ChangeTracker.Entries<CostEntry>().Where(e => ids.Contains(e.Entity.Id)).ToList())
+            {
+                await tracked.ReloadAsync(ct);
+            }
+        }
+
+        return await GetCostEntriesByIdsAsync(ids, ct);
+    }
+
+    public async Task AddCostEntryApprovalAsync(CostEntryApproval approval, CancellationToken ct = default)
+    {
+        await db.CostEntryApprovals.AddAsync(approval, ct);
+    }
+
+    public async Task<IReadOnlyList<CostEntryApproval>> GetCostEntryApprovalsAsync(
+        IReadOnlyCollection<Guid> costEntryIds, CancellationToken ct = default)
+    {
+        var ids = costEntryIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.CostEntryApprovals
+            .AsNoTracking()
+            .Where(a => ids.Contains(a.CostEntryId))
+            .OrderBy(a => a.ApprovedAtUtc)
+            .ToListAsync(ct);
+    }
+
     // spec: pre-launch-repair L2b (R-1) — see IShramSafalRepository.
     public async Task<CostEntry?> FindCostEntryForReplayAsync(Guid costEntryId, CancellationToken ct = default)
     {

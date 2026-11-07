@@ -4,8 +4,10 @@
  * aside, with its kind, date, note and why it was set aside, and its amount opening the money drawer, where
  * it can be corrected. The server's English reasons ("High amount: >= 25000 INR") are said in Marathi.
  *
- * NO approve and NO "बरोबर आहे" — the approved preview had both, but there is no server path for approving
- * a money entry (PENDING D-12), so the page keeps its one honest line instead (see below).
+ * Lane BILL-1 (founder D-12: "2 — A separate "मंजूर" stamp with who and when"): each entry now carries its मंजूर line
+ * (`BillApprovalLine`) — "मंजूर करा" for a reviewer (the server's rule: the primary account holder or review money), the
+ * stamp for everyone who sees the bill, and what this phone still holds for it. Approving clears तपासायचे for the version
+ * he saw; the entry leaves this list when the server's answer reaches the phone.
  */
 import React, { useMemo, useState } from 'react';
 import { Sparkles, TriangleAlert } from 'lucide-react';
@@ -17,6 +19,13 @@ import { FinanceFilters } from '../features/finance/finance.types';
 import { MoneyPage } from '../features/finance/components/MoneyPage';
 import { CATEGORY_LABEL, FINANCE_TITLE, SOURCE_LABEL, formatMoneyDate, reviewReasonLabel } from '../features/finance/moneyLabels';
 import { Chip, GlassCard, IconDot } from '../shared/components/ui/placeUi';
+import { BillApprovalLine, useBillApprovalOutbox } from '../features/finance/components/BillApprovalLine';
+import { mayApproveBills, mayApproveThisBill } from '../features/finance/billApproval';
+import { useStoredAccessScopes } from '../core/session/storedFarmScope';
+import { scopeForFarm } from '../infrastructure/storage/accessScopeStore';
+import { billWord } from '../features/finance/billApprovalWords';
+import { useOptionalFarmContext } from '../core/session/FarmContext';
+import { useOptionalLanguage } from '../i18n/LanguageContext';
 
 interface ReviewInboxPageProps {
     currentRoute: AppRoute;
@@ -27,13 +36,22 @@ interface ReviewInboxPageProps {
 const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavigate, onBack }) => {
     const [refresh, setRefresh] = useState(0);
     const [drawerFilter, setDrawerFilter] = useState<FinanceFilters | null>(null);
+    // lane BILL-1 — who may approve (the current farm's seat, the server's rule), his language, and this phone's outbox.
+    const farmContext = useOptionalFarmContext();
+    const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
+    const [outbox, refreshOutbox] = useBillApprovalOutbox();
+    // fix round 1 (review L4) — and, for a chosen-plots seat, only bills on his plots (the server's write rule).
+    const storedScopes = useStoredAccessScopes();
+    const mayApproveOn = (bill: { farmId: string; plotId?: string }) =>
+        !!farmContext && farmContext.currentFarmId === bill.farmId
+        && mayApproveThisBill(farmContext.currentFarm, scopeForFarm(storedScopes, bill.farmId), bill);
+    const seatMayApprove = !!farmContext && mayApproveBills(farmContext.currentFarm);
 
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I8 — X5). "Approve" used to mark
     // entries verified on this phone and send a LOG verification carrying a money entry's
     // id — the server found no such log, recorded nothing, and the mark vanished on the
-    // next reload. There is no server path for approving a money entry yet (PENDING D-12),
-    // so the buttons are gone and the page says so (doctrine P5), the same way the review
-    // sheet already does. `refresh` stays for the money drawer's adjustments.
+    // next reload. Lane BILL-1 gave it a real server path (`approve_cost_entry`); the
+    // action is queued, and the entry leaves this list only on the server's answer.
     // `currentRoute` and `refresh` are re-read triggers: the selector reads a mutable store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const entries = useMemo(() => financeSelectors.getReviewInbox(), [currentRoute, refresh]);
@@ -47,8 +65,9 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
             )}
 
             {entries.length > 0 && (
-                <p data-testid="review-approve-unavailable" className="m-0 rounded-2xl bg-amber-50 p-3 text-[14px] font-extrabold leading-snug text-amber-900 ring-1 ring-amber-200">
-                    मंजुरी अजून उपलब्ध नाही — खर्च दुरुस्त करायचा असेल तर रकमेवर दाबा.
+                // PROPOSED (both languages) — a bill's मंजूर is money review, not a work record's (D-40), and not a payment.
+                <p data-testid="review-approve-meaning" className="m-0 rounded-2xl bg-amber-50 p-3 text-[14px] font-extrabold leading-snug text-amber-900 ring-1 ring-amber-200">
+                    {billWord(seatMayApprove ? 'meaning' : 'whoApproves', language)}
                 </p>
             )}
 
@@ -75,6 +94,13 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
                                         ? reasons.map(reason => <Chip key={reason} tone="rose">{reviewReasonLabel(reason)}</Chip>)
                                         : <Chip tone="amber">एकदा पाहायचं</Chip>}
                                 </div>
+                                <BillApprovalLine
+                                    bill={item}
+                                    mayApprove={mayApproveOn(item)}
+                                    outbox={outbox}
+                                    language={language}
+                                    onQueued={refreshOutbox}
+                                />
                             </div>
                         </div>
                     </GlassCard>
@@ -85,7 +111,7 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
                 <GlassCard testId="review-empty">
                     <div className="flex flex-col items-center gap-2 py-4 text-center">
                         <IconDot tone="green" size={56}><Sparkles size={28} aria-hidden="true" /></IconDot>
-                        {/* Not "everything has been checked": there is no checking step yet (PENDING D-12). */}
+                        {/* Not "everything has been checked": nothing waits here, which is all this page knows. */}
                         <p className="m-0 text-[17px] font-extrabold text-stone-900">पाहण्यासारखी कोणतीही नोंद नाही</p>
                     </div>
                 </GlassCard>

@@ -61,6 +61,10 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
     private static readonly Guid CycleA = Guid.Parse("2b000001-0000-0000-0000-0000000000d2");
     private static readonly Guid CostA = Guid.Parse("2b000001-0000-0000-0000-0000000000d3");
 
+    // lane BILL-1 fix round 1 (review H1) — a कामगार-labelled seat reads only its OWN money (MU-3 §11.7), so its review-money
+    // probe corrects a cost it entered itself; another person's cost is not there for it (CostEntryNotFound).
+    private static readonly Guid HolderCost = Guid.Parse("2b000001-0000-0000-0000-0000000000d4");
+
     private const int AllBits = 1 | 2 | 8 | 32 | 64 | 128 | 256 | 512 | 1024;
 
     private string _rootConn = string.Empty;
@@ -107,10 +111,11 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
                 VALUES (@cycle, @farm, @plot, 'Grapes', 'Vegetative', @start, NOW(), NOW());
                 INSERT INTO ssf.cost_entries ("Id", farm_id, plot_id, description, amount, currency_code, entry_date, created_by_user_id,
                                               created_at_utc, modified_at_utc, source, model_version, prompt_version, category_id)
-                VALUES (@cost, @farm, @plot, 'probe cost', 1000, 'INR', CURRENT_DATE, @owner, NOW(), NOW(), 'manual', 'unknown', 'unknown', 'other');
+                VALUES (@cost, @farm, @plot, 'probe cost', 1000, 'INR', CURRENT_DATE, @owner, NOW(), NOW(), 'manual', 'unknown', 'unknown', 'other'),
+                       (@holderCost, @farm, @plot, 'probe cost of the holder', 1000, 'INR', CURRENT_DATE, @holder, NOW(), NOW(), 'manual', 'unknown', 'unknown', 'other');
                 """,
                 ("plot", PlotA), ("farm", FarmA), ("cycle", CycleA), ("start", new DateTime(2026, 1, 1)),
-                ("cost", CostA), ("owner", OwnerA));
+                ("cost", CostA), ("owner", OwnerA), ("holderCost", HolderCost), ("holder", Holder));
         }
 
         _app = await BuildHostAsync(_appConn);
@@ -226,11 +231,12 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
 
         // review money → POST cost correction (needs see money too)
         await StoreOnlyAsync(Holder, FarmAuthority.ReviewMoney, end: null);
-        (await CorrectCostAsync(Holder)).Should().Be(HttpStatusCode.OK);
+        (await CorrectCostAsync(Holder, HolderCost)).Should().Be(HttpStatusCode.OK);
+        (await CorrectCostAsync(Holder)).Should().Be(HttpStatusCode.BadRequest, "another person's cost is not there for a कामगार seat (not found)");
         await StoreOnlyAsync(Holder, FarmAuthority.ReviewMoney, end: DateTime.UtcNow.AddSeconds(-1));
-        (await CorrectCostAsync(Holder)).Should().Be(HttpStatusCode.Forbidden, "ended");
+        (await CorrectCostAsync(Holder, HolderCost)).Should().Be(HttpStatusCode.Forbidden, "ended");
         await ExecSuperAsync("UPDATE ssf.farm_memberships SET permissions = 4, authority_expires_at = NULL WHERE user_id = @u", ("u", Holder));
-        (await CorrectCostAsync(Holder)).Should().Be(HttpStatusCode.Forbidden, "review money without see money means nothing");
+        (await CorrectCostAsync(Holder, HolderCost)).Should().Be(HttpStatusCode.Forbidden, "review money without see money means nothing");
         (await CorrectCostAsync(HolderOnB)).Should().NotBe(HttpStatusCode.OK, "another farm's seat");
 
         // confirm records → POST verify (Verified counts; without it the door refuses)
@@ -702,12 +708,12 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
     }
 
     /// <summary>Corrects the seeded cost the way the phone does (push correct_cost_entry).</summary>
-    private async Task<HttpStatusCode> CorrectCostAsync(Guid who)
+    private async Task<HttpStatusCode> CorrectCostAsync(Guid who, Guid? cost = null)
     {
         var outcome = await PushAsync(who, $"correct-{Guid.NewGuid():N}", "correct_cost_entry", new
         {
             financeCorrectionId = Guid.NewGuid(),
-            costEntryId = CostA,
+            costEntryId = cost ?? CostA,
             correctedAmount = 900m,
             currencyCode = "INR",
             reason = "probe correction",

@@ -159,6 +159,8 @@ public static class DependencyInjection
         services.AddScoped<AddCostEntryHandler>();
         services.AddScoped<AllocateGlobalExpenseHandler>();
         services.AddScoped<CorrectCostEntryHandler>();
+        // spec: plr-d10 lane BILL-1 (founder D-12) — a bill's मंजूर stamp; one handler for the push and the REST door.
+        services.AddScoped<ShramSafal.Application.UseCases.Finance.ApproveCostEntry.ApproveCostEntryHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
         // lane MU-3 fix 1 (F94) — /finance/plot-summary asked for this and it was never registered (500).
         services.AddScoped<GetPlotFinanceSummaryHandler>();

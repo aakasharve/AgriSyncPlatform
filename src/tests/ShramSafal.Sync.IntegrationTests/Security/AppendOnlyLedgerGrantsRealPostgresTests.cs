@@ -86,6 +86,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.shram_identity_events",
         // plr-d10 lane RATE-1 part A (founder D-72) — each farm's own rate list, one unchangeable row per version of a rate.
         "ssf.farm_rates",
+        // plr-d10 lane BILL-1 (founder D-12) — a bill's मंजूर stamps (who, when, which version), one unchangeable row each.
+        "ssf.cost_entry_approvals",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -212,6 +214,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    FORCE-RLS and APPEND-ONLY BY PRIVILEGE with its own effective-privilege guard (it is on AppendOnlyLedgers above).
         //    Touches no other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261106112244_AddFarmRates",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane BILL-1, founder D-12); Down() read in full: drops the two policies on
+        //    ssf.cost_entry_approvals, the table (with its CHECK and indexes) and the additive cost_entries.content_version
+        //    column — only what Up() added. Up() creates the table FORCE-RLS and APPEND-ONLY BY PRIVILEGE with its own
+        //    effective-privilege guard (it is on AppendOnlyLedgers above). Touches no other ledger's grants. Safe to revert and
+        //    re-apply mid-proof.
+        "20261106221812_AddCostEntryApprovals",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

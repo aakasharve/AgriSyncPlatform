@@ -234,7 +234,9 @@ public sealed class MoveDailyLogHandler(
             return Result.Failure<MoveDailyLogResultDto>(ShramSafalErrors.LogMoveDetailsNotHeld);
         }
 
-        var money = (await repository.GetCostEntriesByIdsAsync(lines.LookFor, ct))
+        // lane BILL-1 fix round 1 (review M2) — the money a move carries is held before it is read: a move raises each bill's
+        // version, and two changes at once must raise it twice.
+        var money = (await repository.GetCostEntriesForChangeAsync(lines.LookFor, ct))
             .Where(entry => entry.FarmId == log.FarmId) // E4: never another farm's row
             .ToList();
         var missing = lines.Stated.Where(id => money.All(entry => entry.Id != id)).OrderBy(id => id).ToList();

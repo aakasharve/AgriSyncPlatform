@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ShramSafal.Application.Contracts.Dtos;
 
 public sealed record CostEntryDto(
@@ -56,7 +58,39 @@ public sealed record CostEntryDto(
     /// </summary>
     string? Audience = null,
     /// <summary>lane PRV — the people the holder chose (<c>Selected</c>); sent only with <see cref="Audience"/>.</summary>
-    IReadOnlyList<Guid>? AudienceUserIds = null);
+    IReadOnlyList<Guid>? AudienceUserIds = null,
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1 (founder D-12) — which version of the bill this is (1 as first saved, one more for every
+    /// correction or move). The version a reviewer's मंजूर names. Sent by the pull and the approve door only; every other
+    /// answer leaves it out (never a key, so their bytes are unchanged: P11).
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? BillVersion = null,
+    /// <summary>
+    /// lane BILL-1 — "तपासायचे": the server set the bill aside and no stamp covers its current version. NOT named
+    /// <c>isFlagged</c> on purpose: 1.0.17 reads that name and would show an Approve button that can only fail (OF-M N2).
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? NeedsReview = null,
+    /// <summary>lane BILL-1 — why it was set aside (the server's English words; the phone says them in its language).</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ReviewReason = null,
+    /// <summary>lane BILL-1 — the latest मंजूर stamp (who, when, which version); absent when nobody approved it.</summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    CostEntryApprovalDto? Approval = null);
+
+/// <summary>
+/// spec: plr-d10 lane BILL-1 (founder D-12: "a separate "मंजूर" stamp with who and when") — one reviewer's मंजूर on a bill.
+/// <see cref="BillVersion"/> below the bill's own <see cref="CostEntryDto.BillVersion"/> means the stamp is for an older
+/// version: the bill was corrected after it was approved, and the stamp is never carried to the new numbers.
+/// <see cref="ApprovedByName"/> follows MU-3's naming rule (an own-records seat is sent no other person's name): null then.
+/// </summary>
+public sealed record CostEntryApprovalDto(
+    Guid Id,
+    Guid ApprovedByUserId,
+    string? ApprovedByName,
+    DateTime ApprovedAtUtc,
+    int BillVersion);
 
 /// <summary>
 /// DATA_PRINCIPLE_SPINE sub-phase 02.5 — reference-data shape for the

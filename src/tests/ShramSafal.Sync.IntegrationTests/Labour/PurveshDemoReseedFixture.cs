@@ -322,9 +322,9 @@ public sealed class PurveshDemoReseedScratch : IAsyncDisposable
     }
 
     /// <summary>The production-shaped DI graph as <c>agrisync_app</c> (Production environment).</summary>
-    public ServiceProvider AppProvider(DateTime? clockUtc = null, string environmentName = "Production")
+    public ServiceProvider AppProvider(DateTime? clockUtc = null, string environmentName = "Production", string? migrationConn = null)
     {
-        var p = PurveshDemoReseedHarness.BuildProvider(AppConn, environmentName, clockUtc);
+        var p = PurveshDemoReseedHarness.BuildProvider(AppConn, environmentName, clockUtc, migrationConn);
         _providers.Add(p);
         return p;
     }

@@ -9,6 +9,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Labour.CorrectLabour;
 using ShramSafal.Application.UseCases.Labour.DeactivateFieldOperator;
@@ -53,6 +54,9 @@ public sealed class PurveshDemoReseedFounderActionsRealPostgresTests(
     [InlineData("approval")]
     [InlineData("labour-correction")]
     [InlineData("money-correction")]
+    // lane BILL-1 fix round 1 (review M1) — the founder approves a demo bill: its stamp is append-only and RESTRICTs the bill,
+    // so the re-seed keeps the bill (and the stamp) exactly as he left it (E5), and never fails on it.
+    [InlineData("bill-approval")]
     [InlineData("mark-on-a-demo-worker")]
     [InlineData("rename-a-demo-worker")]
     [InlineData("retire-a-demo-worker")]
@@ -112,6 +116,7 @@ public sealed class PurveshDemoReseedFounderActionsRealPostgresTests(
         "approval" => ApproveAsync(s, founder),
         "labour-correction" => CorrectLabourAsync(s, founder),
         "money-correction" => CorrectMoneyAsync(s, founder),
+        "bill-approval" => ApproveBillAsync(s, founder),
         "mark-on-a-demo-worker" => MarkDemoWorkerAsync(s, founder),
         "rename-a-demo-worker" => RenameOrRetireAsync(s, founder, rename: true),
         "retire-a-demo-worker" => RenameOrRetireAsync(s, founder, rename: false),
@@ -198,6 +203,30 @@ public sealed class PurveshDemoReseedFounderActionsRealPostgresTests(
         {
             new("ssf.cost_entries", r => StartsWithId(r, cost)),
             new("ssf.finance_corrections", r => r.Contains(cost.ToString("D"), StringComparison.Ordinal)),
+        });
+    }
+
+    private async Task<Acted> ApproveBillAsync(PurveshDemoReseedScratch s, IServiceProvider founder)
+    {
+        var cost = (Guid)(await H.ScalarAsync(s.SuperuserConn, """
+            SELECT "Id" FROM ssf.cost_entries
+            WHERE farm_id = @farm AND NOT is_corrected AND category_id NOT LIKE 'labour%'
+            ORDER BY entry_date DESC, "Id" LIMIT 1
+            """, FarmParam))!;
+        var version = Convert.ToInt32(await H.ScalarAsync(s.SuperuserConn,
+            """SELECT content_version FROM ssf.cost_entries WHERE "Id" = @id""", ("id", cost)));
+        await H.AsCallerAsync(founder, Farm, Owner, async sp =>
+        {
+            var r = await sp.GetRequiredService<ApproveCostEntryHandler>().HandleAsync(
+                new ApproveCostEntryCommand(cost, Farm, version, Owner));
+            r.IsSuccess.Should().BeTrue("the owner approves a demo bill: {0}", r.Error);
+            return true;
+        });
+
+        return new Acted("cost_entries", cost, new List<Keep>
+        {
+            new("ssf.cost_entries", r => StartsWithId(r, cost)),
+            new("ssf.cost_entry_approvals", r => r.Contains(cost.ToString("D"), StringComparison.Ordinal)),
         });
     }
 

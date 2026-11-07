@@ -505,6 +505,7 @@ public sealed partial class PurveshDemoSeeder
     private readonly AccountsDbContext _accountsContext;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IHostEnvironment? _hostEnvironment;
+    private readonly IAdminDbContextFactory<ShramSafalDbContext>? _adminFactory;
 
     /// <summary>
     /// The text every Production refusal of the startup clear/seed carries. Public so tests and
@@ -528,13 +529,18 @@ public sealed partial class PurveshDemoSeeder
         UserDbContext userContext,
         AccountsDbContext accountsContext,
         IPasswordHasher passwordHasher,
-        IHostEnvironment? hostEnvironment = null)
+        IHostEnvironment? hostEnvironment = null,
+        // spec: plr-d10 lane BILL-1 fix round 1 (review M1) — the admin path (the migration connection): a demo bill's मंजूर
+        // stamps are append-only, so the app role may not delete them; the startup clear removes them through this, before
+        // their bills. Optional only so a direct construction keeps compiling; then a clear that meets a stamp refuses.
+        IAdminDbContextFactory<ShramSafalDbContext>? adminFactory = null)
     {
         _ssfContext = ssfContext;
         _userContext = userContext;
         _accountsContext = accountsContext;
         _passwordHasher = passwordHasher;
         _hostEnvironment = hostEnvironment;
+        _adminFactory = adminFactory;
     }
 
     /// <summary>
@@ -769,7 +775,8 @@ public sealed partial class PurveshDemoSeeder
         return $"Cleared {SeedVersion}: users={loginsToDelete.Count}, farms={farm.Farms}, plots={farm.Plots}, " +
                $"cropCycles={farm.CropCycles}, templates={farm.Templates}, templateActivities={farm.TemplateActivities}, " +
                $"plannedActivities={farm.PlannedActivities}, dailyLogs={farm.DailyLogs}, dayLedgers={farm.DayLedgers}, " +
-               $"costEntries={farm.CostEntries}, corrections={farm.Corrections}, attachments={farm.Attachments}, " +
+               $"costEntries={farm.CostEntries}, corrections={farm.Corrections}, costEntryApprovals={farm.CostEntryApprovals}, " +
+               $"attachments={farm.Attachments}, " +
                $"priceConfigs={farm.PriceConfigs}, memberships={deletedMembershipCount}, " +
                $"farmMemberships={farm.FarmMemberships}, " +
                $"farmInvitations={farm.FarmInvitations}, farmJoinTokens={farm.FarmJoinTokens}, " +
@@ -847,6 +854,7 @@ public sealed partial class PurveshDemoSeeder
         int DayLedgers,
         int CostEntries,
         int Corrections,
+        int CostEntryApprovals,
         int Attachments,
         int PriceConfigs,
         int FarmMemberships,
@@ -1112,6 +1120,10 @@ public sealed partial class PurveshDemoSeeder
         // from the correction's own DELETE (0 rows affected).
         await _ssfContext.SaveChangesAsync(cancellationToken);
 
+        // spec: plr-d10 lane BILL-1 fix round 1 (review M1) — a seed bill somebody approved carries append-only मंजूर stamps that
+        // RESTRICT it: they go first, through the admin path (the app role holds no DELETE on them), so the bill can follow.
+        var deletedApprovalsCount = await DeleteSeedBillApprovalsAsync(farmId, costIds, cancellationToken);
+
         var costs = await _ssfContext.CostEntries
             .Where(c => costIds.Contains(c.Id))
             .ToListAsync(cancellationToken);
@@ -1275,6 +1287,7 @@ public sealed partial class PurveshDemoSeeder
             DayLedgers: deletedDayLedgersCount,
             CostEntries: deletedCostEntriesCount,
             Corrections: deletedCorrectionsCount,
+            CostEntryApprovals: deletedApprovalsCount,
             Attachments: deletedAttachmentsCount,
             PriceConfigs: deletedPriceConfigsCount,
             FarmMemberships: deletedFarmMembershipsCount,
@@ -1284,6 +1297,42 @@ public sealed partial class PurveshDemoSeeder
             FieldOperatorWorkRows: deletedFieldOperatorWorkRowsCount,
             AttendanceMarks: deletedAttendanceMarksCount,
             LabourAssignments: deletedLabourAssignmentsCount);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1 fix round 1 (review M1) — the मंजूर stamps on these seed bills of the demo farm, deleted through
+    /// the admin context (the migration connection) under the farm's own tenant scope: the app role may only append to that
+    /// table. None: nothing is opened. A stamp with no admin path: refused before anything is deleted from the bills.
+    /// </summary>
+    private async Task<int> DeleteSeedBillApprovalsAsync(FarmId farmId, IReadOnlyCollection<Guid> costIds, CancellationToken ct)
+    {
+        var ids = costIds.ToList();
+        var stamped = await _ssfContext.CostEntryApprovals.AsNoTracking()
+            .CountAsync(a => a.FarmId == farmId && ids.Contains(a.CostEntryId), ct);
+        if (stamped == 0)
+        {
+            return 0;
+        }
+
+        if (_adminFactory is null)
+        {
+            throw new InvalidOperationException(
+                $"The demo farm {farmId.Value} holds {stamped} approved bill stamp(s) (ssf.cost_entry_approvals), which only the "
+                + "admin path may remove. Nothing was deleted. Run with the migration connection configured, or use "
+                + "`--reseed-purvesh-demo`, which keeps an approved bill as it is.");
+        }
+
+        await using var admin = await _adminFactory.CreateAsync(
+            $"{nameof(PurveshDemoSeeder)}.clear.{farmId.Value:N}", AgriSync.BuildingBlocks.Auditing.SystemActor.Worker, ct);
+        return await RlsIdentityScope.RunAsFarmAsync(
+            admin,
+            farmId.Value,
+            (Guid)PurveshOwnerAccountId,
+            actorUserId: null,
+            token => admin.CostEntryApprovals
+                .Where(a => a.FarmId == farmId && ids.Contains(a.CostEntryId))
+                .ExecuteDeleteAsync(token),
+            ct);
     }
 
     /// <summary>

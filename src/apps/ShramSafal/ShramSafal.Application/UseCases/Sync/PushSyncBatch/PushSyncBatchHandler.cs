@@ -165,6 +165,9 @@ public sealed class PushSyncBatchHandler(
     // spec: plr-d10 lane RATE-1 part A (founder D-72) — a change to the farm's own rate list (set_farm_rate). The SAME
     // handler the REST door (POST /shramsafal/finance/farm-rates) resolves.
     ShramSafal.Application.UseCases.Finance.SetFarmRate.SetFarmRateHandler setFarmRateHandler,
+    // spec: plr-d10 lane BILL-1 (founder D-12) — a reviewer's मंजूर stamp on one bill (approve_cost_entry). The SAME handler
+    // the REST door (POST /shramsafal/finance/cost-entry/{id}/approve) resolves.
+    ShramSafal.Application.UseCases.Finance.ApproveCostEntry.ApproveCostEntryHandler approveCostEntryHandler,
     // spec: plr-d10 lane L8b-1 — a plot's schedule choice (adopt / migrate / abandon), the SAME handlers the REST routes call.
     ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleHandler adoptScheduleHandler,
     ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleHandler migrateScheduleHandler,
@@ -1088,6 +1091,9 @@ public sealed class PushSyncBatchHandler(
             // spec: plr-d10 lane RATE-1 part A (founder D-72) — the farm's own rate list.
             case "set_farm_rate":
                 return await HandleSetFarmRateAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 lane BILL-1 (founder D-12) — a bill's मंजूर stamp.
+            case "approve_cost_entry":
+                return await HandleApproveCostEntryAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
@@ -3793,6 +3799,61 @@ public sealed class PushSyncBatchHandler(
     }
 
     /// <summary>
+    /// spec: plr-d10 lane BILL-1 (founder D-12: "2 — A separate "मंजूर" stamp with who and when") — a reviewer's मंजूर on one
+    /// bill. The payload names the bill's farm, so the farm's scope is opened from it (a farm the sender is not an Active member
+    /// of is refused with no farm GUC ever set). Who may (review money or the primary account holder), which bills (audience,
+    /// plots, the bill's own farm: E4) and which version (the L4b exact-version code) are
+    /// <see cref="ShramSafal.Application.UseCases.Finance.ApproveCostEntry.ApproveCostEntryHandler"/>'s — the REST door's
+    /// handler. Who approved is the authenticated sender, never a payload field. Every refusal parks visibly (P10).
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleApproveCostEntryAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with approve_cost_entry.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line — so it must stay on one line.
+        if (!PayloadHasOnly(payload, "approvalId", "costEntryId", "farmId", "billVersion"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "approve_cost_entry payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<ApproveCostEntryPayload>(payload);
+        if (request is null || request.ApprovalId == Guid.Empty || request.CostEntryId == Guid.Empty || request.FarmId == Guid.Empty
+            || request.BillVersion < 1)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for approve_cost_entry.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await approveCostEntryHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Finance.ApproveCostEntry.ApproveCostEntryCommand(
+                request.CostEntryId,
+                request.FarmId,
+                request.BillVersion,
+                actorUserId,
+                request.ApprovalId,
+                actorRole,
+                clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
     /// spec: plr-d10 lane PRV (founder D-26; orchestrator call 7, "push") — the record a change names, for every kind
     /// of change that touches an EXISTING work or money record: its tasks, words, place or day, workers, confirmation,
     /// correction, allocation, or a photo linked to it. Internal (fix pass 2, L4) so a test proves which changes the PUSH
@@ -3821,7 +3882,8 @@ public sealed class PushSyncBatchHandler(
                 or "jobcard.complete"
                 => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "dailyLogId")),
             "verify_log_v2" => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "logId")),
-            "correct_cost_entry" or "allocate_global_expense" => (Domain.RecordPrivacy.RecordKinds.CostEntry, IdOf(payload, "costEntryId")),
+            "correct_cost_entry" or "allocate_global_expense" or "approve_cost_entry"
+                => (Domain.RecordPrivacy.RecordKinds.CostEntry, IdOf(payload, "costEntryId")),
             // The handler reads the kind case-insensitively (CreateAttachmentHandler), so the gate does too (fix pass 1, L4).
             "create_attachment" => TextOf(payload, "linkedEntityType")?.Trim().ToLowerInvariant() switch
             {

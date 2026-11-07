@@ -150,6 +150,8 @@ const MUTATION_LABEL: Record<string, { mr: string; en: string }> = {
     [SyncMutationName.VerifyLog]: { mr: 'मंजुरी', en: 'Approval' },
     [SyncMutationName.VerifyLogV2]: { mr: 'मंजुरी', en: 'Approval' },
     [SyncMutationName.AddCostEntry]: { mr: 'खर्च', en: 'Expense' },
+    // lane BILL-1 (founder D-12) — a bill's मंजूर stamp; its "this bill changed" refusal reads the L4b line above. PROPOSED.
+    [SyncMutationName.ApproveCostEntry]: { mr: 'बिलाची मंजुरी', en: 'Bill approval' },
     [SyncMutationName.AttendanceMark]: { mr: 'हजेरी', en: 'Attendance' },
     [SyncMutationName.CorrectLabourAssignment]: { mr: 'मजुरांची दुरुस्ती', en: 'Labour correction' },
     [SyncMutationName.CreateAttachment]: { mr: 'फोटो', en: 'Photo' },

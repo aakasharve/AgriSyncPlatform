@@ -916,6 +916,70 @@ public sealed class DailyLogContentRealPostgresTests(Xunit.Abstractions.ITestOut
             "the log goes after its details, with no 23503");
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1 fix round 1 (review M1) — a bill's मंजूर stamps are append-only (the app role cannot delete
+    /// them) and RESTRICT their bill, so the reset removes them first, through the same admin path as a log's details.
+    /// </summary>
+    [Fact]
+    public async Task A_test_fixture_reset_removes_an_approved_bills_stamps_before_the_bill()
+    {
+        await AssertRunsAsNonSuperuserOnOwnScratchDatabaseAsync();
+        var billId = Guid.NewGuid();
+        await PushAppliedAsync(OwnerA, "add_cost_entry", "req-bill1-reset-bill", new Dictionary<string, object?>
+        {
+            ["costEntryId"] = billId,
+            ["farmId"] = FarmA,
+            ["categoryId"] = "fertilizer",
+            ["description"] = "खत",
+            ["amount"] = 31234.56m,
+            ["currencyCode"] = "INR",
+            ["entryDate"] = "2026-10-30",
+            ["plotId"] = PlotA,
+            ["cropCycleId"] = CycleA,
+            ["direction"] = "Expense",
+        });
+        await PushAppliedAsync(OwnerA, "approve_cost_entry", "req-bill1-reset-approve", new Dictionary<string, object?>
+        {
+            ["approvalId"] = Guid.NewGuid(),
+            ["costEntryId"] = billId,
+            ["farmId"] = FarmA,
+            ["billVersion"] = 1,
+        });
+        (await ScalarLongAsync("SELECT COUNT(*) FROM ssf.cost_entry_approvals WHERE cost_entry_id = @id", billId)).Should().Be(1);
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:ShramSafalDb"] = _superuserConn,
+                ["ConnectionStrings:UserDb"] = _superuserConn,
+                ["ConnectionStrings:ShramSafalDb_Migration"] = _superuserConn,
+            }!)
+            .Build();
+        services.AddSingleton<IConfiguration>(config);
+        services.AddShramSafalApi(config);
+        await using var provider = services.BuildServiceProvider();
+
+        var fixtures = new AgriSync.Bootstrapper.Infrastructure.TestFixtureService(
+            new DevelopmentHost(),
+            Options.Create(new AgriSync.Bootstrapper.Infrastructure.TestFixtureOptions
+            {
+                AllowRuntimeReset = true,
+                AllowRuntimeSeed = false,
+                AllowedOwnerAccountIds = [AccountA],
+            }),
+            provider,
+            NullLogger<AgriSync.Bootstrapper.Infrastructure.TestFixtureService>.Instance);
+
+        var reset = await fixtures.ResetFixtureAsync("blank-test-user");
+        output.WriteLine($"[EVIDENCE] reset -> {reset.Summary}");
+        reset.Summary.Should().Contain("costEntryApprovals=1");
+        (await ScalarLongAsync("SELECT COUNT(*) FROM ssf.cost_entry_approvals WHERE cost_entry_id = @id", billId)).Should().Be(0);
+        (await ScalarLongAsync("SELECT COUNT(*) FROM ssf.cost_entries WHERE \"Id\" = @id", billId)).Should().Be(0,
+            "the bill goes after its stamps, with no 23503");
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Harness.
     // ─────────────────────────────────────────────────────────────────────────

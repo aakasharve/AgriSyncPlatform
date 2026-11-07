@@ -1337,6 +1337,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    SELECT + INSERT for the app role). Never touches ssf.audit_events, its policies or its grants (a rate change
         //    writes an ordinary audit row through the app role's existing INSERT). Safe mid-proof.
         "20261106112244_AddFarmRates",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane BILL-1, founder D-12); Down() read in full: drops the two policies on
+        //    ssf.cost_entry_approvals, the table (its CHECK and indexes go with it) and the additive cost_entries.content_version
+        //    column. Up() adds that column (NOT NULL DEFAULT 1) and creates that table only (FORCE RLS, SELECT + INSERT for the
+        //    app role). Never touches ssf.audit_events, its policies or its grants (an approval writes an ordinary audit row
+        //    through the app role's existing INSERT). Safe mid-proof.
+        "20261106221812_AddCostEntryApprovals",
     ];
 
     /// <summary>

@@ -32,6 +32,7 @@ import { prepareRecordMoney } from './recordMoneyOrder';
 import type { QueueRowWithFacts } from './queueRowFacts';
 import { lineAmountNow } from '../../features/finance/recordMoneyNow';
 import { restoreRefusedAudienceChoice } from '../../features/recordAudience/refusedAudience';
+import { settleBillVersions } from '../../features/finance/billVersionsMarker';
 
 /** A record's first money that reached the server is in step only when it went at its line's current amount. */
 async function clearWhenInStep(moneySource: string, payload: unknown): Promise<void> {
@@ -638,6 +639,17 @@ export class BackgroundSyncWorker {
         const payload = await agriSyncClient.pullSyncChanges(sinceCursor, await readHeldFarmIds(getDatabase()));
         await mutationQueue.saveLastPullPayload(payload);
         await reconcileSyncPull(payload, { rebuildLogs, fullPull: sinceCursor === '0' });
+        // lane BILL-1 fix round 1 (review M4) — bills held from before BILL-1 have no version: once, against a server that
+        // sends versions, the next pull asks for everything again. A failure here costs only that request (never this pull).
+        try {
+            await settleBillVersions(getDatabase(), payload, sinceCursor === '0');
+        } catch (error) {
+            console.warn(JSON.stringify({
+                component: 'billVersionsMarker',
+                action: 'settle_failed',
+                reason: error instanceof Error ? error.message : String(error),
+            }));
+        }
 
         const nextCursor = payload.nextCursorUtc || payload.serverTimeUtc || systemClock.nowISO();
         await mutationQueue.setCursor(nextCursor);

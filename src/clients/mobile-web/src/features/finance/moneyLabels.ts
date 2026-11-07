@@ -98,6 +98,8 @@ export function reviewReasonLabel(reason: string): string {
         return n ? `${rupees(Number(n[1].replace(/,/g, '')))} किंवा जास्त रक्कम` : 'मोठी रक्कम';
     }
     if (/duplicate/i.test(reason)) return 'दुहेरी नोंद असू शकते';
+    // lane BILL-1 fix round 1 (review M3) — approved before, changed since: looked at again. PROPOSED.
+    if (/changed after approval/i.test(reason)) return 'मंजुरीनंतर बदललं — पुन्हा पाहा';
     return 'वेगळी दिसली — एकदा पाहा';
 }
 

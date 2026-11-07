@@ -5,9 +5,17 @@ import { financeCommandService } from '../financeCommandService';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { SANS } from '../../../shared/components/ui/placeUi';
 import { BUCKET_LABEL, SOURCE_LABEL, categoryLabel, entryState, formatMoneyDate, rupees } from '../moneyLabels';
+import { BillApprovalLine, useBillApprovalOutbox } from './BillApprovalLine';
+import { mayApproveThisBill } from '../billApproval';
+import { useStoredAccessScopes } from '../../../core/session/storedFarmScope';
+import { scopeForFarm } from '../../../infrastructure/storage/accessScopeStore';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — the money drawer behind a tapped amount, in
 // Marathi with the पैसे व हिशोब words (`moneyLabels.ts`). Same reads and the same two writes as before.
+// Lane BILL-1 (founder D-12) — each bill opened here carries its मंजूर line: the stamp for whoever sees the bill, and
+// "मंजूर करा" for a reviewer (the server's rule) on a bill no stamp covers at its version.
 
 interface MoneyLensDrawerProps {
     isOpen: boolean;
@@ -39,7 +47,15 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
     const breakdown = financeSelectors.getBreakdown(filters);
 
     useBackDismiss(isOpen, onClose);
+    const farmContext = useOptionalFarmContext();
+    const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
+    const [outbox, refreshOutbox] = useBillApprovalOutbox(isOpen);
+    const storedScopes = useStoredAccessScopes();
     if (!isOpen) return null;
+    // fix round 1 (review L4) — and, for a chosen-plots seat, only bills on his plots (the server's write rule).
+    const mayApproveOn = (bill: EffectiveMoneyEvent) =>
+        !!farmContext && farmContext.currentFarmId === bill.farmId
+        && mayApproveThisBill(farmContext.currentFarm, scopeForFarm(storedScopes, bill.farmId), bill);
 
     const openFix = (line: EffectiveMoneyEvent) => {
         setSelected(line);
@@ -117,6 +133,13 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
                                     </button>
                                 )}
                             </div>
+                            <BillApprovalLine
+                                bill={line}
+                                mayApprove={mayApproveOn(line)}
+                                outbox={outbox}
+                                language={language}
+                                onQueued={refreshOutbox}
+                            />
                         </div>
                     ))}
                     {breakdown.lines.length === 0 && (

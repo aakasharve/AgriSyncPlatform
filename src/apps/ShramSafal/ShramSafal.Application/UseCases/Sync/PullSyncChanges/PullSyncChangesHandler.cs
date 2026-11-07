@@ -351,7 +351,29 @@ public sealed class PullSyncChangesHandler(
             auditEvents);
         // lane RATE-1 — who set each rate he receives (a person of that farm), so his phone can name them in its history.
         operatorIds.UnionWith(farmRates.Select(r => r.CreatedByUserId.Value).Where(id => id != Guid.Empty));
+
+        // spec: plr-d10 lane BILL-1 (founder D-12) — each bill he receives goes with its मंजूर stamps (who, when, which
+        // version): read for exactly those bills, each stamp kept only when its farm IS its bill's farm (E4). Phase-1 data like
+        // the bill itself: a failed read fails the pull and the phone retries, never told a bill has no stamp. The approver
+        // is named under MU-3's rule (an own-records seat is sent no other person's name).
+        var costEntryById = costEntries.ToDictionary(c => c.Id);
+        var billApprovals = (await repository.GetCostEntryApprovalsAsync(costEntryIds, ct))
+            .Where(a => costEntryById.TryGetValue(a.CostEntryId, out var bill) && bill.FarmId == a.FarmId)
+            .ToList();
+        foreach (var approval in billApprovals)
+        {
+            var approver = approval.ApprovedByUserId.Value;
+            if (approver != Guid.Empty
+                && (approver == query.UserId || window.ScopeOf((Guid)approval.FarmId) is { OwnRecordsOnly: false }))
+            {
+                operatorIds.Add(approver);
+            }
+        }
+
         var operators = await repository.GetOperatorsByIdsAsync(operatorIds, ct);
+        var operatorNames = operators
+            .GroupBy(o => o.UserId)
+            .ToDictionary(g => g.Key, g => g.First().DisplayName);
 
         var nextCursorUtc = ComputeNextCursor(
             sinceUtc,
@@ -678,7 +700,7 @@ public sealed class PullSyncChangesHandler(
             attachments.Select(a => a.ToDto()).ToList(),
             costEntries
                 .Select(c => WithAudience(
-                    c.ToDto(),
+                    BillReviewProjection.WithReview(c.ToDto(), c, billApprovals, operatorNames),
                     c.Audience,
                     window.ScopeOf((Guid)c.FarmId),
                     audience.Visibility.Restricted(Domain.RecordPrivacy.RecordKinds.CostEntry, c.Id)))
@@ -716,7 +738,10 @@ public sealed class PullSyncChangesHandler(
             // lane PRV — content-free: kind + id of each record taken back from this phone.
             audience.Withdrawn.ToList(),
             // lane RATE-1 — each farm's own rate versions he may read (additive and last).
-            FarmRates: farmRates.Select(FarmRateDto.From).ToList());
+            FarmRates: farmRates.Select(FarmRateDto.From).ToList(),
+            // lane BILL-1 fix round 1 (review M4) — this server sends every bill with its version: a phone holding bills it
+            // pulled before BILL-1 (no version on them) may ask once for all of them again. Additive and last (P11).
+            BillVersions: true);
 
         return Result.Success(response);
     }

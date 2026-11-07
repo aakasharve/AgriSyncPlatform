@@ -24,6 +24,8 @@ describe('moneyLabels', () => {
     it('the server\'s review reasons, in Marathi', () => {
         expect(reviewReasonLabel('High amount: >= 25000 INR')).toBe('₹ 25,000 किंवा जास्त रक्कम');
         expect(reviewReasonLabel('HIGH_AMOUNT')).toBe('मोठी रक्कम');
+        // lane BILL-1 fix round 1 (review M3) — a bill changed after it was approved is looked at again.
+        expect(reviewReasonLabel('Changed after approval')).toBe('मंजुरीनंतर बदललं — पुन्हा पाहा');
         expect(reviewReasonLabel('Possible duplicate entry')).toBe('दुहेरी नोंद असू शकते');
         expect(reviewReasonLabel('Something new')).toBe('वेगळी दिसली — एकदा पाहा');
     });

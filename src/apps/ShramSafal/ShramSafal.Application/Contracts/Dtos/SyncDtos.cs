@@ -96,7 +96,11 @@ public sealed record SyncPullResponseDto(
     // spec: plr-d10 lane RATE-1 part A (founder D-72) — the versions of each farm's OWN rate list made since this phone's
     // cursor, as he may read them (input prices with see money; work rates also need see wages). Additive and last (P11):
     // 1.0.17 parses the pull with no schema and never reads it; `priceConfigs` above keeps its F99 answer exactly.
-    IReadOnlyList<FarmRateDto>? FarmRates = null);
+    IReadOnlyList<FarmRateDto>? FarmRates = null,
+    // spec: plr-d10 lane BILL-1 fix round 1 (review M4) — true from a server that sends every cost entry with its bill version
+    // (and its review state and stamp). A phone that pulled its bills before that holds them with no version and asks once
+    // for a full pull (the F1 path); an older server never sends it, so a phone never asks it. Additive and last (P11).
+    bool? BillVersions = null);
 
 /// <summary>
 /// lane PRV — one record taken back from a phone: its kind (<c>DailyLog</c> / <c>CostEntry</c>) and id. Content-free.

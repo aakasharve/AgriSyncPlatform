@@ -535,6 +535,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // the table. Up() creates that table only, with its user-select policy written ALREADY narrowed (m.status = 3) — see
         // PoliciesCreatedAfterActiveOnly. No farm_memberships or farm_join_requests object, no other policy. Re-Up recreates them.
         "20261106112244_AddFarmRates",
+        // spec plr-d10 lane BILL-1 (founder D-12) — Down() read in full: drops the two policies on ssf.cost_entry_approvals, the
+        // table and the additive cost_entries.content_version column. Up() creates that table only, with its user-select policy
+        // written ALREADY narrowed (m.status = 3) — see PoliciesCreatedAfterActiveOnly. No farm_memberships or
+        // farm_join_requests object, no other policy. Re-Up recreates them.
+        "20261106221812_AddCostEntryApprovals",
     ];
 
     /// <summary>
@@ -552,6 +557,8 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         "p_user_select_schedule_subscriptions",
         // spec plr-d10 lane RATE-1 part A — 20261106112244_AddFarmRates.
         "p_user_select_farm_rates",
+        // spec plr-d10 lane BILL-1 — 20261106221812_AddCostEntryApprovals.
+        "p_user_select_cost_entry_approvals",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
     ];
