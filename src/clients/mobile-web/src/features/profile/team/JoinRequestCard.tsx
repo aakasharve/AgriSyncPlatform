@@ -27,6 +27,7 @@ import type { FarmPlot } from './useFarmPlots';
 import { PRESETS, phoneLine } from './teamModel';
 import { ReasonStep } from './ReasonStep';
 import { TEAM_COPY } from './teamCopy';
+import { invitationCopy } from '../../invitations/invitationCopy';
 
 export interface JoinRequestCardProps {
     row: LabourPermission;
@@ -37,9 +38,14 @@ export interface JoinRequestCardProps {
     onDecline: (reason: string) => void;
     /** lane MU-4 — the farm's plots, for the owner's plot choice in the same card. Absent = no plot row. */
     farmPlots?: readonly FarmPlot[];
+    /**
+     * spec: plr-d10 lane MU-2 — the request was claimed from a personal invitation: its grant was chosen before he
+     * joined, so the card offers ONE tap that lets him in with exactly that grant (no preset, no plot choice here).
+     */
+    onLetInFromInvitation?: () => void;
 }
 
-export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, busy, onApprove, onDecline, farmPlots }) => {
+export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, busy, onApprove, onDecline, farmPlots, onLetInFromInvitation }) => {
     const [declining, setDeclining] = useState(false);
     // lane MU-4 (orchestrator call 8) — the plots start from the preset (कामगार → स्वतःचं काम); a choice the owner makes
     // here replaces that default for whichever preset he then taps.
@@ -47,9 +53,12 @@ export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, bus
     const copy = plotScopeCopy(useOptionalLanguage()?.language);
     const via = row.joinedVia === 'SelfJoin' ? TEAM_COPY.viaCode : row.joinedVia === 'QrScan' ? TEAM_COPY.viaQr : null;
     const phone = phoneLine(row);
+    const language = useOptionalLanguage()?.language;
+    const fromInvitation = Boolean(row.personalInvitationId) && onLetInFromInvitation !== undefined;
+    const invite = invitationCopy(language);
 
     return (
-        <li className="list-none space-y-2 rounded-3xl border-2 border-[#1448E6] bg-white p-3.5" data-testid={`join-request-${row.userId}`}>
+        <li tabIndex={-1} className="list-none space-y-2 rounded-3xl border-2 border-[#1448E6] bg-white p-3.5 outline-none focus:ring-4 focus:ring-[#1448E6]/30" data-testid={`join-request-${row.userId}`}>
             <p className="m-0 flex items-start gap-2 text-[17px] font-extrabold leading-snug text-stone-900">
                 <UserPlus size={20} className="mt-0.5 shrink-0 text-[#1448E6]" aria-hidden="true" />
                 {TEAM_COPY.wantsIn(name)}
@@ -59,13 +68,24 @@ export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, bus
                     <Smartphone size={16} aria-hidden="true" />{phone}
                 </p>
             )}
-            {via && <p className="m-0 text-[13px] font-bold text-stone-600">{via}</p>}
-            {farmPlots && (
+            {via && !fromInvitation && <p className="m-0 text-[13px] font-bold text-stone-600">{via}</p>}
+            {fromInvitation && (
+                <>
+                    <p className="m-0 text-[13px] font-bold text-stone-600" data-testid={`join-request-invited-${row.userId}`}>
+                        {invite.waitsForYou}{row.label ? ` · ${invite.labels[row.label as keyof typeof invite.labels] ?? row.label}` : ''}
+                    </p>
+                    <Tap disabled={busy} data-testid={`let-in-${row.userId}`} onClick={() => onLetInFromInvitation?.()}
+                        className="min-h-[56px] w-full rounded-2xl bg-emerald-600 px-3 text-[17px] font-extrabold text-white disabled:opacity-60">
+                        {invite.letIn}
+                    </Tap>
+                </>
+            )}
+            {!fromInvitation && farmPlots && (
                 <PlotScopePicker memberId={row.userId} value={plots ?? defaultPlotScopeFor('work')} farmPlots={farmPlots} busy={busy}
                     summary={!plots || plots.plotScope === 'AllPlots' ? copy.presetDefaults : undefined} onSave={setPlots} />
             )}
-            <p className="m-0 text-[14px] font-extrabold text-stone-800">{TEAM_COPY.quick}</p>
-            <div className="grid grid-cols-1 gap-2">
+            {!fromInvitation && <p className="m-0 text-[14px] font-extrabold text-stone-800">{TEAM_COPY.quick}</p>}
+            {!fromInvitation && <div className="grid grid-cols-1 gap-2">
                 {PRESETS.map(p => (
                     <Tap key={p.id} disabled={busy} data-testid={`approve-${p.id}-${row.userId}`}
                         onClick={() => onApprove(p.id, farmPlots ? (plots ?? defaultPlotScopeFor(p.id)) : undefined)}
@@ -74,7 +94,7 @@ export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, bus
                         <span className="block text-[12.5px] font-semibold leading-snug text-stone-600">{p.hint}</span>
                     </Tap>
                 ))}
-            </div>
+            </div>}
             {declining ? (
                 <ReasonStep question={TEAM_COPY.declineAsk} confirmLabel={TEAM_COPY.decline} busy={busy}
                     onConfirm={reason => onDecline(reason)} onCancel={() => setDeclining(false)}

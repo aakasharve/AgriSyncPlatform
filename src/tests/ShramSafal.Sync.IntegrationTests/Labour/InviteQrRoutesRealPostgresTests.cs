@@ -212,7 +212,8 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
     // Worker half (POST /join/claim): fixed by IJoinClaimTenantScope; the full contract lives in
     // JoinClaimRoutesRealPostgresTests. This keeps the issue -> rotate -> claim chain end to end.
     [Fact]
-    public async Task A_worker_who_claims_via_the_issued_or_rotated_invite_becomes_Worker_Active_on_that_farm_only()
+    // CONSCIOUS CHANGE — spec: plr-d10 lane MU-2: the farm QR only ASKS — the claim is a waiting request (status 2).
+    public async Task A_worker_who_claims_via_the_issued_or_rotated_invite_asks_to_join_that_farm_only()
     {
         await AssertAppRoleIsNotVacuousAsync();
 
@@ -227,7 +228,7 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
 
         using var claim = await ClaimAsync(NewWorker, rotated.Token, rotated.FarmCode);
         claim.StatusCode.Should().Be(HttpStatusCode.OK, await claim.Content.ReadAsStringAsync());
-        (await MembershipRoleAndStatusAsync(FarmA, NewWorker)).Should().Be(("Worker", 3));
+        (await MembershipRoleAndStatusAsync(FarmA, NewWorker)).Should().Be(("Worker", 2));
         (await MembershipRoleAndStatusAsync(FarmB, NewWorker)).Should().BeNull("the invite is for farm A only");
     }
 
@@ -390,8 +391,10 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
         return ReadInvite(body);
     }
 
+    // CONSCIOUS CHANGE — lane MU-2 fix round 1 (D-103, Q1): this release's phone says it understands a waiting
+    // request (acceptsJoinRequest); a claim without it gets 409 join.request_sent (PersonalInvitationRealPostgresTests).
     private Task<HttpResponseMessage> ClaimAsync(Guid caller, string token, string farmCode)
-        => SendAsync(HttpMethod.Post, "/shramsafal/join/claim", caller, new { token, farmCode });
+        => SendAsync(HttpMethod.Post, "/shramsafal/join/claim", caller, new { token, farmCode, acceptsJoinRequest = true });
 
     private async Task<HttpResponseMessage> SendAsync(
         HttpMethod method, string url, Guid? userId, object? body = null)

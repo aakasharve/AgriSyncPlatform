@@ -101,6 +101,35 @@ public static class FarmAuthorities
         FarmAuthority.ScheduleTemplates,
     ];
 
+    /// <summary>
+    /// spec: plr-d10 lane MU-4 fix pass 1 (M7, P5), moved here by lane MU-2 fix round 1 (review M-2) so the team card and
+    /// the personal invitation say ONE rule — the authorities that do nothing on a seat of this role and plot scope:
+    /// changing the farm's setup needs every plot (<c>FarmAccessPolicy.Holds</c>); a कामगार, or anyone on स्वतःचं काम,
+    /// reads only his own records (<c>FarmReadScope.Of</c>), so money and other people's wages are not in force. The
+    /// primary account holder holds everything everywhere: nothing. Pure.
+    /// </summary>
+    public static IReadOnlyList<FarmAuthority> NotInForce(AgriSync.SharedKernel.Contracts.Roles.AppRole role, MembershipPlotScope scope)
+    {
+        if (role == AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner)
+        {
+            return [];
+        }
+
+        var notInForce = new List<FarmAuthority>();
+        if (scope != MembershipPlotScope.AllPlots)
+        {
+            notInForce.Add(FarmAuthority.EditFarmSetup);
+        }
+
+        if (role == AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker || scope == MembershipPlotScope.OwnWork)
+        {
+            notInForce.Add(FarmAuthority.SeeMoney);
+            notInForce.Add(FarmAuthority.SeeWages);
+        }
+
+        return notInForce;
+    }
+
     /// <summary>The stored bit for an authority; <see cref="FarmPermission.None"/> for take हजेरी (the labour grant).</summary>
     public static FarmPermission BitOf(FarmAuthority authority) => authority switch
     {

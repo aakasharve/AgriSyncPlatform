@@ -403,6 +403,14 @@ public static class ShramSafalErrors
         "membership.wrong_status",
         "This person's membership is not in a state where that decision applies.");
 
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 fix round 1 (review Q2) — the general approval refuses a request claimed from a personal
+    /// invitation: that one is let in with EXACTLY the invitation's grant by its own one-tap route.
+    /// </summary>
+    public static readonly Error MembershipClaimedFromInvitation = Error.Conflict(
+        "membership.claimed_from_invitation",
+        "This request came from a personal invitation. Let the person in from that invitation.");
+
     // spec: plr-d10-redesign-real-integration-2026-10-25 — lane WID (founder D-54). The worker-identity answers. Each
     // is a QUESTION the phone asks calmly in its own words (section 9: questions, never errors); none names a person,
     // a number or another farm (R6, case 11).

@@ -63,6 +63,12 @@ public enum IdentityEventKind
     ErasureRequested = 10,
     ErasureCancelled = 11,
     Erased = 12,
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 — the farm record was linked to the login that claimed a personal invitation naming his
+    /// number, proven by that login's own one-time code (R1). Stored as its name (24 characters at most).
+    /// </summary>
+    LinkedToLogin = 13,
 }
 
 /// <summary>What a one-time code is for; a code proves only the purpose it was sent for.</summary>

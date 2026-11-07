@@ -88,6 +88,26 @@ export interface MeContext {
     share: MeShare;
     alerts: MeAlert[];
     serverTimeUtc: string;
+    /**
+     * spec: plr-d10 lane MU-2 (MU design §6) — ADDITIVE (absent from an older server, or without includePending): the
+     * waiting personal invitations that named his proven number. Never farms: the switcher reads `farms` only.
+     */
+    invitations?: MeInvitation[] | null;
+}
+
+/** spec: plr-d10 lane MU-2 — one waiting invitation on /me/context (no code, no farm id, no number). */
+export interface MeInvitation {
+    invitationId: string;
+    farmName: string;
+    invitedByName: string | null;
+    /** "CoOwner" / "Family" / "Mukadam" / "Worker". */
+    label: string;
+    name: string | null;
+    plotScope: 'AllPlots' | 'ChosenPlots' | 'OwnWork';
+    plotNames: string[];
+    authorities: MeAuthority[];
+    expiresAtUtc: string;
+    namesAWorker: boolean;
 }
 
 const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes

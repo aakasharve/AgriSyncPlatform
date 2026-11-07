@@ -64,17 +64,11 @@ internal static class LabourPermissionProjection
         // own-records rule for the कामगार label and the स्वतःचं काम scope (FarmReadScope.Of); edit farm setup only on a
         // seat that covers every plot (FarmAccessPolicy.Holds).
         var ownRecords = !isPrimary && (membership.Role == AppRole.Worker || membership.PlotScope == MembershipPlotScope.OwnWork);
-        var notInForce = new List<string>();
-        if (!isPrimary && membership.PlotScope != MembershipPlotScope.AllPlots)
-        {
-            notInForce.Add(FarmAuthorities.NameOf(FarmAuthority.EditFarmSetup));
-        }
-
-        if (ownRecords)
-        {
-            notInForce.Add(FarmAuthorities.NameOf(FarmAuthority.SeeMoney));
-            notInForce.Add(FarmAuthorities.NameOf(FarmAuthority.SeeWages));
-        }
+        // lane MU-2 fix round 1 (review M-2): the rule lives in the domain now, so the invitation refuses exactly what
+        // this card calls "not in force".
+        var notInForce = isPrimary
+            ? new List<string>()
+            : FarmAuthorities.NotInForce(membership.Role, membership.PlotScope).Select(FarmAuthorities.NameOf).ToList();
 
         var effectiveScope = isPrimary
             ? MembershipPlotScope.AllPlots
@@ -121,6 +115,10 @@ internal static class LabourPermissionProjection
                 : null,
             EffectivePlotScope: effectiveScope.ToString(),
             PlotScopeChoices: choices,
-            AuthoritiesNotInForce: notInForce);
+            AuthoritiesNotInForce: notInForce,
+            // spec: plr-d10 lane MU-2 — the owner's chosen label (null for older seats) and, while it waits, the
+            // personal invitation the request was claimed from.
+            Label: membership.Label?.ToString(),
+            PersonalInvitationId: membership.Status == MembershipStatus.PendingApproval ? membership.PersonalInvitationId : null);
     }
 }

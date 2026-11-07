@@ -1322,6 +1322,16 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    ssf.shram_person_phones (one verified number per person; the plain number index). No table, column,
         //    policy or grant; never touches ssf.audit_events. Safe mid-proof.
         "20261106060953_AddOneVerifiedNumberPerPerson",
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane MU-2); Down() read in full: drops the three policies on
+        //    ssf.farm_personal_invitations and the table, the relationship-label CHECK and the three nullable
+        //    farm_memberships columns (relationship_label, personal_invitation_id, field_operator_id). Up() creates them.
+        //    Never touches ssf.audit_events, its policies or its grants (every invitation step is an ordinary appended
+        //    audit row: PersonalInvitationCreated / Withdrawn / Declined, MemberJoined / MemberJoinRequested). Safe mid-proof.
+        "20261106063315_AddPersonalInvitations",
+        // 20261106212345_PersonalInvitationsGoWithTheirFarm (lane MU-2 fix round 1, L-10): Up() and Down() read in full —
+        //    re-creates ONE foreign key on ssf.farm_personal_invitations (RESTRICT -> CASCADE; Down() puts RESTRICT back).
+        //    Never touches ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261106212345_PersonalInvitationsGoWithTheirFarm",
         // ── Reviewed 2026-11-06 (spec: plr-d10 lane RATE-1 part A, founder D-72); Down() read in full: drops the two policies
         //    on ssf.farm_rates and the table (its CHECKs and indexes go with it). Up() creates that table only (FORCE RLS,
         //    SELECT + INSERT for the app role). Never touches ssf.audit_events, its policies or its grants (a rate change

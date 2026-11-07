@@ -146,7 +146,12 @@ public sealed record LabourPermissionDto(
     // older phone ignores all three.
     string? EffectivePlotScope = null,
     IReadOnlyList<string>? PlotScopeChoices = null,
-    IReadOnlyList<string>? AuthoritiesNotInForce = null);
+    IReadOnlyList<string>? AuthoritiesNotInForce = null,
+    // spec: plr-d10 lane MU-2 — additive. The label the owner chose on a personal invitation ("CoOwner" / "Family" /
+    // "Mukadam" / "Worker"; null for every older seat, which keeps reading its role — no guessing, D-8), and, on a waiting
+    // request, the personal invitation it was claimed from: the owner's one tap applies exactly that grant.
+    string? Label = null,
+    Guid? PersonalInvitationId = null);
 
 /// <summary>
 /// lane 2b (MU design §2, §11.1) — one authority a member holds on one farm, as the wire carries it:

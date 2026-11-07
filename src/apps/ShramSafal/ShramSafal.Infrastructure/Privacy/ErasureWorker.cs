@@ -208,6 +208,17 @@
 //     or headcount is deleted or changed except the name text. ssf.shram_identity_events names nobody
 //     (ids, a kind, a proof, a time) and is append-only by GRANT: KEEP; one 'Erased' event per farm record
 //     is appended.
+//   - ssf.farm_personal_invitations — ADDED 2026-11-06 (lane MU-2; migration 20261106063315_AddPersonalInvitations).
+//     The owner's invitation that carries the relationship: who invited (invited_by_user_id), the label, plots and
+//     authorities, a seven-day eight-digit code, who claimed it (claimed_by_user_id) and when. HAS PII of a THIRD
+//     PARTY: person_name and invited_phone_e164 are what the OWNER typed about the person he invited (the farm_name
+//     and scope_plot_names snapshots are farm data). Like ssf.field_operators above, DELIBERATELY ABSENT FROM THE
+//     CREATOR-ERASURE SEQUENCE: the farmer who typed a person's number is not that person's data subject (P6), and the
+//     row is the farm's record of who it let in and with what grant (a seat's provenance). The ROW is KEPT; the PERSON on
+//     it is not (lane MU-2 fix round 1, review M-3): person_name and invited_phone_e164 are cleared (PersonalInvitationPeople)
+//     (a) by THIS worker when an account is erased — every invitation on every farm naming his login's number — and when
+//     a worker's own identity is erased (WorkerPersonErasure: his numbers and his farm records); (b) by the nightly
+//     RetentionSweepWorker 30 days after an invitation ended or expired (it only ever works for seven days).
 //   - ssf.attendance_marks — ADDED 2026-08-31 (founder decision D-H3: what somebody
 //     RULED about a person on a farm-day; day mark full/half/absent/unmarked plus
 //     night mark worked/not-worked/unmarked).
@@ -842,6 +853,17 @@ public sealed class ErasureWorker(
             .ExecuteDeleteAsync(ct)
             .ConfigureAwait(false);
         totalAnonymized += perTableCounts["raw_blob_subjects"];
+
+        // lane MU-2 fix round 1 (review M-3, P6) — every personal invitation, on every farm, naming his login's number loses
+        // the name and number the owner typed (the row, the farm's record of the invitation, stays).
+        var hisNumber = ShramSafal.Domain.Identity.IndianMobile.Normalize(await admin.Database
+            .SqlQueryRaw<string>("SELECT phone AS \"Value\" FROM public.users WHERE \"Id\" = {0}", targetUserId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false));
+        perTableCounts["farm_personal_invitations"] = hisNumber is null
+            ? 0
+            : await PersonalInvitationPeople.ForgetNumbersAsync(admin, [hisNumber], [], ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["farm_personal_invitations"];
 
         // (e) Retained voice S3 — via port.
         //

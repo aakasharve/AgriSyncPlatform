@@ -26,6 +26,29 @@ public interface IAffiliationSnapshotReader
 }
 
 /// <summary>
+/// spec: plr-d10 lane MU-2 (MU design §6, "one read model") — the waiting personal invitations that named the person's
+/// PROVEN number. Implemented in the composition root over ShramSafal's own reader, so this context never re-derives
+/// who may see an invitation.
+/// </summary>
+public interface IMeInvitationSnapshotReader
+{
+    Task<IReadOnlyList<MeInvitationSnapshot>> GetWaitingForUserAsync(UserId userId, CancellationToken ct = default);
+}
+
+/// <summary>spec: plr-d10 lane MU-2 — one waiting invitation, as the person's card shows it (no code, no farm id, no number).</summary>
+public sealed record MeInvitationSnapshot(
+    Guid InvitationId,
+    string FarmName,
+    string? InvitedByName,
+    string Label,
+    string? Name,
+    string PlotScope,
+    IReadOnlyList<string> PlotNames,
+    IReadOnlyList<MeAuthoritySnapshot> Authorities,
+    DateTime ExpiresAtUtc,
+    bool NamesAWorker);
+
+/// <summary>
 /// Subscription snapshot as observed by the User app for a given owner
 /// account. <c>PlanCode</c> is the raw code from Accounts
 /// (e.g. <c>"ShramSafalPro"</c>, <c>"FreeTier"</c>); mapping to the UI

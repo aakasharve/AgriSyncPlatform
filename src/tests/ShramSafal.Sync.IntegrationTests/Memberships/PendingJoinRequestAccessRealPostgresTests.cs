@@ -521,6 +521,16 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // lane WID fix pass 2 (N3) — Down() read in full: drops only the two shram_person_phones indexes Up() adds. No
         // farm_memberships or farm_join_requests object, no ssf.farms policy.
         "20261106060953_AddOneVerifiedNumberPerPerson",
+        // spec plr-d10 lane MU-2 — Down() read in full: drops the three policies on ssf.farm_personal_invitations (a
+        // farm-id tenant policy and two SELECT-only invitee doors keyed on agrisync.invitee_phone / agrisync.invite_code;
+        // none names a membership status, so none is an "open" or an "active" predicate here), the table, the
+        // relationship-label CHECK and the three nullable farm_memberships columns. No farm_join_requests object, no
+        // ssf.farms policy; a seat's status is never touched. Re-Up re-creates them.
+        "20261106063315_AddPersonalInvitations",
+        // 20261106212345_PersonalInvitationsGoWithTheirFarm (lane MU-2 fix round 1, L-10): Up() and Down() read in full —
+        // one foreign key on ssf.farm_personal_invitations re-created (CASCADE; Down() puts RESTRICT back). No
+        // farm_join_requests object, no ssf.farms policy, no seat touched.
+        "20261106212345_PersonalInvitationsGoWithTheirFarm",
         // spec plr-d10 lane RATE-1 part A (founder D-72) — Down() read in full: drops the two policies on ssf.farm_rates and
         // the table. Up() creates that table only, with its user-select policy written ALREADY narrowed (m.status = 3) — see
         // PoliciesCreatedAfterActiveOnly. No farm_memberships or farm_join_requests object, no other policy. Re-Up recreates them.

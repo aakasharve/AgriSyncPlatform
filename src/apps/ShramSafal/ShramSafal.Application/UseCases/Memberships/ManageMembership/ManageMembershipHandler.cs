@@ -4,6 +4,8 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Ports.External;
+using ShramSafal.Application.UseCases.Memberships.PersonalInvitations;
 using ShramSafal.Application.UseCases.Memberships.SetLabourPermission;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -55,7 +57,11 @@ namespace ShramSafal.Application.UseCases.Memberships.ManageMembership;
 /// </summary>
 public sealed class ManageMembershipHandler(
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock,
+    // spec: plr-d10 lane MU-2 fix round 1 (review M-1) — optional so existing direct constructions keep compiling; the
+    // composition root supplies both, and then an approval ends the person's waiting named invitations on this farm.
+    IPersonalInvitationRepository? invitations = null,
+    IUserDirectory? users = null)
     : IHandler<ManageMembershipCommand, LabourPermissionDto>
 {
     /// <summary>The roles the primary owner may give in step 2: काम सांगणे and काम + हजेरी.
@@ -139,6 +145,15 @@ public sealed class ManageMembershipHandler(
         if (seat is null || seat.FarmId != command.FarmId)
         {
             return await AnswerEndedSeatAsync(command, now, ct);
+        }
+
+        // ── 5b. spec: plr-d10 lane MU-2 — a request claimed from a personal invitation is let in with EXACTLY that
+        //        invitation's grant, by its own one-tap route (POST …/personal-invitations/{id}/approve). The general
+        //        approval would choose a role and authorities afresh, so it refuses that seat (409); नको stays here.
+        if (command.Decision == MembershipDecision.Approve && seat.PersonalInvitationId is not null)
+        {
+            // Fix round 1 (review Q2): its own code, so a screen can say why (the one-tap route lets him in).
+            return Result.Failure<LabourPermissionDto>(ShramSafalErrors.MembershipClaimedFromInvitation);
         }
 
         // ── 6. The last Active primary owner stays (I3) ──────────────────────
@@ -243,6 +258,15 @@ public sealed class ManageMembershipHandler(
         if (changed)
         {
             await repository.AddAuditEventAsync(BuildAudit(command, AppRole.PrimaryOwner, seat, before), ct);
+            // Fix round 1 (review M-1): he is in now — a named invitation still waiting for his number must not outlive a
+            // later decision of the owner's. Ended in the same unit of work, each with its own audit row.
+            if (command.Decision == MembershipDecision.Approve && invitations is not null && users is not null)
+            {
+                await NamedInvitations.EndForPersonLetInAsync(
+                    invitations, repository, users, command.FarmId.Value, command.TargetUserId.Value, exceptInvitationId: null,
+                    command.CallerUserId, now, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash, ct);
+            }
+
             await repository.SaveChangesAsync(ct);
         }
 

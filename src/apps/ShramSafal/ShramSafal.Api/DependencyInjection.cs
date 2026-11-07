@@ -877,6 +877,8 @@ public static class DependencyInjection
             ShramSafal.Application.UseCases.Labour.CreateFieldOperator.CreateFieldOperatorHandler>();
         // spec: plr-d10 lane WID — the narrow worker-identity use cases (one service; see its remarks).
         services.AddScoped<ShramSafal.Application.UseCases.Labour.WorkerIdentity.WorkerIdentityService>();
+        // spec: plr-d10 lane MU-2 — the personal invitation (one service; see its remarks).
+        services.AddScoped<ShramSafal.Application.UseCases.Memberships.PersonalInvitations.PersonalInvitationService>();
         services.AddScoped<
             AgriSync.BuildingBlocks.Application.IHandler<
                 ShramSafal.Application.UseCases.Labour.AttachFieldOperator.AttachFieldOperatorCommand,

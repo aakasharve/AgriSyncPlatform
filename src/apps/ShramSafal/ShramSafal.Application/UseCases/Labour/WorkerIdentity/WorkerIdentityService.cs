@@ -89,6 +89,76 @@ public sealed class WorkerIdentityService(
     /// of him, never linked him by his code) may use at most 5 together, so his own farms always keep 5.
     /// </summary>
     public const int StrangerWrongTriesPerDay = 5;
+    // ── a login that proved the number an owner's invitation named (lane MU-2) ─────────────────────────
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-2 — "this is रमेश from your हजेरी list": an owner's personal invitation named this farm record
+    /// and the person's number, and that person claimed it from a login whose number a one-time code proved. That is R1's
+    /// proof (the owner's explicit choice + the worker's own phone code), so the record may become this login's — under
+    /// R3: never when ANOTHER identity holds the number proven, never when his own proven number is a different one, never
+    /// for an erased identity or a record that is not this farm's working one. When the number is one THIS farm typed for
+    /// him but nobody had proven, the login's code proves it now (screen 3's effect) — but, as for screen 3, only while the
+    /// farm holds his proof (lane MU-2 fix round 1, review H-2: WID fix 2's N1 — with no verified number anywhere, only the
+    /// farm that issued his working card proves his first one). Otherwise the seat link is recorded and the number stays
+    /// unproven. Every change is an append-only event naming the login as actor and the proof as the phone code (R5). It
+    /// moves no work (R2, P7) and writes no seat: the caller records the link on the seat and saves both in one unit of
+    /// work, then closes the door (<see cref="CloseIdentityDoorAsync"/>). Returns false, with nothing staged, when any rule
+    /// says no.
+    /// </summary>
+    public async Task<bool> RecordLoginLinkAsync(
+        Guid farmId, Guid fieldOperatorId, string phoneE164, Guid loginUserId, CancellationToken ct)
+    {
+        var record = await RecordOnFarmAsync(farmId, fieldOperatorId, ct);
+        if (record is null || !record.IsActive || IndianMobile.Normalize(phoneE164) != phoneE164)
+        {
+            return false;
+        }
+
+        var group = await WorkerIdentityReads.GroupOfAsync(store, record.PersonId, ct);
+        if (group is null || group.Root.IsErased)
+        {
+            return false;
+        }
+
+        // WID fix 3's person lock (lane MU-2 fix round 1, review H-2): the same lock fix 3's send and verify paths take, taken
+        // before any read below decides, so a login link and a verify for one person run one at a time. A clash on the
+        // per-person verified index is still answered cleanly by the caller (IdentityClash → 409 invitation.try_again).
+        await store.LockPersonAsync(group.Root.Id, ct);
+
+        if (await HeldByAnotherAsync(phoneE164, group, ct))
+        {
+            return false;
+        }
+
+        var phones = await store.GetPhonesAsync(group.Ids, ct);
+        if (phones.Any(p => p.IsActiveVerified && p.PhoneE164 != phoneE164))
+        {
+            return false;
+        }
+
+        var now = clock.UtcNow;
+        var alreadyProven = phones.Any(p => p.IsActiveVerified && p.PhoneE164 == phoneE164);
+        // N1: with no verified number at all, only the farm holding his proof (the issuer of his working card) may prove
+        // one; and only a number THIS farm added (as WID's own verify target, SendRecordCodeAsync).
+        if (!alreadyProven && await HoldsHisProofAsync(farmId, group, ct))
+        {
+            var typed = phones.FirstOrDefault(p =>
+                p.IsActive && !p.IsActiveVerified && p.PhoneE164 == phoneE164 && p.AddedByFarmId == farmId);
+            if (typed is not null)
+            {
+                typed.MarkVerified(now);
+                await store.AddEventAsync(ShramIdentityEvent.Record(
+                    ids.New(), farmId, record.Id, group.Root.Id, IdentityEventKind.PhoneVerified, IdentityProof.PhoneCode, loginUserId, now), ct);
+            }
+        }
+
+        await store.AddEventAsync(ShramIdentityEvent.Record(
+            ids.New(), farmId, record.Id, group.Root.Id, IdentityEventKind.LinkedToLogin, IdentityProof.PhoneCode, loginUserId, now), ct);
+        return true;
+    }
+
+    /// <summary>lane MU-2 — closes the identity door after the caller saved what <see cref="RecordLoginLinkAsync"/> staged.</summary>
+    public Task CloseIdentityDoorAsync(CancellationToken ct) => store.CloseAsync(ct);
 
     // ── scan-resolve (R6) ───────────────────────────────────────────────────────────────────────────
 

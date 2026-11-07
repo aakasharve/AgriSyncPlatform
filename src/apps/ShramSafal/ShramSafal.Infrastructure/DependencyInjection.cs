@@ -452,6 +452,11 @@ public static class DependencyInjection
         services.AddScoped<IJoinClaimTenantScope, JoinClaimTenantScope>();
         // spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — typed farm-code join.
         services.AddScoped<IJoinCodeTenantScope, JoinCodeTenantScope>();
+        // spec: plr-d10 lane MU-2 — the personal invitation: its table, the invitee's staged tenant scope (the two
+        // SELECT-only doors), and the read /me/context lists a person's waiting invitations with.
+        services.AddScoped<IPersonalInvitationRepository, PersonalInvitationRepository>();
+        services.AddScoped<IPersonalInvitationTenantScope, PersonalInvitationTenantScope>();
+        services.AddScoped<IPersonalInvitationInviteeReader, PersonalInvitationInviteeReader>();
         // spec: plr-d10 lane WID — the ONE door to the ShramSafal-wide person tables (the identity setting is opened only
         // by this store, after the route's farm scope) and the worker-code sender: the dev stub outside Production; in
         // Production SWITCHED OFF until the worker-code DLT template is approved (the host then registers the real one

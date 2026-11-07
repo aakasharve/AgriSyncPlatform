@@ -2327,6 +2327,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("farm_id");
 
+                    b.Property<Guid?>("FieldOperatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("field_operator_id");
+
                     b.Property<DateTime>("GrantedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("granted_at_utc");
@@ -2340,6 +2344,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
                         .HasColumnName("joined_via");
+
+                    b.Property<string>("Label")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("relationship_label");
 
                     b.Property<DateTime?>("LabourGrantExpiresAtUtc")
                         .HasColumnType("timestamp with time zone")
@@ -2356,6 +2365,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<int?>("Permissions")
                         .HasColumnType("integer")
                         .HasColumnName("permissions");
+
+                    b.Property<Guid?>("PersonalInvitationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("personal_invitation_id");
 
                     b.Property<string>("PlotScope")
                         .IsRequired()
@@ -2872,6 +2885,154 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_observation_events_daily_log_id");
 
                     b.ToTable("observation_events", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Farms.PersonalInvitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AuthoritiesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("authorities");
+
+                    b.Property<DateTime?>("ClaimedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at_utc");
+
+                    b.Property<Guid?>("ClaimedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("claimed_by_user_id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character(8)")
+                        .HasColumnName("code")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<DateTime?>("EndedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at_utc");
+
+                    b.Property<Guid?>("EndedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ended_by_user_id");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at_utc");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("FarmName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("farm_name");
+
+                    b.Property<Guid?>("FieldOperatorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("field_operator_id");
+
+                    b.Property<Guid>("InvitedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invited_by_user_id");
+
+                    b.Property<string>("InvitedPhoneE164")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("invited_phone_e164");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("label");
+
+                    b.Property<Guid?>("MembershipId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("membership_id");
+
+                    b.Property<DateTime?>("OwnerApprovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("owner_approved_at_utc");
+
+                    b.Property<string>("PersonName")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("person_name");
+
+                    b.Property<string>("PlotScope")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("plot_scope");
+
+                    b.Property<Guid?>("ReplacedByInvitationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("replaced_by_invitation_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("status");
+
+                    b.Property<bool>("WaitsForOwner")
+                        .HasColumnType("boolean")
+                        .HasColumnName("waits_for_owner");
+
+                    b.Property<bool>("WorkerLinked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("worker_linked");
+
+                    b.PrimitiveCollection<List<Guid>>("_scopePlotIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("scope_plot_ids");
+
+                    b.PrimitiveCollection<List<string>>("_scopePlotNames")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("scope_plot_names");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ux_farm_personal_invitations_code");
+
+                    b.HasIndex("InvitedPhoneE164")
+                        .HasDatabaseName("ix_farm_personal_invitations_phone_waiting")
+                        .HasFilter("status = 'Waiting' AND invited_phone_e164 IS NOT NULL");
+
+                    b.HasIndex("FarmId", "CreatedAtUtc")
+                        .HasDatabaseName("ix_farm_personal_invitations_farm_created");
+
+                    b.HasIndex("FarmId", "InvitedPhoneE164")
+                        .IsUnique()
+                        .HasDatabaseName("ux_farm_personal_invitations_farm_phone_waiting")
+                        .HasFilter("status = 'Waiting' AND invited_phone_e164 IS NOT NULL");
+
+                    b.ToTable("farm_personal_invitations", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_farm_personal_invitations_code", "code ~ '^[0-9]{8}$'");
+
+                            t.HasCheckConstraint("ck_farm_personal_invitations_label", "label IN ('CoOwner', 'Family', 'Mukadam', 'Worker')");
+
+                            t.HasCheckConstraint("ck_farm_personal_invitations_plot_scope", "(plot_scope = 'ChosenPlots') = (cardinality(scope_plot_ids) > 0) AND cardinality(scope_plot_ids) = cardinality(scope_plot_names) AND plot_scope IN ('AllPlots', 'ChosenPlots', 'OwnWork')");
+
+                            t.HasCheckConstraint("ck_farm_personal_invitations_status", "status IN ('Waiting', 'Accepted', 'Declined', 'Withdrawn')");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Farms.Plot", b =>

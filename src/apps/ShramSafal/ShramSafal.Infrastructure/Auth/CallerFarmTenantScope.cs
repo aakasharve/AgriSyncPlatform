@@ -292,3 +292,84 @@ internal sealed class IdentityTenantScope(ShramSafalDbContext db)
         _open = false;
     }
 }
+
+/// <summary>
+/// spec: plr-d10 lane MU-2 — the invitee's tenant scope (<see cref="IPersonalInvitationTenantScope"/>). Lives in this file
+/// for the same reason as <see cref="JoinCodeTenantScope"/>: the single reviewed home of the transaction-local
+/// <c>set_config</c> technique (<c>RlsIdentityScopeRules.GucWriteAllowlist</c>). It alone writes the two settings the
+/// SELECT-only policies on <c>ssf.farm_personal_invitations</c> key on (migration <c>AddPersonalInvitations</c>):
+/// <list type="bullet">
+/// <item><c>agrisync.invitee_phone</c> — the person's PROVEN number (<c>IUserDirectory.GetVerifiedPhoneAsync</c>, the
+/// server's record of an OTP; never a request value): the rows that named it become visible, nothing else;</item>
+/// <item><c>agrisync.invite_code</c> — the eight digits he typed: exactly that one row becomes visible.</item>
+/// </list>
+/// Stage 2 (<see cref="PublishInvitationFarmScopeAsync"/>) closes both and opens the invitation's farm only, exactly as the
+/// typed-code join's stage 2 does.
+/// </summary>
+internal sealed class PersonalInvitationTenantScope(
+    TenantContext tenantContext,
+    ShramSafalDbContext db) : IPersonalInvitationTenantScope
+{
+    private bool _elevated;
+
+    public Task BeginInviteeLookupAsync(CancellationToken ct = default)
+    {
+        if (db.Database.IsRelational() && !_elevated)
+        {
+            // Silences the interceptor ONLY (sets no GUC). This route has no farm claim of its own.
+            tenantContext.ElevateToAdminCrossTenant();
+            _elevated = true;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public async Task OpenInviteeDoorAsync(string? inviteePhoneE164, string? code, CancellationToken ct = default)
+    {
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        await BeginInviteeLookupAsync(ct);
+        await SetInviteeDoorAsync(db, inviteePhoneE164, code, ct);
+    }
+
+    public async Task PublishInvitationFarmScopeAsync(Guid invitationFarmId, Guid claimantUserId, CancellationToken ct = default)
+    {
+        if (invitationFarmId == Guid.Empty || claimantUserId == Guid.Empty)
+        {
+            throw new ArgumentException("The invitation's farm id and the claimant's user id are both required.");
+        }
+
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        // The doors have done their one job (finding the invitation). Close them before the farm scope opens.
+        await SetInviteeDoorAsync(db, null, null, ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.farm_id', {invitationFarmId.ToString()}, true)", ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.user_id', {claimantUserId.ToString()}, true)", ct);
+    }
+
+    /// <summary>
+    /// Writes (or, with nulls, closes) the two invitee doors on the CURRENT transaction. Shared with
+    /// <c>PersonalInvitationInviteeReader</c>, which runs it inside <c>RlsIdentityScope.RunAsUserAsync</c> for
+    /// <c>/me/context</c>. Outside a transaction it refuses (a transaction-local setting would last one statement).
+    /// </summary>
+    internal static async Task SetInviteeDoorAsync(ShramSafalDbContext db, string? inviteePhoneE164, string? code, CancellationToken ct)
+    {
+        if (db.Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("The invitee door opens only inside a transaction.");
+        }
+
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.invitee_phone', {inviteePhoneE164 ?? string.Empty}, true)", ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT set_config('agrisync.invite_code', {code ?? string.Empty}, true)", ct);
+    }
+}

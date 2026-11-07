@@ -22,6 +22,7 @@ import {
 } from '../qr/inviteApi';
 import { type WaitingSeat } from './PendingJoinRequests';
 import FirstFarmDoors from './FirstFarmDoors';
+import { WaitingInvitations } from '../../invitations/WaitingInvitations';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { firstRunCopy, type FirstRunCopy } from '../firstRun/firstRunCopy';
 import { FirstRunGlass, FirstRunHeading, FirstRunShell, GreenButton, Rise } from '../firstRun/FirstRunShell';
@@ -54,6 +55,8 @@ interface MinimalOnboardingProps {
     onWithdrawRequest?: (farmId: string) => Promise<void>;
     /** Back from the doors to the phone number (signs out). Not drawn without it. */
     onBack?: () => void;
+    /** spec: plr-d10 lane MU-2 — an invitation was answered (in at once, or a request): the caller refreshes his farms. */
+    onInvitationAnswered?: () => void;
 }
 
 const INPUT = 'min-h-[56px] w-full rounded-2xl bg-white px-4 text-[19px] font-extrabold text-stone-900 outline-none ring-1 ring-stone-300 placeholder:font-semibold placeholder:text-stone-400 focus:ring-2 focus:ring-emerald-500 disabled:opacity-60';
@@ -65,6 +68,7 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
     pendingSeats = [],
     onWithdrawRequest,
     onBack,
+    onInvitationAnswered,
 }) => {
     const language = useOptionalLanguage()?.language ?? 'mr';
     const c = firstRunCopy(language);
@@ -104,6 +108,7 @@ const MinimalOnboarding: React.FC<MinimalOnboardingProps> = ({
                 onBack={onBack}
                 pendingSeats={pendingSeats}
                 onWithdrawRequest={onWithdrawRequest}
+                invitations={<WaitingInvitations onAnswered={onInvitationAnswered} />}
             />
         );
     }

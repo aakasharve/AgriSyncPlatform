@@ -31,9 +31,18 @@ interface Props {
     onCancel: () => void;
     /** Hold reading while the caller is busy with a code already read. */
     paused?: boolean;
+    /**
+     * spec: plr-d10 lane MU-2 (reuse, WID orchestrator call 4) — what counts as a code here. Default: a ShramSafal card
+     * code. The join door passes the personal invitation's eight digits instead, so the SAME scanner reads its QR.
+     */
+    readCode?: (raw: string | null | undefined) => string | null;
+    /** The typed field's example (default: a card code). */
+    placeholder?: string;
+    /** false = the caller has its own code box (the join door): only the camera and "later" are drawn. */
+    showTyped?: boolean;
 }
 
-export const CardScanner: React.FC<Props> = ({ onCode, onCancel, paused }) => {
+export const CardScanner: React.FC<Props> = ({ onCode, onCancel, paused, readCode = normalizeCardCode, placeholder = 'SS-7K4M-29QX', showTyped = true }) => {
     const language = useOptionalLanguage()?.language;
     const Detector = platformQrDetector();
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -44,6 +53,8 @@ export const CardScanner: React.FC<Props> = ({ onCode, onCancel, paused }) => {
     onCodeRef.current = onCode;
     const pausedRef = useRef(paused);
     pausedRef.current = paused;
+    const readRef = useRef(readCode);
+    readRef.current = readCode;
 
     useEffect(() => {
         if (!Detector) return;
@@ -68,7 +79,7 @@ export const CardScanner: React.FC<Props> = ({ onCode, onCancel, paused }) => {
                 timer = setInterval(() => {
                     if (pausedRef.current || !videoRef.current) return;
                     void detector.detect(videoRef.current).then((found) => {
-                        const body = found.map((f) => normalizeCardCode(f.rawValue)).find((b): b is string => b !== null);
+                        const body = found.map((f) => readRef.current(f.rawValue)).find((b): b is string => b !== null);
                         if (body) onCodeRef.current(body);
                     }).catch(() => undefined);
                 }, 400);
@@ -83,7 +94,7 @@ export const CardScanner: React.FC<Props> = ({ onCode, onCancel, paused }) => {
     }, [Detector]);
 
     const submitTyped = () => {
-        const body = normalizeCardCode(typed);
+        const body = readCode(typed);
         if (!body) {
             setTypedWrong(true);
             return;
@@ -107,13 +118,13 @@ export const CardScanner: React.FC<Props> = ({ onCode, onCancel, paused }) => {
                 <p data-testid="scanner-camera-off" className="rounded-xl bg-stone-50 p-3 text-[14px] font-semibold text-stone-600">{widText('cameraOff', language)}</p>
             )}
 
-            <div>
+            {showTyped && <div>
                 <label htmlFor="scanner-typed" className="mb-1.5 ml-1 flex items-center gap-1.5 text-[13px] font-extrabold text-stone-500">
                     <Keyboard size={14} aria-hidden /> {widText('typeCode', language)}
                 </label>
                 <div className="flex gap-2">
                     <input id="scanner-typed" data-testid="scanner-typed-input" value={typed} maxLength={40} autoCapitalize="characters"
-                        placeholder="SS-7K4M-29QX"
+                        placeholder={placeholder}
                         onChange={(e) => { setTyped(e.target.value); setTypedWrong(false); }}
                         onKeyDown={(e) => { if (e.key === 'Enter') submitTyped(); }}
                         className="min-h-[52px] flex-1 rounded-xl border border-stone-200 bg-white px-3 font-mono text-[18px] font-bold tracking-wider text-stone-800 focus:border-emerald-500 focus:outline-none" />
@@ -125,7 +136,7 @@ export const CardScanner: React.FC<Props> = ({ onCode, onCancel, paused }) => {
                 {typedWrong && (
                     <p data-testid="scanner-typed-error" className="ml-1 mt-1 text-[13px] font-semibold text-amber-700">{widText('typedNotCode', language)}</p>
                 )}
-            </div>
+            </div>}
 
             <button type="button" onClick={onCancel} className="min-h-[48px] w-full rounded-xl border border-stone-200 bg-white text-[15px] font-bold text-stone-600">
                 {widText('later', language)}

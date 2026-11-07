@@ -1240,6 +1240,9 @@ public sealed partial class PurveshDemoSeeder
         Survived("ssf.field_operator_work_rows", await _ssfContext.FieldOperatorWorkRows.CountAsync(r => r.FarmId == farmId, cancellationToken));
         Survived("ssf.attendance_marks", await _ssfContext.AttendanceMarks.CountAsync(m => m.FarmId == farmId, cancellationToken));
         Survived("ssf.farm_memberships", await _ssfContext.FarmMemberships.CountAsync(m => m.FarmId == farmId, cancellationToken));
+        // lane MU-2 fix round 1 (L-10): the farm's personal invitations go with it (ON DELETE CASCADE; the app role holds no
+        // DELETE of its own on them).
+        Survived("ssf.farm_personal_invitations", await _ssfContext.PersonalInvitations.CountAsync(i => i.FarmId == farmId, cancellationToken));
 
         // … then through each demo login's OWN view of its farms — an independent policy, so
         // a farm row the tenant scope somehow failed to show is still caught here.

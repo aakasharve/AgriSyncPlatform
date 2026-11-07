@@ -197,6 +197,16 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         // ── Reviewed 2026-11-06 (lane WID fix pass 2, N3); Down() read in full: drops only the two indexes Up() adds
         //    on ssf.shram_person_phones. No table, column, policy or grant; no ledger is touched. Safe mid-proof.
         "20261106060953_AddOneVerifiedNumberPerPerson",
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane MU-2); Down() read in full. Up() CREATEs ssf.farm_personal_invitations
+        //    (FORCE RLS on its own farm_id, three policies; SELECT + INSERT + UPDATE for the app role, DELETE and TRUNCATE
+        //    revoked — current state with a status, not a ledger) and ADDs three nullable farm_memberships columns with one
+        //    CHECK. Down() drops the policies, the table, the CHECK and the three columns — only what Up() added. No
+        //    append-only ledger, policy or privilege of another table is touched. Safe to revert and re-apply mid-proof.
+        "20261106063315_AddPersonalInvitations",
+        // 20261106212345_PersonalInvitationsGoWithTheirFarm (lane MU-2 fix round 1, L-10): Up() and Down() read in full —
+        //    drops and re-adds the invitation table's farm foreign key (CASCADE; Down() RESTRICT). No grant, policy or
+        //    append-only ledger is touched; the app role still holds no DELETE on the invitations. Safe mid-proof.
+        "20261106212345_PersonalInvitationsGoWithTheirFarm",
         // ── Reviewed 2026-11-06 (spec: plr-d10 lane RATE-1 part A, founder D-72); Down() read in full: drops the two policies
         //    on ssf.farm_rates and the table (with its CHECKs and indexes) — only what Up() added. Up() creates the table
         //    FORCE-RLS and APPEND-ONLY BY PRIVILEGE with its own effective-privilege guard (it is on AppendOnlyLedgers above).

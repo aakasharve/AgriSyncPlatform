@@ -184,6 +184,21 @@ internal sealed class FarmMembershipConfiguration : IEntityTypeConfiguration<Far
             .IsRequired();
         builder.Ignore(x => x.ScopePlotIds);
 
+        // spec: plr-d10 lane MU-2 — three additive, nullable columns: every existing row reads NULL (no label guessed,
+        // no invitation, no worker link), so an old seat answers exactly what it answered (P10, P11).
+        builder.Property(x => x.Label)
+            .HasColumnName("relationship_label")
+            .HasConversion<string>()
+            .HasMaxLength(16);
+
+        builder.Property(x => x.PersonalInvitationId)
+            .HasColumnName("personal_invitation_id");
+
+        builder.Property(x => x.FieldOperatorId)
+            .HasColumnName("field_operator_id");
+
+        builder.Ignore(x => x.IsGenericJoinRequest);
+
         builder.Ignore(x => x.EffectivePermissions);
         builder.Ignore(x => x.EndedAfterOwnerStop);
         builder.Ignore(x => x.WasLetInByOwner);

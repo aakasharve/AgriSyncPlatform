@@ -27,6 +27,12 @@ vi.mock('../../../labour/data/fieldOperatorClient', () => ({
     createFieldOperator: vi.fn(),
     deactivateFieldOperator: vi.fn(),
 }));
+// spec: plr-d10 lane MU-2 — the team page now lists the invitations the owner sent: stubbed, so this suite stays
+// off the network (an empty list draws nothing).
+vi.mock('../../../invitations/personalInvitationClient', async (importActual) => ({
+    ...(await importActual<typeof import('../../../invitations/personalInvitationClient')>()),
+    listInvitations: vi.fn(async () => []),
+}));
 vi.mock('../../../labour/data/fieldOperatorRosterCache', () => ({ readCachedRoster: () => null, writeCachedRoster: vi.fn() }));
 
 let language = 'mr';

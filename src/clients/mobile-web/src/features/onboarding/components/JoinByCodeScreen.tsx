@@ -30,6 +30,15 @@ import {
 } from '../qr/farmCodeEntry';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { joinByCodeCopy } from './joinByCodeCopy';
+import { CardScanner, platformQrDetector } from '../../labour/identity/CardScanner';
+import { InvitationCard } from '../../invitations/InvitationCard';
+import { invitationCopy } from '../../invitations/invitationCopy';
+import { normalizeInvitationCode } from '../../invitations/invitationModel';
+import {
+    findInvitation,
+    invitationRefusal,
+    type InvitationCard as InvitationCardData,
+} from '../../invitations/personalInvitationClient';
 
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — round-2 review LANG-strict-EN-join) — the words
 // live in `joinByCodeCopy.ts` with an English side, so someone who chose English sees English here too.
@@ -48,12 +57,26 @@ export interface JoinByCodeScreenProps {
     openJoinLink?: (href: string) => void;
 }
 
+/** Fix round 1 (L-7): what the invitation scanner hands back for a FARM's QR, so it is answered, not ignored. */
+const FARM_QR_SEEN = 'farm-qr';
+
+/** The invitation scanner's reader: an invitation's eight digits, or the mark of a farm's QR link. */
+const readScanned = (raw: string | null | undefined): string | null =>
+    normalizeInvitationCode(raw) ?? (raw && readJoinLink(raw) ? FARM_QR_SEEN : null);
+
 const defaultOpenJoinLink = (href: string): void => {
     if (typeof window !== 'undefined') window.location.assign(href);
 };
 
 const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, onJoined, openJoinLink = defaultOpenJoinLink }) => {
-    const C = joinByCodeCopy(useOptionalLanguage()?.language);
+    const language = useOptionalLanguage()?.language;
+    const C = joinByCodeCopy(language);
+    const I = invitationCopy(language);
+    // spec: plr-d10 lane MU-2 — a personal invitation found by its eight digits (typed, pasted as its link, or scanned).
+    const [invitation, setInvitation] = useState<{ card: InvitationCardData; code: string } | null>(null);
+    const [scanning, setScanning] = useState(false);
+    const [farmQrSeen, setFarmQrSeen] = useState(false);
+    const [digitsFarmCode, setDigitsFarmCode] = useState<string | null>(null);
     const [raw, setRaw] = useState('');
     const [phase, setPhase] = useState<Phase>('enter');
     const [problem, setProblem] = useState<Problem>(null);
@@ -79,6 +102,10 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
         setPhase('enter');
         setProblem(null);
         setJoined(null);
+        setInvitation(null);
+        setScanning(false);
+        setFarmQrSeen(false);
+        setDigitsFarmCode(null);
     }, [isOpen]);
 
     useBackDismiss(isOpen, onClose);
@@ -114,9 +141,40 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
         }
     };
 
+    /** spec: plr-d10 lane MU-2 — the card for an invitation code (any wrong code gets the one "not found" line). */
+    const findCard = async (code: string) => {
+        if (inFlightRef.current) return;
+        const run = runRef.current;
+        inFlightRef.current = true;
+        lastSentRef.current = null;
+        setProblem(null);
+        setPhase('sending');
+        try {
+            const card = await findInvitation(code);
+            if (run !== runRef.current) return;
+            setInvitation({ card, code });
+            setPhase('enter');
+        } catch (error) {
+            if (run !== runRef.current) return;
+            const why = invitationRefusal(error, 'invitee');
+            setPhase('enter');
+            setProblem(why === 'unknown' ? 'unknown' : why === 'rate_limited' ? 'rateLimited' : 'failed');
+        } finally {
+            if (run === runRef.current) inFlightRef.current = false;
+        }
+    };
+
     const handleChange = (value: string) => {
         setRaw(value);
         setProblem(null);
+        setFarmQrSeen(false);
+        setDigitsFarmCode(null);
+        // An invitation's eight digits (or its shared link): its card, not a farm code.
+        const invitationCode = normalizeInvitationCode(value);
+        if (invitationCode) {
+            void findCard(invitationCode);
+            return;
+        }
         if (looksLikeLink(value)) {
             const link = readJoinLink(value);
             if (link) openJoinLink(joinLandingHref(link));
@@ -124,6 +182,13 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
             return;
         }
         const code = normalizeFarmCode(value);
+        // Digits only: it may be an invitation still being typed (eight digits), so nothing goes by itself. A farm code
+        // that happens to be six digits is sent with a tap.
+        if (/^[0-9]+$/.test(code)) {
+            if (code.length === FARM_CODE_LENGTH && isCompleteFarmCode(code)) setDigitsFarmCode(code);
+            else if (code.length > 8) setProblem('unknown');
+            return;
+        }
         if (isCompleteFarmCode(code)) {
             if (code === lastUnknownRef.current) setProblem('unknown');
             else void send(code);
@@ -149,7 +214,23 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
             <div className="mx-auto max-w-md px-4 pb-10">
                 <PageBar title={C.title} onBack={onClose} backLabel={C.back} />
 
-                {phase !== 'done' && (
+                {invitation && phase !== 'done' && (
+                    <div className="space-y-3" data-testid="join-invitation">
+                        <InvitationCard card={invitation.card} code={invitation.code}
+                            onAnswered={answer => {
+                                if (answer) {
+                                    onJoinedRef.current?.({
+                                        farmId: answer.farmId,
+                                        farmName: answer.farmName,
+                                        status: answer.status === 'Active' ? 'Active' : 'PendingApproval',
+                                    });
+                                }
+                            }} />
+                        <BigButton tone="white" testId="join-invitation-close" onClick={onClose}>{C.ok}</BigButton>
+                    </div>
+                )}
+
+                {!invitation && phase !== 'done' && (
                     <div className="space-y-3">
                         <GlassCard>
                             <label htmlFor="join-code-input" className="flex items-center gap-2 text-[16px] font-extrabold text-stone-900">
@@ -177,6 +258,11 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
                             {problemLine && (
                                 <p role="alert" data-testid="join-code-problem" className="m-0 mt-2 text-[15px] font-extrabold leading-snug text-rose-700">{problemLine}</p>
                             )}
+                            {digitsFarmCode && phase === 'enter' && (
+                                <div className="mt-2">
+                                    <BigButton testId="join-code-send-digits" onClick={() => void send(digitsFarmCode)}>{I.send}</BigButton>
+                                </div>
+                            )}
                             {canRetry && (
                                 <div className="mt-2">
                                     <BigButton tone="white" testId="join-code-retry" onClick={() => { if (lastSentRef.current) void send(lastSentRef.current); }}>{C.retry}</BigButton>
@@ -190,6 +276,35 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
                                 <QrCode size={20} className="shrink-0 text-blue-700" aria-hidden="true" />{C.qrTitle}
                             </p>
                             <p className="m-0 mt-1 text-[14px] font-semibold leading-snug text-stone-700">{C.qrLine}</p>
+                            {/* spec: plr-d10 lane MU-2 — the in-app scanner (WID's, no new library) for an invitation QR. A
+                                phone without the platform's QR reader shows one line: type the code above. */}
+                            {platformQrDetector() ? (
+                                scanning ? (
+                                    <div className="mt-2">
+                                        <CardScanner readCode={readScanned} showTyped={false} paused={phase === 'sending'}
+                                            onCode={code => {
+                                                setScanning(false);
+                                                if (code === FARM_QR_SEEN) {
+                                                    setFarmQrSeen(true);
+                                                    return;
+                                                }
+                                                void findCard(code);
+                                            }}
+                                            onCancel={() => setScanning(false)} />
+                                    </div>
+                                ) : (
+                                    <div className="mt-2 space-y-2">
+                                        {farmQrSeen && (
+                                            <p role="status" className="m-0 text-[14px] font-bold leading-snug text-amber-800" data-testid="join-farm-qr-line">
+                                                {I.farmQrAtInvitationDoor}
+                                            </p>
+                                        )}
+                                        <BigButton tone="white" testId="join-scan-qr" onClick={() => { setFarmQrSeen(false); setScanning(true); }}>{I.scanQr}</BigButton>
+                                    </div>
+                                )
+                            ) : (
+                                <p className="m-0 mt-2 text-[13px] font-bold text-stone-600" data-testid="join-no-scanner">{I.noScanner}</p>
+                            )}
                         </GlassCard>
                     </div>
                 )}

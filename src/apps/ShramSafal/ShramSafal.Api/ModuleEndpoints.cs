@@ -21,6 +21,9 @@ public static class ModuleEndpoints
 
         group.MapFarmEndpoints();
         group.MapMembershipEndpoints();
+        // spec: plr-d10 lane MU-2 — the personal invitation (owner: make / list / withdraw / one-tap approve; invitee: mine,
+        // find by code, accept, decline).
+        group.MapPersonalInvitationEndpoints();
         group.MapLogsEndpoints();
         group.MapFinanceEndpoints();
         // Task 1.3 (spec: 2026-07-13-labour-attendance-approval-design) —

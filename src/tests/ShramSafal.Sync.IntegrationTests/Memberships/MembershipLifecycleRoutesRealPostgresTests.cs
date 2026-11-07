@@ -530,9 +530,10 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests(ITestOutp
             AssertNothingOfTheFarm(await PullAsync(stopped), "a waiting re-scan reads nothing");
         }
 
-        // CONTROLS: a person who left on his own, and a newcomer, still get in by the QR at once.
-        (await ClaimAsync(Worker3, token, farmCode)).Should().Be("Active");
-        (await ClaimAsync(Stranger, token, farmCode)).Should().Be("Active");
+        // CONSCIOUS CHANGE — spec: plr-d10 lane MU-2 (MU design §5): the farm QR only ASKS, for everyone. A person who left
+        // on his own, and a newcomer, get a waiting request too (until MU-2 they got in by the QR at once).
+        (await ClaimAsync(Worker3, token, farmCode)).Should().Be("PendingApproval");
+        (await ClaimAsync(Stranger, token, farmCode)).Should().Be("PendingApproval");
 
         // And the owner can now answer the stopped person's request.
         using var approve = await SendAsync(HttpMethod.Post, $"/shramsafal/farms/{Farm}/memberships/{Worker}/approve", Owner, new { role = "Worker" });
@@ -573,7 +574,8 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests(ITestOutp
 
     private async Task<string> ClaimAsync(Guid who, string token, string farmCode)
     {
-        using var response = await SendAsync(HttpMethod.Post, "/shramsafal/join/claim", who, new { token, farmCode });
+        // CONSCIOUS CHANGE — lane MU-2 fix round 1 (D-103, Q1): this release's phone sends acceptsJoinRequest.
+        using var response = await SendAsync(HttpMethod.Post, "/shramsafal/join/claim", who, new { token, farmCode, acceptsJoinRequest = true });
         var body = await response.Content.ReadAsStringAsync();
         response.StatusCode.Should().Be(HttpStatusCode.OK, body);
         using var doc = JsonDocument.Parse(body);

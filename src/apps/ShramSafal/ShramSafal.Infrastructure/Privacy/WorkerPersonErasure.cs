@@ -99,7 +99,11 @@ internal static class WorkerPersonErasure
             person.Anonymise(nowUtc);
         }
 
-        foreach (var phone in await admin.ShramPersonPhones.Where(p => ids.Contains(p.PersonId)).ToListAsync(ct).ConfigureAwait(false))
+        var phoneRows = await admin.ShramPersonPhones.Where(p => ids.Contains(p.PersonId)).ToListAsync(ct).ConfigureAwait(false);
+        // lane MU-2 fix round 1 (review M-3, P6): his numbers, read before they are released below — every invitation on
+        // every farm naming one of them (or one of his farm records) loses the name and number the owner typed.
+        var hisNumbers = phoneRows.Where(p => p.PhoneE164 is not null).Select(p => p.PhoneE164!).ToList();
+        foreach (var phone in phoneRows)
         {
             phone.Erase(nowUtc);
         }
@@ -121,6 +125,8 @@ internal static class WorkerPersonErasure
             .ConfigureAwait(false);
 
         await admin.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        await PersonalInvitationPeople.ForgetNumbersAsync(admin, hisNumbers, records.Select(r => r.Id).ToList(), ct).ConfigureAwait(false);
 
         foreach (var record in records)
         {

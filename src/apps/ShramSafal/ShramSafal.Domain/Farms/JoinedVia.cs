@@ -10,4 +10,7 @@ public enum JoinedVia
     OwnerManualAdd = 2,
     QrScan = 3,
     SelfJoin = 4,
+
+    /// <summary>spec: plr-d10 lane MU-2 — claimed from a personal invitation (label, plots and authorities chosen first).</summary>
+    PersonalInvitation = 5,
 }
