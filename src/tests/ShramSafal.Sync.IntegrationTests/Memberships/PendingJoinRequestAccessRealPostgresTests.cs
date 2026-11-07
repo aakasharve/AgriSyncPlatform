@@ -540,6 +540,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // written ALREADY narrowed (m.status = 3) — see PoliciesCreatedAfterActiveOnly. No farm_memberships or
         // farm_join_requests object, no other policy. Re-Up recreates them.
         "20261106221812_AddCostEntryApprovals",
+        // spec plr-d10 lane RLS-2 (F113) — Up() and Down() read in full: Up() puts day_ledgers, day_ledger_allocations,
+        // log_tasks, planned_activities (and the two February *_legacy_financev2 tables, when present) under ENABLE + FORCE
+        // RLS with a tenant policy each, and gives the four live tables a user-select policy written ALREADY narrowed
+        // (m.status = 3) — see PoliciesCreatedAfterActiveOnly. Down() drops exactly those policies and takes the tables back
+        // out of RLS. No farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched. Re-Up recreates them.
+        "20261107034303_AddRlsToDayLedgersLogTasksAndPlannedActivities",
     ];
 
     /// <summary>
@@ -559,6 +565,12 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         "p_user_select_farm_rates",
         // spec plr-d10 lane BILL-1 — 20261106221812_AddCostEntryApprovals.
         "p_user_select_cost_entry_approvals",
+        // spec plr-d10 lane RLS-2 — 20261107034303_AddRlsToDayLedgersLogTasksAndPlannedActivities. Their tables predate the
+        // Active-only migration (as schedule_subscriptions'); each policy is dropped by its OWN migration's Down() on the way back.
+        "p_user_select_day_ledgers",
+        "p_user_select_day_ledger_allocations",
+        "p_user_select_log_tasks",
+        "p_user_select_planned_activities",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
     ];

@@ -1084,6 +1084,11 @@ public sealed partial class PurveshDemoSeeder
         _ssfContext.PlannedActivities.RemoveRange(planned);
         manifest.UnionWith(planned.Select(p => p.Id));
         Count("planned_activities", planned.Count);
+        // spec: plr-d10 lane RLS-2 — own flush BEFORE the crop cycles, for the finance_corrections reason above:
+        // planned_activities' tenant policy is an EXISTS on its crop cycle, and the model has no FK to make EF order the
+        // two (EF deletes crop_cycles first by table order), so deleting the cycle first would hide the planned step from
+        // its own DELETE (0 rows: DbUpdateConcurrencyException, and the whole reseed rolls back).
+        await AssertDeletionManifestAndSaveAsync(manifest, ct);
 
         _ssfContext.CropCycles.RemoveRange(census.SeedCycles);
         manifest.UnionWith(census.SeedCycles.Select(c => c.Id));

@@ -220,6 +220,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    effective-privilege guard (it is on AppendOnlyLedgers above). Touches no other ledger's grants. Safe to revert and
         //    re-apply mid-proof.
         "20261106221812_AddCostEntryApprovals",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane RLS-2, F113); Down() read in full: drops the policies Up() created on
+        //    ssf.day_ledgers, day_ledger_allocations, log_tasks, planned_activities (and the February *_legacy_financev2
+        //    tables, when present) and takes those tables back out of RLS — only what Up() added. Up() adds ENABLE + FORCE
+        //    RLS and policies only: no grant, privilege or append-only ledger is touched. Safe to revert and re-apply mid-proof.
+        "20261107034303_AddRlsToDayLedgersLogTasksAndPlannedActivities",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

@@ -1343,6 +1343,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    app role). Never touches ssf.audit_events, its policies or its grants (an approval writes an ordinary audit row
         //    through the app role's existing INSERT). Safe mid-proof.
         "20261106221812_AddCostEntryApprovals",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane RLS-2, F113); Down() read in full: drops the tenant and user-select
+        //    policies Up() created on ssf.day_ledgers, day_ledger_allocations, log_tasks and planned_activities (and the
+        //    tenant policy on each February *_legacy_financev2 table, when present) and takes those tables back out of RLS
+        //    (NO FORCE, DISABLE). Up() only adds RLS and policies; no row, column, index or grant changes. Never touches
+        //    ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261107034303_AddRlsToDayLedgersLogTasksAndPlannedActivities",
     ];
 
     /// <summary>
