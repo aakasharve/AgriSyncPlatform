@@ -18,7 +18,7 @@
 
 # Privacy Notice — Shram Safal
 
-**Version `privacy-2026-11-02.2` · revised 2 November 2026**
+**Version `privacy-2026-11-06.1` · revised 6 November 2026**
 
 > **This is a founder-authored draft. It has not been reviewed by a lawyer.**
 > It is published so that nobody is asked to accept a document that does not exist. It
@@ -141,8 +141,8 @@ Version `retention-2026-10-13.1`.
 | What | How long |
 |---|---|
 | **Voice recording on your phone**, while it is being turned into a record | **Not deleted automatically at present.** It stays on your phone until you clear the app's data or uninstall the app |
-| **Voice recording kept on our servers** as the evidence behind a saved record | **No automatic deletion date.** Kept while your account is open. Deleted when you ask us to |
-| **Voice Diary recordings** — only if you switched "Keep original voice" on. Permission to listen: you and authorized reviewers on this farm | Kept while that setting is on and your account is open. Deleted automatically when you ask us to erase your data |
+| **Voice recording kept on our servers** as the evidence behind a saved record. **Every recording's evidence copy is always kept, as proof** | **No automatic deletion date.** Kept while your account is open. Deleted when you ask us to |
+| **Voice Diary recordings** — only if you switched "Allow playback of my original voice" on. Permission to listen: you and authorized reviewers on this farm | Kept while that setting is on and your account is open. Deleted automatically when you ask us to erase your data |
 | **Farm work records** — logs, labour, costs | Kept while your account is open. If you ask us to erase your data, your name and personal notes are removed and the farm figures are kept **without you attached to them** |
 | **Database backups** | Up to **607 days** (about 20 months), then deleted automatically |
 | **Consent and audit records** | Kept for the life of the service. These record what you were shown and what you agreed to — they are your proof, and the app is technically prevented from editing or deleting them |
@@ -153,16 +153,18 @@ worse than none:
 1. The **no automatic deletion date** on server-held voice recordings is a deliberate
    decision, not an oversight. There is no timer on those files today, and deleting them
    is something a person at ARVE does when you ask.
-2. Switching the optional **"Keep original voice"** setting **off stops new recordings
-   being saved, but does not yet delete the ones already saved.** To have those removed,
-   ask us to erase your data.
+2. The optional **"Allow playback of my original voice"** switch only decides whether your original voice can
+   be played back by you and by authorized reviewers on this farm. ShramSafal keeps the original sound of every
+   record as proof either way. **Turning the switch off stops playback and never deletes anything; a recording made
+   while it is off cannot be played later.** <!-- PROPOSED (D-101) --> While your phone is offline, you may still hear your own recordings on your phone. The recordings already saved are not deleted automatically either: to
+   have those removed, ask us to erase your data.
 3. An erasure request today removes your account, your voice diary and your personal
    details, and anonymises your farm records. It does **not** currently reach the raw
    voice files described in row two — those are removed by hand. We would rather write
    that down than let you assume otherwise.
 
    An erasure request **waits 30 days** before anything is erased. During those 30 days
-   you can **cancel** it in **Settings → Data & Privacy**, and then nothing is erased.
+   you can **cancel** it in **Privacy and consent** (in the app: **गोपनीयता व संमती**), and then nothing is erased.
    Only after the 30 days does the erasure run.
 
 ---
@@ -175,7 +177,7 @@ worse than none:
   you turn it on, your voice recordings, the corrections you make and the related work
   context may be used to **train and evaluate the systems behind Shram Safal**. Your choice,
   the version of the words you were shown and the time are recorded on our server. Ticking
-  to use the service, "Keep original voice", or any older setting in the app does not count
+  to use the service, "Allow playback of my original voice", or any older setting in the app does not count
   as this permission.
 - **Nothing is used for this today.** No process that selects information for improvement
   is running yet, and the two background jobs in the code that could ever build a training
@@ -196,7 +198,7 @@ worse than none:
 
 ## 8. Your rights
 
-In **Settings → Data & Privacy**, or by writing to arvesystems@gmail.com, you can:
+In **Privacy and consent** (in the app: **गोपनीयता व संमती**), or by writing to arvesystems@gmail.com, you can:
 
 - Review or withdraw the permissions you gave.
 - Ask to see, correct or get a copy of your information.

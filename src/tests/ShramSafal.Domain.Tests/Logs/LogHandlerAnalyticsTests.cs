@@ -13,7 +13,6 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Work.Handlers;
-using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Audit;
@@ -143,7 +142,6 @@ public sealed class LogHandlerAnalyticsTests
         var fixedClock = new FixedClock(verifyAt);
         var autoVerify = new OnLogVerifiedAutoVerifyJobCard(
             repo,
-            new VerifyJobCardForPayoutHandler(repo, fixedClock),
             fixedClock,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
         // T-IGH-03-PIPELINE-ROLLOUT (VerifyLog): the ctor no longer takes
@@ -157,7 +155,8 @@ public sealed class LogHandlerAnalyticsTests
             fixedClock,
             new AllowAllEntitlementPolicy(),
             analytics,
-            autoVerify);
+            autoVerify,
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         var command = new VerifyLogCommand(
             DailyLogId: log.Id,

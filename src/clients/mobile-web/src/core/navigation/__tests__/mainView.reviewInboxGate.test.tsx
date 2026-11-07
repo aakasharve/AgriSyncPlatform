@@ -3,8 +3,8 @@
 // spec: dfes-companion-2026-07-11 (wave-1.7)
 //
 // "Hide the dead ends while nothing is waiting." For a solo farmer with an
-// empty review queue, mainView must not offer a route into an empty
-// ReviewInboxSheet. Originally covered 3 of the brief's 4 entry points, all
+// empty review queue, mainView must not offer a route into an empty review
+// sheet (now `ApprovalReviewHost`, lane L4b; `ReviewInboxSheet` was deleted). Originally covered 3 of the brief's 4 entry points, all
 // of which lived in mainView.tsx (the 4th, the auto-open nudge, was covered
 // in useNudgeRouteEffect.test.tsx):
 //   - "Pending approvals: {count}"
@@ -55,7 +55,7 @@
 //                                      -> WaitingDrawer.test.tsx
 //   - tapping it becomes requestOpenReviewInbox()
 //                                      -> AppHeader.oversight.test.tsx
-//   - AppRouter hears it and opens ReviewInboxSheet
+//   - AppRouter hears it and opens the one review sheet (ApprovalReviewHost)
 //                                      -> AppRouter.reviewInboxRequest.test.tsx
 //
 // `log-view-home-reorder.test.tsx` also asserts the removal, from the

@@ -16,6 +16,12 @@ namespace ShramSafal.Application.Ports;
 /// identity rows commit (or roll back) together with the request's transaction.</para>
 /// <para>The append-only events table is farm-scoped (F8) and is read and written under the farm scope.</para>
 /// </remarks>
+/// <summary>
+/// Fix pass 3 (review R1) — one try counted at a code: <see cref="Counted"/> with the tries now used, or not counted
+/// because the code was already spent or its tries were used up.
+/// </summary>
+public readonly record struct CountedTry(bool Counted, int Attempts, bool Spent);
+
 /// <summary>Which database one-holder rule refused an identity write (fix pass 2, N3).</summary>
 public enum IdentitySaveClash
 {
@@ -64,8 +70,26 @@ public interface IShramIdentityStore
     /// </summary>
     Task<IReadOnlyList<ShramPhoneChallenge>> GetChallengesToNumberSinceAsync(string phoneE164, DateTime sinceUtc, CancellationToken ct = default);
 
-    /// <summary>Wrong tries at any code sent for these persons (one human) since <paramref name="sinceUtc"/>, from every farm (fix pass 2, N2).</summary>
-    Task<int> CountWrongTriesForPersonsSinceAsync(IReadOnlyCollection<Guid> personIds, DateTime sinceUtc, CancellationToken ct = default);
+    /// <summary>
+    /// Wrong tries at any code sent for these persons (one human) since <paramref name="sinceUtc"/>, per farm that asked
+    /// for the code (fix pass 2, N2; fix pass 3, R2: the caller splits his own farms' tries from everyone else's).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, int>> CountWrongTriesForPersonsByFarmSinceAsync(
+        IReadOnlyCollection<Guid> personIds, DateTime sinceUtc, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fix pass 3 (review R1) — holds this person's row (<c>SELECT … FOR UPDATE</c>) until the request's transaction ends,
+    /// so every code send and every code check for one person runs one at a time: a parallel request waits here, then
+    /// reads the committed counts and tries. Taken before any count, and always first (person, then anything else).
+    /// </summary>
+    Task LockPersonAsync(Guid personId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fix pass 3 (review R1) — counts one try at this code in ONE database statement (<c>attempts = attempts + 1 … WHERE
+    /// attempts &lt; 5 AND not spent … RETURNING attempts</c>), so the five-tries rule holds even without the person lock.
+    /// The tracked challenge is brought in line with the database.
+    /// </summary>
+    Task<CountedTry> CountTryAsync(ShramPhoneChallenge challenge, CancellationToken ct = default);
 
     /// <summary>The farms that linked these persons with HIS code (a link code he read back), ever (fix pass 2, N2).</summary>
     Task<IReadOnlyList<Guid>> GetFarmsLinkedByCodeAsync(IReadOnlyCollection<Guid> personIds, CancellationToken ct = default);

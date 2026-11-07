@@ -158,10 +158,11 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         (await CorrectionCountAsync()).Should().Be(2);
     }
 
-    /// <summary>M-4: adding a crop-schedule activity (the door the phone's "add to plan" uses)
-    /// keeps today's rule — a मुकादम or above plans, a worker does not — with no PlanWork switch.</summary>
+    /// <summary>M-4, amended by lane L8b-1 (founder D-73, 2026-11-06: "You, plus the people you give 'कामाचं नियोजन करणे'"):
+    /// adding a crop-schedule activity (the door the phone's "add to plan" uses) is the primary owner's, or a seat he gave
+    /// PlanWork through his own authorities route. The मुकादम label grants nothing (D-26).</summary>
     [Fact]
-    public async Task Planning_a_schedule_activity_keeps_todays_rule_mukadam_or_above()
+    public async Task Planning_a_schedule_activity_needs_the_owners_PlanWork()
     {
         await AssertAppRoleIsNotVacuousAsync();
 
@@ -174,9 +175,30 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         (await PlannedActivityExistsAsync(refusedId)).Should().BeFalse();
 
         await DecideOkAsync(HttpMethod.Put, $"{Worker3}/access", Owner, new { role = "Mukadam", resetPermissions = true, labourGrant = true });
-        // lane 2b: plan work is STORED only (L8 enforces it) - none is stored for him, and today's
-        // rule still lets him plan. (The switch stores confirm records, 128, nothing else.)
+        // The switch stores confirm records (128) and nothing else: no PlanWork, so the मुकादम label alone is refused.
         ((await LiveSeatAsync(Farm, Worker3))!.Permissions ?? 0).Should().Be(128, "no PlanWork is stored for him");
+        var labelOnlyId = Guid.NewGuid();
+        using (var labelOnly = await PlanAsync(Worker3, labelOnlyId))
+        {
+            labelOnly.StatusCode.Should().Be(HttpStatusCode.Forbidden, await labelOnly.Content.ReadAsStringAsync());
+        }
+
+        (await PlannedActivityExistsAsync(labelOnlyId)).Should().BeFalse();
+
+        // The owner gives "कामाचं नियोजन करणे" through his authorities route; then he plans.
+        using (var given = await SendAsync(HttpMethod.Put, $"/shramsafal/farms/{Farm}/memberships/{Worker3}/authorities", Owner, new
+        {
+            authorities = new object[]
+            {
+                new { name = "TakeAttendance", expiresAtUtc = (DateTime?)null },
+                new { name = "ConfirmRecords", expiresAtUtc = (DateTime?)null },
+                new { name = "PlanWork", expiresAtUtc = (DateTime?)null },
+            },
+        }))
+        {
+            given.StatusCode.Should().Be(HttpStatusCode.OK, await given.Content.ReadAsStringAsync());
+        }
+
         foreach (var who in new[] { Worker3, Owner })
         {
             var id = Guid.NewGuid();

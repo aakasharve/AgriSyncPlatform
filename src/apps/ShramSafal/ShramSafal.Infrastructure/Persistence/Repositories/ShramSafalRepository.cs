@@ -370,6 +370,7 @@ internal sealed class ShramSafalRepository(
         return await db.DailyLogs
             .AsNoTracking()
             .Include(l => l.Tasks)
+            .Include(l => l.VerificationEvents) // lane IT3a (D-46): the streak reads each record's confirmation
             .Where(l => l.FarmId == typedFarmId && l.LogDate == localDate)
             .OrderBy(l => l.Id)
             .ToListAsync(ct);
@@ -631,9 +632,10 @@ internal sealed class ShramSafalRepository(
         await db.ScheduleTemplates.AddAsync(template, ct);
     }
 
+    // spec: plr-d10 lane L8b-1 Task 5 — no Include of Stages: the EF map ignores it (ScheduleTemplateConfiguration), and
+    // including it threw before the first row was read, so every clone / edit / publish answered 500.
     public async Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) =>
         await db.ScheduleTemplates
-            .Include(t => t.Stages)
             .Include(t => t.Activities)
             .FirstOrDefaultAsync(t => t.Id == templateId, ct);
 
@@ -1457,8 +1459,10 @@ internal sealed class ShramSafalRepository(
     {
         var normalizedCrop = cropKey.Trim().ToLowerInvariant();
 
+        // spec: plr-d10 lane L8b-1 — TRACKED: migrate / abandon / complete change this row's state and save it. Read
+        // untracked, the state change was never written (an abandon answered "Abandoned" and kept the row Active; a
+        // migrate then hit the one-active index), unseen while no adopt could succeed.
         return await db.ScheduleSubscriptions
-            .AsNoTracking()
             .FirstOrDefaultAsync(
                 s => s.PlotId == plotId
                      && s.CropKey == normalizedCrop
@@ -1858,6 +1862,56 @@ internal sealed class ShramSafalRepository(
         return true;
     }
 
+    public async Task<bool> TryAddErasureRequestAsync(
+        ErasureRequest request, AuditEvent requestedAudit, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(requestedAudit);
+
+        await db.ErasureRequests.AddAsync(request, ct);
+        await db.AuditEvents.AddAsync(requestedAudit, ct);
+
+        // A refused insert would abort the surrounding request transaction, and the caller still has to read the
+        // winning request and write an audit row. A SAVEPOINT absorbs the refusal (same pattern as TryAddFieldOperatorAsync).
+        var transaction = db.Database.CurrentTransaction;
+        string? savepoint = null;
+        if (transaction is not null)
+        {
+            savepoint = "sp_erasure_request_" + Guid.NewGuid().ToString("N");
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ux_erasure_requests_one_waiting_per_person"))
+        {
+            db.Entry(request).State = EntityState.Detached;
+            db.Entry(requestedAudit).State = EntityState.Detached;
+            if (transaction is not null && savepoint is not null)
+            {
+                await RollBackQuietlyAsync(transaction, savepoint);
+            }
+
+            return false;
+        }
+
+        if (transaction is not null && savepoint is not null)
+        {
+            try
+            {
+                await transaction.ReleaseSavepointAsync(savepoint, ct);
+            }
+            catch (PostgresException)
+            {
+                // Housekeeping only; the savepoint is discarded at COMMIT.
+            }
+        }
+
+        return true;
+    }
+
     public async Task<FieldOperator?> GetFieldOperatorByIdAsync(Guid id, CancellationToken ct = default)
     {
         return await db.FieldOperators.FindAsync([id], ct);
@@ -1932,6 +1986,29 @@ internal sealed class ShramSafalRepository(
     {
         ArgumentNullException.ThrowIfNull(content);
         await db.DailyLogContents.AddAsync(content, ct);
+    }
+
+    // spec: plr-d10 lane L8b-1 fix round 1 (review M1) — see IShramSafalRepository.TrySaveScheduleCopyAsync.
+    public async Task<bool> TrySaveScheduleCopyAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ix_schedule_templates_derived_version"))
+        {
+            // A copy of this source and version is already kept. Discard everything this unit staged (the copy, its
+            // tasks, its audit row) so a later SaveChanges cannot replay the doomed INSERTs; the caller answers 409.
+            foreach (var entry in db.ChangeTracker.Entries()
+                         .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return false;
+        }
     }
 
     public async Task<bool> TrySaveContentRevisionAsync(CancellationToken ct = default)
@@ -3543,6 +3620,93 @@ internal sealed class ShramSafalRepository(
                 .Where(x => ids.Contains(x.SourceCostEntryId))
                 .ToListAsync(ct);
     }
+
+    // ── spec: plr-d10 lane RATE-1 part A (founder D-72) — each farm's own price and rate list ─────────────────────────
+    // Rows are only ever appended (the app role holds SELECT + INSERT on ssf.farm_rates), so every read is AsNoTracking.
+
+    public async Task<bool> TryAddFarmRateAsync(FarmRate rate, AuditEvent created, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(rate);
+        ArgumentNullException.ThrowIfNull(created);
+
+        // A SAVEPOINT on the ambient transaction (the push's per-mutation one, or the request's), so a clash rolls back only
+        // this version and the caller can look again — the shape of TryAddRecordMoneyAsync above.
+        var transaction = db.Database.IsRelational() ? db.Database.CurrentTransaction : null;
+        const string savepoint = "ssf_farm_rate";
+        if (transaction is not null)
+        {
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        await db.FarmRates.AddAsync(rate, ct);
+        await db.AuditEvents.AddAsync(created, ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "PK_farm_rates") || IsUniqueViolationOn(ex, "ux_farm_rates_line_version"))
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackToSavepointAsync(savepoint, ct);
+            }
+
+            db.Entry(rate).State = EntityState.Detached;
+            db.Entry(created).State = EntityState.Detached;
+            logger?.LogWarning(
+                "Farm rate {FarmRateId} (line {RateLineId}, version {Version}) was not saved: its id or version is already taken.",
+                rate.Id, rate.RateLineId, rate.Version);
+            return false;
+        }
+    }
+
+    public async Task<IReadOnlyList<FarmRate>> GetFarmRateLineAsync(Guid rateLineId, CancellationToken ct = default) =>
+        await db.FarmRates
+            .AsNoTracking()
+            .Where(r => r.RateLineId == rateLineId)
+            .OrderBy(r => r.Version)
+            .ToListAsync(ct);
+
+    public async Task<FarmRate?> GetFarmRateByIdAsync(Guid farmRateId, CancellationToken ct = default) =>
+        await db.FarmRates.AsNoTracking().FirstOrDefaultAsync(r => r.Id == farmRateId, ct);
+
+    public async Task<IReadOnlyList<FarmRate>> GetFarmRatesForFarmAsync(Guid farmId, CancellationToken ct = default)
+    {
+        var farm = new FarmId(farmId);
+        return await db.FarmRates
+            .AsNoTracking()
+            .Where(r => r.FarmId == farm)
+            .OrderBy(r => r.RateLineId)
+            .ThenBy(r => r.Version)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<FarmRate>> GetFarmRatesChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.FarmRates
+            .AsNoTracking()
+            .Where(r => ids.Contains((Guid)r.FarmId) && r.CreatedAtUtc > sinceUtc)
+            .OrderBy(r => r.CreatedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public async Task<PriceConfig?> GetPriceConfigByIdAsync(Guid priceConfigId, CancellationToken ct = default) =>
+        await db.PriceConfigs.AsNoTracking().FirstOrDefaultAsync(c => c.Id == priceConfigId, ct);
+
+    public async Task<IReadOnlyList<PriceConfig>> GetPriceConfigsAsync(CancellationToken ct = default) =>
+        await db.PriceConfigs
+            .AsNoTracking()
+            .OrderBy(c => c.ItemName)
+            .ThenBy(c => c.Version)
+            .ToListAsync(ct);
 
     private static List<Guid> NormalizeFarmIds(IEnumerable<Guid> farmIds)
     {

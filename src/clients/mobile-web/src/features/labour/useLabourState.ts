@@ -54,6 +54,7 @@ import { useOptionalAuth } from '../../app/providers/AuthProvider';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { loadLabourReadout, saveLabourReadout } from './data/labourReadout';
 import { isFarmAccessRefused, purgeLabourCachesForFarm } from '../../infrastructure/storage/labourFarmAccess';
+import { publishApprovalQueue } from '../approval/approvalQueue';
 
 /**
  * Task 9 (B001, spec: 2026-08-28-labour-v2-release-1) — the local attendance
@@ -327,6 +328,9 @@ export const useLabourState = (): UseLabourStateResult => {
                 // marks → `overlayLocalAttendance` returns `real` itself.
                 const plane = await readLocalAttendancePlane(farmId);
                 if (userId) saveLabourReadout(userId, farmId, timeWindow, real);
+                // lane L4b (D-40 §1) — the review list is never windowed, so every live read refreshes the ONE
+                // approval list every door counts from.
+                publishApprovalQueue(farmId, real);
                 if (!cancelled) {
                     setData(overlayLocalAttendance(real, plane.marks, plane.hints));
                     setError(false);

@@ -36,6 +36,7 @@ vi.mock('../../../i18n/LanguageContext', () => ({
 
 import ConsentScreen from '../ConsentScreen';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
+import { peekPlaybackSwitch, resetPlaybackSwitchForTests } from '../../logs/components/voiceResult/playbackSwitch';
 
 const mockedClient = agriSyncClient as unknown as {
     getConsent: ReturnType<typeof vi.fn>;
@@ -140,7 +141,7 @@ describe('ConsentScreen', () => {
         expect(typeof callArg.consentTextVersion).toBe('number');
         expect(typeof callArg.clientAppVersion).toBe('string');
         // D-31: the "keep my original voice" choice was made, so the words are named.
-        expect(callArg.fullHistoryJournalWordingVersion).toBe('voice-keep-2026-10-30.1');
+        expect(callArg.fullHistoryJournalWordingVersion).toBe('voice-keep-2026-11-06.1');
         // D-36: the improvement permission did not change, so nothing is sent for it.
         expect(mockedClient.setImprovementPermission).not.toHaveBeenCalled();
     });
@@ -150,7 +151,7 @@ describe('ConsentScreen', () => {
         mockedClient.getImprovementPermission.mockResolvedValue(improvementDto(false));
         render(<ConsentScreen forceLocale="en-IN" />);
         expect(await screen.findByTestId('consent-meaning-fullHistoryJournal')).toHaveTextContent(
-            'Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.',
+            'Allow me and authorized reviewers on this farm to play back my original voice.',
         );
     });
 
@@ -207,6 +208,24 @@ describe('ConsentScreen', () => {
         fireEvent.click(await screen.findByTestId('consent-revoke-all-button'));
         fireEvent.click(await screen.findByTestId('consent-revoke-confirm-button'));
     };
+
+    it('fix round 4 (L1, D-101): a save publishes the new switch state to the phone at once; turning it OFF blocks playback now', async () => {
+        resetPlaybackSwitchForTests();
+        const dto = (on: boolean) => ({
+            fullHistoryJournal: on, crossFarmAggregation: false, researchCorpusExport: false,
+            version: 1, acceptedAtUtc: '2026-05-17T00:00:00.000Z', revokedAtUtc: null,
+        });
+        mockedClient.getConsent.mockResolvedValue(dto(true));
+        mockedClient.getImprovementPermission.mockResolvedValue(improvementDto(false));
+        mockedClient.updateConsent.mockResolvedValue(dto(false));
+
+        render(<ConsentScreen forceLocale="en-IN" />);
+        fireEvent.click(await screen.findByTestId('consent-checkbox-fullHistoryJournal'));
+        fireEvent.click(screen.getByTestId('consent-save-button'));
+
+        await waitFor(() => expect(mockedClient.updateConsent).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(peekPlaybackSwitch()).toBe(false));
+    });
 
     it('Revoke All sends improvement OFF even when the page could not read the stored choice', async () => {
         mockedClient.getConsent.mockRejectedValue(new Error('no consent'));

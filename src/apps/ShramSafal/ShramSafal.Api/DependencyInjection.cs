@@ -143,6 +143,10 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Logs.MoveDailyLog.MoveDailyLogHandler>();
         // spec: plr-d10 lane PRV (founder D-26) — who sees one record (set_record_audience, queued only).
         services.AddScoped<ShramSafal.Application.UseCases.RecordPrivacy.SetRecordAudience.SetRecordAudienceHandler>();
+        // spec: plr-d10 lane RATE-1 part A (founder D-72) — each farm's own price and rate list (set_farm_rate + REST).
+        services.AddScoped<ShramSafal.Application.UseCases.Finance.SetFarmRate.SetFarmRateHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Finance.GetFarmRates.GetFarmRatesHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Finance.GetFarmRates.GetRateSuggestionsHandler>();
         services.AddScoped<VerifyLogHandler>();
 
         // spec: dfes-companion-2026-07-11 (wave-1.5) — BackfillOwnerAttestationsHandler is
@@ -279,6 +283,7 @@ public static class DependencyInjection
         // adapter rebind); range query depends only on IRetainedBlobStore.
         services.AddScoped<PersistVoiceClipRetainedHandler>();
         services.AddScoped<GetVoiceDiaryByRangeHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.VoiceDiary.GetVoiceDiaryById.GetVoiceDiaryByIdHandler>();
         // spec: plr-d10 (I27; founder D-31) — the original voice of ONE record, for a person
         // allowed to review it. Reads the archive through the same IRetainedBlobStore.
         services.AddScoped<ShramSafal.Application.UseCases.Logs.GetLogOriginalVoice.GetLogOriginalVoiceHandler>();

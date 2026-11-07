@@ -37,6 +37,8 @@ import type { JobCard, JobCardStatus } from '../../../domain/work/JobCard';
 // COPY is written for this fix: the change is subtractive — stop asserting a
 // sentence that is false, show the affordance that already exists.
 import { LoadErrorBanner } from '../../labour/components/LabourUiKit';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { mayCheckPayout, payoutRefusalText } from '../payoutCheckWords';
 
 type FilterChip = 'Draft' | 'Assigned' | 'InProgress' | 'Completed' | 'VerifiedForPayout' | 'PaidOut' | 'All';
 
@@ -73,11 +75,17 @@ interface JobCardsPageProps {
 }
 
 const JobCardsPage: React.FC<JobCardsPageProps> = ({ onNavigateToDetail }) => {
-    const { currentFarmId } = useFarmContext();
+    const { currentFarmId, currentFarm } = useFarmContext();
+    const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     // `cancelJobCard` is deliberately NOT destructured: nothing on this screen
-    // cancels a card (`handleAction` covers assign/start/settle only), and the
+    // cancels a card (`handleAction` covers assign/start/verify/settle only), and the
     // repo's pre-commit lint runs at zero warnings on staged files.
-    const { jobCards, isLoading, loadFailed, assignJobCard, startJobCard, settleJobCard, refresh } = useJobCards({ farmId: currentFarmId });
+    const {
+        jobCards, isLoading, loadFailed, assignJobCard, startJobCard, verifyJobCardForPayout, settleJobCard, refresh,
+    } = useJobCards({ farmId: currentFarmId });
+    // lane L4b fix round 1 (H-1 / CTO D-89) — the payout check is offered only to a seat the server lets pass.
+    const seatMayCheckPayout = mayCheckPayout(currentFarm);
+    const [refusal, setRefusal] = useState<string | null>(null);
 
     const [activeFilter, setActiveFilter] = useState<FilterChip>('All');
     const [expandedBands, setExpandedBands] = useState<Record<string, boolean>>(
@@ -110,10 +118,17 @@ const JobCardsPage: React.FC<JobCardsPageProps> = ({ onNavigateToDetail }) => {
             setAssignTarget(card);
         } else if (action === 'start') {
             startJobCard(card.id).then(refresh);
+        } else if (action === 'verify') {
+            // lane L4b fix round 1 (H-1 / CTO D-89) — "पेआउट तपासा" is the server's verify-for-payout, then the list is
+            // read again; a refusal is said by its code in his language.
+            setRefusal(null);
+            verifyJobCardForPayout(card.id)
+                .then(refresh)
+                .catch((err: unknown) => setRefusal(payoutRefusalText(err, language)));
         } else if (action === 'settle') {
             setSettleTarget(card);
         }
-    }, [startJobCard, refresh]);
+    }, [startJobCard, verifyJobCardForPayout, refresh, language]);
 
     const toggleBand = (labelEn: string) => {
         setExpandedBands(prev => ({ ...prev, [labelEn]: !prev[labelEn] }));
@@ -178,6 +193,16 @@ const JobCardsPage: React.FC<JobCardsPageProps> = ({ onNavigateToDetail }) => {
                 )}
 
                 {loadFailed && <LoadErrorBanner onRetry={refresh} compact />}
+
+                {refusal && (
+                    <p
+                        data-testid="jobcard-refusal"
+                        role="alert"
+                        className="rounded-xl bg-rose-50 border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-800"
+                    >
+                        {refusal}
+                    </p>
+                )}
 
                 {/*
                  * TASK 8 (spec: 2026-08-28-labour-v2-release-1, P4/P5, Ruling
@@ -252,6 +277,7 @@ const JobCardsPage: React.FC<JobCardsPageProps> = ({ onNavigateToDetail }) => {
                                             card={card}
                                             onAction={handleAction}
                                             onPress={c => onNavigateToDetail?.(c.id)}
+                                            mayCheckPayout={seatMayCheckPayout}
                                         />
                                     ))}
                                 </div>

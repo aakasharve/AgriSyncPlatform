@@ -31,6 +31,7 @@ import {
     RETENTION_POLICY_VERSION,
 } from '../../../domain/privacy/RetentionPolicy';
 import {
+    CONSENT_NOTICE,
     PRIVACY_POLICY_VERSION,
     TERMS_VERSION,
 } from '../../consent/gate/consentNotice';
@@ -300,5 +301,26 @@ describe('the promises', () => {
         // already holds. A farmer would act on an invented channel.
         expect(DOCS.privacyEn).not.toMatch(/Board[^.\n]*https?:\/\//);
         expect(DOCS.privacyMr).not.toMatch(/Board[^.\n]*https?:\/\//);
+    });
+});
+
+describe('the in-app place the documents send a farmer to (lane OPS-1, F49 / F99 L-5)', () => {
+    it('no document names "Settings → Data & Privacy", a page the app does not have', () => {
+        for (const [name, body] of ALL_DOCS) {
+            expect(body, `${name} must not send the reader to a place that does not exist`).not.toMatch(/Settings\s*(→|->)\s*Data\s*(&|and|&amp;)\s*Privacy/i);
+        }
+    });
+
+    it('the English documents name the real page, in English and as the app labels it', () => {
+        for (const body of [DOCS.privacyEn, DOCS.termsEn]) {
+            expect(body).toContain('**Privacy and consent**');
+            expect(body).toContain('गोपनीयता व संमती');
+        }
+    });
+
+    it('the notice a farmer ticks says the same place as the documents', () => {
+        expect(CONSENT_NOTICE.en.rights.where).toContain('Privacy and consent');
+        expect(CONSENT_NOTICE.en.rights.where).not.toContain('Settings');
+        expect(CONSENT_NOTICE.mr.rights.where).toContain('गोपनीयता व संमती');
     });
 });

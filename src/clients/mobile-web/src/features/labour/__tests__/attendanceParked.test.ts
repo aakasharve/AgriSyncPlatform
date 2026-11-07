@@ -41,7 +41,7 @@ vi.mock('../../../infrastructure/api/AgriSyncClient', async () => {
 vi.mock('../../../infrastructure/storage/AuthTokenStore', () => ({
     getAuthSession: () => ({ userId: 'test-user', accessToken: 'test', expiresAtUtc: '2099-01-01T00:00:00Z' }),
 }));
-vi.mock('../../../infrastructure/sync/SyncPullReconciler', () => ({ reconcileSyncPull: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../../sync/pull/SyncPullReconciler', () => ({ reconcileSyncPull: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../../infrastructure/sync/AiJobWorker', () => ({ AiJobWorker: { run: vi.fn().mockResolvedValue(undefined) } }));
 vi.mock('../../../app/state/RootStore', () => ({ getRootStore: () => ({ sync: { send: vi.fn() } }) }));
 

@@ -5,7 +5,6 @@ import {
     useAppDataState,
     useAppLogState,
     useAppNavigationState,
-    useAppTrustState,
     useAppUiRuntime,
     useAppViewHelpers,
     useAppVoiceState,
@@ -22,6 +21,7 @@ import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useFarmContext } from '../session/FarmContext';
 import { mayChangeRecordedMoney } from '../session/farmPermissions';
 import { seeMoneyDoor, useStoredAccessScopes } from '../session/storedFarmScope';
+import { AUTHORITY, holdsAuthority } from '../session/farmAuthorities';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
@@ -75,7 +75,6 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const voice = useAppVoiceState();
     const commands = useAppCommandsState();
     const weather = useAppWeatherState();
-    const trust = useAppTrustState();
     const { handleReset, lastSavedLogSummary, lastSavedLogIds } = useAppUiRuntime();
 
     // The same two once-only prefs as before (installed users who passed them see neither again —
@@ -147,7 +146,6 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const refetchWeather = weather.refetchWeather;
     const handleManualSubmit = commands.handleManualSubmit;
     const handleUpdateNote = commands.handleUpdateNote;
-    const handleVerifyLog = trust.handleVerifyLog;
     const history = isDemoMode ? mockHistory : realHistory;
 
     // DFES Phase 0: Review Inbox / QuickLog / Reflect-focus modals.
@@ -291,6 +289,8 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         // lane MU-3 — the money doors follow the server's see-money answer, never the label: the pull's stored answer
         // (fix 1, F11), `/me/context` only before it.
         maySeeMoney: seeMoneyDoor(storedAccessScopes, currentFarmId, currentFarm),
+        // lane L8b-1 (founder D-73) — the planning doors follow the server's PlanWork answer, never the label.
+        mayPlanWork: holdsAuthority(currentFarm, AUTHORITY.planWork),
         canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,
@@ -313,7 +313,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         weatherStatus,
         boundaryUnset,
         refetchWeather,
-        handleManualSubmit, handleUpdateNote, handleVerifyLog,
+        handleManualSubmit, handleUpdateNote,
         handleReset, lastSavedLogSummary, lastSavedLogIds,
         getTodayCounts, getContextColorIndicator,
         showReviewInbox, setShowReviewInbox,

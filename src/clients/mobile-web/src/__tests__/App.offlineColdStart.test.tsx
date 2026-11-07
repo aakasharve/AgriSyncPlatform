@@ -24,7 +24,7 @@ vi.mock('../infrastructure/api/AgriSyncClient', () => {
         },
     };
 });
-vi.mock('../infrastructure/storage/endFarmerSession', () => ({ endFarmerSessionLocally: vi.fn() }));
+vi.mock('../infrastructure/storage/endFarmerSession', () => ({ endFarmerSessionLocally: vi.fn(), notifyFarmerSessionEnded: vi.fn(), onFarmerSessionEnded: vi.fn(() => () => undefined) }));
 vi.mock('../infrastructure/security/tenantDekClient', () => ({ clearCachedDek: vi.fn() }));
 vi.mock('../infrastructure/storage/RememberDeviceStore', () => ({
     getRememberDevice: vi.fn(() => false), setRememberDevice: vi.fn(), clearRememberDevice: vi.fn(),

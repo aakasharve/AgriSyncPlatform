@@ -18,5 +18,7 @@ public sealed record AdoptSchedulePayload(
     Guid ActorUserId,
     string? ActorRole = null,
     string? ClientCommandId = null,
-    Guid? SubscriptionId = null
+    Guid? SubscriptionId = null,
+    DateOnly? ReferenceDate = null,
+    DateTime? DecidedAtUtc = null
 );

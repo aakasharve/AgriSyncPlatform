@@ -51,7 +51,8 @@ public sealed class PersonalInvitationTests
     [Fact]
     public void A_grant_the_server_would_not_hold_is_refused()
     {
-        Assert.Throws<ArgumentException>(() => Make(authorities: new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.PlanWork] = null }));
+        // AssignWork is not enforced yet (it waits for L8c); PlanWork became enforced with lane L8b-1 (D-73).
+        Assert.Throws<ArgumentException>(() => Make(authorities: new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.AssignWork] = null }));
         Assert.Throws<ArgumentException>(() => Make(authorities: new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.SeeWages] = null }));
         Assert.Throws<ArgumentException>(() => Make(authorities: new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.TakeAttendance] = Now }));
         Assert.Throws<ArgumentException>(() => Make(code: "1234567"));

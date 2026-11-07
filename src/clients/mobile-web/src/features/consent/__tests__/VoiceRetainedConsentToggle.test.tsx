@@ -99,14 +99,14 @@ describe('VoiceRetainedConsentToggle', () => {
         const [calledWith] = mockedClient.updateConsent.mock.calls[0];
         expect(calledWith).toMatchObject({ fullHistoryJournal: true, languageShown: 'en-IN' });
         // plr-d10 I25 (founder D-31): the choice is stored with the words it was made under.
-        expect(calledWith.fullHistoryJournalWordingVersion).toBe('voice-keep-2026-10-30.1');
+        expect(calledWith.fullHistoryJournalWordingVersion).toBe('voice-keep-2026-11-06.1');
     });
 
     it('D-31: the switch says who may listen — me and authorised reviewers on this farm', async () => {
         mockedClient.getConsent.mockResolvedValue(defaultConsentDto);
         render(<VoiceRetainedConsentToggle locale="en-IN" />);
         expect(await screen.findByTestId('voice-retained-consent-meaning')).toHaveTextContent(
-            'Keep my original voice recordings so that I and authorized reviewers on this farm can listen to them.',
+            'Allow me and authorized reviewers on this farm to play back my original voice.',
         );
         cleanup();
         render(<VoiceRetainedConsentToggle locale="mr-IN" />);

@@ -115,6 +115,18 @@ public sealed class AddRemovePlannedActivityHandlerTests
         public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
             Task.FromResult(_role);
 
+        // lane L8b-1 (founder D-73) — the planning doors ask ScheduleChangeGate (PlanWork): the मुकादम in these tests is the
+        // seat the owner GAVE "कामाचं नियोजन करणे"; any other label holds nothing stored (a label grants nothing, D-26).
+        public Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(_role is { } role
+                ? new ShramSafal.Application.Services.FarmAccess(
+                    role,
+                    ShramSafal.Domain.Farms.MembershipStatus.Active,
+                    IsRegistrant: false,
+                    StoredPermissions: role == AppRole.Mukadam ? ShramSafal.Domain.Farms.FarmPermission.PlanWork : null)
+                : null);
+
         public Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default)
         {
             AddedActivities.AddRange(plannedActivities);
@@ -143,7 +155,9 @@ public sealed class AddRemovePlannedActivityHandlerTests
         public Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Plot>> GetPlotsByFarmIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddCropCycleAsync(CropCycle cropCycle, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) => throw new NotSupportedException();
+        // lane L8b-1 fix round 1 (review H1) — the planned-work doors read the season's farm first: every season here is FarmId's.
+        public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult<CropCycle?>(CropCycle.Create(cropCycleId, new FarmId(FarmId), Guid.NewGuid(), "Grapes", "Flowering", new DateOnly(2026, 1, 1), null, Now));
         public Task<List<CropCycle>> GetCropCyclesByPlotIdAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddDailyLogAsync(DailyLog log, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default) => throw new NotSupportedException();

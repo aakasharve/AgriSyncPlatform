@@ -64,9 +64,10 @@ function serverRoutes(): Route[] {
  * must still be a mismatch (the test fails when it is fixed, so the entry is removed with the fix).
  */
 const CARRIED: Record<string, string> = {
-    // Review row 17: the crop-schedule-template picker, which its own comment says is never shown. Carried to lane L8b.
+    // Review row 17: the crop-schedule-template picker (the compliance model, not the library the phone lists). Lane
+    // L8b-1 kept it out of the flow: the schedule-in-planning integration is held by founder D-24e2 (plan question L8-3).
     'infrastructure/api/resources/ScheduleResource.ts /shramsafal/reference-data/crop-schedule-templates':
-        'row 17: schedule-template picker, never shown (lane L8b)',
+        'row 17: held by D-24e2 (L8-3)',
 };
 
 /**
@@ -81,7 +82,10 @@ const NOT_A_CALL: Record<string, string> = {
     // Fragments matched against the URL of a request that already failed (which failures to report); never requested.
     'infrastructure/telemetry/ClientErrorReporter.ts /logs': 'a failed-URL fragment, never requested',
     'infrastructure/telemetry/ClientErrorReporter.ts /ai/parse-voice': 'a failed-URL fragment, never requested',
-    'infrastructure/telemetry/ClientErrorReporter.ts /ai/extract': 'a failed-URL fragment, never requested',
+    'infrastructure/telemetry/ClientErrorReporter.ts /ai/voice-parse': 'a failed-URL fragment, never requested',
+    'infrastructure/telemetry/ClientErrorReporter.ts /ai/receipt-extract': 'a failed-URL fragment, never requested',
+    'infrastructure/telemetry/ClientErrorReporter.ts /ai/patti-extract': 'a failed-URL fragment, never requested',
+    'infrastructure/telemetry/ClientErrorReporter.ts /ai/document-sessions': 'a failed-URL fragment, never requested',
 };
 
 /** A `${…}` span inside a phone path. */

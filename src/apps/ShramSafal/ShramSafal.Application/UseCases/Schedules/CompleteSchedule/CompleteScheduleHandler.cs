@@ -59,11 +59,12 @@ public sealed class CompleteScheduleHandler(
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.Forbidden);
         }
 
-        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
-        if (await Services.PlotScopeGate.RefuseAsync(
-                repository, command.FarmId, command.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } outsidePlots)
+        // spec: plr-d10 lane L8b-1 Task 3 (founder D-73) — who may change a plot's schedule: the primary owner, or a seat the
+        // owner gave "कामाचं नियोजन करणे" (PlanWork), with the MU-4 plot rule inside the gate.
+        if (await Services.ScheduleChangeGate.RefuseAsync(
+                repository, command.FarmId, command.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } refused)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(outsidePlots);
+            return Result.Failure<ScheduleSubscriptionDto>(refused);
         }
 
         var gate = await EntitlementGate.CheckAsync<ScheduleSubscriptionDto>(

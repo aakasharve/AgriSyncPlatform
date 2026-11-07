@@ -24,9 +24,10 @@
 // P0.1 — a session ending is an isolation event, not only an auth event.
 // See `endFarmerSession.ts` for what it does and why it hangs off this
 // function rather than off the logout button.
-import { endFarmerSessionLocally } from './endFarmerSession';
+import { endFarmerSessionLocally, notifyFarmerSessionEnded } from './endFarmerSession';
 import { clearPendingLogout } from './PendingLogoutStore';
 import { clearAllLabourReadouts } from './LabourReadoutCache';
+import { ApprovalSeenStore } from './ApprovalSeenStore';
 import { clearAllCachedRosters } from './LabourLocalStore';
 import { SessionStore } from './SessionStore';
 import { getActiveDatabaseName } from './activeDatabaseName';
@@ -213,6 +214,10 @@ export function getSessionUserId(): string | null {
 }
 
 export function setAuthSession(session: AuthSession): void {
+    // Fix round 4 (L2): a sign-in as a DIFFERENT person than the one on record makes in-memory per-person state forgotten.
+    const previousUserId = readPresenceMarker()?.userId ?? null;
+    if (previousUserId && previousUserId !== session.userId) notifyFarmerSessionEnded();
+
     // The access token lives in memory only — never in localStorage.
     inMemoryAccessToken = session.accessToken;
 
@@ -261,6 +266,8 @@ export function clearAuthSession(): void {
     // does not outlive the session that fetched it.
     clearAllLabourReadouts();
     clearAllCachedRosters();
+    // lane L4b fix round 1 (L-4) — and what he saw in the approval sheet (it can carry a money amount).
+    ApprovalSeenStore.clearAll();
     // The unidentified boundary holds no ending user's data (it is swept at boot instead).
     if (endingDatabaseName !== UNIDENTIFIED_DATABASE_NAME) purgeDownloadedLabourForDatabase(endingDatabaseName);
 

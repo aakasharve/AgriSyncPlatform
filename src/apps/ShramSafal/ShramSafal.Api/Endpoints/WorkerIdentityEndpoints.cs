@@ -23,7 +23,8 @@ public static class WorkerIdentityEndpoints
     /// Fix pass 1 (review M2, L1) — the per-user request limit on the identity lookups and code sends (scan-resolve, the
     /// number check, link/start, send-code), so none of them can be looped to list cards or verified numbers, or to make
     /// ShramSafal's SMS header spam a number. Registered by <c>RateLimitingConfig</c> under this one name. Fix pass 2 (N4):
-    /// also on the link itself (it looks the typed card up too) and on the phone verify.
+    /// also on the link itself (it looks the typed card up too) and on the phone verify. Fix pass 3 (R1): and on the card
+    /// reissue and the number move, which read codes too (the move is switched off, but carries the limit already).
     /// </summary>
     public const string IdentityRateLimitPolicy = "identity";
 
@@ -101,13 +102,13 @@ public static class WorkerIdentityEndpoints
             RunAsync(user, scope, farmId, ct, caller => service.MoveNumberAsync(
                 farmId, caller, id, body.NewPhone, body.NewWhose, body.NewTicket, body.NewCode, body.Proof, body.OldTicket,
                 body.OldCode, body.CardCode, ct)))
-            .WithName("MoveWorkerNumber").RequireAuthorization();
+            .WithName("MoveWorkerNumber").RequireAuthorization().RequireRateLimiting(IdentityRateLimitPolicy);
 
         group.MapPost($"{Worker}/card/reissue", (Guid farmId, Guid id, ReissueRequest body, ClaimsPrincipal user,
                 ICallerFarmTenantScope scope, WorkerIdentityService service, CancellationToken ct) =>
             RunAsync(user, scope, farmId, ct, caller =>
                 service.ReissueCardAsync(farmId, caller, id, body.Proof, body.Ticket, body.Code, ct)))
-            .WithName("ReissueWorkerCard").RequireAuthorization();
+            .WithName("ReissueWorkerCard").RequireAuthorization().RequireRateLimiting(IdentityRateLimitPolicy);
 
         group.MapPost($"{Worker}/unlink", (Guid farmId, Guid id, ClaimsPrincipal user, ICallerFarmTenantScope scope,
                 WorkerIdentityService service, CancellationToken ct) =>

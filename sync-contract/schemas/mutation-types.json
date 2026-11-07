@@ -1,7 +1,7 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.4.0",
-  "lastUpdated": "2026-11-01",
+  "version": "1.5.0",
+  "lastUpdated": "2026-11-06",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
     { "name": "create_plot",            "ownerAggregate": "Plot",             "sinceVersion": "0.1.0", "payloadSchema": "CreatePlot" },
@@ -39,6 +39,7 @@
     { "name": "attendance.mark",        "ownerAggregate": "AttendanceMark",   "sinceVersion": "0.9.0", "payloadSchema": "AttendanceMark" },
     { "name": "move_daily_log",         "ownerAggregate": "DailyLog",         "sinceVersion": "1.0.0", "payloadSchema": "MoveDailyLog" },
     { "name": "correct_labour_assignment", "ownerAggregate": "LabourAssignment", "sinceVersion": "1.0.0", "payloadSchema": "CorrectLabourAssignment" },
-    { "name": "set_record_audience",    "ownerAggregate": "RecordAudience",   "sinceVersion": "1.0.18", "payloadSchema": "SetRecordAudience" }
+    { "name": "set_record_audience",    "ownerAggregate": "RecordAudience",   "sinceVersion": "1.0.18", "payloadSchema": "SetRecordAudience" },
+    { "name": "set_farm_rate",          "ownerAggregate": "FarmRate",         "sinceVersion": "1.0.18", "payloadSchema": "SetFarmRate" }
   ]
 }

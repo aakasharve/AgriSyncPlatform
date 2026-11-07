@@ -25,6 +25,9 @@ import { render, cleanup, act } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { t as translate } from '../../../../../i18n/translations';
 
+// A bare 0-100 lens score (40 to 100) anywhere on the surface, written with real word-boundary escapes.
+const LENS_SCORE_LEAK = /\b(4[0-9]|[5-9][0-9]|100)\b/;
+
 // Controllable useDayUnderstanding mock — set per test.
 const dayUnderstandingMock = vi.fn();
 // Task 6 — the card also consults useFarmerEngagement (for the streak on a
@@ -187,7 +190,18 @@ describe('DayUnderstandingCard (server /10 Day Understanding Score)', () => {
 
         // ...and no lens score (0-100) leaks anywhere on the surface.
         const surface = getByTestId('day-understanding');
-        expect(surface.textContent ?? '').not.toMatch(/(4[0-9]|[5-9][0-9]|100)/);
+        expect(surface.textContent ?? '').not.toMatch(LENS_SCORE_LEAK);
+    });
+
+    // lane OPS-1 (F87): this pattern was once written with BACKSPACE characters in place of the word-boundary
+    // escape (a heredoc ate the backslashes), so it matched nothing and the check above could never fail.
+    // Pin that it CAN fail.
+    it('the lens-score leak pattern matches a bare score and nothing else (the check above can fail)', () => {
+        expect('score 55 here').toMatch(LENS_SCORE_LEAK);
+        expect('100').toMatch(LENS_SCORE_LEAK);
+        expect('४ / १०').not.toMatch(LENS_SCORE_LEAK);
+        expect('abc455def').not.toMatch(LENS_SCORE_LEAK);
+        expect(LENS_SCORE_LEAK.source).not.toMatch(/[\u0000-\u001f]/);
     });
 
     // -------------------------------------------------------------------------

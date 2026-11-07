@@ -133,6 +133,23 @@ function makeItem(id: string, status: ReviewItem['status'] = 'Confirmed'): Revie
     return { id, who: `who-${id}`, initial: 'र', tone: 'or', detail: `detail-${id}`, status, points: {} };
 }
 
+/**
+ * lane L4b (founder D-40 §4) — a card a bulk मंजूर may include: who, day, place and work all stated, and its version
+ * known. Bulk now goes only over cards he SELECTS (`selectAndApprove`), with the number confirmed first.
+ */
+function makeEligible(id: string): ReviewItem {
+    return {
+        id, who: `who-${id}`, initial: 'र', tone: 'or', detail: '2026-10-30', status: 'Confirmed', version: 1,
+        plot: 'प्लॉट A', plotScope: 'Plot', points: { task: 'फवारणी' },
+    };
+}
+
+function selectAndApprove(ids: string[]): void {
+    ids.forEach((id) => fireEvent.click(screen.getByTestId(`review-select-${id}`)));
+    fireEvent.click(screen.getByTestId('review-approve-selected'));
+    fireEvent.click(screen.getByTestId('review-bulk-yes'));
+}
+
 function dataWith(review: ReviewItem[]): LabourData {
     return { ...EMPTY_LABOUR_DATA, review };
 }
@@ -226,13 +243,13 @@ describe('ReviewSheet — confirm animation + 3s undo-before-send (Task 3.2)', (
         expect(onToast).not.toHaveBeenCalled();
     });
 
-    it('सगळं मंजूर then undo cancels the WHOLE batch — zero mutations, every card restored', async () => {
+    it('a selected bulk मंजूर then undo cancels the WHOLE batch — zero mutations, every card restored', async () => {
         const onToast = vi.fn();
         render(React.createElement(ReviewSheet, {
-            open: true, data: dataWith([makeItem('r4', 'Confirmed'), makeItem('r5', 'Confirmed')]), onClose: vi.fn(), onToast,
+            open: true, data: dataWith([makeEligible('r4'), makeEligible('r5')]), onClose: vi.fn(), onToast,
         }));
 
-        fireEvent.click(screen.getByTestId('review-approve-all'));
+        selectAndApprove(['r4', 'r5']);
         await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
 
         expect(screen.queryByTestId('review-card-r4')).toBeNull();
@@ -306,7 +323,7 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
             open: true, data: dataWith([makeItem('t1', 'Confirmed'), makeItem('t2', 'Confirmed')]), onClose: vi.fn(), onToast: vi.fn(),
         }));
 
-        expect(screen.getByText('2 नोंदी — मंजूर करा')).toBeInTheDocument();
+        expect(screen.getByText('२ नोंदी — मंजूर करा')).toBeInTheDocument();
         expect(screen.queryByText(/टीमच्या/)).toBeNull();
     });
 
@@ -335,7 +352,7 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
 
         expect(screen.getByTestId('review-card-recent-1')).toBeInTheDocument();
         expect(screen.getByTestId('review-card-old-1')).toBeInTheDocument();
-        expect(screen.getByText('2 नोंदी — मंजूर करा')).toBeInTheDocument();
+        expect(screen.getByText('२ नोंदी — मंजूर करा')).toBeInTheDocument();
     });
 
     it('reformats a real backend ISO-date detail (आज) instead of leaking the raw yyyy-MM-dd string', () => {
@@ -350,21 +367,21 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
         expect(screen.queryByText(todayIso)).toBeNull();
     });
 
-    it('सगळं मंजूर on 3 items triggers sync ONCE for the whole batch, not once per item', async () => {
+    it('a selected bulk मंजूर of 3 items triggers sync ONCE for the whole batch, not once per item', async () => {
         const onToast = vi.fn();
         render(React.createElement(ReviewSheet, {
             open: true,
-            data: dataWith([makeItem('b1', 'Confirmed'), makeItem('b2', 'Confirmed'), makeItem('b3', 'Confirmed')]),
+            data: dataWith([makeEligible('b1'), makeEligible('b2'), makeEligible('b3')]),
             onClose: vi.fn(), onToast,
         }));
 
-        fireEvent.click(screen.getByTestId('review-approve-all'));
+        selectAndApprove(['b1', 'b2', 'b3']);
         await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
         await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
 
         expect(mockEnqueue).toHaveBeenCalledTimes(3); // one per item (each Confirmed -> one-hop)
         expect(mockTriggerNow).toHaveBeenCalledTimes(1); // NOT 3 — the actual fix
-        expect(onToast).toHaveBeenCalledWith('सगळं मंजूर केलं — लक्षात ठेवलं ✓');
+        expect(onToast).toHaveBeenCalledWith('निवडलेल्या नोंदी मंजूर केल्या — लक्षात ठेवलं ✓');
     });
 
     it('calls onApproved after a successful single approve, so the caller can refresh the stale "तपासा N" badge', async () => {
@@ -381,15 +398,15 @@ describe('ReviewSheet — screen honesty (Decision 4b)', () => {
         expect(onApproved).toHaveBeenCalledTimes(1);
     });
 
-    it('calls onApproved after a bulk सगळं मंजूर batch completes', async () => {
+    it('calls onApproved after a selected bulk batch completes', async () => {
         const onApproved = vi.fn();
         render(React.createElement(ReviewSheet, {
             open: true,
-            data: dataWith([makeItem('c1', 'Confirmed'), makeItem('c2', 'Confirmed')]),
+            data: dataWith([makeEligible('c1'), makeEligible('c2')]),
             onClose: vi.fn(), onToast: vi.fn(), onApproved,
         }));
 
-        fireEvent.click(screen.getByTestId('review-approve-all'));
+        selectAndApprove(['c1', 'c2']);
         await act(async () => { await vi.advanceTimersByTimeAsync(PAST_ANIM_MS); });
         await act(async () => { await vi.advanceTimersByTimeAsync(PAST_UNDO_WINDOW_MS); });
 

@@ -84,6 +84,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.daily_log_contents",
         // plr-d10 lane WID (R5) — every link, unlink, merge, number move and card reissue, one unchangeable row each.
         "ssf.shram_identity_events",
+        // plr-d10 lane RATE-1 part A (founder D-72) — each farm's own rate list, one unchangeable row per version of a rate.
+        "ssf.farm_rates",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -179,6 +181,19 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261102163914_AddWorkerIdentity",
 
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane OPS-1, L-1, fix round 2); Down() read in full: drops ONE partial unique index,
+        //    ux_erasure_requests_one_waiting_per_person, on ssf.erasure_requests. Up() DOES touch ssf.audit_events: it first marks
+        //    duplicate WAITING requests (the oldest per person is kept) Cancelled and INSERTS one audit row per cancelled duplicate
+        //    (actor system_migration), lifting FORCE ROW LEVEL SECURITY on ssf.audit_events for that single insert and restoring it exactly
+        //    as found (only when there is a duplicate to cancel); it then creates the index. No table, column, policy or grant is created,
+        //    changed or dropped; no ledger's grants are touched. Safe to revert and re-apply mid-proof.
+        "20261105190000_AddOneWaitingErasureRequestIndex",
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane L8b-1); Down() read in full. Up() ADDs the nullable
+        //    schedule_subscriptions.reference_date and puts ssf.schedule_subscriptions and ssf.schedule_migration_events under
+        //    ENABLE + FORCE RLS with three policies (tenant on both, user-scoped select on subscriptions). Down() drops the
+        //    three policies, the RLS flags and the column — only what Up() added. No append-only ledger, privilege or grant
+        //    is touched. Safe to revert and re-apply mid-proof.
+        "20261106054532_AddScheduleSubscriptionDayZeroAndRls",
         // ── Reviewed 2026-11-06 (lane WID fix pass 2, N3); Down() read in full: drops only the two indexes Up() adds
         //    on ssf.shram_person_phones. No table, column, policy or grant; no ledger is touched. Safe mid-proof.
         "20261106060953_AddOneVerifiedNumberPerPerson",
@@ -192,6 +207,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    drops and re-adds the invitation table's farm foreign key (CASCADE; Down() RESTRICT). No grant, policy or
         //    append-only ledger is touched; the app role still holds no DELETE on the invitations. Safe mid-proof.
         "20261106212345_PersonalInvitationsGoWithTheirFarm",
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane RATE-1 part A, founder D-72); Down() read in full: drops the two policies
+        //    on ssf.farm_rates and the table (with its CHECKs and indexes) — only what Up() added. Up() creates the table
+        //    FORCE-RLS and APPEND-ONLY BY PRIVILEGE with its own effective-privilege guard (it is on AppendOnlyLedgers above).
+        //    Touches no other ledger's grants. Safe to revert and re-apply mid-proof.
+        "20261106112244_AddFarmRates",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

@@ -178,6 +178,11 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // Current state only (the change itself is the record's audit row); FORCE-RLS on its own farm_id (F8).
     public DbSet<ShramSafal.Domain.RecordPrivacy.RecordAudienceMember> RecordAudienceMembers =>
         Set<ShramSafal.Domain.RecordPrivacy.RecordAudienceMember>();
+
+    // spec: plr-d10 lane RATE-1 part A (founder D-72) — each farm's own price and rate list, one unchangeable row per
+    // version of a rate. APPEND-ONLY by privilege (migration AddFarmRates); FORCE-RLS on its own farm_id (F8).
+    public DbSet<FarmRate> FarmRates => Set<FarmRate>();
+
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();

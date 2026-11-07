@@ -93,6 +93,10 @@ public sealed class ScheduleTemplate : Entity<Guid>
     }
 
     // CEI-I1: copy-on-write edit — produces a NEW template row, original is NOT mutated.
+    // spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88, 2026-11-06: "each version shows who made it") — the
+    // new version records ITS maker, the editor; it replaces CEI-I2 ("author attribution preserved"), under which an edit
+    // was stored as written by the schedule's first author. Whose schedule it stays is the first version's maker, read
+    // back along PreviousVersionId (ShramSafal.Application.Services.ScheduleViewer.OwnerOfAsync).
     public ScheduleTemplate EditCopyOnWrite(
         Guid newId,
         string? newName,
@@ -105,7 +109,7 @@ public sealed class ScheduleTemplate : Entity<Guid>
             newName is not null ? newName.Trim() : Name,
             newStage is not null ? newStage.Trim() : Stage,
             occurredAtUtc,
-            CreatedByUserId,       // author attribution preserved — CEI-I2
+            editedByUserId,        // the version's maker (D-88); the first version's maker stays the schedule's owner
             TenantScope,
             version: Version + 1,
             previousVersionId: Id,

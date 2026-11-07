@@ -79,11 +79,14 @@ public sealed class MigrateScheduleHandler(
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.Forbidden);
         }
 
-        // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
-        if (await Services.PlotScopeGate.RefuseAsync(
-                repository, command.FarmId, command.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } outsidePlots)
+        // spec: plr-d10 lane L8b-1 Task 3 (founder D-73) — who may change a plot's schedule: the primary owner, or a seat the
+        // owner gave "कामाचं नियोजन करणे" (PlanWork), with the MU-4 plot rule inside the gate. A change made offline before
+        // the authority ended counts inside the late window and is flagged for the owner below (MU design §11.2).
+        var decision = await Services.ScheduleChangeGate.DecideAsync(
+            repository, command.FarmId, command.PlotId, command.ActorUserId, clock.UtcNow, command.DecidedAtUtc, ct);
+        if (decision.Refusal is { } refused)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(outsidePlots);
+            return Result.Failure<ScheduleSubscriptionDto>(refused);
         }
 
         var gate = await EntitlementGate.CheckAsync<ScheduleSubscriptionDto>(
@@ -91,23 +94,21 @@ public sealed class MigrateScheduleHandler(
             PaidFeature.CreatePlot, ct);
         if (gate is not null) return gate;
 
+        // spec: plr-d10 lane L8b-1 Task 1 — the new schedule comes from the library the phone lists (ScheduleLibrary), as
+        // adopt does; one he may not see answers like an unknown id (E4); the crop rule is the phone's own.
         var newTemplateId = new ScheduleTemplateId(command.NewScheduleTemplateId);
-        var newTemplate = await repository.GetCropScheduleTemplateByIdAsync(newTemplateId, ct);
+        var newTemplate = await new Services.ScheduleLibrary(repository).FindAsync(command.NewScheduleTemplateId, command.ActorUserId, ct);
         if (newTemplate is null)
         {
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
-        if (!newTemplate.IsPublished)
-        {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateUnpublished);
-        }
-
-        var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
-        if (!string.Equals(newTemplate.CropKey, cropKey, StringComparison.Ordinal))
+        if (!Services.ScheduleLibrary.MatchesCrop(newTemplate, cropCycle.CropName))
         {
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateCropMismatch);
         }
+
+        var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
 
         var prev = await repository.GetActiveScheduleSubscriptionAsync(
             command.PlotId, cropKey, command.CropCycleId, ct);
@@ -137,8 +138,11 @@ public sealed class MigrateScheduleHandler(
             command.CropCycleId,
             cropKey,
             newTemplateId,
-            newTemplate.VersionTag,
-            nowUtc);
+            Services.ScheduleLibrary.VersionTagOf(newTemplate),
+            nowUtc,
+            // my call (L8b-1): a switch that names no day 0 keeps the plot's day 0 — the day is the plot's, not the
+            // schedule's, so switching schedules never silently loses it (P10).
+            command.ReferenceDate ?? prev.ReferenceDate);
         newSubscription.AttachMigratedFrom(prev.SubscriptionId);
 
         // Phase 4 will populate this from ScheduleComplianceSnapshot rollups.
@@ -195,6 +199,10 @@ public sealed class MigrateScheduleHandler(
                 ipHash: command.AuditIpHash,
                 sourceAiJobId: null),
             ct);
+
+        await Services.ScheduleChangeGate.FlagIfLateAsync(
+            repository, decision, newSubscription.Id, "Migrated", command.FarmId, command.ActorUserId, command.ActorRole ?? "unknown",
+            clock.UtcNow, command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash, ct);
 
         await repository.SaveChangesAsync(ct);
 

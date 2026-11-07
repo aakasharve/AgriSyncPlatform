@@ -13,7 +13,7 @@ import { agriSyncClient } from '../AgriSyncClient';
 import { apiFetch } from '../apiFetch';
 import { clearAuthSession, getPresenceSession, setAuthSession } from '../../storage/AuthTokenStore';
 
-vi.mock('../../storage/endFarmerSession', () => ({ endFarmerSessionLocally: vi.fn() }));
+vi.mock('../../storage/endFarmerSession', () => ({ endFarmerSessionLocally: vi.fn(), notifyFarmerSessionEnded: vi.fn(), onFarmerSessionEnded: vi.fn(() => () => undefined) }));
 
 const KEY = 'agrisync_auth_session_v1';
 

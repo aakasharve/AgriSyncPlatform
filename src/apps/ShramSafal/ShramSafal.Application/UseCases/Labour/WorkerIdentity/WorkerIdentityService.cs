@@ -84,6 +84,11 @@ public sealed class WorkerIdentityService(
     /// </summary>
     public const int PersonWrongTriesPerDay = 10;
 
+    /// <summary>
+    /// Fix pass 3 (review R2, the orchestrator's ruling) — of his 10 wrong tries a day, farms he does not trust (no proof
+    /// of him, never linked him by his code) may use at most 5 together, so his own farms always keep 5.
+    /// </summary>
+    public const int StrangerWrongTriesPerDay = 5;
     // ── a login that proved the number an owner's invitation named (lane MU-2) ─────────────────────────
 
     /// <summary>
@@ -115,12 +120,10 @@ public sealed class WorkerIdentityService(
             return false;
         }
 
-        // ── WID FIX 3 LOCK — CALL SITE (lane MU-2 fix round 1, review H-2) ──────────────────────────────────────────────
-        // When WID fix 3 merges, take its person lock HERE, before any read below decides:
-        //     await store.LockPersonAsync(group.Root.Id, ct);
-        // (fix 3's verify paths take the same lock). The orchestrator adds this call when fix 3 lands; until then a race on
-        // the per-person verified index is answered cleanly by the caller (IdentityClash → 409 invitation.try_again).
-        // ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+        // WID fix 3's person lock (lane MU-2 fix round 1, review H-2): the same lock fix 3's send and verify paths take, taken
+        // before any read below decides, so a login link and a verify for one person run one at a time. A clash on the
+        // per-person verified index is still answered cleanly by the caller (IdentityClash → 409 invitation.try_again).
+        await store.LockPersonAsync(group.Root.Id, ct);
 
         if (await HeldByAnotherAsync(phoneE164, group, ct))
         {
@@ -1016,6 +1019,10 @@ public sealed class WorkerIdentityService(
         record.AttachPerson(person.Id);
         await store.AddEventAsync(ShramIdentityEvent.Record(
             ids.New(), farmId, record.Id, person.Id, IdentityEventKind.CardIssued, IdentityProof.None, userId, now), ct);
+
+        // Fix pass 3 — written at once, so every rule that reads the database sees him (N1 reads which farm issued his
+        // card: without this, a worker who had no ShramSafal person yet was refused his first verify on his own farm).
+        await store.TrySaveChangesAsync(ct);
         return new PersonGroup(person, [person]);
     }
 
@@ -1088,8 +1095,21 @@ public sealed class WorkerIdentityService(
     private async Task<bool> TooManyWrongTriesAsync(Guid farmId, PersonGroup group, CancellationToken ct)
     {
         var since = clock.UtcNow - LongWindow;
-        return await store.CountWrongTriesByFarmSinceAsync(farmId, since, ct) >= FarmWrongTriesPerDay
-            || await store.CountWrongTriesForPersonsSinceAsync(group.Ids, since, ct) >= PersonWrongTriesPerDay;
+        if (await store.CountWrongTriesByFarmSinceAsync(farmId, since, ct) >= FarmWrongTriesPerDay)
+        {
+            return true;
+        }
+
+        var byFarm = await store.CountWrongTriesForPersonsByFarmSinceAsync(group.Ids, since, ct);
+        if (byFarm.Values.Sum() >= PersonWrongTriesPerDay)
+        {
+            return true;
+        }
+
+        // R2 (fix pass 3) — farms without his trust share at most 5 of his 10; his own farms keep the rest.
+        var trusted = await TrustedFarmsAsync(group, ct);
+        return !trusted.Contains(farmId)
+            && byFarm.Where(f => !trusted.Contains(f.Key)).Sum(f => f.Value) >= StrangerWrongTriesPerDay;
     }
 
     /// <summary>
@@ -1151,6 +1171,9 @@ public sealed class WorkerIdentityService(
     private async Task<Consumed> ConsumeAsync(
         Guid farmId, Guid ticket, string? code, ChallengePurpose purpose, PersonGroup group, CancellationToken ct)
     {
+        // R1 (fix pass 3) — his code checks and sends run one at a time: wait for any other one for him, then count.
+        await store.LockPersonAsync(group.Root.Id, ct);
+
         // M2 / N2 — a farm that has spent its wrong tries for the day, or a person whose codes have taken his day's wrong
         // tries from every farm together, gets no code read until the day has passed.
         if (await TooManyWrongTriesAsync(farmId, group, ct))
@@ -1165,22 +1188,50 @@ public sealed class WorkerIdentityService(
             return new Consumed(null, ShramSafalErrors.IdentityCodeExpired);
         }
 
-        var outcome = challenge.TryConsume(code, purpose, clock.UtcNow);
-        if (outcome == ChallengeOutcome.Ok)
+        var now = clock.UtcNow;
+        if (challenge.RefuseBeforeCounting(purpose, now) is { } refused)
+        {
+            await store.TrySaveChangesAsync(ct);
+            return new Consumed(null, RefusalFor(refused));
+        }
+
+        // R1 — the try is counted in ONE statement (never above five, never on a spent code); only then is it compared.
+        var counted = await store.CountTryAsync(challenge, ct);
+        if (!counted.Counted)
+        {
+            await store.TrySaveChangesAsync(ct);
+            return new Consumed(null, counted.Spent ? ShramSafalErrors.IdentityCodeExpired : ShramSafalErrors.IdentityCodeUsedUp);
+        }
+
+        if (challenge.CompareCounted(code, now) == ChallengeOutcome.Ok)
         {
             return new Consumed(challenge, null);
         }
 
+        // The wrong try is already counted in the database; anything else this request staged is saved as before.
         await store.TrySaveChangesAsync(ct);
-        return new Consumed(null, outcome is ChallengeOutcome.Wrong or ChallengeOutcome.WrongPurpose
-            ? ShramSafalErrors.IdentityCodeWrong
-            : ShramSafalErrors.IdentityCodeExpired);
+        return new Consumed(null, ShramSafalErrors.IdentityCodeWrong);
     }
+
+    /// <summary>
+    /// A code refused before its try was counted. Its own five tries used up is "this code is used up — ask a new one"
+    /// (fix pass 3 add-on, P5): a fresh code works today. "Too many tries" is only the DAILY cap (person or farm).
+    /// </summary>
+    private static Error RefusalFor(ChallengeOutcome refused) => refused switch
+    {
+        ChallengeOutcome.WrongPurpose => ShramSafalErrors.IdentityCodeWrong,
+        ChallengeOutcome.TooManyTries => ShramSafalErrors.IdentityCodeUsedUp,
+        _ => ShramSafalErrors.IdentityCodeExpired,
+    };
 
     /// <summary>Issues and sends a code; the challenge is kept only once the SMS was accepted.</summary>
     private async Task<Result<CodeSentView>> SendCodeAsync(
         PersonGroup group, string e164, ChallengePurpose purpose, Guid farmId, Guid userId, CancellationToken ct)
     {
+        // R1 (fix pass 3) — sends for one person run one at a time, so each one counts the codes already sent (a parallel
+        // request waits here, then sees the code this one sent). Before any count.
+        await store.LockPersonAsync(group.Root.Id, ct);
+
         var now = clock.UtcNow;
         if (await NumberBudgetSpentAsync(group, e164, farmId, now, ct)
             || await store.CountChallengesByFarmSinceAsync(farmId, now - LongWindow, ct) >= FarmCodesPerDay

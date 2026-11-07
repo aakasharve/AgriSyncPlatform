@@ -52,14 +52,14 @@ export function toUnifiedClip(r: VoiceClipCacheRecord, consentGranted: boolean, 
 
 /** That day's clips, played with the voice diary's player. Asks for the voice-keeping answer only when there are clips. */
 const DayClips: React.FC<{ clips: readonly VoiceClipCacheRecord[] }> = ({ clips }) => {
-    const { granted } = useFullHistoryJournalConsent();
+    const { granted, known } = useFullHistoryJournalConsent();
     const [since, setSince] = useState<string | null>(null);
     useEffect(() => {
         let alive = true;
         void getArchiveConsentSince().catch(() => null).then(s => { if (alive) setSince(s); });
         return () => { alive = false; };
     }, []);
-    return <div className="space-y-2">{clips.map(c => <ClipPlayerCard key={c.id} locale="mr-IN" clip={toUnifiedClip(c, granted, since)} />)}</div>;
+    return <div className="space-y-2">{clips.map(c => <ClipPlayerCard key={c.id} locale="mr-IN" clip={toUnifiedClip(c, granted, since)} playbackAllowed={known ? granted : undefined} />)}</div>;
 };
 
 // No voice behind it: the hand-filled form, or (PLR-D10 L6b) words typed to Sathi — "लिहिलेलं" there too.

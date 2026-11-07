@@ -11,7 +11,6 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Work.Handlers;
-using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Logs;
@@ -260,7 +259,6 @@ public sealed class VerifyLogPipelineTests
 
         var autoVerify = new OnLogVerifiedAutoVerifyJobCard(
             repo,
-            new VerifyJobCardForPayoutHandler(repo, fixedClock),
             fixedClock,
             NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
 
@@ -270,7 +268,8 @@ public sealed class VerifyLogPipelineTests
             fixedClock,
             new AllowAllEntitlementPolicy(),
             analytics,
-            autoVerify);
+            autoVerify,
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         var validator = new VerifyLogValidator();
         var authorizer = new VerifyLogAuthorizer(

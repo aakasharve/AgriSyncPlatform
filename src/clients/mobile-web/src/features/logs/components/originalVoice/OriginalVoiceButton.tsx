@@ -5,7 +5,7 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I27) — founder D-31 / D-44 / D-40.
  *
  * "मूळ आवाज ऐका" for ONE record a reviewer is looking at. The server decides whether he may hear it (the speaker, the
- * primary owner or a member holding the owner's grant; the speaker's "मूळ आवाज जतन करा" ON under the current words);
+ * primary owner or a member holding the owner's grant; the speaker's "मूळ आवाज ऐकू देणे" ON under the current words);
  * this control only asks, then plays or says honestly why not:
  *   - nothing he may play -> "मूळ आवाज उपलब्ध नाही." (the record's words stay on screen; the control goes away);
  *   - not on the server yet (the speaker's phone may still be sending it) -> says so, and the button stays for a retry;

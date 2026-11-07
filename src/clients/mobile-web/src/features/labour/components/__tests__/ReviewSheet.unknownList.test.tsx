@@ -23,20 +23,19 @@ import { EMPTY_LABOUR_DATA } from '../../labourMock';
 
 afterEach(() => cleanup());
 
-const DONE_TITLE = 'सगळ्या नोंदी तपासून झाल्या';
-const DONE_HEADER = 'सगळं झालं ✓';
+// lane L4b (founder D-40 §6) — the one empty line, in the header and the body; never "सगळं झालं".
+const EMPTY = 'मंजुरीसाठी नोंदी बाकी नाहीत';
 
 describe('ReviewSheet - empty list', () => {
-    it('a genuinely empty, KNOWN list still says everything is checked', () => {
+    it('a genuinely empty, KNOWN list says nothing is waiting for approval', () => {
         render(<ReviewSheet open data={EMPTY_LABOUR_DATA} onClose={() => undefined} onToast={() => undefined} />);
-        expect(screen.getByText(DONE_TITLE)).toBeInTheDocument();
-        expect(screen.getByText(DONE_HEADER)).toBeInTheDocument();
+        expect(screen.getByTestId('review-list-empty')).toHaveTextContent(EMPTY);
+        expect(screen.getByTestId('review-sheet-count')).toHaveTextContent(EMPTY);
     });
 
     it('an UNKNOWN list (offline / stale) never claims completeness', () => {
         render(<ReviewSheet open data={EMPTY_LABOUR_DATA} reviewListUnknown onClose={() => undefined} onToast={() => undefined} />);
-        expect(screen.queryByText(DONE_TITLE)).not.toBeInTheDocument();
-        expect(screen.queryByText(DONE_HEADER)).not.toBeInTheDocument();
+        expect(screen.queryByText(EMPTY)).not.toBeInTheDocument();
         expect(screen.getByTestId('review-list-unknown')).toBeInTheDocument();
     });
 });
@@ -44,14 +43,13 @@ describe('ReviewSheet - empty list', () => {
 describe('ReviewSheet - list refetching after a save', () => {
     it('never renders the all-done text or the header claim while the list is loading', () => {
         render(<ReviewSheet open data={EMPTY_LABOUR_DATA} reviewListLoading onClose={() => undefined} onToast={() => undefined} />);
-        expect(screen.queryByText(DONE_TITLE)).not.toBeInTheDocument();
-        expect(screen.queryByText(DONE_HEADER)).not.toBeInTheDocument();
+        expect(screen.queryByText(EMPTY)).not.toBeInTheDocument();
         expect(screen.queryByTestId('review-list-unknown')).not.toBeInTheDocument();
     });
 
-    it('once the refetch settles with a truly empty list the done text returns', () => {
+    it('once the refetch settles with a truly empty list the empty line returns', () => {
         const { rerender } = render(<ReviewSheet open data={EMPTY_LABOUR_DATA} reviewListLoading onClose={() => undefined} onToast={() => undefined} />);
         rerender(<ReviewSheet open data={EMPTY_LABOUR_DATA} reviewListLoading={false} onClose={() => undefined} onToast={() => undefined} />);
-        expect(screen.getByText(DONE_TITLE)).toBeInTheDocument();
+        expect(screen.getByTestId('review-list-empty')).toHaveTextContent(EMPTY);
     });
 });

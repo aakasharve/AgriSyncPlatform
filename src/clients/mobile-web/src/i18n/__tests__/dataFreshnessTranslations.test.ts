@@ -85,10 +85,10 @@ describe('dataFreshnessTranslations — a fact, never a reassurance', () => {
 
 describe('dataFreshnessTranslations — Marathi provenance is checked, not asserted', () => {
     it('पर्यन्त keeps the founder\'s spelling, never normalised to पर्यंत', () => {
-        // His spelling, carried by `restState` and `unsendableRecordsLine`.
+        // His spelling, carried by `unsendableRecordsLine` (and by the retired `restState`, deleted in lane L4b).
         // Normalising it is the exact "correction" a spell-checking agent
         // makes without noticing.
-        expect(oversightTranslations.mr.restState).toContain('पर्यन्त');
+        expect(oversightTranslations.mr.unsendableRecordsLine).toContain('पर्यन्त');
         expect(dataFreshnessTranslations.mr.showingWorkUpTo).toContain('पर्यन्त');
         expect(dataFreshnessTranslations.mr.showingWorkUpTo).not.toContain('पर्यंत');
         expect(dataFreshnessTranslations.mr.showingWorkUpToUnknown).not.toContain('पर्यंत');
@@ -104,10 +104,8 @@ describe('dataFreshnessTranslations — Marathi provenance is checked, not asser
     });
 
     it('the unknown form borrows the founder\'s own way of admitting it cannot say', () => {
-        // Lifted from `unknownState` ('निश्चित सांगता येत नाही की सर्व कामे झाली'),
-        // his words. If that string is ever reworded away from this clause,
-        // this fails and the borrowing is re-decided rather than drifting.
-        expect(oversightTranslations.mr.unknownState).toContain('सांगता येत नाही');
+        // Lifted from his retired `unknownState` line ('निश्चित सांगता येत नाही की सर्व कामे झाली'; the key was
+        // deleted in lane L4b fix round 1 with the strip that showed it). The clause is pinned here on its own.
         expect(dataFreshnessTranslations.mr.showingWorkUpToUnknown).toContain('सांगता येत नाही');
     });
 

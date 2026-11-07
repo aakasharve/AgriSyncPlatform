@@ -20,6 +20,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, BookOpen } from 'lucide-react';
 import { agriSyncClient } from '../../infrastructure/api/AgriSyncClient';
+import { publishPlaybackSwitch } from '../logs/components/voiceResult/playbackSwitch';
 import {
     type VoiceDiaryLocale,
     tVoiceDiary,
@@ -72,7 +73,7 @@ export const VoiceRetainedConsentToggleView: React.FC<Props & {
         async (nextValue: boolean) => {
             setSaving(true);
             try {
-                await agriSyncClient.updateConsent({
+                const saved = await agriSyncClient.updateConsent({
                     fullHistoryJournal: nextValue,
                     languageShown: locale,
                     consentTextVersion: state.version,
@@ -80,6 +81,8 @@ export const VoiceRetainedConsentToggleView: React.FC<Props & {
                     // plr-d10 I25 (founder D-31): the choice is made against THESE words.
                     fullHistoryJournalWordingVersion: VOICE_RETENTION_WORDING_VERSION,
                 });
+                // Fix round 4 (L1, D-101): publish at once, before the reload answers.
+                publishPlaybackSwitch(saved.fullHistoryJournal === true);
                 await reload();
             } finally {
                 setSaving(false);

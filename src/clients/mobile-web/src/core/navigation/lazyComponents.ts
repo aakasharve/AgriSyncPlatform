@@ -26,7 +26,6 @@ export const AdminAiOpsPage = React.lazy(() => import('../../features/admin/ai/A
 export const AdminOpsPage = React.lazy(() => import('../../features/admin/ops/AdminOpsPage').then(module => ({ default: module.AdminOpsPage })));
 export const ReferralsPage = React.lazy(() => import('../../pages/ReferralsPage'));
 export const TaskCreationSheet = React.lazy(() => import('../../features/scheduler/components/TaskCreationSheet'));
-export const ReviewInboxSheet = React.lazy(() => import('../../features/logs/components/ReviewInboxSheet'));
 export const QuickLogSheet = React.lazy(() => import('../../features/logs/components/QuickLogSheet').then(module => ({ default: module.QuickLogSheet })));
 export const OnboardingPermissionsPage = React.lazy(() => import('../../pages/OnboardingPermissionsPage'));
 // The welcome written for the role — the LAST first-run step, after the permissions (plr-d10 I16).

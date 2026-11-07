@@ -1305,6 +1305,19 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    grants (identity changes are recorded in their own append-only table). Safe mid-proof.
         "20261102163914_AddWorkerIdentity",
 
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane OPS-1, L-1, fix round 2); Down() read in full: drops ONE partial unique index,
+        //    ux_erasure_requests_one_waiting_per_person, on ssf.erasure_requests. Up() DOES touch ssf.audit_events: it first marks
+        //    duplicate WAITING requests (the oldest per person is kept) Cancelled and INSERTS one audit row per cancelled duplicate
+        //    (actor system_migration), lifting FORCE ROW LEVEL SECURITY on ssf.audit_events for that single insert and restoring it exactly
+        //    as found (only when there is a duplicate to cancel); it then creates the index. No table, column, policy or grant is created,
+        //    changed or dropped; no ledger's grants are touched. Safe to revert and re-apply mid-proof.
+        "20261105190000_AddOneWaitingErasureRequestIndex",
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane L8b-1); Down() read in full: drops the three policies
+        //    p_tenant_schedule_subscriptions, p_user_select_schedule_subscriptions and p_tenant_schedule_migration_events,
+        //    takes ssf.schedule_subscriptions and ssf.schedule_migration_events back out of RLS (NO FORCE, DISABLE) and drops
+        //    the nullable column schedule_subscriptions.reference_date. Up() adds that column and those policies under
+        //    ENABLE + FORCE. Never touches ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261106054532_AddScheduleSubscriptionDayZeroAndRls",
         // ── Reviewed 2026-11-06 (lane WID fix pass 2, N3); Down() read in full: drops the two indexes Up() adds on
         //    ssf.shram_person_phones (one verified number per person; the plain number index). No table, column,
         //    policy or grant; never touches ssf.audit_events. Safe mid-proof.
@@ -1319,6 +1332,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    re-creates ONE foreign key on ssf.farm_personal_invitations (RESTRICT -> CASCADE; Down() puts RESTRICT back).
         //    Never touches ssf.audit_events, its policies or its grants. Safe mid-proof.
         "20261106212345_PersonalInvitationsGoWithTheirFarm",
+        // ── Reviewed 2026-11-06 (spec: plr-d10 lane RATE-1 part A, founder D-72); Down() read in full: drops the two policies
+        //    on ssf.farm_rates and the table (its CHECKs and indexes go with it). Up() creates that table only (FORCE RLS,
+        //    SELECT + INSERT for the app role). Never touches ssf.audit_events, its policies or its grants (a rate change
+        //    writes an ordinary audit row through the app role's existing INSERT). Safe mid-proof.
+        "20261106112244_AddFarmRates",
     ];
 
     /// <summary>

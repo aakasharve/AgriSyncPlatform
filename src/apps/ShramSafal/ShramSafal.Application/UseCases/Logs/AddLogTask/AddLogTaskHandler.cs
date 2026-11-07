@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -46,6 +47,10 @@ public sealed class AddLogTaskHandler(
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IScheduleComplianceService complianceService,
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3a fix pass 1, B003) — required, never optional: the
+    // day score of the record's work day is rebuilt inside this transaction (see HandleAsync), so a caller that has
+    // not supplied it must not compile.
+    IDailyRichnessDerivationService dailyRichnessDerivation,
     // spec: dfes-companion-2026-07-11 (wave-1.3) — I3. Optional so the existing
     // direct-construction unit tests keep compiling; resolved from DI in production
     // (registered in ShramSafal.Api DependencyInjection). Used for ONE thing: when a
@@ -66,7 +71,9 @@ public sealed class AddLogTaskHandler(
         // below — that path is defense-in-depth and the only auth gate
         // for direct (non-pipeline) consumers.
 
-        var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
+        // lane L4b (L6 review S7) — held for this change and re-read after the hold, so a confirmation committing while
+        // this task is added is seen below and re-opened (D-46 §4), never left standing over the new version.
+        var log = await repository.GetDailyLogForChangeAsync(command.DailyLogId, ct);
         if (log is null)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);
@@ -315,6 +322,15 @@ public sealed class AddLogTaskHandler(
 
         await repository.SaveChangesAsync(ct);
 
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3a fix pass 1, B003; founder D-46) — the streak counts
+        // confirmed records only, and this task may have re-opened the record (or re-confirmed it at the new version);
+        // the task itself is also something the day score reads. So the day score of the record's WORK day
+        // (log.LogDate) is rebuilt from what was just flushed. Inside this transaction, after the record's row hold
+        // taken first above, before the commit; database work only. Not a side-car: a failure fails the task, so the
+        // two commit together or neither does.
+        await dailyRichnessDerivation.RecomputeAsync((Guid)log.FarmId, log.LogDate, ct);
+        await repository.SaveChangesAsync(ct);
+
         // spec: dfes-companion-2026-07-11 (wave-1.3) — I3, the money consequence.
         // Domain events are raised but never dispatched in this codebase (see
         // OnLogVerifiedAutoVerifyJobCard's design note), so a log leaving Verified
@@ -331,7 +347,11 @@ public sealed class AddLogTaskHandler(
             && logVerificationChanged is not null)
         {
             await logVerificationChanged.HandleAsync(
-                log.Id, log.CurrentVerificationStatus, new UserId(command.ActorUserId), ct);
+                log.Id,
+                log.CurrentVerificationStatus,
+                new UserId(command.ActorUserId),
+                new Work.Handlers.ChangeProvenance(command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+                ct);
         }
 
         // lane MU-3 fix 1 (F5) — the record as the PULL would send it to this person.

@@ -55,6 +55,13 @@ public sealed class CloneScheduleTemplateHandler(
             return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H3) — only a schedule he may see is copied: another account's
+        // Private or Team one is answered exactly like an unknown id (E4).
+        if (await ScheduleTemplateWriteGate.RefuseCopyAsync(repository, source, command.CallerUserId, ct) is { } unseen)
+        {
+            return Result.Failure<CloneScheduleTemplateResult>(unseen);
+        }
+
         // Step 4: scope authz — per-scope role gate (CEI Phase 2 §4.7)
         //
         // Public  → only backend seed job; handler path always rejected
@@ -106,7 +113,13 @@ public sealed class CloneScheduleTemplateHandler(
         await repository.AddAuditEventAsync(audit, ct);
 
         // Step 9: save
-        await repository.SaveChangesAsync(ct);
+        // spec: plr-d10 lane L8b-1 fix round 1 (review M1) — one copy per source and version is all the index allows
+        // (ix_schedule_templates_derived_version, which lane SCH-OWN re-keys): a second copy is answered 409 with words,
+        // never a 500, and nothing of it is kept.
+        if (!await repository.TrySaveScheduleCopyAsync(ct))
+        {
+            return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.ScheduleCopyExists);
+        }
 
         // Step 10: store idempotency result
         var result = new CloneScheduleTemplateResult(

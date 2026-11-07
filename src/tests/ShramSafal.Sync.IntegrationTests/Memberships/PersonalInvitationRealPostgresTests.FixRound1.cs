@@ -498,7 +498,17 @@ public sealed partial class PersonalInvitationRealPostgresTests
         (await PersonOnInvitationAsync(onB)).Should().Be("|", "every farm's invitation naming his number");
         (await PersonOnInvitationAsync(forWorker)).Should().Be("|", "the worker's own erasure reaches the invitations too");
         (await PersonOnInvitationAsync(someoneElse)).Should().Be("नाव|+916000054321", "nobody else's");
+
+        // Orchestrator ruling (concern 6): an invitation still waiting for the erased person is withdrawn, never left as a
+        // nameless live code; one that had already ended keeps its status; nobody else's is touched.
+        (await StatusOfInvitationAsync(onB)).Should().Be("Withdrawn", "a waiting invitation for the erased person ends");
+        (await StatusOfInvitationAsync(forWorker)).Should().Be("Withdrawn", "the worker's erasure ends his waiting invitation too");
+        (await StatusOfInvitationAsync(onA)).Should().Be("Withdrawn", "an invitation that had already ended keeps its status");
+        (await StatusOfInvitationAsync(someoneElse)).Should().Be("Waiting", "nobody else's invitation is touched");
     }
+
+    private async Task<string> StatusOfInvitationAsync(Guid id)
+        => await ScalarSuperuserAsync<string>("SELECT status FROM ssf.farm_personal_invitations WHERE id = @id", ("id", id));
 
     // ── M-4: the facts the review asked for ──────────────────────────────────────────────────────
 

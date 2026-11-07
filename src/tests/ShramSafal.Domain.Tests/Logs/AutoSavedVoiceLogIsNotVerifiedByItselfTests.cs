@@ -12,7 +12,6 @@ using ShramSafal.Application.UseCases.Logs.AddLogTask;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
 using ShramSafal.Application.UseCases.Work.Handlers;
-using ShramSafal.Application.UseCases.Work.VerifyJobCardForPayout;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
@@ -455,7 +454,8 @@ public sealed class AutoSavedVoiceLogIsNotVerifiedByItselfTests
             clock,
             new AllowAllEntitlementPolicy(),
             new NoopAnalyticsWriter(),
-            JobCardHook(repo, clock));
+            JobCardHook(repo, clock),
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
         return handler.HandleAsync(new VerifyLogCommand(
             logId, status, Reason: reason, VerifiedByUserId: callerGuid,
@@ -472,6 +472,7 @@ public sealed class AutoSavedVoiceLogIsNotVerifiedByItselfTests
             clock,
             new AllowAllEntitlementPolicy(),
             new NoopComplianceService(),
+            new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService(),
             JobCardHook(repo, clock));
 
         return handler.HandleAsync(new AddLogTaskCommand(
@@ -486,7 +487,6 @@ public sealed class AutoSavedVoiceLogIsNotVerifiedByItselfTests
 
     private static OnLogVerifiedAutoVerifyJobCard JobCardHook(ScenarioRepo repo, IClock clock) => new(
         repo,
-        new VerifyJobCardForPayoutHandler(repo, clock),
         clock,
         NullLogger<OnLogVerifiedAutoVerifyJobCard>.Instance);
 

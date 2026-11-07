@@ -40,7 +40,7 @@
  * an account with 2+ farms exists.
  */
 import type { CropProfile, DailyLog, FarmOperator, PlannedTask } from '../../types';
-import { computeDayState, isLogUnverified } from '../../shared/utils/dayState';
+import { computeDayState } from '../../shared/utils/dayState';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { isOwnAutoSavedVoiceLog } from './autoSavedVoiceLog';
 
@@ -50,14 +50,9 @@ export interface OversightHeaderInputs {
     /** `operator.id -> operator.name`, straight off `farmerProfile.operators`
      * — the SAME list `AppHeader` already reads for `activeOperator`. */
     operatorNameById: Record<string, string>;
-    /**
-     * Records with `verification.required` outstanding (spec §3's decision
-     * row). "Outstanding" reuses the app's ONE existing definition of
-     * unverified — `isLogUnverified` (`shared/utils/dayState.ts`), the same
-     * function `computeDayState`/`computeCostRunning` already count by —
-     * rather than inventing a second status comparison.
-     */
-    unverifiedCount: number;
+    // `unverifiedCount` (the phone's own tally of records awaiting approval) was here. Lane L4b fix round 1 deleted
+    // it: the drawer's approval row is the farm's ONE server count (`approvalQueue`, founder D-40 §1), and nothing
+    // read this one any more.
     /**
      * Mirrors `useAppRouterDerivations.ts`'s own `yesterdayDayState.isClosed`
      * computation exactly (same `computeDayState` call, same "yesterday" date
@@ -92,13 +87,8 @@ export function buildOversightHeaderInputs(
 
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I13) — his OWN voice auto-save is not waiting on
     // anyone: it counts even if he never confirms it (founder decision 2026-09-02), and nothing behind this
-    // row could confirm it for him (P5). So it neither raises the approval row nor holds a day open. Other
-    // people's logs count exactly as before.
+    // row could confirm it for him (P5). So it does not hold a day open. Other people's logs count exactly as before.
     const reviewNotAwaited = (log: DailyLog) => isOwnAutoSavedVoiceLog(log, youIds);
-
-    const unverifiedCount = history.filter(
-        (log) => log.verification?.required === true && isLogUnverified(log) && !reviewNotAwaited(log),
-    ).length;
 
     // MERGE RECONCILIATION (main <- feat/dfes-companion): `hasStarted` is now
     // part of the answer, not a refinement of it.
@@ -124,5 +114,5 @@ export function buildOversightHeaderInputs(
     });
     const yesterdayNotClosed = yesterday.hasStarted && !yesterday.isClosed;
 
-    return { plotCount, operatorNameById, unverifiedCount, yesterdayNotClosed };
+    return { plotCount, operatorNameById, yesterdayNotClosed };
 }

@@ -29,7 +29,7 @@ vi.mock('../../../infrastructure/api/AgriSyncClient', () => {
     };
 });
 vi.mock('../../../infrastructure/storage/endFarmerSession', () => ({
-    endFarmerSessionLocally: vi.fn(),
+    endFarmerSessionLocally: vi.fn(), notifyFarmerSessionEnded: vi.fn(), onFarmerSessionEnded: vi.fn(() => () => undefined),
 }));
 vi.mock('../../../infrastructure/security/tenantDekClient', () => ({ clearCachedDek: vi.fn() }));
 vi.mock('../../../infrastructure/storage/RememberDeviceStore', () => ({
@@ -205,6 +205,12 @@ describe('AuthProvider - offline cold start (real AuthTokenStore)', () => {
         spy().mockResolvedValueOnce({ kind: 'unreachable' });
         render(<AuthProvider><Shell /></AuthProvider>);
         await waitFor(() => expect(screen.getByTestId('app-content')).toBeInTheDocument());
+        // F72 (lane OPS-1): app-content appears in the commit that makes the presence session real, but the effect
+        // that attaches the 'online' listener is a PASSIVE effect and is flushed later. waitFor polls outside act, so
+        // the test could reach the dispatch below first and fire 'online' at nobody (about 1 run in 10 under load:
+        // login-page never appears). An empty act() flushes the pending effects and microtasks, so the listener
+        // exists before the event - a flush, not a sleep.
+        await act(async () => { await Promise.resolve(); });
 
         spy().mockImplementationOnce(async () => { clearAuthSession(); return { kind: 'rejected' }; });
         await act(async () => { window.dispatchEvent(new Event('online')); });

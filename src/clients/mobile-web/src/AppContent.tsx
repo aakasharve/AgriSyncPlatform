@@ -54,6 +54,8 @@ import { useAuth } from './app/providers/AuthProvider';
 import { useOptionalFarmContext } from './core/session/FarmContext';
 import { hiddenMainViewsFor } from './core/navigation/hiddenViews';
 import { useAttentionModel } from './features/attention/hooks/useAttentionModel';
+import { attentionSummaryEn, attentionSummaryMr } from './features/attention/attentionItems';
+import { useOptionalLanguage } from './i18n/LanguageContext';
 import { useWorkTabViewChange } from './features/logs/components/entry/workHomeRequest';
 import { BOTTOM_BAR_CLEARANCE } from './shared/utils/bottomBar';
 
@@ -107,7 +109,17 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
 
     // spec: plr-d10 (I22, founder D-1) — the bottom bar's लक्ष द्या count: the items its page lists for this farm
     // (one list for the page, this count and the आढावा strip — `attentionItems.ts`).
-    const attentionCount = useAttentionModel(data.plannedTasks, data.crops).total;
+    const attentionModel = useAttentionModel(data.plannedTasks, data.crops);
+    const attentionCount = attentionModel.total;
+    // lane L4b (D-40 §2) — the strip's third signal: the same list, summarised in his language (the Marathi
+    // summary is the आढावा strip's own; its English twin is PROPOSED).
+    const appLanguage = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
+    const attentionSignal = {
+        total: attentionCount,
+        summary: appLanguage === 'mr'
+            ? attentionSummaryMr(attentionModel.counts)
+            : attentionSummaryEn(attentionModel.counts),
+    };
 
     // BUG-2 2026-08-14, cause 3 (founder: "there is no going back screen after
     // this screen"). `<main>` below is the app's ONE scroll container, so it —
@@ -202,7 +214,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 // सेट-अप केंद्र is a PLACE: re-tapped from inside it, it returns to the hub's first
                 // screen. Its other hops (the sync drawer's "not synced" page, आजची कामे) keep the
                 // ordinary route history, so their मागे still returns where he was.
-                onNavigate={(route) => (route === 'profile' ? navigation.openPlace(route) : navigation.setCurrentRoute(route))}
+                onNavigate={(route) => (route === 'profile' || route === 'attention' ? navigation.openPlace(route) : navigation.setCurrentRoute(route))}
                 // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — a tap on the आजची कामे card
                 // (again, or from another tab) opens its work home fresh, also from the saved card.
                 // Never over an unsaved review form or a parse in progress (`workTabTapAction`).
@@ -226,16 +238,11 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                     logs: data.history,
                     operatorNameById: oversightHeaderInputs.operatorNameById,
                     plotCount: oversightHeaderInputs.plotCount,
-                    unverifiedCount: oversightHeaderInputs.unverifiedCount,
                     yesterdayNotClosed: oversightHeaderInputs.yesterdayNotClosed,
                     // Genuinely unreachable honestly, not fabricated — see
                     // AppHeader.tsx's own doc comment on this field.
                     approvalHolderName: null,
-                    // Finding F7(a) — whether `data.history`/`data.crops`
-                    // above are a measured empty or simply not hydrated
-                    // yet. The strip may not claim "all work is complete"
-                    // from arrays nobody has read.
-                    dataLoaded: data.dataLoaded,
+                    attention: attentionSignal,
                 }}
                 // spec: owner-oversight-loop (Task 11) — the weather chip
                 // moved from mainView.tsx's home screen into AppHeader row

@@ -15,7 +15,6 @@ import {
     useAppDataState,
     useAppLogState,
     useAppNavigationState,
-    useAppTrustState,
     useAppUiRuntime,
     useAppViewHelpers,
     useAppVoiceState,
@@ -28,7 +27,6 @@ type DataState = ReturnType<typeof useAppDataState>;
 type VoiceState = ReturnType<typeof useAppVoiceState>;
 type CommandsState = ReturnType<typeof useAppCommandsState>;
 type WeatherState = ReturnType<typeof useAppWeatherState>;
-type TrustState = ReturnType<typeof useAppTrustState>;
 type UiRuntime = ReturnType<typeof useAppUiRuntime>;
 type ViewHelpers = ReturnType<typeof useAppViewHelpers>;
 
@@ -115,6 +113,12 @@ export interface AppRouterContext {
      * context builders compile; absent = the role rule (`mayShowFarmMoney`).
      */
     maySeeMoney?: boolean;
+    /**
+     * spec: plr-d10 lane L8b-1 (founder D-73) — this seat holds "कामाचं नियोजन करणे" (PlanWork) on the current farm, as the
+     * server answers it (/me/context authorities; the primary account holder when the server sent none). It decides
+     * "पुढे ठरवा" and every schedule change the server gates the same way. Optional: absent = the primary owner only.
+     */
+    mayPlanWork?: boolean;
     /** The work home's "आजची हजेरी" door: owner tier or the owner's labour grant only (H10). */
     canOpenAttendanceFromHome?: boolean;
 
@@ -188,7 +192,6 @@ export interface AppRouterContext {
     // commands / trust
     handleManualSubmit: CommandsState['handleManualSubmit'];
     handleUpdateNote: CommandsState['handleUpdateNote'];
-    handleVerifyLog: TrustState['handleVerifyLog'];
 
     // ui runtime
     handleReset: UiRuntime['handleReset'];

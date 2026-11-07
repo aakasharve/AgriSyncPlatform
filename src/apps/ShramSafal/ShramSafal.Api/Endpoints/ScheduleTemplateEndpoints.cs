@@ -22,6 +22,7 @@ public static class ScheduleTemplateEndpoints
             ClaimsPrincipal user,
             CloneScheduleTemplateHandler handler,
             ICallerFarmTenantScope scope,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -61,7 +62,12 @@ public static class ScheduleTemplateEndpoints
                 AuditIpHash: auditIpHash,
                 FarmId: farmId);
 
-            var result = await handler.HandleAsync(command, ct);
+            // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
+            // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
+            // fault in front of it was gone; F99 sweep, BareRequest).
+            var result = farmId is null
+                ? await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct)
+                : await handler.HandleAsync(command, ct);
             return result.IsSuccess
                 ? Results.Created($"/schedule-templates/{result.Value.NewTemplateId}", result.Value)
                 : ToErrorResult(result.Error);
@@ -76,6 +82,7 @@ public static class ScheduleTemplateEndpoints
             ClaimsPrincipal user,
             EditScheduleTemplateHandler handler,
             ICallerFarmTenantScope scope,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -113,7 +120,12 @@ public static class ScheduleTemplateEndpoints
                 AuditIpHash: auditIpHash,
                 FarmId: farmId);
 
-            var result = await handler.HandleAsync(command, ct);
+            // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
+            // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
+            // fault in front of it was gone; F99 sweep, BareRequest).
+            var result = farmId is null
+                ? await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct)
+                : await handler.HandleAsync(command, ct);
             return result.IsSuccess
                 ? Results.Created($"/schedule-templates/{result.Value.NewTemplateId}", result.Value)
                 : ToErrorResult(result.Error);
@@ -128,6 +140,7 @@ public static class ScheduleTemplateEndpoints
             ClaimsPrincipal user,
             PublishScheduleTemplateHandler handler,
             ICallerFarmTenantScope scope,
+            ICallerUserTenantScope userScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -162,7 +175,12 @@ public static class ScheduleTemplateEndpoints
                 AuditIpHash: auditIpHash,
                 FarmId: farmId);
 
-            var result = await handler.HandleAsync(command, ct);
+            // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
+            // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
+            // fault in front of it was gone; F99 sweep, BareRequest).
+            var result = farmId is null
+                ? await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct)
+                : await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("PublishScheduleTemplate");
@@ -190,10 +208,23 @@ public static class ScheduleTemplateEndpoints
         return group;
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 fix round 1 (review M1) — the Marathi twin of a refusal this door words itself (PROPOSED;
+    /// the English twin is the error's description). No phone calls these doors yet; when one does, it shows these.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> MarathiWords = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [ShramSafal.Domain.Common.ShramSafalErrors.ScheduleCopyExists.Code] = "ही प्रत आधीच बनवलेली आहे.",
+    };
+
     private static IResult ToErrorResult(AgriSync.BuildingBlocks.Results.Error error)
     {
         if (error.Code.EndsWith("NotFound", StringComparison.Ordinal))
             return Results.NotFound(new { error = error.Code, message = error.Description });
+
+        // lane L8b-1 fix round 1 (review M1) — a second copy of the same schedule: 409 with its words, never a 500.
+        if (error.Code.EndsWith("Conflict", StringComparison.Ordinal))
+            return Results.Conflict(new { error = error.Code, message = error.Description, messageMr = MarathiWords.GetValueOrDefault(error.Code) });
 
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
             return Results.Forbid();

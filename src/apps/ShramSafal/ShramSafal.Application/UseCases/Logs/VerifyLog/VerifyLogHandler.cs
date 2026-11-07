@@ -7,6 +7,7 @@ using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Work.Handlers;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -45,7 +46,8 @@ public sealed class VerifyLogHandler(
     IClock clock,
     IEntitlementPolicy entitlementPolicy,
     IAnalyticsWriter analytics,
-    OnLogVerifiedAutoVerifyJobCard autoVerifyJobCard)
+    OnLogVerifiedAutoVerifyJobCard autoVerifyJobCard,
+    IDailyRichnessDerivationService dailyRichnessDerivation)
     : IHandler<VerifyLogCommand, DailyLogDto>
 {
     public async Task<Result<DailyLogDto>> HandleAsync(VerifyLogCommand command, CancellationToken ct = default)
@@ -58,7 +60,11 @@ public sealed class VerifyLogHandler(
         // pipeline. Direct callers must enforce the same invariants
         // themselves.
 
-        var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
+        // lane L4b (L6 review S7; founder D-40 / D-46 §3) — the record is HELD for this decision (row lock, re-read
+        // after the hold), so the version compared below is one a correction cannot move underneath it: a correction
+        // that committed first is seen (the stale confirmation is refused), one arriving later waits and then re-opens
+        // what this confirmation covered. The same read the move and labour-correction doors use; no schema change.
+        var log = await repository.GetDailyLogForChangeAsync(command.DailyLogId, ct);
         if (log is null)
         {
             return Result.Failure<DailyLogDto>(ShramSafalErrors.DailyLogNotFound);
@@ -302,7 +308,21 @@ public sealed class VerifyLogHandler(
 
         await repository.SaveChangesAsync(ct);
 
-        await autoVerifyJobCard.HandleAsync(log.Id, verification.Status, new UserId(command.VerifiedByUserId), ct);
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3a; founder D-46) — the streak counts confirmed
+        // records only, so a decision that moved the record's status rebuilds the day score of the record's WORK day
+        // (log.LogDate), never the day the decision was given. Inside this transaction, after the record's row hold
+        // taken above, before the commit; database work only. Not a side-car: a failure here fails the decision, so the
+        // two commit together or neither does. The decision was flushed just above, so the day's records read back
+        // with it.
+        await dailyRichnessDerivation.RecomputeAsync((Guid)log.FarmId, log.LogDate, ct);
+        await repository.SaveChangesAsync(ct);
+
+        await autoVerifyJobCard.HandleAsync(
+            log.Id,
+            verification.Status,
+            new UserId(command.VerifiedByUserId),
+            new ChangeProvenance(command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+            ct);
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),

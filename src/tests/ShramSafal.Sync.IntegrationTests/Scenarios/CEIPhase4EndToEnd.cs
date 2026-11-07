@@ -42,7 +42,7 @@ namespace ShramSafal.Sync.IntegrationTests.Scenarios;
 /// Happy path:
 ///   Ramu (PrimaryOwner) creates a JobCard → assigns to Vikas (Worker) →
 ///   Vikas starts and creates a DailyLog → completes the job card →
-///   Ramu verifies the log → explicit verify-for-payout → settle (payout) →
+///   Ramu verifies the log → explicit verify-for-payout (D-33: the log's मंजूर no longer does it) → settle (payout) →
 ///   assert CEI-I8 (single labour_payout cost entry) + worker profile.
 ///
 /// Negative cases:
@@ -296,11 +296,18 @@ public sealed class CEIPhase4EndToEnd
                 "DailyLog must be Verified after two-step verification");
         }
 
-        // ── STEP 8: Auto-verify-for-payout fired by OnLogVerifiedAutoVerifyJobCard ─
-        // CEI-I9 auto-path (commit 207579c) wires OnLogVerifiedAutoVerifyJobCard into
-        // VerifyLogHandler, so when STEP 7 verified the DailyLog the linked JobCard was
-        // automatically transitioned to VerifiedForPayout — no explicit call needed.
-        // We read back via the status filter to prove the auto-transition happened.
+        // ── STEP 8: Ramu verifies the job card for payout — an explicit step ─────
+        // lane L4b, founder D-33 (verbatim): "मंजूर no longer moves a काम कार्ड to 'ready to pay'". Verifying the
+        // DailyLog in STEP 7 left the card Completed; the payment decision is its own call, made here.
+        using var verifyForPayoutReq = CreateJsonRequest<object?>(
+            HttpMethod.Post,
+            $"/shramsafal/job-cards/{jobCardId}/verify-for-payout",
+            new { clientCommandId = (string?)null },
+            RamuUserId,
+            "shramsafal:PrimaryOwner");
+        var verifyForPayoutResp = await harness.Client.SendAsync(verifyForPayoutReq);
+        verifyForPayoutResp.StatusCode.Should().Be(HttpStatusCode.OK,
+            "with the linked DailyLog Verified, the owner verifies the card for payout himself");
 
         // Assert job card appears in the VerifiedForPayout filter.
         using var getVerifiedJobCardsReq = CreateRequest(

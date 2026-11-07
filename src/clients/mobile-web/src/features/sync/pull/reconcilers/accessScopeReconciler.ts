@@ -36,9 +36,11 @@ import type { DailyLog } from '../../../../types';
 import { ACCESS_SCOPES_META_KEY, OUT_OF_SCOPE_FARMS_META_KEY, isReadableScope, readAccessScopes, readOutOfScopeFarmIds } from '../../../../infrastructure/storage/accessScopeStore';
 import { clearLabourReadoutsForFarm } from '../../../../infrastructure/storage/LabourReadoutCache';
 import { purgeLabourCachesForFarm } from '../../../../infrastructure/storage/labourFarmAccess';
+import { ApprovalSeenStore } from '../../../../infrastructure/storage/ApprovalSeenStore';
 import { dayLedgerMetaKey } from '../helpers/dayLedgerMetaKey';
 import { logMentionsMoney, MONEY_KEYS, textMentionsMoney, WORD_KEYS } from '../helpers/moneyMention';
 import { purgeOutsidePlots, removeCatalogPlots } from './plotScopePurge';
+import { purgeFarmRatesOutOfScope } from '../../../finance/farmRates/farmRatesStore';
 
 export interface AccessScopeContext {
     /** This phone's signed-in person; `null` = unknown, then nothing is attributed to him or removed as another's. */
@@ -168,6 +170,8 @@ export async function reconcileAccessScopes(
     await trimMirror(db, 'shramsafal_finance_cost_entries_v1', row => !removedEntries.has(String(row.id ?? ''))
         && (!moneyWithheld(String(row.farmId ?? '')) || (!!ctx.userId && row.createdByUserId === ctx.userId && !goneSet.has(String(row.farmId ?? '')))), ctx.receivedAtUtc);
     await trimMirror(db, 'shramsafal_finance_corrections_v1', row => !removedEntries.has(String(row.costEntryId ?? '')), ctx.receivedAtUtc);
+    // spec: plr-d10 lane RATE-1 part A — the farm's own rate list: every rate without see money, work rates without see wages.
+    outcome.removedMoneyRows += await purgeFarmRatesOutOfScope(db, byFarm, goneSet, ctx.receivedAtUtc);
 
     // ── Attendance, tests, warnings ─────────────────────────────────────────────────────
     const withheld = (farmId: string, key: 'seeAttendance' | 'seeTests' | 'seeCompliance') =>
@@ -246,6 +250,8 @@ export async function reconcileAccessScopes(
         if (!s.seeWages && previous.get(s.farmId)?.seeWages !== false && ctx.userId) {
             clearLabourReadoutsForFarm(ctx.userId, s.farmId);
         }
+        // lane L4b fix round 2 (L-b) — the amounts he saw in the approval sheet go with the farm's money.
+        if (!s.seeMoney && ctx.userId) ApprovalSeenStore.dropAmounts(ctx.userId, s.farmId);
     }
 
     // ── Remember the server's answer (the save path reads it) ───────────────────────────

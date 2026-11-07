@@ -16,7 +16,7 @@
 import React, { useMemo, useState } from 'react';
 import { CheckCircle2, Eye, Search } from 'lucide-react';
 import { CropProfile, CropScheduleTemplate } from '../../../types';
-import { getAllTemplates, sortTemplates } from '../../../infrastructure/reference/TemplateCatalog';
+import { UNKNOWN_CROP, getAllTemplates, scheduleCropCode, sortTemplates } from '../../../infrastructure/reference/TemplateCatalog';
 import { getOperationCategory } from '../planning/ClientPlanEngine';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../shared/components/ui/placeUi';
@@ -50,10 +50,9 @@ const ORDERS: ReadonlyArray<readonly [Order, string]> = [
     ['short', 'कमी दिवसांचं आधी'], // PROPOSED (Marathi) — the old "Shortest Duration"
 ];
 
-const canonicalCropCode = (value: string): string => {
-    const normalized = value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
-    return normalized.endsWith('s') ? normalized.slice(0, -1) : normalized;
-};
+// spec: plr-d10 lane L8b-1 — the library matches crops by THE crop rule (TemplateCatalog.scheduleCropCode, read through the
+// crop master: "द्राक्ष" is Grapes), the same rule the server adopts by. Its own copy here read a Marathi name as no crop.
+const canonicalCropCode = scheduleCropCode;
 
 /** Up to three schedules per crop the farmer grows (most detailed first) — the same rule the page counts by. */
 export function libraryTemplates(allCrops: readonly CropProfile[]): CropScheduleTemplate[] {
@@ -61,7 +60,8 @@ export function libraryTemplates(allCrops: readonly CropProfile[]): CropSchedule
     const byCrop = new Map<string, CropScheduleTemplate[]>();
     getAllTemplates().forEach(t => {
         const code = canonicalCropCode(t.cropCode);
-        if (allowed.size > 0 && !allowed.has(code)) return;
+        // lane L8b-1 fix round 1 (L5) — an unreadable crop is never a crop: it matches none of the farm's crops.
+        if (allowed.size > 0 && (code === UNKNOWN_CROP || !allowed.has(code))) return;
         byCrop.set(code, [...(byCrop.get(code) ?? []), t]);
     });
     const out: CropScheduleTemplate[] = [];

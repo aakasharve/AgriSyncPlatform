@@ -91,12 +91,13 @@ public sealed class ServerRouteTableTests(ITestOutputHelper output)
                 "--Cors:AllowedOrigins:0=https://route-table.invalid",
                 // A placeholder key only so the JWT options validate; nothing is ever signed here.
                 "--Jwt:SigningKey=route-table-test-only-placeholder-signing-key-0000",
-                // Since f08cd1c2 Production refuses to boot on the dev SMS stub (SmsGatewayStartupGuard). Placeholders only,
-                // so the host builds; listing the routes never serves, so nothing is ever sent. (Found broken at the MU-2
-                // merge commit c92e2e5d by lane MU-2 fix round 1.)
+                // spec: plr-d10 lane WID fix pass 3 add-on — the Production SMS startup guard (main's f08cd1c2) refuses to
+                // boot on the dev stub. This host only BUILDS and lists its routes (no SMS is ever sent), so it is given
+                // the shape of a configured gateway, exactly as the guard's own passing test does
+                // (SmsGatewayStartupGuardTests.Production_with_full_msg91_config_passes). The guard is unchanged.
                 "--Msg91:UseDevStub=false",
-                "--Msg91:AuthKey=route-table-test-only-placeholder",
-                "--Msg91:TemplateId=route-table-test-only-placeholder",
+                "--Msg91:AuthKey=route-table-test-only-placeholder-auth-key",
+                "--Msg91:TemplateId=route-table-test-only-placeholder-template",
             })
             {
                 start.ArgumentList.Add(arg);

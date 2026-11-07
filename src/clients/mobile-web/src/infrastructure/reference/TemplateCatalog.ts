@@ -7,6 +7,7 @@ import {
     type StageCode,
     type StageTemplate,
 } from '../../features/scheduler/scheduler.types';
+import { cropByName } from '../../domain/crops/cropMaster';
 
 export type TemplateCatalogSort = 'HIGHEST_ADOPTION' | 'MOST_FOLLOWED' | 'SHORTEST_DURATION' | 'NEWEST';
 
@@ -58,6 +59,26 @@ function normalizeCropCode(value: string): string {
     return normalizeToken(value).replace(/[^a-z0-9_]+/g, '').replace(/^_+|_+$/g, '');
 }
 
+/**
+ * spec: plr-d10-redesign-real-integration-2026-10-25 (lane L8b-1, Review Focus 3) — THE crop <-> schedule rule: the name
+ * is read through the founder's crop master first (any English or Marathi name, canonical or alternate — "द्राक्ष",
+ * "द्राक्षबाग", "Grapevine" all mean Grapes), then reduced to a crop code. A name the master does not know, or that two
+ * crops share, is read as typed. The server reads a season's crop name with the SAME rule (ScheduleLibrary.CropCode, over
+ * sync-contract/schemas/crop-names.json generated from this master), pinned by one shared fixture
+ * (sync-contract/tests/fixtures/crop-schedule-match.json). Before, a Marathi name read as no crop at all: the library
+ * listed nothing for it and the page fell back to the stand-in schedule.
+ */
+export function scheduleCropCode(value: string): string {
+    return canonicalCropCode(cropByName(value)?.en ?? value);
+}
+
+/**
+ * spec: plr-d10 lane L8b-1 fix round 1 (review L5) — the code of a name the rule cannot read. It is never a crop: no
+ * schedule is matched to it, not even one whose own crop reads the same (the server's ScheduleLibrary.MatchesCrop
+ * answers the same; the shared fixture's `neverMatch` list pins both).
+ */
+export const UNKNOWN_CROP = 'unknown_crop';
+
 function canonicalCropCode(value: string): string {
     const normalized = normalizeCropCode(value);
     const aliases: Record<string, string> = {
@@ -81,7 +102,7 @@ function canonicalCropCode(value: string): string {
         return aliases[normalized.slice(0, -1)];
     }
 
-    return normalized || 'unknown_crop';
+    return normalized || UNKNOWN_CROP;
 }
 
 function toDisplayName(cropCode: string): string {
@@ -305,7 +326,7 @@ function buildExpectations(
 function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropScheduleTemplate {
     const templateId = referenceTemplate.id.trim();
     const templateKey = toSafeId(templateId) || `tpl_${toSafeId(referenceTemplate.name)}`;
-    const cropCode = canonicalCropCode(referenceTemplate.cropType);
+    const cropCode = scheduleCropCode(referenceTemplate.cropType);
     const stageList: StageTemplate[] = referenceTemplate.stages.map((stage, index) => {
         const stageId = `stg_${templateKey}_${index + 1}`;
         const stageCode = inferStageCode(stage.name);
@@ -432,7 +453,7 @@ export function isFallbackTemplate(template: Pick<CropScheduleTemplate, 'id'> | 
 }
 
 function buildFallbackTemplate(cropName: string): CropScheduleTemplate {
-    const cropCode = canonicalCropCode(cropName);
+    const cropCode = scheduleCropCode(cropName);
     const existing = fallbackTemplatesByCrop.get(cropCode);
     if (existing) {
         return existing;
@@ -490,7 +511,7 @@ function rebuildIndexes(nextTemplates: CropScheduleTemplate[]): void {
     templatesByCrop = new Map<string, CropScheduleTemplate[]>();
 
     nextTemplates.forEach(template => {
-        const cropCode = canonicalCropCode(template.cropCode);
+        const cropCode = scheduleCropCode(template.cropCode);
         const bucket = templatesByCrop.get(cropCode) ?? [];
         bucket.push(template);
         templatesByCrop.set(cropCode, bucket);
@@ -539,8 +560,9 @@ export function getTemplatesForCrop(
     cropName: string,
     sortBy: TemplateCatalogSort = 'HIGHEST_ADOPTION'
 ): CropScheduleTemplate[] {
-    const cropCode = canonicalCropCode(cropName);
-    const fromCatalog = templatesByCrop.get(cropCode);
+    const cropCode = scheduleCropCode(cropName);
+    // lane L8b-1 fix round 1 (L5) — an unreadable name matches no schedule (only the stand-in, never shown as one).
+    const fromCatalog = cropCode === UNKNOWN_CROP ? undefined : templatesByCrop.get(cropCode);
     if (fromCatalog && fromCatalog.length > 0) {
         return sortTemplates(fromCatalog, sortBy);
     }

@@ -73,6 +73,7 @@ const T = {
     smsOff: ['कोड पाठवणं अजून सुरू झालेलं नाही — नंतर करा', 'Sending codes has not started yet — later'], // PROPOSED (DLT pending)
     noPhone: ['आधी फोन नंबर भरा', 'Enter a phone number first'], // PROPOSED
     tooMany: ['आज खूप कोड पाठवले — थोड्या वेळाने', 'Too many codes today — try a little later'], // PROPOSED
+    codeUsedUp: ['हा कोड आता चालणार नाही. नवीन कोड मागवा.', 'This code can no longer be used. Ask for a new code.'], // PROPOSED (fix pass 3 add-on, P5: a fresh code works today)
     tooManyTries: ['आज खूप चुकीचे कोड टाकले गेले — उद्या पुन्हा करा.', 'Too many wrong codes today — try again tomorrow.'], // PROPOSED (fix pass 1, M2)
 
     // ── link on another farm (screen 5) ──

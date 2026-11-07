@@ -8,6 +8,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Logs.Content;
+using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Logs;
@@ -59,6 +60,7 @@ public sealed class ReviseLogContentHandler(
     IEntitlementPolicy entitlementPolicy,
     IScheduleComplianceService complianceService,
     ILogger<ReviseLogContentHandler> logger,
+    IDailyRichnessDerivationService dailyRichnessDerivation,
     // The money consequence, exactly as AddLogTaskHandler: a log that leaves Verified must
     // withdraw a payout authorisation granted on the strength of it. Optional for direct tests.
     Work.Handlers.OnLogVerifiedAutoVerifyJobCard? logVerificationChanged = null)
@@ -121,7 +123,9 @@ public sealed class ReviseLogContentHandler(
     /// <summary>One attempt. <c>null</c> = another edit took this version first; try again on top.</summary>
     private async Task<Result<ReviseLogContentResultDto>?> ReviseAsync(ReviseLogContentCommand command, CancellationToken ct)
     {
-        var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
+        // lane L4b (L6 review S7) — held for this change and re-read after the hold: a confirmation committing while
+        // this edit is made is seen by the re-open below (D-46 §4), never left standing over the new version.
+        var log = await repository.GetDailyLogForChangeAsync(command.DailyLogId, ct);
         if (log is null)
         {
             return Result.Failure<ReviseLogContentResultDto>(ShramSafalErrors.DailyLogNotFound);
@@ -344,6 +348,15 @@ public sealed class ReviseLogContentHandler(
             return null;
         }
 
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3a; founder D-46) — the streak counts confirmed
+        // records only, and a correction re-opens a confirmed record (above), so the day score of the record's WORK day
+        // (log.LogDate) is rebuilt from what was just flushed: the re-open, the new version and its task lines. Inside
+        // this transaction, after the record's row hold, before the commit; database work only. Before the money step,
+        // whose savepoint must not cover it. Not a side-car: a failure fails the correction, so the two commit together
+        // or neither does.
+        await dailyRichnessDerivation.RecomputeAsync(farmId, log.LogDate, ct);
+        await repository.SaveChangesAsync(ct);
+
         var answer = await editMoney.FinishAsync(log, money, stamp, now, ct);
 
         if (staleBase)
@@ -358,7 +371,11 @@ public sealed class ReviseLogContentHandler(
             && logVerificationChanged is not null)
         {
             await logVerificationChanged.HandleAsync(
-                log.Id, log.CurrentVerificationStatus, new UserId(command.ActorUserId), ct);
+                log.Id,
+                log.CurrentVerificationStatus,
+                new UserId(command.ActorUserId),
+                new Work.Handlers.ChangeProvenance(command.ClientRequestId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash),
+                ct);
         }
 
         return Result.Success(await ForReaderAsync(answer, log, command.ActorUserId, now, ct));

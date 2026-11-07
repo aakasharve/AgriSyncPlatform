@@ -42,7 +42,7 @@
  * NOT prove what a farmer reads on the assembled screen, and "individually
  * true surfaces composing one false impression" is the entire defect class
  * here. So the real `AppHeader` (real `buildOversightModel`, real
- * `CanonicalStrip`) is mounted and the assertions read its rendered DOM.
+ * `StripSignals` since lane L4b) is mounted and the assertions read its rendered DOM.
  *
  * It used to mount `DailyLoopHero` beside it, because the defect needed two
  * surfaces to exist. The founder's 2026-08-29 ruling deleted that component
@@ -63,7 +63,6 @@ import path from 'node:path';
 import React from 'react';
 
 import { t as translate, type Language } from '../../../i18n/translations';
-import { oversightTranslations } from '../../../i18n/oversightTranslations';
 import type { SyncQueueStatus } from '../../sync/hooks/useSyncQueueStatus';
 import type { DailyLog } from '../../../domain/types/log.types';
 
@@ -102,7 +101,15 @@ vi.mock('../../sync', () => ({
 }));
 
 import AppHeader from '../../context/components/AppHeader';
-import CanonicalStrip from '../components/CanonicalStrip';
+import { publishApprovalQueue, resetApprovalQueueForTests } from '../../approval/approvalQueue';
+import { EMPTY_LABOUR_DATA } from '../../labour/labourMock';
+
+/** lane L4b — the farm's server approval list, as the server would answer it (the strip's only count). */
+const serverListOf = (n: number) => ({
+    ...EMPTY_LABOUR_DATA,
+    canConfirm: true,
+    review: Array.from({ length: n }, (_, i) => ({ id: `r${i}`, who: 'w', initial: 'w', tone: 'or' as const, detail: '2026-10-30', status: 'Draft' as const, points: {} })),
+});
 
 /** The exact settled sentence the founder saw, and had removed. Read from the
  * table, never retyped — the key survives in `dfesTranslations.ts` (approved
@@ -110,8 +117,13 @@ import CanonicalStrip from '../components/CanonicalStrip';
  * must not silently pass. */
 const SETTLED_LINE = translate('dfes.dailyLoopDaySettled', 'mr');
 
-/** The strip's own all-clear — the ONE that is allowed to remain. */
-const STRIP_REST_LINE = oversightTranslations.mr.restState;
+/**
+ * lane L4b fix round 1 (review L-3) — the strip's two rest lines. `RETIRED_ALL_CLEAR` is the old ring's rest state
+ * (founder D-3 retired it; lane L4b deleted its key). `EMPTY_LIST_LINE` is the founder's D-40 §6 line — the ONE rest
+ * line allowed to remain, and only on the farm's server list read empty.
+ */
+const RETIRED_ALL_CLEAR = 'आज पर्यन्त सर्व कामे पूर्ण आहेत';
+const EMPTY_LIST_LINE = 'मंजुरीसाठी नोंदी बाकी नाहीत';
 
 const SINGLE_FARM = [
     { farmId: 'farm-1', name: 'Arve Farm', role: 'PrimaryOwner', farmCode: 'ABC123', subscription: null },
@@ -183,10 +195,8 @@ const NOTHING_WAITING: React.ComponentProps<typeof AppHeader>['oversightData'] =
     logs: [],
     operatorNameById: {},
     plotCount: 4,
-    unverifiedCount: 0,
     yesterdayNotClosed: false,
     approvalHolderName: null,
-    dataLoaded: true,
 };
 
 /** Four waiting rows, the number the founder actually read: two decision rows
@@ -196,10 +206,8 @@ const FOUR_WAITING: React.ComponentProps<typeof AppHeader>['oversightData'] = {
     logs: [makeLog('log-1', 'op-1'), makeLog('log-2', 'op-2')],
     operatorNameById: { 'op-1': 'Ramesh', 'op-2': 'Sunita' },
     plotCount: 4,
-    unverifiedCount: 4,
     yesterdayNotClosed: true,
     approvalHolderName: null,
-    dataLoaded: true,
 };
 
 beforeEach(() => {
@@ -209,21 +217,24 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     localStorage.clear();
+    resetApprovalQueueForTests();
     queueRef.current = { ...queueRef.current, failedCount: 0, failedUploads: 0, hasLoaded: true };
     unqueueableRef.current = 0;
 });
 
 describe('the home screen carries exactly ONE all-clear claim (founder rulings 2026-08-27 and 2026-08-29)', () => {
     it('the_settled_line_cannot_render_while_the_strip_shows_a_positive_count', async () => {
+        publishApprovalQueue('farm-1', serverListOf(4));
         await act(async () => {
             renderHomeScreen(FOUR_WAITING);
         });
 
-        // The strip is genuinely reporting waiting rows — this is the founder's
-        // screen, not an empty one that would pass by accident.
-        const ringCount = screen.getByTestId('canonical-strip-waiting-count');
-        expect(Number(ringCount.textContent)).toBeGreaterThan(0);
-        expect(ringCount).toHaveTextContent('4');
+        // The strip is genuinely reporting waiting work — this is the founder's
+        // screen, not an empty one that would pass by accident. lane L4b fix round 1 (review L-3): its approval
+        // signal carries the farm's server count ("मंजुरीसाठी ४"), so an empty strip fails here.
+        expect(screen.getByTestId('strip-approval')).toHaveTextContent('मंजुरीसाठी ४');
+        expect(screen.queryByTestId('strip-rest')).toBeNull();
+        expect(screen.getByTestId('canonical-strip-waiting-button')).toBeInTheDocument();
 
         // ...and the sentence he read underneath it is nowhere on the screen.
         expect(screen.queryByText(SETTLED_LINE)).toBeNull();
@@ -238,15 +249,17 @@ describe('the home screen carries exactly ONE all-clear claim (founder rulings 2
         // the strip is in its rest state, so the old code spoke the hero's
         // sentence beneath it. That is the duplication the founder read on
         // `?preview=oversight&waiting=none`, and it is what he removed.
+        publishApprovalQueue('farm-1', serverListOf(0));
         await act(async () => {
             renderHomeScreen(NOTHING_WAITING);
         });
 
-        // The strip's all-clear IS there — this is a positive claim (its green
-        // tick), not merely an unread zero, and it is the one he kept.
-        expect(screen.getByTestId('canonical-strip-waiting-rest-tick')).toBeInTheDocument();
-        expect(screen.getByText(STRIP_REST_LINE)).toBeInTheDocument();
-        expect(screen.queryByTestId('canonical-strip-waiting-count')).toBeNull();
+        // lane L4b (founder D-3 / D-40 §6) — the strip's own all-clear is RETIRED too: it said
+        // "आज पर्यन्त सर्व कामे पूर्ण आहेत" while late work waited (D-3). With nothing to show it
+        // states only what it read: the farm's approval list, read empty (the founder's D-40 §6 line).
+        expect(screen.queryByText(RETIRED_ALL_CLEAR)).toBeNull();
+        expect(document.body.textContent).not.toMatch(/सर्व कामे पूर्ण/);
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent(EMPTY_LIST_LINE);
 
         // And it is the ONLY one. No second sentence, no second card.
         expect(screen.queryByText(SETTLED_LINE)).toBeNull();
@@ -255,14 +268,15 @@ describe('the home screen carries exactly ONE all-clear claim (founder rulings 2
     });
 
     it('the_settled_line_is_absent_while_the_strip_cannot_yet_confirm (unknown is not none)', async () => {
-        // `dataLoaded: false` — the same zeros, but nobody has read them. The
-        // strip refuses its rest state here (finding F7(a)), and there is no
-        // longer any other surface that could make the stronger claim in its
-        // place.
+        // The same zeros, but the farm's list was never read (lane L4b: the strip's only rest claim rests on that
+        // list). The strip says so (finding F7(a)), and there is no longer any other surface that could make the
+        // stronger claim in its place.
         await act(async () => {
-            renderHomeScreen({ ...NOTHING_WAITING, dataLoaded: false });
+            renderHomeScreen({ ...NOTHING_WAITING });
         });
 
+        expect(screen.getByTestId('strip-rest')).toHaveTextContent('यादी आत्ता दिसत नाही');
+        expect(screen.queryByText(EMPTY_LIST_LINE)).toBeNull();
         expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).toBeNull();
         expect(screen.queryByText(SETTLED_LINE)).toBeNull();
     });
@@ -317,132 +331,5 @@ describe('the home screen carries exactly ONE all-clear claim (founder rulings 2
     }, 20000);
 });
 
-describe('the strip\'s ring and the strip\'s words are ONE fact (founder ruling 2026-08-27)', () => {
-    // THE PROPERTY THE RING HAD TO EARN. The founder's complaint was a 70%
-    // ring beside "काही बाकी नाही" — a number and a sentence from different
-    // domains inside one glance. Moving a ring onto the strip is only safe if
-    // the number it shows IS what the sentence beside it is about.
-    const stripProps = (waitingCount: number) => ({
-        language: 'mr' as Language,
-        waitingCount,
-        dataResolved: true,
-        farmCount: 1,
-        lastSyncAt: null,
-        onToggleWaiting: vi.fn(),
-    });
-
-    it.each([1, 4, 37])(
-        'the_ring_number_and_the_strip_words_are_one_fact (waitingCount %i)',
-        async (waitingCount) => {
-            await act(async () => {
-                render(<CanonicalStrip {...stripProps(waitingCount)} />);
-            });
-
-            // The ring prints the prop verbatim...
-            expect(screen.getByTestId('canonical-strip-waiting-count'))
-                .toHaveTextContent(String(waitingCount));
-            // ...and the sentence beside it is the WAITING sentence, resolved
-            // from the same positive count. Neither the rest sentence nor any
-            // other state's may appear while the ring shows a number.
-            expect(screen.getByText(oversightTranslations.mr.waitingLabel)).toBeInTheDocument();
-            expect(screen.queryByText(STRIP_REST_LINE)).toBeNull();
-            expect(screen.queryByText(oversightTranslations.mr.unknownState)).toBeNull();
-            expect(screen.queryByTestId('canonical-strip-waiting-rest-tick')).toBeNull();
-        },
-    );
-
-    it('the_all_clear_sentence_and_a_ring_number_can_never_be_on_screen_together', async () => {
-        // The merged form of the defect: one control, one glance. If the ring
-        // ever showed a number the sentence did not account for, THIS is the
-        // assertion that fails. Swept across the whole state space the strip
-        // has, not just the two cases a demo would use.
-        const cases: Array<{ waitingCount: number; dataResolved: boolean; farmCount: number }> = [
-            { waitingCount: 0, dataResolved: true, farmCount: 1 },
-            { waitingCount: 0, dataResolved: true, farmCount: 2 },
-            { waitingCount: 0, dataResolved: false, farmCount: 1 },
-            { waitingCount: 1, dataResolved: true, farmCount: 1 },
-            { waitingCount: 4, dataResolved: false, farmCount: 1 },
-            { waitingCount: 9, dataResolved: true, farmCount: 2 },
-        ];
-
-        for (const c of cases) {
-            const label = JSON.stringify(c);
-            await act(async () => {
-                render(
-                    <CanonicalStrip
-                        language="mr"
-                        waitingCount={c.waitingCount}
-                        dataResolved={c.dataResolved}
-                        farmCount={c.farmCount}
-                        lastSyncAt={null}
-                        onToggleWaiting={vi.fn()}
-                    />,
-                );
-            });
-
-            const ringNumber = screen.queryByTestId('canonical-strip-waiting-count');
-            const allClear = screen.queryByText(STRIP_REST_LINE);
-            const restTick = screen.queryByTestId('canonical-strip-waiting-rest-tick');
-
-            // Never both.
-            expect(ringNumber !== null && allClear !== null, label).toBe(false);
-            expect(ringNumber !== null && restTick !== null, label).toBe(false);
-            // The ring shows a number if and only if the count is positive —
-            // it is the prop, never a derived or invented figure.
-            expect(ringNumber !== null, label).toBe(c.waitingCount > 0);
-            if (ringNumber) {
-                expect(ringNumber.textContent, label).toBe(String(c.waitingCount));
-            }
-
-            cleanup();
-        }
-    });
-
-    it('canonical_strip_ring_is_never_a_gauge', async () => {
-        // `waitingCount` has no denominator (`oversightSelectors.ts`: rows, not
-        // a proportion), so a part-filled ring beside it would be a fabricated
-        // percentage in the most prominent place on the screen — doctrine P4.
-        // The hero's ring is a `conic-gradient`; this one must be a solid band
-        // in every state, i.e. a ring by SHAPE and never a gauge.
-        for (const c of [
-            { waitingCount: 4, dataResolved: true, farmCount: 1, testid: 'canonical-strip-waiting-icon' },
-            { waitingCount: 0, dataResolved: true, farmCount: 1, testid: 'canonical-strip-waiting-rest-tick' },
-            { waitingCount: 0, dataResolved: false, farmCount: 1, testid: 'canonical-strip-waiting-checking-icon' },
-        ]) {
-            await act(async () => {
-                render(
-                    <CanonicalStrip
-                        language="mr"
-                        waitingCount={c.waitingCount}
-                        dataResolved={c.dataResolved}
-                        farmCount={c.farmCount}
-                        lastSyncAt={null}
-                        onToggleWaiting={vi.fn()}
-                    />,
-                );
-            });
-
-            const ring = screen.getByTestId(c.testid);
-            expect(ring.getAttribute('style') ?? '', c.testid).not.toContain('gradient');
-            expect(ring.className, c.testid).not.toContain('gradient');
-            // Round, and one solid colour — the shell of the hero's ring
-            // without its proportion.
-            expect(ring.className, c.testid).toContain('rounded-full');
-
-            cleanup();
-        }
-    });
-
-    it('the_ring_number_renders_in_the_locked_number_font', async () => {
-        // Root CLAUDE.md font rules: numerals are DM Sans, never a Devanagari
-        // face and never a generic fallback. Pinned here because the count
-        // moved node in this change — a move is exactly when an inline font
-        // style gets dropped.
-        await act(async () => {
-            render(<CanonicalStrip {...stripProps(4)} />);
-        });
-
-        expect(screen.getByTestId('canonical-strip-waiting-count'))
-            .toHaveStyle({ fontFamily: "'DM Sans', sans-serif" });
-    });
-});
+// lane L4b fix round 0 — the ring strip (`CanonicalStrip` / `StripStateRing`) is deleted: the strip is three separate
+// signals now (`StripSignals`, founder D-40 §2), tested in `features/approval/__tests__/oneApprovalPath.doors.test.tsx`.

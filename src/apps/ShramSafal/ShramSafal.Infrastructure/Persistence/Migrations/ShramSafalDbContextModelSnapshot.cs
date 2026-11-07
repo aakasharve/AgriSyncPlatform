@@ -3532,6 +3532,113 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("day_ledgers", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Finance.FarmRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("AppVersion")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("app_version");
+
+                    b.Property<string>("Basis")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("basis");
+
+                    b.Property<string>("ClientRequestId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("client_request_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("CurrencyCode")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("currency_code");
+
+                    b.Property<DateOnly>("EffectiveFrom")
+                        .HasColumnType("date")
+                        .HasColumnName("effective_from");
+
+                    b.Property<DateOnly?>("EndsOn")
+                        .HasColumnType("date")
+                        .HasColumnName("ends_on");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("ItemName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("item_name");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<Guid>("RateLineId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("rate_line_id");
+
+                    b.Property<bool>("Retired")
+                        .HasColumnType("boolean")
+                        .HasColumnName("retired");
+
+                    b.Property<string>("Season")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("season");
+
+                    b.Property<Guid?>("SuggestionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("suggestion_id");
+
+                    b.Property<string>("Unit")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("unit");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.Property<string>("WorkerCategory")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("worker_category");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "CreatedAtUtc")
+                        .HasDatabaseName("ix_farm_rates_farm_created");
+
+                    b.HasIndex("RateLineId", "Version")
+                        .IsUnique()
+                        .HasDatabaseName("ux_farm_rates_line_version");
+
+                    b.ToTable("farm_rates", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Finance.FinanceCorrection", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5461,6 +5568,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("plot_id");
 
+                    b.Property<DateOnly?>("ReferenceDate")
+                        .HasColumnType("date")
+                        .HasColumnName("reference_date");
+
                     b.Property<Guid>("ScheduleTemplateId")
                         .HasColumnType("uuid")
                         .HasColumnName("schedule_template_id");
@@ -6388,6 +6499,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Allocations");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Finance.FarmRate", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Farms.Farm", null)
+                        .WithMany()
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Identity.ShramCard", b =>

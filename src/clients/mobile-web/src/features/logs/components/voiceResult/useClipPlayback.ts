@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import { clipsForLogs, readClipAudio } from '../../../../infrastructure/voice/clipLogLink';
+import { usePlaybackSwitch } from './playbackSwitch';
 
 export interface LogClips {
     /** The clips (on this phone) of these logs, keyed by log id; a log with no clip is simply absent. */
@@ -51,6 +52,10 @@ export type AudioFactory = (url: string) => HTMLAudioElement;
 const defaultAudio: AudioFactory = url => new Audio(url);
 
 export function useClipPlayback(createAudio: AudioFactory = defaultAudio): ClipPlayback {
+    // Fix round 3 (M1): the one player behind the result screen, today's activity and the day listen obeys the playback switch. Known OFF
+    // blocks (nothing opens, nothing plays; a clip that is playing stops); ON and unknown do not.
+    const playbackAllowed = usePlaybackSwitch();
+    const switchOff = playbackAllowed === false;
     const audio = useRef<HTMLAudioElement | null>(null);
     const url = useRef<string | null>(null);
     // Opening a clip is a decrypt (async). Every start or stop takes a new ticket; a decrypt that finishes under an
@@ -79,6 +84,7 @@ export function useClipPlayback(createAudio: AudioFactory = defaultAudio): ClipP
     }, [release]);
 
     const toggle = useCallback(async (logId: string, clip: VoiceClipCacheRecord) => {
+        if (switchOff) return; // OFF: no player is ever created
         if (loading.current === logId) return; // a second tap while it opens: the first one plays
         if (playingId === logId) { stop(); return; }
         stop();
@@ -101,7 +107,11 @@ export function useClipPlayback(createAudio: AudioFactory = defaultAudio): ClipP
         setPlayingId(logId);
         setProgress(0);
         try { await a.play(); } catch { if (mine === ticket.current) stop(); } // a later tap's player is not stopped
-    }, [playingId, stop, createAudio]);
+    }, [switchOff, playingId, stop, createAudio]);
+
+    useEffect(() => {
+        if (switchOff) stop();
+    }, [switchOff, stop]);
 
     useEffect(() => {
         mounted.current = true;

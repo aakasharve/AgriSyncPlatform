@@ -17,5 +17,6 @@ public sealed record AbandonSchedulePayload(
     Guid ActorUserId,
     string? ReasonText = null,
     string? ActorRole = null,
-    string? ClientCommandId = null
+    string? ClientCommandId = null,
+    DateTime? DecidedAtUtc = null
 );

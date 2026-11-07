@@ -87,6 +87,32 @@ public sealed class GetScheduleLineageHandlerTests
             .Should().BeEquivalentTo([root.Id, strangersTeamClone.Id], "a stranger sees Public and his own only");
     }
 
+    // spec: plr-d10 lane L8b-1 fix round 1 (review L7) — whose team a caller is on is read ONCE per lineage, not once per
+    // Team template (the read is his farms, then each farm).
+    [Fact]
+    public async Task GetLineage_reads_the_callers_team_once_however_many_team_templates_it_holds()
+    {
+        var root = ScheduleTemplate.Create(Guid.NewGuid(), "Root", "S1", Now, createdByUserId: UserId.New());
+        var farmOwner = UserId.New();
+        var member = UserId.New();
+        var farm = Domain.Farms.Farm.Create(new FarmId(Guid.NewGuid()), "शेत", farmOwner, Now);
+        var teamClones = Enumerable.Range(0, 4)
+            .Select(i => root.Clone(Guid.NewGuid(), farmOwner, TenantScope.Team, $"team {i}", Now))
+            .ToList();
+
+        var repo = new FakeRepo([root, .. teamClones])
+        {
+            Farms = { [(Guid)farm.Id] = farm },
+            FarmsOf = { [member.Value] = [(Guid)farm.Id] },
+        };
+        var handler = new GetScheduleLineageHandler(repo, new FakeUserDirectory([]));
+
+        var seen = await handler.HandleAsync(new GetScheduleLineageQuery(root.Id, member.Value));
+
+        seen.Value!.Should().HaveCount(5, "the root and his farm owner's four Team templates");
+        repo.FarmIdReads.Should().Be(1, "his farms are read once for the whole lineage (L7), never once per Team template");
+    }
+
     // ---------------------------------------------------------------------------
     //  Minimal fake repo — only the lineage method is implemented
     // ---------------------------------------------------------------------------
@@ -155,8 +181,13 @@ public sealed class GetScheduleLineageHandlerTests
         public Task<List<Domain.Audit.AuditEvent>> GetAuditEventsChangedSinceAsync(DateTime sinceUtc, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Domain.Audit.AuditEvent>> GetAuditEventsForEntityAsync(Guid entityId, string entityType, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<Domain.Audit.AuditEvent>> GetAuditEventsForFarmAsync(Guid farmId, DateOnly from, DateOnly to, int limit, int offset, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) =>
-            Task.FromResult(FarmsOf.TryGetValue(userId, out var farms) ? farms : new List<Guid>());
+        public int FarmIdReads { get; private set; }
+
+        public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default)
+        {
+            FarmIdReads++;
+            return Task.FromResult(FarmsOf.TryGetValue(userId, out var farms) ? farms : new List<Guid>());
+        }
         public Task<IReadOnlyList<Application.Contracts.Dtos.SyncOperatorDto>> GetOperatorsByIdsAsync(IEnumerable<Guid> userIds, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddCropScheduleTemplateAsync(Domain.Schedules.CropScheduleTemplate template, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<Domain.Schedules.CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(AgriSync.SharedKernel.Contracts.Ids.ScheduleTemplateId templateId, CancellationToken ct = default) => throw new NotSupportedException();

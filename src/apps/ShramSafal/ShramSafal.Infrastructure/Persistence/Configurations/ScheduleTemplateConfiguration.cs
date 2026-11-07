@@ -37,9 +37,14 @@ internal sealed class ScheduleTemplateConfiguration : IEntityTypeConfiguration<S
                 v => v.HasValue ? (Guid?)v.Value.Value : null,
                 v => v.HasValue ? (UserId?)new UserId(v.Value) : null);
 
+        // spec: plr-d10 lane L8b-1 — the sentinel is Public, the column's own default. Without it EF took the CLR default
+        // (0 = Private) for "not set", left the column out of the INSERT, and the database default stored every PRIVATE
+        // schedule (a clone, an edited copy) as PUBLIC: listed to every farm and adoptable by anyone. Found by
+        // ScheduleTemplateRoutesRealPostgresTests / ScheduleAdoptRealPostgresTests (red before this line).
         builder.Property(x => x.TenantScope)
             .HasColumnName("tenant_scope")
             .HasDefaultValue(TenantScope.Public)
+            .HasSentinel(TenantScope.Public)
             .IsRequired();
 
         builder.Property(x => x.Version)

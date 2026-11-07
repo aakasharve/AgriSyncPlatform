@@ -13,10 +13,13 @@
  */
 import { clearLabourReadoutsForFarm, LABOUR_READOUT_MAX_AGE_MS } from './LabourReadoutCache';
 import { clearCachedRosterForFarm } from './LabourLocalStore';
+import { ApprovalSeenStore } from './ApprovalSeenStore';
 
 export function purgeLabourCachesForFarm(userId: string | null, farmId: string): void {
     if (userId) clearLabourReadoutsForFarm(userId, farmId);
     clearCachedRosterForFarm(farmId);
+    // lane L4b fix round 1 (L-4) — what he saw in the approval sheet for this farm goes with its labour caches.
+    if (userId) ApprovalSeenStore.purgeFarm(userId, farmId);
 }
 
 /** True only when the server READ the request and refused it as 403 (not a member). */

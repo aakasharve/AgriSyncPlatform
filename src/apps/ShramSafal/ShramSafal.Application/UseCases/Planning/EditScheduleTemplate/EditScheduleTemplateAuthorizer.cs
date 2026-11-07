@@ -30,6 +30,11 @@ namespace ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
 /// <see cref="ScopeRoleGate"/> rule for the source's scope.</item>
 /// </list>
 /// </para>
+/// <para><b>spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88).</b> The rule is now
+/// <see cref="ScheduleTemplateWriteGate.RefuseEditAsync"/>: a source the caller may not see is
+/// <see cref="ShramSafalErrors.ScheduleTemplateNotFound"/>; a Team or Licensed source needs the farm named and is that
+/// farm's schedule edited by a holder of "पीक वेळापत्रकाचे नमुने" there, or the caller's own schedule under the
+/// <see cref="ScopeRoleGate"/> rule. The wording above describes the rule it replaced, kept for the record.</para>
 /// </summary>
 public sealed class EditScheduleTemplateAuthorizer : IAuthorizationCheck<EditScheduleTemplateCommand>
 {
@@ -50,24 +55,10 @@ public sealed class EditScheduleTemplateAuthorizer : IAuthorizationCheck<EditSch
             return Result.Failure(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
-        if (source.TenantScope == TenantScope.Private)
-        {
-            // Private templates: only the author may edit.
-            if (source.CreatedByUserId is null || source.CreatedByUserId.Value.Value != command.CallerUserId)
-            {
-                return Result.Failure(ShramSafalErrors.Forbidden);
-            }
-        }
-        else
-        {
-            // Non-private: apply the scope/role gate (CEI Phase 2 §4.7).
-            if (!await ScopeRoleGate.IsAllowedAsync(
-                _repository, source.TenantScope, command.FarmId, command.CallerUserId, command.CallerRole, _clock.UtcNow, ct))
-            {
-                return Result.Failure(ShramSafalErrors.Forbidden);
-            }
-        }
-
-        return Result.Success();
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88) — the same rule as the handler's body.
+        return await ScheduleTemplateWriteGate.RefuseEditAsync(
+                _repository, source, command.FarmId, command.CallerUserId, command.CallerRole, _clock.UtcNow, ct) is { } refused
+            ? Result.Failure(refused)
+            : Result.Success();
     }
 }

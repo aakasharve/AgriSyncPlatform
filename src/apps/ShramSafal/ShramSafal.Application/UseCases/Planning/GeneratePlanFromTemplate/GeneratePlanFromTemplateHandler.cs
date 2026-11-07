@@ -46,6 +46,14 @@ public sealed class GeneratePlanFromTemplateHandler(
             return Result.Failure<PlanGenerationResultDto>(ShramSafalErrors.Forbidden);
         }
 
+        // spec: plr-d10 lane L8b-1 (founder D-73) — generating a season's plan is planning work: the primary owner, or a seat
+        // he gave "कामाचं नियोजन करणे" (PlanWork). Membership alone (the rule that stood here) is not enough.
+        if (!await Services.ScheduleChangeGate.MayChangeAsync(
+                repository, (Guid)cropCycle.FarmId, command.ActorUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<PlanGenerationResultDto>(ShramSafalErrors.Forbidden);
+        }
+
         // spec: plr-d10 lane MU-4 fix pass 1 (H1) — a seat on chosen plots writes only on his plots (REST and sync alike).
         if (await Services.PlotScopeGate.RefuseAsync(
                 repository, (Guid)cropCycle.FarmId, cropCycle.PlotId, command.ActorUserId, clock.UtcNow, ct) is { } outsidePlots)
@@ -54,11 +62,17 @@ public sealed class GeneratePlanFromTemplateHandler(
         }
 
         var utcNow = clock.UtcNow;
+
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H4) — a season's generated plan is its MAKER's private record. It
+        // was written Public with no author (Create's defaults), so one request put a schedule into every farm's library
+        // (and, as the first row, replaced the built-in one there). Public rows come from the backend seed only.
         var template = Domain.Planning.ScheduleTemplate.Create(
             idGenerator.New(),
             command.TemplateName,
             command.Stage,
-            utcNow);
+            utcNow,
+            createdByUserId: new UserId(command.ActorUserId),
+            tenantScope: Domain.Planning.TenantScope.Private);
 
         var plannedActivities = new List<Domain.Planning.PlannedActivity>(command.Activities.Count);
 

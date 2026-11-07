@@ -88,8 +88,10 @@ public sealed class EditScheduleTemplateHandlerTests
             NewStage: null,
             ClientCommandId: null));
 
+        // lane L8b-1 fix round 1 (review H3) — another account's Private schedule is one he may not even see: it is
+        // answered exactly like an unknown id (E4), no longer as a Forbidden that tells him it exists.
         Assert.False(result.IsSuccess);
-        Assert.Equal("ShramSafal.Forbidden", result.Error.Code);
+        Assert.Equal("ShramSafal.ScheduleTemplateNotFound", result.Error.Code);
         Assert.Empty(repo.AddedTemplates);
         Assert.Equal(0, repo.SaveCalls);
     }

@@ -37,8 +37,33 @@
 import { SessionStore } from './SessionStore';
 import { setActiveDatabaseName } from './activeDatabaseName';
 import { UNIDENTIFIED_DATABASE_NAME } from './userDatabaseName';
+import { logger } from '../observability/Logger';
+
+type SessionEndListener = () => void;
+const sessionEndListeners = new Set<SessionEndListener>();
+
+/**
+ * Fix round 4 (OPS-1 L2): per-person state held in memory (the phone's knowledge of the playback switch) registers here to be
+ * forgotten when a session ends or the account changes, so the next person on a shared handset never inherits it.
+ * Returns the unsubscribe function. Deletes no farmer record.
+ */
+export function onFarmerSessionEnded(listener: SessionEndListener): () => void {
+    sessionEndListeners.add(listener);
+    return () => { sessionEndListeners.delete(listener); };
+}
+
+/** Runs the registered forget-callbacks (sign-out, and a sign-in as a DIFFERENT user). A failing listener never blocks the others. */
+export function notifyFarmerSessionEnded(): void {
+    for (const l of sessionEndListeners) {
+        // One listener's failure must not keep another person's state alive, so the loop goes on; the failure is named, not hidden.
+        try { l(); } catch (error) {
+            logger.warn('A session-end listener failed; the others still ran.', { component: 'endFarmerSession', error: String(error) });
+        }
+    }
+}
 
 export function endFarmerSessionLocally(): void {
     SessionStore.clearCurrentFarmId();
     setActiveDatabaseName(UNIDENTIFIED_DATABASE_NAME);
+    notifyFarmerSessionEnded();
 }

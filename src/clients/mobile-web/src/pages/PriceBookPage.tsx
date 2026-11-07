@@ -1,177 +1,174 @@
 /**
- * spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — "दरपत्रक", the real Price Book in the
- * founder-approved look (PLR-D9 `FinanceTools.tsx`). Everything it had stays: every rate with its kind,
- * price, unit and from-date, and "नवीन दर" (kind, item, unit, price, from-date) saved through the SAME
- * `financeCommandService.createPriceBookItem` with the same fields — a blank unit is still stored as
- * `unit`. Added from the approved look: show one kind at a time, and "दर बदला" on a rate, which fills the
- * form so a NEW rate can be written from a new date. There is no in-place edit (the service has none);
- * the older rate stays listed, as a price book should.
+ * spec: plr-d10-redesign-real-integration-2026-10-25 — lane RATE-1 part A (founder D-72 "Own farm prices" = D-17 / D-43).
+ * "दरपत्रक" — HIS FARM's own price and rate list, kept on the server (one permanent list per farm, with history).
  *
- * Said plainly, because it is true today (founder ruling D2 pending): a written rate is not kept. The
- * `set_price_config` payload is refused before it reaches the outbox, and the next read of the price book
- * replaces the list with the server's copy. So the page never says "saved" — it says the rate was written
- * and that keeping it is still to come. A price is required: a blank one used to be stored as ₹ 0.
+ * What it shows: every rate of the farm the server lets this person read — what it is for (कशासाठी), the rate per unit
+ * or per day / hour / acre / trip / task, the kind (वस्तूचा भाव / कामाचा दर), for whom, the season and dates — and each
+ * rate's history (who, when, old → new). A seat that does not read work rates (they are pay: see wages) gets the rule
+ * line and "—", never ₹ 0; a seat without money never opens this page (the route shows the money rule instead, MU-3).
  *
- * spec: plr-d10 lane F99 fix pass 1 (D-72) — the price list is ONE list for every farm, and only the platform admin may
- * write it (the server refuses anyone else, REST and push). So the write controls ("दर बदला", the "नवीन दर" form and its
- * "लवकरच" line) are shown only to the platform admin (`usePlatformAdmin`, fails closed); everyone else reads the list and
- * is told, in one line, that it is one list ShramSafal keeps (P5: no control that does nothing).
+ * Who writes: the farm's primary account holder (part A; the server's one gate decides, `/finance/farm-rates`
+ * `mayWrite`). A change makes a NEW version and the old one stays in the history; "हा दर बंद करा" makes a stopped
+ * version, never a deletion. Writes go through the outbox, so they work with no internet (P10): an unsent change says
+ * so, and one the server refused says why in Marathi and stays on the phone.
+ *
+ * What it never does: rewrite a bill, a cost or a wage, or compute a wage (D-17). ShramSafal's shared list is offered
+ * only as "ShramSafal सुचवलेला दर", to confirm into his own list.
+ *
+ * Replaced (lane RATE-1): the platform admin's write form for the SHARED list. It never kept a rate (its payload was
+ * refused before the outbox — pre-flight T9) and the shared list keeps its own admin doors; showing it would be a control
+ * that does nothing (P5).
  */
 import React, { useMemo, useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import { AppRoute } from '../types';
-import { financeService } from '../features/finance/financeService';
-import { financeCommandService } from '../features/finance/financeCommandService';
-import { MoneyCategory, PriceBookItem } from '../features/finance/finance.types';
-import { getDateKey } from '../core/domain/services/DateKeyService';
 import { MoneyPage } from '../features/finance/components/MoneyPage';
-import { CATEGORY_LABEL, FINANCE_TITLE, MONEY_CATEGORIES, formatMoneyDate, rupees } from '../features/finance/moneyLabels';
-import { BigButton, Chip, ChoiceChips, GlassCard, SectionHead, Soon, Tap, TextField } from '../shared/components/ui/placeUi';
-import { usePlatformAdmin } from '../core/session/usePlatformAdmin';
+import { ChoiceChips, GlassCard, Tap } from '../shared/components/ui/placeUi';
+import { useOptionalLanguage } from '../i18n/LanguageContext';
+import { useOptionalFarmContext } from '../core/session/FarmContext';
+import { backgroundSyncWorker } from '../infrastructure/sync/BackgroundSyncWorker';
+import { SetFarmRateCommand, type SetFarmRateInput } from '../application/usecases/sync/SetFarmRateCommand';
+import { farmRateWords, queuedRateLine } from '../features/finance/farmRates/farmRateWords';
+import { useFarmRates } from '../features/finance/farmRates/useFarmRates';
+import { linesOf, type FarmRateLine } from '../features/finance/farmRates/farmRateLines';
+import { FarmRateCard } from '../features/finance/farmRates/FarmRateCard';
+import { FarmRateForm, type FarmRateFormStart } from '../features/finance/farmRates/FarmRateForm';
+import { RateOffers } from '../features/finance/farmRates/RateOffers';
+import { perWhat, rateRupees } from '../features/finance/farmRates/farmRateFormat';
+import type { FarmRateKind } from '../features/finance/farmRates/farmRateSchema';
 
 interface PriceBookPageProps {
     currentRoute: AppRoute;
     onNavigate: (route: AppRoute) => void;
     onBack?: () => void;
+    /** The farm open now (the router's active farm); else the farm context's. */
+    farmId?: string | null;
+    /** The role the server last told this phone (/me/context): stands in only until the server answers "may write". */
+    isPrimaryHolder?: boolean;
+    selfUserId?: string | null;
+    operatorNameById?: ReadonlyMap<string, string>;
 }
 
-const CATEGORY_CHIPS = MONEY_CATEGORIES.map(c => [c, CATEGORY_LABEL[c]] as const);
-const SHOW_CHIPS = [['all', 'सर्व'] as const, ...CATEGORY_CHIPS];
+type Show = 'all' | FarmRateKind;
 
-/** What a stored placeholder means on screen: `unit` is "no unit given", `Price Config` is "no name sent". */
-const unitShown = (unit: string) => (unit && unit !== 'unit' ? unit : '');
-const nameShown = (name: string) => (name && name !== 'Price Config' ? name : 'नाव लिहिलेलं नाही');
+const PriceBookPage: React.FC<PriceBookPageProps> = ({
+    currentRoute, onNavigate, onBack, farmId, isPrimaryHolder, selfUserId = null, operatorNameById,
+}) => {
+    const language = useOptionalLanguage()?.language ?? 'mr';
+    const words = farmRateWords(language);
+    const farmContext = useOptionalFarmContext();
+    const farm = farmId ?? farmContext?.currentFarmId ?? null;
+    const view = useFarmRates(farm, { isPrimaryHolder, selfUserId });
+    const [show, setShow] = useState<Show>('all');
+    const [form, setForm] = useState<{ start: FarmRateFormStart; changing: boolean } | null>(null);
+    const [failed, setFailed] = useState(false);
 
-const PriceBookPage: React.FC<PriceBookPageProps> = ({ currentRoute, onNavigate, onBack }) => {
-    const [name, setName] = useState('');
-    const [unit, setUnit] = useState('');
-    const [price, setPrice] = useState('');
-    const [category, setCategory] = useState<MoneyCategory>('Input');
-    const [effectiveFrom, setEffectiveFrom] = useState(getDateKey());
-    const [refresh, setRefresh] = useState(0);
-    const [show, setShow] = useState<MoneyCategory | 'all'>('all');
-    const [changing, setChanging] = useState<PriceBookItem | null>(null);
-    const [written, setWritten] = useState(false);
-    const mayWritePrices = usePlatformAdmin();
+    const lines = useMemo(() => linesOf(view.rows), [view.rows]);
+    const shown = lines.filter(l => show === 'all' || l.current.kind === show);
+    const showChips = [['all', words.all] as const, ['Input', words.kind.Input] as const, ['Work', words.kind.Work] as const];
+    const nameOf = (userId: string) =>
+        userId && userId === selfUserId ? words.you : operatorNameById?.get(userId) || undefined;
 
-    // `refresh` and `currentRoute` are re-read triggers: the service reads a mutable store.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const items = useMemo(() => financeService.getPriceBook(), [refresh, currentRoute]);
-    const list = items.filter(item => show === 'all' || item.category === show);
-
-    const parsedPrice = Number(price);
-    const canSave = name.trim() !== '' && price.trim() !== '' && Number.isFinite(parsedPrice) && parsedPrice > 0;
-
-    const resetForm = () => {
-        setName('');
-        setPrice('');
-        setUnit('');
-        setChanging(null);
+    const queue = (input: SetFarmRateInput) => {
+        setFailed(false);
+        SetFarmRateCommand.enqueue(input).then(
+            () => {
+                setForm(null);
+                void backgroundSyncWorker.triggerNow();
+                view.reload();
+            },
+            // Refused before it reached the outbox: said on screen, the form stays filled (nothing is lost).
+            () => setFailed(true),
+        );
     };
 
-    const addItem = () => {
-        if (!canSave) return;
-        financeCommandService.createPriceBookItem({
-            name: name.trim(),
-            category,
-            defaultUnit: unit.trim() || 'unit',
-            defaultUnitPrice: parsedPrice,
-            effectiveFrom,
-            isActive: true
+    const startChange = (line: FarmRateLine) => {
+        const r = line.current;
+        setForm({
+            changing: true,
+            start: {
+                rateLineId: line.rateLineId, kind: r.kind, itemName: r.itemName, unit: r.unit ?? undefined, basis: r.basis,
+                workerCategory: r.workerCategory ?? undefined, amount: r.amount, season: r.season ?? undefined,
+                endsOn: r.endsOn ?? undefined,
+            },
         });
-        resetForm();
-        setWritten(true);
-        setShow('all');
-        setRefresh(v => v + 1);
     };
 
-    const startChange = (item: PriceBookItem) => {
-        setChanging(item);
-        setName(item.name === 'Price Config' ? '' : item.name);
-        setCategory(item.category);
-        setUnit(unitShown(item.defaultUnit));
-        setPrice(String(item.defaultUnitPrice));
-        setEffectiveFrom(getDateKey());
-        setWritten(false);
-        if (typeof document !== 'undefined') {
-            document.getElementById('price-form')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-        }
+    const retire = (line: FarmRateLine) => {
+        if (!farm) return;
+        queue({ farmId: farm, rateLineId: line.rateLineId, change: 'retire' });
     };
 
     return (
-        <MoneyPage title={FINANCE_TITLE['finance-price-book']} testId="fin-prices" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
-            {mayWritePrices ? (
-                <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">ठरलेले दर इथे एकदा लिहून ठेवा — मजुरी, खत-औषध, यंत्र, इंधन.</p>
-            ) : (
-                // PROPOSED words (lane F99 fix pass 1, D-72).
-                <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700" data-testid="price-read-only">
-                    हे दरपत्रक सगळ्या शेतांसाठी एकच आहे. ते फक्त श्रमसफल बदलू शकतं.
-                </p>
+        <MoneyPage title={words.title} backLabel={words.back} testId="fin-prices" currentRoute={currentRoute} onNavigate={onNavigate} onBack={onBack}>
+            <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700" data-testid={view.mayWrite ? 'rate-intro' : 'rate-read-only'}>
+                {view.mayWrite ? words.intro : words.readOnly}
+            </p>
+            <p className="m-0 px-1 text-[13px] font-semibold leading-snug text-stone-500" data-testid="rate-never-rewrites">{words.neverRewrites}</p>
+
+            {/* fix round 1 (F1) — a seat that reads none of the farm's rates gets the ShramSafal rule, not the list. */}
+            {view.seeInputPrices === false && (
+                <GlassCard testId="rate-all-withheld">
+                    <p className="m-0 text-[14px] font-bold text-stone-700">{words.allWithheld}</p>
+                    <p className="m-0 mt-1 text-[15px] font-extrabold text-stone-500">{words.withheldAmount}</p>
+                </GlassCard>
             )}
 
-            <ChoiceChips items={SHOW_CHIPS} value={show} onPick={setShow} testId="price-show" />
+            {/* fix round 1 (F5) — rows this phone received and could not read are said, never silently missing. */}
+            {(view.unreadable ?? 0) > 0 && (
+                <p className="m-0 px-1 text-[13.5px] font-bold text-amber-800" role="status" data-testid="rate-unreadable">{words.unreadable}</p>
+            )}
 
-            {list.map(item => (
-                <GlassCard key={item.id} testId={`price-row-${item.id}`}>
-                    <div className="flex items-baseline justify-between gap-2">
-                        <p className="m-0 min-w-0 text-[15.5px] font-extrabold text-stone-900 [overflow-wrap:anywhere]">{nameShown(item.name)}</p>
-                        <p className="m-0 shrink-0 text-[16px] font-extrabold text-stone-900">
-                            {rupees(item.defaultUnitPrice)}
-                            {unitShown(item.defaultUnit) && <span className="text-[13px] font-bold text-stone-500"> / {unitShown(item.defaultUnit)}</span>}
+            {view.seeInputPrices !== false && <ChoiceChips items={showChips} value={show} onPick={setShow} testId="rate-show" />}
+
+            {view.seeInputPrices !== false && view.seeWorkRates === false && (
+                <GlassCard testId="rate-work-withheld">
+                    <p className="m-0 text-[14px] font-bold text-stone-700">{words.workWithheld}</p>
+                    <p className="m-0 mt-1 text-[15px] font-extrabold text-stone-500" data-testid="rate-work-withheld-amount">{words.withheldAmount}</p>
+                </GlassCard>
+            )}
+
+            {view.queued.map(q => (
+                <GlassCard key={q.payload.farmRateId} testId={`rate-queued-${q.payload.farmRateId}`}>
+                    {q.payload.itemName && q.payload.amount !== undefined && q.payload.basis && q.payload.kind && (
+                        <p className="m-0 text-[15px] font-extrabold text-stone-900">
+                            {q.payload.itemName} — {rateRupees(q.payload.amount)} {perWhat({ kind: q.payload.kind, unit: q.payload.unit, basis: q.payload.basis }, words)}
                         </p>
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
-                        <Chip tone="violet">{CATEGORY_LABEL[item.category]}</Chip>
-                        {formatMoneyDate(item.effectiveFrom) && <span className="text-[12.5px] font-bold text-stone-500">{formatMoneyDate(item.effectiveFrom)} पासून</span>}
-                        {mayWritePrices && (
-                            <Tap onClick={() => startChange(item)} data-testid={`price-change-${item.id}`}
-                                className="flex min-h-[40px] items-center gap-1 rounded-full bg-white px-3 text-[13.5px] font-extrabold text-emerald-800 ring-1 ring-emerald-300">
-                                <Pencil size={14} aria-hidden="true" />दर बदला
-                            </Tap>
-                        )}
-                    </div>
+                    )}
+                    <p className={`m-0 mt-1 text-[13.5px] font-bold ${q.state === 'refused' ? 'text-rose-800' : 'text-stone-600'}`} role="status">
+                        {queuedRateLine(q.state, q.errorCode, words)}
+                    </p>
                 </GlassCard>
             ))}
-            {list.length === 0 && (
-                <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[14px] font-bold text-stone-500" data-testid="price-empty">
-                    {items.length === 0 ? 'अजून एकही दर लिहिलेला नाही.' : 'या प्रकारचा दर अजून लिहिलेला नाही.'}
+
+            {shown.map(line => (
+                <FarmRateCard key={line.rateLineId} line={line} words={words} language={language} mayWrite={view.mayWrite}
+                    nameOf={nameOf} onChange={startChange} onRetire={retire} />
+            ))}
+            {!view.loading && view.seeInputPrices !== false && shown.length === 0 && (
+                <p className="m-0 rounded-2xl bg-white/70 p-4 text-center text-[14px] font-bold text-stone-500" data-testid="rate-empty">
+                    {view.failed ? words.couldNotOpen : lines.length === 0 ? words.empty : words.emptyKind}
                 </p>
             )}
 
-            {mayWritePrices && <div id="price-form" className="space-y-3">
-                <SectionHead
-                    title={changing ? `दर बदला — ${nameShown(changing.name)}` : 'नवीन दर'}
-                    hint={changing ? 'नवा दर आणि तो कधीपासून ते लिहा. आधीचा दर यादीत तसाच राहील.' : 'प्रकार निवडा, मग नाव, दर आणि कधीपासून'}
-                />
-                <GlassCard testId="price-form">
-                    <ChoiceChips items={CATEGORY_CHIPS} value={category} onPick={setCategory} testId="price-cat" />
-                    <div className="mt-3 space-y-2">
-                        <TextField label="कशाचा दर?" value={name} onChange={v => { setName(v); setWritten(false); }} placeholder="उदा. फवारणी मजूर" testId="price-item" />
-                        <div className="grid grid-cols-2 gap-2">
-                            <TextField label="दर (₹)" type="number" value={price} onChange={v => { setPrice(v); setWritten(false); }} testId="price-rate" />
-                            <TextField label="कशामागे?" value={unit} onChange={setUnit} placeholder="दिवस, किलो" testId="price-unit" />
-                        </div>
-                        <label className="block">
-                            <span className="text-[13.5px] font-extrabold text-stone-700">कधीपासून</span>
-                            <input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)} data-testid="price-date"
-                                className="mt-1 min-h-[52px] w-full rounded-xl bg-white px-3 text-[17px] font-bold text-stone-900 outline-none ring-1 ring-stone-300 focus:ring-2 focus:ring-emerald-500" />
-                        </label>
-                        <BigButton onClick={addItem} disabled={!canSave} testId="price-save"><Plus size={20} aria-hidden="true" />दर यादीत लिहा</BigButton>
-                        {changing && (
-                            <Tap onClick={resetForm} data-testid="price-change-cancel"
-                                className="flex min-h-[48px] w-full items-center justify-center rounded-full bg-white text-[15px] font-extrabold text-stone-700 ring-1 ring-stone-300">
-                                रद्द करा
-                            </Tap>
-                        )}
-                        {written && (
-                            <p className="m-0 text-center text-[14px] font-extrabold text-emerald-800" role="status" data-testid="price-written">
-                                दर यादीत लिहिला ✓ — पण अजून कायम जतन होत नाही.
-                            </p>
-                        )}
-                    </div>
-                </GlassCard>
-                <Soon what="लिहिलेला दर कायम जतन होणं आणि शेतातल्या इतर फोनवर दिसणं" />
-            </div>}
+            {view.mayWrite && farm && !form && (
+                <>
+                    <RateOffers words={words} language={language} suggestions={view.suggestions} drafts={view.drafts}
+                        onTakeSuggestion={s => setForm({ changing: false, start: { itemName: s.itemName, amount: s.unitPrice, suggestionId: s.id } })}
+                        onTakeDraft={d => setForm({ changing: false, start: { itemName: d.itemName, amount: d.amount, unit: d.unit, effectiveFrom: d.effectiveFrom } })} />
+                    <Tap onClick={() => setForm({ changing: false, start: {} })} data-testid="rate-new"
+                        className="flex min-h-[52px] w-full items-center justify-center rounded-full bg-emerald-700 text-[16px] font-extrabold text-white">
+                        {words.newRate}
+                    </Tap>
+                </>
+            )}
+            {view.mayWrite && farm && form && (
+                <FarmRateForm key={form.start.rateLineId ?? form.start.suggestionId ?? 'new'} farmId={farm} words={words}
+                    start={form.start} changing={form.changing} newLineId={uuidv4} onSave={queue} onCancel={() => setForm(null)} />
+            )}
+            {failed && (
+                <p className="m-0 text-center text-[14px] font-extrabold text-rose-800" role="alert" data-testid="rate-failed">{words.refusedOther}</p>
+            )}
         </MoneyPage>
     );
 };

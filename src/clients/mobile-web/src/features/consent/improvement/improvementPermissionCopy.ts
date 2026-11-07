@@ -42,10 +42,11 @@ export const IMPROVEMENT_COPY: Record<SwitchLanguage, ImprovementCopy> = {
 };
 
 /**
- * The "keep my original voice" switch (founder D-31, with D-2's title). Its meaning now
- * explicitly includes authorised reviewers on this farm, so a choice made against these words
- * is sent with this version; the server keeps it beside the choice
- * (`user_consent_state.full_history_journal_wording_version`). Lane L6's reviewer playback
- * must honour only a choice made against these words.
+ * The playback switch, "Allow playback of my original voice" / "मूळ आवाज ऐकू देणे" (founder D-50 choice 2, CTO call D-101; the names are
+ * PROPOSED). The words a new choice is made against: "Allow me and authorized reviewers on this farm to play back my original
+ * voice." with the founder's sentence "ShramSafal keeps the original sound of every record as proof; this switch only decides
+ * whether it can be played." The server keeps this version beside the choice
+ * (`user_consent_state.full_history_journal_wording_version`). The server still accepts the earlier version
+ * `voice-keep-2026-10-30.1` for playback (same listeners), so an ON given before the rename keeps working.
  */
-export const VOICE_RETENTION_WORDING_VERSION = 'voice-keep-2026-10-30.1';
+export const VOICE_RETENTION_WORDING_VERSION = 'voice-keep-2026-11-06.1';

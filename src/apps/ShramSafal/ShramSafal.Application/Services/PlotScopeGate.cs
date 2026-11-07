@@ -72,8 +72,12 @@ public static class PlotScopeGate
 
     /// <summary>
     /// The same question for a crop season on <paramref name="farmId"/>: its plot. The season is read only for a seat
-    /// that may read by place; one not found asks nothing (the handler answers), and one on ANOTHER farm is refused for
-    /// such a seat (E4: a season id never carries his write onto a plot of another farm).
+    /// that may read by place; for such a seat a season on ANOTHER farm is refused (E4: a season id never carries his write
+    /// onto a plot of another farm), and so is one the farm's scope cannot see at all
+    /// (<see cref="ShramSafalErrors.CropCycleNotFound"/>; lane L8b-1 fix round 1, review H1: it used to answer "allowed",
+    /// and under the row policy another farm's season IS one it cannot see). Every other seat has no plot rule to break, so
+    /// this asks it nothing; whether the season is the farm's is its door's own question (the planned-work doors:
+    /// <see cref="ScheduleChangeGate.RefusePlannedWorkAsync"/>; cost and job card: their CropCycleNotFound checks).
     /// </summary>
     public static async Task<Error?> RefuseCycleAsync(
         IShramSafalRepository repository, Guid farmId, Guid cropCycleId, Guid userId, DateTime atUtc, CancellationToken ct = default)
@@ -88,7 +92,7 @@ public static class PlotScopeGate
         var cycle = await repository.GetCropCycleByIdAsync(cropCycleId, ct);
         if (cycle is null)
         {
-            return null;
+            return ShramSafalErrors.CropCycleNotFound;
         }
 
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, userId, atUtc, ct);

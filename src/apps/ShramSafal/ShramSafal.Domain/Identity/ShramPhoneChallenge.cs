@@ -65,6 +65,21 @@ public sealed class ShramPhoneChallenge : Entity<Guid>
     /// <summary>Checks a code read back by the worker. Every wrong try counts; a right one spends the challenge.</summary>
     public ChallengeOutcome TryConsume(string? code, ChallengePurpose purpose, DateTime atUtc)
     {
+        if (RefuseBeforeCounting(purpose, atUtc) is { } refused)
+        {
+            return refused;
+        }
+
+        Attempts++;
+        return CompareCounted(code, atUtc);
+    }
+
+    /// <summary>
+    /// Fix pass 3 (review R1) — what refuses a try before it is counted: spent, the wrong purpose, expired, or its tries
+    /// used up. <c>null</c>: the try may be counted (the server counts it in one database statement, then compares).
+    /// </summary>
+    public ChallengeOutcome? RefuseBeforeCounting(ChallengePurpose purpose, DateTime atUtc)
+    {
         if (ConsumedAtUtc is not null)
         {
             return ChallengeOutcome.Spent;
@@ -80,12 +95,15 @@ public sealed class ShramPhoneChallenge : Entity<Guid>
             return ChallengeOutcome.Expired;
         }
 
-        if (Attempts >= MaxAttempts)
-        {
-            return ChallengeOutcome.TooManyTries;
-        }
+        return Attempts >= MaxAttempts ? ChallengeOutcome.TooManyTries : null;
+    }
 
-        Attempts++;
+    /// <summary>
+    /// Fix pass 3 (review R1) — compares the code once this try has been counted (the count is not repeated here). A
+    /// right code spends the challenge.
+    /// </summary>
+    public ChallengeOutcome CompareCounted(string? code, DateTime atUtc)
+    {
         var normalized = (code ?? string.Empty).Trim();
         if (normalized.Length != CodeLength
             || !CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Hash(Id, normalized)), Encoding.ASCII.GetBytes(CodeHash)))

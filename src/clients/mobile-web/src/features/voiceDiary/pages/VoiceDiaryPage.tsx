@@ -89,7 +89,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
     const [consentSince, setConsentSince] = useState<string | null>(null);
 
     const consent = useFullHistoryJournalConsent();
-    const { granted: consentGranted, loaded: consentLoaded, reload: reloadConsent } = consent;
+    const { granted: consentGranted, loaded: consentLoaded, known: consentKnown, reload: reloadConsent } = consent;
     // Once he picks a day (or a month) himself, the page stops moving his choice.
     const pickedByHim = useRef(false);
     const pickDate = useCallback((dateKey: string) => {
@@ -337,6 +337,7 @@ const VoiceDiaryPage: React.FC<VoiceDiaryPageProps> = ({
                         locale={locale}
                         dateKey={selectedDateKey}
                         clips={clipsForSelectedDate}
+                        playbackAllowed={consentKnown ? consentGranted : undefined}
                     />
                 </>
             )}

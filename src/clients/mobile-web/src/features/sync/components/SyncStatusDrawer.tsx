@@ -9,6 +9,8 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { voiceNotesWords } from '../../voiceDiary/waiting/voiceNotesWords';
+import { syncDrawerWords, mutationLabel, reasonForRow } from './syncDrawerWords';
+import { useUnsentRecordCount } from '../../approval/unsentRecords';
 
 interface Props {
      isOpen: boolean;
@@ -31,6 +33,11 @@ interface Props {
 const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts }) => {
      const status = useSyncQueueStatus();
      const language = useOptionalLanguage()?.language;
+     // lane L4b (language-strict) — every word in his language; with no language provider at all (a bare mount)
+     // the sheet keeps its original English.
+     const words = syncDrawerWords(language ?? 'en');
+     // D-40 §2 — the same "पाठवणे बाकी" number the strip shows: this phone's records on their way.
+     const unsentRecords = useUnsentRecordCount();
      /**
       * FINAL REVIEW F-2 — records this session knows reached NO queue.
       *
@@ -148,12 +155,12 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
      };
 
      const getRelativeTime = (isoDate: string | null): string => {
-          if (!isoDate) return 'Never';
+          if (!isoDate) return words.never;
           const diff = Date.now() - new Date(isoDate).getTime();
-          if (diff < 10000) return 'Just now';
-          if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
-          if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-          return `${Math.floor(diff / 3600000)}h ago`;
+          if (diff < 10000) return words.justNow;
+          if (diff < 60000) return words.secondsAgo(Math.floor(diff / 1000));
+          if (diff < 3600000) return words.minutesAgo(Math.floor(diff / 60000));
+          return words.hoursAgo(Math.floor(diff / 3600000));
      };
 
      useBackDismiss(isOpen, onClose);
@@ -177,8 +184,8 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
       */
      const nothingOutstanding = totalPending === 0 && totalFailed === 0 && unqueueableCount === 0;
      const aiStatusParts = [
-          aiJobStatusCounts.pending > 0 ? `${aiJobStatusCounts.pending} voice recording${aiJobStatusCounts.pending > 1 ? 's' : ''} pending` : null,
-          aiJobStatusCounts.processing > 0 ? `${aiJobStatusCounts.processing} voice recording${aiJobStatusCounts.processing > 1 ? 's' : ''} processing` : null,
+          aiJobStatusCounts.pending > 0 ? words.recordingsPending(aiJobStatusCounts.pending) : null,
+          aiJobStatusCounts.processing > 0 ? words.recordingsProcessing(aiJobStatusCounts.processing) : null,
      ].filter((part): part is string => Boolean(part));
 
      return (
@@ -191,9 +198,9 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                     <div className="flex items-center justify-between p-4 border-b border-slate-100">
                          <div className="flex items-center gap-2">
                               <div className={`w-2.5 h-2.5 rounded-full ${status.isOnline ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                              <h3 className="text-lg font-black text-slate-800">Sync Status</h3>
+                              <h3 className="text-lg font-black text-slate-800">{words.title}</h3>
                          </div>
-                         <button onClick={onClose} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200">
+                         <button onClick={onClose} aria-label={words.close} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200">
                               <X size={16} className="text-slate-500" />
                          </button>
                     </div>
@@ -207,22 +214,22 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                          <div className={`flex items-center gap-3 p-3 rounded-xl border ${status.isOnline ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
                               {status.isOnline ? <Wifi size={16} className="text-emerald-600" /> : <WifiOff size={16} className="text-red-600" />}
                               <span className={`text-sm font-bold ${status.isOnline ? 'text-emerald-700' : 'text-red-700'}`}>
-                                   {status.isOnline ? 'Connected' : 'Offline — changes saved locally'}
+                                   {status.isOnline ? words.online : words.offline}
                               </span>
                          </div>
 
                          {/* 2. Pending Changes */}
-                         {totalPending > 0 && (
-                              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                         {totalPending > 0 && unsentRecords > 0 && (
+                              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200" data-testid="sync-unsent">
                                    <div className="flex items-center gap-2 mb-1">
                                         <Clock size={14} className="text-amber-600" />
                                         <span className="text-sm font-bold text-amber-700">
-                                             {totalPending} change{totalPending > 1 ? 's' : ''} waiting to sync
+                                             {words.waiting(unsentRecords)}
                                         </span>
                                    </div>
                                    <div className="text-[10px] text-amber-600 font-medium space-x-3">
-                                        {status.pendingCount > 0 && <span>{status.pendingCount} mutations</span>}
-                                        {status.pendingUploads > 0 && <span>{status.pendingUploads} uploads</span>}
+                                        {status.pendingCount > 0 && <span>{words.changes(status.pendingCount)}</span>}
+                                        {status.pendingUploads > 0 && <span>{words.uploads(status.pendingUploads)}</span>}
                                         {/* Lane OF (founder 2026-10-31, register F77): never "AI" — plain words. */}
                                         {status.pendingAiJobs > 0 && <span data-testid="sync-waiting-recordings">{voiceNotesWords(language).syncLine(status.pendingAiJobs)}</span>}
                                    </div>
@@ -251,10 +258,10 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                                  exactly at two digits. */}
                                              <span className="truncate text-sm font-bold text-red-700">
                                                   {needsReviewCount > 0 && resendableCount > 0
-                                                       ? `${resendableCount} can be sent · ${needsReviewCount} need you`
+                                                       ? words.canBeSentAndNeedYou(resendableCount, needsReviewCount)
                                                        : needsReviewCount > 0
-                                                            ? `${needsReviewCount} need you`
-                                                            : `${resendableCount} can be sent again`}
+                                                            ? words.needYou(needsReviewCount)
+                                                            : words.canBeSent(resendableCount)}
                                              </span>
                                         </div>
                                         {resendableCount > 0 && (
@@ -264,7 +271,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                                   data-testid="sync-retry-all"
                                                   className="ml-2 shrink-0 px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
                                              >
-                                                  {isRetrying ? 'Retrying...' : 'Retry All'}
+                                                  {isRetrying ? words.retrying : words.retryAll}
                                              </button>
                                         )}
                                    </div>
@@ -274,15 +281,16 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                              return (
                                                   <div key={item.clientRequestId} className="flex items-center justify-between p-3 bg-white">
                                                        <div className="min-w-0 flex-1">
-                                                            <p className="text-xs font-bold text-slate-700 truncate">{item.mutationType}</p>
-                                                            <p className="text-[10px] text-red-500 font-medium truncate">{item.lastError || 'Unknown error'}</p>
+                                                            <p className="text-xs font-bold text-slate-700 truncate">{mutationLabel(item.mutationType, language ?? 'en')}</p>
+                                                            {/* lane L4b — the reason by its CODE, in his language; never the server's English in Marathi. */}
+                                                            <p className="text-[10px] text-red-500 font-medium truncate" data-testid={`sync-reason-${item.clientRequestId}`}>{reasonForRow(item, language ?? 'en')}</p>
                                                             {item.remedy === 'NEEDS_REVIEW' && (
                                                                  // Re-sending these bytes unchanged is KNOWN to
                                                                  // fail — the server refused this row on its
                                                                  // merits. A "Retry" here would be a second
                                                                  // painted door beside the first one.
                                                                  <p className="text-[10px] font-medium text-slate-500">
-                                                                      The server would not accept this. Open it to fix, resend or discard.
+                                                                      {words.refusedHint}
                                                                  </p>
                                                             )}
                                                        </div>
@@ -293,7 +301,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                                                       data-testid={`sync-review-${item.clientRequestId}`}
                                                                       className="ml-2 shrink-0 px-2 py-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100"
                                                                  >
-                                                                      Review
+                                                                      {words.review}
                                                                  </button>
                                                             )
                                                        ) : (
@@ -303,7 +311,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                                                  data-testid={`sync-retry-${item.clientRequestId}`}
                                                                  className="ml-2 shrink-0 px-2 py-1 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50"
                                                             >
-                                                                 {isRetryingRow ? 'Sending...' : 'Retry'}
+                                                                 {isRetryingRow ? words.sending : words.retry}
                                                             </button>
                                                        )}
                                                   </div>
@@ -319,7 +327,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                                   data-testid="sync-toggle-all-stuck"
                                                   className="w-full p-2 text-center text-[10px] font-bold text-slate-500 hover:bg-slate-50"
                                              >
-                                                  {showAllStuck ? 'Show fewer' : `+${stuck.length - 5} more`}
+                                                  {showAllStuck ? words.showFewer : words.more(stuck.length - 5)}
                                              </button>
                                         )}
                                         {status.failedUploads > 0 && (
@@ -330,7 +338,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                              // it is guaranteed on screen, because failedUploads > 0
                                              // is one of the two terms in `resendableCount`.
                                              <p className="p-3 text-[10px] font-medium text-slate-500 bg-white">
-                                                  {status.failedUploads} photo upload{status.failedUploads > 1 ? 's' : ''} also stopped. "Retry All" sends {status.failedUploads > 1 ? 'them' : 'it'} again.
+                                                  {words.photosStopped(status.failedUploads)}
                                              </p>
                                         )}
                                    </div>
@@ -342,9 +350,9 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                               <div className="flex items-center gap-3 p-3 rounded-xl bg-blue-50 border border-blue-200">
                                    <Upload size={14} className="text-blue-600" />
                                    <span className="text-sm font-medium text-blue-700">
-                                        {status.pendingUploads > 0 && `${status.pendingUploads} uploading`}
+                                        {status.pendingUploads > 0 && words.uploading(status.pendingUploads)}
                                         {status.pendingUploads > 0 && status.failedUploads > 0 && ' • '}
-                                        {status.failedUploads > 0 && `${status.failedUploads} failed`}
+                                        {status.failedUploads > 0 && words.uploadFailed(status.failedUploads)}
                                    </span>
                               </div>
                          )}
@@ -365,7 +373,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                    <AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-600" />
                                    <div className="min-w-0">
                                         <p className="text-sm font-bold text-amber-700">
-                                             {unqueueableCount} record{unqueueableCount > 1 ? 's' : ''} will not reach your farm records
+                                             {words.unqueueable(unqueueableCount)}
                                         </p>
                                         {/* NO BUTTON, deliberately. There is no queue row, no
                                             worker and no retry behind these, so any control here
@@ -374,7 +382,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                             (finding B3). "Sync Now" below does not reach them
                                             either, and does not claim to. */}
                                         <p className="text-[10px] font-medium text-amber-600">
-                                             Saved on this phone. Nothing will send {unqueueableCount > 1 ? 'them' : 'it'}.
+                                             {words.unqueueableHint(unqueueableCount)}
                                         </p>
                                    </div>
                               </div>
@@ -384,14 +392,14 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                          {nothingOutstanding && status.syncedCount > 0 && (
                               <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                                    <CheckCircle size={14} className="text-emerald-600" />
-                                   <span className="text-sm font-bold text-emerald-700">All synced</span>
+                                   <span className="text-sm font-bold text-emerald-700">{words.allSynced}</span>
                               </div>
                          )}
 
                          {/* Last Synced */}
                          <div className="text-center text-[10px] text-slate-400 font-medium pt-2">
-                              Last synced: {getRelativeTime(status.lastSyncAt)}
-                              {status.syncedCount > 0 && ` • ${status.syncedCount} applied`}
+                              {words.lastSynced} {getRelativeTime(status.lastSyncAt)}
+                              {status.syncedCount > 0 && ` • ${words.applied(status.syncedCount)}`}
                          </div>
                     </div>
 
@@ -404,7 +412,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                               className="w-full py-3 bg-slate-800 text-white font-bold rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 transition-all active:scale-[0.98]"
                          >
                               <RefreshCw size={16} className={isSyncing ? 'animate-spin' : ''} />
-                              {isSyncing ? 'Syncing...' : 'Sync Now'}
+                              {isSyncing ? words.syncing : words.syncNow}
                          </button>
                     </div>
                </div>

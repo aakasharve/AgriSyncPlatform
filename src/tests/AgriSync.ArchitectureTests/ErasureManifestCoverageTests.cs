@@ -27,14 +27,15 @@ public sealed class ErasureManifestCoverageTests
     // tables. A genuine "no disposition needed" claim (same rationale family as the RLS
     // exemption allowlist). NOTE: the 4 names crop_schedules / planned_activities /
     // schedule_templates / template_activities are NOT ssf CreateTable names and are
-    // deliberately ABSENT — the real schedule tables are the crop_schedule_* /
-    // schedule_subscription* / schedule_migration_events names below.
+    // deliberately ABSENT — the real schedule tables are the crop_schedule_* names below.
+    // spec: plr-d10 lane L8b-1 — schedule_subscriptions / schedule_migration_events left this
+    // baseline: they are a farm's choices (farm_id; the migration event names its actor and may
+    // carry his reason words), so ErasureWorker.cs now names each with a gate-4 disposition.
     private static readonly HashSet<string> NoFarmerDataStructural = new(StringComparer.Ordinal)
     {
         "outbox_messages", "cost_categories", "ai_provider_capabilities", "mode_policy",
         "diarization_policy", "feature_flags", "ai_provider_spend_daily", "dpa_registry",
         "crop_schedule_templates", "crop_schedule_prescribed_tasks",
-        "schedule_subscriptions", "schedule_migration_events",
         "organizations", "organization_memberships", "organization_farm_scopes",
         "test_protocols", "test_recommendations", "test_instances",
         "erasure_requests", "export_requests", "retention_sweep_runs", "breach_incidents",

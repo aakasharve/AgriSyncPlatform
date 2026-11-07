@@ -827,6 +827,47 @@ describe('AdoptSchedulePayload', () => {
         });
         expect(r.success).toBe(false);
     });
+    // lane L8b-1 — the plot's day 0: optional (1.0.17 never sends it, P11), a calendar day when present.
+    it('accepts a referenceDate day and its absence', () => {
+        const base = {
+            farmId: VALID_GUID_A,
+            plotId: VALID_GUID_B,
+            cropCycleId: VALID_GUID_C,
+            scheduleTemplateId: VALID_GUID_D,
+            actorUserId: VALID_GUID_E,
+        };
+        expect(payloads.AdoptSchedulePayload.safeParse({ ...base, referenceDate: '2026-09-15' }).success).toBe(true);
+        expect(payloads.AdoptSchedulePayload.safeParse(base).success).toBe(true);
+    });
+    it('rejects a referenceDate that is not YYYY-MM-DD', () => {
+        for (const referenceDate of ['15-09-2026', '2026-09-15T00:00:00Z', '', 20260915]) {
+            const r = payloads.AdoptSchedulePayload.safeParse({
+                farmId: VALID_GUID_A,
+                plotId: VALID_GUID_B,
+                cropCycleId: VALID_GUID_C,
+                scheduleTemplateId: VALID_GUID_D,
+                actorUserId: VALID_GUID_E,
+                referenceDate,
+            });
+            expect(r.success, String(referenceDate)).toBe(false);
+        }
+    });
+    // lane L8b-1 (founder D-73) — when the farmer made the change on the phone: optional, an ISO instant with offset.
+    it('accepts a decidedAtUtc instant and rejects one that is not ISO with an offset', () => {
+        const base = {
+            farmId: VALID_GUID_A,
+            plotId: VALID_GUID_B,
+            cropCycleId: VALID_GUID_C,
+            scheduleTemplateId: VALID_GUID_D,
+            actorUserId: VALID_GUID_E,
+        };
+        expect(payloads.AdoptSchedulePayload.safeParse({ ...base, decidedAtUtc: '2026-11-04T09:30:00.000Z' }).success).toBe(true);
+        expect(payloads.AdoptSchedulePayload.safeParse({ ...base, decidedAtUtc: '2026-11-04' }).success).toBe(false);
+        expect(payloads.AbandonSchedulePayload.safeParse({
+            farmId: VALID_GUID_A, plotId: VALID_GUID_B, cropCycleId: VALID_GUID_C, actorUserId: VALID_GUID_E,
+            decidedAtUtc: '2026-11-04T09:30:00+05:30',
+        }).success).toBe(true);
+    });
 });
 
 describe('MigrateSchedulePayload', () => {
@@ -851,6 +892,18 @@ describe('MigrateSchedulePayload', () => {
             actorUserId: VALID_GUID_E,
         });
         expect(r.success).toBe(false);
+    });
+    it('accepts a referenceDate day (lane L8b-1) and rejects a malformed one', () => {
+        const base = {
+            farmId: VALID_GUID_A,
+            plotId: VALID_GUID_B,
+            cropCycleId: VALID_GUID_C,
+            newScheduleTemplateId: VALID_GUID_D,
+            reason: 'Other',
+            actorUserId: VALID_GUID_E,
+        };
+        expect(payloads.MigrateSchedulePayload.safeParse({ ...base, referenceDate: '2026-09-15' }).success).toBe(true);
+        expect(payloads.MigrateSchedulePayload.safeParse({ ...base, referenceDate: '2026/09/15' }).success).toBe(false);
     });
 });
 
@@ -1047,5 +1100,63 @@ describe('lane PRV — SetRecordAudiencePayload', () => {
         expect(names({ ...base, audience: 'Selected', selectedUserIds: [] } as never)).toBe(false);
         expect(names({ ...base, audience: 'OnlyMe', selectedUserIds: [VALID_GUID_B] } as never)).toBe(false);
         expect(names({ ...base, audience: 'Selected', selectedUserIds: [VALID_GUID_B, VALID_GUID_B] } as never)).toBe(false);
+    });
+});
+
+// spec: plr-d10 lane RATE-1 part A (founder D-72 "Own farm prices") — set_farm_rate: one change to one rate of a farm's list.
+describe('lane RATE-1 — SetFarmRatePayload', () => {
+    const input = {
+        farmRateId: VALID_GUID_A,
+        rateLineId: VALID_GUID_B,
+        farmId: VALID_GUID_A,
+        change: 'set',
+        kind: 'Input',
+        itemName: 'युरिया',
+        unit: 'पोते',
+        basis: 'PerUnit',
+        amount: 1350,
+        currencyCode: 'INR',
+        effectiveFrom: '2026-11-01',
+        changedAtUtc: VALID_ISO,
+    };
+    const work = {
+        ...input,
+        kind: 'Work',
+        itemName: 'फवारणी',
+        unit: undefined,
+        basis: 'PerDay',
+        workerCategory: 'बाई मजूर',
+        season: 'खरीप',
+        endsOn: '2027-03-31',
+    };
+
+    it('accepts an input price, a work rate, a confirmed suggestion and a value-less stop', () => {
+        expect(payloads.SetFarmRatePayload.safeParse(input).success).toBe(true);
+        expect(payloads.SetFarmRatePayload.safeParse(work).success).toBe(true);
+        expect(payloads.SetFarmRatePayload.safeParse({ ...input, suggestionId: VALID_GUID_B }).success).toBe(true);
+        expect(payloads.SetFarmRatePayload.safeParse({
+            farmRateId: VALID_GUID_A, rateLineId: VALID_GUID_B, farmId: VALID_GUID_A, change: 'retire', changedAtUtc: VALID_ISO,
+        }).success).toBe(true);
+    });
+
+    it('refuses an unknown change, kind or basis, a zero or negative amount, a bad date and a version from the phone', () => {
+        expect(payloads.SetFarmRatePayload.safeParse({ ...input, change: 'delete' }).success).toBe(false);
+        expect(payloads.SetFarmRatePayload.safeParse({ ...input, kind: 'Wage' }).success).toBe(false);
+        expect(payloads.SetFarmRatePayload.safeParse({ ...input, basis: 'PerKg' }).success).toBe(false);
+        expect(payloads.SetFarmRatePayload.safeParse({ ...input, amount: 0 }).success).toBe(false);
+        expect(payloads.SetFarmRatePayload.safeParse({ ...input, amount: -5 }).success).toBe(false);
+        expect(payloads.SetFarmRatePayload.safeParse({ ...input, effectiveFrom: '01-11-2026' }).success).toBe(false);
+        expect(payloads.SetFarmRatePayload.strict().safeParse({ ...input, version: 2 }).success).toBe(false);
+    });
+
+    it("a 'set' carries its values: an input names its unit, work names a basis and no unit", async () => {
+        const { setFarmRateCarriesItsValues: whole } = await import('../schemas/payloads/set_farm_rate.zod');
+        expect(whole(input as never)).toBe(true);
+        expect(whole(work as never)).toBe(true);
+        expect(whole({ ...input, unit: undefined } as never)).toBe(false);
+        expect(whole({ ...input, basis: 'PerDay' } as never)).toBe(false);
+        expect(whole({ ...work, unit: 'दिवस' } as never)).toBe(false);
+        expect(whole({ ...input, amount: undefined } as never)).toBe(false);
+        expect(whole({ change: 'retire' } as never)).toBe(true);
     });
 });

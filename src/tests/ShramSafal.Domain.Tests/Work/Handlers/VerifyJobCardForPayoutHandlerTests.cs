@@ -113,7 +113,57 @@ public sealed class VerifyJobCardForPayoutHandlerTests
         result.Error.Code.Should().Contain("JobCardRoleNotAllowed");
     }
 
+    /// <summary>
+    /// lane L4b fix round 1 (review L-1) — after D-33 this is the only door to "ready to pay", so the record it decides on
+    /// is read HELD (<c>GetDailyLogForChangeAsync</c>, the row lock), never as a plain read a शंका could slip under.
+    /// </summary>
+    [Fact]
+    public async Task VerifyForPayout_reads_the_linked_record_under_the_row_hold()
+    {
+        var (job, log) = BuildCompletedJobCardWithLog(logVerified: true);
+        var repo = new HoldSpyRepo(job, log, AgronomistGuid, AppRole.Agronomist);
+        repo.ReviewMoneyHolders.Add(AgronomistGuid);
+        var handler = new VerifyJobCardForPayoutHandler(repo, new FixedClock(Now.AddHours(5)));
+
+        var result = await handler.HandleAsync(new VerifyJobCardForPayoutCommand(job.Id, AgronomistUserId, ClientCommandId: null));
+
+        result.IsSuccess.Should().BeTrue();
+        repo.HeldReads.Should().Be(1, "the record is held for the payout decision");
+        repo.PlainReads.Should().Be(0, "no unheld read of the record decides the payout");
+    }
+
     // ─── Test doubles ────────────────────────────────────────────────────────
+
+    /// <summary>Counts which read of the record the handler makes; the hold is answered without the plain read.</summary>
+    private sealed class HoldSpyRepo(JobCard jobCard, DailyLog dailyLog, Guid callerGuid, AppRole callerRole)
+        : StubShramSafalRepository, ShramSafal.Application.Ports.IShramSafalRepository
+    {
+        public int HeldReads { get; private set; }
+
+        public int PlainReads { get; private set; }
+
+        public override Task<JobCard?> GetJobCardByIdAsync(Guid jobCardId, CancellationToken ct = default)
+            => Task.FromResult<JobCard?>(jobCard.Id == jobCardId ? jobCard : null);
+
+        public override Task<DailyLog?> GetDailyLogByIdAsync(Guid dailyLogId, CancellationToken ct = default)
+        {
+            PlainReads++;
+            return Task.FromResult<DailyLog?>(dailyLog.Id == dailyLogId ? dailyLog : null);
+        }
+
+        Task<DailyLog?> ShramSafal.Application.Ports.IShramSafalRepository.GetDailyLogForChangeAsync(Guid dailyLogId, CancellationToken ct)
+        {
+            HeldReads++;
+            return Task.FromResult<DailyLog?>(dailyLog.Id == dailyLogId ? dailyLog : null);
+        }
+
+        public override Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default)
+            => Task.FromResult<AppRole?>(userId == callerGuid ? callerRole : null);
+
+        public override Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default) => Task.CompletedTask;
+
+        public override Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
 
     private sealed class FixedClock(DateTime utcNow) : IClock
     {

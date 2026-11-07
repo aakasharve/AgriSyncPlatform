@@ -5,6 +5,7 @@
 // view used ONLY by AuthProvider's 'unreachable' boot branch. It must never
 // carry, invent or persist a token.
 import { describe, it, expect, beforeEach } from 'vitest';
+import { onFarmerSessionEnded } from '../endFarmerSession';
 import { PENDING_REVOKE_MAX_AGE_MS } from '../RefreshSessionStore';
 import { PENDING_LOGOUT_MAX_AGE_MS } from '../PendingLogoutStore';
 import { SERVER_REFRESH_LIFETIME_MS } from '../refreshCredentialLife';
@@ -103,5 +104,21 @@ describe('getPresenceSession', () => {
         expect(PENDING_LOGOUT_MAX_AGE_MS).toBe(SERVER_REFRESH_LIFETIME_MS);
         expect(PENDING_REVOKE_MAX_AGE_MS).toBeGreaterThan(PRESENCE_MAX_AGE_MS);
         expect(PENDING_LOGOUT_MAX_AGE_MS).toBeGreaterThan(PRESENCE_MAX_AGE_MS);
+    });
+});
+
+describe('fix round 4 (OPS-1 L2): in-memory per-person state is forgotten when the person changes', () => {
+    it('a sign-in as a DIFFERENT user notifies; the same user refreshing does not', () => {
+        let forgotten = 0;
+        const off = onFarmerSessionEnded(() => { forgotten += 1; });
+        setAuthSession({ userId: 'u-1', accessToken: 't', expiresAtUtc: iso(60_000) });
+        expect(forgotten).toBe(0); // nobody on record before: nothing to forget
+        setAuthSession({ userId: 'u-1', accessToken: 't2', expiresAtUtc: iso(60_000) });
+        expect(forgotten).toBe(0); // boot refresh of the same person keeps what is known
+        setAuthSession({ userId: 'u-2', accessToken: 't3', expiresAtUtc: iso(60_000) });
+        expect(forgotten).toBe(1); // another person on the same handset
+        clearAuthSession();
+        expect(forgotten).toBe(2); // sign-out
+        off();
     });
 });

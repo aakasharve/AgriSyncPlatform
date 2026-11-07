@@ -23,19 +23,25 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             ["pre-flowering"] = 2,
         };
 
-    public async Task<Result<IReadOnlyList<ScheduleTemplateDto>>> HandleAsync(CancellationToken ct = default)
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 fix round 1 (review H2) — <paramref name="callerUserId"/>'s library: the rows he may see,
+    /// else the built-in catalog (<see cref="Services.ScheduleLibrary.ListingForAsync"/>). The reference route and the pull
+    /// both answer it, and adoption reads exactly it. It used to be every row of every account, for everyone.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<ScheduleTemplateDto>>> HandleAsync(Guid callerUserId, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
 
         var dbTemplates = await repository.GetScheduleTemplatesAsync(ct);
-        if (dbTemplates.Count == 0)
-        {
-            return Result.Success<IReadOnlyList<ScheduleTemplateDto>>(ReferenceDataCatalog.ScheduleTemplates);
-        }
-
-        var mapped = MapFromDb(dbTemplates);
-        return Result.Success<IReadOnlyList<ScheduleTemplateDto>>(mapped);
+        return Result.Success(await Services.ScheduleLibrary.ListingForAsync(repository, dbTemplates, callerUserId, ct));
     }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 — a library from the rows ONE caller may see (never all rows: see
+    /// <see cref="Services.ScheduleLibrary.ListingForAsync"/>): the rows when there are any, else the built-in catalog.
+    /// </summary>
+    public static IReadOnlyList<ScheduleTemplateDto> Listing(IReadOnlyList<ScheduleTemplate> rows) =>
+        rows.Count == 0 ? ReferenceDataCatalog.ScheduleTemplates : MapFromDb(rows);
 
     public static IReadOnlyList<CropTypeDto> BuildCropTypes(IReadOnlyList<ScheduleTemplateDto> templates)
     {

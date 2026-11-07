@@ -12,7 +12,7 @@ import { render, screen, waitFor, act, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AxiosError, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios';
 
-vi.mock('../../../infrastructure/storage/endFarmerSession', () => ({ endFarmerSessionLocally: vi.fn() }));
+vi.mock('../../../infrastructure/storage/endFarmerSession', () => ({ endFarmerSessionLocally: vi.fn(), notifyFarmerSessionEnded: vi.fn(), onFarmerSessionEnded: vi.fn(() => () => undefined) }));
 
 import { AuthProvider, useAuth } from '../AuthProvider';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';

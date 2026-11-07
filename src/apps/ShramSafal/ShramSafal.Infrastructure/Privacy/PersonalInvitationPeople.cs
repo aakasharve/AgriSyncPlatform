@@ -33,10 +33,14 @@ UPDATE ssf.farm_personal_invitations
    AND ((status = 'Waiting' AND expires_at_utc < @cutoff)
      OR (status <> 'Waiting' AND COALESCE(ended_at_utc, claimed_at_utc, expires_at_utc) < @cutoff))";
 
+    // Orchestrator ruling (MU-2 fix round 1, concern 6): an invitation still WAITING for the erased person is withdrawn as
+    // well, so it never stays live as a nameless code. Both CASEs read the row's old status. The farm's record of it stays.
     private const string ForgetNumbersSql = @"
 UPDATE ssf.farm_personal_invitations
-   SET person_name = NULL, invited_phone_e164 = NULL
- WHERE (person_name IS NOT NULL OR invited_phone_e164 IS NOT NULL)
+   SET person_name = NULL, invited_phone_e164 = NULL,
+       status = CASE WHEN status = 'Waiting' THEN 'Withdrawn' ELSE status END,
+       ended_at_utc = CASE WHEN status = 'Waiting' THEN now() ELSE ended_at_utc END
+ WHERE (person_name IS NOT NULL OR invited_phone_e164 IS NOT NULL OR status = 'Waiting')
    AND (invited_phone_e164 = ANY(@phones) OR field_operator_id = ANY(@records))";
 
     /// <summary>Clears the person on every invitation that ended or expired more than <see cref="KeptAfterEnd"/> ago.</summary>
