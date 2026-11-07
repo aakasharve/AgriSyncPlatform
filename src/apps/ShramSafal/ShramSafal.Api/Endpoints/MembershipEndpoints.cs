@@ -392,6 +392,32 @@ public static class MembershipEndpoints
         })
         .WithName("GetFarmLabourPermissions");
 
+        // spec: plr-d10 lane MU-1 (MU design §11.2) - the owner's kept-work card: work the server kept for him (refused for want of
+        // an authority, arrived after the authority behind it ended). The PRIMARY account holder alone; anyone else is refused (403).
+        group.MapGet("/farms/{farmId:guid}/kept-work", async Task<IResult> (
+            Guid farmId,
+            ClaimsPrincipal user,
+            ShramSafal.Application.UseCases.Memberships.KeptWork.GetKeptWorkHandler handler,
+            ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var userId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // The farm's scope first (a stranger is refused with no farm GUC ever set - E4), then the primary-holder rule.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, userId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            var result = await handler.HandleAsync(farmId, userId, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetFarmKeptWork");
+
         group.MapPut("/farms/{farmId:guid}/labour-permissions/{targetUserId:guid}", async Task<IResult> (
             Guid farmId,
             Guid targetUserId,

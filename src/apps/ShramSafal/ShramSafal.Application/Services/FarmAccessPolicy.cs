@@ -216,6 +216,26 @@ public static class FarmAuthorityGate
         return FarmAccessPolicy.Holds(access, authority, atUtc);
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane MU-1 (register F95) - may this person WRITE A RATE on the farm (a job card names one)? He must hold
+    /// review money (the primary account holder always does) AND it must be in force on his seat: a कामगار or a स्वतःचं काम seat
+    /// reads only his own records, so a stored review-money bit does nothing there (<see cref="FarmAuthorities.NotInForce"/>).
+    /// </summary>
+    public static async Task<bool> MayWriteRateAsync(
+        IShramSafalRepository repository, Guid farmId, Guid userId, DateTime atUtc, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        if (farmId == Guid.Empty || userId == Guid.Empty)
+        {
+            return false;
+        }
+
+        var access = await repository.GetFarmAccessForUserAsync(farmId, userId, ct);
+        return FarmAccessPolicy.Holds(access, FarmAuthority.ReviewMoney, atUtc)
+            && (access!.IsRegistrant
+                || !FarmAuthorities.NotInForce(access.Role, access.PlotScope).Contains(FarmAuthority.ReviewMoney));
+    }
+
     /// <summary>The primary account holder of this farm (D-26: people and permissions are his alone).</summary>
     public static async Task<bool> IsPrimaryAccountHolderAsync(
         IShramSafalRepository repository,

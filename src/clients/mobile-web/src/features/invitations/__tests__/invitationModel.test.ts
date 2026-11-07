@@ -54,7 +54,7 @@ describe('the three questions edit one grant', () => {
         expect(chosen.plotIds).toEqual(['p1', 'p3']);
         expect(withPlots(chosen, 'AllPlots', ['p1']).plotIds).toEqual([]);
         expect(notInForce(chosen)).toEqual(['EditFarmSetup']);
-        expect(notInForce(presetGrant('Worker'))).toEqual(['EditFarmSetup', 'SeeMoney', 'SeeWages']);
+        expect(notInForce(presetGrant('Worker'))).toEqual(['EditFarmSetup', 'SeeMoney', 'SeeWages', 'ReviewMoney']);
     });
 
     // AssignWork is the authority the server does not enforce yet (it waits for L8c); PlanWork became enforced with lane

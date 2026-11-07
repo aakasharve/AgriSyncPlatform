@@ -45,7 +45,10 @@ public sealed record PersonalInvitationView(
     string? ClaimedByName = null,
     string? ClaimedByPhoneLast4 = null,
     bool ClaimedByAnotherNumber = false,
-    string? ClaimOutcome = null);
+    string? ClaimOutcome = null,
+    // spec: plr-d10 lane MU-1 (MU-2 review N-4) - ADDITIVE, last: the invitation ended because the PERSON's data was erased
+    // (stored Withdrawn with nobody as the one who ended it). The owner's list says so; it is not "taken back" by him.
+    bool PersonErased = false);
 
 /// <summary>Fix round 1 — who claimed an invitation, as the owner's list shows him.</summary>
 public sealed record InvitationClaimant(string? Name, string? PhoneLast4, bool AnotherNumber, string? Outcome);
@@ -110,7 +113,8 @@ public static class PersonalInvitationProjection
         ClaimedByName: claimant?.Name,
         ClaimedByPhoneLast4: claimant?.PhoneLast4,
         ClaimedByAnotherNumber: claimant?.AnotherNumber ?? false,
-        ClaimOutcome: claimant?.Outcome);
+        ClaimOutcome: claimant?.Outcome,
+        PersonErased: invitation.Status == PersonalInvitationStatus.Withdrawn && invitation.EndedByUserId is null);
 
     /// <summary>
     /// The card. Fix round 1 (review L-11): a code is often forwarded, so the card says only what its holder needs — the

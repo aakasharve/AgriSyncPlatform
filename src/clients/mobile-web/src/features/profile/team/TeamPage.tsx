@@ -40,6 +40,7 @@ import { useFarmWorkers } from '../hooks/useFarmWorkers';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import { InviteBuilderSheet } from '../../invitations/InviteBuilderSheet';
 import { SentInvitations } from '../../invitations/SentInvitations';
+import { useInvitedFor } from '../../invitations/useInvitedFor';
 import { invitationCopy } from '../../invitations/invitationCopy';
 import {
     approveInvitationClaim, invitationRefusal, type InvitationRefusal, type PersonalInvitationView,
@@ -83,6 +84,8 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
     const [showing, setShowing] = useState<PersonalInvitationView | null>(null);
     const [sentKey, setSentKey] = useState(0);
     const farmName = useOptionalFarmContext()?.currentFarm?.name ?? '';
+    // lane MU-1 (MU-2 N-6): who an invitation was for, on the request card of whoever opened it.
+    const invitedFor = useInvitedFor(decidesPeople ? farmId : null, sentKey);
     const builderWorkers = useFarmWorkers(builderOpen && decidesPeople ? farmId : null).workers;
     const invite = invitationCopy(language);
     // Fix round 1 (L-3): the one tap's refusal is said, in the server's own reason; the reload then shows what it holds.
@@ -138,6 +141,7 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                         {requests.map(row => (
                             <JoinRequestCard key={row.userId} row={row} name={nameFor(row, operators)} busy={busy(row.userId)}
                                 farmPlots={farmPlots}
+                                invitedFor={row.personalInvitationId ? invitedFor.get(row.personalInvitationId) : undefined}
                                 onLetInFromInvitation={row.personalInvitationId
                                     ? () => void letInFromInvitation(row.personalInvitationId as string)
                                     : undefined}
@@ -211,6 +215,7 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                                         authorityAccess={maySetAuthorities ? {
                                             authorities: row.authorities ?? [],
                                             notInForce: row.authoritiesNotInForce ?? [],
+                                            plotsChosen: (row.effectivePlotScope ?? row.plotScope) === 'ChosenPlots',
                                             saving: roster.savingUserId === row.userId,
                                             onChange: next => void roster.setAuthorities(row.userId, next),
                                         } : undefined}

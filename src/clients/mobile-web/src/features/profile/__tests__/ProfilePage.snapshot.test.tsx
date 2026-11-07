@@ -31,6 +31,8 @@ import { describe, it, expect, vi } from 'vitest';
 // ---- Hook mocks (must be hoisted by Vitest before importing ProfilePage) ----
 vi.mock('../../../i18n/LanguageContext', () => ({
     useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), t: (k: string) => k }),
+    // lane MU-1: the Setup Hub now draws "my farms and responsibilities" (reads the language softly).
+    useOptionalLanguage: () => ({ language: 'en', setLanguage: vi.fn(), t: (k: string) => k }),
     LanguageProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 

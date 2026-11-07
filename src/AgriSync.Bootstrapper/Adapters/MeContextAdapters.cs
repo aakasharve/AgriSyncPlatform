@@ -165,10 +165,26 @@ public sealed class FarmMembershipSnapshotReader(
                     x.m.AuthorityExpiresAtJson,
                     // spec: plr-d10 lane MU-4 fix pass 1 (M7) — which plots the seat covers.
                     x.m.PlotScope,
+                    Label = x.m.Label,
+                    // spec: plr-d10 lane MU-1 - the chosen plots (names are read below, in the same user scope).
+                    ScopePlotIds = EF.Property<List<Guid>>(x.m, "_scopePlotIds"),
                     IsRegistrant = x.f.OwnerUserId == userId,
                 })
                 .ToListAsync(token),
             ct);
+
+        // spec: plr-d10 lane MU-1 - the NAMES of the plots a chosen-plots seat covers, for the relationship card.
+        var chosenIds = rows.SelectMany(r => r.ScopePlotIds ?? []).Distinct().ToList();
+        var plotNames = chosenIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await RlsIdentityScope.RunAsUserAsync(
+                ssfDb,
+                userId.Value,
+                token => ssfDb.Plots.AsNoTracking()
+                    .Where(p => chosenIds.Contains(p.Id))
+                    .Select(p => new { p.Id, p.Name })
+                    .ToDictionaryAsync(p => p.Id, p => p.Name, token),
+                ct);
 
         if (rows.Count == 0)
         {
@@ -255,7 +271,16 @@ public sealed class FarmMembershipSnapshotReader(
                 Authorities: held
                     .Select(a => new MeAuthoritySnapshot(a.Key.ToString(), a.Value))
                     .ToList(),
-                IsPrimaryAccountHolder: primary);
+                IsPrimaryAccountHolder: primary,
+                // spec: plr-d10 lane MU-1 - the registrant and the primary owner's label always cover every plot
+                // (FarmAccess.CoveredPlotIds); every other seat is as stored.
+                PlotScope: r.IsRegistrant || r.Role == AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner
+                    ? nameof(ShramSafal.Domain.Farms.MembershipPlotScope.AllPlots)
+                    : r.PlotScope.ToString(),
+                PlotNames: r.PlotScope == ShramSafal.Domain.Farms.MembershipPlotScope.ChosenPlots
+                    ? (r.ScopePlotIds ?? []).Where(plotNames.ContainsKey).Select(id => plotNames[id]).ToList()
+                    : [],
+                Label: r.Label?.ToString());
         }).ToList();
     }
 

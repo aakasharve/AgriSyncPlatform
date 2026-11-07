@@ -159,6 +159,12 @@ export interface FarmNameBoardProps {
      *  this is false, and only becomes a button when there is a second farm to
      *  reach. */
     canSwitch?: boolean;
+    /**
+     * spec: plr-d10 lane MU-1 (MU design §6) - the small secondary relationship word under the farm name ("जबाबदार", "कामगार" ...),
+     * shown when the person is not the primary owner or holds two or more farms. It takes the place of the subtitle line; the
+     * farm name stays primary. Absent = the board is exactly as before (a single-farm owner's board).
+     */
+    relationWord?: string | null;
 }
 
 /**
@@ -176,6 +182,7 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
     showSubtitle = true,
     disabled = false,
     canSwitch = false,
+    relationWord = null,
 }) => {
     const rowRef = React.useRef<HTMLSpanElement>(null);
     const markRef = React.useRef<HTMLSpanElement>(null);
@@ -336,9 +343,9 @@ const FarmNameBoard: React.FC<FarmNameBoardProps> = ({
                                         <span
                                             data-testid="farm-nameboard-subtitle"
                                             className="shrink-0 whitespace-nowrap text-[9px] font-semibold tracking-[0.06em]"
-                                            style={{ color: '#EAD9A8', ...bodyFontFor(SUBTITLE) }}
+                                            style={{ color: '#EAD9A8', ...bodyFontFor(relationWord ?? SUBTITLE) }}
                                         >
-                                            {SUBTITLE}
+                                            {relationWord ?? SUBTITLE}
                                         </span>
                                         <i
                                             aria-hidden="true"

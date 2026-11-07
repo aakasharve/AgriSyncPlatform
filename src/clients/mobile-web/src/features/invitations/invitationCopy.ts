@@ -76,6 +76,10 @@ export interface InvitationCopy {
     claimedBy: (invited: string, claimant: string) => string;
     claimedBySame: (claimant: string) => string;
     openRequest: string;
+    /** lane MU-1 (MU-2 review N-6): on the request card itself - the person the invitation was made for. */
+    wasForAnother: (invited: string) => string;
+    /** lane MU-1 (MU-2 review N-4): the invitation ended because the person's data was erased - not taken back by the owner. */
+    personErased: string;
     /** Fix round 1 (L-4): a claim that is no longer waiting. */
     claimOutcome: Record<Exclude<ClaimOutcome, 'WaitsForOwner'>, string>;
     /** Fix round 1 (L-6): in, but his attendance-list name was not joined to this login. */
@@ -140,6 +144,8 @@ const mr: InvitationCopy = {
         try_again: 'त्याच वेळी दुसरं काम चालू होतं. पुन्हा एकदा दाबा.', // PROPOSED (Marathi) — fix round 1
         number_busy: 'या नंबरसाठी आत्ताच एक आमंत्रण तयार झालं. खालची यादी पाहा.', // PROPOSED (Marathi) — fix round 1
         changed: 'ही विनंती आधीच बदलली आहे. यादी पुन्हा आणली.', // PROPOSED (Marathi) — fix round 1
+        authority_idle: 'या निवडीतली एक जबाबदारी या व्यक्तीच्या कामात लागू होत नाही (पैसे फक्त स्वतःच्या नोंदींपलीकडे पाहणाऱ्यांसाठी; शेताची रचना सर्व प्लॉट असतील तरच). ती काढून पुन्हा करा.', // PROPOSED (Marathi) — lane MU-1 (MU-2 N-3)
+        from_invitation: 'ही विनंती आमंत्रणातून आली आहे. तिच्या आमंत्रणावरील “आत घ्या” दाबा.', // PROPOSED (Marathi) — lane MU-1 (MU-2 N-7a)
     },
     inviteButton: 'नवीन व्यक्तीला बोलवा', // PROPOSED (Marathi)
     builderTitle: 'नवीन व्यक्तीला बोलवा', // PROPOSED (Marathi)
@@ -183,6 +189,8 @@ const mr: InvitationCopy = {
     claimedBy: (invited, claimant) => `हे आमंत्रण ${invited} साठी होतं; ${claimant} यांनी उघडलं`, // the orchestrator's words (PROPOSED)
     claimedBySame: claimant => `${claimant} यांनी उघडलं`, // PROPOSED (Marathi) — fix round 1
     openRequest: 'विनंती पाहा', // PROPOSED (Marathi) — fix round 1
+    wasForAnother: invited => `हे आमंत्रण ${invited} साठी होतं`, // PROPOSED (Marathi) — lane MU-1 (MU-2 N-6)
+    personErased: 'व्यक्तीची माहिती मिटवली, आमंत्रण बंद झालं', // PROPOSED (Marathi) — lane MU-1 (MU-2 N-4)
     claimOutcome: {
         Joined: 'स्वीकारलं', // PROPOSED (Marathi)
         Declined: 'नाकारलं', // the orchestrator's word (PROPOSED)
@@ -242,6 +250,8 @@ const en: InvitationCopy = {
         try_again: 'Something else was happening at the same moment. Please press it once more.', // PROPOSED (English) — fix round 1
         number_busy: 'An invitation for this number was made just now. Look at the list below.', // PROPOSED (English) — fix round 1
         changed: 'This request has already changed. The list was fetched again.', // PROPOSED (English) — fix round 1
+        authority_idle: "One responsibility in this choice does nothing on this person's seat (money only for someone who sees beyond his own records; farm setup only with every plot). Remove it and try again.", // PROPOSED (English) — lane MU-1 (MU-2 N-3)
+        from_invitation: 'This request came from an invitation. Use Let in on that invitation instead.', // PROPOSED (English) — lane MU-1 (MU-2 N-7a)
     },
     inviteButton: 'Invite a person', // PROPOSED (English)
     builderTitle: 'Invite a person', // PROPOSED (English)
@@ -285,6 +295,8 @@ const en: InvitationCopy = {
     claimedBy: (invited, claimant) => `This invitation was for ${invited}; ${claimant} opened it`, // the orchestrator's words (PROPOSED)
     claimedBySame: claimant => `${claimant} opened it`, // PROPOSED (English) — fix round 1
     openRequest: 'See the request', // PROPOSED (English) — fix round 1
+    wasForAnother: invited => `This invitation was for ${invited}`, // PROPOSED (English) — lane MU-1 (MU-2 N-6)
+    personErased: "The person's data was erased; the invitation ended", // PROPOSED (English) — lane MU-1 (MU-2 N-4)
     claimOutcome: {
         Joined: 'Accepted', // PROPOSED (English)
         Declined: 'Declined', // PROPOSED (English)

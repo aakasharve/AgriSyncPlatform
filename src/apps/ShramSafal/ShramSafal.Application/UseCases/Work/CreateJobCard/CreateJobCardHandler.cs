@@ -13,7 +13,7 @@ namespace ShramSafal.Application.UseCases.Work.CreateJobCard;
 /// <summary>
 /// CEI Phase 4 §4.8 — Task 2.1.1.
 /// Creates a new JobCard in Draft status.
-/// Caller must be PrimaryOwner, SecondaryOwner, or Mukadam on the farm.
+/// The caller must hold the review-money authority on the farm (F95; the primary account holder always does).
 /// </summary>
 public sealed class CreateJobCardHandler(
     IShramSafalRepository repository,
@@ -42,8 +42,11 @@ public sealed class CreateJobCardHandler(
         if (callerRole is null)
             return Result.Failure<CreateJobCardResult>(ShramSafalErrors.Forbidden);
 
-        // Worker role is not allowed to create job cards.
-        if (!IsEligibleToCreate(callerRole.Value))
+        // spec: plr-d10 lane MU-1 (register F95) - a card names a rate, so writing it needs lane 2b's ReviewMoney (the primary
+        // account holder always holds it): a label (सहमालक, मुकादम) grants nothing, and a seat that may not see money cannot
+        // set a rate it could not read back. REST and sync alike.
+        if (!await Services.FarmAuthorityGate.MayWriteRateAsync(
+                repository, command.FarmId.Value, command.CallerUserId.Value, clock.UtcNow, ct))
             return Result.Failure<CreateJobCardResult>(ShramSafalErrors.JobCardRoleNotAllowed);
 
         // spec: plr-d10 lane F99 fix pass 1 (review F-9; E4) — the plot and the season the card names must be this farm's,
@@ -137,7 +140,4 @@ public sealed class CreateJobCardHandler(
 
         return Result.Success(new CreateJobCardResult(jobCard.Id));
     }
-
-    private static bool IsEligibleToCreate(AppRole role) =>
-        role is AppRole.PrimaryOwner or AppRole.SecondaryOwner or AppRole.Mukadam;
 }

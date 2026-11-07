@@ -68,6 +68,8 @@ export interface PersonalInvitationView {
     claimedByAnotherNumber?: boolean;
     /** Fix round 1 (L-4) — what became of the claim. Absent from an older server. */
     claimOutcome?: ClaimOutcome | null;
+    /** lane MU-1 (MU-2 review N-4): it ended because the person's data was erased (not taken back by the owner). */
+    personErased?: boolean;
 }
 
 /** What became of a claim: waiting for the owner, in, the owner's नको, or the claimant took his request back. */
@@ -104,7 +106,9 @@ export type InvitationRefusal =
     | 'unknown' | 'expired' | 'used' | 'declined' | 'withdrawn' | 'already_member'
     | 'rate_limited' | 'daily_cap' | 'forbidden' | 'invalid' | 'failed'
     // fix round 1 (L-2, M-5, L-3)
-    | 'phone_not_verified' | 'try_again' | 'number_busy' | 'changed';
+    | 'phone_not_verified' | 'try_again' | 'number_busy' | 'changed'
+    // lane MU-1 (MU-2 review N-3, N-7): a responsibility that does nothing on this seat; a request that came from an invitation
+    | 'authority_idle' | 'from_invitation';
 
 /** Which side asked: the owner's routes or the invited person's. The same status can mean different words. */
 export type InvitationSide = 'owner' | 'invitee';
@@ -160,7 +164,8 @@ const REFUSAL_BY_CODE: Readonly<Record<string, InvitationRefusal>> = {
     'invitation.number_busy': 'number_busy',
     'join.phone_not_verified': 'phone_not_verified',
     'membership.wrong_status': 'changed',
-    'membership.claimed_from_invitation': 'changed',
+    'membership.claimed_from_invitation': 'from_invitation',
+    'invitation.authority_does_nothing': 'authority_idle',
 };
 
 /**

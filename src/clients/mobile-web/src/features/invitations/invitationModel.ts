@@ -95,7 +95,8 @@ export function withPlots(grant: InviteGrant, plotScope: PlotScopeName, plotIds?
 export function notInForce(grant: Pick<InviteGrant, 'label' | 'plotScope'>): string[] {
     const out: string[] = [];
     if (grant.plotScope !== 'AllPlots') out.push(AUTHORITY.editFarmSetup);
-    if (grant.label === 'Worker' || grant.plotScope === 'OwnWork') out.push(AUTHORITY.seeMoney, AUTHORITY.seeWages);
+    // lane MU-1 (MU-2 review N-3): review money needs see money, so it is not in force wherever money is not.
+    if (grant.label === 'Worker' || grant.plotScope === 'OwnWork') out.push(AUTHORITY.seeMoney, AUTHORITY.seeWages, AUTHORITY.reviewMoney);
     return out;
 }
 

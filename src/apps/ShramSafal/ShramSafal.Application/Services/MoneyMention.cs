@@ -108,8 +108,11 @@ public static partial class MoneyMention
             && InRecord(original);
     }
 
-    /// <summary>D-67 — may this seat hear the words of a record that mentions money? Only with see wages.</summary>
-    public static bool HearsMoneyWords(FarmReadScope? scope) => scope?.SeeWages == true;
+    /// <summary>
+    /// D-67 — may this seat hear the words of a record that mentions money? Only with see wages. lane MU-1 (D-70 option 2,
+    /// F124): and not on chosen plots, where no day wage may be read and a spoken one can be in the words.
+    /// </summary>
+    public static bool HearsMoneyWords(FarmReadScope? scope) => scope?.SeeDayWages == true;
 
     private static bool IsAmount(JsonElement value) => value.ValueKind switch
     {

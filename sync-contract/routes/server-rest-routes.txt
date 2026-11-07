@@ -47,6 +47,7 @@ GET /shramsafal/farms/mine
 GET /shramsafal/farms/{farmId:guid}
 GET /shramsafal/farms/{farmId:guid}/compliance
 GET /shramsafal/farms/{farmId:guid}/job-cards
+GET /shramsafal/farms/{farmId:guid}/kept-work
 GET /shramsafal/farms/{farmId:guid}/labour
 GET /shramsafal/farms/{farmId:guid}/labour-permissions
 GET /shramsafal/farms/{farmId:guid}/labour/field-operators

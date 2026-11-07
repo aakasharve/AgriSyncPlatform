@@ -14,6 +14,9 @@ import { useLanguage } from '../../../i18n/LanguageContext';
 import { FarmOperator } from '../../../domain/types/farm.types';
 import type { DailyLog } from '../../../domain/types/log.types';
 import { FarmSwitcherSheet } from './FarmContextSwitcher';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import RoleBand from '../../relationships/RoleBand';
+import { boardRelationWord, ownsNoFarm, switcherRows } from '../../relationships/relationshipModel';
 import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { useSyncQueueStatus, useUnqueueableLogCount, SyncStatusDrawer } from '../../sync';
 import type { WeatherStatus } from '../../weather/useWeatherMonitor';
@@ -221,6 +224,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
   const storedScopes = useStoredAccessScopes();
   const plotsOnly = scopeForFarm(storedScopes, currentFarmId)?.plotScope === 'ChosenPlots';
   const farmName = currentFarm?.name ?? '';
+  // spec: plr-d10 lane MU-1 - the ONE relationship read model (/me/context): the role band, the nameboard's small word and the
+  // switcher's rows all read it. Absent without a FarmContextProvider (a test) = none drawn.
+  const meContext = useOptionalFarmContext()?.meContext ?? null;
   // `plotCount` was derived here for `FarmIdentityElement`'s plot line. That
   // element left row 1 with the founder's 2026-08-30 nameboard ruling — the
   // count is not a farm IDENTITY, and he removed it from this row. The number
@@ -453,6 +459,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                board into a control. See the prop doc in `FarmNameBoard.tsx`. */
             canSwitch={farmCount > 1}
             onOpenFarmSwitcher={() => setIsFarmSwitcherOpen(true)}
+            relationWord={boardRelationWord(meContext, currentFarm?.farmId, language)}
           />
         ) : (
           <div className="min-w-0 flex-1" />
@@ -505,6 +512,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         </div>
 
       </div>
+
+      {/* spec: plr-d10 lane MU-1 - the role band: who he is on the open farm (not for a single-farm primary owner). */}
+      {farmContext && <RoleBand meContext={meContext} currentFarmId={currentFarm?.farmId} language={language} />}
 
       {/* Task 13 (founder reference image + his own Marathi table) — the
           nav-cards row. Renders "in its own row below the header, not
@@ -568,6 +578,9 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         <FarmSwitcherSheet
           farms={farmContext.farms}
           currentFarmId={currentFarm?.farmId ?? ''}
+          rows={switcherRows(meContext, currentFarm?.farmId, language)}
+          ownsNoFarm={ownsNoFarm(meContext)}
+          language={language}
           onClose={() => setIsFarmSwitcherOpen(false)}
           onSwitch={(farmId) => {
             farmContext.onSwitchFarm(farmId);

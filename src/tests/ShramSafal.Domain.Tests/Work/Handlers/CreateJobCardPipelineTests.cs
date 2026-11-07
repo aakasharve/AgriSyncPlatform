@@ -144,19 +144,36 @@ public sealed class CreateJobCardPipelineTests
         Assert.Equal(ErrorKind.Forbidden, result.Error.Kind);
     }
 
+    // spec: plr-d10 lane MU-1 (F95) - the seat's review-money authority decides, never the label.
     [Theory]
-    [InlineData(AppRole.PrimaryOwner)]
-    [InlineData(AppRole.SecondaryOwner)]
-    [InlineData(AppRole.Mukadam)]
-    public async Task Authorizer_returns_Success_for_eligible_roles(AppRole role)
+    [InlineData(AppRole.PrimaryOwner, null)]
+    [InlineData(AppRole.SecondaryOwner, FarmPermission.SeeMoney | FarmPermission.ReviewMoney)]
+    [InlineData(AppRole.Mukadam, FarmPermission.SeeMoney | FarmPermission.ReviewMoney)]
+    public async Task Authorizer_returns_Success_for_a_seat_that_holds_review_money(AppRole role, FarmPermission? stored)
     {
         var repo = new InMemoryJobCardCreateRepo();
-        repo.SetMembership(Farm.Value, Owner.Value, role);
+        repo.SetMembership(Farm.Value, Owner.Value, role, stored);
         var a = new CreateJobCardAuthorizer(repo);
 
         var result = await a.AuthorizeAsync(BuildCommand(callerUserId: Owner), default);
 
         Assert.True(result.IsSuccess);
+    }
+
+    [Theory]
+    [InlineData(AppRole.SecondaryOwner, null)]
+    [InlineData(AppRole.Mukadam, null)]
+    [InlineData(AppRole.Mukadam, FarmPermission.ReviewMoney)]
+    public async Task Authorizer_refuses_a_seat_without_review_money_whatever_its_label(AppRole role, FarmPermission? stored)
+    {
+        var repo = new InMemoryJobCardCreateRepo();
+        repo.SetMembership(Farm.Value, Owner.Value, role, stored);
+        var a = new CreateJobCardAuthorizer(repo);
+
+        var result = await a.AuthorizeAsync(BuildCommand(callerUserId: Owner), default);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ShramSafalErrors.JobCardRoleNotAllowed, result.Error);
     }
 
     // ---- Pipeline integration ----
@@ -210,7 +227,7 @@ public sealed class CreateJobCardPipelineTests
     public async Task Pipeline_invokes_inner_handler_on_happy_path()
     {
         var (pipeline, repo) = BuildPipeline();
-        repo.SetMembership(Farm.Value, Mukadam.Value, AppRole.Mukadam);
+        repo.SetMembership(Farm.Value, Mukadam.Value, AppRole.Mukadam, FarmPermission.SeeMoney | FarmPermission.ReviewMoney);
 
         var result = await pipeline.HandleAsync(BuildCommand(callerUserId: Mukadam));
 
@@ -234,7 +251,7 @@ public sealed class CreateJobCardPipelineTests
         // InvalidCommand — verifying that body-domain errors propagate
         // through the pipeline unchanged.
         var (pipeline, repo) = BuildPipeline();
-        repo.SetMembership(Farm.Value, Mukadam.Value, AppRole.Mukadam);
+        repo.SetMembership(Farm.Value, Mukadam.Value, AppRole.Mukadam, FarmPermission.SeeMoney | FarmPermission.ReviewMoney);
 
         var mixedLineItems = new[]
         {
@@ -313,12 +330,22 @@ public sealed class CreateJobCardPipelineTests
     private sealed class InMemoryJobCardCreateRepo : StubShramSafalRepository
     {
         private readonly Dictionary<(Guid farmId, Guid userId), AppRole> _memberships = new();
+        private readonly Dictionary<(Guid farmId, Guid userId), FarmPermission?> _stored = new();
 
         public List<JobCard> AddedJobCards { get; } = new();
         public List<AuditEvent> AuditEvents { get; } = new();
 
-        public void SetMembership(Guid farmId, Guid userId, AppRole role)
-            => _memberships[(farmId, userId)] = role;
+        public void SetMembership(Guid farmId, Guid userId, AppRole role, FarmPermission? stored = null)
+        {
+            _memberships[(farmId, userId)] = role;
+            _stored[(farmId, userId)] = stored;
+        }
+
+        public override Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult<ShramSafal.Application.Services.FarmAccess?>(_memberships.TryGetValue((farmId, userId), out var r)
+                ? new ShramSafal.Application.Services.FarmAccess(r, MembershipStatus.Active, false, _stored[(farmId, userId)])
+                : null);
 
         // lane F99 fix pass 1 — the handler asks that the plot is the named farm's: every plot here is on the test farm.
         public override Task<Plot?> GetPlotByIdAsync(Guid plotId, CancellationToken ct = default)

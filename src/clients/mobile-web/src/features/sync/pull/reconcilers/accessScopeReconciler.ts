@@ -205,8 +205,13 @@ export async function reconcileAccessScopes(
             if (!scope || !byAnother) continue;
             // F3 / fix 2 N4 (D-67) — asked of the copy as held, BEFORE its amounts are removed: the words of a record that
             // mentions money stay only with see WAGES (a named worker's pay can be in them).
-            const wordsForMoney = !scope.seeWages && logMentionsMoney(log) && !alreadyWithoutWords(log);
-            const stripped = !scope.seeMoney ? withoutMoney(log) : !scope.seeWages ? withoutWages(log) : log;
+            // lane MU-1 (founder D-70 option 2, F124): day wages need see wages AND not chosen plots - a seat on chosen plots
+            // keeps the rest of his plots' money, but no wage per person, no crew total and no words that can state a wage.
+            const wordsForMoney = !seesDayWages(scope) && logMentionsMoney(log) && !alreadyWithoutWords(log);
+            const stripped = !scope.seeMoney ? withoutMoney(log)
+                : !scope.seeWages ? withoutWages(log)
+                    : !seesDayWages(scope) ? withoutDayWages(log)
+                        : log;
             // Fix 2 (N2): a copy the purge trimmed SAYS so, so an edit of it never reads the missing amounts as deleted.
             const priced = stripped === log ? log : ({ ...stripped, amountsWithheld: true } as DailyLog);
             const trimmed = wordsForMoney ? withoutWords(priced) : priced;
@@ -247,7 +252,10 @@ export async function reconcileAccessScopes(
         await keepOnlySelfInProfile(db, ctx.userId);
     }
     for (const s of scopes) {
-        if (!s.seeWages && previous.get(s.farmId)?.seeWages !== false && ctx.userId) {
+        // D-70 option 2 (lane MU-1): the cached wage book also holds the day-wage figure, so it goes once when day wages stop
+        // being his - wages off, or the seat narrowed to chosen plots - where the last answer (or none) said they were.
+        const before = previous.get(s.farmId);
+        if (!seesDayWages(s) && !(before && !seesDayWages(before)) && ctx.userId) {
             clearLabourReadoutsForFarm(ctx.userId, s.farmId);
         }
         // lane L4b fix round 2 (L-b) — the amounts he saw in the approval sheet go with the farm's money.
@@ -333,6 +341,24 @@ export function withoutWords(log: DailyLog): DailyLog {
     const disturbance = (log as unknown as Record<string, unknown>).disturbance;
     if (disturbance && typeof disturbance === 'object') next.disturbance = stripKeys(disturbance, WORD_KEYS);
     return next as unknown as DailyLog;
+}
+
+/**
+ * spec: plr-d10 lane MU-1 (founder D-70 option 2, register F124) — may this seat read DAY wages? With see wages, and not
+ * on chosen plots (the server's `FarmReadScope.SeeDayWages`; an older server sends no plot scope = every plot).
+ */
+export function seesDayWages(scope: Pick<FarmAccessScopeDto, 'seeWages' | 'plotScope'>): boolean {
+    return scope.seeWages && scope.plotScope !== 'ChosenPlots';
+}
+
+/**
+ * Another person's record WITHOUT any DAY wage on its labour (D-70 option 2): the wage per person AND the crew's total (the
+ * wage times the crew), each marked as held back. The rest of the record's money stays. Same log when nothing changes.
+ */
+export function withoutDayWages(log: DailyLog): DailyLog {
+    if (!Array.isArray(log.labour)) return log;
+    const labour = log.labour.map(item => markLabourWithheld(item, true));
+    return labour.some((item, i) => item !== log.labour[i]) ? { ...log, labour } as DailyLog : log;
 }
 
 /** Another person's record WITHOUT the per-person wage on its labour (a WAGE). Same log when nothing changes. */

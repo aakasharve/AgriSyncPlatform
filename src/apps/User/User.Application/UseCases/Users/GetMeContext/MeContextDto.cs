@@ -57,7 +57,13 @@ public sealed record MeFarmDto(
     // lane 2b (MU design §2, §6) — ADDITIVE, last: every authority this seat holds now on this
     // farm (the label grants none), each with its end (null = कायम); empty unless Active. The
     // phone reads its doors from this, never from the label.
-    IReadOnlyList<MeAuthorityDto>? Authorities = null);
+    IReadOnlyList<MeAuthorityDto>? Authorities = null,
+    // spec: plr-d10 lane MU-1 (MU design §6) - ADDITIVE, last: which plots this seat covers ("AllPlots" / "ChosenPlots" /
+    // "OwnWork") and, for chosen plots, their names; empty unless Active. The role band's plots line reads these.
+    string? PlotScope = null,
+    IReadOnlyList<string>? PlotNames = null,
+    // spec: plr-d10 lane MU-1 - ADDITIVE, last: the label the owner chose ("CoOwner" / "Family" / "Mukadam" / "Worker"), or null.
+    string? Label = null);
 
 /// <summary>lane 2b — one authority on the wire: the FarmAuthority NAME and its end (null = कायम).</summary>
 public sealed record MeAuthorityDto(string Name, DateTime? ExpiresAtUtc);

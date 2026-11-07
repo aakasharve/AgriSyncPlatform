@@ -62,6 +62,14 @@ public sealed class PersonalInvitationService(
 
     public static readonly Error Unknown = Error.NotFound("invitation.unknown", "No such invitation.");
     public static readonly Error Expired = Error.Conflict("invitation.expired", "This invitation has expired.");
+    /// <summary>
+    /// spec: plr-d10 lane MU-1 (MU-2 review N-3) - the grant names a responsibility that would do nothing on this seat (money on a
+    /// कामगार or a स्वतःचं काम seat, review money without money, farm setup on chosen plots). A clear reason, not a generic 400.
+    /// </summary>
+    public static readonly Error AuthorityDoesNothing = Error.Validation(
+        "invitation.authority_does_nothing",
+        "A responsibility on this invitation would do nothing on this seat (money needs every record; setup needs every plot).");
+
     public static readonly Error Used = Error.Conflict("invitation.used", "This invitation has already been used.");
     public static readonly Error Declined = Error.Conflict("invitation.declined", "This invitation was declined.");
     public static readonly Error Withdrawn = Error.Conflict("invitation.withdrawn", "The farm owner withdrew this invitation.");
@@ -142,6 +150,12 @@ public sealed class PersonalInvitationService(
         if (await invitations.CountCreatedSinceAsync(farmId, now - TimeSpan.FromDays(1), ct) >= InvitationsPerFarmPerDay)
         {
             return Result.Failure<PersonalInvitationView>(DailyCap);
+        }
+
+        // MU-1 (N-3): said for what it is, before the generic domain refusal.
+        if (FarmAuthorities.NotInForce(RelationshipLabels.RoleOf(label.Value), plotScope).Any(authorities.ContainsKey))
+        {
+            return Result.Failure<PersonalInvitationView>(AuthorityDoesNothing);
         }
 
         var newId = ids.New();
@@ -412,6 +426,10 @@ public sealed class PersonalInvitationService(
         }
 
         await inviteeScope.PublishInvitationFarmScopeAsync(found.FarmId.Value, callerUserId, ct);
+        // spec: plr-d10 lane MU-1 (MU-2 review N-2) - ONE lock order with the owner's general approve (ManageMembershipHandler
+        // locks the seat, then updates the person's waiting invitation at save): the SEAT first, then the invitation. The old
+        // order (invitation, then seat) let an approve and a स्वीकारा in the same second each hold what the other needed (a 500).
+        var seat = await repository.GetTrackedFarmMembershipForUpdateAsync(found.FarmId.Value, callerUserId, ct);
         var invitation = await invitations.GetForFarmForUpdateAsync(found.FarmId.Value, found.Id, ct);
         if (invitation is null)
         {
@@ -437,7 +455,6 @@ public sealed class PersonalInvitationService(
         }
 
         var caller = new UserId(callerUserId);
-        var seat = await repository.GetTrackedFarmMembershipForUpdateAsync(farmId, callerUserId, ct);
         var isNewSeat = seat is null;
         if (seat is not null)
         {

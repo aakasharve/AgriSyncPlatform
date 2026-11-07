@@ -94,7 +94,15 @@ public sealed record FarmMembershipSnapshot(
     // the primary account holder) — this context never re-derives another context's rule.
     IReadOnlyList<MeAuthoritySnapshot>? Authorities = null,
     // lane 2b — the person is this farm's primary account holder (people and permissions, D-26).
-    bool IsPrimaryAccountHolder = false);
+    bool IsPrimaryAccountHolder = false,
+    // spec: plr-d10 lane MU-1 (MU design §6) - ADDITIVE. Which plots the seat covers ("AllPlots" / "ChosenPlots" / "OwnWork";
+    // the registrant and the primary owner's label always "AllPlots") and, for chosen plots, their NAMES - so the role band
+    // and the relationship card read one read model. Computed by the composition-root reader.
+    string PlotScope = "AllPlots",
+    IReadOnlyList<string>? PlotNames = null,
+    // spec: plr-d10 lane MU-1 - ADDITIVE. The relationship label the owner chose on the invitation ("CoOwner" / "Family" /
+    // "Mukadam" / "Worker"); null for a seat made before MU-2 (it keeps reading its role - no label is ever guessed, D-8, P4).
+    string? Label = null);
 
 /// <summary>lane 2b — one authority a seat holds now, and when it ends (null = कायम).</summary>
 public sealed record MeAuthoritySnapshot(string Name, DateTime? ExpiresAtUtc);

@@ -13,6 +13,9 @@
  *     the page behind never shows through or crowds it (it used to float half over the page content).
  *   - spec: plr-d10 (I22, founder D-1) — लक्ष द्या carries a small count: how many items its page lists for the farm on screen
  *     (`attentionItems.ts` — the same list the page and the आढावा strip read). No count when there is none or none is known (P4).
+ *   - spec: plr-d10 lane MU-1 (MU design §6, role-shaped doors) - a door this seat cannot use is not drawn: a worker's bar is
+ *     लक्ष द्या and शेड्यूल only (no खरेदी / उत्पन्न / चाचण्या); the columns share the width and शेड्यूल keeps its raised place
+ *     (`doors`, read from the seat's authorities by `core/session/seatDoors.ts`; absent = every door, as before).
  *   - lane FX-1 (founder rule FOOT-1, 2026-10-31: nothing may sit behind the bar): while any sheet, pop-up or full-screen
  *     overlay is open the bar steps away, exactly as it does for the keyboard (`useOverlayOverBar`; the rule is
  *     `shared/utils/bottomBar.ts`). It is also the app's base layer (z-40): every sheet is drawn above it. The room it
@@ -25,6 +28,10 @@ import { hapticFeedback } from '../../../shared/utils/haptics';
 import { useLanguage } from '../../../i18n/LanguageContext';
 import { useOverlayOverBar } from '../../../shared/hooks/useOverlayOverBar';
 import { BOTTOM_BAR_ROW_PX } from '../../../shared/utils/bottomBar';
+import type { SeatDoors } from '../../../core/session/seatDoors';
+
+/** One column per place drawn (2 to 5): whole class names, so the style sheet keeps them. */
+const BAR_COLUMNS: Record<number, string> = { 2: 'grid-cols-2', 3: 'grid-cols-3', 4: 'grid-cols-4', 5: 'grid-cols-5' };
 
 interface BottomNavigationProps {
     currentRoute: AppRoute;
@@ -38,9 +45,12 @@ interface BottomNavigationProps {
     attentionLabel?: string;
     /** Items on लक्ष द्या right now (`useAttentionModel().total`). Absent or 0 → no badge. */
     attentionCount?: number;
+    /** MU-1 - which doors this seat is shown. Absent = all (the seat is not known yet, or a test). */
+    doors?: SeatDoors;
 }
 
-const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, onNavigate, hidden = false, attentionLabel = 'लक्ष द्या', attentionCount }) => {
+const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, onNavigate, hidden = false, attentionLabel = 'लक्ष द्या', attentionCount, doors }) => {
+    const show: SeatDoors = doors ?? { procurement: true, money: true, tests: true };
     const { t } = useLanguage();
     const navRef = useRef<HTMLElement>(null);
     // FOOT-1 — a sheet or pop-up is open: the bar steps away so nothing of it sits under the bar.
@@ -72,15 +82,17 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, onNav
             className={`fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200 bg-white pb-safe-area shadow-[0_-4px_16px_-6px_rgba(28,25,23,0.12)] transition-all duration-200 ${away ? 'pointer-events-none translate-y-full opacity-0' : 'translate-y-0 opacity-100'}`}>
             <div aria-hidden="true" className="pointer-events-none absolute -top-8 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-[rgba(250,250,249,0.92)]" />
             {/* the cradle: a white half-disc the bar lifts around the raised button (it covers the bar's top line inside it) */}
-            <div aria-hidden="true" data-testid="nav-cradle"
-                className="pointer-events-none absolute -top-[22px] left-1/2 h-[84px] w-[84px] -translate-x-1/2 rounded-full bg-white shadow-[0_-6px_12px_-8px_rgba(28,25,23,0.22)]" />
-            <div className="page-content pl-safe-area pr-safe-area relative grid grid-cols-5 items-end" style={{ height: BOTTOM_BAR_ROW_PX }}>
+            <div className={`page-content pl-safe-area pr-safe-area relative grid items-end ${BAR_COLUMNS[2 + (show.procurement ? 1 : 0) + (show.money ? 1 : 0) + (show.tests ? 1 : 0)]}`} data-testid="nav-row" style={{ height: BOTTOM_BAR_ROW_PX }}>
                 {side('attention', CircleAlert, 'attention', attentionLabel, undefined,
                     attentionCount ? `${attentionLabel}, ${attentionCount}` : undefined, attentionCount)}
-                {side('procurement', ShoppingBag, 'procure', t('nav.procure'), 'procurement-nav-btn')}
+                {show.procurement && side('procurement', ShoppingBag, 'procure', t('nav.procure'), 'procurement-nav-btn')}
 
                 {/* the one raised button: शेड्यूल */}
                 <div className="relative z-[1] flex flex-col items-center justify-end gap-1.5 pb-2">
+                    {/* the cradle: a white half-disc the bar lifts around the raised button (it covers the bar's top line inside it);
+                        it sits on the button's own column, so it follows the button when a door is not drawn. */}
+                    <div aria-hidden="true" data-testid="nav-cradle"
+                        className="pointer-events-none absolute -top-[22px] left-1/2 -z-[1] h-[84px] w-[84px] -translate-x-1/2 rounded-full bg-white shadow-[0_-6px_12px_-8px_rgba(28,25,23,0.22)]" />
                     <button type="button" onClick={() => go('schedule')} data-testid="nav-schedule" aria-label={t('nav.schedule')} aria-current={on('schedule') ? 'page' : undefined}
                         className={`-mt-9 grid h-[62px] w-[62px] place-items-center rounded-full bg-gradient-to-b text-white shadow-[0_10px_20px_-8px_rgba(4,120,87,0.75)] ring-4 transition-transform duration-150 active:scale-90 ${on('schedule') ? 'from-emerald-600 to-emerald-800 ring-emerald-100' : 'from-emerald-500 to-emerald-700 ring-white'}`}>
                         <CalendarCheck size={30} strokeWidth={2.4} aria-hidden="true" data-nav-icon="schedule" />
@@ -88,8 +100,8 @@ const BottomNavigation: React.FC<BottomNavigationProps> = ({ currentRoute, onNav
                     <span className="text-[12.5px] font-extrabold leading-none text-emerald-800">{t('nav.schedule')}</span>
                 </div>
 
-                {side('income', IndianRupee, 'income', t('nav.income'))}
-                {side('tests', FlaskConical, 'tests', t('nav.tests'), undefined, t('nav.tests'))}
+                {show.money && side('income', IndianRupee, 'income', t('nav.income'))}
+                {show.tests && side('tests', FlaskConical, 'tests', t('nav.tests'), undefined, t('nav.tests'))}
             </div>
         </nav>
     );

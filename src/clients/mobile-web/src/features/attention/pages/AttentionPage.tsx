@@ -38,6 +38,9 @@ import { rescheduledTask, toggledTask, type TodoItem, type TodoWhen } from '../.
 import { addDays, dateLabel, fromDateKey } from '../../reflect/overview/reflectDates';
 // TASK 8 — reused as-is, no new copy. See the note in `JobCardsPage.tsx`.
 import { LoadErrorBanner } from '../../labour/components/LabourUiKit';
+// spec: plr-d10 lane MU-1 - the PRIMARY account holder's two cards: people waiting to join, and the work the server kept for him.
+import JoinRequestsAttention from '../../relationships/JoinRequestsAttention';
+import KeptWorkAttention from '../../relationships/KeptWorkAttention';
 
 /** "आज सकाळी 9:15 पर्यंतची माहिती" / "28 ऑग, सकाळी 11:30 पर्यंतची माहिती". PROPOSED (Marathi) */
 export function asOfLabelMr(asOf: string | null, todayKey: string = getDateKey()): string {
@@ -157,6 +160,9 @@ const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews
             <PageBar title="लक्ष द्या" onBack={onBack} />
             <p className="m-0 px-1 text-[14px] font-semibold leading-snug text-stone-700">आज ज्याकडे पाहायला हवं, ते इथे. एक-एक करून पूर्ण करा.</p>
             {status}
+            {/* MU-1: self-contained and drawn only for the farm's primary account holder (nothing for anyone else). */}
+            <JoinRequestsAttention />
+            <KeptWorkAttention />
             {GROUPS.map(g => {
                 const items = model[g.key];
                 if (items.length === 0) return null;

@@ -127,6 +127,16 @@ public static class FarmAuthorities
             notInForce.Add(FarmAuthority.SeeWages);
         }
 
+        // spec: plr-d10 lane MU-1 (MU-2 review N-3) - an authority that REQUIRES one that is not in force is not in force
+        // either (review money needs see money): the card never offers it, and a grant naming it is refused for what it is.
+        foreach (var authority in All)
+        {
+            if (RequiredBy(authority) is { } needed && notInForce.Contains(needed) && !notInForce.Contains(authority))
+            {
+                notInForce.Add(authority);
+            }
+        }
+
         return notInForce;
     }
 

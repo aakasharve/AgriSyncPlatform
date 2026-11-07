@@ -507,8 +507,14 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
         {data.view === 'owner' && plotsOnly && (
             <p className="m-0 px-1 text-[13px] font-bold text-stone-500" data-testid="labour-home-plots-only">{plotsOnly}</p>
         )}
+        {/* lane MU-1 (founder D-70 option 2, F124) — a seat on chosen plots sees NO day wages: his home draws the job-work
+            card alone and one line that says so, never a "—" that would read as "nothing stated". */}
+        {data.view === 'owner' && data.scopedToPlots === true && (
+            <p className="m-0 px-1 text-[13px] font-semibold text-stone-500" data-testid="labour-home-day-wages-note">{plotScopeCopy(plotsLanguage).dayWagesNote}</p>
+        )}
         {data.view === 'owner' && (
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className={data.scopedToPlots === true ? 'grid grid-cols-1 gap-2.5' : 'grid grid-cols-2 gap-2.5'}>
+                {data.scopedToPlots !== true && (
                 <div className="flex min-w-0 flex-col rounded-[20px] border border-white/70 bg-white/85 p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                     {/* FOUNDER VOCABULARY RULE (2026-09-03) — was `रोजंदारी`.
                         रोजंदारी names the BASIS on which the farmer owes money;
@@ -525,6 +531,7 @@ const LabourHub: React.FC<Props> = ({ data, onOpenMukadam, onOpenPerson, onAtten
                         figures line up even when one title wraps to two lines and the other does not. */}
                     <span className="mt-auto block pt-1 text-[23px] font-black text-stone-800 [font-variant-numeric:tabular-nums]">{data.home.rojandariStated === null ? '—' : inr(data.home.rojandariStated)}</span>
                 </div>
+                )}
                 <div className="flex min-w-0 flex-col rounded-[20px] border border-violet-100 bg-white p-4 shadow-[0_6px_20px_-10px_rgba(20,40,30,0.28)] backdrop-blur-md">
                     <span className="block text-[16px] font-bold leading-tight text-violet-700">उक्ते काम</span>
                     <span className="block text-[13px] font-semibold text-stone-400">ठरलेली</span>

@@ -147,6 +147,8 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Finance.SetFarmRate.SetFarmRateHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Finance.GetFarmRates.GetFarmRatesHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Finance.GetFarmRates.GetRateSuggestionsHandler>();
+        // spec: plr-d10 lane MU-1 - the owner's kept-work list (GET farms/{farmId}/kept-work; the primary account holder only).
+        services.AddScoped<ShramSafal.Application.UseCases.Memberships.KeptWork.GetKeptWorkHandler>();
         services.AddScoped<VerifyLogHandler>();
 
         // spec: dfes-companion-2026-07-11 (wave-1.5) — BackfillOwnerAttestationsHandler is

@@ -198,6 +198,33 @@ public sealed class GetMeContextSeatStatusTests
         }
     }
 
+    // spec: plr-d10 lane MU-1 (MU design §6) - the role band's plots line and the relationship card read ONE read model:
+    // the seat's plot scope and, for chosen plots, their names. A seat that is not Active carries none.
+    [Fact]
+    public async Task An_active_seat_carries_its_plot_scope_and_chosen_plot_names_and_a_waiting_one_none()
+    {
+        var chosen = Guid.NewGuid();
+        var own = Guid.NewGuid();
+        var all = Guid.NewGuid();
+        var waiting = Guid.NewGuid();
+        var context = await RunAsync(
+            includePending: true,
+            Seat(chosen, "Patil", "Active", role: "Mukadam") with { PlotScope = "ChosenPlots", PlotNames = ["प्लॉट 2", "प्लॉट 4"] },
+            Seat(own, "Jadhav", "Active", role: "Worker") with { PlotScope = "OwnWork" },
+            Seat(all, "Shinde", "Active", role: "PrimaryOwner"),
+            Seat(waiting, "Kale", "PendingApproval", role: "Worker") with { PlotScope = "ChosenPlots", PlotNames = ["प्लॉट 9"] });
+
+        var chosenFarm = context.Farms.Single(f => f.FarmId == chosen);
+        chosenFarm.PlotScope.Should().Be("ChosenPlots");
+        chosenFarm.PlotNames.Should().Equal("प्लॉट 2", "प्लॉट 4");
+        context.Farms.Single(f => f.FarmId == own).PlotScope.Should().Be("OwnWork");
+        context.Farms.Single(f => f.FarmId == own).PlotNames.Should().BeEmpty();
+        context.Farms.Single(f => f.FarmId == all).PlotScope.Should().Be("AllPlots", "the default: every seat made before MU-4");
+        var waitingFarm = context.Farms.Single(f => f.FarmId == waiting);
+        waitingFarm.PlotScope.Should().BeNull("a request that has not been let in carries no plots");
+        waitingFarm.PlotNames.Should().BeEmpty();
+    }
+
     private static FarmMembershipSnapshot Seat(Guid farmId, string name, string status, string role)
         => new(
             FarmId: new FarmId(farmId),

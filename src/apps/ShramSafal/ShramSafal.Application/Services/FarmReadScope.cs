@@ -74,6 +74,16 @@ public sealed record FarmReadScope(
     /// <summary>lane MU-4 — the seat's plot scope as stored (for the wire: the phone's pickers and its purge).</summary>
     public MembershipPlotScope PlotScope { get; init; } = MembershipPlotScope.AllPlots;
 
+    /// <summary>
+    /// spec: plr-d10 lane MU-1 (founder D-70 option 2, register F124) — may this seat read DAY WAGES: the wage per person and
+    /// the total of a labour line on a record, the words that can state them, the labour page's day-wage figure, a
+    /// worker's earnings? Only with <see cref="SeeWages"/> AND not on chosen plots: a day wage comes from the farm-day हजेरी,
+    /// which has no plot to split by, so a person who covers only some plots sees none of it. He still sees job-card
+    /// (उक्ते काम) money and the other money of his plots (<see cref="SeeWages"/> keeps governing a job card's pay). The
+    /// primary account holder, a seat on every plot and a seat on his own work are unchanged.
+    /// </summary>
+    public bool SeeDayWages => SeeWages && (IsPrimaryAccountHolder || PlotScope != MembershipPlotScope.ChosenPlots);
+
     /// <summary>lane MU-4 — does this seat cover <paramref name="plotId"/>? Every plot when it covers all.</summary>
     public bool CoversPlot(Guid plotId) => PlotIds is null || PlotIds.Contains(plotId);
 

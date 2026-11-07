@@ -39,6 +39,7 @@ import { Chip, PageBar, SANS, Tap } from '../../shared/components/ui/placeUi';
 import { useLabourPermissions } from './hooks/useLabourPermissions';
 import { isOwnerTierRole } from './helpers/teamRoster';
 import { AUTHORITY, holdsAuthority, isPrimaryAccountHolderRole } from '../../core/session/farmAuthorities';
+import { seatDoors } from '../../core/session/seatDoors';
 import { TeamPage } from './team/TeamPage';
 import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
@@ -493,7 +494,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                             items={menuItems}
                             onSelect={setActiveTab}
                             onExit={onExit}
-                            onOpenFinance={onOpenFinanceManager}
+                            // spec: plr-d10 lane MU-1 - "पैसे व हिशोब" is drawn only for a seat that sees the farm's money.
+                            onOpenFinance={seatDoors(setupFarm).money ? onOpenFinanceManager : undefined}
                             onOpenLabour={onOpenLabour}
                             farmCode={teamFarmCode}
                             onOpenTeam={openTeam}
