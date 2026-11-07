@@ -22,6 +22,8 @@ export { MoveDailyLogPayload } from './move_daily_log.zod';
 export { SetRecordAudiencePayload } from './set_record_audience.zod';
 // lane RATE-1 part A (founder D-72) — one change to one rate of a farm's own price and rate list.
 export { SetFarmRatePayload } from './set_farm_rate.zod';
+// lane BILL-1 (founder D-12) — a reviewer's मंजूर stamp on one bill: who (the sender), when (the server), which version.
+export { ApproveCostEntryPayload } from './approve_cost_entry.zod';
 export { CorrectLabourAssignmentPayload } from './correct_labour_assignment.zod';
 export {
     LogContentSchema,

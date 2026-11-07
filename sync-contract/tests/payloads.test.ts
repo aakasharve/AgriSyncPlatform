@@ -1160,3 +1160,32 @@ describe('lane RATE-1 — SetFarmRatePayload', () => {
         expect(whole({ change: 'retire' } as never)).toBe(true);
     });
 });
+
+// spec: plr-d10 lane BILL-1 (founder D-12) — approve_cost_entry: a reviewer's मंजूर stamp on one bill, naming the version he saw.
+describe('lane BILL-1 — ApproveCostEntryPayload', () => {
+    const approval = { approvalId: VALID_GUID_A, costEntryId: VALID_GUID_B, farmId: VALID_GUID_C, billVersion: 1 };
+
+    it('takes the stamp id, the bill, its farm and the version he saw', () => {
+        expect(payloads.ApproveCostEntryPayload.safeParse(approval).success).toBe(true);
+        expect(payloads.ApproveCostEntryPayload.safeParse({ ...approval, billVersion: 7 }).success).toBe(true);
+    });
+
+    it('refuses a missing, zero, negative or fractional version (never read as "the current one")', () => {
+        const { billVersion: _omitted, ...withoutVersion } = approval;
+        expect(payloads.ApproveCostEntryPayload.safeParse(withoutVersion).success).toBe(false);
+        for (const billVersion of [0, -1, 1.5, '1', null]) {
+            expect(payloads.ApproveCostEntryPayload.safeParse({ ...approval, billVersion }).success).toBe(false);
+        }
+    });
+
+    it('never carries who approved or when: the sender and the server clock say that', () => {
+        for (const extra of [{ approvedByUserId: VALID_GUID_D }, { approvedAtUtc: '2026-11-07T10:00:00Z' }, { amount: 100 }]) {
+            expect(payloads.ApproveCostEntryPayload.safeParse({ ...approval, ...extra }).success).toBe(false);
+        }
+    });
+
+    it('refuses a bill or farm that is not an id', () => {
+        expect(payloads.ApproveCostEntryPayload.safeParse({ ...approval, costEntryId: 'bill-1' }).success).toBe(false);
+        expect(payloads.ApproveCostEntryPayload.safeParse({ ...approval, farmId: undefined }).success).toBe(false);
+    });
+});

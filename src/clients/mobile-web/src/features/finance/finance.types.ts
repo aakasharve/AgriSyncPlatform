@@ -45,6 +45,19 @@ export type MoneyTrustStatus = 'Unverified' | 'Verified' | 'Adjusted';
 export type MoneyReviewStatus = 'OK' | 'NeedsReview';
 export type MoneyPriceSource = 'PriceBook' | 'Manual' | 'Unknown';
 
+/**
+ * spec: plr-d10 lane BILL-1 (founder D-12: "a separate "मंजूर" stamp with who and when") — one reviewer's मंजूर on a bill,
+ * as the server holds it. `billVersion` below the bill's own `billVersion` = the stamp is for an older version (the bill was
+ * corrected after it was approved). `approvedByName` is absent when this person is not sent that name (MU-3).
+ */
+export interface MoneyApproval {
+    id: string;
+    approvedByUserId: string;
+    approvedByName?: string;
+    approvedAtUtc: string;
+    billVersion: number;
+}
+
 export interface MoneyEvent {
     id: string;
     farmId: string;
@@ -78,6 +91,10 @@ export interface MoneyEvent {
     updatedAt?: string;
     /** CEI Phase 4 §4.8 — set when this cost entry was created by a job card settlement */
     jobCardId?: string;
+    /** lane BILL-1 — which version of the bill this is (the server's); absent from an older server or an unsent entry. */
+    billVersion?: number;
+    /** lane BILL-1 — the latest मंजूर stamp; absent when nobody approved it (or the server is older). */
+    approval?: MoneyApproval;
 }
 
 export interface PriceBookItem {

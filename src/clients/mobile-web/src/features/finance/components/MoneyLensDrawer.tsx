@@ -5,9 +5,15 @@ import { financeCommandService } from '../financeCommandService';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { SANS } from '../../../shared/components/ui/placeUi';
 import { BUCKET_LABEL, SOURCE_LABEL, categoryLabel, entryState, formatMoneyDate, rupees } from '../moneyLabels';
+import { BillApprovalLine, useBillApprovalOutbox } from './BillApprovalLine';
+import { mayApproveBills } from '../billApproval';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I8) — the money drawer behind a tapped amount, in
 // Marathi with the पैसे व हिशोब words (`moneyLabels.ts`). Same reads and the same two writes as before.
+// Lane BILL-1 (founder D-12) — each bill opened here carries its मंजूर line: the stamp for whoever sees the bill, and
+// "मंजूर करा" for a reviewer (the server's rule) on a bill no stamp covers at its version.
 
 interface MoneyLensDrawerProps {
     isOpen: boolean;
@@ -39,7 +45,12 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
     const breakdown = financeSelectors.getBreakdown(filters);
 
     useBackDismiss(isOpen, onClose);
+    const farmContext = useOptionalFarmContext();
+    const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
+    const [outbox, refreshOutbox] = useBillApprovalOutbox(isOpen);
     if (!isOpen) return null;
+    const mayApproveOn = (farmId: string) =>
+        !!farmContext && farmContext.currentFarmId === farmId && mayApproveBills(farmContext.currentFarm);
 
     const openFix = (line: EffectiveMoneyEvent) => {
         setSelected(line);
@@ -117,6 +128,13 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
                                     </button>
                                 )}
                             </div>
+                            <BillApprovalLine
+                                bill={line}
+                                mayApprove={mayApproveOn(line.farmId)}
+                                outbox={outbox}
+                                language={language}
+                                onQueued={refreshOutbox}
+                            />
                         </div>
                     ))}
                     {breakdown.lines.length === 0 && (

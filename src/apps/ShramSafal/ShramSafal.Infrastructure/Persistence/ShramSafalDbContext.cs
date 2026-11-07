@@ -181,6 +181,10 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // version of a rate. APPEND-ONLY by privilege (migration AddFarmRates); FORCE-RLS on its own farm_id (F8).
     public DbSet<FarmRate> FarmRates => Set<FarmRate>();
 
+    // spec: plr-d10 lane BILL-1 (founder D-12) — a bill's मंजूर stamps (who, when, which version), one unchangeable row
+    // each. APPEND-ONLY by privilege (migration AddCostEntryApprovals); FORCE-RLS on its own farm_id (F8).
+    public DbSet<CostEntryApproval> CostEntryApprovals => Set<CostEntryApproval>();
+
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();

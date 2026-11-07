@@ -12,6 +12,7 @@ import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { moneyDayKey } from './moneyDay';
 import {
     MoneyAdjustment,
+    MoneyApproval,
     MoneyCategory,
     MoneyEvent,
     MoneyEventDirection,
@@ -54,6 +55,21 @@ type ServerCostEntry = {
     vendorName?: string | null;
     /** `null`/absent = no statement; `[]` = "none linked". */
     clientAttachmentIds?: string[] | null;
+    // ── spec: plr-d10 lane BILL-1 (founder D-12) — sent by the pull from this lane on; absent from an older server. ──
+    /** Which version of the bill this is. */
+    billVersion?: number | null;
+    /** "तपासायचे": the server set it aside and no stamp covers this version. Read INSTEAD of `isFlagged` when present. */
+    needsReview?: boolean | null;
+    /** Why it was set aside (the server's English words). */
+    reviewReason?: string | null;
+    /** The latest मंजूर stamp. */
+    approval?: {
+        id?: string;
+        approvedByUserId?: string;
+        approvedByName?: string | null;
+        approvedAtUtc?: string;
+        billVersion?: number;
+    } | null;
 };
 
 type ServerFinanceCorrection = {
@@ -172,10 +188,35 @@ function stated<T>(value: T | null | undefined): T | undefined {
     return value ?? undefined;
 }
 
+const wholePositive = (value: unknown): number | undefined =>
+    typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : undefined;
+
+/** lane BILL-1 — the stamp as the server sent it, or `undefined` when it is absent or cannot be read (never guessed). */
+function readApproval(raw: ServerCostEntry['approval']): MoneyApproval | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const billVersion = wholePositive(raw.billVersion);
+    if (!raw.id || !raw.approvedByUserId || !raw.approvedAtUtc || billVersion === undefined) return undefined;
+    return {
+        id: raw.id,
+        approvedByUserId: raw.approvedByUserId,
+        ...(raw.approvedByName ? { approvedByName: raw.approvedByName } : {}),
+        approvedAtUtc: raw.approvedAtUtc,
+        billVersion,
+    };
+}
+
 function mapCostEntryToMoneyEvent(entry: ServerCostEntry): MoneyEvent {
     const id = entry.id || `me_${idGenerator.generate()}`;
     const amount = Number(entry.amount || 0);
     const createdAt = entry.createdAtUtc || systemClock.nowISO();
+    // spec: plr-d10 lane BILL-1 (founder D-12) — a server from this lane on says "तपासायचे" as `needsReview` (cleared by a
+    // stamp for the bill's current version) and sends the latest stamp. An older server (and a row pulled from one) still
+    // reads `isFlagged`, exactly as before.
+    const billVersion = wholePositive(entry.billVersion);
+    const approval = readApproval(entry.approval);
+    const needsReview = typeof entry.needsReview === 'boolean' ? entry.needsReview : !!entry.isFlagged;
+    const reviewReason = typeof entry.needsReview === 'boolean' ? entry.reviewReason : entry.flagReason;
+    const approvedNow = !!approval && billVersion !== undefined && approval.billVersion === billVersion;
 
     return {
         id,
@@ -199,9 +240,10 @@ function mapCostEntryToMoneyEvent(entry: ServerCostEntry): MoneyEvent {
         sourceType: 'Manual',
         sourceId: id,
         createdByUserId: entry.createdByUserId || 'unknown',
-        trustStatus: entry.isCorrected ? 'Adjusted' : 'Unverified',
-        reviewStatus: entry.isFlagged ? 'NeedsReview' : 'OK',
-        reviewReasons: entry.isFlagged && entry.flagReason ? [entry.flagReason] : [],
+        // मंजूर only when a stamp covers the version the bill stands at; a stamp for an older version is not.
+        trustStatus: approvedNow ? 'Verified' : entry.isCorrected ? 'Adjusted' : 'Unverified',
+        reviewStatus: needsReview ? 'NeedsReview' : 'OK',
+        reviewReasons: needsReview && reviewReason ? [reviewReason] : [],
         priceSource: 'Unknown',
         notes: entry.description,
         // Tri-state preserved: undefined = the server made no statement,
@@ -210,6 +252,8 @@ function mapCostEntryToMoneyEvent(entry: ServerCostEntry): MoneyEvent {
         // claim, and the two can legitimately differ.
         attachments: stated(entry.clientAttachmentIds),
         createdAt,
+        ...(billVersion !== undefined ? { billVersion } : {}),
+        ...(approval ? { approval } : {}),
     };
 }
 

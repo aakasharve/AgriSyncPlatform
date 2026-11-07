@@ -417,6 +417,15 @@
 //     DPDP compliance slice (GO-LIVE-REGISTER F98).
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.cost_entry_approvals (plr-d10 lane BILL-1, founder D-12) — KEEP. One row is one
+//     reviewer's मंजूर on one bill of a FARM: the farm, the bill, the bill version he saw, when
+//     the server took it, the sync request id and app version (telemetry), and who approved it
+//     as an opaque user id ONLY — no name, no words, no amount. It is the farm's money-review
+//     history, append-only by GRANT (SELECT + INSERT). An erased approver's opaque user id stays
+//     on the rows he stamped, exactly as on ssf.audit_events; the phone names an approver only
+//     through the operator directory, which erasure anonymises.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a
 //     disposition comment; see step 5 of the delete block in ProcessOneAsync.
 //     This table is not merely adjacent to the ownership link, it IS the

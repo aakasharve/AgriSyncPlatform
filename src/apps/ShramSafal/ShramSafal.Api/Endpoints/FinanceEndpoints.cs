@@ -9,6 +9,7 @@ using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Finance.AddCostEntry;
 using ShramSafal.Application.UseCases.Finance.AllocateGlobalExpense;
+using ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 using ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 using ShramSafal.Application.UseCases.Finance.GetFinanceSummary;
 using ShramSafal.Application.UseCases.Finance.GetPlotFinanceSummary;
@@ -244,6 +245,66 @@ public static class FinanceEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("CorrectCostEntry")
+        .RequireAuthorization();
+
+        // spec: plr-d10 lane BILL-1 (founder D-12: "2 — A separate "मंजूर" stamp with who and when") — a reviewer's मंजूर on
+        // one bill, online. The SAME handler as the sync push's approve_cost_entry. A version that moved on is answered 409
+        // with the L4b code and the version to look at; every other refusal as the money doors answer it.
+        group.MapPost("/finance/cost-entry/{id:guid}/approve", async (
+            Guid id,
+            ApproveCostEntryRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            ApproveCostEntryHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // The bill's farm, found under his own scope, then its scope (a bill he cannot see is not found).
+            if (await OpenCostFarmAsync(id, actorUserId, repository, userScope, farmScope, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
+            }
+
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var command = new ApproveCostEntryCommand(
+                id,
+                FarmId: null,
+                BillVersion: request.BillVersion ?? 0,
+                ApprovedByUserId: actorUserId,
+                ApprovalId: request.ApprovalId,
+                ActorRole: EndpointActorContext.GetActorRole(user),
+                ClientCommandId: null,
+                ClientAppVersion: ResolveClientAppVersion(httpContext),
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
+
+            var result = await handler.HandleAsync(command, ct);
+            if (result.IsSuccess)
+            {
+                return Results.Ok(result.Value);
+            }
+
+            if (result.Error.Code == ShramSafalErrors.LogChangedSinceReview.Code)
+            {
+                var current = await repository.GetCostEntryByIdAsync(id, ct);
+                return Results.Conflict(new
+                {
+                    error = result.Error.Code,
+                    message = result.Error.Description,
+                    billVersion = current?.ContentVersion,
+                });
+            }
+
+            return ToErrorResult(result.Error);
+        })
+        .WithName("ApproveCostEntry")
         .RequireAuthorization();
 
         group.MapGet("/finance/summary", async (
@@ -497,6 +558,11 @@ public sealed record DuplicateCheckRequest(
     int WindowMinutes = 120);
 
 public sealed record DuplicateCheckResponse(bool IsDuplicate, Guid? MatchedEntryId);
+
+/// <summary>lane BILL-1 — the version of the bill he saw (required), and optionally the stamp's own id for a safe retry.</summary>
+public sealed record ApproveCostEntryRequest(
+    int? BillVersion,
+    Guid? ApprovalId = null);
 
 public sealed record CorrectCostEntryRequest(
     decimal CorrectedAmount,

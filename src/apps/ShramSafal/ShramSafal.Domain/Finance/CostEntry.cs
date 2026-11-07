@@ -87,6 +87,15 @@ public sealed class CostEntry : Entity<Guid>
     public DateTime CreatedAtUtc { get; private set; }
     public DateTime ModifiedAtUtc { get; private set; }
     public bool IsCorrected { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1 (founder D-12) — which version of the bill this is: 1 as first saved, one more for every
+    /// change of what it says (a correction of its amount, a move of its place or day). A reviewer's मंजूर names the version
+    /// he saw (<see cref="CostEntryApproval.BillVersion"/>); a version that moved on is refused, and a stamp for an older
+    /// version is never carried to the new numbers. Its audience, its flag, its location and an approval do not change it.
+    /// </summary>
+    public int ContentVersion { get; private set; } = 1;
+
     public bool IsFlagged { get; private set; }
     public string? FlagReason { get; private set; }
     public Provenance Provenance { get; private set; } = null!;
@@ -302,6 +311,12 @@ public sealed class CostEntry : Entity<Guid>
     public void FollowRecord(Guid? plotId, Guid? cropCycleId, DateOnly entryDate, DateTime movedAtUtc)
     {
         var plotBefore = PlotId;
+        // lane BILL-1 — a bill moved to another place or day says something new: a new version (an approval stays on the old).
+        if (plotBefore != plotId || CropCycleId != cropCycleId || EntryDate != entryDate)
+        {
+            ContentVersion++;
+        }
+
         PlotId = plotId;
         CropCycleId = cropCycleId;
         EntryDate = entryDate;
@@ -333,8 +348,9 @@ public sealed class CostEntry : Entity<Guid>
 
     /// <summary>
     /// spec: plr-d10 (lane OF-M fix passes 1 and 3) — flag money for the person who reviews money, later than it was made
-    /// (an edit's correction raised it past <see cref="ReviewAmountThreshold"/>, review 6). Server-side only: no phone
-    /// shows a money flag yet (F90, open in the D-12 approval lane). The amount never changes; its clock moves forward.
+    /// (an edit's correction raised it past <see cref="ReviewAmountThreshold"/>, review 6). Lane BILL-1 (F90): the pull
+    /// carries it as <c>needsReview</c> until a stamp covers the bill's current version (<see cref="CostEntryReview"/>) —
+    /// never as <c>isFlagged</c>, which 1.0.17 would act on. The amount never changes; its clock moves forward.
     /// </summary>
     public void FlagForReview(string reason, DateTime atUtc)
     {
@@ -363,6 +379,8 @@ public sealed class CostEntry : Entity<Guid>
         DateTime correctedAtUtc)
     {
         IsCorrected = true;
+        // lane BILL-1 — a corrected amount is a new version of the bill: an approval of the old one reads as older.
+        ContentVersion++;
         // lane PRV fix pass 1 (L6) — forward only: never back below a cursor that already read this money.
         if (correctedAtUtc > ModifiedAtUtc)
         {
@@ -401,6 +419,31 @@ public sealed class CostEntry : Entity<Guid>
         Audience = audience;
         ModifiedAtUtc = AudienceStamp.NextModified(ModifiedAtUtc, changedAtUtc);
         AudienceChangedAtUtc = ModifiedAtUtc;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1 (founder D-12) — a reviewer's मंजूर on THIS version of the bill: the stamp (who, when, which
+    /// version). <paramref name="seenVersion"/> is the version he saw; when the bill has moved on since, nothing is stamped
+    /// (<see cref="InvalidOperationException"/>; the handler refuses first with the L4b exact-version code). The bill's
+    /// figures, flag and history are untouched; its clock moves past every phone's cursor so the stamp reaches them.
+    /// </summary>
+    public CostEntryApproval Approve(
+        Guid approvalId,
+        UserId approvedByUserId,
+        int seenVersion,
+        DateTime approvedAtUtc,
+        string? clientRequestId = null,
+        string? appVersion = null)
+    {
+        if (seenVersion != ContentVersion)
+        {
+            throw new InvalidOperationException(
+                $"The bill is at version {ContentVersion}; an approval of version {seenVersion} is for a bill that changed.");
+        }
+
+        var approval = CostEntryApproval.For(approvalId, this, approvedByUserId, approvedAtUtc, clientRequestId, appVersion);
+        ModifiedAtUtc = AudienceStamp.NextModified(ModifiedAtUtc, approvedAtUtc);
+        return approval;
     }
 
     public void AttachLocation(LocationSnapshot location)

@@ -178,6 +178,29 @@ public interface IShramSafalRepository
     Task<CostEntry?> GetCostEntryByIdAsync(Guid costEntryId, CancellationToken ct = default);
 
     /// <summary>
+    /// spec: plr-d10 lane BILL-1 (founder D-12) — the bill, read for a change that must not race another one (an approval of
+    /// its version, a correction that makes a new version): the row is held (<c>SELECT … FOR UPDATE</c>) for the rest of the
+    /// caller's transaction and re-read after the hold, so the version compared is one a second writer cannot move
+    /// underneath it (the L6 S7 lesson). The default (an in-memory or test repository, no row locks) is the ordinary read.
+    /// </summary>
+    Task<CostEntry?> GetCostEntryForChangeAsync(Guid costEntryId, CancellationToken ct = default)
+        => GetCostEntryByIdAsync(costEntryId, ct);
+
+    /// <summary>
+    /// lane BILL-1 — stage one मंजूर stamp (append-only; the caller's single SaveChanges commits it with its audit row). The
+    /// default refuses: a repository that cannot keep a stamp must never answer as if it had (P5).
+    /// </summary>
+    Task AddCostEntryApprovalAsync(CostEntryApproval approval, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot keep a bill's approval stamp.");
+
+    /// <summary>
+    /// lane BILL-1 — every stamp of these bills, as the caller's tenant scope can see them (the pull is user-scoped: the
+    /// Active-member read policy). Callers still match each stamp's farm to its bill's farm (E4). Default: none.
+    /// </summary>
+    Task<IReadOnlyList<CostEntryApproval>> GetCostEntryApprovalsAsync(IReadOnlyCollection<Guid> costEntryIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<CostEntryApproval>>([]);
+
+    /// <summary>
     /// spec: pre-launch-repair L2b (R-1) — the stored cost entry with this id, read-only and untracked, as the
     /// caller's tenant scope can see it (under FORCE RLS only the farm in scope; a row of another farm reaches
     /// the write as a primary-key clash instead, which the sync push turns into the typed conflict), or

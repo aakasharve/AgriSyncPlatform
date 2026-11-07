@@ -1,25 +1,31 @@
 // @vitest-environment jsdom
-// spec: plr-d10-redesign-real-integration-2026-10-25 (I8 — X5)
+// spec: plr-d10-redesign-real-integration-2026-10-25 (I8 — X5; lane BILL-1, founder D-12)
 //
-// "Approve" on this page sent a LOG verification carrying a money entry's id; the server
-// refused it, nothing was recorded, and the local "verified" vanished on the next reload.
-// Until a real approval path exists (PENDING D-12) the page offers no approve control and
-// says so — and nothing is queued.
+// "Approve" on this page once sent a LOG verification carrying a money entry's id; the server
+// refused it, nothing was recorded, and the local "verified" vanished on the next reload. Until a
+// real approval path existed the page offered no approve control and said so.
 //
-// The redesign (तपासायचे) keeps that: the approved preview's "बरोबर आहे" / "दुरुस्त करा"
-// buttons are NOT carried over, the honest line is now Marathi only, and the server's
-// English reason is said in Marathi.
+// Lane BILL-1 gave it the real path (`approve_cost_entry`, a separate मंजूर stamp with who, when and
+// which version). What this file now pins:
+//   - a reviewer of THIS farm (the server's rule: the primary account holder or review money) sees
+//     "मंजूर करा" on each bill the server sent with its version, and it queues the BILL approval —
+//     never a log verification, never a local "verified";
+//   - anyone else sees the entries and a plain Marathi line saying who approves, and no approve control;
+//   - the approved preview's "बरोबर आहे" is still not carried over;
+//   - the server's English reason is said in Marathi.
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { latinLeftovers } from './financeFixtures';
+import { FarmContext } from '../../core/session/FarmContext';
 
+const FARM = '11111111-1111-4111-8111-111111111111';
 const ENTRY = {
-    id: 'me-1', category: 'Input', dateTime: '2026-10-25T10:00:00Z', effectiveAmount: 30000,
-    sourceType: 'Procurement', sourceId: 's-1', reviewReasons: ['HIGH_AMOUNT'],
+    id: 'me-1', farmId: FARM, category: 'Input', dateTime: '2026-10-25T10:00:00Z', effectiveAmount: 30000,
+    sourceType: 'Procurement', sourceId: 's-1', reviewReasons: ['HIGH_AMOUNT'], billVersion: 1,
 };
-const h = vi.hoisted(() => ({ inbox: [] as unknown[] }));
+const h = vi.hoisted(() => ({ inbox: [] as unknown[], approveBill: vi.fn() }));
 
 vi.mock('../../features/finance/financeSelectors', () => ({
     financeSelectors: {
@@ -29,34 +35,66 @@ vi.mock('../../features/finance/financeSelectors', () => ({
 vi.mock('../../features/finance/components/FinanceManagerNav', () => ({ FinanceManagerNav: () => null }));
 vi.mock('../../features/finance/components/MoneyLensDrawer', () => ({ MoneyLensDrawer: () => null }));
 vi.mock('../../features/finance/components/MoneyChip', () => ({ MoneyChip: () => <span data-testid="money-chip" /> }));
+vi.mock('../../features/finance/billApproval', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../features/finance/billApproval')>()),
+    approveBill: h.approveBill,
+    readBillApprovalOutbox: async () => ({ pending: new Set(), changed: new Map(), refused: new Map() }),
+}));
 
 import ReviewInboxPage from '../ReviewInboxPage';
 
-beforeEach(() => { h.inbox = [ENTRY]; });
+const asSeat = (role: string, authorities?: { name: string }[], farmId = FARM) => ({
+    currentFarmId: farmId,
+    currentFarm: { role, ...(authorities ? { authorities } : {}) },
+}) as never;
+
+function drawAs(seat: unknown, onBack?: () => void) {
+    return render(
+        <FarmContext.Provider value={seat as never}>
+            <ReviewInboxPage currentRoute={'review-inbox' as never} onNavigate={vi.fn()} onBack={onBack} />
+        </FarmContext.Provider>,
+    );
+}
+
+beforeEach(() => { h.inbox = [ENTRY]; h.approveBill.mockReset(); h.approveBill.mockResolvedValue({}); });
 afterEach(cleanup);
 
-describe('the review inbox while approving has no server path', () => {
-    it('shows the entries and an honest line, and offers no approve control', () => {
-        render(<ReviewInboxPage currentRoute={'review-inbox' as never} onNavigate={vi.fn()} />);
-        expect(screen.getByTestId('review-approve-unavailable')).toBeInTheDocument();
-        expect(screen.getByTestId('money-chip')).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /approve/i })).toBeNull();
-        expect(screen.queryByTitle('Approve')).toBeNull();
+describe('the review inbox, now that a bill can be approved (D-12)', () => {
+    it('a reviewer of this farm sees "मंजूर करा", and it queues the BILL approval for the version on screen', async () => {
+        drawAs(asSeat('Mukadam', [{ name: 'SeeMoney' }, { name: 'ReviewMoney' }]));
+        expect(screen.getByTestId('review-approve-meaning')).toHaveTextContent('बिल मंजूर म्हणजे हा खर्च तपासला. पैसे दिल्याची नोंद वेगळी आहे.');
+        fireEvent.click(screen.getByTestId('bill-approve-me-1'));
+        await waitFor(() => expect(h.approveBill).toHaveBeenCalledTimes(1));
+        expect(h.approveBill).toHaveBeenCalledWith(expect.objectContaining({ id: 'me-1', farmId: FARM, billVersion: 1 }), undefined);
     });
 
-    it('the honest line is plain Marathi, with no English half', () => {
-        render(<ReviewInboxPage currentRoute={'review-inbox' as never} onNavigate={vi.fn()} />);
-        const line = screen.getByTestId('review-approve-unavailable');
-        expect(line).toHaveTextContent('मंजुरी अजून उपलब्ध नाही — खर्च दुरुस्त करायचा असेल तर रकमेवर दाबा.');
+    it('the primary account holder too; a bill of ANOTHER farm offers him nothing here', () => {
+        h.inbox = [ENTRY, { ...ENTRY, id: 'me-9', sourceId: 's-9', farmId: '99999999-9999-4999-8999-999999999999' }];
+        drawAs(asSeat('PrimaryOwner'));
+        expect(screen.getByTestId('bill-approve-me-1')).toBeInTheDocument();
+        expect(screen.queryByTestId('bill-approve-me-9')).toBeNull();
+    });
+
+    it('anyone else: the entries and a plain Marathi line saying who approves — no approve control', () => {
+        drawAs(asSeat('Mukadam', [{ name: 'SeeMoney' }]));
+        const line = screen.getByTestId('review-approve-meaning');
+        expect(line).toHaveTextContent('श्रमसफलच्या नियमानुसार बिल मालक किंवा त्यांनी परवानगी दिलेली व्यक्ती मंजूर करते.');
         expect(latinLeftovers(line)).toEqual([]);
+        expect(screen.getByTestId('money-chip')).toBeInTheDocument();
+        expect(screen.queryByTestId('bill-approve-me-1')).toBeNull();
+        expect(screen.queryByRole('button', { name: /approve|मंजूर करा/i })).toBeNull();
+    });
+
+    it('with no farm known yet (no seat), nothing to approve — fail closed', () => {
+        render(<ReviewInboxPage currentRoute={'review-inbox' as never} onNavigate={vi.fn()} />);
+        expect(screen.queryByTestId('bill-approve-me-1')).toBeNull();
         expect(latinLeftovers()).toEqual([]);
     });
 
-    it('no approve or resolve action of any kind — not even the approved preview\'s', () => {
-        render(<ReviewInboxPage currentRoute={'review-inbox' as never} onNavigate={vi.fn()} onBack={vi.fn()} />);
-        // The only button on the page is "मागे"; the amount (mocked here) opens the money drawer.
+    it('still no "बरोबर आहे" or resolve action — and nothing but मागे for a seat that may not approve', () => {
+        drawAs(asSeat('Worker', []), vi.fn());
         expect(screen.getAllByRole('button').map(b => b.textContent)).toEqual(['मागे']);
-        expect(screen.queryByText(/बरोबर आहे|मंजूर करा|मंजूर केलं|approve|resolve/i)).toBeNull();
+        expect(screen.queryByText(/बरोबर आहे|मंजूर केलं|approve|resolve/i)).toBeNull();
     });
 
     it('says why the entry was set aside, in Marathi', () => {
@@ -70,13 +108,12 @@ describe('the review inbox while approving has no server path', () => {
 
     it('with nothing to look at, it says so and shows no line about approving', () => {
         h.inbox = [];
-        render(<ReviewInboxPage currentRoute={'review-inbox' as never} onNavigate={vi.fn()} />);
-        // I8 review B005: not "everything has been checked" (there is no checking step yet), and no
-        // "these entries looked different" line over an empty inbox.
+        drawAs(asSeat('PrimaryOwner'));
+        // I8 review B005: not "everything has been checked", and no "these entries looked different" line over an empty inbox.
         expect(screen.getByTestId('review-empty')).toHaveTextContent('पाहण्यासारखी कोणतीही नोंद नाही');
         expect(document.body.textContent).not.toContain('तपासून झालं');
         expect(document.body.textContent).not.toContain('वेगळ्या दिसल्या');
-        expect(screen.queryByTestId('review-approve-unavailable')).toBeNull();
+        expect(screen.queryByTestId('review-approve-meaning')).toBeNull();
         // spec: pre-launch-repair L2a (R-7, D-18) — no promise the server does not keep: nothing sets a
         // double entry aside, so the page no longer says one "will come here".
         expect(document.body.textContent).not.toContain('इथे येईल');

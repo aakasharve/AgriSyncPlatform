@@ -40,7 +40,9 @@ public sealed class CorrectCostEntryHandler(
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.InvalidCommand);
         }
 
-        var entry = await repository.GetCostEntryByIdAsync(command.CostEntryId, ct);
+        // spec: plr-d10 lane BILL-1 — read under the bill's row hold (the approval door's read): a correction makes a new
+        // version of the bill, so it and an approval in flight never both read the version the other is about to move.
+        var entry = await repository.GetCostEntryForChangeAsync(command.CostEntryId, ct);
         if (entry is null)
         {
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
