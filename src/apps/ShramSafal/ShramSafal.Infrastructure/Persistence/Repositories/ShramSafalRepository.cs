@@ -272,6 +272,29 @@ internal sealed class ShramSafalRepository(
         return await GetCostEntryByIdAsync(costEntryId, ct);
     }
 
+    // lane BILL-1 fix round 1 (M2) — see IShramSafalRepository: every row held in id order, then re-read.
+    public async Task<List<CostEntry>> GetCostEntriesForChangeAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
+    {
+        var ids = costEntryIds.Distinct().OrderBy(id => id).ToArray();
+        if (ids.Length == 0)
+        {
+            return [];
+        }
+
+        if (db.Database.IsRelational())
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM ssf.cost_entries WHERE \"Id\" = ANY({ids}) ORDER BY \"Id\" FOR UPDATE", ct);
+
+            foreach (var tracked in db.ChangeTracker.Entries<CostEntry>().Where(e => ids.Contains(e.Entity.Id)).ToList())
+            {
+                await tracked.ReloadAsync(ct);
+            }
+        }
+
+        return await GetCostEntriesByIdsAsync(ids, ct);
+    }
+
     public async Task AddCostEntryApprovalAsync(CostEntryApproval approval, CancellationToken ct = default)
     {
         await db.CostEntryApprovals.AddAsync(approval, ct);

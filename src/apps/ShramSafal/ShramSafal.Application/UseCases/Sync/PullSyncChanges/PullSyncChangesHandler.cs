@@ -738,7 +738,10 @@ public sealed class PullSyncChangesHandler(
             // lane PRV — content-free: kind + id of each record taken back from this phone.
             audience.Withdrawn.ToList(),
             // lane RATE-1 — each farm's own rate versions he may read (additive and last).
-            FarmRates: farmRates.Select(FarmRateDto.From).ToList());
+            FarmRates: farmRates.Select(FarmRateDto.From).ToList(),
+            // lane BILL-1 fix round 1 (review M4) — this server sends every bill with its version: a phone holding bills it
+            // pulled before BILL-1 (no version on them) may ask once for all of them again. Additive and last (P11).
+            BillVersions: true);
 
         return Result.Success(response);
     }

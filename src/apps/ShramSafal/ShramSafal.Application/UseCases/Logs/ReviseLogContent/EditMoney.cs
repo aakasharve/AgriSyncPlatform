@@ -26,8 +26,10 @@ namespace ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 /// (<see cref="ShramSafalErrors.LogContentPricesNotYours"/>) and nothing is saved — a backstop, since his phone shows him
 /// the prices read-only; his edit of any other part lands and changes no money. So no seat makes money it could not
 /// correct, and no edit leaves a price and its money apart.
-/// TODO(D-12): there is no money approval yet, so all money is unreviewed and the maker may restate it. When D-12 brings
-/// approval, APPROVED money will need <c>ReviewMoney</c> even for the record's maker.</item>
+/// Lane BILL-1: money can now be approved (a separate stamp, who / when / which version). A price the maker restates after an
+/// approval makes a new version: the stamp then reads "for an earlier version" and the bill is तपासायचे again
+/// (<see cref="CostEntryReview"/>), so a changed price is never silently approved. Whether approved money may be restated by
+/// its maker at all is the founder's open question D-105 (b).</item>
 /// <item><b>What</b> (fix pass 3, call 2 — reconcile, not diff) — <see cref="EditMoneyPlan"/>: on every edit by an
 /// allowed seat, ALL of the record's derived money is brought in line with what the record now states — a priced line
 /// with no money is made under its derived id (<see cref="MoneyEntryIdentity"/>); money that differs from its line is
@@ -151,7 +153,10 @@ internal sealed class EditMoney(
             .Concat(stated.Select(l => MoneyEntryIdentity.ForRecordLine(log.Id, l.Kind, l.LineId)))
             .Distinct()
             .ToList();
-        var money = (await repository.GetCostEntriesByIdsAsync(ids, ct))
+        // lane BILL-1 fix round 1 (review M2) — the record's money is held BEFORE it and its corrections are read: a money-book
+        // correction or an approval in flight finishes first, this edit then sees the version it left (and a money-book
+        // correction is never undone, fix pass 4), and the version it raises is one step on top — never a lost step.
+        var money = (await repository.GetCostEntriesForChangeAsync(ids, ct))
             .Where(entry => entry.FarmId == log.FarmId) // E4: never another farm's row
             .ToList();
         var latest = (await repository.GetCorrectionsForEntriesAsync(money.Select(e => e.Id), ct))
@@ -226,8 +231,8 @@ internal sealed class EditMoney(
     }
 
     /// <summary>
-    /// Call 1 — may this seat change the record's prices? Its maker (TODO(D-12): approved money will need ReviewMoney even
-    /// for him), or a member who reviews money (the money book's rule, <c>CorrectCostEntryHandler</c>).
+    /// Call 1 — may this seat change the record's prices? Its maker (founder D-105 (b) open: whether approved money still may
+    /// be restated by him), or a member who reviews money (the money book's rule, <c>CorrectCostEntryHandler</c>).
     /// </summary>
     private async Task<bool> MayChangePricesAsync(DailyLog log, Guid actor, DateTime now, CancellationToken ct) =>
         actor == log.OperatorUserId.Value

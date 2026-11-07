@@ -6,6 +6,7 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 using ShramSafal.Domain.Finance;
 using ShramSafal.Domain.RecordPrivacy;
 using Xunit;
@@ -123,6 +124,31 @@ public sealed class CostEntryApprovalTests
     }
 
     [Fact]
+    public void Fix_round_1_a_bill_changed_after_its_approval_waits_for_review_again_whatever_its_amount()
+    {
+        var bill = Bill(); // ₹1,200: never set aside by the amount rule
+        var stamps = new List<CostEntryApproval> { bill.Approve(Guid.NewGuid(), Reviewer, 1, Made.AddMinutes(1)) };
+        CostEntryReview.NeedsReview(bill, stamps).Should().BeFalse();
+
+        bill.MarkCorrected(Guid.NewGuid(), 1300m, "INR", Made.AddMinutes(2));
+        CostEntryReview.NeedsReview(bill, stamps).Should().BeTrue("a changed price is never silently approved (D-105 either way)");
+        CostEntryReview.ReasonOf(bill, stamps).Should().Be(CostEntryReview.ChangedAfterApprovalReason);
+
+        stamps.Add(bill.Approve(Guid.NewGuid(), Reviewer, 2, Made.AddMinutes(3)));
+        CostEntryReview.NeedsReview(bill, stamps).Should().BeFalse();
+        CostEntryReview.ReasonOf(bill, stamps).Should().BeNull();
+    }
+
+    [Fact]
+    public void Fix_round_1_self_approval_waits_for_the_founder_behind_one_named_rule()
+    {
+        BillApprovalRules.ReviewerMayApproveOwnBill.Should().BeTrue("as built until the founder answers D-105 (a)");
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: true).Should().BeTrue();
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: true, isMaker: true).Should().BeTrue();
+        BillApprovalRules.MayApproveOwnBill(isPrimaryAccountHolder: false, isMaker: false).Should().BeTrue();
+    }
+
+    [Fact]
     public void A_bill_never_set_aside_is_never_waiting_for_review()
     {
         var bill = Bill();
@@ -156,7 +182,7 @@ public sealed class CostEntryApprovalTests
 
         dto.BillVersion.Should().Be(2);
         dto.NeedsReview.Should().BeTrue();
-        dto.ReviewReason.Should().Be(CostEntry.ReviewAmountReason);
+        dto.ReviewReason.Should().Be(CostEntryReview.ChangedAfterApprovalReason, "approved before, changed since: the fact a reviewer acts on");
         dto.Approval!.BillVersion.Should().Be(1, "the stamp reads as for an older version");
         dto.Approval.ApprovedByUserId.Should().Be(Reviewer.Value);
         dto.Approval.ApprovedByName.Should().Be("मुकादम-गणेश");

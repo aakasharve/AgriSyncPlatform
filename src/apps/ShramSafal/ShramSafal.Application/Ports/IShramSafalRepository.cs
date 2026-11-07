@@ -187,6 +187,14 @@ public interface IShramSafalRepository
         => GetCostEntryByIdAsync(costEntryId, ct);
 
     /// <summary>
+    /// lane BILL-1 fix round 1 (review M2) — the same hold for several bills at once (a record edit or a move changes all its
+    /// money in one save): every row held in id order (so two such changes never deadlock), then re-read. Every path that
+    /// raises a bill's version takes this hold first, so two simultaneous changes raise it twice. Default: the ordinary read.
+    /// </summary>
+    Task<List<CostEntry>> GetCostEntriesForChangeAsync(IEnumerable<Guid> costEntryIds, CancellationToken ct = default)
+        => GetCostEntriesByIdsAsync(costEntryIds, ct);
+
+    /// <summary>
     /// lane BILL-1 — stage one मंजूर stamp (append-only; the caller's single SaveChanges commits it with its audit row). The
     /// default refuses: a repository that cannot keep a stamp must never answer as if it had (P5).
     /// </summary>

@@ -20,6 +20,7 @@ import { financeService } from '../financeService';
 import {
     BILL_VERSION_CONFLICT_CODE,
     approvalIsDue,
+    mayApproveThisBill,
     approveBill,
     billStamp,
     buildApprovePayload,
@@ -71,6 +72,25 @@ describe('who may approve a bill — the server\'s rule, fail closed', () => {
         expect(mayApproveBills({ role: 'SecondaryOwner', authorities: undefined } as never)).toBe(false);
         expect(mayApproveBills({ role: 'Worker', authorities: [] } as never)).toBe(false);
         expect(mayApproveBills(null)).toBe(false);
+    });
+});
+
+describe('fix round 1 (review L4): a chosen-plots reviewer is offered the action only on his plots', () => {
+    const reviewer = { role: 'Mukadam', authorities: [{ name: 'SeeMoney' }, { name: 'ReviewMoney' }] } as never;
+    const chosen = { farmId: FARM, plotScope: 'ChosenPlots', plotIds: ['plot-a'] } as never;
+
+    it('a bill on his plot, and his own farm-wide bill: yes', () => {
+        expect(mayApproveThisBill(reviewer, chosen, { plotId: 'plot-a' })).toBe(true);
+        expect(mayApproveThisBill(reviewer, chosen, { plotId: undefined })).toBe(true);
+    });
+
+    it('his own bill on another plot (the pull sends it him, D-28): no button the server can only refuse', () => {
+        expect(mayApproveThisBill(reviewer, chosen, { plotId: 'plot-b' })).toBe(false);
+    });
+
+    it('every other seat: the farm-level rule alone; never without review money', () => {
+        expect(mayApproveThisBill(reviewer, undefined, { plotId: 'plot-b' })).toBe(true);
+        expect(mayApproveThisBill({ role: 'Mukadam', authorities: [{ name: 'SeeMoney' }] } as never, undefined, { plotId: 'plot-a' })).toBe(false);
     });
 });
 

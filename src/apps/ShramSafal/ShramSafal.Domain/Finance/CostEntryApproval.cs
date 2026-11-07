@@ -106,18 +106,41 @@ public sealed class CostEntryApproval : Entity<Guid>
 }
 
 /// <summary>
-/// lane BILL-1 — the one rule for "तपासायचे" on a bill: the server set it aside (<see cref="CostEntry.IsFlagged"/>) and no
-/// stamp covers the version it stands at now. An approval clears the flag for THAT version only: a correction after it
-/// makes a new version, and a flagged bill is then तपासायचे again (the flag itself is history and is never erased, P3).
+/// lane BILL-1 — the one rule for "तपासायचे" on a bill: no stamp covers the version it stands at now, and either the server
+/// set it aside (<see cref="CostEntry.IsFlagged"/>) or it was approved before and has changed since (fix round 1, review M3:
+/// a changed price is never silently approved, under either answer to the founder's D-105 (b)). An approval clears it for
+/// THAT version only: a correction or move after it makes a new version, and the bill is तपासायचे again until that version is
+/// approved. The flag itself is history and is never erased (P3).
 /// </summary>
 public static class CostEntryReview
 {
+    /// <summary>The reason sent when a bill is back for review because it changed after its approval.</summary>
+    public const string ChangedAfterApprovalReason = "Changed after approval";
+
     /// <summary>Is <paramref name="entry"/> waiting for a reviewer, given every stamp it has?</summary>
     public static bool NeedsReview(CostEntry entry, IEnumerable<CostEntryApproval> approvals)
     {
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(approvals);
-        return entry.IsFlagged && !approvals.Any(a => a.CostEntryId == entry.Id && a.BillVersion == entry.ContentVersion);
+        var own = approvals.Where(a => a.CostEntryId == entry.Id).ToList();
+        return (entry.IsFlagged || own.Count > 0) && !own.Any(a => a.BillVersion == entry.ContentVersion);
+    }
+
+    /// <summary>
+    /// Why it waits (only when <see cref="NeedsReview"/>): approved before and changed since — the fact a reviewer acts on —
+    /// or else the server's own flag reason.
+    /// </summary>
+    public static string? ReasonOf(CostEntry entry, IEnumerable<CostEntryApproval> approvals)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        ArgumentNullException.ThrowIfNull(approvals);
+        var own = approvals.Where(a => a.CostEntryId == entry.Id).ToList();
+        if (!NeedsReview(entry, own))
+        {
+            return null;
+        }
+
+        return own.Count > 0 ? ChangedAfterApprovalReason : entry.FlagReason;
     }
 
     /// <summary>The stamp to show: the most recent one (a stale approval is refused, so it is also the highest version).</summary>

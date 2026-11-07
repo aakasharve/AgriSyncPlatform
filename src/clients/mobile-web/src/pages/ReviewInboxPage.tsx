@@ -20,7 +20,9 @@ import { MoneyPage } from '../features/finance/components/MoneyPage';
 import { CATEGORY_LABEL, FINANCE_TITLE, SOURCE_LABEL, formatMoneyDate, reviewReasonLabel } from '../features/finance/moneyLabels';
 import { Chip, GlassCard, IconDot } from '../shared/components/ui/placeUi';
 import { BillApprovalLine, useBillApprovalOutbox } from '../features/finance/components/BillApprovalLine';
-import { mayApproveBills } from '../features/finance/billApproval';
+import { mayApproveBills, mayApproveThisBill } from '../features/finance/billApproval';
+import { useStoredAccessScopes } from '../core/session/storedFarmScope';
+import { scopeForFarm } from '../infrastructure/storage/accessScopeStore';
 import { billWord } from '../features/finance/billApprovalWords';
 import { useOptionalFarmContext } from '../core/session/FarmContext';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
@@ -38,8 +40,11 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
     const farmContext = useOptionalFarmContext();
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const [outbox, refreshOutbox] = useBillApprovalOutbox();
-    const mayApproveOn = (farmId: string) =>
-        !!farmContext && farmContext.currentFarmId === farmId && mayApproveBills(farmContext.currentFarm);
+    // fix round 1 (review L4) — and, for a chosen-plots seat, only bills on his plots (the server's write rule).
+    const storedScopes = useStoredAccessScopes();
+    const mayApproveOn = (bill: { farmId: string; plotId?: string }) =>
+        !!farmContext && farmContext.currentFarmId === bill.farmId
+        && mayApproveThisBill(farmContext.currentFarm, scopeForFarm(storedScopes, bill.farmId), bill);
     const seatMayApprove = !!farmContext && mayApproveBills(farmContext.currentFarm);
 
     // spec: plr-d10-redesign-real-integration-2026-10-25 (I8 — X5). "Approve" used to mark
@@ -91,7 +96,7 @@ const ReviewInboxPage: React.FC<ReviewInboxPageProps> = ({ currentRoute, onNavig
                                 </div>
                                 <BillApprovalLine
                                     bill={item}
-                                    mayApprove={mayApproveOn(item.farmId)}
+                                    mayApprove={mayApproveOn(item)}
                                     outbox={outbox}
                                     language={language}
                                     onQueued={refreshOutbox}

@@ -32,7 +32,7 @@ public static class BillReviewProjection
         {
             BillVersion = entry.ContentVersion,
             NeedsReview = needsReview,
-            ReviewReason = needsReview ? entry.FlagReason : null,
+            ReviewReason = CostEntryReview.ReasonOf(entry, own),
             Approval = latest is null
                 ? null
                 : new CostEntryApprovalDto(

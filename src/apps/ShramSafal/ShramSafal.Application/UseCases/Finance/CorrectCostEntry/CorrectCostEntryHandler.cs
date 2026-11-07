@@ -48,6 +48,14 @@ public sealed class CorrectCostEntryHandler(
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
         }
 
+        // spec: plr-d10 lane BILL-1 fix round 1 (review H1) — THE place rule the read side uses, for every seat it narrows: an
+        // own-records seat (स्वतःचं काम, कामगार) holding review money corrects only his own money, a chosen-plots seat only his
+        // plots' (or his own). A bill his pull never sends him is not there: not found, as a bill of another farm.
+        if (await CostEntryPlaceGate.HiddenFromAsync(repository, entry, command.CorrectedByUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.CostEntryNotFound);
+        }
+
         // spec: plr-d10 lane PRV fix pass 1 (H2) — a money record kept from him is not his to correct.
         if (!await Services.RecordAudienceGate.MaySeeCostAsync(repository, entry, command.CorrectedByUserId, clock.UtcNow, ct))
         {

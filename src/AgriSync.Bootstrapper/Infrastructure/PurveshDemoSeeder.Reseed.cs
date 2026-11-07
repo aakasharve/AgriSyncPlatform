@@ -657,7 +657,10 @@ public sealed partial class PurveshDemoSeeder
         List<Guid> IdentityOperatorIds,
         // lane WID fix pass 2 (L5) — workers whose ONLY identity event is one CardIssued with proof None: the card the
         // re-seed issues (outside Production). Kept with their card, not reported as retained.
-        List<Guid> CardOnlyOperatorIds);
+        List<Guid> CardOnlyOperatorIds,
+        // spec: plr-d10 lane BILL-1 fix round 1 (review M1) — bills somebody approved in the app. Their मंजूर stamps are
+        // append-only and RESTRICT the bill, so such a seed bill is kept exactly as he left it (E5).
+        List<Guid> ApprovedCostIds);
 
     private async Task<DemoFarmCensus> TakeDemoFarmCensusAsync(FarmId farmId, DemoLabourPlan plan, CancellationToken ct)
     {
@@ -715,6 +718,11 @@ public sealed partial class PurveshDemoSeeder
             .Include(l => l.Allocations)
             .Where(l => l.FarmId == farmId)
             .ToListAsync(ct);
+        var approvedCostIds = await _ssfContext.CostEntryApprovals.AsNoTracking()
+            .Where(a => a.FarmId == farmId && costIds.Contains(a.CostEntryId))
+            .Select(a => a.CostEntryId)
+            .Distinct()
+            .ToListAsync(ct);
 
         var seedCycleIds = PlotSeeds.Select(p => CreateDeterministicGuid($"{SeedVersion}:cycle:{p.Key}")).ToList();
         var seedCycles = await _ssfContext.CropCycles
@@ -730,7 +738,8 @@ public sealed partial class PurveshDemoSeeder
         return new DemoFarmCensus(
             seedLogs, nonSeedLogIds, farmAssignments, workRows, operators, marks,
             markCorrections.ToHashSet(), markCorrections.Count, labourCorrections, contentLogIds,
-            costs, corrections, dayLedgers, planned, seedCycles, attachments, identityOperatorIds, cardOnlyOperatorIds);
+            costs, corrections, dayLedgers, planned, seedCycles, attachments, identityOperatorIds, cardOnlyOperatorIds,
+            approvedCostIds);
     }
 
     // ── what must be retained ───────────────────────────────────────────────────────────
@@ -934,6 +943,11 @@ public sealed partial class PurveshDemoSeeder
         foreach (var correction in census.Corrections.Where(c => !seedCorrectionIds.Contains(c.Id)))
         {
             RetainCost(correction.CostEntryId, $"carries a correction somebody made in the app ({correction.Id})");
+        }
+
+        foreach (var costId in census.ApprovedCostIds)
+        {
+            RetainCost(costId, "was approved in the app (its मंजूर stamp is append-only)");
         }
 
         foreach (var ledger in census.DayLedgers)

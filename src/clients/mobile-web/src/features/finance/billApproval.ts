@@ -26,6 +26,7 @@ import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { mutationQueue } from '../../infrastructure/sync/MutationQueue';
 import { SyncMutationName } from '../../infrastructure/sync/SyncMutationCatalog';
 import type { MoneyEvent } from './finance.types';
+import type { FarmAccessScopeDto } from '../../infrastructure/api/accessScopeDtos';
 
 /** The server code a stale approval is refused with — the L4b exact-version code (`ShramSafalErrors.LogChangedSinceReview`). */
 export const BILL_VERSION_CONFLICT_CODE = 'ShramSafal.LogVersion.Conflict';
@@ -33,6 +34,21 @@ export const BILL_VERSION_CONFLICT_CODE = 'ShramSafal.LogVersion.Conflict';
 /** May this seat approve bills on this farm? The server's rule, fail closed. */
 export function mayApproveBills(farm: Pick<MeFarm, 'role' | 'authorities'> | null | undefined): boolean {
     return isPrimaryAccountHolderRole(farm?.role) || holdsAuthority(farm, AUTHORITY.reviewMoney);
+}
+
+/**
+ * fix round 1 (review L4) — may this seat approve THIS bill? The farm-level rule, and for a chosen-plots seat the bill's plot:
+ * his own bill on a plot he does not cover reaches him (D-28) but the server refuses its approval, so no button is drawn for
+ * it. A farm-wide bill reaches such a seat only when he made it, and he may approve that one. Every other seat: the farm rule.
+ */
+export function mayApproveThisBill(
+    farm: Pick<MeFarm, 'role' | 'authorities'> | null | undefined,
+    scope: Pick<FarmAccessScopeDto, 'plotScope' | 'plotIds'> | null | undefined,
+    bill: Pick<MoneyEvent, 'plotId'>,
+): boolean {
+    if (!mayApproveBills(farm)) return false;
+    if (scope?.plotScope !== 'ChosenPlots' || !Array.isArray(scope.plotIds)) return true;
+    return !bill.plotId || scope.plotIds.includes(bill.plotId);
 }
 
 export type BillStamp = 'approved' | 'approvedOlder' | 'none';

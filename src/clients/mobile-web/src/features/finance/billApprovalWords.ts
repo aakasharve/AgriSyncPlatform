@@ -18,9 +18,10 @@ const WORDS = {
     approve: said('मंजूर करा', 'Approve'),
     approved: said('मंजूर', 'Approved'),
     approvedOlder: said('आधीच्या रूपाला मंजूर', 'Approved for an earlier version'),
-    olderHint: said('नंतर रक्कम बदलली — पुन्हा पाहून मंजूर करा', 'The amount changed later — look again and approve'),
+    // fix round 1 (review L1) — a version also moves with the bill's place or day: the BILL changed, not always its amount.
+    olderHint: said('नंतर बिल बदललं — पुन्हा पाहून मंजूर करा', 'The bill changed later — look again and approve'),
     pending: said('मंजुरी पाठवायची आहे', 'Approval waiting to be sent'),
-    changed: said('हे बिल बदललं आहे — नवीन रक्कम पाहून पुन्हा मंजूर करा', 'This bill changed — look at the new amount and approve again'),
+    changed: said('हे बिल बदललं आहे — नवीन रूप पाहून पुन्हा मंजूर करा', 'This bill changed — look at the new version and approve again'),
     changedNotHereYet: said(
         'नवीन रूप अजून या फोनवर आलं नाही — थोड्या वेळाने पुन्हा पाहा',
         'The new version has not reached this phone yet — check again in a while'),
@@ -28,7 +29,7 @@ const WORDS = {
         'मंजुरी झाली नाही — श्रमसफलच्या नियमानुसार हे बिल तुम्ही मंजूर करू शकत नाही',
         'Not approved — by ShramSafal rules you cannot approve this bill'),
     failed: said('मंजुरी पाठवता आली नाही — पुन्हा प्रयत्न करा', 'Could not send the approval — try again'),
-    newAmount: said('नवीन रक्कम', 'New amount'),
+    newAmount: said('आताची रक्कम', 'Amount now'),
     meaning: said(
         'बिल मंजूर म्हणजे हा खर्च तपासला. पैसे दिल्याची नोंद वेगळी आहे.',
         'Approving a bill means this expense was checked. A payment record is separate.'),

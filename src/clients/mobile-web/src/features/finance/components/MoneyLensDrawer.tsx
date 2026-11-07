@@ -6,7 +6,9 @@ import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { SANS } from '../../../shared/components/ui/placeUi';
 import { BUCKET_LABEL, SOURCE_LABEL, categoryLabel, entryState, formatMoneyDate, rupees } from '../moneyLabels';
 import { BillApprovalLine, useBillApprovalOutbox } from './BillApprovalLine';
-import { mayApproveBills } from '../billApproval';
+import { mayApproveThisBill } from '../billApproval';
+import { useStoredAccessScopes } from '../../../core/session/storedFarmScope';
+import { scopeForFarm } from '../../../infrastructure/storage/accessScopeStore';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
@@ -48,9 +50,12 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
     const farmContext = useOptionalFarmContext();
     const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const [outbox, refreshOutbox] = useBillApprovalOutbox(isOpen);
+    const storedScopes = useStoredAccessScopes();
     if (!isOpen) return null;
-    const mayApproveOn = (farmId: string) =>
-        !!farmContext && farmContext.currentFarmId === farmId && mayApproveBills(farmContext.currentFarm);
+    // fix round 1 (review L4) — and, for a chosen-plots seat, only bills on his plots (the server's write rule).
+    const mayApproveOn = (bill: EffectiveMoneyEvent) =>
+        !!farmContext && farmContext.currentFarmId === bill.farmId
+        && mayApproveThisBill(farmContext.currentFarm, scopeForFarm(storedScopes, bill.farmId), bill);
 
     const openFix = (line: EffectiveMoneyEvent) => {
         setSelected(line);
@@ -130,7 +135,7 @@ export const MoneyLensDrawer: React.FC<MoneyLensDrawerProps> = ({
                             </div>
                             <BillApprovalLine
                                 bill={line}
-                                mayApprove={mayApproveOn(line.farmId)}
+                                mayApprove={mayApproveOn(line)}
                                 outbox={outbox}
                                 language={language}
                                 onQueued={refreshOutbox}

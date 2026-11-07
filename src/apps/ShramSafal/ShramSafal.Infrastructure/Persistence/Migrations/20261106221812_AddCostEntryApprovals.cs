@@ -23,6 +23,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
     /// the migration rather than record success if the app role can still UPDATE / DELETE / TRUNCATE. No existing policy,
     /// grant or constraint changes.</para>
     ///
+    /// <para><b>Rollback changes what a stamp MEANS (fix round 1, review M5; classified by behaviour, E8).</b> The old binary
+    /// runs against this schema, but it never raises <c>content_version</c>: a bill it corrects or moves keeps its version. So
+    /// after a rollback window, a stamp for "version 1" can stand on numbers nobody approved. Before rolling FORWARD again after
+    /// any rollback, the deployment plan must re-derive the versions, e.g.
+    /// <c>UPDATE ssf.cost_entries c SET content_version = c.content_version + (SELECT count(*) FROM ssf.finance_corrections f
+    /// WHERE f.cost_entry_id = c."Id" AND f.corrected_at_utc &gt;= '&lt;rollback start&gt;')</c> (and the same for a move in that
+    /// window, from its audit rows) — or treat every stamp older than the rollback start as for an earlier version. This is a
+    /// deployment step, stated here so the rollback section of the deployment plan carries it.</para>
+    ///
     /// <para><b>Down() destroys data, stated before it ever runs.</b> It drops the table — every bill's मंजूर stamps and
     /// their history — and the version column. The bills, their corrections and their flags are untouched (a stamp never
     /// changed them), so every bill reads "not approved" again and its review flag is open again. Rolling back past this

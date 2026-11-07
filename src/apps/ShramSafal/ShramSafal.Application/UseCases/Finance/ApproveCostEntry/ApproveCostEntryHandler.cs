@@ -19,9 +19,11 @@ namespace ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 /// <item><b>Who may approve</b>: the farm's primary account holder, or a seat holding "पैशांच्या नोंदी तपासणे व दुरुस्त करणे"
 /// (<see cref="FarmAuthority.ReviewMoney"/>, which needs see money) at this moment — the money book's one rule
 /// (<c>CorrectCostEntryHandler</c>, D-89's payout check). Never the bill's maker as such, never a label.</item>
-/// <item><b>Which bills</b>: one he may see (the audience, PRV) on a plot he covers (MU-4: the write rule on the bill's plot,
-/// and a chosen-plots seat's place rule — the farm's shared bill someone else made is not his), of the farm the phone named
-/// (E4: a bill of another farm is "not found", exactly as it is to every read of his).</item>
+/// <item><b>Which bills</b>: one he may see (the audience, PRV) on a plot he covers, of the farm the phone named (E4). MU-4:
+/// the read side's place rule for every seat it narrows (fix round 1, review H1: chosen plots AND an own-records seat — the
+/// स्वतःचं काम scope or the कामगार label sees only his own money), then the write rule on the bill's plot. A bill he may not
+/// see is "not found", exactly as a bill of another farm: no figure and no version in the answer.</item>
+/// <item><b>His own bill</b>: approvable by a reviewer as built, behind <see cref="BillApprovalRules"/> (founder D-105 (a)).</item>
 /// <item><b>Which version</b>: the one he saw. A bill corrected or moved since is refused with the L4b exact-version code
 /// (<see cref="ShramSafalErrors.LogChangedSinceReview"/>) so the phone shows the new version first. The bill is read under
 /// its row hold, so a correction in flight finishes first and this check sees the version it leaves.</item>
@@ -68,19 +70,19 @@ public sealed class ApproveCostEntryHandler(
             return Result.Failure<CostEntryDto>(ShramSafalErrors.Forbidden);
         }
 
-        // MU-4 — the write rule on the bill's plot, then (a chosen-plots seat) the place rule: a whole-farm or shared bill
-        // someone else made is not on his plots.
+        // MU-4 — fix round 1 (review H1): THE place rule the read side uses, for every seat it narrows (chosen plots, and an
+        // own-records seat: the स्वतःचं काम scope or the कामगार label). A bill his pull never sends him is not there: not found,
+        // exactly as a bill of another farm — no figure and no version reaches him.
+        if (await CostEntryPlaceGate.HiddenFromAsync(repository, entry, caller, now, ct))
+        {
+            return Result.Failure<CostEntryDto>(ShramSafalErrors.CostEntryNotFound);
+        }
+
+        // Then the write rule on the bill's plot (his own bill on a plot he does not cover: he sees it, D-28, and may not
+        // approve it).
         if (await PlotScopeGate.RefuseAsync(repository, farmId, entry.PlotId, caller, now, ct) is { } outside)
         {
             return Result.Failure<CostEntryDto>(outside);
-        }
-
-        var scope = await FarmReadGate.ScopeAsync(repository, farmId, caller, now, ct);
-        var place = RecordPlace.OfCost(entry.Id, farmId, entry.CreatedByUserId.Value, entry.EntryDate, entry.CreatedAtUtc,
-            entry.PlotId, entry.SourceAiJobId, entry.ClientAttachmentIdsJson);
-        if (RecordPlaceRule.NarrowsByPlot(scope) && !RecordPlaceRule.MaySee(scope, caller, place))
-        {
-            return Result.Failure<CostEntryDto>(ShramSafalErrors.PlotScopeForbidden);
         }
 
         // PRV — a bill kept from him is not his to approve.
@@ -90,11 +92,20 @@ public sealed class ApproveCostEntryHandler(
         }
 
         // The money book's rule: the primary account holder, or review money at this moment.
-        if (!await FarmAuthorityGate.IsPrimaryAccountHolderAsync(repository, farmId, caller, ct)
+        var isPrimaryHolder = await FarmAuthorityGate.IsPrimaryAccountHolderAsync(repository, farmId, caller, ct);
+        if (!isPrimaryHolder
             && !await FarmAuthorityGate.HoldsAsync(repository, farmId, caller, FarmAuthority.ReviewMoney, now, ct))
         {
             return Result.Failure<CostEntryDto>(ShramSafalErrors.Forbidden);
         }
+
+        // D-105 (a), waiting for the founder: may a reviewer approve a bill he entered himself? As built until he answers.
+        if (!BillApprovalRules.MayApproveOwnBill(isPrimaryHolder, entry.CreatedByUserId.Value == caller))
+        {
+            return Result.Failure<CostEntryDto>(ShramSafalErrors.Forbidden);
+        }
+
+        var scope = await FarmReadGate.ScopeAsync(repository, farmId, caller, now, ct);
 
         var stamps = (await repository.GetCostEntryApprovalsAsync([entry.Id], ct))
             .Where(a => a.CostEntryId == entry.Id && a.FarmId == entry.FarmId)
@@ -154,7 +165,7 @@ public sealed class ApproveCostEntryHandler(
                     effectiveAmount,
                     entry.CurrencyCode,
                     clearedReview = neededReview,
-                    flagReason = neededReview ? entry.FlagReason : null,
+                    reviewReason = CostEntryReview.ReasonOf(entry, stamps),
                 },
                 farmId: entry.FarmId,
                 clientCommandId: command.ClientCommandId,

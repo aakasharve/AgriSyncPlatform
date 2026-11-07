@@ -60,7 +60,9 @@ export const BillApprovalLine: React.FC<BillApprovalLineProps> = ({ bill, mayApp
     const [failed, setFailed] = useState(false);
     const stamp = billStamp(bill);
     const pending = outbox.pending.has(bill.id);
-    const changed = outbox.changed.get(bill.id);
+    // fix round 1 (review L5) — once someone stamped the version the bill stands at, a parked "it changed" refusal has
+    // nothing left to ask: the stamp shows, and the box goes.
+    const changed = stamp === 'approved' ? undefined : outbox.changed.get(bill.id);
     const refused = outbox.refused.get(bill.id);
     // A refusal because the bill changed: the NEW version must be on this phone before it can be approved.
     const newVersionHere = !!changed && bill.billVersion !== undefined && bill.billVersion > changed.seenVersion;

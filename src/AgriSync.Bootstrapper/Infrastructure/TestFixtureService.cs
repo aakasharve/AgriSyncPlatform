@@ -127,6 +127,7 @@ public sealed class TestFixtureService(
             ["verificationEvents"] = 0,
             ["dailyLogs"] = 0,
             ["financeCorrections"] = 0,
+            ["costEntryApprovals"] = 0,
             ["dayLedgers"] = 0,
             ["costEntries"] = 0,
             ["attachments"] = 0,
@@ -168,6 +169,11 @@ public sealed class TestFixtureService(
                 n = await ssf.DailyLogs
                     .Where(l => l.FarmId == farmId).ExecuteDeleteAsync(ct);
                 byTable["dailyLogs"] += n; total += n;
+
+                // spec: plr-d10 lane BILL-1 fix round 1 (review M1) — a bill's मंजूर stamps go BEFORE the bill (RESTRICT), through
+                // the admin path: the app role may only append to that table.
+                n = await DeleteBillApprovalsAsync(adminFactory, (Guid)farmId, ownerGuid, costIds, ct);
+                byTable["costEntryApprovals"] += n; total += n;
 
                 n = await ssf.FinanceCorrections
                     .Where(fc => costIds.Contains(fc.CostEntryId)).ExecuteDeleteAsync(ct);
@@ -239,6 +245,44 @@ public sealed class TestFixtureService(
             actorUserId: null,
             token => admin.DailyLogContents
                 .Where(c => logIds.Contains(c.DailyLogId))
+                .ExecuteDeleteAsync(token),
+            ct);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1 fix round 1 (review M1) — deletes the मंजूर stamps (<c>ssf.cost_entry_approvals</c>) of these
+    /// bills of one allowlisted farm, through the admin context, the same way as a log's stored details above.
+    /// </summary>
+    private static async Task<int> DeleteBillApprovalsAsync(
+        IAdminDbContextFactory<ShramSafalDbContext>? adminFactory,
+        Guid farmId,
+        Guid ownerAccountId,
+        System.Collections.Generic.List<Guid> costIds,
+        CancellationToken ct)
+    {
+        if (costIds.Count == 0)
+        {
+            return 0;
+        }
+
+        if (adminFactory is null)
+        {
+            throw new System.InvalidOperationException(
+                "Test fixture reset needs the admin database context to remove bill approval stamps before their bills.");
+        }
+
+        await using var admin = await adminFactory.CreateAsync(
+            $"{nameof(TestFixtureService)}.reset-approvals.{farmId:N}",
+            AgriSync.BuildingBlocks.Auditing.SystemActor.Worker,
+            ct);
+        var typedFarm = new AgriSync.SharedKernel.Contracts.Ids.FarmId(farmId);
+        return await RlsIdentityScope.RunAsFarmAsync(
+            admin,
+            farmId,
+            ownerAccountId,
+            actorUserId: null,
+            token => admin.CostEntryApprovals
+                .Where(a => a.FarmId == typedFarm && costIds.Contains(a.CostEntryId))
                 .ExecuteDeleteAsync(token),
             ct);
     }

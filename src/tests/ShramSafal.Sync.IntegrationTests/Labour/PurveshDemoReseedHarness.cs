@@ -262,17 +262,26 @@ public static class PurveshDemoReseedHarness
     /// timestamps sit on the same timeline as the fixed run instants. The command itself is given
     /// its run instant explicitly and never reads this.
     /// </param>
-    public static ServiceProvider BuildProvider(string conn, string environmentName = "Production", DateTime? clockUtc = null)
+    public static ServiceProvider BuildProvider(
+        string conn, string environmentName = "Production", DateTime? clockUtc = null, string? migrationConn = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        var settings = new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:ShramSafalDb"] = conn,
+            ["ConnectionStrings:UserDb"] = conn,
+            ["ConnectionStrings:AccountsDb"] = conn,
+        };
+        // lane BILL-1 fix round 1 — the admin path's connection, when a caller needs it (the tracked Development settings
+        // give the startup clear one; without it the admin factory falls back to the connection above).
+        if (migrationConn is not null)
+        {
+            settings["ConnectionStrings:ShramSafalDb_Migration"] = migrationConn;
+        }
+
         var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["ConnectionStrings:ShramSafalDb"] = conn,
-                ["ConnectionStrings:UserDb"] = conn,
-                ["ConnectionStrings:AccountsDb"] = conn,
-            })
+            .AddInMemoryCollection(settings)
             .Build();
         services.AddSingleton<IConfiguration>(config);
         services.AddSingleton<IHostEnvironment>(new FixedHostEnvironment(environmentName));

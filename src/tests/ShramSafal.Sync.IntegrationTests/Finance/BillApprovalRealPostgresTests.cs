@@ -134,10 +134,14 @@ public sealed class BillApprovalRealPostgresTests(ITestOutputHelper output) : Ro
         {
             var pushed = await PushAsync(who, Mutation, $"bill1-b-{who:N}", Approve(Cost, FarmA, 1));
             pushed.Status.Should().NotBe("applied");
-            pushed.ErrorCode.Should().EndWith("Forbidden", "a visible refusal every phone parks");
+            // fix round 1 (review H1): the कामगार's seat reads only his own money, so another person's bill is not there for
+            // him (not found, as a bill of another farm); the others see it and lack the authority (a visible refusal).
+            var mayNotSeeIt = who == Worker;
+            pushed.ErrorCode.Should().Be(mayNotSeeIt ? "ShramSafal.CostEntryNotFound" : "ShramSafal.Forbidden");
 
             var (rest, restBody) = await PostAsync(who, Route(Cost), new { billVersion = 1 });
-            rest.Should().Be(HttpStatusCode.Forbidden, restBody);
+            rest.Should().Be(mayNotSeeIt ? HttpStatusCode.NotFound : HttpStatusCode.Forbidden, restBody);
+            restBody.Should().NotContain("9876.54");
 
             // Not even his own bill: approving is the review-money authority, never the maker's.
             (await PushAsync(who, Mutation, $"bill1-b-own-{who:N}", Approve(WorkerBill, FarmA, 1))).Status.Should().NotBe("applied");
@@ -189,17 +193,30 @@ public sealed class BillApprovalRealPostgresTests(ITestOutputHelper output) : Ro
 
         await Task.Delay(1150);
 
-        // A bill on a plot he does not cover, and the farm's shared bill someone else made: refused, push and REST.
+        // A bill on a plot he does not cover, and the farm's shared bill someone else made: his pull never sends them, so to
+        // this door they are not there (fix round 1, review H1: not found, exactly as a bill of another farm), push and REST.
         foreach (var bill in new[] { PlotTwoBill, WholeFarmBill })
         {
             var pushed = await PushAsync(Mukadam, Mutation, $"bill1-c-{bill:N}", Approve(bill, FarmA, 1));
             Output.WriteLine($"[EVIDENCE] chosen-plots reviewer approves {bill} -> {pushed.Status} {pushed.ErrorCode}");
             pushed.Status.Should().NotBe("applied");
+            // The push's own place gate (MU-4, every kind of change) answers a chosen-plots seat first, with the plot rule's
+            // code; the door itself answers "not found" (REST below). Neither carries a figure or a version.
             pushed.ErrorCode.Should().Be("ShramSafal.PlotScope.Forbidden");
+            JsonSerializer.Serialize(pushed).Should().NotContain("4321.09");
             var (rest, restBody) = await PostAsync(Mukadam, Route(bill), new { billVersion = 1 });
-            rest.Should().Be(HttpStatusCode.Forbidden, restBody);
+            rest.Should().Be(HttpStatusCode.NotFound, restBody);
+            restBody.Should().NotContain("4321.09").And.NotContain("billVersion");
             (await StampsAsync(bill)).Should().BeEmpty();
         }
+
+        // His OWN bill on a plot he does not cover: he sees it (D-28), and the write rule refuses its approval.
+        var ownElsewhere = Guid.Parse("b1110000-0000-4000-8000-000000000005");
+        await PushAppliedAsync(Owner, "add_cost_entry", "bill1-c-own-elsewhere-seed", CostPayload(ownElsewhere, FarmA, PlotTwo, CycleTwo, 777.12m));
+        await ExecOnSuperuserAsync("""UPDATE ssf.cost_entries SET created_by_user_id = @m WHERE "Id" = @id""", ("m", Mukadam), ("id", ownElsewhere));
+        var own = await PushAsync(Mukadam, Mutation, "bill1-c-own-elsewhere", Approve(ownElsewhere, FarmA, 1));
+        own.ErrorCode.Should().Be("ShramSafal.PlotScope.Forbidden");
+        (await PostAsync(Mukadam, Route(ownElsewhere), new { billVersion = 1 })).Status.Should().Be(HttpStatusCode.Forbidden);
 
         // A bill on his plot: his to approve.
         await PushAppliedAsync(Mukadam, Mutation, "bill1-c-plot-a", Approve(Cost, FarmA, 1));

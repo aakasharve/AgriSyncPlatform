@@ -90,7 +90,8 @@ describe('the stamp words, one language at a time', () => {
         draw({ bill: bill({ billVersion: 2, approval: approval(1) }) });
         expect(screen.getByTestId('bill-stamp-bill-1')).toHaveTextContent('आधीच्या रूपाला मंजूर · मुकादम-गणेश');
         expect(screen.getByTestId('bill-stamp-bill-1')).toHaveAttribute('data-stamp', 'approvedOlder');
-        expect(screen.getByText('नंतर रक्कम बदलली — पुन्हा पाहून मंजूर करा')).toBeInTheDocument();
+        // fix round 1 (review L1) — a version also moves with the place or day, so the words say the BILL changed.
+        expect(screen.getByText('नंतर बिल बदललं — पुन्हा पाहून मंजूर करा')).toBeInTheDocument();
         expect(screen.getByTestId('bill-approve-bill-1')).toBeInTheDocument();
         cleanup();
         draw({ language: 'en', bill: bill({ billVersion: 2, approval: approval(1, 'Ganesh') }) });
@@ -110,8 +111,8 @@ describe('the "this bill changed" screen (the L4b pattern)', () => {
     it('shows the new amount and approves the NEW version, settling the parked row', async () => {
         const { onQueued } = draw({ bill: bill({ billVersion: 2, effectiveAmount: 32109.87 }), outbox: changed(1) });
         const screenOfIt = screen.getByTestId('bill-changed-bill-1');
-        expect(screenOfIt).toHaveTextContent('हे बिल बदललं आहे — नवीन रक्कम पाहून पुन्हा मंजूर करा');
-        expect(screenOfIt).toHaveTextContent('नवीन रक्कम: ₹ 32,110');
+        expect(screenOfIt).toHaveTextContent('हे बिल बदललं आहे — नवीन रूप पाहून पुन्हा मंजूर करा');
+        expect(screenOfIt).toHaveTextContent('आताची रक्कम: ₹ 32,110');
         fireEvent.click(screen.getByTestId('bill-approve-bill-1'));
         await waitFor(() => expect(onQueued).toHaveBeenCalled());
         expect(h.approveBill).toHaveBeenCalledWith(expect.objectContaining({ billVersion: 2 }), 41);
@@ -125,14 +126,21 @@ describe('the "this bill changed" screen (the L4b pattern)', () => {
 
     it('in English mode, the English twin', () => {
         draw({ language: 'en', bill: bill({ billVersion: 2 }), outbox: changed(1) });
-        expect(screen.getByTestId('bill-changed-bill-1')).toHaveTextContent('This bill changed — look at the new amount and approve again');
+        expect(screen.getByTestId('bill-changed-bill-1')).toHaveTextContent('This bill changed — look at the new version and approve again');
         expect(screen.getByTestId('bill-changed-bill-1').textContent).not.toMatch(/[ऀ-ॿ]/);
     });
 
     it('withheld money reads "—", never ₹0', () => {
         draw({ bill: bill({ billVersion: 2, effectiveAmount: Number.NaN }), outbox: changed(1) });
-        expect(screen.getByTestId('bill-changed-bill-1')).toHaveTextContent('नवीन रक्कम: —');
+        expect(screen.getByTestId('bill-changed-bill-1')).toHaveTextContent('आताची रक्कम: —');
         expect(screen.getByTestId('bill-changed-bill-1')).not.toHaveTextContent('₹ 0');
+    });
+
+    it('fix round 1 (review L5): once someone stamped the version it stands at, the old "changed" box is gone', () => {
+        draw({ bill: bill({ billVersion: 2, approval: approval(2), trustStatus: 'Verified', reviewStatus: 'OK' }), outbox: changed(1) });
+        expect(screen.queryByTestId('bill-changed-bill-1')).toBeNull();
+        expect(screen.getByTestId('bill-stamp-bill-1')).toHaveAttribute('data-stamp', 'approved');
+        expect(screen.queryByTestId('bill-approve-bill-1')).toBeNull();
     });
 
     it('a refusal for another reason is said as a ShramSafal rule, by its code', () => {

@@ -493,6 +493,8 @@ export interface SyncPullResponse extends PullAudienceFields {
     // spec: plr-d10 lane RATE-1 part A (founder D-72) — each farm's OWN rate versions made since the cursor, as this person
     // may read them. Additive: absent from an older server = nothing to merge. Read by `farmRatesStore` (Zod per row).
     farmRates?: unknown[];
+    // lane BILL-1 fix round 1 (M4) — true from a server that sends every bill with its version (`billVersionsMarker`).
+    billVersions?: boolean;
 }
 
 export interface AiParseResponse {

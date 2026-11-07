@@ -6,6 +6,7 @@ using AgriSync.Bootstrapper.Infrastructure;
 using AgriSync.BuildingBlocks.Persistence;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 using Xunit;
 using Xunit.Abstractions;
 using H = ShramSafal.Sync.IntegrationTests.Labour.PurveshDemoReseedHarness;
@@ -140,6 +141,44 @@ public sealed class PurveshDemoClearAfterReseedRealPostgresTests(
 
         H.Diff(before, await s.SnapshotAsync()).Select(d => d.Table).Should().BeEmpty(
             "the guard is the protection, not a prelude to deletion — the v3 seed workers do not dilute it");
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1 fix round 1 (review M1) — a demo bill the founder approved: its stamp is append-only (the app
+    /// role may not delete it) and RESTRICTs the bill, so the clear removes it first through the admin path (the migration
+    /// connection, as the tracked Development settings give it), then the bill. As agrisync_app, the role a developer's
+    /// <c>CLEAR_PURVESH_DEMO=true</c> runs as.
+    /// </summary>
+    [Fact]
+    public async Task Clear_removes_an_approved_demo_bills_stamp_before_the_bill()
+    {
+        await using var s = await PurveshDemoReseedScratch.CloneAsync(fixture.Template);
+        var reseed = await H.RunReseedAsync(s.AppProvider(), RunUtc, dryRun: false);
+        reseed.ExitCode.Should().Be(PurveshDemoReseedCommand.ExitOk, reseed.Output);
+
+        var bill = (Guid)(await H.ScalarAsync(s.SuperuserConn, """
+            SELECT "Id" FROM ssf.cost_entries WHERE farm_id = @farm AND NOT is_corrected ORDER BY entry_date DESC, "Id" LIMIT 1
+            """, ("farm", PurveshDemoSeeder.DemoFarmId)))!;
+        await H.AsCallerAsync(s.AppProvider(), PurveshDemoSeeder.DemoFarmId, fixture.Template.OwnerUserId, async sp =>
+        {
+            var r = await sp.GetRequiredService<ApproveCostEntryHandler>().HandleAsync(
+                new ApproveCostEntryCommand(bill, PurveshDemoSeeder.DemoFarmId, 1, fixture.Template.OwnerUserId));
+            r.IsSuccess.Should().BeTrue("the owner approves a demo bill: {0}", r.Error);
+            return true;
+        });
+        (await H.CountAsync(s.SuperuserConn, "SELECT count(*) FROM ssf.cost_entry_approvals WHERE cost_entry_id = @id", ("id", bill)))
+            .Should().Be(1, "arrange: the demo bill carries a stamp");
+
+        var provider = s.AppProvider(environmentName: "Development", migrationConn: s.SuperuserConn);
+        await using var scope = provider.CreateAsyncScope();
+        scope.ServiceProvider.GetRequiredService<TenantContext>().ElevateToAdminCrossTenant();
+        var result = await scope.ServiceProvider.GetRequiredService<PurveshDemoSeeder>().ClearPurveshDemoAsync();
+        output.WriteLine($"[EVIDENCE] clear with an approved demo bill: {result}");
+
+        (await H.CountAsync(s.SuperuserConn, "SELECT count(*) FROM ssf.cost_entry_approvals WHERE cost_entry_id = @id", ("id", bill)))
+            .Should().Be(0, "the stamp goes first");
+        (await H.CountAsync(s.SuperuserConn, """SELECT count(*) FROM ssf.cost_entries WHERE "Id" = @id""", ("id", bill)))
+            .Should().Be(0, "then the bill, with no 23503");
     }
 
     private static async Task<string> ClearAsync(PurveshDemoReseedScratch s, string connectAs)
