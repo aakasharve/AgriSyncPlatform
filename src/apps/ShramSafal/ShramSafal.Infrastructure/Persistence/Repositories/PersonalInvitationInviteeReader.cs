@@ -29,14 +29,16 @@ public sealed class PersonalInvitationInviteeReader(
             return [];
         }
 
+        var since = clock.UtcNow;
         var rows = await RlsIdentityScope.RunAsUserAsync(
             db,
             userId,
             async token =>
             {
                 await PersonalInvitationTenantScope.SetInviteeDoorAsync(db, phone, null, token);
+                // Fix round 1 (L-12): waiting AND unexpired, before the 50 are taken.
                 var visible = await db.PersonalInvitations.AsNoTracking()
-                    .Where(x => x.InvitedPhoneE164 == phone && x.Status == PersonalInvitationStatus.Waiting)
+                    .Where(x => x.InvitedPhoneE164 == phone && x.Status == PersonalInvitationStatus.Waiting && x.ExpiresAtUtc > since)
                     .OrderByDescending(x => x.CreatedAtUtc)
                     .Take(50)
                     .ToListAsync(token);

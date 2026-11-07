@@ -57,6 +57,13 @@ export interface JoinByCodeScreenProps {
     openJoinLink?: (href: string) => void;
 }
 
+/** Fix round 1 (L-7): what the invitation scanner hands back for a FARM's QR, so it is answered, not ignored. */
+const FARM_QR_SEEN = 'farm-qr';
+
+/** The invitation scanner's reader: an invitation's eight digits, or the mark of a farm's QR link. */
+const readScanned = (raw: string | null | undefined): string | null =>
+    normalizeInvitationCode(raw) ?? (raw && readJoinLink(raw) ? FARM_QR_SEEN : null);
+
 const defaultOpenJoinLink = (href: string): void => {
     if (typeof window !== 'undefined') window.location.assign(href);
 };
@@ -68,6 +75,7 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
     // spec: plr-d10 lane MU-2 — a personal invitation found by its eight digits (typed, pasted as its link, or scanned).
     const [invitation, setInvitation] = useState<{ card: InvitationCardData; code: string } | null>(null);
     const [scanning, setScanning] = useState(false);
+    const [farmQrSeen, setFarmQrSeen] = useState(false);
     const [digitsFarmCode, setDigitsFarmCode] = useState<string | null>(null);
     const [raw, setRaw] = useState('');
     const [phase, setPhase] = useState<Phase>('enter');
@@ -96,6 +104,7 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
         setJoined(null);
         setInvitation(null);
         setScanning(false);
+        setFarmQrSeen(false);
         setDigitsFarmCode(null);
     }, [isOpen]);
 
@@ -147,7 +156,7 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
             setPhase('enter');
         } catch (error) {
             if (run !== runRef.current) return;
-            const why = invitationRefusal(error);
+            const why = invitationRefusal(error, 'invitee');
             setPhase('enter');
             setProblem(why === 'unknown' ? 'unknown' : why === 'rate_limited' ? 'rateLimited' : 'failed');
         } finally {
@@ -158,6 +167,7 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
     const handleChange = (value: string) => {
         setRaw(value);
         setProblem(null);
+        setFarmQrSeen(false);
         setDigitsFarmCode(null);
         // An invitation's eight digits (or its shared link): its card, not a farm code.
         const invitationCode = normalizeInvitationCode(value);
@@ -271,13 +281,25 @@ const JoinByCodeScreen: React.FC<JoinByCodeScreenProps> = ({ isOpen, onClose, on
                             {platformQrDetector() ? (
                                 scanning ? (
                                     <div className="mt-2">
-                                        <CardScanner readCode={normalizeInvitationCode} showTyped={false} paused={phase === 'sending'}
-                                            onCode={code => { setScanning(false); void findCard(code); }}
+                                        <CardScanner readCode={readScanned} showTyped={false} paused={phase === 'sending'}
+                                            onCode={code => {
+                                                setScanning(false);
+                                                if (code === FARM_QR_SEEN) {
+                                                    setFarmQrSeen(true);
+                                                    return;
+                                                }
+                                                void findCard(code);
+                                            }}
                                             onCancel={() => setScanning(false)} />
                                     </div>
                                 ) : (
-                                    <div className="mt-2">
-                                        <BigButton tone="white" testId="join-scan-qr" onClick={() => setScanning(true)}>{I.scanQr}</BigButton>
+                                    <div className="mt-2 space-y-2">
+                                        {farmQrSeen && (
+                                            <p role="status" className="m-0 text-[14px] font-bold leading-snug text-amber-800" data-testid="join-farm-qr-line">
+                                                {I.farmQrAtInvitationDoor}
+                                            </p>
+                                        )}
+                                        <BigButton tone="white" testId="join-scan-qr" onClick={() => { setFarmQrSeen(false); setScanning(true); }}>{I.scanQr}</BigButton>
                                     </div>
                                 )
                             ) : (

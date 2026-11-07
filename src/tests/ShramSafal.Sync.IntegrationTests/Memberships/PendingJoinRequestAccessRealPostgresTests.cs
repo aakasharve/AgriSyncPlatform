@@ -514,6 +514,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // relationship-label CHECK and the three nullable farm_memberships columns. No farm_join_requests object, no
         // ssf.farms policy; a seat's status is never touched. Re-Up re-creates them.
         "20261106063315_AddPersonalInvitations",
+        // 20261106212345_PersonalInvitationsGoWithTheirFarm (lane MU-2 fix round 1, L-10): Up() and Down() read in full —
+        // one foreign key on ssf.farm_personal_invitations re-created (CASCADE; Down() puts RESTRICT back). No
+        // farm_join_requests object, no ssf.farms policy, no seat touched.
+        "20261106212345_PersonalInvitationsGoWithTheirFarm",
     ];
 
     /// <summary>

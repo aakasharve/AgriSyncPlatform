@@ -42,7 +42,26 @@ public sealed class UserDirectoryService(ShramSafalDbContext db) : IUserDirector
         return rows.Count == 1 ? rows[0].Phone : null;
     }
 
+    // lane MU-2 fix round 1 (review H-1) — one read for the owner's list: which claimant's PROVEN number is which. Compared
+    // on the server only; the list sends nothing but the last four digits.
+    public async Task<IReadOnlyDictionary<Guid, string>> GetVerifiedPhonesAsync(IEnumerable<Guid> userIds, CancellationToken ct = default)
+    {
+        var ids = userIds.Where(id => id != Guid.Empty).Distinct().ToArray();
+        if (ids.Length == 0)
+            return new Dictionary<Guid, string>();
+
+        var rows = await db.Database
+            .SqlQueryRaw<UserIdPhoneRow>(
+                "SELECT \"Id\" AS \"Id\", phone AS \"Phone\" FROM public.users WHERE \"Id\" = ANY(@ids) AND phone_verified_at_utc IS NOT NULL",
+                new Npgsql.NpgsqlParameter("ids", ids))
+            .ToListAsync(ct);
+
+        return rows.Where(r => !string.IsNullOrWhiteSpace(r.Phone)).ToDictionary(r => r.Id, r => r.Phone);
+    }
+
     private sealed record UserDisplayNameRow(Guid Id, string DisplayName);
 
     private sealed record UserPhoneRow(string Phone);
+
+    private sealed record UserIdPhoneRow(Guid Id, string Phone);
 }

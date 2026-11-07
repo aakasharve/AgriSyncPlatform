@@ -1,4 +1,5 @@
 using AgriSync.BuildingBlocks.Abstractions;
+using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -47,7 +48,8 @@ public sealed class PersonalInvitationService(
     IUserDirectory users,
     WorkerIdentityService workerIdentity,
     IIdGenerator ids,
-    IClock clock)
+    IClock clock,
+    IAnalyticsWriter analytics)
 {
     /// <summary>Invitations one farm may make in 24 hours (my call): a big gang in a day, never a code-spraying loop.</summary>
     public const int InvitationsPerFarmPerDay = 20;
@@ -64,6 +66,14 @@ public sealed class PersonalInvitationService(
     public static readonly Error Declined = Error.Conflict("invitation.declined", "This invitation was declined.");
     public static readonly Error Withdrawn = Error.Conflict("invitation.withdrawn", "The farm owner withdrew this invitation.");
     public static readonly Error AlreadyMember = Error.Conflict("invitation.already_member", "You are already on this farm.");
+
+    /// <summary>Fix round 1 (review M-5): another invitation for the same number was made at the same moment.</summary>
+    public static readonly Error NumberBusy = Error.Conflict(
+        "invitation.number_busy", "An invitation for this number was made just now. Look at the list.");
+
+    /// <summary>Fix round 1 (review M-5): the claim lost a race (a double tap, or the worker's record changed at that moment).</summary>
+    public static readonly Error TryAgain = Error.Conflict(
+        "invitation.try_again", "Something else changed at the same moment. Please try again.");
 
     private const int CodeAttempts = 4;
 
@@ -177,9 +187,12 @@ public sealed class PersonalInvitationService(
 
         for (var attempt = 1; ; attempt++)
         {
-            if (await invitations.TrySaveNewAsync(invitation, ct))
+            switch (await invitations.TrySaveNewAsync(invitation, ct))
             {
-                return Result.Success(PersonalInvitationProjection.View(invitation, now));
+                case PersonalInvitationSaveOutcome.Saved:
+                    return Result.Success(PersonalInvitationProjection.View(invitation, now));
+                case PersonalInvitationSaveOutcome.NumberBusy:
+                    return Result.Failure<PersonalInvitationView>(NumberBusy);
             }
 
             if (attempt == CodeAttempts)
@@ -203,17 +216,63 @@ public sealed class PersonalInvitationService(
         }
 
         var now = clock.UtcNow;
-        var rows = await invitations.ListForFarmAsync(farmId, now - OwnerListWindow, ct);
+        var rows = (await invitations.ListForFarmAsync(farmId, now - OwnerListWindow, ct)).Where(r => r.FarmId.Value == farmId).ToList();
         // A claim still waits for his tap only while its seat is still a waiting claim of that invitation (the owner may
         // have said नको through the general decline, or the person withdrew it).
-        var waitingClaims = (await repository.GetFarmMembershipsAsync(new FarmId(farmId), ct))
+        var seats = await repository.GetFarmMembershipsAsync(new FarmId(farmId), ct);
+        var seatById = seats.ToDictionary(s => s.Id);
+        var waitingClaims = seats
             .Where(m => m.Status == MembershipStatus.PendingApproval && m.PersonalInvitationId is not null)
             .Select(m => m.PersonalInvitationId!.Value)
             .ToHashSet();
+
+        // Fix round 1 (review H-1): the owner approves WHO CLAIMED IT — the claimant's own name and last four digits, and
+        // whether the claim came from the number the owner named (compared here, on the server, on proven numbers only).
+        var claimants = rows.Where(r => r.ClaimedByUserId is not null).Select(r => r.ClaimedByUserId!.Value.Value).Distinct().ToList();
+        var names = claimants.Count == 0 ? new Dictionary<Guid, string>() : await users.GetDisplayNamesAsync(claimants, ct);
+        var tails = claimants.Count == 0 ? new Dictionary<Guid, string>() : await repository.GetPhoneLast4ByIdsAsync(claimants, ct);
+        var proven = claimants.Count == 0 ? new Dictionary<Guid, string>() : await users.GetVerifiedPhonesAsync(claimants, ct);
+
         return Result.Success<IReadOnlyList<PersonalInvitationView>>(rows
-            .Where(r => r.FarmId.Value == farmId)
-            .Select(r => PersonalInvitationProjection.View(r, now) with { WaitsForOwner = r.WaitsForOwner && waitingClaims.Contains(r.Id) })
+            .Select(r =>
+            {
+                var waits = r.WaitsForOwner && waitingClaims.Contains(r.Id);
+                InvitationClaimant? claimant = null;
+                if (r.ClaimedByUserId is { } by)
+                {
+                    var provenPhone = IndianMobile.Normalize(proven.GetValueOrDefault(by.Value));
+                    claimant = new InvitationClaimant(
+                        names.GetValueOrDefault(by.Value),
+                        tails.GetValueOrDefault(by.Value),
+                        AnotherNumber: r.InvitedPhoneE164 is not null && !r.Names(provenPhone),
+                        Outcome: ClaimOutcomeOf(r, waits, r.MembershipId is { } seatId ? seatById.GetValueOrDefault(seatId) : null));
+                }
+
+                return PersonalInvitationProjection.View(r, now, claimant) with { WaitsForOwner = waits };
+            })
             .ToList());
+    }
+
+    /// <summary>
+    /// Fix round 1 (review L-4) — what became of a claim: still waiting for the owner, in (by the advance approval or his
+    /// tap), his नको on the request, or the claimant took it back. A claim that ended without the owner's yes is never
+    /// called accepted.
+    /// </summary>
+    private static string ClaimOutcomeOf(PersonalInvitation invitation, bool waits, FarmMembership? seat)
+    {
+        if (waits)
+        {
+            return "WaitsForOwner";
+        }
+
+        if (!invitation.WaitsForOwner || invitation.OwnerApprovedAtUtc is not null)
+        {
+            return "Joined";
+        }
+
+        return seat?.Status == MembershipStatus.Exited || (seat?.StatusChangedByUserId is { } by && by == seat.UserId)
+            ? "Withdrawn"
+            : "Declined";
     }
 
     public async Task<Result<PersonalInvitationView>> WithdrawAsync(
@@ -286,6 +345,10 @@ public sealed class PersonalInvitationService(
                 plotIds = seat.ScopePlotIds.Order().ToList(),
                 authorities = PersonalInvitationProjection.AuthorityList(invitation),
             }, audit), ct);
+        // Fix round 1 (review M-1): he is in now — any other invitation on this farm still waiting for his number ends.
+        await NamedInvitations.EndForPersonLetInAsync(
+            invitations, repository, users, farmId, claimant.Value, exceptInvitationId: invitation.Id, new UserId(callerUserId),
+            now, audit.AppVersion, audit.DeviceId, audit.IpHash, ct);
         await repository.SaveChangesAsync(ct);
 
         var names = await users.GetDisplayNamesAsync([claimant.Value], ct);
@@ -306,7 +369,7 @@ public sealed class PersonalInvitationService(
 
         await inviteeScope.OpenInviteeDoorAsync(phone, code: null, ct);
         var now = clock.UtcNow;
-        var waiting = (await invitations.ListVisibleAsync(ct))
+        var waiting = (await invitations.ListVisibleWaitingAsync(now, ct))
             .Where(i => i.Names(phone) && i.StatusAt(now) == PersonalInvitationStatus.Waiting)
             .OrderByDescending(i => i.CreatedAtUtc)
             .ToList();
@@ -393,8 +456,11 @@ public sealed class PersonalInvitationService(
             await repository.AddFarmMembershipAsync(seat, ct);
         }
 
-        // The ruling: the number it named, proven by this person's own one-time code = the owner's advance approval.
-        var approvedInAdvance = invitation.Names(phone);
+        // The ruling: the number it named, proven by this person's own one-time code = the owner's advance approval — unless
+        // the owner stopped this person on this farm AFTER he made the invitation (fix round 1, review M-1, SEC-2): a
+        // removal, a नको or a pause newer than the advance approval outranks it, and the claim waits for him again.
+        var approvedInAdvance = invitation.Names(phone)
+            && !OwnerStoppedSince(await repository.GetFarmMembershipHistoryAsync(farmId, callerUserId, ct), invitation.CreatedAtUtc);
         var workerLinked = false;
         if (approvedInAdvance)
         {
@@ -427,15 +493,16 @@ public sealed class PersonalInvitationService(
             }, audit), ct);
 
         // The identity rows a link changed are written in this same unit of work, while the identity door is still open
-        // (WID's phone table answers only inside it); the door is closed once they are saved.
-        var saved = true;
-        if (isNewSeat)
+        // (WID's phone table answers only inside it). Fix round 1 (review M-5): a lost race — a double tap on the seat index,
+        // or WID's one-verified-number indexes — is a clean refusal with nothing written, and the door is closed only after
+        // a save that landed (never on a refused one; it is transaction-local and ends with the request either way).
+        switch (await invitations.TrySaveClaimAsync(ct))
         {
-            saved = await repository.TrySaveNewMembershipAsync(ct);
-        }
-        else
-        {
-            await repository.SaveChangesAsync(ct);
+            case InvitationClaimSaveOutcome.SeatTaken:
+                return Result.Failure<InvitationAcceptView>(Error.Conflict(
+                    "join.concurrent_claim_unresolved", "Could not complete joining. Please try again."));
+            case InvitationClaimSaveOutcome.IdentityClash:
+                return Result.Failure<InvitationAcceptView>(TryAgain);
         }
 
         if (invitation.FieldOperatorId is not null)
@@ -443,14 +510,37 @@ public sealed class PersonalInvitationService(
             await workerIdentity.CloseIdentityDoorAsync(ct);
         }
 
-        if (!saved)
-        {
-            return Result.Failure<InvitationAcceptView>(Error.Conflict(
-                "join.concurrent_claim_unresolved", "Could not complete joining. Please try again."));
-        }
+        // Fix round 1 (review L-5): a personal-invitation join is counted in the same stream as a QR claim.
+        await analytics.EmitAsync(new AnalyticsEvent(
+            EventId: ids.New(),
+            EventType: AnalyticsEventType.InvitationClaimed,
+            OccurredAtUtc: now,
+            ActorUserId: caller,
+            FarmId: invitation.FarmId,
+            OwnerAccountId: null,
+            ActorRole: approvedInAdvance ? seat.Role.ToString().ToLowerInvariant() : "joiner",
+            Trigger: "manual",
+            DeviceOccurredAtUtc: null,
+            SchemaVersion: "v1",
+            PropsJson: System.Text.Json.JsonSerializer.Serialize(new
+            {
+                farmId,
+                personalInvitationId = invitation.Id,
+                label = invitation.Label.ToString(),
+                outcome = approvedInAdvance ? "joined" : "requested",
+                workerLinked,
+            })), ct);
 
         return Result.Success(new InvitationAcceptView(farmId, invitation.FarmName, seat.Status.ToString(), seat.Id, workerLinked));
     }
+
+    /// <summary>
+    /// Fix round 1 (review M-1) — did the owner stop this person on this farm after <paramref name="sinceUtc"/>: a removal or
+    /// a नको (<see cref="MembershipStatus.Revoked"/>), or a pause he left on (<see cref="FarmMembership.EndedAfterOwnerStop"/>),
+    /// decided after the moment given.
+    /// </summary>
+    private static bool OwnerStoppedSince(IReadOnlyList<FarmMembership> history, DateTime sinceUtc) =>
+        history.Any(s => s.EndedAfterOwnerStop && (s.StatusChangedAtUtc ?? s.RevokedAtUtc ?? s.ExitedAtUtc) is { } at && at > sinceUtc);
 
     /// <summary>नको — it ends; nothing is made. An invitation that named a number is declined only by that proven number.</summary>
     public async Task<Result<string>> DeclineAsync(
@@ -554,9 +644,9 @@ public sealed class PersonalInvitationService(
         else
         {
             // By id: only an invitation naming his proven number (the door shows no other; re-asserted here, E4).
-            found = phone is null
+            found = phone is null || await invitations.FindVisibleByIdAsync(invitationId!.Value, ct) is not { } byId || !byId.Names(phone)
                 ? null
-                : (await invitations.ListVisibleAsync(ct)).FirstOrDefault(i => i.Id == invitationId && i.Names(phone));
+                : byId;
             if (found is null)
             {
                 return (null, phone, Unknown);

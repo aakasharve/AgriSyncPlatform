@@ -58,7 +58,7 @@ export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, bus
     const invite = invitationCopy(language);
 
     return (
-        <li className="list-none space-y-2 rounded-3xl border-2 border-[#1448E6] bg-white p-3.5" data-testid={`join-request-${row.userId}`}>
+        <li tabIndex={-1} className="list-none space-y-2 rounded-3xl border-2 border-[#1448E6] bg-white p-3.5 outline-none focus:ring-4 focus:ring-[#1448E6]/30" data-testid={`join-request-${row.userId}`}>
             <p className="m-0 flex items-start gap-2 text-[17px] font-extrabold leading-snug text-stone-900">
                 <UserPlus size={20} className="mt-0.5 shrink-0 text-[#1448E6]" aria-hidden="true" />
                 {TEAM_COPY.wantsIn(name)}

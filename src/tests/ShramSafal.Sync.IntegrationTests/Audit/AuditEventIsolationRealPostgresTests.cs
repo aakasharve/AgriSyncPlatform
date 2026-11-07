@@ -1315,6 +1315,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    Never touches ssf.audit_events, its policies or its grants (every invitation step is an ordinary appended
         //    audit row: PersonalInvitationCreated / Withdrawn / Declined, MemberJoined / MemberJoinRequested). Safe mid-proof.
         "20261106063315_AddPersonalInvitations",
+        // 20261106212345_PersonalInvitationsGoWithTheirFarm (lane MU-2 fix round 1, L-10): Up() and Down() read in full —
+        //    re-creates ONE foreign key on ssf.farm_personal_invitations (RESTRICT -> CASCADE; Down() puts RESTRICT back).
+        //    Never touches ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261106212345_PersonalInvitationsGoWithTheirFarm",
     ];
 
     /// <summary>

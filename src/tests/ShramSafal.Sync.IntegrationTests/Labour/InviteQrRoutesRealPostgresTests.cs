@@ -391,8 +391,10 @@ public sealed class InviteQrRoutesRealPostgresTests : IAsyncLifetime
         return ReadInvite(body);
     }
 
+    // CONSCIOUS CHANGE — lane MU-2 fix round 1 (D-103, Q1): this release's phone says it understands a waiting
+    // request (acceptsJoinRequest); a claim without it gets 409 join.request_sent (PersonalInvitationRealPostgresTests).
     private Task<HttpResponseMessage> ClaimAsync(Guid caller, string token, string farmCode)
-        => SendAsync(HttpMethod.Post, "/shramsafal/join/claim", caller, new { token, farmCode });
+        => SendAsync(HttpMethod.Post, "/shramsafal/join/claim", caller, new { token, farmCode, acceptsJoinRequest = true });
 
     private async Task<HttpResponseMessage> SendAsync(
         HttpMethod method, string url, Guid? userId, object? body = null)

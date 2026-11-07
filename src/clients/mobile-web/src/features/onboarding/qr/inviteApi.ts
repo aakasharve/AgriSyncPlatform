@@ -134,11 +134,17 @@ export const rotateFarmInvite = async (farmId: string): Promise<InviteResponse> 
     return (await response.json()) as InviteResponse;
 };
 
+/**
+ * spec: plr-d10 lane MU-2 fix round 1 (founder question D-103, the review's Q1) — a wall-QR scan makes a request that waits
+ * for the owner. `acceptsJoinRequest: true` tells the server THIS phone reads a waiting status (`status:
+ * "PendingApproval"`) and says so in its own words; a phone that does not send it (release 1.0.17) gets 409
+ * `join.request_sent` with a message it shows as written.
+ */
 export const claimFarmJoin = async (token: string, farmCode: string): Promise<ClaimResponse> => {
     const response = await fetch(`${resolveBaseUrl()}/shramsafal/join/claim`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({ token, farmCode }),
+        body: JSON.stringify({ token, farmCode, acceptsJoinRequest: true }),
     });
     if (!response.ok) throw await parseError(response);
     return (await response.json()) as ClaimResponse;

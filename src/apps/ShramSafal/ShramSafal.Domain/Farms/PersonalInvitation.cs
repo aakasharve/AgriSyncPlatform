@@ -169,6 +169,15 @@ public sealed class PersonalInvitation : Entity<Guid>
 
         ValidateAuthorities(authorities, nowUtc);
 
+        // lane MU-2 fix round 1 (review M-2, P5): an authority that would do nothing on this seat is refused, so the card
+        // never promises it (the team card's own "not in force" rule).
+        var idle = FarmAuthorities.NotInForce(RelationshipLabels.RoleOf(label), plotScope).Where(authorities.ContainsKey).ToList();
+        if (idle.Count > 0)
+        {
+            throw new ArgumentException(
+                $"{string.Join(", ", idle)} would do nothing on a {label} seat with {plotScope}.", nameof(authorities));
+        }
+
         var invitation = new PersonalInvitation(id)
         {
             FarmId = farmId,

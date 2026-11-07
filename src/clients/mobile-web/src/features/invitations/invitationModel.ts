@@ -92,7 +92,7 @@ export function withPlots(grant: InviteGrant, plotScope: PlotScopeName, plotIds?
  * The responsibilities that do nothing on this grant (the team card's rule, MU-4 fix pass 1): setup needs every plot; a
  * कामगार or a स्वतःचं काम seat sees only its own records, so money and wages are not in force.
  */
-export function notInForce(grant: InviteGrant): string[] {
+export function notInForce(grant: Pick<InviteGrant, 'label' | 'plotScope'>): string[] {
     const out: string[] = [];
     if (grant.plotScope !== 'AllPlots') out.push(AUTHORITY.editFarmSetup);
     if (grant.label === 'Worker' || grant.plotScope === 'OwnWork') out.push(AUTHORITY.seeMoney, AUTHORITY.seeWages);
@@ -109,12 +109,17 @@ export function readMobile(input: string | null | undefined): { ok: boolean; dig
     return /^[6-9]\d{9}$/.test(digits) ? { ok: true, digits } : { ok: false, digits: null };
 }
 
-/** The request body: exactly the grant on the screen, plus the optional person details. */
+/**
+ * The request body: the grant on the screen, plus the optional person details. An authority that does nothing on this
+ * grant (shown "लागू नाही" on its switch) is left out — the server refuses it, and no card may promise it (fix round 1,
+ * M-2).
+ */
 export function createBody(
     grant: InviteGrant,
     person: { name?: string; mobile?: string | null; fieldOperatorId?: string | null },
 ): CreateInvitationBody {
     const name = person.name?.trim();
+    const ruledOut = notInForce(grant);
     return {
         label: grant.label,
         ...(name ? { name } : {}),
@@ -122,7 +127,9 @@ export function createBody(
         ...(person.fieldOperatorId ? { fieldOperatorId: person.fieldOperatorId } : {}),
         plotScope: grant.plotScope,
         ...(grant.plotScope === 'ChosenPlots' ? { plotIds: [...grant.plotIds] } : {}),
-        authorities: grant.authorities.map(a => ({ name: a.name, expiresAtUtc: a.expiresAtUtc ?? null })),
+        authorities: grant.authorities
+            .filter(a => !ruledOut.includes(a.name))
+            .map(a => ({ name: a.name, expiresAtUtc: a.expiresAtUtc ?? null })),
     };
 }
 
@@ -152,14 +159,16 @@ export function cardLines(
         : grant.plotScope === 'OwnWork'
             ? copy.ownWork
             : grant.plotNames.join(', ');
+    // Fix round 1 (M-2, P5): an authority that does nothing on this grant is never said, even if an older invitation held it.
+    const ruledOut = notInForce(grant);
     const lines = SWITCHABLE_AUTHORITIES
-        .filter(name => grant.authorities.some(a => a.name === name))
+        .filter(name => !ruledOut.includes(name) && grant.authorities.some(a => a.name === name))
         .map(name => {
             const end = grant.authorities.find(a => a.name === name)?.expiresAtUtc;
             const word = copy.can[name] ?? name;
             return end ? `${word} (${copy.untilDay(dayOf(end, language))})` : word;
         });
-    if (!grant.authorities.some(a => a.name === AUTHORITY.seeMoney)) lines.push(copy.noMoney);
+    if (ruledOut.includes(AUTHORITY.seeMoney) || !grant.authorities.some(a => a.name === AUTHORITY.seeMoney)) lines.push(copy.noMoney);
     return {
         responsibility: copy.responsibilityLine(copy.labels[grant.label] ?? grant.label),
         plots: grant.plotScope === 'OwnWork' ? plots : copy.plotsLine(plots),

@@ -16,8 +16,8 @@ namespace ShramSafal.Api.Endpoints;
 /// number, the card for a typed code, स्वीकारा and नको. The farm is found only through the invitee doors
 /// (<c>IPersonalInvitationTenantScope</c>), inside the service.</item>
 /// </list>
-/// The three code routes carry <see cref="InvitationCodeRateLimitPolicy"/> — per person per hour, and the join door's
-/// per-network and all-callers limits besides (<c>RateLimitingConfig</c>). None is skip-listed in
+/// The three code routes carry <see cref="InvitationCodeRateLimitPolicy"/> — per person per hour, and per-network and
+/// all-callers limits besides, their own (fix round 1, L-8: not the join door's; <c>RateLimitingConfig</c>). None is skip-listed in
 /// <c>TenantTransactionMiddleware</c>: they need its per-request transaction.
 /// </summary>
 public static class PersonalInvitationEndpoints

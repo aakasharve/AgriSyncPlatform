@@ -202,6 +202,8 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         using var dead = await ClaimAsync(Worker, oldInvite.Token, oldInvite.FarmCode);
         dead.StatusCode.Should().Be(HttpStatusCode.NotFound, await dead.Content.ReadAsStringAsync());
         (await MembershipsAsync(FarmA, Worker)).Should().BeEmpty();
+        // L-9 (lane MU-2 fix round 1): the claim writes MemberJoinRequested now; that is the row a dead token must not make.
+        (await AuditCountAsync(FarmA, Worker, "MemberJoinRequested")).Should().Be(0);
         (await AuditCountAsync(FarmA, Worker, "MemberJoined")).Should().Be(0);
 
         using var live = await ClaimAsync(Worker, rotated.Token, rotated.FarmCode);
@@ -232,6 +234,8 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         bodies.Distinct().Should().HaveCount(1, "revoked/unknown tokens must not be distinguishable");
         bodies[0].Should().Contain("join.token_invalid");
         (await MembershipsAsync(FarmA, Worker)).Should().BeEmpty();
+        // L-9 (lane MU-2 fix round 1): the claim writes MemberJoinRequested now; that is the row a dead token must not make.
+        (await AuditCountAsync(FarmA, Worker, "MemberJoinRequested")).Should().Be(0);
         (await AuditCountAsync(FarmA, Worker, "MemberJoined")).Should().Be(0);
     }
 
@@ -477,8 +481,10 @@ public sealed class JoinClaimRoutesRealPostgresTests : IAsyncLifetime
         return ReadInvite(body);
     }
 
+    // CONSCIOUS CHANGE — lane MU-2 fix round 1 (D-103, Q1): this release's phone says it understands a waiting
+    // request (acceptsJoinRequest); a claim without it gets 409 join.request_sent (PersonalInvitationRealPostgresTests).
     private Task<HttpResponseMessage> ClaimAsync(Guid caller, string token, string farmCode)
-        => SendAsync(HttpMethod.Post, "/shramsafal/join/claim", caller, new { token, farmCode });
+        => SendAsync(HttpMethod.Post, "/shramsafal/join/claim", caller, new { token, farmCode, acceptsJoinRequest = true });
 
     private async Task<HttpResponseMessage> SendAsync(
         HttpMethod method, string url, Guid? userId, object? body = null)

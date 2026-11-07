@@ -38,7 +38,7 @@ namespace ShramSafal.Sync.IntegrationTests.Memberships;
 /// <para>Doctrine E3 — vacuity guard FIRST: each fact asserts the host's role is neither superuser nor BYPASSRLS.</para>
 /// </summary>
 [Trait("Category", "RequiresPostgres")]
-public sealed class PersonalInvitationRealPostgresTests : IAsyncLifetime
+public sealed partial class PersonalInvitationRealPostgresTests : IAsyncLifetime
 {
     private const string FarmAName = "पाटील फार्म";
     private const string FarmBName = "Jadhav Wadi";
@@ -102,11 +102,11 @@ public sealed class PersonalInvitationRealPostgresTests : IAsyncLifetime
             await ExecAsync(raw,
                 "GRANT USAGE ON SCHEMA public TO agrisync_app;"
                 + "GRANT SELECT ON ALL TABLES IN SCHEMA public TO agrisync_app;");
-            await SeedUserAsync(raw, OwnerA, "9811100001", "Ramrao Patil", verified: true);
-            await SeedUserAsync(raw, OwnerB, "9811100002", "Shankar Jadhav", verified: true);
-            await SeedUserAsync(raw, CoOwnerA, "9811100003", "Sunita Patil", verified: true);
-            await SeedUserAsync(raw, MukadamA, "9811100004", "Gopal", verified: true);
-            await SeedUserAsync(raw, OldWorkerA, "9811100005", "Baban", verified: true);
+            await SeedUserAsync(raw, OwnerA, "6000000101", "Ramrao Patil", verified: true);
+            await SeedUserAsync(raw, OwnerB, "6000000102", "Shankar Jadhav", verified: true);
+            await SeedUserAsync(raw, CoOwnerA, "6000000103", "Sunita Patil", verified: true);
+            await SeedUserAsync(raw, MukadamA, "6000000104", "Gopal", verified: true);
+            await SeedUserAsync(raw, OldWorkerA, "6000000105", "Baban", verified: true);
             await SeedUserAsync(raw, Joiner, JoinerPhone, "Ramesh", verified: true);
             await SeedUserAsync(raw, Stranger, StrangerPhone, "Suresh", verified: true);
             await SeedUserAsync(raw, Unverified, UnverifiedPhone, "Mahesh", verified: false);
@@ -135,6 +135,8 @@ public sealed class PersonalInvitationRealPostgresTests : IAsyncLifetime
                        (@wb, 'गणू', 'गणू', NULL, @fb, @ownerB, NOW(), TRUE, NULL);
                 INSERT INTO ssf.shram_person_phones (id, person_id, phone_e164, whose, added_by_farm_id, added_at_utc, verified_at_utc)
                 VALUES (@phoneRow, @person, '+916000012345', 'Own', @fa, NOW(), NULL);
+                INSERT INTO ssf.shram_cards (code, person_id, issued_by_farm_id, issued_at_utc)
+                VALUES ('K7M2QP01', @person, @fa, NOW());
                 """,
                 ("person", WorkerPersonA), ("owner", OwnerA), ("ownerB", OwnerB), ("wa", WorkerRecordA), ("wb", WorkerRecordB),
                 ("fa", FarmA), ("fb", FarmB), ("phoneRow", Guid.NewGuid()));
@@ -460,7 +462,7 @@ public sealed class PersonalInvitationRealPostgresTests : IAsyncLifetime
         var token = invite.RootElement.GetProperty("token").GetString();
         var farmCode = invite.RootElement.GetProperty("farmCode").GetString();
 
-        using var claimed = await PostAsync("/shramsafal/join/claim", Joiner, new { token, farmCode });
+        using var claimed = await PostAsync("/shramsafal/join/claim", Joiner, new { token, farmCode, acceptsJoinRequest = true });
         var claimedBody = await claimed.Content.ReadAsStringAsync();
         claimed.StatusCode.Should().Be(HttpStatusCode.OK, claimedBody);
         JsonDocument.Parse(claimedBody).RootElement.GetProperty("status").GetString().Should().Be("PendingApproval");
@@ -473,7 +475,7 @@ public sealed class PersonalInvitationRealPostgresTests : IAsyncLifetime
             typed.StatusCode.Should().Be(HttpStatusCode.OK, await typed.Content.ReadAsStringAsync());
         }
 
-        using (var thenQr = await PostAsync("/shramsafal/join/claim", Stranger, new { token, farmCode }))
+        using (var thenQr = await PostAsync("/shramsafal/join/claim", Stranger, new { token, farmCode, acceptsJoinRequest = true }))
         {
             thenQr.StatusCode.Should().Be(HttpStatusCode.OK, await thenQr.Content.ReadAsStringAsync());
             JsonDocument.Parse(await thenQr.Content.ReadAsStringAsync()).RootElement.GetProperty("status").GetString()
@@ -483,7 +485,7 @@ public sealed class PersonalInvitationRealPostgresTests : IAsyncLifetime
         (await SeatAsync(FarmA, Stranger))!.Status.Should().Be(2);
 
         // A repeat scan by a person already let in is answered with his seat, unchanged.
-        using var again = await PostAsync("/shramsafal/join/claim", MukadamA, new { token, farmCode });
+        using var again = await PostAsync("/shramsafal/join/claim", MukadamA, new { token, farmCode, acceptsJoinRequest = true });
         JsonDocument.Parse(await again.Content.ReadAsStringAsync()).RootElement.GetProperty("status").GetString().Should().Be("Active");
     }
 
@@ -750,7 +752,10 @@ public sealed class PersonalInvitationRealPostgresTests : IAsyncLifetime
             .AddScheme<AuthenticationSchemeOptions, JoinByCodeTestAuthHandler>("Test", _ => { });
         builder.Services.AddAuthorization();
         builder.Services.AddBuildingBlocks();
-        builder.Services.AddAnalytics(o => o.UseInMemoryDatabase($"mu2-analytics-{Guid.NewGuid()}"));
+        // One in-memory analytics store per host (fix round 1): the name is fixed here, not inside the options lambda,
+        // which runs once per scope — a fresh name there gave every scope an empty store of its own.
+        var analyticsStore = $"mu2-analytics-{Guid.NewGuid()}";
+        builder.Services.AddAnalytics(o => o.UseInMemoryDatabase(analyticsStore));
         builder.Services.AddShramSafalApi(builder.Configuration);
         builder.Services.AddAgriSyncRateLimiting(e2eHarnessEnabled: false);
 

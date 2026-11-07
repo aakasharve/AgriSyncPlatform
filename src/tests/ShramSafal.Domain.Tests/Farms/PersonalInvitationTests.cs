@@ -97,6 +97,33 @@ public sealed class PersonalInvitationTests
         Assert.Equal([FarmAuthority.TakeAttendance], alive.Keys.ToList());
     }
 
+    /// <summary>
+    /// lane MU-2 fix round 1 (review M-2, P5) — an authority that does nothing on the grant (the team card's "not in force"
+    /// rule) is refused when the invitation is made, so the card can never promise it.
+    /// </summary>
+    [Theory]
+    [InlineData(RelationshipLabel.Worker, MembershipPlotScope.OwnWork, FarmAuthority.SeeMoney)]
+    [InlineData(RelationshipLabel.Worker, MembershipPlotScope.ChosenPlots, FarmAuthority.SeeMoney)]
+    [InlineData(RelationshipLabel.Family, MembershipPlotScope.OwnWork, FarmAuthority.SeeMoney)]
+    [InlineData(RelationshipLabel.Family, MembershipPlotScope.ChosenPlots, FarmAuthority.EditFarmSetup)]
+    [InlineData(RelationshipLabel.Mukadam, MembershipPlotScope.OwnWork, FarmAuthority.EditFarmSetup)]
+    public void An_authority_not_in_force_on_the_grant_is_refused(
+        RelationshipLabel label, MembershipPlotScope scope, FarmAuthority authority)
+    {
+        Assert.Throws<ArgumentException>(() => Make(
+            label: label, scope: scope, authorities: new Dictionary<FarmAuthority, DateTime?> { [authority] = null }));
+    }
+
+    [Fact]
+    public void Money_and_farm_setup_are_in_force_on_every_plot()
+    {
+        var invitation = Make(
+            label: RelationshipLabel.CoOwner,
+            scope: MembershipPlotScope.AllPlots,
+            authorities: new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.SeeMoney] = null, [FarmAuthority.EditFarmSetup] = null });
+        Assert.Equal(2, invitation.Authorities().Count);
+    }
+
     [Theory]
     [InlineData("48217730", "48217730")]
     [InlineData(" 4821-7730 ", "48217730")]

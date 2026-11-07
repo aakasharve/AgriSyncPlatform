@@ -61,7 +61,17 @@ export interface PersonalInvitationView {
     claimedAtUtc: string | null;
     waitsForOwner: boolean;
     workerLinked: boolean;
+    /** Fix round 1 (H-1) — WHO claimed it: his own display name and the last four digits of his proven number. */
+    claimedByName?: string | null;
+    claimedByPhoneLast4?: string | null;
+    /** It named a number, and the claim came from another (or an unproven) one: the link reached someone else. */
+    claimedByAnotherNumber?: boolean;
+    /** Fix round 1 (L-4) — what became of the claim. Absent from an older server. */
+    claimOutcome?: ClaimOutcome | null;
 }
+
+/** What became of a claim: waiting for the owner, in, the owner's नको, or the claimant took his request back. */
+export type ClaimOutcome = 'WaitsForOwner' | 'Joined' | 'Declined' | 'Withdrawn';
 
 /** The invited person's card (no code, no farm id, no number). */
 export interface InvitationCard {
@@ -92,7 +102,12 @@ export interface InvitationAccepted {
 /** How the server refused, as the screen must say it. */
 export type InvitationRefusal =
     | 'unknown' | 'expired' | 'used' | 'declined' | 'withdrawn' | 'already_member'
-    | 'rate_limited' | 'daily_cap' | 'forbidden' | 'invalid' | 'failed';
+    | 'rate_limited' | 'daily_cap' | 'forbidden' | 'invalid' | 'failed'
+    // fix round 1 (L-2, M-5, L-3)
+    | 'phone_not_verified' | 'try_again' | 'number_busy' | 'changed';
+
+/** Which side asked: the owner's routes or the invited person's. The same status can mean different words. */
+export type InvitationSide = 'owner' | 'invitee';
 
 const ownerPath = (farmId: string): string => `/shramsafal/farms/${farmId}/personal-invitations`;
 
@@ -131,27 +146,39 @@ export async function declineInvitation(answer: { invitationId?: string; code?: 
     await agriSyncClient.http.post('/shramsafal/invitations/decline', answer);
 }
 
-/** Structural (not `instanceof AxiosError`): the shared client's interceptor re-throws. */
-export function invitationRefusal(error: unknown): InvitationRefusal {
+/** The server's error codes, each with the words it needs (fix round 1, L-2: by code first, the status only after). */
+const REFUSAL_BY_CODE: Readonly<Record<string, InvitationRefusal>> = {
+    'invitation.unknown': 'unknown',
+    'invitation.expired': 'expired',
+    'invitation.used': 'used',
+    'invitation.declined': 'declined',
+    'invitation.withdrawn': 'withdrawn',
+    'invitation.already_member': 'already_member',
+    'invitation.daily_cap': 'daily_cap',
+    'invitation.try_again': 'try_again',
+    'join.concurrent_claim_unresolved': 'try_again',
+    'invitation.number_busy': 'number_busy',
+    'join.phone_not_verified': 'phone_not_verified',
+    'membership.wrong_status': 'changed',
+    'membership.claimed_from_invitation': 'changed',
+};
+
+/**
+ * Structural (not `instanceof AxiosError`): the shared client's interceptor re-throws. The error CODE decides the words;
+ * only a code the phone does not know falls back to the status — and then the invited person never reads an owner's
+ * words ("only the main owner…", "the invitation was not made").
+ */
+export function invitationRefusal(error: unknown, side: InvitationSide = 'owner'): InvitationRefusal {
     if (typeof error !== 'object' || error === null) return 'failed';
     const response = (error as { response?: { status?: number; data?: unknown } }).response;
     if (!response) return 'failed';
     const code = typeof response.data === 'object' && response.data !== null
         ? (response.data as { error?: unknown }).error
         : undefined;
-    if (response.status === 429) return code === 'invitation.daily_cap' ? 'daily_cap' : 'rate_limited';
+    if (typeof code === 'string' && REFUSAL_BY_CODE[code]) return REFUSAL_BY_CODE[code];
+    if (response.status === 429) return 'rate_limited';
     if (response.status === 404) return 'unknown';
-    if (response.status === 403) return 'forbidden';
-    if (response.status === 400) return 'invalid';
-    if (response.status === 409) {
-        switch (code) {
-            case 'invitation.expired': return 'expired';
-            case 'invitation.used': return 'used';
-            case 'invitation.declined': return 'declined';
-            case 'invitation.withdrawn': return 'withdrawn';
-            case 'invitation.already_member': return 'already_member';
-            default: return 'failed';
-        }
-    }
+    if (response.status === 403) return side === 'invitee' ? 'phone_not_verified' : 'forbidden';
+    if (response.status === 400) return side === 'invitee' ? 'unknown' : 'invalid';
     return 'failed';
 }

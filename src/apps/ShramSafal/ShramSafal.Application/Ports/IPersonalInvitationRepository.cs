@@ -28,16 +28,51 @@ public interface IPersonalInvitationRepository
     /// <summary>Under the invitee door: the invitation with exactly this code, or <c>null</c>. Not tracked.</summary>
     Task<PersonalInvitation?> FindVisibleByCodeAsync(string code, CancellationToken ct = default);
 
-    /// <summary>Under the invitee door: every invitation it shows (those naming his proven number). Not tracked.</summary>
-    Task<IReadOnlyList<PersonalInvitation>> ListVisibleAsync(CancellationToken ct = default);
+    /// <summary>
+    /// Under the invitee door: the still-waiting, unexpired invitations it shows (those naming his proven number), newest
+    /// first, at most 50 — filtered BEFORE the 50 are taken (fix round 1, L-12), so ended ones never push a live card out.
+    /// Not tracked.
+    /// </summary>
+    Task<IReadOnlyList<PersonalInvitation>> ListVisibleWaitingAsync(DateTime nowUtc, CancellationToken ct = default);
+
+    /// <summary>Under the invitee door: the invitation with this id, or <c>null</c>. Not tracked.</summary>
+    Task<PersonalInvitation?> FindVisibleByIdAsync(Guid invitationId, CancellationToken ct = default);
 
     /// <summary>
-    /// Saves a NEW invitation. A clash on the unique code is answered <c>false</c> with nothing written (rolled back to
-    /// a savepoint, so the request's transaction lives on); the caller makes a fresh code and tries again.
+    /// Saves a NEW invitation. A clash on the unique code is <see cref="PersonalInvitationSaveOutcome.CodeTaken"/> (the
+    /// caller makes a fresh code and tries again); a clash on the one-waiting-per-(farm, mobile) index is
+    /// <see cref="PersonalInvitationSaveOutcome.NumberBusy"/> (another invitation for that number was made at the same
+    /// moment). Either way nothing of the attempt is written (rolled back to a savepoint, so the request's transaction lives
+    /// on).
     /// </summary>
-    Task<bool> TrySaveNewAsync(PersonalInvitation invitation, CancellationToken ct = default);
+    Task<PersonalInvitationSaveOutcome> TrySaveNewAsync(PersonalInvitation invitation, CancellationToken ct = default);
+
+    /// <summary>
+    /// Fix round 1 (review M-5) — saves a claim (the seat, the invitation, the audit row and any identity rows a worker link
+    /// staged) as one unit. A lost race on the one-live-seat-per-(farm, person) index is
+    /// <see cref="InvitationClaimSaveOutcome.SeatTaken"/>; on WID's verified-number indexes (one holder per number, one
+    /// verified number per person) <see cref="InvitationClaimSaveOutcome.IdentityClash"/>. Either way nothing is written
+    /// (rolled back to a savepoint; the request's transaction stays usable) and every staged change is dropped.
+    /// </summary>
+    Task<InvitationClaimSaveOutcome> TrySaveClaimAsync(CancellationToken ct = default);
 
     Task SaveChangesAsync(CancellationToken ct = default);
+}
+
+/// <summary>Fix round 1 — how saving a new invitation ended.</summary>
+public enum PersonalInvitationSaveOutcome
+{
+    Saved,
+    CodeTaken,
+    NumberBusy,
+}
+
+/// <summary>Fix round 1 (review M-5) — how saving a claim ended.</summary>
+public enum InvitationClaimSaveOutcome
+{
+    Saved,
+    SeatTaken,
+    IdentityClash,
 }
 
 /// <summary>

@@ -41,7 +41,9 @@ import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import { InviteBuilderSheet } from '../../invitations/InviteBuilderSheet';
 import { SentInvitations } from '../../invitations/SentInvitations';
 import { invitationCopy } from '../../invitations/invitationCopy';
-import { approveInvitationClaim, type PersonalInvitationView } from '../../invitations/personalInvitationClient';
+import {
+    approveInvitationClaim, invitationRefusal, type InvitationRefusal, type PersonalInvitationView,
+} from '../../invitations/personalInvitationClient';
 import {
     isPrimaryOwner, nameFor, rightsOver, roleTone, roleWord, serverRoleOf, splitRoster,
 } from './teamModel';
@@ -83,15 +85,25 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
     const farmName = useOptionalFarmContext()?.currentFarm?.name ?? '';
     const builderWorkers = useFarmWorkers(builderOpen && decidesPeople ? farmId : null).workers;
     const invite = invitationCopy(language);
+    // Fix round 1 (L-3): the one tap's refusal is said, in the server's own reason; the reload then shows what it holds.
+    const [inviteRefusal, setInviteRefusal] = useState<InvitationRefusal | null>(null);
     const letInFromInvitation = async (invitationId: string) => {
         if (!farmId) return;
+        setInviteRefusal(null);
         try {
             roster.adoptRow(await approveInvitationClaim(farmId, invitationId));
-        } catch {
-            /* the roster reload below says what the server holds */
+        } catch (error) {
+            setInviteRefusal(invitationRefusal(error, 'owner'));
         }
         await roster.reload();
         setSentKey(k => k + 1);
+    };
+    // Fix round 1 (H-1): an invitation opened by someone other than the person it named is decided on that claimant's own
+    // request card, which shows his name and his number.
+    const openRequest = (claimantUserId: string) => {
+        const card = document.querySelector<HTMLElement>(`[data-testid="join-request-${claimantUserId}"]`);
+        card?.scrollIntoView({ block: 'center' });
+        card?.focus();
     };
 
     return (
@@ -116,6 +128,12 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
             {decidesPeople && requests.length > 0 && (
                 <section className="space-y-2" data-testid="team-requests">
                     <SectionHead title={TEAM_COPY.requestsTitle(requests.length)} />
+                    {inviteRefusal && (
+                        <p role="alert" data-testid="team-invitation-refusal"
+                            className="m-0 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-[14px] font-bold text-rose-800">
+                            {invite.refusal[inviteRefusal]}
+                        </p>
+                    )}
                     <ul className="m-0 space-y-2.5 p-0">
                         {requests.map(row => (
                             <JoinRequestCard key={row.userId} row={row} name={nameFor(row, operators)} busy={busy(row.userId)}
@@ -138,7 +156,8 @@ export const TeamPage: React.FC<TeamPageProps> = ({ farmId, farmCode, callerRole
                     </button>
                     <SentInvitations farmId={farmId} refreshKey={sentKey}
                         onShowAgain={row => { setShowing(row); setBuilderOpen(true); }}
-                        onLetIn={() => void roster.reload()} />
+                        onLetIn={() => void roster.reload()}
+                        onOpenRequest={openRequest} />
                 </section>
             )}
 

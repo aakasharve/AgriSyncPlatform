@@ -39,16 +39,19 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ card, code, onAn
     const initialRefusal = refusalOfStatus(card.status);
     const [phase, setPhase] = useState<Phase>(initialRefusal ? 'refused' : 'open');
     const [refusal, setRefusal] = useState<InvitationRefusal | null>(initialRefusal);
+    // Fix round 1 (L-6): the server's word on the worker link — the card promised it, so a refusal is said plainly.
+    const [workerLinked, setWorkerLinked] = useState<boolean | null>(null);
     const answerKey = code ? { code } : { invitationId: card.invitationId };
 
     const accept = async () => {
         setPhase('sending');
         try {
             const answer = await acceptInvitation(answerKey);
+            setWorkerLinked(answer.workerLinked);
             setPhase(answer.status === 'Active' ? 'active' : 'waiting');
             onAnswered?.(answer);
         } catch (error) {
-            setRefusal(invitationRefusal(error));
+            setRefusal(invitationRefusal(error, 'invitee'));
             setPhase('refused');
         }
     };
@@ -60,7 +63,7 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ card, code, onAn
             setPhase('declined');
             onAnswered?.(null);
         } catch (error) {
-            setRefusal(invitationRefusal(error));
+            setRefusal(invitationRefusal(error, 'invitee'));
             setPhase('refused');
         }
     };
@@ -113,6 +116,11 @@ export const InvitationCard: React.FC<InvitationCardProps> = ({ card, code, onAn
             {phase === 'active' && (
                 <p role="status" data-testid="invitation-active" className="m-0 flex items-center gap-2 text-[16px] font-extrabold text-emerald-800">
                     <CheckCircle2 size={20} aria-hidden="true" />{copy.acceptedTitle(card.farmName)}
+                </p>
+            )}
+            {phase === 'active' && card.namesAWorker && workerLinked === false && (
+                <p data-testid="invitation-worker-not-linked" className="m-0 text-[14px] font-bold leading-snug text-amber-800">
+                    {copy.workerNotLinked}
                 </p>
             )}
             {phase === 'waiting' && (

@@ -112,9 +112,11 @@ public static class RateLimitingConfig
                     }));
 
             // spec: plr-d10 lane MU-2 — the personal invitation's code routes (find, accept, decline). Eight digits are
-            // 10^8 values; per signed-in person (the same resolver as "ai") 10 tries an hour, and the join door's
-            // per-network and all-callers limits below apply to these routes too (IsJoinRequest), so fresh accounts from
-            // one network share one budget. A guessed code still only ASKS unless it named the guesser's own proven number.
+            // 10^8 values; per signed-in person (the same resolver as "ai") 10 tries an hour, and per-network and
+            // all-callers limits below, so fresh accounts from one network share one budget. Fix round 1 (review L-8):
+            // those two are the invitation door's OWN budgets (the same sizes as the join door's, separate partitions),
+            // so a farm-code flood never blocks an invitation claim, nor the other way round. A guessed code still only
+            // ASKS unless it named the guesser's own proven number.
             options.AddPolicy(ShramSafal.Api.Endpoints.PersonalInvitationEndpoints.InvitationCodeRateLimitPolicy, httpContext =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     partitionKey: ResolveAiRateLimitPartitionKey(httpContext),
@@ -176,15 +178,15 @@ public static class RateLimitingConfig
             // itself saw — so a header a phone or a script sets is never believed.
             options.GlobalLimiter = PartitionedRateLimiter.CreateChained(
                 PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-                    IsJoinRequest(httpContext)
+                    CodeDoorOf(httpContext) is { } door
                         ? RateLimitPartition.GetFixedWindowLimiter(
-                            partitionKey: ResolveJoinClientNetworkKey(httpContext),
+                            partitionKey: door + ResolveJoinClientNetworkKey(httpContext),
                             factory: _ => JoinWindowLimit(joinPerClientNetworkPermitLimit))
                         : RateLimitPartition.GetNoLimiter(NotAJoinRequest)),
                 PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-                    IsJoinRequest(httpContext)
+                    CodeDoorOf(httpContext) is { } door
                         ? RateLimitPartition.GetFixedWindowLimiter(
-                            partitionKey: "join:all-callers",
+                            partitionKey: door + "join:all-callers",
                             factory: _ => JoinWindowLimit(joinAllCallersPermitLimit))
                         : RateLimitPartition.GetNoLimiter(NotAJoinRequest)));
         });
@@ -237,12 +239,18 @@ public static class RateLimitingConfig
         return $"join-net:{ip}";
     }
 
-    /// <summary>True for a request routed to an endpoint that carries the "join" policy.</summary>
-    private static bool IsJoinRequest(HttpContext context) =>
-        context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName is
-            MembershipEndpoints.JoinRateLimitPolicy
-            // spec: plr-d10 lane MU-2 — the invitation-code routes are a code door too: same network and global budgets.
-            or ShramSafal.Api.Endpoints.PersonalInvitationEndpoints.InvitationCodeRateLimitPolicy;
+    /// <summary>
+    /// Which code door a request is at, as the prefix of its network and all-callers partitions: <c>""</c> for an endpoint
+    /// carrying the "join" policy (its partition keys stay exactly as they were), <c>"invitation:"</c> for the personal
+    /// invitation's code routes (lane MU-2 fix round 1, review L-8: their own budgets), <c>null</c> for anything else.
+    /// </summary>
+    private static string? CodeDoorOf(HttpContext context) =>
+        context.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName switch
+        {
+            MembershipEndpoints.JoinRateLimitPolicy => string.Empty,
+            ShramSafal.Api.Endpoints.PersonalInvitationEndpoints.InvitationCodeRateLimitPolicy => "invitation:",
+            _ => null,
+        };
 
     private static FixedWindowRateLimiterOptions JoinWindowLimit(int permitLimit) => new()
     {

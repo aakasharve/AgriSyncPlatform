@@ -91,11 +91,14 @@ public sealed class WorkerIdentityService(
     /// and the person's number, and that person claimed it from a login whose number a one-time code proved. That is R1's
     /// proof (the owner's explicit choice + the worker's own phone code), so the record may become this login's — under
     /// R3: never when ANOTHER identity holds the number proven, never when his own proven number is a different one, never
-    /// for an erased identity or a record that is not this farm's working one. When the number is one this farm typed for
-    /// him but nobody had proven, the login's code proves it now (screen 3's effect). Every change is an append-only event
-    /// naming the login as actor and the proof as the phone code (R5). It moves no work (R2, P7) and writes no seat: the
-    /// caller records the link on the seat and saves both in one unit of work, then closes the door
-    /// (<see cref="CloseIdentityDoorAsync"/>). Returns false, with nothing staged, when any rule says no.
+    /// for an erased identity or a record that is not this farm's working one. When the number is one THIS farm typed for
+    /// him but nobody had proven, the login's code proves it now (screen 3's effect) — but, as for screen 3, only while the
+    /// farm holds his proof (lane MU-2 fix round 1, review H-2: WID fix 2's N1 — with no verified number anywhere, only the
+    /// farm that issued his working card proves his first one). Otherwise the seat link is recorded and the number stays
+    /// unproven. Every change is an append-only event naming the login as actor and the proof as the phone code (R5). It
+    /// moves no work (R2, P7) and writes no seat: the caller records the link on the seat and saves both in one unit of
+    /// work, then closes the door (<see cref="CloseIdentityDoorAsync"/>). Returns false, with nothing staged, when any rule
+    /// says no.
     /// </summary>
     public async Task<bool> RecordLoginLinkAsync(
         Guid farmId, Guid fieldOperatorId, string phoneE164, Guid loginUserId, CancellationToken ct)
@@ -112,6 +115,13 @@ public sealed class WorkerIdentityService(
             return false;
         }
 
+        // ── WID FIX 3 LOCK — CALL SITE (lane MU-2 fix round 1, review H-2) ──────────────────────────────────────────────
+        // When WID fix 3 merges, take its person lock HERE, before any read below decides:
+        //     await store.LockPersonAsync(group.Root.Id, ct);
+        // (fix 3's verify paths take the same lock). The orchestrator adds this call when fix 3 lands; until then a race on
+        // the per-person verified index is answered cleanly by the caller (IdentityClash → 409 invitation.try_again).
+        // ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
         if (await HeldByAnotherAsync(phoneE164, group, ct))
         {
             return false;
@@ -124,12 +134,19 @@ public sealed class WorkerIdentityService(
         }
 
         var now = clock.UtcNow;
-        var typed = phones.FirstOrDefault(p => p.IsActive && !p.IsActiveVerified && p.PhoneE164 == phoneE164);
-        if (typed is not null)
+        var alreadyProven = phones.Any(p => p.IsActiveVerified && p.PhoneE164 == phoneE164);
+        // N1: with no verified number at all, only the farm holding his proof (the issuer of his working card) may prove
+        // one; and only a number THIS farm added (as WID's own verify target, SendRecordCodeAsync).
+        if (!alreadyProven && await HoldsHisProofAsync(farmId, group, ct))
         {
-            typed.MarkVerified(now);
-            await store.AddEventAsync(ShramIdentityEvent.Record(
-                ids.New(), farmId, record.Id, group.Root.Id, IdentityEventKind.PhoneVerified, IdentityProof.PhoneCode, loginUserId, now), ct);
+            var typed = phones.FirstOrDefault(p =>
+                p.IsActive && !p.IsActiveVerified && p.PhoneE164 == phoneE164 && p.AddedByFarmId == farmId);
+            if (typed is not null)
+            {
+                typed.MarkVerified(now);
+                await store.AddEventAsync(ShramIdentityEvent.Record(
+                    ids.New(), farmId, record.Id, group.Root.Id, IdentityEventKind.PhoneVerified, IdentityProof.PhoneCode, loginUserId, now), ct);
+            }
         }
 
         await store.AddEventAsync(ShramIdentityEvent.Record(

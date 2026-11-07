@@ -214,10 +214,11 @@
 //     PARTY: person_name and invited_phone_e164 are what the OWNER typed about the person he invited (the farm_name
 //     and scope_plot_names snapshots are farm data). Like ssf.field_operators above, DELIBERATELY ABSENT FROM THE
 //     CREATOR-ERASURE SEQUENCE: the farmer who typed a person's number is not that person's data subject (P6), and the
-//     row is the farm's record of who it let in and with what grant (a seat's provenance). KEEP. DISCLOSED GAP, not
-//     built: the INVITED person's own erasure (and a retention rule that clears person_name / invited_phone_e164 once
-//     an invitation has ended or expired) is a tracked follow-up for the privacy review — an unanswered invitation is
-//     only ever useful for seven days.
+//     row is the farm's record of who it let in and with what grant (a seat's provenance). The ROW is KEPT; the PERSON on
+//     it is not (lane MU-2 fix round 1, review M-3): person_name and invited_phone_e164 are cleared (PersonalInvitationPeople)
+//     (a) by THIS worker when an account is erased — every invitation on every farm naming his login's number — and when
+//     a worker's own identity is erased (WorkerPersonErasure: his numbers and his farm records); (b) by the nightly
+//     RetentionSweepWorker 30 days after an invitation ended or expired (it only ever works for seven days).
 //   - ssf.attendance_marks — ADDED 2026-08-31 (founder decision D-H3: what somebody
 //     RULED about a person on a farm-day; day mark full/half/absent/unmarked plus
 //     night mark worked/not-worked/unmarked).
@@ -821,6 +822,17 @@ public sealed class ErasureWorker(
             .ExecuteDeleteAsync(ct)
             .ConfigureAwait(false);
         totalAnonymized += perTableCounts["raw_blob_subjects"];
+
+        // lane MU-2 fix round 1 (review M-3, P6) — every personal invitation, on every farm, naming his login's number loses
+        // the name and number the owner typed (the row, the farm's record of the invitation, stays).
+        var hisNumber = ShramSafal.Domain.Identity.IndianMobile.Normalize(await admin.Database
+            .SqlQueryRaw<string>("SELECT phone AS \"Value\" FROM public.users WHERE \"Id\" = {0}", targetUserId)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false));
+        perTableCounts["farm_personal_invitations"] = hisNumber is null
+            ? 0
+            : await PersonalInvitationPeople.ForgetNumbersAsync(admin, [hisNumber], [], ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["farm_personal_invitations"];
 
         // (e) Retained voice S3 — via port.
         //

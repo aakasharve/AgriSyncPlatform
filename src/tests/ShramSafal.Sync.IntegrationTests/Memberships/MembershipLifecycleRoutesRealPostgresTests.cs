@@ -574,7 +574,8 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests(ITestOutp
 
     private async Task<string> ClaimAsync(Guid who, string token, string farmCode)
     {
-        using var response = await SendAsync(HttpMethod.Post, "/shramsafal/join/claim", who, new { token, farmCode });
+        // CONSCIOUS CHANGE — lane MU-2 fix round 1 (D-103, Q1): this release's phone sends acceptsJoinRequest.
+        using var response = await SendAsync(HttpMethod.Post, "/shramsafal/join/claim", who, new { token, farmCode, acceptsJoinRequest = true });
         var body = await response.Content.ReadAsStringAsync();
         response.StatusCode.Should().Be(HttpStatusCode.OK, body);
         using var doc = JsonDocument.Parse(body);

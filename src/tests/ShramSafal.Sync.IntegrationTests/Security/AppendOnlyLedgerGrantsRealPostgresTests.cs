@@ -188,6 +188,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    CHECK. Down() drops the policies, the table, the CHECK and the three columns — only what Up() added. No
         //    append-only ledger, policy or privilege of another table is touched. Safe to revert and re-apply mid-proof.
         "20261106063315_AddPersonalInvitations",
+        // 20261106212345_PersonalInvitationsGoWithTheirFarm (lane MU-2 fix round 1, L-10): Up() and Down() read in full —
+        //    drops and re-adds the invitation table's farm foreign key (CASCADE; Down() RESTRICT). No grant, policy or
+        //    append-only ledger is touched; the app role still holds no DELETE on the invitations. Safe mid-proof.
+        "20261106212345_PersonalInvitationsGoWithTheirFarm",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

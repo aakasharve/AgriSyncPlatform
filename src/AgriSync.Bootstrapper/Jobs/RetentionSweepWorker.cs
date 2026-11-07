@@ -9,6 +9,10 @@
 // Scope:
 //   - ssf.export_artifacts     : DELETE rows + S3 objects > 7 days old
 //   - ssf.audit_read_telemetry : DELETE rows > 30 days old
+//   - ssf.farm_personal_invitations : NO row is deleted. The PERSON the owner typed on an invitation (person_name,
+//     invited_phone_e164 — a third party's name and number, P6) is cleared 30 days after the invitation ended or expired
+//     (lane MU-2 fix round 1, review M-3; PersonalInvitationPeople). The row — the farm's record of who it let in and
+//     with what grant — stays. An invitation only ever works for seven days, so nothing anyone uses is touched.
 //
 // That is the whole scope, and the boundary is the point.
 //
@@ -160,6 +164,11 @@ public sealed class RetentionSweepWorker(
                 "DELETE FROM ssf.audit_read_telemetry WHERE read_at_utc < {0}",
                 new object[] { auditTelemetryCutoff }, ct).ConfigureAwait(false);
 
+            // 3. lane MU-2 fix round 1 (review M-3, P6) — invitations ended or expired 30+ days ago: their person is cleared,
+            //    the row kept. Counted apart (no row is removed).
+            var invitationPeopleCleared = await ShramSafal.Infrastructure.Privacy.PersonalInvitationPeople
+                .ForgetEndedAsync(admin, nowUtc, ct).ConfigureAwait(false);
+
             var totalRows = artifactsDeleted + telemetryDeleted;
             var totalS3 = s3Removed;
 
@@ -187,6 +196,7 @@ public sealed class RetentionSweepWorker(
                     tablesSwept = sweepRow.TablesSwept,
                     rowsRemovedCount = sweepRow.RowsRemovedCount,
                     s3ObjectsRemovedCount = sweepRow.S3ObjectsRemovedCount,
+                    invitationPeopleCleared,
                     occurredAtUtc = sweepRow.OccurredAtUtc.ToString("O", CultureInfo.InvariantCulture),
                 },
                 farmId: null,
@@ -199,8 +209,9 @@ public sealed class RetentionSweepWorker(
             await admin.SaveChangesAsync(ct).ConfigureAwait(false);
 
             logger.LogInformation(
-                "RetentionSweepWorker pass complete: {RowsRemoved} rows + {S3Removed} S3 objects removed from {TablesSwept}.",
-                totalRows, totalS3, tablesSwept);
+                "RetentionSweepWorker pass complete: {RowsRemoved} rows + {S3Removed} S3 objects removed from {TablesSwept}; "
+                + "{InvitationPeopleCleared} invitation(s) had their person cleared.",
+                totalRows, totalS3, tablesSwept, invitationPeopleCleared);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)

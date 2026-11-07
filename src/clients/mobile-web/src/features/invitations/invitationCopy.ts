@@ -6,7 +6,7 @@
  * invited side, in one place. Marathi and English twins, ONE language at a time (Marathi mode = Marathi only). Every
  * string is PROPOSED unless marked as the brief's / design's own words; nothing here says "AI", and there is no emoji.
  */
-import type { InvitationLabel, InvitationRefusal, InvitationStatus } from './personalInvitationClient';
+import type { ClaimOutcome, InvitationLabel, InvitationRefusal, InvitationStatus } from './personalInvitationClient';
 
 export interface InvitationCopy {
     labels: Record<InvitationLabel, string>;
@@ -64,6 +64,16 @@ export interface InvitationCopy {
     letIn: string;
     withdraw: string;
     showAgain: string;
+    /** Fix round 1 (H-1): the person it was for, and the one who opened it (his own name and last four digits). */
+    claimedBy: (invited: string, claimant: string) => string;
+    claimedBySame: (claimant: string) => string;
+    openRequest: string;
+    /** Fix round 1 (L-4): a claim that is no longer waiting. */
+    claimOutcome: Record<Exclude<ClaimOutcome, 'WaitsForOwner'>, string>;
+    /** Fix round 1 (L-6): in, but his attendance-list name was not joined to this login. */
+    workerNotLinked: string;
+    /** Fix round 1 (L-7): a farm's QR scanned at the invitation scanner. */
+    farmQrAtInvitationDoor: string;
     // ── the join door ──
     scanQr: string;
     noScanner: string;
@@ -117,6 +127,10 @@ const mr: InvitationCopy = {
         forbidden: 'हे फक्त शेताचे मुख्य मालक करू शकतात.', // PROPOSED (Marathi)
         invalid: 'आमंत्रण तयार झालं नाही. निवड पुन्हा तपासा.', // PROPOSED (Marathi)
         failed: 'आत्ता जमलं नाही. इंटरनेट तपासून पुन्हा प्रयत्न करा.', // PROPOSED (Marathi)
+        phone_not_verified: 'तुमचा मोबाईल नंबर अजून पक्का झालेला नाही. नंबरवर आलेला कोड टाकून पुन्हा लॉग इन करा.', // PROPOSED (Marathi) — fix round 1
+        try_again: 'त्याच वेळी दुसरं काम चालू होतं. पुन्हा एकदा दाबा.', // PROPOSED (Marathi) — fix round 1
+        number_busy: 'या नंबरसाठी आत्ताच एक आमंत्रण तयार झालं. खालची यादी पाहा.', // PROPOSED (Marathi) — fix round 1
+        changed: 'ही विनंती आधीच बदलली आहे. यादी पुन्हा आणली.', // PROPOSED (Marathi) — fix round 1
     },
     inviteButton: 'नवीन व्यक्तीला बोलवा', // PROPOSED (Marathi)
     builderTitle: 'नवीन व्यक्तीला बोलवा', // PROPOSED (Marathi)
@@ -157,6 +171,16 @@ const mr: InvitationCopy = {
     letIn: 'आत घ्या', // PROPOSED (Marathi)
     withdraw: 'आमंत्रण परत घ्या', // PROPOSED (Marathi)
     showAgain: 'पुन्हा दाखवा', // PROPOSED (Marathi)
+    claimedBy: (invited, claimant) => `हे आमंत्रण ${invited} साठी होतं; ${claimant} यांनी उघडलं`, // the orchestrator's words (PROPOSED)
+    claimedBySame: claimant => `${claimant} यांनी उघडलं`, // PROPOSED (Marathi) — fix round 1
+    openRequest: 'विनंती पाहा', // PROPOSED (Marathi) — fix round 1
+    claimOutcome: {
+        Joined: 'स्वीकारलं', // PROPOSED (Marathi)
+        Declined: 'नाकारलं', // the orchestrator's word (PROPOSED)
+        Withdrawn: 'मागे घेतलं', // the orchestrator's word (PROPOSED)
+    },
+    workerNotLinked: 'हजेरी यादीतलं तुमचं नाव या खात्याशी आत्ता जोडता आलं नाही. मालक ते नंतर पाहतील.', // PROPOSED (Marathi) — fix round 1
+    farmQrAtInvitationDoor: 'हा शेताचा QR आहे, आमंत्रणाचा नाही. त्या शेतावर विनंती पाठवायला शेताचा कोड वर टाका.', // PROPOSED (Marathi) — fix round 1
     scanQr: 'QR स्कॅन करा', // PROPOSED (Marathi)
     noScanner: 'या फोनमध्ये QR वाचता येत नाही. वर कोड टाका.', // PROPOSED (Marathi)
     send: 'पाठवा', // PROPOSED (Marathi)
@@ -204,6 +228,10 @@ const en: InvitationCopy = {
         forbidden: "Only the farm's main owner can do this.", // PROPOSED (English)
         invalid: 'The invitation was not made. Check the choices again.', // PROPOSED (English)
         failed: 'That did not work just now. Check the internet and try again.', // PROPOSED (English)
+        phone_not_verified: 'Your mobile number is not confirmed yet. Sign in again with the code sent to it.', // PROPOSED (English) — fix round 1
+        try_again: 'Something else was happening at the same moment. Please press it once more.', // PROPOSED (English) — fix round 1
+        number_busy: 'An invitation for this number was made just now. Look at the list below.', // PROPOSED (English) — fix round 1
+        changed: 'This request has already changed. The list was fetched again.', // PROPOSED (English) — fix round 1
     },
     inviteButton: 'Invite a person', // PROPOSED (English)
     builderTitle: 'Invite a person', // PROPOSED (English)
@@ -244,6 +272,16 @@ const en: InvitationCopy = {
     letIn: 'Let in', // PROPOSED (English)
     withdraw: 'Withdraw the invitation', // PROPOSED (English)
     showAgain: 'Show again', // PROPOSED (English)
+    claimedBy: (invited, claimant) => `This invitation was for ${invited}; ${claimant} opened it`, // the orchestrator's words (PROPOSED)
+    claimedBySame: claimant => `${claimant} opened it`, // PROPOSED (English) — fix round 1
+    openRequest: 'See the request', // PROPOSED (English) — fix round 1
+    claimOutcome: {
+        Joined: 'Accepted', // PROPOSED (English)
+        Declined: 'Declined', // PROPOSED (English)
+        Withdrawn: 'Taken back', // PROPOSED (English)
+    },
+    workerNotLinked: 'Your name on the attendance list could not be joined to this login just now. The owner will look at it later.', // PROPOSED (English) — fix round 1
+    farmQrAtInvitationDoor: "This is a farm's QR, not an invitation. To ask to join that farm, type the farm's code above.", // PROPOSED (English) — fix round 1
     scanQr: 'Scan a QR', // PROPOSED (English)
     noScanner: 'This phone cannot read a QR. Type the code above.', // PROPOSED (English)
     send: 'Send', // PROPOSED (English)

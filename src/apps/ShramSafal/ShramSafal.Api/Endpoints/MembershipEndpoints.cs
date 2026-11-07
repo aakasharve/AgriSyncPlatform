@@ -27,6 +27,15 @@ public static class MembershipEndpoints
     /// </summary>
     public const string JoinRateLimitPolicy = "join";
 
+    /// <summary>spec: plr-d10 lane MU-2 fix round 1 (D-103, Q1) — the answer a phone without <c>acceptsJoinRequest</c> gets.</summary>
+    public const string JoinRequestSentCode = "join.request_sent";
+
+    /// <summary>
+    /// Shown as written by release 1.0.17 (its join page is bilingual, Marathi first). PROPOSED words (the review's).
+    /// </summary>
+    public const string JoinRequestSentMessage =
+        "मालकाला विनंती गेली आहे. ते मंजूर करतील तेव्हा शेत उघडेल. / Your request reached the owner; the farm opens once he approves.";
+
     public static RouteGroupBuilder MapMembershipEndpoints(this RouteGroupBuilder group)
     {
         // Owner-only: get/create the persistent Active invitation+QR for a farm.
@@ -182,6 +191,19 @@ public static class MembershipEndpoints
                 return Results.Json(
                     new { error = result.Error.Code, message = result.Error.Description },
                     statusCode: statusCode);
+            }
+
+            // spec: plr-d10 lane MU-2 fix round 1 (founder question D-103, the review's Q1). A wall-QR scan now makes a
+            // request that waits for the owner. A phone that does not say it reads a waiting status (release 1.0.17 reads
+            // any 200 as "joined", fails its own farm-list check and shows "Could not reach the server…") gets this 409
+            // instead: the {error, message} shape it already parses on this call, so it shows the message as written, on
+            // the same step. The request is made either way; a repeat tap answers the same seat. This release's phone
+            // sends acceptsJoinRequest and keeps its 200.
+            if (result.Value!.Status == ShramSafal.Domain.Farms.MembershipStatus.PendingApproval && request?.AcceptsJoinRequest != true)
+            {
+                return Results.Json(
+                    new { error = JoinRequestSentCode, message = JoinRequestSentMessage },
+                    statusCode: StatusCodes.Status409Conflict);
             }
 
             return Results.Ok(new
@@ -755,7 +777,9 @@ public static class MembershipEndpoints
     }
 }
 
-public sealed record ClaimJoinRequest(string? Token, string? FarmCode);
+/// <param name="AcceptsJoinRequest">spec: plr-d10 lane MU-2 fix round 1 (D-103, Q1) — ADDITIVE: this phone reads a waiting
+/// status. Absent (release 1.0.17 and older) and the scan made a waiting request: 409 <c>join.request_sent</c>.</param>
+public sealed record ClaimJoinRequest(string? Token, string? FarmCode, bool? AcceptsJoinRequest = null);
 
 /// <summary>
 /// spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — body of <c>POST /shramsafal/join/by-code</c>.

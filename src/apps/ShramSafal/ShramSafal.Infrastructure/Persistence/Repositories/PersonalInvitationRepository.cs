@@ -10,6 +10,12 @@ internal sealed class PersonalInvitationRepository(ShramSafalDbContext db) : IPe
 {
     private const string CodeIndex = "ux_farm_personal_invitations_code";
 
+    /// <summary>One waiting invitation per (farm, mobile) — the AddPersonalInvitations migration.</summary>
+    private const string WaitingNumberIndex = "ux_farm_personal_invitations_farm_phone_waiting";
+
+    /// <summary>One live seat per (farm, person) — the AddFarmMemberships line of migrations.</summary>
+    private const string LiveSeatIndex = "ix_farm_memberships_farm_user_nonterminal";
+
     public Task AddAsync(PersonalInvitation invitation, CancellationToken ct = default)
         => db.PersonalInvitations.AddAsync(invitation, ct).AsTask();
 
@@ -54,10 +60,17 @@ internal sealed class PersonalInvitationRepository(ShramSafalDbContext db) : IPe
     public Task<PersonalInvitation?> FindVisibleByCodeAsync(string code, CancellationToken ct = default)
         => db.PersonalInvitations.AsNoTracking().FirstOrDefaultAsync(x => x.Code == code, ct);
 
-    public async Task<IReadOnlyList<PersonalInvitation>> ListVisibleAsync(CancellationToken ct = default)
-        => await db.PersonalInvitations.AsNoTracking().OrderByDescending(x => x.CreatedAtUtc).Take(50).ToListAsync(ct);
+    public async Task<IReadOnlyList<PersonalInvitation>> ListVisibleWaitingAsync(DateTime nowUtc, CancellationToken ct = default)
+        => await db.PersonalInvitations.AsNoTracking()
+            .Where(x => x.Status == PersonalInvitationStatus.Waiting && x.ExpiresAtUtc > nowUtc)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(50)
+            .ToListAsync(ct);
 
-    public async Task<bool> TrySaveNewAsync(PersonalInvitation invitation, CancellationToken ct = default)
+    public Task<PersonalInvitation?> FindVisibleByIdAsync(Guid invitationId, CancellationToken ct = default)
+        => db.PersonalInvitations.AsNoTracking().FirstOrDefaultAsync(x => x.Id == invitationId, ct);
+
+    public async Task<PersonalInvitationSaveOutcome> TrySaveNewAsync(PersonalInvitation invitation, CancellationToken ct = default)
     {
         var entry = db.Entry(invitation);
         if (entry.State == EntityState.Detached)
@@ -75,7 +88,7 @@ internal sealed class PersonalInvitationRepository(ShramSafalDbContext db) : IPe
         try
         {
             await db.SaveChangesAsync(ct);
-            return true;
+            return PersonalInvitationSaveOutcome.Saved;
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
                                            && pg.ConstraintName == CodeIndex)
@@ -88,7 +101,64 @@ internal sealed class PersonalInvitationRepository(ShramSafalDbContext db) : IPe
             }
 
             db.Entry(invitation).State = EntityState.Detached;
-            return false;
+            return PersonalInvitationSaveOutcome.CodeTaken;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
+                                           && pg.ConstraintName == WaitingNumberIndex)
+        {
+            // Fix round 1 (review M-5): another invitation for this number was made at the same moment and won. Nothing of
+            // this one is written — not the invitation, not the withdrawals or audit rows staged with it.
+            if (tx is not null)
+            {
+                await tx.RollbackToSavepointAsync(savepoint, ct);
+            }
+
+            DropStaged();
+            return PersonalInvitationSaveOutcome.NumberBusy;
+        }
+    }
+
+    public async Task<InvitationClaimSaveOutcome> TrySaveClaimAsync(CancellationToken ct = default)
+    {
+        var tx = db.Database.IsRelational() ? db.Database.CurrentTransaction : null;
+        const string savepoint = "personal_invitation_claim";
+        if (tx is not null)
+        {
+            await tx.CreateSavepointAsync(savepoint, ct);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return InvitationClaimSaveOutcome.Saved;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } pg
+                                           && ClashOf(pg.ConstraintName) is { } clash)
+        {
+            // Fix round 1 (review M-5): a double tap, or a race on WID's one-verified-number rules. The savepoint keeps the
+            // request's transaction usable; every change this claim staged is dropped, so a later save cannot replay it.
+            if (tx is not null)
+            {
+                await tx.RollbackToSavepointAsync(savepoint, ct);
+            }
+
+            DropStaged();
+            return clash;
+        }
+    }
+
+    private static InvitationClaimSaveOutcome? ClashOf(string? constraint) => constraint switch
+    {
+        LiveSeatIndex => InvitationClaimSaveOutcome.SeatTaken,
+        ShramIdentityStore.VerifiedNumberIndex or ShramIdentityStore.VerifiedPerPersonIndex => InvitationClaimSaveOutcome.IdentityClash,
+        _ => null,
+    };
+
+    private void DropStaged()
+    {
+        foreach (var staged in db.ChangeTracker.Entries().Where(e => e.State != EntityState.Unchanged).ToList())
+        {
+            staged.State = staged.State == EntityState.Added ? EntityState.Detached : EntityState.Unchanged;
         }
     }
 

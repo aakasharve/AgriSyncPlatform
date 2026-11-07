@@ -17,4 +17,23 @@ public interface IUserDirectory
     /// <c>null</c>, which fails closed: every claim then waits for the owner.
     /// </summary>
     Task<string?> GetVerifiedPhoneAsync(Guid userId, CancellationToken ct = default) => Task.FromResult<string?>(null);
+
+    /// <summary>
+    /// lane MU-2 fix round 1 (review H-1) — the proven numbers of several people at once, keyed by user id; a person with no
+    /// proven number has no entry. Compared on the server only (never sent): did the claim come from the number the owner
+    /// named? The default asks one by one.
+    /// </summary>
+    async Task<IReadOnlyDictionary<Guid, string>> GetVerifiedPhonesAsync(IEnumerable<Guid> userIds, CancellationToken ct = default)
+    {
+        var phones = new Dictionary<Guid, string>();
+        foreach (var id in userIds.Where(id => id != Guid.Empty).Distinct())
+        {
+            if (await GetVerifiedPhoneAsync(id, ct) is { Length: > 0 } phone)
+            {
+                phones[id] = phone;
+            }
+        }
+
+        return phones;
+    }
 }

@@ -16,6 +16,11 @@ public sealed record CreatePersonalInvitationInput(
 /// <summary>
 /// spec: plr-d10 lane MU-2 — the owner's view of one invitation: the code and link he delivers (QR and link carry the same
 /// invitation), what it grants, where it stands, and who claimed it. Only the last four digits of a named number.
+/// <para>Fix round 1 (review H-1, L-4): <paramref name="ClaimedByName"/> and <paramref name="ClaimedByPhoneLast4"/> are the
+/// CLAIMANT's own (his display name, the last four digits of his proven number) — the owner approves who claimed it, not
+/// the name he typed. <paramref name="ClaimedByAnotherNumber"/> = it named a number and the claim came from another (or an
+/// unproven) one: the link reached someone else. <paramref name="ClaimOutcome"/> = what became of the claim:
+/// <c>WaitsForOwner</c>, <c>Joined</c>, <c>Declined</c> (his नको) or <c>Withdrawn</c> (the claimant took it back).</para>
 /// </summary>
 public sealed record PersonalInvitationView(
     Guid Id,
@@ -36,7 +41,14 @@ public sealed record PersonalInvitationView(
     Guid? ClaimedByUserId,
     DateTime? ClaimedAtUtc,
     bool WaitsForOwner,
-    bool WorkerLinked);
+    bool WorkerLinked,
+    string? ClaimedByName = null,
+    string? ClaimedByPhoneLast4 = null,
+    bool ClaimedByAnotherNumber = false,
+    string? ClaimOutcome = null);
+
+/// <summary>Fix round 1 — who claimed an invitation, as the owner's list shows him.</summary>
+public sealed record InvitationClaimant(string? Name, string? PhoneLast4, bool AnotherNumber, string? Outcome);
 
 /// <summary>
 /// spec: plr-d10 lane MU-2 — the invited person's card: "‹farm› ने तुम्हाला बोलावलं आहे · जबाबदारी: … · प्लॉट … ·
@@ -75,7 +87,7 @@ public static class PersonalInvitationProjection
             .Select(a => new AuthorityGrantDto(FarmAuthorities.NameOf(a.Key), a.Value))
             .ToList();
 
-    public static PersonalInvitationView View(PersonalInvitation invitation, DateTime nowUtc) => new(
+    public static PersonalInvitationView View(PersonalInvitation invitation, DateTime nowUtc, InvitationClaimant? claimant = null) => new(
         Id: invitation.Id,
         FarmId: invitation.FarmId.Value,
         Code: invitation.Code,
@@ -94,20 +106,35 @@ public static class PersonalInvitationProjection
         ClaimedByUserId: invitation.ClaimedByUserId?.Value,
         ClaimedAtUtc: invitation.ClaimedAtUtc,
         WaitsForOwner: invitation.WaitsForOwner,
-        WorkerLinked: invitation.WorkerLinked);
+        WorkerLinked: invitation.WorkerLinked,
+        ClaimedByName: claimant?.Name,
+        ClaimedByPhoneLast4: claimant?.PhoneLast4,
+        ClaimedByAnotherNumber: claimant?.AnotherNumber ?? false,
+        ClaimOutcome: claimant?.Outcome);
 
+    /// <summary>
+    /// The card. Fix round 1 (review L-11): a code is often forwarded, so the card says only what its holder needs — the
+    /// name the owner typed is shown only to the person whose proven number it named (his own name); an ENDED invitation
+    /// says its reason alone (farm and status), with no grant, no plots and no name.
+    /// </summary>
     public static InvitationCardView Card(
-        PersonalInvitation invitation, DateTime nowUtc, string? inviteePhoneE164, string? invitedByName) => new(
-        InvitationId: invitation.Id,
-        FarmName: invitation.FarmName,
-        InvitedByName: invitedByName,
-        Label: invitation.Label.ToString(),
-        Name: invitation.PersonName,
-        PlotScope: invitation.PlotScope.ToString(),
-        PlotNames: invitation.ScopePlotNames,
-        Authorities: AuthorityList(invitation),
-        ExpiresAtUtc: invitation.ExpiresAtUtc,
-        Status: invitation.StatusAt(nowUtc).ToString(),
-        NamesYou: invitation.Names(inviteePhoneE164),
-        NamesAWorker: invitation.FieldOperatorId is not null);
+        PersonalInvitation invitation, DateTime nowUtc, string? inviteePhoneE164, string? invitedByName)
+    {
+        var status = invitation.StatusAt(nowUtc);
+        var live = status == PersonalInvitationStatus.Waiting;
+        var namesYou = invitation.Names(inviteePhoneE164);
+        return new InvitationCardView(
+            InvitationId: invitation.Id,
+            FarmName: invitation.FarmName,
+            InvitedByName: live ? invitedByName : null,
+            Label: invitation.Label.ToString(),
+            Name: live && namesYou ? invitation.PersonName : null,
+            PlotScope: invitation.PlotScope.ToString(),
+            PlotNames: live ? invitation.ScopePlotNames : [],
+            Authorities: live ? AuthorityList(invitation) : [],
+            ExpiresAtUtc: invitation.ExpiresAtUtc,
+            Status: status.ToString(),
+            NamesYou: namesYou,
+            NamesAWorker: live && invitation.FieldOperatorId is not null);
+    }
 }
