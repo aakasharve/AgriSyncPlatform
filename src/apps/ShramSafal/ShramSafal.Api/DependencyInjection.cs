@@ -255,6 +255,7 @@ public static class DependencyInjection
         services.AddScoped<GetScheduleLineageHandler>();
         services.AddScoped<GetAttentionBoardHandler>();
         services.AddScoped<GetCropTypesHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetInputLibrary.GetInputLibraryHandler>();
         services.AddScoped<GetDeviationReasonCodesHandler>();
 
         services.AddScoped<ParseVoiceInputHandler>();

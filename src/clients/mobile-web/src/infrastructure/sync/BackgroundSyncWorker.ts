@@ -3,6 +3,7 @@ import { systemClock } from '../../core/domain/services/Clock';
 import { agriSyncClient, type SyncMutationType } from '../api/AgriSyncClient';
 import { getAuthSession } from '../storage/AuthTokenStore';
 import { reconcileSyncPull } from '../../features/sync/pull/SyncPullReconciler';
+import { runInputLibraryStep } from '../../features/sync/pull/reconcilers/inputLibraryDownload';
 import { isLogsRebuildDue, REFUSAL_RESTORES_SERVER_VERSION, requestLogsRebuild } from '../../features/sync/pull/logsRebuildMarker';
 import { getDatabase } from '../storage/DexieDatabase';
 import { readHeldFarmIds } from '../storage/accessScopeStore';
@@ -99,6 +100,11 @@ export class BackgroundSyncWorker {
         // not sent back yet are queued again FIRST (same ids, so a repeat collapses), so a
         // stranded log on such a plot is recovered behind its plot, never ahead of it.
         void this.reconcileUnregisteredPlots().then(() => this.reconcileStrandedLogs());
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT1c, Task 4) - the product library at APP START: the stored
+        // copy becomes the one the matcher uses at once (so offline launches match against it), then the server is asked.
+        // Fire and forget, never inside a cycle: the step never throws, and the .catch (which also covers the database handle
+        // itself failing to open) means it can never fail or delay this start.
+        void Promise.resolve().then(() => runInputLibraryStep(getDatabase())).catch(() => undefined);
         this.safeRunCycle();
 
         this.timerId = window.setInterval(() => {

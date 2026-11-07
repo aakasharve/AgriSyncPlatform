@@ -27,7 +27,15 @@ public sealed record CatalogProduct(
     IReadOnlyList<CatalogBenefit> Benefits,
     bool IngredientUnknown = false,
     string? Company = null,
-    string? CompanyMr = null);
+    string? CompanyMr = null,
+    IReadOnlyList<CatalogDifferingUse>? DifferingUses = null);
+
+/// <summary>One side of a difference between sources that a person settled as real (lane IT1c Task 5, D-108 3). A
+/// product with a settled difference on <see cref="Field"/> carries two of these: the library's own value and the other
+/// source's, each labelled by the source's POSITION ("स्रोत 1" / "Source 2"), never by its name. The common use is what
+/// every source agrees on and needs no entry. <see cref="Value"/> is the field's values as a list (a one-value field is a
+/// list of one). The card screen is IT4; this is the data.</summary>
+public sealed record CatalogDifferingUse(string Field, int SourcePosition, string LabelMr, string LabelEn, IReadOnlyList<string> Value);
 
 /// <summary>A source the library lists (<c>agro-dosage-guide-en</c> is source 1). <see cref="Kind"/> is
 /// <c>guide</c>, <c>company-list</c>, <c>university</c> or <c>label</c>; <see cref="CheckedBy"/> is null until

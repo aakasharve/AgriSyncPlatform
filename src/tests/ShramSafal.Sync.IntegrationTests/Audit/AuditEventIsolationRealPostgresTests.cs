@@ -1356,6 +1356,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    ShramSafal migrator never reverts or re-applies it. Never touches ssf.audit_events, its policies or its grants.
         //    Safe mid-proof.
         "20261107061500_AddNewPhoneQuestion",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane IT1c, D-107 B / D-108 3); Down() read in full: drops the five new tables
+        //    ssf.input_library_conflicts, _meta, _source_refs, _products and _sources (their policies, indexes, constraints and
+        //    seeded rows go with them). Up() creates exactly those tables, seeds source 1, puts them under ENABLE + FORCE RLS
+        //    in the cost_categories shape and grants SELECT on them to the app role. Never touches ssf.audit_events, its policies or
+        //    its grants. Safe mid-proof.
+        "20261107080000_AddInputLibrary",
     ];
 
     /// <summary>

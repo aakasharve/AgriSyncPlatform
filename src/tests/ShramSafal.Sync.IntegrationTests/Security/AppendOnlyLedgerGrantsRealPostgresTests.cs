@@ -230,6 +230,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    public.refresh_tokens (USER context; the ShramSafal migrator never reverts or re-applies it, it only shares the
         //    scratch database's history table). No grant, policy or append-only ledger is touched. Safe mid-proof.
         "20261107061500_AddNewPhoneQuestion",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane IT1c, D-107 B / D-108 3); Down() read in full: drops the five new
+        //    ssf.input_library_* tables (with their policies, indexes and seeded rows) and nothing else. Up() creates those tables,
+        //    seeds source 1, puts them under ENABLE + FORCE RLS and adds ONE grant: SELECT on those five new tables to agrisync_app
+        //    (the deny-write policies still block its writes). No existing grant, privilege or append-only ledger is touched. Safe to
+        //    revert and re-apply mid-proof.
+        "20261107080000_AddInputLibrary",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

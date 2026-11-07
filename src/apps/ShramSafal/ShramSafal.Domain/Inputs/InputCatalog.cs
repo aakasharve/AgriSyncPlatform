@@ -40,8 +40,8 @@ public static class InputCatalog
 
     private static readonly Regex Digits = new("[0-9]+", RegexOptions.CultureInvariant);
 
-    // THE LOADER SEAM: the one place the library is read. Today it is the embedded resource; a later lane
-    // swaps only LoadLibrary to read the server's copy. Nothing else in this class reads the JSON.
+    // THE LOADER SEAM: the one place the library is read. It is the server's published copy when the host placed
+    // one (lane IT1c, PublishedInputLibrary), else the embedded resource. Nothing else in this class reads the JSON.
     private static readonly (byte[] Raw, CatalogFile Data) Library = LoadLibrary();
     private static readonly byte[] Raw = Library.Raw;
     private static readonly CatalogFile Data = Library.Data;
@@ -65,7 +65,8 @@ public static class InputCatalog
     /// <summary>Every product, in catalogue order.</summary>
     public static IReadOnlyList<CatalogProduct> Products => Data.Products;
 
-    /// <summary>The embedded catalogue's bytes, exactly as generated (a copy).</summary>
+    /// <summary>The library's bytes as this process read them: the published copy when one was placed, else the embedded
+    /// catalogue exactly as generated (a copy).</summary>
     public static byte[] RawJson() => (byte[])Raw.Clone();
 
     /// <summary>The product with this id, or <c>null</c>.</summary>
@@ -106,6 +107,15 @@ public static class InputCatalog
 
     private static (byte[] Raw, CatalogFile Data) LoadLibrary()
     {
+        // spec: lane IT1c Task 2 - the server's PUBLISHED copy, when the host placed one before first use
+        // (PublishedInputLibrary); the embedded seed (source 1) when none was placed or the copy does not parse.
+        var published = PublishedInputLibrary.TakeForCatalog();
+        if (published is not null && PublishedInputLibrary.Validate(published) is null
+            && System.Text.Json.JsonSerializer.Deserialize<CatalogFile>(published, InputReferenceResource.JsonOptions) is { } publishedData)
+        {
+            return (published, publishedData);
+        }
+
         var raw = InputReferenceResource.ReadBytes("catalog.json");
         var data = System.Text.Json.JsonSerializer.Deserialize<CatalogFile>(raw, InputReferenceResource.JsonOptions)
             ?? throw new InvalidOperationException("Embedded resource 'catalog.json' is empty.");

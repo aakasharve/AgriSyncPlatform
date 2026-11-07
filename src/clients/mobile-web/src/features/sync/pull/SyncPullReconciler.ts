@@ -35,6 +35,7 @@ import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
 import { finalizeReconciliation } from './reconcilers/finalizeReconciliation';
 import { dispatchPostReconcileEvents } from './reconcilers/postReconcileEvents';
 import { markLogsRebuilt } from './logsRebuildMarker';
+import { INPUT_LIBRARY_POLL_MS, runInputLibraryStep } from './reconcilers/inputLibraryDownload';
 
 export { dayLedgerMetaKey } from './helpers/dayLedgerMetaKey';
 
@@ -145,6 +146,10 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
     });
 
     dispatchPostReconcileEvents(payload);
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT1c, Task 4) - the product library, asked for AFTER the pull has
+    // landed and OUTSIDE its Dexie transaction, at most every INPUT_LIBRARY_POLL_MS. Fire and forget: the step never throws,
+    // and the .catch (which also covers a throw before the first await) means nothing it does can fail or delay this pull.
+    void Promise.resolve().then(() => runInputLibraryStep(db, { minIntervalMs: INPUT_LIBRARY_POLL_MS })).catch(() => undefined);
     if (withdrawnMoney > 0 && typeof window !== 'undefined') {
         // The money cache merges pulls; a withdrawn money record must leave it too (re-read from the phone's store).
         window.dispatchEvent(new CustomEvent('agrisync:finance-records-withdrawn'));

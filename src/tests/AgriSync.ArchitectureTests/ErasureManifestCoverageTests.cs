@@ -41,6 +41,11 @@ public sealed class ErasureManifestCoverageTests
         "erasure_requests", "export_requests", "retention_sweep_runs", "breach_incidents",
         "export_artifacts", "audit_read_telemetry", "pii_review_queue",
         "cross_border_transfers", "raw_blob_index", "transcripts",
+        // spec: plr-d10 lane IT1c - the input library: ShramSafal-wide reference data about products (sources, products with
+        // their ingredients and uses, source refs, intake conflicts, the published-version row). No farm or person column;
+        // the only person named is the staff member who settled a conflict (decided_by), never a farmer.
+        "input_library_sources", "input_library_products", "input_library_source_refs",
+        "input_library_conflicts", "input_library_meta",
         // Executor: run this test RED first, then add ANY remaining genuinely-no-PII
         // pre-existing ssf table the scan flags (core reference/config tables such as
         // price_configs, ai_provider_config, etc.) here with a one-line reason. Do NOT

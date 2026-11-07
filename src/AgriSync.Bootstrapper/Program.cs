@@ -809,6 +809,16 @@ try
             app.Services, args, Console.Out, DateTime.UtcNow, CancellationToken.None);
     }
 
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT1c, Task 3) - the intake of a new input-library source
+    // (`--input-library-intake status|load|decide|publish|discard`), run by a human in the shape of the re-seed above:
+    // it returns before app.Run(), applies no migration, starts no hosted service, and writes only through the admin
+    // (migration) connection, since the library tables deny the app role every write. See InputLibraryIntakeCommand.
+    if (args.Contains(AgriSync.Bootstrapper.Infrastructure.InputLibraryIntakeCommand.Flag, StringComparer.Ordinal))
+    {
+        return await AgriSync.Bootstrapper.Infrastructure.InputLibraryIntakeCommand.RunAsync(
+            app.Services, args, Console.Out, DateTime.UtcNow, CancellationToken.None);
+    }
+
     if (args.Contains("--list-migrations", StringComparer.Ordinal))
     {
         await ListMigrationsAndExitAsync(app);
@@ -1135,6 +1145,18 @@ static async Task InitializeApplicationDataAsync(WebApplication app)
         catch (Exception ex)
         {
             logger.LogError(ex, "PlatformAdminBridgeSeeder failed — admin login may require manual intervention.");
+        }
+
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT1c, Task 2) - hand the server's matcher the PUBLISHED input
+        // library, so it matches against the library the phones download. Any failure leaves the embedded seed in use; the
+        // host never fails to start over it. Runs after migrations (the tables exist) and before anything reads the matcher.
+        try
+        {
+            logger.LogInformation("{InputLibrary}", await ShramSafal.Infrastructure.Persistence.InputLibrary.InputLibraryPublishedCopyLoader.TryPlaceAsync(ssfContext, CancellationToken.None));
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Input library: the published copy was not placed; the embedded seed stays in use.");
         }
 
         // CEI §4.5 Phase 3 — default Grapes test protocols (idempotent).

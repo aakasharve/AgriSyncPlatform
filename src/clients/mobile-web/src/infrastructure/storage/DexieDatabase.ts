@@ -41,6 +41,7 @@ import { applyV22 } from './dexie/versions/v22';
 import { applyV23 } from './dexie/versions/v23';
 import { applyV24 } from './dexie/versions/v24';
 import { applyV25 } from './dexie/versions/v25';
+import { applyV26 } from './dexie/versions/v26';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
@@ -109,7 +110,7 @@ export interface PendingInterpretationDexieRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 25; // Labour V2 R1 Task 3.5c — adds the attendanceMarks store (server-acknowledged हजेरी rulings from /sync/pull); see versions/v25.ts. 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
+export const DATABASE_VERSION = 26; // lane IT1c Task 4 — adds the inputLibrary store (the offline copy of the server's published product library); see versions/v26.ts. v25 added attendanceMarks (Labour V2 R1 Task 3.5c). 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
 /**
  * CEI Phase 1 schema version (now active — applied by Task 5.1.1).
  *
@@ -283,6 +284,7 @@ export class AgriLogDatabase extends Dexie {
         applyV23(this);
         applyV24(this);
         applyV25(this);
+        applyV26(this);
     }
 }
 

@@ -406,6 +406,8 @@ public static class DependencyInjection
         services.AddScoped<IRecordCorrectionEventHandler, RecordCorrectionEventHandler>();
 
         services.AddScoped<IShramSafalRepository, ShramSafalRepository>();
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT1c) - the input library's read side (published rows only).
+        services.AddScoped<IInputLibraryStore, ShramSafal.Infrastructure.Persistence.InputLibrary.InputLibraryStore>();
         // spec: dfes-companion-2026-07-11 (wave-1.5) — the one-time repair over days
         // recorded before the server learned to self-attest an owner's own log. Registered
         // here rather than beside the other log handlers because it must NOT be composed
