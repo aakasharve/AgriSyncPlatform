@@ -31,6 +31,13 @@ import type { FarmAccessScopeDto } from '../../infrastructure/api/accessScopeDto
 /** The server code a stale approval is refused with — the L4b exact-version code (`ShramSafalErrors.LogChangedSinceReview`). */
 export const BILL_VERSION_CONFLICT_CODE = 'ShramSafal.LogVersion.Conflict';
 
+/**
+ * lane BILL-1b (founder D-105 (b)) — the server code a change to an APPROVED bill's price is refused with when the changer is
+ * not the main owner (`ShramSafalErrors.BillPriceLockedAfterApproval`). Three segments, tail CONFLICT: every phone already
+ * parks such a row where its owner sees it (P10, P11).
+ */
+export const BILL_PRICE_LOCKED_CODE = 'ShramSafal.BillPrice.Conflict';
+
 /** May this seat approve bills on this farm? The server's rule, fail closed. */
 export function mayApproveBills(farm: Pick<MeFarm, 'role' | 'authorities'> | null | undefined): boolean {
     return isPrimaryAccountHolderRole(farm?.role) || holdsAuthority(farm, AUTHORITY.reviewMoney);

@@ -4,7 +4,8 @@
  *
  * The founder's own sentence: "ShramSafal keeps the original sound of every record as proof; this switch only decides whether it
  * can be played." Every screen and document says that, and NOTHING says the switch decides whether recordings are SAVED. The one
- * extra true line (PROPOSED): "A recording made while this is off cannot be played later." Nothing stored changes.
+ * extra true line: "A voice Shram Sathi understood while this is off cannot be played later." (the founder's own words, lane WORD-1 / D-109:
+ * "don't use recording but understanding"; it first read "A recording made while this is off..."). Nothing stored changes.
  * This is a MATERIAL notice change, so the one-time sheet asks once (and shows this change: NoticeChangeSheet.test).
  */
 import { readFileSync } from 'node:fs';
@@ -33,7 +34,7 @@ const OLD_OR_CONTRADICTING = [
     /नवीन आवाजी नोंदी (तुमच्या खात्यात )?जतन/,
     /जतन केल्या जाणार नाहीत/,
     /जतन करण्याची सोय/,
-    // N11: ONE Marathi rendering of the founder's sentence everywhere outside Sathi's surface ("रेकॉर्डिंग", never the "नोंद" rendering).
+    // N11: ONE Marathi rendering of the founder's sentence everywhere outside Sathi's surface ("आवाज" since lane WORD-1; never the "नोंद" rendering).
     /प्रत्येक नोंदीचा मूळ आवाज/,
     /बंद असताना केलेली नोंद नंतर/,
     /यापुढची नोंद नंतर/,
@@ -94,7 +95,7 @@ describe('D-50 - the founder\'s own sentence is what every screen says, and noth
         const voice = (lang: 'mr' | 'en') => CONSENT_NOTICE[lang].cards.find((p) => p.id === 'voiceUploads')!.purpose;
         expect(voice('en')).toContain(PROOF_KEPT_EN);
         expect(voice('en')).toContain(OFF_CONSEQUENCE_EN);
-        // N11: ONE Marathi rendering outside Sathi's surface - the same two sentences, worded with "रेकॉर्डिंग" (not "नोंद")
+        // N11: ONE Marathi rendering outside Sathi's surface - the same two sentences, worded with "आवाज" (not "रेकॉर्डिंग", not "नोंद")
         expect(voice('mr')).toContain(PROOF_KEPT_MR);
         expect(voice('mr')).toContain(OFF_CONSEQUENCE_MR);
         expect(voice('mr')).not.toContain('नोंद');
@@ -133,11 +134,56 @@ describe('D-50 - the documents (M3, M4): meaning, evidence copy, the real in-app
     it('the Privacy Notice and the Terms say it too, in both languages', () => {
         expect(doc('legal/privacy_en.md')).toContain('ShramSafal keeps the original sound of every');
         expect(doc('legal/privacy_en.md')).toContain('cannot be played later');
-        expect(doc('legal/terms_en.md')).toContain('A recording made while it is off cannot be played later.');
+        expect(doc('legal/terms_en.md')).toContain('A voice Shram Sathi understood while it is off cannot be played later.');
         expect(doc('legal/privacy_mr.md')).toContain('नंतर ऐकता येणार नाही');
-        expect(doc('legal/terms_mr.md')).toContain('बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.');
+        expect(doc('legal/terms_mr.md')).toContain('बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.');
         expect(doc('legal/privacy_en.md')).toContain(SWITCH_TITLE_EN);
         expect(doc('legal/privacy_mr.md')).toContain(SWITCH_TITLE_MR);
+    });
+});
+
+describe('WORD-1 (founder D-109) - "don\'t use recording but understanding": the switch never says recording', () => {
+    it('the founder\'s approved line is exactly this, in both languages', () => {
+        expect(OFF_CONSEQUENCE_MR).toBe('हा पर्याय बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.');
+        expect(OFF_CONSEQUENCE_EN).toBe('A voice Shram Sathi understood while this is off cannot be played later.');
+    });
+
+    it('no switch line, voice-list line or notice line outside the Sathi screen says "रेकॉर्डिंग" / "recording"', () => {
+        const texts: Array<[string, string]> = [
+            ['PROOF_KEPT_MR', PROOF_KEPT_MR], ['OFF_CONSEQUENCE_MR', OFF_CONSEQUENCE_MR],
+            ['PROOF_KEPT_EN', PROOF_KEPT_EN], ['OFF_CONSEQUENCE_EN', OFF_CONSEQUENCE_EN],
+            ...CONSENT_KEYS.flatMap((key): Array<[string, string]> => [[`consent:${key}:mr`, mr(key, 'consent')], [`consent:${key}:en`, en(key, 'consent')]]),
+            ...DIARY_KEYS.flatMap((key): Array<[string, string]> => [[`diary:${key}:mr`, mr(key, 'diary')], [`diary:${key}:en`, en(key, 'diary')]]),
+            ['diary:firstGrant.bullet1:mr', mr('firstGrant.bullet1', 'diary')], ['diary:firstGrant.bullet1:en', en('firstGrant.bullet1', 'diary')],
+            ['notice:voiceUploads:mr', CONSENT_NOTICE.mr.cards.find((p) => p.id === 'voiceUploads')!.purpose],
+            ['notice:voiceUploads:en', CONSENT_NOTICE.en.cards.find((p) => p.id === 'voiceUploads')!.purpose],
+        ];
+        for (const [name, text] of texts) {
+            expect(text, name).not.toMatch(/रेकॉर्डिंग/);
+            // D-31's own English "Original recording unavailable." is the founder's verbatim and sits on the player card, not on these lines.
+            expect(text, name).not.toMatch(/recording/i);
+        }
+    });
+
+    it('the consent form and the OPS-1 lines of the Privacy Notice and the Terms say it too, never "recording"', () => {
+        const opsLines = [
+            ['consent/agreement_en.md', /If you say no:[^\n]*/],
+            ['consent/agreement_mr.md', /नकार दिल्यास:[^\n]*/],
+            ['legal/terms_en.md', /In short: an evidence copy[\s\S]*?on your phone\./],
+            ['legal/terms_mr.md', /थोडक्यात: प्रत्येक आवाजाची[^\n]*/],
+        ] as const;
+        for (const [name, pattern] of opsLines) {
+            const found = doc(name).match(pattern);
+            expect(found, name).not.toBeNull();
+            expect(found![0], name).not.toMatch(/रेकॉर्डिंग|recording/i);
+        }
+        expect(doc('legal/privacy_en.md')).toContain('a voice Shram Sathi understood');
+        expect(doc('legal/privacy_mr.md')).toContain('ती बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.');
+    });
+
+    it('a pure wording change does not move the notice version (that would ask every farmer again)', () => {
+        expect(NOTICE_VERSION).toBe('notice-2026-11-06.1');
+        expect(ACCEPTED_NOTICE_VERSIONS_STILL_CURRENT).toEqual(['notice-2026-11-06.1']);
     });
 });
 

@@ -3,6 +3,7 @@
   "byRange": {
     "clips": [
       {
+        "playable": true,
         "clipId": "7b0e3c5e-2a41-5d7a-8c0e-3f9a1b2c4d5e",
         "recordedAtUtc": "2026-10-10T09:00:00Z",
         "durationSeconds": 4,

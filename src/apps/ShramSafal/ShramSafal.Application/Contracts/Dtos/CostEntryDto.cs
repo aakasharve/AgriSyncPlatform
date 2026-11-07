@@ -77,7 +77,16 @@ public sealed record CostEntryDto(
     string? ReviewReason = null,
     /// <summary>lane BILL-1 — the latest मंजूर stamp (who, when, which version); absent when nobody approved it.</summary>
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    CostEntryApprovalDto? Approval = null);
+    CostEntryApprovalDto? Approval = null,
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1b (founder D-105 (b), 2026-11-08) — when the farm's primary account holder (the main owner)
+    /// changed this bill's price AFTER it was approved: the moment of his latest such change. Once a bill is approved only he can
+    /// change its price, and the bill then shows "मालकाने बदलला" / "Changed by owner" to everyone, him included. Absent when
+    /// no such change happened; sent by the pull and the approve door only (never a key elsewhere, so their bytes are
+    /// unchanged: P11). The stamps stay: an older phone shows the old stamp and ignores this key.
+    /// </summary>
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    DateTime? ChangedByOwnerAtUtc = null);
 
 /// <summary>
 /// spec: plr-d10 lane BILL-1 (founder D-12: "a separate "मंजूर" stamp with who and when") — one reviewer's मंजूर on a bill.

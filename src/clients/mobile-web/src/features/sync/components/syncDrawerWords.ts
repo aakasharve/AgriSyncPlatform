@@ -169,6 +169,12 @@ const REASON_BY_CODE: Record<string, { mr: string; en: string }> = {
         mr: 'ही नोंद बदलली आहे — नवीन नोंद पाहून मंजूर करा',
         en: 'This record changed — look at the new version and approve it',
     },
+    // lane BILL-1b (founder D-105 (b)) — a price change on an APPROVED bill from anyone but the main owner. The same words as
+    // `billApprovalWords.priceLocked` (a test holds the two together). PROPOSED.
+    'ShramSafal.BillPrice.Conflict': {
+        mr: 'बिल मंजूर झाल्यावर त्याची किंमत फक्त मुख्य मालक बदलू शकतात — तुमचा बदल घेतला गेला नाही',
+        en: 'Once a bill is approved only the main owner can change its price — your change was not taken',
+    },
     'ShramSafal.Forbidden': { mr: 'हे करण्याची परवानगी तुम्हाला नाही', en: 'You do not have permission for this' },
     // lane L4b fix round 1 — the server's code is `ShramSafal.RecordAudience.Forbidden` (`RecordAudienceClosed` is its
     // C# name); the old key never matched.

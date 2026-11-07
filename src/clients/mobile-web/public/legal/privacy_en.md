@@ -155,8 +155,8 @@ worse than none:
    is something a person at ARVE does when you ask.
 2. The optional **"Allow playback of my original voice"** switch only decides whether your original voice can
    be played back by you and by authorized reviewers on this farm. ShramSafal keeps the original sound of every
-   record as proof either way. **Turning the switch off stops playback and never deletes anything; a recording made
-   while it is off cannot be played later.** <!-- PROPOSED (D-101) --> While your phone is offline, you may still hear your own recordings on your phone. The recordings already saved are not deleted automatically either: to
+   record as proof either way. **Turning the switch off stops playback and never deletes anything; a voice Shram Sathi understood
+   while it is off cannot be played later.** <!-- PROPOSED (D-101) --> While your phone is offline, you may still hear your own voice on your phone. The voices already saved are not deleted automatically either: to
    have those removed, ask us to erase your data.
 3. An erasure request today removes your account, your voice diary and your personal
    details, and anonymises your farm records. It does **not** currently reach the raw

@@ -138,8 +138,20 @@ public sealed class VerifyOtpHandler(
         }
 
         // Revoke old refresh tokens for this device only — other device sessions preserved.
-        await refreshTokenRepository.RevokeActiveForUserDeviceAsync(
-            user.Id, command.Session.DeviceId, utcNow, "same_device_login", ct);
+        // lane FIX-1 (register F131; NP-1 review M1): a HELD session (a phone this account has never confirmed — possibly a
+        // stranger's) replaces only the HELD rows of its device id, never the account's normal sessions: `unknown` (no id sent:
+        // the admin console, phones on 1.0.15–1.0.17) and `legacy` are shared by many sessions, and "the real owner's phones stay
+        // signed in". A sign-in on a known device keeps the old behaviour.
+        if (hold is not null)
+        {
+            await refreshTokenRepository.RevokeHeldForUserDeviceAsync(
+                user.Id, command.Session.DeviceId, utcNow, "same_device_login", ct);
+        }
+        else
+        {
+            await refreshTokenRepository.RevokeActiveForUserDeviceAsync(
+                user.Id, command.Session.DeviceId, utcNow, "same_device_login", ct);
+        }
 
         var tokens = jwtTokenService.GenerateIdentityTokens(user.Id, phoneVerified: true, deviceCheckPending: hold is not null);
 

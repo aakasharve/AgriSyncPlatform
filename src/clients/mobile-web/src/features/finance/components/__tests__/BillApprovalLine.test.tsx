@@ -148,3 +148,38 @@ describe('the "this bill changed" screen (the L4b pattern)', () => {
         expect(screen.getByTestId('bill-refused-bill-1')).toHaveTextContent('श्रमसफलच्या नियमानुसार हे बिल तुम्ही मंजूर करू शकत नाही');
     });
 });
+
+// lane BILL-1b (founder D-105 (b), 2026-11-08): once a bill is approved only the main owner changes its price, and the bill then
+// shows "मालकाने बदलला" / "Changed by owner" (PROPOSED words) with the date to EVERYONE who sees it, the owner included.
+describe('the mark "changed by owner"', () => {
+    const OWNER_CHANGE = '2026-11-08T05:30:00Z';
+    const changedByOwner = (over: Partial<EffectiveMoneyEvent> = {}) =>
+        bill({ billVersion: 2, approval: approval(1), changedByOwnerAtUtc: OWNER_CHANGE, ...over });
+
+    it('Marathi: मालकाने बदलला · ‹दिवस›, shown to a reviewer AND to a seat that cannot approve (the owner sees it the same way)', () => {
+        draw({ bill: changedByOwner() });
+        const mark = screen.getByTestId('bill-owner-change-bill-1');
+        expect(mark).toHaveTextContent(/^मालकाने बदलला · 8 नोव्हें\.?,? 2026$/);
+        expect(mark.textContent).not.toMatch(/[A-Za-z]/);
+        // The old stamp stays in the history beside it.
+        expect(screen.getByTestId('bill-stamp-bill-1')).toHaveAttribute('data-stamp', 'approvedOlder');
+        cleanup();
+        draw({ mayApprove: false, bill: changedByOwner() });
+        expect(screen.getByTestId('bill-owner-change-bill-1')).toHaveTextContent('मालकाने बदलला');
+    });
+
+    it('English: Changed by owner · ‹day›', () => {
+        draw({ language: 'en', bill: changedByOwner({ approval: approval(1, 'Ganesh') }) });
+        expect(screen.getByTestId('bill-owner-change-bill-1')).toHaveTextContent(/^Changed by owner · 8 Nov 2026$/);
+        expect(screen.getByTestId('bill-owner-change-bill-1').textContent).not.toMatch(/[ऀ-ॿ]/);
+    });
+
+    it('it stays after the new version is approved (the bill\'s history never lies), and a bill with no such change shows no mark', () => {
+        draw({ mayApprove: false, bill: changedByOwner({ billVersion: 2, approval: approval(2), trustStatus: 'Verified', reviewStatus: 'OK' }) });
+        expect(screen.getByTestId('bill-owner-change-bill-1')).toBeInTheDocument();
+        expect(screen.getByTestId('bill-stamp-bill-1')).toHaveAttribute('data-stamp', 'approved');
+        cleanup();
+        draw({ bill: bill({ approval: approval(1) }) });
+        expect(screen.queryByTestId('bill-owner-change-bill-1')).toBeNull();
+    });
+});

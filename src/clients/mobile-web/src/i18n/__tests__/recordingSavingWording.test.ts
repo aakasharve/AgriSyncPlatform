@@ -18,17 +18,18 @@ const agreement = (lang: 'mr' | 'en') =>
 // fix round 1 (lane OPS-1; founder D-50 choice 2, CTO call D-101): the R-series below used to pin wording that said the switch decides
 // whether recordings are SAVED. The founder's D-50 sentence replaces it: ShramSafal keeps the original sound of every record as
 // proof; the switch only decides whether it can be played. The exact new lines are pinned here (PROPOSED words).
-const OFF_MR = 'हा पर्याय बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.';
-const OFF_EN = 'A recording made while this is off cannot be played later.';
+// lane WORD-1 (founder D-109, 2026-11-08: "don't use recording but understanding"): the founder approved exactly these two lines.
+const OFF_MR = 'हा पर्याय बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.';
+const OFF_EN = 'A voice Shram Sathi understood while this is off cannot be played later.';
 
 describe('R4 - playback on banner', () => {
     it('exact Marathi, two lines', () => {
         expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedTitle')).toBe('मूळ आवाज ऐकू देणे सुरू आहे.');
-        expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedBody')).toBe('प्रत्येक रेकॉर्डिंगची जतन स्थिती खाली पाहा.');
+        expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedBody')).toBe('प्रत्येक आवाजाची जतन स्थिती खाली पाहा.');
     });
-    it('English says playback is on and points at the per-recording status', () => {
+    it('English says playback is on and points at the per-voice status', () => {
         expect(tVoiceDiary('en-IN', 'retentionBanner.grantedTitle')).toBe('Playback of your original voice is on.');
-        expect(tVoiceDiary('en-IN', 'retentionBanner.grantedBody')).toBe("See each recording's saving status below.");
+        expect(tVoiceDiary('en-IN', 'retentionBanner.grantedBody')).toBe("See each voice's saving status below.");
     });
 });
 
@@ -38,7 +39,7 @@ describe('R5 - playback off banner', () => {
         expect(tVoiceDiary('mr-IN', 'retentionBanner.deniedBody')).toBe(`${OFF_MR} काहीही मिटवलं जात नाही.`);
         expect(tVoiceDiary('mr-IN', 'retentionBanner.deniedBody')).not.toMatch(/[A-Za-z]/);
     });
-    it('English: a recording made while off cannot be played later, nothing is erased', () => {
+    it('English: a voice Shram Sathi understood while off cannot be played later, nothing is erased', () => {
         expect(tVoiceDiary('en-IN', 'retentionBanner.deniedTitle')).toBe('Playback of your original voice is off.');
         expect(tVoiceDiary('en-IN', 'retentionBanner.deniedBody')).toBe(`${OFF_EN} Nothing is erased.`);
     });
@@ -46,14 +47,14 @@ describe('R5 - playback off banner', () => {
 
 describe('R7 - turning playback off', () => {
     it('exact Marathi on the confirmation', () => {
-        expect(tVoiceDiary('mr-IN', 'stopFutureConfirm.body')).toBe('बंद केल्यावर यापुढे केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.');
+        expect(tVoiceDiary('mr-IN', 'stopFutureConfirm.body')).toBe('बंद केल्यावर यापुढे श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.');
     });
     it('the revoke-all confirmation says playback stops and nothing is deleted', () => {
         expect(tConsent('mr-IN', 'revoke.whatStops')).toContain('मूळ आवाज ऐकता येणार नाही; पुराव्याची प्रत जतन राहते आणि काहीही मिटवलं जात नाही.');
         expect(tConsent('en-IN', 'revoke.whatStops')).toContain('can no longer be played back; the evidence copy is still kept as proof and nothing is deleted.');
     });
     it('English confirmation', () => {
-        expect(tVoiceDiary('en-IN', 'stopFutureConfirm.body')).toBe('A recording made after this cannot be played later. The evidence copy is kept; nothing is erased.');
+        expect(tVoiceDiary('en-IN', 'stopFutureConfirm.body')).toBe('A voice Shram Sathi understands after this cannot be played later. The evidence copy is kept; nothing is erased.');
     });
 });
 
@@ -131,24 +132,26 @@ describe('no string claims saved history or success from consent alone', () => {
     });
 });
 
-describe('fix round 3 - one word for one recording on the first turn-on sheet (CTO call D-101)', () => {
-    it('firstGrant.body in Marathi says "रेकॉर्डिंग" and never "नोंद" for the recording', () => {
+describe('fix round 3 (re-worded by lane WORD-1, founder D-109) - one word for one voice on the first turn-on sheet', () => {
+    it('firstGrant.body in Marathi says "आवाज" and never "रेकॉर्डिंग" or "नोंद" for the voice', () => {
         const body = tVoiceDiary('mr-IN', 'firstGrant.body');
-        expect(body).toContain('प्रत्येक रेकॉर्डिंगची जतन स्थिती');
-        expect(body).toContain('प्रत्येक रेकॉर्डिंगची पुराव्याची प्रत');
+        expect(body).toContain('प्रत्येक आवाजाची जतन स्थिती');
+        expect(body).toContain('प्रत्येक आवाजाची पुराव्याची प्रत');
+        expect(body).not.toMatch(/रेकॉर्डिंग/);
         expect(body.replace(/आवाज नोंदी/g, '')).not.toMatch(/नोंद/);
     });
 });
 
-describe('fix round 3 add-on - "रेकॉर्डिंग" for the sound recording on the same page (CTO call D-101)', () => {
-    it('bullet1, grantedBody and keptNote name the recording "रेकॉर्डिंग", not "नोंद"', () => {
-        expect(tVoiceDiary('mr-IN', 'firstGrant.bullet1')).toBe('प्रत्येक रेकॉर्डिंगची जतन स्थिती दिसते');
-        expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedBody')).toBe('प्रत्येक रेकॉर्डिंगची जतन स्थिती खाली पाहा.');
+describe('fix round 3 add-on (re-worded by lane WORD-1, founder D-109) - "आवाज" for the voice on the same page', () => {
+    it('bullet1, grantedBody and keptNote name the voice "आवाज", not "रेकॉर्डिंग" and not "नोंद"', () => {
+        expect(tVoiceDiary('mr-IN', 'firstGrant.bullet1')).toBe('प्रत्येक आवाजाची जतन स्थिती दिसते');
+        expect(tVoiceDiary('mr-IN', 'retentionBanner.grantedBody')).toBe('प्रत्येक आवाजाची जतन स्थिती खाली पाहा.');
         const kept = tVoiceDiary('mr-IN', 'stopFutureConfirm.keptNote');
-        expect(kept).toBe('आधी जतन झालेली रेकॉर्डिंग जशी आहे तशीच राहील. ती मिटवायची असेल तर ती वेगळी कृती आहे.');
-        // the switch helper paragraph on आवाज नोंदी: "रेकॉर्डिंग" throughout (the place name is not part of this paragraph)
+        expect(kept).toBe('आधी जतन झालेले आवाज जसे आहेत तसेच राहतील. ते मिटवायचे असतील तर ती वेगळी कृती आहे.');
+        // the switch helper paragraph on आवाज नोंदी: "आवाज" throughout (the place name is not part of this paragraph)
         const helper = tVoiceDiary('mr-IN', 'consentToggle.helper');
-        expect(helper).toContain('आधी जतन झालेली रेकॉर्डिंग तुम्ही मिटवेपर्यंत राहील.');
+        expect(helper).toContain('आधी जतन झालेला आवाज तुम्ही मिटवेपर्यंत राहील.');
+        expect(helper).not.toMatch(/रेकॉर्डिंग/);
         // the founder's own D-2 sentence says "आवाज नोंदीसोबत" = with the WORK record; that one stays, everything else in the paragraph is the recording
         expect(helper.replace(D2_DESCRIPTION_MR, '')).not.toMatch(/नोंद/);
         for (const k of ['firstGrant.bullet1', 'retentionBanner.grantedBody', 'stopFutureConfirm.keptNote'] as const) {

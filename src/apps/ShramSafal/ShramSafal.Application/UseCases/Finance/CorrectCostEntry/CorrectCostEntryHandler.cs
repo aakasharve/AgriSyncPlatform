@@ -9,6 +9,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 
 namespace ShramSafal.Application.UseCases.Finance.CorrectCostEntry;
 
@@ -74,6 +75,20 @@ public sealed class CorrectCostEntryHandler(
             return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.Forbidden);
         }
         var resolvedActorRole = actorRole.Value;
+
+        // spec: plr-d10 lane BILL-1b (founder D-105 (b), 2026-11-08) — an APPROVED bill keeps its price: only the primary account
+        // holder changes it. Any stamp counts (the stamp rows are append-only; an older version's stamp is still "approved once").
+        // Asked after the authority gates (a stranger learns nothing about a bill's state) and under the bill's row hold (an
+        // approval in flight finishes first, so this sees it). The owner's change goes on as before; the pull then marks the bill
+        // "मालकाने बदलला" (BillOwnerChange) for everyone, the owner included.
+        var isPrimaryHolder = await FarmAuthorityGate.IsPrimaryAccountHolderAsync(
+            repository, (Guid)entry.FarmId, command.CorrectedByUserId, ct);
+        if (!BillApprovalRules.MayChangeApprovedPrice(isPrimaryHolder)
+            && (await repository.GetCostEntryApprovalsAsync([entry.Id], ct))
+                .Any(a => a.CostEntryId == entry.Id && a.FarmId == entry.FarmId))
+        {
+            return Result.Failure<FinanceCorrectionDto>(ShramSafalErrors.BillPriceLockedAfterApproval);
+        }
 
         // Phase 5 entitlement gate (PaidFeature.EditFinance).
         var gate = await EntitlementGate.CheckAsync<FinanceCorrectionDto>(

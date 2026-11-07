@@ -15,4 +15,13 @@ public static class BillApprovalRules
     /// <summary>May this approver stamp this bill, as its maker or not?</summary>
     public static bool MayApproveOwnBill(bool isPrimaryAccountHolder, bool isMaker) =>
         !isMaker || isPrimaryAccountHolder || ReviewerMayApproveOwnBill;
+
+    /// <summary>
+    /// spec: plr-d10 lane BILL-1b — founder D-105 (b), answered 2026-11-08: "Only you, the main owner, can change an approved
+    /// bill's price." Once a bill carries a मंजूर stamp (any version: the stamp rows are append-only history), a change to its
+    /// price is the primary account holder's alone. Every door that changes a bill's amount asks this ONE check: the money
+    /// book's correction (REST and the sync push, <c>CorrectCostEntryHandler</c>) and a record edit's money
+    /// (<c>EditMoney</c>). A bill nobody approved is unchanged by this rule.
+    /// </summary>
+    public static bool MayChangeApprovedPrice(bool isPrimaryAccountHolder) => isPrimaryAccountHolder;
 }

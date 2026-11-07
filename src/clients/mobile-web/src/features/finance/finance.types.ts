@@ -95,6 +95,12 @@ export interface MoneyEvent {
     billVersion?: number;
     /** lane BILL-1 — the latest मंजूर stamp; absent when nobody approved it (or the server is older). */
     approval?: MoneyApproval;
+    /**
+     * lane BILL-1b (founder D-105 (b), 2026-11-08) — when the main owner changed this bill's price AFTER it was approved
+     * (the date of his latest such change). Once a bill is approved only he may change its price, and the bill says so to
+     * everyone, him included: "मालकाने बदलला" / "Changed by owner". Absent when no such change happened (or the server is older).
+     */
+    changedByOwnerAtUtc?: string;
 }
 
 export interface PriceBookItem {

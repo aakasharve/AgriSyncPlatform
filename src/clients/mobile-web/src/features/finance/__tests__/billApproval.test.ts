@@ -18,6 +18,7 @@ import { getDatabase, type AgriLogDatabase } from '../../../infrastructure/stora
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { financeService } from '../financeService';
 import {
+    BILL_PRICE_LOCKED_CODE,
     BILL_VERSION_CONFLICT_CODE,
     approvalIsDue,
     mayApproveThisBill,
@@ -201,5 +202,38 @@ describe('what this phone still holds for its approvals (P10)', () => {
 
         const everyFarm = await readBillApprovalOutbox(null, db);
         expect(everyFarm.pending.has('bill-b')).toBe(true);
+    });
+});
+
+describe('lane BILL-1b (founder D-105 (b)): the main owner changed an approved bill\'s price', () => {
+    it('the pull\'s changedByOwnerAtUtc is kept on the bill, beside the old stamp; absent from an older server', () => {
+        const OWNER_AT = '2026-11-08T05:30:00Z';
+        const changed = read([pulled({ billVersion: 2, needsReview: true, approval: stamp(1), changedByOwnerAtUtc: OWNER_AT })]);
+        expect(changed.changedByOwnerAtUtc).toBe(OWNER_AT);
+        expect(billStamp(changed)).toBe('approvedOlder');
+        const plain = read([pulled({ billVersion: 1, needsReview: false, approval: stamp(1) })]);
+        expect('changedByOwnerAtUtc' in plain).toBe(false);
+        // A day the phone cannot read is never shown (no guess).
+        const unreadable = read([pulled({ billVersion: 2, approval: stamp(1), changedByOwnerAtUtc: 'not a day' })]);
+        expect('changedByOwnerAtUtc' in unreadable).toBe(false);
+    });
+
+    it('the refusal code is the three-segment CONFLICT code, said in both languages, and the sync drawer says the same words', async () => {
+        const { refusalLine, billWord, ownerChangeLine } = await import('../billApprovalWords');
+        const { reasonForRow } = await import('../../sync/components/syncDrawerWords');
+        expect(BILL_PRICE_LOCKED_CODE).toBe('ShramSafal.BillPrice.Conflict');
+        expect(BILL_PRICE_LOCKED_CODE.split('.')).toHaveLength(3);
+        expect(refusalLine(BILL_PRICE_LOCKED_CODE, 'mr')).toBe(billWord('priceLocked', 'mr'));
+        expect(refusalLine(BILL_PRICE_LOCKED_CODE, 'en')).toBe(billWord('priceLocked', 'en'));
+        expect(billWord('priceLocked', 'mr')).not.toMatch(/[A-Za-z]/);
+        expect(billWord('priceLocked', 'en')).not.toMatch(/[ऀ-ॿ]/);
+        // One reason, one set of words: the parked row in the sync drawer reads like the bill screen.
+        expect(reasonForRow({ errorCode: BILL_PRICE_LOCKED_CODE }, 'mr')).toBe(billWord('priceLocked', 'mr'));
+        expect(reasonForRow({ errorCode: BILL_PRICE_LOCKED_CODE, lastError: 'English sentence' }, 'en')).toBe(billWord('priceLocked', 'en'));
+        // The mark's own words (PROPOSED).
+        expect(billWord('changedByOwner', 'mr')).toBe('मालकाने बदलला');
+        expect(billWord('changedByOwner', 'en')).toBe('Changed by owner');
+        expect(ownerChangeLine('2026-11-08T05:30:00Z', 'mr')).toMatch(/^मालकाने बदलला · 8 /);
+        expect(ownerChangeLine('not a day', 'en')).toBe('Changed by owner');
     });
 });

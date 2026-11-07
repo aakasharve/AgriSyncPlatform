@@ -17,19 +17,23 @@ export const D2_DESCRIPTION_EN =
 /**
  * PROPOSED (Marathi rendering of the founder's D-50 sentence): the original sound of every record is kept as proof; the switch only decides
  * playback. ONE rendering everywhere outside Sathi's own surface (the notice, the sheet, the privacy page, the consent form, the Marathi Privacy
- * Notice and Terms): "रेकॉर्डिंग", as `privacy_mr.md` already says it - decision 13's "नोंद scope = sathi-only". A farmer never sees two
- * renderings side by side.
+ * Notice and Terms): it says "आवाज", never "रेकॉर्डिंग" (lane WORD-1, founder D-109: "don't use recording but understanding") and never the
+ * "नोंद" rendering (decision 13's "नोंद scope = sathi-only"). A farmer never sees two renderings side by side.
  */
-export const PROOF_KEPT_MR = 'श्रमसफल प्रत्येक रेकॉर्डिंगचा मूळ आवाज पुराव्यासाठी जतन करते; हे बटण फक्त तो ऐकता येईल की नाही हे ठरवते.';
+export const PROOF_KEPT_MR = 'श्रमसफल तुमचा प्रत्येक मूळ आवाज पुराव्यासाठी जतन करते; हे बटण फक्त तो ऐकता येईल की नाही हे ठरवते.';
 
 /** The founder's D-50 sentence (English), as he wrote it. */
 export const PROOF_KEPT_EN = 'ShramSafal keeps the original sound of every record as proof; this switch only decides whether it can be played.';
 
-/** PROPOSED (CTO call D-101): the one true consequence of turning the switch off. */
-export const OFF_CONSEQUENCE_MR = 'हा पर्याय बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.';
+/**
+ * The one true consequence of turning the switch off (CTO call D-101). Lane WORD-1 (founder D-109, 2026-11-08): the founder approved
+ * this exact line - "don't use recording but understanding". The word "रेकॉर्डिंग" / "recording" is not used for the switch anywhere
+ * outside the Sathi screen.
+ */
+export const OFF_CONSEQUENCE_MR = 'हा पर्याय बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.';
 
-/** PROPOSED (CTO call D-101). */
-export const OFF_CONSEQUENCE_EN = 'A recording made while this is off cannot be played later.';
+/** The founder's approved English line (D-109). */
+export const OFF_CONSEQUENCE_EN = 'A voice Shram Sathi understood while this is off cannot be played later.';
 
 /** PROPOSED: the switch's names. Not the founder's: he asked for "who may listen". */
 export const SWITCH_TITLE_MR = 'मूळ आवाज ऐकू देणे';

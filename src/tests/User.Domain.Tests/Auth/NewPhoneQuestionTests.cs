@@ -111,6 +111,22 @@ public sealed class NewPhoneQuestionTests
     }
 
     [Fact]
+    public async Task A_held_sign_in_ends_only_held_rows_of_its_id_and_a_known_phones_keeps_the_old_rule()
+    {
+        // lane FIX-1 (register F131; NP-1 review M1): `unknown` is shared by the owner's normal sessions (admin console, phones on
+        // 1.0.15-1.0.17), so a stranger's held sign-in must not use the all-sessions-of-this-id revoke.
+        var held = new Sessions(known: ["unknown"]);
+        await Verify(ExistingUser(), held, new CapturingJwt()).HandleAsync(new VerifyOtpCommand(Phone, "123456", null, Device("unknown")));
+        held.RevokedHeldDevices.Should().Equal("unknown");
+        held.RevokedDevices.Should().BeEmpty("a normal session is never ended by a held sign-in");
+
+        var known = new Sessions(known: ["own-phone"]);
+        await Verify(ExistingUser(), known, new CapturingJwt()).HandleAsync(new VerifyOtpCommand(Phone, "123456", null, Device("own-phone")));
+        known.RevokedDevices.Should().Equal("own-phone");
+        known.RevokedHeldDevices.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task The_phone_that_makes_the_account_is_never_held()
     {
         var sessions = new Sessions(known: []);
@@ -216,7 +232,8 @@ public sealed class NewPhoneQuestionTests
         result.Value.AccessToken.Should().BeNull();
         held.DeviceCheck.Should().Be(DeviceCheckState.Declined);
         held.IsRevoked.Should().BeTrue();
-        sessions.RevokedDevices.Should().Equal("strangers-phone");
+        sessions.RevokedHeldDevices.Should().Equal("strangers-phone");
+        sessions.RevokedDevices.Should().BeEmpty("lane FIX-1: a stranger's tap ends held rows only, never a normal session on the same id");
         sessions.RevokeAllCalls.Should().Be(0, "a stranger's tap never signs the owner's phones out");
         user.PhoneVerifiedAtUtc.Should().Be(Now.AddDays(-30));
     }
@@ -287,6 +304,15 @@ public sealed class NewPhoneQuestionTests
         public Task RevokeActiveForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
         {
             RevokedDevices.Add(deviceId);
+            return Task.CompletedTask;
+        }
+
+        // lane FIX-1 (register F131): a held sign-in and a "नाही" end only HELD rows of their device id.
+        public List<string> RevokedHeldDevices { get; } = [];
+
+        public Task RevokeHeldForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
+        {
+            RevokedHeldDevices.Add(deviceId);
             return Task.CompletedTask;
         }
 

@@ -30,6 +30,21 @@ internal sealed class RefreshTokenRepository(UserDbContext db) : IRefreshTokenRe
         }
     }
 
+    public async Task RevokeHeldForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
+    {
+        var typedUserId = new UserId(userId);
+        // lane FIX-1 (F131): only rows that are themselves held (asked, not answered) - never a normal session on the same id.
+        var heldTokens = await db.RefreshTokens
+            .Where(t => t.UserId == typedUserId && t.DeviceId == deviceId && t.RevokedAtUtc == null
+                && (t.DeviceCheck == DeviceCheckState.AskedAfterSmsCode || t.DeviceCheck == DeviceCheckState.AskedAfterPassword))
+            .ToListAsync(ct);
+
+        foreach (var token in heldTokens)
+        {
+            token.Revoke(utcNow, reason);
+        }
+    }
+
     public async Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, string reason = "revoked_all", CancellationToken ct = default)
     {
         var typedUserId = new UserId(userId);

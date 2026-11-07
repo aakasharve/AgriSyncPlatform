@@ -13,7 +13,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import type { EffectiveMoneyEvent } from '../finance.types';
 import { approvalIsDue, approveBill, billStamp, readBillApprovalOutbox, EMPTY_OUTBOX, type BillApprovalOutbox } from '../billApproval';
-import { billWord, refusalLine, stampLine, type BillLang } from '../billApprovalWords';
+import { billWord, ownerChangeLine, refusalLine, stampLine, type BillLang } from '../billApprovalWords';
 import { rupees } from '../moneyLabels';
 
 /** ₹ when the amount is a real figure; "—" when it is withheld or unreadable (P4: never ₹0, never a guess). */
@@ -90,6 +90,13 @@ export const BillApprovalLine: React.FC<BillApprovalLineProps> = ({ bill, mayApp
                     className={`m-0 text-[13px] font-extrabold ${stamp === 'approved' ? 'text-emerald-800' : 'text-amber-900'}`}
                 >
                     {stampLine(bill.approval, stamp === 'approvedOlder', language)}
+                </p>
+            )}
+            {bill.changedByOwnerAtUtc && (
+                // lane BILL-1b (founder D-105 (b)): the main owner changed this approved bill's price. Said to everyone who sees the
+                // bill, the owner included, and never hidden by a later stamp: it is a fact of the bill's history.
+                <p data-testid={`bill-owner-change-${bill.id}`} className="m-0 text-[13px] font-extrabold text-sky-900">
+                    {ownerChangeLine(bill.changedByOwnerAtUtc, language)}
                 </p>
             )}
             {stamp === 'approvedOlder' && mayApprove && !pending && !changed && (

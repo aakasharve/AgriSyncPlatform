@@ -86,7 +86,9 @@ public sealed class AnswerDeviceCheckHandler(
 
         // "नाही" — this phone only. The declined row is the support mark; the account's other phones stay signed in.
         session.DeclineDevice(utcNow);
-        await sessions.RevokeActiveForUserDeviceAsync(session.UserId, session.DeviceId, utcNow, DeclinedRevocationReason, ct);
+        // lane FIX-1 (register F131; NP-1 review M1): only HELD rows of this phone id end with it - on a placeholder id
+        // (`unknown`, `legacy`) the account's normal sessions share the id and are the real owner's.
+        await sessions.RevokeHeldForUserDeviceAsync(session.UserId, session.DeviceId, utcNow, DeclinedRevocationReason, ct);
         await sessions.SaveChangesAsync(ct);
         logger.LogWarning(
             "New-phone question answered NO for account {UserId} on device ****{DeviceTail} ({Platform}, {DeviceName}): the number may have changed hands. Session {SessionId} ended; the account and its other phones are unchanged. Support mark: public.refresh_tokens.device_check = 'Declined'.",
