@@ -51,7 +51,12 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
         var plotEntries = (await repository.GetCostEntriesAsync(query.FromDate, query.ToDate, ct))
             .Where(entry => entry.PlotId == query.PlotId)
             .ToList();
-        var costEntries = plotEntries.Where(entry => visibility.MaySeeCost(entry.Id)).ToList();
+        // spec: plr-d10 lane MU-1 fix round 1 (D-70 option 2; review HIGH-1) - a crew's total (a labour_misc entry) is the day
+        // wage times the headcount: a chosen-plots seat that holds see wages does not add it up.
+        var costEntries = plotEntries
+            .Where(entry => visibility.MaySeeCost(entry.Id))
+            .Where(entry => !DayWageMoney.HiddenFrom(readScope, entry, query.ActorUserId))
+            .ToList();
         // lane OF-M fix pass 1 (review 9) — what each entry says NOW: its latest correction, else as made (₹0 = no longer
         // spent), the rule every other money reader follows.
         var latest = (await repository.GetCorrectionsForEntriesAsync(costEntries.Select(entry => entry.Id), ct))
@@ -67,7 +72,10 @@ public sealed class GetPlotFinanceSummaryHandler(IShramSafalRepository repositor
         var farmLedgers = await repository.GetDayLedgersForFarm(plot.FarmId, from, to, ct);
         // lane MU-4 (D-39) — a bill split across plots counts here by ITS SHARE on this plot (RecordVisibility.Ledger): the
         // share lines he may see, never the whole bill; a bill kept by its audience not at all (PRV).
+        var keptFromHim = await DayWageMoney.HiddenSourcesAsync(
+            repository, readScope, query.ActorUserId, farmLedgers.Select(ledger => ledger.SourceCostEntryId), ct);
         var ledgers = farmLedgers
+            .Where(ledger => !keptFromHim.Contains(ledger.SourceCostEntryId))
             .Select(ledger => visibility.Ledger(ledger.ToDto()))
             .Where(ledger => ledger is not null)
             .ToList();

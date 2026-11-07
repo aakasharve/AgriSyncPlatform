@@ -127,7 +127,7 @@ const mr: RelationshipCopy = {
     },
     kept: {
         title: n => `तुमच्यासाठी ठेवलेलं काम (${n})`, // PROPOSED (Marathi)
-        intro: 'हे काम सर्व्हरने तुमच्यासाठी जपून ठेवलं आहे. यातलं काहीही गमावलं गेलेलं नाही.', // PROPOSED (Marathi)
+        intro: 'सर्व्हरने तुमच्यासाठी बाजूला काढलेलं काम. प्रत्येक ओळीत काय आणि का ते सांगितलं आहे.', // PROPOSED (Marathi) - fix round 1 (LOW-3): promises neither recovery nor loss
         loadFailed: 'ठेवलेलं काम आत्ता आणता आलं नाही.', // PROPOSED (Marathi)
         retry: 'पुन्हा प्रयत्न करा',
         what: {
@@ -212,7 +212,7 @@ const en: RelationshipCopy = {
     },
     kept: {
         title: n => `Work kept for you (${n})`,
-        intro: 'The server kept this work for you. None of it was lost.',
+        intro: 'Work the server set aside for you to look at. Each line says what it is and why.', // fix round 1 (LOW-3): promises neither recovery nor loss
         loadFailed: 'Could not load the kept work just now.',
         retry: 'Try again',
         what: {

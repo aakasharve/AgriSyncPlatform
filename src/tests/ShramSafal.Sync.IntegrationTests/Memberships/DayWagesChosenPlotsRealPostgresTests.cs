@@ -120,6 +120,70 @@ public sealed class DayWagesChosenPlotsRealPostgresTests(ITestOutputHelper outpu
         (await ProfileAs()).Should().NotBeNull("chosen plots: a worker's earnings hold his day wages, so the page is refused (1.0.17 would draw a hidden figure as 0)");
     }
 
+    // ── Fix round 1 (review HIGH-1): the same day wage as a crew's total stored as a `labour_misc` money entry ──
+
+    private static readonly Guid OwnerMisc = Guid.Parse("3d030000-0000-4000-8000-0000000007a1");
+    private static readonly Guid MukadamMisc = Guid.Parse("3d030000-0000-4000-8000-0000000007a2");
+    private const decimal OwnerMiscAmount = 2468.13m;
+    private const decimal MukadamMiscAmount = 1357.91m;
+
+    private static Dictionary<string, object?> MiscPayload(Guid id, decimal amount)
+    {
+        var payload = CostPayload(id, FarmA, PlotA, CycleA, amount);
+        payload["categoryId"] = "labour_misc";
+        payload["description"] = "मजूर";
+        return payload;
+    }
+
+    private static IEnumerable<Guid> CostIds(JsonElement pull) =>
+        pull.GetProperty("costEntries").EnumerateArray().Select(c => c.GetProperty("id").GetGuid());
+
+    [Fact]
+    public async Task MuOne_D70_the_crews_labour_misc_money_entry_goes_with_the_day_wage_in_the_pull_the_labour_page_and_the_totals()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        await GiveMukadamWagesAsync();
+        // A crew's recorded total is stored as a money entry; the owner records one, the मुकादम one of his own.
+        await PushAppliedAsync(Owner, "add_cost_entry", "mu1-d70-misc-owner", MiscPayload(OwnerMisc, OwnerMiscAmount));
+        await PushAppliedAsync(Mukadam, "add_cost_entry", "mu1-d70-misc-own", MiscPayload(MukadamMisc, MukadamMiscAmount));
+
+        async Task<(decimal LabourPaid, decimal PlotTotal, decimal PlotSummary)> TotalsAsync(Guid who)
+        {
+            var (labourStatus, labour) = await GetAsync(who, $"/shramsafal/farms/{FarmA}/labour");
+            labourStatus.Should().Be(HttpStatusCode.OK, labour);
+            var paid = JsonDocument.Parse(labour).RootElement.GetProperty("dashboard").GetProperty("money").GetProperty("paid").GetDecimal();
+            var (summaryStatus, summary) = await GetAsync(who, "/shramsafal/finance/summary?groupBy=plot");
+            summaryStatus.Should().Be(HttpStatusCode.OK, summary);
+            var group = JsonDocument.Parse(summary).RootElement.GetProperty("items").EnumerateArray()
+                .Single(i => i.GetProperty("groupKey").GetString() == PlotA.ToString()).GetProperty("totalAmount").GetDecimal();
+            var (plotStatus, plot) = await GetAsync(who, $"/shramsafal/finance/plot-summary?plotId={PlotA}");
+            plotStatus.Should().Be(HttpStatusCode.OK, plot);
+            return (paid, group, JsonDocument.Parse(plot).RootElement.GetProperty("totalCosts").GetDecimal());
+        }
+
+        // The control: a seat on every plot with see wages reads both entries, and they are in his totals.
+        var (_, every) = await PullAsync(Mukadam);
+        CostIds(every).Should().Contain([OwnerMisc, MukadamMisc, Cost]);
+        var all = await TotalsAsync(Mukadam);
+        all.LabourPaid.Should().Be(OwnerMiscAmount + MukadamMiscAmount, "दिलं counts the labour money paid out");
+
+        // The same person on plot A alone: the owner's day-wage entry is gone from the pull, the labour page and both totals;
+        // his own submission stays; job-card money and the other money of his plot (the fertiliser cost) stay.
+        await NarrowMukadamToPlotAAsync();
+        var (narrowBody, narrow) = await PullAsync(Mukadam);
+        CostIds(narrow).Should().Contain([MukadamMisc, Cost]).And.NotContain(OwnerMisc);
+        narrowBody.Should().NotContain(OwnerMiscAmount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "the crew's total is the day wage times the headcount, which he can see");
+        var chosen = await TotalsAsync(Mukadam);
+        chosen.LabourPaid.Should().Be(MukadamMiscAmount, "the labour page's दिलं leaves the owner's day-wage entry out");
+        (all.PlotTotal - chosen.PlotTotal).Should().Be(OwnerMiscAmount, "the plot's total in the money summary");
+        (all.PlotSummary - chosen.PlotSummary).Should().Be(OwnerMiscAmount, "and in the plot summary");
+
+        // The owner is unchanged.
+        CostIds((await PullAsync(Owner)).Root).Should().Contain([OwnerMisc, MukadamMisc]);
+        (await TotalsAsync(Owner)).LabourPaid.Should().Be(OwnerMiscAmount + MukadamMiscAmount);
+    }
+
     private async Task<(HttpStatusCode Status, string Body)> GetAsync(Guid user, string url)
     {
         using var response = await SendAsync(HttpMethod.Get, url, user);

@@ -54,6 +54,10 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
             .Where(entry => visibility.MaySeeCost(entry.Id))
             .Where(entry => !plotScopes.TryGetValue((Guid)entry.FarmId, out var plotScope)
                 || (entry.PlotId is { } plotId && plotScope.CoversPlot(plotId)))
+            // spec: plr-d10 lane MU-1 fix round 1 (D-70 option 2; review HIGH-1) - a crew's total (a labour_misc entry) is the
+            // day wage times the headcount: a chosen-plots seat that holds see wages does not add it up.
+            .Where(entry => !plotScopes.TryGetValue((Guid)entry.FarmId, out var wageScope)
+                || !DayWageMoney.HiddenFrom(wageScope, entry, query.ActorUserId))
             .ToList();
         var corrections = await repository.GetCorrectionsForEntriesAsync(entries.Select(e => e.Id), ct);
 
@@ -91,7 +95,11 @@ public sealed class GetFinanceSummaryHandler(IShramSafalRepository repository, I
                 query.FromDate ?? DateOnly.MinValue,
                 query.ToDate ?? DateOnly.MaxValue,
                 ct);
-            foreach (var ledger in farmLedgers.Select(l => visibility.Ledger(l.ToDto())).Where(l => l is not null))
+            // MU-1 fix round 1 (D-70): and the share lines of a day wage split across plots go with the entry they came from.
+            var keptFromHim = await DayWageMoney.HiddenSourcesAsync(
+                repository, plotScope, query.ActorUserId, farmLedgers.Select(l => l.SourceCostEntryId), ct);
+            foreach (var ledger in farmLedgers.Where(l => !keptFromHim.Contains(l.SourceCostEntryId))
+                         .Select(l => visibility.Ledger(l.ToDto())).Where(l => l is not null))
             {
                 normalizedRows.AddRange(ledger!.Allocations
                     .Where(share => plotScope.CoversPlot(share.PlotId))

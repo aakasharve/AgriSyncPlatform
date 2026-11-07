@@ -301,6 +301,10 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var payoutRows = (await repository.GetLabourPayoutCostEntriesWithJobCardAsync(
                 query.FarmId, window.FromDate, window.ToDateInclusive, ct))
             .Where(r => !recordVisibility.IsOutOfPlace(Domain.RecordPrivacy.RecordKinds.CostEntry, r.CostEntry.Id))
+            // spec: plr-d10 lane MU-1 fix round 1 (D-70 option 2; review HIGH-1) - a crew's total stored as a labour_misc
+            // entry is the day wage times the headcount: a seat on chosen plots that holds see wages adds none of it up
+            // (the मजुरी tile, Money.Paid); job-card payouts (labour_payout) stay.
+            .Where(r => !DayWageMoney.HiddenFrom(callerReadScope, r.CostEntry, query.CallerUserId.Value))
             .ToList();
         var latestCorrections = BuildLatestCorrections(
             await repository.GetCorrectionsForEntriesAsync(payoutRows.Select(r => r.CostEntry.Id), ct));
@@ -342,6 +346,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         {
             payoutRowsAllTime = (await repository.GetLabourPayoutCostEntriesWithJobCardAsync(query.FarmId, null, null, ct))
                 .Where(r => !recordVisibility.IsOutOfPlace(Domain.RecordPrivacy.RecordKinds.CostEntry, r.CostEntry.Id))
+                .Where(r => !DayWageMoney.HiddenFrom(callerReadScope, r.CostEntry, query.CallerUserId.Value))
                 .ToList();
             latestCorrectionsAllTime = BuildLatestCorrections(
                 await repository.GetCorrectionsForEntriesAsync(payoutRowsAllTime.Select(r => r.CostEntry.Id), ct));

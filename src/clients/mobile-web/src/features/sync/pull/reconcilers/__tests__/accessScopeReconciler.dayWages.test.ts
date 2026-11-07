@@ -109,4 +109,26 @@ describe('accessScopeReconciler - D-70 option 2: no day wages on chosen plots', 
         await run(db, [chosen]);
         expect(readLabourReadout(ME, FARM, 'week')).not.toBeNull();
     });
+
+    // Fix round 1 (review HIGH-1): a crew's total is also stored as a `labour_misc` money entry.
+    it('a day-wage money entry (labour_misc) of someone else goes from a chosen-plots seat; his own and the rest of the plot\'s money stay', async () => {
+        const cost = (id: string, categoryId: string, by: string) =>
+            db.costEntries.put({ id, farmId: FARM, payload: { id, farmId: FARM, plotId: P2, amount: 2468.13, categoryId, createdByUserId: by }, updatedAt: AT });
+        const ledger = (id: string, source: string) =>
+            db.dayLedgers.put({ id, farmId: FARM, dateKey: '2026-10-30', payload: { id, farmId: FARM, sourceCostEntryId: source, allocations: [{ plotId: P2, allocatedAmount: 100 }] }, updatedAt: AT });
+        await cost('misc-owner', 'labour_misc', OWNER);
+        await cost('misc-mine', 'labour_misc', ME);
+        await cost('fertilizer', 'fertilizer', OWNER);
+        await cost('payout', 'labour_payout', OWNER);
+        await ledger('ledger-misc', 'misc-owner');
+        await ledger('ledger-fertilizer', 'fertilizer');
+
+        await run(db, [everyPlot]);
+        expect(await db.costEntries.count()).toBe(4);
+        expect(await db.dayLedgers.count()).toBe(2);
+
+        await run(db, [chosen]);
+        expect((await db.costEntries.toArray()).map(e => e.id).sort()).toEqual(['fertilizer', 'misc-mine', 'payout']);
+        expect((await db.dayLedgers.toArray()).map(l => l.id)).toEqual(['ledger-fertilizer']);
+    });
 });

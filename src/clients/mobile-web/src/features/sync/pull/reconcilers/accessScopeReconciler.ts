@@ -130,12 +130,18 @@ export async function reconcileAccessScopes(
         // sends them to every working seat. A farm that is gone takes them too.
         const own = !!ctx.userId && (entry.payload as { createdByUserId?: unknown } | null)?.createdByUserId === ctx.userId;
         if (moneyWithheld(entry.farmId) && !(own && !goneSet.has(entry.farmId))) removedEntryIds.push(entry.id);
+        // lane MU-1 fix round 1 (D-70 option 2; review HIGH-1) - a crew's total is also stored as a `labour_misc` money entry
+        // (the day wage times the headcount): a seat on chosen plots that holds see wages keeps none of another person's.
+        else if (!own && isDayWageMoney(entry.payload) && dayWagesRuledOut(scopeOf(entry.farmId))) removedEntryIds.push(entry.id);
     }
     await db.costEntries.bulkDelete(removedEntryIds);
     const removedEntries = new Set(removedEntryIds);
     const corrections = (await db.financeCorrections.toArray()).filter(c => removedEntries.has(c.costEntryId)).map(c => c.id);
     await db.financeCorrections.bulkDelete(corrections);
-    const ledgers = (await db.dayLedgers.toArray()).filter(l => moneyWithheld(l.farmId)).map(l => l.id);
+    // ...and the share lines of a day wage split across plots go with the entry they were split from.
+    const ledgers = (await db.dayLedgers.toArray())
+        .filter(l => moneyWithheld(l.farmId) || removedEntries.has((l.payload as { sourceCostEntryId?: string } | null)?.sourceCostEntryId ?? ''))
+        .map(l => l.id);
     await db.dayLedgers.bulkDelete(ledgers);
     await db.appMeta.bulkDelete(ledgers.map(dayLedgerMetaKey));
     // Job cards (fix 1, F7) are the farm's WORK: kept for every seat that reads the farm's work (a कामगार keeps the cards
@@ -349,6 +355,16 @@ export function withoutWords(log: DailyLog): DailyLog {
  */
 export function seesDayWages(scope: Pick<FarmAccessScopeDto, 'seeWages' | 'plotScope'>): boolean {
     return scope.seeWages && scope.plotScope !== 'ChosenPlots';
+}
+
+/** The D-70 seat itself (the server's `FarmReadScope.DayWagesRuledOut`): holds see wages and covers only chosen plots. */
+function dayWagesRuledOut(scope: FarmAccessScopeDto | undefined): boolean {
+    return !!scope && scope.seeWages && !seesDayWages(scope);
+}
+
+/** Is this cached money entry a crew's total stored as a day wage (category `labour_misc`)? */
+function isDayWageMoney(payload: unknown): boolean {
+    return (payload as { categoryId?: unknown } | null)?.categoryId === 'labour_misc';
 }
 
 /**

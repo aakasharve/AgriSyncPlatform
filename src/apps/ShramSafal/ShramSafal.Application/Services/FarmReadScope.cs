@@ -84,6 +84,15 @@ public sealed record FarmReadScope(
     /// </summary>
     public bool SeeDayWages => SeeWages && (IsPrimaryAccountHolder || PlotScope != MembershipPlotScope.ChosenPlots);
 
+    /// <summary>
+    /// spec: plr-d10 lane MU-1 fix round 1 (D-70 option 2; review HIGH-1) — the D-70 seat itself: it holds see wages and
+    /// covers chosen plots, so its day wages are ruled out. Everywhere a day wage can come back by ANOTHER road (a crew's
+    /// total as a money entry, the labour page's tile, a plot total) this is the one question asked. False for the
+    /// primary account holder, a seat on every plot, a seat on his own work, and a seat without see wages (its crew totals
+    /// follow MU-3's rule: a crew's total is money).
+    /// </summary>
+    public bool DayWagesRuledOut => SeeWages && !SeeDayWages;
+
     /// <summary>lane MU-4 — does this seat cover <paramref name="plotId"/>? Every plot when it covers all.</summary>
     public bool CoversPlot(Guid plotId) => PlotIds is null || PlotIds.Contains(plotId);
 

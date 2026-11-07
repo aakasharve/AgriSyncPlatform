@@ -211,7 +211,11 @@ public sealed class PullSyncChangesHandler(
         // the audience rule, so no other money record is even named to him).
         var costEntries = audience.Costs(
             (await window.ReadAsync(Any, (ids, since) => repository.GetCostEntriesChangedSinceAsync(ids, since, ct), c => (Guid)c.FarmId))
-                .Where(c => window.ScopeOf((Guid)c.FarmId)!.SeeMoney || c.CreatedByUserId.Value == query.UserId));
+                .Where(c => window.ScopeOf((Guid)c.FarmId)!.SeeMoney || c.CreatedByUserId.Value == query.UserId)
+                // spec: plr-d10 lane MU-1 fix round 1 (D-70 option 2; review HIGH-1) - a crew's total stored as a labour_misc
+                // money entry is the day wage times the headcount he can see: a seat on chosen plots that holds see wages gets
+                // none of them (his own submissions excepted). Their corrections follow below.
+                .Where(c => !DayWageMoney.HiddenFrom(window.ScopeOf((Guid)c.FarmId), c, query.UserId)));
         var costEntryIds = costEntries.Select(c => c.Id).ToHashSet();
 
         // lane PRV — a record RE-ADMITTED to him since his cursor comes back whole: its photos, corrections and
@@ -267,6 +271,24 @@ public sealed class PullSyncChangesHandler(
             .Where(l => audience.Visibility.Ledger(l.ToDto()) is not null)
             .DistinctBy(l => l.Id)
             .ToList();
+        // lane MU-1 fix round 1 (D-70 option 2; review HIGH-1) - and the share lines of a day wage that was split across plots
+        // go with it (the entry they were split from is kept from this seat).
+        var dayWageLedgerFarms = dayLedgers
+            .Where(l => window.ScopeOf((Guid)l.FarmId) is { DayWagesRuledOut: true })
+            .GroupBy(l => (Guid)l.FarmId)
+            .ToList();
+        if (dayWageLedgerFarms.Count > 0)
+        {
+            var keptFromHim = new HashSet<Guid>();
+            foreach (var farmLedgers in dayWageLedgerFarms)
+            {
+                keptFromHim.UnionWith(await DayWageMoney.HiddenSourcesAsync(
+                    repository, window.ScopeOf(farmLedgers.Key), query.UserId, farmLedgers.Select(l => l.SourceCostEntryId), ct));
+            }
+
+            dayLedgers = dayLedgers.Where(l => !keptFromHim.Contains(l.SourceCostEntryId)).ToList();
+        }
+
         // Labour V2 R1 Task 3.5c — attendance rulings changed since the cursor.
         // P10's server half: once pulled here, a mark is reconstructable
         // without the device that made it.

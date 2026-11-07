@@ -388,6 +388,8 @@ public static class FinanceEndpoints
                 .Where(entry => entry.CreatedByUserId.Value == actorUserId
                     || (readScope is { SeeMoney: true } money
                         && (entry.PlotId is { } plot ? money.CoversPlot(plot) : money.PlotIds is null)))
+                // lane MU-1 fix round 1 (D-70 option 2): another person's day-wage entry is not matched against, so it is not told.
+                .Where(entry => !ShramSafal.Application.Services.DayWageMoney.HiddenFrom(readScope, entry, actorUserId))
                 .ToList();
 
             var isDuplicate = DuplicateDetector.IsPotentialDuplicate(existing, candidate, windowMinutes);

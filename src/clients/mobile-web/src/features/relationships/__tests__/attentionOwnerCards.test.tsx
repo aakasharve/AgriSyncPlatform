@@ -208,6 +208,18 @@ describe('the owner\'s kept-work card', () => {
         expect(text).not.toMatch(DEVANAGARI);
     });
 
+    // Fix round 1 (review LOW-3, P4): one list cannot say "nothing here is lost" and, on its cap row, "was not kept".
+    it('the intro line promises neither that nothing was lost nor that everything was kept - it agrees with the cap row', () => {
+        for (const language of ['mr', 'en'] as const) {
+            const copy = relationshipCopy(language);
+            const intro = copy.kept.intro;
+            expect(intro.length).toBeGreaterThan(10);
+            expect(intro).not.toMatch(/गमावल|जपून|ठेवलं|lost|kept/i);
+            expect(copy.kept.capReached).toMatch(language === 'mr' ? /ठेवलं गेलं नाही/ : /not kept/);
+            expect(DEVANAGARI.test(intro)).toBe(language === 'mr');
+        }
+    });
+
     it('an unknown code is worded as ShramSafal\'s rule, never a raw code', () => {
         const copy = relationshipCopy('mr');
         const words = keptItemWords({ ...KEPT[0]!, kind: 'refused', what: 'some_new_mutation', why: 'Some.New.Code' } as never, copy, 'mr');
