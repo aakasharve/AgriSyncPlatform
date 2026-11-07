@@ -13,6 +13,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { verifyOtp, type StartOtpResponse, type OtpError } from '../data/otpClient';
 import { setAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
+import { askDeviceCheck } from '../../../infrastructure/storage/PendingDeviceCheckStore';
 import { setRememberDevice } from '../../../infrastructure/storage/RememberDeviceStore';
 import { getOrCreateDeviceId } from '../../../infrastructure/storage/DeviceIdStore';
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I16 — LANG-2, FR-8) — ONE language per screen
@@ -86,11 +87,18 @@ const OtpVerifyForm: React.FC<OtpVerifyFormProps> = ({ phone, otpMeta, onVerifie
             // Write the remember flag so AgriSyncClient.refreshSession() picks
             // it up on the next refresh cycle.
             setRememberDevice(rememberDevice);
-            setAuthSession({
-                userId: res.userId,
-                accessToken: res.accessToken,
-                expiresAtUtc: res.expiresAtUtc,
-            });
+            if (res.deviceCheckRequired === true) {
+                // spec: plr-d10 lane NP-1 (D-56) — a phone this account has never confirmed: its token opens nothing,
+                // so nothing is stored and the app stays signed out until "हे खातं ‹नाव› यांचं आहे — तुम्ही तेच आहात का?"
+                // is answered (AuthProvider shows it).
+                askDeviceCheck({ userId: res.userId, accountName: res.accountName ?? '' });
+            } else {
+                setAuthSession({
+                    userId: res.userId,
+                    accessToken: res.accessToken,
+                    expiresAtUtc: res.expiresAtUtc,
+                });
+            }
             // `res.createdNewUser` is no longer read here: the name field it
             // used to reveal is now always visible, and this page unmounts on
             // onVerified() anyway, so nothing could ever have seen it.

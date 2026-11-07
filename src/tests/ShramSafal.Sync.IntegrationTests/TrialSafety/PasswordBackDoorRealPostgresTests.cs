@@ -17,6 +17,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using ShramSafal.Sync.IntegrationTests.Labour;
 using User.Application.Ports;
+using User.Application.UseCases.Auth.DeviceCheck;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.RegisterUser;
 using User.Application.UseCases.Auth.Session;
@@ -113,13 +114,25 @@ public sealed class PasswordBackDoorRealPostgresTests(TrialSafetyDatabase db, IT
             verified.Value!.UserId.Should().Be(userId, "the holder lands in the same account (invariant I1)");
             verified.Value.CreatedNewUser.Should().BeFalse();
             jwt.LastPhoneVerified.Should().BeTrue("the SMS code verified the number");
+
+            // spec: plr-d10 lane NP-1 (D-56) — his phone is new for this account, so the sign-in is held and asks
+            // "is this your account?"; the account does not change until he answers (D-85). He answers होय.
+            verified.Value.DeviceCheckRequired.Should().BeTrue("owners-phone has never been confirmed for this account");
+            (await db.CountAsync("SELECT count(*) FROM public.users WHERE \"Id\" = @u AND phone_verified_at_utc IS NULL", ("u", userId)))
+                .Should().Be(1, "a held sign-in changes nothing in the account");
+            var answered = await new AnswerDeviceCheckHandler(
+                    sp.GetRequiredService<IRefreshTokenRepository>(), sp.GetRequiredService<IUserRepository>(), jwt,
+                    sp.GetRequiredService<IClock>(), NullLogger<AnswerDeviceCheckHandler>.Instance)
+                .HandleAsync(new AnswerDeviceCheckCommand(verified.Value.RefreshToken, ItIsMe: true));
+            answered.IsSuccess.Should().BeTrue(answered.IsSuccess ? "" : answered.Error.Code);
+            answered.Value.Confirmed.Should().BeTrue();
         }
 
         // 3. What is STORED.
         var user = await PurveshDemoReseedHarness.RowsAsync(db.SuperuserConn,
             "SELECT auth_mode, phone_verified_at_utc IS NOT NULL, password_hash FROM public.users WHERE \"Id\" = @u", ("u", userId));
         user[0][0].Should().Be(0, "the account is still in Password mode");
-        user[0][1].Should().Be(true, "the SMS code verified the number");
+        user[0][1].Should().Be(true, "the SMS code verified the number (stamped once he said होय)");
         await using (var scope = Elevated(provider))
         {
             scope.ServiceProvider.GetRequiredService<IPasswordHasher>().Verify(OwnersPassword, (string)user[0][2]!)
@@ -238,13 +251,13 @@ public sealed class PasswordBackDoorRealPostgresTests(TrialSafetyDatabase db, IT
     {
         public bool? LastPhoneVerified { get; private set; }
 
-        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified)
+        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending)
         {
             LastPhoneVerified = phoneVerified;
             return new TokenPair("access", Guid.NewGuid().ToString("N"), DateTime.UtcNow.AddMinutes(15));
         }
 
-        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified)
+        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
         {
             LastPhoneVerified = phoneVerified;
             return new TokenPair("access", Guid.NewGuid().ToString("N"), DateTime.UtcNow.AddMinutes(15));

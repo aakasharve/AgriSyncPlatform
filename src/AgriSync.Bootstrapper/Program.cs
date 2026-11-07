@@ -6,6 +6,7 @@ using AgriSync.Bootstrapper.Configuration;
 using AgriSync.Bootstrapper.Middleware;
 using AgriSync.BuildingBlocks;
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Auth.DeviceCheck;
 using Amazon;
 using Amazon.KeyManagementService;
 using Amazon.S3;
@@ -599,6 +600,12 @@ try
     app.UseMiddleware<AgriSync.BuildingBlocks.Audit.AuditContextMiddleware>();
     app.UseAuthentication();
     app.UseRateLimiter();
+    // spec: plr-d10-redesign-real-integration-2026-10-25 — lane NP-1 (founder D-56). A phone that has not answered the
+    // one-time "is this your account?" question holds a token marked device_check=pending: every route that is not
+    // anonymous refuses it with 403 auth.device_unconfirmed (sync pull, REST reads, writes, logout-all), and an
+    // anonymous route runs for nobody. MUST sit after authentication (it reads the principal) and before authorization
+    // (so the refusal carries its own code).
+    app.UseDeviceCheckGate();
     app.UseAuthorization();
     // DATA_PRINCIPLE_SPINE 03.2 — TenantTransactionMiddleware wraps every
     // business request in a single DbContext transaction so the

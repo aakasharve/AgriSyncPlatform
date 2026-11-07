@@ -85,11 +85,19 @@ public sealed class VerifyOtpHandler(
         // Resolve or create the User — invariant I1.
         var existingUser = await userRepository.GetByPhoneAsync(phone.Value, ct);
         bool createdNewUser = false;
+        DeviceCheckState? hold = null;
 
         Domain.Identity.User user;
         if (existingUser is not null)
         {
             user = existingUser;
+
+            // spec: plr-d10 lane NP-1 (founder D-56) — a number can pass to a stranger after it was switched off, and
+            // the SMS code then reaches HIM. On a phone this account has never confirmed, the session is HELD: its
+            // token opens nothing but the one-time "is this your account?" answer. The phone that made the account
+            // (below) and every phone signed in before this question existed are known.
+            hold = await NewPhoneQuestion.HoldForSmsSignInAsync(refreshTokenRepository, user.Id, command.Session.DeviceId, ct);
+
             // Existing user just completed OTP — stamp the verification timestamp
             // so the semi-literate UI stops showing the "verify phone" banner.
             //
@@ -99,8 +107,14 @@ public sealed class VerifyOtpHandler(
             // phone + password), and nothing in the data tells their password from a stranger's.
             // The back door is closed elsewhere: password self-registration is off by default and
             // a password login never marks a number verified.
-            user.MarkPhoneVerified(utcNow);
-            await userRepository.SaveChangesAsync(ct);
+            //
+            // lane NP-1 (CTO call D-85): on a HELD phone not even that — the account must not change for someone who
+            // may answer "नाही". The stamp lands when he answers "होय" (AnswerDeviceCheckHandler).
+            if (hold is null)
+            {
+                user.MarkPhoneVerified(utcNow);
+                await userRepository.SaveChangesAsync(ct);
+            }
         }
         else
         {
@@ -127,7 +141,7 @@ public sealed class VerifyOtpHandler(
         await refreshTokenRepository.RevokeActiveForUserDeviceAsync(
             user.Id, command.Session.DeviceId, utcNow, "same_device_login", ct);
 
-        var tokens = jwtTokenService.GenerateIdentityTokens(user.Id, phoneVerified: true);
+        var tokens = jwtTokenService.GenerateIdentityTokens(user.Id, phoneVerified: true, deviceCheckPending: hold is not null);
 
         var refreshToken = new Domain.Security.RefreshToken(
             idGenerator.New(),
@@ -138,6 +152,10 @@ public sealed class VerifyOtpHandler(
             command.Session.Platform,
             utcNow,
             utcNow.Add(RefreshTokenPolicy.Lifetime));
+        if (hold is { } asked)
+        {
+            refreshToken.HoldForDeviceCheck(asked);
+        }
 
         await refreshTokenRepository.AddAsync(refreshToken, ct);
         await refreshTokenRepository.SaveChangesAsync(ct);
@@ -195,7 +213,9 @@ public sealed class VerifyOtpHandler(
             RefreshToken: tokens.RefreshToken,
             ExpiresAtUtc: tokens.ExpiresAtUtc,
             CreatedNewUser: createdNewUser,
-            RefreshExpiresAtUtc: refreshToken.ExpiresAtUtc));
+            RefreshExpiresAtUtc: refreshToken.ExpiresAtUtc,
+            DeviceCheckRequired: hold is not null,
+            AccountName: hold is not null ? user.DisplayName : null));
     }
 
     private static string HashPhone(string phone)

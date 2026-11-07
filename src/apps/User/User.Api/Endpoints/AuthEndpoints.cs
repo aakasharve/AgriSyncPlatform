@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using User.Application.Ports;
+using User.Application.UseCases.Auth.DeviceCheck;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.Logout;
 using User.Application.UseCases.Auth.RefreshToken;
@@ -79,8 +80,8 @@ public static class AuthEndpoints
             // Capacitor app can persist it in the Android Keystore. Web clients get the
             // token-less body; the HttpOnly cookie set above is authoritative for them.
             return IsNativeClient(context)
-                ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken))
-                : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
+                ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken, result.Value.DeviceCheckRequired, result.Value.AccountName))
+                : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.DeviceCheckRequired, result.Value.AccountName));
         })
         .WithName("RegisterUser")
         .AllowAnonymous();
@@ -114,8 +115,8 @@ public static class AuthEndpoints
                 // Capacitor app can persist it in the Android Keystore. Web clients get the
                 // token-less body; the HttpOnly cookie set above is authoritative for them.
                 return IsNativeClient(context)
-                    ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken))
-                    : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
+                    ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken, result.Value.DeviceCheckRequired, result.Value.AccountName))
+                    : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.DeviceCheckRequired, result.Value.AccountName));
             }
             catch (ArgumentException ex)
             {
@@ -213,6 +214,8 @@ public static class AuthEndpoints
                     expiresAtUtc = result.Value.ExpiresAtUtc,
                     createdNewUser = result.Value.CreatedNewUser,
                     refreshToken = result.Value.RefreshToken,
+                    deviceCheckRequired = result.Value.DeviceCheckRequired,
+                    accountName = result.Value.AccountName,
                 });
             }
 
@@ -222,6 +225,11 @@ public static class AuthEndpoints
                 accessToken = result.Value.AccessToken,
                 expiresAtUtc = result.Value.ExpiresAtUtc,
                 createdNewUser = result.Value.CreatedNewUser,
+                // spec: plr-d10 lane NP-1 — true on a phone this account has never confirmed: the token opens nothing
+                // until the phone answers "is this your account?" (POST /user/auth/device-check). The name is the
+                // question's, sent only with it. Older apps ignore both fields (P11).
+                deviceCheckRequired = result.Value.DeviceCheckRequired,
+                accountName = result.Value.AccountName,
             });
         })
         .WithName("VerifyOtp")
@@ -268,10 +276,76 @@ public static class AuthEndpoints
             // Capacitor app can persist it in the Android Keystore. Web clients get the
             // token-less body; the HttpOnly cookie set above is authoritative for them.
             return IsNativeClient(context)
-                ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken))
-                : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc));
+                ? Results.Ok(new NativeAuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.RefreshToken, result.Value.DeviceCheckRequired, result.Value.AccountName))
+                : Results.Ok(new AuthResponseBody(result.Value.UserId, result.Value.AccessToken, result.Value.ExpiresAtUtc, result.Value.DeviceCheckRequired, result.Value.AccountName));
         })
         .WithName("RefreshToken")
+        .AllowAnonymous();
+
+        // spec: plr-d10-redesign-real-integration-2026-10-25 — lane NP-1 (founder D-56, CTO call D-85).
+        // The phone's answer to "हे खातं ‹नाव› यांचं आहे — तुम्ही तेच आहात का?". The refresh credential (cookie on the
+        // web, body on Android — exactly as /refresh and /logout) names the session that was asked, so this route is
+        // anonymous at the bearer level: the held access token is not what proves anything here.
+        //   "yes" → 200 { outcome: "confirmed", userId, accessToken, expiresAtUtc, deviceCheckRequired: false }
+        //           (the phone keeps its refresh credential; nothing is rotated, so a retried tap is harmless)
+        //   "no"  → 200 { outcome: "declined" }, the session ends (cookie cleared), the support mark stays,
+        //           the account and its other phones are untouched.
+        publicGroup.MapPost("/device-check", async (
+            DeviceCheckAnswerRequest? request,
+            HttpContext context,
+            AnswerDeviceCheckHandler handler,
+            IHostEnvironment env,
+            CancellationToken ct) =>
+        {
+            var answer = request?.Answer?.Trim().ToLowerInvariant();
+            if (answer is not ("yes" or "no"))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]>
+                {
+                    ["answer"] = ["Answer must be \"yes\" or \"no\"."],
+                });
+            }
+
+            var cookieToken = context.Request.Cookies[AuthCookieOptions.RefreshCookieName];
+            var refreshToken = !string.IsNullOrWhiteSpace(cookieToken)
+                ? cookieToken
+                : (IsNativeClient(context) && !string.IsNullOrWhiteSpace(request!.RefreshToken) ? request.RefreshToken : null);
+            if (refreshToken is null)
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await handler.HandleAsync(new AnswerDeviceCheckCommand(refreshToken, ItIsMe: answer == "yes"), ct);
+            if (result.IsFailure)
+            {
+                if (result.Error.Kind == ErrorKind.Conflict)
+                {
+                    return Results.Json(
+                        new { error = result.Error.Code, message = result.Error.Description },
+                        statusCode: StatusCodes.Status409Conflict);
+                }
+
+                // No open question on that credential: the same answer a dead refresh gets.
+                context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
+                return Results.Unauthorized();
+            }
+
+            if (!result.Value.Confirmed)
+            {
+                context.Response.Cookies.Delete(AuthCookieOptions.RefreshCookieName, AuthCookieOptions.BuildForDelete(env));
+                return Results.Ok(new { outcome = "declined" });
+            }
+
+            return Results.Ok(new
+            {
+                outcome = "confirmed",
+                userId = result.Value.UserId,
+                accessToken = result.Value.AccessToken,
+                expiresAtUtc = result.Value.ExpiresAtUtc,
+                deviceCheckRequired = false,
+            });
+        })
+        .WithName("AnswerDeviceCheck")
         .AllowAnonymous();
 
         // AllowAnonymous: logout must work even after the 15-min access token expires.
@@ -439,6 +513,12 @@ public sealed record RefreshRequest(
     bool RememberDevice = false, string? DeviceId = null, string? DeviceName = null, string? Platform = null);
 
 public sealed record StartOtpRequest(string? Phone);
+
+/// <summary>
+/// spec: plr-d10 lane NP-1 — the answer to the new-phone question: <c>"yes"</c> (होय) or <c>"no"</c> (नाही).
+/// Web clients send no token (the cookie carries it); Android sends its Keystore refresh token, as for /refresh.
+/// </summary>
+public sealed record DeviceCheckAnswerRequest(string? Answer, string? RefreshToken = null);
 
 /// <summary>
 /// Optional body for POST /logout. Web clients send nothing (cookie carries the token).

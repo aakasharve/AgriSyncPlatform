@@ -30,6 +30,7 @@
 import { isNativeSecureRefreshEnabled, setNativeRefreshSession } from '../../../infrastructure/storage/RefreshSessionStore';
 import { agriSyncClient } from '../../../infrastructure/api/AgriSyncClient';
 import { getOrCreateDeviceId } from '../../../infrastructure/storage/DeviceIdStore';
+import type { HeldSignInFields } from '../../../infrastructure/storage/PendingDeviceCheckStore';
 
 interface ViteImportMeta {
     env?: {
@@ -56,7 +57,9 @@ export interface StartOtpResponse {
 // On WEB: refreshToken is absent — it is delivered via HttpOnly cookie.
 // On ANDROID native: refreshToken is present in the body (no cookie on native);
 // verifyOtp persists it to the Android Keystore via setNativeRefreshSession.
-export interface VerifyOtpResponse {
+// spec: plr-d10 lane NP-1 — `deviceCheckRequired` / `accountName`: on a phone this account has never confirmed the
+// access token opens nothing, so it is NOT stored and the one-time question is asked instead.
+export interface VerifyOtpResponse extends HeldSignInFields {
     userId: string;
     accessToken: string;
     expiresAtUtc: string;

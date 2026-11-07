@@ -224,6 +224,15 @@ namespace User.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
 
+                    b.Property<string>("DeviceCheck")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("device_check");
+
+                    b.Property<DateTime?>("DeviceCheckAnsweredAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("device_check_answered_at_utc");
+
                     b.Property<string>("DeviceId")
                         .IsRequired()
                         .HasMaxLength(128)

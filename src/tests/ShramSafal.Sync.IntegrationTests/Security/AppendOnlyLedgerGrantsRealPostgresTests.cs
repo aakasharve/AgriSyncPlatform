@@ -225,6 +225,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    tables, when present) and takes those tables back out of RLS — only what Up() added. Up() adds ENABLE + FORCE
         //    RLS and policies only: no grant, privilege or append-only ledger is touched. Safe to revert and re-apply mid-proof.
         "20261107034303_AddRlsToDayLedgersLogTasksAndPlannedActivities",
+        // ── Reviewed 2026-11-07 (spec: plr-d10 lane NP-1, founder D-56 / CTO call D-85); Down() read in full: drops the CHECK
+        //    ck_refresh_tokens_device_check and the two nullable columns device_check / device_check_answered_at_utc on
+        //    public.refresh_tokens (USER context; the ShramSafal migrator never reverts or re-applies it, it only shares the
+        //    scratch database's history table). No grant, policy or append-only ledger is touched. Safe mid-proof.
+        "20261107061500_AddNewPhoneQuestion",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

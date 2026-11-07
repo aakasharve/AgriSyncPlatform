@@ -143,7 +143,12 @@ export type RefreshOutcome =
      * 200 that was not a session (captive portal). Every credential is left
      * EXACTLY as it was, so the next attempt on a working connection succeeds.
      */
-    | { kind: 'unreachable' };
+    | { kind: 'unreachable' }
+    /**
+     * spec: plr-d10 lane NP-1 — the server keeps this session, but its phone has not answered the one-time new-phone
+     * question, so it opens nothing. NO session is stored; the question is in `PendingDeviceCheckStore`.
+     */
+    | { kind: 'device-check' };
 
 /**
  * Does this response body actually contain a session?

@@ -38,6 +38,14 @@ import { setRememberDevice, clearRememberDevice } from '../../infrastructure/sto
 // behaviour when the web build is ported.
 import { hasPendingLogout } from '../../infrastructure/storage/PendingLogoutStore';
 import { clearNativeRefreshSession } from '../../infrastructure/storage/RefreshSessionStore';
+// spec: plr-d10 lane NP-1 (founder D-56) — the one-time "is this your account?" question on a new phone.
+import {
+    askDeviceCheck,
+    clearPendingDeviceCheck,
+    DEVICE_CHECK_CHANGED_EVENT,
+    getPendingDeviceCheck,
+    type PendingDeviceCheck,
+} from '../../infrastructure/storage/PendingDeviceCheckStore';
 
 // spec: secure-remembered-device-sessions-2026-06-24
 export type AuthStatus = 'checking' | 'authenticated' | 'anonymous';
@@ -59,6 +67,15 @@ interface AuthContextValue {
     logout: () => Promise<void>;
     refresh: () => Promise<void>;
     clearAuthError: () => void;
+    /**
+     * spec: plr-d10 lane NP-1 — the one-time new-phone question is open on this phone: the server signed it in, but
+     * it opens nothing until the person answers. While set, the app is NOT authenticated (no farm list, no sync).
+     */
+    deviceCheck: PendingDeviceCheck | null;
+    /** होय was accepted: store the session that opens the account and continue as after any sign-in. */
+    completeDeviceCheck: (session: AuthSession) => void;
+    /** नाही (after its "मागे"), or the question was no longer open: forget it; the phone stays signed out. */
+    endDeviceCheck: () => void;
 }
 
 /** Presence-mode recovery cadence - matches BackgroundSyncWorker's 15 s tick. */
@@ -110,6 +127,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [authStatus, setAuthStatus] = useState<AuthStatus>('checking');
     const [isLoading, setIsLoading] = useState(false);
     const [authError, setAuthError] = useState<string | null>(null);
+    // spec: plr-d10 lane NP-1 — mirrors PendingDeviceCheckStore (set by a sign-in answer or a boot refresh).
+    const [deviceCheck, setDeviceCheck] = useState<PendingDeviceCheck | null>(() => getPendingDeviceCheck());
 
     // spec: secure-remembered-device-sessions-2026-06-24 — FIX #2
     // syncFromStorage is called by onAuthSessionChanged (OTP login, QR-join, logout)
@@ -169,6 +188,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (outcome.kind === 'rejected') {
             clearAuthSession();
+            setSession(null);
+            setAuthStatus('anonymous');
+            return;
+        }
+
+        // spec: plr-d10 lane NP-1 — the session is the server's, but its phone has not answered the new-phone
+        // question: nothing is stored, the app stays signed out and the question is shown (deviceCheck).
+        if (outcome.kind === 'device-check') {
             setSession(null);
             setAuthStatus('anonymous');
             return;
@@ -302,6 +329,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         };
     }, [syncFromStorage]);
 
+    useEffect(() => {
+        const onDeviceCheckChanged = () => setDeviceCheck(getPendingDeviceCheck());
+        window.addEventListener(DEVICE_CHECK_CHANGED_EVENT, onDeviceCheckChanged);
+        // A question asked between the first render and this listener (a fast boot refresh) is not missed.
+        onDeviceCheckChanged();
+        return () => window.removeEventListener(DEVICE_CHECK_CHANGED_EVENT, onDeviceCheckChanged);
+    }, []);
+
     const login = useCallback(async (phone: string, password: string, rememberDevice = false) => {
         setIsLoading(true);
         setAuthError(null);
@@ -318,6 +353,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Persist the remember-device flag so AgriSyncClient.refreshSession()
             // sends the correct value on the next refresh cycle.
             setRememberDevice(rememberDevice);
+            if (response.deviceCheckRequired === true) {
+                // spec: plr-d10 lane NP-1 — the (test-only) password sign-in on a new phone asks like SMS: no session
+                // is stored until the question is answered.
+                askDeviceCheck({ userId: response.userId, accountName: response.accountName ?? '' });
+                return;
+            }
             const next = mapSession(response);
             setAuthSession(next);
             setSession(next);
@@ -382,6 +423,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // spec: secure-remembered-device-sessions-2026-06-24 / Task 6.1
         clearRememberDevice();
         await clearNativeRefreshSession();
+        clearPendingDeviceCheck();
         setSession(null);
         setAuthStatus('anonymous');
         setAuthError(null);
@@ -392,6 +434,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (err) {
             console.error('[AuthProvider] Backend logout failed - will retry when online', err);
         }
+    }, []);
+
+    // spec: plr-d10 lane NP-1 — होय: the server opened the session; store it like any sign-in.
+    const completeDeviceCheck = useCallback((next: AuthSession) => {
+        setAuthSession(next);
+        clearPendingDeviceCheck();
+        setSession(next);
+        setAuthError(null);
+        setAuthStatus('authenticated');
+    }, []);
+
+    // नाही (the server already ended this phone's sign-in), or the question expired: signed out, nothing kept.
+    const endDeviceCheck = useCallback(() => {
+        clearPendingDeviceCheck();
+        clearRememberDevice();
+        setSession(null);
+        setAuthStatus('anonymous');
     }, []);
 
     const value = useMemo<AuthContextValue>(() => ({
@@ -406,7 +465,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         refresh,
         clearAuthError,
-    }), [session, authStatus, isLoading, offlinePresence, authError, login, register, logout, refresh, clearAuthError]);
+        deviceCheck,
+        completeDeviceCheck,
+        endDeviceCheck,
+    }), [session, authStatus, isLoading, offlinePresence, authError, login, register, logout, refresh, clearAuthError,
+        deviceCheck, completeDeviceCheck, endDeviceCheck]);
 
     return (
         <AuthContext.Provider value={value}>

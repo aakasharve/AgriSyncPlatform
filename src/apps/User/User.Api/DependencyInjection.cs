@@ -1,6 +1,7 @@
 using AgriSync.BuildingBlocks.Auth.Jwt;
 using Microsoft.Extensions.Options;
 using User.Application.UseCases.Auth;
+using User.Application.UseCases.Auth.DeviceCheck;
 using User.Application.UseCases.Auth.Login;
 using User.Application.UseCases.Auth.Logout;
 using User.Application.UseCases.Auth.RefreshToken;
@@ -39,6 +40,8 @@ public static class DependencyInjection
         services.AddScoped<VerifyOtpHandler>();
         services.AddScoped<LogoutCurrentDeviceHandler>();
         services.AddScoped<RevokeAllDeviceSessionsHandler>();
+        // spec: plr-d10 lane NP-1 — the answer to the one-time new-phone question.
+        services.AddScoped<AnswerDeviceCheckHandler>();
 
         return services;
     }

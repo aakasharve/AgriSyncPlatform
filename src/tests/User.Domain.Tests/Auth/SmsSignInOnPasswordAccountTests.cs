@@ -114,13 +114,13 @@ public sealed class SmsSignInOnPasswordAccountTests
     {
         public bool? LastPhoneVerified { get; private set; }
 
-        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified)
+        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending)
         {
             LastPhoneVerified = phoneVerified;
             return new("access", Guid.NewGuid().ToString("N"), DateTime.UtcNow.AddMinutes(15));
         }
 
-        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified)
+        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
         {
             LastPhoneVerified = phoneVerified;
             return new("access", Guid.NewGuid().ToString("N"), DateTime.UtcNow.AddMinutes(15));
@@ -161,6 +161,9 @@ public sealed class SmsSignInOnPasswordAccountTests
             RevokeAllReasons.Add(reason);
             return Task.CompletedTask;
         }
+        // lane NP-1: every phone counts as known here (these tests are about sessions, not the new-phone question).
+        public Task<bool> HasUnheldSessionOnDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default) => Task.FromResult(true);
+
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 

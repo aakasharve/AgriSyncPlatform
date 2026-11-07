@@ -27,6 +27,7 @@ import {
 import { getOrCreateDeviceId } from '../storage/DeviceIdStore';
 import { getRememberDevice } from '../storage/RememberDeviceStore';
 import { hasPendingLogout } from '../storage/PendingLogoutStore';
+import { askDeviceCheck } from '../storage/PendingDeviceCheckStore';
 import {
     clearNativeRefreshSession,
     getNativeRefreshSession,
@@ -175,6 +176,18 @@ export type {
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
+
+/**
+ * spec: plr-d10 lane NP-1 (founder D-56) — the server kept this session, but its phone has not answered the one-time
+ * "is this your account?" question, so the token it sent opens nothing. It is NOT stored (the app stays signed out:
+ * no farm list, no sync); the question is asked instead. The refresh credential (cookie / Keystore) is the session the
+ * answer will name, so it stays.
+ */
+function holdForDeviceCheck(data: AuthResponseDto): RefreshOutcome {
+    clearAuthSession();
+    askDeviceCheck({ userId: data.userId, accountName: data.accountName ?? '' });
+    return { kind: 'device-check' };
+}
 
 export class AgriSyncClient implements HttpTransport {
     readonly http: AxiosInstance;
@@ -642,6 +655,9 @@ export class AgriSyncClient implements HttpTransport {
                             expiresAtUtc: data.expiresAtUtc,
                         });
                     }
+                    if (data.deviceCheckRequired === true) {
+                        return holdForDeviceCheck(data);
+                    }
                     const session = toAuthSession(data);
                     setAuthSession(session);
                     return { kind: 'refreshed', session };
@@ -666,6 +682,9 @@ export class AgriSyncClient implements HttpTransport {
                 .then((response): RefreshOutcome => {
                     if (!isAuthResponse(response.data)) {
                         return { kind: 'unreachable' };
+                    }
+                    if (response.data.deviceCheckRequired === true) {
+                        return holdForDeviceCheck(response.data);
                     }
                     const session = toAuthSession(response.data);
                     setAuthSession(session);

@@ -195,6 +195,7 @@ POST /shramsafal/test-protocols
 POST /shramsafal/voice-diary/persist
 POST /sync/push
 POST /telemetry/client-error
+POST /user/auth/device-check
 POST /user/auth/login
 POST /user/auth/logout
 POST /user/auth/logout-all

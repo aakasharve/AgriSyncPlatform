@@ -120,6 +120,9 @@ public sealed class RegisterUserHandlerTests
         public Task AddAsync(DomainRefreshToken refreshToken, CancellationToken ct = default) { Added.Add(refreshToken); return Task.CompletedTask; }
         public Task RevokeActiveForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default) => Task.CompletedTask;
         public Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, string reason = "revoked_all", CancellationToken ct = default) => Task.CompletedTask;
+        // lane NP-1: every phone counts as known here (these tests are about sessions, not the new-phone question).
+        public Task<bool> HasUnheldSessionOnDeviceAsync(Guid userId, string deviceId, CancellationToken ct = default) => Task.FromResult(true);
+
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
@@ -129,7 +132,7 @@ public sealed class RegisterUserHandlerTests
         public bool? LastPhoneVerified { get; private set; }
         public IReadOnlyCollection<MembershipClaim>? LastMemberships { get; private set; }
 
-        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified)
+        public TokenPair GenerateTokens(Guid userId, string phone, string displayName, IReadOnlyCollection<MembershipClaim> memberships, bool phoneVerified, bool deviceCheckPending)
         {
             Calls++;
             LastPhoneVerified = phoneVerified;
@@ -137,7 +140,7 @@ public sealed class RegisterUserHandlerTests
             return new TokenPair("access", "refresh", DateTime.UtcNow.AddMinutes(15));
         }
 
-        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified)
+        public TokenPair GenerateIdentityTokens(Guid userId, bool phoneVerified, bool deviceCheckPending)
         {
             Calls++;
             LastPhoneVerified = phoneVerified;
