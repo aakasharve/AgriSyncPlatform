@@ -108,6 +108,35 @@ public sealed class LabourRegisterViewTests
     }
 
     /// <summary>
+    /// lane MU-1 (founder D-70 option 2, register F124) — a seat on CHOSEN plots reads the wage book (job-card money on his
+    /// plots) but NO day wages: the day-wage figure on the home card, a crew's stated amount and the words that name
+    /// money are taken out; the उक्ते (job-card) figure and the people's job-card pay stay. A seat that covers every plot
+    /// (the default) is untouched.
+    /// </summary>
+    [Fact]
+    public void The_owner_book_for_chosen_plots_leaves_out_day_wages_and_keeps_job_card_money()
+    {
+        var full = FullDto();
+        var priced = full with { Review = [full.Review[0] with { Points = full.Review[0].Points with { Task = "छाटणी ४०० रुपये" } }] };
+
+        var chosen = GetLabourDataHandler.ApplyRegisterView(priced, LabourRegisterView.OwnerBook, seesMoney: true, seesDayWages: false);
+        Assert.Equal("owner", chosen.View);
+        Assert.Null(chosen.Home.RojandariStated);
+        Assert.Equal(12000m, chosen.Home.UkteAgreed);
+        Assert.Null(chosen.Review[0].Points.Amount);
+        Assert.Null(chosen.Review[0].Points.Task);
+        Assert.Equal(4200m, chosen.People[0].RecordedWages);
+        Assert.Equal(2000m, chosen.People[0].Paid);
+        Assert.Equal(1200m, chosen.Dashboard.Wages);
+        Assert.NotNull(chosen.Dashboard.Money);
+
+        var whole = GetLabourDataHandler.ApplyRegisterView(priced, LabourRegisterView.OwnerBook, seesMoney: true, seesDayWages: true);
+        Assert.Equal(1200m, whole.Home.RojandariStated);
+        Assert.Equal(850m, whole.Review[0].Points.Amount);
+        Assert.Equal("छाटणी ४०० रुपये", whole.Review[0].Points.Task);
+    }
+
+    /// <summary>
     /// lane MU-3 fix 1 (F3, D-66) — a crew's task words that themselves name money are withheld WHOLE from a seat
     /// without see money; task words without money stay exactly as written.
     /// </summary>

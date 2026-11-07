@@ -43,9 +43,14 @@ export interface JoinRequestCardProps {
      * joined, so the card offers ONE tap that lets him in with exactly that grant (no preset, no plot choice here).
      */
     onLetInFromInvitation?: () => void;
+    /**
+     * spec: plr-d10 lane MU-1 (MU-2 review N-6) - the invitation was opened by someone other than the person it named: "this
+     * invitation was for ‹name · …2345›", so the owner who decides here is told on the card itself.
+     */
+    invitedFor?: string | null;
 }
 
-export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, busy, onApprove, onDecline, farmPlots, onLetInFromInvitation }) => {
+export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, busy, onApprove, onDecline, farmPlots, onLetInFromInvitation, invitedFor }) => {
     const [declining, setDeclining] = useState(false);
     // lane MU-4 (orchestrator call 8) — the plots start from the preset (कामगार → स्वतःचं काम); a choice the owner makes
     // here replaces that default for whichever preset he then taps.
@@ -66,6 +71,11 @@ export const JoinRequestCard: React.FC<JoinRequestCardProps> = ({ row, name, bus
             {phone && (
                 <p className="m-0 flex items-center gap-1.5 text-[14px] font-extrabold text-stone-800" data-testid={`join-request-phone-${row.userId}`}>
                     <Smartphone size={16} aria-hidden="true" />{phone}
+                </p>
+            )}
+            {invitedFor && (
+                <p className="m-0 text-[13.5px] font-extrabold text-amber-800 [overflow-wrap:anywhere]" data-testid={`join-request-for-another-${row.userId}`}>
+                    {invite.wasForAnother(invitedFor)}
                 </p>
             )}
             {via && !fromInvitation && <p className="m-0 text-[13px] font-bold text-stone-600">{via}</p>}

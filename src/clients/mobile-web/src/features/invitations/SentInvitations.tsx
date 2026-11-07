@@ -133,6 +133,8 @@ export const SentInvitations: React.FC<SentInvitationsProps> = ({ farmId, refres
 
 /** Where an invitation stands; a claim that ended without the owner's yes never reads "स्वीकारलं" (fix round 1, L-4). */
 function statusWordOf(row: PersonalInvitationView, copy: ReturnType<typeof invitationCopy>): string {
+    // lane MU-1 (MU-2 N-4): an erasure ended it - never "परत घेतलं", which says the owner did.
+    if (row.personErased === true) return copy.personErased;
     if (row.status !== 'Accepted') return copy.status[row.status] ?? row.status;
     if (row.waitsForOwner || row.claimOutcome === 'WaitsForOwner') return copy.waitsForYou;
     if (row.claimOutcome === 'Declined' || row.claimOutcome === 'Withdrawn' || row.claimOutcome === 'Joined') {

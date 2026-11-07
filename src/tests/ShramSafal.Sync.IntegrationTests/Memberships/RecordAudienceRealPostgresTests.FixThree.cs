@@ -116,7 +116,14 @@ public sealed partial class RecordAudienceRealPostgresTests
 
         (await DaysToRuleAsync(Owner)).Should().Equal([$"{FieldOperator}:{WorkDay}"], "the holder sees every record of the day");
         (await DaysToRuleAsync(Mukadam)).Should().BeEmpty("the sender is told nothing");
-        (await DaysToRuleAsync(CoOwner)).Should().BeEmpty("nor anyone a named record is kept from");
+        // MU-1 (PRV REVIEW-4 N-2): the co-owner is given take हजेरी, so "nothing for him" can only be the audience gate - without
+        // the authority the empty answer passed for the wrong reason. The control opens the record to him: then he is shown the day.
+        await SetAuthoritiesAsync(FarmA, CoOwner, FarmAuthority.TakeAttendance);
+        (await DaysToRuleAsync(CoOwner)).Should().BeEmpty("nor anyone a named record is kept from, even one who may rule days");
+        await SetAudienceAsync(Owner, "DailyLog", N1HiddenLog, "Selected", CoOwner);
+        (await DaysToRuleAsync(CoOwner)).Should().Equal([$"{FieldOperator}:{WorkDay}"], "control: once the record is open to him, the same seat is shown the day");
+        await SetAudienceAsync(Owner, "DailyLog", N1HiddenLog, "OnlyMe");
+        (await DaysToRuleAsync(CoOwner)).Should().BeEmpty("and closed again, nothing");
 
         // N1-b — his own audit rows (what his personal data export carries) name no record kept from him.
         foreach (var hidden in new[] { N1HiddenLog, PrivateLog, PrivateCost })

@@ -17,6 +17,7 @@ import { financeSelectors } from '../features/finance/financeSelectors';
 import type { FinancePipelineBucket } from '../features/finance/finance.types';
 import { MoneyPage } from '../features/finance/components/MoneyPage';
 import { MonthlyCostPdfButton } from '../features/finance/components/MonthlyCostPdfButton';
+import { PlotsOnlyNote } from '../features/relationships/PlotsOnlyNote';
 import { BUCKET_LABEL, FINANCE_TITLE, rupees } from '../features/finance/moneyLabels';
 import { Chip, GlassCard, IconDot, RowLink, SectionHead, Tap, type Tone } from '../shared/components/ui/placeUi';
 
@@ -77,6 +78,8 @@ const FinanceManagerHome: React.FC<FinanceManagerHomeProps> = ({ currentRoute, o
                         <div><p className="m-0 text-[13px] font-bold text-stone-600">एकूण खर्च</p><p className="m-0 text-[21px] font-extrabold text-stone-900" data-testid="fin-quick-spent">{rupees(totalSpent)}</p></div>
                         <div><p className="m-0 text-[13px] font-bold text-stone-600">तपासणी बाकी</p><p className="m-0 text-[21px] font-extrabold text-amber-700" data-testid="fin-quick-waiting">{rupees(waiting?.total ?? 0)}</p></div>
                     </div>
+                    {/* lane MU-1 (R3-L2) — a chosen-plots seat's totals are his plots' only, and say so. */}
+                    <div className="mt-2"><PlotsOnlyNote testId="fin-plots-only" /></div>
                     {reportFarmId && <div className="mt-3"><MonthlyCostPdfButton farmId={reportFarmId} testId="fin-home-report" /></div>}
                 </GlassCard>
             ) : (

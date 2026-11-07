@@ -198,6 +198,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         // spec: plr-d10 lane MU-4 fix pass 1 (H2, M1) — the seat's read scope: own work (the कामगार label OR the स्वतःचं
         // काम scope, ONE rule) picks the own-row view below, and chosen plots narrow the page's plot work and money.
         var callerReadScope = FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc);
+        // spec: plr-d10 lane MU-1 (founder D-70 option 2, F124) — day wages: a seat on chosen plots sees none (the page's
+        // day-wage figure, a crew's stated amount, the words that name money); the wage book (job-card money) stays.
+        var seesDayWages = callerReadScope?.SeeDayWages == true;
         // The place rule, read once for this page (records, job cards' payouts): the same visibility every door asks.
         var recordVisibility = await RecordVisibility.ForFarmAsync(repository, query.FarmId.Value, query.CallerUserId.Value, readAtUtc, ct);
 
@@ -298,6 +301,10 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         var payoutRows = (await repository.GetLabourPayoutCostEntriesWithJobCardAsync(
                 query.FarmId, window.FromDate, window.ToDateInclusive, ct))
             .Where(r => !recordVisibility.IsOutOfPlace(Domain.RecordPrivacy.RecordKinds.CostEntry, r.CostEntry.Id))
+            // spec: plr-d10 lane MU-1 fix round 1 (D-70 option 2; review HIGH-1) - a crew's total stored as a labour_misc
+            // entry is the day wage times the headcount: a seat on chosen plots that holds see wages adds none of it up
+            // (the मजुरी tile, Money.Paid); job-card payouts (labour_payout) stay.
+            .Where(r => !DayWageMoney.HiddenFrom(callerReadScope, r.CostEntry, query.CallerUserId.Value))
             .ToList();
         var latestCorrections = BuildLatestCorrections(
             await repository.GetCorrectionsForEntriesAsync(payoutRows.Select(r => r.CostEntry.Id), ct));
@@ -339,6 +346,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         {
             payoutRowsAllTime = (await repository.GetLabourPayoutCostEntriesWithJobCardAsync(query.FarmId, null, null, ct))
                 .Where(r => !recordVisibility.IsOutOfPlace(Domain.RecordPrivacy.RecordKinds.CostEntry, r.CostEntry.Id))
+                .Where(r => !DayWageMoney.HiddenFrom(callerReadScope, r.CostEntry, query.CallerUserId.Value))
                 .ToList();
             latestCorrectionsAllTime = BuildLatestCorrections(
                 await repository.GetCorrectionsForEntriesAsync(payoutRowsAllTime.Select(r => r.CostEntry.Id), ct));
@@ -770,7 +778,7 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 weekLabel, window, farmLocalToday, attendanceMarks, farmOperators,
                 windowWorkRows, windowAssignments, windowLogDateById),
             windowAssignments
-                .Where(a => !(seesWages && !moneyHiddenLogIds.Contains(a.DailyLogId)))
+                .Where(a => !(seesDayWages && !moneyHiddenLogIds.Contains(a.DailyLogId)))
                 .Select(a => a.Task?.Trim())
                 .Where(t => !string.IsNullOrWhiteSpace(t) && Services.MoneyMention.InText(t))
                 .Select(t => t!)
@@ -845,7 +853,9 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 resolvedCallerRole, hasConfirmAuthority),
             // lane MU-3 fix 1 (F4): crew totals to a seat that sees money (a कामगार narrowed to his row never).
             seesMoney: !narrowToCaller && registerView != LabourRegisterView.OwnRow
-                && FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc)?.SeeMoney == true);
+                && FarmReadScope.Of(query.FarmId.Value, callerAccess, readAtUtc)?.SeeMoney == true,
+            // lane MU-1 (D-70 option 2, F124): no day wages for a seat on chosen plots.
+            seesDayWages: seesDayWages);
 
         // spec: plr-d10 lane MU-4 fix pass 2 (M1 label) — his money figures are his plots' only: said, never left to guess.
         return Result.Success(projected with { ScopedToPlots = callerReadScope is { PlotIds: not null, IsPrimaryAccountHolder: false } });
@@ -856,6 +866,12 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
     /// newest flag is newer than its newest ruling; shown only to a reader who may take हजेरी (or the holder) and may see
     /// EVERY record any open flag of that day names. Nothing for anyone else — no flag, no count.
     /// </summary>
+    /// <summary>PRV REVIEW-4 N-4 (CTO ruling, reversible): how far back the owner's "days to rule" look.</summary>
+    internal const int DaysToRuleWindowDays = 90;
+
+    /// <summary>PRV REVIEW-4 N-4: the most flag / ruling rows one read takes.</summary>
+    internal const int DaysToRuleMaxRows = 5000;
+
     private async Task<IReadOnlyList<LabourDayToRuleDto>> DaysToRuleAsync(
         Guid farmId, RecordVisibility visibility, bool mayRule, CancellationToken ct)
     {
@@ -864,12 +880,17 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             return [];
         }
 
+        // spec: plr-d10 lane MU-1 (PRV REVIEW-4 N-4) - BOUNDED: only the last DaysToRuleWindowDays days of flags and rulings
+        // are read (newest first, DaysToRuleMaxRows at most). A flag older than the window is no longer offered - the ledger
+        // stays complete (append-only), the screen simply does not derive state from an unbounded read of it.
         var rows = await repository.GetAuditEventsForFarmByActionsAsync(
             farmId,
             [
                 UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler.RestrictedDisagreementAction,
                 UseCases.Labour.RecordAttendanceMark.RecordAttendanceMarkHandler.DayRuledAction,
             ],
+            clock.UtcNow.AddDays(-DaysToRuleWindowDays),
+            DaysToRuleMaxRows,
             ct);
         var days = new List<LabourDayToRuleDto>();
         foreach (var mark in rows.GroupBy(r => r.EntityId))
@@ -1091,11 +1112,56 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                     ? cell
                     : cell with
                     {
-                        Work = string.Join(SeparatorMiddot, cell.Work.Split(SeparatorMiddot).Where(part => !withheld.Contains(part)))
-                            is { Length: > 0 } kept ? kept : null,
+                        Work = WithoutPhrases(cell.Work, withheld) is { Length: > 0 } kept ? kept : null,
                     }).ToList(),
             }).ToList(),
         };
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane MU-1 (PRV REVIEW-4 N-1) - <paramref name="work"/> (phrases joined by " · ") with every whole phrase in
+    /// <paramref name="withheld"/> taken out. A phrase is removed only where it stands on the joins (start or " · " before it,
+    /// end or " · " after it), so a spoken task that itself holds " · " is removed whole, never in two fragments with one
+    /// surviving (the old split-on-" · " left the money fragment of such a task).
+    /// </summary>
+    internal static string WithoutPhrases(string work, IReadOnlySet<string> withheld)
+    {
+        var result = work;
+        foreach (var phrase in withheld.Where(p => p.Length > 0).OrderByDescending(p => p.Length))
+        {
+            var from = 0;
+            while (from <= result.Length - phrase.Length)
+            {
+                var at = result.IndexOf(phrase, from, StringComparison.Ordinal);
+                if (at < 0)
+                {
+                    break;
+                }
+
+                var end = at + phrase.Length;
+                var startsOnJoin = at == 0 || result.AsSpan(0, at).EndsWith(SeparatorMiddot, StringComparison.Ordinal);
+                var endsOnJoin = end == result.Length || result.AsSpan(end).StartsWith(SeparatorMiddot, StringComparison.Ordinal);
+                if (!startsOnJoin || !endsOnJoin)
+                {
+                    from = at + 1;
+                    continue;
+                }
+
+                if (end < result.Length)
+                {
+                    end += SeparatorMiddot.Length; // the join after it goes with it
+                }
+                else if (at > 0)
+                {
+                    at -= SeparatorMiddot.Length; // it was last: the join before it goes
+                }
+
+                result = result.Remove(at, end - at);
+                from = Math.Max(0, at);
+            }
+        }
+
+        return result;
     }
 
     internal static LabourLedgerDto BuildHajeriLedger(
@@ -1302,7 +1368,8 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
         bool narrowToCaller = false,
         bool? canManageLabour = null,
         bool? canConfirm = null,
-        bool seesMoney = false)
+        bool seesMoney = false,
+        bool seesDayWages = true)
     {
         if (view == LabourRegisterView.OwnerBook)
         {
@@ -1314,6 +1381,21 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
             {
                 View = "owner",
                 Dashboard = dto.Dashboard with { Pending = dto.Review.Count },
+                // spec: plr-d10 lane MU-1 (founder D-70 option 2, F124) - a seat on CHOSEN plots reads the wage book (job-card
+                // money on his plots) but no DAY wages: the day-wage figure on the home card, a crew's stated amount and the
+                // task words that name money are taken out (blank, never ₹0). Job-card money (उक्ते) and the people's
+                // job-card pay stay.
+                Home = seesDayWages ? dto.Home : dto.Home with { RojandariStated = null },
+                Review = seesDayWages
+                    ? dto.Review
+                    : dto.Review.Select(r => r with
+                    {
+                        Points = r.Points with
+                        {
+                            Amount = null,
+                            Task = Services.MoneyMention.InText(r.Points.Task) ? null : r.Points.Task,
+                        },
+                    }).ToList(),
                 // lane MU-3 fix 1 (F6) — reading the wage book (see wages) is not writing labour (take हजेरी):
                 // the handler's answer, never assumed. Only a direct caller with nothing to hand gets the old true.
                 CanManageLabour = canManageLabour ?? true,

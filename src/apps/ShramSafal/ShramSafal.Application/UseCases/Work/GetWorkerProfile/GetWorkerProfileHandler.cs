@@ -94,7 +94,8 @@ public sealed class GetWorkerProfileHandler(
                 return Result.Failure<WorkerProfileDto>(ShramSafalErrors.Forbidden);
             }
 
-            earningsShown = farmIds.All(id => readScopes[id]?.SeeWages == true);
+            // lane MU-1 (D-70 option 2, F124): a worker's earnings hold his day wages, which a seat on chosen plots never reads.
+            earningsShown = farmIds.All(id => readScopes[id]?.SeeDayWages == true);
         }
 
         // lane MU-3 fix 2 (N1) — a phone that would draw withheld earnings as "0k" (1.0.17) is refused, as edee6667

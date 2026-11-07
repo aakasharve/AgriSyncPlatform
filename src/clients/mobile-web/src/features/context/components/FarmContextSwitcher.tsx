@@ -25,6 +25,8 @@ import type { MyFarmDto } from '../../onboarding/qr/inviteApi';
 import { JOIN_DOOR_LABEL } from '../../onboarding/qr/farmCodeEntry';
 import { getRoleLabel } from '../../../shared/roles/roleLabels';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
+import { relationshipCopy, toRelationshipLanguage } from '../../relationships/relationshipCopy';
+import type { SwitcherRow } from '../../relationships/relationshipModel';
 
 interface FarmContextSwitcherProps {
     farms: MyFarmDto[];
@@ -35,19 +37,6 @@ interface FarmContextSwitcherProps {
     /** Compact variant used in the top app bar */
     compact?: boolean;
 }
-
-const roleStyle = (role: string) => {
-    switch (role) {
-        case 'PrimaryOwner':
-            return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-        case 'SecondaryOwner':
-            return 'bg-blue-50 text-blue-700 border-blue-200';
-        case 'Mukadam':
-            return 'bg-orange-50 text-orange-700 border-orange-200';
-        default:
-            return 'bg-stone-100 text-stone-600 border-stone-200';
-    }
-};
 
 const roleLabel = (role: string) => {
     switch (role) {
@@ -146,6 +135,17 @@ export interface FarmSwitcherSheetProps {
     onSwitch: (farmId: string) => void;
     onCreateFarm: () => void;
     onJoinViaQr: () => void;
+    /**
+     * spec: plr-d10 lane MU-1 (MU design §6) - the ONE relationship read model (`/me/context`), as the rows to draw: one per
+     * ACTIVE relationship with its farm name, relationship word, scope summary, an expiry only when near, and which is open
+     * now. Absent (the context has not answered yet) = the plain farm list, as before. A waiting invitation or request is
+     * never a row here (visible is not operational): it is a card in "माझी शेती व जबाबदाऱ्या".
+     */
+    rows?: SwitcherRow[];
+    /** MU-1 - the person owns no farm of his own: the sheet asks "तुमचं स्वतःचं शेत आहे का?" (a worker's line). */
+    ownsNoFarm?: boolean;
+    /** MU-1 - the person's language ("mr" / "en"); every other value reads Marathi. Passed in, so the sheet needs no language provider. */
+    language?: string | null;
 }
 
 /**
@@ -155,6 +155,9 @@ export interface FarmSwitcherSheetProps {
  * instead of copying this markup into a second sheet. `FarmContextSwitcher`
  * below (the pill + its own internal `isOpen` state) is untouched; this is
  * an additive export, not a behaviour change to the default export.
+ *
+ * spec: plr-d10 lane MU-1 - one language at a time (Marathi mode shows only Marathi: today's "Your farms · N" English is
+ * gone), the whole row is the button, and the rows come from the relationship read model.
  */
 export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
     farms,
@@ -163,7 +166,12 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
     onSwitch,
     onCreateFarm,
     onJoinViaQr,
+    rows,
+    ownsNoFarm = false,
+    language: languageProp = null,
 }) => {
+    const language = toRelationshipLanguage(languageProp);
+    const copy = relationshipCopy(language);
     useEffect(() => {
         const handleKey = (event: KeyboardEvent) => {
             if (event.key === 'Escape') {
@@ -179,6 +187,18 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
         return null;
     }
 
+    // The rows: the relationship model when /me/context answered, else the plain farm list (name + the role word of /farms/mine).
+    const listed: SwitcherRow[] = rows && rows.length > 0
+        ? rows
+        : farms.map(farm => ({
+            farmId: farm.farmId,
+            name: farm.name,
+            word: roleWord(farm.role, language),
+            plots: '',
+            until: null,
+            current: farm.farmId === currentFarmId,
+        }));
+
     return createPortal(
         <div
             data-testid="farm-switcher-sheet"
@@ -193,7 +213,7 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
                     type="button"
                     onClick={onClose}
                     data-testid="farm-switcher-close"
-                    aria-label="Close"
+                    aria-label={copy.switcher.close}
                     className="absolute right-3 top-3 rounded-full bg-stone-100 p-2 text-stone-600 hover:bg-stone-200"
                 >
                     <X size={16} />
@@ -201,22 +221,20 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
 
                 <div className="px-6 pb-6 pt-8">
                     <div className="text-center">
-                        <h2 className="font-display text-2xl font-black text-stone-900">
-                            तुमच्या शेती
+                        <h2 className="font-display text-2xl font-black text-stone-900" data-testid="farm-switcher-title">
+                            {copy.switcher.title}
                         </h2>
-                        <p className="mt-0.5 text-sm font-semibold text-stone-500">
-                            Your farms · {farms.length}
-                        </p>
                     </div>
 
                     <div className="mt-5 space-y-2">
-                        {farms.map(farm => {
-                            const isCurrent = farm.farmId === currentFarmId;
+                        {listed.map(row => {
+                            const isCurrent = row.farmId === currentFarmId || row.current;
                             return (
                                 <button
-                                    key={farm.farmId}
+                                    key={row.farmId}
                                     type="button"
-                                    onClick={() => onSwitch(farm.farmId)}
+                                    data-testid={`farm-switcher-row-${row.farmId}`}
+                                    onClick={() => onSwitch(row.farmId)}
                                     className={`group flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition-colors ${
                                         isCurrent
                                             ? 'border-emerald-400 bg-emerald-50'
@@ -228,24 +246,41 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-1.5">
-                                            <div className="truncate font-bold text-stone-900">{farm.name}</div>
-                                            {isCurrent && <CheckCircle2 size={14} className="shrink-0 text-emerald-600" />}
+                                            <div className="truncate font-bold text-stone-900" data-testid="farm-switcher-row-name">{row.name}</div>
+                                            {isCurrent && <CheckCircle2 size={14} className="shrink-0 text-emerald-600" aria-hidden="true" data-testid="farm-switcher-row-check" />}
                                         </div>
-                                        <div className="mt-0.5 flex items-center gap-1.5">
-                                            <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${roleStyle(farm.role)}`}>
-                                                {roleLabel(farm.role)}
+                                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                            <span className="inline-flex items-center rounded-md border border-stone-200 bg-stone-100 px-1.5 py-0.5 text-[11px] font-bold text-stone-700" data-testid="farm-switcher-row-word">
+                                                {row.word}
                                             </span>
-                                            {farm.farmCode && (
-                                                <span className="font-mono text-[10px] font-bold tracking-widest text-stone-400">
-                                                    {farm.farmCode}
-                                                </span>
+                                            {row.plots && (
+                                                <span className="text-[12px] font-semibold text-stone-600" data-testid="farm-switcher-row-plots">{row.plots}</span>
+                                            )}
+                                            {row.until && (
+                                                <span className="text-[12px] font-extrabold text-amber-800" data-testid="farm-switcher-row-until">{row.until}</span>
                                             )}
                                         </div>
+                                        {isCurrent && (
+                                            <span className="mt-1 inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-extrabold text-emerald-900" data-testid="farm-switcher-row-current">
+                                                {copy.switcher.current}
+                                            </span>
+                                        )}
                                     </div>
                                 </button>
                             );
                         })}
                     </div>
+
+                    {ownsNoFarm && (
+                        <button
+                            type="button"
+                            onClick={onCreateFarm}
+                            data-testid="farm-switcher-own-farm"
+                            className="mt-4 w-full rounded-2xl bg-amber-50 px-3 py-3 text-center text-[14px] font-extrabold text-amber-900 ring-1 ring-amber-200"
+                        >
+                            {copy.switcher.workerOwnFarm}
+                        </button>
+                    )}
 
                     <div className="mt-5 grid grid-cols-2 gap-2">
                         <button
@@ -254,7 +289,7 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
                             className="flex items-center justify-center gap-1.5 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm font-bold text-emerald-700 hover:border-emerald-300"
                         >
                             <Plus size={15} />
-                            शेती तयार करा
+                            {copy.switcher.createFarm}
                         </button>
                         <button
                             type="button"
@@ -263,12 +298,8 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
                         >
                             <QrCode size={15} className="shrink-0" />
                             {/* spec: plr-d7-m1-multiuser-2026-10-26 (step 1) — the join door takes the typed farm code too. */}
-                            {JOIN_DOOR_LABEL}
+                            {language === 'en' ? 'Join with a code or QR' : JOIN_DOOR_LABEL}
                         </button>
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-center text-[10px] font-semibold text-stone-400">
-                        <div>Create farm</div>
-                        <div>Join via QR</div>
                     </div>
                 </div>
             </div>
@@ -276,5 +307,19 @@ export const FarmSwitcherSheet: React.FC<FarmSwitcherSheetProps> = ({
         document.body,
     );
 };
+
+/** The role word of the plain farm list (before /me/context answers): one language only. */
+function roleWord(role: string, language: 'mr' | 'en'): string {
+    switch (role) {
+        case 'PrimaryOwner':
+        case 'SecondaryOwner':
+        case 'Mukadam':
+        case 'Worker': {
+            const l = getRoleLabel(role);
+            return language === 'en' ? l.en : l.mr;
+        }
+        default: return role;
+    }
+}
 
 export default FarmContextSwitcher;

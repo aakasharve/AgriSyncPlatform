@@ -163,13 +163,14 @@ public sealed class PlotScopeFixPass1RulesTests
         card.PlotScope.Should().Be("AllPlots", "what is stored");
         card.EffectivePlotScope.Should().Be("OwnWork", "the label narrows to his own work");
         card.PlotScopeChoices.Should().Equal(["OwnWork", "ChosenPlots"], "every plot would read exactly as his own work");
-        card.AuthoritiesNotInForce.Should().BeEquivalentTo(["SeeMoney", "SeeWages"], "only his own money, whatever he holds");
+        // lane MU-1 (MU-2 review N-3): review money needs see money, so it does nothing here either - closed over what it needs.
+        card.AuthoritiesNotInForce.Should().BeEquivalentTo(["SeeMoney", "SeeWages", "ReviewMoney"], "only his own money, whatever he holds");
 
         var ownWork = Seat(AppRole.Mukadam, FarmAuthority.SeeMoney, FarmAuthority.SeeWages);
         ownWork.SetPlotScope(MembershipPlotScope.OwnWork, null, Now);
         var ownCard = LabourPermissionProjection.From(ownWork, Now);
         ownCard.EffectivePlotScope.Should().Be("OwnWork");
-        ownCard.AuthoritiesNotInForce.Should().BeEquivalentTo(["EditFarmSetup", "SeeMoney", "SeeWages"]);
+        ownCard.AuthoritiesNotInForce.Should().BeEquivalentTo(["EditFarmSetup", "SeeMoney", "SeeWages", "ReviewMoney"]);
         ownCard.PlotScopeChoices.Should().Equal(["AllPlots", "ChosenPlots", "OwnWork"], "a मुकादम label: every choice changes something");
 
         var owner = FarmMembership.Create(Guid.NewGuid(), new FarmId(Farm), new UserId(Owner), AppRole.PrimaryOwner, Now.AddDays(-30), JoinedVia.OwnerManualAdd);

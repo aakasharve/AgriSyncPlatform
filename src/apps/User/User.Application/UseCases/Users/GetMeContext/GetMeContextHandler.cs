@@ -135,7 +135,11 @@ public sealed class GetMeContextHandler(
                 // person is told why.
                 Permissions: Array.Empty<string>(),
                 StatusReason: m.StatusReason,
-                Authorities: Array.Empty<MeAuthorityDto>());
+                Authorities: Array.Empty<MeAuthorityDto>(),
+                PlotScope: null,
+                PlotNames: Array.Empty<string>(),
+                // A waiting seat is told its label too: its card says what it asked to be.
+                Label: m.Label);
         }
 
         var plan = ResolvePlan(m.Subscription);
@@ -158,7 +162,10 @@ public sealed class GetMeContextHandler(
             StatusReason: m.StatusReason,
             Authorities: (m.Authorities ?? Array.Empty<MeAuthoritySnapshot>())
                 .Select(a => new MeAuthorityDto(a.Name, a.ExpiresAtUtc))
-                .ToList());
+                .ToList(),
+            PlotScope: m.PlotScope,
+            PlotNames: m.PlotNames ?? Array.Empty<string>(),
+            Label: m.Label);
     }
 
     private static string ResolvePlan(SubscriptionSnapshot? sub)

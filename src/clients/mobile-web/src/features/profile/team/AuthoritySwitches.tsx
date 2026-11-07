@@ -29,6 +29,8 @@ export interface AuthorityAccessView {
      * still row with its rule line, never a switch; a held one keeps travelling back in the whole set, untouched.
      */
     notInForce?: readonly string[];
+    /** lane MU-1 (D-70 option 2) - this person covers only chosen plots, so day wages are never shown to him. */
+    plotsChosen?: boolean;
     /** A write for this person is in flight. */
     saving: boolean;
     /** The WHOLE desired set. */
@@ -115,6 +117,18 @@ export const AuthoritySwitches: React.FC<{ memberId: string; access: AuthorityAc
                     );
                 })}
             </ul>
+            {/* lane MU-1: checking money entries without seeing wages cannot settle a payout - said once, on the switches. */}
+            {holds(access.authorities, 'ReviewMoney') && !holds(access.authorities, 'SeeWages') && !access.notInForce?.includes('ReviewMoney') && (
+                <p className="m-0 text-[12px] font-bold leading-snug text-amber-800" data-testid={`authority-payout-note-${memberId}`}>
+                    {copy.payoutNeedsWages}
+                </p>
+            )}
+            {/* lane MU-1 (D-70 option 2, F124): see wages on chosen plots shows job-work money only - said where it is switched on. */}
+            {access.plotsChosen === true && holds(access.authorities, 'SeeWages') && !access.notInForce?.includes('SeeWages') && (
+                <p className="m-0 text-[12px] font-bold leading-snug text-amber-800" data-testid={`authority-day-wages-note-${memberId}`}>
+                    {copy.dayWagesNotOnChosenPlots}
+                </p>
+            )}
         </section>
     );
 };

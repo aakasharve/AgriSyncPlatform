@@ -52,6 +52,7 @@ import { isRecordingPathBusy } from './shared/utils/recordingPathBusy';
 import { useAuth } from './app/providers/AuthProvider';
 // spec: plr-d10 (I14, CMP-3) — a worker gets no तुलना; the one rule, read here for the switcher.
 import { useOptionalFarmContext } from './core/session/FarmContext';
+import { seatDoors } from './core/session/seatDoors';
 import { hiddenMainViewsFor } from './core/navigation/hiddenViews';
 import { useAttentionModel } from './features/attention/hooks/useAttentionModel';
 import { attentionSummaryEn, attentionSummaryMr } from './features/attention/attentionItems';
@@ -98,7 +99,10 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
     // ask "बाहेर पडायचं?" first (FirstFarmDoors); only "बाहेर पडा" there calls this.
     const { logout } = useAuth();
     // The person's role on the CURRENT farm (`/me/context`), so the switcher leaves out what they may not open.
-    const hiddenViews = hiddenMainViewsFor(useOptionalFarmContext()?.currentFarm?.role);
+    const openSeat = useOptionalFarmContext()?.currentFarm ?? null;
+    const hiddenViews = hiddenMainViewsFor(openSeat?.role);
+    // spec: plr-d10 lane MU-1 - the bottom bar's doors follow this seat's authorities (a worker: लक्ष द्या and शेड्यूल only).
+    const doors = seatDoors(openSeat);
     const app = useAgriLogApp({ initialCrops, currentFarmId, currentFarmName });
     useTemplateCatalogSync();
 
@@ -327,6 +331,7 @@ const AppContent: React.FC<AppContentProps> = ({ crops: initialCrops, setCrops }
                 onViewChange={(view) => navigation.setMainView(view)}
                 hidden={isKeyboardOpen}
                 attentionCount={attentionCount}
+                doors={doors}
             />
 
             {toast && (

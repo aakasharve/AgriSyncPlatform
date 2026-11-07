@@ -151,7 +151,8 @@ public sealed class GetAiJobStatusHandler(
         try
         {
             using var document = JsonDocument.Parse(json);
-            return MoneyMention.InDocument(document.RootElement);
+            // lane MU-1 fix round 1 (D-70; review MEDIUM-2): a labour row's stated rate / wage per person is money here too.
+            return MoneyMention.InParse(document.RootElement);
         }
         catch (JsonException ex)
         {

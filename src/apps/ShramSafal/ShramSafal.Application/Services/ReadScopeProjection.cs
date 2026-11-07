@@ -58,7 +58,12 @@ public static class ReadScopeProjection
         }
 
         var seesMoney = scope?.SeeMoney == true;
-        var seesWages = scope?.SeeWages == true;
+        // spec: plr-d10 lane MU-1 (founder D-70 option 2, F124) — a wage on a record is a DAY wage (hajeri has no plot to split
+        // by): a seat on chosen plots that holds see wages still gets NONE of it - not the wage per person, not the crew's
+        // total (the wage times the crew) and not the words (a spoken wage). He keeps the rest of the money of his plots and
+        // every job card's pay (see JobCard, which keeps following see wages).
+        var seesWages = scope?.SeeDayWages == true;
+        var dayWagesRuledOut = scope is { SeeWages: true, SeeDayWages: false };
         if (seesMoney && seesWages)
         {
             return dto;
@@ -85,10 +90,10 @@ public static class ReadScopeProjection
                 .Select(l => l with
                 {
                     WagePerPerson = seesWages ? l.WagePerPerson : null,
-                    TotalCost = seesMoney ? l.TotalCost : null,
+                    TotalCost = seesMoney && !dayWagesRuledOut ? l.TotalCost : null,
                     // F10 — a stated amount withheld by rule says so; one never stated stays "not stated".
                     WageWithheld = !seesWages && l.WagePerPerson is not null ? true : l.WageWithheld,
-                    TotalCostWithheld = !seesMoney && l.TotalCost is not null ? true : l.TotalCostWithheld,
+                    TotalCostWithheld = (!seesMoney || dayWagesRuledOut) && l.TotalCost is not null ? true : l.TotalCostWithheld,
                     Notes = Unless(l.Notes),
                     Task = Unless(l.Task),
                 })

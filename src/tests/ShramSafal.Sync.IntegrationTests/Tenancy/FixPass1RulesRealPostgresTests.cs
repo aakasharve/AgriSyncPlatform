@@ -145,6 +145,10 @@ public sealed class FixPass1RulesRealPostgresTests(ITestOutputHelper output) : R
     {
         await AssertAppRoleIsNotVacuousAsync();
         await SeatMukadamOnFarmBAsync();
+        // lane MU-1 (register F95): a job card carries a rate, and writing a rate follows the authorities (review money, which
+        // needs see money), never the label - so the मुकादम holds them on both farms; this fact is about the farm of each record.
+        await SetAuthoritiesAsync(FarmA, Mukadam, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney);
+        await SetAuthoritiesAsync(FarmB, Mukadam, FarmAuthority.SeeMoney, FarmAuthority.ReviewMoney);
         object Card(Guid farm, Guid plot, Guid? cycle) => new
         {
             farmId = farm,

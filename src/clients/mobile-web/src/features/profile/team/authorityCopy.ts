@@ -34,6 +34,10 @@ export interface AuthorityCopy {
     notInForce: string;
     /** fix pass 1 (M7) — why, one line per responsibility the server can say is not in force. */
     notInForceWhy: Partial<Record<string, string>>;
+    /** lane MU-1 - one line when a person may check money entries but not see wages: he cannot settle a payout. */
+    payoutNeedsWages: string;
+    /** lane MU-1 (D-70 option 2) - one line when the wages switch is on for a person who covers only chosen plots. */
+    dayWagesNotOnChosenPlots: string;
 }
 
 const mr: AuthorityCopy = {
@@ -66,7 +70,10 @@ const mr: AuthorityCopy = {
         EditFarmSetup: 'सर्व प्लॉट असतील तरच शेताची रचना बदलता येते.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
         SeeMoney: 'याला फक्त स्वतःच्या नोंदी दिसतात, म्हणून फक्त स्वतःचे पैसे दिसतात.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
         SeeWages: 'याला फक्त स्वतःच्या नोंदी दिसतात, म्हणून फक्त स्वतःची मजुरी दिसते.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
+        ReviewMoney: 'पैसे दिसत नसतील तर पैशांच्या नोंदी तपासता येत नाहीत.', // PROPOSED (Marathi) — lane MU-1 (MU-2 N-3)
     },
+    payoutNeedsWages: 'नोंदी तपासता येतील, पण "इतरांची मजुरी पाहणे" नसेल तर मजुरीचे पैसे देणं पूर्ण करता येणार नाही.', // PROPOSED (Marathi) — lane MU-1
+    dayWagesNotOnChosenPlots: 'निवडलेले प्लॉट असतील तर दिवसाच्या हिशोबाची मजुरी दिसत नाही; फक्त उक्ते कामाचे पैसे त्या प्लॉटचे दिसतात.', // PROPOSED (Marathi) — lane MU-1, D-70 option 2
 };
 
 const en: AuthorityCopy = {
@@ -99,7 +106,10 @@ const en: AuthorityCopy = {
         EditFarmSetup: 'Farm setup can be changed only with all plots.', // PROPOSED (English) — lane MU-4 fix pass 1
         SeeMoney: 'He sees only his own records, so only his own money shows.', // PROPOSED (English) — lane MU-4 fix pass 1
         SeeWages: 'He sees only his own records, so only his own wages show.', // PROPOSED (English) — lane MU-4 fix pass 1
+        ReviewMoney: 'Money entries cannot be checked where money is not seen.', // PROPOSED (English) — lane MU-1 (MU-2 N-3)
     },
+    payoutNeedsWages: "He can check entries, but without 'See other people's wages' he cannot complete a wage payout.", // PROPOSED (English) — lane MU-1
+    dayWagesNotOnChosenPlots: 'With chosen plots, day wages are not shown to him; only job-work money of those plots is.', // PROPOSED (English) — lane MU-1, D-70 option 2
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

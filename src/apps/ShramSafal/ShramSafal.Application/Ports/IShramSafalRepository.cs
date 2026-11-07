@@ -319,6 +319,19 @@ public interface IShramSafalRepository
         => Task.FromResult<IReadOnlyList<AuditEvent>>([]);
 
     /// <summary>
+    /// spec: plr-d10 lane MU-1 (PRV REVIEW-4 N-4) — the same read, BOUNDED: only rows from <paramref name="sinceUtc"/> on,
+    /// newest first, at most <paramref name="limit"/>. A screen's state is never derived from an unbounded read of an
+    /// append-only table. Default body: the unbounded read narrowed in memory (a test double); production overrides in SQL.
+    /// </summary>
+    async Task<IReadOnlyList<AuditEvent>> GetAuditEventsForFarmByActionsAsync(
+        Guid farmId, IReadOnlyCollection<string> actions, DateTime sinceUtc, int limit, CancellationToken ct = default)
+        => (await GetAuditEventsForFarmByActionsAsync(farmId, actions, ct))
+            .Where(a => a.OccurredAtUtc >= sinceUtc)
+            .OrderByDescending(a => a.OccurredAtUtc)
+            .Take(limit)
+            .ToList();
+
+    /// <summary>
     /// The farms whose data this user may read (the sync pull's farm list): owned, or an
     /// <c>Active</c> seat. spec plr-d7-m1-multiuser-2026-10-26 (step 1, BN-1): a
     /// PendingApproval request or a Suspended seat contributes no farm.

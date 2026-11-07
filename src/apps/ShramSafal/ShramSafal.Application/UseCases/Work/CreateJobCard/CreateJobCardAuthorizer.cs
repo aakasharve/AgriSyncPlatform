@@ -1,3 +1,4 @@
+using AgriSync.BuildingBlocks.Abstractions;
 using AgriSync.BuildingBlocks.Application.PipelineBehaviors;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -46,10 +47,17 @@ namespace ShramSafal.Application.UseCases.Work.CreateJobCard;
 public sealed class CreateJobCardAuthorizer : IAuthorizationCheck<CreateJobCardCommand>
 {
     private readonly IShramSafalRepository _repository;
+    private readonly IClock _clock;
 
-    public CreateJobCardAuthorizer(IShramSafalRepository repository)
+    public CreateJobCardAuthorizer(IShramSafalRepository repository, IClock? clock = null)
     {
         _repository = repository;
+        _clock = clock ?? new SystemClockFallback();
+    }
+
+    private sealed class SystemClockFallback : IClock
+    {
+        public DateTime UtcNow => DateTime.UtcNow;
     }
 
     public async Task<Result> AuthorizeAsync(CreateJobCardCommand command, CancellationToken ct)
@@ -62,14 +70,13 @@ public sealed class CreateJobCardAuthorizer : IAuthorizationCheck<CreateJobCardC
             return Result.Failure(ShramSafalErrors.Forbidden);
         }
 
-        if (!IsEligibleToCreate(role.Value))
+        // spec: plr-d10 lane MU-1 (register F95) - writing a rate needs ReviewMoney, not a label.
+        if (!await Services.FarmAuthorityGate.MayWriteRateAsync(
+                _repository, command.FarmId.Value, command.CallerUserId.Value, _clock.UtcNow, ct))
         {
             return Result.Failure(ShramSafalErrors.JobCardRoleNotAllowed);
         }
 
         return Result.Success();
     }
-
-    private static bool IsEligibleToCreate(AppRole role) =>
-        role is AppRole.PrimaryOwner or AppRole.SecondaryOwner or AppRole.Mukadam;
 }

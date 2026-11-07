@@ -13,6 +13,8 @@ export const toServiceProofLang = (language: string | null | undefined): Service
 
 export interface ServiceProofWords {
     title: string;
+    /** lane MU-1 (F99 review) - the one line under the title on the Reports page's door to this page. */
+    doorLine: string;
     notForThisSeat: string;
     intro: string;
     period: string;
@@ -34,6 +36,7 @@ export interface ServiceProofWords {
 export const SERVICE_PROOF_WORDS: Record<ServiceProofLang, ServiceProofWords> = {
     mr: {
         title: 'सेवेचा पुरावा',
+        doorLine: 'नियोजन, अंमलबजावणी आणि पडताळणी — सल्लागार नोंदीसाठी',
         notForThisSeat: 'ही सुविधा फक्त कृषितज्ज्ञ, सल्लागार आणि मुख्य मालकांसाठी आहे.',
         intro: 'काय ठरवलं, काय केलं आणि काय तपासलं — तुमच्या सल्ल्याच्या नोंदीसाठी एका अहवालात.',
         period: 'कालावधी',
@@ -53,6 +56,7 @@ export const SERVICE_PROOF_WORDS: Record<ServiceProofLang, ServiceProofWords> = 
     },
     en: {
         title: 'Service proof',
+        doorLine: 'Planning, doing and checking - for an advisory record',
         notForThisSeat: 'This is only for an agronomist, a consultant or the primary owner.',
         intro: 'What was planned, what was done and what was checked — in one report, for your advisory record.',
         period: 'Period',

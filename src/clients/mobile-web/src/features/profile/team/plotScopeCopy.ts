@@ -37,6 +37,8 @@ export interface PlotScopeCopy {
     presetDefaults: string;
     /** fix pass 1 (M7) — under a कामगार's row: the label fixes his own work; choosing plots still narrows where. */
     labelFixesOwnWork: string;
+    /** lane MU-1 (D-70 option 2) — on the हजेरी page of a seat on chosen plots: the day wages are not shown to him. */
+    dayWagesNote: string;
 }
 
 const mr: PlotScopeCopy = {
@@ -62,6 +64,7 @@ const mr: PlotScopeCopy = {
     costHint: 'आतापर्यंतचा हिशोब आणि खर्चाचा आलेख', // the overview's existing words
     presetDefaults: 'काम सांगणे: स्वतःचं काम · काम + हजेरी: सर्व प्लॉट', // PROPOSED (Marathi)
     labelFixesOwnWork: 'कामगार म्हणून फक्त स्वतःचं काम दिसतं. प्लॉट निवडले तर फक्त त्या प्लॉटवर नोंद करता येईल.', // PROPOSED (Marathi)
+    dayWagesNote: 'दिवसाच्या हिशोबाची मजुरी तुम्हाला दिसत नाही. उक्ते कामाचे पैसे तुमच्या प्लॉटचे दिसतात.', // PROPOSED (Marathi) - lane MU-1, D-70 option 2
 };
 
 const en: PlotScopeCopy = {
@@ -87,6 +90,7 @@ const en: PlotScopeCopy = {
     costHint: 'Totals so far and the spending chart', // PROPOSED (English) — lane MU-4 fix pass 1 (L5)
     presetDefaults: 'Tells work: own work · Work + attendance: all plots', // PROPOSED (English)
     labelFixesOwnWork: 'As a worker he sees only his own work. Choosing plots limits him to those plots.', // PROPOSED (English)
+    dayWagesNote: 'Day wages are not shown to you. Job-work money shows for your plots only.', // PROPOSED (English) - lane MU-1, D-70 option 2
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

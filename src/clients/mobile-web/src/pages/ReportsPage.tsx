@@ -19,6 +19,8 @@ import { AppRoute } from '../types';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { MoneyCategory } from '../features/finance/finance.types';
 import { useFarmContext } from '../core/session/FarmContext';
+import { useOptionalLanguage } from '../i18n/LanguageContext';
+import { SERVICE_PROOF_WORDS, toServiceProofLang } from '../i18n/serviceProofTranslations';
 import { MoneyPage } from '../features/finance/components/MoneyPage';
 import { CATEGORY_LABEL, FINANCE_TITLE, PERIOD_LABEL, entriesCount, periodFilters, rupees, type ReportPeriod } from '../features/finance/moneyLabels';
 import { ChoiceChips, GlassCard, RowLink, SectionHead, Tap } from '../shared/components/ui/placeUi';
@@ -39,6 +41,8 @@ const CAT_BAR: Record<MoneyCategory, string> = {
 const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate, onBack }) => {
     const [timeRange, setTimeRange] = useState<ReportPeriod>('THIS_MONTH');
     const { currentFarm } = useFarmContext();
+    // lane MU-1 (F99 review) - the door to the service proof speaks his language, Marathi or English, never both.
+    const proofWords = SERVICE_PROOF_WORDS[toServiceProofLang(useOptionalLanguage()?.language)];
     const canSeeServiceProof = currentFarm?.role === 'Agronomist' ||
         currentFarm?.role === 'Consultant' ||
         currentFarm?.role === 'PrimaryOwner';
@@ -137,7 +141,7 @@ const ReportsPage: React.FC<ReportsPageProps> = ({ currentRoute, onNavigate, onB
 
             {/* Service Proof — CEI Phase 3 §23.2, for the same three roles as before. */}
             {canSeeServiceProof && (
-                <RowLink icon={<FileCheck2 size={22} aria-hidden="true" />} tone="green" title="सेवेचा पुरावा" line="नियोजन, अंमलबजावणी आणि पडताळणी — सल्लागार नोंदीसाठी"
+                <RowLink icon={<FileCheck2 size={22} aria-hidden="true" />} tone="green" title={proofWords.title} line={proofWords.doorLine}
                     onClick={() => onNavigate('service-proof')} testId="report-service-proof" />
             )}
         </MoneyPage>

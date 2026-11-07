@@ -43,6 +43,15 @@ export interface MeFarm {
      * (`role`) grants none — the phone reads its doors from this, never from the label.
      */
     authorities?: MeAuthority[] | null;
+    /**
+     * spec: plr-d10 lane MU-1 (MU design §6) - ADDITIVE (absent from an older server): which plots this seat covers
+     * ("AllPlots" / "ChosenPlots" / "OwnWork"; the primary owner's always "AllPlots"; null for a seat not yet let in) and,
+     * for chosen plots, their names. The role band, the switcher rows and the relationship cards all read these.
+     */
+    plotScope?: 'AllPlots' | 'ChosenPlots' | 'OwnWork' | null;
+    plotNames?: string[] | null;
+    /** The label the owner chose on the invitation ("CoOwner" / "Family" / "Mukadam" / "Worker"); null = read the role. */
+    label?: string | null;
 }
 
 /** lane 2b — one authority the server says this seat holds, and when it ends. */

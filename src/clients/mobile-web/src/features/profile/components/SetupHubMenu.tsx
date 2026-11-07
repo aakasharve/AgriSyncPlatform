@@ -22,6 +22,9 @@ import FarmsSection from './FarmsSection';
 import { Chip, GlassCard, PageBar, RowLink, SANS, SectionHead, Tap } from '../../../shared/components/ui/placeUi';
 import { TEAM_COPY } from '../team/teamCopy';
 import { AppVersionRow } from '../../appUpdate/AppVersionRow';
+import { MyResponsibilities } from '../../relationships/MyResponsibilities';
+import { ownsNoFarm, switcherRows } from '../../relationships/relationshipModel';
+import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 
 export interface SetupHelp {
     what: string;
@@ -154,6 +157,8 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
     farmCode, onOpenTeam, teamViewOnly, teamRequestCount = 0, settingsItems, onSelectExtra, logout,
 }) => {
     const [showFarmSwitcher, setShowFarmSwitcher] = useState(false);
+    // spec: plr-d10 lane MU-1 - the same relationship read model (/me/context) feeds this sheet's rows as the header's.
+    const meContext = useOptionalFarmContext()?.meContext ?? null;
 
     // spec: owner-oversight-loop (Task 12) — all wired together, or the row does not render at all.
     const farmSwitcherReady = !!(farms && onSwitchFarm && onCreateFarm && onJoinViaQr);
@@ -183,6 +188,10 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                 </GlassCard>
 
                 {setupProgress && <ProgressCard p={setupProgress} onNext={() => setupProgress.nextId && onSelect(setupProgress.nextId)} />}
+
+                {/* spec: plr-d10 lane MU-1 - "माझी शेती व जबाबदाऱ्या": one card per relationship, from the one read model only. Not drawn for a
+                    single-farm primary owner with nothing waiting (Scenario A). */}
+                <MyResponsibilities />
 
                 {/* your farms — each a 7/12 holding; tap to open its own page (FarmsSection, unchanged) */}
                 {farms && farms.length > 0 && onOpenFarm && (
@@ -242,6 +251,9 @@ export const SetupHubMenu: React.FC<SetupHubMenuProps> = ({
                 <FarmSwitcherSheet
                     farms={farms}
                     currentFarmId={currentFarmId ?? farms[0]?.farmId ?? ''}
+                    rows={switcherRows(meContext, currentFarmId ?? farms[0]?.farmId, language)}
+                    ownsNoFarm={ownsNoFarm(meContext)}
+                    language={language}
                     onClose={() => setShowFarmSwitcher(false)}
                     onSwitch={(farmId) => {
                         onSwitchFarm(farmId);

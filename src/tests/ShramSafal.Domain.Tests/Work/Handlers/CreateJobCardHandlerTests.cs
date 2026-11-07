@@ -84,6 +84,33 @@ public sealed class CreateJobCardHandlerTests
         repo.SavedJobCards.Should().ContainSingle();
     }
 
+    // spec: plr-d10 lane MU-1 (F95) - writing a rate needs ReviewMoney (with see money); a label grants nothing.
+    [Theory]
+    [InlineData(AppRole.Mukadam, null)]
+    [InlineData(AppRole.SecondaryOwner, null)]
+    [InlineData(AppRole.Mukadam, FarmPermission.ReviewMoney)] // review money without see money is not held
+    [InlineData(AppRole.SecondaryOwner, FarmPermission.SeeMoney)]
+    public async Task CreateJobCard_without_review_money_is_refused_whatever_the_label(AppRole role, FarmPermission? stored)
+    {
+        var repo = new FakeRepo(MukadamGuid, role, stored);
+        var result = await new CreateJobCardHandler(repo, new SequentialIdGenerator(), new FixedClock(Now))
+            .HandleAsync(Command(cropCycleId: null));
+
+        result.IsFailure.Should().BeTrue();
+        result.Error.Code.Should().Contain("JobCardRoleNotAllowed");
+        repo.SavedJobCards.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CreateJobCard_the_primary_owner_label_holds_it_without_a_stored_choice()
+    {
+        var repo = new FakeRepo(MukadamGuid, AppRole.PrimaryOwner, stored: null);
+        var result = await new CreateJobCardHandler(repo, new SequentialIdGenerator(), new FixedClock(Now))
+            .HandleAsync(Command(cropCycleId: null));
+
+        result.IsSuccess.Should().BeTrue();
+    }
+
     // spec: plr-d10 lane F99 fix pass 1 (review F-9; E4) — the plot and the season must be the named farm's.
     [Fact]
     public async Task CreateJobCard_another_farms_plot_is_not_found()
@@ -152,8 +179,15 @@ public sealed class CreateJobCardHandlerTests
         public DateTime UtcNow { get; }
     }
 
-    private sealed class FakeRepo(Guid callerGuid, AppRole callerRole) : StubShramSafalRepository
+    private sealed class FakeRepo(Guid callerGuid, AppRole callerRole, FarmPermission? stored = FarmPermission.SeeMoney | FarmPermission.ReviewMoney) : StubShramSafalRepository
     {
+        // spec: plr-d10 lane MU-1 (F95) - the standing is the seat's stored authorities, never the label.
+        public override Task<ShramSafal.Application.Services.FarmAccess?> GetFarmAccessForUserAsync(
+            Guid farmId, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult<ShramSafal.Application.Services.FarmAccess?>(userId == callerGuid
+                ? new ShramSafal.Application.Services.FarmAccess(callerRole, MembershipStatus.Active, false, stored)
+                : null);
+
         public List<JobCard> SavedJobCards { get; } = [];
         public List<AuditEvent> AuditEvents { get; } = [];
 

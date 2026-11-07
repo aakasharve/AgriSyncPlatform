@@ -476,7 +476,10 @@ public sealed partial class PersonalInvitationRealPostgresTests
         await AssertAppRoleIsNotVacuousAsync();
 
         // An account's erasure (Ramesh, a login): every invitation naming his number, on every farm.
-        var onA = await SeedInvitationAsync(FarmA, "Withdrawn", JoinerPhone, createdDaysAgo: 3, endedDaysAgo: 2);
+        // MU-1 (MU-2 review N-5): seeded DECLINED - the old "Withdrawn" seed made the assertion unable to fail (a SQL that withdrew
+        // every matching row would still have passed). Its status AND its ended-at must come through unchanged.
+        var onA = await SeedInvitationAsync(FarmA, "Declined", JoinerPhone, createdDaysAgo: 3, endedDaysAgo: 2);
+        var onAEndedAt = await ScalarSuperuserAsync<DateTime>("SELECT ended_at_utc FROM ssf.farm_personal_invitations WHERE id = @id", ("id", onA));
         var onB = await SeedInvitationAsync(FarmB, "Waiting", JoinerPhone, createdDaysAgo: 1, endedDaysAgo: null);
         var someoneElse = await SeedInvitationAsync(FarmA, "Waiting", StrangerPhone, createdDaysAgo: 1, endedDaysAgo: null);
         await ExecSuperuserAsync("""
@@ -503,7 +506,9 @@ public sealed partial class PersonalInvitationRealPostgresTests
         // nameless live code; one that had already ended keeps its status; nobody else's is touched.
         (await StatusOfInvitationAsync(onB)).Should().Be("Withdrawn", "a waiting invitation for the erased person ends");
         (await StatusOfInvitationAsync(forWorker)).Should().Be("Withdrawn", "the worker's erasure ends his waiting invitation too");
-        (await StatusOfInvitationAsync(onA)).Should().Be("Withdrawn", "an invitation that had already ended keeps its status");
+        (await StatusOfInvitationAsync(onA)).Should().Be("Declined", "an invitation that had already ended keeps its status");
+        (await ScalarSuperuserAsync<DateTime>("SELECT ended_at_utc FROM ssf.farm_personal_invitations WHERE id = @id", ("id", onA)))
+            .Should().Be(onAEndedAt, "and its end is not moved");
         (await StatusOfInvitationAsync(someoneElse)).Should().Be("Waiting", "nobody else's invitation is touched");
     }
 

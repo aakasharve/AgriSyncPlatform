@@ -95,6 +95,21 @@ public static partial class MoneyMention
     }
 
     /// <summary>
+    /// spec: plr-d10 lane MU-1 fix round 1 (D-70 option 2; review MEDIUM-2) - does a VOICE PARSE (the AI job's result) mention
+    /// money? <see cref="InDocument"/> knows the amount keys (<c>totalCost</c> among them) and the money words, but not a labour
+    /// row's stated <c>rate</c> or <c>wagePerPerson</c> - a day wage with no rupee word ("5 workers, rate 400"). Those count
+    /// here, on the parse's own <c>labour</c> rows only (a <c>rate</c> elsewhere is not a wage).
+    /// </summary>
+    public static bool InParse(JsonElement root) =>
+        InDocument(root)
+        || (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("labour", out var labour)
+            && labour.ValueKind == JsonValueKind.Array
+            && labour.EnumerateArray().Any(row => row.ValueKind == JsonValueKind.Object
+                && ((row.TryGetProperty("rate", out var rate) && IsAmount(rate))
+                    || (row.TryGetProperty("wagePerPerson", out var wage) && IsAmount(wage)))));
+
+    /// <summary>
     /// Are the words and voice of <paramref name="original"/> withheld from this reader for money (D-66; fix 2 N4 =
     /// D-67)? Yes when he did not make the record, does not see WAGES there (see wages needs see money, so every seat
     /// without see money is caught too; no scope at all fails closed), and the record mentions money — his words may
@@ -108,8 +123,11 @@ public static partial class MoneyMention
             && InRecord(original);
     }
 
-    /// <summary>D-67 — may this seat hear the words of a record that mentions money? Only with see wages.</summary>
-    public static bool HearsMoneyWords(FarmReadScope? scope) => scope?.SeeWages == true;
+    /// <summary>
+    /// D-67 — may this seat hear the words of a record that mentions money? Only with see wages. lane MU-1 (D-70 option 2,
+    /// F124): and not on chosen plots, where no day wage may be read and a spoken one can be in the words.
+    /// </summary>
+    public static bool HearsMoneyWords(FarmReadScope? scope) => scope?.SeeDayWages == true;
 
     private static bool IsAmount(JsonElement value) => value.ValueKind switch
     {

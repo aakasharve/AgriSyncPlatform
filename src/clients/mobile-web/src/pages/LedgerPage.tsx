@@ -33,6 +33,7 @@ import {
 import { Chip, ChoiceChips, GlassCard, IconDot, Tap, type Tone } from '../shared/components/ui/placeUi';
 import { AudienceLockChip, AudienceRow } from '../features/recordAudience/AudienceRow';
 import { RuleNotCountedNote } from '../features/recordAudience/RuleNotCountedNote';
+import { PlotsOnlyNote } from '../features/relationships/PlotsOnlyNote';
 import { useMoneyAudiences } from '../features/recordAudience/useMoneyAudiences';
 
 interface LedgerPageProps {
@@ -116,6 +117,8 @@ const LedgerPage: React.FC<LedgerPageProps> = ({ currentRoute, onNavigate, onBac
                 <GlassCard testId="ledger-in"><p className="m-0 text-[13px] font-bold text-stone-600">जमा</p><p className="m-0 text-[22px] font-extrabold text-emerald-800">{rupees(totalIncome)}</p></GlassCard>
                 <GlassCard testId="ledger-out"><p className="m-0 text-[13px] font-bold text-stone-600">खर्च</p><p className="m-0 text-[22px] font-extrabold text-stone-900">{rupees(totalExpense)}</p></GlassCard>
             </div>
+            {/* lane MU-1 (R3-L2) — a chosen-plots seat's totals are his plots' only, and say so. */}
+            <PlotsOnlyNote testId="ledger-plots-only" />
             {/* lane PRV (W4) — the totals above count only the money records he may see; say so when one is left out. */}
             {filterType !== 'LabourPayouts' && (
                 <RuleNotCountedNote kind="money" farmIds={shownFarmIds.length > 0 ? shownFarmIds : undefined} testId="ledger-not-counted" />
