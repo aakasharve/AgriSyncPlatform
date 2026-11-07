@@ -40,6 +40,15 @@ public sealed class AllocateGlobalExpenseHandler(
             return Result.Failure<DayLedgerDto>(ShramSafalErrors.CostEntryNotFound);
         }
 
+        // spec: plr-d10 lane BILL-1 add-on (re-review 2, N1) — THE place rule the read side uses, for every seat it narrows: an
+        // own-records seat (स्वतःचं काम, कामगार) holding review money splits only its own money, a chosen-plots seat only money it
+        // may see (REST too: the push's shared gate covers only the push). Asked first, before any amount is read or an earlier
+        // split is handed back: a bill his pull never sends him is not there, exactly as a bill of another farm.
+        if (await CostEntryPlaceGate.HiddenFromAsync(repository, costEntry, command.CreatedByUserId, clock.UtcNow, ct))
+        {
+            return Result.Failure<DayLedgerDto>(ShramSafalErrors.CostEntryNotFound);
+        }
+
         // spec: plr-d10 lane PRV fix pass 1 (H2) — a money record kept from him is not his to share out.
         if (!await Services.RecordAudienceGate.MaySeeCostAsync(repository, costEntry, command.CreatedByUserId, clock.UtcNow, ct))
         {
