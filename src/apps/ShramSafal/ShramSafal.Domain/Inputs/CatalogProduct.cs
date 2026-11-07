@@ -1,12 +1,15 @@
 // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT1, Task 1)
 namespace ShramSafal.Domain.Inputs;
 
-/// <summary>One product of the input catalogue (<c>sync-contract/reference/inputs/catalog.json</c>,
-/// version <c>inputs-1</c>). Facts only, read from the founder's dosage guide: names, ingredients and
-/// their %, form, brand, company, category, modes, methods, stages, targets and NPK grade, plus the
-/// guide line they came from. Never the guide's prose (D-97). Mirrors the JSON <c>Product</c> shape.
-/// <see cref="IngredientUnknown"/> is true when the guide names only a brand (no ingredient is
-/// invented); <see cref="Company"/> holds a company the guide prints with no brand name.</summary>
+/// <summary>One product of ShramSafal's input library (<c>sync-contract/reference/inputs/catalog.json</c>,
+/// version <c>inputs-2</c>). The library holds the facts ShramSafal describes for every input: names,
+/// ingredients and their %, form, brand, company, category, modes, methods, stages, targets and NPK grade.
+/// It lists its sources (<see cref="CatalogSource"/>; the founder's dosage guide is source 1) and each
+/// product points back at them through <see cref="SourceRefs"/>. Facts only, never a source's prose
+/// (D-97). <see cref="Id"/> is ShramSafal's own (<c>p-...</c>), written once as data; no source owns an id.
+/// Mirrors the JSON <c>Product</c> shape. <see cref="IngredientUnknown"/> is true when a source names only
+/// a brand (no ingredient is invented); <see cref="Company"/> holds a company a source prints with no
+/// brand name.</summary>
 public sealed record CatalogProduct(
     string Id,
     string Category,
@@ -20,11 +23,20 @@ public sealed record CatalogProduct(
     string? NpkGrade,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Aliases,
-    int GuideLine,
+    IReadOnlyList<CatalogSourceRef> SourceRefs,
     IReadOnlyList<CatalogBenefit> Benefits,
     bool IngredientUnknown = false,
     string? Company = null,
     string? CompanyMr = null);
+
+/// <summary>A source the library lists (<c>agro-dosage-guide-en</c> is source 1). <see cref="Kind"/> is
+/// <c>guide</c>, <c>company-list</c>, <c>university</c> or <c>label</c>; <see cref="CheckedBy"/> is null until
+/// someone has checked the source.</summary>
+public sealed record CatalogSource(string Id, string Title, string Kind, string ReceivedOn, string? CheckedBy);
+
+/// <summary>Where a product came from: a listed source and the place in it (<c>line 38</c>). <see cref="Entry"/>
+/// is the source's own entry id, kept for traceability only.</summary>
+public sealed record CatalogSourceRef(string Source, string Ref, string? Entry = null);
 
 /// <summary>An active ingredient: its English and Marathi name and its strength as printed.</summary>
 public sealed record CatalogIngredient(string? En, string? Mr, string? Pct, string? PctMr = null);
@@ -32,7 +44,7 @@ public sealed record CatalogIngredient(string? En, string? Mr, string? Pct, stri
 /// <summary>The formulation code (sc, ec, wg …) and its Marathi spelling.</summary>
 public sealed record CatalogFormulation(string Code, string? Mr);
 
-/// <summary>A brand the guide lists for the product, with its company. <see cref="En"/> is never
+/// <summary>A brand the library lists for the product, with its company. <see cref="En"/> is never
 /// empty in the catalogue (a data test pins it).</summary>
 public sealed record CatalogBrand(string? En, string? Mr, string? Company, string? CompanyMr);
 

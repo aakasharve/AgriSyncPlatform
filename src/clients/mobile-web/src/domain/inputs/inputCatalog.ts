@@ -24,8 +24,10 @@
  * `nonMatchingWords` (a common English or Marathi word also printed as a brand, such as "root" or
  * "double") is `notFound`, so he gets the photo option. The brand still shows on its product card.
  *
- * The catalogue facts come from the founder's dosage guide (facts only, D-97); it ships with the app,
- * so matching works offline. Pure: it never changes what he said (P7).
+ * The library holds the facts ShramSafal describes for every input and lists its sources (the founder's
+ * dosage guide is source 1); facts only, never a source's prose (D-97). Product ids are ShramSafal's own
+ * (`p-...`), written once as data. It ships with the app, so matching works offline. `loadLibrary()` is the
+ * ONE place the library is read; nothing else imports the JSON. Pure: it never changes what he said (P7).
  */
 import catalogJson from './generated/catalog.json';
 
@@ -58,17 +60,34 @@ export interface CatalogBenefit {
     checkedBy: string | null;
 }
 
+/** A source the library lists ('agro-dosage-guide-en' is source 1). */
+export interface CatalogSource {
+    id: string;
+    title: string;
+    kind: 'guide' | 'company-list' | 'university' | 'label';
+    receivedOn: string;
+    checkedBy: string | null;
+}
+
+/** Where a product came from: a listed source and the place in it ('line 38'); `entry` is the source's own id, traceability only. */
+export interface CatalogSourceRef {
+    /** The id of a source listed in `CATALOG_SOURCES`. */
+    source: string;
+    ref: string;
+    entry?: string;
+}
+
 export type ProductCategory = 'insecticide' | 'fungicide' | 'herbicide' | 'pgr' | 'fertilizer';
 
 export interface CatalogProduct {
     id: string;
     category: ProductCategory;
     activeIngredients: CatalogIngredient[];
-    /** True when the guide names only a brand: no ingredient is invented (review B009). */
+    /** True when a source names only a brand: no ingredient is invented (review B009). */
     ingredientUnknown?: boolean;
     formulation: CatalogFormulation | null;
     brands: CatalogBrand[];
-    /** A company the guide prints with no brand name (review B010). */
+    /** A company a source prints with no brand name (review B010). */
     company?: string | null;
     companyMr?: string | null;
     modes: string[];
@@ -78,13 +97,14 @@ export interface CatalogProduct {
     npkGrade: string | null;
     tags: string[];
     aliases: string[];
-    guideLine: number;
+    sourceRefs: CatalogSourceRef[];
     benefits: CatalogBenefit[];
 }
 
 export interface CatalogFile {
     version: string;
-    source: string;
+    /** The sources that filled the library (the guide is source 1). */
+    sources: CatalogSource[];
     /** Common English / Marathi words also printed as brands; a spoken name equal to one never matches. */
     nonMatchingWords?: string[];
     products: CatalogProduct[];
@@ -98,10 +118,18 @@ export interface ProductMatch {
     candidateIds: string[];
 }
 
-const catalog = catalogJson as unknown as CatalogFile;
+/** THE LOADER SEAM: the one function that returns the parsed library. Today the bundled JSON; a later lane swaps only this. */
+function loadLibrary(): CatalogFile {
+    return catalogJson as unknown as CatalogFile;
+}
 
-/** The catalogue version (`inputs-1`), stored with every identity answer. */
+const catalog = loadLibrary();
+
+/** The catalogue version (`inputs-2`), stored with every identity answer. */
 export const CATALOG_VERSION: string = catalog.version;
+
+/** The sources the library lists (the founder's dosage guide is source 1). */
+export const CATALOG_SOURCES: readonly CatalogSource[] = catalog.sources;
 
 /** Every product, in catalogue order. */
 export const CATALOG_PRODUCTS: readonly CatalogProduct[] = catalog.products;

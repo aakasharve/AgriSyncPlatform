@@ -1,6 +1,14 @@
 {
-  "version": "inputs-1",
-  "source": "Agro Dosage Guide (English), 309 pp., founder copy",
+  "version": "inputs-2",
+  "sources": [
+    {
+      "id": "agro-dosage-guide-en",
+      "title": "Agro Dosage Guide (English), 309 pp., founder copy",
+      "kind": "guide",
+      "receivedOn": "2026-11-06",
+      "checkedBy": null
+    }
+  ],
   "nonMatchingWords": [
     "activated",
     "black",
@@ -14,7 +22,7 @@
   ],
   "products": [
     {
-      "id": "g001",
+      "id": "p-abamectin-1-9-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -58,11 +66,17 @@
         "abacin",
         "miticide"
       ],
-      "guideLine": 38,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 38",
+          "entry": "g001"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g002",
+      "id": "p-acephate-50-imidacloprid-1-8-sp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -117,11 +131,17 @@
         "lancer gold",
         "starthene power"
       ],
-      "guideLine": 55,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 55",
+          "entry": "g002"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g003",
+      "id": "p-acephate-75-sp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -169,11 +189,17 @@
         "acemain",
         "asataf"
       ],
-      "guideLine": 71,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 71",
+          "entry": "g003"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g004",
+      "id": "p-acephate-95-sg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -213,11 +239,17 @@
       "aliases": [
         "hunk"
       ],
-      "guideLine": 82,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 82",
+          "entry": "g004"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g005",
+      "id": "p-acequinocyl-15-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -251,11 +283,17 @@
       "aliases": [
         "mahindra summit"
       ],
-      "guideLine": 98,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 98",
+          "entry": "g005"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g006",
+      "id": "p-acetamiprid-20-sp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -322,11 +360,17 @@
         "sharp",
         "tagride"
       ],
-      "guideLine": 109,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 109",
+          "entry": "g006"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g007",
+      "id": "p-acetamiprid-25-bifenthrin-25-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -379,11 +423,17 @@
         "argyle",
         "sperto"
       ],
-      "guideLine": 124,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 124",
+          "entry": "g007"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g008",
+      "id": "p-alphamethrin-10-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -429,11 +479,17 @@
         "alphaguard",
         "stop"
       ],
-      "guideLine": 137,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 137",
+          "entry": "g008"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g009",
+      "id": "p-beta-cyfluthrin-8-49-imidacloprid-19-81-od",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -482,11 +538,17 @@
       "aliases": [
         "soloman"
       ],
-      "guideLine": 154,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 154",
+          "entry": "g009"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g010",
+      "id": "p-bifenthrin-8-clothianidin-10-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -530,11 +592,17 @@
       "aliases": [
         "fmc talstar plus"
       ],
-      "guideLine": 166,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 166",
+          "entry": "g010"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g011",
+      "id": "p-bifenthrin-10-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -570,11 +638,17 @@
       "aliases": [
         "fmc talstar"
       ],
-      "guideLine": 177,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 177",
+          "entry": "g011"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g012",
+      "id": "p-broflanilide-20-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -615,11 +689,17 @@
         "alecto",
         "brofreya"
       ],
-      "guideLine": 188,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 188",
+          "entry": "g012"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g013",
+      "id": "p-buprofezin-25-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -660,11 +740,17 @@
       "aliases": [
         "applaud"
       ],
-      "guideLine": 199,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 199",
+          "entry": "g013"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g014",
+      "id": "p-buprofezin-15-acephate-35-wp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -712,11 +798,17 @@
         "piranha",
         "tapuz"
       ],
-      "guideLine": 210,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 210",
+          "entry": "g014"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g015",
+      "id": "p-carbofuran-3",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -756,11 +848,17 @@
         "carbomain",
         "fury"
       ],
-      "guideLine": 221,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 221",
+          "entry": "g015"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g016",
+      "id": "p-carbosulfan-25-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -797,11 +895,17 @@
       "aliases": [
         "marshal"
       ],
-      "guideLine": 232,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 232",
+          "entry": "g016"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g017",
+      "id": "p-carbosulfan-25-ds",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -833,11 +937,17 @@
       "aliases": [
         "advantage"
       ],
-      "guideLine": 243,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 243",
+          "entry": "g017"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g018",
+      "id": "p-cartap-hydrochloride-7-5-emamectin-benzoate-0-25-gr",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -876,11 +986,17 @@
       "aliases": [
         "barroz"
       ],
-      "guideLine": 255,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 255",
+          "entry": "g018"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g019",
+      "id": "p-chlorantraniliprole-0-4-gr",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -926,11 +1042,17 @@
         "mission",
         "tag agent"
       ],
-      "guideLine": 266,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 266",
+          "entry": "g019"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g020",
+      "id": "p-chlorantraniliprole-18-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -982,11 +1104,17 @@
         "coragen",
         "tag zen"
       ],
-      "guideLine": 277,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 277",
+          "entry": "g020"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g021",
+      "id": "p-chlorantraniliprole-8-8-thiamethoxam-17-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1029,11 +1157,17 @@
       "aliases": [
         "voliam flexi"
       ],
-      "guideLine": 292,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 292",
+          "entry": "g021"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g022",
+      "id": "p-cartap-hydrochloride-50-sp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1074,11 +1208,17 @@
       "aliases": [
         "caldan"
       ],
-      "guideLine": 303,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 303",
+          "entry": "g022"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g023",
+      "id": "p-chlorantraniliprole-9-3-lambda-cyhalothrin-4-6-zc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1120,11 +1260,17 @@
       "aliases": [
         "ampligo"
       ],
-      "guideLine": 317,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 317",
+          "entry": "g023"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g024",
+      "id": "p-chlorpyrifos-50-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1171,11 +1317,17 @@
         "lethal super 505",
         "predator"
       ],
-      "guideLine": 328,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 328",
+          "entry": "g024"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g025",
+      "id": "p-chlorpyrifos-75-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1215,11 +1367,17 @@
       "aliases": [
         "chlocaps"
       ],
-      "guideLine": 340,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 340",
+          "entry": "g025"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g026",
+      "id": "p-chlorpyriphos-1-5-dp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1257,11 +1415,17 @@
         "(hpm) hindol",
         "hindol"
       ],
-      "guideLine": 349,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 349",
+          "entry": "g026"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g027",
+      "id": "p-chlorpyriphos-20-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1299,11 +1463,17 @@
       "aliases": [
         "lethal"
       ],
-      "guideLine": 360,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 360",
+          "entry": "g027"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g028",
+      "id": "p-chlorpyriphos-50-cypermethrin-5-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1348,11 +1518,17 @@
       "aliases": [
         "cannon"
       ],
-      "guideLine": 371,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 371",
+          "entry": "g028"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g029",
+      "id": "p-clothianidin-50-wdg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1396,11 +1572,17 @@
       "aliases": [
         "dantotsu"
       ],
-      "guideLine": 382,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 382",
+          "entry": "g029"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g030",
+      "id": "p-cyantraniliprole-10-26-od",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1436,11 +1618,17 @@
       "aliases": [
         "benevia"
       ],
-      "guideLine": 394,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 394",
+          "entry": "g030"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g031",
+      "id": "p-cyclaniliprole-10",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1477,11 +1665,17 @@
         "(pi) pressedo",
         "pressedo"
       ],
-      "guideLine": 405,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 405",
+          "entry": "g031"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g032",
+      "id": "p-cyenopyrafen-30-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1516,11 +1710,17 @@
       "aliases": [
         "kunoichi"
       ],
-      "guideLine": 416,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 416",
+          "entry": "g032"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g033",
+      "id": "p-cypermethrin-25-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1573,11 +1773,17 @@
         "cymbush",
         "superkiller-25"
       ],
-      "guideLine": 426,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 426",
+          "entry": "g033"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g034",
+      "id": "p-cypermethrin-3-quinalphos-20-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1619,11 +1825,17 @@
       "aliases": [
         "viraat"
       ],
-      "guideLine": 437,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 437",
+          "entry": "g034"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g035",
+      "id": "p-deltamethrin-1-25",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1652,11 +1864,17 @@
       "aliases": [
         "del"
       ],
-      "guideLine": 448,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 448",
+          "entry": "g035"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g036",
+      "id": "p-deltamethrin-11-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1695,11 +1913,17 @@
       "aliases": [
         "decis100"
       ],
-      "guideLine": 465,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 465",
+          "entry": "g036"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g037",
+      "id": "p-deltamethrin-2-8-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1739,11 +1963,17 @@
       "aliases": [
         "decis"
       ],
-      "guideLine": 478,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 478",
+          "entry": "g037"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g038",
+      "id": "p-diafenthiuron-40-spinetoram-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1787,11 +2017,17 @@
         "(adama) trassid",
         "trassid"
       ],
-      "guideLine": 493,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 493",
+          "entry": "g038"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g039",
+      "id": "p-diafenthiuron-50-wp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1832,11 +2068,17 @@
       "aliases": [
         "pegasus"
       ],
-      "guideLine": 502,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 502",
+          "entry": "g039"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g040",
+      "id": "p-dimethoate-30-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1879,11 +2121,17 @@
       "aliases": [
         "rogor"
       ],
-      "guideLine": 514,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 514",
+          "entry": "g040"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g041",
+      "id": "p-dinotefuran-15-pymetrozine-45-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1924,11 +2172,17 @@
         "(best agrolife) axeman",
         "axeman"
       ],
-      "guideLine": 527,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 527",
+          "entry": "g041"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g042",
+      "id": "p-dinotefuran-70-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -1965,11 +2219,17 @@
       "aliases": [
         "osheen ultra"
       ],
-      "guideLine": 538,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 538",
+          "entry": "g042"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g043",
+      "id": "p-emamectin-benzoate-1-5-fipronil-3-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2020,11 +2280,17 @@
         "apex",
         "empala"
       ],
-      "guideLine": 555,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 555",
+          "entry": "g043"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g044",
+      "id": "p-emamectin-benzoate-1-5-profenofos-35-wdg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2067,11 +2333,17 @@
       "aliases": [
         "velektin"
       ],
-      "guideLine": 567,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 567",
+          "entry": "g044"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g045",
+      "id": "p-emamectin-benzoate-1-9-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2112,11 +2384,17 @@
       "aliases": [
         "emazek"
       ],
-      "guideLine": 578,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 578",
+          "entry": "g045"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g046",
+      "id": "p-emamectin-benzoate-3-thiamethoxam-12-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2162,11 +2440,17 @@
       "aliases": [
         "emoxam"
       ],
-      "guideLine": 591,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 591",
+          "entry": "g046"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g047",
+      "id": "p-emamectin-benzoate-5-sg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2221,11 +2505,17 @@
         "proclaim",
         "xplode"
       ],
-      "guideLine": 603,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 603",
+          "entry": "g047"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g048",
+      "id": "p-ethion-50-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2262,11 +2552,17 @@
       "aliases": [
         "fosmite"
       ],
-      "guideLine": 620,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 620",
+          "entry": "g048"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g049",
+      "id": "p-ethiprole-10-7-pymetrozine-40-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2310,11 +2606,17 @@
       "aliases": [
         "curbix pro"
       ],
-      "guideLine": 632,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 632",
+          "entry": "g049"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g050",
+      "id": "p-etofenprox-6-diafenthiuron-25-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2358,11 +2660,17 @@
       "aliases": [
         "decide"
       ],
-      "guideLine": 644,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 644",
+          "entry": "g050"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g051",
+      "id": "p-fenobucarb-50-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2404,11 +2712,17 @@
       "aliases": [
         "feno-50"
       ],
-      "guideLine": 655,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 655",
+          "entry": "g051"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g052",
+      "id": "p-fenobucarb-50-ec-2",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2455,11 +2769,17 @@
         "blast",
         "ebs feno-50"
       ],
-      "guideLine": 667,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 667",
+          "entry": "g052"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g053",
+      "id": "p-fenpropathrin-10-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2495,11 +2815,17 @@
       "aliases": [
         "danitol"
       ],
-      "guideLine": 679,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 679",
+          "entry": "g053"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g054",
+      "id": "p-fenpropathrin-30-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2541,11 +2867,17 @@
       "aliases": [
         "meothrin"
       ],
-      "guideLine": 690,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 690",
+          "entry": "g054"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g055",
+      "id": "p-fenpyroximate-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2580,11 +2912,17 @@
       "aliases": [
         "sedna"
       ],
-      "guideLine": 701,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 701",
+          "entry": "g055"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g056",
+      "id": "p-fenvalerate-0-4-dp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2622,11 +2960,17 @@
       "aliases": [
         "multiplex nagfen-d"
       ],
-      "guideLine": 712,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 712",
+          "entry": "g056"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g057",
+      "id": "p-fenvalerate-20-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2664,11 +3008,17 @@
       "aliases": [
         "fenval"
       ],
-      "guideLine": 723,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 723",
+          "entry": "g057"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g058",
+      "id": "p-fipronil-0-6-gr",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2705,11 +3055,17 @@
       "aliases": [
         "regent ultra"
       ],
-      "guideLine": 734,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 734",
+          "entry": "g058"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g059",
+      "id": "p-fipronil-10-diafenthiuron-30-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2751,11 +3107,17 @@
       "aliases": [
         "guru"
       ],
-      "guideLine": 745,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 745",
+          "entry": "g059"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g060",
+      "id": "p-fipronil-15-chlorantraniliprole-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2799,11 +3161,17 @@
       "aliases": [
         "centran sc"
       ],
-      "guideLine": 754,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 754",
+          "entry": "g060"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g061",
+      "id": "p-fipronil-15-imidacloprid-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2848,11 +3216,17 @@
       "aliases": [
         "bakeel"
       ],
-      "guideLine": 768,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 768",
+          "entry": "g061"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g062",
+      "id": "p-fipronil-40-imidacloprid-40-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2909,11 +3283,17 @@
         "lesenta",
         "velma 80"
       ],
-      "guideLine": 779,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 779",
+          "entry": "g062"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g063",
+      "id": "p-fipronil-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -2965,11 +3345,17 @@
         "agadi sc",
         "sonic"
       ],
-      "guideLine": 793,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 793",
+          "entry": "g063"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g064",
+      "id": "p-fipronil-80-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3008,11 +3394,17 @@
       "aliases": [
         "jump"
       ],
-      "guideLine": 804,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 804",
+          "entry": "g064"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g065",
+      "id": "p-flonicamid-50-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3051,11 +3443,17 @@
       "aliases": [
         "ulala"
       ],
-      "guideLine": 815,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 815",
+          "entry": "g065"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g066",
+      "id": "p-flubendiamide-20-wdg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3091,11 +3489,17 @@
       "aliases": [
         "takumi"
       ],
-      "guideLine": 826,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 826",
+          "entry": "g066"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g067",
+      "id": "p-flubendiamide-39-35-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3133,11 +3537,17 @@
       "aliases": [
         "fame"
       ],
-      "guideLine": 837,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 837",
+          "entry": "g067"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g068",
+      "id": "p-flubendiamide-90-deltamethrin-60-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3179,11 +3589,17 @@
       "aliases": [
         "fenos quick"
       ],
-      "guideLine": 849,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 849",
+          "entry": "g068"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g069",
+      "id": "p-fluopyrum-34-48-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3217,11 +3633,17 @@
       "aliases": [
         "velum prime"
       ],
-      "guideLine": 860,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 860",
+          "entry": "g069"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g070",
+      "id": "p-flupyradifurone-17-09-sl",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3256,11 +3678,17 @@
       "aliases": [
         "sivanto prime"
       ],
-      "guideLine": 871,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 871",
+          "entry": "g070"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g071",
+      "id": "p-fluxametamide-10-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3304,11 +3732,17 @@
         "gracia",
         "shinwa"
       ],
-      "guideLine": 882,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 882",
+          "entry": "g071"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g072",
+      "id": "p-hexythiazox-5-45-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3352,11 +3786,17 @@
         "k-mite",
         "maiden"
       ],
-      "guideLine": 891,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 891",
+          "entry": "g072"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g073",
+      "id": "p-imidacloprid-0-3-gr",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3397,11 +3837,17 @@
         "rudra",
         "sena"
       ],
-      "guideLine": 902,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 902",
+          "entry": "g073"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g074",
+      "id": "p-imidacloprid-17-8-sl",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3450,11 +3896,17 @@
         "confidor",
         "hotshot"
       ],
-      "guideLine": 913,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 913",
+          "entry": "g074"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g075",
+      "id": "p-imidacloprid-30-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3491,11 +3943,17 @@
       "aliases": [
         "confidor super"
       ],
-      "guideLine": 925,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 925",
+          "entry": "g075"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g076",
+      "id": "p-imidacloprid-48-fs",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3535,11 +3993,17 @@
       "aliases": [
         "gaucho"
       ],
-      "guideLine": 936,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 936",
+          "entry": "g076"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g077",
+      "id": "p-imidacloprid-6-lambda-cyhalothrin-4-sl",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3579,11 +4043,17 @@
       "aliases": [
         "inovexia"
       ],
-      "guideLine": 947,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 947",
+          "entry": "g077"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g078",
+      "id": "p-imidacloprid-70-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3622,11 +4092,17 @@
       "aliases": [
         "admire"
       ],
-      "guideLine": 958,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 958",
+          "entry": "g078"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g079",
+      "id": "p-indoxacarb-10-thiamethoxam-10-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3672,11 +4148,17 @@
       "aliases": [
         "firrangi"
       ],
-      "guideLine": 969,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 969",
+          "entry": "g079"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g080",
+      "id": "p-indoxacarb-14-5-acetamiprid-7-7-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3720,11 +4202,17 @@
       "aliases": [
         "kite"
       ],
-      "guideLine": 980,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 980",
+          "entry": "g080"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g081",
+      "id": "p-indoxacarb-14-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3760,11 +4248,17 @@
       "aliases": [
         "king doxa"
       ],
-      "guideLine": 991,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 991",
+          "entry": "g081"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g082",
+      "id": "p-indoxacarb-5-fipronil-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3809,11 +4303,17 @@
       "aliases": [
         "black"
       ],
-      "guideLine": 1004,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1004",
+          "entry": "g082"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g083",
+      "id": "p-isocycloseram-18-1-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3851,11 +4351,17 @@
       "aliases": [
         "incipio"
       ],
-      "guideLine": 1015,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1015",
+          "entry": "g083"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g084",
+      "id": "p-isocycloseram-9-2-isocycloseram-10",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3897,11 +4403,17 @@
       "aliases": [
         "simodis"
       ],
-      "guideLine": 1024,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1024",
+          "entry": "g084"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g085",
+      "id": "p-lambda-cyhalothrin-10-wp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3935,11 +4447,17 @@
       "aliases": [
         "sentry"
       ],
-      "guideLine": 1036,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1036",
+          "entry": "g085"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g086",
+      "id": "p-lambda-cyhalothrin-4-9-cs",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -3979,11 +4497,17 @@
       "aliases": [
         "vadh cs"
       ],
-      "guideLine": 1049,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1049",
+          "entry": "g086"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g087",
+      "id": "p-lambda-cyhalothrin-5-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4027,11 +4551,17 @@
         "karate",
         "tag command"
       ],
-      "guideLine": 1060,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1060",
+          "entry": "g087"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g088",
+      "id": "p-malathion-50-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4072,11 +4602,17 @@
       "aliases": [
         "cythion"
       ],
-      "guideLine": 1071,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1071",
+          "entry": "g088"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g089",
+      "id": "p-metaldehyde-2-5",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4107,11 +4643,17 @@
       "aliases": [
         "snailkill"
       ],
-      "guideLine": 1083,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1083",
+          "entry": "g089"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g090",
+      "id": "p-methoxyfenozide-20-chlorantraniliprole-5",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4150,11 +4692,17 @@
       "aliases": [
         "liger"
       ],
-      "guideLine": 1094,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1094",
+          "entry": "g090"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g091",
+      "id": "p-profenofos-40-cypermethrin-4-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4194,11 +4742,17 @@
       "aliases": [
         "roket"
       ],
-      "guideLine": 1105,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1105",
+          "entry": "g091"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g092",
+      "id": "p-phenthoate-50-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4234,11 +4788,17 @@
       "aliases": [
         "phendal"
       ],
-      "guideLine": 1116,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1116",
+          "entry": "g092"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g093",
+      "id": "p-permethrin-25-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4273,11 +4833,17 @@
       "aliases": [
         "pixel"
       ],
-      "guideLine": 1127,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1127",
+          "entry": "g093"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g094",
+      "id": "p-profenofos-40-fenpyroximate-2-5-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4318,11 +4884,17 @@
       "aliases": [
         "excel etna"
       ],
-      "guideLine": 1138,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1138",
+          "entry": "g094"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g095",
+      "id": "p-prefenophos-50-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4356,11 +4928,17 @@
       "aliases": [
         "curacron"
       ],
-      "guideLine": 1149,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1149",
+          "entry": "g095"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g096",
+      "id": "p-propargite-57-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4392,11 +4970,17 @@
       "aliases": [
         "omite"
       ],
-      "guideLine": 1160,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1160",
+          "entry": "g096"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g097",
+      "id": "p-propargite-50-bifenthrin-5-se",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4438,11 +5022,17 @@
       "aliases": [
         "brigade power"
       ],
-      "guideLine": 1171,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1171",
+          "entry": "g097"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g098",
+      "id": "p-propargite-42-hexythiazox-2",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4480,11 +5070,17 @@
       "aliases": [
         "ceasemite"
       ],
-      "guideLine": 1182,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1182",
+          "entry": "g098"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g099",
+      "id": "p-pymetrozine-50-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4530,11 +5126,17 @@
         "across x",
         "chess"
       ],
-      "guideLine": 1193,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1193",
+          "entry": "g099"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g100",
+      "id": "p-pyraclostrobin-10-fipronil-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4582,11 +5184,17 @@
       "aliases": [
         "joker"
       ],
-      "guideLine": 1202,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1202",
+          "entry": "g100"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g101",
+      "id": "p-pyridaben-20-wp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4623,11 +5231,17 @@
       "aliases": [
         "hanabi"
       ],
-      "guideLine": 1213,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1213",
+          "entry": "g101"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g102",
+      "id": "p-pyrifluquinazon-20-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4663,11 +5277,17 @@
       "aliases": [
         "clasto"
       ],
-      "guideLine": 1224,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1224",
+          "entry": "g102"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g103",
+      "id": "p-pyridalyl-10-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4703,11 +5323,17 @@
       "aliases": [
         "sumipleo"
       ],
-      "guideLine": 1233,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1233",
+          "entry": "g103"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g104",
+      "id": "p-pyriproxyfen-8-diafenthiuron-30-se",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4747,11 +5373,17 @@
       "aliases": [
         "boris super"
       ],
-      "guideLine": 1244,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1244",
+          "entry": "g104"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g105",
+      "id": "p-pyriproxyfen-10-bifenthrin-10-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4793,11 +5425,17 @@
       "aliases": [
         "leonis"
       ],
-      "guideLine": 1255,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1255",
+          "entry": "g105"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g106",
+      "id": "p-pyriproxyfen-10-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4833,11 +5471,17 @@
       "aliases": [
         "lano"
       ],
-      "guideLine": 1266,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1266",
+          "entry": "g106"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g107",
+      "id": "p-pyriproxifen-5-difenthuron-25",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4877,11 +5521,17 @@
       "aliases": [
         "slr 525"
       ],
-      "guideLine": 1277,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1277",
+          "entry": "g107"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g108",
+      "id": "p-pyriproxyfen-5-fenpropathrin-15-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4923,11 +5573,17 @@
       "aliases": [
         "sumiprempt"
       ],
-      "guideLine": 1288,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1288",
+          "entry": "g108"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g109",
+      "id": "p-pyriproxyfen-8-dinotefuran-5-diafenthiuron-18-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -4977,11 +5633,17 @@
       "aliases": [
         "ronfen"
       ],
-      "guideLine": 1300,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1300",
+          "entry": "g109"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g110",
+      "id": "p-quinalphos-25-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5020,11 +5682,17 @@
       "aliases": [
         "kemlox 725"
       ],
-      "guideLine": 1309,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1309",
+          "entry": "g110"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g111",
+      "id": "p-spinetoram-11-7-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5062,11 +5730,17 @@
       "aliases": [
         "summit"
       ],
-      "guideLine": 1320,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1320",
+          "entry": "g111"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g112",
+      "id": "p-spinosad-2-5-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5105,11 +5779,17 @@
       "aliases": [
         "spino25"
       ],
-      "guideLine": 1331,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1331",
+          "entry": "g112"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g113",
+      "id": "p-spiromesifen-22-9-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5144,11 +5824,17 @@
       "aliases": [
         "oberon"
       ],
-      "guideLine": 1342,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1342",
+          "entry": "g113"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g114",
+      "id": "p-spirotetramat-imidacloprid-11-01-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5191,11 +5877,17 @@
       "aliases": [
         "movento energy"
       ],
-      "guideLine": 1353,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1353",
+          "entry": "g114"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g115",
+      "id": "p-spirotetramat-150-od",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5234,11 +5926,17 @@
       "aliases": [
         "movento od"
       ],
-      "guideLine": 1364,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1364",
+          "entry": "g115"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g116",
+      "id": "p-thiacloprid-21-7-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5276,11 +5974,17 @@
       "aliases": [
         "alanto"
       ],
-      "guideLine": 1375,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1375",
+          "entry": "g116"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g117",
+      "id": "p-thiamethoxam-1-chlorantraniliprole-0-5-gr",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5321,11 +6025,17 @@
       "aliases": [
         "virtako"
       ],
-      "guideLine": 1384,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1384",
+          "entry": "g117"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g118",
+      "id": "p-thiamethoxam-12-60-lambda-cyhalothrin-9-50-zc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5370,11 +6080,17 @@
       "aliases": [
         "alika"
       ],
-      "guideLine": 1395,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1395",
+          "entry": "g118"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g119",
+      "id": "p-thiamethoxam-25-wg",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5421,11 +6137,17 @@
         "actara",
         "areva"
       ],
-      "guideLine": 1406,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1406",
+          "entry": "g119"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g120",
+      "id": "p-thiamethoxam-30-fs",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5470,11 +6192,17 @@
         "bheema plus",
         "slayer pro"
       ],
-      "guideLine": 1417,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1417",
+          "entry": "g120"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g121",
+      "id": "p-thiamethoxam-70-ws",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5518,11 +6246,17 @@
       "aliases": [
         "cruiser"
       ],
-      "guideLine": 1428,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1428",
+          "entry": "g121"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g122",
+      "id": "p-thiocyclam-hydrogen-oxalate-3-0-clothianidin-1-2-gr",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5562,11 +6296,17 @@
       "aliases": [
         "aurthor"
       ],
-      "guideLine": 1441,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1441",
+          "entry": "g122"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g123",
+      "id": "p-tolfenpyrad-15-ec",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5605,11 +6345,17 @@
       "aliases": [
         "patang"
       ],
-      "guideLine": 1452,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1452",
+          "entry": "g123"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g124",
+      "id": "p-triflumezopyrim-10-sc",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5641,11 +6387,17 @@
       "aliases": [
         "sparcle"
       ],
-      "guideLine": 1463,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1463",
+          "entry": "g124"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g125",
+      "id": "p-zinc-phosphide-80",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5676,11 +6428,17 @@
       "aliases": [
         "sumitomo commando"
       ],
-      "guideLine": 1474,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1474",
+          "entry": "g125"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g126",
+      "id": "p-brand-dhaman-bio-303",
       "category": "insecticide",
       "activeIngredients": [],
       "ingredientUnknown": true,
@@ -5707,11 +6465,17 @@
       "aliases": [
         "dhaman bio 303"
       ],
-      "guideLine": 1485,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1485",
+          "entry": "g126"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g127",
+      "id": "p-azadirachtin-1",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5751,11 +6515,17 @@
         "निंबोळी",
         "निंबोळी तेल"
       ],
-      "guideLine": 1496,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1496",
+          "entry": "g127"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g128",
+      "id": "p-azadirachtin-300-ppm",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5791,11 +6561,17 @@
         "निंबोळी",
         "निंबोळी तेल"
       ],
-      "guideLine": 1507,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1507",
+          "entry": "g128"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g129",
+      "id": "p-neem-oil-3000-ppm",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5830,11 +6606,17 @@
         "निंबोळी",
         "निंबोळी तेल"
       ],
-      "guideLine": 1518,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1518",
+          "entry": "g129"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g130",
+      "id": "p-metarhizium-anisopliae-1-0-wp",
       "category": "insecticide",
       "activeIngredients": [
         {
@@ -5869,11 +6651,17 @@
       "aliases": [
         "kalichakra"
       ],
-      "guideLine": 1529,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1529",
+          "entry": "g130"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g131",
+      "id": "p-amisulbrom-20-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -5908,11 +6696,17 @@
       "aliases": [
         "kirari"
       ],
-      "guideLine": 1542,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1542",
+          "entry": "g131"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g132",
+      "id": "p-azoxystrobin-10-fipronil-5-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -5954,11 +6748,17 @@
       "aliases": [
         "tipsy"
       ],
-      "guideLine": 1553,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1553",
+          "entry": "g132"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g133",
+      "id": "p-azoxystrobin-11-5-mancozeb-30-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -5998,11 +6798,17 @@
       "aliases": [
         "pluton"
       ],
-      "guideLine": 1564,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1564",
+          "entry": "g133"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g134",
+      "id": "p-azoxystrobin-11-tebuconazole-18-3-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6044,11 +6850,17 @@
       "aliases": [
         "custodia"
       ],
-      "guideLine": 1575,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1575",
+          "entry": "g134"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g135",
+      "id": "p-azoxystrobin-12-5-tebuconazole-12-5-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6090,11 +6902,17 @@
       "aliases": [
         "kitoshi"
       ],
-      "guideLine": 1586,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1586",
+          "entry": "g135"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g136",
+      "id": "p-azoxystrobin-14-epoxiconazole-9-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6134,11 +6952,17 @@
       "aliases": [
         "mentor"
       ],
-      "guideLine": 1597,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1597",
+          "entry": "g136"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g137",
+      "id": "p-azoxystrobin-16-7-tricyclazole-33-3-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6178,11 +7002,17 @@
       "aliases": [
         "azotrix"
       ],
-      "guideLine": 1608,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1608",
+          "entry": "g137"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g138",
+      "id": "p-azoxystrobin-18-2-difenoconazole-11-4-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6224,11 +7054,17 @@
       "aliases": [
         "amistar top"
       ],
-      "guideLine": 1619,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1619",
+          "entry": "g138"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g139",
+      "id": "p-thiamethoxam-25-fs",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6266,11 +7102,17 @@
       "aliases": [
         "electron"
       ],
-      "guideLine": 1631,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1631",
+          "entry": "g139"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g140",
+      "id": "p-azoxystrobin-23-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6311,11 +7153,17 @@
       "aliases": [
         "mirador"
       ],
-      "guideLine": 1642,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1642",
+          "entry": "g140"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g141",
+      "id": "p-azoxystrobin-4-7-mancozeb-59-7-tebuconazole-5-6-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6362,11 +7210,17 @@
       "aliases": [
         "tridium"
       ],
-      "guideLine": 1655,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1655",
+          "entry": "g141"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g142",
+      "id": "p-azoxystrobin-7-1-propiconazole-11-9-se",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6410,11 +7264,17 @@
       "aliases": [
         "apropo"
       ],
-      "guideLine": 1666,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1666",
+          "entry": "g142"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g143",
+      "id": "p-azoxystrobin-7-mancozeb-40",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6452,11 +7312,17 @@
       "aliases": [
         "prospell"
       ],
-      "guideLine": 1677,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1677",
+          "entry": "g143"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g144",
+      "id": "p-azoxystrobin-8-3-mancozeb-66-7-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6499,11 +7365,17 @@
       "aliases": [
         "avancer glow"
       ],
-      "guideLine": 1688,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1688",
+          "entry": "g144"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g145",
+      "id": "p-benalaxyl-m-4-mancozeb-65-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6545,11 +7417,17 @@
       "aliases": [
         "defensa"
       ],
-      "guideLine": 1699,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1699",
+          "entry": "g145"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g146",
+      "id": "p-captan-70-hexaconazole-5-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6595,11 +7473,17 @@
       "aliases": [
         "taqat"
       ],
-      "guideLine": 1710,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1710",
+          "entry": "g146"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g147",
+      "id": "p-carbendazim-12-mancozeb-63-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6656,11 +7540,17 @@
         "revive 750",
         "saaf"
       ],
-      "guideLine": 1721,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1721",
+          "entry": "g147"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g148",
+      "id": "p-carbendazim-25-mancozeb-50-ws",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6702,11 +7592,17 @@
       "aliases": [
         "sprint"
       ],
-      "guideLine": 1732,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1732",
+          "entry": "g148"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g149",
+      "id": "p-carbendazim-46-27-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6743,11 +7639,17 @@
       "aliases": [
         "pearl"
       ],
-      "guideLine": 1743,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1743",
+          "entry": "g149"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g150",
+      "id": "p-carbendazim-50-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6786,11 +7688,17 @@
       "aliases": [
         "zen"
       ],
-      "guideLine": 1754,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1754",
+          "entry": "g150"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g151",
+      "id": "p-carboxin-37-5-thiram-37-5-ds",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6832,11 +7740,17 @@
       "aliases": [
         "vitavax power"
       ],
-      "guideLine": 1764,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1764",
+          "entry": "g151"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g152",
+      "id": "p-chlorothalonil-40-difenoconazole-4",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6875,11 +7789,17 @@
       "aliases": [
         "kavach flo"
       ],
-      "guideLine": 1775,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1775",
+          "entry": "g152"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g153",
+      "id": "p-chlorothalonil-75-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6924,11 +7844,17 @@
         "jatayu",
         "kavach"
       ],
-      "guideLine": 1786,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1786",
+          "entry": "g153"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g154",
+      "id": "p-copper-hydroxide-46-1-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -6966,11 +7892,17 @@
       "aliases": [
         "kocide 3000"
       ],
-      "guideLine": 1797,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1797",
+          "entry": "g154"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g155",
+      "id": "p-copper-oxychloride-50-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7008,11 +7940,17 @@
       "aliases": [
         "blue copper"
       ],
-      "guideLine": 1806,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1806",
+          "entry": "g155"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g156",
+      "id": "p-copper-sulfate-pentahydrate-23-99",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7047,11 +7985,17 @@
         "mastercop",
         "मोरचूद"
       ],
-      "guideLine": 1816,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1816",
+          "entry": "g156"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g157",
+      "id": "p-copper-sulphate",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7089,11 +8033,17 @@
         "instant copper",
         "मोरचूद"
       ],
-      "guideLine": 1827,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1827",
+          "entry": "g157"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g158",
+      "id": "p-copper-sulphate-47-15-mancozeb-30-wdg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7137,11 +8087,17 @@
         "cuprofix",
         "मोरचूद"
       ],
-      "guideLine": 1838,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1838",
+          "entry": "g158"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g159",
+      "id": "p-cyflufenamid-5-ew",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7176,11 +8132,17 @@
       "aliases": [
         "nissodium"
       ],
-      "guideLine": 1849,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1849",
+          "entry": "g159"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g160",
+      "id": "p-cymoxanil-8-mancozeb-64-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7230,11 +8192,17 @@
         "crizol",
         "curzate m8"
       ],
-      "guideLine": 1860,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1860",
+          "entry": "g160"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g161",
+      "id": "p-difenoconazole-25-ec",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7272,11 +8240,17 @@
       "aliases": [
         "score"
       ],
-      "guideLine": 1871,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1871",
+          "entry": "g161"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g162",
+      "id": "p-difenoconazole-6-validamycin-6-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7319,11 +8293,17 @@
       "aliases": [
         "varix"
       ],
-      "guideLine": 1881,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1881",
+          "entry": "g162"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g163",
+      "id": "p-dimethomorph-50-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7359,11 +8339,17 @@
       "aliases": [
         "ditaf"
       ],
-      "guideLine": 1892,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1892",
+          "entry": "g163"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g164",
+      "id": "p-kresoxim-methyl-44-3-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7398,11 +8384,17 @@
       "aliases": [
         "ergon"
       ],
-      "guideLine": 1901,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1901",
+          "entry": "g164"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g165",
+      "id": "p-fluopicolide-4-44-fosetyl-al-66-67-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7447,11 +8439,17 @@
       "aliases": [
         "profiler"
       ],
-      "guideLine": 1912,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1912",
+          "entry": "g165"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g166",
+      "id": "p-fluopicolide-5-56-propamocarb-hydrochloride-55-6",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7491,11 +8489,17 @@
       "aliases": [
         "infinito"
       ],
-      "guideLine": 1925,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1925",
+          "entry": "g166"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g167",
+      "id": "p-fluopyram-17-7-tebuconazole-17-7-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7535,11 +8539,17 @@
       "aliases": [
         "luna experience"
       ],
-      "guideLine": 1934,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1934",
+          "entry": "g167"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g168",
+      "id": "p-fluopyram-21-37-trifloxystrobin-21-37-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7584,11 +8594,17 @@
       "aliases": [
         "acerbo"
       ],
-      "guideLine": 1945,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1945",
+          "entry": "g168"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g169",
+      "id": "p-hexaconazole-0-5-gr",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7625,11 +8641,17 @@
       "aliases": [
         "zaafu"
       ],
-      "guideLine": 1954,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1954",
+          "entry": "g169"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g170",
+      "id": "p-hexaconazole-4-carbendazim-16-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7674,11 +8696,17 @@
         "(iil) sofia",
         "sofia"
       ],
-      "guideLine": 1965,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1965",
+          "entry": "g170"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g171",
+      "id": "p-hexaconazole-5-validamycin-2-5-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7721,11 +8749,17 @@
       "aliases": [
         "valxtra"
       ],
-      "guideLine": 1976,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1976",
+          "entry": "g171"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g172",
+      "id": "p-hexaconazole-5-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7764,11 +8798,17 @@
       "aliases": [
         "contof plus"
       ],
-      "guideLine": 1987,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1987",
+          "entry": "g172"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g173",
+      "id": "p-hexaconazole-75-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7805,11 +8845,17 @@
       "aliases": [
         "epic"
       ],
-      "guideLine": 1998,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 1998",
+          "entry": "g173"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g174",
+      "id": "p-iprobenfos-48-ec",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7848,11 +8894,17 @@
       "aliases": [
         "kitazin"
       ],
-      "guideLine": 2009,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2009",
+          "entry": "g174"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g175",
+      "id": "p-iprovalicarb-propineb-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7894,11 +8946,17 @@
       "aliases": [
         "melody duo"
       ],
-      "guideLine": 2018,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2018",
+          "entry": "g175"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g176",
+      "id": "p-isoprothiolane-40-ec",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7934,11 +8992,17 @@
       "aliases": [
         "fujione"
       ],
-      "guideLine": 2027,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2027",
+          "entry": "g176"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g177",
+      "id": "p-kasugamycin-3-sl",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -7974,11 +9038,17 @@
       "aliases": [
         "kasu b"
       ],
-      "guideLine": 2036,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2036",
+          "entry": "g177"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g178",
+      "id": "p-kresoxim-methyl-40-hexaconazole-8-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8019,11 +9089,17 @@
       "aliases": [
         "ayaan"
       ],
-      "guideLine": 2047,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2047",
+          "entry": "g178"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g179",
+      "id": "p-mancozeb-35-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8060,11 +9136,17 @@
       "aliases": [
         "hydroman"
       ],
-      "guideLine": 2058,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2058",
+          "entry": "g179"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g180",
+      "id": "p-mancozeb-75-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8122,11 +9204,17 @@
         "indofil m -45",
         "uthane m-45"
       ],
-      "guideLine": 2069,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2069",
+          "entry": "g180"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g181",
+      "id": "p-mandipropamid-23-4-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8162,11 +9250,17 @@
       "aliases": [
         "mandus mid"
       ],
-      "guideLine": 2084,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2084",
+          "entry": "g181"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g182",
+      "id": "p-metalaxyl-35-ws",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8203,11 +9297,17 @@
       "aliases": [
         "tagron 35"
       ],
-      "guideLine": 2095,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2095",
+          "entry": "g182"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g183",
+      "id": "p-metalaxyl-8-mancozeb-64-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8248,11 +9348,17 @@
       "aliases": [
         "rodomil gold"
       ],
-      "guideLine": 2106,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2106",
+          "entry": "g183"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g184",
+      "id": "p-metalaxyl-m-3-3-chlorothalonil-33-1-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8296,11 +9402,17 @@
       "aliases": [
         "folio gold"
       ],
-      "guideLine": 2117,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2117",
+          "entry": "g184"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g185",
+      "id": "p-metalaxyl-m-4-mancozeb-64-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8341,11 +9453,17 @@
       "aliases": [
         "matco gold"
       ],
-      "guideLine": 2126,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2126",
+          "entry": "g185"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g186",
+      "id": "p-metiram-44-dimethomorph-9-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8385,11 +9503,17 @@
       "aliases": [
         "murphy gold"
       ],
-      "guideLine": 2137,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2137",
+          "entry": "g186"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g187",
+      "id": "p-methyl-15-chlorothalonil-56",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8432,11 +9556,17 @@
       "aliases": [
         "sarthak"
       ],
-      "guideLine": 2148,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2148",
+          "entry": "g187"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g188",
+      "id": "p-metiram-55-pyraclostrobin-5-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8485,11 +9615,17 @@
         "cabrio top",
         "clutch"
       ],
-      "guideLine": 2160,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2160",
+          "entry": "g188"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g189",
+      "id": "p-metiram-70-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8533,11 +9669,17 @@
         "hashtag",
         "polyram"
       ],
-      "guideLine": 2171,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2171",
+          "entry": "g189"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g190",
+      "id": "p-myclobutanil-10-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8574,11 +9716,17 @@
       "aliases": [
         "index"
       ],
-      "guideLine": 2182,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2182",
+          "entry": "g190"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g191",
+      "id": "p-pencycuron-22-9-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8612,11 +9760,17 @@
       "aliases": [
         "monceren"
       ],
-      "guideLine": 2193,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2193",
+          "entry": "g191"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g192",
+      "id": "p-picoxystrobin-6-78-tricyclazole-20-33-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8656,11 +9810,17 @@
       "aliases": [
         "slogan"
       ],
-      "guideLine": 2204,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2204",
+          "entry": "g192"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g193",
+      "id": "p-picoxystrobin-7-05-propiconazole-11-71-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8702,11 +9862,17 @@
       "aliases": [
         "picozole way"
       ],
-      "guideLine": 2215,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2215",
+          "entry": "g193"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g194",
+      "id": "p-prochloraz-23-5-tricyclazole-20-se",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8747,11 +9913,17 @@
       "aliases": [
         "blasil"
       ],
-      "guideLine": 2226,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2226",
+          "entry": "g194"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g195",
+      "id": "p-propineb-70-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8787,11 +9959,17 @@
       "aliases": [
         "antracol"
       ],
-      "guideLine": 2235,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2235",
+          "entry": "g195"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g196",
+      "id": "p-propiconazole-25-ec",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8829,11 +10007,17 @@
       "aliases": [
         "tilt"
       ],
-      "guideLine": 2247,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2247",
+          "entry": "g196"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g197",
+      "id": "p-propiconazole-13-9-difenoconazole-13-9-ec",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8879,11 +10063,17 @@
       "aliases": [
         "vespa"
       ],
-      "guideLine": 2258,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2258",
+          "entry": "g197"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g198",
+      "id": "p-pyraclostrobin-10-thifluzamide-10-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8927,11 +10117,17 @@
       "aliases": [
         "yamakazi"
       ],
-      "guideLine": 2268,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2268",
+          "entry": "g198"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g199",
+      "id": "p-pyraclostrobin-3-5-thiram-15-clothianidin-22-5-fs",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -8977,11 +10173,17 @@
       "aliases": [
         "pct 410"
       ],
-      "guideLine": 2280,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2280",
+          "entry": "g199"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g200",
+      "id": "p-tribasic-copper-sulfate-34-5-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9019,11 +10221,17 @@
       "aliases": [
         "cuflow"
       ],
-      "guideLine": 2289,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2289",
+          "entry": "g200"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g201",
+      "id": "p-streptomycin-sulphate-90-tetracycline-hydrochloride-10",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9064,11 +10272,17 @@
       "aliases": [
         "streptocycline"
       ],
-      "guideLine": 2301,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2301",
+          "entry": "g201"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g202",
+      "id": "p-sulphur-55-16-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9101,11 +10315,17 @@
         "liquiflo",
         "गंधक"
       ],
-      "guideLine": 2312,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2312",
+          "entry": "g202"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g203",
+      "id": "p-sulphur-80-wdg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9143,11 +10363,17 @@
         "thinutri",
         "गंधक"
       ],
-      "guideLine": 2323,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2323",
+          "entry": "g203"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g204",
+      "id": "p-sulphur-80-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9186,11 +10412,17 @@
         "sulfex",
         "गंधक"
       ],
-      "guideLine": 2334,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2334",
+          "entry": "g204"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g205",
+      "id": "p-tebuconazole-10-sulphur-65-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9235,11 +10467,17 @@
         "cultivo",
         "गंधक"
       ],
-      "guideLine": 2345,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2345",
+          "entry": "g205"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g206",
+      "id": "p-tebuconazole-2-ds",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9271,11 +10509,17 @@
       "aliases": [
         "recent"
       ],
-      "guideLine": 2356,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2356",
+          "entry": "g206"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g207",
+      "id": "p-tebuconazole-25-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9314,11 +10558,17 @@
       "aliases": [
         "caviet"
       ],
-      "guideLine": 2367,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2367",
+          "entry": "g207"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g208",
+      "id": "p-tebuconazole-50-trifloxystrobin-25-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9365,11 +10615,17 @@
       "aliases": [
         "nativo"
       ],
-      "guideLine": 2378,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2378",
+          "entry": "g208"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g209",
+      "id": "p-tebuconazole-6-7-captan-26-9-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9413,11 +10669,17 @@
       "aliases": [
         "shamir"
       ],
-      "guideLine": 2389,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2389",
+          "entry": "g209"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g210",
+      "id": "p-tebuconazole-38-9",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9450,11 +10712,17 @@
       "aliases": [
         "buonos"
       ],
-      "guideLine": 2398,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2398",
+          "entry": "g210"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g211",
+      "id": "p-tebuconazole-250-ec",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9494,11 +10762,17 @@
       "aliases": [
         "folicur"
       ],
-      "guideLine": 2409,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2409",
+          "entry": "g211"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g212",
+      "id": "p-tetraconazole-3-8-ew",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9538,11 +10812,17 @@
       "aliases": [
         "domark"
       ],
-      "guideLine": 2420,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2420",
+          "entry": "g212"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g213",
+      "id": "p-thifluzamide-24-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9578,11 +10858,17 @@
       "aliases": [
         "pulsor"
       ],
-      "guideLine": 2433,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2433",
+          "entry": "g213"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g214",
+      "id": "p-thifluzamide-26-kasugamycin-6-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9622,11 +10908,17 @@
       "aliases": [
         "izuki"
       ],
-      "guideLine": 2444,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2444",
+          "entry": "g214"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g215",
+      "id": "p-thiophanate-methlyl-25-mancozeb-50-wg",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9667,11 +10959,17 @@
       "aliases": [
         "juniper"
       ],
-      "guideLine": 2455,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2455",
+          "entry": "g215"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g216",
+      "id": "p-thiophanate-methyl-38-kasugamycin-2-21-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9715,11 +11013,17 @@
       "aliases": [
         "zanet"
       ],
-      "guideLine": 2466,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2466",
+          "entry": "g216"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g217",
+      "id": "p-thiophanate-methyl-70-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9760,11 +11064,17 @@
       "aliases": [
         "roko"
       ],
-      "guideLine": 2475,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2475",
+          "entry": "g217"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g218",
+      "id": "p-trichoderma-asperellum-2-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9799,11 +11109,17 @@
       "aliases": [
         "agenor"
       ],
-      "guideLine": 2485,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2485",
+          "entry": "g218"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g219",
+      "id": "p-trichoderma-viride-1-0-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9835,11 +11151,17 @@
       "aliases": [
         "sanjeevni"
       ],
-      "guideLine": 2496,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2496",
+          "entry": "g219"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g220",
+      "id": "p-tricyclazole-75-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9871,11 +11193,17 @@
       "aliases": [
         "force-11"
       ],
-      "guideLine": 2507,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2507",
+          "entry": "g220"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g221",
+      "id": "p-validamycin-3",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9908,11 +11236,17 @@
       "aliases": [
         "valida"
       ],
-      "guideLine": 2518,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2518",
+          "entry": "g221"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g222",
+      "id": "p-zineb-75-wp",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9953,11 +11287,17 @@
       "aliases": [
         "z-78"
       ],
-      "guideLine": 2529,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2529",
+          "entry": "g222"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g223",
+      "id": "p-ziram-27-sc",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -9994,11 +11334,17 @@
       "aliases": [
         "cuman l"
       ],
-      "guideLine": 2541,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2541",
+          "entry": "g223"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g224",
+      "id": "p-brand-orondis-ultra",
       "category": "fungicide",
       "activeIngredients": [],
       "ingredientUnknown": true,
@@ -10023,11 +11369,17 @@
       "npkGrade": null,
       "tags": [],
       "aliases": [],
-      "guideLine": 2551,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2551",
+          "entry": "g224"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g225",
+      "id": "p-copper-hydroxide-53-8-df",
       "category": "fungicide",
       "activeIngredients": [
         {
@@ -10065,11 +11417,17 @@
       "aliases": [
         "kocide 2000"
       ],
-      "guideLine": 2562,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2562",
+          "entry": "g225"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g226",
+      "id": "p-glyphosate-41-sl",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10115,11 +11473,17 @@
         "roundup",
         "touchdown"
       ],
-      "guideLine": 2575,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2575",
+          "entry": "g226"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g227",
+      "id": "p-glyphosate-54-sl",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10156,11 +11520,17 @@
       "aliases": [
         "roundup speed"
       ],
-      "guideLine": 2584,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2584",
+          "entry": "g227"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g228",
+      "id": "p-glyphosate-71-sg",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10196,11 +11566,17 @@
       "aliases": [
         "mera 71"
       ],
-      "guideLine": 2596,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2596",
+          "entry": "g228"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g229",
+      "id": "p-halosulfuron-methyl-75-wg",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10237,11 +11613,17 @@
       "aliases": [
         "sempra"
       ],
-      "guideLine": 2610,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2610",
+          "entry": "g229"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g230",
+      "id": "p-glufosinate-ammonium-13-5-sl",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10275,11 +11657,17 @@
       "aliases": [
         "sweep power"
       ],
-      "guideLine": 2621,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2621",
+          "entry": "g230"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g231",
+      "id": "p-paraquat-dichloride-24-sl",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10316,11 +11704,17 @@
       "aliases": [
         "gramoxone"
       ],
-      "guideLine": 2633,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2633",
+          "entry": "g231"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g232",
+      "id": "p-propaquizafop-10-ec",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10350,11 +11744,17 @@
       "aliases": [
         "agil"
       ],
-      "guideLine": 2644,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2644",
+          "entry": "g232"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g233",
+      "id": "p-tembotrione-34-4-sc",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10384,11 +11784,17 @@
       "aliases": [
         "laudis"
       ],
-      "guideLine": 2655,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2655",
+          "entry": "g233"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g234",
+      "id": "p-quizalofop-ethyl-5-ec",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10418,11 +11824,17 @@
       "aliases": [
         "targa super"
       ],
-      "guideLine": 2666,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2666",
+          "entry": "g234"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g235",
+      "id": "p-metribuzin-70-wp",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10454,11 +11866,17 @@
       "aliases": [
         "sencor"
       ],
-      "guideLine": 2677,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2677",
+          "entry": "g235"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g236",
+      "id": "p-flumioxazin-50-sc",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10488,11 +11906,17 @@
       "aliases": [
         "sumimax"
       ],
-      "guideLine": 2688,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2688",
+          "entry": "g236"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g237",
+      "id": "p-fluazifop-p-butyl-11-1-fomesafen-11-1-sl",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10527,11 +11951,17 @@
       "aliases": [
         "fusiflex"
       ],
-      "guideLine": 2700,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2700",
+          "entry": "g237"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g238",
+      "id": "p-atrazine-50-wp",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10564,11 +11994,17 @@
       "aliases": [
         "atrataf"
       ],
-      "guideLine": 2711,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2711",
+          "entry": "g238"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g239",
+      "id": "p-oxyfluorfen-23-5-ec",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10601,11 +12037,17 @@
       "aliases": [
         "galigan"
       ],
-      "guideLine": 2722,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2722",
+          "entry": "g239"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g240",
+      "id": "p-mesotrione-2-27-atrazine-22-7-sc",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10643,11 +12085,17 @@
       "aliases": [
         "calaris xtra"
       ],
-      "guideLine": 2733,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2733",
+          "entry": "g240"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g241",
+      "id": "p-topramezone-336-g-l-sc",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10679,11 +12127,17 @@
       "aliases": [
         "tynzer"
       ],
-      "guideLine": 2744,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2744",
+          "entry": "g241"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g242",
+      "id": "p-propaquizafop-2-5-imazethapyr-3-75-me",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10720,11 +12174,17 @@
       "aliases": [
         "shaked"
       ],
-      "guideLine": 2757,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2757",
+          "entry": "g242"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g243",
+      "id": "p-ametryne-80-wdg",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10754,11 +12214,17 @@
       "aliases": [
         "tamar"
       ],
-      "guideLine": 2768,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2768",
+          "entry": "g243"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g244",
+      "id": "p-2-4-d-sodium-salt-80-wp",
       "category": "herbicide",
       "activeIngredients": [
         {
@@ -10792,11 +12258,17 @@
       "aliases": [
         "weedmar-80"
       ],
-      "guideLine": 2779,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2779",
+          "entry": "g244"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g245",
+      "id": "p-short-chain-peptides-long-chain-peptides-free-amino-acids",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -10844,11 +12316,17 @@
       "aliases": [
         "isabion"
       ],
-      "guideLine": 2797,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2797",
+          "entry": "g245"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g246",
+      "id": "p-sea-weed-extract",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -10885,11 +12363,17 @@
       "aliases": [
         "biovita"
       ],
-      "guideLine": 2812,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2812",
+          "entry": "g246"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g247",
+      "id": "p-sea-weed",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -10926,11 +12410,17 @@
       "aliases": [
         "biozyme"
       ],
-      "guideLine": 2829,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2829",
+          "entry": "g247"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g248",
+      "id": "p-amino-acid-vitamins",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -10969,11 +12459,17 @@
       "aliases": [
         "fantac plus"
       ],
-      "guideLine": 2842,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2842",
+          "entry": "g248"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g249",
+      "id": "p-gibberellic-acid-technical-90",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11009,11 +12505,17 @@
         "progibb",
         "जिब्रेलिक"
       ],
-      "guideLine": 2853,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2853",
+          "entry": "g249"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g250",
+      "id": "p-gibberellic-acid-40-wsg",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11054,11 +12556,17 @@
         "progibb easy",
         "जिब्रेलिक"
       ],
-      "guideLine": 2865,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2865",
+          "entry": "g250"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g251",
+      "id": "p-triacontanol-0-1-ew",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11097,11 +12605,17 @@
       "aliases": [
         "sultan"
       ],
-      "guideLine": 2876,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2876",
+          "entry": "g251"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g252",
+      "id": "p-seaweed-extract",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11134,11 +12648,17 @@
       "aliases": [
         "biozyme drip"
       ],
-      "guideLine": 2887,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2887",
+          "entry": "g252"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g253",
+      "id": "p-brand-diamore-combine",
       "category": "pgr",
       "activeIngredients": [],
       "ingredientUnknown": true,
@@ -11161,11 +12681,17 @@
       "npkGrade": null,
       "tags": [],
       "aliases": [],
-      "guideLine": 2898,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2898",
+          "entry": "g253"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g254",
+      "id": "p-homobrassinolide-hbr-0-04",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11196,11 +12722,17 @@
         "homobrassinolide",
         "supershakti combine"
       ],
-      "guideLine": 2909,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2909",
+          "entry": "g254"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g255",
+      "id": "p-gibberellic-acid-0-001",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11234,11 +12766,17 @@
         "prime gold",
         "जिब्रेलिक"
       ],
-      "guideLine": 2920,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2920",
+          "entry": "g255"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g256",
+      "id": "p-azatobacter-chroococcum-4-1x10-8-cfu-ml",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11271,11 +12809,17 @@
       "aliases": [
         "vitermone"
       ],
-      "guideLine": 2931,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2931",
+          "entry": "g256"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g257",
+      "id": "p-chlormequat-chloride-50",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11307,11 +12851,17 @@
       "aliases": [
         "lihocin"
       ],
-      "guideLine": 2941,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2941",
+          "entry": "g257"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g258",
+      "id": "p-paclobutrazole-23-sc",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11351,11 +12901,17 @@
       "aliases": [
         "cultar"
       ],
-      "guideLine": 2953,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2953",
+          "entry": "g258"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g259",
+      "id": "p-humic-acid-98",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11393,11 +12949,17 @@
         "p-humate",
         "root"
       ],
-      "guideLine": 2964,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2964",
+          "entry": "g259"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g260",
+      "id": "p-humic-acid-98-together-fulvic-acid-98-together",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11436,11 +12998,17 @@
       "aliases": [
         "activated"
       ],
-      "guideLine": 2978,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2978",
+          "entry": "g260"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g261",
+      "id": "p-amino-acids",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11474,11 +13042,17 @@
       "aliases": [
         "bahar"
       ],
-      "guideLine": 2990,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 2990",
+          "entry": "g261"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g262",
+      "id": "p-brand-mc-extra",
       "category": "pgr",
       "activeIngredients": [],
       "ingredientUnknown": true,
@@ -11509,11 +13083,17 @@
       "npkGrade": null,
       "tags": [],
       "aliases": [],
-      "guideLine": 3001,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3001",
+          "entry": "g262"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g263",
+      "id": "p-brand-ralligold",
       "category": "pgr",
       "activeIngredients": [],
       "ingredientUnknown": true,
@@ -11540,11 +13120,17 @@
       "npkGrade": null,
       "tags": [],
       "aliases": [],
-      "guideLine": 3012,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3012",
+          "entry": "g263"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g264",
+      "id": "p-nitrobenzene-20-ew",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11582,11 +13168,17 @@
       "aliases": [
         "boom flower"
       ],
-      "guideLine": 3023,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3023",
+          "entry": "g264"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g265",
+      "id": "p-alpha-napthyl-acetic-acid-4-5-sl",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11625,11 +13217,17 @@
       "aliases": [
         "planofix"
       ],
-      "guideLine": 3038,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3038",
+          "entry": "g265"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g266",
+      "id": "p-paclobutrazol-40-sc",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11671,11 +13269,17 @@
       "aliases": [
         "taboli"
       ],
-      "guideLine": 3049,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3049",
+          "entry": "g266"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g267",
+      "id": "p-homobrassinolide-hbr-0-04-2",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11714,11 +13318,17 @@
         "hbr",
         "homobrassinolide"
       ],
-      "guideLine": 3064,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3064",
+          "entry": "g267"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g268",
+      "id": "p-triacontanol-0-1-ew-2",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11760,11 +13370,17 @@
       "aliases": [
         "vipul"
       ],
-      "guideLine": 3079,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3079",
+          "entry": "g268"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g269",
+      "id": "p-seaweed-extract-8-tea-saponin-5",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11805,11 +13421,17 @@
       "aliases": [
         "exadose"
       ],
-      "guideLine": 3093,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3093",
+          "entry": "g269"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g270",
+      "id": "p-sodium-para-nitro-phenolate-0-3-sl",
       "category": "pgr",
       "activeIngredients": [
         {
@@ -11849,11 +13471,17 @@
       "aliases": [
         "chaperone"
       ],
-      "guideLine": 3108,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3108",
+          "entry": "g270"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g271",
+      "id": "p-potassium-nitrate-13-0-45",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -11878,11 +13506,17 @@
       "aliases": [
         "13:0:45"
       ],
-      "guideLine": 3125,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3125",
+          "entry": "g271"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g272",
+      "id": "p-mono-ammonium-phosphate-12-61-0",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -11911,11 +13545,17 @@
       "aliases": [
         "12:61:0"
       ],
-      "guideLine": 3136,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3136",
+          "entry": "g272"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g273",
+      "id": "p-npk-19-19-19",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -11941,11 +13581,17 @@
       "aliases": [
         "19:19:19"
       ],
-      "guideLine": 3149,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3149",
+          "entry": "g273"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g274",
+      "id": "p-npk-0-60-20",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -11972,11 +13618,17 @@
       "aliases": [
         "0:60:20"
       ],
-      "guideLine": 3160,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3160",
+          "entry": "g274"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g275",
+      "id": "p-npk-fe-2-8-0-42-47",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12002,11 +13654,17 @@
       "aliases": [
         "0:42:47"
       ],
-      "guideLine": 3173,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3173",
+          "entry": "g275"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g276",
+      "id": "p-npk-13-40-13",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12035,11 +13693,17 @@
       "aliases": [
         "13:40:13"
       ],
-      "guideLine": 3182,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3182",
+          "entry": "g276"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g277",
+      "id": "p-potassium-schoenite-ko-23-mgo-11",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12066,11 +13730,17 @@
         "sulphate-source"
       ],
       "aliases": [],
-      "guideLine": 3197,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3197",
+          "entry": "g277"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g278",
+      "id": "p-npk-0-52-34",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12100,11 +13770,17 @@
       "aliases": [
         "0:52:34"
       ],
-      "guideLine": 3206,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3206",
+          "entry": "g278"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g279",
+      "id": "p-npk-0-0-50",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12133,11 +13809,17 @@
       "aliases": [
         "0:0:50"
       ],
-      "guideLine": 3217,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3217",
+          "entry": "g279"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g280",
+      "id": "p-calcium-nitrate",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12160,11 +13842,17 @@
         "calcium-source"
       ],
       "aliases": [],
-      "guideLine": 3227,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3227",
+          "entry": "g280"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g281",
+      "id": "p-magnesium-sulphate",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12188,11 +13876,17 @@
         "sulphate-source"
       ],
       "aliases": [],
-      "guideLine": 3239,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3239",
+          "entry": "g281"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g282",
+      "id": "p-dap-18-46-0",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12218,11 +13912,17 @@
       "aliases": [
         "18:46:0"
       ],
-      "guideLine": 3248,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3248",
+          "entry": "g282"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g283",
+      "id": "p-npk-24-24-0",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12247,11 +13947,17 @@
       "aliases": [
         "24:24:0"
       ],
-      "guideLine": 3263,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3263",
+          "entry": "g283"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g284",
+      "id": "p-npk-20-20-0-13",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12276,11 +13982,17 @@
       "aliases": [
         "20:20:0:13"
       ],
-      "guideLine": 3276,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3276",
+          "entry": "g284"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g285",
+      "id": "p-mop-k-60",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12307,11 +14019,17 @@
         "potash",
         "पोटॅश"
       ],
-      "guideLine": 3287,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3287",
+          "entry": "g285"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g286",
+      "id": "p-urea-n-46",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12337,11 +14055,17 @@
       "npkGrade": null,
       "tags": [],
       "aliases": [],
-      "guideLine": 3299,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3299",
+          "entry": "g286"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g287",
+      "id": "p-npk-10-26-26",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12365,11 +14089,17 @@
       "aliases": [
         "10:26:26"
       ],
-      "guideLine": 3315,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3315",
+          "entry": "g287"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g288",
+      "id": "p-ammonium-sulphate",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12389,11 +14119,17 @@
         "sulphate-source"
       ],
       "aliases": [],
-      "guideLine": 3325,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3325",
+          "entry": "g288"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g289",
+      "id": "p-npk-15-15-15",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12419,11 +14155,17 @@
       "aliases": [
         "15:15:15"
       ],
-      "guideLine": 3342,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3342",
+          "entry": "g289"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g290",
+      "id": "p-npk-20-20-0",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12449,11 +14191,17 @@
       "aliases": [
         "20:20:0"
       ],
-      "guideLine": 3353,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3353",
+          "entry": "g290"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g291",
+      "id": "p-npk-9-24-24",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12477,11 +14225,17 @@
       "aliases": [
         "9:24:24"
       ],
-      "guideLine": 3364,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3364",
+          "entry": "g291"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g292",
+      "id": "p-silicon-sio2-70-to-75",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12504,11 +14258,17 @@
       "aliases": [
         "agrosil"
       ],
-      "guideLine": 3378,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3378",
+          "entry": "g292"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g293",
+      "id": "p-ssp",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12537,11 +14297,17 @@
       "aliases": [
         "single super phosphate"
       ],
-      "guideLine": 3390,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3390",
+          "entry": "g293"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g294",
+      "id": "p-polysulphate",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12565,11 +14331,17 @@
         "sulphate-source"
       ],
       "aliases": [],
-      "guideLine": 3406,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3406",
+          "entry": "g294"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g295",
+      "id": "p-npk-12-32-16",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12594,11 +14366,17 @@
       "aliases": [
         "12:32:16"
       ],
-      "guideLine": 3419,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3419",
+          "entry": "g295"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g296",
+      "id": "p-yaramila-complex",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12620,11 +14398,17 @@
       "aliases": [
         "yaramila"
       ],
-      "guideLine": 3431,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3431",
+          "entry": "g296"
+        }
+      ],
       "benefits": []
     },
     {
-      "id": "g297",
+      "id": "p-cab-calcium-27",
       "category": "fertilizer",
       "activeIngredients": [
         {
@@ -12651,7 +14435,13 @@
       "aliases": [
         "hydrospeed cab-max"
       ],
-      "guideLine": 3442,
+      "sourceRefs": [
+        {
+          "source": "agro-dosage-guide-en",
+          "ref": "line 3442",
+          "entry": "g297"
+        }
+      ],
       "benefits": []
     }
   ]
