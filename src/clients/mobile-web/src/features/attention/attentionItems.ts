@@ -6,12 +6,17 @@
  * the bottom-bar count and the आढावा strip are all read from this, so the three can never disagree (D-1: "Both
  * should show the same underlying items"). Pure.
  *
- * Founder D-1, three groups, most urgent first:
+ * Founder D-1, three groups, most urgent first (lane IT5 puts "आधी हे पाहा" above them: a wrong mix in one tank, see below):
  *   1. वेळ निघून गेली — reminders whose day has passed, and scheduled steps that are late but still inside the
  *      server's on-time window ("कालची फवारणी बाकी आहे");
  *   2. आज करायचे      — today's reminders and today's scheduled steps;
  *   3. निर्णय घ्यायचा  — steps past their on-time window (missed: record it, or set a new day), and the
  *      server's plot cards that ask for a look or a decision (tests due, a stage falling behind, a signal).
+ *
+ * "आधी हे पाहा" (lane IT5, spec dfes-input-truth-and-mix-check-2026-11-06): the server's open wrong-mix alerts - a card whose top
+ * signal is `compliance.input-mix.never-together` - sit in their own group above the others. A card from an older server (no
+ * rule code) or with another rule stays in "निर्णय घ्यायचा" exactly as before. The group is empty in production until a person has
+ * reviewed the mixing rules (D-96): the server emits no such alert before then.
  *
  * Kept OUT, on purpose (D-1): routine approvals and disputed records — they belong in मंजुरी, and this page
  * carries no shortcut to it. A dispute card (`ResolveDispute`) is therefore never listed.
@@ -28,12 +33,13 @@ import { attentionRankOrder, suggestedActionOf } from './attentionWire';
 import { toMarathiDigits } from '../labour/marathiDate';
 import { isRescheduledLocally, stepDueTextMr, stepLabelMr, type ScheduledWorkItem, type StoredScheduledWork } from './scheduledWork';
 
-export type AttentionGroupKey = 'late' | 'today' | 'decide';
+// spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 1) - `first`: "आधी हे पाहा", a wrong mix in one tank, above everything.
+export type AttentionGroupKey = 'first' | 'late' | 'today' | 'decide';
 
 export type AttentionItem =
     | { kind: 'reminder'; id: string; group: 'late' | 'today'; daysLate: number; todo: TodoItem }
-    | { kind: 'step'; id: string; group: AttentionGroupKey; daysLate: number; step: ScheduledWorkItem; label: string; dueText: string }
-    | { kind: 'card'; id: string; group: 'decide'; card: AttentionCardCacheRecord };
+    | { kind: 'step'; id: string; group: 'late' | 'today' | 'decide'; daysLate: number; step: ScheduledWorkItem; label: string; dueText: string }
+    | { kind: 'card'; id: string; group: 'first' | 'decide'; card: AttentionCardCacheRecord };
 
 export interface AttentionCounts {
     lateSteps: number;
@@ -41,9 +47,13 @@ export interface AttentionCounts {
     todaySteps: number;
     todayReminders: number;
     decisions: number;
+    /** lane IT5: the "आधी हे पाहा" cards. Optional so a caller that builds counts by hand (a test) is unchanged. */
+    firstAlerts?: number;
 }
 
 export interface AttentionModel {
+    /** lane IT5 (Task 1): "आधी हे पाहा" - the server's open wrong-mix alerts, above the late work. */
+    first: AttentionItem[];
     late: AttentionItem[];
     today: AttentionItem[];
     decide: AttentionItem[];
@@ -61,6 +71,25 @@ export interface AttentionInput {
     /** The farm on screen; `null` keeps every farm's rows (no farm chosen yet). */
     farmId: string | null;
     todayKey: string;
+    /** lane IT5: signals he tapped पाहिलं on (id to the time of the tap, ms) - see `seenSignals.ts`. */
+    seenSignals?: ReadonlyMap<string, number>;
+    /** lane IT5 fix 1 (F4): signals whose "पाहिलं" is queued and on its way - hidden whatever the clocks say (`data/queuedAcknowledgements.ts`). */
+    queuedAcks?: ReadonlySet<string>;
+}
+
+/** The compliance rule code of "products that must not be mixed were given together" (`ComplianceRuleCode.cs`). */
+export const INPUT_MIX_RULE_CODE = 'compliance.input-mix.never-together';
+
+/** A card the server raised for a wrong mix in one tank. A card from an older server (no rule code) is none. */
+export const isMixAlertCard = (card: Pick<AttentionCardCacheRecord, 'topSignalRuleCode'>): boolean =>
+    card.topSignalRuleCode === INPUT_MIX_RULE_CODE;
+
+/** He tapped पाहिलं on this card's signal, and the board on the phone is not newer than that tap. */
+function seenHere(card: AttentionCardCacheRecord, seen: ReadonlyMap<string, number> | undefined): boolean {
+    const at = card.topSignalId ? seen?.get(card.topSignalId) : undefined;
+    if (at === undefined) return false;
+    const asOf = Date.parse(card.computedAtUtc);
+    return Number.isNaN(asOf) || asOf < at;
 }
 
 /** Card actions whose whole content is late scheduled work — itemised by the step list when there is one. */
@@ -95,7 +124,7 @@ const stepItem = (step: ScheduledWorkItem): AttentionItem => ({
 const byLateness = (a: AttentionItem, b: AttentionItem): number =>
     ('daysLate' in b ? b.daysLate : 0) - ('daysLate' in a ? a.daysLate : 0);
 
-export function buildAttentionModel({ cards, scheduledWork, todos, farmId, todayKey }: AttentionInput): AttentionModel {
+export function buildAttentionModel({ cards, scheduledWork, todos, farmId, todayKey, seenSignals, queuedAcks }: AttentionInput): AttentionModel {
     const onFarm = (rowFarmId: string) => farmId === null || rowFarmId === farmId;
     const stepsKnown = scheduledWork !== null;
 
@@ -107,22 +136,25 @@ export function buildAttentionModel({ cards, scheduledWork, todos, farmId, today
         list.filter(t => !t.done).map(t => ({ kind: 'reminder', id: `todo-${t.id}`, group, daysLate: reminderDaysLate(t, todayKey), todo: t }));
 
     const cardItems: AttentionItem[] = cards
-        .filter(c => onFarm(c.farmId) && keepCard(c, stepsKnown))
+        .filter(c => onFarm(c.farmId) && keepCard(c, stepsKnown) && !seenHere(c, seenSignals) && !(c.topSignalId && queuedAcks?.has(c.topSignalId)))
         .sort((a, b) => attentionRankOrder(a.rank) - attentionRankOrder(b.rank))
-        .map(card => ({ kind: 'card', id: `card-${card.cardId}`, group: 'decide', card }));
+        .map(card => ({ kind: 'card', id: `card-${card.cardId}`, group: isMixAlertCard(card) ? 'first' : 'decide', card }));
+    const first = cardItems.filter(i => i.group === 'first');
 
     // Stable within a lateness tie: steps before reminders (the schedule is the farm's plan), then input order.
     const late = [...steps.filter(s => s.group === 'late'), ...reminders('late', todos.late)].sort(byLateness);
     const today = [...steps.filter(s => s.group === 'today'), ...reminders('today', todos.today)];
-    const decide = [...steps.filter(s => s.group === 'decide').sort(byLateness), ...cardItems];
+    const decide = [...steps.filter(s => s.group === 'decide').sort(byLateness), ...cardItems.filter(i => i.group === 'decide')];
 
     const count = (list: AttentionItem[], kind: AttentionItem['kind']) => list.filter(i => i.kind === kind).length;
     return {
+        first,
         late,
         today,
         decide,
-        total: late.length + today.length + decide.length,
+        total: first.length + late.length + today.length + decide.length,
         counts: {
+            firstAlerts: first.length,
             lateSteps: count(late, 'step'),
             lateReminders: count(late, 'reminder'),
             todaySteps: count(today, 'step'),
@@ -140,6 +172,8 @@ export function attentionSummaryMr(counts: AttentionCounts): string {
     // lane L4b fix round 1 (L-6) — Devanagari digits in Marathi, as in the founder's own D-1 example ("२").
     const one = (n: number, singular: string, plural: string) => `${toMarathiDigits(n)} ${n === 1 ? singular : plural}`;
     const parts: string[] = [];
+    // lane IT5 - the wrong-mix alerts are the most urgent kind. PROPOSED (Marathi)
+    if (counts.firstAlerts) parts.push(one(counts.firstAlerts, 'चुकीचं मिश्रण', 'चुकीची मिश्रणं'));
     if (counts.lateSteps) parts.push(one(counts.lateSteps, 'काम उशिराचे', 'कामे उशिराची'));
     if (counts.lateReminders) parts.push(one(counts.lateReminders, 'आठवण उशिराची', 'आठवणी उशिराच्या'));
     if (counts.todaySteps) parts.push(one(counts.todaySteps, 'काम आज', 'कामे आज'));
@@ -155,6 +189,8 @@ export function attentionSummaryMr(counts: AttentionCounts): string {
 export function attentionSummaryEn(counts: AttentionCounts): string {
     const one = (n: number, singular: string, plural: string) => `${n} ${n === 1 ? singular : plural}`;
     const parts: string[] = [];
+    // lane IT5 - the wrong-mix alerts are the most urgent kind. PROPOSED (English)
+    if (counts.firstAlerts) parts.push(one(counts.firstAlerts, 'wrong mix', 'wrong mixes'));
     if (counts.lateSteps) parts.push(one(counts.lateSteps, 'task late', 'tasks late'));
     if (counts.lateReminders) parts.push(one(counts.lateReminders, 'reminder late', 'reminders late'));
     if (counts.todaySteps) parts.push(one(counts.todaySteps, 'task today', 'tasks today'));
@@ -165,7 +201,7 @@ export function attentionSummaryEn(counts: AttentionCounts): string {
 
 /** The single most urgent item's words for the strip: "फवारणी · प्लॉट 2 — काल". PROPOSED (Marathi) */
 export function mostUrgentLineMr(model: AttentionModel): string | null {
-    const first = model.late[0] ?? model.today[0] ?? model.decide[0];
+    const first = model.first[0] ?? model.late[0] ?? model.today[0] ?? model.decide[0];
     if (!first) return null;
     if (first.kind === 'step') return `${first.label}${first.step.plotName ? ` · ${first.step.plotName}` : ''} — ${first.dueText}`;
     if (first.kind === 'reminder') return `${first.todo.title} — ${first.todo.dueText}`;

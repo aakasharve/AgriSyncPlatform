@@ -29,7 +29,7 @@ export interface ReflectPageProps {
     operators?: FarmOperator[];
     /**
      * Lane RF (review B001) — the SIGNED-IN user's id (the auth session's), the only id "he said it" is compared with:
-     * his records read "तुम्ही", keep his own amounts, and may offer his original voice. Never the profile's active
+     * his records are his own (named by `ownName`), keep his own amounts, and may offer his original voice. Never the profile's active
      * operator (on a non-owner's phone the sync sets that to the primary owner's id).
      */
     sessionUserId?: string | null;
@@ -40,6 +40,11 @@ export interface ReflectPageProps {
     farmRole?: string | null;
     /** lane MU-3 — the server's see-money answer for this seat (absent = the role rule, `mayShowFarmMoney`). */
     maySeeMoney?: boolean;
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 2; founder 2026-11-06) - the phone holder's own name (the
+     * session profile's), so his records read by his real name and never "तुम्ही". Absent or blank: the unknown word.
+     */
+    ownName?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- pre-existing prop shape (not part of the Activity Feed change); typing it is a separate cleanup
     navigate?: (route: any) => void;
     focusLogRequest?: { logId: string; date: string; plotId?: string } | null;

@@ -46,6 +46,13 @@ export interface ReflectCopy {
     timesTold: (n: number, isToday: boolean) => string;
     /** Lane RF2 — the card's way into its day. */
     seeAll: string;
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 2; preview DFES-meter-and-names) - a plot card's "who told
+     * it" line label, the one "tell more" line's label, and the mic button's word. Words only: no number, no bar.
+     */
+    toldBy: string;
+    moreToTell: string;
+    speak: string;
     /** Lane RF2 — the "संपूर्ण शेत" card's line. */
     farmCardLine: string;
     /** Lane RF2 — the plot's day view: the buckets' line, the time chips' title and key, "आणखी सांगा". */
@@ -107,6 +114,10 @@ const mr: ReflectCopy = {
     timesTold: (n: number, isToday: boolean) => (isToday ? RESULT_STR.todayCount(n) : `${RESULT_STR.times(n)} सांगितलं`),
     // PROPOSED (Marathi) — the founder's screen 1.
     seeAll: 'सगळं बघा',
+    // The preview's own words (DFES-meter-and-names, screen 3): "सांगितलं:", "अजून सांगा:" and the mic's "बोला".
+    toldBy: 'सांगितलं:',
+    moreToTell: 'अजून सांगा:',
+    speak: 'बोला',
     // PROPOSED (Marathi)
     farmCardLine: 'कोणत्याही एका प्लॉटचं नसलेलं काम',
     // PROPOSED (Marathi) — today's: the founder's screen 1; another day's: new.
@@ -166,6 +177,9 @@ const en: ReflectCopy = {
     nothingTold: (isToday: boolean) => (isToday ? 'Nothing told yet today' : 'Nothing told on this day'), // PROPOSED (English)
     timesTold: (n: number, isToday: boolean) => `Told ${n} ${n === 1 ? 'time' : 'times'}${isToday ? ' today' : ''}`, // PROPOSED (English)
     seeAll: 'See all', // PROPOSED (English)
+    toldBy: 'Told by:', // PROPOSED (English)
+    moreToTell: 'Tell more:', // PROPOSED (English)
+    speak: 'Speak', // PROPOSED (English)
     farmCardLine: 'Work not for any one plot', // PROPOSED (English)
     dayViewHint: (isToday: boolean) => (isToday ? "All of today's work — sorted as it was told" : "All of this day's work — sorted as it was told"), // PROPOSED (English)
     timesTitle: 'What was told when', // PROPOSED (English)

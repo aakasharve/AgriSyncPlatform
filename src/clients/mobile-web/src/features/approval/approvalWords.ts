@@ -106,6 +106,15 @@ export interface ApprovalWords {
     listSending: string;
     /** M-3 (D-40) — a मंजूर held for the farm's subscription (a plain line; fix round 2, N-2). */
     heldApprovals: string;
+    // ── lane IT5 (Task 2b; preview DFES-owner-check-scenario): the card's "औषधं" block and आढावा's check button ──
+    productsTitle: string;
+    productsToCheck: (n: number) => string;
+    productsAllChecked: string;
+    /** Said under मंजूर: checking is optional, approval never waits for it (P9). */
+    approveWithoutChecking: string;
+    /** आढावा's button on a recording, only for those who may check. */
+    checkProducts: (n: number) => string;
+    productsChecked: string;
 }
 
 const MR: ApprovalWords = {
@@ -161,6 +170,13 @@ const MR: ApprovalWords = {
     jobCardPending: 'मंजुरी बाकी — पाहा', // PROPOSED
     listSending: 'तुमचे निर्णय या फोनवर आहेत', // PROPOSED
     heldApprovals: 'मंजुरीसाठी सदस्यता सुरू असावी लागते', // PROPOSED
+    // The founder-approved preview's own words (DFES-owner-check-scenario, phone 2 and 3).
+    productsTitle: 'औषधं',
+    productsToCheck: (n) => `${numberIn(n, 'mr')} तपासायची · ऐच्छिक`,
+    productsAllChecked: 'सगळी तपासली',
+    approveWithoutChecking: 'औषधं न तपासता मंजूर केलं तरी चालेल.',
+    checkProducts: (n) => `औषधं तपासा (${numberIn(n, 'mr')})`,
+    productsChecked: 'औषधं तपासली',
 };
 
 const EN: ApprovalWords = {
@@ -216,6 +232,12 @@ const EN: ApprovalWords = {
     jobCardPending: 'Approval pending — look', // PROPOSED
     listSending: 'Your decisions are on this phone', // PROPOSED
     heldApprovals: 'Approvals need an active subscription', // PROPOSED
+    productsTitle: 'Products', // PROPOSED
+    productsToCheck: (n) => `${n} to check · optional`, // PROPOSED
+    productsAllChecked: 'All checked', // PROPOSED
+    approveWithoutChecking: 'You can approve without checking the products.', // PROPOSED
+    checkProducts: (n) => `Check products (${n})`, // PROPOSED
+    productsChecked: 'Products checked', // PROPOSED
 };
 
 export function approvalWords(language: Language | null | undefined): ApprovalWords {

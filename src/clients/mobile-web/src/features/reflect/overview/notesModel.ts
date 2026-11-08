@@ -16,7 +16,7 @@
  * words (`textRaw`) are shown instead. Every Marathi string is PROPOSED.
  *
  * Lane RF: each note also carries the record it came from (`logId`), who said it the result screen's way (`who`:
- * "तुम्ही" for the person holding this phone, else the name recorded, else "अज्ञात" — never a guess) and whether that
+ * the name recorded (the phone holder's own name from his profile, lane IT5; never "तुम्ही"), else "अज्ञात" — never a guess) and whether that
  * record is confirmed, so the list can link each note to its recording.
  */
 import type { CropProfile, DailyLog, ObservationNote } from '../../../types';
@@ -58,7 +58,7 @@ interface BuildArgs {
     scope: ViewScope;
     crops: readonly CropProfile[];
     operatorNameById: Readonly<Record<string, string>>;
-    /** Lane RF — names the speaker the result screen's way ("तुम्ही" for the person holding this phone). */
+    /** Lane RF — names the speaker the result screen's way (a real name; the phone holder's own name too). */
     whoDeps?: WhoDeps;
 }
 

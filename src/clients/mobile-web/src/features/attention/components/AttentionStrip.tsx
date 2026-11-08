@@ -24,7 +24,7 @@ export const AttentionStrip: React.FC<{
 }> = ({ tasks, crops, onOpen }) => {
     const model = useAttentionModel(tasks, crops);
     if (!onOpen || model.total === 0) return null;
-    const urgent = model.counts.lateSteps + model.counts.lateReminders > 0;
+    const urgent = model.counts.lateSteps + model.counts.lateReminders + (model.counts.firstAlerts ?? 0) > 0;
     const first = mostUrgentLineMr(model);
     return (
         <Tap onClick={onOpen} data-testid="attention-strip" aria-label={`लक्ष द्या: ${attentionSummaryMr(model.counts)}`}

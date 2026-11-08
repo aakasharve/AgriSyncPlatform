@@ -46,7 +46,7 @@ export interface FeedEntry {
      * everything understood from it. Sample/preview entries omit it (then the card just opens).
      */
     log?: DailyLog;
-    /** PLR-D10 I13 — the person holding this phone spoke it (the glance then says "तुम्ही", like the result screen). */
+    /** PLR-D10 I13 — the person holding this phone spoke it (the glance then shows his own name, like the result screen). */
     byYou?: boolean;
     onOpen: () => void;
 }

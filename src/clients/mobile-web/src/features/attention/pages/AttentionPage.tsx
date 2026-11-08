@@ -6,7 +6,8 @@
  * bar with the big "← मागे", a plain intro line, glass cards, Marathi only.
  *
  * What is on it — ONE list (`attentionItems.ts`), the same one the bottom-bar count and the आढावा strip read,
- * ordered by urgency in the founder's three groups:
+ * ordered by urgency in the founder's three groups (lane IT5: and, above them, "आधी हे पाहा" - a wrong mix in one tank,
+ * `MixAlertCard`: काय करायचं / पाहिलं):
  *   1. वेळ निघून गेली — late reminders (झाले / वेळ बदला) and late scheduled steps (काम नोंदवा / पुढे ठरवा);
  *   2. आज करायचे      — today's reminders and today's scheduled steps;
  *   3. निर्णय घ्यायचा  — steps past their on-time window, and the server's plot cards (each card's button
@@ -24,9 +25,10 @@ import React, { useCallback } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { useAttentionModel } from '../hooks/useAttentionModel';
 import AttentionCard from '../components/AttentionCard';
+import MixAlertCard from '../components/MixAlertCard';
 import { ReminderRow, StepRow } from '../components/AttentionItemRow';
 import { attentionButtonLabelMr, attentionTargetFor, type AttentionTarget } from '../attentionActions';
-import type { AttentionItem } from '../attentionItems';
+import type { AttentionGroupKey, AttentionItem } from '../attentionItems';
 import { rescheduleStep } from '../data/rescheduleStep';
 import type { ScheduledWorkItem } from '../scheduledWork';
 import type { AttentionCardCacheRecord } from '../../../infrastructure/storage/DexieDatabase';
@@ -75,7 +77,9 @@ export interface AttentionPageProps {
     canReschedule?: boolean;
 }
 
-const GROUPS: readonly { key: 'late' | 'today' | 'decide'; title: string; tone: string }[] = [
+const GROUPS: readonly { key: AttentionGroupKey; title: string; tone: string }[] = [
+    // lane IT5 (Task 1) - a wrong mix in one tank, above everything (empty in production until the rules are reviewed, D-96)
+    { key: 'first', title: 'आधी हे पाहा', tone: 'text-rose-700' },
     { key: 'late', title: 'वेळ निघून गेली', tone: 'text-rose-700' },
     { key: 'today', title: 'आज करायचे', tone: 'text-amber-800' },
     { key: 'decide', title: 'निर्णय घ्यायचा', tone: 'text-stone-800' },
@@ -111,12 +115,13 @@ const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews
         onGo?.(target, card);
     }, [onGo, refresh]);
 
-    const renderItem = (item: AttentionItem, tone: 'late' | 'today' | 'decide') => {
+    const renderItem = (item: AttentionItem) => {
+        if (item.kind === 'card' && item.group === 'first') return <MixAlertCard key={item.id} card={item.card} />;
         if (item.kind === 'reminder') {
             return <ReminderRow key={item.id} t={item.todo} tone={item.group} onDone={onUpdateTask ? done : undefined} onMove={onUpdateTask ? moveReminder : undefined} />;
         }
         if (item.kind === 'step') {
-            return <StepRow key={item.id} step={item.step} label={item.label} dueText={item.dueText} tone={tone}
+            return <StepRow key={item.id} step={item.step} label={item.label} dueText={item.dueText} tone={item.group}
                 onRecord={onRecordWork} onMove={canReschedule ? moveStep : undefined} />;
         }
         const target = attentionTargetFor(item.card, hiddenViews);
@@ -169,7 +174,7 @@ const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews
                 return (
                     <section key={g.key} className="space-y-2" data-testid={`attention-group-${g.key}`}>
                         <p className={`m-0 px-1 text-[15px] font-extrabold ${g.tone}`}>{g.title} ({items.length})</p>
-                        {items.map(item => renderItem(item, g.key))}
+                        {items.map(item => renderItem(item))}
                     </section>
                 );
             })}

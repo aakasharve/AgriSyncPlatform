@@ -12,7 +12,7 @@
  * "आज अजून काही सांगितलं नाही". Tapping a card opens the plot's day (`day/DaySheets.PlotDayView`).
  */
 import React from 'react';
-import { ChevronRight, Droplets, HelpCircle, IndianRupee, Map as MapIcon, Paperclip, Thermometer } from 'lucide-react';
+import { ChevronRight, Droplets, HelpCircle, IndianRupee, Map as MapIcon, Mic, Paperclip, Thermometer, User } from 'lucide-react';
 import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { CategoryIcon } from '../../logs/components/shramsathi/understandingRing';
 import { PartIcon } from '../../logs/components/voiceResult/HisWords';
@@ -108,7 +108,41 @@ const CardButton: React.FC<{ testId: string; status: DayCardCore['status']; onOp
     );
 };
 
-const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (ref: PlotRef) => void; onCost?: (ref: PlotRef) => void }> = ({ card, isToday, onOpen, onCost }) => {
+/**
+ * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 2; founder 2026-11-06; preview DFES-meter-and-names) - who told
+ * the plot's day, each by his real name (the phone holder's own name too, never "तुम्ही"), and the server's ONE "tell more" line
+ * with the mic. WORDS ONLY: no meter, no bar, no number. The line is drawn only when there is something to say AND the mic can
+ * be opened for it (`onTell`: today, with a speak door) - never a hint that leads nowhere (P5).
+ */
+const WhoAndHint: React.FC<{ card: PlotDayCard; testKey: string; onTell?: () => void }> = ({ card, testKey, onTell }) => {
+    const copy = useReflectCopy();
+    return (
+        <>
+            {card.speakers.length > 0 && (
+                <span className="mt-2 flex flex-wrap items-center gap-1.5 text-[13.5px] font-bold text-stone-600" data-testid={`plot-who-${testKey}`}>
+                    {copy.toldBy}
+                    {card.speakers.map(name => (
+                        <span key={name} data-testid={`plot-who-name-${testKey}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-[12px] font-extrabold text-blue-900">
+                            <User size={12} aria-hidden="true" />{name}
+                        </span>
+                    ))}
+                </span>
+            )}
+            {card.nextHint && onTell && (
+                <span className="mt-2.5 flex items-center justify-between gap-2 rounded-2xl bg-amber-50 px-3 py-2 ring-1 ring-amber-200" data-testid={`plot-hint-${testKey}`}>
+                    <span className="text-[14.5px] font-bold leading-snug text-stone-800"><span className="font-extrabold text-amber-800">{copy.moreToTell}</span> {card.nextHint}</span>
+                    <Tap onClick={e => { e.stopPropagation(); onTell(); }} data-testid={`plot-hint-speak-${testKey}`} aria-label={`${copy.moreToTell} ${card.nextHint}`}
+                        className="inline-flex min-h-[42px] shrink-0 items-center gap-1 rounded-full bg-emerald-700 px-3 text-[14px] font-extrabold text-white">
+                        <Mic size={16} aria-hidden="true" />{copy.speak}
+                    </Tap>
+                </span>
+            )}
+        </>
+    );
+};
+
+const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (ref: PlotRef) => void; onCost?: (ref: PlotRef) => void; onTell?: (ref: PlotRef) => void }> = ({ card, isToday, onOpen, onCost, onTell }) => {
     const { ref, log } = card;
     const language = useOptionalLanguage()?.language;
     const files = useLogAttachmentCount(log?.id);
@@ -131,6 +165,7 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
                 </span>
             </span>
             <Chips card={card} testKey={ref.key} onCost={onCost ? () => onCost(ref) : undefined} />
+            <WhoAndHint card={card} testKey={ref.key} onTell={onTell ? () => onTell(ref) : undefined} />
             {(card.water || card.weather) && (
                 <span className="mt-2 flex flex-wrap gap-1.5">
                     {card.water && <span className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] font-extrabold ${WATER_TONE[card.water]}`}><Droplets size={13} aria-hidden="true" />{WATER_LABEL[card.water]}</span>}
@@ -169,9 +204,11 @@ export const PlotDayCards: React.FC<{
     onOpen: (ref: PlotRef) => void;
     onOpenFarm?: () => void;
     onCost?: (ref: PlotRef) => void;
-}> = ({ cards, farm, isToday, onOpen, onOpenFarm, onCost }) => (
+    /** The "tell more" line's mic: THE ONE mic for that plot. Omit and the line is not drawn (never a mic that leads nowhere). */
+    onTell?: (ref: PlotRef) => void;
+}> = ({ cards, farm, isToday, onOpen, onOpenFarm, onCost, onTell }) => (
     <div className="space-y-2.5" data-testid="plot-day-cards">
-        {cards.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} />)}
+        {cards.map(c => <PlotDayCardView key={c.ref.key} card={c} isToday={isToday} onOpen={onOpen} onCost={onCost} onTell={onTell} />)}
         {farm && onOpenFarm && <FarmDayCardView card={farm} isToday={isToday} onOpen={onOpenFarm} />}
     </div>
 );

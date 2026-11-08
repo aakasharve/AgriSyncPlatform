@@ -46,6 +46,9 @@ import { approvalWords, workDateIn, type ApprovalWords } from '../../approval/ap
 import { approvalReadTicket, rememberSeen, seenFactsOf, forgetSeen, type ApprovalConflict } from '../../approval/approvalQueue';
 import { enqueueVerificationSteps, sendVerification, triggerSyncBestEffort } from './reviewSend';
 import { BulkConfirmPanel, ChangedNotice, ConfirmOverlay, DisputeReasonPanel, ReviewFacts, type ConfirmKind } from './ReviewCardParts';
+// spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 2b) - the card's "औषधं" block; checking is optional and never gates मंजूर.
+import ReviewProducts from './ReviewProducts';
+import { productsLeftToCheck } from './reviewProductsModel';
 
 export { sendVerification };
 
@@ -79,6 +82,8 @@ interface Props {
     listTicket?: number | null;
     /** Overrides the app language (tests, previews). */
     language?: Language;
+    /** lane IT5 (Task 2b) - the phone holder's own name (his profile's): his check on a product reads by it, never "तुम्ही". */
+    ownName?: string;
 }
 
 // The confirm animation plays for CONFIRM_ANIM_MS, then the undo bar shows for UNDO_WINDOW_MS before anything is
@@ -137,7 +142,7 @@ export function isBulkEligible(item: ReviewItem, changed: boolean): boolean {
 
 const ReviewSheet: React.FC<Props> = ({
     open, data, onClose, onToast, onApproved, farmId, history, reviewListUnknown, reviewListLoading,
-    conflicts = [], onConflictSettled, focusLogId, language: languageOverride, pendingDecisionIds = [], listTicket = null,
+    conflicts = [], onConflictSettled, focusLogId, language: languageOverride, pendingDecisionIds = [], listTicket = null, ownName,
 }) => {
     const appLanguage = useOptionalLanguage()?.language;
     const language: Language = languageOverride ?? (appLanguage === 'en' ? 'en' : 'mr');
@@ -440,11 +445,16 @@ const ReviewSheet: React.FC<Props> = ({
                                         <p className="mt-1.5 text-[14px] font-semibold text-stone-500">{words.lookAlone}</p>
                                     )}
                                     {mayApprove && it.hasRecording && farmId && <OriginalVoiceButton dailyLogId={it.id} farmId={farmId} onHeard={(id) => setHeardIds((h) => new Set(h).add(id))} />}
+                                    {/* lane IT5 (Task 2b) - the products of this record, only when the server sent them to this reader. */}
+                                    <ReviewProducts item={it} words={words} language={language} history={history} farmId={farmId} canCheck={mayApprove} ownName={ownName} />
                                     {disputeFor !== it.id && (
                                         <div className="mt-3 flex gap-3">
                                             {mayApprove && <button type="button" data-testid={`review-approve-${it.id}`} disabled={!!kind} onClick={() => approve(it.id)} className="flex min-h-[60px] flex-1 items-center justify-center gap-2.5 rounded-xl bg-emerald-600 py-3.5 text-[19px] font-extrabold text-white active:scale-[0.98] disabled:opacity-60"><Check size={24} strokeWidth={2.6} /> {words.approve}</button>}
                                             {mayApprove && <button type="button" data-testid={`review-query-${it.id}`} disabled={!!kind} onClick={() => setDisputeFor(it.id)} className="flex min-h-[60px] w-[112px] flex-shrink-0 items-center justify-center gap-2 rounded-xl border-2 border-stone-200 bg-white py-3.5 text-[19px] font-bold text-stone-600 active:scale-[0.98] disabled:opacity-60"><MessageSquare size={20} /> {words.dispute}</button>}
                                         </div>
+                                    )}
+                                    {mayApprove && disputeFor !== it.id && productsLeftToCheck(it, history?.find((l) => l.id === it.id), { viewerUserId: getSessionUserId(), canCheck: mayApprove }) > 0 && (
+                                        <p data-testid={`review-approve-anyway-${it.id}`} className="mt-1.5 text-center text-[12.5px] font-bold text-stone-500">{words.approveWithoutChecking}</p>
                                     )}
                                     {mayApprove && disputeFor === it.id && !kind && (
                                         <DisputeReasonPanel itemId={it.id} words={words} language={language} onSend={(reason) => sendDispute(it.id, reason)} onCancel={() => setDisputeFor(null)} />

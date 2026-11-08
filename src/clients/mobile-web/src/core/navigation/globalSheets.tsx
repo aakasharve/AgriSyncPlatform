@@ -14,6 +14,7 @@ import { buildNoWorkDayPayload } from './noWorkDay';
 import { t } from '../../i18n/translations';
 import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
+import { ownNameOf } from '../../shared/utils/ownName';
 
 /**
  * spec I18 — the "+" button's spoken name, in his language: the sheet's own approved question ("आज काय काम झालं?" /
@@ -103,6 +104,7 @@ export const renderGlobalSheets = (ctx: AppRouterContext): React.ReactNode => {
                 open={showReviewInbox}
                 onClose={() => setShowReviewInbox(false)}
                 history={history}
+                ownName={ownNameOf(farmerProfile.name)}
             />
 
             {/* DFES: QuickLogSheet (INT-3 Voice Integration) */}

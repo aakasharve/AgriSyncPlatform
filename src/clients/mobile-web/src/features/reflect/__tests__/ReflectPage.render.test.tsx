@@ -85,7 +85,8 @@ const renderPage = (over: Partial<React.ComponentProps<typeof ReflectPage>> = {}
         history, crops: CROPS,
         tasks: [task('t1', 'फवारणी', { dueDate: TODAY_KEY })],
         onUpdateTask: vi.fn(), onAddTask: vi.fn(), navigate: vi.fn(), onOpenLog: vi.fn(), onSpeak: vi.fn(),
-        sessionUserId: 'me', farmRole: 'PrimaryOwner',
+        // lane IT5 (Task 2): his records read by his real name, from his profile - never "तुम्ही"
+        sessionUserId: 'me', ownName: 'प्रकाश', farmRole: 'PrimaryOwner',
         operators: [{ id: 'op-sunil', name: 'सुनील' }] as React.ComponentProps<typeof ReflectPage>['operators'],
         ...over,
     };
@@ -256,7 +257,8 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         expect(screen.getByTestId('vr-day-crop')).toHaveAttribute('data-open', 'yes');
         expect(screen.getByTestId('rf-day')).not.toHaveTextContent('Edit This Log');
         fireEvent.click(screen.getByTestId('rf-time-g1-today'));
-        expect(screen.getByTestId('rf-rec-g1-today-who')).toHaveTextContent('तुम्ही');
+        expect(screen.getByTestId('rf-rec-g1-today-who')).toHaveTextContent('प्रकाश');
+        expect(screen.getByTestId('rf-rec-g1-today-who')).not.toHaveTextContent('तुम्ही');
         fireEvent.click(screen.getByTestId('rf-rec-g1-today-edit-g1-today'));
         expect(props.onOpenLog).toHaveBeenCalledWith(expect.objectContaining({ id: 'g1-today' }));
     });
@@ -313,7 +315,7 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         // ONE row of time chips per block; a tap opens that recording RIGHT THERE: its work as rows, and one small line
         const block = screen.getByTestId('rf-feed-block-grape:g1');
         fireEvent.click(within(block).getByTestId('rf-time-grape:g1-g1-today'));
-        expect(within(block).getByTestId('rf-rec-grape:g1-g1-today-who')).toHaveTextContent('तुम्ही');
+        expect(within(block).getByTestId('rf-rec-grape:g1-g1-today-who')).toHaveTextContent('प्रकाश');
         expect(within(block).getByTestId('rf-rec-grape:g1-g1-today-state')).toHaveTextContent('पक्कं नाही');
         expect(within(block).getByTestId('rf-rec-grape:g1-g1-today-parts')).toHaveTextContent('छाटणी');
         expect(within(block).queryByTestId('vr-words')).toBeNull(); // no source-words panel
@@ -342,7 +344,7 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
     it('a note opens its recording through the same plot-day view', () => {
         renderPage();
         fireEvent.click(screen.getByTestId('reflect-section-notes-toggle'));
-        expect(screen.getByTestId('note-o1-who')).toHaveTextContent('तुम्ही');
+        expect(screen.getByTestId('note-o1-who')).toHaveTextContent('प्रकाश');
         fireEvent.click(screen.getByTestId('note-o1-source'));
         expect(screen.getByTestId('rf-day-title')).toHaveTextContent('सोनाका');
         expect(screen.getByTestId('rf-rec-g1-today')).toBeInTheDocument();

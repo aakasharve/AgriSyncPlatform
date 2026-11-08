@@ -99,6 +99,8 @@ export const renderReflectView = (ctx: AppRouterContext): React.ReactNode => {
             sessionUserId={getSessionUserId()}
             farmRole={ctx.farmRole ?? null}
             maySeeMoney={ctx.maySeeMoney}
+            // lane IT5 (Task 2) - his own name on his records, never "तुम्ही" (the profile's name; a blank or placeholder reads as unknown)
+            ownName={ctx.farmerProfile.name}
             onOpenLog={ctx.handleEditLog}
             onSpeak={(request) => { requestSpeak({ ...request, returnTo: { route: 'main', mainView: 'reflect' } }); }}
             history={ctx.history}

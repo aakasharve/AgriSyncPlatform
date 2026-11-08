@@ -127,10 +127,11 @@ describe('a WORKER\'s phone (review B001, B002)', () => {
 });
 
 describe('the OWNER\'s phone, the same day', () => {
-    it('his own records read "तुम्ही" with his amounts; his older record offers "मूळ आवाज ऐका"', () => {
+    it('his own records read his real name (lane IT5: never "तुम्ही") with his amounts; his older record offers "मूळ आवाज ऐका"', () => {
         renderAs('owner');
         openRecording('grape:g1', 'dz');
-        expect(screen.getByTestId('rf-rec-dz-who')).toHaveTextContent('तुम्ही');
+        expect(screen.getByTestId('rf-rec-dz-who')).toHaveTextContent('मालक');
+        expect(screen.getByTestId('rf-rec-dz-who')).not.toHaveTextContent('तुम्ही');
         expect(screen.getByTestId('rf-rec-dz-parts')).toHaveTextContent('डिझेल · ₹800');
         fireEvent.click(screen.getByTestId('rf-day-back'));
         openRecording('grape:g2', 'old');
