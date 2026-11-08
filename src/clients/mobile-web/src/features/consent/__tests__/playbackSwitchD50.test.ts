@@ -116,9 +116,10 @@ describe('D-50 - the documents (M3, M4): meaning, evidence copy, the real in-app
         expect(form('en')).toContain(SWITCH_MEANING_EN);
         expect(form('mr')).toContain(SWITCH_MEANING_MR);
         expect(form('en')).toContain(PROOF_KEPT_EN);
-        expect(form('mr')).toContain(PROOF_KEPT_MR);
-        expect(form('en')).toContain(OFF_CONSEQUENCE_EN);
-        expect(form('mr')).toContain(OFF_CONSEQUENCE_MR);
+        // The legal files keep the pre-WORD-1 text (coordinator's call, 2026-11-08), so the form is asserted as it stands there.
+        expect(form('mr')).toContain('श्रमसफल प्रत्येक रेकॉर्डिंगचा मूळ आवाज पुराव्यासाठी जतन करते; हे बटण फक्त तो ऐकता येईल की नाही हे ठरवते.');
+        expect(form('en')).toContain('A recording made while this is off cannot be played later.');
+        expect(form('mr')).toContain('हा पर्याय बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.');
         for (const lang of ['en', 'mr'] as const) {
             expect(form(lang)).toContain('गोपनीयता व संमती');
             expect(form(lang)).not.toMatch(/Settings|सेटिंग्ज/);
@@ -134,9 +135,9 @@ describe('D-50 - the documents (M3, M4): meaning, evidence copy, the real in-app
     it('the Privacy Notice and the Terms say it too, in both languages', () => {
         expect(doc('legal/privacy_en.md')).toContain('ShramSafal keeps the original sound of every');
         expect(doc('legal/privacy_en.md')).toContain('cannot be played later');
-        expect(doc('legal/terms_en.md')).toContain('A voice Shram Sathi understood while it is off cannot be played later.');
+        expect(doc('legal/terms_en.md')).toContain('A recording made while it is off cannot be played later.');
         expect(doc('legal/privacy_mr.md')).toContain('नंतर ऐकता येणार नाही');
-        expect(doc('legal/terms_mr.md')).toContain('बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.');
+        expect(doc('legal/terms_mr.md')).toContain('बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.');
         expect(doc('legal/privacy_en.md')).toContain(SWITCH_TITLE_EN);
         expect(doc('legal/privacy_mr.md')).toContain(SWITCH_TITLE_MR);
     });
@@ -163,22 +164,6 @@ describe('WORD-1 (founder D-109) - "don\'t use recording but understanding": the
             // D-31's own English "Original recording unavailable." is the founder's verbatim and sits on the player card, not on these lines.
             expect(text, name).not.toMatch(/recording/i);
         }
-    });
-
-    it('the consent form and the OPS-1 lines of the Privacy Notice and the Terms say it too, never "recording"', () => {
-        const opsLines = [
-            ['consent/agreement_en.md', /If you say no:[^\n]*/],
-            ['consent/agreement_mr.md', /नकार दिल्यास:[^\n]*/],
-            ['legal/terms_en.md', /In short: an evidence copy[\s\S]*?on your phone\./],
-            ['legal/terms_mr.md', /थोडक्यात: प्रत्येक आवाजाची[^\n]*/],
-        ] as const;
-        for (const [name, pattern] of opsLines) {
-            const found = doc(name).match(pattern);
-            expect(found, name).not.toBeNull();
-            expect(found![0], name).not.toMatch(/रेकॉर्डिंग|recording/i);
-        }
-        expect(doc('legal/privacy_en.md')).toContain('a voice Shram Sathi understood');
-        expect(doc('legal/privacy_mr.md')).toContain('ती बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.');
     });
 
     it('a pure wording change does not move the notice version (that would ask every farmer again)', () => {

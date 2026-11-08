@@ -21,6 +21,10 @@ const agreement = (lang: 'mr' | 'en') =>
 // lane WORD-1 (founder D-109, 2026-11-08: "don't use recording but understanding"): the founder approved exactly these two lines.
 const OFF_MR = 'हा पर्याय बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.';
 const OFF_EN = 'A voice Shram Sathi understood while this is off cannot be played later.';
+// The legal files (agreement_*.md, privacy_*.md, terms_*.md) were deliberately left with the pre-WORD-1 text (coordinator's call,
+// 2026-11-08): the agreement is asserted as it stands there. The screens above carry the approved line.
+const AGREEMENT_OFF_MR = 'हा पर्याय बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.';
+const AGREEMENT_OFF_EN = 'A recording made while this is off cannot be played later.';
 
 describe('R4 - playback on banner', () => {
     it('exact Marathi, two lines', () => {
@@ -61,11 +65,11 @@ describe('R7 - turning playback off', () => {
 describe('R8 - the consent screen and the agreement say the same about "no"', () => {
     it('Marathi: the screen carries the founder sentence and the off line; the agreement says playback stops, nothing is deleted', () => {
         expect(tConsent('mr-IN', 'toggles.fullHistoryJournal.body')).toContain(OFF_MR);
-        expect(agreement('mr')).toContain(`- नकार दिल्यास: ऐकणं थांबतं, पण काहीही मिटवलं जात नाही. ${OFF_MR}`);
+        expect(agreement('mr')).toContain(`- नकार दिल्यास: ऐकणं थांबतं, पण काहीही मिटवलं जात नाही. ${AGREEMENT_OFF_MR}`);
     });
     it('English: the same', () => {
         expect(tConsent('en-IN', 'toggles.fullHistoryJournal.body')).toContain(OFF_EN);
-        expect(agreement('en')).toContain(`- If you say no: playback stops and nothing is deleted. ${OFF_EN}`);
+        expect(agreement('en')).toContain(`- If you say no: playback stops and nothing is deleted. ${AGREEMENT_OFF_EN}`);
     });
 });
 
