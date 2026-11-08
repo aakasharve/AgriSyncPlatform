@@ -133,11 +133,12 @@ describe('TodayActivityClipsSheet — ▶ and the glance', () => {
 });
 
 describe('round 2 — the feed and the glance', () => {
-    it('the glance names the phone holder "तुम्ही", like the result screen; someone else by name', async () => {
+    it('the glance names the phone holder by his own name, like the result screen (lane IT4: never "तुम्ही"); someone else by name', async () => {
         render(<TodayActivityClipsSheet entries={entriesFor(vi.fn())} dateLabel="सोमवार" onClose={vi.fn()} createAudio={createAudio} />);
         await waitFor(() => expect(within(cards()[0]).getByTestId('card-play')).toBeTruthy());
         fireEvent.click(within(cards()[0]).getByTestId('card-open'));
-        expect(screen.getByTestId('clip-glance-who').textContent).toBe('तुम्ही');
+        expect(screen.getByTestId('clip-glance-who').textContent).not.toBe('तुम्ही');
+        expect(screen.getByTestId('clip-glance-who').textContent).toBe('पुर्वेश');
         fireEvent.click(screen.getByTestId('clip-glance-back'));
         fireEvent.click(within(cards()[1]).getByTestId('card-open'));
         expect(screen.getByTestId('clip-glance-who').textContent).toBe('रमेश');

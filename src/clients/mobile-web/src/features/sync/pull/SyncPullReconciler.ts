@@ -25,6 +25,7 @@ import { reconcileScheduleSubscriptions } from './reconcilers/scheduleSubscripti
 import { reconcilePlannedWork } from './reconcilers/plannedWorkReconciler';
 import { uploadHeldScheduleChoices } from '../../scheduler/schedulePage/uploadHeldScheduleChoices';
 import { reconcileLogs } from './reconcilers/logsReconciler';
+import { reconcileInputIdentityAnswers } from './reconcilers/inputIdentityReconciler';
 import { reconcileAttachments } from './reconcilers/attachmentsReconciler';
 import { reconcileReferenceData } from './reconcilers/referenceDataReconciler';
 import { reconcileDayLedgersAndPlannedTasks } from './reconcilers/dayLedgersAndPlannedTasksReconciler';
@@ -119,6 +120,9 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
                 await markLogsRebuilt(db, receivedAtUtc);
             }
         }
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4) - his हो / नाही / फोटो answers, laid on the records just
+        // reconciled. Their own list: an answer never moves its record's clock, so the log step above cannot carry it.
+        await reconcileInputIdentityAnswers(db, payload);
         await reconcileAttachments(db, payload, receivedAtUtc);
         referenceDataUpdated = await reconcileReferenceData(db, payload, receivedAtUtc);
         const ledgerSummary = await reconcileDayLedgersAndPlannedTasks(db, payload, receivedAtUtc);

@@ -20,6 +20,15 @@ import type { VoiceResultState } from '../../../../app/hooks/useVoiceAutoSave';
 import { resolveVerifierUserId } from '../../../../core/domain/verifierIdentity';
 import { getSessionUserId } from '../../../../infrastructure/storage/AuthTokenStore';
 import { clipScanFloor } from '../../../../infrastructure/voice/clipLogLink';
+import { useOptionalFarmContext } from '../../../../core/session/FarmContext';
+import { AUTHORITY, holdsAuthority } from '../../../../core/session/farmAuthorities';
+import { seeMoneyDoor, useStoredAccessScopes } from '../../../../core/session/storedFarmScope';
+import { mayShowFarmMoney } from '../../../labour/homeAttendanceDoor';
+import { AssertInputIdentityCommand } from '../../../../application/usecases/sync/AssertInputIdentityCommand';
+import { captureAttachment } from '../../../../application/use-cases/CaptureAttachment';
+import { CATALOG_VERSION } from '../../../../domain/inputs/inputCatalog';
+import type { MixRule } from '../../../../domain/inputs/mixVerdict';
+import type { ProductAnswerKit } from './ProductCard';
 import { buildDayView, isConfirmed, ringNodesForDay, sameDayLogs, type PartKey, type WhoDeps } from './resultModel';
 import { useResultStr } from './resultStrings';
 import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './useClipPlayback';
@@ -33,6 +42,12 @@ import { moneyNotFollowedLines, useMoneyNotFollowedOf } from '../correction/mone
 import { readMoneyNotFollowed } from '../../../finance/editMoney';
 import { DayPickSheet } from '../dayPick/DayPickSheet';
 import { AudienceRow } from '../../../recordAudience/AudienceRow';
+
+/** The holder's own name from the session profile; the app's placeholder for "no name yet" is not a name. */
+const ownNameOf = (name: string | undefined): string | undefined => {
+    const n = (name ?? '').trim();
+    return n && n.toLowerCase() !== 'owner' ? n : undefined;
+};
 
 export interface VoiceResultContainerProps {
     result: VoiceResultState;
@@ -59,11 +74,13 @@ export interface VoiceResultContainerProps {
      * chosen day is queued as a move of each of its entries (`queueSavedEntryMove`). Absent = the day is shown, not offered.
      */
     onMoveDay?: (logs: readonly DailyLog[], dateKey: string) => Promise<void>;
+    /** Lane IT4 - the mixing rules the combination boxes use. Default: the shippable list (no red rule is reviewed yet, D-96). Test seam. */
+    mixRules?: readonly MixRule[];
 }
 
 export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     result, history, farmerProfile, operatorNameById, farmId, farmRole, placeLabel, syncQueuedById,
-    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay,
+    onEdit, onBack, onAddAnother, onTellMore, questionPanel, extras, createAudio, onMoveDay, mixRules,
 }) => {
     const [pickingDay, setPickingDay] = useState(false);
     const sessionUserId = getSessionUserId();
@@ -79,10 +96,12 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const deps: WhoDeps = useMemo(() => ({
         youIds: new Set([farmerProfile.activeOperatorId, sessionUserId].filter((x): x is string => !!x)),
         nameOf: id => operatorNameById.get(id),
-        youLabel: RS.you,
+        // Lane IT4 Task 0b (founder 2026-11-06): the holder is shown by his own name, never "तुम्ही". The profile's default
+        // placeholder ("Owner") is not a name: it reads as unknown.
+        ownName: ownNameOf(farmerProfile.name),
         unknownLabel: RS.unknownPerson,
         language,
-    }), [farmerProfile.activeOperatorId, sessionUserId, operatorNameById, RS, language]);
+    }), [farmerProfile.activeOperatorId, farmerProfile.name, sessionUserId, operatorNameById, RS, language]);
     const day = useMemo(() => buildDayView(current, history, deps), [current, history, deps]);
     const dayLogs = useMemo(() => sameDayLogs(current, history), [current, history]);
     const nodes = useMemo(() => ringNodesForDay(dayLogs, current[0]?.date), [dayLogs, current]);
@@ -101,6 +120,42 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
     const verifierUserId = resolveVerifierUserId(farmerProfile.activeOperatorId, sessionUserId);
     const trust = useConfirmRecording({ verifierUserId, repository: dataSource.logs, auditPort, profile: farmerProfile });
     const mayConfirmOwn = farmRole === 'PrimaryOwner';
+
+    // Lane IT4 Task 2 (founder D-95): who may CHECK products (the confirm-records authority) and who may see money. The server
+    // decides what an answer is; the phone only draws the right words. Without a farm context only the primary owner checks.
+    const currentFarm = useOptionalFarmContext()?.currentFarm ?? null;
+    const storedScopes = useStoredAccessScopes();
+    const canCheck = mayConfirmOwn || holdsAuthority(currentFarm, AUTHORITY.confirmRecords);
+    const canSeeMoney = mayShowFarmMoney(farmRole, seeMoneyDoor(storedScopes, farmId, currentFarm));
+    const ownName = deps.ownName;
+    const answerKit: ProductAnswerKit = useMemo(() => {
+        const logById = new Map<string, DailyLog>([...dayLogs, ...current].map(l => [l.id, l] as const));
+        const farmOf = (logId: string): string | null => logById.get(logId)?.meta?.farmId ?? farmId;
+        const enqueue = async (logId: string, item: { ref?: { eventId: string; mixIndex: number } }, rest: { verdict: 'confirmed' | 'rejected' | 'photo'; catalogProductId?: string; attachmentId?: string }) => {
+            const farm = farmOf(logId);
+            if (!farm || !item.ref) throw new Error('VoiceResultContainer: this product cannot be answered about yet.');
+            await AssertInputIdentityCommand.enqueue({
+                farmId: farm, dailyLogId: logId, inputEventId: item.ref.eventId, mixIndex: item.ref.mixIndex,
+                catalogVersion: CATALOG_VERSION, ...rest,
+            });
+        };
+        return {
+            logById,
+            canCheck,
+            canSeeMoney,
+            nameOfUser: userId => (userId && (operatorNameById.get(userId) || (userId === sessionUserId ? ownName : undefined))) || RS.unknownPerson,
+            cropNamesOf: logId => (logById.get(logId)?.context?.selection ?? []).map(s => s.cropName).filter((n): n is string => !!n),
+            onAnswer: ({ logId, item, verdict, catalogProductId }) => enqueue(logId, item, { verdict, ...(catalogProductId ? { catalogProductId } : {}) }),
+            // The photo goes with the SAME record as its parent ("DailyLog"), through the existing attachment flow; the answer
+            // then points at it (the photo may not have reached the server yet - the server takes a pointer).
+            onPhoto: async ({ logId, item }) => {
+                const farm = farmOf(logId);
+                if (!farm) throw new Error('VoiceResultContainer: no farm for this photo.');
+                const photo = await captureAttachment({ source: 'camera', farmId: farm, linkedEntityId: logId, linkedEntityType: 'DailyLog' });
+                await enqueue(logId, item, { verdict: 'photo', attachmentId: photo.id });
+            },
+        };
+    }, [dayLogs, current, farmId, canCheck, canSeeMoney, operatorNameById, sessionUserId, ownName, RS]);
 
     if (current.length === 0) return null;
     // Only a log KNOWN to be on its way to the server can be verified there. `null` (the write held but the
@@ -166,6 +221,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
             questionPanel={questionPanel}
             extras={extras}
             onChangeDay={moveDay ? () => setPickingDay(true) : undefined}
+            answerKit={answerKit}
+            mixRules={mixRules}
         />
         {moveDay && pickingDay && (
             <DayPickSheet

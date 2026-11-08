@@ -70,6 +70,10 @@ export async function reconcileAttentionBoard(
             overdueTaskCount: card.overdueTaskCount,
             latestHealthScore: card.latestHealthScore,
             unresolvedDisputeCount: card.unresolvedDisputeCount,
+            // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 Task 4) - the open signal that ranks this card, kept as
+            // sent (optional, non-indexed). An older server sends neither: the keys are left off, not written as undefined.
+            ...(typeof card.topSignalId === 'string' ? { topSignalId: card.topSignalId } : {}),
+            ...(typeof card.topSignalRuleCode === 'string' ? { topSignalRuleCode: card.topSignalRuleCode } : {}),
         })),
     );
 }

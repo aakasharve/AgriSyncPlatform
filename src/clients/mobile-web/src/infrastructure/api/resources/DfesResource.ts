@@ -73,3 +73,29 @@ export async function getDayUnderstanding(
     );
     return response.data;
 }
+
+/**
+ * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3 Task 2, read by IT4 Task 0b) - one plot's understanding of one day,
+ * derived on read from that plot's own records. `score0to10` is null for a plot with no record that day and for a declared
+ * no-work day (a null is never a zero). Shown only on the result screen.
+ */
+export interface PlotDayUnderstandingDto {
+    plotId: string;
+    score0to10: number | null;
+    understood?: Array<{ mr: string; en: string }>;
+    nextHint?: { mr: string; en: string } | null;
+}
+
+export async function getPlotDayUnderstanding(
+    t: HttpTransport,
+    farmId: string,
+    date?: string,
+): Promise<PlotDayUnderstandingDto[]> {
+    const query = date
+        ? `?farmId=${encodeURIComponent(farmId)}&date=${encodeURIComponent(date)}`
+        : `?farmId=${encodeURIComponent(farmId)}`;
+    const response = await t.http.get<PlotDayUnderstandingDto[]>(
+        `/shramsafal/day-understanding/plots${query}`,
+    );
+    return Array.isArray(response.data) ? response.data : [];
+}

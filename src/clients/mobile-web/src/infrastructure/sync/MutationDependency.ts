@@ -82,6 +82,9 @@ const DAILY_LOG_PARENT_FIELD: Readonly<Record<string, string>> = {
     // a queued worker count wait for their log's create like every other change to it (never parked as a refusal).
     [SyncMutationName.MoveDailyLog]: 'dailyLogId',
     [SyncMutationName.CorrectLabourAssignment]: 'dailyLogId',
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 fix 1, F2) - `assert_input_identity.zod.ts`: his हो / नाही / फोटो
+    // answer waits for its record's create like every other change to it (the server answers `DailyLogNotFound` before that).
+    [SyncMutationName.AssertInputIdentity]: 'dailyLogId',
     [SyncMutationName.VerifyLog]: 'dailyLogId',
     [SyncMutationName.VerifyLogV2]: 'logId',
     [SyncMutationName.JobcardComplete]: 'dailyLogId',

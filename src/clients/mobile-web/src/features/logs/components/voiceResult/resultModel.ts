@@ -388,18 +388,33 @@ export interface WhoDeps {
     /** Ids that mean "the person holding this phone" (the active operator and the signed-in user). */
     youIds: ReadonlySet<string>;
     nameOf: (operatorId: string) => string | undefined;
-    /** Shown for the phone holder. */
-    youLabel: string;
-    /** Shown when nobody was recorded as speaking it (never a guessed name). */
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 Task 0b; founder 2026-11-06) - the phone holder's OWN name, from
+     * the session profile. "Who said it" is always a real name, never "you": the result screen passes this and no `youLabel`.
+     */
+    ownName?: string;
+    /**
+     * LEGACY (lane IT4 Task 0b): the word the screens used for the phone holder. The result screen no longer passes it and shows
+     * a real name. Only a caller outside this lane that still passes one (Reflect / आढावा: lane IT5 "Reflect names" removes it)
+     * keeps the old swap, so that screen is not changed behind IT5's back. A blank value is no swap.
+     */
+    youLabel?: string;
+    /** Shown when nobody was recorded as speaking it, or the name is not known (never a guessed name, never "तुम्ही"). */
     unknownLabel: string;
     /** spec I18 — the language the entries' words are built in (default Marathi). */
     language?: string;
 }
 
+/**
+ * Who spoke a recording: ALWAYS a real name. The phone holder is named by the operator list, else by his own session-profile
+ * name (`ownName`); a name nobody knows reads `unknownLabel`, never "तुम्ही" (lane IT4 Task 0b). `you` still says whose phone it
+ * is (colour and "my recording" rules), it no longer changes the words.
+ */
 export const whoSpoke = (log: DailyLog, deps: WhoDeps): Who => {
     const id = log.meta?.createdByOperatorId ?? '';
-    if (id && deps.youIds.has(id)) return { name: deps.youLabel, you: true };
-    return { name: (id && deps.nameOf(id)) || deps.unknownLabel, you: false };
+    const known = (id && deps.nameOf(id)) || '';
+    if (id && deps.youIds.has(id)) return { name: clean(deps.youLabel) || known || clean(deps.ownName) || deps.unknownLabel, you: true };
+    return { name: known || deps.unknownLabel, you: false };
 };
 
 /**

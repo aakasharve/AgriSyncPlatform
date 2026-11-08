@@ -11,6 +11,7 @@
 
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { REFUSAL_RESTORES_SERVER_VERSION } from '../logsRebuildMarker';
+import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 
 /**
  * P0.5 — the statuses that mean "this device still holds unresolved intent for
@@ -62,6 +63,10 @@ export async function readPendingLogIds(db: AgriLogDatabase): Promise<Set<string
             .toArray();
         for (const mutation of pending) {
             if (!holdsEntry(mutation)) continue;
+            // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4) - his हो / नाही / फोटो answer is an overlay on the
+            // record, never an edit of it (P7): it holds nothing back from the pull, and a refused one must not park the
+            // record for good. (The answers themselves are merged by their own step, `inputIdentityReconciler.ts`.)
+            if (mutation.mutationType === SyncMutationName.AssertInputIdentity) continue;
             const payloadObj = mutation.payload as
                 | { dailyLogId?: string; logId?: string; id?: string }
                 | null

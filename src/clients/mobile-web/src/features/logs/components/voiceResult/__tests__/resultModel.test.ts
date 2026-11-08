@@ -32,7 +32,7 @@ const log = (id: string, over: Record<string, unknown> = {}): DailyLog => ({
 const deps: WhoDeps = {
     youIds: new Set(['op-me']),
     nameOf: id => (id === 'op-ramesh' ? 'रमेश' : undefined),
-    youLabel: 'तुम्ही',
+    ownName: 'सुनील',
     unknownLabel: 'अज्ञात',
 };
 
@@ -171,12 +171,12 @@ describe('buildDayView — the plot\'s WHOLE day', () => {
         expect([...day.touchedNow]).toEqual(['irrigation']);
     });
 
-    it('each recording names who spoke it: "तुम्ही" for this phone\'s person, else the author\'s name', () => {
+    it('each recording names who spoke it: the real name, the phone holder\'s own too (lane IT4), else the author\'s name', () => {
         const day = buildDayView([now], history, deps);
-        expect(day.current[0].who).toEqual({ name: 'तुम्ही', you: true });
+        expect(day.current[0].who).toEqual({ name: 'सुनील', you: true });
         expect(day.earlier.find(r => r.id === 'MORNING')?.who).toEqual({ name: 'रमेश', you: false });
         expect(whoSpoke(log('X', { meta: { createdAtISO: DATE, createdByOperatorId: 'op-stranger' } }), deps)).toEqual({ name: 'अज्ञात', you: false });
-        expect(day.speakers).toEqual([{ name: 'रमेश', you: false, times: 1 }, { name: 'तुम्ही', you: true, times: 2 }]);
+        expect(day.speakers).toEqual([{ name: 'रमेश', you: false, times: 1 }, { name: 'सुनील', you: true, times: 2 }]);
     });
 
     it('confirmed / not confirmed comes from the log\'s own verification', () => {

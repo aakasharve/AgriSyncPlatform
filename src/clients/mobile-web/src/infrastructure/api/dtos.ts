@@ -454,6 +454,35 @@ export interface AttentionCardDto {
     overdueTaskCount?: number | null;
     latestHealthScore?: string | null;
     unresolvedDisputeCount?: number | null;
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2 Task 4, read by IT4 Task 4) - the id of the open compliance
+     * signal that ranks this plot's card, and that signal's rule code. Additive: absent from an older server. No screen reads
+     * them yet (lane IT5).
+     */
+    topSignalId?: string | null;
+    topSignalRuleCode?: string | null;
+}
+
+/**
+ * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2 Task 2, read by IT4 Task 2) - one answer about the identity of one
+ * product of one saved record, as the pull sends it (`inputIdentityAssertions`). `isCheck` is the server's statement that the
+ * sender held the confirm-records authority; false is the speaker's own answer (founder D-95).
+ */
+export interface InputIdentityAssertionDto {
+    assertionId: string;
+    farmId: string;
+    plotId?: string | null;
+    dailyLogId: string;
+    inputEventId: string;
+    mixIndex: number;
+    spokenName: string;
+    catalogProductId?: string | null;
+    verdict: string;
+    attachmentId?: string | null;
+    catalogVersion: string;
+    assertedByUserId: string;
+    assertedAtUtc: string;
+    isCheck: boolean;
 }
 
 export interface AttentionBoardDto {
@@ -489,6 +518,11 @@ export interface SyncPullResponse extends PullAudienceFields {
     costCategories?: CostCategoryRef[];
     referenceDataVersionHash?: string;
     attentionBoard?: AttentionBoardDto | null;
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2) - his हो / नाही / फोटो answers about products, the newest of each
+     * item, for the records this person may see. Additive and last (P11): absent from an older server = nothing to merge.
+     */
+    inputIdentityAssertions?: InputIdentityAssertionDto[];
     // Labour V2 R1 Task 3.5c — additive: absent from an older server = no-op.
     attendanceMarks?: AttendanceMarkDto[];
     // lane MU-3 (plan step 4a) — what this person may read on EACH farm this pull covers. Fix 1 (F9): a farm the

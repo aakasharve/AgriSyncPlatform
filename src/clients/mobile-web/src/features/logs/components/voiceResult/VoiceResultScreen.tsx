@@ -18,12 +18,17 @@
  *   4. the bottom bar: "मागे" + "आणखी सांगा".
  * One screen for readers and non-readers alike (no mode switch).
  *
+ * Lane IT4 (spec dfes-input-truth-and-mix-check-2026-11-06; founder 2026-11-06) - the simple form: a red banner on top when a combination
+ * is wrong; the day as ONE tappable line per part, nothing expanded (`DaySummaryLines`); a spray or drip line opens to one big coloured
+ * row per product (Option 3) whose card carries the library's facts and हो / नाही / फोटो; his words folded under one line with his
+ * play button; real names for who said it. The speaker's answer is optional and kept as his (D-95). The record is only read here (P7).
+ *
  * Lane L6b (founder design, `PostVoiceResultPreview.sendTyped` / `TypedLog.tsx`): what he TYPED to Sathi lands on this
  * same screen, marked "लिहिलेलं", with the design's no-recording note where the player would be (no player, no "ऐका");
  * the why-tiles are the design's ("श्रम साथीला हे का समजले?"); sprays and fertilisers sit on one chip row; Sathi's
  * question is the design's amber card (the container's panel, `look="sathi"`).
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Check, MapPin, Mic, Pencil } from 'lucide-react';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { dayRel, dayShort } from '../dayPick/dayWords';
@@ -33,12 +38,17 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import type { VoiceClipCacheRecord } from '../../../../infrastructure/storage/DexieDatabase';
 import type { RingNodeData } from '../shramsathi/understandingRing';
 import ClipPlayer from './ClipPlayer';
-import { AddedRow, BlockerRow, DayRow, EarlierRecording, LegacyNote, TimePill, TypedNote, TypedTag, WhoChip } from './DayParts';
-import { PartLinks, Words } from './HisWords';
-import { AddedProducts } from './ProductRows';
-import { showsProducts } from './productModel';
+import { BlockerRow, EarlierRecording, LegacyNote, TimePill, TypedNote, TypedTag, WhoChip } from './DayParts';
+import DaySummaryLines, { dayLinesOf, lineKeyOfVerdict } from './DaySummaryLines';
+import { PartLinks, Words, WordsFold } from './HisWords';
+import { MixBanner, tankVerdictsOf } from './MixBox';
+import ProductCard, { type ProductAnswerKit } from './ProductCard';
+import type { ProductItem } from './productModel';
+import { resultCopy } from './resultCopy';
+import type { MixRule } from '../../../../domain/inputs/mixVerdict';
+import { SHIPPABLE_RULES } from '../../../../domain/inputs/mixVerdict';
 import ResultHero from './ResultHero';
-import { PARTS, markTranscript, type DayView, type PartKey, type RecordingView } from './resultModel';
+import { markTranscript, type DayView, type PartKey, type RecordingView } from './resultModel';
 import { resultDayStr, useResultStr, type ResultStr } from './resultStrings';
 import { scrollBelowHeader } from './scrollBelowHeader';
 import type { LogSyncState } from './useRecordingTrust';
@@ -93,9 +103,22 @@ export interface VoiceResultScreenProps {
      * is shown and not offered as a button (P5).
      */
     onChangeDay?: () => void;
+    /**
+     * Lane IT4 (spec dfes-input-truth-and-mix-check-2026-11-06) - what the product rows need to answer with (the records, the
+     * roles, the queue, the camera). Absent = the rows are shown with no answers and no combination check.
+     */
+    answerKit?: ProductAnswerKit;
+    /** Lane IT4 - the mixing rules the combination boxes use. Default: the shippable list, which holds no red rule until a person has reviewed one (D-96). Test seam. */
+    mixRules?: readonly MixRule[];
 }
 
 /** The plots one log of this recording is about, as named on the farm (his own words for them). */
+/** Lane IT4 Task 0b - the ONE plot a log is about, for the plot's own score; none for a whole-farm log or one that names several. */
+const plotIdOf = (r: RecordingView): string | null => {
+    const ids = [...new Set((r.log.context?.selection ?? []).flatMap(s => s.selectedPlotIds ?? []).filter(Boolean))];
+    return ids.length === 1 ? ids[0] : null;
+};
+
 const plotsOf = (r: RecordingView, RS: ResultStr): string => {
     const names = (r.log.context?.selection ?? []).flatMap(s => s.selectedPlotNames ?? []).filter(Boolean);
     return names.length > 0 ? names.join(', ') : RS.wholeFarm;
@@ -105,7 +128,27 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     const { day } = p;
     const primary: RecordingView | undefined = day.current.find(r => !!r.transcript) ?? day.current[0];
     const [focus, setFocus] = useState<PartKey | null>(null);
+    const [openLines, setOpenLines] = useState<ReadonlySet<string>>(() => new Set());
+    const [wordsOpen, setWordsOpen] = useState(false);
+    const [card, setCard] = useState<{ item: ProductItem; logId: string } | null>(null);
+    const [scrollTo, setScrollTo] = useState<string | null>(null);
     const latest = useRef<HTMLElement>(null);
+    const rules = p.mixRules ?? SHIPPABLE_RULES;
+    const kit = p.answerKit;
+    // Lane IT4 Task 3 - the day's tank verdicts, derived on read from the records on this screen; nothing is stored.
+    const verdicts = useMemo(() => {
+        if (!kit) return [];
+        const ids = [...new Set([...p.day.current, ...p.day.earlier].flatMap(r => r.logIds))];
+        return ids.flatMap(id => tankVerdictsOf(kit.logById.get(id), rules));
+    }, [kit, p.day, rules]);
+    const reds = useMemo(() => verdicts.filter(v => v.result.state === 'red'), [verdicts]);
+    // After the banner opens a line, bring it into view below the sticky header.
+    useEffect(() => {
+        if (!scrollTo) return;
+        const el = latest.current?.querySelector<HTMLElement>(`[data-testid="vr-line-${scrollTo}"]`);
+        scrollBelowHeader(el);
+        setScrollTo(null);
+    }, [scrollTo]);
     const language = useOptionalLanguage()?.language;
     const RS = useResultStr();
     if (!primary) return null;
@@ -115,25 +158,40 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
     const addedEntries = day.current.flatMap(r => r.entries);
     const runs = markTranscript(primary.transcript, addedEntries);
+    const copy = resultCopy(language);
+    const plotId = plotIdOf(primary);
+    const lines = dayLinesOf(day, language);
+    const toggleLine = (key: string) => setOpenLines(prev => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+    // Banner: one tap opens the line that holds the wrong mix and brings it into view.
+    const openRed = (v: (typeof reds)[number]) => {
+        const key = lineKeyOfVerdict(lines, v);
+        if (!key) return;
+        setOpenLines(prev => new Set(prev).add(key));
+        setScrollTo(key);
+    };
+    const redHint = (() => {
+        const v = reds[0];
+        const box = v ? lines.find(l => l.key === lineKeyOfVerdict(lines, v))?.box : undefined;
+        const kind = box ? (box.kind === 'spray' ? copy.spray : box.kind === 'drip' ? copy.drip : copy.products) : '';
+        return [kind, copy.mixBannerHint].filter(Boolean).join(' · ');
+    })();
+    // D-95: someone who does not check sees that the owner will, once, under the badges - only when there is a product to check.
+    const hasAnswerable = !!kit && addedEntries.some(e => e.products?.items.some(i => !!i.ref));
     const clip = p.clips.get(primary.id);
     const heard = p.heard.has(primary.id);
     // Founder D-44 (amends PLR-D1 round 2): listening is never a compulsory step. He may confirm from his words
     // ("वाचा आणि पक्कं करा", recorded as read-not-heard) or after playing his clip ("ऐका आणि पक्कं करा", heard).
-    const nowIds = new Set(day.current.map(r => r.id));
     // How many times he told Sathi today: one recording, however many plots it named, counted once (the earlier ones
     // are already one row each); an entry filled in on the form is not a time he "said" it (L6b: one TYPED to Sathi is —
     // the sheet's own words are "लिहून सांगा", and the design counts it).
     const count = day.earlier.filter(r => !r.byForm).length + 1;
-    // L6b — the design's one compact chip row: the products of every verified spray / fertiliser item of this recording.
-    const boxed = (e: typeof addedEntries[number]) => e.verified && showsProducts(e.products, language);
-    const productBoxes = addedEntries.flatMap(e => (boxed(e) && e.products ? [e.products] : []));
-    const otherEntries = addedEntries.filter(e => !boxed(e));
     const severalPlots = day.current.length > 1;
     // Lands his words below the sticky back bar, never under it (the preview's scrollBelowHeader).
     const toWords = () => scrollBelowHeader(latest.current);
 
     return (
         <div className="space-y-3 pb-6 pt-1" style={{ fontFamily: SANS }} data-testid="voice-result">
+            <MixBanner reds={reds} hint={redHint} onOpen={openRed} />
             <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr-place"><MapPin size={16} aria-hidden="true" />{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
                 {p.onChangeDay ? (
@@ -154,7 +212,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 ))}
             </div>
 
-            <ResultHero farmId={p.farmId} dayDate={primary.log.date} savedLogId={primary.id} recordingKey={p.recordingKey}
+            <ResultHero farmId={p.farmId} dayDate={primary.log.date} plotId={plotId} savedLogId={primary.id} recordingKey={p.recordingKey}
                 nodes={p.nodes} missing={day.missing} unsure={day.unsure} onTellMore={p.onTellMore} onReadMore={toWords} typed={primary.typed} />
 
             <section ref={latest} className="rounded-3xl border-2 border-emerald-600 bg-white p-3.5" data-testid="vr-latest">
@@ -172,36 +230,41 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 </div>
                 {!severalPlots && <NotQueuedForServerBadge syncQueued={p.syncQueuedOf(primary.id)} />}
                 {primary.legacyPartial && <LegacyNote />}
-
-                {primary.wordsWithheld
-                    ? <MoneyWordsWithheldCard testId="vr-words-withheld" />
-                    : runs.length > 0 && <Words runs={runs} tags focus={focus} />}
-                <PartLinks runs={runs} entries={addedEntries} focus={focus} onFocus={setFocus} />
-
-                {p.unclear.length > 0 && (
-                    <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-2.5" data-testid="vr-unclear">
-                        <div className="mb-1 text-[12.5px] font-extrabold text-amber-900">{RS.unclearTitle}</div>
-                        {p.unclear.map((u, i) => <div key={i} className="text-[15px] font-semibold text-stone-800">“{u}”</div>)}
-                    </div>
+                {kit && !kit.canCheck && hasAnswerable && (
+                    <p className="m-0 mt-2 text-[14px] font-bold leading-snug text-stone-700" data-testid="vr-speaker-done">{copy.speakerDone}</p>
                 )}
 
-                {primary.typed ? <div className="mt-2"><TypedNote /></div> : clip && (
-                    <div className="mt-2">
-                        <ClipPlayer clipKey={clip.id} durationSec={p.lengthOf(primary.id)} playing={p.playingId === primary.id} progress={p.progress} big
-                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr-play" />
-                    </div>
-                )}
-
-                {(addedEntries.length > 0 || day.blockersNow.length > 0) && (
-                    <div className="mt-3" data-testid="vr-added">
-                        <div className="mb-1.5 text-[13px] font-extrabold text-emerald-800">{RS.addedTitle}</div>
-                        <div className="space-y-1.5">
-                            {otherEntries.map(e => <AddedRow key={`${e.logId}:${e.id}`} entry={e} />)}
-                            {productBoxes.length > 0 && <AddedProducts boxes={productBoxes} />}
+                {/* The day as ONE tappable line per part, nothing expanded (lane IT4 Task 1). */}
+                <div className="mt-3" data-testid="vr-day-lines">
+                    <h3 className="m-0 text-sm font-extrabold text-stone-700" data-testid="vr-day-title">{onDay ? DS.title(onDay) : RS.dayTitle}</h3>
+                    <p className="m-0 mb-1 text-[12px] text-stone-600">{RS.tapForHistory}</p>
+                    <DaySummaryLines day={day} open={openLines} onToggle={toggleLine} verdicts={verdicts} kit={kit}
+                        onOpenProduct={kit ? (item, logId) => setCard({ item, logId }) : undefined} />
+                    {day.blockersNow.length > 0 && (
+                        <div className="mt-2 space-y-1.5" data-testid="vr-blockers">
                             {day.blockersNow.map(b => <BlockerRow key={b.id} entry={b} />)}
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
+
+                {/* His words, folded under ONE line with his recording's play button (lane IT4 Task 1). */}
+                <WordsFold open={wordsOpen} onToggle={() => setWordsOpen(o => !o)}
+                    player={primary.typed ? <TypedNote /> : clip ? (
+                        <ClipPlayer clipKey={clip.id} durationSec={p.lengthOf(primary.id)} playing={p.playingId === primary.id} progress={p.progress} big
+                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr-play" />
+                    ) : undefined}>
+                    {primary.wordsWithheld
+                        ? <MoneyWordsWithheldCard testId="vr-words-withheld" />
+                        : runs.length > 0 && <Words runs={runs} tags focus={focus} />}
+                    <PartLinks runs={runs} entries={addedEntries} focus={focus} onFocus={setFocus} />
+
+                    {p.unclear.length > 0 && (
+                        <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-2.5" data-testid="vr-unclear">
+                            <div className="mb-1 text-[12.5px] font-extrabold text-amber-900">{RS.unclearTitle}</div>
+                            {p.unclear.map((u, i) => <div key={i} className="text-[15px] font-semibold text-stone-800">“{u}”</div>)}
+                        </div>
+                    )}
+                </WordsFold>
 
                 {p.questionPanel && <div className="mt-3">{p.questionPanel}</div>}
 
@@ -245,17 +308,6 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
 
             {p.extras}
 
-            <div>
-                <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700" data-testid="vr-day-title">{onDay ? DS.title(onDay) : RS.dayTitle}</h3>
-                <p className="m-0 mb-2 text-[12px] text-stone-600">{RS.tapForHistory}</p>
-                <div className="space-y-2">
-                    {PARTS.filter(m => day.byPart[m.key].length > 0).map(m => (
-                        <DayRow key={m.key} part={m.key} entries={day.byPart[m.key]} byLog={day.recordingByLog} touched={day.touchedNow.has(m.key)}
-                            showWho={day.speakers.length > 1} nowIds={nowIds} />
-                    ))}
-                </div>
-            </div>
-
             {day.earlier.length > 0 && (
                 <div className="space-y-2" data-testid="vr-earlier">
                     <h3 className="m-0 pt-1 text-sm font-extrabold text-stone-700">{onDay ? DS.earlier : RS.earlierTitle}</h3>
@@ -274,6 +326,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                     <Mic size={20} aria-hidden="true" /> {RS.addAnother}
                 </button>
             </div>
+            {card && kit && <ProductCard item={card.item} logId={card.logId} kit={kit} onClose={() => setCard(null)} />}
         </div>
     );
 };
