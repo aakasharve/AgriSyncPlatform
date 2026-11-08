@@ -8,6 +8,9 @@
  * its day and not finished turns red; an undated or loose one is amber and never late. A change waiting on this phone says
  * "फोनवर ठेवलं — नेट आल्यावर पाठवलं जाईल"; a parked step says its own words and opens the conflict page, and never shows as done.
  * The headcount, quantity and pay mode are shown as the words they are (P4): no हजेरी, wage or cost is drawn from them.
+ * Lane L8c-3 (founder D-24d, D-30): a done task says "झालं · मंजुरी बाकी" / "झालं · मंजूर" / "झालं · शंका — मालकाशी बोला" - the owner's word on
+ * the logs it was done with, TEXT ONLY (the approval door is lane L8c-5); a task done on some of its plots says "अर्धवट झालं" with a line
+ * per plot ("ऊस 1 — झालं · ऊस 2 — बाकी").
  *
  * Marathi mode shows Marathi only and English mode English only (names through `shared/names/namesIn`).
  */
@@ -56,6 +59,8 @@ export interface PlanCardProps {
     assigneeRole?: string | null;
     /** Who planned it, as entered, when the phone knows it. */
     makerName?: string | null;
+    /** Lane L8c-3 - plot names for the per-plot lines of a task done on some of its plots. */
+    plotNames?: ReadonlyMap<string, string>;
     parked?: ParkedStep;
     onOpenConflicts?: () => void;
     /** The assignee's buttons; omitted where there are none. */
@@ -63,7 +68,7 @@ export interface PlanCardProps {
 }
 
 export const PlanCard: React.FC<PlanCardProps> = ({
-    task, today, me, language, whereText, assigneeName, assigneeRole, makerName, parked, onOpenConflicts, actions,
+    task, today, me, language, whereText, assigneeName, assigneeRole, makerName, plotNames, parked, onOpenConflicts, actions,
 }) => {
     const words = plannedWorkWords(language);
     const when = whenView(task, today, words, language);
@@ -75,6 +80,14 @@ export const PlanCard: React.FC<PlanCardProps> = ({
     const roleWord = assigneeRole ? words.role[assigneeRole] ?? '' : '';
     const details = [task.quantityText, task.payMode ? words.payMode[task.payMode] : null, task.note].filter((x): x is string => !!x && x.length > 0);
     const trailLabels = TRAIL_STATUSES.map(s => words.status[s]);
+    // Lane L8c-3: the owner's word on the logs the work was done with, and the per-plot lines of a half-done task.
+    const confirmWord = task.confirmationState
+        ? { Confirmed: words.confirmed, Disputed: words.disputed, Waiting: words.waitingConfirm }[task.confirmationState]
+        : null;
+    const isDone = task.status === 'Done';
+    const partly = !isDone && task.status !== 'Cancelled' && task.plots.some(p => p.status === 'Done');
+    // A plot whose name is not on the phone is "प्लॉट 1" by order - never its id (fix round 1, L006).
+    const plotLines = task.plots.map((p, i) => `${plotNames?.get(p.plotId) ?? `${words.plot} ${i + 1}`} — ${p.status === 'Done' ? words.plotDone : words.plotLeft}`);
 
     return (
         <li data-testid={`plan-${task.id}`} data-stage={stage ?? ''} data-mine={mine ? 'yes' : 'no'} data-reminder={reminder ? 'yes' : 'no'}
@@ -108,6 +121,15 @@ export const PlanCard: React.FC<PlanCardProps> = ({
                 </div>
             )}
             {makerName && <p className="m-0 mt-1 text-[12px] font-bold text-stone-600" data-testid="plan-card-by">{words.by}: {makerName}</p>}
+            {(isDone || partly) && (confirmWord || partly) && (
+                <div className="mt-1.5" data-testid="plan-card-done" data-state={task.confirmationState ?? ''} data-partly={partly ? 'yes' : 'no'}>
+                    <p className={`m-0 text-[14px] font-extrabold ${task.confirmationState === 'Confirmed' ? 'text-emerald-800' : task.confirmationState === 'Disputed' ? 'text-red-800' : 'text-amber-900'}`}
+                        data-testid="plan-card-confirmation">
+                        {[partly ? words.partlyDone : words.status.Done, confirmWord].filter(Boolean).join(' · ')}
+                    </p>
+                    {partly && plotLines.length > 0 && <p className="m-0 mt-0.5 text-[13px] font-bold text-stone-800" data-testid="plan-card-plot-lines">{plotLines.join(' · ')}</p>}
+                </div>
+            )}
             {reminder && task.status !== 'Cancelled' && <p className="m-0 mt-1 text-[12px] font-extrabold text-amber-900" data-testid="plan-card-reminder">{words.reminder}</p>}
             {task.status === 'Cancelled' && <p className="m-0 mt-1 text-[12px] font-extrabold text-stone-600" data-testid="plan-card-cancelled">{words.status.Cancelled}</p>}
             {stage !== null && <div className="mt-2"><Trail stage={stage} labels={trailLabels} /></div>}
@@ -123,7 +145,7 @@ export const PlanCard: React.FC<PlanCardProps> = ({
                     )}
                 </div>
             )}
-            {actions && <div className="mt-2.5 flex flex-wrap gap-2">{actions}</div>}
+            {actions && <div className="mt-2.5 flex flex-wrap gap-2 empty:hidden">{actions}</div>}
         </li>
     );
 };

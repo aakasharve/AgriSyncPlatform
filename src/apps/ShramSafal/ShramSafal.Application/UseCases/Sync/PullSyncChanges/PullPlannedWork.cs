@@ -1,5 +1,6 @@
 // spec: plr-d10-redesign-real-integration-2026-10-25 — lane L8c-1 (founder D-24c, D-26, D-79).
 using ShramSafal.Application.Contracts.Dtos;
+using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.RecordPrivacy;
@@ -17,21 +18,23 @@ namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 internal static class PullPlannedWork
 {
     /// <summary>The tasks this reader sees (with only his plot rows); the ones taken from him go to <paramref name="audience"/>.</summary>
-    internal static List<PlannedWorkDto> Visible(
+    internal static async Task<List<PlannedWorkDto>> VisibleAsync(
+        IShramSafalRepository repository,
         IEnumerable<PlannedWork> changed,
         Guid readerUserId,
         IReadOnlyDictionary<Guid, FarmAccess?> accesses,
         DateTime serverNowUtc,
-        PullAudience audience)
+        PullAudience audience,
+        CancellationToken ct)
     {
-        var sent = new List<PlannedWorkDto>();
+        var seen = new List<(PlannedWork Work, IReadOnlyList<Guid> Rows)>();
         foreach (var work in changed.DistinctBy(w => w.Id))
         {
             var farmId = (Guid)work.FarmId;
             var seat = PlannedWorkSeats.From(accesses.GetValueOrDefault(farmId), readerUserId, serverNowUtc);
             if (PlannedWorkVisibility.VisiblePlots(seat, work) is { } rows)
             {
-                sent.Add(PlannedWorkDto.From(work, rows));
+                seen.Add((work, rows));
             }
             else if (PlannedWorkVisibility.MustForget(seat, work))
             {
@@ -39,7 +42,10 @@ internal static class PullPlannedWork
             }
         }
 
-        return sent;
+        // Lane L8c-3: each task carries the owner's word on the logs it was done with (read from the logs themselves, for every
+        // linked log whether or not this reader may see it: one of three words about a task he already sees).
+        var standing = await PlannedWorkConfirmations.LoadAsync(repository, seen.Select(x => x.Work), ct);
+        return seen.Select(x => PlannedWorkDto.From(x.Work, x.Rows, standing)).ToList();
     }
 
     /// <summary>The cursor after these rows: at least where it was, and the newest change sent when that is later.</summary>

@@ -67,6 +67,9 @@ export { PlannedWorkEditPayload } from './plannedwork_edit.zod';
 export { PlannedWorkSeenPayload } from './plannedwork_seen.zod';
 export { PlannedWorkAcceptPayload } from './plannedwork_accept.zod';
 export { PlannedWorkCancelPayload } from './plannedwork_cancel.zod';
+// lane L8c-3 (founder D-24d): the work done through the real log, and the owner's reopen.
+export { PlannedWorkCompletePayload } from './plannedwork_complete.zod';
+export { PlannedWorkReopenPayload } from './plannedwork_reopen.zod';
 // Labour V2 R1 Task 3.5a — attendance.mark. The parity gate resolves
 // '<payloadSchema>Payload' against this barrel and fails OPEN on a miss
 // (PayloadValidator.ts), so the export name must stay exactly

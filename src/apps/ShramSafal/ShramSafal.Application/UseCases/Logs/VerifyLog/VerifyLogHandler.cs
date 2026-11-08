@@ -306,6 +306,12 @@ public sealed class VerifyLogHandler(
             return Result.Failure<DailyLogDto>(ShramSafalErrors.VerificationTransitionNotAllowedForRole);
         }
 
+        // spec: plr-d10 lane L8c-3 (founder D-24d) - a task done with this log shows the owner's word about it ("मंजूर" /
+        // "शंका" / "मंजुरी बाकी"). That word is read from the log, so the task is moved past every phone's cursor in this same
+        // save and the next pull resends it with the log's new standing. Nothing else on the task changes: a confirmation, a
+        // doubt or a correction never reopens it (only the owner's reopen does).
+        await PlannedWorkConfirmations.NoteLogStandingChangedAsync(repository, log, nowUtc, ct);
+
         await repository.SaveChangesAsync(ct);
 
         // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3a; founder D-46) — the streak counts confirmed

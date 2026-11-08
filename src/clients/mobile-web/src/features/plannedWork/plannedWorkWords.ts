@@ -8,7 +8,8 @@
  * The words the founder named on 2026-10-31 are ported as they are: काम काय / कुठे / कधी / कोणाला / तपशील, "काम सोपवा",
  * and the four steps सोपवलं -> पाहिलं -> स्वीकारलं -> झालं. Lane L8c-2 ports the 25 Oct preview's `PS` words (planModel.ts) AS
  * THEY ARE - रोखीने / ठेक्याने, "तारीख ठरलेली नाही", "जमेल तेव्हा", "ठीक आहे, करतो", "उशीर झाला" - minus its speak / spoken /
- * exampleSaid / mainPage / remindViaLog, and minus "काम झालं — सांगा" (the done step is lane L8c-3, so it is not drawn).
+ * exampleSaid / mainPage / remindViaLog, and minus "काम झालं — सांगा". Lane L8c-3 adds the done step: "काम झालं", the owner's three words (मंजूर / शंका — मालकाशी बोला /
+ * मंजुरी बाकी), "अर्धवट झालं", "कोणत्या प्लॉटवर झालं?", "पूर्ण झालं / काही बाकी आहे", the reopen box - all PROPOSED.
  * Everything the preview does not word is NEW wording, marked `// PROPOSED (Marathi)` / `// PROPOSED (English)`; a Marathi line
  * marked "the preview's" is its own word (itself still PROPOSED there until the founder approves it).
  *
@@ -105,6 +106,36 @@ export interface PlannedWorkWords {
     tooLong: (box: string, max: number) => string;
     /** A person's seat, by the server's role name (display only; the server decides everything). */
     role: Record<string, string>;
+    // ---- lane L8c-3 (founder D-24d, D-30): "काम झालं" through the real log, plot by plot, with the owner's word ----
+    /** The assignee's button on his card (and on a reminder of his own, which needs no log: D-1). */
+    markDone: string;
+    /** The owner's word on the logs the work was done with. */
+    confirmed: string;
+    disputed: string;
+    waitingConfirm: string;
+    /** The whole task when only some plots are done, and a plot's own line. */
+    partlyDone: string;
+    plotDone: string;
+    /** A plot whose name this phone does not hold (never its id): "प्लॉट 1" by order (fix round 1, L006). */
+    plot: string;
+    plotLeft: string;
+    /** After the log is saved: which plots, and is any work left. */
+    whichPlot: string;
+    allDone: string;
+    somethingLeft: string;
+    notNow: string;
+    finishWaitingFirst: string;
+    /** The owner's reopen, with the reason he must give. */
+    reopen: string;
+    reopenWhy: string;
+    reopenReasonPh: string;
+    reopenSend: string;
+    reopenCancel: string;
+    reopenNeedsReason: string;
+    // Refusals of the done step, said plainly.
+    donePlotsRefused: string;
+    doneLogRefused: string;
+    reopenOwnerOnly: string;
 }
 
 /** 10 -> १० (the farmer's digits in Marathi mode). */
@@ -214,6 +245,28 @@ const mr: PlannedWorkWords = {
         Mukadam: 'मुकादम', // the preview's
         Worker: 'कामगार', // the preview's
     },
+    markDone: 'काम झालं', // PROPOSED (Marathi) - the founder's own words for the step
+    confirmed: 'मंजूर', // PROPOSED (Marathi) - the review sheet's own word
+    disputed: 'शंका — मालकाशी बोला', // PROPOSED (Marathi)
+    waitingConfirm: 'मंजुरी बाकी', // PROPOSED (Marathi)
+    partlyDone: 'अर्धवट झालं', // PROPOSED (Marathi)
+    plotDone: 'झालं', // PROPOSED (Marathi)
+    plot: 'प्लॉट', // PROPOSED (Marathi)
+    plotLeft: 'बाकी', // PROPOSED (Marathi)
+    whichPlot: 'कोणत्या प्लॉटवर झालं?', // PROPOSED (Marathi)
+    allDone: 'पूर्ण झालं', // PROPOSED (Marathi)
+    somethingLeft: 'काही बाकी आहे', // PROPOSED (Marathi)
+    notNow: 'आत्ता नाही', // PROPOSED (Marathi)
+    finishWaitingFirst: 'आधी चालू असलेली नोंद पूर्ण करा, मग काम झालं म्हणून सांगा.', // PROPOSED (Marathi)
+    reopen: 'पुन्हा उघडा', // PROPOSED (Marathi)
+    reopenWhy: 'काम पुन्हा का उघडताय? कारण लिहा', // PROPOSED (Marathi)
+    reopenReasonPh: 'उदा. काम नीट झालेलं नाही', // PROPOSED (Marathi)
+    reopenSend: 'पुन्हा उघडा', // PROPOSED (Marathi)
+    reopenCancel: 'नको', // PROPOSED (Marathi)
+    reopenNeedsReason: 'कारण लिहा', // PROPOSED (Marathi)
+    donePlotsRefused: 'यातले काही प्लॉट या कामाचे नाहीत, म्हणून काम झालं हे नोंदवता आलं नाही.', // PROPOSED (Marathi)
+    doneLogRefused: 'काम ज्या प्लॉटवर झालं त्या प्लॉटची नोंद लागते, म्हणून काम झालं हे नोंदवता आलं नाही.', // PROPOSED (Marathi)
+    reopenOwnerOnly: 'काम पुन्हा उघडण्याचा अधिकार फक्त मालकाला आहे.', // PROPOSED (Marathi)
 };
 
 const en: PlannedWorkWords = {
@@ -318,6 +371,28 @@ const en: PlannedWorkWords = {
         Mukadam: 'Mukadam', // PROPOSED (English)
         Worker: 'Worker', // PROPOSED (English)
     },
+    markDone: 'Work done', // PROPOSED (English)
+    confirmed: 'Approved', // PROPOSED (English)
+    disputed: 'Doubt - talk to the owner', // PROPOSED (English)
+    waitingConfirm: 'Approval pending', // PROPOSED (English)
+    partlyDone: 'Partly done', // PROPOSED (English)
+    plotDone: 'Done', // PROPOSED (English)
+    plot: 'Plot', // PROPOSED (English)
+    plotLeft: 'Left', // PROPOSED (English)
+    whichPlot: 'On which plot was it done?', // PROPOSED (English)
+    allDone: 'All done', // PROPOSED (English)
+    somethingLeft: 'Some is left', // PROPOSED (English)
+    notNow: 'Not now', // PROPOSED (English)
+    finishWaitingFirst: 'Finish the record that is open first, then say the work is done.', // PROPOSED (English)
+    reopen: 'Open it again', // PROPOSED (English)
+    reopenWhy: 'Why open this work again? Write the reason', // PROPOSED (English)
+    reopenReasonPh: 'e.g. the work was not done properly', // PROPOSED (English)
+    reopenSend: 'Open it again', // PROPOSED (English)
+    reopenCancel: 'No', // PROPOSED (English)
+    reopenNeedsReason: 'Write the reason', // PROPOSED (English)
+    donePlotsRefused: 'Some of these plots are not plots of this work, so it could not be recorded as done.', // PROPOSED (English)
+    doneLogRefused: 'A record made on the plot where the work was done is needed, so it could not be recorded as done.', // PROPOSED (English)
+    reopenOwnerOnly: 'Only the owner can open the work again.', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

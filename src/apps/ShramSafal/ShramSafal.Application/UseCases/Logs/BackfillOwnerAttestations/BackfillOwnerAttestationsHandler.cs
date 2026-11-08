@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Logs;
 
@@ -144,6 +145,9 @@ public sealed class BackfillOwnerAttestationsHandler(
             }
 
             attested++;
+
+            // Fix round 1 (L003): the day went Draft -> Verified without a tap - a task done with it now reads "मंजूर".
+            await PlannedWorkConfirmations.NoteLogStandingChangedAsync(repository, log, attestedAtUtc, ct);
 
             // wave-1.3's I1 ruling, applied to a bulk write: an audit row that was never
             // written at the moment of the act can never be reconstructed afterwards. This

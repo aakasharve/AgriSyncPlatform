@@ -347,6 +347,11 @@ public sealed class MoveDailyLogHandler(
         var isCreator = command.ActorUserId == log.OperatorUserId.Value;
         var actorRole = await repository.GetUserRoleForFarmAsync((Guid)log.FarmId, command.ActorUserId, ct);
         var reopen = MaterialChangeReopen.Apply(log, command.ActorUserId, actorRole, isCreator, now, idGenerator);
+        if (reopen.ReOpen is not null)
+        {
+            // Fix round 1 (L003): the day went back to Draft (or was re-attested) - resend the tasks done with it.
+            await PlannedWorkConfirmations.NoteLogStandingChangedAsync(repository, log, now, ct);
+        }
 
         var appVersion = string.IsNullOrWhiteSpace(command.ClientAppVersion)
             ? AgriSync.BuildingBlocks.Persistence.AppVersionProvider.Current

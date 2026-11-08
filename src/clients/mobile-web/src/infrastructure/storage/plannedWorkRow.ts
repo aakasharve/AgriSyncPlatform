@@ -13,12 +13,17 @@ export type PlannedWorkPayModeName = 'Cash' | 'Daily' | 'Contract' | 'Later';
 export type PlannedWorkSourceName = 'Planning' | 'VoiceLog' | 'LogLeftover' | 'Schedule';
 export type PlannedWorkSourceKindName = 'Typed' | 'PlanForm' | 'Spoken' | 'Leftover';
 
+/** The owner's word on the logs a task (or one of its plots) was done with (lane L8c-3; the server computes it from the logs). */
+export type PlannedWorkConfirmationName = 'Confirmed' | 'Disputed' | 'Waiting';
+
 export interface PlannedWorkPlotRow {
     plotId: string;
     status: 'Pending' | 'Done';
     doneAtUtc: string | null;
     doneByUserId: string | null;
     linkedDailyLogIds: string[];
+    /** Lane L8c-3 - from this plot's own logs; absent on a row from before the lane or a server that does not send it (P11). */
+    confirmationState?: PlannedWorkConfirmationName | null;
 }
 
 export interface PlannedWorkRow {
@@ -59,4 +64,6 @@ export interface PlannedWorkRow {
     cancelledByUserId: string | null;
     cancelReason: string | null;
     plots: PlannedWorkPlotRow[];
+    /** Lane L8c-3 - Confirmed | Disputed | Waiting, from ALL the task's linked logs; null = no linked log. Plain field, no index. */
+    confirmationState?: PlannedWorkConfirmationName | null;
 }

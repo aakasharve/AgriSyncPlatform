@@ -24,6 +24,8 @@ const VERB_OF: Readonly<Record<string, PlannedWorkVerb>> = {
     [SyncMutationName.PlannedworkSeen]: 'seen',
     [SyncMutationName.PlannedworkAccept]: 'accept',
     [SyncMutationName.PlannedworkCancel]: 'cancel',
+    [SyncMutationName.PlannedworkComplete]: 'complete',
+    [SyncMutationName.PlannedworkReopen]: 'reopen',
 };
 
 /** The latest parked step of each task of this farm, by task id. */
@@ -48,6 +50,12 @@ export function parkedWords(step: ParkedStep, words: PlannedWorkWords): string {
     if (code.includes('AssigneeNotMember')) return words.personNotOnFarm;
     if (code.includes('AssigneeOutsidePlots')) return words.personNotOnPlots;
     if (code.includes('PlannedWorkState')) return words.changedFirst;
-    if (code.includes('Forbidden')) return step.verb === 'seen' || step.verb === 'accept' ? words.noLongerYours : words.notAllowedToAssign;
+    // Lane L8c-3: the done step's own refusals, said plainly.
+    if (code.includes('PlannedWorkPlots')) return words.donePlotsRefused;
+    if (code.includes('PlannedWorkLog')) return words.doneLogRefused;
+    if (code.includes('Forbidden')) {
+        if (step.verb === 'reopen') return words.reopenOwnerOnly;
+        return step.verb === 'seen' || step.verb === 'accept' || step.verb === 'complete' ? words.noLongerYours : words.notAllowedToAssign;
+    }
     return words.parkedUnknown;
 }

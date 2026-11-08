@@ -11,8 +11,8 @@
  *   EVERYONE ELSE: no form; only the work handed to HIM, with "ठीक आहे, करतो".
  *
  * Opening the list sends `seen` once for each task handed to him that he has not been seen to open (the outbox key makes a second
- * open the same one change). "ठीक आहे, करतो" sends `accept`. "काम झालं" is NOT drawn here (lane L8c-3, P5: the server cannot take
- * it yet). Every step works with no net and says "फोनवर ठेवलं — नेट आल्यावर पाठवलं जाईल" until the server answers; a step the server
+ * open the same one change). "ठीक आहे, करतो" sends `accept`. "काम झालं" (lane L8c-3, D-24d) opens the normal recording on the task's
+ * plot(s) - a reminder of his own is done with no log (D-1) - and the primary owner can reopen a done task with a reason. Every step works with no net and says "फोनवर ठेवलं — नेट आल्यावर पाठवलं जाईल" until the server answers; a step the server
  * parked says its own words and opens the conflict page, and never shows as done.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -29,6 +29,7 @@ import { isOpenTask, isReminderTask } from '../planCardModel';
 import { sortByWhen, startOfDay } from '../planDates';
 import { plannedWorkWords } from '../plannedWorkWords';
 import { PlanCard, fontFor } from './PlanCard';
+import { PlanDoneActions } from './PlanDoneActions';
 import { PlanForm, type PlanSavedInfo } from './PlanForm';
 
 export interface PlanWorkPageProps {
@@ -42,6 +43,10 @@ export interface PlanWorkPageProps {
     mayPlan: boolean;
     /** The primary owner or a holder of AssignWork: the people are offered. */
     mayAssign: boolean;
+    /** Lane L8c-3 - the PRIMARY account holder: the only one who may reopen a done task (the server decides). */
+    isPrimaryOwner?: boolean;
+    /** Lane L8c-3 - "काम झालं" on handed-out work: opens the recording on the task's plot(s). */
+    onStartDone?: (task: LocalPlannedWork) => 'opened' | 'waiting';
     onBack: () => void;
     /** Opens the conflict page (route `offline-conflicts`). */
     onOpenConflicts: () => void;
@@ -55,7 +60,7 @@ export interface PlanWorkPageProps {
 const NO_ASSIGNEES: readonly PlannedWorkAssigneeDto[] = [];
 
 export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
-    farmId, userId, language: languageProp, crops, farmerProfile, mayPlan, mayAssign, onBack, onOpenConflicts, today: todayProp, understand, loadAssigneeList,
+    farmId, userId, language: languageProp, crops, farmerProfile, mayPlan, mayAssign, isPrimaryOwner = false, onStartDone, onBack, onOpenConflicts, today: todayProp, understand, loadAssigneeList,
 }) => {
     const contextLanguage = useOptionalLanguage()?.language;
     const language = languageProp ?? contextLanguage;
@@ -163,11 +168,17 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                             <PlanCard key={task.id} task={task} today={today} me={userId} language={language} whereText={whereOf(task)}
                                 assigneeName={who.name} assigneeRole={who.role}
                                 makerName={task.createdByUserId && task.createdByUserId === userId ? words.you : nameOf(task.createdByUserId).name}
-                                parked={parkedStep} onOpenConflicts={onOpenConflicts}
-                                actions={canAccept ? (
-                                    <button type="button" data-testid={`plan-accept-${task.id}`} onClick={() => { void accept(task); }}
-                                        className="min-h-[48px] rounded-full bg-[#1448E6] px-5 text-[15px] font-extrabold text-white active:scale-95">{words.accept}</button>
-                                ) : undefined} />
+                                parked={parkedStep} onOpenConflicts={onOpenConflicts} plotNames={plotName}
+                                actions={(
+                                    <>
+                                        {canAccept && (
+                                            <button type="button" data-testid={`plan-accept-${task.id}`} onClick={() => { void accept(task); }}
+                                                className="min-h-[48px] rounded-full bg-[#1448E6] px-5 text-[15px] font-extrabold text-white active:scale-95">{words.accept}</button>
+                                        )}
+                                        <PlanDoneActions task={task} me={userId} words={words} isPrimaryOwner={isPrimaryOwner} parked={parkedStep}
+                                            onStartDone={onStartDone} onQueued={() => { void reload(); }} onNote={setBanner} />
+                                    </>
+                                )} />
                         );
                     })}
                 </ul>

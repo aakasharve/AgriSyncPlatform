@@ -40,46 +40,59 @@ public sealed record PlannedWorkDto(
     DateTime? CancelledAtUtc,
     Guid? CancelledByUserId,
     string? CancelReason,
-    IReadOnlyList<PlannedWorkPlotDto> Plots)
+    IReadOnlyList<PlannedWorkPlotDto> Plots,
+    string? ConfirmationState = null)
 {
-    /// <summary>The task with only the plot rows in <paramref name="visiblePlots"/> (what this reader may see).</summary>
-    public static PlannedWorkDto From(PlannedWork work, IReadOnlyCollection<Guid> visiblePlots) => new(
-        work.Id,
-        (Guid)work.FarmId,
-        work.Title,
-        work.Scope.ToString(),
-        work.PlannedDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-        work.LooseWhen?.ToString(),
-        work.PlannedTime?.ToString("HH':'mm", System.Globalization.CultureInfo.InvariantCulture),
-        work.AssigneeUserId,
-        work.CrewText,
-        work.ExpectedHeadcount,
-        work.QuantityText,
-        work.PayMode?.ToString(),
-        work.Note,
-        work.Status.ToString(),
-        work.Source.ToString(),
-        work.SourceKind?.ToString(),
-        work.SourceDailyLogId,
-        work.SourceLogTaskId,
-        work.SourcePlotId,
-        work.RecordedOn.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
-        work.LinkedDailyLogIds,
-        work.CreatedByUserId,
-        work.CreatedAtUtc,
-        work.ModifiedAtUtc,
-        work.SeenAtUtc,
-        work.AcceptedAtUtc,
-        work.DoneAtUtc,
-        work.DoneByUserId,
-        work.CancelledAtUtc,
-        work.CancelledByUserId,
-        work.CancelReason,
-        work.LivePlots
-            .Where(p => visiblePlots.Contains(p.PlotId))
-            .OrderBy(p => p.PlotId)
-            .Select(p => new PlannedWorkPlotDto(p.PlotId, p.Status.ToString(), p.DoneAtUtc, p.DoneByUserId, p.LinkedDailyLogIds))
-            .ToList());
+    /// <summary>
+    /// The task with only the plot rows in <paramref name="visiblePlots"/> (what this reader may see).
+    /// <paramref name="statusOf"/> gives the standing of a linked log (<c>null</c> = not found): lane L8c-3's
+    /// <see cref="ConfirmationState"/> is read from it, for the task and for each plot row from its own logs.
+    /// </summary>
+    public static PlannedWorkDto From(
+        PlannedWork work, IReadOnlyCollection<Guid> visiblePlots, Func<Guid, ShramSafal.Domain.Logs.VerificationStatus?>? statusOf = null)
+    {
+        Func<Guid, ShramSafal.Domain.Logs.VerificationStatus?> standing = statusOf ?? (_ => null);
+        return new(
+            work.Id,
+            (Guid)work.FarmId,
+            work.Title,
+            work.Scope.ToString(),
+            work.PlannedDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            work.LooseWhen?.ToString(),
+            work.PlannedTime?.ToString("HH':'mm", System.Globalization.CultureInfo.InvariantCulture),
+            work.AssigneeUserId,
+            work.CrewText,
+            work.ExpectedHeadcount,
+            work.QuantityText,
+            work.PayMode?.ToString(),
+            work.Note,
+            work.Status.ToString(),
+            work.Source.ToString(),
+            work.SourceKind?.ToString(),
+            work.SourceDailyLogId,
+            work.SourceLogTaskId,
+            work.SourcePlotId,
+            work.RecordedOn.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            work.LinkedDailyLogIds,
+            work.CreatedByUserId,
+            work.CreatedAtUtc,
+            work.ModifiedAtUtc,
+            work.SeenAtUtc,
+            work.AcceptedAtUtc,
+            work.DoneAtUtc,
+            work.DoneByUserId,
+            work.CancelledAtUtc,
+            work.CancelledByUserId,
+            work.CancelReason,
+            work.LivePlots
+                .Where(p => visiblePlots.Contains(p.PlotId))
+                .OrderBy(p => p.PlotId)
+                .Select(p => new PlannedWorkPlotDto(
+                    p.PlotId, p.Status.ToString(), p.DoneAtUtc, p.DoneByUserId, p.LinkedDailyLogIds,
+                    PlannedWorkConfirmation.Of(p.LinkedDailyLogIds.ToList(), standing)))
+                .ToList(),
+            PlannedWorkConfirmation.Of(work.LinkedDailyLogIds.ToList(), standing));
+    }
 }
 
 /// <summary>One plot of a task (pending or done; a dropped plot is no longer on the task).</summary>
@@ -88,4 +101,5 @@ public sealed record PlannedWorkPlotDto(
     string Status,
     DateTime? DoneAtUtc,
     Guid? DoneByUserId,
-    IReadOnlyList<Guid> LinkedDailyLogIds);
+    IReadOnlyList<Guid> LinkedDailyLogIds,
+    string? ConfirmationState = null);

@@ -91,6 +91,9 @@ public enum PlannedWorkStep
 
     /// <summary>The task is Done or Cancelled: it takes no more steps.</summary>
     Closed,
+
+    /// <summary>A reopen of a task that is not Done (lane L8c-3): there is nothing to reopen.</summary>
+    NotDone,
 }
 
 /// <summary>The wire words of the lists above: a name, any case, never a number.</summary>

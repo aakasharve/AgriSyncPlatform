@@ -10,6 +10,10 @@
  *   - create / seen:  queued once. `seen` is a fact about a moment - never revived once refused or discarded.
  *   - accept / cancel: a re-tap after he DISCARDED the parked refusal (`REJECTED_DROPPED`) revives that same row through
  *     `replacePayload` (the same bytes, back to PENDING), so the farmer is never stuck with a change he can no longer make again.
+ *   - complete (lane L8c-3, D-24d): ONE change per saved log - `plannedwork.complete:<id>:<first log id>`; a work done with no log
+ *     (a personal reminder, D-1) is `plannedwork.complete:<id>`. A re-tap is the same change; after he discarded the parked refusal it
+ *     revives that row. `reopen` (the primary owner's, with his reason) follows the edit rule: the latest unsent one replaces it, a
+ *     reopen already sent is followed by a new one (a work can be done and reopened more than once).
  *   - edit: the latest edit of an unsent one replaces it (`replacePayload`); once an edit was SENT, the next edit is a new
  *     queued change under the next key (`plannedwork.edit:<id>:<n>`), because the server stores only applied request ids.
  *
@@ -57,7 +61,19 @@ export interface EditPlannedWorkInput extends PlannedWorkWordsInput {
     farmId: string;
 }
 
-export type PlannedWorkVerb = 'create' | 'edit' | 'seen' | 'accept' | 'cancel';
+/** Lane L8c-3 (D-24d, D-30): the work was done on these plots, with these logs (the real log is made first). */
+export interface CompletePlannedWorkInput {
+    plannedWorkId: string;
+    farmId: string;
+    /** The plots done now; empty only for work with no plots. */
+    plotIds: string[];
+    /** The logs that show it (each queued BEFORE this change); none only for a personal reminder (D-1). */
+    dailyLogIds: string[];
+    /** True = more remains: the logs are linked and the work stays pending. */
+    somethingLeft: boolean;
+}
+
+export type PlannedWorkVerb = 'create' | 'edit' | 'seen' | 'accept' | 'cancel' | 'complete' | 'reopen';
 
 const MUTATION = {
     create: SyncMutationName.PlannedworkCreate,
@@ -65,7 +81,15 @@ const MUTATION = {
     seen: SyncMutationName.PlannedworkSeen,
     accept: SyncMutationName.PlannedworkAccept,
     cancel: SyncMutationName.PlannedworkCancel,
+    complete: SyncMutationName.PlannedworkComplete,
+    reopen: SyncMutationName.PlannedworkReopen,
 } as const;
+
+/** `plannedwork.complete:<id>` is 1, `...:<id>:<n>` is n (a reminder done with no log, done again after a reopen). */
+function numberOf(clientRequestId: string): number {
+    const n = /:([0-9]+)$/.exec(clientRequestId);
+    return n ? Number(n[1]) : 1;
+}
 
 /** Drops the fields that were not given: the wire is strict, and "absent" is the only way to say "none". */
 function present<T extends object>(value: T): T {
@@ -117,8 +141,54 @@ export class PlannedWorkCommands {
         return PlannedWorkCommands.answer('cancel', present({ plannedWorkId, farmId, reason }));
     }
 
-    private static async answer(verb: 'accept' | 'cancel', payload: Record<string, unknown>): Promise<string> {
-        const clientRequestId = PlannedWorkCommands.requestIdFor(verb, String(payload.plannedWorkId));
+    /**
+     * "काम झालं": the work was done (lane L8c-3). Queued after the log's own create (the queue keeps order), and the push waits for
+     * every parent log (`MutationDependency`). One change per save: the key carries the first saved log.
+     */
+    static async complete(input: CompletePlannedWorkInput): Promise<string> {
+        const payload = {
+            plannedWorkId: input.plannedWorkId, farmId: input.farmId, plotIds: input.plotIds, dailyLogIds: input.dailyLogIds,
+            somethingLeft: input.somethingLeft,
+        };
+        const base = PlannedWorkCommands.requestIdFor('complete', input.plannedWorkId);
+        if (input.dailyLogIds.length > 0) {
+            // One change per saved log: a new recording is a new change, and so a done-again after a reopen needs no numbering.
+            return PlannedWorkCommands.answer('complete', payload, `${base}:${input.dailyLogIds[0]}`);
+        }
+        // Fix round 1 (L002): a reminder done with no log has no log in its key, so done -> reopened -> done again would meet its
+        // own applied row and queue nothing. The same rule as `edit` and `reopen`: an earlier one that was SENT is followed by a
+        // new change under the next number (`:2`, `:3`); one still waiting (or parked, or discarded) is the same change.
+        const db = getDatabase();
+        const deviceId = mutationQueue.getDeviceId();
+        const earlier = (await db.mutationQueue.where('mutationType').equals(MUTATION.complete)
+            .filter(row => row.deviceId === deviceId && (row.clientRequestId === base || /^[0-9]+$/.test(row.clientRequestId.slice(base.length + 1)) && row.clientRequestId.startsWith(`${base}:`)))
+            .toArray())
+            .sort((a, b) => numberOf(a.clientRequestId) - numberOf(b.clientRequestId));
+        const latest = earlier[earlier.length - 1];
+        const key = latest && latest.status === 'APPLIED' ? `${base}:${numberOf(latest.clientRequestId) + 1}` : latest?.clientRequestId ?? base;
+        return PlannedWorkCommands.answer('complete', payload, key);
+    }
+
+    /** The primary owner says it was not done, with his reason (required). The latest unsent one wins; one already sent is followed by a new one. */
+    static async reopen(plannedWorkId: string, farmId: string, reason: string): Promise<string> {
+        const base = PlannedWorkCommands.requestIdFor('reopen', plannedWorkId);
+        const payload = { plannedWorkId, farmId, reason: reason.trim() };
+        const db = getDatabase();
+        const deviceId = mutationQueue.getDeviceId();
+        const rows = await db.mutationQueue.where('mutationType').equals(MUTATION.reopen)
+            .filter(row => row.clientRequestId === base || row.clientRequestId.startsWith(`${base}:`))
+            .toArray();
+        const unsent = rows.find(row => row.deviceId === deviceId && (row.status === 'PENDING' || row.status === 'FAILED'));
+        if (unsent) {
+            await mutationQueue.replacePayload(unsent.clientRequestId, payload);
+            return unsent.clientRequestId;
+        }
+        const clientRequestId = rows.length === 0 ? base : `${base}:${rows.length + 1}`;
+        return mutationQueue.enqueue(MUTATION.reopen, payload, { clientRequestId, clientCommandId: clientRequestId });
+    }
+
+    private static async answer(verb: 'accept' | 'cancel' | 'complete', payload: Record<string, unknown>, key?: string): Promise<string> {
+        const clientRequestId = key ?? PlannedWorkCommands.requestIdFor(verb, String(payload.plannedWorkId));
         const db = getDatabase();
         const existing = await db.mutationQueue
             .where('[deviceId+clientRequestId]')

@@ -159,3 +159,37 @@ public static class PlannedWorkVisibility
         return task.FormerAssigneeUserIds.Contains(seat.UserId) && VisiblePlots(seat, task) is null;
     }
 }
+
+/// <summary>
+/// Lane L8c-3 (D-24d): what the owner has said about the log(s) a task or one of its plots was done with, as ONE word. Read from
+/// the logs' own standing, never stored on the task: no linked log is <c>null</c> (no word - not "Waiting"); every linked log
+/// Verified is <see cref="Confirmed"/>; any Disputed is <see cref="Disputed"/>; anything else (a draft, a confirmed-by-speaker
+/// log, a log with a correction pending, a log this reader's database does not return) is <see cref="Waiting"/>. A correction
+/// to a log never reopens the task (that is the owner's act alone).
+/// </summary>
+public static class PlannedWorkConfirmation
+{
+    public const string Confirmed = "Confirmed";
+    public const string Disputed = "Disputed";
+    public const string Waiting = "Waiting";
+
+    /// <param name="linkedLogIds">The logs the work was done with.</param>
+    /// <param name="statusOf">A log's current standing; <c>null</c> when it cannot be found.</param>
+    public static string? Of(IReadOnlyCollection<Guid> linkedLogIds, Func<Guid, ShramSafal.Domain.Logs.VerificationStatus?> statusOf)
+    {
+        ArgumentNullException.ThrowIfNull(linkedLogIds);
+        ArgumentNullException.ThrowIfNull(statusOf);
+        if (linkedLogIds.Count == 0)
+        {
+            return null;
+        }
+
+        var states = linkedLogIds.Select(statusOf).ToList();
+        if (states.Any(s => s == ShramSafal.Domain.Logs.VerificationStatus.Disputed))
+        {
+            return Disputed;
+        }
+
+        return states.All(s => s == ShramSafal.Domain.Logs.VerificationStatus.Verified) ? Confirmed : Waiting;
+    }
+}

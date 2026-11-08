@@ -1332,3 +1332,41 @@ describe('lane L8c-1 — PlannedWork payloads', () => {
         expect(payloads.PlannedWorkCancelPayload.safeParse({ ...ids, reason: 'x'.repeat(501) }).success).toBe(false);
     });
 });
+
+// spec: plr-d10-redesign-real-integration-2026-10-25 — lane L8c-3 (founder D-24d, D-30, D-1, P3) — plannedwork.{complete,reopen}.
+// The work done on which plots with which logs, and the owner's reopen with his reason. Strict: a field the server did not name is
+// refused; the caps are on the arrays and on the reason.
+describe('lane L8c-3 — PlannedWork complete and reopen payloads', () => {
+    const base = { plannedWorkId: VALID_GUID_A, farmId: VALID_GUID_B };
+    const done = { ...base, plotIds: [VALID_GUID_C], dailyLogIds: [VALID_GUID_D], somethingLeft: false };
+
+    it('complete: the plots, the logs and whether anything is left - all required, a reminder sends no log', () => {
+        expect(payloads.PlannedWorkCompletePayload.safeParse(done).success).toBe(true);
+        expect(payloads.PlannedWorkCompletePayload.safeParse({ ...done, plotIds: [], dailyLogIds: [], somethingLeft: true }).success).toBe(true);
+        for (const missing of ['plannedWorkId', 'farmId', 'plotIds', 'dailyLogIds', 'somethingLeft'] as const) {
+            const { [missing]: _gone, ...rest } = done;
+            expect(payloads.PlannedWorkCompletePayload.safeParse(rest).success, missing).toBe(false);
+        }
+    });
+
+    it('complete: strict, typed, and capped', () => {
+        for (const bad of [
+            { doneByUserId: VALID_GUID_D }, { status: 'Done' }, { quantityText: '३ पोती' }, { headcount: 3 }, { payMode: 'Daily' },
+            { somethingLeft: 'no' }, { plotIds: ['not-a-guid'] }, { dailyLogIds: [7] }, { plotIds: VALID_GUID_C },
+            { plotIds: Array.from({ length: 201 }, () => VALID_GUID_C) }, { dailyLogIds: Array.from({ length: 101 }, () => VALID_GUID_D) },
+        ]) {
+            expect(payloads.PlannedWorkCompletePayload.safeParse({ ...done, ...bad }).success, JSON.stringify(bad).slice(0, 60)).toBe(false);
+        }
+        expect(payloads.PlannedWorkCompletePayload.safeParse({ ...done, plotIds: Array.from({ length: 200 }, () => VALID_GUID_C) }).success).toBe(true);
+        expect(payloads.PlannedWorkCompletePayload.safeParse({ ...done, dailyLogIds: Array.from({ length: 100 }, () => VALID_GUID_D) }).success).toBe(true);
+    });
+
+    it('reopen: the reason is required, 1 to 500 characters, and nothing else travels', () => {
+        expect(payloads.PlannedWorkReopenPayload.safeParse({ ...base, reason: 'काम नीट नाही' }).success).toBe(true);
+        expect(payloads.PlannedWorkReopenPayload.safeParse({ ...base, reason: 'x'.repeat(500) }).success).toBe(true);
+        expect(payloads.PlannedWorkReopenPayload.safeParse(base).success).toBe(false);
+        expect(payloads.PlannedWorkReopenPayload.safeParse({ ...base, reason: '' }).success).toBe(false);
+        expect(payloads.PlannedWorkReopenPayload.safeParse({ ...base, reason: 'x'.repeat(501) }).success).toBe(false);
+        expect(payloads.PlannedWorkReopenPayload.safeParse({ ...base, reason: 'x', status: 'Accepted' }).success).toBe(false);
+    });
+});

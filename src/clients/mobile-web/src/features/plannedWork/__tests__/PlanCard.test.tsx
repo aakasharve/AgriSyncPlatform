@@ -28,7 +28,7 @@ const task = (over: Partial<LocalPlannedWork> = {}): LocalPlannedWork => ({
     id: '33333333-3333-4333-8333-333333333331', farmId: 'f1', title: 'फवारणी', scope: 'Plot', plotIds: ['p1'],
     plannedDate: '2026-11-10', looseWhen: null, plannedTime: null, assigneeUserId: RAJU, crewText: null, expectedHeadcount: null,
     quantityText: null, payMode: null, note: null, status: 'Assigned', sourceKind: 'PlanForm', recordedOn: '2026-11-08',
-    createdByUserId: ME, modifiedAtUtc: null, source: 'server', keptOnPhone: false, pendingSteps: [], refused: false,
+    createdByUserId: ME, modifiedAtUtc: null, source: 'server', keptOnPhone: false, pendingSteps: [], refused: false, plots: [], confirmationState: null,
     ...over,
 });
 
@@ -187,5 +187,31 @@ describe('the model', () => {
         expect(isReminderTask({ assigneeUserId: RAJU, createdByUserId: null }, ME)).toBe(false);
         expect(trailStage({ status: 'Cancelled', assigneeUserId: RAJU, createdByUserId: ME }, ME)).toBeNull();
         expect(crewLine({ crewText: null, expectedHeadcount: null }, plannedWorkWords('mr'))).toBe('');
+    });
+});
+
+describe('L006 - a plot whose name is not on the phone never prints its id', () => {
+    const GUID_A = '44444444-4444-4444-8444-444444444441';
+    const GUID_B = '44444444-4444-4444-8444-444444444442';
+    const half = (): LocalPlannedWork => task({
+        status: 'Accepted', confirmationState: 'Waiting',
+        plots: [{ plotId: GUID_A, status: 'Done', confirmationState: 'Waiting' }, { plotId: GUID_B, status: 'Pending', confirmationState: null }],
+    });
+
+    it('Marathi: "प्लॉट 1 — झालं · प्लॉट 2 — बाकी", no GUID', () => {
+        draw(half());
+        const lines = screen.getByTestId('plan-card-plot-lines').textContent ?? '';
+        expect(lines).toBe('प्लॉट 1 — झालं · प्लॉट 2 — बाकी');
+        expect(lines).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
+    });
+
+    it('English: "Plot 1 - Done · Plot 2 - Left", and a known name is still used', () => {
+        draw(half(), {}, 'en');
+        const lines = screen.getByTestId('plan-card-plot-lines').textContent ?? '';
+        expect(lines).toMatch(/^Plot 1 .*Done · Plot 2 .*Left$/);
+        expect(lines).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}/i);
+        cleanup();
+        draw(half(), { plotNames: new Map([[GUID_A, 'ऊस 1']]) });
+        expect(screen.getByTestId('plan-card-plot-lines').textContent).toBe('ऊस 1 — झालं · प्लॉट 2 — बाकी');
     });
 });

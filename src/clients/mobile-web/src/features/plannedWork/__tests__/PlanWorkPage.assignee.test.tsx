@@ -6,7 +6,8 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane L8c-2 Task 4; founder D-24c, D-26, D-79, P5, P10) - the plan page and the
  * assignee's view, over the real task store and outbox (fake-indexeddb): opening the list sends ONE `seen`; "ठीक आहे, करतो" sends ONE
  * `accept`; offline both queue and say "फोनवर ठेवलं"; a parked accept shows its words and the conflict link and never shows as accepted;
- * "काम झालं" is not drawn (L8c-3); a seat that is not a planner has no form; another farm's work never appears.
+ * "काम झालं" is drawn on his accepted work since lane L8c-3 (its flow is tested in taskDone.router.test.tsx); a seat that is not a planner
+ * has no form; another farm's work never appears.
  */
 import 'fake-indexeddb/auto';
 import React from 'react';
@@ -149,7 +150,7 @@ describe('"ठीक आहे, करतो" sends accept once', () => {
 });
 
 describe('what the assignee view does not draw', () => {
-    it('no form, no mic, no "काम झालं" (lane L8c-3), no money or हजेरी; the title is "तुमच्यावर सोपवलेली कामे"', async () => {
+    it('no form, no mic, no money or हजेरी (and, since lane L8c-3, "काम झालं" on his accepted work); the title is "तुमच्यावर सोपवलेली कामे"', async () => {
         await reconcileSyncPull(pull([task({ status: 'Accepted', crewText: 'रोकडेची टीम', expectedHeadcount: 10, payMode: 'Contract' })]));
         render(page());
         await screen.findByTestId(`plan-${T1}`);
@@ -157,7 +158,7 @@ describe('what the assignee view does not draw', () => {
         expect(screen.queryByTestId('plan-form')).toBeNull();
         expect(screen.queryByTestId('plan-mic')).toBeNull();
         const text = screen.getByTestId('plan-work').textContent ?? '';
-        expect(text).not.toContain('काम झालं');
+        expect(screen.getByTestId(`plan-done-${T1}`)).toHaveTextContent('काम झालं');
         expect(text).not.toMatch(/हजेरी|₹/);
         expect(screen.getByTestId('plan-card-crew')).toHaveTextContent('रोकडेची टीम · १० जण');
     });

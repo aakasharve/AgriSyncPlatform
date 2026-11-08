@@ -291,6 +291,16 @@ public interface IShramSafalRepository
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
         => Task.FromResult(new List<PlannedWork>());
 
+    /// <summary>
+    /// Lane L8c-3 (founder D-24d): the tasks of this farm that link this log - on the task or on one of its plot rows -
+    /// with their plot rows, TRACKED (the caller moves their clock and saves with its own change). Used by the confirmation of
+    /// a log, so the next pull resends the task with the log's new standing. There is no index on the linked ids
+    /// (<c>ssf.planned_work</c> holds one farm's tasks, a few hundred): the farm's rows are scanned under its row security.
+    /// Default: none.
+    /// </summary>
+    Task<List<PlannedWork>> GetPlannedWorkLinkingLogAsync(Guid farmId, Guid dailyLogId, CancellationToken ct = default)
+        => Task.FromResult(new List<PlannedWork>());
+
     /// <summary>The pull: answers kept on these farms strictly after <paramref name="sinceUtc"/>, oldest first.</summary>
     Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
