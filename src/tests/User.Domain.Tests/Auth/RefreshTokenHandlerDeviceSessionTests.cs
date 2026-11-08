@@ -5,6 +5,7 @@ using User.Application.Contracts.Dtos;
 using User.Application.Ports;
 using User.Application.UseCases.Auth.RefreshToken;
 using User.Application.UseCases.Auth.Session;
+using User.Domain.Security;
 using Xunit;
 using DomainUser = global::User.Domain.Identity.User;
 using DomainPhone = global::User.Domain.Identity.PhoneNumber;
@@ -99,7 +100,30 @@ public class RefreshTokenHandlerDeviceSessionTests
 
         result.IsFailure.Should().BeTrue("reuse of a revoked token must fail");
         repo.ReuseDetectedDeviceId.Should().Be("device-X", "reuse detection must revoke same-device sessions");
+        repo.HeldReuseDetectedDeviceId.Should().BeNull("a normal credential keeps today's reuse rule");
         repo.AddedToken.Should().BeNull("no new token should be stored on reuse attempt");
+    }
+
+    [Fact]
+    public async Task Reuse_of_a_credential_that_was_held_for_the_new_phone_question_ends_only_held_sessions()
+    {
+        // lane FIX-1 (register F131): a declined / held credential may be a stranger's; its reuse must not reach the account's
+        // normal sessions on the same (placeholder) device id.
+        var now = DateTime.UtcNow;
+        const string rawToken = "declined-token";
+        var userId = new UserId(Guid.NewGuid());
+        var user = MakeActiveUser(userId, now);
+        var declined = MakeActiveToken(userId, rawToken, "unknown", now);
+        declined.HoldForDeviceCheck(DeviceCheckState.AskedAfterSmsCode);
+        declined.DeclineDevice(now.AddMinutes(-1));
+
+        var repo = new CapturingRepo(declined);
+
+        var result = await BuildHandler(user, repo, now).HandleAsync(new RefreshTokenCommand(rawToken, DefaultSession));
+
+        result.IsFailure.Should().BeTrue();
+        repo.HeldReuseDetectedDeviceId.Should().Be("unknown");
+        repo.ReuseDetectedDeviceId.Should().BeNull("the all-sessions-of-this-device revoke is not used for a held credential");
     }
 
     [Fact]
@@ -276,6 +300,18 @@ public class RefreshTokenHandlerDeviceSessionTests
             if (reason == "reuse_detected")
             {
                 ReuseDetectedDeviceId = deviceId;
+            }
+            return Task.CompletedTask;
+        }
+
+        /// <summary>lane FIX-1: set when reuse detection went through the HELD-only door.</summary>
+        public string? HeldReuseDetectedDeviceId { get; private set; }
+
+        public Task RevokeHeldForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
+        {
+            if (reason == "reuse_detected")
+            {
+                HeldReuseDetectedDeviceId = deviceId;
             }
             return Task.CompletedTask;
         }

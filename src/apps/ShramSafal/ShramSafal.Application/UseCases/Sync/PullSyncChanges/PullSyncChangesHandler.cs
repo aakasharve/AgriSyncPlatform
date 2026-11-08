@@ -397,6 +397,11 @@ public sealed class PullSyncChangesHandler(
             .GroupBy(o => o.UserId)
             .ToDictionary(g => g.Key, g => g.First().DisplayName);
 
+        // spec: plr-d10 lane BILL-1b (founder D-105 (b)) — each approved bill whose price the main owner changed after its
+        // approval goes with the day of his latest change, so the mark "मालकाने बदलला" reaches everyone who receives the
+        // bill, the owner included. Read from the append-only corrections of exactly the stamped bills (none for most pulls).
+        var billOwnerChanges = await BillOwnerChange.OfAsync(repository, costEntries, billApprovals, ct);
+
         var nextCursorUtc = ComputeNextCursor(
             sinceUtc,
             farms,
@@ -722,7 +727,7 @@ public sealed class PullSyncChangesHandler(
             attachments.Select(a => a.ToDto()).ToList(),
             costEntries
                 .Select(c => WithAudience(
-                    BillReviewProjection.WithReview(c.ToDto(), c, billApprovals, operatorNames),
+                    BillReviewProjection.WithReview(c.ToDto(), c, billApprovals, operatorNames, billOwnerChanges),
                     c.Audience,
                     window.ScopeOf((Guid)c.FarmId),
                     audience.Visibility.Restricted(Domain.RecordPrivacy.RecordKinds.CostEntry, c.Id)))

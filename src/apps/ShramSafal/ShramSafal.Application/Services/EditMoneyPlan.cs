@@ -47,13 +47,18 @@ public enum EditMoneyNotFollowed
     /// <summary>Fix pass 5 (N4) — money of a line the record no longer states is kept as it is (the money book's, shared
     /// out, or a job card's), so no new money is made on the record: a line said again could otherwise count twice.</summary>
     OldMoneyKept,
+
+    /// <summary>Lane BILL-1b (founder D-105 (b)) — its money is an APPROVED bill, and only the farm's primary account holder
+    /// changes an approved bill's price: this editor is not him, so the edit lands and the amount does not change.</summary>
+    ApprovedPriceLocked,
 }
 
 /// <summary>
 /// Money found under a line's derived id (this farm only): its amount NOW (latest correction, else as made), and what ties
-/// it — shared out across plots, a job card's, or (fix pass 4) last corrected in the money book.
+/// it — shared out across plots, a job card's, (fix pass 4) last corrected in the money book, or (lane BILL-1b) approved
+/// while the editor is not the primary account holder.
 /// </summary>
-public sealed record FoundMoney(Guid Id, decimal Effective, bool Shared, bool JobCard, bool MoneyBook = false);
+public sealed record FoundMoney(Guid Id, decimal Effective, bool Shared, bool JobCard, bool MoneyBook = false, bool ApprovedLocked = false);
 
 /// <summary>One line and what happens to its money.</summary>
 public sealed record EditMoneyStep(
@@ -122,7 +127,8 @@ public static class EditMoneyPlan
             if (StepFor(key.Kind, key.LineId, moneyId, 0m, null, found) is { } step)
             {
                 steps.Add(step);
-                oldKept |= step.Reason is EditMoneyNotFollowed.MoneyBook or EditMoneyNotFollowed.Shared or EditMoneyNotFollowed.JobCard;
+                oldKept |= step.Reason is EditMoneyNotFollowed.MoneyBook or EditMoneyNotFollowed.Shared or EditMoneyNotFollowed.JobCard
+                    or EditMoneyNotFollowed.ApprovedPriceLocked;
             }
         }
 
@@ -167,6 +173,7 @@ public static class EditMoneyPlan
             var tied = money.JobCard ? EditMoneyNotFollowed.JobCard
                 : money.Shared ? EditMoneyNotFollowed.Shared
                 : money.MoneyBook ? EditMoneyNotFollowed.MoneyBook
+                : money.ApprovedLocked ? EditMoneyNotFollowed.ApprovedPriceLocked
                 : (EditMoneyNotFollowed?)null;
             return tied is { } reason
                 ? new(kind, lineId, moneyId, EditMoneyAction.NotFollowed, to, line, reason)

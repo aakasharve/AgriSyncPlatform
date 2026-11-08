@@ -192,6 +192,8 @@ public sealed class ApproveCostEntryHandler(
                 .ToDictionary(g => g.Key, g => g.First().DisplayName);
         }
 
-        return BillReviewProjection.WithReview(entry.ToDto(), entry, stamps, names);
+        // lane BILL-1b — the mark "मालकाने बदलला" rides this answer too, exactly as the pull sends it.
+        var ownerChanges = await BillOwnerChange.OfAsync(repository, [entry], [.. stamps], ct);
+        return BillReviewProjection.WithReview(entry.ToDto(), entry, stamps, names, ownerChanges);
     }
 }

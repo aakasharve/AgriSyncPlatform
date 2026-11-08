@@ -8,7 +8,7 @@
  */
 import { DISPLAY_TIME_ZONE } from '../../shared/utils/displayTime';
 import type { MoneyApproval } from './finance.types';
-import { BILL_VERSION_CONFLICT_CODE } from './billApproval';
+import { BILL_PRICE_LOCKED_CODE, BILL_VERSION_CONFLICT_CODE } from './billApproval';
 
 export type BillLang = 'mr' | 'en';
 
@@ -37,6 +37,12 @@ const WORDS = {
         'श्रमसफलच्या नियमानुसार बिल मालक किंवा त्यांनी परवानगी दिलेली व्यक्ती मंजूर करते.',
         'By ShramSafal rules a bill is approved by the owner or someone they allowed.'),
     withheld: said('—', '—'),
+    // lane BILL-1b (founder D-105 (b), 2026-11-08) — PROPOSED words. "Only you, the main owner, can change an approved bill's price.
+    // The bill then shows 'changed by owner' to everyone, you included."
+    changedByOwner: said('मालकाने बदलला', 'Changed by owner'),
+    priceLocked: said(
+        'बिल मंजूर झाल्यावर त्याची किंमत फक्त मुख्य मालक बदलू शकतात — तुमचा बदल घेतला गेला नाही',
+        'Once a bill is approved only the main owner can change its price — your change was not taken'),
 } as const;
 
 export type BillWord = keyof typeof WORDS;
@@ -62,9 +68,18 @@ export function stampLine(approval: MoneyApproval, older: boolean, language: Bil
     return [head, approval.approvedByName, stampDay(approval.approvedAtUtc, language)].filter(Boolean).join(' · ');
 }
 
+/**
+ * lane BILL-1b — "मालकाने बदलला · ‹दिवस›": the main owner changed this approved bill's price. The day is left out when the
+ * phone cannot read it (never a guess); the mark itself is never left out.
+ */
+export function ownerChangeLine(atUtc: string, language: BillLang): string {
+    return [billWord('changedByOwner', language), stampDay(atUtc, language)].filter(Boolean).join(' · ');
+}
+
 /** What a parked refusal is said as, by the server's code — never its English sentence in Marathi mode. */
 export function refusalLine(errorCode: string | undefined, language: BillLang): string {
     if (errorCode === BILL_VERSION_CONFLICT_CODE) return billWord('changed', language);
+    if (errorCode === BILL_PRICE_LOCKED_CODE) return billWord('priceLocked', language);
     if (errorCode && (errorCode.endsWith('Forbidden') || errorCode.endsWith('NotFound'))) return billWord('refused', language);
     return billWord('failed', language);
 }

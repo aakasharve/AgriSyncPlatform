@@ -193,6 +193,10 @@ public class LoginHandlerDeviceSessionTests
             return Task.CompletedTask;
         }
 
+        // lane FIX-1: a password sign-in revokes through the all-sessions door of a device; the held-only door is not its door.
+        public Task RevokeHeldForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
+            => Task.CompletedTask;
+
         public Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, string reason = "revoked_all", CancellationToken ct = default)
         {
             RevokeAllCalled = true;

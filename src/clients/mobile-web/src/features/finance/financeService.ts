@@ -70,6 +70,8 @@ type ServerCostEntry = {
         approvedAtUtc?: string;
         billVersion?: number;
     } | null;
+    /** lane BILL-1b — when the main owner changed the price of this APPROVED bill (his latest such change); absent otherwise. */
+    changedByOwnerAtUtc?: string | null;
 };
 
 type ServerFinanceCorrection = {
@@ -254,6 +256,10 @@ function mapCostEntryToMoneyEvent(entry: ServerCostEntry): MoneyEvent {
         createdAt,
         ...(billVersion !== undefined ? { billVersion } : {}),
         ...(approval ? { approval } : {}),
+        // lane BILL-1b — a day the phone cannot read is never shown (no guess); absent from an older server.
+        ...(typeof entry.changedByOwnerAtUtc === 'string' && !Number.isNaN(new Date(entry.changedByOwnerAtUtc).getTime())
+            ? { changedByOwnerAtUtc: entry.changedByOwnerAtUtc }
+            : {}),
     };
 }
 

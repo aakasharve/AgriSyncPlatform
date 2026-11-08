@@ -110,7 +110,9 @@ public sealed class CostEntryApproval : Entity<Guid>
 /// set it aside (<see cref="CostEntry.IsFlagged"/>) or it was approved before and has changed since (fix round 1, review M3:
 /// a changed price is never silently approved, under either answer to the founder's D-105 (b)). An approval clears it for
 /// THAT version only: a correction or move after it makes a new version, and the bill is तपासायचे again until that version is
-/// approved. The flag itself is history and is never erased (P3).
+/// approved. The flag itself is history and is never erased (P3). Lane FIX-1 round 2 (founder, 2026-11-08): the one change
+/// that does not wait is the main owner's own change of an already-approved price - the handler stamps it for him on the spot,
+/// so a stamp then covers the new version and this rule holds unchanged.
 /// </summary>
 public static class CostEntryReview
 {

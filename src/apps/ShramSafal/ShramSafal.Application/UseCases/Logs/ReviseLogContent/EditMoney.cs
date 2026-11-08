@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Finance.ApproveCostEntry;
 using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -28,8 +29,12 @@ namespace ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 /// correct, and no edit leaves a price and its money apart.
 /// Lane BILL-1: money can now be approved (a separate stamp, who / when / which version). A price the maker restates after an
 /// approval makes a new version: the stamp then reads "for an earlier version" and the bill is तपासायचे again
-/// (<see cref="CostEntryReview"/>), so a changed price is never silently approved. Whether approved money may be restated by
-/// its maker at all is the founder's open question D-105 (b).</item>
+/// (<see cref="CostEntryReview"/>), so a changed price is never silently approved. Lane BILL-1b (founder D-105 (b), answered
+/// 2026-11-08): approved money's price is changed by the farm's primary account holder alone
+/// (<see cref="BillApprovalRules.MayChangeApprovedPrice"/>); for any other editor the edit lands, that money's amount does not
+/// change, and he is told (<see cref="EditMoneyNotFollowed.ApprovedPriceLocked"/>). Round 2 (founder, 2026-11-08): the primary
+/// account holder's own change of an approved price counts as approved straight away - his stamp for the new version is added
+/// with the correction (<see cref="BillApprovalRules.OwnerChangeCountsAsApproval"/>), so the bill does not go back to "तपासायचे".</item>
 /// <item><b>What</b> (fix pass 3, call 2 — reconcile, not diff) — <see cref="EditMoneyPlan"/>: on every edit by an
 /// allowed seat, ALL of the record's derived money is brought in line with what the record now states — a priced line
 /// with no money is made under its derived id (<see cref="MoneyEntryIdentity"/>); money that differs from its line is
@@ -162,6 +167,25 @@ internal sealed class EditMoney(
         var latest = (await repository.GetCorrectionsForEntriesAsync(money.Select(e => e.Id), ct))
             .GroupBy(c => c.CostEntryId)
             .ToDictionary(g => g.Key, g => g.OrderByDescending(c => c.CorrectedAtUtc).First());
+        // lane BILL-1b (founder D-105 (b), 2026-11-08) — a record edit is a door to a bill's price too: money that carries a मंजूर
+        // stamp keeps its price unless the editor is the farm's primary account holder (the money book's door asks the same
+        // check, BillApprovalRules.MayChangeApprovedPrice). The stamps are read under the same row holds as the money.
+        // Round 2 (founder, 2026-11-08): when the editor IS the primary account holder, his change of an approved price counts as
+        // approved straight away - he stamps the new version below (BillApprovalRules.OwnerChangeCountsAsApproval).
+        var stampedMoney = new HashSet<Guid>();
+        var editorIsPrimary = false;
+        if (money.Count > 0)
+        {
+            editorIsPrimary = await FarmAuthorityGate.IsPrimaryAccountHolderAsync(repository, (Guid)log.FarmId, stamp.ActorUserId, ct);
+            var moneyById = money.ToDictionary(e => e.Id);
+            stampedMoney = (await repository.GetCostEntryApprovalsAsync([.. moneyById.Keys], ct))
+                .Where(a => moneyById.TryGetValue(a.CostEntryId, out var bill) && bill.FarmId == a.FarmId)
+                .Select(a => a.CostEntryId)
+                .ToHashSet();
+        }
+
+        var approvedLocked = BillApprovalRules.MayChangeApprovedPrice(editorIsPrimary) ? new HashSet<Guid>() : stampedMoney;
+
         var found = new Dictionary<Guid, FoundMoney>();
         foreach (var entry in money)
         {
@@ -172,7 +196,8 @@ internal sealed class EditMoney(
                 last?.CorrectedAmount ?? entry.Amount,
                 shared,
                 entry.JobCardId is not null,
-                MoneyBook: last is not null && !await MadeByAnEditAsync(entry.Id, last.Id, ct));
+                MoneyBook: last is not null && !await MadeByAnEditAsync(entry.Id, last.Id, ct),
+                ApprovedLocked: approvedLocked.Contains(entry.Id));
         }
 
         // Call B — the record's money follows edits only when ALL its first money is found (the move's rule).
@@ -224,6 +249,29 @@ internal sealed class EditMoney(
                     trigger = EditTrigger,
                 }),
                 ct);
+
+            // Round 2 (founder, 2026-11-08): the main owner's change of an already-approved price counts as approved straight away -
+            // his own stamp for the new version (the same append-only stamp an approval makes), with the audit row an approval writes.
+            // After the review-amount flag above: the stamp for this version clears "तपासायचे" for it, as any approval would.
+            if (BillApprovalRules.OwnerChangeCountsAsApproval(stampedMoney.Contains(entry.Id), editorIsPrimary))
+            {
+                var ownerStamp = BillApprovalRules.OwnerChangeStamp(entry, idGenerator.New(), by, now, stamp.ClientCommandId, stamp.AppVersion);
+                await repository.AddCostEntryApprovalAsync(ownerStamp, ct);
+                await repository.AddAuditEventAsync(
+                    Audit(stamp, "CostEntry", entry.Id, ApproveCostEntryHandler.ApprovedAction, (Guid)log.FarmId, new
+                    {
+                        costEntryId = entry.Id,
+                        approvalId = ownerStamp.Id,
+                        billVersion = ownerStamp.BillVersion,
+                        effectiveAmount = correction.CorrectedAmount,
+                        correction.CurrencyCode,
+                        financeCorrectionId = correction.Id,
+                        dailyLogId = log.Id,
+                        trigger = BillApprovalRules.OwnerChangeTrigger,
+                    }),
+                    ct);
+            }
+
             corrected.Add((entry, correction));
         }
 
@@ -231,8 +279,9 @@ internal sealed class EditMoney(
     }
 
     /// <summary>
-    /// Call 1 — may this seat change the record's prices? Its maker (founder D-105 (b) open: whether approved money still may
-    /// be restated by him), or a member who reviews money (the money book's rule, <c>CorrectCostEntryHandler</c>).
+    /// Call 1 — may this seat change the record's prices? Its maker, or a member who reviews money (the money book's rule,
+    /// <c>CorrectCostEntryHandler</c>). Money that is an APPROVED bill is a further, per-bill rule (lane BILL-1b), asked in
+    /// <see cref="StageAsync"/>.
     /// </summary>
     private async Task<bool> MayChangePricesAsync(DailyLog log, Guid actor, DateTime now, CancellationToken ct) =>
         actor == log.OperatorUserId.Value

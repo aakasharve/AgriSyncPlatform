@@ -183,6 +183,9 @@ public class LogoutDeviceSessionTests
         public Task RevokeActiveForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
             => Task.CompletedTask;
 
+        public Task RevokeHeldForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
+            => Task.CompletedTask;
+
         public Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, string reason = "revoked_all", CancellationToken ct = default)
         {
             RevokeAllCalledForUserId = userId;

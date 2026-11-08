@@ -298,7 +298,7 @@ public sealed class BillApprovalRealPostgresTests(ITestOutputHelper output) : Ro
     // ── F ────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task F_a_correction_after_approval_makes_the_stamp_read_as_for_an_older_version()
+    public async Task F_the_owners_correction_after_approval_is_approved_for_the_new_version_and_the_old_stamp_stays()
     {
         await AssertAppRoleIsNotVacuousAsync();
         await PushAppliedAsync(Owner, Mutation, "bill1-f-approve", Approve(Cost, FarmA, 1));
@@ -309,13 +309,15 @@ public sealed class BillApprovalRealPostgresTests(ITestOutputHelper output) : Ro
         Keep("owner-pull-after-correction", body);
         var row = Bill(pulled, Cost);
         row.GetProperty("billVersion").GetInt32().Should().Be(2, "the correction made a new version");
-        row.GetProperty("approval").GetProperty("billVersion").GetInt32().Should().Be(1, "the stamp names the version it was for");
+        // Lane FIX-1 round 2 (founder, 2026-11-08): the main owner's own change counts as approved straight away - his stamp is for the new version.
+        row.GetProperty("approval").GetProperty("billVersion").GetInt32().Should().Be(2, "the owner's change is approved for the version it made");
+        row.GetProperty("needsReview").GetBoolean().Should().BeFalse();
         row.GetProperty("amount").GetDecimal().Should().Be(CostAmount, "the bill's first figure is kept (P3)");
         ArrayOf(pulled, "financeCorrections").Should().Contain(c => c.GetProperty("costEntryId").GetGuid() == Cost
             && c.GetProperty("correctedAmount").GetDecimal() == CostCorrected);
 
-        // Nothing was carried to the new numbers: still the one stamp, still version 1.
-        (await StampsAsync(Cost)).Select(s => s.Version).Should().Equal([1]);
+        // The old stamp is kept (append-only); the owner's stamp for version 2 is added.
+        (await StampsAsync(Cost)).Select(s => s.Version).Should().Equal([1, 2]);
     }
 
     // ── G ────────────────────────────────────────────────────────────────────────────────
@@ -339,17 +341,21 @@ public sealed class BillApprovalRealPostgresTests(ITestOutputHelper output) : Ro
         await Task.Delay(1150);
         Bill((await PullAsync(Owner)).Root, BigBill).GetProperty("needsReview").GetBoolean().Should().BeFalse();
 
-        // A correction makes version 2: the approval was for version 1, so the bill is तपासायचे again.
+        // Lane FIX-1 round 2 (founder, 2026-11-08): the main owner's own change of an APPROVED bill counts as approved straight away - it
+        // makes version 2 AND the owner's stamp for it, so the flag does not come back. (The server's flag itself stays, below.)
         await PushAppliedAsync(Owner, "correct_cost_entry", "bill1-g-correct", Correct(BigBill, BigCorrected));
         await Task.Delay(1150);
         var again = Bill((await PullAsync(Owner)).Root, BigBill);
         again.GetProperty("billVersion").GetInt32().Should().Be(2);
-        again.GetProperty("needsReview").GetBoolean().Should().BeTrue("the flag clears only for the approved version");
-        again.GetProperty("approval").GetProperty("billVersion").GetInt32().Should().Be(1);
+        again.GetProperty("needsReview").GetBoolean().Should().BeFalse("the owner's change is approved for the version it made");
+        again.GetProperty("approval").GetProperty("billVersion").GetInt32().Should().Be(2);
+        (await StampsAsync(BigBill)).Select(s => s.Version).Should().Equal([1, 2]);
 
+        // Approving that same version again is answered as it stands: no second stamp.
         await PushAppliedAsync(Owner, Mutation, "bill1-g-approve-2", Approve(BigBill, FarmA, 2));
         await Task.Delay(1150);
         Bill((await PullAsync(Owner)).Root, BigBill).GetProperty("needsReview").GetBoolean().Should().BeFalse();
+        (await StampsAsync(BigBill)).Select(s => s.Version).Should().Equal([1, 2]);
 
         // The server's flag itself is history, never erased (P3): the stamp is what cleared it.
         (await CountAsync("SELECT count(*) FROM ssf.cost_entries WHERE \"Id\" = @id AND is_flagged", BigBill)).Should().Be(1);

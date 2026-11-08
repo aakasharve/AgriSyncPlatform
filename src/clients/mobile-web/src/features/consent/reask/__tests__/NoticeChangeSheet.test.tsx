@@ -109,9 +109,11 @@ describe('NoticeChangeSheet', () => {
     it('someone who accepted notice-2026-11-02.2 is shown the D-50 line, and not the two changes he already accepted', async () => {
         await openAskedHaving('notice-2026-11-02.2');
         expect(screen.getByTestId('notice-change-proof')).toHaveTextContent(
-            'श्रमसफल प्रत्येक रेकॉर्डिंगचा मूळ आवाज पुराव्यासाठी जतन करते; हे बटण फक्त तो ऐकता येईल की नाही हे ठरवते.');
+            'श्रमसफल तुमचा प्रत्येक मूळ आवाज पुराव्यासाठी जतन करते; हे बटण फक्त तो ऐकता येईल की नाही हे ठरवते.');
         expect(screen.getByTestId('notice-change-proof')).toHaveTextContent(
-            'हा पर्याय बंद असताना केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही.');
+            'हा पर्याय बंद असताना श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही.');
+        // lane WORD-1 (founder D-109): never the word "रेकॉर्डिंग" for the switch.
+        expect(screen.getByTestId('notice-change-proof').textContent ?? '').not.toContain('रेकॉर्डिंग');
         expect(screen.queryByTestId('notice-change-promise')).toBeNull();
         expect(screen.queryByTestId('notice-change-erasure')).toBeNull();
     });
@@ -129,7 +131,8 @@ describe('NoticeChangeSheet', () => {
         expect(screen.getByTestId('notice-change-promise')).toBeInTheDocument();
         expect(screen.getByTestId('notice-change-erasure')).toBeInTheDocument();
         expect(screen.getByTestId('notice-change-proof')).toHaveTextContent(
-            'ShramSafal keeps the original sound of every record as proof; this switch only decides whether it can be played. A recording made while this is off cannot be played later.');
+            'ShramSafal keeps the original sound of every record as proof; this switch only decides whether it can be played. A voice Shram Sathi understood while this is off cannot be played later.');
+        expect(screen.getByTestId('notice-change-proof').textContent ?? '').not.toMatch(/recording/i);
     });
 
     // ── P10: the network never holds him ─────────────────────────────────

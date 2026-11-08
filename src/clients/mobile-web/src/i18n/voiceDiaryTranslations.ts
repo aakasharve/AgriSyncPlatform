@@ -161,7 +161,7 @@ const mr: VoiceDiaryBundle = {
     },
     retentionBanner: {
         grantedTitle: 'मूळ आवाज ऐकू देणे सुरू आहे.', // PROPOSED
-        grantedBody: 'प्रत्येक रेकॉर्डिंगची जतन स्थिती खाली पाहा.', // PROPOSED (D-101): "रेकॉर्डिंग", not "नोंद"
+        grantedBody: 'प्रत्येक आवाजाची जतन स्थिती खाली पाहा.', // PROPOSED (D-109): "आवाज", not "रेकॉर्डिंग" and not "नोंद"
         deniedTitle: 'मूळ आवाज ऐकू देणे बंद आहे.', // PROPOSED
         deniedBody: `${OFF_CONSEQUENCE_MR} काहीही मिटवलं जात नाही.`, // PROPOSED
         deniedCta: 'चालू करा',
@@ -180,7 +180,7 @@ const mr: VoiceDiaryBundle = {
         // PROPOSED.
         meaning: SWITCH_MEANING_MR,
         // Founder D-2 description, verbatim, then PROPOSED lines (D-50: the founder's own sentence; D-101: the one consequence of OFF), then the existing sentence.
-        helper: `${D2_DESCRIPTION_MR} ${PROOF_KEPT_MR} ${OFF_CONSEQUENCE_MR} कधीही बंद करता येते — आधी जतन झालेली रेकॉर्डिंग तुम्ही मिटवेपर्यंत राहील.`, // PROPOSED (D-101): one word, "रेकॉर्डिंग", for the recording
+        helper: `${D2_DESCRIPTION_MR} ${PROOF_KEPT_MR} ${OFF_CONSEQUENCE_MR} कधीही बंद करता येते — आधी जतन झालेला आवाज तुम्ही मिटवेपर्यंत राहील.`, // PROPOSED (D-109): "आवाज", not "रेकॉर्डिंग"
         expand: '+ अधिक',
     },
     replay: {
@@ -194,8 +194,8 @@ const mr: VoiceDiaryBundle = {
         // left for the founder.
         // PROPOSED (Marathi), plr-d10 I25: the last sentence follows D-31 — saved recordings may be
         // heard by him AND by authorised reviewers on this farm (it said "only your account").
-        body: `तुमचा मूळ आवाज तुम्हाला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येईल. प्रत्येक रेकॉर्डिंगची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. प्रत्येक रेकॉर्डिंगची पुराव्याची प्रत नेहमी जतन केली जाते. ${OFF_CONSEQUENCE_MR}`, // PROPOSED
-        bullet1: 'प्रत्येक रेकॉर्डिंगची जतन स्थिती दिसते', // PROPOSED (D-101): "रेकॉर्डिंग", not "नोंद"
+        body: `तुमचा मूळ आवाज तुम्हाला आणि या शेतावरील अधिकृत तपासणाऱ्यांना ऐकता येईल. प्रत्येक आवाजाची जतन स्थिती "आवाज नोंदी" मध्ये दिसेल. प्रत्येक आवाजाची पुराव्याची प्रत नेहमी जतन केली जाते. ${OFF_CONSEQUENCE_MR}`, // PROPOSED (D-109)
+        bullet1: 'प्रत्येक आवाजाची जतन स्थिती दिसते', // PROPOSED (D-109): "आवाज", not "रेकॉर्डिंग" and not "नोंद"
         bullet2: 'कधीही बंद करता येते',
         bullet3: 'तुम्ही नोंदी मिटवायला सांगू शकता',
         primaryCta: 'मी सहमत आहे',
@@ -204,8 +204,8 @@ const mr: VoiceDiaryBundle = {
     },
     stopFutureConfirm: {
         headline: 'मूळ आवाज ऐकू देणे बंद करायचे?', // PROPOSED
-        body: 'बंद केल्यावर यापुढे केलेलं रेकॉर्डिंग नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.', // PROPOSED
-        keptNote: 'आधी जतन झालेली रेकॉर्डिंग जशी आहे तशीच राहील. ती मिटवायची असेल तर ती वेगळी कृती आहे.', // PROPOSED (D-101): "रेकॉर्डिंग" as a feminine singular collective (ती मिटवायची)
+        body: 'बंद केल्यावर यापुढे श्रमसाथीने समजून घेतलेला आवाज नंतर ऐकता येणार नाही. पुराव्याची प्रत जतन राहते; काहीही मिटवलं जात नाही.', // PROPOSED (D-109: the founder's approved line, with "यापुढे")
+        keptNote: 'आधी जतन झालेले आवाज जसे आहेत तसेच राहतील. ते मिटवायचे असतील तर ती वेगळी कृती आहे.', // PROPOSED (D-109): "आवाज", not "रेकॉर्डिंग"
         primaryCta: 'होय, बंद करा', // PROPOSED
         secondaryCta: 'नको',
     },
@@ -244,7 +244,7 @@ const en: VoiceDiaryBundle = {
     },
     retentionBanner: {
         grantedTitle: 'Playback of your original voice is on.', // PROPOSED
-        grantedBody: "See each recording's saving status below.",
+        grantedBody: "See each voice's saving status below.", // PROPOSED (D-109): "voice", not "recording"
         deniedTitle: 'Playback of your original voice is off.', // PROPOSED
         deniedBody: `${OFF_CONSEQUENCE_EN} Nothing is erased.`, // PROPOSED
         deniedCta: 'Turn on',
@@ -252,7 +252,7 @@ const en: VoiceDiaryBundle = {
     emptyState: {
         headline: 'No voice notes yet',
         // plr-d10 I25: the switch's name is now the D-2 title (PROPOSED English).
-        body: 'Turn on "' + SWITCH_TITLE_EN + '" below so your recordings can be played later.', // PROPOSED
+        body: 'Turn on "' + SWITCH_TITLE_EN + '" below so your voices can be played later.', // PROPOSED (D-109)
         cta: 'Turn on',
     },
     consentToggle: {
@@ -261,7 +261,7 @@ const en: VoiceDiaryBundle = {
         // PROPOSED.
         meaning: SWITCH_MEANING_EN,
         // PROPOSED English rendering of the founder's D-2 description, then the founder's D-50 sentence and PROPOSED lines (D-101), then the existing sentence.
-        helper: `${D2_DESCRIPTION_EN} ${PROOF_KEPT_EN} ${OFF_CONSEQUENCE_EN} You can turn off any time — recordings saved earlier stay until you erase them.`,
+        helper: `${D2_DESCRIPTION_EN} ${PROOF_KEPT_EN} ${OFF_CONSEQUENCE_EN} You can turn off any time — voices saved earlier stay until you erase them.`, // PROPOSED (D-109)
         expand: '+ more',
     },
     replay: {
@@ -271,8 +271,8 @@ const en: VoiceDiaryBundle = {
     firstGrant: {
         headline: 'Allow playback of my original voice', // PROPOSED
         // PROPOSED (English), plr-d10 I25: the last sentence follows D-31 (it said "only your account").
-        body: `You and authorized reviewers on this farm will be able to play back your original voice. Each recording shows its saving status in "Voice notes". An evidence copy of every recording is always kept as proof. ${OFF_CONSEQUENCE_EN}`, // PROPOSED
-        bullet1: 'Each recording shows its saving status',
+        body: `You and authorized reviewers on this farm will be able to play back your original voice. Each voice shows its saving status in "Voice notes". An evidence copy of every voice is always kept as proof. ${OFF_CONSEQUENCE_EN}`, // PROPOSED (D-109)
+        bullet1: 'Each voice shows its saving status', // PROPOSED (D-109)
         bullet2: 'Turn off any time',
         bullet3: 'You can ask us to erase them',
         primaryCta: 'I agree',
@@ -281,8 +281,8 @@ const en: VoiceDiaryBundle = {
     },
     stopFutureConfirm: {
         headline: 'Turn off playback of my original voice?', // PROPOSED
-        body: 'A recording made after this cannot be played later. The evidence copy is kept; nothing is erased.', // PROPOSED
-        keptNote: 'Recordings already saved stay as they are. Deleting them is a separate action.',
+        body: 'A voice Shram Sathi understands after this cannot be played later. The evidence copy is kept; nothing is erased.', // PROPOSED (D-109: the founder's approved line, in the future tense)
+        keptNote: 'Voices already saved stay as they are. Deleting them is a separate action.', // PROPOSED (D-109)
         primaryCta: 'Yes, turn off', // PROPOSED
         secondaryCta: 'Cancel',
     },

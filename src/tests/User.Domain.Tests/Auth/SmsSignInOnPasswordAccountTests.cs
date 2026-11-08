@@ -156,6 +156,8 @@ public sealed class SmsSignInOnPasswordAccountTests
             RevokedDevices.Add(deviceId);
             return Task.CompletedTask;
         }
+        public Task RevokeHeldForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
+            => Task.CompletedTask; // lane FIX-1: never reached here (every phone counts as known)
         public Task RevokeAllForUserAsync(Guid userId, DateTime utcNow, string reason = "revoked_all", CancellationToken ct = default)
         {
             RevokeAllReasons.Add(reason);

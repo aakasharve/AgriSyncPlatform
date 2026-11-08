@@ -128,6 +128,16 @@ public static class ShramSafalErrors
         "ShramSafal.LogContentPrices.Conflict",
         "Only the person who made this entry, or someone who checks money entries, can change its prices. Nothing was saved.");
 
+    // spec: plr-d10 lane BILL-1b (founder D-105 (b), answered 2026-11-08: "Only you, the main owner, can change an approved
+    // bill's price. The bill then shows 'changed by owner' to everyone, you included."). A bill that carries a मंजूर stamp
+    // keeps its price: a change to it from anyone but the farm's primary account holder is refused and nothing is saved.
+    // THREE SEGMENTS, tail CONFLICT, like LogContentPricesNotYours: every phone already parks such a row where its owner
+    // sees it, with this reason, and never retries it for ever (P10, P11). The phone says the reason in its own language by
+    // this code; the sentence below is the server's English twin.
+    public static readonly Error BillPriceLockedAfterApproval = Error.Conflict(
+        "ShramSafal.BillPrice.Conflict",
+        "This bill was approved, so only the farm's main owner can change its price. Nothing was changed.");
+
     public static readonly Error LabourAssignmentConflict = Error.Conflict(
         "ShramSafal.LabourAssignment.Conflict",
         "This labour entry is already recorded on another daily log. The same engagement cannot belong to two logs — recording it again would count the same workers twice.");

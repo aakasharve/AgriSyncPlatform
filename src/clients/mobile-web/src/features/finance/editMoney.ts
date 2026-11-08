@@ -30,10 +30,12 @@ export type MoneyNotFollowedReason =
     // fix pass 4: its latest correction was made in the money book, so no edit changes it.
     | 'moneyBook'
     // fix pass 5 (N4): money of a line that is gone is kept, so no new money was made beside it.
-    | 'oldMoneyKept';
+    | 'oldMoneyKept'
+    // lane BILL-1b (founder D-105 (b)): the money is an APPROVED bill, and only the main owner changes an approved bill's price.
+    | 'approvedPriceLocked';
 
 const REASONS: ReadonlySet<string> = new Set<MoneyNotFollowedReason>(
-    ['notFound', 'shared', 'jobCard', 'detailsNotHeld', 'notAllowed', 'idTaken', 'tooLong', 'moneyBook', 'oldMoneyKept']);
+    ['notFound', 'shared', 'jobCard', 'detailsNotHeld', 'notAllowed', 'idTaken', 'tooLong', 'moneyBook', 'oldMoneyKept', 'approvedPriceLocked']);
 
 /** One line whose money did not follow: the money id it has (or would have; `kind:lineId` from an answer without one) and why. */
 export interface MoneyNotFollowedLine { key: string; reason: MoneyNotFollowedReason }

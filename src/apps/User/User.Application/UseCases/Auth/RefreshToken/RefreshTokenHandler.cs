@@ -30,8 +30,19 @@ public sealed class RefreshTokenHandler(
         if (existingToken.IsRevoked)
         {
             // Reuse detected: revoke all active sessions for this user/device.
-            await refreshTokenRepository.RevokeActiveForUserDeviceAsync(
-                existingToken.UserId, existingToken.DeviceId, utcNow, "reuse_detected", ct);
+            // lane FIX-1 (register F131; NP-1 review M1): a credential that was ever HELD for the new-phone question (asked, or
+            // answered "नाही") belongs to a phone the account may not know - possibly a stranger's. Its reuse ends only the
+            // HELD rows of that id, never the account's normal sessions (on `unknown` / `legacy` those are the real owner's).
+            if (existingToken.DeviceCheck is not null)
+            {
+                await refreshTokenRepository.RevokeHeldForUserDeviceAsync(
+                    existingToken.UserId, existingToken.DeviceId, utcNow, "reuse_detected", ct);
+            }
+            else
+            {
+                await refreshTokenRepository.RevokeActiveForUserDeviceAsync(
+                    existingToken.UserId, existingToken.DeviceId, utcNow, "reuse_detected", ct);
+            }
             await refreshTokenRepository.SaveChangesAsync(ct);
             return Result.Failure<AuthResponse>(UserErrors.InvalidRefreshToken);
         }

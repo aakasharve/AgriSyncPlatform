@@ -130,7 +130,7 @@ public sealed class BillApprovalFixRound1RealPostgresTests(ITestOutputHelper out
     // ── M3 ───────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task M3_a_bill_changed_after_its_approval_is_taken_for_review_again_until_its_new_version_is_approved()
+    public async Task M3_a_price_change_by_the_owner_after_approval_is_approved_straight_away_not_taken_for_review()
     {
         await AssertAppRoleIsNotVacuousAsync();
         // ₹9,876.54: never set aside by the amount rule.
@@ -139,15 +139,18 @@ public sealed class BillApprovalFixRound1RealPostgresTests(ITestOutputHelper out
         var approved = Bill((await PullAsync(Owner)).Root, Cost);
         approved.GetProperty("needsReview").GetBoolean().Should().BeFalse();
 
+        // Lane FIX-1 round 2 (founder, 2026-11-08): the main owner's change of an approved price counts as approved straight away
+        // (it was "taken for review again" before). The review-again rule itself stays for every other new version (CostEntryReview).
         await PushAppliedAsync(Owner, "correct_cost_entry", "bill1-f1-m3-correct", CorrectPayload(Cost, 9999.99m));
         await Task.Delay(1150);
         var changed = Bill((await PullAsync(Owner)).Root, Cost);
-        Output.WriteLine($"[EVIDENCE] after a correction: {changed}");
+        Output.WriteLine($"[EVIDENCE] after the owner's correction: {changed}");
         changed.GetProperty("billVersion").GetInt32().Should().Be(2);
-        changed.GetProperty("approval").GetProperty("billVersion").GetInt32().Should().Be(1, "the stamp reads as for an earlier version");
-        changed.GetProperty("needsReview").GetBoolean().Should().BeTrue("a changed price is never silently approved");
-        changed.GetProperty("reviewReason").GetString().Should().Be("Changed after approval");
+        changed.GetProperty("approval").GetProperty("billVersion").GetInt32().Should().Be(2, "approved for the version the owner made");
+        changed.GetProperty("needsReview").GetBoolean().Should().BeFalse("the main owner's change does not wait for review");
+        changed.TryGetProperty("reviewReason", out _).Should().BeFalse();
 
+        // Approving that version again is answered as it stands (one person, one version, one stamp).
         await PushAppliedAsync(Owner, Approve, "bill1-f1-m3-v2", ApprovePayload(Cost, 2));
         await Task.Delay(1150);
         Bill((await PullAsync(Owner)).Root, Cost).GetProperty("needsReview").GetBoolean().Should().BeFalse();

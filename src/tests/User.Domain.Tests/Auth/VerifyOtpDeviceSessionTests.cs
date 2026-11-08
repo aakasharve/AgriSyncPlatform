@@ -65,6 +65,9 @@ public class VerifyOtpDeviceSessionTests
         repo.RevokedDeviceIds.Should().ContainSingle().Which.Should().Be("device-A",
             "handler must revoke sessions for device-A only (per-device, not bulk)");
 
+        // lane FIX-1: a sign-in on a known device keeps the all-sessions-of-this-device revoke; the held-only door is not used.
+        repo.RevokedHeldDeviceIds.Should().BeEmpty();
+
         // Handler must NOT call RevokeAllForUserAsync — that would log out every device.
         repo.RevokeAllCalled.Should().BeFalse(
             "OTP verify must only revoke the current device; RevokeAllForUserAsync must not be called");
@@ -188,6 +191,15 @@ public class VerifyOtpDeviceSessionTests
         public Task RevokeActiveForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
         {
             RevokedDeviceIds.Add(deviceId);
+            return Task.CompletedTask;
+        }
+
+        // lane FIX-1: a held sign-in revokes through this door; every phone is known in this fake, so it is never reached.
+        public List<string> RevokedHeldDeviceIds { get; } = [];
+
+        public Task RevokeHeldForUserDeviceAsync(Guid userId, string deviceId, DateTime utcNow, string reason, CancellationToken ct = default)
+        {
+            RevokedHeldDeviceIds.Add(deviceId);
             return Task.CompletedTask;
         }
 

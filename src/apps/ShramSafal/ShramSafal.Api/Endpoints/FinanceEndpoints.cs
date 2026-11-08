@@ -242,6 +242,12 @@ public static class FinanceEndpoints
                 AuditIpHash: auditIpHash);
 
             var result = await handler.HandleAsync(command, ct);
+            if (!result.IsSuccess && result.Error.Code == ShramSafalErrors.BillPriceLockedAfterApproval.Code)
+            {
+                // lane BILL-1b (founder D-105 (b)): an approved bill's price is the main owner's alone - a plain 409 with the reason.
+                return Results.Conflict(new { error = result.Error.Code, message = result.Error.Description });
+            }
+
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("CorrectCostEntry")

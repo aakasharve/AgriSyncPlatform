@@ -358,6 +358,80 @@ public sealed class NewPhoneQuestionRealPostgresTests(TrialSafetyDatabase db, IT
         (await SendAsync(HttpMethod.Get, "/shramsafal/farms/mine", console.Body.GetProperty("accessToken").GetString()!)).Status.Should().Be(HttpStatusCode.OK);
     }
 
+    // ── H: a stranger's held sign-in and his "नाही" never end the owner's sessions that carry a placeholder id ──
+    // Register F131 (the NP-1 review's M1). `unknown` (no id sent: the admin console, phones on 1.0.15-1.0.17) and `legacy`
+    // (rows from before device sessions) are shared by many sessions of one account; they are not a phone. A held session
+    // on such an id revokes only HELD rows, never the owner's normal ones.
+
+    [Fact]
+    public async Task H_a_strangers_held_sign_in_and_his_nahi_never_sign_out_the_owners_placeholder_id_sessions()
+    {
+        await db.AssertAppRoleIsNotVacuousAsync();
+        const string phone = "6000001009";
+        var (owner, farm) = await OwnerWithFarmAsync(phone, "np1-owners-phone-h", "NP1H01");
+
+        // The owner's other sessions: the admin console (password login stores `unknown`) and a row since before device
+        // sessions (`legacy`) - both normal (not held) - and 1.0.17 phones that send no device id, which are `unknown` too.
+        var seeded = new Dictionary<string, string>();
+        foreach (var placeholder in new[] { "unknown", "legacy" })
+        {
+            var raw = "np1-h-owner-" + placeholder + "-0123456789abcdef";
+            seeded[placeholder] = raw;
+            await PurveshDemoReseedHarness.ExecAsync(db.SuperuserConn, """
+                INSERT INTO public.refresh_tokens ("Id", user_id, token_hash, device_id, platform, created_at_utc, expires_at_utc, last_used_at_utc)
+                VALUES (@id, @u, @h, @d, 'unknown', NOW() - INTERVAL '1 day', NOW() + INTERVAL '20 days', NOW() - INTERVAL '1 hour');
+                """, ("id", Guid.NewGuid()), ("u", owner), ("h", RefreshTokenHasher.Hash(raw)), ("d", placeholder));
+        }
+
+        bool PlaceholderRowsStillValid(List<SessionRow> rows) =>
+            rows.Count(r => r.Device is "unknown" or "legacy" && r.Check == null && !r.Revoked) == 2;
+
+        // The number changed hands: the stranger verifies the SMS code and sends no device id (server default `unknown`).
+        var first = await PostAsync("/user/auth/verify-otp", new { phone, otp = Otp, rememberDevice = true, platform = "android" }, native: true, seedOtpFor: phone);
+        first.Status.Should().Be(HttpStatusCode.OK, first.Raw);
+        first.Body.GetProperty("deviceCheckRequired").GetBoolean().Should().BeTrue("a phone that names no id is asked");
+        var afterFirst = await SessionRowsAsync(owner);
+        output.WriteLine("[EVIDENCE] after the stranger's held sign-in: " + string.Join(" | ", afterFirst.Select(r => $"{r.Device} check={r.Check ?? "-"} revoked={r.Revoked} reason={r.Reason ?? "-"}")));
+        PlaceholderRowsStillValid(afterFirst).Should().BeTrue("the owner's `unknown` and `legacy` sessions are not the stranger's to end");
+
+        // He signs in again with the same code route: only his own earlier HELD row is replaced.
+        var second = await PostAsync("/user/auth/verify-otp", new { phone, otp = Otp, rememberDevice = true, platform = "android" }, native: true, seedOtpFor: phone);
+        second.Body.GetProperty("deviceCheckRequired").GetBoolean().Should().BeTrue();
+        var afterSecond = await SessionRowsAsync(owner);
+        PlaceholderRowsStillValid(afterSecond).Should().BeTrue();
+        afterSecond.Where(r => r.Device == "unknown" && r.Check == "AskedAfterSmsCode" && !r.Revoked).Should().ContainSingle("one open question per phone id");
+        afterSecond.Where(r => r.Device == "unknown" && r.Check == "AskedAfterSmsCode" && r.Revoked).Should().ContainSingle()
+            .Which.Reason.Should().Be("same_device_login");
+
+        // "नाही": that held session ends, and again nothing of the owner's.
+        var no = await AnswerAsync(second.RefreshToken, "no");
+        no.Status.Should().Be(HttpStatusCode.OK, no.Raw);
+        no.Body.GetProperty("outcome").GetString().Should().Be("declined");
+        var afterNo = await SessionRowsAsync(owner);
+        output.WriteLine("[EVIDENCE] after नाही: " + string.Join(" | ", afterNo.Select(r => $"{r.Device} check={r.Check ?? "-"} revoked={r.Revoked} reason={r.Reason ?? "-"}")));
+        PlaceholderRowsStillValid(afterNo).Should().BeTrue("a stranger's नाही must not sign the real owner out");
+        afterNo.Single(r => r.Device == "unknown" && r.Check == "Declined").Revoked.Should().BeTrue("the support mark is kept and ended");
+
+        // The declined credential used again (a refresh of a revoked session = reuse detected): still nothing of the owner's.
+        (await RefreshAsync(second.RefreshToken)).Status.Should().Be(HttpStatusCode.Unauthorized);
+        PlaceholderRowsStillValid(await SessionRowsAsync(owner)).Should().BeTrue("reuse detection on his credential must not reach the owner's sessions");
+
+        // The owner's rows still work: each `unknown`/`legacy` credential refreshes and opens the farm.
+        foreach (var raw in seeded.Values)
+        {
+            var refreshed = await PostAsync("/user/auth/refresh", new { refreshToken = raw, rememberDevice = true, platform = "android" }, native: true);
+            refreshed.Status.Should().Be(HttpStatusCode.OK, refreshed.Raw);
+            (await SendAsync(HttpMethod.Get, "/shramsafal/farms/mine", refreshed.AccessToken)).Raw.Should().Contain(farm.ToString());
+        }
+
+        // A normal sign-in on a KNOWN phone keeps today's behaviour: it ends that phone's earlier sessions and no other phone's.
+        var again = await VerifyAsync(phone, "np1-owners-phone-h");
+        again.Body.GetProperty("deviceCheckRequired").GetBoolean().Should().BeFalse();
+        var afterKnown = await SessionRowsAsync(owner);
+        afterKnown.Where(r => r.Device == "np1-owners-phone-h" && !r.Revoked).Should().ContainSingle("the new session of the known phone");
+        afterKnown.Where(r => r.Device == "np1-owners-phone-h" && r.Revoked).Should().OnlyContain(r => r.Reason == "same_device_login");
+    }
+
     // ── harness ───────────────────────────────────────────────────────────────────────────────────
 
     private sealed record Reply(HttpStatusCode Status, JsonElement Body, string Raw)

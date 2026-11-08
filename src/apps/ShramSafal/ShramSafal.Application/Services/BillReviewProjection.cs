@@ -14,11 +14,16 @@ public static class BillReviewProjection
     /// <param name="entry">The bill.</param>
     /// <param name="approvals">Stamps read for this response; only this bill's, of this bill's farm, are used (E4).</param>
     /// <param name="names">Display names this reader may be sent (MU-3: an own-records seat gets no other person's name).</param>
+    /// <param name="ownerChanges">
+    /// lane BILL-1b — for each bill the main owner changed the price of after it was approved, the moment of his latest change
+    /// (<see cref="BillOwnerChange"/>). Sent as <c>changedByOwnerAtUtc</c> to everyone who receives the bill, the owner included.
+    /// </param>
     public static CostEntryDto WithReview(
         CostEntryDto dto,
         CostEntry entry,
         IEnumerable<CostEntryApproval> approvals,
-        IReadOnlyDictionary<Guid, string> names)
+        IReadOnlyDictionary<Guid, string> names,
+        IReadOnlyDictionary<Guid, DateTime>? ownerChanges = null)
     {
         ArgumentNullException.ThrowIfNull(dto);
         ArgumentNullException.ThrowIfNull(entry);
@@ -41,6 +46,7 @@ public static class BillReviewProjection
                     names.TryGetValue(latest.ApprovedByUserId.Value, out var name) ? name : null,
                     latest.ApprovedAtUtc,
                     latest.BillVersion),
+            ChangedByOwnerAtUtc = ownerChanges is not null && ownerChanges.TryGetValue(entry.Id, out var changedAt) ? changedAt : null,
         };
     }
 }
