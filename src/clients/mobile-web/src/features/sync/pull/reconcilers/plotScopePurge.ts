@@ -85,6 +85,12 @@ export async function purgeOutsidePlots(
     await removeCatalogPlots(db, new Set(outcome.removedPlotIds));
     await db.cropCycles.bulkDelete([...removedCycles]);
     if (removedCycles.size > 0) await db.plannedTasks.where('cropCycleId').anyOf([...removedCycles]).delete();
+    // lane L8b-2 fix round 1 (B004) - and the schedule choices of those plots / seasons (the server sends a chosen-plots seat
+    // only his plots' choices; the others must not stay readable on the phone).
+    const outside = new Set(outcome.removedPlotIds);
+    for (const sub of await db.scheduleSubscriptions.toArray()) {
+        if (outside.has(sub.plotId) || removedCycles.has(sub.cropCycleId)) await db.scheduleSubscriptions.delete(sub.id);
+    }
 
     // ── Work records (only the server's copies, never one with a change queued) ─────────
     if (ctx.pendingLogIds && chosen.size > 0) {

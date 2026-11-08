@@ -3054,7 +3054,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "newScheduleTemplateId", "reason", "actorUserId", "reasonText", "actorRole", "clientCommandId", "newSubscriptionId", "migrationEventId", "referenceDate", "decidedAtUtc"))
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "newScheduleTemplateId", "reason", "actorUserId", "reasonText", "actorRole", "clientCommandId", "newSubscriptionId", "migrationEventId", "referenceDate", "decidedAtUtc", "fromSubscriptionId"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -3089,7 +3089,8 @@ public sealed class PushSyncBatchHandler(
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
                 AuditDeviceId: deviceId,
                 ReferenceDate: request.ReferenceDate,
-                DecidedAtUtc: request.DecidedAtUtc),
+                DecidedAtUtc: request.DecidedAtUtc,
+                FromSubscriptionId: request.FromSubscriptionId),
             ct);
 
         return ToOutcome(result);

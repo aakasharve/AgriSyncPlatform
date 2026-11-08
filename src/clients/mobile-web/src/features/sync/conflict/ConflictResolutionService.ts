@@ -23,6 +23,7 @@ import { getRootStore } from '../../../app/state/RootStore';
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { getEditSurface } from './EditSurfaceRegistry';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import { refusalHintForRow, refusalReasonOf } from '../../logs/components/correction/refusedRevision';
 import { applyPendingWithdrawals } from '../pull/reconcilers/withdrawnRecordsReconciler';
 import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
@@ -33,6 +34,15 @@ import {
 
 /** spec: pre-launch-repair L2b (R-1) — `ShramSafalErrors.CostEntryIdConflict`; normalises to CONFLICT (PERMANENT). */
 export const COST_ENTRY_ID_CONFLICT_CODE = 'ShramSafal.CostEntry.Conflict';
+
+/**
+ * spec: plr-d10 lane L8b-2 (Review Focus 1) - `ShramSafalErrors.ScheduleAlreadyAdopted`: another phone of the farm chose this
+ * plot's schedule first. Normalises to SCHEDULEALREADYADOPTED (PERMANENT, `RejectionPolicy`).
+ */
+export const SCHEDULE_ALREADY_ADOPTED_CODE = 'ShramSafal.ScheduleAlreadyAdopted';
+
+/** B006: `ShramSafalErrors.ScheduleChangedElsewhere` - a switch from a choice another phone already changed. PERMANENT. */
+export const SCHEDULE_CHANGED_ELSEWHERE_CODE = 'ShramSafal.ScheduleChangedElsewhere';
 
 export interface RejectedMutationView {
     mutationId: string;
@@ -96,7 +106,7 @@ export class ConflictResolutionService {
                     reason: r.lastError ?? 'UNKNOWN',
                     // Lane OF-S fix 1 (B011): a refused move / worker count / future-day create says why in plain
                     // words, in his language; every other row keeps the hints below.
-                    hint: hints[index] ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode),
+                    hint: hints[index] ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode, r.mutationType),
                     payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
                     closedByRule: refusalReasonOf(r.errorCode) === 'recordClosed' || refusalReasonOf(r.errorCode) === 'plotClosed',
                 };
@@ -177,6 +187,16 @@ export class ConflictResolutionService {
             // Soft-delete: keep the row for audit + E2E assertion.
             // Never returned by list() or getPending().
             await mutationQueue.markRejectedDropped(row.id);
+            // lane L8b-2 fix round 1 (B001) - a discarded schedule choice gives the plot back to the server's choice: the
+            // phone's own unanswered row for it goes (the server's row was never touched).
+            if (row.mutationType === SyncMutationName.AdoptSchedule || row.mutationType === SyncMutationName.MigrateSchedule) {
+                const payload = row.payload as { subscriptionId?: string; newSubscriptionId?: string } | null;
+                const subscriptionId = payload?.subscriptionId ?? payload?.newSubscriptionId;
+                if (subscriptionId) {
+                    const held = await db.scheduleSubscriptions.get(subscriptionId).catch(() => undefined);
+                    if (held?.pending === true) await db.scheduleSubscriptions.delete(subscriptionId);
+                }
+            }
             // lane PRV fix pass 1 (M6) — the change no longer holds its record: a withdrawal it held back applies now.
             try {
                 const outcome = await applyPendingWithdrawals(db, getAuthSession()?.userId ?? null, systemClock.nowISO());
@@ -195,12 +215,28 @@ export class ConflictResolutionService {
         }
     }
 
-    private static hintFor(reason: string | undefined, autoRetriesExhausted = false, errorCode?: string): string | undefined {
+    private static hintFor(reason: string | undefined, autoRetriesExhausted = false, errorCode?: string, mutationType?: string): string | undefined {
         // spec: pre-launch-repair L2b (R-1) — the server holds this money entry's id on ANOTHER farm or for
         // another person, so it refused the entry instead of saving it twice. Re-sending cannot change that.
         // PROPOSED (Marathi)
         if (errorCode === COST_ENTRY_ID_CONFLICT_CODE) {
             return 'हीच खर्चाची नोंद दुसऱ्या शेतावर किंवा दुसऱ्या व्यक्तीच्या नावाने आधीच आहे. ती पुन्हा पाठवली जाणार नाही — श्रम सफलच्या नंबरला कॉल करा.';
+        }
+        // spec: plr-d10 lane L8b-2 (Review Focus 1) - two phones chose different schedules for one plot offline; the server
+        // kept the first. His phone shows the server's choice after the next sync; nothing is overwritten silently.
+        // PROPOSED (Marathi)
+        if (errorCode === SCHEDULE_ALREADY_ADOPTED_CODE) {
+            return 'दुसऱ्या फोनवरून वेगळं शेड्यूल निवडलं आहे. आता सर्व फोनवर तेच शेड्यूल दिसेल.';
+        }
+        // B006 - another phone switched this plot's schedule first. PROPOSED (Marathi)
+        if (errorCode === SCHEDULE_CHANGED_ELSEWHERE_CODE) {
+            return 'दुसऱ्या फोनवरून आधीच शेड्यूल बदललं आहे. आता सर्व फोनवर सर्व्हरचं शेड्यूल दिसेल.';
+        }
+        // B015 - a refusal of a SCHEDULE choice for want of authority (`ShramSafal.Forbidden`: L8b-1's gate): read from its CODE,
+        // for these two mutations only (the server's message names no authority word); every other mutation keeps its words. PROPOSED (Marathi)
+        if (errorCode && /(^|\.)(FORBIDDEN|UNAUTHORIZED)$/i.test(errorCode.trim())
+            && (mutationType === SyncMutationName.AdoptSchedule || mutationType === SyncMutationName.MigrateSchedule)) {
+            return 'मालक तुम्हाला "कामाचं नियोजन करणे" देऊ शकतात.';
         }
         if (!reason) {
             // §P0.7 box 2d — a cap-exhausted row can reach this screen with no

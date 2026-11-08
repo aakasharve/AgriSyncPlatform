@@ -23,6 +23,7 @@ public sealed record MigrateSchedulePayload(
     string? ClientCommandId = null,
     Guid? NewSubscriptionId = null,
     Guid? MigrationEventId = null,
+    Guid? FromSubscriptionId = null,
     DateOnly? ReferenceDate = null,
     DateTime? DecidedAtUtc = null
 );

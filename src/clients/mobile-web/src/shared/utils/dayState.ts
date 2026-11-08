@@ -9,9 +9,8 @@ import {
     derivePlannedItemsForDay,
     derivePlannedItemsForStage,
     getCurrentStage,
-    getScheduleById,
     getStageStartDay,
-    getTemplateForCrop
+    scheduleTemplateForPlot
 } from '../../features/scheduler/planning/ClientPlanEngine';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 
@@ -322,10 +321,7 @@ const getOverdueStageSignal = (
         const { crop, plot } = item;
         if (!plot.schedule) continue;
 
-        const template =
-            getScheduleById(crop.activeScheduleId || '')
-            || getScheduleById(plot.schedule.templateId || '')
-            || getTemplateForCrop(crop.name);
+        const template = scheduleTemplateForPlot(crop, plot);
 
         if (!template) continue;
 
@@ -512,10 +508,7 @@ export const computeDayState = ({
         const { crop, plot } = item;
         if (!plot.schedule) return;
 
-        const template =
-            getScheduleById(crop.activeScheduleId || '')
-            || getScheduleById(plot.schedule.templateId || '')
-            || getTemplateForCrop(crop.name);
+        const template = scheduleTemplateForPlot(crop, plot);
 
         if (!template) return;
 

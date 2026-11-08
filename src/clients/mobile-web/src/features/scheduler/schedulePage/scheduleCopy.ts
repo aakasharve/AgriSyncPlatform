@@ -96,6 +96,9 @@ export const SC = {
     waterGap: (n: number) => `पाणी देऊन ${n} दिवस झाले`, // PROPOSED (Marathi)
     // Shortened from the app's own close-day line "दिवस पूर्ण करण्यासाठी क्लिक करा" (dfesTranslations clickToClose).
     closeDay: 'दिवस पूर्ण करा', // PROPOSED (Marathi)
+    // spec: plr-d10 lane L8b-2 - said only when a choice could not be sent to the server yet (the plot's crop season has not
+    // reached it). The choice is shown as made; it goes to the other phones once the season is there.
+    choiceNotSent: 'या प्लॉटचा हंगाम अजून सर्व्हरवर नाही, म्हणून ही निवड फक्त या फोनवर आहे. हंगाम सर्व्हरवर पोचल्यावर पुन्हा निवडा.', // PROPOSED (Marathi) (B009: it promises no later send; none happens)
     library: 'शेड्यूल लायब्ररी', // PROPOSED (Marathi)
     libraryLine: (n: number) => `तुमच्या पिकांसाठी ${n} शेड्यूल`, // PROPOSED (Marathi)
     editor: 'शेड्यूल बदला', // PROPOSED (Marathi)
@@ -114,7 +117,8 @@ export const SC = {
     edSchedule: 'कोणतं शेड्यूल पाळायचं', // PROPOSED (Marathi)
     edPicked: 'निवडलं', // PROPOSED (Marathi)
     edNone: 'या पिकासाठी अजून एकही शेड्यूल आलेलं नाही. इंटरनेट चालू असताना ॲप उघडा.', // PROPOSED (Marathi) — same line as the library's
-    edAllPlots: (crop: string, n: number) => `हे शेड्यूल ${crop} च्या सगळ्या ${n} प्लॉटसाठी लागू होईल`, // PROPOSED (Marathi)
+    // spec: plr-d10 lane L8b-2 (founder C2) - the editor's choice is for this plot only; the library is the door for the whole crop.
+    edThisPlotOnly: 'हे शेड्यूल फक्त या प्लॉटसाठी लागू होईल. सगळ्या प्लॉटसाठी लायब्ररीतून निवडा.', // PROPOSED (Marathi)
     edDayZero: 'दिवस 0', // preview word ("दिवस")
     edTodayIs: (d: number) => `म्हणजे आज दिवस ${d}`, // PROPOSED (Marathi)
     edSave: 'जतन करा', // app word (translations `save`)

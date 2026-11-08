@@ -65,7 +65,7 @@ afterEach(async () => {
 
 describe('the library download (lane IT1c Task 4)', () => {
     it('the shipped Dexie version has the inputLibrary store', () => {
-        expect(db.verno).toBe(26);
+        expect(db.verno).toBe(27); // v26 added the inputLibrary store; lane L8b-2's v27 keeps it
         expect(db.tables.map(t => t.name)).toContain('inputLibrary');
     });
 

@@ -44,6 +44,8 @@ public static class ShramSafalErrors
     // that would acknowledge a recording the server did not store for the caller.
     public static readonly Error RetainedClipIdTaken = Error.Conflict("ShramSafal.RetainedClipIdTaken", "This recording id belongs to another account.");
     public static readonly Error ScheduleAlreadyAdopted = Error.Conflict("ShramSafal.ScheduleAlreadyAdopted", "An active schedule subscription already exists for this plot-crop-cycle.");
+    // spec: plr-d10 lane L8b-2 fix round 1 (B006): a switch that names the choice it switches from, and that choice is no longer the plot's.
+    public static readonly Error ScheduleChangedElsewhere = Error.Conflict("ShramSafal.ScheduleChangedElsewhere", "The plot's schedule was changed from another phone first.");
     public static readonly Error ScheduleTemplateUnpublished = Error.Conflict("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
 
     // spec: plr-d10 lane L8b-1 fix round 1 (review M1) — a copy of this schedule (this source and version) is already kept:

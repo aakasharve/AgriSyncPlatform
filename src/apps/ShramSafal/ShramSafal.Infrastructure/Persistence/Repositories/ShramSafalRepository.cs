@@ -1617,6 +1617,42 @@ internal sealed class ShramSafalRepository(
                 ct);
     }
 
+    public async Task<List<ScheduleSubscription>> GetScheduleSubscriptionsChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds).Select(id => new FarmId(id)).ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        // spec: plr-d10 lane L8b-2 - a row has two clocks: when it was adopted and when its state last changed (migrated,
+        // abandoned, completed). Either one after the cursor sends it. UNTRACKED: the pull only reads.
+        return await db.ScheduleSubscriptions
+            .AsNoTracking()
+            .Where(s => ids.Contains(s.FarmId)
+                        && (s.AdoptedAtUtc > sinceUtc || (s.StateChangedAtUtc != null && s.StateChangedAtUtc > sinceUtc)))
+            .OrderBy(s => s.AdoptedAtUtc)
+            .ThenBy(s => s.Id)
+            .ToListAsync(ct);
+    }
+
+    public async Task<List<CropCycle>> GetCropCyclesOfFarmsByIdsAsync(
+        IEnumerable<Guid> farmIds, IReadOnlyCollection<Guid> cropCycleIds, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds);
+        if (ids.Count == 0 || cropCycleIds.Count == 0)
+        {
+            return [];
+        }
+
+        var wanted = cropCycleIds.ToList();
+        return await db.CropCycles
+            .AsNoTracking()
+            .Where(c => ids.Contains((Guid)c.FarmId) && wanted.Contains(c.Id))
+            .ToListAsync(ct);
+    }
+
     public async Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default)
     {
         await db.ScheduleMigrationEvents.AddAsync(migrationEvent, ct);

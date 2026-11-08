@@ -34,6 +34,7 @@ import type { QueueRowWithFacts } from './queueRowFacts';
 import { lineAmountNow } from '../../features/finance/recordMoneyNow';
 import { restoreRefusedAudienceChoice } from '../../features/recordAudience/refusedAudience';
 import { settleBillVersions } from '../../features/finance/billVersionsMarker';
+import { settleScheduleSubscriptions } from '../../features/scheduler/schedulePage/scheduleSubscriptionsMarker';
 
 /** A record's first money that reached the server is in step only when it went at its line's current amount. */
 async function clearWhenInStep(moneySource: string, payload: unknown): Promise<void> {
@@ -652,6 +653,17 @@ export class BackgroundSyncWorker {
         } catch (error) {
             console.warn(JSON.stringify({
                 component: 'billVersionsMarker',
+                action: 'settle_failed',
+                reason: error instanceof Error ? error.message : String(error),
+            }));
+        }
+
+        // lane L8b-2 fix round 1 (B011) - the same, once, for the schedule choices made before this phone's cursor.
+        try {
+            await settleScheduleSubscriptions(getDatabase(), payload, sinceCursor === '0');
+        } catch (error) {
+            console.warn(JSON.stringify({
+                component: 'scheduleSubscriptionsMarker',
                 action: 'settle_failed',
                 reason: error instanceof Error ? error.message : String(error),
             }));

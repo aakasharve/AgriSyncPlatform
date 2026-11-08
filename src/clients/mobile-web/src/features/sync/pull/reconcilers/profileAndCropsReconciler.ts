@@ -32,7 +32,8 @@ import {
     normalizeCropTypeKey,
     readCropTypeReferences,
 } from '../helpers/cropIdentity';
-import { ensureCrop, upsertPlot } from '../helpers/plotSchedule';
+import { applyScheduleChoices, ensureCrop, upsertPlot } from '../helpers/plotSchedule';
+import { readPlotChoices } from '../../../scheduler/schedulePage/scheduleSubscriptions';
 import {
     enrichPurveshDemoCrops,
     fillMissingProfileDetails,
@@ -74,6 +75,11 @@ export async function reconcileProfileAndCrops(
     const existingCrops = await cropsRepo.getAll();
     const cropsById = new Map(existingCrops.map(crop => [crop.id, crop]));
 
+    // spec: plr-d10 lane L8b-2 (founder D-32; Review Focus 2) - the schedule each plot has CHOSEN (the server's row, or this
+    // phone's own not yet answered). The crop-type default below is only for a plot with no choice: a download, and a full
+    // re-pull (`since=0`) above all, never puts the default over a choice.
+    const choices = await readPlotChoices();
+
     const plotsById = new Map(payload.plots.map(plot => [plot.id, plot]));
     for (const cycle of payload.cropCycles) {
         // spec: plr-d10-redesign-real-integration (I9). A crop made on this phone has its
@@ -84,11 +90,18 @@ export async function reconcileProfileAndCrops(
         const holder = [...cropsById.values()].find(c =>
             c.plots.some(p => p.id === cycle.plotId) && sameCropName(c.name, cycle.cropName));
         const crop = holder ?? ensureCrop(cropsById, cycle.cropName);
+        // The crop-type default is the crop's own schedule for the plots that have chosen nothing; a plot's choice is applied
+        // to the plot below (and, when every plot of the crop follows the same one, to the crop's field again).
         const resolvedTemplateId = cropTypeDefaults.get(normalizeCropTypeKey(cycle.cropName))
             ?? crop.activeScheduleId
             ?? null;
         if (resolvedTemplateId) {
             crop.activeScheduleId = resolvedTemplateId;
+        }
+        // B007 - what the DOWNLOAD wrote as the crop's own schedule is recorded, so the one-time upload can tell it from a choice.
+        const downloadedDefault = cropTypeDefaults.get(normalizeCropTypeKey(cycle.cropName));
+        if (downloadedDefault) {
+            (crop as unknown as Record<string, unknown>).downloadedDefaultScheduleId = downloadedDefault;
         }
 
         const plotDto = plotsById.get(cycle.plotId);
@@ -96,8 +109,11 @@ export async function reconcileProfileAndCrops(
             continue;
         }
 
-        upsertPlot(crop, plotDto, cycle, resolvedTemplateId);
+        upsertPlot(crop, plotDto, cycle, choices.get(plotDto.id)?.templateId ?? resolvedTemplateId);
     }
+
+    // The choices are written onto the plots they belong to (day 0 and schedule), for every reader of the crop list.
+    applyScheduleChoices([...cropsById.values()], choices);
 
     const receivedAtUtc = systemClock.nowISO();
     const profileFromRepo = await profileRepo.get();

@@ -29,11 +29,10 @@ import {
 } from '../../types';
 
 import {
-    getTemplateForCrop,
-    getScheduleById,
     calculateDayNumber,
     derivePlannedItemsForStage,
-    PlannedTaskDerived
+    PlannedTaskDerived,
+    scheduleTemplateForPlot,
 } from '../scheduler/planning/ClientPlanEngine';
 
 import { getDateKey } from '../../core/domain/services/DateKeyService';
@@ -49,9 +48,7 @@ export function generatePlotComparison(
 ): PlotComparisonSummary {
 
     // 1. Get schedule template and instance
-    const template = getScheduleById(crop.activeScheduleId || '')
-        || getScheduleById(plot.schedule?.templateId || '')
-        || getTemplateForCrop(crop.name);
+    const template = scheduleTemplateForPlot(crop, plot);
     const scheduleInstance = plot.schedule;
     const referenceDate = scheduleInstance?.referenceDate || plot.startDate || getDateKey();
 

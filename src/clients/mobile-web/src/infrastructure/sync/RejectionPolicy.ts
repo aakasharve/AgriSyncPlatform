@@ -149,6 +149,15 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     // a stop that arrived before its rate self-heals.
     'UnknownSuggestion',
     'KindChangeNotAllowed',
+    // spec: plr-d10 lane L8b-2 (founder D-32; Review Focus 1) - two phones of one farm chose DIFFERENT schedules for the same
+    // plot while offline: the server kept the first, so this second adopt can never succeed and is not retried. It is parked
+    // with its own words (ConflictResolutionService.hintFor: "दुसऱ्या फोनवरून वेगळं शेड्यूल निवडलं आहे"), and the next pull
+    // brings the server's choice to both phones (scheduleSubscriptionsReconciler). `ShramSafal.Forbidden` (no authority to
+    // change the plot's schedule, L8b-1's ScheduleChangeGate) is already permanent above, through FORBIDDEN.
+    'ScheduleAlreadyAdopted',
+    // B006 - a switch that named the choice it switches FROM, and that choice is no longer the plot's (another phone switched
+    // first): refused, nothing written, never re-sent. Parked with its words; the server's choice is shown (sweep).
+    'ScheduleChangedElsewhere',
 ];
 
 const PERMANENT_SET = new Set(

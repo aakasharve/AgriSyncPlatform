@@ -113,7 +113,7 @@ const reconcile = (db: AgriLogDatabase, scopes: FarmAccessScopeDto[], pending = 
     db.transaction('rw', [
         db.logs, db.attachments, db.uploadQueue, db.appMeta, db.farms, db.plots, db.cropCycles, db.costEntries,
         db.financeCorrections, db.dayLedgers, db.plannedTasks, db.attentionCards, db.attendanceMarks, db.jobCards,
-        db.testInstances, db.testRecommendations, db.complianceSignals, db.crops, db.farmerProfile,
+        db.testInstances, db.testRecommendations, db.complianceSignals, db.crops, db.farmerProfile, db.scheduleSubscriptions,
     ], () => reconcileAccessScopes(db, pull(scopes), { userId: ME, pendingLogIds: pending, receivedAtUtc: AT }));
 
 const ids = async (rows: Promise<{ id?: string; cardId?: string }[]>) => (await rows).map(r => r.id ?? r.cardId).sort();

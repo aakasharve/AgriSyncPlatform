@@ -80,12 +80,22 @@ describe('adopting from the library', () => {
 });
 
 describe('the editor\'s save takes effect', () => {
-    it('a different schedule becomes the crop\'s schedule (so the page shows it) and the plot\'s day 0 moves', () => {
+    it('a different schedule becomes that plot schedule only (founder C2: the crop schedule is not touched) and the plot day 0 moves', () => {
         const next = applyEditorChoice([crop()], { cropId: 'crop-1', plotId: 'plot-1', templateId: SPRAY_TEMPLATE_ID, startDate: '2026-10-20' }, TODAY);
-        expect(next[0].activeScheduleId).toBe(SPRAY_TEMPLATE_ID);
-        expect(next[0].plots[0].schedule).toMatchObject({ templateId: SPRAY_TEMPLATE_ID, referenceDate: '2026-10-20', stageOverrides: [], expectationOverrides: [] });
+        expect(next[0].activeScheduleId).toBe(TEMPLATE_ID); // spec: lane L8b-2 - the editor is for one plot; the library is the crop-wide door
+        expect(next[0].plots[0].schedule).toMatchObject({ templateId: SPRAY_TEMPLATE_ID, referenceDate: '2026-10-20', stageOverrides: [], expectationOverrides: [], plotChoice: true });
         const shown = resolvePlotSchedule(next[0], next[0].plots[0], TODAY)!;
-        expect([shown.template.id, shown.instance.referenceDate, shown.source]).toEqual([SPRAY_TEMPLATE_ID, '2026-10-20', 'adopted']);
+        expect([shown.template.id, shown.instance.referenceDate, shown.source]).toEqual([SPRAY_TEMPLATE_ID, '2026-10-20', 'plot']);
+    });
+
+    it('the editor choice leaves the other plots of the crop alone, and the library adopt (crop-wide) clears the plot mark', () => {
+        const b = plot({ id: 'plot-2', name: 'B' });
+        const edited = applyEditorChoice([crop([plot(), b])], { cropId: 'crop-1', plotId: 'plot-1', templateId: SPRAY_TEMPLATE_ID, startDate: '2026-10-20' }, TODAY);
+        expect(edited[0].plots[1]).toEqual(b);
+        expect(resolvePlotSchedule(edited[0], edited[0].plots[1], TODAY)!.template.id).toBe(TEMPLATE_ID);
+        const adopted = adoptForCrop(edited, 'crop-1', SPRAY_TEMPLATE_ID, TODAY);
+        expect(adopted[0].plots.map(p => (p.schedule as unknown as Record<string, unknown>).plotChoice)).toEqual([undefined, undefined]);
+        expect(adopted[0].plots.map(p => resolvePlotSchedule(adopted[0], p, TODAY)!.template.id)).toEqual([SPRAY_TEMPLATE_ID, SPRAY_TEMPLATE_ID]);
     });
 
     it('the same schedule only moves the chosen plot\'s day 0; the other plot is untouched', () => {
