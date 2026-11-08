@@ -97,6 +97,16 @@ public static class DayUnderstandingScore
         new(StringComparer.Ordinal) { "LEARN_FACET" };
 
     /// <summary>
+    /// Whether this part of the roster takes part in the /10 at all: it applies to the day's work and something in production can
+    /// earn it. The rollup below and the per-plot read (lane IT3, "the highest-weight part still unearned") ask this ONE question.
+    /// </summary>
+    public static bool CountsInTheScore(ScoredDimension dimension)
+    {
+        ArgumentNullException.ThrowIfNull(dimension);
+        return dimension.Applicable && !NotYetEarnable.Contains(dimension.Name);
+    }
+
+    /// <summary>
     /// Roll the day's scored dimensions up into the 0–10 Day Understanding Score,
     /// or <c>null</c> when no dimension applied. See the type remarks for the exact
     /// formula + rationale.
@@ -108,14 +118,9 @@ public static class DayUnderstandingScore
         double covered = 0, possible = 0;
         foreach (var d in Roster(input))
         {
-            if (!d.Applicable)
+            if (!CountsInTheScore(d))
             {
-                continue; // cannot apply to this day's work → out of BOTH sums
-            }
-
-            if (NotYetEarnable.Contains(d.Name))
-            {
-                continue; // no production path can earn it on ANY day → out of BOTH sums
+                continue; // cannot apply to this day's work, or no production path can earn it on ANY day → out of BOTH sums
             }
 
             // Defensive clamps: ComponentsJson is now read back from storage, so a
@@ -136,6 +141,13 @@ public static class DayUnderstandingScore
 
     // The completeness roster, or — for a row written before the roster existed —
     // the union of the three lens lists (score what was recorded; invent nothing).
+    /// <summary>The parts that take part in the /10 for this day, in roster order (lane IT3: the per-plot read lists them).</summary>
+    public static IReadOnlyList<ScoredDimension> ScoredParts(LensInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        return Roster(input).Where(CountsInTheScore).ToList();
+    }
+
     private static IEnumerable<ScoredDimension> Roster(LensInput input)
         => input.Possible is { Count: > 0 } roster
             ? roster

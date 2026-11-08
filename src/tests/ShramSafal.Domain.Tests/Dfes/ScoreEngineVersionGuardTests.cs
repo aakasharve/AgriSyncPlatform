@@ -84,8 +84,13 @@ public sealed class ScoreEngineVersionGuardTests
         underDfes3.Should().Be(Dfes3Baseline(),
             "a historical day must not drift when the engine changes — it must score EXACTLY what "
             + "an engine with no dfes-4 rules would give it");
-        fresh.Should().NotBe(underDfes3,
+        // The two scores can land on the same rounded number by coincidence (dfes-4 retires WEATHER, dfes-5 adds PRODUCT_ID: one
+        // raises the number, the other lowers it), so the proof that the engines differ is the ROSTER, not the rounded score.
+        var weather = Stamp(WeatherProvider.TomorrowIo, Plot, Now);
+        Roster(Build(SprayDay, [weather], scoredUnder: null)).Should().NotEqual(
+            Roster(Build(SprayDay, [weather], scoredUnder: "dfes-3")),
             "and the new engine must actually be different on this day, or the freeze above proves nothing");
+        fresh.Should().NotBeNull();
     }
 
     [Fact]
@@ -126,7 +131,7 @@ public sealed class ScoreEngineVersionGuardTests
         var stamped = await StampWrittenForAsync(scoredUnder: null);
 
         stamped.Should().Be(DfesTuning.ScoreEngineVersion);
-        stamped.Should().Be("dfes-4", "wave-3.5 bumps the engine exactly once, here");
+        stamped.Should().Be("dfes-5", "lane IT3 bumps the engine exactly once, here (wave-3.5 did dfes-4)");
     }
 
     [Fact]
@@ -190,6 +195,9 @@ public sealed class ScoreEngineVersionGuardTests
             "a day stored after 2.2 has no server sentence to credit (doctrine P4)");
     }
 
+    private static IEnumerable<string> Roster(LensInput input)
+        => input.Possible!.Select(d => $"{d.Name}:{d.Applicable}:{d.Coverage}");
+
     private static double Coverage(LensInput input, string name)
         => input.Possible!.Single(d => d.Name == name).Coverage;
 
@@ -208,7 +216,8 @@ public sealed class ScoreEngineVersionGuardTests
     /// </summary>
     private static int? Dfes3Baseline()
     {
-        var baseline = DayUnderstandingScore.From(Build(SprayDay, [], scoredUnder: null));
+        // "dfes-4": the Wave-3 rules and no PRODUCT_ID, with no system weather. (Before dfes-5 this was a day with no aggregate.)
+        var baseline = DayUnderstandingScore.From(Build(SprayDay, [], scoredUnder: "dfes-4"));
         baseline.Should().Be(2, "receipt: a bare spray day with WEATHER owed and uncovered scores 2/10");
         return baseline;
     }

@@ -344,7 +344,49 @@ public sealed record LabourReviewItemDto(
     /// reviewer asks (<c>GET /logs/{id}/original-voice</c>), against the speaker's "keep
     /// original voice" switch. Additive: null on an older server.
     /// </summary>
-    bool? HasRecording = null);
+    bool? HasRecording = null,
+
+    /// <summary>
+    /// spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3, Task 3a; founder D-95) - the products the record names, so a
+    /// record that only sprays is no longer a blank card: one line per product of the record's LATEST stored content, with the
+    /// library's match and the newest answers. The speaker's answer and the check are kept apart. Shown only to a reader who may
+    /// hear the record's words (its speaker, the primary account holder, a holder of the confirm-records authority); null when
+    /// he may not, and on an older server. Empty when the record names no product. Nothing here changes a stored name, dose,
+    /// quantity or date (P7).
+    /// </summary>
+    IReadOnlyList<ReviewProductDto>? Products = null,
+
+    /// <summary>
+    /// lane IT3, Task 3a - how many of <see cref="Products"/> no checker has checked yet (a check is an answer from a holder of
+    /// the confirm-records authority who is not the record's speaker). Checking is optional everywhere and NEVER blocks मंजूर
+    /// (D-95). Null where <see cref="Products"/> is null.
+    /// </summary>
+    int? UncheckedProductCount = null);
+
+/// <summary>
+/// lane IT3, Task 3a - one product of a record on its approval card. <see cref="Match"/> is what the library made of his words
+/// (<c>found</c> / <c>ambiguous</c> / <c>notFound</c>; a product id only when found); <see cref="SpeakerAnswer"/> is the
+/// speaker's own answer (his, optional); <see cref="Check"/> is the checker's answer.
+/// </summary>
+public sealed record ReviewProductDto(
+    string InputEventId,
+    int MixIndex,
+    string SpokenName,
+    ReviewProductMatchDto Match,
+    ReviewProductAnswerDto? SpeakerAnswer,
+    ReviewProductAnswerDto? Check);
+
+/// <summary>lane IT3, Task 3a - the library's answer for his words.</summary>
+public sealed record ReviewProductMatchDto(string State, string? ProductId);
+
+/// <summary>lane IT3, Task 3a - one stored answer: <c>confirmed</c> / <c>rejected</c> / <c>photo</c>, the library product a
+/// yes names, the packet photo a photo names, who gave it and when.</summary>
+public sealed record ReviewProductAnswerDto(
+    string Verdict,
+    string? CatalogProductId,
+    Guid? AttachmentId,
+    Guid AssertedByUserId,
+    DateTime AssertedAtUtc);
 
 /// <summary>
 /// The labour facts the approval card is judged on. Task 20 (spec:

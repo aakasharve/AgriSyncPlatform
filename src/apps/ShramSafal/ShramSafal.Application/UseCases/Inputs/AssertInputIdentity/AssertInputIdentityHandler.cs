@@ -6,8 +6,10 @@ using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.Services;
+using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
+using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Inputs;
 
@@ -37,10 +39,18 @@ namespace ShramSafal.Application.UseCases.Inputs.AssertInputIdentity;
 /// has changed since.</item>
 /// </list>
 /// Checking never blocks मंजूर and no entitlement gate stands in front of it: an answer is never a condition of saving (P9).
+///
+/// <para><b>The score and the points follow the answer (lane IT3).</b> Once the answer is flushed, the record's WORK day is
+/// recomputed (its understanding score gains or loses the product part) and, when the answer is given on a later day, the day
+/// it is given is recomputed too (its points gain the reason, D-94). Both inside this transaction, after the record's row
+/// hold, so a concurrent confirmation of the same record waits for it and reads the answer. Not a side-car: a failure fails
+/// the answer, so the two commit together or neither does. Nothing of the record, its quantities or its confirmation is
+/// written.</para>
 /// </summary>
 public sealed class AssertInputIdentityHandler(
     IShramSafalRepository repository,
-    IClock clock)
+    IClock clock,
+    IDailyRichnessDerivationService dailyRichnessDerivation)
 {
     public const string AssertedAction = "InputIdentityAsserted";
 
@@ -70,7 +80,7 @@ public sealed class AssertInputIdentityHandler(
 
         // E4 - the farm is the RECORD's farm; the payload only says which one the phone means. A record of another farm (or
         // one the sender's scope cannot see) is "not found", the answer every phone reads as "wait for its create".
-        var log = await repository.GetDailyLogByIdAsync(command.DailyLogId, ct);
+        var log = await repository.GetDailyLogForChangeAsync(command.DailyLogId, ct);
         if (log is null || (Guid)log.FarmId != command.FarmId)
         {
             return Result.Failure<InputIdentityAssertionDto>(ShramSafalErrors.DailyLogNotFound);
@@ -217,6 +227,19 @@ public sealed class AssertInputIdentityHandler(
                 ipHash: command.AuditIpHash,
                 sourceAiJobId: null),
             ct);
+        await repository.SaveChangesAsync(ct);
+
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3; founder D-94) - the answer is flushed, so the days read back
+        // with it. The record's WORK day carries the score (the product part of the /10); the day the answer is GIVEN carries
+        // the points, and when that is a later day the work day's own points are not touched (it reads no answer given on
+        // another day). Database work only.
+        await dailyRichnessDerivation.RecomputeAsync(farmId, log.LogDate, ct);
+        var givenOn = FarmLocalDay.From(now);
+        if (givenOn != log.LogDate)
+        {
+            await dailyRichnessDerivation.RecomputeAsync(farmId, givenOn, ct);
+        }
+
         await repository.SaveChangesAsync(ct);
 
         return Result.Success(InputIdentityAssertionDto.From(assertion));

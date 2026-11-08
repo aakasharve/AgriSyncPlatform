@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Persistence.Outbox;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ShramSafal.Domain.AI;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
@@ -465,6 +466,18 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     {
         modelBuilder.HasDefaultSchema("ssf");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ShramSafalDbContext).Assembly);
+
+        // spec: plr-d10-redesign-real-integration-2026-10-25 (gate fix after L8c-1). The three Guid lists of a task (its linked
+        // logs, its former assignees, and a plot's linked logs) are stored as a uuid[] through a value converter (Npgsql). EF's
+        // in-memory provider, which the database-free tests use, cannot compose that converter with its own collection converter
+        // and fails the whole model, which broke every test that builds this context in memory. There the list is stored as it
+        // is. The relational (Npgsql) model, and so the migration snapshot, is not touched.
+        if (!Database.IsRelational())
+        {
+            modelBuilder.Entity<PlannedWork>().Property(x => x.LinkedDailyLogIds).HasConversion((ValueConverter?)null);
+            modelBuilder.Entity<PlannedWork>().Property(x => x.FormerAssigneeUserIds).HasConversion((ValueConverter?)null);
+            modelBuilder.Entity<PlannedWorkPlot>().Property(x => x.LinkedDailyLogIds).HasConversion((ValueConverter?)null);
+        }
 
         // T-IGH-03-OUTBOX-WIRING: outbox table sits alongside the
         // ShramSafal aggregates in the ssf schema so the

@@ -8,6 +8,7 @@ using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Inputs;
 using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
@@ -260,6 +261,37 @@ internal sealed class InMemoryShramSafalRepository : IShramSafalRepository
     // FIX (dfes-companion-2026-07-11) — the interface default no-ops these two
     // members, which is exactly wrong for a test that needs a REAL round-trip
     // (RecomputeAsync reads the day's logs, then writes the aggregate back).
+    // lane IT3 - the stored content and the product-identity answers the day's score and points read on every recompute. Empty
+    // unless a test seeds them, so the pre-existing derivation tests (which are not about answers) score as they did before.
+    private readonly Dictionary<Guid, DailyLogContent> _contents = new();
+    private readonly List<InputIdentityAssertion> _answers = new();
+
+    public void SetContent(DailyLogContent content) => _contents[content.DailyLogId] = content;
+    public void AddAnswer(InputIdentityAssertion answer) => _answers.Add(answer);
+
+    public Task<IReadOnlyList<DailyLogContent>> GetCurrentDailyLogContentsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLogContent>>(
+            dailyLogIds.Where(_contents.ContainsKey).Select(id => _contents[id]).ToList());
+
+    public Task<IReadOnlyList<InputIdentityAssertion>> GetLatestInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>(
+            _answers.Where(a => dailyLogIds.Contains(a.DailyLogId))
+                .GroupBy(a => (a.DailyLogId, a.InputEventId, a.MixIndex, a.IsCheck))
+                .Select(g => g.OrderByDescending(a => a.AssertedAtUtc).ThenByDescending(a => a.Id).First())
+                .ToList());
+
+    public Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>(
+            _answers.Where(a => dailyLogIds.Contains(a.DailyLogId)).OrderBy(a => a.AssertedAtUtc).ThenBy(a => a.Id).ToList());
+
+    public Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsGivenBetweenAsync(
+        Guid farmId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>(
+            _answers.Where(a => (Guid)a.FarmId == farmId && a.AssertedAtUtc >= fromUtc && a.AssertedAtUtc < toUtcExclusive).ToList());
+
     // GetDailyLogsForFarmDateAsync reads from the same _logs store AddLog/
     // AddDailyLogAsync populate; AddDailyRichnessAggregateAsync writes into the
     // SAME SeededRichnessAggregates list GetDailyRichnessAggregateAsync reads

@@ -135,6 +135,73 @@ public sealed class InputIdentityAssertionRepositoryInMemoryTests
         (await repository.GetLatestInputIdentityAssertionsForLogsAsync([Guid.NewGuid()])).Should().BeEmpty();
     }
 
+    // ── lane IT3: GetInputIdentityAssertionsForLogsAsync (every answer, for the day's points) ───────────
+
+    [Fact]
+    public async Task ForLogs_ReturnsEveryAnswerOldestFirst_AndDropsOneWhoseFarmIsNotItsRecordsFarm()
+    {
+        await using var db = NewInMemoryDb();
+        var log = LogOn(FarmA);
+        var other = LogOn(FarmA);
+        var first = Answer(FarmA, log, Now.AddDays(-3), eventId: "a");
+        var second = Answer(FarmA, log, Now.AddDays(-2), eventId: "a");
+        var third = Answer(FarmA, log, Now.AddDays(-1), eventId: "b");
+        var planted = Answer(FarmB, log, Now.AddHours(-1), eventId: "planted");
+        var elsewhere = Answer(FarmA, other, Now.AddHours(-2), eventId: "elsewhere");
+        db.AddRange(log, other, third, first, second, planted, elsewhere);
+        await db.SaveChangesAsync();
+
+        var all = await new ShramSafalRepository(db).GetInputIdentityAssertionsForLogsAsync([log.Id]);
+
+        all.Select(a => a.Id).Should().Equal(
+            new[] { first.Id, second.Id, third.Id }, "every earlier answer too, oldest first; never another record's or another farm's");
+    }
+
+    [Fact]
+    public async Task ForLogs_ForNoRecords_IsEmpty()
+    {
+        await using var db = NewInMemoryDb();
+        var repository = new ShramSafalRepository(db);
+
+        (await repository.GetInputIdentityAssertionsForLogsAsync([])).Should().BeEmpty();
+        (await repository.GetInputIdentityAssertionsForLogsAsync([Guid.NewGuid()])).Should().BeEmpty();
+    }
+
+    // ── lane IT3: GetInputIdentityAssertionsGivenBetweenAsync (the answers of one farm-local day) ───────
+
+    [Fact]
+    public async Task GivenBetween_ReturnsOnlyThatFarmsAnswersInTheWindow()
+    {
+        await using var db = NewInMemoryDb();
+        var logA = LogOn(FarmA);
+        var logB = LogOn(FarmB);
+        var before = Answer(FarmA, logA, Now.AddHours(-3), eventId: "before");
+        var atStart = Answer(FarmA, logA, Now.AddHours(-2), eventId: "atStart");
+        var inside = Answer(FarmA, logA, Now.AddHours(-1), eventId: "inside");
+        var atEnd = Answer(FarmA, logA, Now, eventId: "atEnd");
+        var otherFarm = Answer(FarmB, logB, Now.AddHours(-1), eventId: "otherFarm");
+        db.AddRange(logA, logB, before, atStart, inside, atEnd, otherFarm);
+        await db.SaveChangesAsync();
+
+        var given = await new ShramSafalRepository(db).GetInputIdentityAssertionsGivenBetweenAsync(
+            (Guid)FarmA, Now.AddHours(-2), Now);
+
+        given.Select(a => a.InputEventId).Should().Equal(
+            new[] { "atStart", "inside" }, "the window is [from, to): the start is in, the end is out, and another farm is never in");
+    }
+
+    [Fact]
+    public async Task GivenBetween_WithNoFarm_ReturnsNothing()
+    {
+        await using var db = NewInMemoryDb();
+        var log = LogOn(FarmA);
+        db.AddRange(log, Answer(FarmA, log, Now.AddHours(-1)));
+        await db.SaveChangesAsync();
+
+        (await new ShramSafalRepository(db).GetInputIdentityAssertionsGivenBetweenAsync(Guid.Empty, DateTime.UnixEpoch, Now.AddDays(1)))
+            .Should().BeEmpty();
+    }
+
     // ── GetInputIdentityAssertionByClientMutationIdAsync (an idempotent repeat) ─────────────────────────
 
     [Fact]

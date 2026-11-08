@@ -7,6 +7,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Inputs;
 using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
@@ -272,4 +273,18 @@ internal abstract class StubShramSafalRepository : IShramSafalRepository
                 && (from is null || m.WorkDate >= from.Value)
                 && (toInclusive is null || m.WorkDate <= toInclusive.Value))
             .ToList());
+
+    // lane IT3 - the stored content and product-identity answers the approval queue reads for each card's products: none stored
+    // here. Empty (not refused) so the labour suites, which are not about products, read as they did before cards carried products.
+    public virtual Task<IReadOnlyList<DailyLogContent>> GetCurrentDailyLogContentsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<DailyLogContent>>([]);
+
+    public virtual Task<IReadOnlyList<InputIdentityAssertion>> GetLatestInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>([]);
+
+    public virtual Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>([]);
 }

@@ -161,8 +161,8 @@ public sealed class StreakConfirmedRecordsTests
 
         // And the pure rule the recompute applies. An external blocker (weather) is a declared no-work day: it
         // advances, but only as a confirmed record.
-        var confirmed = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "weather"), dayHasConfirmedRecord: true);
-        var unconfirmed = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "weather"), dayHasConfirmedRecord: false);
+        var confirmed = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "weather"), dayHasConfirmedRecord: true, IdentityPoints.None);
+        var unconfirmed = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "weather"), dayHasConfirmedRecord: false, IdentityPoints.None);
 
         Assert.Equal(DfesTuning.Streak.AdvanceOnDeclaredNoWork, confirmed.AdvancesStreak);
         Assert.True(confirmed.AdvancesStreak);
@@ -192,7 +192,7 @@ public sealed class StreakConfirmedRecordsTests
     {
         foreach (var confirmed in new[] { true, false })
         {
-            var rest = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "rest"), confirmed);
+            var rest = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "rest"), confirmed, IdentityPoints.None);
             Assert.False(rest.AdvancesStreak);
             Assert.Equal(DfesTuning.Points.NoWork, rest.ShramPointsEarned);
         }
@@ -216,8 +216,8 @@ public sealed class StreakConfirmedRecordsTests
     {
         foreach (var signals in new[] { Sig(), Sig(obs: true, learning: true, followup: true), Sig(noWorkCode: "weather"), Sig(noWorkCode: "rest") })
         {
-            var confirmed = RichnessStamper.Stamp(classification, signals, dayHasConfirmedRecord: true);
-            var unconfirmed = RichnessStamper.Stamp(classification, signals, dayHasConfirmedRecord: false);
+            var confirmed = RichnessStamper.Stamp(classification, signals, dayHasConfirmedRecord: true, IdentityPoints.None);
+            var unconfirmed = RichnessStamper.Stamp(classification, signals, dayHasConfirmedRecord: false, IdentityPoints.None);
 
             Assert.Equal(confirmed.ShramPointsEarned, unconfirmed.ShramPointsEarned);
             Assert.Equal(confirmed.AdvancesBar, unconfirmed.AdvancesBar);

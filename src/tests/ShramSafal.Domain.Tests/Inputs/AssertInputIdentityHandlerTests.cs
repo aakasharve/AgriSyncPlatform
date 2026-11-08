@@ -51,20 +51,33 @@ public sealed class AssertInputIdentityHandlerTests
 
     private static string CalciumNitrateId => InputCatalog.Match("calcium nitrate", null).ProductId!;
 
+    /// <summary>Records the days the handler asked to recompute (lane IT3).</summary>
+    internal sealed class RecordingDerivation : ShramSafal.Application.UseCases.Logs.CreateDailyLog.IDailyRichnessDerivationService
+    {
+        public List<(Guid FarmId, DateOnly Day)> Calls { get; } = [];
+
+        public Task RecomputeAsync(Guid farmId, DateOnly localDate, CancellationToken ct = default)
+        {
+            Calls.Add((farmId, localDate));
+            return Task.CompletedTask;
+        }
+    }
+
     private sealed class Fixture
     {
         public DailyLog Log { get; }
         public DailyLogContent Content { get; set; }
         public AnswerFake Repo { get; }
         public AssertInputIdentityHandler Handler { get; }
+        public RecordingDerivation Derivation { get; } = new();
 
-        public Fixture(string document = Document)
+        public Fixture(string document = Document, DateTime? givenAt = null)
         {
             Log = DailyLog.Create(Guid.NewGuid(), Farm, Plot, Cycle, new UserId(Speaker), new DateOnly(2026, 11, 8), null, null, Now.AddHours(-3));
             Content = DailyLogContent.Create(
                 Guid.NewGuid(), Log, 1, document, DailyLogContent.OriginCreate, null, new UserId(Speaker), Now.AddHours(-3), null, null);
             Repo = new AnswerFake(Log, () => Content);
-            Handler = new AssertInputIdentityHandler(Repo, new FixedClock(Now));
+            Handler = new AssertInputIdentityHandler(Repo, new FixedClock(givenAt ?? Now), Derivation);
         }
 
         public AssertInputIdentityCommand Command(
@@ -327,6 +340,51 @@ public sealed class AssertInputIdentityHandlerTests
         Assert.Empty(f.Repo.Rows);
     }
 
+    // ── lane IT3 (founder D-94): the score and the points follow the answer ─────────────────────────────────────────
+
+    [Fact]
+    public async Task Assert_RecomputesTheRecordsWorkDay_AfterTheAnswerIsSaved()
+    {
+        var f = new Fixture();
+
+        var result = await f.Handler.HandleAsync(f.Command(Speaker));
+
+        Assert.True(result.IsSuccess);
+        // The record is of 2026-11-08 and the answer is given the same day: that day, once.
+        Assert.Equal([(Farm.Value, new DateOnly(2026, 11, 8))], f.Derivation.Calls);
+        Assert.Equal(2, f.Repo.Saves); // the answer with its audit row, then the days it moved
+    }
+
+    [Fact]
+    public async Task Assert_GivenOnALaterDay_RecomputesTheWorkDayAndTheDayItIsGiven()
+    {
+        var f = new Fixture(givenAt: Now.AddDays(2));
+
+        var result = await f.Handler.HandleAsync(f.Command(Speaker));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(
+            [(Farm.Value, new DateOnly(2026, 11, 8)), (Farm.Value, new DateOnly(2026, 11, 10))],
+            f.Derivation.Calls);
+    }
+
+    [Fact]
+    public async Task Assert_ARepeatedRequest_AndARefusedAnswer_RecomputeNothing()
+    {
+        var f = new Fixture();
+        await f.Handler.HandleAsync(f.Command(Speaker, requestId: "same"));
+        f.Derivation.Calls.Clear();
+
+        var repeat = await f.Handler.HandleAsync(f.Command(Speaker, requestId: "same"));
+        var refused = await f.Handler.HandleAsync(f.Command(OtherMember, requestId: "other"));
+        var badProduct = await f.Handler.HandleAsync(f.Command(Speaker, requestId: "bad", productId: "p-not-in-the-library"));
+
+        Assert.True(repeat.IsSuccess);
+        Assert.True(refused.IsFailure);
+        Assert.True(badProduct.IsFailure);
+        Assert.Empty(f.Derivation.Calls);
+    }
+
     [Fact]
     public async Task Assert_Twice_SameClientMutationId_IsIdempotent()
     {
@@ -341,7 +399,8 @@ public sealed class AssertInputIdentityHandlerTests
         Assert.True(first.IsSuccess && again.IsSuccess);
         Assert.Single(f.Repo.Rows);
         Assert.Equal(first.Value.AssertionId, again.Value.AssertionId);
-        Assert.Equal(1, f.Repo.Saves);
+        // One flush for the answer and its audit row, one for the days the answer moved (lane IT3); the repeat saves nothing.
+        Assert.Equal(2, f.Repo.Saves);
     }
 
     [Fact]
@@ -418,7 +477,8 @@ public sealed class AssertInputIdentityHandlerTests
         Assert.Equal("InputIdentityAssertion", audit.EntityType);
         Assert.DoesNotContain("spokenName", audit.Payload, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("calcium nitrate", audit.Payload, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, f.Repo.Saves);
+        // One flush for the answer and its audit row, one for the days the answer moved (lane IT3).
+        Assert.Equal(2, f.Repo.Saves);
     }
 
     [Fact]

@@ -630,6 +630,18 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                 .ToDictionary(p => p.Id, p => p.Name)
             : [];
 
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3, Task 3a; founder D-95) - the products each card names, from
+        // the record's LATEST stored content, the library's match and the newest answers. Read once for the queue and only
+        // for the records whose words this reader may hear (the speaker, the primary account holder, a holder of the confirm-
+        // records authority - the same rule as the original voice and his words in the pull); the others keep a blank list.
+        // Checking never blocks मंजूर: nothing here is read by the confirm path.
+        var wordsLogs = reviewLogs
+            .Where(l => l.OperatorUserId.Value == query.CallerUserId.Value
+                || resolvedCallerRole == AppRole.PrimaryOwner
+                || hasConfirmAuthority)
+            .ToList();
+        var judgedProducts = await ProductIdentityReader.JudgeAsync(repository, wordsLogs, ct);
+
         var review = reviewLogs
             .Select(l =>
             {
@@ -711,7 +723,11 @@ public sealed class GetLabourDataHandler(IShramSafalRepository repository, ICloc
                     Plot: plotNames.Count > 0 ? string.Join(SeparatorMiddot, plotNames) : null,
                     PlotScope: l.Scope.ToString(),
                     Version: l.ContentVersion,
-                    HasRecording: l.VoiceClipId is not null);
+                    HasRecording: l.VoiceClipId is not null,
+                    Products: judgedProducts.TryGetValue(l.Id, out var judged) ? ReviewProducts.Of(judged) : null,
+                    UncheckedProductCount: judgedProducts.TryGetValue(l.Id, out var judgedForCount)
+                        ? ReviewProducts.UncheckedCount(judgedForCount)
+                        : null);
             })
             .ToList();
 
