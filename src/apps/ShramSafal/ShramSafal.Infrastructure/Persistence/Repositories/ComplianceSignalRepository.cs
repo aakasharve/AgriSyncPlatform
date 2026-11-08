@@ -67,6 +67,22 @@ internal sealed class ComplianceSignalRepository(ShramSafalDbContext context) : 
         return await context.ComplianceSignals.FindAsync([id], ct);
     }
 
+    public async Task<IReadOnlyList<ComplianceSignal>> GetAcknowledgedSinceAsync(
+        FarmId farmId,
+        string ruleCode,
+        DateTime sinceUtc,
+        CancellationToken ct = default)
+    {
+        // AsNoTracking: a read of evidence only; the handler never changes an acknowledged signal.
+        return await context.ComplianceSignals
+            .AsNoTracking()
+            .Where(s => s.FarmId == farmId
+                && s.RuleCode == ruleCode
+                && s.AcknowledgedAtUtc != null
+                && s.AcknowledgedAtUtc >= sinceUtc)
+            .ToListAsync(ct);
+    }
+
     public async Task<IReadOnlyList<ComplianceSignal>> GetSinceCursorAsync(
         FarmId farmId,
         DateTime cursor,

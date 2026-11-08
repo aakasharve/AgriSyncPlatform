@@ -110,4 +110,32 @@ public sealed class ComplianceSignalTests
         FluentActions.Invoking(() => signal.Resolve(UserId.New(), "Second resolution.", DateTime.UtcNow))
             .Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void ComplianceSignal_UpdateEvidence_ReplacesThePayloadAndTheWords_KeepsIdentityTitleAndState()
+    {
+        var signal = OpenSignal();
+        var id = signal.Id;
+        var firstSeen = signal.FirstSeenAtUtc;
+
+        signal.UpdateEvidence("{\"ruleId\":\"R2\"}", "New words", "नवे शब्द");
+
+        signal.PayloadJson.Should().Be("{\"ruleId\":\"R2\"}");
+        signal.DescriptionEn.Should().Be("New words");
+        signal.DescriptionMr.Should().Be("नवे शब्द");
+        signal.Id.Should().Be(id);
+        signal.TitleEn.Should().Be("Test signal");
+        signal.FirstSeenAtUtc.Should().Be(firstSeen);
+        signal.IsOpen.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ComplianceSignal_UpdateEvidence_RefusesAnEmptyPayload_AndASignalThatIsAlreadyClosed()
+    {
+        var signal = OpenSignal();
+        FluentActions.Invoking(() => signal.UpdateEvidence(" ", "d", "d")).Should().Throw<ArgumentException>();
+
+        signal.Acknowledge(UserId.New(), DateTime.UtcNow);
+        FluentActions.Invoking(() => signal.UpdateEvidence("{}", "d", "d")).Should().Throw<InvalidOperationException>();
+    }
 }

@@ -8,6 +8,9 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Compliance;
+using ShramSafal.Domain.Dfes;
+using ShramSafal.Domain.Inputs;
+using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Tests;
 
@@ -31,7 +34,12 @@ public sealed class EvaluateComplianceHandler(
     IComplianceSignalRepository signalRepository,
     ITestInstanceRepository testInstanceRepository,
     IClock clock,
-    ILogger<EvaluateComplianceHandler> logger) : IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>
+    ILogger<EvaluateComplianceHandler> logger,
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2) - the mixing rules the wrong-mix rule judges against. NOTHING
+    // registers this in production, so it is null there and the rule uses MixRules.Shippable (reviewed and sourced rules only,
+    // empty until the founder's agronomist ticks them, D-96). A test host registers its own reviewed rule; the verdict still
+    // counts only rules that are reviewed and sourced, so an unreviewed rule given here changes nothing.
+    IReadOnlyList<MixRule>? mixRulesInForce = null) : IHandler<EvaluateComplianceCommand, EvaluateComplianceResult>
 {
     private sealed record SignalKey(FarmId FarmId, Guid PlotId, string RuleCode, Guid? CropCycleId);
 
@@ -60,6 +68,42 @@ public sealed class EvaluateComplianceHandler(
             [TestInstanceStatus.Due, TestInstanceStatus.Overdue, TestInstanceStatus.Reported],
             ct);
 
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2, Task 3) - the two inputs of the wrong-mix rule
+        // (InputMixRule). The latest stored content of each record dated in the last 7 days (the farm's own day: what he said,
+        // per saved record), and the fingerprints of the wrong mixes this farm already acknowledged (पाहिलं) in the last 30
+        // days, read from the evidence of those signals - so the same wrong mix never comes back, while a different record,
+        // a new version of the record or a different pair is a new alert. Both reads are bounded (a week of records; a month
+        // of acknowledged signals of ONE rule) and skipped when there is nothing to judge.
+        //
+        // And when NO rule in force is shippable (reviewed and sourced) - today's production state, founder D-96 - nothing can
+        // change whatever the records say, so neither read is made and nothing is judged: a farm's evaluation pass costs what it
+        // cost before this rule existed.
+        var mixRules = mixRulesInForce ?? MixRules.Shippable;
+        var anyMixRuleShippable = mixRules.Any(MixVerdict.IsShippable);
+        IReadOnlyList<DailyLogContent>? latestContents = null;
+        var acknowledgedMixFingerprints = new HashSet<string>(StringComparer.Ordinal);
+        if (anyMixRuleShippable)
+        {
+            var mixWindowStart = FarmLocalDay.From(now).AddDays(-InputMixRule.WindowDays);
+            var recentLogIds = dailyLogs.Where(l => l.LogDate >= mixWindowStart).Select(l => l.Id).ToList();
+            latestContents = recentLogIds.Count == 0
+                ? []
+                : await repository.GetCurrentDailyLogContentsAsync(recentLogIds, ct);
+        }
+
+        if (latestContents is { Count: > 0 })
+        {
+            var acknowledgedMixes = await signalRepository.GetAcknowledgedSinceAsync(
+                farmId, ComplianceRuleCode.InputMixNeverTogether, now.AddDays(-InputMixRule.AcknowledgedWindowDays), ct);
+            foreach (var acknowledged in acknowledgedMixes)
+            {
+                if (InputMixRule.FingerprintOfPayload(acknowledged.PayloadJson) is { } fingerprint)
+                {
+                    acknowledgedMixFingerprints.Add(fingerprint);
+                }
+            }
+        }
+
         var input = new ComplianceEvaluationInput(
             FarmId: farmId,
             AsOfUtc: now,
@@ -67,7 +111,22 @@ public sealed class EvaluateComplianceHandler(
             LogTasksLastWeek: logTasksLastWeek,
             DailyLogs: dailyLogs,
             TestInstances: testInstances,
-            Plots: plots);
+            Plots: plots,
+            LatestContents: latestContents,
+            AcknowledgedMixFingerprints: acknowledgedMixFingerprints,
+            MixRulesInForce: mixRulesInForce);
+
+        // A red mix in a record with no single plot (multi-plot or farm-wide scope) cannot become a signal: the signal row needs a
+        // plot, and inventing one or fanning one alert across plots is what founder decision O-1 ruled out. Say so out loud
+        // (P5) rather than let the skip be silent - exactly as the unrepresentable disputes below.
+        if (latestContents is { Count: > 0 } && InputMixRule.RedMixesWithNoPlot(input, mixRules) is { Count: > 0 } plotless)
+        {
+            logger.LogWarning(
+                "EvaluateCompliance: farm {FarmId} has {PlotlessMixCount} saved record(s) with a wrong mix but no single plot (scope MultiPlot or Farm). No InputMixNeverTogether signal can be opened for them because ssf.compliance_signals.plot_id is NOT NULL. Daily log ids: {PlotlessMixLogIds}.",
+                farmId,
+                plotless.Count,
+                string.Join(",", plotless));
+        }
 
         // LABOUR_PHASE2 P2.3 — say out loud what this pass cannot represent.
         //
@@ -168,6 +227,18 @@ public sealed class EvaluateComplianceHandler(
 
             if (openByKey.TryGetValue(key, out var existing))
             {
+                // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2) - there is one open signal per plot and rule, so
+                // when the mix it names is gone (revised away) or a newer wrong mix stands on the same plot, the signal is
+                // kept and its evidence follows: an alert always names a mix that is there - the payload AND the words that
+                // describe it (the rule's why / next-time and the titles of its sources; the newer mix may break another
+                // rule). Acknowledging it then remembers THAT mix (the fingerprint is read from this evidence), and any other
+                // wrong mix opens afresh after it. The signal's title is the rule's own and does not change.
+                if (rule.RuleCode == ComplianceRuleCode.InputMixNeverTogether
+                    && !string.Equals(existing.PayloadJson, evidence.PayloadJson, StringComparison.Ordinal))
+                {
+                    existing.UpdateEvidence(evidence.PayloadJson, evidence.DescriptionEn, evidence.DescriptionMr);
+                }
+
                 existing.Refresh(now);
                 refreshed++;
                 EmitAudit(repository, existing, "compliance.refreshed", now, auditProvenance);

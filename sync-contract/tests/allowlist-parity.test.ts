@@ -56,7 +56,8 @@ const HANDLER_PATH = resolve(
 // 20 -> 23 on 2026-11-07 (lane L8b-1, merged): adopt_schedule, migrate_schedule and abandon_schedule are WIRED (they
 // answered MUTATION_TYPE_UNIMPLEMENTED before), each guarded by its own PayloadHasOnly and named below.
 // 23 -> 24 on 2026-11-07 (lane BILL-1, founder D-12): approve_cost_entry, its own PayloadHasOnly.
-const EXPECTED_ALLOWLIST_COUNT = 24;
+// 24 -> 25 on 2026-11-08 (lane IT2, founders D-92 / D-95): assert_input_identity, its own PayloadHasOnly.
+const EXPECTED_ALLOWLIST_COUNT = 25;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -79,6 +80,8 @@ const EXPECTED_GUARDED_MUTATIONS = [
     'set_farm_rate',
     // lane BILL-1 — a reviewer's मंजूर stamp on one bill (who, when, which version).
     'approve_cost_entry',
+    // lane IT2 — his हो / नाही / फोटो answer about one product of one saved record (an append-only overlay, never an edit).
+    'assert_input_identity',
     'verify_log',
     // Wired by feat/dfes-companion. On `main` this mutation dispatches to a
     // stub that returns MUTATION_TYPE_UNIMPLEMENTED and has no allow-list, so

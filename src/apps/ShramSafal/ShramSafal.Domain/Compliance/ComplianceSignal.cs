@@ -122,4 +122,22 @@ public sealed class ComplianceSignal : Entity<Guid>
     {
         PayloadJson = payloadJson;
     }
+
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2) - a signal is one open row per plot and rule, so when the thing
+    // it names changes (a newer wrong mix under another rule replaces the one it named) the SAME signal speaks for the new
+    // evidence: the payload and the words that describe it change together, never one without the other. The rule's title,
+    // severity and suggested action are the rule's and stay; so do its identity and its first-seen time. Only an open signal
+    // can be re-worded: an acknowledged or resolved one is history.
+    public void UpdateEvidence(string payloadJson, string descriptionEn, string descriptionMr)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+            throw new ArgumentException("The evidence is required.", nameof(payloadJson));
+
+        if (!IsOpen)
+            throw new InvalidOperationException("Only an open signal's evidence can be updated.");
+
+        PayloadJson = payloadJson;
+        DescriptionEn = descriptionEn;
+        DescriptionMr = descriptionMr;
+    }
 }

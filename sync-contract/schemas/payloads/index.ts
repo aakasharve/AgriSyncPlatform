@@ -24,6 +24,8 @@ export { SetRecordAudiencePayload } from './set_record_audience.zod';
 export { SetFarmRatePayload } from './set_farm_rate.zod';
 // lane BILL-1 (founder D-12) — a reviewer's मंजूर stamp on one bill: who (the sender), when (the server), which version.
 export { ApproveCostEntryPayload } from './approve_cost_entry.zod';
+// lane IT2 (founder D-92 / D-95) — his हो / नाही / फोटो answer about one product of one saved record.
+export { AssertInputIdentityPayload } from './assert_input_identity.zod';
 export { CorrectLabourAssignmentPayload } from './correct_labour_assignment.zod';
 export {
     LogContentSchema,

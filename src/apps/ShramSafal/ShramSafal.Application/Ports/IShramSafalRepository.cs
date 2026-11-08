@@ -4,6 +4,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Inputs;
 using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
@@ -207,6 +208,40 @@ public interface IShramSafalRepository
     /// </summary>
     Task<IReadOnlyList<CostEntryApproval>> GetCostEntryApprovalsAsync(IReadOnlyCollection<Guid> costEntryIds, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<CostEntryApproval>>([]);
+
+    // ── spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his हो / नाही / फोटो answers about
+    // the products of a saved record (ssf.input_identity_assertions). APPEND-ONLY by privilege: the app role holds SELECT and
+    // INSERT only, so there is no update or delete counterpart here; the newest row for an item (asserted_at_utc) is current.
+
+    /// <summary>
+    /// Stages one answer (no SaveChanges: the caller's single save commits it with its audit row). The default refuses: a
+    /// repository that cannot keep an answer must never answer as if it had (P5).
+    /// </summary>
+    Task AddInputIdentityAssertionAsync(InputIdentityAssertion assertion, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot keep a product-identity answer.");
+
+    /// <summary>
+    /// The answer this farm already kept for this sync request (a re-sent answer), or null. Matched on the farm AND the request
+    /// id, the unique key the table keeps (<c>ux_input_identity_assertions_farm_mutation</c>).
+    /// </summary>
+    Task<InputIdentityAssertion?> GetInputIdentityAssertionByClientMutationIdAsync(
+        Guid farmId, string clientMutationId, CancellationToken ct = default)
+        => Task.FromResult<InputIdentityAssertion?>(null);
+
+    /// <summary>
+    /// The CURRENT answer of each item of these records: per (record, input event, mix slot, speaker-or-check) the newest by
+    /// <c>asserted_at_utc</c>, only where the answer's farm is its record's farm (E4). The pull reads it for a record
+    /// RE-ADMITTED to a reader, whose answers go with it whatever their age. The default REFUSES: a store that cannot answer
+    /// must never look as though the record has no answers (it would silently hide them).
+    /// </summary>
+    Task<IReadOnlyList<InputIdentityAssertion>> GetLatestInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot read the newest product-identity answers of a record.");
+
+    /// <summary>The pull: answers kept on these farms strictly after <paramref name="sinceUtc"/>, oldest first.</summary>
+    Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult(new List<InputIdentityAssertion>());
 
     /// <summary>
     /// spec: pre-launch-repair L2b (R-1) — the stored cost entry with this id, read-only and untracked, as the

@@ -197,6 +197,11 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // each. APPEND-ONLY by privilege (migration AddCostEntryApprovals); FORCE-RLS on its own farm_id (F8).
     public DbSet<CostEntryApproval> CostEntryApprovals => Set<CostEntryApproval>();
 
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) - his हो / नाही / फोटो answers about the
+    // products of saved records, one unchangeable row each. APPEND-ONLY by privilege (migration AddInputIdentityAssertions);
+    // FORCE-RLS on its own farm_id (F8). An overlay: the record is never touched.
+    public DbSet<InputIdentityAssertion> InputIdentityAssertions => Set<InputIdentityAssertion>();
+
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();

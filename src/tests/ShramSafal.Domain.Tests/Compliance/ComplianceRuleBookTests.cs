@@ -18,9 +18,10 @@ public sealed class ComplianceRuleBookTests
         new(TestFarmId, asOf ?? DateTime.UtcNow, [], [], [], [], []);
 
     [Fact]
-    public void ComplianceRuleBook_Exposes6Rules_EachWithStableRuleCode()
+    public void ComplianceRuleBook_Exposes7Rules_EachWithStableRuleCode()
     {
-        ComplianceRuleBook.Rules.Should().HaveCount(6);
+        // 6 -> 7 on 2026-11-08 (lane IT2): the wrong-mix rule (InputMixNeverTogether).
+        ComplianceRuleBook.Rules.Should().HaveCount(7);
 
         var codes = ComplianceRuleBook.Rules.Select(r => r.RuleCode).ToList();
         codes.Should().Contain(ComplianceRuleCode.MissedTaskThresholdWeek);
@@ -29,6 +30,7 @@ public sealed class ComplianceRuleBookTests
         codes.Should().Contain(ComplianceRuleCode.ResidueRiskReported);
         codes.Should().Contain(ComplianceRuleCode.UnresolvedDisputeAgeHigh);
         codes.Should().Contain(ComplianceRuleCode.ProtocolBreakInStage);
+        codes.Should().Contain(ComplianceRuleCode.InputMixNeverTogether);
     }
 
     [Fact]

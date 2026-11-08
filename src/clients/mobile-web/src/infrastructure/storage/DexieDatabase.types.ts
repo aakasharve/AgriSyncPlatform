@@ -652,6 +652,18 @@ export interface AttentionCardCacheRecord {
     overdueTaskCount?: number | null;
     latestHealthScore?: string | null;
     unresolvedDisputeCount?: number | null;
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2, Task 4) — the open compliance signal that ranks this plot's
+     * card (its id), so a screen can acknowledge THAT signal with पाहिलं. Optional and non-indexed, so the cache table needs no
+     * Dexie version bump (`DATABASE_VERSION` stays 25); absent on a card cached before this field existed, and from an older
+     * server.
+     */
+    topSignalId?: string | null;
+    /**
+     * lane IT2 — the same signal's rule code (`compliance.input-mix.never-together` is "wrong mix in one tank"). Optional for
+     * the same reasons as {@link topSignalId}.
+     */
+    topSignalRuleCode?: string | null;
 }
 
 // =============================================================================

@@ -171,7 +171,10 @@ public sealed class PushSyncBatchHandler(
     // spec: plr-d10 lane L8b-1 — a plot's schedule choice (adopt / migrate / abandon), the SAME handlers the REST routes call.
     ShramSafal.Application.UseCases.Schedules.AdoptSchedule.AdoptScheduleHandler adoptScheduleHandler,
     ShramSafal.Application.UseCases.Schedules.MigrateSchedule.MigrateScheduleHandler migrateScheduleHandler,
-    ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleHandler abandonScheduleHandler)
+    ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleHandler abandonScheduleHandler,
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his हो / नाही / फोटो answer about one
+    // product of one saved record (assert_input_identity): an append-only overlay, never an edit of the record.
+    ShramSafal.Application.UseCases.Inputs.AssertInputIdentity.AssertInputIdentityHandler assertInputIdentityHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1094,6 +1097,9 @@ public sealed class PushSyncBatchHandler(
             // spec: plr-d10 lane BILL-1 (founder D-12) — a bill's मंजूर stamp.
             case "approve_cost_entry":
                 return await HandleApproveCostEntryAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his answer about a product.
+            case "assert_input_identity":
+                return await HandleAssertInputIdentityAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
@@ -3854,6 +3860,70 @@ public sealed class PushSyncBatchHandler(
     }
 
     /// <summary>
+    /// spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) - his हो / नाही / फोटो answer about ONE
+    /// product of ONE saved record. The payload names the record's farm, so the farm's scope is opened from it (a farm the
+    /// sender is not an Active member of is refused with no farm GUC ever set). Which record (its own farm: E4; its audience
+    /// and plots), which product (an item of its LATEST stored content: his words are the server's copy, never a payload
+    /// field), who may answer (the speaker as himself, a holder of the confirm-records authority as the check) and the
+    /// idempotent repeat are <see cref="ShramSafal.Application.UseCases.Inputs.AssertInputIdentity.AssertInputIdentityHandler"/>'s.
+    /// Who answered is the authenticated sender, and whether it is the check is his standing - never payload fields. The
+    /// record is not touched: no version, no task, no quantity (D-92, P7). Every refusal parks visibly (P10).
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleAssertInputIdentityAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with assert_input_identity.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "assertionId", "farmId", "dailyLogId", "inputEventId", "mixIndex", "verdict", "catalogProductId", "catalogVersion", "attachmentId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "assert_input_identity payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<AssertInputIdentityPayload>(payload);
+        if (request is null || request.AssertionId == Guid.Empty || request.FarmId == Guid.Empty || request.DailyLogId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.InputEventId) || request.MixIndex < 0
+            || string.IsNullOrWhiteSpace(request.Verdict) || string.IsNullOrWhiteSpace(request.CatalogVersion))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for assert_input_identity.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(
+                Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await assertInputIdentityHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Inputs.AssertInputIdentity.AssertInputIdentityCommand(
+                request.AssertionId,
+                request.FarmId,
+                request.DailyLogId,
+                request.InputEventId,
+                request.MixIndex,
+                request.Verdict,
+                request.CatalogProductId,
+                request.CatalogVersion,
+                request.AttachmentId,
+                actorUserId,
+                clientRequestId,
+                actorRole,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
     /// spec: plr-d10 lane PRV (founder D-26; orchestrator call 7, "push") — the record a change names, for every kind
     /// of change that touches an EXISTING work or money record: its tasks, words, place or day, workers, confirmation,
     /// correction, allocation, or a photo linked to it. Internal (fix pass 2, L4) so a test proves which changes the PUSH
@@ -3879,7 +3949,7 @@ public sealed class PushSyncBatchHandler(
         var (kind, id) = mutationType switch
         {
             "add_log_task" or "revise_log_content" or "move_daily_log" or "correct_labour_assignment" or "verify_log"
-                or "jobcard.complete"
+                or "jobcard.complete" or "assert_input_identity"
                 => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "dailyLogId")),
             "verify_log_v2" => (Domain.RecordPrivacy.RecordKinds.DailyLog, IdOf(payload, "logId")),
             "correct_cost_entry" or "allocate_global_expense" or "approve_cost_entry"

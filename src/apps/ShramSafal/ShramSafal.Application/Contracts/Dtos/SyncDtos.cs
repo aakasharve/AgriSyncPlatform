@@ -100,7 +100,12 @@ public sealed record SyncPullResponseDto(
     // spec: plr-d10 lane BILL-1 fix round 1 (review M4) — true from a server that sends every cost entry with its bill version
     // (and its review state and stamp). A phone that pulled its bills before that holds them with no version and asks once
     // for a full pull (the F1 path); an older server never sends it, so a phone never asks it. Additive and last (P11).
-    bool? BillVersions = null);
+    bool? BillVersions = null,
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his हो / नाही / फोटो answers about the
+    // products of saved records, kept since this phone's cursor, for the records he may see: the newest answer of each item
+    // (the speaker's and the check separately). Their own delta - an answer never moves its record's clock. Additive and last
+    // (P11): 1.0.17 parses the pull with no schema and never reads it.
+    IReadOnlyList<InputIdentityAssertionDto>? InputIdentityAssertions = null);
 
 /// <summary>
 /// lane PRV — one record taken back from a phone: its kind (<c>DailyLog</c> / <c>CostEntry</c>) and id. Content-free.
