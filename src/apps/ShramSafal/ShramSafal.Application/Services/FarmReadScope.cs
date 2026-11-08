@@ -71,6 +71,13 @@ public sealed record FarmReadScope(
     /// </summary>
     public IReadOnlySet<Guid>? PlotIds { get; init; }
 
+    /// <summary>
+    /// spec: plr-d10 lane L8c-1 (fix round 1, L001) - this seat holds See all tasks NOW (the primary owner always). It is
+    /// <c>PlannedWorkSeat.HoldsSeeAllTasks</c> exactly (both come from <c>FarmAccessPolicy.Holds</c> at the same clock), and it
+    /// travels on the pull's access scope so a phone can drop the tasks it may no longer see.
+    /// </summary>
+    public bool SeeAllTasks { get; init; }
+
     /// <summary>lane MU-4 — the seat's plot scope as stored (for the wire: the phone's pickers and its purge).</summary>
     public MembershipPlotScope PlotScope { get; init; } = MembershipPlotScope.AllPlots;
 
@@ -137,6 +144,7 @@ public sealed record FarmReadScope(
             AccessChangedAtUtc: access!.IsRegistrant ? null : access.AccessChangedAtUtc)
         {
             IsRecordHolder = access.IsRegistrant,
+            SeeAllTasks = Holds(FarmAuthority.SeeAllTasks), // fix round 1 (L001): the SAME value as PlannedWorkSeat.HoldsSeeAllTasks; an explicit grant widens an own-work seat too
             PlotIds = primary ? null : access.CoveredPlotIds,
             PlotScope = primary ? MembershipPlotScope.AllPlots : access.PlotScope,
         };

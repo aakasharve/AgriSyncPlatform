@@ -207,6 +207,11 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // FORCE-RLS on its own farm_id (F8). An overlay: the record is never touched.
     public DbSet<InputIdentityAssertion> InputIdentityAssertions => Set<InputIdentityAssertion>();
 
+    // spec: plr-d10 lane L8c-1 (founder D-24c) — planned work and reminders (migration AddPlannedWork): two tables, FORCE-RLS on
+    // their own farm_id, SELECT / INSERT / UPDATE for the app role and never DELETE. Row version = xmin.
+    public DbSet<PlannedWork> PlannedWork => Set<PlannedWork>();
+    public DbSet<PlannedWorkPlot> PlannedWorkPlots => Set<PlannedWorkPlot>();
+
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();

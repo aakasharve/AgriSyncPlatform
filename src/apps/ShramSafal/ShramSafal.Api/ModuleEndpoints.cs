@@ -46,6 +46,8 @@ public static class ModuleEndpoints
         group.MapPlannedActivityEndpoints();
         group.MapScheduleTemplateEndpoints();
         group.MapScheduleEndpoints();
+        // spec: plr-d10 lane L8c-1 (founder D-24c) - the REST reads of planned work and reminders.
+        group.MapPlannedWorkEndpoints();
         group.MapReportEndpoints();
         group.MapAdminEndpoints();
         group.MapAttentionEndpoints();

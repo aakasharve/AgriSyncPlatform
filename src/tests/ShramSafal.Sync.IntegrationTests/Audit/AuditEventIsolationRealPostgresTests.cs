@@ -1377,6 +1377,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    two nullable columns (origin, check_state_at_adopt) Up() added to ssf.schedule_subscriptions - only what Up() added. Never
         //    touches ssf.audit_events, its policies or its grants. Safe mid-proof.
         "20261108150000_AddScheduleSubscriptionOriginAndCheck",
+        // ── Reviewed 2026-11-08 (spec: plr-d10 lane L8c-1, founder D-24c); Down() read in full: it drops the four policies and the
+        //    two tables Up() created (ssf.planned_work_plots, ssf.planned_work) - only what Up() added. Up() and Down() never touch
+        //    ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261108180000_AddPlannedWork",
     ];
 
     /// <summary>

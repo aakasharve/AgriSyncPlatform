@@ -349,6 +349,56 @@ internal sealed class ShramSafalRepository(
         return await NewestLegitimateAssertions(db, dailyLogIds).ToListAsync(ct);
     }
 
+    // spec: plr-d10 lane L8c-1 (founder D-24c) - see IShramSafalRepository.
+    public async Task AddPlannedWorkAsync(PlannedWork work, CancellationToken ct = default)
+    {
+        await db.PlannedWork.AddAsync(work, ct);
+    }
+
+    public async Task<bool> TrySavePlannedWorkChangeAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another change to the same row was saved first (xmin moved). Nothing of ours is kept: the tracked copies, and the
+            // audit row staged with them, are dropped so no later save in this scope retries them.
+            db.ChangeTracker.Clear();
+            return false;
+        }
+    }
+
+    public async Task<PlannedWork?> GetPlannedWorkByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        if (id == Guid.Empty)
+        {
+            return null;
+        }
+
+        return await db.PlannedWork.Include(w => w.Plots).FirstOrDefaultAsync(w => w.Id == id, ct);
+    }
+
+    public async Task<List<PlannedWork>> GetPlannedWorkChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds).Select(id => new FarmId(id)).ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.PlannedWork
+            .AsNoTracking()
+            .Include(w => w.Plots)
+            .Where(w => ids.Contains(w.FarmId) && w.ModifiedAtUtc > sinceUtc)
+            .OrderBy(w => w.ModifiedAtUtc)
+            .ThenBy(w => w.Id)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
     {

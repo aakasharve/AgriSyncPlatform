@@ -29,7 +29,8 @@ public static class FarmPermissionDefaults
         | FarmPermission.AssignWork
         | FarmPermission.ConfirmRecords
         | FarmPermission.EditFarmSetup
-        | FarmPermission.ManageScheduleTemplates;
+        | FarmPermission.ManageScheduleTemplates
+        | FarmPermission.SeeAllTasks;
 
     /// <summary>Every bit a stored value may legally carry (a pre-2b row may still hold a retired bit).</summary>
     public const FarmPermission Known = All | FarmPermission.Invite | FarmPermission.AddCost;
@@ -107,5 +108,6 @@ public static class FarmPermissionDefaults
         FarmPermission.ConfirmRecords,
         FarmPermission.EditFarmSetup,
         FarmPermission.ManageScheduleTemplates,
+        FarmPermission.SeeAllTasks,
     ];
 }

@@ -36,6 +36,7 @@ using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 using ShramSafal.Application.UseCases.Logs.MoveDailyLog;
 using ShramSafal.Application.UseCases.Logs.ReviseLogContent;
 using ShramSafal.Application.UseCases.Logs.VerifyLog;
+using ShramSafal.Application.UseCases.Planning.PlannedWork;
 using ShramSafal.Application.UseCases.Tests.RecordTestCollected;
 using ShramSafal.Application.UseCases.Tests.RecordTestResult;
 using ShramSafal.Application.UseCases.Work.AssignJobCard;
@@ -174,7 +175,12 @@ public sealed class PushSyncBatchHandler(
     ShramSafal.Application.UseCases.Schedules.AbandonSchedule.AbandonScheduleHandler abandonScheduleHandler,
     // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his हो / नाही / फोटो answer about one
     // product of one saved record (assert_input_identity): an append-only overlay, never an edit of the record.
-    ShramSafal.Application.UseCases.Inputs.AssertInputIdentity.AssertInputIdentityHandler assertInputIdentityHandler)
+    ShramSafal.Application.UseCases.Inputs.AssertInputIdentity.AssertInputIdentityHandler assertInputIdentityHandler,
+    // spec: plr-d10 lane L8c-1 (founder D-24c) — planned work and reminders (plannedwork.create / edit / seen / accept / cancel).
+    ShramSafal.Application.UseCases.Planning.PlannedWork.CreatePlannedWorkHandler createPlannedWorkHandler,
+    ShramSafal.Application.UseCases.Planning.PlannedWork.EditPlannedWorkHandler editPlannedWorkHandler,
+    ShramSafal.Application.UseCases.Planning.PlannedWork.AnswerPlannedWorkHandler answerPlannedWorkHandler,
+    ShramSafal.Application.UseCases.Planning.PlannedWork.CancelPlannedWorkHandler cancelPlannedWorkHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1148,6 +1154,17 @@ public sealed class PushSyncBatchHandler(
                 return await HandleMigrateScheduleAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "abandon_schedule":
                 return await HandleAbandonScheduleAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 lane L8c-1 (founder D-24c) — planned work and reminders (the aggregate; plan.* is PlannedActivity's).
+            case "plannedwork.create":
+                return await HandlePlannedWorkCreateAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "plannedwork.edit":
+                return await HandlePlannedWorkEditAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "plannedwork.seen":
+                return await HandlePlannedWorkSeenAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "plannedwork.accept":
+                return await HandlePlannedWorkAcceptAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "plannedwork.cancel":
+                return await HandlePlannedWorkCancelAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             // Schedule-template + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "schedule.edit":
@@ -3923,6 +3940,294 @@ public sealed class PushSyncBatchHandler(
                 AuditDeviceId: deviceId),
             ct);
 
+        return ToOutcome(result);
+    }
+
+    // ── spec: plr-d10 lane L8c-1 (founder D-24c) — planned work and reminders ────────────────────────────────────────────────
+    // The five doors run the handlers of UseCases/Planning/PlannedWork. Who made / answered / cancelled is the authenticated
+    // sender, never a payload field; the payload names the task's farm, so that farm's scope is opened from it (a farm the
+    // sender is not an Active member of is refused with no farm GUC ever set). Which task (its own farm: E4), who may, and
+    // every plot and person rule are the handlers'. Every refusal parks visibly on the phone (P10).
+
+    private static PlannedWorkCaller PlannedWorkCallerOf(
+        string deviceId, string clientRequestId, Guid actorUserId, string actorRole, string? appVersion) =>
+        new(
+            actorUserId,
+            actorRole,
+            clientRequestId,
+            ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+            AuditDeviceId: deviceId);
+
+    /// <summary>
+    /// The words of a task from a create / edit payload; <c>null</c> when a word is not in its list (the payload is refused as
+    /// invalid). Nothing here is a number the server derives from another number (D-24a, P4).
+    /// </summary>
+    private static ShramSafal.Domain.Planning.PlannedWorkDetails? PlannedWorkDetailsOf(
+        string title,
+        string scope,
+        IReadOnlyList<Guid>? plotIds,
+        DateOnly? plannedDate,
+        string? looseWhen,
+        string? plannedTime,
+        Guid? assigneeUserId,
+        string? crewText,
+        int? expectedHeadcount,
+        string? quantityText,
+        string? payMode,
+        string? note)
+    {
+        if (!ShramSafal.Domain.Planning.PlannedWorkWords.TryParse<ShramSafal.Domain.Planning.PlannedWorkScope>(scope, out var parsedScope))
+        {
+            return null;
+        }
+
+        ShramSafal.Domain.Planning.PlannedWorkLooseWhen? loose = null;
+        if (looseWhen is not null)
+        {
+            if (!ShramSafal.Domain.Planning.PlannedWorkWords.TryParse<ShramSafal.Domain.Planning.PlannedWorkLooseWhen>(looseWhen, out var l))
+            {
+                return null;
+            }
+
+            loose = l;
+        }
+
+        ShramSafal.Domain.Planning.PlannedWorkPayMode? pay = null;
+        if (payMode is not null)
+        {
+            if (!ShramSafal.Domain.Planning.PlannedWorkWords.TryParse<ShramSafal.Domain.Planning.PlannedWorkPayMode>(payMode, out var p))
+            {
+                return null;
+            }
+
+            pay = p;
+        }
+
+        TimeOnly? time = null;
+        if (plannedTime is not null)
+        {
+            if (!TimeOnly.TryParseExact(plannedTime, "HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var t))
+            {
+                return null;
+            }
+
+            time = t;
+        }
+
+        return new ShramSafal.Domain.Planning.PlannedWorkDetails(
+            title, parsedScope, plotIds ?? [], plannedDate, loose, time, assigneeUserId, crewText, expectedHeadcount, quantityText, pay, note);
+    }
+
+    private async Task<MutationExecutionOutcome> HandlePlannedWorkCreateAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with plannedwork_create.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "plannedWorkId", "farmId", "title", "scope", "plotIds", "plannedDate", "looseWhen", "plannedTime", "assigneeUserId", "crewText", "expectedHeadcount", "quantityText", "payMode", "note", "sourceKind", "recordedOn"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "plannedwork.create payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<PlannedWorkCreatePayload>(payload);
+        var details = request is null
+            ? null
+            : PlannedWorkDetailsOf(
+                request.Title, request.Scope, request.PlotIds, request.PlannedDate, request.LooseWhen, request.PlannedTime,
+                request.AssigneeUserId, request.CrewText, request.ExpectedHeadcount, request.QuantityText, request.PayMode, request.Note);
+        ShramSafal.Domain.Planning.PlannedWorkSourceKind? sourceKind = null;
+        if (request?.SourceKind is not null)
+        {
+            if (!ShramSafal.Domain.Planning.PlannedWorkWords.TryParse<ShramSafal.Domain.Planning.PlannedWorkSourceKind>(request.SourceKind, out var parsedKind))
+            {
+                details = null;
+            }
+            else
+            {
+                sourceKind = parsedKind;
+            }
+        }
+
+        if (request is null || details is null || request.PlannedWorkId == Guid.Empty || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for plannedwork.create.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await createPlannedWorkHandler.HandleAsync(
+            new CreatePlannedWorkCommand(
+                request.PlannedWorkId, request.FarmId, details, sourceKind, request.RecordedOn,
+                PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandlePlannedWorkEditAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with plannedwork_edit.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "plannedWorkId", "farmId", "title", "scope", "plotIds", "plannedDate", "looseWhen", "plannedTime", "assigneeUserId", "crewText", "expectedHeadcount", "quantityText", "payMode", "note"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "plannedwork.edit payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<PlannedWorkEditPayload>(payload);
+        var details = request is null
+            ? null
+            : PlannedWorkDetailsOf(
+                request.Title, request.Scope, request.PlotIds, request.PlannedDate, request.LooseWhen, request.PlannedTime,
+                request.AssigneeUserId, request.CrewText, request.ExpectedHeadcount, request.QuantityText, request.PayMode, request.Note);
+        if (request is null || details is null || request.PlannedWorkId == Guid.Empty || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for plannedwork.edit.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await editPlannedWorkHandler.HandleAsync(
+            new EditPlannedWorkCommand(
+                request.PlannedWorkId, request.FarmId, details,
+                PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandlePlannedWorkSeenAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with plannedwork_seen.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "plannedWorkId", "farmId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "plannedwork.seen payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<PlannedWorkSeenPayload>(payload);
+        if (request is null || request.PlannedWorkId == Guid.Empty || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for plannedwork.seen.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await answerPlannedWorkHandler.SeenAsync(
+            new AnswerPlannedWorkCommand(
+                request.PlannedWorkId, request.FarmId,
+                PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandlePlannedWorkAcceptAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with plannedwork_accept.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "plannedWorkId", "farmId"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "plannedwork.accept payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<PlannedWorkAcceptPayload>(payload);
+        if (request is null || request.PlannedWorkId == Guid.Empty || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for plannedwork.accept.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await answerPlannedWorkHandler.AcceptAsync(
+            new AnswerPlannedWorkCommand(
+                request.PlannedWorkId, request.FarmId,
+                PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandlePlannedWorkCancelAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with plannedwork_cancel.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "plannedWorkId", "farmId", "reason"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "plannedwork.cancel payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<PlannedWorkCancelPayload>(payload);
+        if (request is null || request.PlannedWorkId == Guid.Empty || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for plannedwork.cancel.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await cancelPlannedWorkHandler.HandleAsync(
+            new CancelPlannedWorkCommand(
+                request.PlannedWorkId, request.FarmId, request.Reason,
+                PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
         return ToOutcome(result);
     }
 

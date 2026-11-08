@@ -569,6 +569,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // to ssf.schedule_subscriptions only; no farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched,
         // no p_user_select_* policy created. Down() drops only what Up() added.
         "20261108150000_AddScheduleSubscriptionOriginAndCheck",
+        // spec plr-d10 lane L8c-1 (founder D-24c) - Up() and Down() read in full: Up() creates ssf.planned_work and
+        // ssf.planned_work_plots with their own farm-scoped policies only; no farm_memberships or farm_join_requests object, no
+        // ssf.farms policy, no seat touched, no p_user_select_* policy on an existing table. Down() drops the policies and the two tables.
+        "20261108180000_AddPlannedWork",
     ];
 
     /// <summary>
@@ -596,6 +600,9 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         "p_user_select_planned_activities",
         // spec dfes-input-truth-and-mix-check-2026-11-06 lane IT2 - 20261108090000_AddInputIdentityAssertions.
         "p_user_select_input_identity_assertions",
+        // spec plr-d10 lane L8c-1 - 20261108180000_AddPlannedWork (two tables, each born with its Active-member read policy).
+        "p_user_select_planned_work",
+        "p_user_select_planned_work_plots",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
     ];

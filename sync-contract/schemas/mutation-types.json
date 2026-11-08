@@ -1,6 +1,6 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "lastUpdated": "2026-11-08",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
@@ -42,6 +42,11 @@
     { "name": "set_record_audience",    "ownerAggregate": "RecordAudience",   "sinceVersion": "1.0.18", "payloadSchema": "SetRecordAudience" },
     { "name": "set_farm_rate",          "ownerAggregate": "FarmRate",         "sinceVersion": "1.0.18", "payloadSchema": "SetFarmRate" },
     { "name": "approve_cost_entry",     "ownerAggregate": "CostEntry",        "sinceVersion": "1.0.18", "payloadSchema": "ApproveCostEntry" },
-    { "name": "assert_input_identity",  "ownerAggregate": "InputIdentityAssertion", "sinceVersion": "1.0.18", "payloadSchema": "AssertInputIdentity" }
+    { "name": "assert_input_identity",  "ownerAggregate": "InputIdentityAssertion", "sinceVersion": "1.0.18", "payloadSchema": "AssertInputIdentity" },
+    { "name": "plannedwork.create",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkCreate" },
+    { "name": "plannedwork.edit",       "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkEdit" },
+    { "name": "plannedwork.seen",       "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkSeen" },
+    { "name": "plannedwork.accept",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkAccept" },
+    { "name": "plannedwork.cancel",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkCancel" }
   ]
 }

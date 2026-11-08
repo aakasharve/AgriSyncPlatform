@@ -31,6 +31,13 @@ public static class RecordKinds
     /// <summary>A money record (<c>ssf.cost_entries</c>) with its corrections, its day-ledger and its bill photos.</summary>
     public const string CostEntry = "CostEntry";
 
+    /// <summary>
+    /// spec: plr-d10 lane L8c-1 — a planned task or reminder (<c>ssf.planned_work</c>). Named ONLY on the pull's
+    /// <c>withdrawnRecords</c> list (a reassign takes it from the old assignee). It carries no audience, so it is NOT a kind
+    /// <see cref="IsKnown"/> (the audience door must keep refusing it).
+    /// </summary>
+    public const string PlannedWork = "PlannedWork";
+
     public static bool IsKnown(string? kind) => kind is DailyLog or CostEntry;
 }
 
