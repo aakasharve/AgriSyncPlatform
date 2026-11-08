@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using ShramSafal.Domain.Compare;
 
 namespace ShramSafal.Infrastructure.AI.DomainKnowledge;
 
@@ -32,9 +33,9 @@ internal static partial class WaterRoleClassifier
     // Spray verb patterns (Marathi)
     // -------------------------------------------------------------------------
 
-    // फवारणी = "spraying", मारल / मारली / मारले = "applied/sprayed" (colloquial)
-    [GeneratedRegex(@"फवारण|मारल", RegexOptions.Compiled)]
-    private static partial Regex SprayVerbRegex();
+    // फवारणी = "spraying", मारल / मारली / मारले = "applied/sprayed" (colloquial).
+    // lane WORK-ID: the spray-verb stems MOVED to ShramSafal.Domain.Compare.SprayCarrierWords (Domain cannot call this
+    // internal type); this classifier reads that one copy, and so does WorkRecogniser.
 
     // -------------------------------------------------------------------------
     // Litre volume pattern: "N लिटर" / "N liter" / "N L" etc.
@@ -110,7 +111,7 @@ internal static partial class WaterRoleClassifier
         // Normalize Devanagari digits in transcript for consistent regex matching.
         var normalizedTranscript = NormalizeDevanagariDigits(transcript);
 
-        var hasSprayVerb = SprayVerbRegex().IsMatch(normalizedTranscript);
+        var hasSprayVerb = SprayCarrierWords.HasSprayVerb(normalizedTranscript);
         var litreMatch = LitreVolumeRegex().Match(normalizedTranscript);
         var hasLitreVolume = litreMatch.Success;
 

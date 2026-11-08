@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
+using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Dfes;
 
 namespace ShramSafal.Infrastructure.AI.DomainKnowledge;
@@ -164,105 +164,16 @@ internal static class GrapeInputLexicon
     }
 
     // -------------------------------------------------------------------------
-    // Normalization helpers
+    // Normalization and distance helpers
+    //
+    // lane WORK-ID (spec plr-d10-redesign-real-integration-2026-10-25, item I29): the Levenshtein <= 2 distance, the
+    // consonant-skeleton key and the comparison normaliser MOVED to ShramSafal.Domain.Compare.WordDistance so the
+    // work vocabulary reads the same copy. Behaviour is unchanged; the calls below are the only change here.
     // -------------------------------------------------------------------------
 
-    /// <summary>
-    /// Lowercases and collapses whitespace/hyphens for comparison.
-    /// Keeps Devanagari characters intact (they are compared directly).
-    /// </summary>
-    private static string NormalizeForComparison(string s)
-    {
-        // Collapse whitespace and hyphens so "6 b a" == "6ba" == "6-ba"
-        s = Regex.Replace(s.ToLowerInvariant().Trim(), @"[\s\-]+", "");
-        return s;
-    }
+    private static string NormalizeForComparison(string s) => WordDistance.NormalizeForComparison(s);
 
-    /// <summary>
-    /// Produces a consonant-skeleton phonetic key over the ASCII-lowercase form.
-    /// Maps common STT/Marathi romanization variations to a shared skeleton:
-    /// - removes vowels (a, e, i, o, u)
-    /// - collapses repeated consonants
-    /// - normalises ph→f, th→t, ck→k
-    /// So "alphamethrin" and "aplhamitren" both become "llfmtrn" → "lfmtrn".
-    /// </summary>
-    private static string PhoneticKey(string s)
-    {
-        if (string.IsNullOrEmpty(s))
-            return "";
+    private static string PhoneticKey(string s) => WordDistance.PhoneticKey(s);
 
-        // Only apply phonetic key to ASCII-range inputs (skip Devanagari blocks)
-        if (ContainsDevanagari(s))
-            return s; // compare Devanagari directly
-
-        // Normalize digraphs first
-        s = s.Replace("ph", "f")
-             .Replace("th", "t")
-             .Replace("ck", "k")
-             .Replace("gh", "g")
-             .Replace("sh", "s")
-             .Replace("ch", "c");
-
-        // Remove vowels
-        s = Regex.Replace(s, "[aeiou]", "");
-
-        // Collapse repeated consonants
-        s = Regex.Replace(s, @"(.)\1+", "$1");
-
-        return s;
-    }
-
-    private static bool ContainsDevanagari(string s)
-    {
-        foreach (var c in s)
-        {
-            if (c >= 'ऀ' && c <= 'ॿ')
-                return true;
-        }
-        return false;
-    }
-
-    // -------------------------------------------------------------------------
-    // Levenshtein distance (iterative, O(m*n) time, O(min(m,n)) space)
-    // -------------------------------------------------------------------------
-
-    private static int Levenshtein(string s, string t)
-    {
-        if (s == t) return 0;
-        if (s.Length == 0) return t.Length;
-        if (t.Length == 0) return s.Length;
-
-        // Early-exit: if lengths differ by more than 2, no point computing
-        if (Math.Abs(s.Length - t.Length) > 3)
-            return Math.Abs(s.Length - t.Length);
-
-        var prev = new int[t.Length + 1];
-        var curr = new int[t.Length + 1];
-
-        for (var j = 0; j <= t.Length; j++)
-            prev[j] = j;
-
-        for (var i = 1; i <= s.Length; i++)
-        {
-            curr[0] = i;
-            var rowMin = curr[0];
-
-            for (var j = 1; j <= t.Length; j++)
-            {
-                var cost = s[i - 1] == t[j - 1] ? 0 : 1;
-                curr[j] = Math.Min(
-                    Math.Min(curr[j - 1] + 1, prev[j] + 1),
-                    prev[j - 1] + cost);
-                if (curr[j] < rowMin) rowMin = curr[j];
-            }
-
-            // Early exit row: if best possible result in this row > threshold
-            if (rowMin > 2)
-                return rowMin;
-
-            Array.Copy(curr, prev, t.Length + 1);
-        }
-
-        return prev[t.Length];
-    }
+    private static int Levenshtein(string s, string t) => WordDistance.Levenshtein(s, t);
 }

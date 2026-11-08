@@ -182,37 +182,32 @@ public static class CompareEngine
     /// <summary>
     /// Buckets a free-text activity name into the one operation category the engine
     /// recognises: <c>spray</c>, <c>fertigation</c>, <c>irrigation</c> or the
-    /// catch-all <c>activity</c>. This is the ONLY activity-name → operation-type
-    /// vocabulary in the codebase; it is deliberately shared rather than duplicated.
+    /// catch-all <c>activity</c>. A thin wrapper over the one work vocabulary
+    /// (<see cref="WorkVocabulary"/> / <see cref="WorkRecogniser"/>); it keeps its old bucket names.
     ///
     /// <para>Made public 2026-08-13 (<c>dfes-3</c>) so DFES scoring can ask the same
     /// question the stage comparison already asks — "is this day an application?" —
-    /// without a second, divergent keyword list. Behaviour is unchanged.</para>
+    /// without a second, divergent keyword list.</para>
+    ///
+    /// <para><b>P11 (lane WORK-ID).</b> Every English input keeps exactly the answer it had: the old four substring rules
+    /// now live in <see cref="WorkVocabulary.LegacyBucket"/> and run first. Only a name written in Devanagari that the old
+    /// rules could not place (<c>activity</c>) is asked of <see cref="WorkRecogniser"/>, so "फवारणी" is a <c>spray</c> and
+    /// "खत टाकलं" a <c>fertigation</c> (D-77); an unrecognised name stays <c>activity</c>.</para>
     /// </summary>
     public static string Categorize(string activityName)
     {
-        var normalized = activityName.Trim().ToLowerInvariant();
-        if (normalized.Contains("spray") ||
-            normalized.Contains("pesticide") ||
-            normalized.Contains("fungicide"))
+        var legacy = WorkVocabulary.LegacyBucket(activityName);
+        if (legacy != "activity" || !WordDistance.ContainsDevanagari(activityName))
         {
-            return "spray";
+            return legacy;
         }
 
-        if (normalized.Contains("fert") ||
-            normalized.Contains("urea") ||
-            normalized.Contains("dap") ||
-            normalized.Contains("nutri"))
+        return WorkRecogniser.Recognise(activityName)?.Part switch
         {
-            return "fertigation";
-        }
-
-        if (normalized.Contains("irrig") || normalized.Contains("water"))
-        {
-            return "irrigation";
-        }
-
-        return "activity";
+            WorkPart.Spray => "spray",
+            WorkPart.Nutrition => "fertigation",
+            WorkPart.Irrigation => "irrigation",
+            _ => "activity",
+        };
     }
 }
-
