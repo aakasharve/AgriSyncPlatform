@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { DailyLog } from '../../types';
+import type { CompletingTask } from '../../features/plannedWork/doneFlow/completingTask';
 import {
     useAppCommandsState,
     useAppDataState,
@@ -130,6 +131,15 @@ export interface AppRouterContext {
     mayOpenPlanner?: boolean;
     /** Lane L8c-2 - the primary account holder, or a holder of AssignWork: another person may be chosen (the server decides). */
     mayAssignWork?: boolean;
+    /** Lane L8c-3 - this seat is the PRIMARY account holder (the only one who may reopen a done task; the server decides). */
+    isPrimaryOwner?: boolean;
+    /**
+     * Lane L8c-3 (founder D-24d) - the task the recording now open is being made for ("काम झालं" on his card): which task and which
+     * plots, nothing else. Set by `openLogFlow`, read after the save by `TaskDoneHost`, cleared when he answers. Optional so older
+     * context builders compile.
+     */
+    completingTask?: CompletingTask | null;
+    setCompletingTask?: (task: CompletingTask | null) => void;
     /** The work home's "आजची हजेरी" door: owner tier or the owner's labour grant only (H10). */
     canOpenAttendanceFromHome?: boolean;
 

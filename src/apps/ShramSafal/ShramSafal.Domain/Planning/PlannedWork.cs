@@ -50,6 +50,9 @@ public sealed class PlannedWork : Entity<Guid>
     public const int MaxHeadcount = 999;
     public const int MaxPlots = 200;
 
+    /// <summary>Most logs one complete step may link (lane L8c-3).</summary>
+    public const int MaxLinkedLogs = 100;
+
     private readonly List<PlannedWorkPlot> plots = [];
 
     private PlannedWork() : base(Guid.Empty) { } // EF Core
@@ -285,6 +288,166 @@ public sealed class PlannedWork : Entity<Guid>
         return PlannedWorkStep.Applied;
     }
 
+    /// <summary>
+    /// Lane L8c-3 (D-24d): who may say the work is done. The assignee; for a personal reminder (nobody else is accountable) the
+    /// maker. Everyone else - the old assignee after a reassign, a holder of PlanWork, the primary owner - may not: only the
+    /// person who did the work says it was done. One place.
+    /// </summary>
+    public bool MayComplete(Guid userId) =>
+        userId != Guid.Empty && (AssigneeUserId is { } assignee ? assignee == userId : CreatedByUserId == userId);
+
+    /// <summary>
+    /// Lane L8c-3 (D-24d, D-30): the assignee (or a reminder's maker) says the work was done on these plots, with these logs.
+    /// <list type="bullet">
+    /// <item>Each named plot row that is still pending becomes Done (stamped once, its own logs appended). A row already Done
+    /// is left exactly as it was: a second complete never un-does or re-stamps anything (replay-safe).</item>
+    /// <item>The task becomes Done only when <paramref name="somethingLeft"/> is false and every live plot row is Done (a task
+    /// with no plot rows: when <paramref name="somethingLeft"/> is false). Otherwise it stays pending: it is Accepted (the
+    /// assignee is doing it), never Done.</item>
+    /// <item>The task keeps every log ever linked to it (each once).</item>
+    /// </list>
+    /// Whether the logs exist, are this farm's, are on the named plots, and whether handed-out work has one at all is the
+    /// handler's rule (it reads the logs); this type holds what the step does. Throws <see cref="ArgumentException"/> for a plot
+    /// that is not a live plot of this task, so the door refuses the bytes.
+    /// </summary>
+    /// <param name="logIdsByPlot">For each named plot, the logs of this step that are on it (may be empty).</param>
+    public PlannedWorkStep Complete(
+        Guid byUserId,
+        IReadOnlyCollection<Guid> plotIds,
+        IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> logIdsByPlot,
+        IReadOnlyCollection<Guid> dailyLogIds,
+        bool somethingLeft,
+        DateTime nowUtc)
+    {
+        // The person comes before the state (the L8c-1 L005 lesson): a non-assignee is "not yours" on a closed task too.
+        if (!MayComplete(byUserId))
+        {
+            return PlannedWorkStep.NotAssignee;
+        }
+
+        if (Status == PlannedWorkStatus.Cancelled)
+        {
+            return PlannedWorkStep.Closed;
+        }
+
+        if (Status == PlannedWorkStatus.Done)
+        {
+            return PlannedWorkStep.AlreadyDone;
+        }
+
+        ArgumentNullException.ThrowIfNull(plotIds);
+        ArgumentNullException.ThrowIfNull(logIdsByPlot);
+        ArgumentNullException.ThrowIfNull(dailyLogIds);
+        var named = plotIds.Distinct().ToList();
+        if (named.Count != plotIds.Count || named.Count > MaxPlots || named.Any(id => id == Guid.Empty))
+        {
+            throw new ArgumentException("The plots must be real, each named once.", nameof(plotIds));
+        }
+
+        var live = LivePlots.ToList();
+        if (named.Any(id => live.All(p => p.PlotId != id)))
+        {
+            throw new ArgumentException("A plot named here is not a plot of this task.", nameof(plotIds));
+        }
+
+        if (dailyLogIds.Any(id => id == Guid.Empty) || dailyLogIds.Distinct().Count() != dailyLogIds.Count || dailyLogIds.Count > MaxLinkedLogs)
+        {
+            throw new ArgumentException("The logs must be real, each named once.", nameof(dailyLogIds));
+        }
+
+        var changed = false;
+        foreach (var row in live.Where(p => named.Contains(p.PlotId) && p.Status == PlannedWorkPlotStatus.Pending))
+        {
+            row.MarkDone(byUserId, nowUtc, logIdsByPlot.TryGetValue(row.PlotId, out var own) ? own : []);
+            changed = true;
+        }
+
+        var newLogs = dailyLogIds.Where(id => !LinkedDailyLogIds.Contains(id)).ToList();
+        if (newLogs.Count > 0)
+        {
+            LinkedDailyLogIds = [.. LinkedDailyLogIds, .. newLogs];
+            changed = true;
+        }
+
+        var becomesDone = !somethingLeft && live.All(p => p.Status == PlannedWorkPlotStatus.Done);
+        if (AssigneeUserId is not null && AcceptedAtUtc is null)
+        {
+            // Doing the work is accepting it: the card never shows "done" over a task nobody accepted.
+            SeenAtUtc ??= nowUtc;
+            AcceptedAtUtc = nowUtc;
+            Status = PlannedWorkStatus.Accepted;
+            changed = true;
+        }
+
+        if (becomesDone)
+        {
+            Status = PlannedWorkStatus.Done;
+            DoneAtUtc = nowUtc;
+            DoneByUserId = byUserId;
+            changed = true;
+        }
+
+        if (!changed)
+        {
+            return PlannedWorkStep.AlreadyDone;
+        }
+
+        Touch(nowUtc);
+        return PlannedWorkStep.Applied;
+    }
+
+    /// <summary>
+    /// Lane L8c-3 (D-24d, P3): the owner says "this was not done". A Done task goes back to pending (Accepted when its
+    /// assignee had accepted it, otherwise as it was before) and every plot row that was Done goes back to Pending; the done
+    /// stamps and the links to the logs that were taken for the work are cleared (the work is to be done again, and logs that
+    /// did not satisfy the owner must not keep showing a confirmation on it). The history is the audit row: the step, and the
+    /// reason. Whether the caller may (the primary owner) is the door's rule. The reason is required, at most
+    /// <see cref="MaxCancelReason"/> characters; <see cref="ArgumentException"/> otherwise.
+    /// </summary>
+    public PlannedWorkStep Reopen(string? reason, DateTime nowUtc)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (trimmed is null || trimmed.Length > MaxCancelReason)
+        {
+            throw new ArgumentException("A reopen needs a reason of at most 500 characters.", nameof(reason));
+        }
+
+        if (Status == PlannedWorkStatus.Cancelled)
+        {
+            return PlannedWorkStep.Closed;
+        }
+
+        if (Status != PlannedWorkStatus.Done)
+        {
+            return PlannedWorkStep.NotDone;
+        }
+
+        foreach (var row in plots.Where(p => p.Status == PlannedWorkPlotStatus.Done))
+        {
+            row.Reopen();
+        }
+
+        LinkedDailyLogIds = [];
+        DoneAtUtc = null;
+        DoneByUserId = null;
+        Status = AcceptedAtUtc is not null ? PlannedWorkStatus.Accepted
+            : AssigneeUserId is null ? PlannedWorkStatus.Open
+            : PlannedWorkStatus.Assigned;
+        Touch(nowUtc);
+        return PlannedWorkStep.Applied;
+    }
+
+    /// <summary>
+    /// Lane L8c-3: a log this task links to changed its standing (the owner confirmed it, or doubted it). Moves the task past
+    /// every phone's cursor and nothing else - what it says and where it stands are untouched - so the next pull resends it
+    /// with its new confirmation state. The state itself is never stored here: it is read from the logs.
+    /// </summary>
+    public void NoteLinkedLogChanged(DateTime nowUtc) => Touch(nowUtc);
+
+    /// <summary>True when <paramref name="dailyLogId"/> is linked to this task or to one of its plot rows.</summary>
+    public bool Links(Guid dailyLogId) =>
+        LinkedDailyLogIds.Contains(dailyLogId) || plots.Any(p => p.LinkedDailyLogIds.Contains(dailyLogId));
+
     private void Touch(DateTime nowUtc) => ModifiedAtUtc = AudienceStamp.NextModified(ModifiedAtUtc, nowUtc);
 
     private void Apply(PlannedWorkDetails details, DateTime nowUtc)
@@ -426,6 +589,22 @@ public sealed class PlannedWorkPlot
     public DateTime? DoneAtUtc { get; private set; }
     public Guid? DoneByUserId { get; private set; }
     public IReadOnlyList<Guid> LinkedDailyLogIds { get; private set; } = [];
+
+    internal void MarkDone(Guid byUserId, DateTime nowUtc, IReadOnlyList<Guid> logIds)
+    {
+        Status = PlannedWorkPlotStatus.Done;
+        DoneAtUtc = nowUtc;
+        DoneByUserId = byUserId;
+        LinkedDailyLogIds = [.. LinkedDailyLogIds, .. logIds.Where(id => !LinkedDailyLogIds.Contains(id))];
+    }
+
+    internal void Reopen()
+    {
+        Status = PlannedWorkPlotStatus.Pending;
+        DoneAtUtc = null;
+        DoneByUserId = null;
+        LinkedDailyLogIds = [];
+    }
 
     internal void Drop()
     {

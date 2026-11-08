@@ -61,6 +61,19 @@ public static class ShramSafalErrors
         "ShramSafal.PlannedWork.InvalidCommand",
         "The work is not well formed.");
 
+    // --- lane L8c-3 (founder D-24d): "काम झालं" through the real log, plot by plot. Both end ".InvalidCommand" so every shipped
+    // phone parks them; Forbidden and DailyLogNotFound keep their own codes.
+
+    /// <summary>A plot named in a complete is not a plot of the work (or none was named where one is needed).</summary>
+    public static readonly Error PlannedWorkPlotsInvalid = Error.Validation(
+        "ShramSafal.PlannedWorkPlots.InvalidCommand",
+        "The plots named are not plots of this work.");
+
+    /// <summary>Handed-out work needs a log on the plots done; or a log named is not on them.</summary>
+    public static readonly Error PlannedWorkLogInvalid = Error.Validation(
+        "ShramSafal.PlannedWorkLog.InvalidCommand",
+        "The work needs a log made on the plots it was done on.");
+
     // --- Conflict (state preconditions / duplication) ---------------------------------------
     public static readonly Error CropCycleOverlap = Error.Conflict("ShramSafal.CropCycleOverlap", "Crop cycle dates overlap an existing cycle on this plot.");
     public static readonly Error DuplicateLogRequest = Error.Conflict("ShramSafal.DuplicateLogRequest", "A log already exists for this idempotency key.");

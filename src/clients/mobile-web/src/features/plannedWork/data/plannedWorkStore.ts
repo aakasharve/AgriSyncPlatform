@@ -22,7 +22,7 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieDatabase';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import type {
-    PlannedWorkLooseWhenName, PlannedWorkPayModeName, PlannedWorkRow, PlannedWorkScopeName, PlannedWorkSourceKindName,
+    PlannedWorkConfirmationName, PlannedWorkLooseWhenName, PlannedWorkPayModeName, PlannedWorkRow, PlannedWorkScopeName, PlannedWorkSourceKindName,
     PlannedWorkStatusName,
 } from '../../../infrastructure/storage/plannedWorkRow';
 import type { PlannedWorkVerb } from './plannedWorkCommands';
@@ -61,6 +61,16 @@ export interface LocalPlannedWork {
     pendingSteps: PlannedWorkVerb[];
     /** The server refused the create and it is parked on the conflict page: shown with its refusal, never as done or as open work. */
     refused: boolean;
+    /** Lane L8c-3 - a line per plot of the task, with its own standing (D-30: completion is per plot). */
+    plots: LocalPlannedWorkPlot[];
+    /** Lane L8c-3 - the owner's word on the logs the work was done with; null = none (nothing linked). From the server only. */
+    confirmationState: PlannedWorkConfirmationName | null;
+}
+
+export interface LocalPlannedWorkPlot {
+    plotId: string;
+    status: 'Pending' | 'Done';
+    confirmationState: PlannedWorkConfirmationName | null;
 }
 
 interface QueuedPlannedWork {
@@ -75,6 +85,8 @@ const VERB_OF: Readonly<Record<string, PlannedWorkVerb>> = {
     [SyncMutationName.PlannedworkSeen]: 'seen',
     [SyncMutationName.PlannedworkAccept]: 'accept',
     [SyncMutationName.PlannedworkCancel]: 'cancel',
+    [SyncMutationName.PlannedworkComplete]: 'complete',
+    [SyncMutationName.PlannedworkReopen]: 'reopen',
 };
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
@@ -104,16 +116,21 @@ function fromServer(row: PlannedWorkRow): LocalPlannedWork {
         keptOnPhone: false,
         pendingSteps: [],
         refused: false,
+        plots: row.plots.map(p => ({ plotId: p.plotId, status: p.status, confirmationState: p.confirmationState ?? null })),
+        confirmationState: row.confirmationState ?? null,
     };
 }
 
 /** The words a queued create / edit carries, laid over an item. */
 function withWords(item: LocalPlannedWork, p: Record<string, unknown>): LocalPlannedWork {
+    const plotIds = Array.isArray(p.plotIds) ? p.plotIds.filter((x): x is string => typeof x === 'string') : [];
     return {
         ...item,
         title: str(p.title) ?? item.title,
         scope: (str(p.scope) as PlannedWorkScopeName | null) ?? item.scope,
-        plotIds: Array.isArray(p.plotIds) ? p.plotIds.filter((x): x is string => typeof x === 'string') : [],
+        plotIds,
+        // A plot kept by an edit keeps what the server said of it; a plot added starts pending.
+        plots: plotIds.map(id => item.plots.find(x => x.plotId === id) ?? { plotId: id, status: 'Pending' as const, confirmationState: null }),
         plannedDate: str(p.plannedDate),
         looseWhen: str(p.looseWhen) as PlannedWorkLooseWhenName | null,
         plannedTime: str(p.plannedTime),
@@ -139,6 +156,17 @@ function overlay(item: LocalPlannedWork, step: QueuedPlannedWork): LocalPlannedW
         if (next.status === 'Assigned' || next.status === 'Seen') next.status = 'Accepted';
     } else if (step.verb === 'cancel') {
         if (next.status !== 'Done') next.status = 'Cancelled';
+    } else if (step.verb === 'complete') {
+        // What he said, laid over the server's row and labelled "फोनवर ठेवलं": the named plots read Done here, and the work Done when
+        // nothing is left. The owner's word stays the server's (never invented here).
+        const named = Array.isArray(step.payload.plotIds) ? step.payload.plotIds.filter((x): x is string => typeof x === 'string') : [];
+        next.plots = next.plots.map(p => (named.includes(p.plotId) ? { ...p, status: 'Done' as const } : p));
+        if (next.status !== 'Cancelled' && step.payload.somethingLeft !== true && next.plots.every(p => p.status === 'Done')) next.status = 'Done';
+        else if (next.status === 'Assigned' || next.status === 'Seen') next.status = 'Accepted';
+    } else if (step.verb === 'reopen') {
+        if (next.status === 'Done') next.status = next.assigneeUserId ? 'Accepted' : 'Open';
+        next.plots = next.plots.map(p => ({ ...p, status: 'Pending' as const, confirmationState: null }));
+        next.confirmationState = null;
     }
     return next;
 }
@@ -192,6 +220,8 @@ export async function getLocalPlannedWork(farmId: string): Promise<LocalPlannedW
                 keptOnPhone: row.status !== PARKED,
                 pendingSteps: row.status === PARKED ? [] : ['create'],
                 refused: row.status === PARKED,
+                plots: [],
+                confirmationState: null,
             }, payload);
             items.set(id, made);
         } else if (existing) {

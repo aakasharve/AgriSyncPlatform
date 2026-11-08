@@ -88,6 +88,16 @@ const DAILY_LOG_PARENT_FIELD: Readonly<Record<string, string>> = {
 };
 
 /**
+ * spec: plr-d10 lane L8c-3 (founder D-24d) - a mutation that carries an ARRAY of parent daily logs: `plannedwork.complete`'s
+ * `dailyLogIds` (`plannedwork_complete.zod.ts`). It waits for EVERY parent log's create, and parks when ANY of them is
+ * unrecoverable (a log the server will never have makes the "done" it shows impossible). The single-field table above is
+ * unchanged.
+ */
+const DAILY_LOG_PARENT_ARRAY_FIELD: Readonly<Record<string, string>> = {
+    [SyncMutationName.PlannedworkComplete]: 'dailyLogIds',
+};
+
+/**
  * `create_attachment` is the one child whose parent is CONDITIONAL: the same
  * payload can link to a farm, a cost entry or a daily log, and only the last of
  * those can produce `DailyLogNotFound`.
@@ -193,6 +203,21 @@ export function parentDailyLogIdOf(mutationType: string, payload: unknown): stri
 }
 
 /**
+ * Every daily-log id this mutation depends on (lane L8c-3): the one of a single-field child, or all of an array child's
+ * (`plannedwork.complete`). Each once; empty when it depends on none. PURE.
+ */
+export function parentDailyLogIdsOf(mutationType: string, payload: unknown): string[] {
+    const arrayField = DAILY_LOG_PARENT_ARRAY_FIELD[mutationType];
+    if (arrayField) {
+        const value = typeof payload === 'object' && payload !== null ? (payload as Record<string, unknown>)[arrayField] : undefined;
+        if (!Array.isArray(value)) return [];
+        return [...new Set(value.filter((id): id is string => typeof id === 'string' && id.trim().length > 0).map(id => id.trim()))];
+    }
+    const single = parentDailyLogIdOf(mutationType, payload);
+    return single ? [single] : [];
+}
+
+/**
  * The parent's `clientRequestId`, derived — never looked up.
  *
  * This is the whole of box 2b. It works ONLY because
@@ -240,11 +265,23 @@ export async function resolveDailyLogDependency(
     mutationType: string,
     payload: unknown,
 ): Promise<DependencyVerdict> {
-    const parentDailyLogId = parentDailyLogIdOf(mutationType, payload);
-    if (!parentDailyLogId) {
+    const parents = parentDailyLogIdsOf(mutationType, payload);
+    if (parents.length === 0) {
         return { disposition: 'NOT_A_DEPENDENCY' };
     }
 
+    // One parent (every mutation before lane L8c-3): exactly the old answer. Several: a parent that will not move again without
+    // a tap wins (the child is parked, naming it); otherwise any parent still on its way makes the child wait, uncharged.
+    const verdicts: DependencyVerdict[] = [];
+    for (const parentDailyLogId of parents) {
+        verdicts.push(await resolveOneDailyLogParent(deviceId, parentDailyLogId));
+    }
+    return verdicts.find(v => v.disposition === 'PARENT_UNRECOVERABLE')
+        ?? verdicts.find(v => v.disposition === 'PARENT_IN_PROGRESS')
+        ?? verdicts[0];
+}
+
+async function resolveOneDailyLogParent(deviceId: string, parentDailyLogId: string): Promise<DependencyVerdict> {
     const parentClientRequestId = parentClientRequestIdForDailyLog(parentDailyLogId);
     const parent = await getDatabase().mutationQueue
         .where('[deviceId+clientRequestId]')

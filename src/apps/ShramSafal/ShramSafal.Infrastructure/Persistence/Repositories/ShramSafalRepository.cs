@@ -438,6 +438,40 @@ internal sealed class ShramSafalRepository(
             .ToListAsync(ct);
     }
 
+    public async Task<List<PlannedWork>> GetPlannedWorkLinkingLogAsync(Guid farmId, Guid dailyLogId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty || dailyLogId == Guid.Empty)
+        {
+            return [];
+        }
+
+        if (!db.Database.IsRelational())
+        {
+            var farmKey = new FarmId(farmId);
+            return (await db.PlannedWork.Include(w => w.Plots).Where(w => w.FarmId == farmKey).ToListAsync(ct))
+                .Where(w => w.Links(dailyLogId))
+                .ToList();
+        }
+
+        // The linked ids are converted arrays, so the match is made in SQL on the two columns (no index: one farm's rows under
+        // its row security), and the tasks are then read tracked with their plot rows.
+        var ids = await db.Database
+            .SqlQuery<Guid>($"""
+                SELECT w.id AS "Value" FROM ssf.planned_work w
+                WHERE w.farm_id = {farmId}
+                  AND ({dailyLogId} = ANY (w.linked_daily_log_ids)
+                       OR EXISTS (SELECT 1 FROM ssf.planned_work_plots p
+                                  WHERE p.planned_work_id = w.id AND p.farm_id = {farmId} AND {dailyLogId} = ANY (p.linked_daily_log_ids)))
+                """)
+            .ToListAsync(ct);
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.PlannedWork.Include(w => w.Plots).Where(w => ids.Contains(w.Id)).ToListAsync(ct);
+    }
+
     public async Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
     {

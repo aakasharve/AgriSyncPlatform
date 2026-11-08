@@ -37,12 +37,13 @@ public sealed class PlannedWorkReads(IShramSafalRepository repository, IClock cl
         }
 
         var rows = await repository.GetPlannedWorkChangedSinceAsync([farmId], sinceUtc ?? DateTime.UnixEpoch, ct);
-        IReadOnlyList<PlannedWorkDto> visible = rows
+        var seen = rows
             .Where(w => (Guid)w.FarmId == farmId)
             .Select(w => (Work: w, Rows: PlannedWorkVisibility.VisiblePlots(seat, w)))
             .Where(x => x.Rows is not null)
-            .Select(x => PlannedWorkDto.From(x.Work, x.Rows!))
             .ToList();
+        var standing = await PlannedWorkConfirmations.LoadAsync(repository, seen.Select(x => x.Work), ct);
+        IReadOnlyList<PlannedWorkDto> visible = seen.Select(x => PlannedWorkDto.From(x.Work, x.Rows!, standing)).ToList();
         return Result.Success(visible);
     }
 
@@ -53,7 +54,7 @@ public sealed class PlannedWorkReads(IShramSafalRepository repository, IClock cl
             repository, plannedWorkId, farmId, callerUserId, clock.UtcNow, mustSee: true, ct);
         return refusal is not null || work is null
             ? Result.Failure<PlannedWorkDto>(refusal ?? ShramSafalErrors.PlannedWorkNotFound)
-            : Result.Success(PlannedWorkDoor.Dto(work, seat));
+            : Result.Success(await PlannedWorkDoor.DtoAsync(repository, work, seat, ct));
     }
 
     /// <summary>

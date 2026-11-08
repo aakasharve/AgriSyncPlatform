@@ -222,6 +222,11 @@ public sealed class AddLogTaskHandler(
             // Null when the current status has no edit transition (Disputed,
             // CorrectionPending) — those are already "not approved", nothing to re-open.
             reOpen = log.Edit(idGenerator.New(), new UserId(command.ActorUserId), reOpenAtUtc);
+            if (reOpen is not null)
+            {
+                // Fix round 1 (L003): a confirmed day went back to Draft - the tasks done with it must lose "मंजूर" on every phone.
+                await PlannedWorkConfirmations.NoteLogStandingChangedAsync(repository, log, reOpenAtUtc, ct);
+            }
 
             // spec: plr-d10 (I13) — a log the phone auto-saved from voice is never
             // re-attested here: TrySelfVerifyAsCreator refuses it (DailyLog.

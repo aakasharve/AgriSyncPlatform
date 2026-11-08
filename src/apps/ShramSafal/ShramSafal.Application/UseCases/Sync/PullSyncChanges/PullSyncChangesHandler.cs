@@ -366,7 +366,8 @@ public sealed class PullSyncChangesHandler(
         // spec: plr-d10 lane L8c-1 (founder D-24c, D-26, D-79) - the tasks and reminders of every farm he reads (an own-records
         // seat too: he is the assignee of work given to him), through the one visibility rule. A failed read fails the pull and
         // the phone retries (Phase-1 data, like the plots).
-        var plannedWork = PullPlannedWork.Visible(
+        var plannedWork = await PullPlannedWork.VisibleAsync(
+            repository,
             await window.ReadAsync(
                 Any,
                 (ids, since) => repository.GetPlannedWorkChangedSinceAsync(ids, since, ct),
@@ -374,7 +375,8 @@ public sealed class PullSyncChangesHandler(
             query.UserId,
             accesses,
             serverNowUtc,
-            audience);
+            audience,
+            ct);
         // §P0.2 — the sync pull no longer carries the audit ledger at all.
         //
         // Not a trim: every audit row this path could ever have returned was a

@@ -8,6 +8,8 @@ export interface PlannedWorkPlotDto {
     doneAtUtc?: string | null;
     doneByUserId?: string | null;
     linkedDailyLogIds?: string[] | null;
+    /** Lane L8c-3 (additive): Confirmed | Disputed | Waiting from this plot's own logs, or null. */
+    confirmationState?: string | null;
 }
 
 export interface PlannedWorkDto {
@@ -43,6 +45,8 @@ export interface PlannedWorkDto {
     cancelledByUserId?: string | null;
     cancelReason?: string | null;
     plots?: PlannedWorkPlotDto[] | null;
+    /** Lane L8c-3 (additive): Confirmed | Disputed | Waiting from all the linked logs, or null when none is linked. */
+    confirmationState?: string | null;
 }
 
 /** One person the caller may give work to (GET /shramsafal/farms/{farmId}/planned-work/assignees). */

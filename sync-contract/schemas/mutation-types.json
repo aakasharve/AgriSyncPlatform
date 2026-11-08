@@ -1,6 +1,6 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "lastUpdated": "2026-11-08",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
@@ -47,6 +47,8 @@
     { "name": "plannedwork.edit",       "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkEdit" },
     { "name": "plannedwork.seen",       "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkSeen" },
     { "name": "plannedwork.accept",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkAccept" },
-    { "name": "plannedwork.cancel",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkCancel" }
+    { "name": "plannedwork.cancel",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkCancel" },
+    { "name": "plannedwork.complete",   "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkComplete" },
+    { "name": "plannedwork.reopen",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkReopen" }
   ]
 }

@@ -180,7 +180,10 @@ public sealed class PushSyncBatchHandler(
     ShramSafal.Application.UseCases.Planning.PlannedWork.CreatePlannedWorkHandler createPlannedWorkHandler,
     ShramSafal.Application.UseCases.Planning.PlannedWork.EditPlannedWorkHandler editPlannedWorkHandler,
     ShramSafal.Application.UseCases.Planning.PlannedWork.AnswerPlannedWorkHandler answerPlannedWorkHandler,
-    ShramSafal.Application.UseCases.Planning.PlannedWork.CancelPlannedWorkHandler cancelPlannedWorkHandler)
+    ShramSafal.Application.UseCases.Planning.PlannedWork.CancelPlannedWorkHandler cancelPlannedWorkHandler,
+    // spec: plr-d10 lane L8c-3 (founder D-24d) - the work done through the real log, and the owner's reopen.
+    ShramSafal.Application.UseCases.Planning.PlannedWork.CompletePlannedWorkHandler completePlannedWorkHandler,
+    ShramSafal.Application.UseCases.Planning.PlannedWork.ReopenPlannedWorkHandler reopenPlannedWorkHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1165,6 +1168,10 @@ public sealed class PushSyncBatchHandler(
                 return await HandlePlannedWorkAcceptAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "plannedwork.cancel":
                 return await HandlePlannedWorkCancelAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "plannedwork.complete":
+                return await HandlePlannedWorkCompleteAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            case "plannedwork.reopen":
+                return await HandlePlannedWorkReopenAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             // Schedule-template + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
             case "schedule.publish":
             case "schedule.edit":
@@ -4225,6 +4232,90 @@ public sealed class PushSyncBatchHandler(
 
         var result = await cancelPlannedWorkHandler.HandleAsync(
             new CancelPlannedWorkCommand(
+                request.PlannedWorkId, request.FarmId, request.Reason,
+                PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    // ── spec: plr-d10 lane L8c-3 (founder D-24d, D-30, D-1) — plannedwork.complete / plannedwork.reopen ──────────────────────
+    // "काम झालं" through the real log, plot by plot, and the owner's reopen. Who did it is the authenticated sender. The
+    // payload names the farm, whose scope is opened from it (a farm the sender is not an Active member of is refused with no
+    // farm GUC ever set). Which task (its own farm: E4), who may, the plots and the logs are the handlers'. A log named is
+    // created by an earlier mutation of the same phone (its own queue order); while it is still on its way the answer
+    // 'ShramSafal.DailyLogNotFound' makes the phone wait (MutationDependency); every other refusal parks visibly (P10).
+
+    private async Task<MutationExecutionOutcome> HandlePlannedWorkCompleteAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with plannedwork_complete.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "plannedWorkId", "farmId", "plotIds", "dailyLogIds", "somethingLeft"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "plannedwork.complete payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<PlannedWorkCompletePayload>(payload);
+        if (request is null || request.PlannedWorkId == Guid.Empty || request.FarmId == Guid.Empty
+            || request.PlotIds is null || request.DailyLogIds is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for plannedwork.complete.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await completePlannedWorkHandler.HandleAsync(
+            new CompletePlannedWorkCommand(
+                request.PlannedWorkId, request.FarmId, request.PlotIds, request.DailyLogIds, request.SomethingLeft,
+                PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
+            ct);
+        return ToOutcome(result);
+    }
+
+    private async Task<MutationExecutionOutcome> HandlePlannedWorkReopenAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with plannedwork_reopen.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "plannedWorkId", "farmId", "reason"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "plannedwork.reopen payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<PlannedWorkReopenPayload>(payload);
+        if (request is null || request.PlannedWorkId == Guid.Empty || request.FarmId == Guid.Empty)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for plannedwork.reopen.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await reopenPlannedWorkHandler.HandleAsync(
+            new ReopenPlannedWorkCommand(
                 request.PlannedWorkId, request.FarmId, request.Reason,
                 PlannedWorkCallerOf(deviceId, clientRequestId, actorUserId, actorRole, appVersion)),
             ct);

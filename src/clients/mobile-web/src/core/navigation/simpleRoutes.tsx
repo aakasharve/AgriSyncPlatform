@@ -49,6 +49,7 @@ import { todaysLabourAnchor } from '../../features/logs/components/entry/todayAt
 import { buildNoWorkDayPayload } from './noWorkDay';
 import { PageBar } from '../../shared/components/ui/placeUi';
 import { PlanWorkPage } from '../../features/plannedWork/components/PlanWorkPage';
+import { startTaskDone } from '../../features/plannedWork/doneFlow/startTaskDone';
 import { MoneyWithheldPage } from '../../features/finance/components/MoneyWithheldPage';
 import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
 
@@ -240,6 +241,8 @@ export const renderPlanWorkRoute = (ctx: AppRouterContext): React.ReactNode => {
                 farmerProfile={ctx.farmerProfile}
                 mayPlan={ctx.mayOpenPlanner ?? false}
                 mayAssign={ctx.mayAssignWork ?? false}
+                isPrimaryOwner={ctx.isPrimaryOwner ?? false}
+                onStartDone={task => startTaskDone(ctx, task)}
                 onBack={() => ctx.goBackOr('main')}
                 onOpenConflicts={() => ctx.setCurrentRoute('offline-conflicts')}
             />

@@ -31,8 +31,8 @@ import type { FarmAccessScopeDto } from '../../../../infrastructure/api/accessSc
 import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCatalog';
 import { isReadableScope } from '../../../../infrastructure/storage/accessScopeStore';
 import type {
-    PlannedWorkLooseWhenName, PlannedWorkPayModeName, PlannedWorkRow, PlannedWorkScopeName, PlannedWorkSourceKindName,
-    PlannedWorkSourceName, PlannedWorkStatusName,
+    PlannedWorkConfirmationName, PlannedWorkLooseWhenName, PlannedWorkPayModeName, PlannedWorkRow, PlannedWorkScopeName,
+    PlannedWorkSourceKindName, PlannedWorkSourceName, PlannedWorkStatusName,
 } from '../../../../infrastructure/storage/plannedWorkRow';
 
 const STATUSES: readonly PlannedWorkStatusName[] = ['Open', 'Assigned', 'Seen', 'Accepted', 'Done', 'Cancelled'];
@@ -41,6 +41,7 @@ const LOOSE: readonly PlannedWorkLooseWhenName[] = ['Week', 'Month', 'Anytime'];
 const PAY: readonly PlannedWorkPayModeName[] = ['Cash', 'Daily', 'Contract', 'Later'];
 const SOURCES: readonly PlannedWorkSourceName[] = ['Planning', 'VoiceLog', 'LogLeftover', 'Schedule'];
 const KINDS: readonly PlannedWorkSourceKindName[] = ['Typed', 'PlanForm', 'Spoken', 'Leftover'];
+const CONFIRMATIONS: readonly PlannedWorkConfirmationName[] = ['Confirmed', 'Disputed', 'Waiting'];
 
 const known = <T extends string>(list: readonly T[], value: unknown): T | null =>
     typeof value === 'string' && (list as readonly string[]).includes(value) ? (value as T) : null;
@@ -93,7 +94,10 @@ export function plannedWorkRowFromDto(dto: PlannedWorkDto | null | undefined): P
                 doneAtUtc: text(p.doneAtUtc),
                 doneByUserId: text(p.doneByUserId),
                 linkedDailyLogIds: ids(p.linkedDailyLogIds),
+                confirmationState: known(CONFIRMATIONS, p.confirmationState),
             })),
+        // Lane L8c-3 (additive, P11): a word we do not know, or none, is no word.
+        confirmationState: known(CONFIRMATIONS, dto.confirmationState),
     };
 }
 
@@ -110,7 +114,8 @@ type ScopeWithTasks = FarmAccessScopeDto & { seeAllTasks?: boolean | null };
 
 const STEPS: readonly string[] = [
     SyncMutationName.PlannedworkCreate, SyncMutationName.PlannedworkEdit, SyncMutationName.PlannedworkSeen,
-    SyncMutationName.PlannedworkAccept, SyncMutationName.PlannedworkCancel,
+    SyncMutationName.PlannedworkAccept, SyncMutationName.PlannedworkCancel, SyncMutationName.PlannedworkComplete,
+    SyncMutationName.PlannedworkReopen,
 ];
 /** A queue row is finished (nothing owed to the server) once it was applied or the farmer discarded it. */
 const FINISHED = new Set(['APPLIED', 'REJECTED_DROPPED']);

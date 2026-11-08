@@ -38,3 +38,18 @@ public sealed record AnswerPlannedWorkCommand(Guid PlannedWorkId, Guid FarmId, P
 
 /// <summary><c>plannedwork.cancel</c>: stop the work, with an optional reason in his words.</summary>
 public sealed record CancelPlannedWorkCommand(Guid PlannedWorkId, Guid FarmId, string? Reason, PlannedWorkCaller Caller);
+
+/// <summary>
+/// <c>plannedwork.complete</c> (lane L8c-3, founder D-24d, D-30): "काम झालं" - the work was done on these plots, with these logs.
+/// <paramref name="SomethingLeft"/> = the person says more remains to be done (the work stays pending).
+/// </summary>
+public sealed record CompletePlannedWorkCommand(
+    Guid PlannedWorkId,
+    Guid FarmId,
+    IReadOnlyList<Guid> PlotIds,
+    IReadOnlyList<Guid> DailyLogIds,
+    bool SomethingLeft,
+    PlannedWorkCaller Caller);
+
+/// <summary><c>plannedwork.reopen</c> (lane L8c-3): the primary owner says the work was not done, with his reason.</summary>
+public sealed record ReopenPlannedWorkCommand(Guid PlannedWorkId, Guid FarmId, string? Reason, PlannedWorkCaller Caller);

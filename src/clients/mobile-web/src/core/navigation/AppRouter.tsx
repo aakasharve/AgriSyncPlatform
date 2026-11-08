@@ -40,6 +40,9 @@ import { useHomeAttendanceDoor } from '../../features/labour/useHomeAttendanceDo
 import { SpeakHost, type CorrectionSaveDeps } from '../speak/SpeakHost';
 import { queueSavedEntryMove } from '../../features/logs/components/correction/correctionCapabilities';
 import { openCorrection } from '../speak/speakStore';
+// Lane L8c-3 (founder D-24d) - the question after the recording made for a task: which plots, and is any left.
+import { TaskDoneHost } from '../../features/plannedWork/components/TaskDoneSheet';
+import { taskReferenceHolds, type CompletingTask } from '../../features/plannedWork/doneFlow/completingTask';
 
 // Sub-plan 04 Task 8 — Routes-as-data decomposition.
 // AppRouter is a thin orchestrator that wires hooks, builds an
@@ -166,6 +169,22 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const [reflectFocusRequest, setReflectFocusRequest] = React.useState<{ logId: string; date: string; plotId?: string } | null>(null);
     // spec: plr-d10 (I14, H16) — लक्ष द्या's "तुकडा पहा" opens the overview on that plot.
     const [reflectFocusPlotId, setReflectFocusPlotId] = React.useState<string | null>(null);
+    // Lane L8c-3 - the task the open recording is being made for (kept here, above the tab boundary, like the recording itself).
+    const [completingTaskState, setCompletingTask] = React.useState<CompletingTask | null>(null);
+    // Fix round 1 (L001): ONE mechanism. The reference is bound to the visit its door opened (the log view of the home tabs, on the
+    // farm it was tapped on - `taskReferenceHolds`). Once he has been there, the moment he is anywhere else - the bottom bar, another
+    // screen, another farm - the router drops it, whichever way he left (no caller has to remember to), and it is never handed on in
+    // that render. Before he has arrived (the door's own navigation lands a render later) it is kept. A different person signing in
+    // drops it too. A later recording is therefore an ordinary one.
+    const [visitReached, setVisitReached] = React.useState(false);
+    const inVisit = taskReferenceHolds(completingTaskState, { route: currentRoute, mainView, farmId: currentFarmId });
+    const completingTask = completingTaskState !== null && (inVisit || !visitReached) ? completingTaskState : null;
+    React.useEffect(() => {
+        if (completingTaskState === null) { if (visitReached) setVisitReached(false); return; }
+        if (inVisit && !visitReached) setVisitReached(true);
+        else if (!inVisit && visitReached) { setCompletingTask(null); setVisitReached(false); }
+    }, [completingTaskState, inVisit, visitReached]);
+    React.useEffect(() => { setCompletingTask(null); }, [userId, currentFarmId]);
 
     // Lane E1 (founder 2026-10-30: "I don't want this [old] UI anywhere in the app") — "बदला" on any saved entry (the
     // result screen, आढावा, the saved card) opens the speak-the-change screen over the screen he is on
@@ -294,6 +313,8 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         // lane L8c-2 (D-24, D-26) - the plan door and form follow the server's PlanWork / AssignWork answers (the primary account
         // holder holds both by definition); another person may be chosen only with AssignWork.
         meUserId: userId,
+        isPrimaryOwner: isPrimaryAccountHolderRole(currentFarm?.role),
+        completingTask, setCompletingTask,
         mayAssignWork: isPrimaryAccountHolderRole(currentFarm?.role) || holdsAuthority(currentFarm, AUTHORITY.assignWork),
         mayOpenPlanner: isPrimaryAccountHolderRole(currentFarm?.role)
             || holdsAuthority(currentFarm, AUTHORITY.planWork) || holdsAuthority(currentFarm, AUTHORITY.assignWork),
@@ -368,6 +389,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
 
                 {renderGlobalSheets(ctx)}
                 <SpeakHost ctx={ctx} save={correctionSave} />
+                <TaskDoneHost ctx={ctx} />
             </div>
         </React.Suspense>
     );

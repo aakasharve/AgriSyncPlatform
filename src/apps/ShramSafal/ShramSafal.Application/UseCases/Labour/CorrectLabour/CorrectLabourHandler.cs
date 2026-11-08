@@ -438,10 +438,12 @@ public sealed class CorrectLabourHandler(
             var lastEventAtUtc = dailyLog.VerificationEvents.Count == 0
                 ? DateTime.MinValue
                 : dailyLog.VerificationEvents.Max(e => e.OccurredAtUtc);
-            dailyLog.Edit(
-                idGenerator.New(),
-                command.CallerUserId,
-                now > lastEventAtUtc ? now : lastEventAtUtc.AddMilliseconds(1));
+            var reopenedAtUtc = now > lastEventAtUtc ? now : lastEventAtUtc.AddMilliseconds(1);
+            if (dailyLog.Edit(idGenerator.New(), command.CallerUserId, reopenedAtUtc) is not null)
+            {
+                // Fix round 1 (L003): the confirmed day went back to Draft - the tasks done with it must lose "मंजूर" everywhere.
+                await PlannedWorkConfirmations.NoteLogStandingChangedAsync(repository, dailyLog, reopenedAtUtc, ct);
+            }
         }
 
         var result = new CorrectLabourResult(

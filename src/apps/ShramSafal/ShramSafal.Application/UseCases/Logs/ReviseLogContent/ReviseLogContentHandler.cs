@@ -286,6 +286,11 @@ public sealed class ReviseLogContentHandler(
         // ── lane L6 — a material change re-opens a confirmed day (shared with move_daily_log) ─
         var (priorStatus, reOpen, reAttested, reAttestedRole) =
             MaterialChangeReopen.Apply(log, command.ActorUserId, actorRole, isCreator, now, idGenerator);
+        if (reOpen is not null)
+        {
+            // Fix round 1 (L003): the day went back to Draft (or was re-attested) - resend the tasks done with it.
+            await PlannedWorkConfirmations.NoteLogStandingChangedAsync(repository, log, now, ct);
+        }
 
         await repository.AddAuditEventAsync(
             AuditEventFactory.Create(
