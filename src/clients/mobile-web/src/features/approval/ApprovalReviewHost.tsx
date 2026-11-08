@@ -29,11 +29,13 @@ export interface ApprovalReviewHostProps {
     history?: DailyLog[];
     /** Overrides the farm (tests, previews); default the selected farm. */
     farmId?: string | null;
+    /** lane IT5 (Task 2b) - the phone holder's own name, for his check on a product (never "तुम्ही"). */
+    ownName?: string;
 }
 
 const TOAST_MS = 2600;
 
-export const ApprovalReviewHost: React.FC<ApprovalReviewHostProps> = ({ open, onClose, history, farmId: farmOverride }) => {
+export const ApprovalReviewHost: React.FC<ApprovalReviewHostProps> = ({ open, onClose, history, farmId: farmOverride, ownName }) => {
     const farmCtx = useOptionalFarmContext();
     const farmId = farmOverride ?? farmCtx?.currentFarmId ?? null;
     const queue = useApprovalQueue(farmId, { autoRefresh: false });
@@ -92,6 +94,7 @@ export const ApprovalReviewHost: React.FC<ApprovalReviewHostProps> = ({ open, on
                 focusLogId={focusLogId}
                 pendingDecisionIds={queue.pendingDecisionIds}
                 listTicket={queue.factsTicket}
+                ownName={ownName}
             />
             {toast && (
                 <div role="status" data-testid="approval-toast" className="fixed inset-x-4 top-4 z-[70] mx-auto max-w-[440px] rounded-2xl bg-stone-900 px-4 py-3 text-center text-[16px] font-bold text-white shadow-xl">

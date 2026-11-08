@@ -14,6 +14,7 @@ import { useOptionalFarmContext } from '../../../core/session/FarmContext';
 import { buildTodoList } from '../../reflect/overview/todoModel';
 import { buildAttentionModel, type AttentionModel } from '../attentionItems';
 import { onRescheduledChange } from '../scheduledWork';
+import { onSeenSignalsChange, seenSignalsSnapshot } from '../seenSignals';
 import { useAttentionBoard } from './useAttentionBoard';
 
 export interface AttentionModelState extends AttentionModel {
@@ -28,6 +29,9 @@ export function useAttentionModel(tasks: readonly PlannedTask[] | undefined, cro
     // a "पुढे ठरवा" the server confirmed hides its step on every surface at once
     const [rescheduleTick, bump] = useReducer((n: number) => n + 1, 0);
     useEffect(() => onRescheduledChange(bump), []);
+    // lane IT5 - a wrong-mix card he tapped पाहिलं on leaves every surface at once, the same way
+    const [seenTick, bumpSeen] = useReducer((n: number) => n + 1, 0);
+    useEffect(() => onSeenSignalsChange(bumpSeen), []);
 
     const todos = useMemo(() => {
         if (!tasks?.length) return { late: [], today: [] };
@@ -43,10 +47,10 @@ export function useAttentionModel(tasks: readonly PlannedTask[] | undefined, cro
     }, [tasks, crops, todayKey]);
 
     const model = useMemo(
-        () => buildAttentionModel({ cards: board.cards, scheduledWork: board.scheduledWork, todos, farmId, todayKey }),
-        // rescheduleTick: re-read the locally confirmed moves
+        () => buildAttentionModel({ cards: board.cards, scheduledWork: board.scheduledWork, todos, farmId, todayKey, seenSignals: seenSignalsSnapshot(), queuedAcks: board.queuedAcks }),
+        // rescheduleTick: re-read the locally confirmed moves; seenTick: the पाहिलं taps
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [board.cards, board.scheduledWork, todos, farmId, todayKey, rescheduleTick],
+        [board.cards, board.scheduledWork, board.queuedAcks, todos, farmId, todayKey, rescheduleTick, seenTick],
     );
 
     return { ...model, board, todayKey };

@@ -8,8 +8,8 @@
  * निरीक्षण / सल्ला / नोंद, with the time, the plot and who told it when the record says so; how serious it
  * is and its tags, as before. A long note opens in full on a tap. Every Marathi string is PROPOSED.
  *
- * Lane RF (founder 2026-10-30): each note says who told it the result screen's way ("तुम्ही" for the person holding
- * this phone), when, whether its record is confirmed (the page's ONE wording), links to the recording it came from
+ * Lane RF (founder 2026-10-30): each note says who told it the result screen's way (a real name - the phone holder's own name
+ * too, lane IT5; never "तुम्ही"), when, whether its record is confirmed (the page's ONE wording), links to the recording it came from
  * (its glance), and offers ▶ where it may be offered (`listenModel.ts`) — never a play button that cannot play.
  */
 import React, { useState } from 'react';

@@ -8,7 +8,7 @@
  * Founder 2026-10-30: "a clarity of what work has been done, who has done it, when it was done, where you can listen".
  * So every piece of work here is a RECORDING (one save — the logs it became share one clock reading, one speaker and
  * one parse, `recordingKeyOf`), seen through the result screen's own model (`recordingOf`): what was understood,
- * who spoke it ("तुम्ही" for the person holding this phone), when, typed or spoken, confirmed or not, and whether the
+ * who spoke it (a real name - the phone holder's own name too, lane IT5; never "तुम्ही"), when, typed or spoken, confirmed or not, and whether the
  * server holds only its task lines (`legacyPartial`, lane F1).
  *
  * Rules kept (doctrine P4 / P7):

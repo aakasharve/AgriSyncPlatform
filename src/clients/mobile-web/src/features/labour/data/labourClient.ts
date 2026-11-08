@@ -44,6 +44,8 @@ import type {
     LedgerRow,
     LedgerCell,
     ReviewItem,
+    ReviewProduct,
+    ReviewProductAnswer,
     PresenceStatus,
 } from '../labour.types';
 
@@ -185,6 +187,27 @@ export interface LabourReviewItemDto {
     version?: number | null;
     /** PLR-D10 I27 — a recording is linked (additive; absent on an older server). */
     hasRecording?: boolean | null;
+    /** lane IT5 (IT3 Task 3a) - the record's products with the library's match and the newest answers; null/absent = not shown to this reader. */
+    products?: ReviewProductWireDto[] | null;
+    /** lane IT5 - how many of `products` no checker has checked yet. */
+    uncheckedProductCount?: number | null;
+}
+
+export interface ReviewProductAnswerWireDto {
+    verdict?: string | null;
+    catalogProductId?: string | null;
+    attachmentId?: string | null;
+    assertedByUserId?: string | null;
+    assertedAtUtc?: string | null;
+}
+
+export interface ReviewProductWireDto {
+    inputEventId?: string | null;
+    mixIndex?: number | null;
+    spokenName?: string | null;
+    match?: { state?: string | null; productId?: string | null } | null;
+    speakerAnswer?: ReviewProductAnswerWireDto | null;
+    check?: ReviewProductAnswerWireDto | null;
 }
 
 export interface LabourAttendanceRowDto {
@@ -328,7 +351,47 @@ const mapPlotScope = (raw: string): ReviewItem['plotScope'] =>
         ? (raw as ReviewItem['plotScope'])
         : undefined;
 
-const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
+/**
+ * lane IT5 (Task 2b) - the products of a record, read defensively: a row that is not the expected shape is dropped, never guessed
+ * at (P4), and a verdict or match word the phone does not know is no answer. Only words and ids cross; no dose, no quantity.
+ */
+const ANSWER_VERDICTS = ['confirmed', 'rejected', 'photo'] as const;
+const MATCH_STATES = ['found', 'ambiguous', 'notFound'] as const;
+
+const mapProductAnswer = (a: ReviewProductAnswerWireDto | null | undefined): ReviewProductAnswer | undefined => {
+    const verdict = typeof a?.verdict === 'string' ? a.verdict.trim().toLowerCase() : '';
+    if (!a || !(ANSWER_VERDICTS as readonly string[]).includes(verdict) || typeof a.assertedAtUtc !== 'string' || typeof a.assertedByUserId !== 'string') return undefined;
+    return {
+        verdict: verdict as ReviewProductAnswer['verdict'],
+        ...(a.catalogProductId ? { catalogProductId: a.catalogProductId } : {}),
+        ...(a.attachmentId ? { attachmentId: a.attachmentId } : {}),
+        assertedByUserId: a.assertedByUserId,
+        assertedAtUtc: a.assertedAtUtc,
+    };
+};
+
+const mapProducts = (rows: ReviewProductWireDto[] | null | undefined): ReviewProduct[] | undefined => {
+    if (!Array.isArray(rows)) return undefined;
+    const out: ReviewProduct[] = [];
+    for (const p of rows) {
+        const state = typeof p?.match?.state === 'string' ? p.match.state : '';
+        if (!p || typeof p.inputEventId !== 'string' || !p.inputEventId || !Number.isInteger(p.mixIndex) || typeof p.spokenName !== 'string' || !p.spokenName.trim()
+            || !(MATCH_STATES as readonly string[]).includes(state)) continue;
+        const speakerAnswer = mapProductAnswer(p.speakerAnswer);
+        const check = mapProductAnswer(p.check);
+        out.push({
+            inputEventId: p.inputEventId,
+            mixIndex: p.mixIndex as number,
+            spokenName: p.spokenName.trim(),
+            match: { state: state as ReviewProduct['match']['state'], ...(p.match?.productId ? { productId: p.match.productId } : {}) },
+            ...(speakerAnswer ? { speakerAnswer } : {}),
+            ...(check ? { check } : {}),
+        });
+    }
+    return out;
+};
+
+export const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
     id: r.id,
     who: r.who,
     initial: r.initial,
@@ -350,6 +413,9 @@ const mapReview = (r: LabourReviewItemDto): ReviewItem => ({
     // PLR-D10 I27 — only a real value counts; anything else stays absent (never a guessed version or recording).
     ...(typeof r.version === 'number' && r.version >= 1 && { version: r.version }),
     ...(r.hasRecording === true && { hasRecording: true }),
+    // lane IT5 - only a list the server sent is shown; a null (the reader may not hear the words) or an older server stays absent.
+    ...(Array.isArray(r.products) && { products: mapProducts(r.products) }),
+    ...(Array.isArray(r.products) && typeof r.uncheckedProductCount === 'number' && r.uncheckedProductCount >= 0 && { uncheckedProductCount: r.uncheckedProductCount }),
 });
 
 /**

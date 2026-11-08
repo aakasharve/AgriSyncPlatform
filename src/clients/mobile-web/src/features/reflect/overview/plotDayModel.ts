@@ -25,7 +25,7 @@
 import type { CropPhase, DailyLog } from '../../../types';
 import { entryText } from '../../logs/components/voiceResult/partNames';
 import {
-    PARTS, groupByRecording, isConfirmed, recordingKeyOf, recordingOf, withoutInventedStoppage,
+    PARTS, groupByRecording, isConfirmed, primaryOf, recordingKeyOf, recordingOf, whoSpoke, withoutInventedStoppage,
     type PartEntry, type PartKey, type WhoDeps,
 } from '../../logs/components/voiceResult/resultModel';
 import { dayLogsOf, plotLogFilter } from '../day/dayRecordings';
@@ -76,6 +76,17 @@ export interface PlotDayCard extends DayCardCore {
     dayLabel?: string;
     phase: CropPhase;
     water?: WaterState;
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 2; founder 2026-11-06) - who told this plot's day, each REAL
+     * name once, in the order told. Nobody recorded = the unknown word, never a guess, never "तुम्ही". Empty when nothing was told
+     * (or the caller gave no name source).
+     */
+    speakers: string[];
+    /**
+     * lane IT5 - the server's one "tell more" line for this plot, in his language: words only, never a number or a bar. Set by
+     * `withNextHint` and only on a plot that has something told; absent everywhere else.
+     */
+    nextHint?: string | null;
 }
 
 const dayLabelOf = (phase: CropPhase, day: number | null, hasPlot: boolean): string | undefined => {
@@ -181,7 +192,28 @@ export function buildDayCardCore(logs: readonly DailyLog[], money?: MoneyFigure,
     };
 }
 
-export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], _scope: ViewScope, dateKey: string, date: Date, money?: MoneyFigure, language?: string | null): PlotDayCard {
+/** Who told these logs: one name per speaker, in the order the recordings were told; the same name is said once. */
+export function speakersOf(logs: readonly DailyLog[], who: WhoDeps): string[] {
+    const names: string[] = [];
+    for (const group of groupByRecording(logs)) {
+        const log = primaryOf(group);
+        if (!log) continue;
+        const { name } = whoSpoke(log, who);
+        if (name && !names.includes(name)) names.push(name);
+    }
+    return names;
+}
+
+/**
+ * The card with the server's "tell more" line, when there is something told on the plot to tell more of. A plot with nothing told
+ * keeps its plain "nothing told" line and takes no hint (the line would make the empty plot look half done).
+ */
+export function withNextHint(card: PlotDayCard, hint: string | null | undefined): PlotDayCard {
+    const text = hint?.trim();
+    return card.recordings > 0 && text ? { ...card, nextHint: text } : card;
+}
+
+export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], _scope: ViewScope, dateKey: string, date: Date, money?: MoneyFigure, language?: string | null, who?: WhoDeps): PlotDayCard {
     const logs = plotDayLogs(history, ref, dateKey);
     const timelinePlot = ref.plot ?? ref.crop.plots?.[0];
     const timeline = getPhaseAndDay(timelinePlot, date);
@@ -198,5 +230,6 @@ export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], _sc
         dayLabel: dayLabelOf(timeline.phase, timeline.day, !!timelinePlot),
         phase: timeline.phase,
         water: water === 'ON_TRACK' || water === 'MISSED' || water === 'EXTRA' ? water : undefined,
+        speakers: who ? speakersOf(logs, who) : [],
     };
 }

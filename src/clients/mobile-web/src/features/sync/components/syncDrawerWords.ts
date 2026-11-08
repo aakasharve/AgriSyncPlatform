@@ -157,6 +157,8 @@ const MUTATION_LABEL: Record<string, { mr: string; en: string }> = {
     [SyncMutationName.CreateAttachment]: { mr: 'फोटो', en: 'Photo' },
     // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 fix 1, F7) - his हो / नाही / फोटो answer about a product. PROPOSED.
     [SyncMutationName.AssertInputIdentity]: { mr: 'औषधाबद्दलचं उत्तर', en: 'Answer about a product' },
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 1) - his पाहिलं on a wrong-mix alert. PROPOSED.
+    [SyncMutationName.ComplianceAcknowledge]: { mr: 'चुकीच्या मिश्रणाचं पाहिलं', en: 'Wrong-mix alert seen' },
 };
 
 export function mutationLabel(mutationType: string, language: Language | null | undefined): string {

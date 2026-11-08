@@ -33,6 +33,12 @@ export interface FeedDeps {
     onOpenLog: (log: DailyLog) => void;
     /** Ids that mean "the person holding this phone" (active operator, signed-in user). */
     youIds?: ReadonlySet<string>;
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 2; founder 2026-11-06) - the phone holder's own name from his
+     * profile: his cards read it when the operator list has no name for him, so the glance says a real name, never "तुम्ही" and
+     * not "अज्ञात" for himself.
+     */
+    ownName?: string;
     /** spec I18 — the language of the card's words (default Marathi). */
     language?: string;
 }
@@ -67,7 +73,8 @@ export function buildFeedEntries(logs: readonly DailyLog[], deps: FeedDeps): Fee
         const createdById = log.meta?.createdByOperatorId || '';
         // Truth audit T1.12b, finding 4: a record nobody was recorded as making is NEVER attributed to a
         // real person by name. `अज्ञात` is the word the app already uses for "no identity" (P4/P7).
-        const loggedBy = deps.operatorNameById.get(createdById) || resultStr(deps.language).unknownPerson;
+        const byYou = !!createdById && !!deps.youIds?.has(createdById);
+        const loggedBy = deps.operatorNameById.get(createdById) || (byYou ? deps.ownName?.trim() : '') || resultStr(deps.language).unknownPerson;
         const primaryCropId = log.context.selection[0]?.cropId;
         const cropColor = deps.crops.find(crop => crop.id === primaryCropId)?.color || 'bg-slate-400';
         const snippet = log.fullTranscript?.trim();
@@ -75,7 +82,7 @@ export function buildFeedEntries(logs: readonly DailyLog[], deps: FeedDeps): Fee
             id: log.id,
             logId: log.id,
             log,
-            byYou: !!createdById && !!deps.youIds?.has(createdById),
+            byYou,
             workDone: workDoneOf(log, deps.language),
             plotName: contextDetails.plotName,
             cropName: cropNameIn(contextDetails.cropName, deps.language),

@@ -25,7 +25,7 @@
  *
  * Lane RF (founder 2026-10-30: "a clarity of what work has been done, who has done it, when it was done, where you
  * can listen") — every piece of work on this page reads the way the voice result screen reads it (`./day/*`): who
- * ("तुम्ही" for the person holding this phone), when, typed or spoken, the ONE status wording, ▶ only where it may be
+ * (a real name - the phone holder's own name too, lane IT5; never "तुम्ही"), when, typed or spoken, the ONE status wording, ▶ only where it may be
  * offered. The money section reads the SERVER's cost ledger (`overview/useMoneyLedger.ts`), never a log's own total;
  * money this person may not see is "—" (founder D-22), and a total made from an incomplete set says so.
  *
@@ -51,6 +51,8 @@ import { getPhaseAndDay } from '../../shared/utils/timelineUtils';
 import { formatCurrencyINR } from '../../shared/utils/dayState';
 import { getDateKey } from '../../core/domain/services/DateKeyService';
 import { useFarmContext } from '../../core/session/FarmContext';
+import { AUTHORITY, holdsAuthority } from '../../core/session/farmAuthorities';
+import { ProductCheckAuthority } from './day/CheckProducts';
 import { useStoredAccessScopes } from '../../core/session/storedFarmScope';
 import { scopeForFarm } from '../../infrastructure/storage/accessScopeStore';
 import { plotScopeCopy } from '../profile/team/plotScopeCopy';
@@ -79,7 +81,9 @@ import { FarmStatus } from './overview/FarmStatus';
 import { buildInHand, buildSeasonTotals, buildSpend, farmWideDayMoney, plotDayMoney, spendRange, type MoneyFigure } from './overview/moneyModel';
 import { buildDayNotes } from './overview/notesModel';
 import { NotesList } from './overview/NotesList';
-import { buildDayCardCore, buildPlotDayCard, placeDayLogs } from './overview/plotDayModel';
+import { buildDayCardCore, buildPlotDayCard, placeDayLogs, withNextHint } from './overview/plotDayModel';
+import { usePlotUnderstanding } from './overview/usePlotUnderstanding';
+import { ownNameOf } from '../../shared/utils/ownName';
 import { PlotDayCards } from './overview/PlotDayCards';
 import { atNoon, relLabel } from './overview/reflectDates';
 import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
@@ -113,12 +117,15 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     sessionUserId = null,
     farmRole = null,
     maySeeMoney,
+    ownName,
     navigate,
     focusPlotId,
     onFocusPlotConsumed,
     onOpenAttention,
 }) => {
-    const { currentFarmId } = useFarmContext();
+    const { currentFarmId, currentFarm } = useFarmContext();
+    // lane IT5 (Task 2b) - "औषधं तपासा" is offered to whoever the server says may confirm records (owner or a trusted person), by authority, not label
+    const mayCheckProducts = holdsAuthority(currentFarm, AUTHORITY.confirmRecords);
     const copy = useReflectCopy();
     const language = useOptionalLanguage()?.language;
     // spec: plr-d10 lane MU-4 (§11.6) — a person who covers chosen plots holds only his plots' work and money (the
@@ -164,15 +171,17 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     const todayKey = getDateKey();
     const isToday = dateKey === todayKey;
 
-    // ── who is looking (lane RF): "तुम्ही", his money, his ▶ ────────────────────────────────────
+    // ── who is looking (lane RF): his own records, his money, his ▶ ────────────────────────────────────
     const moneyVisible = mayShowFarmMoney(farmRole, maySeeMoney);
     // "He said it" is the SIGNED-IN user only (review B001) — never the profile's active operator.
     const viewer = useMemo<Viewer>(() => ({ sessionUserId, farmRole, farmId: currentFarmId ?? null }), [sessionUserId, farmRole, currentFarmId]);
     const operatorNameById = useMemo(() => Object.fromEntries(operators.map(o => [o.id, o.name])), [operators]);
     const whoDeps = useMemo(() => ({
-        youIds: new Set(sessionUserId ? [sessionUserId] : []), nameOf: (id: string) => operatorNameById[id], youLabel: copy.you, unknownLabel: copy.unknownPerson,
+        // lane IT5 (founder 2026-11-06): "who told it" is a real name - the phone holder's own name from his profile too, never
+        // "तुम्ही"; nobody known reads the unknown word.
+        youIds: new Set(sessionUserId ? [sessionUserId] : []), nameOf: (id: string) => operatorNameById[id], ownName: ownNameOf(ownName), unknownLabel: copy.unknownPerson,
         language: language ?? undefined, // spec I18 — what was understood, in his language
-    }), [sessionUserId, operatorNameById, copy, language]);
+    }), [sessionUserId, operatorNameById, ownName, copy, language]);
     const shown = useCallback((r: DayRecording) => withMoneyShown(r, moneyVisible, language), [moneyVisible, language]);
     // The chosen day's recordings, farm-wide (the notes' links, the one player).
     const dayRecs = useMemo(() => dayRecordings(history, dateKey, anyLog, whoDeps, crops).map(shown), [history, dateKey, whoDeps, crops, shown]);
@@ -192,8 +201,16 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     const refs = useMemo(() => plotRefsInScope(crops, scope), [crops, scope]);
     const cards = useMemo(
-        () => refs.map(ref => buildPlotDayCard(ref, history, scope, dateKey, date, plotDayMoney(ledger, ref.plotId, dateKey, moneyVisible), language)),
-        [refs, history, scope, dateKey, date, ledger, moneyVisible, language],
+        () => refs.map(ref => buildPlotDayCard(ref, history, scope, dateKey, date, plotDayMoney(ledger, ref.plotId, dateKey, moneyVisible), language, whoDeps)),
+        [refs, history, scope, dateKey, date, ledger, moneyVisible, language, whoDeps],
+    );
+    // lane IT5 (Task 2) - the server's one "tell more" line per plot (words only; never a number), for today's cards that have
+    // something told. Asked again when the day's records change.
+    const hintKey = cards.map(c => `${c.recordings}${c.confirmed ? 'y' : 'n'}`).join(',');
+    const { hintFor } = usePlotUnderstanding(currentFarmId ?? null, dateKey, isToday && Boolean(onSpeak), hintKey);
+    const hintedCards = useMemo(
+        () => cards.map(c => withNextHint(c, hintFor(c.ref.plotId, language))),
+        [cards, hintFor, language],
     );
     // Lane RF2 — whole-farm work (no plot card takes it) gets its own card, when the page shows the whole farm.
     const farmFilter = useMemo(() => farmLogFilter(new Set(crops.filter(c => (c.plots ?? []).length === 0).map(c => c.id))), [crops]);
@@ -333,8 +350,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                             <DayBar date={date} onDate={pickDay} />
                             {tellPastDay && <PastDayTell dateKey={dateKey} onTell={tellPastDay} />}
                             {cards.length > 0
-                                ? <PlotDayCards cards={cards} farm={farmCard} isToday={isToday} onOpen={ref => openPlace({ ref })} onOpenFarm={() => openPlace({ farm: true })}
-                                    onCost={openPlotMoney} />
+                                ? <PlotDayCards cards={hintedCards} farm={farmCard} isToday={isToday} onOpen={ref => openPlace({ ref })} onOpenFarm={() => openPlace({ farm: true })}
+                                    onCost={openPlotMoney} onTell={isToday && onSpeak ? ref => tellMoreFor({ ref })?.() : undefined} />
                                 : <p className="m-0 rounded-2xl bg-stone-50 p-3 text-center text-[14.5px] font-bold text-stone-600" data-testid="plot-cards-empty">पीक आणि प्लॉट जोडले की इथे रोजचं काम दिसेल.</p>}
                         </div>
                     </SectionBlock>
@@ -364,6 +381,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     };
 
     return (
+        <ProductCheckAuthority.Provider value={mayCheckProducts}>
         <div className="space-y-3 pb-20" style={{ fontFamily: SANS }} data-testid="reflect-page">
             {/* THE DAY'S WORK — one button; it follows the day the page is on (lane RF). RF2 fix pass: the screen inside it
                 is the founder's screen 2 (one block per place, time chips). */}
@@ -438,6 +456,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
             <MoneyLensDrawer isOpen={moneyLensOpen} onClose={() => setMoneyLensOpen(false)} filters={moneyLensFilters} />
         </div>
+        </ProductCheckAuthority.Provider>
     );
 };
 

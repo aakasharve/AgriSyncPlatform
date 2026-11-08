@@ -202,6 +202,34 @@ export interface ReviewItem {
     version?: number;
     /** PLR-D10 I27 (D-31) — a recording is linked to this record (whether it may be PLAYED is the server's call). */
     hasRecording?: boolean;
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 2b; IT3 Task 3a; founder D-95) - the products the record names,
+     * with the library's match and the newest answers (the speaker's own, kept as his, and the check). Present ONLY when the server
+     * says this reader may hear the record's words; absent on an older server, for a reader who may not, and (as an empty list) when
+     * the record names no product. Approval never reads it: checking is optional and never blocks मंजूर (P9).
+     */
+    products?: ReviewProduct[];
+    /** lane IT5 - how many of `products` no checker has checked yet; absent where `products` is. */
+    uncheckedProductCount?: number;
+}
+
+/** One answer about a product, as the approval list carries it. */
+export interface ReviewProductAnswer {
+    verdict: 'confirmed' | 'rejected' | 'photo';
+    catalogProductId?: string;
+    attachmentId?: string;
+    assertedByUserId: string;
+    assertedAtUtc: string;
+}
+
+/** One product of a record on its approval card (IT3 Task 3a). The record's dose, quantity and date are never carried here (P7). */
+export interface ReviewProduct {
+    inputEventId: string;
+    mixIndex: number;
+    spokenName: string;
+    match: { state: 'found' | 'ambiguous' | 'notFound'; productId?: string };
+    speakerAnswer?: ReviewProductAnswer;
+    check?: ReviewProductAnswer;
 }
 
 /** `ShramSafal.Domain.Logs.DailyLogScope.ToString()` — the wire spelling, PascalCase. */

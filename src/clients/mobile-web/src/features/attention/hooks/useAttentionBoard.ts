@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { getDatabase, AttentionCardCacheRecord } from '../../../infrastructure/storage/DexieDatabase';
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import { SCHEDULED_WORK_META_KEY, storedScheduledWorkOf, type StoredScheduledWork } from '../scheduledWork';
+import { readQueuedAcknowledgements } from '../data/queuedAcknowledgements';
+import { onSeenSignalsChange } from '../seenSignals';
 
 /**
  * The sync scope whose cursor proves this device has ever completed a pull.
@@ -49,6 +51,8 @@ interface UseAttentionBoardResult {
      * "nothing is late".
      */
     scheduledWork: StoredScheduledWork | null;
+    /** lane IT5 fix 1 (F4) - wrong-mix signals whose "पाहिलं" is queued on this phone and on its way: their cards stay hidden. */
+    queuedAcks: ReadonlySet<string>;
     refresh: () => void;
 }
 
@@ -58,6 +62,7 @@ export function useAttentionBoard(): UseAttentionBoardResult {
     const [isLoading, setIsLoading] = useState(true);
     const [loadFailed, setLoadFailed] = useState(false);
     const [scheduledWork, setScheduledWork] = useState<StoredScheduledWork | null>(null);
+    const [queuedAcks, setQueuedAcks] = useState<ReadonlySet<string>>(() => new Set<string>());
 
     const load = useCallback(async () => {
         setIsLoading(true);
@@ -96,6 +101,8 @@ export function useAttentionBoard(): UseAttentionBoardResult {
         } finally {
             setIsLoading(false);
         }
+        // lane IT5 fix 1 (F4) - read on its own too: a database without the queue leaves the cards exactly as they were read.
+        setQueuedAcks(await readQueuedAcknowledgements());
         // spec: plr-d10 (I22) — read on its own: a phone database without the list (or without `appMeta` at
         // all) leaves the cards above exactly as they were read.
         try {
@@ -116,6 +123,9 @@ export function useAttentionBoard(): UseAttentionBoardResult {
         window.addEventListener('agrisync:sync-reconciled', reread);
         return () => window.removeEventListener('agrisync:sync-reconciled', reread);
     }, [load]);
+
+    // lane IT5 fix 1 (F4) - a "पाहिलं" was just queued: read the queue again so the card stays away whatever the clocks say.
+    useEffect(() => onSeenSignalsChange(() => { void readQueuedAcknowledgements().then(setQueuedAcks); }), []);
 
     /**
      * The retry the banner offers. Re-reading Dexie on its own could only ever
@@ -142,5 +152,5 @@ export function useAttentionBoard(): UseAttentionBoardResult {
         })();
     }, [load]);
 
-    return { cards, asOf, isLoading, loadFailed, scheduledWork, refresh };
+    return { cards, asOf, isLoading, loadFailed, scheduledWork, queuedAcks, refresh };
 }

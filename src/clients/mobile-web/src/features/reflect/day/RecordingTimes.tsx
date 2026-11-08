@@ -23,6 +23,7 @@ import type { DayRecording } from './dayRecordings';
 import { ListenControl, LogPhotos, StatusChip, useReflectCopy } from './RecordingParts';
 import type { DayListen } from './useDayListen';
 import { AudienceLockChip } from '../../recordAudience/AudienceRow';
+import { CheckProductsButton } from './CheckProducts';
 import { getSessionUserId } from '../../../infrastructure/storage/AuthTokenStore';
 
 const NO_IDS: ReadonlySet<string> = new Set();
@@ -66,6 +67,8 @@ export const RecordingInline: React.FC<{ rec: DayRecording; listen: DayListen; t
                     </button>
                 ))}
             </div>
+            {/* lane IT5 (Task 2b) - "औषधं तपासा (N)": only for a person who holds the confirm-records authority; opens the review sheet on this record. */}
+            <CheckProductsButton logs={rec.logs} testId={testId} />
             {view.legacyPartial && <LegacyNote testId={`${testId}-legacy`} />}
             <div className="mt-2 space-y-1.5" data-testid={`${testId}-parts`}>
                 {nothing && <p className="m-0 text-[14px] font-semibold text-stone-600" data-testid={`${testId}-nothing`}>{copy.nothingUnderstood}</p>}
