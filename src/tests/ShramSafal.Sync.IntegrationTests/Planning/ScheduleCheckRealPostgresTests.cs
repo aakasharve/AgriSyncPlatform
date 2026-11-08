@@ -162,7 +162,7 @@ public sealed class ScheduleCheckRealPostgresTests(ITestOutputHelper output) : S
             await db.SaveChangesAsync();
         }
 
-        var library = await LibraryAsync(Owner);
+        var library = await ReviewLibraryAsync();
         RowOf(library, row.Id)!.Value.GetProperty("check").GetProperty("state").GetString().Should().Be("Checked");
         var copy = RowOf(library, edited)!.Value;
         copy.GetProperty("check").GetProperty("state").GetString().Should().Be("NotChecked");

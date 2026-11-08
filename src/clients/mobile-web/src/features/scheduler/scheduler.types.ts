@@ -138,6 +138,11 @@ export interface CropScheduleTemplate {
     // check of it. Absent = not checked (the built-in samples, every row made before the lane).
     sourceLabel?: string;
     check?: ScheduleCheckInfo;
+    // spec: plr-d10 lane L8b-1F: whose row it is (Public | Team | Private | Licensed). Absent = a built-in sample (Public). The
+    // library offers a plot only what it may follow; the farm's own schedules (Team / Private) stay hidden until SCH-OWN.
+    scope?: string;
+    /** spec: plr-d10 lane L8b-1F fix 1 (F002): true only for a row that stores its days (never a sample). */
+    hasStoredDays?: boolean;
 }
 
 // Overrides allow per-plot customization — definitions moved to

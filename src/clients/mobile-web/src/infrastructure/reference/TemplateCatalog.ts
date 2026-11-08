@@ -40,6 +40,10 @@ type ReferenceScheduleTemplate = {
     ownerType?: ScheduleOwnerType;
     sourceLabel?: string;
     check?: ScheduleCheckInfo;
+    // spec: plr-d10 lane L8b-1F (additive, optional): Public | Team | Private | Licensed; absent = a built-in sample (Public).
+    scope?: string;
+    // spec: plr-d10 lane L8b-1F fix 1 (F002) - true only for a row that STORES its days (the server's `hasStoredDays`).
+    hasStoredDays?: boolean;
 };
 
 const STAGE_NOTE_FALLBACKS: Record<StageCode | 'CUSTOM', string> = {
@@ -369,6 +373,8 @@ function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropSchedule
         ownerType: referenceTemplate.ownerType ?? 'SYSTEM_DEFAULT',
         ...(referenceTemplate.sourceLabel ? { sourceLabel: referenceTemplate.sourceLabel } : {}),
         ...(referenceTemplate.check ? { check: referenceTemplate.check } : {}),
+        ...(referenceTemplate.scope ? { scope: referenceTemplate.scope } : {}),
+        ...(referenceTemplate.hasStoredDays === true ? { hasStoredDays: true } : {}),
         totalDurationDays: Math.max(1, referenceTemplate.totalDays),
         description: `Server-managed template for ${toDisplayName(cropCode)}.`,
         adoptionScore: 0,
@@ -449,6 +455,8 @@ function parseReferenceTemplate(input: unknown): ReferenceScheduleTemplate | nul
         stages,
         activities,
         ...parseOwnerAndCheck(source),
+        ...(toStringValue(source.scope).trim() ? { scope: toStringValue(source.scope).trim() } : {}),
+        ...(source.hasStoredDays === true ? { hasStoredDays: true } : {}),
     };
 }
 

@@ -34,7 +34,7 @@ public sealed class ScheduleStoredDaysRealPostgresTests(ITestOutputHelper output
         await AssertAppRoleIsNotVacuousAsync();
         var row = await SeedStoredRowAsync();
 
-        var listed = RowOf(await LibraryAsync(Owner), row.Id);
+        var listed = RowOf(await ReviewLibraryAsync(), row.Id);
 
         listed.Should().NotBeNull("a Public row is in every farmer's library");
         var dto = listed!.Value;
@@ -68,7 +68,7 @@ public sealed class ScheduleStoredDaysRealPostgresTests(ITestOutputHelper output
             new ImportedActivity("c", "Irrigation", 41, 99, FrequencyMode.PerWeek, 3),
         ]);
 
-        var dto = RowOf(await LibraryAsync(Owner), row.Id)!.Value;
+        var dto = RowOf(await ReviewLibraryAsync(), row.Id)!.Value;
         var byName = dto.GetProperty("activities").EnumerateArray().ToDictionary(a => a.GetProperty("name").GetString()!);
 
         byName["Pruning"].GetProperty("frequencyMode").GetString().Should().Be("every_n_days");
@@ -130,11 +130,13 @@ public sealed class ScheduleStoredDaysRealPostgresTests(ITestOutputHelper output
         // optional, so a reader that ignores unknown names (1.0.17 parses the JSON with no schema) reads the same library.
         string[] oldTemplate = ["id", "name", "cropType", "totalDays", "stages", "activities", "versionHash"];
         string[] oldActivity = ["name", "category", "stageName", "startDay", "endDay", "frequencyMode", "intervalDays"];
-        string[] newTemplate = ["ownerType", "sourceLabel", "check", "rowVersionTag", "hasStoredDays"];
+        string[] newTemplate = ["ownerType", "sourceLabel", "check", "rowVersionTag", "hasStoredDays", "scope"]; // L8b-1F appended "scope"
         string[] newActivity = ["operationKey", "id", "part", "role", "nutrientKey", "afterActivityId", "storedFrequencyMode"];
 
         var library = JsonDocument.Parse(body).RootElement;
-        library.GetArrayLength().Should().Be(2);
+        // L8b-1F (F114): a farm caller's library = the checked grape schedule + the OTHER crops' samples (the grape samples, the thin
+        // grape row included, are gone once grapes have a checked schedule).
+        library.GetArrayLength().Should().Be(4);
         foreach (var template in library.EnumerateArray())
         {
             var names = template.EnumerateObject().Select(p => p.Name).ToList();
@@ -154,7 +156,8 @@ public sealed class ScheduleStoredDaysRealPostgresTests(ITestOutputHelper output
 
         // The checked row says so (state, who, when), the thin row says NotChecked.
         RowOf(library.EnumerateArray().ToList(), stored.Id)!.Value.GetProperty("check").GetProperty("state").GetString().Should().Be("Checked");
-        RowOf(library.EnumerateArray().ToList(), thin)!.Value.GetProperty("check").GetProperty("state").GetString().Should().Be("NotChecked");
+        RowOf(library.EnumerateArray().ToList(), thin).Should().BeNull("grapes now have a checked schedule, so a grape thin row is no longer offered");
+        RowOf(library.EnumerateArray().ToList(), BuiltInPomegranate)!.Value.GetProperty("check").GetProperty("state").GetString().Should().Be("NotChecked");
     }
 
     [Fact]
@@ -170,9 +173,9 @@ public sealed class ScheduleStoredDaysRealPostgresTests(ITestOutputHelper output
 
         await SeedReviewSeatsAsync();
         var stored = await SeedStoredRowAsync();
-        var undecided = RowOf(await LibraryAsync(Owner), stored.Id)!.Value.GetProperty("versionHash").GetString();
+        var undecided = RowOf(await ReviewLibraryAsync(), stored.Id)!.Value.GetProperty("versionHash").GetString();
         (await CheckAsync(PlatformOwner, stored.Id, "Approved", ActivityIdsOf(stored))).Status.Should().Be(HttpStatusCode.OK);
-        var decided = RowOf(await LibraryAsync(Owner), stored.Id)!.Value.GetProperty("versionHash").GetString();
+        var decided = RowOf(await ReviewLibraryAsync(), stored.Id)!.Value.GetProperty("versionHash").GetString();
 
         decided.Should().NotBe(undecided, "a check changes what the library says, so a phone that compares the list hash re-reads it");
     }

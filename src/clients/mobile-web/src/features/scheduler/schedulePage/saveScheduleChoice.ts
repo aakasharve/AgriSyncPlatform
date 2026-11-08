@@ -35,6 +35,8 @@ export interface ScheduleChoiceTarget {
     plotId: string;
     templateId: string;
     referenceDate?: string | null;
+    /** spec: plr-d10 lane L8b-1F (R7) - this is a choice the phone ALREADY held (the one-time upload): the adopt says so. */
+    carryOver?: boolean;
 }
 
 export interface SaveScheduleChoiceResult {
@@ -117,7 +119,12 @@ export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[
                 if (held && held.cropCycleId === where.cropCycleId) {
                     result.clientRequestIds.push(await MigrateScheduleCommand.enqueue({ ...common, newScheduleTemplateId: target.templateId, reason: 'Other', newSubscriptionId: id, fromSubscriptionId: held.id }));
                 } else {
-                    result.clientRequestIds.push(await AdoptScheduleCommand.enqueue({ ...common, scheduleTemplateId: target.templateId, subscriptionId: id }));
+                    result.clientRequestIds.push(await AdoptScheduleCommand.enqueue({
+                        ...common,
+                        scheduleTemplateId: target.templateId,
+                        subscriptionId: id,
+                        ...(target.carryOver === true ? { carryOver: true as const } : {}),
+                    }));
                 }
             }
 

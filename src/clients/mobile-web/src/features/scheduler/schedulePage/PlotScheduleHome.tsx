@@ -23,6 +23,7 @@ import { ScheduleTabs, type ScheduleTab } from './ScheduleTabs';
 import { TodayTab } from './TodayTab';
 import type { ClipsByDay } from './usePlotClips';
 import { BehindBanner, DefaultScheduleNote, ScheduleHeader, StageProgress } from './WhereYouAre';
+import type { FollowedCheckNote } from './followedCheck';
 
 export const PlotScheduleHome: React.FC<{
     cropName: string;
@@ -35,7 +36,9 @@ export const PlotScheduleHome: React.FC<{
     onTab: (t: ScheduleTab) => void;
     onOpenDay: (key: string) => void;
     onLibrary: () => void;
-}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary }) => {
+    /** spec: plr-d10 lane L8b-1F - set when the followed schedule is not checked (a sample) or its check was withdrawn. */
+    checkNote?: FollowedCheckNote | null;
+}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary, checkNote }) => {
     const facts = useMemo(() => {
         const total = stageTally(model);
         const byPart = Object.fromEntries(PARTS.map(p => [p, stageTally(model, p)])) as Record<Part, Tally>;
@@ -48,7 +51,7 @@ export const PlotScheduleHome: React.FC<{
 
     return (
         <div className="space-y-4" data-testid="plot-schedule">
-            <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} />
+            <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} />
             {source === 'default' && <DefaultScheduleNote onLibrary={onLibrary} />}
             <BehindBanner model={model} />
             <StageProgress model={model} />

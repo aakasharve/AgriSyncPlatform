@@ -29,6 +29,8 @@ import { ChoiceChips, GlassCard, PageBar, SANS } from '../shared/components/ui/p
 import SchedulerTimeline from '../features/scheduler/components/SchedulerTimeline';
 import ScheduleMaker from '../features/scheduler/components/ScheduleMaker';
 import ScheduleLibraryView, { libraryTemplates } from '../features/scheduler/components/ScheduleLibraryView';
+import { followedCheckNote } from '../features/scheduler/schedulePage/followedCheck';
+import { scheduleCropCode } from '../infrastructure/reference/TemplateCatalog';
 import { PlotScheduleHome } from '../features/scheduler/schedulePage/PlotScheduleHome';
 import { ScheduleDaySheet } from '../features/scheduler/schedulePage/ScheduleDaySheet';
 import { ScheduleTools } from '../features/scheduler/schedulePage/ScheduleTools';
@@ -125,6 +127,13 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const todaySpend = useMemo(() => financeSelectors.getTotalCost(moneyFilters), [moneyFilters, logs.length]);
     const libraryCount = useMemo(() => libraryTemplates(crops).length, [crops]);
+    // spec: plr-d10 lane L8b-1F - what to say under a followed schedule that is not checked / was withdrawn (R7, R8).
+    const checkNote = useMemo(() => {
+        if (!crop || !plot || !resolved || resolved.source === 'default') return null;
+        const code = scheduleCropCode(crop.name);
+        const hasChecked = libraryTemplates([crop]).some(t => scheduleCropCode(t.cropCode) === code && t.check?.state === 'Checked' && t.id !== resolved.template.id);
+        return followedCheckNote(resolved.template, choices.get(plot.id)?.checkState, hasChecked);
+    }, [crop, plot, resolved, choices]);
 
     const saveCrops = (next: CropProfile[]) => onUpdateCrops(next);
 
@@ -233,7 +242,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                 </GlassCard>
             )}
             {crop && plot && resolved && model && (
-                <PlotScheduleHome cropName={nameOf(crop)} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips}
+                <PlotScheduleHome cropName={nameOf(crop)} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips} checkNote={checkNote}
                     tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => setView('LIBRARY')} />
             )}
             <ScheduleTools

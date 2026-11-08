@@ -25,6 +25,10 @@ export const AdoptSchedulePayload = z.object({
     // a change made offline while he held "plan work", arriving after it ended, counts inside the late window and is
     // flagged for the owner (MU design §11.2). Without it only "held now" counts (P11: 1.0.17 sends none).
     decidedAtUtc: ZIsoDate.optional(),
+    // spec: plr-d10 lane L8b-1F (R7) — true when the phone uploads a choice it ALREADY made before the server held one (the
+    // one-time upload of held choices). Optional and additive: 1.0.17 never sends it, and the adopt then follows the check rule
+    // (a Checked schedule is accepted; an unchecked sample only while its crop has no checked schedule; P11).
+    carryOver: z.boolean().optional(),
 });
 
 export type AdoptSchedulePayloadType = z.infer<typeof AdoptSchedulePayload>;

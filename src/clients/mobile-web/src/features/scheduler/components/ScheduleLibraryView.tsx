@@ -20,7 +20,8 @@ import { UNKNOWN_CROP, getAllTemplates, scheduleCropCode, sortTemplates } from '
 import { getOperationCategory } from '../planning/ClientPlanEngine';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../shared/components/ui/placeUi';
-import { OWNER_LABEL, frequencyMr, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
+import { OWNER_LABEL, SC, frequencyMr, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
+import { cropNameIn } from '../../../shared/names/namesIn';
 import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
 import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
 import { ScheduleCheckBadge } from './ScheduleCheckBadge';
@@ -55,6 +56,23 @@ const ORDERS: ReadonlyArray<readonly [Order, string]> = [
 // crop master: "द्राक्ष" is Grapes), the same rule the server adopts by. Its own copy here read a Marathi name as no crop.
 const canonicalCropCode = scheduleCropCode;
 
+/**
+ * spec: plr-d10 lane L8b-1F (founder D-82 note, D-91 = 1) - what a plot may be OFFERED for a new choice. An outside schedule is
+ * offered only once ShramSafal has checked it; the samples (the app's built-in ones, and rows the library holds without stored
+ * days: they read "not checked") only while their crop has no checked schedule; a withdrawn or sent-back one never. This farm's
+ * own schedules (Team / Private) stay hidden until SCH-OWN opens that branch, so no "हे शेड्यूल वापरा" ever leads to a refusal.
+ * A plot that already follows a schedule keeps it whatever this says (the page reads the plot's choice, not this list).
+ */
+const isOutside = (t: CropScheduleTemplate): boolean => !t.scope || t.scope === 'Public';
+// A sample = a built-in or a row without stored days, and not checked. An unchecked row that STORES its days is never a sample: it can
+// reach the phone only because a plot follows it (the pull sends followed schedules), so it shows on that plot and is not offered.
+const isSample = (t: CropScheduleTemplate): boolean => (!t.check || t.check.state === 'NotChecked') && t.hasStoredDays !== true;
+const offeredForCrop = (bucket: readonly CropScheduleTemplate[]): CropScheduleTemplate[] => {
+    const outside = bucket.filter(isOutside);
+    const checked = outside.filter(t => t.check?.state === 'Checked');
+    return checked.length > 0 ? checked : outside.filter(isSample);
+};
+
 /** Up to three schedules per crop the farmer grows (most detailed first) — the same rule the page counts by. */
 export function libraryTemplates(allCrops: readonly CropProfile[]): CropScheduleTemplate[] {
     const allowed = new Set(allCrops.map(c => canonicalCropCode(c.name)));
@@ -66,7 +84,8 @@ export function libraryTemplates(allCrops: readonly CropProfile[]): CropSchedule
         byCrop.set(code, [...(byCrop.get(code) ?? []), t]);
     });
     const out: CropScheduleTemplate[] = [];
-    byCrop.forEach(bucket => {
+    byCrop.forEach(whole => {
+        const bucket = offeredForCrop(whole);
         out.push(...[...bucket].sort((a, b) => {
             const d = (b.periodicExpectations.length + b.oneTimeExpectations.length) - (a.periodicExpectations.length + a.oneTimeExpectations.length);
             return d !== 0 ? d : a.name.localeCompare(b.name);
@@ -123,6 +142,10 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
     const [order, setOrder] = useState<Order>('usual');
     const [detail, setDetail] = useState<CropScheduleTemplate | null>(null);
     const activeCropCode = crop ? canonicalCropCode(crop.name) : null;
+    const sampleCropName = (t: CropScheduleTemplate): string => {
+        const own = allCrops.find(c => canonicalCropCode(c.name) === canonicalCropCode(t.cropCode));
+        return own ? cropNameIn(own.name, 'mr', own.masterId) : t.cropCode;
+    };
     const schedules = useMemo(() => libraryTemplates(allCrops), [allCrops]);
     const shown = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -155,6 +178,8 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                                 <p className="m-0 mt-0.5 text-[14px] font-bold text-stone-600">कोणी बनवलं: {madeBy(t)}</p>
                                 {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only */}
                                 <ScheduleCheckBadge template={t} testId={`library-check-${t.id}`} />
+                                {/* spec: plr-d10 lane L8b-1F (D-91 = 1) - a sample says it will go once its crop has a checked schedule */}
+                                {isSample(t) && <p className="m-0 mt-1 text-[13.5px] font-bold text-stone-600" data-testid={`library-sample-line-${t.id}`}>{SC.sampleWillHide(sampleCropName(t))}</p>}
                             </div>
                             {/* PROPOSED (Marathi) */}
                             {adopted && <Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />वापरात आहे</Chip>}

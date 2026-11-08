@@ -24,9 +24,12 @@ export interface ScheduleChoice {
     referenceDate: string | null;
     /** True while this phone's choice has not been answered by the server. */
     pending: boolean;
+    /** spec: plr-d10 lane L8b-1F - what ShramSafal's check says now about the schedule followed (absent: the server has not said). */
+    checkState?: ScheduleSubscriptionRow['checkState'];
 }
 
 const STATES = new Set(['Active', 'Migrated', 'Abandoned', 'Completed']);
+const CHECK_STATES = new Set(['Checked', 'NotChecked', 'Returned', 'Withdrawn']);
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 const dayKey = (v: unknown): string | null => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
 
@@ -42,6 +45,9 @@ export function rowFromDto(dto: ScheduleSubscriptionDto | null | undefined): Sch
         referenceDate: dayKey(dto.referenceDate),
         state: dto.state,
         adoptedAtUtc: isText(dto.adoptedAtUtc) ? dto.adoptedAtUtc : '',
+        // spec: plr-d10 lane L8b-1F - additive: an older server sends neither, and an unreadable word is left out (never guessed).
+        ...(typeof dto.checkState === 'string' && CHECK_STATES.has(dto.checkState) ? { checkState: dto.checkState } : {}),
+        ...(dto.origin === 'Outside' || dto.origin === 'Own' ? { origin: dto.origin } : {}),
     };
 }
 
@@ -55,7 +61,7 @@ export function bestActive(rows: readonly ScheduleSubscriptionRow[], currentCycl
 }
 
 export const choiceOf = (row: ScheduleSubscriptionRow): ScheduleChoice =>
-    ({ templateId: row.templateId, referenceDate: row.referenceDate, pending: row.pending === true });
+    ({ templateId: row.templateId, referenceDate: row.referenceDate, pending: row.pending === true, ...(row.checkState ? { checkState: row.checkState } : {}) });
 
 /** Every Active row of one plot (the server's, and this phone's unanswered one), newest intent first. */
 export async function activeSubscriptionsForPlot(plotId: string, db: AgriLogDatabase = getDatabase()): Promise<ScheduleSubscriptionRow[]> {

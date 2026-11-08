@@ -97,16 +97,16 @@ public sealed class MigrateScheduleHandler(
         // spec: plr-d10 lane L8b-1 Task 1 — the new schedule comes from the library the phone lists (ScheduleLibrary), as
         // adopt does; one he may not see answers like an unknown id (E4); the crop rule is the phone's own.
         var newTemplateId = new ScheduleTemplateId(command.NewScheduleTemplateId);
-        var newTemplate = await new Services.ScheduleLibrary(repository).FindAsync(command.NewScheduleTemplateId, command.ActorUserId, ct);
-        if (newTemplate is null)
+        // spec: plr-d10 lane L8b-1F - what this plot's farm may follow and the check rule are decided in ScheduleLibrary.ChooseAsync, as
+        // adopt does (R8: a switch to a newer Checked version is allowed; a Withdrawn one the plot follows stays Active meanwhile).
+        var choice = await new Services.ScheduleLibrary(repository).ChooseAsync(
+            command.NewScheduleTemplateId, command.ActorUserId, farm.OwnerUserId.Value, cropCycle.CropName, carryOver: false, ct);
+        if (!choice.IsSuccess)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateNotFound);
+            return Result.Failure<ScheduleSubscriptionDto>(choice.Error);
         }
 
-        if (!Services.ScheduleLibrary.MatchesCrop(newTemplate, cropCycle.CropName))
-        {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateCropMismatch);
-        }
+        var newTemplate = choice.Value.Template;
 
         var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
 
@@ -149,7 +149,9 @@ public sealed class MigrateScheduleHandler(
             nowUtc,
             // my call (L8b-1): a switch that names no day 0 keeps the plot's day 0 — the day is the plot's, not the
             // schedule's, so switching schedules never silently loses it (P10).
-            command.ReferenceDate ?? prev.ReferenceDate);
+            command.ReferenceDate ?? prev.ReferenceDate,
+            choice.Value.Origin,
+            choice.Value.CheckStateAtAdopt);
         newSubscription.AttachMigratedFrom(prev.SubscriptionId);
 
         // Phase 4 will populate this from ScheduleComplianceSnapshot rollups.
@@ -236,6 +238,6 @@ public sealed class MigrateScheduleHandler(
             })
         ), ct);
 
-        return Result.Success(newSubscription.ToDto());
+        return Result.Success(newSubscription.ToDto(choice.Value.LiveCheckState.ToString()));
     }
 }

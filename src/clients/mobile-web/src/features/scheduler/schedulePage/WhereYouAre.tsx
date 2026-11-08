@@ -22,6 +22,7 @@ import type { ScheduleModel } from './scheduleModel';
 import { scheduleNameMr } from './scheduleNames';
 import { ScheduleCheckBadge } from '../components/ScheduleCheckBadge';
 import { GLASS } from './scheduleUi';
+import type { FollowedCheckNote } from './followedCheck';
 
 /** The saved author is shown only when it is a real name, not the catalog's internal English tag. */
 const INTERNAL_AUTHORS = new Set(['ShramSafal Reference Data', 'System Fallback']);
@@ -45,7 +46,23 @@ export const OwnerBadge: React.FC<{ template: CropScheduleTemplate }> = ({ templ
     );
 };
 
-export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; template: CropScheduleTemplate; model: ScheduleModel }> = ({ cropName, plotName, template, model }) => {
+/**
+ * spec: plr-d10 lane L8b-1F (R7, R8) - under the card of a schedule ShramSafal's check does not stand behind: the withdrawn
+ * words with the checker's reason, and the way to take the newer checked schedule when the crop has one.
+ */
+export const FollowedCheckNoteLine: React.FC<{ note: FollowedCheckNote; onLibrary?: () => void }> = ({ note, onLibrary }) => (
+    <div className="mt-2 space-y-1.5" data-testid="followed-check-note" data-kind={note.kind}>
+        {note.kind === 'withdrawn' && <p className="m-0 text-[15px] font-extrabold text-amber-200" data-testid="followed-withdrawn">{SC.checkWithdrawn(note.reason)}</p>}
+        {note.offerNew && onLibrary && (
+            <Tap onClick={onLibrary} data-testid="followed-take-new"
+                className="flex min-h-[48px] w-full items-center justify-center rounded-full border-2 border-emerald-300 bg-white/10 px-4 text-[16px] font-extrabold text-white">
+                {SC.takeNewChecked} →
+            </Tap>
+        )}
+    </div>
+);
+
+export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; template: CropScheduleTemplate; model: ScheduleModel; checkNote?: FollowedCheckNote | null; onLibrary?: () => void }> = ({ cropName, plotName, template, model, checkNote, onLibrary }) => {
     const stage = model.currentStage;
     const started = model.todayDay >= 0;
     const tiles: ReadonlyArray<readonly [string, string, string]> = [
@@ -60,6 +77,7 @@ export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; temp
             <OwnerBadge template={template} />
             {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only */}
             <ScheduleCheckBadge template={template} tone="dark" testId="sched-check" />
+            {checkNote && <FollowedCheckNoteLine note={checkNote} onLibrary={onLibrary} />}
             <div className="mt-4 grid grid-cols-3 gap-2.5">
                 {tiles.map(([n, label, id]) => (
                     <div key={id} className="rounded-2xl bg-white/10 p-3 text-center backdrop-blur-sm">

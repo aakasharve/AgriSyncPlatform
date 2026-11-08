@@ -373,7 +373,7 @@ internal static class DtoMappingExtensions
             attachment.UploadedAtUtc,
             attachment.FinalizedAtUtc);
 
-    public static ScheduleSubscriptionDto ToDto(this ScheduleSubscription sub) =>
+    public static ScheduleSubscriptionDto ToDto(this ScheduleSubscription sub, string? liveCheckState = null) =>
         new(
             sub.Id,
             sub.FarmId.Value,
@@ -388,7 +388,9 @@ internal static class DtoMappingExtensions
             sub.MigratedToSubscriptionId?.Value,
             sub.MigrationReason?.ToString(),
             sub.StateChangedAtUtc,
-            sub.ReferenceDate);
+            sub.ReferenceDate,
+            liveCheckState,
+            sub.Origin?.ToString());
 
     public static FieldOperatorDto ToDto(this FieldOperator fieldOperator) =>
         new(

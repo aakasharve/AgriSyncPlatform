@@ -1644,6 +1644,21 @@ internal sealed class ShramSafalRepository(
                 ct);
     }
 
+    public async Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsOfFarmsAsync(
+        IEnumerable<Guid> farmIds, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds).Select(id => new FarmId(id)).ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.ScheduleSubscriptions
+            .AsNoTracking()
+            .Where(s => ids.Contains(s.FarmId) && s.State == ScheduleSubscriptionState.Active)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<ScheduleSubscription>> GetScheduleSubscriptionsChangedSinceAsync(
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
     {

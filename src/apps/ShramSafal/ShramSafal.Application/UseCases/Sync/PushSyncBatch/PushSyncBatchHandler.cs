@@ -3004,7 +3004,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "scheduleTemplateId", "actorUserId", "actorRole", "clientCommandId", "subscriptionId", "referenceDate", "decidedAtUtc"))
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "scheduleTemplateId", "actorUserId", "actorRole", "clientCommandId", "subscriptionId", "referenceDate", "decidedAtUtc", "carryOver"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -3035,7 +3035,9 @@ public sealed class PushSyncBatchHandler(
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
                 AuditDeviceId: deviceId,
                 ReferenceDate: request.ReferenceDate,
-                DecidedAtUtc: request.DecidedAtUtc),
+                DecidedAtUtc: request.DecidedAtUtc,
+                // spec: plr-d10 lane L8b-1F (R7) - the phone's one-time upload of a choice it already made; absent = a new choice (P11).
+                CarryOver: request.CarryOver == true),
             ct);
 
         return ToOutcome(result);

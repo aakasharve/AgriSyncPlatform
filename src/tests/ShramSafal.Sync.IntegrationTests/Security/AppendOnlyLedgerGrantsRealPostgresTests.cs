@@ -253,6 +253,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    own effective-privilege guard (it is on AppendOnlyLedgers above) and touches no other ledger's grants. Safe to
         //    revert and re-apply mid-proof.
         "20261108120000_AddScheduleCheckAndStoredDays",
+        // ── Reviewed 2026-11-08 (spec: plr-d10 lane L8b-1F, founders D-82 / D-91); Down() read in full: drops the two CHECKs and the two
+        //    nullable columns Up() added to ssf.schedule_subscriptions - only what Up() added. Up() touches no ledger, no grant and no
+        //    privilege (the table keeps its table-level grants and its row-level security). Safe to revert and re-apply mid-proof.
+        "20261108150000_AddScheduleSubscriptionOriginAndCheck",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

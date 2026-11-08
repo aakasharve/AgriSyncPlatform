@@ -20,6 +20,7 @@ vi.mock('../../../../i18n/LanguageContext', () => ({
 }));
 
 import ScheduleLibraryView from '../ScheduleLibraryView';
+import { ScheduleCheckBadge } from '../ScheduleCheckBadge';
 import AddPlotWizard from '../../../profile/components/AddPlotWizard';
 import { getAllTemplates, setScheduleTemplatesFromReferenceData } from '../../../../infrastructure/reference/TemplateCatalog';
 import { SC } from '../../schedulePage/scheduleCopy';
@@ -86,6 +87,8 @@ describe('ScheduleLibraryView - ShramSafal check badge (SCH-A)', () => {
     });
 
     it('an unchecked schedule, a row made before the lane and a built-in sample show the grey words', () => {
+        // L8b-1F (D-91 = 1): the samples are offered only while their crop has no checked schedule, so the checked row is left out here.
+        setScheduleTemplatesFromReferenceData([thinRow, sampleRow]);
         render(<ScheduleLibraryView crop={grapes} allCrops={[grapes]} onAdopt={vi.fn()} />);
 
         for (const id of [THIN_ID, SAMPLE_ID]) {
@@ -104,7 +107,12 @@ describe('ScheduleLibraryView - ShramSafal check badge (SCH-A)', () => {
         ]);
         render(<ScheduleLibraryView crop={grapes} allCrops={[grapes]} onAdopt={vi.fn()} />);
 
-        expect(screen.getByTestId(`library-check-${CHECKED_ID}`)).toHaveAttribute('data-check-state', 'NotChecked');
+        // L8b-1F: a withdrawn schedule is no longer OFFERED in the library (see ScheduleLibraryView.perCrop.test.tsx); the badge a plot
+        // that follows it shows still reads "not checked", never "checked".
+        const withdrawn = getAllTemplates().find(t => t.id === CHECKED_ID)!;
+        cleanup();
+        render(<ScheduleCheckBadge template={withdrawn} testId="followed-badge" />);
+        expect(screen.getByTestId('followed-badge')).toHaveAttribute('data-check-state', 'NotChecked');
         expect(screen.queryByText(SC.checkedByShramSafal)).toBeNull();
     });
 

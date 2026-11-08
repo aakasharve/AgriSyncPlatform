@@ -62,7 +62,7 @@ public sealed class ScheduleImportRealPostgresTests(ITestOutputHelper output) : 
         result.GetProperty("activityCount").GetInt32().Should().Be(3);
         var id = result.GetProperty("templateId").GetGuid();
 
-        var dto = RowOf(await LibraryAsync(Owner), id)!.Value;
+        var dto = RowOf(await ReviewLibraryAsync(), id)!.Value;
         dto.GetProperty("ownerType").GetString().Should().Be("INSTITUTION");
         dto.GetProperty("sourceLabel").GetString().Should().Be("Test University recommendation 2026");
         dto.GetProperty("check").GetProperty("state").GetString().Should().Be("NotChecked", "an import checks nothing");
@@ -138,7 +138,7 @@ public sealed class ScheduleImportRealPostgresTests(ITestOutputHelper output) : 
         ]));
 
         imported.Status.Should().Be(HttpStatusCode.Created, imported.Body);
-        var dto = RowOf(await LibraryAsync(Owner), Json(imported.Body).GetProperty("templateId").GetGuid())!.Value;
+        var dto = RowOf(await ReviewLibraryAsync(), Json(imported.Body).GetProperty("templateId").GetGuid())!.Value;
         var byName = dto.GetProperty("activities").EnumerateArray().ToDictionary(a => a.GetProperty("name").GetString()!);
         byName["Pruning"].GetProperty("afterActivityId").ValueKind.Should().Be(JsonValueKind.Null);
         byName["Paste"].GetProperty("afterActivityId").GetGuid().Should().Be(byName["Pruning"].GetProperty("id").GetGuid(),
@@ -284,7 +284,7 @@ public sealed class ScheduleImportRealPostgresTests(ITestOutputHelper output) : 
         (await CountAsync("SELECT count(*) FROM ssf.template_activities WHERE schedule_template_id = @t AND activity_name = 'Pruning' AND role IS NULL AND operation_key LIKE 'op\\_%'", ("t", id))).Should().Be(1);
 
         // ... listed for the checker to tick with the row.
-        var dto = RowOf(await LibraryAsync(Owner), id)!.Value;
+        var dto = RowOf(await ReviewLibraryAsync(), id)!.Value;
         var byName = dto.GetProperty("activities").EnumerateArray().ToDictionary(a => a.GetProperty("name").GetString()!);
         byName["बुरशीनाशक फवारणी"].GetProperty("role").GetString().Should().Be("fungicide");
         byName["बोरॉन फवारणी"].GetProperty("nutrientKey").GetString().Should().Be("boron");
@@ -303,7 +303,7 @@ public sealed class ScheduleImportRealPostgresTests(ITestOutputHelper output) : 
         await SeedReviewSeatsAsync();
         var thin = await SeedTemplateRowAsync("Grapes - thin row");
         var stored = await SeedStoredRowAsync();
-        var library = await LibraryAsync(Owner);
+        var library = await ReviewLibraryAsync();
 
         foreach (var activity in RowOf(library, stored.Id)!.Value.GetProperty("activities").EnumerateArray())
         {
@@ -335,7 +335,7 @@ public sealed class ScheduleImportRealPostgresTests(ITestOutputHelper output) : 
         imported.Status.Should().Be(HttpStatusCode.Created, imported.Body);
         var id = Json(imported.Body).GetProperty("templateId").GetGuid();
 
-        var library = await LibraryAsync(Owner);
+        var library = await ReviewLibraryAsync();
         var thinType = RowOf(library, thin)!.Value.GetProperty("cropType").GetString();
         var storedType = RowOf(library, id)!.Value.GetProperty("cropType").GetString();
         thinType.Should().Be("Grapes");
@@ -375,7 +375,8 @@ public sealed class ScheduleImportRealPostgresTests(ITestOutputHelper output) : 
         library.Should().NotBeEmpty();
         foreach (var template in library)
         {
-            template.GetProperty("check").ValueKind.Should().Be(JsonValueKind.Null, "a built-in sample was never checked");
+            // L8b-1F: every sample says so in words (NotChecked), no longer by an absent object.
+            template.GetProperty("check").GetProperty("state").GetString().Should().Be("NotChecked", "a built-in sample was never checked");
             template.GetProperty("ownerType").ValueKind.Should().Be(JsonValueKind.Null);
             template.GetProperty("hasStoredDays").ValueKind.Should().Be(JsonValueKind.Null);
         }

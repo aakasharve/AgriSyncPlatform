@@ -17,6 +17,11 @@ export interface AdoptSchedulePayload {
     referenceDate?: string;
     /** When the farmer chose (ISO, with offset) - an offline change is judged by when it was made (D-73). */
     decidedAtUtc: string;
+    /**
+     * spec: plr-d10 lane L8b-1F (R7) - true only on the ONE-TIME upload of a choice this phone already held: the server accepts it
+     * whether or not a checked schedule exists, and marks it not checked unless it is. Absent on every new choice (and on 1.0.17).
+     */
+    carryOver?: true;
 }
 
 export interface MigrateSchedulePayload {

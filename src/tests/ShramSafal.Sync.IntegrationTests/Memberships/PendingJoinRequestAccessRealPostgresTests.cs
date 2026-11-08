@@ -565,6 +565,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // template_activities; no farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched, no
         // p_user_select_* policy created. Down() refuses while a check exists, else drops only what Up() added.
         "20261108120000_AddScheduleCheckAndStoredDays",
+        // spec plr-d10 lane L8b-1F (founders D-82 / D-91) - Up() and Down() read in full: Up() adds two nullable columns and their CHECKs
+        // to ssf.schedule_subscriptions only; no farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched,
+        // no p_user_select_* policy created. Down() drops only what Up() added.
+        "20261108150000_AddScheduleSubscriptionOriginAndCheck",
     ];
 
     /// <summary>

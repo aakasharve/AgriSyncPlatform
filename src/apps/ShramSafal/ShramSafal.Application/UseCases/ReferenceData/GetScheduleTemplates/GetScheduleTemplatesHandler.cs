@@ -8,7 +8,20 @@ using ShramSafal.Domain.Planning;
 
 namespace ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
 
-public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository)
+/// <summary>Who a library listing is for (see <see cref="GetScheduleTemplatesHandler.Listing"/>).</summary>
+public enum ScheduleListingMode
+{
+    /// <summary>A farm caller: checked schedules, his own, and each crop's samples until that crop has a checked one.</summary>
+    Farm = 0,
+
+    /// <summary>A platform reviewer: every visible row with its state (the admin list). No built-in samples beside rows.</summary>
+    Reviewer = 1,
+
+    /// <summary>Adoption's lookup: every visible row and every sample, whether or not listed; the check rule decides.</summary>
+    Pool = 2,
+}
+
+public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository, ShramSafal.Application.Admin.Ports.IEntitlementResolver? entitlements = null)
 {
     private static readonly IReadOnlyDictionary<string, int> StageOrderHints =
         new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
@@ -33,16 +46,161 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         ct.ThrowIfCancellationRequested();
 
         var dbTemplates = await repository.GetScheduleTemplatesAsync(ct);
-        return Result.Success(await Services.ScheduleLibrary.ListingForAsync(repository, dbTemplates, callerUserId, ct));
+        return Result.Success(await Services.ScheduleLibrary.ListingForAsync(
+            repository, dbTemplates, callerUserId, ct, entitlements));
     }
 
     /// <summary>
-    /// spec: plr-d10 lane L8b-1 — a library from the rows ONE caller may see (never all rows: see
-    /// <see cref="Services.ScheduleLibrary.ListingForAsync"/>): the rows when there are any, else the built-in catalog.
+    /// spec: plr-d10 lane L8b-1F (R7, P10) - the PULL's library: <see cref="HandleAsync(Guid, CancellationToken)"/> plus the
+    /// schedules this person's plots ALREADY follow that the listing no longer offers for a new choice (a sample, once its crop has
+    /// a checked schedule; a withdrawn one). A plot that follows one keeps it, so its phone must still be able to read it; the phone's
+    /// library never offers such a schedule for a new choice (it applies the same per-crop rule). The list hash then also covers
+    /// the added ids, so a phone told the library changed gets the new list.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<ScheduleTemplateDto>>> HandleAsync(
+        Guid callerUserId, IReadOnlyCollection<Guid> followedTemplateIds, CancellationToken ct = default)
+    {
+        var listed = await HandleAsync(callerUserId, ct);
+        if (!listed.IsSuccess || followedTemplateIds.Count == 0)
+        {
+            return listed;
+        }
+
+        var have = (listed.Value ?? []).Select(t => t.Id).ToHashSet();
+        var missing = followedTemplateIds.Where(id => !have.Contains(id)).Distinct().OrderBy(id => id).ToList();
+        if (missing.Count == 0)
+        {
+            return listed;
+        }
+
+        var extras = await Services.ScheduleLibrary.FollowedAsync(repository, await repository.GetScheduleTemplatesAsync(ct), callerUserId, missing, ct);
+        if (extras.Count == 0)
+        {
+            return listed;
+        }
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            (listed.Value![0].VersionHash ?? string.Empty) + "|followed:" + string.Join(",", extras.Select(e => $"{e.Id:N}:{e.Check?.State}"))))).ToLowerInvariant();
+        IReadOnlyList<ScheduleTemplateDto> all = (listed.Value ?? [])
+            .Concat(extras)
+            .OrderBy(t => t.CropType, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(t => t with { VersionHash = hash })
+            .ToList();
+        return Result.Success(all);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1F (register F114; founder D-91 = 1, D-82 = 3) - a library from the rows ONE caller may see (never all
+    /// rows: see <see cref="Services.ScheduleLibrary.ListingForAsync"/>): <b>his visible rows PLUS the samples, by crop</b>.
+    /// <list type="bullet">
+    /// <item>His own rows (every row that is not Public: his Private ones, his team's, the farm's own) are always listed and never
+    /// hide a sample.</item>
+    /// <item>A <b>sample</b> is a built-in seed or a Public row that stores no days (the thin rows from before SCH-A). Its crop is
+    /// the <see cref="ScheduleTemplateDto.CropType"/> (<see cref="Services.ScheduleLibrary.CropGroupKey"/>, case-blind). A crop's
+    /// samples are listed, each with <c>Check.State = NotChecked</c>, ONLY while that crop has no Checked Outside row; once it
+    /// has one, that crop's samples drop and every other crop's stay.</item>
+    /// <item>A Public row that stores its days is Outside: a farm caller sees it only once it is Checked (or Withdrawn, so a plot that
+    /// follows it can say why; never offered for a new choice). One still waiting for its check, or sent back, is never listed to a
+    /// farm caller (D-82 note).</item>
+    /// </list>
+    /// <paramref name="checks"/> are the latest decisions of the rows that store their days (SCH-A's shape, kept). The mode says who
+    /// is asking: <see cref="ScheduleListingMode.Farm"/> (the default), a platform <see cref="ScheduleListingMode.Reviewer"/> (every
+    /// row with its state, for the admin list), or the adoption <see cref="ScheduleListingMode.Pool"/> (every row and every sample
+    /// he could ever be offered; the check rule then decides). Pure and static.
     /// </summary>
     public static IReadOnlyList<ScheduleTemplateDto> Listing(
-        IReadOnlyList<ScheduleTemplate> rows, IReadOnlyList<ScheduleCheck>? checks = null) =>
-        rows.Count == 0 ? ReferenceDataCatalog.ScheduleTemplates : MapFromDb(rows, checks ?? []);
+        IReadOnlyList<ScheduleTemplate> rows,
+        IReadOnlyList<ScheduleCheck>? checks = null,
+        ScheduleListingMode mode = ScheduleListingMode.Farm)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        var samples = SamplesOf(ReferenceDataCatalog.ScheduleTemplates);
+        if (rows.Count == 0)
+        {
+            // Nothing of his to list: the built-in samples, as before the lane (their hash stays the catalog's).
+            return samples;
+        }
+
+        var mapped = MapFromDb(rows, checks ?? []);
+        var rowById = rows.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
+        var all = mapped.Where(d => rowById.ContainsKey(d.Id)).ToList();
+
+        // Crops that already have a Checked Outside schedule: their samples are no longer offered for a new choice.
+        var checkedCrops = CheckedOutsideCrops(all, rowById);
+
+        bool Listed(ScheduleTemplateDto d, ScheduleTemplate? row, bool isSample)
+        {
+            if (mode == ScheduleListingMode.Pool)
+            {
+                return true;
+            }
+
+            if (row is { } r && !IsOutsideRow(r))
+            {
+                return true;
+            }
+
+            if (isSample)
+            {
+                return mode == ScheduleListingMode.Reviewer || !checkedCrops.Contains(Services.ScheduleLibrary.CropGroupKey(d.CropType));
+            }
+
+            var state = d.Check?.State;
+            return mode == ScheduleListingMode.Reviewer
+                || state == nameof(ScheduleCheckState.Checked)
+                || state == nameof(ScheduleCheckState.Withdrawn);
+        }
+
+        var listed = new List<ScheduleTemplateDto>();
+        foreach (var d in all)
+        {
+            var row = rowById[d.Id];
+            var isSample = IsOutsideRow(row) && !row.HasStoredDays;
+            if (Listed(d, row, isSample))
+            {
+                listed.Add(isSample ? WithCheck(d, ScheduleCheckState.NotChecked) : d);
+            }
+        }
+
+        if (mode != ScheduleListingMode.Reviewer)
+        {
+            foreach (var sample in samples)
+            {
+                if (!rowById.ContainsKey(sample.Id) && Listed(sample, null, isSample: true))
+                {
+                    listed.Add(sample);
+                }
+            }
+        }
+
+        var ordered = listed
+            .OrderBy(template => template.CropType, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var versionHash = ComputeDtoVersionHash(ordered);
+        return ordered.Select(template => template with { VersionHash = versionHash }).ToList();
+    }
+
+    /// <summary>
+    /// The ONE rule for "this crop has a Checked Outside schedule" (the listing's per-crop sample rule and adopt's bridge both read it):
+    /// the crop groups (<see cref="Services.ScheduleLibrary.CropGroupKey"/>) of the listed dtos whose row is Outside and whose state is Checked.
+    /// </summary>
+    internal static HashSet<string> CheckedOutsideCrops(
+        IEnumerable<ScheduleTemplateDto> dtos, IReadOnlyDictionary<Guid, ScheduleTemplate> rowById) =>
+        dtos
+            .Where(d => rowById.TryGetValue(d.Id, out var row) && IsOutsideRow(row) && d.Check?.State == nameof(ScheduleCheckState.Checked))
+            .Select(d => Services.ScheduleLibrary.CropGroupKey(d.CropType))
+            .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>A row the check applies to: Public (only a Public row can be checked, SCH-A).</summary>
+    internal static bool IsOutsideRow(ScheduleTemplate row) => row.TenantScope == TenantScope.Public;
+
+    private static ScheduleTemplateDto WithCheck(ScheduleTemplateDto dto, ScheduleCheckState state) =>
+        dto with { Check = new ScheduleCheckDto(state.ToString(), null, null, null) };
+
+    private static IReadOnlyList<ScheduleTemplateDto> SamplesOf(IReadOnlyList<ScheduleTemplateDto> builtIns) =>
+        builtIns.Select(b => WithCheck(b, ScheduleCheckState.NotChecked)).ToList();
 
     public static IReadOnlyList<CropTypeDto> BuildCropTypes(IReadOnlyList<ScheduleTemplateDto> templates)
     {
@@ -140,14 +298,14 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
                     SourceLabel: template.SourceLabel,
                     Check: check,
                     RowVersionTag: rowTag,
-                    HasStoredDays: false);
+                    HasStoredDays: false,
+                    Scope: template.TenantScope.ToString());
             })
             .OrderBy(template => template.CropType, StringComparer.OrdinalIgnoreCase)
             .ThenBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var versionHash = ComputeDtoVersionHash(mapped);
-        return mapped.Select(template => template with { VersionHash = versionHash }).ToList();
+        return mapped;
     }
 
     private static ScheduleTemplateDto MapStored(ScheduleTemplate template, ScheduleCheckDto check, string? ownerType, string rowTag)
@@ -190,7 +348,8 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             SourceLabel: template.SourceLabel,
             Check: check,
             RowVersionTag: rowTag,
-            HasStoredDays: true);
+            HasStoredDays: true,
+            Scope: template.TenantScope.ToString());
     }
 
     private static string WireFrequency(FrequencyMode mode) => mode switch
