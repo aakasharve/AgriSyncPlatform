@@ -40,8 +40,9 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
     /// spec: plr-d10 lane L8b-1 — a library from the rows ONE caller may see (never all rows: see
     /// <see cref="Services.ScheduleLibrary.ListingForAsync"/>): the rows when there are any, else the built-in catalog.
     /// </summary>
-    public static IReadOnlyList<ScheduleTemplateDto> Listing(IReadOnlyList<ScheduleTemplate> rows) =>
-        rows.Count == 0 ? ReferenceDataCatalog.ScheduleTemplates : MapFromDb(rows);
+    public static IReadOnlyList<ScheduleTemplateDto> Listing(
+        IReadOnlyList<ScheduleTemplate> rows, IReadOnlyList<ScheduleCheck>? checks = null) =>
+        rows.Count == 0 ? ReferenceDataCatalog.ScheduleTemplates : MapFromDb(rows, checks ?? []);
 
     public static IReadOnlyList<CropTypeDto> BuildCropTypes(IReadOnlyList<ScheduleTemplateDto> templates)
     {
@@ -73,17 +74,33 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             .ToList();
     }
 
-    private static IReadOnlyList<ScheduleTemplateDto> MapFromDb(IReadOnlyList<ScheduleTemplate> templates)
+    private static IReadOnlyList<ScheduleTemplateDto> MapFromDb(
+        IReadOnlyList<ScheduleTemplate> templates, IReadOnlyList<ScheduleCheck> checks)
     {
-        var stageDefinitionsByCrop = BuildStageDefinitionsByCrop(templates);
+        // spec: plr-d10 lane SCH-A (Task 1) - a row that STORES its days is listed exactly as stored (R3: no equal split,
+        // no repeat guessed from the name); the guesses below stay for the other rows only (P11). The equal-split stage
+        // list is worked out from the thin rows alone, so a stored row never changes what a thin row reads.
+        var thin = templates.Where(template => !template.HasStoredDays).ToList();
+        var stageDefinitionsByCrop = BuildStageDefinitionsByCrop(thin);
         var totalDaysByCrop = stageDefinitionsByCrop.ToDictionary(
             pair => pair.Key,
             pair => pair.Value.Count == 0 ? 60 : pair.Value.Max(stage => stage.EndDay) + 1,
             StringComparer.OrdinalIgnoreCase);
+        var checksByRow = checks.GroupBy(c => c.ScheduleTemplateId).ToDictionary(g => g.Key, g => g.ToList());
 
         var mapped = templates
             .Select(template =>
             {
+                var rowChecks = checksByRow.GetValueOrDefault(template.Id) ?? [];
+                var check = ToCheckDto(template, rowChecks);
+                var ownerType = template.OwnerType is { } owner ? ScheduleOwnerTypeWire.ToWire(owner) : null;
+                var rowTag = $"v{template.Version}";
+
+                if (template.HasStoredDays)
+                {
+                    return MapStored(template, check, ownerType, rowTag);
+                }
+
                 var cropType = DeriveCropType(template.Name);
                 var stageDefinitions = stageDefinitionsByCrop.TryGetValue(cropType, out var stages)
                     ? stages
@@ -118,7 +135,12 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
                     totalDays,
                     stageDefinitions,
                     activities,
-                    string.Empty);
+                    string.Empty,
+                    OwnerType: ownerType,
+                    SourceLabel: template.SourceLabel,
+                    Check: check,
+                    RowVersionTag: rowTag,
+                    HasStoredDays: false);
             })
             .OrderBy(template => template.CropType, StringComparer.OrdinalIgnoreCase)
             .ThenBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
@@ -126,6 +148,87 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
 
         var versionHash = ComputeDtoVersionHash(mapped);
         return mapped.Select(template => template with { VersionHash = versionHash }).ToList();
+    }
+
+    private static ScheduleTemplateDto MapStored(ScheduleTemplate template, ScheduleCheckDto check, string? ownerType, string rowTag)
+    {
+        var stages = template.Stages.Select(stage => new StageDefinitionDto(stage.Name, stage.StartDay, stage.EndDay)).ToList();
+        var activities = template.Activities
+            .OrderBy(activity => activity.OffsetDays)
+            .ThenBy(activity => activity.ActivityName, StringComparer.OrdinalIgnoreCase)
+            .Select(activity =>
+            {
+                var mode = activity.FrequencyMode;
+                return new TemplateActivityDto(
+                    activity.ActivityName,
+                    StoredCategory(activity),
+                    template.StageContaining(activity.OffsetDays)?.Name ?? template.Stage,
+                    activity.OffsetDays,
+                    activity.EndDay ?? activity.OffsetDays,
+                    WireFrequency(mode),
+                    mode == FrequencyMode.OneTime ? null : activity.IntervalDays,
+                    OperationKey: activity.OperationKey,
+                    Id: activity.Id,
+                    Part: activity.Part,
+                    Role: activity.Role,
+                    NutrientKey: activity.NutrientKey,
+                    AfterActivityId: activity.AfterActivityId,
+                    StoredFrequencyMode: activity.StoredFrequencyMode is { } stored ? stored.ToString() : null);
+            })
+            .ToList();
+
+        return new ScheduleTemplateDto(
+            template.Id,
+            template.Name,
+            // S006: the same crop-type name the thin rows use (never the raw key), so the phone files it under a crop a plot has.
+            Services.ScheduleLibrary.CropTypeNameFor(template.CropKey) ?? DeriveCropType(template.Name),
+            stages.Count == 0 ? 0 : stages.Max(stage => stage.EndDay) + 1,
+            stages,
+            activities,
+            string.Empty,
+            OwnerType: ownerType,
+            SourceLabel: template.SourceLabel,
+            Check: check,
+            RowVersionTag: rowTag,
+            HasStoredDays: true);
+    }
+
+    private static string WireFrequency(FrequencyMode mode) => mode switch
+    {
+        FrequencyMode.EveryNDays => "every_n_days",
+        FrequencyMode.PerWeek => "per_week",
+        _ => "one_time",
+    };
+
+    // The category is a LABEL (the phone groups by it); for a stored row it follows the stored part, never the name.
+    private static string StoredCategory(TemplateActivity activity) => activity.Part switch
+    {
+        "Spray" => "Spraying",
+        "Irrigation" => "Irrigation",
+        "Nutrition" => "Fertigation",
+        _ => activity.OperationKey switch
+        {
+            "op_pruning" or "op_thinning" => "Pruning",
+            "op_weed_man" => "Weeding",
+            "op_harvest" => "Harvest",
+            _ => DeriveCategory(activity.ActivityName),
+        },
+    };
+
+    /// <summary>A row's state for the library: its LATEST decision, else NotChecked. Only a row that stores its days can carry one.</summary>
+    private static ScheduleCheckDto ToCheckDto(ScheduleTemplate template, IReadOnlyList<ScheduleCheck> rowChecks)
+    {
+        var notChecked = new ScheduleCheckDto(nameof(ScheduleCheckState.NotChecked), null, null, null);
+        if (!template.HasStoredDays)
+        {
+            return notChecked;
+        }
+
+        var latest = ScheduleCheck.Latest(rowChecks);
+        return latest is null
+            ? notChecked
+            : new ScheduleCheckDto(
+                ScheduleCheck.StateOf(rowChecks).ToString(), latest.CheckerDisplayName, latest.CheckedAtUtc, latest.Note);
     }
 
     private static Dictionary<string, IReadOnlyList<StageDefinitionDto>> BuildStageDefinitionsByCrop(
@@ -284,6 +387,18 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         });
 
         var json = JsonSerializer.Serialize(payload);
+
+        // spec: plr-d10 lane SCH-A - a check (or a withdrawal) changes what the library says, so it changes the list hash;
+        // a library with no decision hashes exactly as before the lane.
+        var decided = templates
+            .Where(template => template.Check is { State: not "NotChecked" })
+            .Select(template => $"{template.Id:N}:{template.Check!.State}:{template.Check.CheckedAtUtc:O}")
+            .ToList();
+        if (decided.Count > 0)
+        {
+            json += "|" + string.Join(",", decided);
+        }
+
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));
         return Convert.ToHexString(hash).ToLowerInvariant();
     }

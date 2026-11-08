@@ -23,6 +23,7 @@ import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../sha
 import { OWNER_LABEL, frequencyMr, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
 import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
 import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
+import { ScheduleCheckBadge } from './ScheduleCheckBadge';
 
 interface ScheduleLibraryViewProps {
     crop?: CropProfile;
@@ -152,6 +153,8 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                                 <h3 className="m-0 text-[18px] font-black leading-snug text-stone-900" data-testid={`library-name-${t.id}`}>{scheduleNameMr(t.name)}</h3>
                                 {/* PROPOSED (Marathi) */}
                                 <p className="m-0 mt-0.5 text-[14px] font-bold text-stone-600">कोणी बनवलं: {madeBy(t)}</p>
+                                {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only */}
+                                <ScheduleCheckBadge template={t} testId={`library-check-${t.id}`} />
                             </div>
                             {/* PROPOSED (Marathi) */}
                             {adopted && <Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />वापरात आहे</Chip>}

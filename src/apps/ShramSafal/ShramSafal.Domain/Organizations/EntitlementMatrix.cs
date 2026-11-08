@@ -31,6 +31,22 @@ public static class EntitlementMatrix
             return (type == OrganizationType.Platform && role == OrganizationRole.Owner, false, false);
         }
 
+        // spec: plr-d10 lane SCH-A (Task 3) - the schedule check, gated BEFORE the blanket Platform branches. A check is a
+        // professional attestation by ShramSafal: Platform Owner and Employee read and write it, the Platform Analyst only
+        // reads it, and no other organisation type (FPO, FPC, ConsultingFirm, Lab) holds it at all. No export.
+        if (moduleKey == ModuleKey.ScheduleReview)
+        {
+            if (type != OrganizationType.Platform)
+                return (false, false, false);
+
+            return role switch
+            {
+                OrganizationRole.Owner or OrganizationRole.Employee => (true, false, true),
+                OrganizationRole.Analyst => (true, false, false),
+                _ => (false, false, false)
+            };
+        }
+
         if (type == OrganizationType.Platform && role == OrganizationRole.Owner)
             return (true, true, IsWriteModule(moduleKey));
 

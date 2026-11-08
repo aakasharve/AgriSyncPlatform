@@ -32,6 +32,17 @@ export type {
 // Schedule Ownership
 export type ScheduleOwnerType = 'EXPERT' | 'INSTITUTION' | 'USER' | 'SYSTEM_DEFAULT';
 
+// spec: plr-d10 lane SCH-A (founder D-74) - ShramSafal's check of a library schedule, as the server sends it. Only the
+// server's `Checked` makes a badge; every other state (including no word at all) reads "not checked".
+export type ScheduleCheckState = 'Checked' | 'NotChecked' | 'Returned' | 'Withdrawn';
+
+export interface ScheduleCheckInfo {
+    state: ScheduleCheckState;
+    checkerName?: string;
+    checkedAt?: string; // ISO
+    note?: string;
+}
+
 // Layer 2: Stage Template
 export type StageCode =
     | 'ESTABLISHMENT'
@@ -123,6 +134,10 @@ export interface CropScheduleTemplate {
     detailScore?: number;           // 0-100 (dummy/demo score for now)
     followersCount?: number;        // Dummy/demo followers for now
     publishedAt?: string;           // ISO date, used for "Newest" sort in library
+    // spec: plr-d10 lane SCH-A: where the schedule comes from as written (a university's recommendation, ...) and ShramSafal's
+    // check of it. Absent = not checked (the built-in samples, every row made before the lane).
+    sourceLabel?: string;
+    check?: ScheduleCheckInfo;
 }
 
 // Overrides allow per-plot customization — definitions moved to

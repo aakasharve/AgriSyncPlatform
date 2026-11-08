@@ -135,6 +135,11 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     /// </summary>
     public DbSet<DiarizationPolicy> DiarizationPolicies => Set<DiarizationPolicy>();
     public DbSet<ScheduleTemplate> ScheduleTemplates => Set<ScheduleTemplate>();
+
+    // spec: plr-d10 lane SCH-A (Task 1; founder D-74) - ShramSafal's check of a library schedule, one unchangeable row per
+    // decision (APPEND-ONLY by privilege, migration AddScheduleCheckAndStoredDays), and a row's stored stages.
+    public DbSet<ScheduleCheck> ScheduleChecks => Set<ScheduleCheck>();
+    public DbSet<ScheduleTemplateStage> ScheduleTemplateStages => Set<ScheduleTemplateStage>();
     public DbSet<TemplateActivity> TemplateActivities => Set<TemplateActivity>();
     public DbSet<PlannedActivity> PlannedActivities => Set<PlannedActivity>();
     public DbSet<CropScheduleTemplate> CropScheduleTemplates => Set<CropScheduleTemplate>();

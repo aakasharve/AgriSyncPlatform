@@ -62,6 +62,12 @@ public static class ModuleKey
     // IEntitlementResolver -> AdminScope, and this key is what the matrix gates.
     public const string AuditLedger = "audit.ledger";
 
+    // spec: plr-d10 lane SCH-A (Task 3; founder D-74, L8-R) - checking a library schedule day by day is a ShramSafal PLATFORM
+    // act. Gated BEFORE the blanket Platform branches (see EntitlementMatrix.Lookup): read + write for Platform Owner and
+    // Employee, read for Platform Analyst, nothing for any other organisation type. The farm role AppRole.Agronomist grants
+    // nothing here.
+    public const string ScheduleReview = "schedules.review";
+
     public static readonly IReadOnlySet<string> All = typeof(ModuleKey)
         .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
         .Where(f => f.IsLiteral && f.FieldType == typeof(string))

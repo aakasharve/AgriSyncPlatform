@@ -20,6 +20,7 @@ import type { CropScheduleTemplate } from '../scheduler.types';
 import { OWNER_LABEL, SC } from './scheduleCopy';
 import type { ScheduleModel } from './scheduleModel';
 import { scheduleNameMr } from './scheduleNames';
+import { ScheduleCheckBadge } from '../components/ScheduleCheckBadge';
 import { GLASS } from './scheduleUi';
 
 /** The saved author is shown only when it is a real name, not the catalog's internal English tag. */
@@ -57,6 +58,8 @@ export const ScheduleHeader: React.FC<{ cropName: string; plotName: string; temp
             <h2 className="m-0 text-[26px] font-black leading-tight tracking-tight" data-testid="sched-crop-plot">{cropName} · {plotName}</h2>
             <p className="m-0 mt-1 text-[16px] font-bold text-white/80" data-testid="sched-name">{scheduleNameMr(template.name)}</p>
             <OwnerBadge template={template} />
+            {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only */}
+            <ScheduleCheckBadge template={template} tone="dark" testId="sched-check" />
             <div className="mt-4 grid grid-cols-3 gap-2.5">
                 {tiles.map(([n, label, id]) => (
                     <div key={id} className="rounded-2xl bg-white/10 p-3 text-center backdrop-blur-sm">

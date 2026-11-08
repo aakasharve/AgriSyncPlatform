@@ -77,6 +77,7 @@ GET /shramsafal/reference/input-library
 GET /shramsafal/reference/schedule-templates
 GET /shramsafal/reference/schedule-templates/{id:guid}
 GET /shramsafal/reports/farm-week/{farmId:guid}
+GET /shramsafal/schedule-templates/checks/waiting
 GET /shramsafal/schedule-templates/{rootId}/lineage
 GET /shramsafal/security/tenant-dek
 GET /shramsafal/test-instances
@@ -185,6 +186,8 @@ POST /shramsafal/plots/{plotId:guid}/cycles/{cycleId:guid}/schedule/adopt
 POST /shramsafal/plots/{plotId:guid}/cycles/{cycleId:guid}/schedule/complete
 POST /shramsafal/plots/{plotId:guid}/cycles/{cycleId:guid}/schedule/migrate
 POST /shramsafal/question-events
+POST /shramsafal/schedule-templates/import
+POST /shramsafal/schedule-templates/{id:guid}/check
 POST /shramsafal/schedule-templates/{id}/clone
 POST /shramsafal/schedule-templates/{id}/edit
 POST /shramsafal/schedule-templates/{id}/publish

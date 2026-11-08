@@ -123,6 +123,34 @@ internal sealed class EntitlementResolver(
             .AnyAsync(ct);
 
     /// <inheritdoc />
+    /// <remarks>
+    /// spec: plr-d10 lane SCH-A (Task 3): the same seats <see cref="ResolveAsync"/> reads (active seat, active organisation),
+    /// asked directly and without an analytics event; the answer is the matrix's, never a second list of roles.
+    /// </remarks>
+    public async Task<bool> MayCheckSchedulesAsync(UserId userId, CancellationToken ct)
+    {
+        var roles = await PlatformRolesOfAsync(userId, ct);
+        return roles.Any(role => EntitlementMatrix.For(OrganizationType.Platform, role)
+            .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && e.CanWrite));
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> MayReadScheduleChecksAsync(UserId userId, CancellationToken ct)
+    {
+        var roles = await PlatformRolesOfAsync(userId, ct);
+        return roles.Any(role => EntitlementMatrix.For(OrganizationType.Platform, role)
+            .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && e.CanRead));
+    }
+
+    private Task<List<OrganizationRole>> PlatformRolesOfAsync(UserId userId, CancellationToken ct)
+        => (from m in db.OrganizationMemberships
+            join o in db.Organizations on m.OrganizationId equals o.Id
+            where m.UserId == userId && m.IsActive && o.IsActive && o.Type == OrganizationType.Platform
+            select m.Role)
+            .Distinct()
+            .ToListAsync(ct);
+
+    /// <inheritdoc />
     /// <remarks>lane RATE-1 fix round 1 (F7): the predicate of <see cref="IsPlatformOwnerAsync"/>, for many people in one query.</remarks>
     public async Task<IReadOnlySet<Guid>> PlatformOwnersAmongAsync(IReadOnlyCollection<UserId> userIds, CancellationToken ct)
     {

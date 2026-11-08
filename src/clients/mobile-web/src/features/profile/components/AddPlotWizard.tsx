@@ -402,14 +402,9 @@ const AddPlotWizard: React.FC<PlotWizardProps> = ({ crop, profile, onSave, onCan
                                                         <p className="text-sm font-bold text-slate-800 truncate">{template.name}</p>
                                                         <p className="text-[11px] text-slate-500 mt-0.5 truncate">Created by: {template.createdBy}</p>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <p className="text-xs font-black text-emerald-700">{template.adoptionScore || 0}/100</p>
-                                                        <p className="text-[10px] text-slate-500">Adoption</p>
-                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-3 mt-2 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
                                                     <span>{template.totalDurationDays || '-'} days</span>
-                                                    <span>{template.followersCount || 0} followers</span>
                                                     {isSelected && <span className="text-emerald-700 flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-emerald-200"><CheckCircle2 size={12}/> Selected</span>}
                                                 </div>
                                             </button>

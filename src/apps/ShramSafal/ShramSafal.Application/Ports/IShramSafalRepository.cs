@@ -269,6 +269,20 @@ public interface IShramSafalRepository
 
     Task AddScheduleTemplateAsync(ScheduleTemplate template, CancellationToken ct = default);
     Task<List<ScheduleTemplate>> GetScheduleTemplatesAsync(CancellationToken ct = default);
+
+    // ── spec: plr-d10 lane SCH-A (Task 1/4; founder D-74) - ShramSafal's check of a library schedule (ssf.schedule_checks).
+    // APPEND-ONLY by privilege: the app role holds SELECT and INSERT only, so there is no update or delete counterpart. ──
+
+    /// <summary>Stages one check (no SaveChanges: the caller's single save commits it with its audit row). The default
+    /// refuses: a repository that cannot keep a check must never answer as if it had (P5).</summary>
+    Task AddScheduleCheckAsync(ScheduleCheck check, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot keep a schedule check.");
+
+    /// <summary>Every check of these library rows (any order). The default is "no checks": a repository that keeps none
+    /// reads every row NotChecked, which is also what a built-in sample is.</summary>
+    Task<IReadOnlyList<ScheduleCheck>> GetScheduleChecksAsync(
+        IReadOnlyCollection<Guid> scheduleTemplateIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<ScheduleCheck>>([]);
     Task AddPlannedActivitiesAsync(IEnumerable<PlannedActivity> plannedActivities, CancellationToken ct = default);
     Task<PlannedActivity?> GetPlannedActivityByIdAsync(Guid id, CancellationToken ct = default);
     Task<List<PlannedActivity>> GetPlannedActivitiesByCropCycleIdAsync(Guid cropCycleId, CancellationToken ct = default);

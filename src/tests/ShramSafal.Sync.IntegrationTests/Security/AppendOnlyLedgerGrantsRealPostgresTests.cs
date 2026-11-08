@@ -91,6 +91,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         // dfes-input-truth-and-mix-check-2026-11-06 lane IT2 (founders D-92 / D-95) — his हो / नाही / फोटो answers about the
         // products of saved records, one unchangeable row each.
         "ssf.input_identity_assertions",
+        // spec plr-d10 lane SCH-A (founder D-74) - 20261108120000_AddScheduleCheckAndStoredDays: ShramSafal's checks of library schedules.
+        "ssf.schedule_checks",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -245,6 +247,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    effective-privilege guard (it is on AppendOnlyLedgers above). It adds no column to any existing table and touches no
         //    other ledger's grants. Safe to revert and re-apply mid-proof.
         "20261108090000_AddInputIdentityAssertions",
+        // ── Reviewed 2026-11-08 (spec: plr-d10 lane SCH-A, founder D-74); Down() read in full: it REFUSES while any
+        //    ssf.schedule_checks row exists (none here), then drops ssf.schedule_checks, ssf.schedule_template_stages and the
+        //    nullable columns Up() added - only what Up() added. Up() creates schedule_checks APPEND-ONLY BY PRIVILEGE with its
+        //    own effective-privilege guard (it is on AppendOnlyLedgers above) and touches no other ledger's grants. Safe to
+        //    revert and re-apply mid-proof.
+        "20261108120000_AddScheduleCheckAndStoredDays",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

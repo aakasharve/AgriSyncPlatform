@@ -560,6 +560,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // PoliciesCreatedAfterActiveOnly. Down() drops its two policies and the table. No farm_memberships or farm_join_requests
         // object, no ssf.farms policy, no seat touched. Re-Up recreates them.
         "20261108090000_AddInputIdentityAssertions",
+        // spec plr-d10 lane SCH-A (founder D-74) - Up() and Down() read in full: Up() adds two tables (schedule_checks,
+        // schedule_template_stages, neither under RLS nor farm-owned) and nullable columns on schedule_templates and
+        // template_activities; no farm_memberships or farm_join_requests object, no ssf.farms policy, no seat touched, no
+        // p_user_select_* policy created. Down() refuses while a check exists, else drops only what Up() added.
+        "20261108120000_AddScheduleCheckAndStoredDays",
     ];
 
     /// <summary>

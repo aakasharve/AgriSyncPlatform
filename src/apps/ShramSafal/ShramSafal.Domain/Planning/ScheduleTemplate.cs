@@ -1,13 +1,14 @@
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Events;
 
 namespace ShramSafal.Domain.Planning;
 
-public sealed class ScheduleTemplate : Entity<Guid>
+public sealed partial class ScheduleTemplate : Entity<Guid>
 {
     private readonly List<TemplateActivity> _activities = [];
-    private readonly List<StageDefinition> _stages = [];
+    private readonly List<ScheduleTemplateStage> _stages = [];
 
     private ScheduleTemplate() : base(Guid.Empty) { } // EF Core
 
@@ -34,11 +35,15 @@ public sealed class ScheduleTemplate : Entity<Guid>
         DerivedFromTemplateId = derivedFromTemplateId;
         if (stages is not null)
         {
-            _stages.AddRange(
-                stages
-                    .Where(s => !string.IsNullOrWhiteSpace(s.Name))
-                    .OrderBy(s => s.StartDay)
-                    .ThenBy(s => s.EndDay));
+            var ordered = stages
+                .Where(s => !string.IsNullOrWhiteSpace(s.Name))
+                .OrderBy(s => s.StartDay)
+                .ThenBy(s => s.EndDay)
+                .ToList();
+            for (var i = 0; i < ordered.Count; i++)
+            {
+                _stages.Add(new ScheduleTemplateStage(Guid.NewGuid(), id, i, ordered[i].Name, ordered[i].StartDay, ordered[i].EndDay));
+            }
         }
     }
 
@@ -46,7 +51,13 @@ public sealed class ScheduleTemplate : Entity<Guid>
     public string Stage { get; private set; } = string.Empty;
     public DateTime CreatedAtUtc { get; private set; }
     public IReadOnlyCollection<TemplateActivity> Activities => _activities.AsReadOnly();
-    public IReadOnlyCollection<StageDefinition> Stages => _stages.AsReadOnly();
+
+    /// <summary>The stages in order (<c>ssf.schedule_template_stages</c>; empty on a row made before the lane).</summary>
+    public IReadOnlyCollection<StageDefinition> Stages =>
+        _stages.OrderBy(s => s.OrderIndex).Select(s => s.ToDefinition()).ToList();
+
+    /// <summary>The stored stage rows (for the persistence map).</summary>
+    public IReadOnlyCollection<ScheduleTemplateStage> StageRows => _stages.AsReadOnly();
 
     // New fields — CEI Phase 1
     public UserId? CreatedByUserId { get; private set; }
@@ -55,6 +66,27 @@ public sealed class ScheduleTemplate : Entity<Guid>
     public Guid? PreviousVersionId { get; private set; }
     public Guid? DerivedFromTemplateId { get; private set; }
     public DateTime? PublishedAtUtc { get; private set; }
+
+    // spec: plr-d10 lane SCH-A (Task 1) — who the schedule comes from (the phone's own owner types), the source as written,
+    // and the crop it is for. All null on a row made before the lane.
+    public ScheduleOwnerType? OwnerType { get; private set; }
+    public string? SourceLabel { get; private set; }
+    public string? CropKey { get; private set; }
+
+    /// <summary>
+    /// R3 / P4: true only when the row STORES its days — at least one stage, every stage with days, and at least one
+    /// activity, every activity with part, start, end and repeat. Only such a row can be checked; the library invents the
+    /// days of any other row and a row it invents never carries ShramSafal's name.
+    /// </summary>
+    public bool HasStoredDays =>
+        _stages.Count > 0
+        && _activities.Count > 0
+        && _stages.All(s => s.StartDay <= s.EndDay)
+        && _activities.All(a => a.HasStoredDays);
+
+    /// <summary>The stage that holds <paramref name="day"/> (the first by order), or null.</summary>
+    public StageDefinition? StageContaining(int day) =>
+        Stages.FirstOrDefault(s => s.StartDay <= day && day <= s.EndDay);
 
     // Single Create factory. Old callers that passed `stages` positionally must now use
     // named argument `stages:` — but all existing call sites pass only the first 4 params
@@ -114,20 +146,14 @@ public sealed class ScheduleTemplate : Entity<Guid>
             version: Version + 1,
             previousVersionId: Id,
             derivedFromTemplateId: null, // edit lineage does not chain root
-            _stages.ToList());
+            Stages);
+        copy.OwnerType = OwnerType;
+        copy.SourceLabel = SourceLabel;
+        copy.CropKey = CropKey;
 
-        // Copy activities by value onto the new template
-        foreach (var a in _activities)
-        {
-            copy._activities.Add(
-                new TemplateActivity(
-                    Guid.NewGuid(),
-                    newId,
-                    a.ActivityName,
-                    a.OffsetDays,
-                    a.FrequencyMode,
-                    a.IntervalDays));
-        }
+        // Copy activities by value onto the new template (SCH-A: the stored days, role and order travel with them; the
+        // order link is remapped to the NEW activity ids — R34).
+        copy.CopyActivitiesFrom(this);
 
         copy.Raise(new ScheduleTemplateEditedEvent(
             Guid.NewGuid(),
@@ -158,19 +184,14 @@ public sealed class ScheduleTemplate : Entity<Guid>
             version: 1,
             previousVersionId: null,
             derivedFromTemplateId: DerivedFromTemplateId ?? Id, // always points to root
-            _stages.ToList());
+            Stages);
+        // A farmer's copy is his own schedule; it keeps where it came from and what crop it is for. It is a NEW row, so it
+        // starts NotChecked whatever the source was.
+        copy.OwnerType = ScheduleOwnerType.User;
+        copy.SourceLabel = SourceLabel;
+        copy.CropKey = CropKey;
 
-        foreach (var a in _activities)
-        {
-            copy._activities.Add(
-                new TemplateActivity(
-                    Guid.NewGuid(),
-                    newId,
-                    a.ActivityName,
-                    a.OffsetDays,
-                    a.FrequencyMode,
-                    a.IntervalDays));
-        }
+        copy.CopyActivitiesFrom(this);
 
         copy.Raise(new ScheduleTemplateClonedEvent(
             Guid.NewGuid(),
@@ -181,6 +202,22 @@ public sealed class ScheduleTemplate : Entity<Guid>
             reason));
 
         return copy;
+    }
+
+    private void CopyActivitiesFrom(ScheduleTemplate source)
+    {
+        var newIdByOldId = new Dictionary<Guid, Guid>();
+        foreach (var a in source._activities)
+        {
+            var copyActivity = a.CopyTo(Guid.NewGuid(), Id);
+            newIdByOldId[a.Id] = copyActivity.Id;
+            _activities.Add(copyActivity);
+        }
+
+        foreach (var a in _activities)
+        {
+            a.RemapAfter(newIdByOldId);
+        }
     }
 
     // Publish — mutates this template.
@@ -230,17 +267,12 @@ public sealed class ScheduleTemplate : Entity<Guid>
             throw new ArgumentException("Stage name is required.", nameof(stageDefinition));
         }
 
-        _stages.Add(stageDefinition);
-        _stages.Sort((a, b) =>
+        _stages.Add(new ScheduleTemplateStage(Guid.NewGuid(), Id, _stages.Count, stageDefinition.Name, stageDefinition.StartDay, stageDefinition.EndDay));
+        var ordered = _stages.OrderBy(s => s.StartDay).ThenBy(s => s.EndDay).ToList();
+        for (var i = 0; i < ordered.Count; i++)
         {
-            var byStart = a.StartDay.CompareTo(b.StartDay);
-            if (byStart != 0)
-            {
-                return byStart;
-            }
-
-            return a.EndDay.CompareTo(b.EndDay);
-        });
+            ordered[i].OrderIndex = i;
+        }
     }
 
     public void MarkGenerated(Guid cropCycleId, DateTime occurredAtUtc)

@@ -24,6 +24,7 @@ const FarmsListPage           = lazy(() => import('@/pages/farms/FarmsListPage')
 const SilentChurnPage         = lazy(() => import('@/pages/farms/SilentChurnPage'));
 const SufferingPage           = lazy(() => import('@/pages/farms/SufferingPage'));
 const ScheduleTemplatesPage   = lazy(() => import('@/pages/schedules/ScheduleTemplatesPage'));
+const ScheduleCheckPage       = lazy(() => import('@/pages/schedules/ScheduleCheckPage'));
 const UsersPage               = lazy(() => import('@/pages/users/UsersPage'));
 const SettingsAdminsPage      = lazy(() => import('@/pages/settings/SettingsAdminsPage'));
 
@@ -160,6 +161,10 @@ export default function App() {
                         Relying on RequireScope (any resolved scope) for now; specific module
                         gates land when schedule / admin-management surfaces add their keys. */}
                     <Route path="/schedules/templates" element={<ScheduleTemplatesPage />} />
+                    {/* spec: plr-d10 lane SCH-A - the schedule check is a ShramSafal platform act: gated on its own module key. */}
+                    <Route path="/schedules/check" element={
+                      <EntitlementGuard module={ModuleKeys.ScheduleReview}><ScheduleCheckPage /></EntitlementGuard>
+                    } />
                     <Route path="/settings/admins" element={<SettingsAdminsPage />} />
 
                     <Route path="*" element={<Navigate to="/" replace />} />

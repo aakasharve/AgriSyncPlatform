@@ -254,6 +254,9 @@ public static class DependencyInjection
         services.AddScoped<CloneScheduleTemplateHandler>();
         services.AddScoped<EditScheduleTemplateHandler>();
         services.AddScoped<PublishScheduleTemplateHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.ImportScheduleTemplateHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.RecordScheduleCheckHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.GetSchedulesWaitingForCheckHandler>();
         services.AddScoped<GetScheduleLineageHandler>();
         services.AddScoped<GetAttentionBoardHandler>();
         services.AddScoped<GetCropTypesHandler>();
