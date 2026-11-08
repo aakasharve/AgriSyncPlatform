@@ -109,3 +109,47 @@ export function upsertPlot(crop: CropProfile, plotDto: PlotDto, cycle: CropCycle
 
     crop.plots.push(plot);
 }
+
+/** What a plot's schedule subscription says (a row of `scheduleSubscriptions`, read for the plots a pull touches). */
+export interface PlotScheduleChoice { templateId: string; referenceDate: string | null }
+
+const dayOf = (value: string | undefined): string | null =>
+    (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null);
+
+/**
+ * spec: plr-d10 lane L8b-2 (founder D-32) - write each plot's CHOSEN schedule onto the plot (its template, and its day 0:
+ * null = the crop season's own start), keeping the plot's stage changes only when the schedule is the same one. When every
+ * plot of a crop follows the same schedule, the crop's own schedule field says so too, for the readers that look only at the
+ * crop. A crop whose plots follow different schedules keeps its field as it is. Mutates, like the other helpers here.
+ */
+export function applyScheduleChoices(crops: CropProfile[], choices: ReadonlyMap<string, PlotScheduleChoice>): void {
+    if (choices.size === 0) return;
+    for (const crop of crops) {
+        for (const plot of crop.plots) {
+            const choice = choices.get(plot.id);
+            if (!choice) continue;
+            const base = plot.schedule ?? defaultPlotSchedule(plot.id, plot.startDate ?? '', choice.templateId);
+            const same = base.templateId === choice.templateId;
+            plot.schedule = {
+                ...base,
+                templateId: choice.templateId,
+                referenceDate: choice.referenceDate ?? dayOf(plot.startDate) ?? base.referenceDate,
+                stageOverrides: same ? base.stageOverrides : [],
+                expectationOverrides: same ? base.expectationOverrides : [],
+            };
+        }
+        const followed = new Set(crop.plots.map(p => choices.get(p.id)?.templateId ?? null));
+        if (crop.plots.length > 0 && followed.size === 1 && !followed.has(null)) {
+            crop.activeScheduleId = [...followed][0];
+        }
+        // A plot whose choice differs from the crop's own schedule is marked as chosen for that plot alone (the mark
+        // `resolvePlotSchedule` reads), so a reader that looks only at the crop list still shows it; one that agrees is not.
+        for (const plot of crop.plots) {
+            const choice = choices.get(plot.id);
+            if (!choice || !plot.schedule) continue;
+            const mark = choice.templateId !== crop.activeScheduleId;
+            const schedule = plot.schedule as unknown as Record<string, unknown>;
+            if (mark) schedule.plotChoice = true; else delete schedule.plotChoice;
+        }
+    }
+}

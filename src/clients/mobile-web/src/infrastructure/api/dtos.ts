@@ -11,6 +11,7 @@ import type { CostCategoryId, CostCategoryRef } from '../../domain/finance/CostC
 import type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEngagementDto } from './labourDtos';
 import type { FarmAccessScopeDto } from './accessScopeDtos';
 import type { PullAudienceFields, RecordAudienceFields } from './recordAudienceDtos';
+import type { ScheduleSubscriptionDto } from './scheduleSubscriptionDtos';
 export type { FarmAccessScopeDto } from './accessScopeDtos';
 
 export type VerificationStatus =
@@ -667,20 +668,9 @@ export interface CropScheduleTemplateDto {
     }>;
 }
 
-export interface ScheduleSubscriptionDto {
-    id: string;
-    farmId: string;
-    plotId: string;
-    cropCycleId: string;
-    cropKey: string;
-    scheduleTemplateId: string;
-    scheduleVersionTag: string;
-    adoptedAtUtc: string;
-    state: 'Active' | 'Migrated' | 'Abandoned' | 'Completed';
-    migratedFromSubscriptionId?: string;
-    migrationReason?: string;
-    stateChangedAtUtc?: string;
-}
+// The schedule-subscription wire shape lives in ./scheduleSubscriptionDtos (lane L8b-2 moved it out to keep this file
+// under the 800-line limit); re-exported so every existing import keeps working.
+export type { ScheduleSubscriptionDto } from './scheduleSubscriptionDtos';
 
 export interface AdoptScheduleRequest {
     farmId: string;

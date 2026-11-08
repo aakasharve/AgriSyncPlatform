@@ -94,6 +94,27 @@ export const getTemplateForCrop = (cropName: string): CropScheduleTemplate => {
 
 export { getTemplateById as getScheduleById };
 
+/**
+ * spec: plr-d10 lane L8b-2 fix round 1 (B002) - the plot's own mark: its schedule was chosen for THIS plot (the editor, or a
+ * plot-level choice the server sent that differs from the crop's own schedule). An extra field the stored schedule carries.
+ */
+export const isPlotChoice = (stored: unknown): boolean =>
+    !!stored && typeof stored === 'object' && (stored as Record<string, unknown>).plotChoice === true;
+
+/**
+ * spec: plr-d10 lane L8b-2 fix round 1 (B002) - THE ONE RULE for which schedule a plot follows, for every phone reader (the
+ * शेड्यूल page, तुलना, the DFES window, the day state): the schedule chosen for this plot first, then the crop's own schedule,
+ * then the plot's stored one, then the crop's default. No reader may prefer the crop field over a plot's own choice.
+ */
+export const scheduleTemplateForPlot = (
+    crop: { name: string; activeScheduleId?: string | null },
+    plot: { schedule?: { templateId?: string } | null },
+): CropScheduleTemplate | undefined =>
+    (isPlotChoice(plot.schedule) ? getTemplateById(plot.schedule?.templateId || '') : undefined)
+    || getTemplateById(crop.activeScheduleId || '')
+    || getTemplateById(plot.schedule?.templateId || '')
+    || getTemplateForCrop(crop.name);
+
 // ============================================
 // 3. PLAN DERIVATION (CORE ENGINE)
 // ============================================

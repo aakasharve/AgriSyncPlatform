@@ -30,6 +30,7 @@ import { DAY_ZERO_LABEL, OWNER_LABEL, SC } from '../../schedulePage/scheduleCopy
 import { scheduleNameMr } from '../../schedulePage/scheduleNames';
 import { daysBetween, toDayKey } from '../../schedulePage/scheduleDates';
 import { resolvePlotSchedule, type EditorChoice } from '../../schedulePage/resolveSchedule';
+import type { ScheduleChoice } from '../../schedulePage/scheduleSubscriptions';
 import { shiftDaysUpTo } from '../../schedulePage/scheduleModel';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { cropNameIn } from '../../../../shared/names/namesIn';
@@ -41,6 +42,8 @@ interface ScheduleMakerProps {
     initialPlotId?: string;
     todayKey: string;
     onSave: (choice: EditorChoice) => void;
+    /** spec: plr-d10 lane L8b-2 - what each plot's schedule subscription says (the server's choice, or this phone's own). */
+    choices?: ReadonlyMap<string, ScheduleChoice>;
 }
 
 /** The crop's schedules as the library lists them, plus the one the plot follows now if it is not among them. */
@@ -51,30 +54,30 @@ function schedulesFor(crop: CropProfile, currentId: string | null): CropSchedule
 }
 
 /** What the plot follows now: its schedule and day 0 (or the crop's first schedule and the plot's start). */
-function startingPoint(crop: CropProfile | undefined, plotId: string, todayKey: string, options: CropScheduleTemplate[]) {
+function startingPoint(crop: CropProfile | undefined, plotId: string, todayKey: string, options: CropScheduleTemplate[], choice?: ScheduleChoice) {
     const plot = crop?.plots.find(p => p.id === plotId);
-    const resolved = crop && plot ? resolvePlotSchedule(crop, plot, todayKey) : null;
+    const resolved = crop && plot ? resolvePlotSchedule(crop, plot, todayKey, choice) : null;
     return {
         templateId: resolved?.template.id ?? options[0]?.id ?? '',
         startDate: resolved?.instance.referenceDate ?? toDayKey(plot?.startDate) ?? todayKey,
     };
 }
 
-const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, initialPlotId, todayKey, onSave }) => {
+const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, initialPlotId, todayKey, onSave, choices }) => {
     const language = useOptionalLanguage()?.language ?? 'mr'; // spec I18 — the crop in his language, never "Grapes" in Marathi mode
     const [cropId, setCropId] = useState(() => (crops.some(c => c.id === initialCropId) ? initialCropId! : crops[0]?.id ?? ''));
     const crop = crops.find(c => c.id === cropId);
     const [plotId, setPlotId] = useState(() => (crop?.plots.some(p => p.id === initialPlotId) ? initialPlotId! : crop?.plots[0]?.id ?? ''));
     const plot = crop?.plots.find(p => p.id === plotId);
 
-    const current = useMemo(() => (crop && plot ? resolvePlotSchedule(crop, plot, todayKey)?.template.id ?? null : null), [crop, plot, todayKey]);
+    const current = useMemo(() => (crop && plot ? resolvePlotSchedule(crop, plot, todayKey, choices?.get(plot.id))?.template.id ?? null : null), [crop, plot, todayKey, choices]);
     const options = useMemo(() => (crop ? schedulesFor(crop, current) : []), [crop, current]);
-    const [templateId, setTemplateId] = useState(() => startingPoint(crop, plotId, todayKey, options).templateId);
-    const [startDate, setStartDate] = useState(() => startingPoint(crop, plotId, todayKey, options).startDate);
+    const [templateId, setTemplateId] = useState(() => startingPoint(crop, plotId, todayKey, options, choices?.get(plotId)).templateId);
+    const [startDate, setStartDate] = useState(() => startingPoint(crop, plotId, todayKey, options, choices?.get(plotId)).startDate);
 
     // Another plot (or crop) picked: start from what THAT plot follows now.
     useEffect(() => {
-        const s = startingPoint(crop, plotId, todayKey, options);
+        const s = startingPoint(crop, plotId, todayKey, options, choices?.get(plotId));
         setTemplateId(s.templateId);
         setStartDate(s.startDate);
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -89,7 +92,8 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
     const dayKey = toDayKey(startDate);
     // The same day number the शेड्यूल page will then show: from day 0, less this plot's recorded shifts (V2-06).
     const todayDay = dayKey ? daysBetween(dayKey, todayKey) - shiftDaysUpTo(plot?.scheduleShifts, todayKey) : null;
-    const forAllPlots = !!crop && crop.plots.length > 1 && !!templateId && templateId !== crop.activeScheduleId;
+    // B013: the editor's pick is for THIS plot only; the line is shown only when the pick would change this plot.
+    const onlyThisPlot = !!crop && crop.plots.length > 1 && !!templateId && templateId !== current;
     const canSave = !!crop && !!plot && !!chosen && !!dayKey;
 
     return (
@@ -121,7 +125,7 @@ const ScheduleMaker: React.FC<ScheduleMakerProps> = ({ crops, initialCropId, ini
                             );
                         })}
                     </div>
-                    {forAllPlots && <p className="m-0 mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[14.5px] font-bold text-amber-900 ring-1 ring-amber-200" data-testid="editor-all-plots">{SC.edAllPlots(cropNameIn(crop!.name, 'mr', crop!.masterId), crop!.plots.length)}</p>}
+                    {onlyThisPlot && <p className="m-0 mt-2 rounded-xl bg-amber-50 px-3 py-2 text-[14.5px] font-bold text-amber-900 ring-1 ring-amber-200" data-testid="editor-this-plot-only">{SC.edThisPlotOnly}</p>}
                 </GlassCard>
             )}
 

@@ -279,7 +279,7 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         expect((screen.getByTestId('editor-date') as HTMLInputElement).value).toBe(REF);
         expect(text('editor-today-day')).toBe('म्हणजे आज दिवस 9');
         expect(text('editor-save')).toBe('जतन करा');
-        expect(screen.queryByTestId('editor-all-plots')).toBeNull(); // one plot only
+        expect(screen.queryByTestId('editor-this-plot-only')).toBeNull(); // one plot only
         noEnglish();
     });
 
@@ -292,7 +292,7 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         fireEvent.click(screen.getByTestId('editor-save'));
 
         const saved = p.onUpdateCrops.mock.calls[0][0] as CropProfile[];
-        expect(saved[0].activeScheduleId).toBe(SPRAY_TEMPLATE_ID);
+        expect(saved[0].activeScheduleId).toBe(TEMPLATE_ID); // spec: lane L8b-2 (founder C2) - the editor's choice is that plot's, not the crop's
         expect(saved[0].plots[0].schedule).toMatchObject({ templateId: SPRAY_TEMPLATE_ID, referenceDate: k(1) });
         expect(text('page-title')).toBe('शेड्यूल');
         expect(text('sched-name')).toBe('द्राक्ष — फवारणी शेड्यूल');
@@ -303,14 +303,17 @@ describe('the schedule editor (शेड्यूल बदला) — Marathi, 
         ]);
     });
 
-    it('a crop with two plots: picking another schedule says it applies to all of them', () => {
+    it('a crop with two plots: picking another schedule says it applies to this plot only (founder C2); the library is the crop-wide door', () => {
         mount([crop([plot(), plot({ id: 'plot-2', name: 'B' })])]);
         fireEvent.click(screen.getByTestId('open-editor'));
-        expect(screen.queryByTestId('editor-all-plots')).toBeNull();
+        expect(screen.queryByTestId('editor-this-plot-only')).toBeNull();
         fireEvent.click(screen.getByTestId('editor-plot-plot-2'));
         expect(text('editor-plot-name')).toBe('द्राक्ष · B');
         fireEvent.click(screen.getByTestId(`editor-schedule-${SPRAY_TEMPLATE_ID}`));
-        expect(text('editor-all-plots')).toBe('हे शेड्यूल द्राक्ष च्या सगळ्या 2 प्लॉटसाठी लागू होईल');
+        expect(text('editor-this-plot-only')).toBe('हे शेड्यूल फक्त या प्लॉटसाठी लागू होईल. सगळ्या प्लॉटसाठी लायब्ररीतून निवडा.');
+        // B013: the line is shown only when the pick would change THIS plot: picking what it already follows hides it.
+        fireEvent.click(screen.getByTestId(`editor-schedule-${TEMPLATE_ID}`));
+        expect(screen.queryByTestId('editor-this-plot-only')).toBeNull();
     });
 });
 

@@ -1,6 +1,6 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "lastUpdated": "2026-11-08",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },

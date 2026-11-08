@@ -28,4 +28,7 @@ public sealed record MigrateScheduleCommand(
     // spec: plr-d10 lane L8b-1 — the plot's day 0 (null = the crop season's start; an old phone sends none, P11).
     DateOnly? ReferenceDate = null,
     // spec: plr-d10 lane L8b-1 — when the phone says the change was made (sync only; MU §11.2 late window). Null online.
-    DateTime? DecidedAtUtc = null);
+    DateTime? DecidedAtUtc = null,
+    // spec: plr-d10 lane L8b-2 fix round 1 (B006) - the subscription the caller believed was the plot-season's Active one. When given
+    // and the Active one is another, the switch is refused (ScheduleChangedElsewhere) and nothing is written. Null = as before (P11).
+    Guid? FromSubscriptionId = null);

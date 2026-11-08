@@ -111,14 +111,15 @@ function legacyRow(id: string): Record<string, unknown> {
 const DB_NAME = 'AgriLogDB_v24_upgrade_test';
 
 describe('§P0.4 — Dexie v24: version constant', () => {
-    it('DATABASE_VERSION is 26', () => {
+    it('DATABASE_VERSION is 27', () => {
         // Exact, not `>= 24`. 23 belongs to `feat/dfes-companion`; a silent
         // regression to it is the whole defect this renumber exists to remove.
         // 24 → 25 on Labour V2 R1 Task 3.5c: v25 adds the `attendanceMarks`
         // store (the attendance pull carriage). The v24 strip below is
         // unchanged and still asserted on the way THROUGH to 25 and then 26.
         // 25 → 26 on lane IT1c: v26 adds the `inputLibrary` store (the stored product library copy).
-        expect(DATABASE_VERSION).toBe(26);
+        // 26 → 27 on lane L8b-2: v27 adds the `scheduleSubscriptions` store (each plot's chosen schedule).
+        expect(DATABASE_VERSION).toBe(27);
     });
 });
 
@@ -386,7 +387,7 @@ describe('§P0.4 — the renumber: a device already at 23 still gets stripped', 
 
         // 25 since Labour V2 R1 Task 3.5c — the real chain now ends at v25
         // (attendanceMarks store), then v26 (lane IT1c, `inputLibrary` store) on top; everything else this test proves is unchanged.
-        expect(verno).toBe(26);
+        expect(verno).toBe(27); // v27 (lane L8b-2, `scheduleSubscriptions` store) on top of v26
         // THE POINT OF THE RENUMBER. Had this branch also declared 23, Dexie
         // would have compared 23 to 23, run nothing, and left every one of these
         // rows carrying the farmer's raw speech and worker names for ever.
@@ -418,7 +419,7 @@ describe('§P0.4 — the renumber: a device already at 23 still gets stripped', 
 
         // 25 since Labour V2 R1 Task 3.5c — the real chain now ends at v25
         // (attendanceMarks store), then v26 (lane IT1c, `inputLibrary` store) on top; everything else this test proves is unchanged.
-        expect(verno).toBe(26);
+        expect(verno).toBe(27); // v27 (lane L8b-2, `scheduleSubscriptions` store) on top of v26
         expect(names).toContain('pendingInterpretations');
         // The ROWS, not just the store. A recreated-but-empty store would satisfy
         // a names-only assertion and would still have lost the farmer's captures.
@@ -442,7 +443,7 @@ describe('§P0.4 — the renumber: a device already at 23 still gets stripped', 
 
         // 25 since Labour V2 R1 Task 3.5c — the real chain now ends at v25
         // (attendanceMarks store), then v26 (lane IT1c, `inputLibrary` store) on top; everything else this test proves is unchanged.
-        expect(verno).toBe(26);
+        expect(verno).toBe(27); // v27 (lane L8b-2, `scheduleSubscriptions` store) on top of v26
         expect(rows).toBe(0);
         // And the strip still ran on the way through.
         expect(containsTranscriptText(after)).toBe(false);

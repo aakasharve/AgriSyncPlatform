@@ -105,7 +105,12 @@ public sealed record SyncPullResponseDto(
     // products of saved records, kept since this phone's cursor, for the records he may see: the newest answer of each item
     // (the speaker's and the check separately). Their own delta - an answer never moves its record's clock. Additive and last
     // (P11): 1.0.17 parses the pull with no schema and never reads it.
-    IReadOnlyList<InputIdentityAssertionDto>? InputIdentityAssertions = null);
+    IReadOnlyList<InputIdentityAssertionDto>? InputIdentityAssertions = null,
+    // spec: plr-d10 lane L8b-2 (founder D-32, register F09) - each plot's chosen schedule, changed since this phone's cursor
+    // (every state: Active, Migrated, Abandoned, Completed, so a phone sees a switch), for the farms and plots this person may
+    // read the farm overview of (the rule planned work follows). Additive and last (P11): 1.0.17 parses the pull with no
+    // schema and never reads it; a phone that does not know the key simply keeps its own choice.
+    IReadOnlyList<ScheduleSubscriptionDto>? ScheduleSubscriptions = null);
 
 /// <summary>
 /// lane PRV — one record taken back from a phone: its kind (<c>DailyLog</c> / <c>CostEntry</c>) and id. Content-free.

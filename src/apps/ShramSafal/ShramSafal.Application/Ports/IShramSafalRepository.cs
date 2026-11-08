@@ -497,6 +497,26 @@ public interface IShramSafalRepository
 
     Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default);
 
+    /// <summary>
+    /// spec: plr-d10 lane L8b-2 - the pull: subscriptions of these farms adopted, or whose state changed, after
+    /// <paramref name="sinceUtc"/> (every state). Default for test doubles: none.
+    /// </summary>
+    Task<List<ScheduleSubscription>> GetScheduleSubscriptionsChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult(new List<ScheduleSubscription>());
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-2 (F96) - these crop seasons of these farms, WHETHER OR NOT they changed since any cursor: the
+    /// pull needs the farm's visible seasons to keep a planned step of an unchanged older season. Default for test doubles:
+    /// every season of the farms (read from the beginning), narrowed to the ids.
+    /// </summary>
+    async Task<List<CropCycle>> GetCropCyclesOfFarmsByIdsAsync(
+        IEnumerable<Guid> farmIds, IReadOnlyCollection<Guid> cropCycleIds, CancellationToken ct = default)
+    {
+        var all = await GetCropCyclesChangedSinceAsync(farmIds, DateTime.UnixEpoch, ct);
+        return all.Where(c => cropCycleIds.Contains(c.Id)).ToList();
+    }
+
     Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default);
 
     /// <summary>

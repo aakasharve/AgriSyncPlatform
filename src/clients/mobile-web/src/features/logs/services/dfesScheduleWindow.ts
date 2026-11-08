@@ -24,8 +24,7 @@ import type { CropProfile, DailyLog } from '../../../types';
 import {
     calculateDayNumber,
     derivePlannedItemsForDay,
-    getScheduleById,
-    getTemplateForCrop,
+    scheduleTemplateForPlot,
 } from '../../scheduler/planning/ClientPlanEngine';
 import { getExecutionCountByCategory, type OperationCategory } from '../../../shared/utils/dayState';
 
@@ -104,10 +103,7 @@ export function computeScheduleGap(
     if (!plot.schedule) return null;
 
     // Same template-resolution chain computeDayState/getOverdueStageSignal use (shared/utils/dayState.ts).
-    const template =
-        getScheduleById(crop.activeScheduleId || '')
-        || getScheduleById(plot.schedule.templateId || '')
-        || getTemplateForCrop(crop.name);
+    const template = scheduleTemplateForPlot(crop, plot);
     if (!template) return null;
 
     const referenceDate = plot.schedule.referenceDate || plot.startDate || todayLocalDate;

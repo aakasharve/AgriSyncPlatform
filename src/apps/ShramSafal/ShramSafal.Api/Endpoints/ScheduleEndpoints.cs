@@ -117,7 +117,8 @@ public static class ScheduleEndpoints
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash,
-                ReferenceDate: request.ReferenceDate);
+                ReferenceDate: request.ReferenceDate,
+                FromSubscriptionId: request.FromSubscriptionId);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -254,7 +255,9 @@ public sealed record MigrateScheduleRequest(
     Guid? NewSubscriptionId = null,
     Guid? MigrationEventId = null,
     // spec: plr-d10 lane L8b-1 — the plot's day 0 (optional; none keeps the plot's current day 0).
-    DateOnly? ReferenceDate = null);
+    DateOnly? ReferenceDate = null,
+    // spec: plr-d10 lane L8b-2 fix round 1 (B006) — the subscription the caller believed was Active (optional).
+    Guid? FromSubscriptionId = null);
 
 public sealed record AbandonScheduleRequest(
     Guid FarmId,

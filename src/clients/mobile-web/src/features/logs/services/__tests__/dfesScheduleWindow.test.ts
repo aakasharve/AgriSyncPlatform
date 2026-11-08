@@ -91,7 +91,7 @@ async function computeWithTemplate(
         const actual = await vi.importActual<typeof import('../../../scheduler/planning/ClientPlanEngine')>(
             '../../../scheduler/planning/ClientPlanEngine',
         );
-        return { ...actual, getScheduleById: () => undefined, getTemplateForCrop: () => template };
+        return { ...actual, getScheduleById: () => undefined, getTemplateForCrop: () => template, scheduleTemplateForPlot: () => template };
     });
     const { computeScheduleGap } = await import('../dfesScheduleWindow');
     return computeScheduleGap(crops, history, plotId, TODAY);

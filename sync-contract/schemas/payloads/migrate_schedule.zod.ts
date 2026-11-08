@@ -30,6 +30,10 @@ export const MigrateSchedulePayload = z.object({
     clientCommandId: z.string().optional(),
     newSubscriptionId: ZGuid.optional(),
     migrationEventId: ZGuid.optional(),
+    // spec: plr-d10 lane L8b-2 fix round 1 (B006) - the subscription the phone believed was this plot's Active one. When given
+    // and the plot-season's Active subscription is another, the server refuses with ShramSafal.ScheduleChangedElsewhere and
+    // writes nothing (two phones switching offline: the second never silently overwrites). Optional and additive (P11).
+    fromSubscriptionId: ZGuid.optional(),
     // spec: plr-d10 lane L8b-1 — the plot's day 0 set in "शेड्यूल बदला" (YYYY-MM-DD). Optional and additive: 1.0.17
     // never sends it, and the server then counts from the crop season's start (P11).
     referenceDate: ZScheduleDay.optional(),

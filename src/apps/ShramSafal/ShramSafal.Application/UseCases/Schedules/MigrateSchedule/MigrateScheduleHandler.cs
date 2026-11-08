@@ -117,6 +117,13 @@ public sealed class MigrateScheduleHandler(
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleSubscriptionNotFound);
         }
 
+        // spec: plr-d10 lane L8b-2 fix round 1 (B006) - the caller named the choice he is switching FROM. If the plot-season's Active
+        // one is another, someone changed it first (another phone, offline): refuse, write nothing, never overwrite it silently.
+        if (command.FromSubscriptionId is { } from && from != prev.Id)
+        {
+            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleChangedElsewhere);
+        }
+
         if (prev.State != ScheduleSubscriptionState.Active)
         {
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleNotActive);

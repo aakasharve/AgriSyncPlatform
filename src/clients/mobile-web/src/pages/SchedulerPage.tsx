@@ -37,6 +37,8 @@ import { SC } from '../features/scheduler/schedulePage/scheduleCopy';
 import { buildScheduleModel, dueTodayCount } from '../features/scheduler/schedulePage/scheduleModel';
 import { adoptForCrop, applyEditorChoice, resolvePlotSchedule, type EditorChoice } from '../features/scheduler/schedulePage/resolveSchedule';
 import { usePlotClips } from '../features/scheduler/schedulePage/usePlotClips';
+import { usePlotScheduleChoices } from '../features/scheduler/schedulePage/usePlotScheduleChoices';
+import { saveScheduleChoice, type ScheduleChoiceTarget } from '../features/scheduler/schedulePage/saveScheduleChoice';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 import { cropNameIn } from '../shared/names/namesIn';
 
@@ -70,6 +72,9 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const [tab, setTab] = useState<ScheduleTab>('today');
     const [openDayKey, setOpenDayKey] = useState<string | null>(null);
     const [moneyOpen, setMoneyOpen] = useState(false);
+    const [choiceNote, setChoiceNote] = useState<string | null>(null);
+    // spec: plr-d10 lane L8b-2 (founder D-32) - the schedule each plot follows on the SERVER (or this phone's own, not yet answered).
+    const choices = usePlotScheduleChoices();
     const todayKey = getDateKey();
 
     const pick = (id: string) => {
@@ -101,7 +106,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     useEffect(() => {
         if (crop && crop.plots.length > 0 && !plot) setPlotId(crop.plots[0].id);
     }, [crop, plot]);
-    const resolved = useMemo(() => (crop && plot ? resolvePlotSchedule(crop, plot, todayKey) : null), [crop, plot, todayKey]);
+    const resolved = useMemo(() => (crop && plot ? resolvePlotSchedule(crop, plot, todayKey, plot ? choices.get(plot.id) : undefined) : null), [crop, plot, todayKey, choices]);
     const model = useMemo(() => (resolved && plot
         ? buildScheduleModel({ template: resolved.template, instance: resolved.instance, plotId: plot.id, logs, todayKey, shifts: plot.scheduleShifts })
         : null), [resolved, plot, logs, todayKey]);
@@ -128,12 +133,26 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         const ok = typeof window !== 'undefined' ? window.confirm(SC.adoptConfirm(cropNameIn(crop.name, 'mr', crop.masterId))) : true;
         if (!ok) return;
         saveCrops(adoptForCrop(crops, crop.id, templateId, todayKey));
+        // The library's adopt = every plot of the crop (founder C2); saved on the server, nothing on the screen moves (D-32).
+        sendChoice(crop.plots.map(p => ({ plotId: p.id, templateId })));
+    };
+
+    // spec: plr-d10 lane L8b-2 - the choice is queued for the server and kept here at once. A plot the server cannot be told
+    // about yet (no crop season there) keeps it on this phone, and the page says so in one line.
+    const sendChoice = (targets: ScheduleChoiceTarget[]) => {
+        setChoiceNote(null);
+        void saveScheduleChoice(targets).then(
+            result => setChoiceNote(result.notSent.length > 0 ? SC.choiceNotSent : null),
+            () => setChoiceNote(SC.choiceNotSent),
+        );
     };
 
     // The editor's choice really takes effect: the schedule is adopted for the crop, the plot's day 0 is set,
     // and the page comes back on that crop and plot.
     const handleEditorSave = (choice: EditorChoice) => {
         saveCrops(applyEditorChoice(crops, choice, todayKey));
+        // The editor's save = that plot only (founder C2), with its day 0.
+        sendChoice([{ plotId: choice.plotId, templateId: choice.templateId, referenceDate: choice.startDate }]);
         setCropId(choice.cropId);
         setPlotId(choice.plotId);
         setView('HOME');
@@ -167,14 +186,15 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         return shell(SC.library, () => setView('HOME'), (
             <>
                 {cropChips}
-                <ScheduleLibraryView crop={crop} allCrops={crops} adoptedScheduleId={crop?.activeScheduleId || null} onAdopt={handleAdopt} />
+                {choiceNote && <p className="m-0 px-1 text-[14px] font-bold text-stone-600" data-testid="sched-choice-note">{choiceNote}</p>}
+                <ScheduleLibraryView crop={crop} allCrops={crops} adoptedScheduleId={(plot && choices.get(plot.id)?.templateId) || crop?.activeScheduleId || null} onAdopt={handleAdopt} />
             </>
         ));
     }
 
     if (view === 'EDITOR') {
         return shell(SC.editor, () => setView('HOME'), (
-            <ScheduleMaker crops={crops} initialCropId={cropId} initialPlotId={plotId} todayKey={todayKey} onSave={handleEditorSave} />
+            <ScheduleMaker crops={crops} initialCropId={cropId} initialPlotId={plotId} todayKey={todayKey} onSave={handleEditorSave} choices={choices} />
         ));
     }
 
@@ -196,6 +216,7 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
 
     return shell(SC.title, onBack, (
         <>
+            {choiceNote && <p className="m-0 px-1 text-[14px] font-bold text-stone-600" data-testid="sched-choice-note">{choiceNote}</p>}
             {cropChips}
             {crop && crop.plots.length > 1 && (
                 <div className="space-y-1" data-testid="plot-pick">

@@ -122,6 +122,12 @@ export async function reconcileAccessScopes(
         }
     }
 
+    // lane L8b-2 fix round 1 (B004) - the schedule choices follow the planned work: gone with a farm he no longer reads, and
+    // with the farm's overview (the same rule the server sends them under).
+    for (const sub of await db.scheduleSubscriptions.toArray()) {
+        if (goneSet.has(sub.farmId) || scopeOf(sub.farmId)?.seeFarmOverview === false) await db.scheduleSubscriptions.delete(sub.id);
+    }
+
     // ── Money: where the farm is gone or its money is not his ───────────────────────────
     const moneyWithheld = (farmId: string) => goneSet.has(farmId) || scopeOf(farmId)?.seeMoney === false;
     const removedEntryIds: string[] = [];

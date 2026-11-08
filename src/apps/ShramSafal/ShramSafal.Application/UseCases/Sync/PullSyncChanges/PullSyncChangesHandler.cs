@@ -323,14 +323,46 @@ public sealed class PullSyncChangesHandler(
             .Where(c => window.ScopeOf((Guid)c.FarmId) is { SeeFarmOverview: true })
             .Select(c => c.Id)
             .ToHashSet();
+        // spec: plr-d10 lane L8b-2 (F96) - a step is kept when its crop season is one this person may SEE on that farm (its
+        // farm's overview, and its plot when his seat covers chosen plots) - not only when the season itself changed in this
+        // pull. A move or a removal on an unchanged older season used to be dropped here and never reached the next pull.
         var plannedActivities = new List<Domain.Planning.PlannedActivity>();
         foreach (var (ids, since) in window.Groups(s => s.SeeFarmOverview))
         {
-            plannedActivities.AddRange((await repository.GetPlannedActivitiesChangedSinceAsync(ids, since, ct))
-                .Where(a => overviewCycleIds.Contains(a.CropCycleId)));
+            plannedActivities.AddRange(await repository.GetPlannedActivitiesChangedSinceAsync(ids, since, ct));
         }
 
         plannedActivities = plannedActivities.DistinctBy(a => a.Id).ToList();
+        var unseenCycleIds = plannedActivities
+            .Select(a => a.CropCycleId)
+            .Where(id => !overviewCycleIds.Contains(id))
+            .Distinct()
+            .ToList();
+        if (unseenCycleIds.Count > 0)
+        {
+            var overviewFarmIds = window.Scopes.Values.Where(s => s.SeeFarmOverview).Select(s => s.FarmId).OrderBy(id => id).ToList();
+            foreach (var cycle in await repository.GetCropCyclesOfFarmsByIdsAsync(overviewFarmIds, unseenCycleIds, ct))
+            {
+                if (window.ScopeOf((Guid)cycle.FarmId) is { SeeFarmOverview: true } scope && scope.CoversPlot(cycle.PlotId))
+                {
+                    overviewCycleIds.Add(cycle.Id);
+                }
+            }
+        }
+
+        plannedActivities = plannedActivities.Where(a => overviewCycleIds.Contains(a.CropCycleId)).ToList();
+
+        // spec: plr-d10 lane L8b-2 (founder D-32) - each plot's chosen schedule, changed since the cursor, through the same
+        // window and the same rule as planned work: only farms whose overview this seat reads, a chosen-plots seat only his
+        // plots, every state (a phone sees a switch). Phase-1 data like the farm's plots: a failed read fails the pull and the
+        // phone retries, never told a plot has no schedule.
+        var scheduleSubscriptions = (await window.ReadAsync(
+                s => s.SeeFarmOverview,
+                (ids, since) => repository.GetScheduleSubscriptionsChangedSinceAsync(ids, since, ct),
+                s => s.FarmId.Value))
+            .Where(s => window.ScopeOf(s.FarmId.Value)!.CoversPlot(s.PlotId))
+            .DistinctBy(s => s.Id)
+            .ToList();
         // §P0.2 — the sync pull no longer carries the audit ledger at all.
         //
         // Not a trim: every audit row this path could ever have returned was a
@@ -439,6 +471,9 @@ public sealed class PullSyncChangesHandler(
 
         // lane IT2 - and past the newest answer sent (an answer moves no record's clock, so nothing else would carry the cursor).
         nextCursorUtc = PullInputIdentityAnswers.AdvanceCursor(nextCursorUtc, inputIdentityAssertions);
+
+        // lane L8b-2 - and past the newest subscription change sent (a choice moves no plot's or season's clock).
+        nextCursorUtc = PullScheduleSubscriptions.AdvanceCursor(nextCursorUtc, scheduleSubscriptions);
 
         // Sub-plan 03 Task 10 — collect partial-failure components.
         // When this list is non-empty, the response carries
@@ -788,7 +823,9 @@ public sealed class PullSyncChangesHandler(
             BillVersions: true,
             // lane IT2 - his हो / नाही / फोटो answers kept since his cursor, for the records he may see (additive and last, P11:
             // an older phone parses the pull with no schema and never reads it).
-            InputIdentityAssertions: inputIdentityAssertions.Select(InputIdentityAssertionDto.From).ToList());
+            InputIdentityAssertions: inputIdentityAssertions.Select(InputIdentityAssertionDto.From).ToList(),
+            // lane L8b-2 (founder D-32) - each plot's chosen schedule, all states (additive and last, P11).
+            ScheduleSubscriptions: scheduleSubscriptions.Select(s => s.ToDto()).ToList());
 
         return Result.Success(response);
     }

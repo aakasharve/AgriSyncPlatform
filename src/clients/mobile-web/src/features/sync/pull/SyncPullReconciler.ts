@@ -21,6 +21,8 @@ import type { SyncPullResponse } from '../../../infrastructure/api/AgriSyncClien
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { readPendingLogIds, readWithdrawalHolds } from './internal/pendingMutations';
 import { reconcileProfileAndCrops } from './reconcilers/profileAndCropsReconciler';
+import { reconcileScheduleSubscriptions } from './reconcilers/scheduleSubscriptionsReconciler';
+import { uploadHeldScheduleChoices } from '../../scheduler/schedulePage/uploadHeldScheduleChoices';
 import { reconcileLogs } from './reconcilers/logsReconciler';
 import { reconcileAttachments } from './reconcilers/attachmentsReconciler';
 import { reconcileReferenceData } from './reconcilers/referenceDataReconciler';
@@ -53,9 +55,16 @@ export interface ReconcileSyncPullOptions {
 }
 
 export async function reconcileSyncPull(payload: SyncPullResponse, options: ReconcileSyncPullOptions = {}): Promise<void> {
-    const { plotLookup, receivedAtUtc } = await reconcileProfileAndCrops(payload);
-
     const db = getDatabase();
+
+    // spec: plr-d10 lane L8b-2 (founder D-32) - the schedule each plot follows, BEFORE the crops are merged: the server's
+    // choice wins on download, and the merge below must know which plots hold one so it never puts the crop-type default
+    // over a choice. First, once: a choice this phone already holds goes up before the download can touch it (P10, P11).
+    // B003: the server's rows are stored FIRST, so the upload never sends a choice for a plot the server already holds.
+    await reconcileScheduleSubscriptions(db, payload);
+    await uploadHeldScheduleChoices(db, payload);
+
+    const { plotLookup, receivedAtUtc } = await reconcileProfileAndCrops(payload);
 
     // P0.5 — FAIL CLOSED ON AN UNREADABLE MUTATION QUEUE.
     //
@@ -97,6 +106,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         db.jobCards, db.testInstances, db.testRecommendations, db.complianceSignals,
         // lane MU-3 fix 1 (item 14) — a gone farm's plots leave the crop list; other people's names leave the profile.
         db.crops, db.farmerProfile,
+        // lane L8b-2 fix round 1 (B004) - the purge reaches the schedule choices too.
+        db.scheduleSubscriptions,
     ], async () => {
         if (pendingLogIds) {
             importedLogs = await reconcileLogs(
