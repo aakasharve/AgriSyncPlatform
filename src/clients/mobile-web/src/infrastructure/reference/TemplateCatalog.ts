@@ -1,5 +1,7 @@
 import {
     type CropScheduleTemplate,
+    type ScheduleCheckInfo,
+    type ScheduleOwnerType,
     type FrequencyMode,
     type OneTimeExpectation,
     type PeriodicExpectation,
@@ -34,6 +36,10 @@ type ReferenceScheduleTemplate = {
     totalDays: number;
     stages: ReferenceStageDefinition[];
     activities: ReferenceTemplateActivity[];
+    // spec: plr-d10 lane SCH-A (additive, optional - the server adds them at the END of each template)
+    ownerType?: ScheduleOwnerType;
+    sourceLabel?: string;
+    check?: ScheduleCheckInfo;
 };
 
 const STAGE_NOTE_FALLBACKS: Record<StageCode | 'CUSTOM', string> = {
@@ -357,8 +363,12 @@ function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropSchedule
         stages: stageList,
         periodicExpectations: periodic,
         oneTimeExpectations: oneTime,
-        createdBy: 'ShramSafal Reference Data',
-        ownerType: 'SYSTEM_DEFAULT',
+        // spec: plr-d10 lane SCH-A - the server's owner type, not a hard-coded SYSTEM_DEFAULT (a row it does not send one for,
+        // and the built-in catalog, stay SYSTEM_DEFAULT); a source written down is shown as the maker's name.
+        createdBy: referenceTemplate.sourceLabel ?? 'ShramSafal Reference Data',
+        ownerType: referenceTemplate.ownerType ?? 'SYSTEM_DEFAULT',
+        ...(referenceTemplate.sourceLabel ? { sourceLabel: referenceTemplate.sourceLabel } : {}),
+        ...(referenceTemplate.check ? { check: referenceTemplate.check } : {}),
         totalDurationDays: Math.max(1, referenceTemplate.totalDays),
         description: `Server-managed template for ${toDisplayName(cropCode)}.`,
         adoptionScore: 0,
@@ -438,7 +448,44 @@ function parseReferenceTemplate(input: unknown): ReferenceScheduleTemplate | nul
         totalDays: Math.max(1, toNumber(source.totalDays, 120)),
         stages,
         activities,
+        ...parseOwnerAndCheck(source),
     };
+}
+
+const OWNER_TYPES: ReadonlySet<string> = new Set(['EXPERT', 'INSTITUTION', 'USER', 'SYSTEM_DEFAULT']);
+const CHECK_STATES: ReadonlySet<string> = new Set(['Checked', 'NotChecked', 'Returned', 'Withdrawn']);
+
+/**
+ * spec: plr-d10 lane SCH-A - the optional fields the server appended to each template: who it comes from, the source as
+ * written, and ShramSafal's check. Anything unreadable is left out (never guessed): no check = not checked.
+ */
+function parseOwnerAndCheck(source: Record<string, unknown>): Pick<ReferenceScheduleTemplate, 'ownerType' | 'sourceLabel' | 'check'> {
+    const out: Pick<ReferenceScheduleTemplate, 'ownerType' | 'sourceLabel' | 'check'> = {};
+    const owner = toStringValue(source.ownerType).trim().toUpperCase();
+    if (OWNER_TYPES.has(owner)) {
+        out.ownerType = owner as ScheduleOwnerType;
+    }
+    const label = toStringValue(source.sourceLabel).trim();
+    if (label) {
+        out.sourceLabel = label;
+    }
+    const raw = source.check;
+    if (raw && typeof raw === 'object') {
+        const value = raw as Record<string, unknown>;
+        const state = toStringValue(value.state).trim();
+        if (CHECK_STATES.has(state)) {
+            const checkerName = toStringValue(value.checkerDisplayName).trim();
+            const checkedAt = toStringValue(value.checkedAtUtc).trim();
+            const note = toStringValue(value.note).trim();
+            out.check = {
+                state: state as ScheduleCheckInfo['state'],
+                ...(checkerName ? { checkerName } : {}),
+                ...(checkedAt ? { checkedAt } : {}),
+                ...(note ? { note } : {}),
+            };
+        }
+    }
+    return out;
 }
 
 const FALLBACK_TEMPLATE_PREFIX = 'tpl_fallback_';

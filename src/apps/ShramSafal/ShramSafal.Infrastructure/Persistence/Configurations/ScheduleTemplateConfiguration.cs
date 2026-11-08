@@ -67,7 +67,32 @@ internal sealed class ScheduleTemplateConfiguration : IEntityTypeConfiguration<S
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.Navigation(x => x.Activities).UsePropertyAccessMode(PropertyAccessMode.Field);
+
+        // spec: plr-d10 lane SCH-A (Task 1) - the stages are STORED (ssf.schedule_template_stages); `Stages` is only the
+        // ordered projection of the stored rows, and HasStoredDays is derived.
+        builder.HasMany(x => x.StageRows)
+            .WithOne()
+            .HasForeignKey(x => x.ScheduleTemplateId)
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(x => x.StageRows).HasField("_stages").UsePropertyAccessMode(PropertyAccessMode.Field);
         builder.Ignore(x => x.Stages);
+        builder.Ignore(x => x.HasStoredDays);
+
+        builder.Property(x => x.OwnerType)
+            .HasColumnName("owner_type")
+            .HasMaxLength(16)
+            .HasConversion(
+                v => v.HasValue ? v.Value.ToString() : null,
+                v => v == null ? (ScheduleOwnerType?)null : Enum.Parse<ScheduleOwnerType>(v));
+
+        builder.Property(x => x.SourceLabel)
+            .HasColumnName("source_label")
+            .HasMaxLength(ScheduleTemplate.MaxSourceLabelLength);
+
+        builder.Property(x => x.CropKey)
+            .HasColumnName("crop_key")
+            .HasMaxLength(ScheduleTemplate.MaxCropKeyLength);
+
         builder.Ignore(x => x.DomainEvents);
     }
 }

@@ -64,6 +64,9 @@ export const ModuleKeys = {
   // §P0.2 — cross-farm audit ledger (NULL-farm ssf.audit_events rows).
   // Platform+Owner only; see EntitlementMatrix.Lookup for the matrix row.
   AuditLedger: 'audit.ledger',
+
+  // spec: plr-d10 lane SCH-A - ShramSafal's schedule check (a platform act). See EntitlementMatrix.Lookup.
+  ScheduleReview: 'schedules.review',
 } as const;
 
 export type ModuleKey = (typeof ModuleKeys)[keyof typeof ModuleKeys];

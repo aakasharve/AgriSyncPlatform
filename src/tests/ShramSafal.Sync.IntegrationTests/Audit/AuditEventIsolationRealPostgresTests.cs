@@ -1368,6 +1368,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    existing table. Never touches ssf.audit_events, its policies or its grants (an answer writes an ordinary audit row
         //    through the app role's existing INSERT). Safe mid-proof.
         "20261108090000_AddInputIdentityAssertions",
+        // ── Reviewed 2026-11-08 (spec: plr-d10 lane SCH-A, founder D-74); Down() read in full: it REFUSES while any
+        //    ssf.schedule_checks row exists (none here), then drops ssf.schedule_checks, ssf.schedule_template_stages and the
+        //    nullable columns Up() added to ssf.template_activities and ssf.schedule_templates - only what Up() added. Never
+        //    touches ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261108120000_AddScheduleCheckAndStoredDays",
     ];
 
     /// <summary>

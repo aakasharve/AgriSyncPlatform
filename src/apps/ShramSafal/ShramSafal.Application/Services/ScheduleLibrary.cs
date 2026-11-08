@@ -62,7 +62,13 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     {
         ArgumentNullException.ThrowIfNull(rows);
         var visible = await new ScheduleViewer(repository, callerUserId, rows).VisibleAsync(rows, ct);
-        return GetScheduleTemplatesHandler.Listing(visible);
+
+        // spec: plr-d10 lane SCH-A (Task 1) - the check rides on THIS filtered list only (never on the unfiltered rows): the
+        // latest decision of each visible row that stores its days. A row that stores none can have no check (R3).
+        IReadOnlyList<ScheduleCheck> checks = visible.Count == 0
+            ? []
+            : await repository.GetScheduleChecksAsync(visible.Where(r => r.HasStoredDays).Select(r => r.Id).ToList(), ct);
+        return GetScheduleTemplatesHandler.Listing(visible, checks);
     }
 
     /// <summary>
@@ -98,6 +104,33 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     /// several forms of one base crop), its English name taken, then the phone's canonical crop code.
     /// </summary>
     public static string CropCode(string? name)
+    {
+        return CropCodeCore(name);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-A fix round 1 (S006) - the crop-type NAME a stored row lists under, the same name the thin rows
+    /// and <see cref="GetScheduleTemplatesHandler.BuildCropTypes"/> use: the built-in catalog's crop of that code ("Grapes"),
+    /// else the crop master's English name. Null when the key is no known crop (import refuses it).
+    /// </summary>
+    public static string? CropTypeNameFor(string? cropKey)
+    {
+        if (string.IsNullOrWhiteSpace(cropKey))
+        {
+            return null;
+        }
+
+        var code = CropCode(cropKey);
+        if (string.Equals(code, UnknownCrop, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var builtIn = ReferenceDataCatalog.CropTypes.FirstOrDefault(c => string.Equals(CropCode(c.Name), code, StringComparison.Ordinal));
+        return builtIn?.Name ?? CropMasterNames.EnglishNameOf(cropKey);
+    }
+
+    private static string CropCodeCore(string? name)
     {
         var english = CropMasterNames.EnglishNameOf(name) ?? name ?? string.Empty;
         return CanonicalCropCode(english);

@@ -5126,6 +5126,63 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("planned_activities", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleCheck", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<Guid[]>("CheckedActivityIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("checked_activity_ids");
+
+                    b.Property<DateTime>("CheckedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_at_utc");
+
+                    b.Property<string>("CheckerDisplayName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("checker_display_name");
+
+                    b.Property<Guid>("CheckerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("checker_user_id");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("decision");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("ScheduleTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_template_id");
+
+                    b.Property<int>("TemplateVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("template_version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduleTemplateId", "CheckedAtUtc")
+                        .HasDatabaseName("ix_schedule_checks_template_checked");
+
+                    b.ToTable("schedule_checks", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_checks_decision", "decision IN ('Approved', 'Returned', 'Withdrawn')");
+
+                            t.HasCheckConstraint("ck_schedule_checks_note_when_not_approved", "decision = 'Approved' OR (note IS NOT NULL AND length(btrim(note)) > 0)");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplate", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5139,6 +5196,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by_user_id");
 
+                    b.Property<string>("CropKey")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)")
+                        .HasColumnName("crop_key");
+
                     b.Property<Guid?>("DerivedFromTemplateId")
                         .HasColumnType("uuid")
                         .HasColumnName("derived_from_template_id");
@@ -5149,6 +5211,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("name");
 
+                    b.Property<string>("OwnerType")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("owner_type");
+
                     b.Property<Guid?>("PreviousVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("previous_version_id");
@@ -5156,6 +5223,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("PublishedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("published_at_utc");
+
+                    b.Property<string>("SourceLabel")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("source_label");
 
                     b.Property<string>("Stage")
                         .IsRequired()
@@ -5180,6 +5252,45 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("schedule_templates", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplateStage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("EndDay")
+                        .HasColumnType("integer")
+                        .HasColumnName("end_day");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("name");
+
+                    b.Property<short>("OrderIndex")
+                        .HasColumnType("smallint")
+                        .HasColumnName("order_index");
+
+                    b.Property<Guid>("ScheduleTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_template_id");
+
+                    b.Property<int>("StartDay")
+                        .HasColumnType("integer")
+                        .HasColumnName("start_day");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduleTemplateId")
+                        .HasDatabaseName("ix_schedule_template_stages_template");
+
+                    b.ToTable("schedule_template_stages", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_schedule_template_stages_days", "start_day <= end_day");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.TemplateActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5191,13 +5302,50 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("activity_name");
 
+                    b.Property<Guid?>("AfterActivityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("after_activity_id");
+
+                    b.Property<int?>("EndDay")
+                        .HasColumnType("integer")
+                        .HasColumnName("end_day");
+
+                    b.Property<string>("NutrientKey")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)")
+                        .HasColumnName("nutrient_key");
+
                     b.Property<int>("OffsetDays")
                         .HasColumnType("integer")
                         .HasColumnName("offset_days");
 
+                    b.Property<string>("OperationKey")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("operation_key");
+
+                    b.Property<string>("Part")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("part");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("role");
+
                     b.Property<Guid>("ScheduleTemplateId")
                         .HasColumnType("uuid")
                         .HasColumnName("schedule_template_id");
+
+                    b.Property<string>("StoredFrequencyMode")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("frequency_mode");
+
+                    b.Property<int?>("StoredIntervalDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("interval_days");
 
                     b.HasKey("Id");
 
@@ -7212,6 +7360,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplateStage", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Planning.ScheduleTemplate", null)
+                        .WithMany("StageRows")
+                        .HasForeignKey("ScheduleTemplateId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.TemplateActivity", b =>
                 {
                     b.HasOne("ShramSafal.Domain.Planning.ScheduleTemplate", null)
@@ -7355,6 +7512,8 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplate", b =>
                 {
                     b.Navigation("Activities");
+
+                    b.Navigation("StageRows");
                 });
 #pragma warning restore 612, 618
         }

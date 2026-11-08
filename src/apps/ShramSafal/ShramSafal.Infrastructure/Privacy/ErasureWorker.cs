@@ -455,6 +455,23 @@
 //     GO-LIVE-REGISTER F98 and not closed here by assertion.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.schedule_template_stages (plr-d10 lane SCH-A, founder D-74) — KEEP. A stage name and its day range of a schedule
+//     row (e.g. "Post Pruning", days 0-15): no person, no words of a farmer, no amount. The person link of a schedule is each
+//     version's maker, ssf.schedule_templates.created_by_user_id (since L8b-1 fix round 1 "who made this version", not
+//     "whose"), an opaque user id. Doctrine P6: anonymise the person, never the work.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
+//   - ssf.schedule_checks (plr-d10 lane SCH-A, founder D-74) — KEEP. One row is one decision (Approved / Returned /
+//     Withdrawn) by a ShramSafal platform reviewer on one version of one library schedule: the schedule row and version, the
+//     activity ids he ticked, a note (required for Returned / Withdrawn; staff words about a schedule, never a farmer's), who
+//     checked as an opaque user id, the display name farmers read (for example "श्रमसफल कृषी तज्ज्ञ ‹नाव›") and when. It is a
+//     professional attestation, append-only by GRANT (SELECT + INSERT): the app role cannot rewrite or remove it. An erased
+//     checker's opaque user id stays on the rows he gave, exactly as on ssf.audit_events. DISCLOSED: checker_display_name
+//     carries the staff member's name as typed; erasing a checker REPLACES it with "श्रमसफल कृषी तज्ज्ञ" through the privileged
+//     admin context (ScrubScheduleCheckerNamesAsync, as ssf.daily_log_contents above; the app role still has no UPDATE).
+//     The opaque checker id, decision, note, version and time stay. Idempotent (a second run changes 0 rows).
+//     KEEP the check; SCRUB the name (S001).
+//
 //   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a
 //     disposition comment; see step 5 of the delete block in ProcessOneAsync.
 //     This table is not merely adjacent to the ownership link, it IS the
@@ -733,6 +750,10 @@ public sealed class ErasureWorker(
         // scrub below, for the same reason as NullLogTaskNotesAsync: the join needs his id.
         perTableCounts["daily_log_contents"] = await ScrubDailyLogContentWordsAsync(admin, targetUserId, sentinel, nowUtc, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["daily_log_contents"];
+
+        // spec: plr-d10 lane SCH-A fix round 1 (S001, P6) - the checker's NAME on ShramSafal's schedule checks. The check stays.
+        perTableCounts["schedule_checks"] = await ScrubScheduleCheckerNamesAsync(admin, targetUserId, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["schedule_checks"];
 
         perTableCounts["daily_logs"] = await AnonymizeDailyLogsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["daily_logs"];
@@ -1166,6 +1187,22 @@ public sealed class ErasureWorker(
     // potentially-large row sets into EF tracked entities just to flip
     // a couple of columns. The admin context bypasses RLS so the
     // UPDATEs hit every farm the user touched.
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-A fix round 1 (S001; doctrine P6: anonymise the person, never the work). Replaces
+    /// <c>checker_display_name</c> with "श्रमसफल कृषी तज्ज्ञ" on the checks the erased person gave. Like the daily-log scrub it
+    /// runs on the migration-role context, the only one the append-only REVOKE leaves able to rewrite a row (the app role
+    /// has no UPDATE). The opaque <c>checker_user_id</c>, decision, note, version and time stay. Idempotent: a row already
+    /// carrying the sentinel is skipped, so a second run changes 0 rows. <c>schedule_checks</c> is not under row-level
+    /// security (platform data), so no filtering can hide a row.
+    /// </summary>
+    internal static async Task<int> ScrubScheduleCheckerNamesAsync(ShramSafalDbContext db, Guid userId, CancellationToken ct)
+    {
+        return await db.Database.ExecuteSqlRawAsync(
+            "UPDATE ssf.schedule_checks SET checker_display_name = {0} WHERE checker_user_id = {1} AND checker_display_name <> {0}",
+            new object[] { "श्रमसफल कृषी तज्ज्ञ", userId },
+            ct).ConfigureAwait(false);
+    }
 
     /// <summary>
     /// spec: plr-d10 (lane F1) — removes HIS WORDS (<see cref="ShramSafal.Application.UseCases.Logs.Content.LogContentDocument.WordKeys"/>)

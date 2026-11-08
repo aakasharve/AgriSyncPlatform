@@ -769,10 +769,35 @@ internal sealed class ShramSafalRepository(
 
     // spec: plr-d10 lane L8b-1 Task 5 — no Include of Stages: the EF map ignores it (ScheduleTemplateConfiguration), and
     // including it threw before the first row was read, so every clone / edit / publish answered 500.
+    // spec: plr-d10 lane SCH-A (Task 1) - the stored stage rows are included (StageRows is a mapped collection; `Stages` is
+    // only its ordered projection), so a copy-on-write edit and a clone carry the stages.
     public async Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) =>
         await db.ScheduleTemplates
             .Include(t => t.Activities)
+            .Include(t => t.StageRows)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(t => t.Id == templateId, ct);
+
+    public async Task AddScheduleCheckAsync(ScheduleCheck check, CancellationToken ct = default)
+    {
+        await db.ScheduleChecks.AddAsync(check, ct);
+    }
+
+    public async Task<IReadOnlyList<ScheduleCheck>> GetScheduleChecksAsync(
+        IReadOnlyCollection<Guid> scheduleTemplateIds, CancellationToken ct = default)
+    {
+        if (scheduleTemplateIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = scheduleTemplateIds.Distinct().ToArray();
+        return await db.ScheduleChecks
+            .AsNoTracking()
+            .Where(c => ids.Contains(c.ScheduleTemplateId))
+            .OrderBy(c => c.CheckedAtUtc)
+            .ToListAsync(ct);
+    }
 
     public async Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default)
     {
@@ -793,6 +818,8 @@ internal sealed class ShramSafalRepository(
         return await db.ScheduleTemplates
             .AsNoTracking()
             .Include(t => t.Activities)
+            .Include(t => t.StageRows)
+            .AsSplitQuery()
             .OrderBy(t => t.Name)
             .ThenBy(t => t.Stage)
             .ToListAsync(ct);

@@ -296,6 +296,17 @@ public sealed class RlsExemptionAllowlistTests
         "schedule_templates",
         "template_activities",
 
+        // spec: plr-d10 lane SCH-A (Task 1) - a schedule row's STORED stages. Author-scoped and application-gated by the F99
+        // F-8 visibility rule, exactly like schedule_templates above: once SCH-OWN lands it holds farmers' own Team schedules,
+        // so "no farm owns it" would be false. No farm_id column; the wall is ScheduleViewer, asked by every door.
+        "schedule_template_stages",
+
+        // spec: plr-d10 lane SCH-A (Task 1; founder D-74) - ShramSafal's check of a library schedule. ShramSafal platform data:
+        // no farm owns a check; writes are gated in the application by schedules.review (ModuleKey.ScheduleReview, answered
+        // BEFORE the blanket Platform branches); the database grants no UPDATE / DELETE (E4: append-only by privilege,
+        // SELECT + INSERT only, with the effective-privilege guard in migration AddScheduleCheckAndStoredDays).
+        "schedule_checks",
+
         // The idempotency store: keyed on (device id, client request id); written and read by the sync layer inside the
         // caller's request. No farm dimension.
         "sync_mutations",

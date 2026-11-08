@@ -27,6 +27,37 @@ public interface IEntitlementResolver
     }
 
     /// <summary>
+    /// spec: plr-d10 lane SCH-A (Task 3; founder D-74, L8-R) - may this person CHECK library schedules? A schedule check is a
+    /// ShramSafal PLATFORM act: an ACTIVE seat of an ACTIVE Platform organisation whose role holds WRITE on
+    /// <see cref="ModuleKey.ScheduleReview"/> in <see cref="EntitlementMatrix"/> (Platform Owner and Employee; the Analyst
+    /// only reads). Never a farm seat: a farm's primary owner, and a farm seat with <c>AppRole.Agronomist</c>, hold nothing
+    /// here. QUIET like <see cref="IsPlatformOwnerAsync"/>: no admin-scope analytics event. The default (for test doubles)
+    /// reads the resolved memberships; the real resolver asks the database directly.
+    /// </summary>
+    async Task<bool> MayCheckSchedulesAsync(UserId userId, CancellationToken ct)
+    {
+        var resolved = await ResolveAsync(userId, activeOrgId: null, ct);
+        return resolved.Memberships.Any(m =>
+            m.OrganizationType == OrganizationType.Platform
+            && EntitlementMatrix.For(m.OrganizationType, m.OrganizationRole)
+                .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && e.CanWrite));
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-A (Task 4) - may this person READ the schedule-check queue? Platform Owner, Employee and
+    /// Analyst (read on <see cref="ModuleKey.ScheduleReview"/>); nobody else. Same seats and quietness as
+    /// <see cref="MayCheckSchedulesAsync"/>.
+    /// </summary>
+    async Task<bool> MayReadScheduleChecksAsync(UserId userId, CancellationToken ct)
+    {
+        var resolved = await ResolveAsync(userId, activeOrgId: null, ct);
+        return resolved.Memberships.Any(m =>
+            m.OrganizationType == OrganizationType.Platform
+            && EntitlementMatrix.For(m.OrganizationType, m.OrganizationRole)
+                .Any(e => e.ModuleKey == ModuleKey.ScheduleReview && e.CanRead));
+    }
+
+    /// <summary>
     /// spec: plr-d10 lane RATE-1 fix round 1 (review F7) — which of these people are platform owners, by the SAME rule as
     /// <see cref="IsPlatformOwnerAsync"/>: the suggestion door asks it once for every author of the shared price list. The
     /// default (for test doubles) asks the one-person rule per person; the real resolver answers in one query.

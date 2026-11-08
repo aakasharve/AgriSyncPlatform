@@ -80,6 +80,9 @@ export const SC = {
     cropPick: 'पीक', // PROPOSED (Marathi)
     plotPick: 'प्लॉट', // PROPOSED (Marathi)
     madeBy: 'कोणी बनवलं', // PROPOSED (Marathi)
+    // spec: plr-d10 lane SCH-A (founder D-74) - ShramSafal's check of a schedule, day by day. Drawn only where the server holds a check.
+    checkedByShramSafal: 'श्रमसफलने तपासलेलं', // PROPOSED (Marathi)
+    notCheckedByShramSafal: 'श्रमसफलने अजून तपासलेलं नाही', // PROPOSED (Marathi)
     behind: (n: number) => `शेड्यूल ${n} दिवस मागे चाललं आहे`, // PROPOSED (Marathi)
     behindLine: (calendar: string, plant: string) => `कॅलेंडरप्रमाणे दिवस ${calendar} · पिकासाठी दिवस ${plant}`, // PROPOSED (Marathi)
     toolsTitle: 'आजचं आणि बाकीचं', // PROPOSED (Marathi)

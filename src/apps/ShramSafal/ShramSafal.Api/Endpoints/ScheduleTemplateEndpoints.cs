@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using AgriSync.BuildingBlocks.Audit;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Planning.CheckSchedule;
 using ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.GetScheduleLineage;
@@ -205,6 +206,93 @@ public static class ScheduleTemplateEndpoints
         })
         .WithName("GetScheduleLineage");
 
+        // ── spec: plr-d10 lane SCH-A (Task 4; founder D-74, L8-R) - ShramSafal's schedule check. A PLATFORM act: the handler
+        // asks IEntitlementResolver.MayCheckSchedulesAsync (ModuleKey.ScheduleReview); a farm seat of any role is refused. A
+        // schedule template belongs to no farm, so each route runs under the caller's OWN user scope (F99). ──
+
+        group.MapPost("/schedule-templates/import", async (
+            ImportScheduleTemplateRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            ImportScheduleTemplateHandler handler,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var command = new ImportScheduleTemplateCommand(
+                CallerUserId: actorUserId,
+                Name: request.Name ?? string.Empty,
+                CropKey: request.CropKey,
+                OwnerType: request.OwnerType ?? string.Empty,
+                SourceLabel: request.SourceLabel,
+                Stages: (request.Stages ?? []).Select(s => new ImportScheduleStageInput(s.Name ?? string.Empty, s.StartDay, s.EndDay)).ToList(),
+                Activities: (request.Activities ?? []).Select(a => new ImportScheduleActivityInput(
+                    a.Key, a.Name ?? string.Empty, a.StartDay, a.EndDay, a.FrequencyMode ?? string.Empty, a.IntervalDays, a.AfterKey, a.Role)).ToList(),
+                ClientAppVersion: ResolveClientAppVersion(httpContext),
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
+
+            var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct);
+            return result.IsSuccess
+                ? Results.Created($"/schedule-templates/{result.Value.TemplateId}", result.Value)
+                : ToErrorResult(result.Error);
+        })
+        .WithName("ImportScheduleTemplate");
+
+        group.MapPost("/schedule-templates/{id:guid}/check", async (
+            Guid id,
+            RecordScheduleCheckRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            RecordScheduleCheckHandler handler,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // The checker is the AUTHENTICATED caller; the body names only the decision, the ticks, the note and the name
+            // farmers read. There is no body field a client could use to say who checked.
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var command = new RecordScheduleCheckCommand(
+                CallerUserId: actorUserId,
+                TemplateId: id,
+                Decision: request.Decision ?? string.Empty,
+                CheckedActivityIds: request.CheckedActivityIds,
+                Note: request.Note,
+                CheckerDisplayName: request.CheckerDisplayName ?? string.Empty,
+                ClientAppVersion: ResolveClientAppVersion(httpContext),
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
+
+            var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(command, token), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("RecordScheduleCheck");
+
+        group.MapGet("/schedule-templates/checks/waiting", async (
+            ClaimsPrincipal user,
+            GetSchedulesWaitingForCheckHandler handler,
+            ICallerUserTenantScope userScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var result = await userScope.RunForCallerAsync(actorUserId, token => handler.HandleAsync(actorUserId, token), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetSchedulesWaitingForCheck");
+
         return group;
     }
 
@@ -256,3 +344,31 @@ public sealed record EditScheduleTemplateRequest(
 
 public sealed record PublishScheduleTemplateRequest(
     string? ClientCommandId);
+
+// spec: plr-d10 lane SCH-A (Task 4) - the platform reviewer's import. FrequencyMode is one_time | every_n_days | per_week.
+public sealed record ImportScheduleStageRequest(string? Name, int StartDay, int EndDay);
+
+public sealed record ImportScheduleActivityRequest(
+    string? Key,
+    string? Name,
+    int StartDay,
+    int EndDay,
+    string? FrequencyMode,
+    int? IntervalDays,
+    string? AfterKey,
+    string? Role);
+
+public sealed record ImportScheduleTemplateRequest(
+    string? Name,
+    string? CropKey,
+    string? OwnerType,
+    string? SourceLabel,
+    IReadOnlyList<ImportScheduleStageRequest>? Stages,
+    IReadOnlyList<ImportScheduleActivityRequest>? Activities);
+
+// spec: plr-d10 lane SCH-A (Task 4) - { decision, checkedActivityIds, note?, checkerDisplayName }. No field names the checker.
+public sealed record RecordScheduleCheckRequest(
+    string? Decision,
+    IReadOnlyList<Guid>? CheckedActivityIds,
+    string? Note,
+    string? CheckerDisplayName);
