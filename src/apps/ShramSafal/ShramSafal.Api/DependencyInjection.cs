@@ -11,6 +11,7 @@ using ShramSafal.Application.UseCases.AI.CreateDocumentSession;
 using ShramSafal.Application.UseCases.Consent.GetConsent;
 using ShramSafal.Application.UseCases.Consent.UpdateConsent;
 using ShramSafal.Application.UseCases.Dfes.GetDayUnderstanding;
+using ShramSafal.Application.UseCases.Dfes.GetPlotDayUnderstanding;
 using ShramSafal.Application.UseCases.Dfes.GetFarmerEngagement;
 using ShramSafal.Application.UseCases.Dfes.GetRecentQuestionEvents;
 using ShramSafal.Application.UseCases.Dfes.RecordQuestionEvent;
@@ -177,6 +178,7 @@ public static class DependencyInjection
         services.AddScoped<GetPlotFinanceSummaryHandler>();
         services.AddScoped<GetFarmerEngagementHandler>();
         services.AddScoped<GetDayUnderstandingHandler>();
+        services.AddScoped<GetPlotDayUnderstandingHandler>(); // lane IT3, Task 2
         services.AddScoped<RecordQuestionEventHandler>();
         services.AddScoped<GetRecentQuestionEventsHandler>();
         // spec: dfes-companion-2026-07-11 (wave-4.2) — first-open Terms + DPDP gate.

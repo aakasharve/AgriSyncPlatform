@@ -16,7 +16,7 @@ public sealed class RichnessStamperTests
     {
         // Rich(10) + Observation(3) + Learning(5) + Followup(2) = 20 → capped to 15.
         var stamp = RichnessStamper.Stamp(DayClassification.RichWorkDay,
-            Sig(obs: true, learning: true, followup: true), dayHasConfirmedRecord: true);
+            Sig(obs: true, learning: true, followup: true), dayHasConfirmedRecord: true, IdentityPoints.None);
 
         stamp.ShramPointsEarned.Should().Be(DfesTuning.DailyPointCap); // 15
         stamp.AdvancesStreak.Should().BeTrue();
@@ -26,7 +26,7 @@ public sealed class RichnessStamperTests
     [Fact]
     public void BasicWorkDay_earns_Basic_advances_streak_not_bar()
     {
-        var stamp = RichnessStamper.Stamp(DayClassification.BasicWorkDay, Sig(), dayHasConfirmedRecord: true);
+        var stamp = RichnessStamper.Stamp(DayClassification.BasicWorkDay, Sig(), dayHasConfirmedRecord: true, IdentityPoints.None);
         stamp.ShramPointsEarned.Should().Be(DfesTuning.Points.Basic); // 5
         stamp.AdvancesStreak.Should().BeTrue();
         stamp.AdvancesBar.Should().BeFalse();
@@ -35,16 +35,16 @@ public sealed class RichnessStamperTests
     [Fact]
     public void ObservationDay_and_LearningDay_advance_the_bar()
     {
-        RichnessStamper.Stamp(DayClassification.ObservationDay, Sig(obs: true), dayHasConfirmedRecord: true)
+        RichnessStamper.Stamp(DayClassification.ObservationDay, Sig(obs: true), dayHasConfirmedRecord: true, IdentityPoints.None)
             .AdvancesBar.Should().BeTrue();
-        RichnessStamper.Stamp(DayClassification.LearningDay, Sig(learning: true), dayHasConfirmedRecord: true)
+        RichnessStamper.Stamp(DayClassification.LearningDay, Sig(learning: true), dayHasConfirmedRecord: true, IdentityPoints.None)
             .AdvancesBar.Should().BeTrue();
     }
 
     [Fact]
     public void DeclaredNoWork_restReason_is_neutral_when_NeutralOnRestDay()
     {
-        var stamp = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "rest"), dayHasConfirmedRecord: true);
+        var stamp = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "rest"), dayHasConfirmedRecord: true, IdentityPoints.None);
         // NeutralOnRestDay=true → rest day does NOT advance the streak.
         stamp.AdvancesStreak.Should().BeFalse();
         stamp.ShramPointsEarned.Should().Be(DfesTuning.Points.NoWork); // 2
@@ -53,14 +53,14 @@ public sealed class RichnessStamperTests
     [Fact]
     public void DeclaredNoWork_externalBlocker_advances_streak()
     {
-        var stamp = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "weather"), dayHasConfirmedRecord: true);
+        var stamp = RichnessStamper.Stamp(DayClassification.DeclaredNoWorkDay, Sig(noWorkCode: "weather"), dayHasConfirmedRecord: true, IdentityPoints.None);
         stamp.AdvancesStreak.Should().Be(DfesTuning.Streak.AdvanceOnDeclaredNoWork); // true
     }
 
     [Fact]
     public void UnaccountedDay_earns_zero_and_is_neutral()
     {
-        var stamp = RichnessStamper.Stamp(DayClassification.UnaccountedDay, Sig(), dayHasConfirmedRecord: true);
+        var stamp = RichnessStamper.Stamp(DayClassification.UnaccountedDay, Sig(), dayHasConfirmedRecord: true, IdentityPoints.None);
         stamp.ShramPointsEarned.Should().Be(0);
         stamp.AdvancesStreak.Should().BeFalse();
         stamp.AdvancesBar.Should().BeFalse();
@@ -76,7 +76,7 @@ public sealed class RichnessStamperTests
             DfesTuning.DailyPointCap);
 
         RichnessStamper.Stamp(DayClassification.RichWorkDay,
-            Sig(obs: true, learning: true, followup: true), dayHasConfirmedRecord: true)
+            Sig(obs: true, learning: true, followup: true), dayHasConfirmedRecord: true, IdentityPoints.None)
             .ShramPointsEarned.Should().Be(expected);
     }
 }

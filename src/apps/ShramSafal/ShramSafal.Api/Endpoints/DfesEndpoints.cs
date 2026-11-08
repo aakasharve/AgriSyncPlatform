@@ -4,6 +4,7 @@ using AgriSync.BuildingBlocks.Results;
 using Microsoft.AspNetCore.Mvc;
 using ShramSafal.Application.UseCases.Dfes.GetDayUnderstanding;
 using ShramSafal.Application.UseCases.Dfes.GetFarmerEngagement;
+using ShramSafal.Application.UseCases.Dfes.GetPlotDayUnderstanding;
 
 namespace ShramSafal.Api.Endpoints;
 
@@ -90,6 +91,43 @@ public static class DfesEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
         })
         .WithName("GetDayUnderstanding");
+
+        // GET /shramsafal/day-understanding/plots?farmId={guid}&date=yyyy-MM-dd
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3, Task 2). Each plot's own understanding of the day, derived on
+        // read from that plot's records: [{ plotId, score0to10 | null, understood: [{mr,en}], nextHint: {mr,en} | null }].
+        // score0to10 is null for a plot with no record that day (and for a declared no-work day); a farm-level record counts for no
+        // plot. Shown only on the result screen - no meter or number goes on the farm overview. Another farm -> 403.
+        // `date` defaults to the farm-local (IST) today.
+        group.MapGet("/day-understanding/plots", async (
+            Guid farmId,
+            DateOnly? date,
+            ClaimsPrincipal user,
+            [FromServices] GetPlotDayUnderstandingHandler handler,
+            [FromServices] IClock clock,
+            [FromServices] ShramSafal.Application.Ports.ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // The membership-validated single-farm tenant scope BEFORE the handler's first DbCommand, so the read passes under
+            // prod FORCE-RLS (as the farm-day read above). Forged/non-member farmId -> 403.
+            var scopeResult = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!scopeResult.IsSuccess)
+            {
+                return ToErrorResult(scopeResult.Error);
+            }
+
+            var localDate = date ?? DateOnly.FromDateTime(clock.UtcNow + IstOffset);
+
+            var result = await handler.HandleAsync(
+                new GetPlotDayUnderstandingQuery(farmId, localDate, actorUserId), ct);
+
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetPlotDayUnderstanding");
 
         return group;
     }

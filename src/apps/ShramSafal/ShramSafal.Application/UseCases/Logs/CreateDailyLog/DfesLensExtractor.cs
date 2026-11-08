@@ -2,6 +2,7 @@ using System.Text.Json;
 using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
+using ShramSafal.Domain.Inputs;
 
 namespace ShramSafal.Application.UseCases.Logs.CreateDailyLog;
 
@@ -16,6 +17,8 @@ internal static class DfesLensExtractor
     // EXCEPT SCOPE: the plot is context-selected up front, so "did you name the plot" must NOT
     // count toward the farmer-facing /10 — the SCOPE dimension is removed from server scoring.
     private const int W_WHAT = 20, W_DOSE = 20, W_CARRIER = 10, W_COST = 12, W_WEATHER = 8;
+    // dfes-5 (lane IT3; spec dfes-input-truth-and-mix-check-2026-11-06) — "did the app understand WHICH product he used".
+    private const int W_PRODUCT_ID = 10;
     private const int W_OBS_FACET = 15, W_LEARN_FACET = 15; // structured-noticing pseudo-dims
     private const double Cf = 1.0;
 
@@ -44,6 +47,9 @@ internal static class DfesLensExtractor
     /// this day's aggregate, read BEFORE this recompute overwrites it. Null means a day
     /// this engine has never scored. This is the version guard's only input — see
     /// <c>appliesNewRules</c> in <see cref="Build"/>.</param>
+    /// <param name="Products">dfes-5 (lane IT3) — what the day's LATEST stored content, the library's match and the
+    /// newest answers say about each product he named (<see cref="ProductIdentity"/>), judged by the caller. Null or empty
+    /// means the day names no product in its stored content. It never comes from the parse job (P4).</param>
     public sealed record DayData(
         IReadOnlyList<JsonElement> Roots,
         IReadOnlyList<ObservationEvent> Observations,
@@ -52,7 +58,8 @@ internal static class DfesLensExtractor
         IReadOnlyList<WeatherStamp>? SystemWeather = null,
         Guid? PlotId = null,
         DateOnly? LocalDate = null,
-        string? ScoredUnderVersion = null);
+        string? ScoredUnderVersion = null,
+        IReadOnlyList<ProductJudgement>? Products = null);
 
     public static (LensInput Input, ClassifierSignals Signals) Build(DayData data, LensScoresProbe probeSink, bool clientDatePlausible)
     {
@@ -85,11 +92,15 @@ internal static class DfesLensExtractor
         // moved it above `hasStructuredObs` for exactly that reason: a rule that needs the
         // guard cannot be evaluated before the guard exists.
         //
-        // Deliberately compared against DfesTuning.ScoreEngineVersion rather than a
-        // literal "dfes-4": the next engine bump then re-freezes dfes-4 days automatically
-        // instead of needing this line remembered.
-        var appliesNewRules = data.ScoredUnderVersion is null
-                           || data.ScoredUnderVersion == DfesTuning.ScoreEngineVersion;
+        // (Before dfes-5 this compared the version for EQUALITY with the current engine, so the next bump would have sent
+        // every dfes-4 day back to dfes-3 behaviour on its next recompute. It is a number now; see below.)
+        //
+        // dfes-5 (lane IT3): the guard reads the version as a NUMBER. Wave 3 (dfes-4) rules apply to a day with no aggregate
+        // yet and to any row stamped dfes-4 or later, so the bump to dfes-5 does not send a dfes-4 day back to dfes-3
+        // behaviour. PRODUCT_ID applies to a day with no aggregate and to a row stamped dfes-5 or later; a row stamped dfes-1..4
+        // is rescored on its own engine's rules and re-stamped with its ORIGINAL version.
+        var appliesNewRules = AppliesFrom(data.ScoredUnderVersion, 4);
+        var appliesProductId = AppliesFrom(data.ScoredUnderVersion, 5);
 
         var hasStructuredObs = HasStructuredObservation(data.Observations, appliesNewRules);
         var hasLearning = HasLearningFacet(data.Observations);
@@ -126,6 +137,18 @@ internal static class DfesLensExtractor
         var doseOwed = Dim("DOSE", W_DOSE, Best(OwedDose(roots), OwedDose(persisted)));
         var carrierOwed = Dim("CARRIER", W_CARRIER,
             Best(OwedCarrier(roots, appliesNewRules), OwedCarrier(persisted, appliesNewRules)));
+
+        // dfes-5 (lane IT3) — PRODUCT_ID: did the app understand WHICH product he used. ROSTER only: the three lenses (and so
+        // the classifier and the reward economy) are untouched. Owed on a day with inputs: when the stored content names a
+        // product, or when the day owes a DOSE (an application operation is present, as for dfes-3: naming a product can only
+        // ever add to the numerator, never push the number down). Earned from stored content, the library's match and the
+        // newest answers only (Products, judged by the caller), never from the parse job (P4). A day that names no
+        // product earns 0 on it, never a guessed credit. Only a day this engine may score under dfes-5.
+        var judged = data.Products ?? [];
+        var productOwed = appliesProductId && (judged.Count > 0 || doseOwed.Applicable);
+        var productId = productOwed
+            ? Dim("PRODUCT_ID", W_PRODUCT_ID, ProductIdentity.MeanCoverage(judged) ?? 0.0)
+            : new ScoredDimension("PRODUCT_ID", W_PRODUCT_ID, Applicable: false, Coverage: 0.0, ConfidenceFactor: Cf);
 
         // wave-3.5, Ruling 3 — do not ask the farmer to repeat weather the app already
         // knows. `weather` above (the LENS reading) is UNTOUCHED: it feeds ThreeLensScorer
@@ -204,6 +227,11 @@ internal static class DfesLensExtractor
             obsFacet,
             learnFacet,
         };
+        // Appended only when the day may be scored under dfes-5, so the roster of an older day is exactly what it was.
+        if (appliesProductId)
+        {
+            possible.Add(productId);
+        }
 
         var input = new LensInput(execution, insight, learning, possible);
 
@@ -243,6 +271,22 @@ internal static class DfesLensExtractor
             HasFollowup: hasFollowup);
 
         return (input, signals);
+    }
+
+    // The version stamp as a number: "dfes-5" is 5. Null (no aggregate yet: a brand-new day) applies every rule; anything that
+    // is not "dfes-<number>" is treated as the oldest engine and keeps the old rules (frozen), exactly as before.
+    private static bool AppliesFrom(string? scoredUnderVersion, int firstEngine)
+    {
+        if (scoredUnderVersion is null)
+        {
+            return true;
+        }
+
+        const string prefix = "dfes-";
+        return scoredUnderVersion.StartsWith(prefix, StringComparison.Ordinal)
+            && int.TryParse(scoredUnderVersion.AsSpan(prefix.Length), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out var engine)
+            && engine >= firstEngine;
     }
 
     // Mutable carrier so Build can return the already-computed scores to RecomputeAsync.

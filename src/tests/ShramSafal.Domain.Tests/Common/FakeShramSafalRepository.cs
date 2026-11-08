@@ -10,6 +10,7 @@ using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Dfes;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Inputs;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
@@ -136,6 +137,22 @@ public class FakeShramSafalRepository : IShramSafalRepository
     // as it did before. Override it to exercise the weather rule.
     public virtual Task<IReadOnlyList<WeatherStamp>> GetWeatherStampsForDailyLogsAsync(IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<WeatherStamp>>([]);
+
+    // lane IT3 — the product-identity answers the day's score and points read on EVERY recompute. Deliberately EMPTY rather than
+    // NotStubbed(), for the reason the weather read above is: a throwing default would fail every pre-existing derivation test for
+    // a read they do not care about. A double that ignores these members scores as it did before answers existed; override them
+    // to exercise the product rules. The REAL port's default refuses, and so does the production store's absence of an override.
+    public virtual Task<IReadOnlyList<InputIdentityAssertion>> GetLatestInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>([]);
+
+    public virtual Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>([]);
+
+    public virtual Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsGivenBetweenAsync(
+        Guid farmId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<InputIdentityAssertion>>([]);
 
     // ── DFES Phase 5 — question-engine telemetry ──
     public virtual Task AddQuestionEventAsync(QuestionEvent e, CancellationToken ct = default) => throw NotStubbed();

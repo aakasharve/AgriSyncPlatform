@@ -88,6 +88,28 @@ public sealed class VerifyLogRecomputeTests
     }
 
     [Fact]
+    public async Task ApproveWithUncheckedProducts_StillSucceeds()
+    {
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3, Task 3a; founder D-95) - checking products is optional
+        // everywhere and never blocks मंजूर. The record names two products, nobody has answered or checked either, and the
+        // owner's confirmation still goes through, through the REAL day recompute that reads those products.
+        var log = MukadamWorkLog();
+        var repo = NewRepo(log);
+        repo.SetContent(ShramSafal.Domain.Logs.DailyLogContent.Create(
+            Guid.NewGuid(), log, 1,
+            """{"schema":1,"inputs":[{"id":"e1","method":"Spray","mix":[{"id":"m0","productName":"calcium nitrate"},{"id":"m1","productName":"Progibb"}]}]}""",
+            ShramSafal.Domain.Logs.DailyLogContent.OriginCreate, null, log.OperatorUserId, Created, null, null));
+        var richness = RealRichness(repo, ConfirmedAt);
+        var (handler, _) = Build(log, richness, ConfirmedAt, repo);
+
+        var result = await handler.HandleAsync(Decide(VerificationStatus.Verified));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(VerificationStatus.Verified, log.CurrentVerificationStatus);
+        Assert.True(repo.SeededRichnessAggregates.Single(a => a.LocalDate == WorkDay).AdvancesStreak);
+    }
+
+    [Fact]
     public async Task Verify_DisputeAfterConfirm_StopsTheWorkDayAdvancing()
     {
         var log = MukadamWorkLog();

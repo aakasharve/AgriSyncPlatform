@@ -39,6 +39,7 @@ GET /shramsafal/compare/stage
 GET /shramsafal/consent/improvement
 GET /shramsafal/consent/me
 GET /shramsafal/day-understanding
+GET /shramsafal/day-understanding/plots
 GET /shramsafal/engagement
 GET /shramsafal/export/daily-summary
 GET /shramsafal/export/monthly-cost

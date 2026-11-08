@@ -65,8 +65,19 @@ public static class DfesTuning
     /// FABRICATED credit (doctrine P4 outranks number stability), whereas dfes-4 changes
     /// what the day is ASKED — only the latter is frozen.</para>
     /// <para>Nothing in the product READS this string as a feature; it is a forensic
-    /// label. <c>appliesNewRules</c> is what actually prevents drift.</para></summary>
-    public const string ScoreEngineVersion = "dfes-4";
+    /// label. <c>appliesNewRules</c> is what actually prevents drift.</para>
+    ///
+    /// <para><c>dfes-5</c> (2026-11-08, spec dfes-input-truth-and-mix-check-2026-11-06, lane IT3 — bumped ONCE). One scoring
+    /// change: a new roster dimension <c>PRODUCT_ID</c> (weight 10), owed on a day with inputs and earned from the products
+    /// named in the day's latest stored content, the library's match and the newest answers (never from the parse job).
+    /// <b>Like dfes-4 it does NOT reach old rows</b>: <c>DfesLensExtractor.Build</c> adds the dimension only to a day with no
+    /// aggregate yet or one already stamped dfes-5 (or later). A row stamped dfes-1..4 is rescored on its own engine's rules
+    /// and re-stamped with its ORIGINAL version, so no stored day moves because we deployed and <b>no backfill or recompute is
+    /// needed</b>. The guard reads the version as a number: a dfes-4 day keeps ALL of the Wave-3 rules above (it is not sent
+    /// back to dfes-3 behaviour) and lacks only PRODUCT_ID. The point reasons for product answers
+    /// (<see cref="ShramPointValues"/>) are not version-gated: they come from answers, which did not exist before this
+    /// lane.</para></summary>
+    public const string ScoreEngineVersion = "dfes-5";
 
     /// <summary>Maximum Shram points a single LocalDate can earn after all bonuses.</summary>
     public const int DailyPointCap = 15;

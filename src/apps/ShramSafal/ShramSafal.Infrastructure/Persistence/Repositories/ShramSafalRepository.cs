@@ -349,6 +349,45 @@ internal sealed class ShramSafalRepository(
         return await NewestLegitimateAssertions(db, dailyLogIds).ToListAsync(ct);
     }
 
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3, founder D-94) - see IShramSafalRepository. Same E4 join as the
+    // newest-answer read: an answer counts only when its farm is its record's farm.
+    public async Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        if (dailyLogIds is null || dailyLogIds.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = dailyLogIds as IList<Guid> ?? dailyLogIds.ToList();
+        return await (
+                from answer in db.InputIdentityAssertions.AsNoTracking()
+                join log in db.DailyLogs.AsNoTracking()
+                    on new { LogId = answer.DailyLogId, Farm = answer.FarmId }
+                    equals new { LogId = log.Id, Farm = log.FarmId }
+                where ids.Contains(answer.DailyLogId)
+                orderby answer.AssertedAtUtc, answer.Id
+                select answer)
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsGivenBetweenAsync(
+        Guid farmId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var farm = new FarmId(farmId);
+        return await db.InputIdentityAssertions
+            .AsNoTracking()
+            .Where(a => a.FarmId == farm && a.AssertedAtUtc >= fromUtc && a.AssertedAtUtc < toUtcExclusive)
+            .OrderBy(a => a.AssertedAtUtc)
+            .ThenBy(a => a.Id)
+            .ToListAsync(ct);
+    }
+
     // spec: plr-d10 lane L8c-1 (founder D-24c) - see IShramSafalRepository.
     public async Task AddPlannedWorkAsync(PlannedWork work, CancellationToken ct = default)
     {

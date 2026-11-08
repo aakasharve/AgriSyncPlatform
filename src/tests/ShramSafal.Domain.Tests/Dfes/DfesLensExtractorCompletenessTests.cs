@@ -353,7 +353,9 @@ public sealed class DfesLensExtractorCompletenessTests
         using var doc = JsonDocument.Parse(json);
         var probe = new DfesLensExtractor.LensScoresProbe();
         var (input, signals) = DfesLensExtractor.Build(
-            new DfesLensExtractor.DayData([doc.RootElement], observations),
+            // These receipts were written for the dfes-3/4 roster (before PRODUCT_ID). A day stamped dfes-4 is scored on exactly
+            // those rules, so they keep proving that arithmetic; PRODUCT_ID (dfes-5) is pinned in DfesLensExtractorProductIdTests.
+            new DfesLensExtractor.DayData([doc.RootElement], observations, ScoredUnderVersion: "dfes-4"),
             probe,
             clientDatePlausible: true);
 

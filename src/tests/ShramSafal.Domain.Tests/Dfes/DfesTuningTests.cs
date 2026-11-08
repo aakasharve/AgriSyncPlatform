@@ -31,7 +31,8 @@ public sealed class DfesTuningTests
         // scored under (see ScoreEngineVersionGuardTests). The frontend mirror
         // (mobile-web/src/features/logs/services/dfesTuning.ts) is value-locked to this
         // string by dfesTuning.test.ts — bump both or that test fails.
-        DfesTuning.ScoreEngineVersion.Should().Be("dfes-4");
+        // dfes-5 (2026-11-08, lane IT3): the PRODUCT_ID roster part. Like dfes-4 it does not reach old rows.
+        DfesTuning.ScoreEngineVersion.Should().Be("dfes-5");
     }
 
     [Fact]
@@ -44,6 +45,10 @@ public sealed class DfesTuningTests
         p.ObservationBonus.Should().Be(3);
         p.LearningBonus.Should().Be(5);
         p.FollowupBonus.Should().Be(2);
+        // lane IT3 (founder D-94): the product-answer reasons. The daily cap does not move.
+        p.ProductConfirmed.Should().Be(2);
+        p.EvidenceMatch.Should().Be(3);
+        p.GapFilledLater.Should().Be(2);
     }
 
     [Fact]

@@ -238,6 +238,25 @@ public interface IShramSafalRepository
         IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
         => throw new NotSupportedException("This repository cannot read the newest product-identity answers of a record.");
 
+    /// <summary>
+    /// spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT3, founder D-94) — EVERY answer ever kept for these records,
+    /// oldest first (<c>asserted_at_utc</c>, then id), only where the answer's farm is its record's farm (E4). The day's
+    /// points read it to find the FIRST answer that could count for a product, whichever day it was given. The default
+    /// REFUSES: a store that cannot answer must never look as though the records have no answers (the day's points would be
+    /// stamped lower).
+    /// </summary>
+    Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot read every product-identity answer of a record.");
+
+    /// <summary>
+    /// lane IT3 — the answers this farm took in the window <paramref name="fromUtc"/> (inclusive) to
+    /// <paramref name="toUtcExclusive"/>, oldest first: the answers of one farm-local day. The default REFUSES (see above).
+    /// </summary>
+    Task<IReadOnlyList<InputIdentityAssertion>> GetInputIdentityAssertionsGivenBetweenAsync(
+        Guid farmId, DateTime fromUtc, DateTime toUtcExclusive, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot read the product-identity answers of a day.");
+
     // ── spec: plr-d10 lane L8c-1 (founder D-24c) — planned work and reminders (ssf.planned_work, ssf.planned_work_plots). No
     // DELETE exists: a plot taken off a task is a Dropped row, and a cancelled task is a Cancelled one.
 
