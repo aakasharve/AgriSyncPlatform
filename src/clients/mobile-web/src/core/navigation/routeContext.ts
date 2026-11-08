@@ -119,6 +119,17 @@ export interface AppRouterContext {
      * "पुढे ठरवा" and every schedule change the server gates the same way. Optional: absent = the primary owner only.
      */
     mayPlanWork?: boolean;
+    /**
+     * Lane L8c-2 (founder D-24, D-26) - the signed-in person's user id (/me/context), for "my" tasks and "स्वतः".
+     */
+    meUserId?: string | null;
+    /**
+     * Lane L8c-2 - this seat is the primary account holder, or holds PlanWork or AssignWork, as the server answers it
+     * (/me/context authorities): the plan door and the plan form. Absent = no (the "तुमच्यावर सोपवलेली कामे" view).
+     */
+    mayOpenPlanner?: boolean;
+    /** Lane L8c-2 - the primary account holder, or a holder of AssignWork: another person may be chosen (the server decides). */
+    mayAssignWork?: boolean;
     /** The work home's "आजची हजेरी" door: owner tier or the owner's labour grant only (H10). */
     canOpenAttendanceFromHome?: boolean;
 

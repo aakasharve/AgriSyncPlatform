@@ -23,6 +23,7 @@ describe('the plan-work responsibility words', () => {
     it('is a switch the owner gives, in the order the server lists it (after review money)', () => {
         expect(SWITCHABLE_AUTHORITIES).toContain(AUTHORITY.planWork);
         expect(SWITCHABLE_AUTHORITIES.indexOf(AUTHORITY.planWork)).toBe(SWITCHABLE_AUTHORITIES.indexOf(AUTHORITY.reviewMoney) + 1);
-        expect(SWITCHABLE_AUTHORITIES).not.toContain(AUTHORITY.assignWork);
+        // lane L8c-2: assign work is enforced since L8c-1, so it is the next switch (the server's own order).
+        expect(SWITCHABLE_AUTHORITIES.indexOf(AUTHORITY.assignWork)).toBe(SWITCHABLE_AUTHORITIES.indexOf(AUTHORITY.planWork) + 1);
     });
 });

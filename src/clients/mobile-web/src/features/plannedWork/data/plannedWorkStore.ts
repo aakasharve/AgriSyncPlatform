@@ -12,8 +12,11 @@
  * a queued fact is never drawn as saved.
  *
  * Another farm's items are never returned (`getLocalPlannedWork(farmId)` keeps them out, queue and server alike).
- * A refused change (a parked rejection) is NOT intent shown here: it sits on the conflict page with its words, and the server
- * row (if any) stays as it is.
+ * A refused change (a parked rejection) is NOT intent: it sits on the conflict page with its words, and the server row (if any) stays
+ * as it is. One exception (lane L8c-2 fix round 1, P003; P10): a task whose CREATE the server refused would otherwise vanish from the
+ * plan list, so it is returned as an item marked `refused` - never done, no step waiting, not open work - for the card to say its refusal
+ * words and open the conflict page. It follows the outbox row: discarded (`REJECTED_DROPPED`) it is gone; re-sent it is a normal queued
+ * task again; if the server has the task by then, the server's row wins.
  */
 import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieDatabase';
@@ -26,6 +29,9 @@ import type { PlannedWorkVerb } from './plannedWorkCommands';
 
 /** The queue statuses that ARE live local intent: waiting, being sent, or retry-capped but still his statement. */
 const LIVE_INTENT_STATUSES: ReadonlySet<MutationQueueStatus> = new Set<MutationQueueStatus>(['PENDING', 'SENDING', 'FAILED']);
+
+/** A change the server refused and parked on the conflict page. */
+const PARKED: MutationQueueStatus = 'REJECTED_USER_REVIEW';
 
 export interface LocalPlannedWork {
     id: string;
@@ -53,6 +59,8 @@ export interface LocalPlannedWork {
     keptOnPhone: boolean;
     /** The queued changes waiting on it, oldest first. */
     pendingSteps: PlannedWorkVerb[];
+    /** The server refused the create and it is parked on the conflict page: shown with its refusal, never as done or as open work. */
+    refused: boolean;
 }
 
 interface QueuedPlannedWork {
@@ -95,6 +103,7 @@ function fromServer(row: PlannedWorkRow): LocalPlannedWork {
         source: 'server',
         keptOnPhone: false,
         pendingSteps: [],
+        refused: false,
     };
 }
 
@@ -143,7 +152,7 @@ export async function getLocalPlannedWork(farmId: string): Promise<LocalPlannedW
     const server = await db.plannedWork.where('farmId').equals(farmId).toArray();
     const queueRows = await db.mutationQueue
         .where('mutationType').anyOf(Object.keys(VERB_OF))
-        .filter(row => LIVE_INTENT_STATUSES.has(row.status))
+        .filter(row => LIVE_INTENT_STATUSES.has(row.status) || (row.status === PARKED && row.mutationType === SyncMutationName.PlannedworkCreate))
         .toArray();
 
     const items = new Map<string, LocalPlannedWork>(server.map(row => [row.id, fromServer(row)]));
@@ -156,6 +165,7 @@ export async function getLocalPlannedWork(farmId: string): Promise<LocalPlannedW
         const id = str(payload.plannedWorkId)!;
         const step: QueuedPlannedWork = { verb, payload, createdAt: row.createdAt };
         const existing = items.get(id);
+        if (existing?.refused) continue; // nothing is laid over a refused create: it has not happened
         if (verb === 'create') {
             if (existing) continue; // the server has it: the create is acknowledged in all but name
             const made = withWords({
@@ -179,8 +189,9 @@ export async function getLocalPlannedWork(farmId: string): Promise<LocalPlannedW
                 createdByUserId: null,
                 modifiedAtUtc: null,
                 source: 'queue',
-                keptOnPhone: true,
-                pendingSteps: ['create'],
+                keptOnPhone: row.status !== PARKED,
+                pendingSteps: row.status === PARKED ? [] : ['create'],
+                refused: row.status === PARKED,
             }, payload);
             items.set(id, made);
         } else if (existing) {

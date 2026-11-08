@@ -78,6 +78,40 @@ export const HOME_WORDS = {
     // (`attendanceCardWords.ts`), and its "हजेरी वही बघा" link keeps the line's second half.
 } as const;
 
+/**
+ * Lane L8c-2 - the plan door on the work home (the preview's `PS.plan`, `PS.planSub`, `PS.mine`, `PS.mineSub`, `PS.openCount`,
+ * planModel.ts:73-80). Unlike the lines above these follow the app language: Marathi mode Marathi only, English mode English only.
+ * The Marathi lines are the preview's own words (still PROPOSED there); the English twins are PROPOSED.
+ */
+export const PLAN_DOOR_WORDS = {
+    mr: {
+        // PROPOSED (Marathi) - the preview's
+        plan: 'कामांची जबाबदारी सोपवा / कामांचे नियोजन करा',
+        // PROPOSED (Marathi) - the preview's
+        planSub: 'शेतात नसलात तरी पुढचं काम ठरवा आणि मुकादमाला सोपवा',
+        // PROPOSED (Marathi) - the preview's
+        mine: 'तुमच्यावर सोपवलेली कामे',
+        // PROPOSED (Marathi) - the preview's
+        mineSub: 'तुम्हाला सोपवलेली कामे इथे दिसतात',
+        // PROPOSED (Marathi) - the preview's
+        openCount: (n: number): string => `${n} कामे चालू`,
+    },
+    en: {
+        // PROPOSED (English)
+        plan: 'Hand over work / Plan the work',
+        // PROPOSED (English)
+        planSub: 'Even when you are not on the farm, decide the next work and hand it to the mukadam',
+        // PROPOSED (English)
+        mine: 'Work handed to you',
+        // PROPOSED (English)
+        mineSub: 'The work handed to you shows here',
+        // PROPOSED (English)
+        openCount: (n: number): string => `${n} works open`,
+    },
+} as const;
+
+export const planDoorWords = (language: string | null | undefined) => (language === 'en' ? PLAN_DOOR_WORDS.en : PLAN_DOOR_WORDS.mr);
+
 export const ENTRY_WORDS = {
     // PROPOSED (Marathi) — Sathi's line once "संपूर्ण शेत" is chosen. The preview's sentence WITHOUT its
     // "त्याचा खर्चही यात जोडला जाईल" clause: that farm-level costs are counted is not verified yet (PLR-D5 :55).

@@ -30,6 +30,7 @@ import FlowBackButton from '../../../context/components/FlowBackButton';
 import { useBackDismiss } from '../../../../core/navigation/useBackDismiss';
 import { SathiAskBand } from './SathiAskBand';
 import { WorkHome } from './WorkHome';
+import type { PlanDoorProps } from '../../../plannedWork/components/PlanDoor';
 import type { RunningCost } from './RunningCostCard';
 import type { TodayAttendance } from './todayAttendance';
 import { SegmentBanner, SegmentCancel } from './SegmentBanner';
@@ -70,6 +71,8 @@ export interface LogEntryFlowProps {
     onOpenAttendanceNames?: () => void;
     /** The running-cost card for the home; absent = not shown to this person. */
     cost?: RunningCost;
+    /** Lane L8c-2 - the plan door on the work home (its kind follows the server's authorities); absent = none. */
+    planDoor?: PlanDoorProps;
     /** Sathi's question he chose to answer by speaking (wave-3.7) — stays visible above the mic. */
     pinnedQuestion?: string | null;
     /** Lane MIC-1 — why he is speaking (the ONE mic's band), shown above the mic. */
@@ -94,7 +97,7 @@ export function plotsByCrop(crops: CropProfile[], scope: LogScope): Record<strin
 export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
     const {
         crops, logScope, setLogScope, onChooseVoice, labourIntent, onBackToLabour, onClearLabourIntent,
-        recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, attendance, onOpenAttendanceNames, cost,
+        recordingSegment, onCancelSegment, homeRequested = false, onHomeRequestHandled, onOpenAttendance, attendance, onOpenAttendanceNames, cost, planDoor,
         pinnedQuestion, micLead, renderRecorder, startAt, onExit, forDay,
     } = props;
     const hasSelection = logScope.selectedCropIds.length > 0;
@@ -154,7 +157,7 @@ export const LogEntryFlow: React.FC<LogEntryFlowProps> = (props) => {
             <div data-testid="log-entry-flow" data-step="home">
                 {/* The हजेरी card's button is this same "झालेले काम सांगा" step: the crop question first (rule CTX-1). */}
                 <WorkHome onTell={() => { setLogScope(EMPTY_SCOPE); setEntryStep('crop'); setStep('entry'); }} onAttendance={onOpenAttendance}
-                    attendance={attendance} onAttendanceNames={onOpenAttendanceNames} cost={cost} />
+                    attendance={attendance} onAttendanceNames={onOpenAttendanceNames} cost={cost} planDoor={planDoor} />
             </div>
         );
     }

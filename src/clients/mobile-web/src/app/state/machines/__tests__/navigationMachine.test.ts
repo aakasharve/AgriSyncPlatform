@@ -89,7 +89,7 @@ describe('navigationMachine — route transitions', () => {
             'finance-ledger', 'finance-price-book', 'finance-review-inbox',
             'finance-reports', 'qr-demo', 'referrals',
             'attention', 'offline-conflicts', 'tests', 'test-detail', 'compliance',
-            'service-proof', 'jobs', 'job-detail', 'worker-profile', 'farm-boundary',
+            'service-proof', 'jobs', 'job-detail', 'worker-profile', 'farm-boundary', 'plan-work',
         ] as const;
         for (const route of allRoutes) {
             const actor = createActor(navigationMachine, { input: undefined }).start();

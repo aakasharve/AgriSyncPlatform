@@ -241,10 +241,21 @@ describe('Task 7 - the local merged read', () => {
         expect((await getLocalPlannedWork(OTHER_FARM)).map(i => i.id).sort()).toEqual([T2, T3]);
     });
 
-    it('a parked refusal is not drawn as intent', async () => {
+    // Lane L8c-2 fix round 1 (P003): a refused CREATE is no longer dropped from the list - it is returned marked `refused` (never kept
+    // on the phone, no step waiting) so the plan page can show its refusal. A refused change to a task the server HAS is still no intent.
+    it('a parked refusal is not drawn as intent (a refused create comes back marked refused; a refused answer changes nothing)', async () => {
         await PlannedWorkCommands.create({ plannedWorkId: T1, farmId: FARM, title: 'काम', scope: 'Farm' });
         const db = getDatabase();
         await db.mutationQueue.update((await db.mutationQueue.toArray())[0].id!, { status: 'REJECTED_USER_REVIEW', errorCode: 'ShramSafal.Forbidden' });
-        expect(await getLocalPlannedWork(FARM)).toEqual([]);
+        const refused = await getLocalPlannedWork(FARM);
+        expect(refused).toHaveLength(1);
+        expect(refused[0]).toMatchObject({ refused: true, keptOnPhone: false, pendingSteps: [] });
+
+        await reconcileSyncPull(pull({ plannedWork: [task({ id: T2 })] }));
+        await PlannedWorkCommands.accept(T2, FARM);
+        const accept = (await db.mutationQueue.toArray()).find(r => r.mutationType === SyncMutationName.PlannedworkAccept)!;
+        await db.mutationQueue.update(accept.id!, { status: 'REJECTED_USER_REVIEW', errorCode: 'ShramSafal.Forbidden' });
+        const t2 = (await getLocalPlannedWork(FARM)).find(i => i.id === T2)!;
+        expect(t2).toMatchObject({ status: 'Assigned', keptOnPhone: false, pendingSteps: [], refused: false });
     });
 });

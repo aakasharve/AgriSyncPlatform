@@ -279,6 +279,12 @@ export const renderLogView = (ctx: AppRouterContext): React.ReactNode => {
                             cost={!mayShowFarmMoney(ctx.farmRole, ctx.maySeeMoney) ? undefined : {
                                 today: costSnapshot.today, yesterday: yesterdayCost, soFar: costSnapshot.cropSoFar, scopeLabel: costSnapshot.scopeLabel,
                             }}
+                            // Lane L8c-2 (founder D-24, D-26, P5) - the plan door: "कामांची जबाबदारी सोपवा / कामांचे नियोजन करा" for the primary
+                            // owner or a holder of PlanWork or AssignWork, "तुमच्यावर सोपवलेली कामे" for everyone else. Both open the route
+                            // 'plan-work'. Drawn only with a farm (the tasks are the farm's).
+                            planDoor={ctx.activeFarmId
+                                ? { kind: ctx.mayOpenPlanner ? 'plan' : 'mine', farmId: ctx.activeFarmId, userId: ctx.meUserId ?? null, onOpen: () => setCurrentRoute('plan-work') }
+                                : undefined}
                             // wave-3.7, founder decision 3 — the question stays VISIBLE while he answers it.
                             // Read straight from the stash, so it survives a reload.
                             pinnedQuestion={mode === 'voice' ? readPendingQuestionAnswer()?.selected.resolvedPromptMr ?? null : null}

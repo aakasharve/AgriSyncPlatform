@@ -11,10 +11,10 @@ import type { AuthorityName } from '../../core/session/farmAuthorities';
 
 /**
  * Every authority the server enforces must have its card words, or a Marathi screen would show the raw English name
- * (MU-2 re-review 2, N-1: PlanWork became enforced with lane L8b-1 and had none). AssignWork is not enforced yet (L8c);
- * when it is, drop it from this Exclude and the word tables below stop compiling until it has words.
+ * (MU-2 re-review 2, N-1: PlanWork became enforced with lane L8b-1 and had none). Lane L8c-2: the server enforces AssignWork and
+ * SeeAllTasks since L8c-1, so the Exclude is gone and the word tables below stop compiling for any authority without words.
  */
-type AuthorityWithWords = Exclude<AuthorityName, 'AssignWork'>;
+type AuthorityWithWords = AuthorityName;
 
 export interface InvitationCopy {
     labels: Record<InvitationLabel, string>;
@@ -107,6 +107,8 @@ const mr: InvitationCopy = {
         SeeWages: 'इतरांची मजुरी दिसते', // PROPOSED (Marathi)
         ReviewMoney: 'पैशांच्या नोंदी तपासू शकतात', // PROPOSED (Marathi)
         PlanWork: 'कामाचं नियोजन करू शकतात', // the founder's word "कामाचं नियोजन करणे" (D-73), in the card's form
+        AssignWork: 'काम सोपवू शकतात', // PROPOSED (Marathi) — lane L8c-2, the card's form of "काम सोपवणे"
+        SeeAllTasks: 'सगळी कामे दिसतात', // PROPOSED (Marathi) — lane L8c-2, the card's form of "सगळी कामे पाहणे"
         EditFarmSetup: 'शेताची रचना बदलू शकतात', // PROPOSED (Marathi)
         LabRecords: 'चाचण्यांच्या नोंदी करू शकतात', // PROPOSED (Marathi)
         ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने बनवू शकतात', // PROPOSED (Marathi)
@@ -213,6 +215,8 @@ const en: InvitationCopy = {
         SeeWages: "Sees other people's wages", // PROPOSED (English)
         ReviewMoney: 'Can check money entries', // PROPOSED (English)
         PlanWork: 'Can plan the work', // PROPOSED (English), the twin of the founder's D-73 word
+        AssignWork: 'Can hand work to others', // PROPOSED (English) — lane L8c-2
+        SeeAllTasks: 'Sees all the tasks', // PROPOSED (English) — lane L8c-2
         EditFarmSetup: 'Can change farm setup', // PROPOSED (English)
         LabRecords: 'Can record lab tests', // PROPOSED (English)
         ScheduleTemplates: 'Can make crop schedule templates', // PROPOSED (English)
