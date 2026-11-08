@@ -90,9 +90,11 @@ public sealed class ScheduledWorkMatcherTests
     }
 
     [Fact]
+    // lane WORK-ID (D-104a): the record was "Fertilizer Urea" before; urea is not the planned 19:19:19, so it no longer
+    // clears that line (the lateness rule this test pins is unchanged - the record now names the planned grade).
     public void Work_recorded_late_still_clears_the_step()
     {
-        var result = ScheduledWorkMatcher.Match([Step("Fertigation 19:19:19", -12)], [Did("Fertilizer Urea", -2)], Today);
+        var result = ScheduledWorkMatcher.Match([Step("Fertigation 19:19:19", -12)], [Did("Fertilizer 19:19:19", -2)], Today);
         Assert.Equal(ScheduledWorkState.Done, Only(result).State);
     }
 
@@ -159,5 +161,65 @@ public sealed class ScheduledWorkMatcherTests
         var removed = Step("Foliar Spray", -1);
         removed.SoftRemove(new UserId(Guid.NewGuid()), "not needed", new DateTime(2026, 10, 29, 0, 0, 0, DateTimeKind.Utc));
         Assert.Empty(ScheduledWorkMatcher.Match([removed], [], Today));
+    }
+
+    // ---- lane WORK-ID: one matcher, words in either language (D-77) ----
+
+    [Fact]
+    public void Marathi_spray_record_meets_a_planned_foliar_spray()
+    {
+        var result = ScheduledWorkMatcher.Match([Step("Foliar Spray", -1)], [Did("आज औषध मारलं", -1), Did("फवारणी", -1)], Today);
+        Assert.Equal(ScheduledWorkState.Done, Only(result).State);
+        Assert.True(ScheduledWorkMatcher.SameWork("Foliar Spray", "फवारणी"));
+    }
+
+    [Fact]
+    public void Spray_carrier_water_never_clears_an_irrigation_step()
+    {
+        var result = ScheduledWorkMatcher.Match([Step("Drip Irrigation", -1)], [Did("फवारणीसाठी पाणी आणलं", -1)], Today);
+        Assert.Equal(ScheduledWorkState.Overdue, Only(result).State);
+        Assert.False(ScheduledWorkMatcher.SameWork("Irrigation", "Spray water 1000 L"));
+    }
+
+    [Fact]
+    public void Weeding_never_clears_pruning_in_either_language()
+    {
+        Assert.Equal(ScheduledWorkState.Overdue, Only(ScheduledWorkMatcher.Match([Step("छाटणी", -1)], [Did("खुरपणी", -1)], Today)).State);
+        Assert.Equal(ScheduledWorkState.Overdue, Only(ScheduledWorkMatcher.Match([Step("खुरपणी", -1)], [Did("Pruning", -1)], Today)).State);
+        Assert.Equal(ScheduledWorkState.Done, Only(ScheduledWorkMatcher.Match([Step("खुरपणी", -1)], [Did("निंदणी", -1)], Today)).State);
+    }
+
+    [Fact]
+    public void A_fungicide_spray_never_clears_an_insecticide_line()
+    {
+        Assert.Equal(ScheduledWorkState.Overdue,
+            Only(ScheduledWorkMatcher.Match([Step("कीटकनाशक फवारणी", -1)], [Did("Spray Mancozeb", -1)], Today)).State);
+        Assert.Equal(ScheduledWorkState.Done,
+            Only(ScheduledWorkMatcher.Match([Step("बुरशीनाशक फवारणी", -1)], [Did("Spray Mancozeb", -1)], Today)).State);
+    }
+
+    [Fact]
+    public void Names_nobody_can_recognise_still_meet_by_their_own_words_as_before()
+    {
+        Assert.True(ScheduledWorkMatcher.SameWork("Staking", "Staking vines"));
+        Assert.False(ScheduledWorkMatcher.SameWork("Staking", "Soil test"));
+        Assert.False(ScheduledWorkMatcher.SameWork("Staking", "Spray"));
+    }
+
+    [Fact]
+    public void Two_unrecognised_names_meet_only_the_old_way()
+    {
+        // R12: words nobody can recognise are never counted as anything else - no close-spelling guess.
+        Assert.Null(WorkRecogniser.Recognise("Stakng"));
+        Assert.Null(WorkRecogniser.Recognise("Staking"));
+        var near = WorkRecogniser.SameWork("Stakng", "Staking");
+        Assert.False(near.Matched);
+        Assert.Equal("not-recognised-different-name", near.ReasonKey);
+
+        // the old base rule still holds: one name containing the other
+        Assert.Null(WorkRecogniser.Recognise("Staking vines"));
+        var contained = WorkRecogniser.SameWork("Staking", "Staking vines");
+        Assert.True(contained.Matched);
+        Assert.Equal("not-recognised-same-name", contained.ReasonKey);
     }
 }

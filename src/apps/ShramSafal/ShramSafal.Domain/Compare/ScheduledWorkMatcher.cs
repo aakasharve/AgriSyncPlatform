@@ -43,9 +43,10 @@ public sealed record ScheduledWorkStatus(PlannedActivity Planned, ScheduledWorkS
 /// <item>A record counts as work done when its status is not Skipped or Delayed (the same rule as
 /// <see cref="CompareEngine"/>), its log is not disputed, it is not a mirrored note ("Reminder" /
 /// "Observation"), and its day is not after today.</item>
-/// <item>A record can meet a step only when it is the same kind of work
-/// (<see cref="CompareEngine.Categorize"/>: spray / fertigation / irrigation); for the catch-all kind the names
-/// must also match (<see cref="CompareEngine.FuzzyMatchActivity"/>), so weeding never clears pruning.</item>
+/// <item>A record can meet a step only when it is the same work (<see cref="WorkRecogniser"/>: the same part, the same
+/// operation for farm work, and the same ROLE for a spray or fertiliser — a fungicide spray never clears an
+/// insecticide line), whichever language either was said in. Words nobody can recognise meet only by their own
+/// names (<see cref="CompareEngine.FuzzyMatchActivity"/>), so weeding never clears pruning.</item>
 /// <item><b>On time</b> (pass 1): a record within <see cref="OnTimeToleranceDays"/> days either side of the
 /// planned day. Closest pairs are joined first, so a step recorded on its own day keeps its own record.</item>
 /// <item><b>Late</b> (pass 2): a step still open takes the earliest unused record made AFTER its on-time
@@ -142,15 +143,11 @@ public static class ScheduledWorkMatcher
         return !NoteTypes.Contains(type);
     }
 
-    /// <summary>Same kind of work; for the catch-all kind, the names must match as well.</summary>
-    public static bool SameWork(string plannedName, string recordedType)
-    {
-        var kind = CompareEngine.Categorize(plannedName);
-        if (!string.Equals(kind, CompareEngine.Categorize(recordedType), StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return kind != "activity" || CompareEngine.FuzzyMatchActivity(plannedName, recordedType);
-    }
+    /// <summary>
+    /// Same work, said in either language (D-77, D-104a). Asks <see cref="WorkRecogniser"/>, the one place the server decides
+    /// sameness, so लक्ष द्या and तुलना agree. Words nobody can recognise are never guessed at (R12): they meet only by the
+    /// old rule, their own names.
+    /// </summary>
+    public static bool SameWork(string plannedName, string recordedType) =>
+        WorkRecogniser.SameWork(plannedName, recordedType).Matched;
 }
