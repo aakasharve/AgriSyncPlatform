@@ -257,6 +257,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    nullable columns Up() added to ssf.schedule_subscriptions - only what Up() added. Up() touches no ledger, no grant and no
         //    privilege (the table keeps its table-level grants and its row-level security). Safe to revert and re-apply mid-proof.
         "20261108150000_AddScheduleSubscriptionOriginAndCheck",
+        // ── Reviewed 2026-11-08 (spec: plr-d10 lane L8c-1, founder D-24c); Down() read in full: drops the four policies and the two new
+        //    tables - only what Up() added. Up() grants SELECT, INSERT, UPDATE on its own two tables and revokes DELETE / TRUNCATE
+        //    there; it touches no existing ledger, grant or privilege. Safe to revert and re-apply mid-proof.
+        "20261108180000_AddPlannedWork",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

@@ -53,6 +53,8 @@ const mr: AuthorityCopy = {
         LabRecords: 'चाचण्यांच्या नोंदी', // PROPOSED (Marathi)
         ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने', // PROPOSED (Marathi)
         PlanWork: 'कामाचं नियोजन करणे', // PROPOSED (Marathi) — lane L8b-1 (founder D-73: "the people you give it")
+        AssignWork: 'काम सोपवणे', // PROPOSED (Marathi) — lane L8c-1 (founder D-24c: assigning to someone else)
+        SeeAllTasks: 'सगळी कामे पाहणे', // PROPOSED (Marathi) — lane L8c-1 (founder D-24e1, D-79)
     },
     note: {
         SeeWages: 'यासोबत पैसे पाहणेही मिळते.', // PROPOSED (Marathi) — lane MU-3, the same line as below
@@ -89,6 +91,8 @@ const en: AuthorityCopy = {
         LabRecords: 'Lab test records', // PROPOSED (English)
         ScheduleTemplates: 'Crop schedule templates', // PROPOSED (English)
         PlanWork: 'Plan the work', // PROPOSED (English) — lane L8b-1 (founder D-73)
+        AssignWork: 'Hand work to others', // PROPOSED (English) — lane L8c-1 (founder D-24c)
+        SeeAllTasks: 'See all the tasks', // PROPOSED (English) — lane L8c-1 (founder D-24e1, D-79)
     },
     note: {
         SeeWages: 'Comes with seeing money.', // PROPOSED (English) — lane MU-3

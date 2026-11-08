@@ -60,6 +60,13 @@ export { JobCardStartPayload } from './jobcard_start.zod';
 export { JobCardCompletePayload } from './jobcard_complete.zod';
 export { JobCardSettlePayload } from './jobcard_settle.zod';
 export { JobCardCancelPayload } from './jobcard_cancel.zod';
+// spec: plr-d10 lane L8c-1 (founder D-24c) - planned work and reminders. The parity gate resolves '<payloadSchema>Payload'
+// against this barrel, so the names stay exactly PlannedWork{Create,Edit,Seen,Accept,Cancel}Payload.
+export { PlannedWorkCreatePayload } from './plannedwork_create.zod';
+export { PlannedWorkEditPayload } from './plannedwork_edit.zod';
+export { PlannedWorkSeenPayload } from './plannedwork_seen.zod';
+export { PlannedWorkAcceptPayload } from './plannedwork_accept.zod';
+export { PlannedWorkCancelPayload } from './plannedwork_cancel.zod';
 // Labour V2 R1 Task 3.5a — attendance.mark. The parity gate resolves
 // '<payloadSchema>Payload' against this barrel and fails OPEN on a miss
 // (PayloadValidator.ts), so the export name must stay exactly

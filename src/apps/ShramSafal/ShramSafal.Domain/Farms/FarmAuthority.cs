@@ -41,7 +41,10 @@ public enum FarmAuthority
     /// </summary>
     PlanWork,
 
-    /// <summary>Assign work. STORED only — L8 enforces it (until then today's label rule decides); no phone switch (P5).</summary>
+    /// <summary>
+    /// Assign work ("काम सोपवणे"): give a task to another person. ENFORCED since lane L8c-1 (founder D-24c) by the planned-work
+    /// doors; the primary account holder always holds it. A personal reminder needs nothing.
+    /// </summary>
     AssignWork,
 
     /// <summary>Edit farm setup: plot, boundary, motors, water.</summary>
@@ -52,6 +55,12 @@ public enum FarmAuthority
 
     /// <summary>Schedule templates (stored as <see cref="FarmPermission.ManageScheduleTemplates"/>).</summary>
     ScheduleTemplates,
+
+    /// <summary>
+    /// spec: plr-d10 lane L8c-1 — See all tasks ("सगळी कामे पाहणे"): every task and reminder of the farm on the plots the seat
+    /// covers. ENFORCED by <c>PlannedWorkVisibility</c> on the pull, the REST reads and the audit.
+    /// </summary>
+    SeeAllTasks,
 }
 
 /// <summary>
@@ -81,12 +90,13 @@ public static class FarmAuthorities
         FarmAuthority.EditFarmSetup,
         FarmAuthority.LabRecords,
         FarmAuthority.ScheduleTemplates,
+        FarmAuthority.SeeAllTasks,
     ];
 
     /// <summary>
     /// The authorities the server ENFORCES and therefore offers as a phone switch (P5): lane MU-3 made
     /// see money / see wages real (the download and every money read follow them); lane L8b-1 (founder D-73) made plan
-    /// work real (ScheduleChangeGate). Assign work waits for L8c.
+    /// work real (ScheduleChangeGate); lane L8c-1 made assign work and see all tasks real (the planned-work doors and reads).
     /// </summary>
     public static readonly IReadOnlyList<FarmAuthority> Switchable =
     [
@@ -96,9 +106,11 @@ public static class FarmAuthorities
         FarmAuthority.SeeWages,
         FarmAuthority.ReviewMoney,
         FarmAuthority.PlanWork,
+        FarmAuthority.AssignWork,
         FarmAuthority.EditFarmSetup,
         FarmAuthority.LabRecords,
         FarmAuthority.ScheduleTemplates,
+        FarmAuthority.SeeAllTasks,
     ];
 
     /// <summary>
@@ -153,6 +165,7 @@ public static class FarmAuthorities
         FarmAuthority.EditFarmSetup => FarmPermission.EditFarmSetup,
         FarmAuthority.LabRecords => FarmPermission.AddTestRecord,
         FarmAuthority.ScheduleTemplates => FarmPermission.ManageScheduleTemplates,
+        FarmAuthority.SeeAllTasks => FarmPermission.SeeAllTasks,
         _ => throw new ArgumentOutOfRangeException(nameof(authority), authority, "Unknown authority."),
     };
 

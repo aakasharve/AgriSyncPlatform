@@ -14,6 +14,12 @@ export type RecordAudienceName = 'Team' | 'Selected' | 'OnlyMe';
 export type RecordKindName = 'DailyLog' | 'CostEntry';
 
 /**
+ * spec: plr-d10 lane L8c-1 - the one kind that is named ONLY on the pull's withdrawn list (a task taken from its old assignee
+ * by a reassign). It has no audience, so it is NOT a `RecordKindName` (an audience is never set on it).
+ */
+export type WithdrawnOnlyKindName = 'PlannedWork';
+
+/**
  * On a work record (`DailyLogDto`) and a money record (`CostEntryDto`): sent ONLY to the farm's primary account
  * holder (his picker and lock chip read it). Everyone else is told nothing.
  */
@@ -25,7 +31,7 @@ export interface RecordAudienceFields {
 
 /** A record taken back from this phone: kind + id, nothing else. The phone removes it and what hangs from it. */
 export interface WithdrawnRecordDto {
-    kind: RecordKindName;
+    kind: RecordKindName | WithdrawnOnlyKindName;
     id: string;
 }
 

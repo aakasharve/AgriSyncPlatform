@@ -63,6 +63,15 @@ export async function reconcileWithdrawnRecords(
     payload: SyncPullResponse,
     ctx: WithdrawnContext,
 ): Promise<WithdrawnOutcome> {
+    // spec: plr-d10 lane L8c-1 - a task taken from its old assignee by a reassign. A plain cache copy of what the server sent:
+    // removed now (his queued answers to it are refused visibly by the server, P10), unless the server sent it again.
+    const sentTasks = new Set((payload.plannedWork ?? []).map(t => t.id));
+    for (const r of payload.withdrawnRecords ?? []) {
+        if (r?.kind === 'PlannedWork' && typeof r.id === 'string' && r.id && !sentTasks.has(r.id)) {
+            await db.plannedWork.delete(r.id);
+        }
+    }
+
     const sentLogs = new Set((payload.dailyLogs ?? []).map(l => l.id));
     const sentMoney = new Set((payload.costEntries ?? []).map(c => c.id));
     const sentAgain = (r: WithdrawnRecordDto) => (r.kind === 'DailyLog' ? sentLogs : sentMoney).has(r.id);

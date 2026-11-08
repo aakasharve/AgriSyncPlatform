@@ -22,6 +22,7 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { readPendingLogIds, readWithdrawalHolds } from './internal/pendingMutations';
 import { reconcileProfileAndCrops } from './reconcilers/profileAndCropsReconciler';
 import { reconcileScheduleSubscriptions } from './reconcilers/scheduleSubscriptionsReconciler';
+import { reconcilePlannedWork } from './reconcilers/plannedWorkReconciler';
 import { uploadHeldScheduleChoices } from '../../scheduler/schedulePage/uploadHeldScheduleChoices';
 import { reconcileLogs } from './reconcilers/logsReconciler';
 import { reconcileAttachments } from './reconcilers/attachmentsReconciler';
@@ -108,6 +109,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         db.crops, db.farmerProfile,
         // lane L8b-2 fix round 1 (B004) - the purge reaches the schedule choices too.
         db.scheduleSubscriptions,
+        // lane L8c-1 - the farm's tasks and reminders (and a task taken from this person leaves with the withdrawn list).
+        db.plannedWork, db.mutationQueue,
     ], async () => {
         if (pendingLogIds) {
             importedLogs = await reconcileLogs(
@@ -132,6 +135,9 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
             pendingLogIds,
             receivedAtUtc,
         });
+        // lane L8c-1 (founder D-24c, D-26, D-79) - the tasks and reminders he may see; the server follows his rights, the phone
+        // keeps exactly what it was sent. Before the withdrawn list, which then takes a task back from its old assignee.
+        await reconcilePlannedWork(db, payload, { fullPull: options.fullPull === true, userId: getAuthSession()?.userId ?? null });
         // lane PRV (D-26) — records whose audience no longer includes this person leave his phone, with what hangs
         // from them; never a record with a change still queued (P10).
         withdrawnMoney = (await reconcileWithdrawnRecords(db, payload, {

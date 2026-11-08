@@ -57,7 +57,8 @@ const HANDLER_PATH = resolve(
 // answered MUTATION_TYPE_UNIMPLEMENTED before), each guarded by its own PayloadHasOnly and named below.
 // 23 -> 24 on 2026-11-07 (lane BILL-1, founder D-12): approve_cost_entry, its own PayloadHasOnly.
 // 24 -> 25 on 2026-11-08 (lane IT2, founders D-92 / D-95): assert_input_identity, its own PayloadHasOnly.
-const EXPECTED_ALLOWLIST_COUNT = 25;
+// 25 -> 30 on 2026-11-08 (lane L8c-1, founder D-24c): plannedwork.create / .edit / .seen / .accept / .cancel, each its own PayloadHasOnly.
+const EXPECTED_ALLOWLIST_COUNT = 30;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -99,6 +100,12 @@ const EXPECTED_GUARDED_MUTATIONS = [
     'adopt_schedule',
     'migrate_schedule',
     'abandon_schedule',
+    // lane L8c-1 - planned work and reminders: make, change, the assignee's two answers, and stop.
+    'plannedwork.create',
+    'plannedwork.edit',
+    'plannedwork.seen',
+    'plannedwork.accept',
+    'plannedwork.cancel',
 ].sort();
 
 interface CatalogEntry {

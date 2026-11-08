@@ -190,14 +190,14 @@ async function deleteDb(): Promise<void> {
 // user, so the number is pinned literally and on purpose — anyone changing
 // it has to come here and say why.
 describe('DATABASE_VERSION tracks the top of the merged version chain', () => {
-    it('DATABASE_VERSION is 27 — dfes v23, main v24, labour v25, input library v26, schedule choices v27, all declared', () => {
+    it('DATABASE_VERSION is 28 — dfes v23, main v24, labour v25, input library v26, schedule choices v27, planned work v28, all declared', () => {
         // WHY 25 (the constant's contract says come here and say why):
         // Labour V2 R1 Task 3.5c added the `attendanceMarks` store in v25 —
         // the pull carriage of the attendance write path. v23 stays DFES's,
         // v24 stays the transcript strip; both remain declared beneath it.
         // v26 (lane IT1c) adds the `inputLibrary` store: the stored product library copy.
         // v27 (lane L8b-2) adds the `scheduleSubscriptions` store: each plot's chosen schedule.
-        expect(DATABASE_VERSION).toBe(27);
+        expect(DATABASE_VERSION).toBe(28); // v28: lane L8c-1 (plannedWork)
     });
 });
 

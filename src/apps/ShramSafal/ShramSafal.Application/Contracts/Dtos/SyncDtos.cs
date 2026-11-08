@@ -110,7 +110,12 @@ public sealed record SyncPullResponseDto(
     // (every state: Active, Migrated, Abandoned, Completed, so a phone sees a switch), for the farms and plots this person may
     // read the farm overview of (the rule planned work follows). Additive and last (P11): 1.0.17 parses the pull with no
     // schema and never reads it; a phone that does not know the key simply keeps its own choice.
-    IReadOnlyList<ScheduleSubscriptionDto>? ScheduleSubscriptions = null);
+    IReadOnlyList<ScheduleSubscriptionDto>? ScheduleSubscriptions = null,
+    // spec: plr-d10 lane L8c-1 (founder D-24c, D-26, D-79) - the tasks and reminders of the farms he reads, changed since his
+    // cursor, as HE may see them (PlannedWorkVisibility: the maker, the assignee, the primary owner, a holder of SeeAllTasks;
+    // a chosen-plots seat only his plots' rows). A task taken from him (a reassign) is named in WithdrawnRecords under kind
+    // "PlannedWork". Additive and last (P11): 1.0.17 parses the pull with no schema and never reads it.
+    IReadOnlyList<PlannedWorkDto>? PlannedWork = null);
 
 /// <summary>
 /// lane PRV — one record taken back from a phone: its kind (<c>DailyLog</c> / <c>CostEntry</c>) and id. Content-free.
@@ -158,7 +163,11 @@ public sealed record FarmAccessScopeDto(
     // every plot, an older server), and, for chosen plots only, the plots (null otherwise). The phone's pickers offer only
     // these plots and its purge removes what lies outside them. A not-readable entry carries neither.
     string? PlotScope = null,
-    IReadOnlyList<Guid>? PlotIds = null)
+    IReadOnlyList<Guid>? PlotIds = null,
+    // spec: plr-d10 lane L8c-1 fix round 1 (L001) - this person holds "see all tasks" now, computed with the clock (an ended
+    // grant is false). Additive and nullable (P11): absent = an older server, and the phone removes no task. With PlotScope and
+    // PlotIds it is all the phone needs to mirror which tasks he may see. A not-readable entry carries none.
+    bool? SeeAllTasks = null)
 {
     public const string Active = "Active";
     public const string Paused = "Paused";
@@ -176,7 +185,8 @@ public sealed record FarmAccessScopeDto(
             scope.SeeCompliance,
             scope.SeeFarmOverview,
             PlotScope: scope.PlotScope.ToString(),
-            PlotIds: scope.PlotIds?.Order().ToList());
+            PlotIds: scope.PlotIds?.Order().ToList(),
+            SeeAllTasks: scope.SeeAllTasks);
 
     /// <summary>
     /// A farm the phone holds that this person may no longer read: a paused seat says Paused, a waiting

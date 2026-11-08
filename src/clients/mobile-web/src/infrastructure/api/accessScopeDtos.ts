@@ -38,4 +38,10 @@ export interface FarmAccessScopeDto {
     seeTests: boolean;
     seeCompliance: boolean;
     seeFarmOverview: boolean;
+    /**
+     * spec: plr-d10 lane L8c-1 fix round 1 (L001) - this person holds "see all tasks" NOW (the server computes it with the
+     * clock: an ended grant arrives as false). Absent = an older server: the phone removes no task. With `plotScope` and
+     * `plotIds` it is all the phone needs to mirror which tasks he may see (for removal only).
+     */
+    seeAllTasks?: boolean | null;
 }

@@ -227,8 +227,8 @@ describe('accessScopeReconciler (lane MU-3)', () => {
     });
 
     it('adds no store of its own: it runs on the shipped Dexie version and the existing stores', () => {
-        expect(DATABASE_VERSION).toBe(27); // lane L8b-2 took v27 for its own store; this lane's claim (no store of its own) is unchanged
-        expect(db.verno).toBe(27);
+        expect(DATABASE_VERSION).toBe(28); // lane L8b-2 took v27 and lane L8c-1 took v28 for their own stores; this lane's claim (no store of its own) is unchanged
+        expect(db.verno).toBe(28);
         for (const name of ['farms', 'plots', 'cropCycles', 'costEntries', 'financeCorrections', 'dayLedgers', 'attendanceMarks',
             'plannedTasks', 'attachments', 'logs', 'jobCards', 'testInstances', 'testRecommendations', 'complianceSignals', 'appMeta']) {
             expect(db.tables.map(t => t.name)).toContain(name);

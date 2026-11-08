@@ -1247,3 +1247,88 @@ describe('lane IT2 — AssertInputIdentityPayload', () => {
         expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, catalogVersion: '' }).success).toBe(false);
     });
 });
+
+// spec: plr-d10-redesign-real-integration-2026-10-25 — lane L8c-1 (founder D-24c, D-24a, D-29) — plannedwork.{create,edit,seen,
+// accept,cancel}: planned work and reminders. Every field is words (a headcount, a quantity and a pay choice never make a
+// wage or a cost); the maker, the status and the clocks are the server's, so no payload carries them.
+describe('lane L8c-1 — PlannedWork payloads', () => {
+    const task = {
+        plannedWorkId: VALID_GUID_A,
+        farmId: VALID_GUID_B,
+        title: 'द्राक्षाला फवारणी',
+        scope: 'Plot',
+        plotIds: [VALID_GUID_C],
+    };
+
+    it('accepts the smallest task and a full crew task', () => {
+        expect(payloads.PlannedWorkCreatePayload.safeParse(task).success).toBe(true);
+        expect(payloads.PlannedWorkCreatePayload.safeParse({ ...task, scope: 'Farm', plotIds: undefined }).success).toBe(true);
+        expect(payloads.PlannedWorkCreatePayload.safeParse({
+            ...task,
+            plannedDate: '2026-11-20',
+            plannedTime: '07:30',
+            assigneeUserId: VALID_GUID_D,
+            crewText: 'मुकादम आणि ५ बायका',
+            expectedHeadcount: 6,
+            quantityText: '२ एकर',
+            payMode: 'Daily',
+            note: 'सकाळी लवकर',
+            sourceKind: 'Spoken',
+            recordedOn: '2026-11-08',
+        }).success).toBe(true);
+        expect(payloads.PlannedWorkCreatePayload.safeParse({ ...task, looseWhen: 'Week' }).success).toBe(true);
+    });
+
+    it('refuses a word outside the lists, a bad day or time, and a headcount outside 1 to 999', () => {
+        for (const bad of [
+            { scope: 'Everywhere' },
+            { looseWhen: 'Tomorrow' },
+            { payMode: 'Bitcoin' },
+            { sourceKind: 'Leftover' },
+            { plannedDate: '20-11-2026' },
+            { plannedTime: '7:30' },
+            { plannedTime: '25:00' },
+            { expectedHeadcount: 0 },
+            { expectedHeadcount: 1000 },
+            { expectedHeadcount: 2.5 },
+            { title: '' },
+            { title: 'x'.repeat(201) },
+            { crewText: 'x'.repeat(101) },
+            { plotIds: ['plot-1'] },
+        ]) {
+            expect(payloads.PlannedWorkCreatePayload.safeParse({ ...task, ...bad }).success, JSON.stringify(bad)).toBe(false);
+        }
+    });
+
+    it('never carries who made it, its status, its source or its clocks', () => {
+        for (const extra of [
+            { createdByUserId: VALID_GUID_D },
+            { status: 'Accepted' },
+            { source: 'Schedule' },
+            { createdAtUtc: '2026-11-08T06:00:00Z' },
+            { wage: 500 },
+            { attendance: true },
+        ]) {
+            expect(payloads.PlannedWorkCreatePayload.safeParse({ ...task, ...extra }).success, JSON.stringify(extra)).toBe(false);
+            expect(payloads.PlannedWorkEditPayload.safeParse({ ...task, ...extra }).success, JSON.stringify(extra)).toBe(false);
+        }
+    });
+
+    it('edit is the same words without the day it was made or its source', () => {
+        expect(payloads.PlannedWorkEditPayload.safeParse(task).success).toBe(true);
+        expect(payloads.PlannedWorkEditPayload.safeParse({ ...task, recordedOn: '2026-11-08' }).success).toBe(false);
+        expect(payloads.PlannedWorkEditPayload.safeParse({ ...task, sourceKind: 'Typed' }).success).toBe(false);
+    });
+
+    it('seen and accept name only the task and its farm; cancel adds an optional reason', () => {
+        const ids = { plannedWorkId: VALID_GUID_A, farmId: VALID_GUID_B };
+        expect(payloads.PlannedWorkSeenPayload.safeParse(ids).success).toBe(true);
+        expect(payloads.PlannedWorkAcceptPayload.safeParse(ids).success).toBe(true);
+        expect(payloads.PlannedWorkSeenPayload.safeParse({ ...ids, assigneeUserId: VALID_GUID_D }).success).toBe(false);
+        expect(payloads.PlannedWorkAcceptPayload.safeParse({ plannedWorkId: VALID_GUID_A }).success).toBe(false);
+        expect(payloads.PlannedWorkCancelPayload.safeParse(ids).success).toBe(true);
+        expect(payloads.PlannedWorkCancelPayload.safeParse({ ...ids, reason: 'पाऊस आला' }).success).toBe(true);
+        expect(payloads.PlannedWorkCancelPayload.safeParse({ ...ids, reason: '' }).success).toBe(false);
+        expect(payloads.PlannedWorkCancelPayload.safeParse({ ...ids, reason: 'x'.repeat(501) }).success).toBe(false);
+    });
+});

@@ -238,6 +238,40 @@ public interface IShramSafalRepository
         IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
         => throw new NotSupportedException("This repository cannot read the newest product-identity answers of a record.");
 
+    // ── spec: plr-d10 lane L8c-1 (founder D-24c) — planned work and reminders (ssf.planned_work, ssf.planned_work_plots). No
+    // DELETE exists: a plot taken off a task is a Dropped row, and a cancelled task is a Cancelled one.
+
+    /// <summary>Stages a new task with its plot rows (no SaveChanges). The default refuses (P5).</summary>
+    Task AddPlannedWorkAsync(PlannedWork work, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot keep planned work.");
+
+    /// <summary>
+    /// The task with this id and its plot rows, TRACKED (the caller changes it and saves), as the caller's tenant scope can
+    /// see it (under FORCE RLS only the farm in scope; another farm's row is not found). Default: none.
+    /// </summary>
+    Task<PlannedWork?> GetPlannedWorkByIdAsync(Guid id, CancellationToken ct = default)
+        => Task.FromResult<PlannedWork?>(null);
+
+    /// <summary>
+    /// Saves a change to a task and its audit row. <c>false</c> when another change to the SAME task was saved first (the row
+    /// version, <c>xmin</c>, moved): nothing of this change is kept and the tracked state is discarded, so the caller answers
+    /// "this work was changed first" and never overwrites the winner. Any other failure throws. Provider specifics never leave
+    /// Infrastructure. Default body = plain save.
+    /// </summary>
+    async Task<bool> TrySavePlannedWorkChangeAsync(CancellationToken ct = default)
+    {
+        await SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
+    /// The pull and the REST list: tasks of these farms changed after <paramref name="sinceUtc"/>, with their plot rows,
+    /// untracked, oldest change first. Which of them a reader may see is <c>PlannedWorkVisibility</c>'s, applied by the caller.
+    /// </summary>
+    Task<List<PlannedWork>> GetPlannedWorkChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+        => Task.FromResult(new List<PlannedWork>());
+
     /// <summary>The pull: answers kept on these farms strictly after <paramref name="sinceUtc"/>, oldest first.</summary>
     Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)

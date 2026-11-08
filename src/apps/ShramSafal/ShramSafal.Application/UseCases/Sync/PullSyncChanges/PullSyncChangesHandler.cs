@@ -363,6 +363,18 @@ public sealed class PullSyncChangesHandler(
             .Where(s => window.ScopeOf(s.FarmId.Value)!.CoversPlot(s.PlotId))
             .DistinctBy(s => s.Id)
             .ToList();
+        // spec: plr-d10 lane L8c-1 (founder D-24c, D-26, D-79) - the tasks and reminders of every farm he reads (an own-records
+        // seat too: he is the assignee of work given to him), through the one visibility rule. A failed read fails the pull and
+        // the phone retries (Phase-1 data, like the plots).
+        var plannedWork = PullPlannedWork.Visible(
+            await window.ReadAsync(
+                Any,
+                (ids, since) => repository.GetPlannedWorkChangedSinceAsync(ids, since, ct),
+                w => (Guid)w.FarmId),
+            query.UserId,
+            accesses,
+            serverNowUtc,
+            audience);
         // §P0.2 — the sync pull no longer carries the audit ledger at all.
         //
         // Not a trim: every audit row this path could ever have returned was a
@@ -482,6 +494,9 @@ public sealed class PullSyncChangesHandler(
 
         // lane L8b-2 - and past the newest subscription change sent (a choice moves no plot's or season's clock).
         nextCursorUtc = PullScheduleSubscriptions.AdvanceCursor(nextCursorUtc, scheduleSubscriptions);
+
+        // lane L8c-1 - and past the newest task change sent (a task moves no plot's or season's clock).
+        nextCursorUtc = PullPlannedWork.AdvanceCursor(nextCursorUtc, plannedWork);
 
         // Sub-plan 03 Task 10 — collect partial-failure components.
         // When this list is non-empty, the response carries
@@ -836,7 +851,9 @@ public sealed class PullSyncChangesHandler(
             // lane L8b-1F - and what ShramSafal's check says NOW about the schedule each follows (a withdrawal shows here, R8).
             ScheduleSubscriptions: scheduleSubscriptions
                 .Select(s => s.ToDto(scheduleTemplates.FirstOrDefault(t => t.Id == s.ScheduleTemplateId.Value)?.Check?.State ?? nameof(Domain.Planning.ScheduleCheckState.NotChecked)))
-                .ToList());
+                .ToList(),
+            // lane L8c-1 (founder D-24c, D-26, D-79) - the tasks and reminders he may see (additive and last, P11).
+            PlannedWork: plannedWork);
 
         return Result.Success(response);
     }

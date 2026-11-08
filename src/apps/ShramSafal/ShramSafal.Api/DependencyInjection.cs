@@ -165,6 +165,13 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Finance.ApproveCostEntry.ApproveCostEntryHandler>();
         // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his answer about a product (push only).
         services.AddScoped<ShramSafal.Application.UseCases.Inputs.AssertInputIdentity.AssertInputIdentityHandler>();
+        // spec: plr-d10 lane L8c-1 (founder D-24c) - planned work and reminders: the five doors (push; the REST reads are in
+        // PlannedWorkEndpoints).
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.CreatePlannedWorkHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.EditPlannedWorkHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.AnswerPlannedWorkHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.CancelPlannedWorkHandler>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.PlannedWorkReads>();
         services.AddScoped<GetFinanceSummaryHandler>();
         // lane MU-3 fix 1 (F94) — /finance/plot-summary asked for this and it was never registered (500).
         services.AddScoped<GetPlotFinanceSummaryHandler>();

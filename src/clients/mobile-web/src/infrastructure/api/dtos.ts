@@ -12,6 +12,7 @@ import type { AttendanceMarkDto, AttributedOperatorDto, DayOutcomeDto, LabourEng
 import type { FarmAccessScopeDto } from './accessScopeDtos';
 import type { PullAudienceFields, RecordAudienceFields } from './recordAudienceDtos';
 import type { ScheduleSubscriptionDto } from './scheduleSubscriptionDtos';
+import type { PlannedWorkDto } from './plannedWorkDtos';
 export type { FarmAccessScopeDto } from './accessScopeDtos';
 
 export type VerificationStatus =
@@ -477,6 +478,8 @@ export interface SyncPullResponse extends PullAudienceFields {
     operators?: SyncOperatorDto[];
     scheduleTemplates?: unknown[];
     scheduleSubscriptions?: ScheduleSubscriptionDto[];
+    /** spec: plr-d10 lane L8c-1 - the farm's tasks and reminders as this person may see them (additive, last; P11). */
+    plannedWork?: PlannedWorkDto[];
     cropTypes?: unknown[];
     activityCategories?: string[];
     // DATA_PRINCIPLE_SPINE 02.5 — server now emits the full
@@ -671,6 +674,7 @@ export interface CropScheduleTemplateDto {
 // The schedule-subscription wire shape lives in ./scheduleSubscriptionDtos (lane L8b-2 moved it out to keep this file
 // under the 800-line limit); re-exported so every existing import keeps working.
 export type { ScheduleSubscriptionDto } from './scheduleSubscriptionDtos';
+export type { PlannedWorkDto, PlannedWorkPlotDto, PlannedWorkAssigneeDto } from './plannedWorkDtos';
 
 export interface AdoptScheduleRequest {
     farmId: string;

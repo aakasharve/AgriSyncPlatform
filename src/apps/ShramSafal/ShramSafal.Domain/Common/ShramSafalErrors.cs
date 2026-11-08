@@ -34,6 +34,33 @@ public static class ShramSafalErrors
     public static readonly Error ScheduleTemplateNotFound = Error.NotFound("ShramSafal.ScheduleTemplateNotFound", "Schedule template was not found.");
     public static readonly Error ScheduleSubscriptionNotFound = Error.NotFound("ShramSafal.ScheduleSubscriptionNotFound", "Schedule subscription was not found.");
 
+    // --- spec: plr-d10 lane L8c-1 (founder D-24 / D-24c) — planned work and reminders -------------------------------
+    // Not found: a made-up id, another farm's task, and a task this person cannot see all answer the same (E4).
+    public static readonly Error PlannedWorkNotFound = Error.NotFound("ShramSafal.PlannedWorkNotFound", "Planned work was not found.");
+
+    // The codes below end in ".InvalidCommand" on purpose: every phone in the field reads the LAST segment and PARKS the
+    // change for the farmer to see (RejectionPolicy), never retrying it silently (P10).
+
+    /// <summary>The person the work is given to is not an Active member of this farm. PROPOSED words.</summary>
+    public static readonly Error PlannedWorkAssigneeNotMember = Error.Validation(
+        "ShramSafal.PlannedWorkAssigneeNotMember.InvalidCommand",
+        "The person is not an active member of this farm, so the work cannot be given to him.");
+
+    /// <summary>The person's seat does not cover every plot of the work. PROPOSED words.</summary>
+    public static readonly Error PlannedWorkAssigneeOutsidePlots = Error.Validation(
+        "ShramSafal.PlannedWorkAssigneeOutsidePlots.InvalidCommand",
+        "The person does not cover all the plots of this work, so the work cannot be given to him.");
+
+    /// <summary>The work was changed first (cancelled, or answered, or edited elsewhere): this step can no longer be applied. PROPOSED words.</summary>
+    public static readonly Error PlannedWorkStateChanged = Error.Conflict(
+        "ShramSafal.PlannedWorkState.InvalidCommand",
+        "This work was changed first, so this step could not be applied.");
+
+    /// <summary>The words or the shape of a task break a rule of the record (a date and a loose word, crew words without a person…).</summary>
+    public static readonly Error PlannedWorkInvalid = Error.Validation(
+        "ShramSafal.PlannedWork.InvalidCommand",
+        "The work is not well formed.");
+
     // --- Conflict (state preconditions / duplication) ---------------------------------------
     public static readonly Error CropCycleOverlap = Error.Conflict("ShramSafal.CropCycleOverlap", "Crop cycle dates overlap an existing cycle on this plot.");
     public static readonly Error DuplicateLogRequest = Error.Conflict("ShramSafal.DuplicateLogRequest", "A log already exists for this idempotency key.");

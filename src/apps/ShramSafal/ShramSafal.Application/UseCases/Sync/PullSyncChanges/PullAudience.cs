@@ -165,6 +165,12 @@ internal sealed class PullAudience(
             .ToList();
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane L8c-1 - names a record (kind + id) this reader held and no longer may, with the delivered-once rule
+    /// of this class. For a kind that has no audience (a planned task taken from its old assignee).
+    /// </summary>
+    public void Withdraw(string kind, Guid id, Guid farmId, DateTime changedAtUtc) => Consider(kind, id, farmId, changedAtUtc);
+
     private void Consider(string kind, Guid id, Guid farmId, DateTime? audienceChangedAtUtc)
     {
         if (audienceChangedAtUtc is not { } changed

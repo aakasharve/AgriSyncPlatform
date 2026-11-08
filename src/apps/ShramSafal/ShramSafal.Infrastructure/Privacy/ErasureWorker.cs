@@ -455,6 +455,19 @@
 //     GO-LIVE-REGISTER F98 and not closed here by assertion.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.planned_work and ssf.planned_work_plots (plr-d10 lane L8c-1, founder D-24c) — KEEP. One planned_work row is one task or
+//     reminder of a FARM: the work instruction in his words (title, note, crew words, quantity words), the date or loose
+//     "when", the place (scope; plots on planned_work_plots), who it was given to, its status, and the people who made, saw,
+//     accepted, cancelled and were formerly assigned it as opaque user ids ONLY — no name, no phone, no amount, no wage (a
+//     headcount, a quantity and a pay choice are words, D-24a). It is the farm's record of what was asked of whom and when
+//     (P10: an acknowledged change is reconstructable without the device). Doctrine P6: anonymise the person, never the work —
+//     an erased person's opaque id stays on the rows, and the phone names a person only through the operator directory, which
+//     erasure anonymises. Neither table can be deleted by the app role (SELECT, INSERT, UPDATE only). DISCLOSED: the title and
+//     note are free words; if account erasure ever needs to remove a farmer's words from tasks he made, that is a surgical
+//     scrub of those columns through the privileged admin context (as ssf.daily_log_contents above), open for
+//     GO-LIVE-REGISTER F98 and not closed here by assertion.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.schedule_template_stages (plr-d10 lane SCH-A, founder D-74) — KEEP. A stage name and its day range of a schedule
 //     row (e.g. "Post Pruning", days 0-15): no person, no words of a farmer, no amount. The person link of a schedule is each
 //     version's maker, ssf.schedule_templates.created_by_user_id (since L8b-1 fix round 1 "who made this version", not

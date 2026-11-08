@@ -65,7 +65,7 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
     // probe corrects a cost it entered itself; another person's cost is not there for it (CostEntryNotFound).
     private static readonly Guid HolderCost = Guid.Parse("2b000001-0000-0000-0000-0000000000d4");
 
-    private const int AllBits = 1 | 2 | 8 | 32 | 64 | 128 | 256 | 512 | 1024;
+    private const int AllBits = 1 | 2 | 8 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048; // 2048 = SeeAllTasks (lane L8c-1)
 
     private string _rootConn = string.Empty;
     private string _scratchDbName = string.Empty;

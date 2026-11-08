@@ -5126,6 +5126,246 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("planned_activities", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.PlannedWork", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("AcceptedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at_utc");
+
+                    b.Property<Guid?>("AssigneeUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assignee_user_id");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cancel_reason");
+
+                    b.Property<DateTime?>("CancelledAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at_utc");
+
+                    b.Property<Guid?>("CancelledByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("cancelled_by_user_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<string>("CrewText")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("crew_text");
+
+                    b.Property<DateTime?>("DoneAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("done_at_utc");
+
+                    b.Property<Guid?>("DoneByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("done_by_user_id");
+
+                    b.Property<short?>("ExpectedHeadcount")
+                        .HasColumnType("smallint")
+                        .HasColumnName("expected_headcount");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid[]>("FormerAssigneeUserIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("former_assignee_user_ids");
+
+                    b.Property<Guid[]>("LinkedDailyLogIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("linked_daily_log_ids");
+
+                    b.Property<string>("LooseWhen")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("loose_when");
+
+                    b.Property<DateTime>("ModifiedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("modified_at_utc");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("note");
+
+                    b.Property<string>("PayMode")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("pay_mode");
+
+                    b.Property<DateOnly?>("PlannedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("planned_date");
+
+                    b.Property<TimeOnly?>("PlannedTime")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("planned_time");
+
+                    b.Property<string>("QuantityText")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("quantity_text");
+
+                    b.Property<DateOnly>("RecordedOn")
+                        .HasColumnType("date")
+                        .HasColumnName("recorded_on");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("scope");
+
+                    b.Property<DateTime?>("SeenAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("seen_at_utc");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("source");
+
+                    b.Property<Guid?>("SourceDailyLogId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_daily_log_id");
+
+                    b.Property<string>("SourceKind")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("source_kind");
+
+                    b.Property<Guid?>("SourceLogTaskId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_log_task_id");
+
+                    b.Property<Guid?>("SourcePlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("source_plot_id");
+
+                    b.Property<string>("SourceVoiceRef")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("source_voice_ref");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssigneeUserId")
+                        .HasDatabaseName("ix_planned_work_assignee");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_planned_work_creator");
+
+                    b.HasIndex("FarmId", "ModifiedAtUtc")
+                        .HasDatabaseName("ix_planned_work_farm_modified");
+
+                    b.ToTable("planned_work", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_planned_work_crew_needs_assignee", "assignee_user_id IS NOT NULL OR (crew_text IS NULL AND expected_headcount IS NULL)");
+
+                            t.HasCheckConstraint("ck_planned_work_date_or_loose", "planned_date IS NULL OR loose_when IS NULL");
+
+                            t.HasCheckConstraint("ck_planned_work_headcount", "expected_headcount IS NULL OR (expected_headcount >= 1 AND expected_headcount <= 999)");
+
+                            t.HasCheckConstraint("ck_planned_work_loose_when", "loose_when IS NULL OR loose_when IN ('Week','Month','Anytime')");
+
+                            t.HasCheckConstraint("ck_planned_work_pay_mode", "pay_mode IS NULL OR pay_mode IN ('Cash','Daily','Contract','Later')");
+
+                            t.HasCheckConstraint("ck_planned_work_scope", "scope IN ('Plot','MultiPlot','Farm','Unspecified')");
+
+                            t.HasCheckConstraint("ck_planned_work_source", "source IN ('Planning','VoiceLog','LogLeftover','Schedule')");
+
+                            t.HasCheckConstraint("ck_planned_work_source_kind", "source_kind IS NULL OR source_kind IN ('Typed','PlanForm','Spoken','Leftover')");
+
+                            t.HasCheckConstraint("ck_planned_work_status", "status IN ('Open','Assigned','Seen','Accepted','Done','Cancelled')");
+
+                            t.HasCheckConstraint("ck_planned_work_time_needs_date", "planned_time IS NULL OR planned_date IS NOT NULL");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.PlannedWorkPlot", b =>
+                {
+                    b.Property<Guid>("PlannedWorkId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("planned_work_id");
+
+                    b.Property<Guid>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<DateTime?>("DoneAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("done_at_utc");
+
+                    b.Property<Guid?>("DoneByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("done_by_user_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid[]>("LinkedDailyLogIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("linked_daily_log_ids");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("status");
+
+                    b.HasKey("PlannedWorkId", "PlotId");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_planned_work_plots_farm");
+
+                    b.HasIndex("PlotId")
+                        .HasDatabaseName("ix_planned_work_plots_plot");
+
+                    b.ToTable("planned_work_plots", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_planned_work_plots_status", "status IN ('Pending','Done','Dropped')");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleCheck", b =>
                 {
                     b.Property<Guid>("Id")
@@ -7375,6 +7615,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.PlannedWorkPlot", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Planning.PlannedWork", null)
+                        .WithMany("Plots")
+                        .HasForeignKey("PlannedWorkId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplateStage", b =>
                 {
                     b.HasOne("ShramSafal.Domain.Planning.ScheduleTemplate", null)
@@ -7522,6 +7771,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Navigation("Tasks");
 
                     b.Navigation("VerificationEvents");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.PlannedWork", b =>
+                {
+                    b.Navigation("Plots");
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplate", b =>

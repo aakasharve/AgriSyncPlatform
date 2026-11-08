@@ -129,6 +129,40 @@ public static class ScheduleChangeGate
     }
 
     /// <summary>
+    /// spec: plr-d10 lane L8c-1 (E4) — the SAME "belongs to this farm" rule as <see cref="RefusePlannedWorkAsync"/>, for the
+    /// PLOTS a task names (a task carries plots, not a season): every plot is read under the named farm's scope and must BE
+    /// that farm's — missing, or another farm's, it is <paramref name="notFound"/>, exactly as an unknown plot answers, so
+    /// nothing tells a caller another farm's plot exists. Asked by the task doors before they ask any authority on the farm.
+    /// </summary>
+    public static async Task<Error?> RefusePlotsOfFarmAsync(
+        IShramSafalRepository repository,
+        Guid farmId,
+        IEnumerable<Guid> plotIds,
+        Error notFound,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(plotIds);
+        ArgumentNullException.ThrowIfNull(notFound);
+        if (farmId == Guid.Empty)
+        {
+            return notFound;
+        }
+
+        foreach (var plotId in plotIds.Distinct())
+        {
+            if (plotId == Guid.Empty
+                || await repository.GetPlotByIdAsync(plotId, ct) is not { } plot
+                || (Guid)plot.FarmId != farmId)
+            {
+                return notFound;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// The owner's flag for a change accepted after "plan work" ended (MU design §11.2): one audit row on the subscription
     /// it changed. Nothing when the decision was an ordinary one. It is a RECORD only: no phone and no server read shows it
     /// to the owner yet (fix round 1, review L2: the orchestrator routes it to lane MU-1's kept-work card).

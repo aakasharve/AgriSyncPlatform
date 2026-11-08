@@ -62,4 +62,10 @@ public enum FarmPermission
 
     /// <summary>lane 2b fix 1 — Review money entries: correct a cost, split a whole-farm cost, job-card payout verify / settle. Requires <see cref="SeeMoney"/>.</summary>
     ReviewMoney = 1 << 10,
+
+    /// <summary>
+    /// spec: plr-d10 lane L8c-1 (R19: the next free bit at merge) — See all tasks ("सगळी कामे पाहणे"): every planned task and
+    /// reminder of the farm on the plots the seat covers, not only the ones he made or was given (D-24e1, D-79).
+    /// </summary>
+    SeeAllTasks = 1 << 11,
 }

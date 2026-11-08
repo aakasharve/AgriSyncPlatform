@@ -17,6 +17,7 @@ import Dexie, { type Table } from 'dexie';
 import type { AuditEvent } from './AuditLogRepository';
 import type { CorrectionEvent } from '../../domain/ai/contracts/CorrectionEvent';
 import type { ScheduleSubscriptionRow } from './scheduleSubscriptionRow';
+import type { PlannedWorkRow } from './plannedWorkRow';
 import { applyV1 } from './dexie/versions/v1';
 import { applyV2 } from './dexie/versions/v2';
 import { applyV3 } from './dexie/versions/v3';
@@ -44,6 +45,7 @@ import { applyV24 } from './dexie/versions/v24';
 import { applyV25 } from './dexie/versions/v25';
 import { applyV26 } from './dexie/versions/v26';
 import { applyV27 } from './dexie/versions/v27';
+import { applyV28 } from './dexie/versions/v28';
 import { LEGACY_DATABASE_NAME } from './userDatabaseName';
 import { getActiveDatabaseName, clearResolvedDatabaseName } from './activeDatabaseName';
 import { recoverLegacyOwnershipClaim, settleOwnershipClaims } from './databaseOwnership';
@@ -112,7 +114,7 @@ export interface PendingInterpretationDexieRow {
 // =============================================================================
 
 /** Current Dexie schema version — bump this when adding version(N).stores(). */
-export const DATABASE_VERSION = 27; // lane L8b-2 — adds the scheduleSubscriptions store (each plot's chosen schedule); see versions/v27.ts. v26 (lane IT1c Task 4) added the inputLibrary store (the offline copy of the server's published product library); see versions/v26.ts. v25 added attendanceMarks (Labour V2 R1 Task 3.5c). 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
+export const DATABASE_VERSION = 28; // lane L8c-1 — adds the plannedWork store (the farm's tasks and reminders; v27 is L8b-2's scheduleSubscriptions); see versions/v27.ts. v26 (lane IT1c Task 4) added the inputLibrary store (the offline copy of the server's published product library); see versions/v26.ts. v25 added attendanceMarks (Labour V2 R1 Task 3.5c). 23 is RESERVED for feat/dfes-companion — see versions/v24.ts.
 /**
  * CEI Phase 1 schema version (now active — applied by Task 5.1.1).
  *
@@ -225,6 +227,9 @@ export class AgriLogDatabase extends Dexie {
     /** spec: lane L8b-2 (v27) — each plot's chosen schedule: the server's rows, and this phone's choices not yet answered. */
     scheduleSubscriptions!: Table<ScheduleSubscriptionRow, string>;
 
+    /** spec: lane L8c-1 (v28) — the farm's tasks and reminders as this person may see them (server rows; unanswered changes are in the queue). */
+    plannedWork!: Table<PlannedWorkRow, string>;
+
     /**
      * dfes-companion-2026-07-11 (Phase 4) — durable voice captures pending AI
      * interpretation. The STORE is created by `applyV23`, which this branch
@@ -291,6 +296,7 @@ export class AgriLogDatabase extends Dexie {
         applyV25(this);
         applyV26(this);
         applyV27(this);
+        applyV28(this);
     }
 }
 

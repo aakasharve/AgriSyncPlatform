@@ -151,7 +151,7 @@ public sealed class ScheduleChangeGateTests
     public void PlanWork_is_a_switch_the_owner_gives()
     {
         Assert.Contains(FarmAuthority.PlanWork, FarmAuthorities.Switchable);
-        Assert.DoesNotContain(FarmAuthority.AssignWork, FarmAuthorities.Switchable);
+        Assert.Contains(FarmAuthority.AssignWork, FarmAuthorities.Switchable); // lane L8c-1: assign work is enforced now
         Assert.Equal(FarmAuthority.PlanWork, ScheduleChangeGate.Authority);
     }
 

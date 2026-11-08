@@ -94,7 +94,12 @@ public static class AuditEndpoints
             // audience changes themselves — from / to and the people before and after — are the record holder's alone.
             var visibility = await RecordVisibility.ForFarmAsync(repository, farmId.Value, actorUserId, clock.UtcNow, ct);
             var holder = await IsRecordHolderAsync(repository, farmId.Value, actorUserId, clock.UtcNow, ct);
+            // spec: plr-d10 lane L8c-1 (founder D-26, D-79) - a task's rows go only to people who may see the task.
+            var visibleTasks = farmEvents.Any(e => e.EntityType == ShramSafal.Domain.RecordPrivacy.RecordKinds.PlannedWork)
+                ? await PlannedWorkAuditAccess.VisibleTaskIdsAsync(repository, farmId.Value, actorUserId, clock.UtcNow, ct)
+                : [];
             var result = farmEvents
+                .Where(e => e.EntityType != ShramSafal.Domain.RecordPrivacy.RecordKinds.PlannedWork || visibleTasks.Contains(e.EntityId))
                 .Where(e => !NamesHidden(visibility, e))
                 .Where(e => holder || !IsAudienceChange(e))
                 .Select(ToDto)
@@ -140,6 +145,25 @@ public static class AuditEndpoints
             }
 
             events = events.Where(e => !NamesHidden(visibility, e)).ToList();
+        }
+
+        // spec: plr-d10 lane L8c-1 (founder D-26, D-79) - the trail of a task is refused whole to anyone who may not see the
+        // task (a made-up id and another farm's task have no rows here at all), and no task's row reaches him otherwise.
+        foreach (var taskFarm in events
+                     .Where(e => e.EntityType == ShramSafal.Domain.RecordPrivacy.RecordKinds.PlannedWork)
+                     .Select(e => e.FarmId).OfType<Guid>().Distinct().ToList())
+        {
+            var visibleTasks = await PlannedWorkAuditAccess.VisibleTaskIdsAsync(repository, taskFarm, actorUserId, now, ct);
+            if (entityType == ShramSafal.Domain.RecordPrivacy.RecordKinds.PlannedWork && !visibleTasks.Contains(entityId))
+            {
+                // Fix round 1 (L004): a task he may not see answers exactly like a made-up id (an empty trail), never a refusal.
+                events = [];
+                break;
+            }
+
+            events = events
+                .Where(e => e.EntityType != ShramSafal.Domain.RecordPrivacy.RecordKinds.PlannedWork || e.FarmId != taskFarm || visibleTasks.Contains(e.EntityId))
+                .ToList();
         }
 
         // Fix pass 1 (L3) — an audience change's own row (from / to, the people before and after) goes to the record
