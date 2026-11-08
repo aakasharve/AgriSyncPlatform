@@ -28,6 +28,7 @@ import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { dayShort } from '../dayPick/dayWords';
 import { useDayUnderstanding } from '../../hooks/useDayUnderstanding';
+import { usePlotDayUnderstanding } from '../../hooks/usePlotDayUnderstanding';
 import { subscribeDfesAnswered } from '../../services/dfesAnswerSignal';
 import type { RingNodeData } from '../shramsathi/understandingRing';
 import { PartIcon } from './HisWords';
@@ -57,6 +58,11 @@ const ringVariant = (): 'cinematic' | 'flat' => (typeof CanvasRenderingContext2D
 export interface ResultHeroProps {
     farmId: string | null;
     dayDate: string | undefined;
+    /**
+     * Lane IT4 Task 0b - the plot this recording is about. The meter then shows THAT plot's own score (IT3); with no plot (a
+     * whole-farm recording) it shows the farm-day score. Never the farm-day score for a recording that has a plot.
+     */
+    plotId?: string | null;
     /** The log this recording wrote: a new one refetches the server score. */
     savedLogId: string | null;
     /** One per recording: the ring replays only for a new one. */
@@ -134,13 +140,18 @@ const UntoldPartButtons: React.FC<Pick<ResultHeroProps, 'missing' | 'onTellMore'
 };
 
 /** The meter (flag-gated). Its own component so a flag-off build mounts no fetch at all. */
-const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed }) => {
+const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId, recordingKey, nodes, onTellMore, onReadMore, missing, unsure, typed }) => {
     const RS = useResultStr();
     const heroTop = useRef<HTMLDivElement>(null);
     const language = useOptionalLanguage()?.language;
     const lastSyncAtMs = useSelector(getRootStore().sync, s => s.context.lastSyncAtMs);
-    const { score, classification, refresh } = useDayUnderstanding(farmId, dayDate, `${savedLogId ?? ''}:${lastSyncAtMs ?? ''}`);
-    useEffect(() => subscribeDfesAnswered(() => { void refresh(); }), [refresh]);
+    const refreshKey = `${savedLogId ?? ''}:${lastSyncAtMs ?? ''}`;
+    const { score: farmScore, classification, refresh } = useDayUnderstanding(farmId, dayDate, refreshKey);
+    // Lane IT4 Task 0b: this recording's plot has its own score; the farm-day score stands only for a recording with no plot.
+    const plot = usePlotDayUnderstanding(farmId, plotId, dayDate, refreshKey);
+    const score = plotId ? plot.score : farmScore;
+    const refreshPlot = plot.refresh;
+    useEffect(() => subscribeDfesAnswered(() => { void refresh(); void refreshPlot(); }), [refresh, refreshPlot]);
     const noWork = classification === DECLARED_NO_WORK_DAY;
     // The ring draws its orbs only with a server score above 0 (RingStage); without one the tiles stand in for it.
     const ringDrawn = !noWork && score != null && score > 0;

@@ -25,7 +25,7 @@ const crops = [{
     plots: [{ id: 'plot-a', name: 'सोनाका', baseline: { unit: 'Acre' } }, { id: 'plot-b', name: 'थॉमसन', baseline: { unit: 'Acre' } }],
 }] as unknown as CropProfile[];
 const onePlot: LogScope = { selectedPlotIds: ['plot-a'], selectedCropIds: ['crop-g'], mode: 'single', applyPolicy: 'broadcast' };
-const deps: WhoDeps = { youIds: new Set(['owner']), nameOf: () => undefined, youLabel: 'तुम्ही', unknownLabel: 'अज्ञात' };
+const deps: WhoDeps = { youIds: new Set(['owner']), nameOf: () => undefined, ownName: 'सुनील', unknownLabel: 'अज्ञात' };
 
 const voice = (over: Partial<AgriLogResponse>): AgriLogResponse => ({
     summary: '', dayOutcome: 'WORK_RECORDED', cropActivities: [], irrigation: [], labour: [], inputs: [], machinery: [],
@@ -120,7 +120,7 @@ describe('real voice logs — what the result screen says Sathi understood', () 
         expect(earlier.length).toBeGreaterThan(1);
         expect(day.earlier).toHaveLength(1);
         expect(day.earlier[0].logIds.sort()).toEqual(earlier.map(l => l.id).sort());
-        expect(day.speakers).toEqual([{ name: 'तुम्ही', you: true, times: 2 }]);
+        expect(day.speakers).toEqual([{ name: 'सुनील', you: true, times: 2 }]);
     });
 });
 

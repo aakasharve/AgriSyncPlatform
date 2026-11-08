@@ -147,6 +147,29 @@ describe('MutationDependency — box 2a: the two enumerated parent sets', () => 
     });
 });
 
+describe('MutationDependency - a his-answer about a product waits behind its record (lane IT4 fix 1, F2)', () => {
+    beforeEach(async () => {
+        await freshDb();
+    });
+
+    const answer = { assertionId: '22222222-2222-4222-8222-222222222222', dailyLogId: PARENT_LOG, inputEventId: 'ev-1', mixIndex: 0, verdict: 'rejected' };
+
+    it('AssertInputIdentity_ReadsItsParentFromDailyLogId', () => {
+        expect(parentDailyLogIdOf(SyncMutationName.AssertInputIdentity, answer)).toBe(PARENT_LOG);
+    });
+
+    it('AnswerWaitsBehindItsLogsCreate_AndIsRefusedWhenThatCreateIsParked', async () => {
+        await seedParent('PENDING');
+        expect((await resolveDailyLogDependency(DEVICE, SyncMutationName.AssertInputIdentity, answer)).disposition).toBe('PARENT_IN_PROGRESS');
+        await freshDb();
+        await seedParent('REJECTED_USER_REVIEW');
+        expect((await resolveDailyLogDependency(DEVICE, SyncMutationName.AssertInputIdentity, answer)).disposition).toBe('PARENT_UNRECOVERABLE');
+        await freshDb();
+        await seedParent('APPLIED'); // the log is on the server: a refusal is then judged on its own merits
+        expect((await resolveDailyLogDependency(DEVICE, SyncMutationName.AssertInputIdentity, answer)).disposition).toBe('NOT_A_DEPENDENCY');
+    });
+});
+
 describe('MutationDependency — which payload field carries the parent', () => {
     it('reads the parent id from each child mutation shape, and from no others', () => {
         expect(parentDailyLogIdOf(SyncMutationName.AddLogTask, { dailyLogId: PARENT_LOG })).toBe(PARENT_LOG);

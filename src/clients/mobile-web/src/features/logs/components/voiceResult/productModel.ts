@@ -41,7 +41,23 @@ export type ProductAmount =
  * one-product row whose label has no Marathi — his own word for it from the row's verified phrase (`spokenName`;
  * `spokenIsPhrase` when no single word could be told apart and the whole phrase stands for it).
  */
-export interface ProductItem { id: string; said?: string; label?: string; amount?: ProductAmount; spokenName?: string; spokenIsPhrase?: boolean }
+export interface ProductItem {
+    id: string;
+    said?: string;
+    label?: string;
+    amount?: ProductAmount;
+    spokenName?: string;
+    spokenIsPhrase?: boolean;
+    /**
+     * Lane IT4 Task 2 - where this product sits in the record: the input event's id and its slot in `mix[]`. The server takes
+     * an answer (हो / नाही / फोटो) about exactly this place, and only a `mix[]` item with a name can be answered. Absent for a
+     * one-line input with no `mix[]` and for an event with no id of its own: those are shown, never asked about.
+     */
+    ref?: { eventId: string; mixIndex: number };
+    /** Lane IT4 Task 2 - the name as recorded in `mix[]` (the library matches this, never `said` / `label`), and its NPK grade. */
+    matchName?: string;
+    npkGrade?: string;
+}
 
 /** Water he stated for the release: his words, or the number(s) as recorded. */
 export interface ProductWater { spoken?: string; litres?: number; hours?: number }
@@ -116,6 +132,8 @@ const itemsOf = (e: InputEvent, index: number, logId: string): ProductItem[] => 
     if (mix.length > 0) {
         return mix.map((m, i) => ({
             id: m.id || `${base}:${i}`,
+            ...(e.id && clean(m.productName) ? { ref: { eventId: e.id, mixIndex: i }, matchName: clean(m.productName) } : {}),
+            ...(clean(m.npkGrade) ? { npkGrade: clean(m.npkGrade) } : {}),
             // A one-product mix may carry his word on the row itself.
             said: rawOf(m) || (mix.length === 1 ? rawOf(e) : '') || undefined,
             label: withoutTaskPrefix(m.productName) || undefined,

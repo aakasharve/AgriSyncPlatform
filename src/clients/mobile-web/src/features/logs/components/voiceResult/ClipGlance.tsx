@@ -67,7 +67,7 @@ export const ClipGlanceSheet: React.FC<GlanceProps> = ({ entry, recording, clip,
                     </button>
                     <TimePill label={entry.timeLabel} strong />
                     {/* Who spoke it, the result screen's way: "तुम्ही" for the person holding this phone. */}
-                    <WhoChip who={{ name: entry.byYou ? RS.you : entry.loggedBy, you: !!entry.byYou }} testId="clip-glance-who" />
+                    <WhoChip who={{ name: entry.loggedBy, you: !!entry.byYou }} testId="clip-glance-who" />
                     <span className={`text-[12px] font-extrabold ${confirmed ? 'text-emerald-700' : 'text-stone-600'}`} data-testid="clip-glance-state">
                         {confirmed ? `✔ ${RS.confirmedBadge}` : RS.notConfirmed}
                     </span>

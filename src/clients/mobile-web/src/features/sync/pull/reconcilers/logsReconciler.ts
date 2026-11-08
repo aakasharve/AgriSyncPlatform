@@ -338,6 +338,9 @@ function preserveLocalOnlyFields(
         ...(existing.voiceClipId && { voiceClipId: existing.voiceClipId }),
         // PLR-D10 L6b — "he typed it to Sathi" (no recording behind it) is not on the wire; this phone keeps it.
         ...(existing.typedEntry === true && { typedEntry: true }),
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4) - his हो / नाही / फोटो answers are not on the log's wire
+        // (they come in the pull's own list, `inputIdentityReconciler.ts`): a log update keeps the ones this phone holds.
+        ...(existing.inputIdentities && existing.inputIdentities.length > 0 && { inputIdentities: existing.inputIdentities }),
 
         // ── P0.5 — `meta` IS MERGED, NOT REPLACED ───────────────────────────
         //

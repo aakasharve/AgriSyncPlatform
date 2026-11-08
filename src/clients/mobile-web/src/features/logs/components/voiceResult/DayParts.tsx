@@ -43,7 +43,7 @@ export const TimePill: React.FC<{ label: string; strong?: boolean }> = ({ label,
     label ? <span className={`inline-block shrink-0 rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${strong ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-stone-300 bg-stone-100 text-stone-700'}`}>{label}</span> : null
 );
 
-/** WHO spoke a recording: "तुम्ही" for the person holding this phone, else the name recorded with the log. */
+/** WHO spoke a recording: always a real name (lane IT4 Task 0b) - the holder's own name too, an unknown name as the unknown label. */
 export const WhoChip: React.FC<{ who: Who; testId?: string }> = ({ who, testId }) => (
     <span data-testid={testId} data-you={who.you ? 'yes' : 'no'}
         className={`inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${who.you ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-blue-300 bg-blue-50 text-blue-900'}`}>
@@ -123,6 +123,42 @@ export const BlockerRow: React.FC<{ entry: BlockerEntry }> = ({ entry }) => {
 };
 
 /**
+ * Every entry of one part of the day, each tied to the time (and speaker) of the recording it came from. Shared by `DayRow`
+ * (आढावा, Reflect) and the result screen's one-line-per-part list (lane IT4 `DaySummaryLines`).
+ */
+export const DayEntries: React.FC<{
+    part: PartKey; entries: readonly PartEntry[]; byLog: ReadonlyMap<string, RecordingView>; showWho: boolean; nowIds: ReadonlySet<string>;
+}> = ({ part, entries, byLog, showWho, nowIds }) => {
+    const language = useOptionalLanguage()?.language;
+    const m = partMeta(part);
+    return (
+        <>
+            {entries.map(e => {
+                const rec = byLog.get(e.logId);
+                const isNew = nowIds.has(e.logId);
+                return (
+                    <div key={e.id} data-testid={`vr-day-entry-${e.id}`} className={`rounded-xl border-l-4 px-2.5 py-1.5 ${isNew ? 'border-emerald-600 bg-emerald-50' : 'border-stone-300 bg-white'}`}>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {rec && <TimePill label={rec.timeLabel} strong={isNew} />}
+                            {rec && showWho && <WhoChip who={rec.who} />}
+                            {rec?.typed && <TypedTag />}
+                        </div>
+                        {rec?.legacyPartial && <LegacyNote testId={`vr-day-legacy-${e.id}`} />}
+                        {!e.verified && <UnsureFlag testId={`vr-day-unsure-${e.id}`} />}
+                        {e.verified && showsProducts(e.products, language) ? <div className="mt-1"><ProductBoxCard box={e.products} /></div> : (
+                            <>
+                                {e.value && <div className={`leading-tight text-stone-900 ${e.verified ? 'text-[18px] font-extrabold' : 'text-[15px] font-semibold'}`}>{e.value}</div>}
+                                {e.quote && e.quote !== e.value && <div className="mt-0.5 text-[12.5px] text-stone-700"><mark className="rounded px-1 text-inherit" style={{ background: m.tint }}>{e.quote}</mark></div>}
+                            </>
+                        )}
+                    </div>
+                );
+            })}
+        </>
+    );
+};
+
+/**
  * One glanceable line per part for the whole day; open when this recording touched it, else one tap away. Lane RF2:
  * `defaultOpen` — आढावा's plot-day view opens every part, so each value shows beside the time it was told.
  */
@@ -151,27 +187,7 @@ export const DayRow: React.FC<{ part: PartKey; entries: readonly PartEntry[]; by
             </button>
             {open && (
                 <div className="space-y-1.5 border-t border-stone-100 p-2.5" data-testid={`vr-day-history-${part}`}>
-                    {entries.map(e => {
-                        const rec = byLog.get(e.logId);
-                        const isNew = nowIds.has(e.logId);
-                        return (
-                            <div key={e.id} data-testid={`vr-day-entry-${e.id}`} className={`rounded-xl border-l-4 px-2.5 py-1.5 ${isNew ? 'border-emerald-600 bg-emerald-50' : 'border-stone-300 bg-white'}`}>
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                    {rec && <TimePill label={rec.timeLabel} strong={isNew} />}
-                                    {rec && showWho && <WhoChip who={rec.who} />}
-                                    {rec?.typed && <TypedTag />}
-                                </div>
-                                {rec?.legacyPartial && <LegacyNote testId={`vr-day-legacy-${e.id}`} />}
-                                {!e.verified && <UnsureFlag testId={`vr-day-unsure-${e.id}`} />}
-                                {e.verified && showsProducts(e.products, language) ? <div className="mt-1"><ProductBoxCard box={e.products} /></div> : (
-                                    <>
-                                        {e.value && <div className={`leading-tight text-stone-900 ${e.verified ? 'text-[18px] font-extrabold' : 'text-[15px] font-semibold'}`}>{e.value}</div>}
-                                        {e.quote && e.quote !== e.value && <div className="mt-0.5 text-[12.5px] text-stone-700"><mark className="rounded px-1 text-inherit" style={{ background: m.tint }}>{e.quote}</mark></div>}
-                                    </>
-                                )}
-                            </div>
-                        );
-                    })}
+                    <DayEntries part={part} entries={entries} byLog={byLog} showWho={showWho} nowIds={nowIds} />
                 </div>
             )}
         </section>

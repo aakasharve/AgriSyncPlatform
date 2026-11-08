@@ -525,6 +525,11 @@ export class AgriSyncClient implements HttpTransport {
         return Dfes.getDayUnderstanding(this, farmId, date);
     }
 
+    /** spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 Task 0b) - each plot's own understanding of the day (IT3). */
+    getPlotDayUnderstanding(farmId: string, date?: string): Promise<import('./resources/DfesResource').PlotDayUnderstandingDto[]> {
+        return Dfes.getPlotDayUnderstanding(this, farmId, date);
+    }
+
     // --- Internal: auth interceptor + 401 retry ---------------------------
 
     private attachAccessToken(config: InternalAxiosRequestConfig): InternalAxiosRequestConfig {

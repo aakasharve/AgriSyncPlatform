@@ -640,7 +640,38 @@ export type LogCaptureScope = 'labour';
  * DailyLog - The immutable execution record for a single day.
  * This is the "truth" of what happened on the farm.
  */
+/**
+ * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 Task 2; founders D-92 / D-95) - his हो / नाही / फोटो answer about ONE
+ * product of a saved record (the item `inputs[inputEventId].mix[mixIndex]`). It rides on the log record as a non-indexed field
+ * (Dexie is unchanged) and is an OVERLAY: it never changes the log's dose, quantity, product name or date (P7).
+ *   - `isCheck` is the SERVER's word (the sender held the confirm-records authority); the phone never sends it. A row made on
+ *     this phone and not yet pulled back carries `pending: true` and `isCheck: false` - the speaker's own answer.
+ *   - `assertedByUserId` is who answered; his name is looked up where it is shown (never "तुम्ही").
+ */
+export interface InputIdentityAnswer {
+    assertionId: string;
+    inputEventId: string;
+    mixIndex: number;
+    verdict: 'confirmed' | 'rejected' | 'photo';
+    /** A library product id; only on a `confirmed` answer. */
+    catalogProductId?: string | null;
+    /** The attachment (packet photo) of a `photo` answer; a pointer, the file may not be on the server yet. */
+    attachmentId?: string | null;
+    catalogVersion: string;
+    assertedByUserId?: string | null;
+    assertedAtUtc: string;
+    isCheck: boolean;
+    /** Made on this phone and not yet seen coming back from the server. */
+    pending?: true;
+}
+
 export interface DailyLog extends DailyLogServerState {
+    /**
+     * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 Task 2) - his answers about the products of this record, the
+     * newest per product and speaker-or-check. Pulled from the server (`inputIdentityAssertions`) and added on this phone when he
+     * answers. Non-indexed: the cache tables are unchanged. An overlay, never part of what he said (P7).
+     */
+    inputIdentities?: InputIdentityAnswer[];
     id: string;
     date: string;
     context: FarmContext;

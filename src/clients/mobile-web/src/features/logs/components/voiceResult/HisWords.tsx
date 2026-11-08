@@ -11,7 +11,7 @@
  * to the item, in one fixed template — nothing invented.
  */
 import React, { useState } from 'react';
-import { Lightbulb } from 'lucide-react';
+import { ChevronDown, Lightbulb } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { CategoryIcon } from '../shramsathi/understandingRing';
 import { resultCopy } from './resultCopy';
@@ -123,6 +123,29 @@ export const PartLinks: React.FC<{ runs: readonly WordRun[]; entries: readonly P
                     </button>
                 )}
             </div>
+        </div>
+    );
+};
+
+/**
+ * spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 Task 1; DFES-simple-day-preview.html) - his words folded under ONE
+ * line, "तुमचं बोलणं · शब्द पाहण्यासाठी दाबा", with his recording's play button beside it (or the typed note where there is none).
+ * The words, the "why" tiles and the lines Sathi could not place open only when he taps the line.
+ */
+export const WordsFold: React.FC<{ open: boolean; onToggle: () => void; player?: React.ReactNode; children: React.ReactNode }> = ({ open, onToggle, player, children }) => {
+    const copy = resultCopy(useOptionalLanguage()?.language);
+    return (
+        <div className="mt-2 rounded-2xl bg-white ring-1 ring-stone-200" data-testid="vr-words-fold" data-open={open ? 'yes' : 'no'}>
+            {player && <div className="p-2">{player}</div>}
+            <button type="button" onClick={onToggle} aria-expanded={open} data-testid="vr-words-toggle"
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left">
+                <span>
+                    <span className="block text-[14.5px] font-extrabold text-stone-900">{copy.yourWords}</span>
+                    <span className="block text-[12px] font-bold text-stone-500">{copy.seeWords}</span>
+                </span>
+                <ChevronDown size={20} className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </button>
+            {open && <div className="border-t border-stone-100 px-3 pb-2.5 pt-1.5" data-testid="vr-words-body">{children}</div>}
         </div>
     );
 };

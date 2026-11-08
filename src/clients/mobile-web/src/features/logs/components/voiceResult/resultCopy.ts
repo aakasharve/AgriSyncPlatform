@@ -46,6 +46,54 @@ export interface ResultCopy {
      * kept what Sathi understood), so some of its details cannot be shown. Said once, quietly, never a warning.
      */
     legacyPartial: string;
+
+    // ---- Lane IT4 (spec dfes-input-truth-and-mix-check-2026-11-06): product rows, the product card, the mix box, the folded words ----
+    /** The product type pill (Option 3): the founder's six kinds. */
+    typeNames: Record<'fungicide' | 'insecticide' | 'herbicide' | 'pgr' | 'fertilizer' | 'unknown', string>;
+    factIngredient: string;
+    factCompany: string;
+    /** The amount as HE said it (never the library's dose). */
+    factDose: string;
+    factBill: string;
+    factBenefit: string;
+    /** A row's status line. */
+    statusAsk: string;
+    statusOwnerWillCheck: string;
+    saidYes: (name: string) => string;
+    saidNo: (name: string) => string;
+    checkedYes: (name: string) => string;
+    checkedNo: (name: string) => string;
+    checkedPhoto: (name: string) => string;
+    /** The card: the speaker's answer, shown as HIS. */
+    speakerSaid: (name: string, what: string) => string;
+    answerYes: string;
+    /** The two short answers as a sentence part: "सुनील: हो, हेच" / "… हे नाही". */
+    yesThis: string;
+    /** A name the library holds more than once: no way to pick yet, so it only says the owner will look (never "say which one"). */
+    ambiguousLine: string;
+    notThis: string;
+    answerNo: string;
+    answerPhoto: string;
+    askChecker: string;
+    askSpeaker: string;
+    closeChecker: string;
+    closeSpeaker: string;
+    close: string;
+    takePhoto: string;
+    /** D-95: under the badges, to someone who is not a checker. */
+    speakerDone: string;
+    answerFailed: string;
+    photoFailed: string;
+    /** A purchase bill matched to the product (money shown only to a member who may see money). */
+    billMatched: (date: string, amount?: string) => string;
+    /** The red banner on top of the screen. */
+    mixBannerOne: string;
+    mixBannerMany: (n: number) => string;
+    mixBannerHint: string;
+    mixSource: (title: string) => string;
+    /** The folded "his words" line. */
+    yourWords: string;
+    seeWords: string;
 }
 
 const mr: ResultCopy = {
@@ -83,6 +131,46 @@ const mr: ResultCopy = {
     readBelow: 'खाली वाचा',
     // PROPOSED (Marathi) — lane F1 review N9. Word-free of "नोंद" (PLR-D5 :65 keeps it off these screens).
     legacyPartial: 'जुनं काम — काही तपशील उपलब्ध नाहीत',
+
+    // Lane IT4. FOUNDER: the type names and colours (DFES-result-options.html Option 3), "तुमचं काम झालं. नोंद ठेवली. औषधं मालक नंतर
+    // तपासतील.", "माहीत असेल तर सांगा (ऐच्छिक)", "माहीत नाही, मालक पाहतील" (D-95). PREVIEW: wording of DFES-owner-check-scenario.html /
+    // DFES-simple-day-preview.html. The rest is PROPOSED (Marathi).
+    typeNames: { fungicide: 'बुरशीनाशक', insecticide: 'कीटकनाशक', herbicide: 'तणनाशक', pgr: 'वाढ नियंत्रक', fertilizer: 'खत', unknown: 'ओळख नाही' },
+    factIngredient: 'घटक',
+    factCompany: 'कंपनी',
+    factDose: 'सांगितलेलं प्रमाण', // PROPOSED (Marathi)
+    factBill: 'बिल',
+    factBenefit: 'फायदा',
+    statusAsk: 'हेच का? तपासा',
+    statusOwnerWillCheck: 'मालक तपासतील',
+    saidYes: (name: string) => `${name}: हो, हेच`,
+    saidNo: (name: string) => `${name}: हे नाही`,
+    checkedYes: (name: string) => `${name} यांनी तपासलं`,
+    checkedNo: (name: string) => `${name}: हे नाही`, // PROPOSED (Marathi)
+    checkedPhoto: (name: string) => `फोटो ठेवला · ${name} यांनी पाहिलं`,
+    speakerSaid: (name: string, what: string) => `${name}ने सांगितलं: ${what}`,
+    answerYes: 'हो',
+    yesThis: 'हो, हेच',
+    ambiguousLine: 'लायब्ररीत एकापेक्षा जास्त जुळले — मालक पाहतील', // PROPOSED (Marathi)
+    notThis: 'हे नाही',
+    answerNo: 'नाही',
+    answerPhoto: 'फोटो',
+    askChecker: 'हेच औषध वापरलं का?',
+    askSpeaker: 'माहीत असेल तर सांगा (ऐच्छिक)',
+    closeChecker: 'नंतर पाहीन',
+    closeSpeaker: 'माहीत नाही, मालक पाहतील',
+    close: 'बंद करा',
+    takePhoto: 'पॅकेटचा फोटो काढा',
+    speakerDone: 'तुमचं काम झालं. नोंद ठेवली. औषधं मालक नंतर तपासतील.',
+    answerFailed: 'आत्ता ठेवता आलं नाही — पुन्हा दाबा', // PROPOSED (Marathi)
+    photoFailed: 'फोटो ठेवता आला नाही — पुन्हा दाबा', // PROPOSED (Marathi)
+    billMatched: (date: string, amount?: string) => ['खरेदी बिलाशी जुळलं', date, amount].filter(Boolean).join(' · '),
+    mixBannerOne: 'एक मिश्रण चुकीचं आहे',
+    mixBannerMany: (n: number) => `${toMarathiNumber(n)} मिश्रणं चुकीची आहेत`, // PROPOSED (Marathi)
+    mixBannerHint: 'पाहण्यासाठी दाबा',
+    mixSource: (title: string) => `स्रोत: ${title}`,
+    yourWords: 'तुमचं बोलणं',
+    seeWords: 'शब्द पाहण्यासाठी दाबा',
 };
 
 const en: ResultCopy = {
@@ -106,6 +194,44 @@ const en: ResultCopy = {
     notToldPart: (part: string) => `${part} — not told yet. Tap and tell Sathi.`, // PROPOSED (English)
     readBelow: 'Read below', // PROPOSED (English)
     legacyPartial: 'Older record — some details are not available', // PROPOSED (English)
+
+    // Lane IT4 - the English twin, all PROPOSED (English).
+    typeNames: { fungicide: 'Fungicide', insecticide: 'Insecticide', herbicide: 'Weedkiller', pgr: 'Growth regulator', fertilizer: 'Fertiliser', unknown: 'Not identified' },
+    factIngredient: 'Ingredient',
+    factCompany: 'Company',
+    factDose: 'Amount said',
+    factBill: 'Bill',
+    factBenefit: 'Benefit',
+    statusAsk: 'Is this it? Check',
+    statusOwnerWillCheck: 'The owner will check',
+    saidYes: (name: string) => `${name}: yes, this one`,
+    saidNo: (name: string) => `${name}: not this one`,
+    checkedYes: (name: string) => `Checked by ${name}`,
+    checkedNo: (name: string) => `${name}: not this one`,
+    checkedPhoto: (name: string) => `Photo saved · seen by ${name}`,
+    speakerSaid: (name: string, what: string) => `${name} said: ${what}`,
+    answerYes: 'Yes',
+    yesThis: 'yes, this one',
+    ambiguousLine: 'The library found more than one match — the owner will look', // PROPOSED (English)
+    notThis: 'not this one',
+    answerNo: 'No',
+    answerPhoto: 'Photo',
+    askChecker: 'Was this the product used?',
+    askSpeaker: 'Tell us if you know (optional)',
+    closeChecker: 'I will look later',
+    closeSpeaker: 'Do not know, the owner will see',
+    close: 'Close',
+    takePhoto: 'Take a photo of the packet',
+    speakerDone: 'Your part is done. The record is kept. The owner will check the products later.',
+    answerFailed: 'Could not keep it just now — tap again',
+    photoFailed: 'Could not keep the photo — tap again',
+    billMatched: (date: string, amount?: string) => ['Matched to a purchase bill', date, amount].filter(Boolean).join(' · '),
+    mixBannerOne: 'One mix is wrong',
+    mixBannerMany: (n: number) => `${n} mixes are wrong`,
+    mixBannerHint: 'Tap to see',
+    mixSource: (title: string) => `Source: ${title}`,
+    yourWords: 'Your words',
+    seeWords: 'Tap to see the words',
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */
