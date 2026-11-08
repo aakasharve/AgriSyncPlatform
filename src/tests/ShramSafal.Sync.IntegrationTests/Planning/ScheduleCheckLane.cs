@@ -32,9 +32,26 @@ public abstract class ScheduleCheckLane(ITestOutputHelper output) : ScheduleLane
 
     protected const string DisplayName = "श्रमसफल कृषी तज्ज्ञ चाचणी";
 
+    private bool _reviewSeatsSeeded;
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1F (D-82 note) - a schedule row still WAITING for its check is never listed to a farm caller; the library
+    /// as the platform reviewer lists it (every row with its state). The reviewer seats are seeded on first use.
+    /// </summary>
+    protected async Task<IReadOnlyList<JsonElement>> ReviewLibraryAsync()
+    {
+        if (!_reviewSeatsSeeded)
+        {
+            await SeedReviewSeatsAsync();
+        }
+
+        return await LibraryAsync(PlatformOwner);
+    }
+
     /// <summary>Platform Owner, Employee, Analyst and Auditor seats, an FPO owner, and a farm seat with AppRole.Agronomist.</summary>
     protected async Task SeedReviewSeatsAsync()
     {
+        _reviewSeatsSeeded = true;
         await SeedPlatformOwnerAsync(PlatformOwner, Guid.NewGuid(), orgType: 0, role: 0, phone: "6000000001");
         await SeedPlatformOwnerAsync(PlatformEmployee, Guid.NewGuid(), orgType: 0, role: 2, phone: "6000000002");
         await SeedPlatformOwnerAsync(PlatformAnalyst, Guid.NewGuid(), orgType: 0, role: 1, phone: "6000000003");

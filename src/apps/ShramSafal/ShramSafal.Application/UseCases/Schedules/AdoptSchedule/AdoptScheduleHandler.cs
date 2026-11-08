@@ -79,17 +79,17 @@ public sealed class AdoptScheduleHandler(
         // spec: plr-d10 lane L8b-1 Task 1 — the schedule is looked up in the library the phone lists (ScheduleLibrary),
         // never in the compliance model (crop_schedule_templates) nobody lists. A schedule he may not see answers exactly
         // like an unknown id (E4). The crop rule is the phone's own (one shared fixture pins both).
+        // spec: plr-d10 lane L8b-1F — and what THIS PLOT's farm may follow (FollowableOnPlot; E4, R23) and the check rule
+        // (D-82, D-91 = 1, R7) are decided in the same one place, ScheduleLibrary.ChooseAsync, for adopt and migrate alike.
         var templateId = new ScheduleTemplateId(command.ScheduleTemplateId);
-        var template = await new Services.ScheduleLibrary(repository).FindAsync(command.ScheduleTemplateId, command.ActorUserId, ct);
-        if (template is null)
+        var choice = await new Services.ScheduleLibrary(repository).ChooseAsync(
+            command.ScheduleTemplateId, command.ActorUserId, farm.OwnerUserId.Value, cropCycle.CropName, command.CarryOver, ct);
+        if (!choice.IsSuccess)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateNotFound);
+            return Result.Failure<ScheduleSubscriptionDto>(choice.Error);
         }
 
-        if (!Services.ScheduleLibrary.MatchesCrop(template, cropCycle.CropName))
-        {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleTemplateCropMismatch);
-        }
+        var template = choice.Value.Template;
 
         var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
         var versionTag = Services.ScheduleLibrary.VersionTagOf(template);
@@ -112,7 +112,9 @@ public sealed class AdoptScheduleHandler(
             templateId,
             versionTag,
             nowUtc,
-            command.ReferenceDate);
+            command.ReferenceDate,
+            choice.Value.Origin,
+            choice.Value.CheckStateAtAdopt);
 
         await repository.AddScheduleSubscriptionAsync(subscription, ct);
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
@@ -136,7 +138,9 @@ public sealed class AdoptScheduleHandler(
                     templateId = template.Id,
                     templateName = template.Name,
                     versionTag,
-                    referenceDate = command.ReferenceDate
+                    referenceDate = command.ReferenceDate,
+                    origin = choice.Value.Origin.ToString(),
+                    checkStateAtAdopt = choice.Value.CheckStateAtAdopt.ToString()
                 },
                 farmId: command.FarmId,
                 clientCommandId: command.ClientCommandId,
@@ -151,6 +155,6 @@ public sealed class AdoptScheduleHandler(
             clock.UtcNow, command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash, ct);
 
         await repository.SaveChangesAsync(ct);
-        return Result.Success(subscription.ToDto());
+        return Result.Success(subscription.ToDto(choice.Value.LiveCheckState.ToString()));
     }
 }

@@ -291,6 +291,10 @@ public static class ShramSafalErrors
     public static readonly Error CorrectionFieldTooLong = Error.Validation(
         "ShramSafal.CorrectionFieldTooLong",
         "A correction field exceeds its stored length. The value is refused, not truncated — a shortened prompt version is not the prompt version.");
+    // spec: plr-d10 lane L8b-1F - an outside schedule is followed only once ShramSafal has checked it (D-82); a sample only while its crop has none (D-91 = 1).
+    public static readonly Error ScheduleNotChecked = Error.Validation("ShramSafal.ScheduleNotChecked", "ShramSafal has not checked this schedule yet.");
+    // spec: plr-d10 lane L8b-1F - the Own branch (a farm's own schedule) opens in SCH-OWN; until then it answers this and writes nothing.
+    public static readonly Error OwnScheduleNotOpenYet = Error.Validation("ShramSafal.OwnScheduleNotOpenYet", "Following the farm's own schedule is not open yet.");
     public static readonly Error ScheduleTemplateCropMismatch = Error.Validation("ShramSafal.ScheduleTemplateCropMismatch", "Schedule template crop does not match the crop cycle.");
 
     // --- Internal (server-side fault / config / external service) --------------------------

@@ -1373,6 +1373,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    nullable columns Up() added to ssf.template_activities and ssf.schedule_templates - only what Up() added. Never
         //    touches ssf.audit_events, its policies or its grants. Safe mid-proof.
         "20261108120000_AddScheduleCheckAndStoredDays",
+        // ── Reviewed 2026-11-08 (spec: plr-d10 lane L8b-1F, founders D-82 / D-91); Down() read in full: it drops the two CHECKs and the
+        //    two nullable columns (origin, check_state_at_adopt) Up() added to ssf.schedule_subscriptions - only what Up() added. Never
+        //    touches ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261108150000_AddScheduleSubscriptionOriginAndCheck",
     ];
 
     /// <summary>

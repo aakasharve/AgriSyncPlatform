@@ -44,6 +44,12 @@ export const SCHEDULE_ALREADY_ADOPTED_CODE = 'ShramSafal.ScheduleAlreadyAdopted'
 /** B006: `ShramSafalErrors.ScheduleChangedElsewhere` - a switch from a choice another phone already changed. PERMANENT. */
 export const SCHEDULE_CHANGED_ELSEWHERE_CODE = 'ShramSafal.ScheduleChangedElsewhere';
 
+/** spec: plr-d10 lane L8b-1F - `ShramSafalErrors.ScheduleNotChecked`: an outside schedule ShramSafal has not checked yet. PERMANENT. */
+export const SCHEDULE_NOT_CHECKED_CODE = 'ShramSafal.ScheduleNotChecked';
+
+/** spec: plr-d10 lane L8b-1F - `ShramSafalErrors.OwnScheduleNotOpenYet`: following the farm's own schedule is not open yet. PERMANENT. */
+export const OWN_SCHEDULE_NOT_OPEN_YET_CODE = 'ShramSafal.OwnScheduleNotOpenYet';
+
 export interface RejectedMutationView {
     mutationId: string;
     mutationType: string;
@@ -231,6 +237,13 @@ export class ConflictResolutionService {
         // B006 - another phone switched this plot's schedule first. PROPOSED (Marathi)
         if (errorCode === SCHEDULE_CHANGED_ELSEWHERE_CODE) {
             return 'दुसऱ्या फोनवरून आधीच शेड्यूल बदललं आहे. आता सर्व फोनवर सर्व्हरचं शेड्यूल दिसेल.';
+        }
+        // spec: plr-d10 lane L8b-1F - the schedule is not yet checked by ShramSafal / the farm's own schedule is not open yet. PROPOSED (Marathi)
+        if (errorCode === SCHEDULE_NOT_CHECKED_CODE) {
+            return 'हे शेड्यूल श्रमसफलने अजून तपासलेलं नाही';
+        }
+        if (errorCode === OWN_SCHEDULE_NOT_OPEN_YET_CODE) {
+            return 'तुमचं स्वतःचं शेड्यूल अजून सुरू झालेलं नाही';
         }
         // B015 - a refusal of a SCHEDULE choice for want of authority (`ShramSafal.Forbidden`: L8b-1's gate): read from its CODE,
         // for these two mutations only (the server's message names no authority word); every other mutation keeps its words. PROPOSED (Marathi)

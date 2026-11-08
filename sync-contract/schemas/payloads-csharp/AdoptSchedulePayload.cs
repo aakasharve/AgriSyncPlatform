@@ -20,5 +20,6 @@ public sealed record AdoptSchedulePayload(
     string? ClientCommandId = null,
     Guid? SubscriptionId = null,
     DateOnly? ReferenceDate = null,
-    DateTime? DecidedAtUtc = null
+    DateTime? DecidedAtUtc = null,
+    bool? CarryOver = null
 );

@@ -158,6 +158,10 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     // B006 - a switch that named the choice it switches FROM, and that choice is no longer the plot's (another phone switched
     // first): refused, nothing written, never re-sent. Parked with its words; the server's choice is shown (sweep).
     'ScheduleChangedElsewhere',
+    // spec: plr-d10 lane L8b-1F - ShramSafal has not checked this schedule yet (D-82); the farm's own schedule is not open yet
+    // (SCH-OWN). Refused, nothing written, never re-sent: parked with their words, the phone's choice stays visible (P10).
+    'ScheduleNotChecked',
+    'OwnScheduleNotOpenYet',
 ];
 
 const PERMANENT_SET = new Set(

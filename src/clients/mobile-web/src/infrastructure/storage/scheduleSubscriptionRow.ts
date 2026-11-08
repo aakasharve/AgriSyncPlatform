@@ -23,4 +23,8 @@ export interface ScheduleSubscriptionRow {
     adoptedAtUtc: string;
     /** True while this phone's choice has not been answered by the server. Absent on every row the server sent. */
     pending?: true;
+    /** spec: plr-d10 lane L8b-1F - the live check state of the followed schedule, as the server last said (absent: not said). */
+    checkState?: 'Checked' | 'NotChecked' | 'Returned' | 'Withdrawn';
+    /** spec: plr-d10 lane L8b-1F - Outside | Own; absent = chosen before the lane, read as Outside. */
+    origin?: 'Outside' | 'Own';
 }

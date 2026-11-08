@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using ShramSafal.Domain.Planning;
 using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Infrastructure.Persistence.Configurations;
@@ -8,7 +9,12 @@ internal sealed class ScheduleSubscriptionConfiguration : IEntityTypeConfigurati
 {
     public void Configure(EntityTypeBuilder<ScheduleSubscription> builder)
     {
-        builder.ToTable("schedule_subscriptions");
+        builder.ToTable("schedule_subscriptions", t =>
+        {
+            // spec: plr-d10 lane L8b-1F - the two marks hold only their names (NULL = chosen before this lane).
+            t.HasCheckConstraint("ck_sched_sub_origin", "origin IS NULL OR origin IN ('Outside','Own')");
+            t.HasCheckConstraint("ck_sched_sub_check_state_at_adopt", "check_state_at_adopt IS NULL OR check_state_at_adopt IN ('Checked','NotChecked')");
+        });
 
         builder.HasKey(x => x.Id);
 
@@ -73,6 +79,18 @@ internal sealed class ScheduleSubscriptionConfiguration : IEntityTypeConfigurati
         builder.Property(x => x.ReferenceDate)
             .HasColumnName("reference_date")
             .HasColumnType("date");
+
+        // spec: plr-d10 lane L8b-1F (R5, R7) - whose schedule it is (Outside|Own; NULL = chosen before this lane, read as Outside)
+        // and what the check said when it was chosen (Checked|NotChecked; NULL = chosen before this lane).
+        builder.Property(x => x.Origin)
+            .HasColumnName("origin")
+            .HasMaxLength(8)
+            .HasConversion<string>();
+
+        builder.Property(x => x.CheckStateAtAdopt)
+            .HasColumnName("check_state_at_adopt")
+            .HasMaxLength(12)
+            .HasConversion<string>();
 
         builder.Ignore(x => x.SubscriptionId);
         builder.Ignore(x => x.DomainEvents);

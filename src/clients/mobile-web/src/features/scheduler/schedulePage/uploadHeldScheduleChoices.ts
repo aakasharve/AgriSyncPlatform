@@ -88,6 +88,8 @@ export async function uploadHeldScheduleChoices(
                     plotId: plot.id,
                     templateId: resolved.template.id,
                     referenceDate: day0 && day0 !== toDayKey(plot.startDate) ? day0 : null,
+                    // L8b-1F (R7): the choice was made before the server held one, so the server keeps it either way (P10).
+                    carryOver: true,
                 });
             }
         }

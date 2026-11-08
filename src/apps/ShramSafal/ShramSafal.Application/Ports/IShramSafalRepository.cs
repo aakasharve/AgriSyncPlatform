@@ -512,6 +512,14 @@ public interface IShramSafalRepository
     Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default);
 
     /// <summary>
+    /// spec: plr-d10 lane L8b-1F fix 1 (F004) - ONLY the Active subscriptions of these farms (state read in SQL), for the pull's
+    /// "schedules a plot follows" extras. Default for test doubles: none.
+    /// </summary>
+    Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsOfFarmsAsync(
+        IEnumerable<Guid> farmIds, CancellationToken ct = default)
+        => Task.FromResult(new List<ScheduleSubscription>());
+
+    /// <summary>
     /// spec: plr-d10 lane L8b-2 - the pull: subscriptions of these farms adopted, or whose state changed, after
     /// <paramref name="sinceUtc"/> (every state). Default for test doubles: none.
     /// </summary>

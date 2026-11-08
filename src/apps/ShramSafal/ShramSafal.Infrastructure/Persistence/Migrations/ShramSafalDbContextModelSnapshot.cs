@@ -6065,6 +6065,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("adopted_at_utc");
 
+                    b.Property<string>("CheckStateAtAdopt")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("check_state_at_adopt");
+
                     b.Property<Guid>("CropCycleId")
                         .HasColumnType("uuid")
                         .HasColumnName("crop_cycle_id");
@@ -6090,6 +6095,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<int?>("MigrationReason")
                         .HasColumnType("integer")
                         .HasColumnName("migration_reason");
+
+                    b.Property<string>("Origin")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("origin");
 
                     b.Property<Guid>("PlotId")
                         .HasColumnType("uuid")
@@ -6134,7 +6144,12 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ux_sched_sub_active")
                         .HasFilter("state = 0");
 
-                    b.ToTable("schedule_subscriptions", "ssf");
+                    b.ToTable("schedule_subscriptions", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_sched_sub_check_state_at_adopt", "check_state_at_adopt IS NULL OR check_state_at_adopt IN ('Checked','NotChecked')");
+
+                            t.HasCheckConstraint("ck_sched_sub_origin", "origin IS NULL OR origin IN ('Outside','Own')");
+                        });
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Storage.RawBlobIndexEntry", b =>

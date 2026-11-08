@@ -3,10 +3,15 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AgriSync.BuildingBlocks.Results;
+using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
+using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Planning;
+using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.Services;
 
@@ -31,14 +36,27 @@ namespace ShramSafal.Application.Services;
 /// (<c>sync-contract/tests/fixtures/crop-schedule-match.json</c>).</item>
 /// </list>
 /// </summary>
+/// <summary>
+/// spec: plr-d10 lane L8b-1F - what <see cref="ScheduleLibrary.ChooseAsync"/> found a plot may follow: the schedule as listed,
+/// whose it is (<see cref="Origin"/>), what the check said when chosen (<see cref="CheckStateAtAdopt"/>, stored) and what it says now
+/// (<see cref="LiveCheckState"/>, shown).
+/// </summary>
+public sealed record ScheduleChoice(
+    ScheduleTemplateDto Template,
+    ScheduleOrigin Origin,
+    ScheduleCheckState CheckStateAtAdopt,
+    ScheduleCheckState LiveCheckState);
+
 public sealed class ScheduleLibrary(IShramSafalRepository repository)
 {
     /// <summary>The crop code the phone gives a name it cannot read (TemplateCatalog <c>canonicalCropCode</c>).</summary>
     public const string UnknownCrop = "unknown_crop";
 
     /// <summary>
-    /// The library schedule <paramref name="templateId"/> as <paramref name="callerUserId"/>'s phone lists it, or
-    /// <c>null</c> when his library does not list it (an unknown id and a schedule he may not see answer alike).
+    /// The library schedule <paramref name="templateId"/> as <paramref name="callerUserId"/>'s phone LISTS it for a new choice
+    /// (his farm view: <see cref="ListingForAsync"/>), or <c>null</c> when his library does not list it (an unknown id, a schedule
+    /// he may not see, a delisted sample and a schedule still waiting for its check all answer alike). Adoption does not use this
+    /// one: it needs to tell "not listed" from "not checked" - see <see cref="ChooseAsync"/>.
     /// </summary>
     public async Task<ScheduleTemplateDto?> FindAsync(Guid templateId, Guid callerUserId, CancellationToken ct = default)
     {
@@ -52,23 +70,158 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     }
 
     /// <summary>
-    /// spec: plr-d10 lane L8b-1 fix round 1 (review H2) — <paramref name="callerUserId"/>'s library, exactly as his phone
-    /// receives it (the reference route and the pull): the rows of <paramref name="rows"/> he may see
-    /// (<see cref="ScheduleViewer"/>), else the built-in catalog. Its version hash is computed over THIS list, so it is his
-    /// list's version: a row he may not see never changes what his phone is told.
+    /// spec: plr-d10 lane L8b-1F (R7; F114) - the schedule a phone chose BEFORE this lane (and holds), found even when the
+    /// listing no longer offers it: the listing, else a built-in id. Never a way to make a NEW choice: a carry-over keeps a choice
+    /// the farmer already made (P10). A schedule he may not see is still not found (E4).
+    /// </summary>
+    public async Task<ScheduleTemplateDto?> FindForCarryOverAsync(Guid templateId, Guid callerUserId, CancellationToken ct = default)
+    {
+        if (templateId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var (_, _, pool) = await PoolAsync(repository, await repository.GetScheduleTemplatesAsync(ct), callerUserId, ct);
+        return pool.FirstOrDefault(t => t.Id == templateId);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1 fix round 1 (review H2) - <paramref name="callerUserId"/>'s library, exactly as his phone
+    /// receives it (the reference route and the pull). L8b-1F (F114): <b>the rows he may see PLUS the samples by crop</b>
+    /// (<see cref="GetScheduleTemplatesHandler.Listing"/>), and for a platform reviewer (asked only when a row waiting for its
+    /// check is among his rows) every row with its state. Its version hash is computed over THIS list, so it is his list's
+    /// version: a row he may not see never changes what his phone is told.
     /// </summary>
     public static async Task<IReadOnlyList<ScheduleTemplateDto>> ListingForAsync(
-        IShramSafalRepository repository, IReadOnlyList<ScheduleTemplate> rows, Guid callerUserId, CancellationToken ct = default)
+        IShramSafalRepository repository,
+        IReadOnlyList<ScheduleTemplate> rows,
+        Guid callerUserId,
+        CancellationToken ct = default,
+        IEntitlementResolver? entitlements = null)
     {
         ArgumentNullException.ThrowIfNull(rows);
-        var visible = await new ScheduleViewer(repository, callerUserId, rows).VisibleAsync(rows, ct);
+        var (visible, checks, _) = await ReadAsync(repository, rows, callerUserId, ct);
+        var mode = ScheduleListingMode.Farm;
+        if (entitlements is not null && callerUserId != Guid.Empty && HasRowHiddenFromFarm(visible, checks)
+            && await entitlements.MayCheckSchedulesAsync(new UserId(callerUserId), ct))
+        {
+            mode = ScheduleListingMode.Reviewer;
+        }
+
+        return GetScheduleTemplatesHandler.Listing(visible, checks, mode);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1F (R7, P10) - these schedules (the ones a person's plots already follow) as listed, whether or not
+    /// they are still listed for a NEW choice. Only what he may see; an id he may not see is not returned.
+    /// </summary>
+    public static async Task<IReadOnlyList<ScheduleTemplateDto>> FollowedAsync(
+        IShramSafalRepository repository, IReadOnlyList<ScheduleTemplate> rows, Guid callerUserId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        var (_, _, pool) = await PoolAsync(repository, rows, callerUserId, ct);
+        return pool.Where(t => ids.Contains(t.Id)).ToList();
+    }
+
+    private static async Task<(List<ScheduleTemplate> Visible, IReadOnlyList<ScheduleCheck> Checks, ScheduleViewer Viewer)> ReadAsync(
+        IShramSafalRepository repository, IReadOnlyList<ScheduleTemplate> rows, Guid callerUserId, CancellationToken ct)
+    {
+        var viewer = new ScheduleViewer(repository, callerUserId, rows);
+        var visible = await viewer.VisibleAsync(rows, ct);
 
         // spec: plr-d10 lane SCH-A (Task 1) - the check rides on THIS filtered list only (never on the unfiltered rows): the
         // latest decision of each visible row that stores its days. A row that stores none can have no check (R3).
         IReadOnlyList<ScheduleCheck> checks = visible.Count == 0
             ? []
             : await repository.GetScheduleChecksAsync(visible.Where(r => r.HasStoredDays).Select(r => r.Id).ToList(), ct);
-        return GetScheduleTemplatesHandler.Listing(visible, checks);
+        return (visible, checks, viewer);
+    }
+
+    private static async Task<(List<ScheduleTemplate> Visible, ScheduleViewer Viewer, IReadOnlyList<ScheduleTemplateDto> Pool)> PoolAsync(
+        IShramSafalRepository repository, IReadOnlyList<ScheduleTemplate> rows, Guid callerUserId, CancellationToken ct)
+    {
+        var (visible, checks, viewer) = await ReadAsync(repository, rows, callerUserId, ct);
+        return (visible, viewer, GetScheduleTemplatesHandler.Listing(visible, checks, ScheduleListingMode.Pool));
+    }
+
+    /// <summary>A Public row that stores its days and is neither Checked nor Withdrawn: a farm caller is never shown it.</summary>
+    private static bool HasRowHiddenFromFarm(IReadOnlyList<ScheduleTemplate> visible, IReadOnlyList<ScheduleCheck> checks)
+    {
+        var byRow = checks.GroupBy(c => c.ScheduleTemplateId).ToDictionary(g => g.Key, g => g.ToList());
+        return visible.Any(r =>
+            r.TenantScope == TenantScope.Public && r.HasStoredDays
+            && ScheduleCheck.StateOf(byRow.GetValueOrDefault(r.Id) ?? []) is not (ScheduleCheckState.Checked or ScheduleCheckState.Withdrawn));
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1F Tasks 1-3 - the ONE place adopt and migrate decide whether a plot may follow a schedule
+    /// (E4, R23, D-82, D-91 = 1, R7). In order:
+    /// <list type="number">
+    /// <item>Not found among what he may see (<see cref="ScheduleViewer"/>) or among the built-in samples - or
+    /// <see cref="FollowableOnPlot.Classify"/> says this plot's farm may not follow it (another farm's Team row, any Private
+    /// row): <see cref="ShramSafalErrors.ScheduleTemplateNotFound"/>, exactly like an unknown id.</item>
+    /// <item>Another crop than the season's: <see cref="ShramSafalErrors.ScheduleTemplateCropMismatch"/>.</item>
+    /// <item>A farm's own schedule: <see cref="ShramSafalErrors.OwnScheduleNotOpenYet"/> until SCH-OWN opens that branch.</item>
+    /// <item>An Outside schedule: Checked is accepted. A carry-over (the phone's earlier choice, R7) is always accepted. A
+    /// <b>sample</b> (a built-in id, or a library row that stores no days) is accepted, stamped NotChecked, while its crop has no
+    /// Checked Outside schedule; once it has one: <see cref="ShramSafalErrors.ScheduleNotChecked"/>. Any other unchecked row
+    /// (waiting, sent back, withdrawn): <see cref="ShramSafalErrors.ScheduleNotChecked"/>.</item>
+    /// </list>
+    /// </summary>
+    public async Task<Result<ScheduleChoice>> ChooseAsync(
+        Guid templateId, Guid callerUserId, Guid plotFarmOwnerUserId, string? cropName, bool carryOver, CancellationToken ct = default)
+    {
+        if (templateId == Guid.Empty)
+        {
+            return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleTemplateNotFound);
+        }
+
+        var rows = await repository.GetScheduleTemplatesAsync(ct);
+        var (visible, viewer, pool) = await PoolAsync(repository, rows, callerUserId, ct);
+        var template = pool.FirstOrDefault(t => t.Id == templateId);
+        if (template is null)
+        {
+            return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleTemplateNotFound);
+        }
+
+        var row = visible.FirstOrDefault(r => r.Id == templateId);
+        var isBuiltIn = row is null && ReferenceDataCatalog.ScheduleTemplates.Any(t => t.Id == templateId);
+        var scope = row?.TenantScope ?? TenantScope.Public;
+        var owner = row is null ? null : await viewer.OwnerOfAsync(row, ct);
+        var origin = FollowableOnPlot.Classify(scope, owner, isBuiltIn, plotFarmOwnerUserId);
+        if (origin is null || (row is null && !isBuiltIn))
+        {
+            return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleTemplateNotFound);
+        }
+
+        if (!MatchesCrop(template, cropName))
+        {
+            return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleTemplateCropMismatch);
+        }
+
+        var live = Enum.TryParse<ScheduleCheckState>(template.Check?.State, out var parsed) ? parsed : ScheduleCheckState.NotChecked;
+        if (origin == ScheduleOrigin.Own)
+        {
+            // SCH-OWN Task 3 fills this branch (no check, D-82 = 3); until then nothing is written.
+            return Result.Failure<ScheduleChoice>(ShramSafalErrors.OwnScheduleNotOpenYet);
+        }
+
+        var atAdopt = live == ScheduleCheckState.Checked ? ScheduleCheckState.Checked : ScheduleCheckState.NotChecked;
+        if (live != ScheduleCheckState.Checked)
+        {
+            // A carry-over (R7) bridges SAMPLES only (a built-in id, or a Public row WITHOUT stored days) and a row whose check was
+            // withdrawn; a Public row WITH stored days that is waiting or sent back is refused even then (D-82: it is never shown).
+            var isSample = isBuiltIn || row is { HasStoredDays: false };
+            var bridged = carryOver && (isSample || live == ScheduleCheckState.Withdrawn);
+            var rowById = visible.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
+            var cropHasChecked = GetScheduleTemplatesHandler.CheckedOutsideCrops(pool, rowById).Contains(CropGroupKey(template.CropType));
+            var newChoiceOpen = isSample && !cropHasChecked;
+            if (!bridged && !newChoiceOpen)
+            {
+                return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleNotChecked);
+            }
+        }
+
+        return Result.Success(new ScheduleChoice(template, origin.Value, atAdopt, live));
     }
 
     /// <summary>
@@ -78,12 +231,33 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     public static string VersionTagOf(ScheduleTemplateDto template)
     {
         ArgumentNullException.ThrowIfNull(template);
+        // spec: plr-d10 lane L8b-1F (repo fact 12) - a library row keeps its OWN version ("v<Version>", SCH-A's RowVersionTag), so an
+        // edit of a followed schedule (a new row) is visible as another version; a built-in sample, which has none, keeps the list hash.
+        var rowTag = template.RowVersionTag?.Trim();
+        if (!string.IsNullOrEmpty(rowTag))
+        {
+            return rowTag[..Math.Min(rowTag.Length, MaxVersionTagLength)];
+        }
+
         var hash = template.VersionHash?.Trim() ?? string.Empty;
         return hash.Length == 0 ? "unversioned" : hash[..Math.Min(hash.Length, MaxVersionTagLength)];
     }
 
     /// <summary>The width of <c>schedule_version_tag</c> (ScheduleSubscriptionConfiguration).</summary>
     public const int MaxVersionTagLength = 32;
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1F (F114) - the key a crop is grouped by when a listing decides "does THIS crop have a checked
+    /// schedule?": the phone's crop code (<see cref="CropCode"/>, so "Grape" and "Grapes" are one crop), else - for a name no crop
+    /// master reads - the name itself, case-blind (<see cref="GetScheduleTemplatesHandler.BuildCropTypes"/>' grouping).
+    /// </summary>
+    public static string CropGroupKey(string? cropType)
+    {
+        var code = CropCode(cropType);
+        return string.Equals(code, UnknownCrop, StringComparison.Ordinal)
+            ? (cropType ?? string.Empty).Trim().ToLowerInvariant()
+            : code;
+    }
 
     /// <summary>
     /// Does <paramref name="template"/> belong to the crop of a season named <paramref name="cycleCropName"/>? A name the

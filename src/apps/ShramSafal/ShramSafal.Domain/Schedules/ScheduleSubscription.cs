@@ -1,5 +1,6 @@
 using AgriSync.BuildingBlocks.Domain;
 using AgriSync.SharedKernel.Contracts.Ids;
+using ShramSafal.Domain.Planning;
 
 namespace ShramSafal.Domain.Schedules;
 
@@ -16,7 +17,9 @@ public sealed class ScheduleSubscription : Entity<Guid>
         ScheduleTemplateId templateId,
         string scheduleVersionTag,
         DateTime adoptedAtUtc,
-        DateOnly? referenceDate)
+        DateOnly? referenceDate,
+        ScheduleOrigin? origin,
+        ScheduleCheckState? checkStateAtAdopt)
         : base(id)
     {
         FarmId = farmId;
@@ -27,6 +30,8 @@ public sealed class ScheduleSubscription : Entity<Guid>
         ScheduleVersionTag = scheduleVersionTag;
         AdoptedAtUtc = adoptedAtUtc;
         ReferenceDate = referenceDate;
+        Origin = origin;
+        CheckStateAtAdopt = checkStateAtAdopt;
         State = ScheduleSubscriptionState.Active;
     }
 
@@ -51,6 +56,19 @@ public sealed class ScheduleSubscription : Entity<Guid>
     /// </summary>
     public DateOnly? ReferenceDate { get; private set; }
 
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1F (R5) - whose schedule this is. <c>null</c> = chosen before this lane; read as
+    /// <see cref="ScheduleOrigin.Outside"/> (L8b-3 backfills it).
+    /// </summary>
+    public ScheduleOrigin? Origin { get; private set; }
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-1F (R7) - what ShramSafal's check said when this was chosen: <see cref="ScheduleCheckState.Checked"/> or
+    /// <see cref="ScheduleCheckState.NotChecked"/> (a sample, or a choice carried over from a phone). <c>null</c> = chosen before
+    /// this lane. A later withdrawal never changes it (R8): the live state is read from the schedule.
+    /// </summary>
+    public ScheduleCheckState? CheckStateAtAdopt { get; private set; }
+
     public static ScheduleSubscription Adopt(
         Guid id,
         FarmId farmId,
@@ -60,7 +78,9 @@ public sealed class ScheduleSubscription : Entity<Guid>
         ScheduleTemplateId templateId,
         string scheduleVersionTag,
         DateTime adoptedAtUtc,
-        DateOnly? referenceDate = null)
+        DateOnly? referenceDate = null,
+        ScheduleOrigin? origin = null,
+        ScheduleCheckState? checkStateAtAdopt = null)
     {
         if (id == Guid.Empty)
         {
@@ -97,6 +117,11 @@ public sealed class ScheduleSubscription : Entity<Guid>
             throw new ArgumentException("Version tag is required.", nameof(scheduleVersionTag));
         }
 
+        if (checkStateAtAdopt is not (null or ScheduleCheckState.Checked or ScheduleCheckState.NotChecked))
+        {
+            throw new ArgumentException("Only Checked or NotChecked can be recorded at adoption.", nameof(checkStateAtAdopt));
+        }
+
         return new ScheduleSubscription(
             id,
             farmId,
@@ -106,7 +131,9 @@ public sealed class ScheduleSubscription : Entity<Guid>
             templateId,
             scheduleVersionTag.Trim(),
             adoptedAtUtc,
-            referenceDate);
+            referenceDate,
+            origin,
+            checkStateAtAdopt);
     }
 
     public void Migrate(

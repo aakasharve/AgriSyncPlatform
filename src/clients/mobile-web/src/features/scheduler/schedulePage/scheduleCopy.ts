@@ -83,6 +83,10 @@ export const SC = {
     // spec: plr-d10 lane SCH-A (founder D-74) - ShramSafal's check of a schedule, day by day. Drawn only where the server holds a check.
     checkedByShramSafal: 'श्रमसफलने तपासलेलं', // PROPOSED (Marathi)
     notCheckedByShramSafal: 'श्रमसफलने अजून तपासलेलं नाही', // PROPOSED (Marathi)
+    // spec: plr-d10 lane L8b-1F (D-91 = 1) - a sample is choosable only until its crop has its first checked schedule.
+    sampleWillHide: (crop: string) => `${crop}साठी पहिलं तपासलेलं शेड्यूल आलं की नवीन निवडीसाठी हे दिसणार नाही. आधीपासून पाळत असाल तर तसंच राहील.`, // PROPOSED (Marathi)
+    takeNewChecked: 'नवीन तपासलेलं शेड्यूल घ्या', // PROPOSED (Marathi)
+    checkWithdrawn: (reason: string) => (reason ? `श्रमसफलने तपासणी मागे घेतली: ${reason}` : 'श्रमसफलने तपासणी मागे घेतली'), // PROPOSED (Marathi)
     behind: (n: number) => `शेड्यूल ${n} दिवस मागे चाललं आहे`, // PROPOSED (Marathi)
     behindLine: (calendar: string, plant: string) => `कॅलेंडरप्रमाणे दिवस ${calendar} · पिकासाठी दिवस ${plant}`, // PROPOSED (Marathi)
     toolsTitle: 'आजचं आणि बाकीचं', // PROPOSED (Marathi)

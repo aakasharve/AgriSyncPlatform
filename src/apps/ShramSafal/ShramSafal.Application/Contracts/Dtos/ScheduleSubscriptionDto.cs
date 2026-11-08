@@ -15,4 +15,9 @@ public sealed record ScheduleSubscriptionDto(
     string? MigrationReason,
     DateTime? StateChangedAtUtc,
     // spec: plr-d10 lane L8b-1 — the plot's day 0 (null = the crop season's start). Additive, last (P11).
-    DateOnly? ReferenceDate = null);
+    DateOnly? ReferenceDate = null,
+    // spec: plr-d10 lane L8b-1F - additive at the END and optional (P11). CheckState is what ShramSafal's check says NOW about the
+    // schedule this follows (Checked | NotChecked | Returned | Withdrawn; a withdrawal changes it, never the subscription - R8).
+    // Origin is Outside | Own; null = chosen before this lane, read as Outside.
+    string? CheckState = null,
+    string? Origin = null);

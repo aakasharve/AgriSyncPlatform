@@ -390,7 +390,15 @@ public sealed class PullSyncChangesHandler(
         // is a later change gated on client rollout.
         IReadOnlyList<Domain.Audit.AuditEvent> auditEvents = [];
         // spec: plr-d10 lane L8b-1 fix round 1 (review H2) — HIS library (the rows he may see), never every account's.
-        var templatesResult = await getScheduleTemplatesHandler.HandleAsync(query.UserId, ct);
+        // spec: plr-d10 lane L8b-1F (R7, P10) - a plot that follows a schedule keeps it: the schedules this person's plots follow are
+        // sent even when the library no longer offers them for a new choice (every Active choice of the farms and plots he reads).
+        var followedTemplateIds = (await repository.GetActiveScheduleSubscriptionsOfFarmsAsync(
+                window.Scopes.Values.Where(s => s.SeeFarmOverview).Select(s => s.FarmId).ToList(), ct))
+            .Where(s => window.ScopeOf(s.FarmId.Value)!.CoversPlot(s.PlotId))
+            .Select(s => s.ScheduleTemplateId.Value)
+            .Distinct()
+            .ToList();
+        var templatesResult = await getScheduleTemplatesHandler.HandleAsync(query.UserId, followedTemplateIds, ct);
         if (!templatesResult.IsSuccess)
         {
             return Result.Failure<SyncPullResponseDto>(templatesResult.Error);
@@ -825,7 +833,10 @@ public sealed class PullSyncChangesHandler(
             // an older phone parses the pull with no schema and never reads it).
             InputIdentityAssertions: inputIdentityAssertions.Select(InputIdentityAssertionDto.From).ToList(),
             // lane L8b-2 (founder D-32) - each plot's chosen schedule, all states (additive and last, P11).
-            ScheduleSubscriptions: scheduleSubscriptions.Select(s => s.ToDto()).ToList());
+            // lane L8b-1F - and what ShramSafal's check says NOW about the schedule each follows (a withdrawal shows here, R8).
+            ScheduleSubscriptions: scheduleSubscriptions
+                .Select(s => s.ToDto(scheduleTemplates.FirstOrDefault(t => t.Id == s.ScheduleTemplateId.Value)?.Check?.State ?? nameof(Domain.Planning.ScheduleCheckState.NotChecked)))
+                .ToList());
 
         return Result.Success(response);
     }

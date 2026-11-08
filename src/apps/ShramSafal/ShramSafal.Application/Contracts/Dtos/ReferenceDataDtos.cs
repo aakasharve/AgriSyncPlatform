@@ -49,7 +49,10 @@ public sealed record ScheduleTemplateDto(
     string? SourceLabel = null,
     ScheduleCheckDto? Check = null,
     string? RowVersionTag = null,
-    bool? HasStoredDays = null);
+    bool? HasStoredDays = null,
+    // spec: plr-d10 lane L8b-1F - additive at the END and optional (P11). Whose row this is: Public | Team | Private | Licensed; null =
+    // a built-in sample (Public). The phone offers only Public/null rows for a plot to follow until SCH-OWN opens the Own branch.
+    string? Scope = null);
 
 public sealed record CropTypeDto(
     string Name,

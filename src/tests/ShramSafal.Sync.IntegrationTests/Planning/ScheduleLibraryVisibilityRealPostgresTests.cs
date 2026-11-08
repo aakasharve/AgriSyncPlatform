@@ -76,20 +76,28 @@ public sealed class ScheduleLibraryVisibilityRealPostgresTests(ITestOutputHelper
         var bPrivate = await SeedTemplateRowAsync("Grapes - L8b-1 private of farm B", TenantScope.Private, author: OwnerB);
         var bTeam = await SeedTemplateRowAsync("Grapes - L8b-1 team of farm B", TenantScope.Team, author: OwnerB);
 
+        // L8b-1F (F114, D-91 = 1): his library is his visible rows PLUS every crop's samples (no crop has a checked schedule here).
         var listed = Ids(await LibraryAsync(Owner));
-        listed.Should().BeEquivalentTo(new[] { shared, aTeam }, "farm A's owner lists the public schedule and his team's");
+        var samples = new[] { BuiltInGrapes, BuiltInPomegranate, BuiltInSugarcane, BuiltInOnion };
+        listed.Should().BeEquivalentTo(new[] { shared, aTeam }.Concat(samples), "farm A's owner lists the public schedule, his team's, and the samples");
 
-        // Every listed schedule is adopted ...
-        foreach (var id in listed)
+        // Every listed schedule a plot may FOLLOW is adopted: the Public row and the samples. His team's own schedule is listed (the phone
+        // hides it) but answers "not open yet" until SCH-OWN (R23).
+        var adopted = new List<Guid>();
+        foreach (var id in new[] { shared, BuiltInGrapes })
         {
             var (plot, cycle) = await SeedSeasonAsync("Grapes");
             var (status, body) = await AdoptAsync(Owner, FarmA, plot, cycle, id);
             status.Should().Be(HttpStatusCode.OK, $"{id} is listed: {body}");
+            adopted.Add(id);
         }
 
-        // ... and nothing that is not listed: another account's private and team rows, and the built-in schedule his
-        // library no longer lists (it lists rows now). Each answers like a made-up id.
-        foreach (var id in new[] { bPrivate, bTeam, BuiltInGrapes, Guid.NewGuid() })
+        var own = await SeedSeasonAsync("Grapes");
+        var ownAdopt = await AdoptAsync(Owner, FarmA, own.Plot, own.Cycle, aTeam);
+        ErrorCode(ownAdopt.Body).Should().Be("ShramSafal.OwnScheduleNotOpenYet");
+
+        // ... and nothing he may not see: another account's private and team rows, and a made-up id. Each answers like a made-up id.
+        foreach (var id in new[] { bPrivate, bTeam, Guid.NewGuid() })
         {
             var (plot, cycle) = await SeedSeasonAsync("Grapes");
             var (status, body) = await AdoptAsync(Owner, FarmA, plot, cycle, id);
@@ -97,7 +105,7 @@ public sealed class ScheduleLibraryVisibilityRealPostgresTests(ITestOutputHelper
             ErrorCode(body).Should().Be("ShramSafal.ScheduleTemplateNotFound");
         }
 
-        (await SubscriptionsAsync()).Select(s => s.Template).Should().BeEquivalentTo(listed, "exactly the listed schedules were kept");
+        (await SubscriptionsAsync()).Select(s => s.Template).Should().BeEquivalentTo(adopted, "exactly the schedules a plot may follow were kept");
     }
 
     [Fact]

@@ -47,21 +47,24 @@ public sealed class ScheduleAdoptRealPostgresTests(ITestOutputHelper output) : S
         var library = await LibraryAsync(Owner);
         var listed = library.Should().ContainSingle(t => t.GetProperty("id").GetGuid() == rowTemplate, "the row is what the library lists").Which;
         listed.GetProperty("cropType").GetString().Should().Be("Grapes");
-        library.Should().NotContain(t => t.GetProperty("id").GetGuid() == BuiltInGrapes, "with rows, the built-in catalog is not listed");
+        // L8b-1F (F114, D-91 = 1): his rows never hide the samples; a crop's samples stay until THAT crop has a checked schedule.
+        library.Should().Contain(t => t.GetProperty("id").GetGuid() == BuiltInGrapes, "a row of his does not hide the grape sample");
+        library.Should().Contain(t => t.GetProperty("id").GetGuid() == BuiltInPomegranate);
 
         var (status, body) = await AdoptAsync(Owner, FarmA, PlotA, CycleA, rowTemplate);
         status.Should().Be(HttpStatusCode.OK, body);
 
         var row = (await SubscriptionsAsync()).Should().ContainSingle().Which;
         row.Template.Should().Be(rowTemplate);
-        listed.GetProperty("versionHash").GetString().Should().StartWith(row.VersionTag);
+        // L8b-1F: a new adopt keeps the row's OWN version ("v<Version>"), not the list hash.
+        listed.GetProperty("rowVersionTag").GetString().Should().Be(row.VersionTag);
 
-        // Listed = adoptable (fix round 1, review H2): once his library lists rows, a built-in id it no longer lists is
-        // answered like any id it does not list (round 1 kept built-in ids adoptable after rows existed; that let a phone
-        // adopt a schedule its own library no longer showed).
+        // L8b-1 fix round 1 (review H2) made a built-in id unadoptable once his library listed rows. L8b-1F (F114) replaces that
+        // with the per-crop rule: this row is a thin Public row = a SAMPLE; while no checked grape schedule exists, the built-in
+        // grape sample is still listed, so it is still choosable (the check-rule cases are in ScheduleAdoptCheckRealPostgresTests).
         var (plot2, cycle2) = await SeedSeasonAsync("Grapes");
         var builtIn = await AdoptAsync(Owner, FarmA, plot2, cycle2, BuiltInGrapes);
-        builtIn.Status.Should().Be(HttpStatusCode.NotFound, builtIn.Body);
+        builtIn.Status.Should().Be(HttpStatusCode.OK, builtIn.Body);
     }
 
     [Fact]
@@ -86,10 +89,18 @@ public sealed class ScheduleAdoptRealPostgresTests(ITestOutputHelper output) : S
 
         (await SubscriptionsAsync()).Should().BeEmpty("nothing was written for a schedule he may not see");
 
-        // Not vacuous: his own private schedule IS his to adopt.
+        // L8b-1F (E4 / R23): what a plot may follow depends on the PLOT's farm - his own PRIVATE schedule answers like an unknown id
+        // on this plot too (a private copy is not a thing a plot follows; SCH-OWN opens the Team branch).
         var own = await AdoptAsync(Owner, FarmA, PlotA, CycleA, hisOwn);
-        own.Status.Should().Be(HttpStatusCode.OK, own.Body);
-        (await SubscriptionsAsync()).Should().ContainSingle().Which.Template.Should().Be(hisOwn);
+        own.Status.Should().Be(HttpStatusCode.NotFound, own.Body);
+        ErrorCode(own.Body).Should().Be(notFoundCode);
+        (await SubscriptionsAsync()).Should().BeEmpty();
+
+        // Not vacuous: a Public schedule IS adoptable (a sample while no checked schedule exists for its crop).
+        var publicRow = await SeedTemplateRowAsync("Grapes - public sample", TenantScope.Public, author: OwnerB);
+        var pub = await AdoptAsync(Owner, FarmA, PlotA, CycleA, publicRow);
+        pub.Status.Should().Be(HttpStatusCode.OK, pub.Body);
+        (await SubscriptionsAsync()).Should().ContainSingle().Which.Template.Should().Be(publicRow);
     }
 
     [Fact]
