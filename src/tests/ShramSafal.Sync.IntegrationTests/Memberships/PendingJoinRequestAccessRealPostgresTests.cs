@@ -555,6 +555,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // role) and grants SELECT on them to the app role. It touches no farm_memberships or farm_join_requests object, no ssf.farms policy, no seat, and creates no
         // p_user_select_* policy. Down() drops only those five tables. Re-Up recreates and re-seeds them.
         "20261107080000_AddInputLibrary",
+        // spec dfes-input-truth-and-mix-check-2026-11-06 lane IT2 (founders D-92 / D-95) - Up() and Down() read in full: Up() creates
+        // ssf.input_identity_assertions only, FORCE-RLS, with its user-select policy written ALREADY narrowed (m.status = 3) - see
+        // PoliciesCreatedAfterActiveOnly. Down() drops its two policies and the table. No farm_memberships or farm_join_requests
+        // object, no ssf.farms policy, no seat touched. Re-Up recreates them.
+        "20261108090000_AddInputIdentityAssertions",
     ];
 
     /// <summary>
@@ -580,6 +585,8 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         "p_user_select_day_ledger_allocations",
         "p_user_select_log_tasks",
         "p_user_select_planned_activities",
+        // spec dfes-input-truth-and-mix-check-2026-11-06 lane IT2 - 20261108090000_AddInputIdentityAssertions.
+        "p_user_select_input_identity_assertions",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
     ];

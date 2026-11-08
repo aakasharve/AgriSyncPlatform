@@ -180,7 +180,14 @@ public sealed class GetAttentionBoardHandler(
                     complianceSignals = Array.Empty<ComplianceSignal>();
                 }
 
-                var plotSignals = complianceSignals.Where(s => s.PlotId == plot.Id).ToList();
+                // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2) - a wrong-mix alert whose evidence names a record kept
+                // from him (its audience, his plots) is not his to read, exactly as the pull and the compliance door already
+                // hold for every warning they send: no card, no id and no word of it reaches him. Asked of this rule's signals
+                // only, so every other warning's card is exactly as it was.
+                var plotSignals = complianceSignals
+                    .Where(s => s.PlotId == plot.Id)
+                    .Where(s => s.RuleCode != ComplianceRuleCode.InputMixNeverTogether || !visibility.MentionsHidden(s.PayloadJson))
+                    .ToList();
                 var openComplianceSignalCount = plotSignals.Count;
                 ComplianceSignal? highestSeveritySignal = plotSignals
                     .OrderByDescending(s => (int)s.Severity)
@@ -462,6 +469,10 @@ public sealed class GetAttentionBoardHandler(
             UnresolvedDisputeCount: disputeCount > 0 ? disputeCount : null,
             MissingTestCount: missingTestCount > 0 ? missingTestCount : null,
             OpenComplianceSignalCount: openComplianceSignalCount,
+            // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2, Task 4) - the signal that ranks the card, so the phone
+            // can name it (wrong mix in one tank) and acknowledge it (पाहिलं).
+            TopSignalId: highestSeveritySignal?.Id,
+            TopSignalRuleCode: highestSeveritySignal?.RuleCode,
             ComputedAtUtc: asOf);
     }
 

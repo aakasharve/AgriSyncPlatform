@@ -163,6 +163,8 @@ public static class DependencyInjection
         services.AddScoped<CorrectCostEntryHandler>();
         // spec: plr-d10 lane BILL-1 (founder D-12) — a bill's मंजूर stamp; one handler for the push and the REST door.
         services.AddScoped<ShramSafal.Application.UseCases.Finance.ApproveCostEntry.ApproveCostEntryHandler>();
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his answer about a product (push only).
+        services.AddScoped<ShramSafal.Application.UseCases.Inputs.AssertInputIdentity.AssertInputIdentityHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
         // lane MU-3 fix 1 (F94) — /finance/plot-summary asked for this and it was never registered (500).
         services.AddScoped<GetPlotFinanceSummaryHandler>();

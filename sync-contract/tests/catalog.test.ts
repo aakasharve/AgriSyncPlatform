@@ -27,8 +27,9 @@ describe('mutation-types.json', () => {
   // 36 -> 37 on 2026-11-01 (lane PRV, founder D-26): set_record_audience.
   // 37 -> 38 on 2026-11-06 (lane RATE-1 part A, founder D-72): set_farm_rate.
   // 38 -> 39 on 2026-11-07 (lane BILL-1, founder D-12): approve_cost_entry.
-  it('declares 39 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(39);
+  // 39 -> 40 on 2026-11-08 (lane IT2, founders D-92 / D-95): assert_input_identity.
+  it('declares 40 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(40);
   });
 
   it('has unique mutation names', () => {

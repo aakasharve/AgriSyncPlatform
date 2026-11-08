@@ -88,6 +88,9 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.farm_rates",
         // plr-d10 lane BILL-1 (founder D-12) — a bill's मंजूर stamps (who, when, which version), one unchangeable row each.
         "ssf.cost_entry_approvals",
+        // dfes-input-truth-and-mix-check-2026-11-06 lane IT2 (founders D-92 / D-95) — his हो / नाही / फोटो answers about the
+        // products of saved records, one unchangeable row each.
+        "ssf.input_identity_assertions",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -236,6 +239,12 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    (the deny-write policies still block its writes). No existing grant, privilege or append-only ledger is touched. Safe to
         //    revert and re-apply mid-proof.
         "20261107080000_AddInputLibrary",
+        // ── Reviewed 2026-11-08 (spec: dfes-input-truth-and-mix-check-2026-11-06 lane IT2, founders D-92 / D-95); Down() read in
+        //    full: drops the two policies on ssf.input_identity_assertions and the table (its CHECKs, indexes and foreign keys go
+        //    with it) - only what Up() added. Up() creates that table FORCE-RLS and APPEND-ONLY BY PRIVILEGE with its own
+        //    effective-privilege guard (it is on AppendOnlyLedgers above). It adds no column to any existing table and touches no
+        //    other ledger's grants. Safe to revert and re-apply mid-proof.
+        "20261108090000_AddInputIdentityAssertions",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

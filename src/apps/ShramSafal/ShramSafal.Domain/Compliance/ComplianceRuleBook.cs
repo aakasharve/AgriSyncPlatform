@@ -156,7 +156,19 @@ public static class ComplianceRuleBook
                 // Handler-coupled rule: Evaluate returns empty; EvaluateComplianceHandler
                 // materialises this signal using historical CompareEngine state.
                 return Array.Empty<ComplianceEvidence>();
-            })
+            }),
+
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2, Task 3; founder D-96) - products a reviewed, sourced rule
+        // says must never share a tank, given together in one saved record. Acknowledge-only: the stored record is the
+        // farmer's own statement and is never changed by this alert (P1, P7). It emits nothing until the founder's agronomist
+        // ticks a rule in the rule file (MixRules.Shippable is empty until then).
+        new ComplianceRule(
+            ComplianceRuleCode.InputMixNeverTogether,
+            ComplianceSeverity.Critical,
+            ComplianceSuggestedAction.AcknowledgeOnly,
+            "Products that must not be mixed were given together",
+            "हे मिश्रण चुकीचं आहे",
+            input => InputMixRule.Evaluate(input))
     };
 
     /// <summary>

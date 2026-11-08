@@ -228,6 +228,14 @@ public sealed class PullSyncChangesHandler(
             .Where(c => audience.Readmitted((Guid)c.FarmId, c.AudienceChangedAtUtc, c.PlaceChangedAtUtc))
             .ToList();
         var readmittedCostIds = readmittedCosts.Select(c => c.Id).ToList();
+        // ── spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his हो / नाही / फोटो answers ──
+        // An answer is its own append-only row and does NOT move its record's ModifiedAtUtc (that would re-open a confirmed
+        // day, D-92), so the record's delta cannot carry it: the answers have their own delta, the ones kept since his cursor
+        // (PullInputIdentityAnswers). A record RE-ADMITTED to him (readmittedLogIds, just above: the same set its photos are
+        // sent again for) brings its answers too, whatever their age. Phase-1 data like the record: NOT degrade-and-continue -
+        // a failed read fails the pull and the phone retries, never told a record has no answer.
+        var inputIdentityAssertions = await PullInputIdentityAnswers.ReadAsync(
+            repository, window, audience.Visibility, dailyLogFarmById, readmittedLogIds, ct);
         var changedAttachments = await window.ReadAsync(Any, (ids, since) => repository.GetAttachmentsChangedSinceAsync(ids, since, ct), a => (Guid)a.FarmId);
         if (readmittedLogIds.Count > 0 || readmittedCostIds.Count > 0)
         {
@@ -373,6 +381,12 @@ public sealed class PullSyncChangesHandler(
             auditEvents);
         // lane RATE-1 — who set each rate he receives (a person of that farm), so his phone can name them in its history.
         operatorIds.UnionWith(farmRates.Select(r => r.CreatedByUserId.Value).Where(id => id != Guid.Empty));
+        // lane IT2 - and who gave each answer he receives (the speaker, or the person who checked), under MU-3's rule: an
+        // own-records seat is sent no other person's name.
+        operatorIds.UnionWith(inputIdentityAssertions
+            .Where(a => a.AssertedByUserId.Value == query.UserId || window.ScopeOf((Guid)a.FarmId) is { OwnRecordsOnly: false })
+            .Select(a => a.AssertedByUserId.Value)
+            .Where(id => id != Guid.Empty));
 
         // spec: plr-d10 lane BILL-1 (founder D-12) — each bill he receives goes with its मंजूर stamps (who, when, which
         // version): read for exactly those bills, each stamp kept only when its farm IS its bill's farm (E4). Phase-1 data like
@@ -422,6 +436,9 @@ public sealed class PullSyncChangesHandler(
         {
             nextCursorUtc = newestRate;
         }
+
+        // lane IT2 - and past the newest answer sent (an answer moves no record's clock, so nothing else would carry the cursor).
+        nextCursorUtc = PullInputIdentityAnswers.AdvanceCursor(nextCursorUtc, inputIdentityAssertions);
 
         // Sub-plan 03 Task 10 — collect partial-failure components.
         // When this list is non-empty, the response carries
@@ -768,7 +785,10 @@ public sealed class PullSyncChangesHandler(
             FarmRates: farmRates.Select(FarmRateDto.From).ToList(),
             // lane BILL-1 fix round 1 (review M4) — this server sends every bill with its version: a phone holding bills it
             // pulled before BILL-1 (no version on them) may ask once for all of them again. Additive and last (P11).
-            BillVersions: true);
+            BillVersions: true,
+            // lane IT2 - his हो / नाही / फोटो answers kept since his cursor, for the records he may see (additive and last, P11:
+            // an older phone parses the pull with no schema and never reads it).
+            InputIdentityAssertions: inputIdentityAssertions.Select(InputIdentityAssertionDto.From).ToList());
 
         return Result.Success(response);
     }

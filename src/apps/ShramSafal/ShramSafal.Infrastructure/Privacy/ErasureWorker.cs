@@ -437,6 +437,24 @@
 //     through the operator directory, which erasure anonymises.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.input_identity_assertions (dfes-input-truth-and-mix-check-2026-11-06, lane IT2, founders
+//     D-92 / D-95) — KEEP. One row is one हो / नाही / फोटो answer about one product of one saved
+//     record of a FARM: the farm, the record and item, spoken_name (the product name copied from
+//     the stored record — a value, not his words: LogContentDocument.WordKeys does not hold it),
+//     the library product he confirmed, the answer, the library version, when the server took it,
+//     the sync request id (telemetry), whether it is the check (the sender held the confirm-records
+//     authority), and who gave it as an opaque user id ONLY — asserted_by_user_id, no name, no
+//     free text, no amount. It is the farm's product-identity history behind the record, append-only
+//     by GRANT (SELECT + INSERT): the app role cannot rewrite or remove it, and an answer is
+//     evidence of which product was used on which day. An erased speaker's or checker's opaque
+//     user id stays on the rows he gave, exactly as on ssf.cost_entry_approvals and
+//     ssf.audit_events; the phone names the person only through the operator directory, which
+//     erasure anonymises. DISCLOSED: spoken_name is a copy of a product name as it was spoken; if
+//     account erasure ever needs to remove product names too, that is a surgical scrub of this
+//     column through the privileged admin context (as ssf.daily_log_contents above), open for
+//     GO-LIVE-REGISTER F98 and not closed here by assertion.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.raw_blob_subjects — DELETE WHERE user_id = X. An ACTION, not a
 //     disposition comment; see step 5 of the delete block in ProcessOneAsync.
 //     This table is not merely adjacent to the ownership link, it IS the

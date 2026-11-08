@@ -21,6 +21,8 @@ public sealed record AttentionCardDto(
     int? UnresolvedDisputeCount,
     int? MissingTestCount,                 // CEI Phase 2 §4.5 — Due/Overdue tests at or past their planned due date
     int OpenComplianceSignalCount,         // CEI Phase 3 §4.6 — open compliance signals for this plot
+    Guid? TopSignalId,                     // IT2 Task 4 — id of the open signal that ranks this plot's card (null: none open, or an older server)
+    string? TopSignalRuleCode,             // IT2 Task 4 — its rule code; compliance.input-mix.never-together is "wrong mix in one tank"
     DateTime ComputedAtUtc);
 
 public enum AttentionRank { Critical = 0, NeedsAttention = 1, Watch = 2, Healthy = 3 }

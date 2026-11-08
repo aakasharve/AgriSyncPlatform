@@ -1362,6 +1362,12 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    in the cost_categories shape and grants SELECT on them to the app role. Never touches ssf.audit_events, its policies or
         //    its grants. Safe mid-proof.
         "20261107080000_AddInputLibrary",
+        // ── Reviewed 2026-11-08 (spec: dfes-input-truth-and-mix-check-2026-11-06 lane IT2, founders D-92 / D-95); Down() read in
+        //    full: drops the two policies on ssf.input_identity_assertions and the table (its CHECKs, indexes and foreign keys go
+        //    with it). Up() creates that table only (FORCE RLS, SELECT + INSERT for the app role); it adds no column to any
+        //    existing table. Never touches ssf.audit_events, its policies or its grants (an answer writes an ordinary audit row
+        //    through the app role's existing INSERT). Safe mid-proof.
+        "20261108090000_AddInputIdentityAssertions",
     ];
 
     /// <summary>

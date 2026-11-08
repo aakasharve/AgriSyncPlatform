@@ -1189,3 +1189,61 @@ describe('lane BILL-1 — ApproveCostEntryPayload', () => {
         expect(payloads.ApproveCostEntryPayload.safeParse({ ...approval, farmId: undefined }).success).toBe(false);
     });
 });
+
+// spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2, founders D-92 / D-95) — assert_input_identity: his हो / नाही / फोटो
+// answer about one product of one saved record. His words for the product are the SERVER's copy of the stored record, never
+// a field here; and who answered / whether it is the check are the sender's standing, never a field either.
+describe('lane IT2 — AssertInputIdentityPayload', () => {
+    const answer = {
+        assertionId: VALID_GUID_A,
+        farmId: VALID_GUID_B,
+        dailyLogId: VALID_GUID_C,
+        inputEventId: 'e1',
+        mixIndex: 0,
+        verdict: 'confirmed',
+        catalogProductId: 'p-calcium-nitrate',
+        catalogVersion: 'inputs-2.4',
+    };
+
+    it('takes a confirmed answer with the library product, and the photo / not-it answers without one', () => {
+        expect(payloads.AssertInputIdentityPayload.safeParse(answer).success).toBe(true);
+        const { catalogProductId: _omitted, ...bare } = answer;
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...bare, verdict: 'rejected' }).success).toBe(true);
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...bare, verdict: 'photo', attachmentId: VALID_GUID_D }).success).toBe(true);
+    });
+
+    it('refuses an answer that is not one of the three', () => {
+        for (const verdict of ['yes', 'Confirmed', '', null, 1]) {
+            expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, verdict }).success).toBe(false);
+        }
+    });
+
+    it('refuses a missing, negative or fractional slot, and an item id that is empty or too long', () => {
+        const { mixIndex: _omitted, ...withoutSlot } = answer;
+        expect(payloads.AssertInputIdentityPayload.safeParse(withoutSlot).success).toBe(false);
+        for (const mixIndex of [-1, 0.5, '0', null]) {
+            expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, mixIndex }).success).toBe(false);
+        }
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, inputEventId: '' }).success).toBe(false);
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, inputEventId: 'e'.repeat(129) }).success).toBe(false);
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, inputEventId: 'e'.repeat(128) }).success).toBe(true);
+    });
+
+    it('never carries his words, who answered, when, or whether it is the check', () => {
+        for (const extra of [
+            { spokenName: 'calcium nitrate' },
+            { assertedByUserId: VALID_GUID_D },
+            { assertedAtUtc: '2026-11-08T06:00:00Z' },
+            { isCheck: true },
+        ]) {
+            expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, ...extra }).success).toBe(false);
+        }
+    });
+
+    it('refuses a record, farm or answer id that is not an id, and a missing library version', () => {
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, dailyLogId: 'log-1' }).success).toBe(false);
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, farmId: undefined }).success).toBe(false);
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, assertionId: 'a' }).success).toBe(false);
+        expect(payloads.AssertInputIdentityPayload.safeParse({ ...answer, catalogVersion: '' }).success).toBe(false);
+    });
+});

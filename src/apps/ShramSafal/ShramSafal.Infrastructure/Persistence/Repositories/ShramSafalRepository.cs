@@ -13,6 +13,7 @@ using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
+using ShramSafal.Domain.Inputs;
 using ShramSafal.Domain.Labour;
 using ShramSafal.Domain.Logs;
 using ShramSafal.Domain.Planning;
@@ -314,6 +315,76 @@ internal sealed class ShramSafalRepository(
             .Where(a => ids.Contains(a.CostEntryId))
             .OrderBy(a => a.ApprovedAtUtc)
             .ToListAsync(ct);
+    }
+
+    // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) - see IShramSafalRepository. Append-only by
+    // privilege: the app role holds SELECT and INSERT on ssf.input_identity_assertions, so there is no update or delete here.
+    public async Task AddInputIdentityAssertionAsync(InputIdentityAssertion assertion, CancellationToken ct = default)
+    {
+        await db.InputIdentityAssertions.AddAsync(assertion, ct);
+    }
+
+    public async Task<InputIdentityAssertion?> GetInputIdentityAssertionByClientMutationIdAsync(
+        Guid farmId, string clientMutationId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty || string.IsNullOrWhiteSpace(clientMutationId))
+        {
+            return null;
+        }
+
+        var farm = new FarmId(farmId);
+        return await db.InputIdentityAssertions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(a => a.FarmId == farm && a.ClientMutationId == clientMutationId, ct);
+    }
+
+    public async Task<IReadOnlyList<InputIdentityAssertion>> GetLatestInputIdentityAssertionsForLogsAsync(
+        IReadOnlyCollection<Guid> dailyLogIds, CancellationToken ct = default)
+    {
+        if (dailyLogIds is null || dailyLogIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await NewestLegitimateAssertions(db, dailyLogIds).ToListAsync(ct);
+    }
+
+    public async Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(
+        IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds).Select(id => new FarmId(id)).ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return await db.InputIdentityAssertions
+            .AsNoTracking()
+            .Where(a => ids.Contains(a.FarmId) && a.AssertedAtUtc > sinceUtc)
+            .OrderBy(a => a.AssertedAtUtc)
+            .ThenBy(a => a.Id)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// lane IT2 - the newest answer of each item of these records, the speaker's and the check apart, chosen in SQL. A row
+    /// counts only when its <c>farm_id</c> is its record's own farm (doctrine E4: the column is its own, FK checks bypass
+    /// RLS), and that test runs BEFORE the newest is picked, so a mismatched row at a later time can never hide the
+    /// newest legitimate one. Internal so a test can read the SQL it becomes.
+    /// </summary>
+    internal static IQueryable<InputIdentityAssertion> NewestLegitimateAssertions(
+        ShramSafalDbContext db, IReadOnlyCollection<Guid> dailyLogIds)
+    {
+        var ids = dailyLogIds as IList<Guid> ?? dailyLogIds.ToList();
+        return (
+                from answer in db.InputIdentityAssertions.AsNoTracking()
+                join log in db.DailyLogs.AsNoTracking()
+                    on new { LogId = answer.DailyLogId, Farm = answer.FarmId }
+                    equals new { LogId = log.Id, Farm = log.FarmId }
+                where ids.Contains(answer.DailyLogId)
+                select answer)
+            .GroupBy(answer => new { answer.DailyLogId, answer.InputEventId, answer.MixIndex, answer.IsCheck })
+            .Select(versions => versions.OrderByDescending(answer => answer.AssertedAtUtc).ThenByDescending(answer => answer.Id).First());
     }
 
     // spec: pre-launch-repair L2b (R-1) — see IShramSafalRepository.

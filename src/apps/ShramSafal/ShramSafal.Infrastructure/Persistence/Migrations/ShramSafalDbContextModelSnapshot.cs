@@ -4063,6 +4063,103 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("shram_phone_challenges", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputIdentityAssertion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AssertedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("asserted_at_utc");
+
+                    b.Property<Guid>("AssertedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("asserted_by_user_id");
+
+                    b.Property<Guid?>("AttachmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("attachment_id");
+
+                    b.Property<string>("CatalogProductId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("catalog_product_id");
+
+                    b.Property<string>("CatalogVersion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("catalog_version");
+
+                    b.Property<string>("ClientMutationId")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("client_mutation_id");
+
+                    b.Property<Guid>("DailyLogId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("daily_log_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("InputEventId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("input_event_id");
+
+                    b.Property<bool>("IsCheck")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_check");
+
+                    b.Property<int>("MixIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("mix_index");
+
+                    b.Property<Guid?>("PlotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("plot_id");
+
+                    b.Property<string>("SpokenName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("spoken_name");
+
+                    b.Property<string>("Verdict")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("verdict");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId", "AssertedAtUtc")
+                        .HasDatabaseName("ix_input_identity_assertions_farm_asserted");
+
+                    b.HasIndex("FarmId", "ClientMutationId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_input_identity_assertions_farm_mutation");
+
+                    b.HasIndex("DailyLogId", "InputEventId", "MixIndex", "AssertedAtUtc")
+                        .IsDescending(false, false, false, true)
+                        .HasDatabaseName("ix_input_identity_assertions_item_asserted");
+
+                    b.ToTable("input_identity_assertions", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_input_identity_assertions_confirmed_has_product", "verdict <> 'confirmed' OR catalog_product_id IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_input_identity_assertions_mix_index", "mix_index >= 0");
+
+                            t.HasCheckConstraint("ck_input_identity_assertions_verdict", "verdict IN ('confirmed', 'rejected', 'photo')");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibraryConflict", b =>
                 {
                     b.Property<Guid>("Id")
@@ -6853,6 +6950,15 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_shram_phone_challenges_person");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Inputs.InputIdentityAssertion", b =>
+                {
+                    b.HasOne("ShramSafal.Domain.Farms.Farm", null)
+                        .WithMany()
+                        .HasForeignKey("FarmId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("ShramSafal.Domain.Inputs.InputLibraryConflict", b =>

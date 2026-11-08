@@ -413,6 +413,123 @@ public sealed class GetAttentionBoardHandlerTests
     // Private fake infrastructure
     // ---------------------------------------------------------------------------
 
+    // ---------------------------------------------------------------------------
+    // lane IT2 (Task 4) - the card carries the signal that ranks it
+    // ---------------------------------------------------------------------------
+    private static ShramSafal.Domain.Compliance.ComplianceSignal OpenMixSignal(Guid plotId, Guid cycleId, string payloadJson) =>
+        ShramSafal.Domain.Compliance.ComplianceSignal.Open(
+            Guid.NewGuid(), new FarmId(FarmId), plotId, cycleId,
+            ShramSafal.Domain.Compliance.ComplianceRuleCode.InputMixNeverTogether,
+            ShramSafal.Domain.Compliance.ComplianceSeverity.Critical,
+            ShramSafal.Domain.Compliance.ComplianceSuggestedAction.AcknowledgeOnly,
+            "Products that must not be mixed were given together", "हे मिश्रण चुकीचं आहे",
+            "These must not share a tank.", "हे एकाच टाकीत चालत नाहीत.", payloadJson, Now.AddHours(-1));
+
+    private static (FakeAttentionRepo Repo, CropCycle Cycle) PlotWithACycle()
+    {
+        var farm = Farm.Create(new FarmId(FarmId), "Ramu Farm", new UserId(UserId), Now.AddDays(-100));
+        var plot = Plot.Create(PlotId1, new FarmId(FarmId), "Plot A", 2.5m, Now.AddDays(-100));
+        var cycle = CropCycle.Create(
+            Guid.NewGuid(), new FarmId(FarmId), PlotId1, "Grapes", "Fruiting",
+            DateOnly.FromDateTime(Now.AddDays(-30)), null, Now.AddDays(-30));
+        var repo = new FakeAttentionRepo();
+        repo.AddFarmForUser(UserId, farm);
+        repo.AddPlot(plot);
+        repo.AddCropCycle(PlotId1, cycle);
+        return (repo, cycle);
+    }
+
+    [Fact]
+    public async Task GetAttentionBoard_CardCarriesTheTopSignal_IdAndRuleCode()
+    {
+        var (repo, cycle) = PlotWithACycle();
+        var signal = OpenMixSignal(PlotId1, cycle.Id, "{\"logId\":\"" + Guid.NewGuid() + "\"}");
+        var handler = new GetAttentionBoardHandler(
+            repo, new FakeTestInstanceRepo(), new FixedSignals(signal), new FakeClock(Now),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<GetAttentionBoardHandler>.Instance);
+
+        var result = await handler.HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        var card = Assert.Single(result.Value!.Cards);
+        Assert.Equal(AttentionRank.Critical, card.Rank);
+        Assert.Equal(signal.Id, card.TopSignalId);
+        Assert.Equal("compliance.input-mix.never-together", card.TopSignalRuleCode);
+        Assert.Equal("हे मिश्रण चुकीचं आहे", card.TitleMr);
+        Assert.Equal(SuggestedActionKind.OpenPlot, card.SuggestedAction);
+        Assert.Equal(1, card.OpenComplianceSignalCount);
+    }
+
+    [Fact]
+    public async Task GetAttentionBoard_CardWithNoOpenSignal_HasNoTopSignal()
+    {
+        var (repo, _) = PlotWithACycle();
+        repo.SetDisputedLogCount(PlotId1, 1);
+
+        var result = await CreateHandler(repo).HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        var card = Assert.Single(result.Value!.Cards);
+        Assert.Null(card.TopSignalId);
+        Assert.Null(card.TopSignalRuleCode);
+    }
+
+    [Fact]
+    public async Task GetAttentionBoard_AWrongMixInARecordKeptFromHim_IsNotOnHisCard()
+    {
+        var (repo, cycle) = PlotWithACycle();
+        var makerId = Guid.NewGuid();
+        var kept = DailyLog.Create(Guid.NewGuid(), new FarmId(FarmId), PlotId1, cycle.Id, new UserId(makerId),
+            DateOnly.FromDateTime(Now), null, null, Now.AddHours(-2));
+        kept.SetAudience(ShramSafal.Domain.RecordPrivacy.RecordAudience.OnlyMe, Now.AddHours(-1));
+        repo.Restricted.Add(ShramSafal.Application.Services.RestrictedRecord.Of(kept, []));
+        // A co-owner without the holder's standing: he reads the farm overview, but not a record kept from him.
+        repo.AccessOverride = new ShramSafal.Application.Services.FarmAccess(
+            AppRole.SecondaryOwner, MembershipStatus.Active, IsRegistrant: false, null);
+        var signal = OpenMixSignal(PlotId1, cycle.Id, "{\"logId\":\"" + kept.Id + "\"}");
+        var handler = new GetAttentionBoardHandler(
+            repo, new FakeTestInstanceRepo(), new FixedSignals(signal), new FakeClock(Now),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<GetAttentionBoardHandler>.Instance);
+
+        var hidden = await handler.HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+
+        Assert.DoesNotContain(hidden.Value!.Cards, c => c.TopSignalId == signal.Id);
+        Assert.DoesNotContain(hidden.Value!.Cards, c => c.TitleMr == "हे मिश्रण चुकीचं आहे");
+
+        // The farm's primary account holder is told.
+        repo.AccessOverride = null;
+        var holder = await handler.HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+        Assert.Contains(holder.Value!.Cards, c => c.TopSignalId == signal.Id);
+    }
+
+    [Fact]
+    public void OldPhonePayload_StillDeserialises()
+    {
+        // The wire is camelCase JSON. A card from before this lane carries neither new field; reading it must neither throw
+        // nor invent a signal (the phone's cached copy, and any reader built on the old shape, keep working).
+        const string oldCard = """
+            {"cardId":"6a0f0c4e-0000-4000-8000-000000000001","farmId":"6a0f0c4e-0000-4000-8000-000000000002","farmName":"f",
+             "plotId":"6a0f0c4e-0000-4000-8000-000000000003","plotName":"p","cropCycleId":null,"stageName":null,"rank":0,
+             "titleEn":"t","titleMr":"t","descriptionEn":"d","descriptionMr":"d","suggestedAction":0,
+             "suggestedActionLabelEn":"l","suggestedActionLabelMr":"l","overdueTaskCount":null,"latestHealthScore":null,
+             "unresolvedDisputeCount":null,"missingTestCount":null,"openComplianceSignalCount":1,"computedAtUtc":"2026-11-08T06:30:00Z"}
+            """;
+
+        var card = System.Text.Json.JsonSerializer.Deserialize<AttentionCardDto>(
+            oldCard, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+
+        Assert.NotNull(card);
+        Assert.Null(card!.TopSignalId);
+        Assert.Null(card.TopSignalRuleCode);
+        Assert.Equal(1, card.OpenComplianceSignalCount);
+        Assert.Equal(AttentionRank.Critical, card.Rank);
+
+        // And the new card writes the two fields in camelCase, so a phone that knows them reads them.
+        var written = System.Text.Json.JsonSerializer.Serialize(
+            card with { TopSignalId = Guid.Parse("6a0f0c4e-0000-4000-8000-000000000009"), TopSignalRuleCode = "compliance.input-mix.never-together" },
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.Contains("\"topSignalId\":\"6a0f0c4e-0000-4000-8000-000000000009\"", written);
+        Assert.Contains("\"topSignalRuleCode\":\"compliance.input-mix.never-together\"", written);
+    }
+
     private sealed class FakeAttentionRepo : IShramSafalRepository
     {
         private readonly Dictionary<Guid, List<Guid>> _userFarms = new();
@@ -422,6 +539,16 @@ public sealed class GetAttentionBoardHandlerTests
         private readonly Dictionary<Guid, List<PlannedActivity>> _cyclePlanned = new();
         private readonly Dictionary<Guid, List<LogTask>> _cycleExecuted = new();
         private readonly Dictionary<Guid, int> _disputedCounts = new();
+
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2) - a reader who is not the record holder, and the records
+        // the farm's audience rules keep from him (PRV): the default reader is the registrant, who sees every record.
+        public ShramSafal.Application.Services.FarmAccess? AccessOverride { get; set; }
+        public List<ShramSafal.Application.Services.RestrictedRecord> Restricted { get; } = [];
+
+        public Task<IReadOnlyList<ShramSafal.Application.Services.RestrictedRecord>> GetRestrictedRecordsAsync(
+            IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ShramSafal.Application.Services.RestrictedRecord>>(
+                Restricted.Where(r => farmIds.Contains(r.FarmId)).ToList());
 
         public void AddFarmForUser(Guid userId, Farm farm)
         {
@@ -492,7 +619,7 @@ public sealed class GetAttentionBoardHandlerTests
             Guid userId, IReadOnlyCollection<Guid> farmIds, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyDictionary<Guid, ShramSafal.Application.Services.FarmAccess?>>(farmIds.Distinct().ToDictionary(
                 id => id,
-                id => (ShramSafal.Application.Services.FarmAccess?)new ShramSafal.Application.Services.FarmAccess(
+                id => AccessOverride ?? (ShramSafal.Application.Services.FarmAccess?)new ShramSafal.Application.Services.FarmAccess(
                     AppRole.PrimaryOwner, MembershipStatus.Active, IsRegistrant: true, null, LabourGrant: false,
                     AuthorityExpiresAtJson: null, AccessChangedAtUtc: null)));
 
@@ -682,6 +809,25 @@ public sealed class GetAttentionBoardHandlerTests
             return Task.FromResult(r);
         }
 
+        public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    /// <summary>Open signals handed back as they are (lane IT2); everything else answers "none".</summary>
+    private sealed class FixedSignals(params ShramSafal.Domain.Compliance.ComplianceSignal[] open) : ShramSafal.Application.Ports.IComplianceSignalRepository
+    {
+        public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> FindOpenAsync(FarmId farmId, Guid plotId, string ruleCode, Guid? cropCycleId, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Compliance.ComplianceSignal?>(null);
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetOpenForFarmAsync(FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(open);
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetForFarmAsync(FarmId farmId, bool includeResolved, bool includeAcknowledged, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>(open);
+        public Task<ShramSafal.Domain.Compliance.ComplianceSignal?> GetByIdAsync(Guid id, CancellationToken ct = default)
+            => Task.FromResult<ShramSafal.Domain.Compliance.ComplianceSignal?>(null);
+        public Task<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>> GetSinceCursorAsync(FarmId farmId, DateTime cursor, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<ShramSafal.Domain.Compliance.ComplianceSignal>>([]);
+        public void Add(ShramSafal.Domain.Compliance.ComplianceSignal signal) { }
+        public Task<DateTime?> GetLatestEvaluationTimeAsync(FarmId farmId, CancellationToken ct = default)
+            => Task.FromResult<DateTime?>(null);
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
     }
 
