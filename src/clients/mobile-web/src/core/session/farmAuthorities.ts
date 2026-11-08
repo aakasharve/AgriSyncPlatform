@@ -25,6 +25,7 @@ export const AUTHORITY = {
     editFarmSetup: 'EditFarmSetup',
     labRecords: 'LabRecords',
     scheduleTemplates: 'ScheduleTemplates',
+    seeAllTasks: 'SeeAllTasks',
 } as const;
 
 export type AuthorityName = typeof AUTHORITY[keyof typeof AUTHORITY];
@@ -33,7 +34,8 @@ export type AuthorityName = typeof AUTHORITY[keyof typeof AUTHORITY];
  * The authorities the server ENFORCES, in the order the owner's switches show them (the server's
  * `FarmAuthorities.Switchable`). Lane MU-3 made see money and see wages real (every download and money read
  * follows them); lane L8b-1 (founder D-73) made plan work real (ScheduleChangeGate on every planning door).
- * Assign work has no switch yet (P5: not enforced until L8c).
+ * Lane L8c-2: assign work and see all tasks are enforced by the server since L8c-1 (the planned-work doors and reads), so they have
+ * switches too, in the server's own order (`FarmAuthorities.Switchable`).
  */
 export const SWITCHABLE_AUTHORITIES: readonly AuthorityName[] = [
     AUTHORITY.takeAttendance,
@@ -42,9 +44,11 @@ export const SWITCHABLE_AUTHORITIES: readonly AuthorityName[] = [
     AUTHORITY.seeWages,
     AUTHORITY.reviewMoney,
     AUTHORITY.planWork,
+    AUTHORITY.assignWork,
     AUTHORITY.editFarmSetup,
     AUTHORITY.labRecords,
     AUTHORITY.scheduleTemplates,
+    AUTHORITY.seeAllTasks,
 ];
 
 /** An authority that means nothing without another (review money needs see money, §11.1). */

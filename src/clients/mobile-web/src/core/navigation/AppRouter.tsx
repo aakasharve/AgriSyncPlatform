@@ -21,7 +21,7 @@ import { useUiPref } from '../../shared/hooks/useUiPref';
 import { useFarmContext } from '../session/FarmContext';
 import { mayChangeRecordedMoney } from '../session/farmPermissions';
 import { seeMoneyDoor, useStoredAccessScopes } from '../session/storedFarmScope';
-import { AUTHORITY, holdsAuthority } from '../session/farmAuthorities';
+import { AUTHORITY, holdsAuthority, isPrimaryAccountHolderRole } from '../session/farmAuthorities';
 import { useAppRouterDerivations } from './hooks/useAppRouterDerivations';
 import { useNudgeRouteEffect } from './hooks/useNudgeRouteEffect';
 import { useLabourLogArrivalScroll } from './hooks/useLabourLogArrivalScroll';
@@ -291,6 +291,12 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         maySeeMoney: seeMoneyDoor(storedAccessScopes, currentFarmId, currentFarm),
         // lane L8b-1 (founder D-73) — the planning doors follow the server's PlanWork answer, never the label.
         mayPlanWork: holdsAuthority(currentFarm, AUTHORITY.planWork),
+        // lane L8c-2 (D-24, D-26) - the plan door and form follow the server's PlanWork / AssignWork answers (the primary account
+        // holder holds both by definition); another person may be chosen only with AssignWork.
+        meUserId: userId,
+        mayAssignWork: isPrimaryAccountHolderRole(currentFarm?.role) || holdsAuthority(currentFarm, AUTHORITY.assignWork),
+        mayOpenPlanner: isPrimaryAccountHolderRole(currentFarm?.role)
+            || holdsAuthority(currentFarm, AUTHORITY.planWork) || holdsAuthority(currentFarm, AUTHORITY.assignWork),
         canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,

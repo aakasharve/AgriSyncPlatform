@@ -89,6 +89,8 @@ const KNOWN_ROUTES: readonly AppRoute[] = [
     'job-detail',
     'worker-profile',
     'farm-boundary',
+    // lane L8c-2 - the plan section.
+    'plan-work',
     // DATA_PRINCIPLE_SPINE Phase 10.4 — admin PII review queue.
     'piiReview',
 ];
@@ -245,6 +247,7 @@ export const navigationMachine = setup({
                     { target: '.job-detail', guard: ({ event }) => event.route === 'job-detail', actions: 'pushHistory' },
                     { target: '.worker-profile', guard: ({ event }) => event.route === 'worker-profile', actions: 'pushHistory' },
                     { target: '.farm-boundary', guard: ({ event }) => event.route === 'farm-boundary', actions: 'pushHistory' },
+                    { target: '.plan-work', guard: ({ event }) => event.route === 'plan-work', actions: 'pushHistory' },
                 ],
                 BROWSER_BACK: [
                     { target: '.main', guard: ({ context }) => context.history.length > 1 && context.history[context.history.length - 2] === 'main', actions: 'popHistory' },
@@ -274,6 +277,7 @@ export const navigationMachine = setup({
                     { target: '.job-detail', guard: ({ context }) => context.history.length > 1 && context.history[context.history.length - 2] === 'job-detail', actions: 'popHistory' },
                     { target: '.worker-profile', guard: ({ context }) => context.history.length > 1 && context.history[context.history.length - 2] === 'worker-profile', actions: 'popHistory' },
                     { target: '.farm-boundary', guard: ({ context }) => context.history.length > 1 && context.history[context.history.length - 2] === 'farm-boundary', actions: 'popHistory' },
+                    { target: '.plan-work', guard: ({ context }) => context.history.length > 1 && context.history[context.history.length - 2] === 'plan-work', actions: 'popHistory' },
                 ],
                 BROWSER_FORWARD: [
                     { target: '.main', guard: ({ context }) => context.future[0] === 'main', actions: 'replayForward' },
@@ -303,6 +307,7 @@ export const navigationMachine = setup({
                     { target: '.job-detail', guard: ({ context }) => context.future[0] === 'job-detail', actions: 'replayForward' },
                     { target: '.worker-profile', guard: ({ context }) => context.future[0] === 'worker-profile', actions: 'replayForward' },
                     { target: '.farm-boundary', guard: ({ context }) => context.future[0] === 'farm-boundary', actions: 'replayForward' },
+                    { target: '.plan-work', guard: ({ context }) => context.future[0] === 'plan-work', actions: 'replayForward' },
                 ],
                 DEEP_LINK_REPLAY: [
                     { target: '.main', guard: ({ event }) => event.route === 'main', actions: ['replaceHistoryWithReplayedRoute', 'recordNudge'] },
@@ -332,6 +337,7 @@ export const navigationMachine = setup({
                     { target: '.job-detail', guard: ({ event }) => event.route === 'job-detail', actions: ['replaceHistoryWithReplayedRoute', 'recordNudge'] },
                     { target: '.worker-profile', guard: ({ event }) => event.route === 'worker-profile', actions: ['replaceHistoryWithReplayedRoute', 'recordNudge'] },
                     { target: '.farm-boundary', guard: ({ event }) => event.route === 'farm-boundary', actions: ['replaceHistoryWithReplayedRoute', 'recordNudge'] },
+                    { target: '.plan-work', guard: ({ event }) => event.route === 'plan-work', actions: ['replaceHistoryWithReplayedRoute', 'recordNudge'] },
                 ],
                 NUDGE_CONSUMED: { actions: 'clearNudge' },
                 RESET: { target: '.main', actions: 'resetHistory' },
@@ -364,6 +370,7 @@ export const navigationMachine = setup({
                 'job-detail': {},
                 'worker-profile': {},
                 'farm-boundary': {},
+                'plan-work': {},
             },
         },
         // ----------------------------------------------------------------

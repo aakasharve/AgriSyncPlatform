@@ -57,10 +57,12 @@ describe('the three questions edit one grant', () => {
         expect(notInForce(presetGrant('Worker'))).toEqual(['EditFarmSetup', 'SeeMoney', 'SeeWages', 'ReviewMoney']);
     });
 
-    // AssignWork is the authority the server does not enforce yet (it waits for L8c); PlanWork became enforced with lane
-    // L8b-1 (D-73), so it is no longer the unenforced example. 'Invite' stays the unknown one.
-    it('an unenforced or unknown authority is never kept (P5)', () => {
-        expect(names(withAuthorities(presetGrant('Worker'), [{ name: 'AssignWork', expiresAtUtc: null }, { name: 'Invite', expiresAtUtc: null }]))).toEqual([]);
+    // Lane L8c-2: AssignWork and SeeAllTasks are enforced by the server since L8c-1 (like PlanWork since L8b-1), so they are kept
+    // and travel; 'Invite' stays the unknown one that is never kept.
+    it('an unknown authority is never kept (P5); AssignWork and SeeAllTasks are enforced and kept (L8c-2)', () => {
+        expect(names(withAuthorities(presetGrant('Worker'), [{ name: 'Invite', expiresAtUtc: null }]))).toEqual([]);
+        expect(names(withAuthorities(presetGrant('Worker'), [{ name: 'AssignWork', expiresAtUtc: null }, { name: 'SeeAllTasks', expiresAtUtc: null }, { name: 'Invite', expiresAtUtc: null }])))
+            .toEqual(['AssignWork', 'SeeAllTasks']);
     });
 });
 

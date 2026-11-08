@@ -72,6 +72,8 @@ const KNOWN_ROUTES: readonly AppRoute[] = [
     'consent',
     // spec: data-principle-spine-2026-05-05/10.4 — admin PII review queue.
     'piiReview',
+    // lane L8c-2 - the plan section.
+    'plan-work',
 ];
 
 const readInitialRouteFromUrl = (): AppRoute => {

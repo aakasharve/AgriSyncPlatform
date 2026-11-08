@@ -433,7 +433,9 @@ export type AppRoute =
     /** spec: 2026-08-14-founder-decisions-launch-cohort-and-scope — offline
      * voice-note drafts (`pendingAiJobs.result`) waiting for the farmer to
      * confirm or discard them. */
-    | 'ai-drafts';
+    | 'ai-drafts'
+    /** Lane L8c-2 - the plan section: "कामांचे नियोजन करा" for a planner, "तुमच्यावर सोपवलेली कामे" for everyone else. */
+    | 'plan-work';
 
 export interface AudioData {
     blob: Blob;

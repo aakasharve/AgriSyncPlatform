@@ -7,14 +7,13 @@
  *   - one big door "झालेले काम सांगा" (the founder's own words) -> crop, then plots, then the mic;
  *   - ONLY for someone who may manage labour (owner tier, or the owner's labour grant): a second
  *     door "आजची हजेरी" that opens the REAL हजेरी screen (route 'labour').
- * A worker gets exactly one door.
+ * A worker gets the one door to tell work, and his own plan door (lane L8c-2).
  *
- * NOT drawn, on purpose (doctrine P5): the plan door "कामांची जबाबदारी सोपवा / कामांचे नियोजन करा".
- * The founder ruled on 2026-10-26 that the log page has THREE sections (work done, plan, daily wage
- * and attendance), lifting the earlier two-door limit for owners (PENDING-DECISIONS "Answered";
- * defaults in D-24). The plan section is still left out because the server has no planned-work store
- * and no "may plan" permission yet (PLR-D6 §7 points A/B/D/E wait on the D-24 cards): a door to it
- * would promise what the server cannot keep. It comes when that model exists.
+ * Lane L8c-2 (founder 2026-10-26: the log page has THREE sections - work done, plan, daily wage and attendance): the plan door
+ * is drawn now that the server keeps the tasks and the authorities (L8c-1), so it promises only what the server keeps (P5).
+ * For the primary owner or a holder of PlanWork or AssignWork it reads "कामांची जबाबदारी सोपवा / कामांचे नियोजन करा" with
+ * "N कामे चालू"; for everyone else "तुमच्यावर सोपवलेली कामे" with his own count (`planDoor.kind`, decided by the caller from the
+ * server's authorities, never from a label). It opens the route 'plan-work'.
  *
  * Below the doors, the running-cost card that sat on the old log screen (re-homed, not dropped).
  *
@@ -33,6 +32,7 @@ import { AppUpdateCard } from '../../../appUpdate/AppUpdateCard';
 import { HOME_WORDS } from './entryWords';
 import { RunningCostCard, type RunningCost } from './RunningCostCard';
 import { TodayAttendanceCard } from './TodayAttendanceCard';
+import { PlanDoor, type PlanDoorProps } from '../../../plannedWork/components/PlanDoor';
 import type { TodayAttendance } from './todayAttendance';
 
 export interface WorkHomeProps {
@@ -45,9 +45,11 @@ export interface WorkHomeProps {
     onAttendanceNames?: () => void;
     /** The running-cost card; absent = not shown to this person. */
     cost?: RunningCost;
+    /** Lane L8c-2 - the plan door (which kind, and its farm and person); absent = no door (no farm yet). */
+    planDoor?: PlanDoorProps;
 }
 
-export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attendance, onAttendanceNames, cost }) => (
+export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attendance, onAttendanceNames, cost, planDoor }) => (
     <div className="space-y-3 px-3 pb-6 pt-3" style={{ fontFamily: SANS }} data-testid="work-home">
         <AppUpdateCard />
         <div className="relative flex min-h-[88px] items-center overflow-visible rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 pl-[26%] pr-3">
@@ -65,6 +67,8 @@ export const WorkHome: React.FC<WorkHomeProps> = ({ onTell, onAttendance, attend
             </span>
             <ChevronRight size={28} className="shrink-0" aria-hidden="true" />
         </Tap>
+
+        {planDoor && <PlanDoor {...planDoor} />}
 
         {onAttendance && attendance && (
             <div data-testid="home-attendance">

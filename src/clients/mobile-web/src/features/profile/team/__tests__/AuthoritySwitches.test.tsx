@@ -79,13 +79,18 @@ describe('the primary owner\'s responsibility switches', () => {
         const block = await openCard('fam');
         // lane MU-3 — see money / see wages are enforced on every download and money read now: real switches.
         // lane L8b-1 (founder D-73) — plan work is enforced on every planning door now: a real switch too.
-        for (const name of ['TakeAttendance', 'ConfirmRecords', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'PlanWork', 'EditFarmSetup', 'LabRecords', 'ScheduleTemplates']) {
+        // lane L8c-2 — assign work and see all tasks are enforced since L8c-1: real switches, in the server's order.
+        const order = ['TakeAttendance', 'ConfirmRecords', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'PlanWork', 'AssignWork', 'EditFarmSetup', 'LabRecords', 'ScheduleTemplates', 'SeeAllTasks'];
+        for (const name of order) {
             expect(within(block).getByTestId(`authority-${name}-fam`)).toBeTruthy();
         }
+        const shown = Array.from(block.querySelectorAll('[data-testid^="authority-"][data-testid$="-fam"]'))
+            .map(el => el.getAttribute('data-testid')!.replace(/^authority-/, '').replace(/-fam$/, ''))
+            .filter(n => order.includes(n));
+        expect(shown).toEqual(order);
         expect(within(block).getByText('कामाचं नियोजन करणे')).toBeTruthy();
-        for (const name of ['AssignWork']) {
-            expect(within(block).queryByTestId(`authority-${name}-fam`)).toBeNull();
-        }
+        expect(within(block).getByText('काम सोपवणे')).toBeTruthy();
+        expect(within(block).getByText('सगळी कामे पाहणे')).toBeTruthy();
         expect(within(block).getByTestId('authority-TakeAttendance-fam').getAttribute('data-on')).toBe('yes');
         expect(within(block).getByTestId('authority-ConfirmRecords-fam').getAttribute('data-on')).toBe('no');
         expect(within(block).getByText('हजेरी घेणे')).toBeTruthy();

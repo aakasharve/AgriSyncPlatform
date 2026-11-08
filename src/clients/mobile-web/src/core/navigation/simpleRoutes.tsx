@@ -48,6 +48,7 @@ import { requestOpenWaitingDrawer } from '../../features/oversight/oversightNavi
 import { todaysLabourAnchor } from '../../features/logs/components/entry/todayAttendance';
 import { buildNoWorkDayPayload } from './noWorkDay';
 import { PageBar } from '../../shared/components/ui/placeUi';
+import { PlanWorkPage } from '../../features/plannedWork/components/PlanWorkPage';
 import { MoneyWithheldPage } from '../../features/finance/components/MoneyWithheldPage';
 import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
 
@@ -221,6 +222,27 @@ export const renderOfflineConflictsRoute = (ctx: AppRouterContext): React.ReactN
     return (
         <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <OfflineConflictPage onBack={() => ctx.goBackOr('main')} />
+        </div>
+    );
+};
+
+// Lane L8c-2 (founder D-24, D-26, P5) - the plan section. A planner (the primary owner, or a holder of PlanWork or AssignWork, as the
+// server answers it) gets the form and the list; everyone else gets the work handed to him. The conflict page is where a parked step
+// is retried or discarded.
+export const renderPlanWorkRoute = (ctx: AppRouterContext): React.ReactNode => {
+    if (ctx.currentRoute !== 'plan-work') return null;
+    return (
+        <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <PlanWorkPage
+                farmId={ctx.activeFarmId}
+                userId={ctx.meUserId ?? null}
+                crops={ctx.crops}
+                farmerProfile={ctx.farmerProfile}
+                mayPlan={ctx.mayOpenPlanner ?? false}
+                mayAssign={ctx.mayAssignWork ?? false}
+                onBack={() => ctx.goBackOr('main')}
+                onOpenConflicts={() => ctx.setCurrentRoute('offline-conflicts')}
+            />
         </div>
     );
 };
@@ -596,6 +618,7 @@ export const SIMPLE_ROUTE_RENDERERS: Array<(ctx: AppRouterContext) => React.Reac
     renderOpsAdminRoute,
     renderReferralsRoute,
     renderOfflineConflictsRoute,
+    renderPlanWorkRoute,
     renderScheduleRoute,
     renderProcurementRoute,
     renderTestE2ERoute,
