@@ -262,6 +262,9 @@ public static class DependencyInjection
                     sp.GetServices<AgriSync.BuildingBlocks.Application.PipelineBehaviors.IAuthorizationCheck<RemovePlannedActivityCommand>>())));
 
         services.AddScoped<GetScheduleTemplatesHandler>();
+        // spec: plr-d10 lane SCH-GATE-a - the planning gate and the stage plan (read by the pull and the stage-plan route only, D-83 = 1).
+        services.AddScoped<ShramSafal.Application.Services.ScheduleRequirement>();
+        services.AddScoped<ShramSafal.Application.Services.ScheduleStagePlan>();
         services.AddScoped<CloneScheduleTemplateHandler>();
         services.AddScoped<EditScheduleTemplateHandler>();
         services.AddScoped<PublishScheduleTemplateHandler>();

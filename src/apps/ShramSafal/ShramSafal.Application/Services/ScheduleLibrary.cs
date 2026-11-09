@@ -214,7 +214,8 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
             var bridged = carryOver && (isSample || live == ScheduleCheckState.Withdrawn);
             var rowById = visible.GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.First());
             var cropHasChecked = GetScheduleTemplatesHandler.CheckedOutsideCrops(pool, rowById).Contains(CropGroupKey(template.CropType));
-            var newChoiceOpen = isSample && !cropHasChecked;
+            // spec: plr-d10 lane SCH-GATE-a - the "a new choice is open" rule is shared with the planning gate (NewChoiceOpen).
+            var newChoiceOpen = NewChoiceOpen(origin, isBuiltIn, row?.HasStoredDays ?? false, live, cropHasChecked);
             if (!bridged && !newChoiceOpen)
             {
                 return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleNotChecked);
@@ -223,6 +224,50 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
 
         return Result.Success(new ScheduleChoice(template, origin.Value, atAdopt, live));
     }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-GATE-a (D-83 = 1, D-82 = 3, D-91 = 1, R7) - the ONE rule "may this listed schedule be chosen NEW on this
+    /// plot-season right now?", read by <see cref="ChooseAsync"/> (adopt and migrate) and by the planning gate, so the gate never asks
+    /// him to choose what adopt would refuse (P5). Pure.
+    /// <list type="bullet">
+    /// <item><paramref name="origin"/> <c>null</c> (the plot's farm may not follow it - <see cref="FollowableOnPlot.Classify"/>): closed.</item>
+    /// <item><see cref="ScheduleOrigin.Own"/>: closed until SCH-OWN opens that branch (adopt answers
+    /// <see cref="ShramSafalErrors.OwnScheduleNotOpenYet"/>).</item>
+    /// <item>Outside and <b>Checked</b> now: open.</item>
+    /// <item>Outside and a <b>sample</b> (a built-in id, or a row that stores no days): open exactly while its crop has no Checked
+    /// Outside schedule (<paramref name="cropHasChecked"/>).</item>
+    /// <item>Any other Outside row (waiting, sent back, withdrawn): closed. A carry-over is a separate thing <see cref="ChooseAsync"/>
+    /// still allows (R7); it is not a NEW choice.</item>
+    /// </list>
+    /// </summary>
+    public static bool NewChoiceOpen(
+        ScheduleOrigin? origin, bool isBuiltIn, bool hasStoredDays, ScheduleCheckState live, bool cropHasChecked)
+    {
+        if (origin is null || origin == ScheduleOrigin.Own)
+        {
+            return false;
+        }
+
+        if (live == ScheduleCheckState.Checked)
+        {
+            return true;
+        }
+
+        var isSample = isBuiltIn || !hasStoredDays;
+        return isSample && !cropHasChecked;
+    }
+
+    /// <summary>
+    /// The crop groups (<see cref="CropGroupKey"/>) of a LISTING that hold a Checked Outside schedule - the listing-side twin of
+    /// <see cref="GetScheduleTemplatesHandler.CheckedOutsideCrops"/> (which reads rows): an Outside row is a Public one, and a built-in
+    /// sample carries no scope and is never Checked.
+    /// </summary>
+    public static HashSet<string> CheckedOutsideCropsOf(IEnumerable<ScheduleTemplateDto> listing) =>
+        listing
+            .Where(d => string.Equals(d.Scope, nameof(TenantScope.Public), StringComparison.Ordinal)
+                        && d.Check?.State == nameof(ScheduleCheckState.Checked))
+            .Select(d => CropGroupKey(d.CropType))
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// The version a subscription keeps of the schedule it adopted: the listed version hash, cut to what

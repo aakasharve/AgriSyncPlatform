@@ -58,6 +58,7 @@ GET /shramsafal/farms/{farmId:guid}/personal-invitations
 GET /shramsafal/farms/{farmId:guid}/planned-work
 GET /shramsafal/farms/{farmId:guid}/planned-work/assignees
 GET /shramsafal/farms/{farmId:guid}/planned-work/{plannedWorkId:guid}
+GET /shramsafal/farms/{farmId:guid}/plots/{plotId:guid}/stage-plan
 GET /shramsafal/farms/{farmId:guid}/weather/current
 GET /shramsafal/farms/{farmId:guid}/weather/forecast
 GET /shramsafal/finance/farm-rates
