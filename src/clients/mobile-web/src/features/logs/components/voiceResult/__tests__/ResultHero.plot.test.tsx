@@ -95,25 +95,27 @@ describe('the day-score meter is drawn in exactly the places listed here (Result
     /** A file that IMPORTS a meter component (the card, the ring, the bar, the gauge, the stage that draws the ring). */
     const MOUNTS_METER = /import\s[^;]*?\b(?:DayUnderstandingCard|RingStage|UnderstandingBar|UnderstandingGauge|UnderstandingRing)\b[^;]*?from\s/;
 
-    it('only ResultHero (the result screen) and, known and pre-existing, the saved route\'s DayUnderstandingCard draw a meter', () => {
+    it('only ResultHero (the result screen) draws a meter; the saved route draws none (D-122)', () => {
         const mounting = sourceFiles(SRC)
             .filter(f => MOUNTS_METER.test(readFileSync(f, 'utf8')))
             .map(f => relative(SRC, f).split(sep).join('/'));
-        // EXPLICIT allowlist. The result screen's meter is `ResultHero` (through `RingStage`). KNOWN, PRE-EXISTING SECOND METER, not
-        // part of this lane and left as it is (raised separately as a register item): `core/navigation/savedView.tsx` still renders
-        // the older flag-gated `DayUnderstandingCard` (the farm-day X/१०) on the non-voice saved route, under
-        // FEATURE_FLAGS.understandingMeter. The other entries are the card's, the stage's and the ring's own implementation files.
+        // EXPLICIT allowlist. The result screen's meter is `ResultHero` (through `RingStage`). The older farm-day card
+        // (`DayUnderstandingCard`, drawn by `core/navigation/savedView.tsx`) was deleted by founder decision D-122 (2026-11-09), so
+        // no route file is allowed: the other entries are the stage's and the ring's own implementation files.
         const ALLOWED = [
-            'core/navigation/savedView.tsx', // KNOWN second meter (DayUnderstandingCard on the saved route), see above
-            'features/logs/components/shramsathi/DayUnderstandingCard.tsx',
             'features/logs/components/voiceResult/ResultHero.tsx', // the result screen's meter
             'features/logs/components/voiceResult/RingStage.tsx', // ... drawn through the ring stage
             'features/logs/components/shramsathi/understandingRing/UnderstandingRing.tsx', // the ring itself
         ];
         expect(mounting.filter(f => !ALLOWED.includes(f))).toEqual([]);
-        // The two route-level mounts: the result screen's hero, and the saved route's card.
-        expect(mounting.filter(f => f.startsWith('core/navigation/'))).toEqual(['core/navigation/savedView.tsx']);
-        expect(readFileSync(join(SRC, 'core/navigation/savedView.tsx'), 'utf8')).toMatch(/FEATURE_FLAGS\.understandingMeter|DayUnderstandingCard/);
+        // No route-level file mounts a meter: the result screen reaches it only through ResultHero.
+        expect(mounting.filter(f => f.startsWith('core/navigation/'))).toEqual([]);
+        // The saved route in particular: no card, no farm-day score fetch, no "grasp" (what-I-understood) section.
+        const savedCode = readFileSync(join(SRC, 'core/navigation/savedView.tsx'), 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+        expect(savedCode).not.toMatch(/DayUnderstandingCard|useDayUnderstanding|tone="grasp"|section-grasp/);
+        // The deleted card is gone from disk, not just unimported.
+        expect(() => statSync(join(SRC, 'features/logs/components/shramsathi/DayUnderstandingCard.tsx'))).toThrow();
         // Nothing of the farm overview (आढावा / Reflect) draws one.
         expect(mounting.filter(f => /^features\/reflect\//.test(f))).toEqual([]);
     });

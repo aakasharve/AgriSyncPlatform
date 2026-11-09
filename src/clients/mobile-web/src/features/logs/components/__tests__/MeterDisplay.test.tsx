@@ -6,9 +6,9 @@
  * MeterDisplay — unit tests (dfes-companion-2026-07-11).
  *
  * 2026-07-19 (founder request): the Day Understanding Score X/१० + UnderstandingBar
- * MOVED OUT of MeterDisplay into shramsathi/DayUnderstandingCard, so the score can
- * lead the post-save success surface. Those score assertions now live in
- * shramsathi/__tests__/DayUnderstandingCard.test.tsx — they were moved, not dropped.
+ * MOVED OUT of MeterDisplay into a farm-day card (DayUnderstandingCard). That card
+ * and its tests were then deleted (founder decision D-122, 2026-11-09): the plot
+ * meter on the result screen (ResultHero) is the only understanding number.
  *
  * What this file still asserts about MeterDisplay:
  *   - the flag-gate (understandingMeter OFF → renders nothing),
@@ -131,7 +131,7 @@ describe('MeterDisplay (question + gap surface)', () => {
     // 3. The score block has MOVED OUT — MeterDisplay must never render it again
     //    (otherwise the farmer sees the score twice on the success surface).
     // -------------------------------------------------------------------------
-    it('no longer renders the Day Understanding score block (it moved to DayUnderstandingCard)', async () => {
+    it('no longer renders the Day Understanding score block (the farm-day card is deleted)', async () => {
         const { MeterDisplay } = await loadComponent(true);
 
         // A rich client VlogScore is present — it must not leak as a farmer number either.

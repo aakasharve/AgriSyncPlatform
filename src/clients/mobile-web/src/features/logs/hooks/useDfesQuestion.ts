@@ -42,7 +42,7 @@ export function useDfesQuestion(
     // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — optional,
     // trailing, following this file's own idiom for `enabled` above. Invoked
     // AFTER recordQuestionEvent resolves, so a caller (MeterQuestionHost) can
-    // trigger the Day Understanding Score refetch (DayUnderstandingCard/
+    // trigger the understanding meter refetch (ResultHero /
     // useDayUnderstanding) the moment the server has accepted the answer.
     onAnswered?: () => void,
 ): UseDfesQuestionResult {

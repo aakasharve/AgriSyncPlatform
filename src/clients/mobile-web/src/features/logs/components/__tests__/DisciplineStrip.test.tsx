@@ -20,7 +20,7 @@ async function loadStrip(disciplineSystem: boolean) {
     }));
     // The 2026-08-13 redesign gave the strip real copy ("दिवस सलग", the
     // come-back-tomorrow line), so it now reads from i18n like every other
-    // DFES component. Same mock DayUnderstandingCard.test.tsx uses — real
+    // DFES component. Same mock the other DFES component tests use — real
     // Marathi strings, no provider needed.
     vi.doMock('../../../../i18n/LanguageContext', () => ({
         useLanguage: () => ({

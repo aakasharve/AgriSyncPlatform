@@ -29,12 +29,12 @@ import { Leaf, Droplets, Users, Package, Tractor, Sprout } from 'lucide-react';
 import { getDateKey } from '../domain/services/DateKeyService';
 import { getCropTheme } from '../../shared/utils/colorTheme';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
-// `MeterDisplay` is NOT imported here any more. main rendered it directly on the
-// success card; dfes-companion moved that score block INTO
-// `LedgerRecognitionPanel` (via `DayUnderstandingCard`), and
-// `mainView.dayUnderstandingOrder.test.tsx` asserts it renders EXACTLY ONCE with
-// the real panel mounted — so a second, direct render here would be the copy that
-// test exists to forbid.
+// `MeterDisplay` is NOT imported here any more, and neither is the farm-day score
+// card (`DayUnderstandingCard`, the old whole-farm-day "X / १०" meter): founder
+// decision D-122 (2026-11-09) deleted it, so the PLOT meter on the result screen
+// (`ResultHero`) is the only understanding number. This saved surface draws no
+// score; `mainView.dayUnderstandingOrder.test.tsx` asserts that with the real
+// panel mounted.
 // Only the SUMMARY is needed here — `mainView` hands it to `ManualEntry`,
 // which owns the decision to render the panel (it is the component that knows
 // whether the farmer's context is the whole farm).
@@ -50,7 +50,6 @@ import { LedgerRecognitionPanel } from '../../features/logs/components/LedgerRec
 import {
     stashPendingQuestionAnswer, } from '../../features/logs/services/pendingQuestionAnswer';
 import DailyLoopClarity from '../../features/logs/components/shramsathi/DailyLoopClarity';
-import DayUnderstandingCard from '../../features/logs/components/shramsathi/DayUnderstandingCard';
 import SathiSaidCard from '../../features/logs/components/shramsathi/SathiSaidCard';
 import SavedScreenBack from '../../features/logs/components/shramsathi/SavedScreenBack';
 import SurfaceSection from '../../features/logs/components/shramsathi/SurfaceSection';
@@ -134,37 +133,6 @@ export const renderSavedView = (ctx: AppRouterContext): React.ReactNode => {
                                 <Leaf size={40} className="drop-shadow-sm" />
                             </div>
                         <SavedLocallyHeadline />
-
-                        {/* WHAT I UNDERSTOOD — the /10, its bar, and one line saying
-                            what the number measures. Self-gates on
-                            FEATURE_FLAGS.understandingMeter (renders null when OFF),
-                            so the section wrapper must gate too or an empty blue box
-                            would show in production. savedLog is derived exactly as
-                            the recognition panel below derives it (lastSavedLogIds[0]
-                            via history.find). */}
-                        {(() => {
-                            const savedLogId = lastSavedLogIds && lastSavedLogIds.length > 0
-                                ? lastSavedLogIds[0]
-                                : undefined;
-                            const savedLog = savedLogId
-                                ? history.find(l => l.id === savedLogId)
-                                : undefined;
-                            const selection = savedLog?.context?.selection?.[0];
-                            const card = (
-                                <DayUnderstandingCard
-                                    farmId={ctx.activeFarmId ?? selection?.farmId ?? null}
-                                    dayDate={savedLog?.date}
-                                    savedLogId={savedLog?.id ?? null}
-                                />
-                            );
-                            return FEATURE_FLAGS.understandingMeter ? (
-                                <div className="mt-4">
-                                    <SurfaceSection tone="grasp" labelKey="dfes.sectionGrasp" testId="section-grasp">
-                                        {card}
-                                    </SurfaceSection>
-                                </div>
-                            ) : card;
-                        })()}
 
                         {/* WHAT YOU DID — the crop/bucket breakdown, now behind a green
                             "आज तुम्ही काय केलं" label so it reads as the farmer's OWN

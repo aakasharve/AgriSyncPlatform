@@ -31,7 +31,7 @@ export interface SathiSaidCardProps {
 }
 
 // mainView's render functions are hook-free, so this component owns its own copy
-// (the same pattern DayUnderstandingCard and DailyLoopHero already follow) rather
+// (the same pattern DailyLoopHero already followed) rather
 // than taking a pre-translated string from a caller that has no language in scope.
 export function SathiSaidCard({ sub }: SathiSaidCardProps): React.ReactElement {
     const { t } = useLanguage();
