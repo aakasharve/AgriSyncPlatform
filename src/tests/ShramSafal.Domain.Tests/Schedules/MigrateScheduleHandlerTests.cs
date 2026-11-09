@@ -19,11 +19,11 @@ using Xunit;
 namespace ShramSafal.Domain.Tests.Schedules;
 
 /// <summary>
-/// Phase 3 MIS — MigrateScheduleHandler covers invariants I-14 and I-15:
+/// Phase 3 MIS — MigrateScheduleHandler covers invariant I-15 and (lane L8b-3, "3 + 1", replacing I-14) the places rule:
 ///   - Happy path: prev → Migrated, new → Active, migration event recorded,
 ///     all domain writes before the single SaveChanges boundary.
 ///   - No active subscription → failure (nothing to migrate).
-///   - Sequential migrations preserve I-14: each call migrates the currently
+///   - Sequential migrations of one followed schedule: each call migrates the currently
 ///     Active subscription and the system always has exactly one Active row
 ///     for (plot, cropKey, cycle) afterwards.
 ///   - Lost race: if prev was already Migrated by another actor before this
@@ -230,7 +230,7 @@ public sealed class MigrateScheduleHandlerTests
         Assert.True(first.IsSuccess);
         Assert.True(second.IsSuccess);
 
-        // I-14: exactly one Active subscription on the key.
+        // Exactly one Active subscription on the key (one schedule was followed all along).
         var activeSubs = repo.Subscriptions
             .Where(s => s.PlotId == PlotIdVal && s.CropKey == "grapes" && s.CropCycleId == CycleIdVal)
             .Where(s => s.State == ScheduleSubscriptionState.Active)
@@ -298,6 +298,106 @@ public sealed class MigrateScheduleHandlerTests
         repo.FarmMembers.Add((FarmIdVal.Value, ActorIdVal));
         return repo;
     }
+
+    // ------- lane L8b-3 (founder D-74, "3 + 1"): which one is switched, and where the new row sits -------
+
+    private static ScheduleSubscription FollowingAt(LibraryTemplate template, short slot, ScheduleOrigin origin = ScheduleOrigin.Outside) =>
+        ScheduleSubscription.Adopt(
+            Guid.NewGuid(), FarmIdVal, PlotIdVal, CycleIdVal, "grapes", template.TemplateId, template.VersionTag,
+            Now.AddDays(-10 + slot), null, origin, ScheduleCheckState.NotChecked, slot);
+
+    private static MigrateScheduleCommand SwitchTo(LibraryTemplate to, Guid? from) => new(
+        FarmId: FarmIdVal.Value,
+        PlotId: PlotIdVal,
+        CropCycleId: CycleIdVal,
+        NewScheduleTemplateId: to.Id,
+        Reason: ScheduleMigrationReason.BetterFit,
+        ActorUserId: ActorIdVal,
+        FromSubscriptionId: from);
+
+    private static (FakeMigrateRepo Repo, List<ScheduleSubscription> Followed, List<LibraryTemplate> Templates) TwoFollowed()
+    {
+        var repo = BuildRepoWithBasics();
+        var templates = new List<LibraryTemplate>();
+        var followed = new List<ScheduleSubscription>();
+        for (short slot = 1; slot <= 2; slot++)
+        {
+            var t = BuildPublishedTemplate("grapes", $"v{slot}");
+            repo.Templates[t.TemplateId] = t;
+            templates.Add(t);
+            var sub = FollowingAt(t, slot);
+            repo.Subscriptions.Add(sub);
+            followed.Add(sub);
+        }
+
+        var target = BuildPublishedTemplate("grapes", "v9");
+        repo.Templates[target.TemplateId] = target;
+        templates.Add(target);
+        return (repo, followed, templates);
+    }
+
+    [Fact]
+    public async Task Migrate_with_fromSubscriptionId_switches_that_row_only_and_keeps_its_place()
+    {
+        var (repo, followed, templates) = TwoFollowed();
+
+        var result = await CreateHandler(repo, new CapturingAnalyticsWriter()).HandleAsync(SwitchTo(templates[2], followed[1].Id));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.Equal(ScheduleSubscriptionState.Migrated, followed[1].State);
+        Assert.Equal(ScheduleSubscriptionState.Active, followed[0].State);
+        Assert.Equal((short?)2, result.Value.Slot);
+        Assert.Equal(2, repo.Subscriptions.Count(s => s.State == ScheduleSubscriptionState.Active));
+    }
+
+    [Fact]
+    public async Task Migrate_without_an_id_and_several_active_is_ScheduleChoiceNeeded_and_nothing_changes()
+    {
+        var (repo, followed, templates) = TwoFollowed();
+
+        var result = await CreateHandler(repo, new CapturingAnalyticsWriter()).HandleAsync(SwitchTo(templates[2], null));
+
+        Assert.Equal(ShramSafalErrors.ScheduleChoiceNeeded, result.Error);
+        Assert.All(followed, s => Assert.Equal(ScheduleSubscriptionState.Active, s.State));
+        Assert.Equal(0, repo.SaveCalls);
+        Assert.Empty(repo.MigrationEvents);
+    }
+
+    [Fact]
+    public async Task Migrate_naming_a_row_that_is_not_active_here_is_ScheduleChangedElsewhere()
+    {
+        var (repo, followed, templates) = TwoFollowed();
+
+        var result = await CreateHandler(repo, new CapturingAnalyticsWriter()).HandleAsync(SwitchTo(templates[2], Guid.NewGuid()));
+
+        Assert.Equal(ShramSafalErrors.ScheduleChangedElsewhere, result.Error);
+        Assert.All(followed, s => Assert.Equal(ScheduleSubscriptionState.Active, s.State));
+        Assert.Equal(0, repo.SaveCalls);
+    }
+
+    [Fact]
+    public async Task Migrate_to_a_schedule_already_followed_in_another_place_is_ScheduleAlreadyAdopted()
+    {
+        var (repo, followed, templates) = TwoFollowed();
+
+        var result = await CreateHandler(repo, new CapturingAnalyticsWriter()).HandleAsync(SwitchTo(templates[1], followed[0].Id));
+
+        Assert.Equal(ShramSafalErrors.ScheduleAlreadyAdopted, result.Error);
+        Assert.Equal(ScheduleSubscriptionState.Active, followed[0].State);
+        Assert.Equal(0, repo.SaveCalls);
+    }
+
+    [Fact]
+    public async Task Migrate_when_the_place_is_lost_to_a_rival_at_save_is_ScheduleChangedElsewhere()
+    {
+        var (repo, followed, templates) = TwoFollowed();
+        repo.PlaceTakenOnSave = true;
+
+        var result = await CreateHandler(repo, new CapturingAnalyticsWriter()).HandleAsync(SwitchTo(templates[2], followed[0].Id));
+
+        Assert.Equal(ShramSafalErrors.ScheduleChangedElsewhere, result.Error);
+    }
+
 
     private static LibraryTemplate BuildPublishedTemplate(string cropKey, string versionTag) =>
         BuildTemplate(cropKey, versionTag, publish: true);
@@ -388,6 +488,20 @@ public sealed class MigrateScheduleHandlerTests
         public HashSet<(Guid farmId, Guid userId)> FarmMembers { get; } = new();
         public int SaveCalls { get; private set; }
 
+        // lane L8b-3 - the database refuses the save because a rival took the place.
+        public bool PlaceTakenOnSave { get; set; }
+
+        public Task<ScheduleSubscriptionSave> TrySaveScheduleSubscriptionAsync(CancellationToken ct = default)
+        {
+            if (PlaceTakenOnSave)
+            {
+                return Task.FromResult(ScheduleSubscriptionSave.PlaceTaken);
+            }
+
+            SaveCalls++;
+            return Task.FromResult(ScheduleSubscriptionSave.Saved);
+        }
+
         public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) =>
             Task.FromResult(Farms.TryGetValue(farmId, out var f) ? f : null);
 
@@ -411,17 +525,13 @@ public sealed class MigrateScheduleHandlerTests
         public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult(FarmMembers.Where(m => m.userId == userId).Select(m => m.farmId).ToList());
 
-        public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
-            Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default)
-        {
-            var normalized = (cropKey ?? string.Empty).Trim().ToLowerInvariant();
-            var sub = Subscriptions.FirstOrDefault(s =>
-                s.PlotId == plotId
-                && s.CropCycleId == cropCycleId
-                && s.CropKey == normalized
-                && s.State == ScheduleSubscriptionState.Active);
-            return Task.FromResult(sub);
-        }
+        // spec: plr-d10 lane L8b-3 - every Active subscription of the plot-season (the single read it replaces relied on I-14), by place.
+        public Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsAsync(
+            Guid plotId, Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult(Subscriptions
+                .Where(s => s.PlotId == plotId && s.CropCycleId == cropCycleId && s.State == ScheduleSubscriptionState.Active)
+                .OrderBy(s => s.Slot is null).ThenBy(s => s.Slot).ThenBy(s => s.AdoptedAtUtc).ThenBy(s => s.Id)
+                .ToList());
 
         public Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default)
         {

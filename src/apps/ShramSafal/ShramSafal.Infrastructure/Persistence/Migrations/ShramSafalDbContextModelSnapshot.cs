@@ -6359,6 +6359,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(32)")
                         .HasColumnName("schedule_version_tag");
 
+                    b.Property<short?>("Slot")
+                        .HasColumnType("smallint")
+                        .HasColumnName("slot");
+
                     b.Property<int>("State")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -6379,9 +6383,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ScheduleTemplateId");
 
-                    b.HasIndex("PlotId", "CropKey", "CropCycleId")
+                    b.HasIndex("PlotId", "CropCycleId", "ScheduleTemplateId")
                         .IsUnique()
-                        .HasDatabaseName("ux_sched_sub_active")
+                        .HasDatabaseName("ux_sched_sub_active_template")
+                        .HasFilter("state = 0");
+
+                    b.HasIndex("PlotId", "CropCycleId", "Slot")
+                        .IsUnique()
+                        .HasDatabaseName("ux_sched_sub_active_slot")
                         .HasFilter("state = 0");
 
                     b.ToTable("schedule_subscriptions", "ssf", t =>
@@ -6389,6 +6398,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("ck_sched_sub_check_state_at_adopt", "check_state_at_adopt IS NULL OR check_state_at_adopt IN ('Checked','NotChecked')");
 
                             t.HasCheckConstraint("ck_sched_sub_origin", "origin IS NULL OR origin IN ('Outside','Own')");
+
+                            t.HasCheckConstraint("ck_sched_sub_slot_origin", "slot IS NULL OR (origin IS NOT NULL AND ((origin = 'Own') = (slot = 0)))");
+
+                            t.HasCheckConstraint("ck_sched_sub_slot_range", "slot IS NULL OR slot BETWEEN 0 AND 3");
                         });
                 });
 

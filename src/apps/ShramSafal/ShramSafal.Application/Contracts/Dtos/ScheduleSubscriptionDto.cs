@@ -20,4 +20,7 @@ public sealed record ScheduleSubscriptionDto(
     // schedule this follows (Checked | NotChecked | Returned | Withdrawn; a withdrawal changes it, never the subscription - R8).
     // Origin is Outside | Own; null = chosen before this lane, read as Outside.
     string? CheckState = null,
-    string? Origin = null);
+    string? Origin = null,
+    // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - additive at the END and optional (P11). The place this schedule holds on its
+    // plot-season: 0 = his own, 1..3 = outside; null = it holds none (written by a binary that sets none).
+    short? Slot = null);

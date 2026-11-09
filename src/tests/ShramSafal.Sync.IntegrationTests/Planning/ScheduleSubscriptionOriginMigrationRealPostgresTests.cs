@@ -82,7 +82,8 @@ public sealed class ScheduleSubscriptionOriginMigrationRealPostgresTests(ITestOu
 
         (await ColumnCountAsync()).Should().Be(2);
         (await CountAsync("SELECT count(*) FROM public.\"__EFMigrationsHistory\" WHERE \"MigrationId\" = @id", ("id", ThisMigration))).Should().Be(1);
-        (await CountAsync("SELECT count(*) FROM ssf.schedule_subscriptions WHERE origin IS NULL AND check_state_at_adopt IS NULL")).Should().Be(1, "the marks were lost with Down; the row was not");
+        // lane L8b-3 (deliberate): re-applying the chain runs the 3 + 1 back-fill, which reads a NULL origin as Outside; the check mark stays NULL.
+        (await CountAsync("SELECT count(*) FROM ssf.schedule_subscriptions WHERE origin = 'Outside' AND check_state_at_adopt IS NULL")).Should().Be(1, "the marks were lost with Down (origin read as Outside again by L8b-3); the row was not");
     }
 
     private async Task MigrateAsync(string? target)

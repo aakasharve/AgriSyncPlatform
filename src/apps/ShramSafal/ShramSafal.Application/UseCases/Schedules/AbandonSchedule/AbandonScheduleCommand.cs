@@ -16,4 +16,7 @@ public sealed record AbandonScheduleCommand(
     string AuditDeviceId = "unknown",
     string AuditIpHash = "sha256:unknown",
     // spec: plr-d10 lane L8b-1 — when the phone says the change was made (sync only; MU §11.2 late window). Null online.
-    DateTime? DecidedAtUtc = null);
+    DateTime? DecidedAtUtc = null,
+    // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - which followed schedule to let go. Null = the plot-season's one Active schedule
+    // (every phone before this lane, P11); several followed and none named: ScheduleChoiceNeeded, nothing changed.
+    Guid? SubscriptionId = null);

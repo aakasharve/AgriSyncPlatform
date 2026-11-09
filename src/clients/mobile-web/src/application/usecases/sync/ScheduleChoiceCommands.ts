@@ -42,6 +42,19 @@ export interface MigrateSchedulePayload {
     decidedAtUtc: string;
 }
 
+/**
+ * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - let one followed schedule go. `subscriptionId` says WHICH (a plot may follow up
+ * to 3 outside schedules and 1 of his own); the server answers `ScheduleChoiceNeeded` for none when several are followed.
+ */
+export interface AbandonSchedulePayload {
+    farmId: string;
+    plotId: string;
+    cropCycleId: string;
+    actorUserId: string;
+    subscriptionId: string;
+    decidedAtUtc: string;
+}
+
 export class AdoptScheduleCommand {
     /** The queue row's id is derived from the subscription, so queuing the same choice twice is one mutation. */
     static requestIdFor(subscriptionId: string): string {
@@ -51,6 +64,18 @@ export class AdoptScheduleCommand {
     static async enqueue(payload: AdoptSchedulePayload, options?: { clientRequestId?: string }): Promise<string> {
         const clientRequestId = options?.clientRequestId ?? AdoptScheduleCommand.requestIdFor(payload.subscriptionId);
         return mutationQueue.enqueue(SyncMutationName.AdoptSchedule, payload, { clientRequestId, clientCommandId: clientRequestId });
+    }
+}
+
+export class AbandonScheduleCommand {
+    /** The queue row's id is derived from the subscription let go, so letting the same one go twice is one mutation. */
+    static requestIdFor(subscriptionId: string): string {
+        return `${SyncMutationName.AbandonSchedule}:${subscriptionId}`;
+    }
+
+    static async enqueue(payload: AbandonSchedulePayload): Promise<string> {
+        const clientRequestId = AbandonScheduleCommand.requestIdFor(payload.subscriptionId);
+        return mutationQueue.enqueue(SyncMutationName.AbandonSchedule, payload, { clientRequestId, clientCommandId: clientRequestId });
     }
 }
 

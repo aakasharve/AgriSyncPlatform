@@ -102,6 +102,68 @@ public sealed class ScheduleComplianceServiceTests
         Assert.Equal(5, result.DeltaDays);
     }
 
+    // ------- lane L8b-3 (R6, D-76): a plot-season may follow several schedules; a record is measured against the मुख्य one -------
+
+    private static ScheduleSubscription FollowingAt(short slot, ScheduleTemplateId? templateId = null) =>
+        ScheduleSubscription.Adopt(
+            Guid.NewGuid(), Farm, Plot, Cycle, CropKey, templateId ?? ScheduleTemplateId.New(), "v1",
+            DateTime.UtcNow.AddDays(-10 + slot), null, ScheduleOrigin.Outside, ScheduleCheckState.Checked, slot);
+
+    private static ScheduleTemplate InstitutionRow(Guid id)
+    {
+        var row = ScheduleTemplate.Import(
+            id, "Grapes - University Schedule", ScheduleOwnerType.Institution, "Test University", "grape",
+            new UserId(Guid.NewGuid()), TenantScope.Public, DateTime.UtcNow,
+            [new StageDefinition("Post Pruning", 0, 99)],
+            [new ImportedActivity("cut", "Pruning", 10, 10, FrequencyMode.OneTime, 1)],
+            out var problem);
+        Assert.Null(problem);
+        return row!;
+    }
+
+    [Fact]
+    public async Task Several_followed_schedules_are_measured_against_the_lowest_outside_place_when_no_Institution_schedule_is_checked()
+    {
+        var (_, template) = BuildSubscriptionAndTemplate(dayOffset: 10, tolerance: 2);
+        var low = FollowingAt(1);
+        var high = FollowingAt(2);
+        var repo = new FakeRepo { Cycle = BuildCycle(), Followed = [high, low], Template = template };
+
+        var result = await new ScheduleComplianceService(repo).EvaluateAsync(new ScheduleComplianceQuery(Cycle, TaskType, Stage, CycleStart.AddDays(10)));
+
+        Assert.Equal(ComplianceOutcome.OnTime, result.Outcome);
+        Assert.Equal(low.SubscriptionId, result.SubscriptionId);
+    }
+
+    [Fact]
+    public async Task A_checked_Institution_schedule_in_place_3_is_the_one_a_record_is_measured_against()
+    {
+        var (_, template) = BuildSubscriptionAndTemplate(dayOffset: 10, tolerance: 2);
+        var institutionTemplate = ScheduleTemplateId.New();
+        var low = FollowingAt(1);
+        var institution = FollowingAt(3, institutionTemplate);
+        var repo = new FakeRepo { Cycle = BuildCycle(), Followed = [low, institution], Template = template };
+        var row = InstitutionRow(institutionTemplate.Value);
+        repo.LibraryRows[row.Id] = row;
+        repo.Checks.Add(ScheduleCheck.Approve(row, row.Activities.Select(a => a.Id).ToList(), new UserId(Guid.NewGuid()), "Checker", DateTime.UtcNow, out var problem)!);
+        Assert.Null(problem);
+
+        var result = await new ScheduleComplianceService(repo).EvaluateAsync(new ScheduleComplianceQuery(Cycle, TaskType, Stage, CycleStart.AddDays(10)));
+
+        Assert.Equal(institution.SubscriptionId, result.SubscriptionId);
+    }
+
+    [Fact]
+    public async Task A_library_schedule_resolves_to_nothing_in_the_compliance_model_so_the_answer_is_Unscheduled_before_and_after()
+    {
+        // crop_schedule_templates (the old model) holds none of the library's ids: the lookup finds nothing, 3 + 1 or not.
+        var repo = new FakeRepo { Cycle = BuildCycle(), Followed = [FollowingAt(1), FollowingAt(2)], Template = null };
+
+        var result = await new ScheduleComplianceService(repo).EvaluateAsync(new ScheduleComplianceQuery(Cycle, TaskType, Stage, CycleStart.AddDays(10)));
+
+        Assert.Equal(ComplianceOutcome.Unscheduled, result.Outcome);
+    }
+
     private static CropCycle BuildCycle() =>
         CropCycle.Create(Cycle, Farm, Plot, CropKey, Stage, CycleStart, endDate: null, createdAtUtc: DateTime.UtcNow);
 
@@ -146,14 +208,28 @@ public sealed class ScheduleComplianceServiceTests
     {
         public CropCycle? Cycle { get; set; }
         public ScheduleSubscription? ActiveSubscription { get; set; }
+
+        /// <summary>lane L8b-3 - several followed schedules (3 + 1); when set it is what the plot-season follows, else <see cref="ActiveSubscription"/>.</summary>
+        public List<ScheduleSubscription>? Followed { get; set; }
+
+        /// <summary>The library rows (owner type) and checks the मुख्य pick reads when several are followed.</summary>
+        public Dictionary<Guid, ScheduleTemplate> LibraryRows { get; } = new();
+        public List<ScheduleCheck> Checks { get; } = new();
         public CropScheduleTemplate? Template { get; set; }
 
         public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
             Task.FromResult(Cycle);
 
-        public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
-            Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) =>
-            Task.FromResult(ActiveSubscription);
+        public Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsAsync(
+            Guid plotId, Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult(Followed ?? (ActiveSubscription is null ? [] : [ActiveSubscription]));
+
+        public Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) =>
+            Task.FromResult(LibraryRows.GetValueOrDefault(templateId));
+
+        public Task<IReadOnlyList<ScheduleCheck>> GetScheduleChecksAsync(
+            IReadOnlyCollection<Guid> scheduleTemplateIds, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<ScheduleCheck>>(Checks.Where(c => scheduleTemplateIds.Contains(c.ScheduleTemplateId)).ToList());
 
         public Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(
             ScheduleTemplateId templateId, CancellationToken ct = default) =>
@@ -219,7 +295,6 @@ public sealed class ScheduleComplianceServiceTests
         public Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<ScheduleTemplate>> GetScheduleLineageAsync(Guid rootTemplateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<int> GetDisputedLogCountForPlotAsync(Guid plotId, CancellationToken ct = default) => throw new NotSupportedException();

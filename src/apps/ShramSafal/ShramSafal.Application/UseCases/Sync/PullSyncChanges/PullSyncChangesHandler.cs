@@ -12,6 +12,7 @@ using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Application.UseCases.Compliance.GetComplianceSignalsForFarm;
 using ShramSafal.Application.UseCases.Planning.GetAttentionBoard;
 using ShramSafal.Application.UseCases.ReferenceData.GetScheduleTemplates;
+using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 
@@ -406,9 +407,11 @@ public sealed class PullSyncChangesHandler(
         // spec: plr-d10 lane L8b-1 fix round 1 (review H2) — HIS library (the rows he may see), never every account's.
         // spec: plr-d10 lane L8b-1F (R7, P10) - a plot that follows a schedule keeps it: the schedules this person's plots follow are
         // sent even when the library no longer offers them for a new choice (every Active choice of the farms and plots he reads).
-        var followedTemplateIds = (await repository.GetActiveScheduleSubscriptionsOfFarmsAsync(
+        var followedNow = (await repository.GetActiveScheduleSubscriptionsOfFarmsAsync(
                 window.Scopes.Values.Where(s => s.SeeFarmOverview).Select(s => s.FarmId).ToList(), ct))
             .Where(s => window.ScopeOf(s.FarmId.Value)!.CoversPlot(s.PlotId))
+            .ToList();
+        var followedTemplateIds = followedNow
             .Select(s => s.ScheduleTemplateId.Value)
             .Distinct()
             .ToList();
@@ -419,6 +422,17 @@ public sealed class PullSyncChangesHandler(
         }
 
         var scheduleTemplates = templatesResult.Value ?? [];
+        // spec: plr-d10 lane L8b-3 (R6, D-76) - the मुख्य schedule of every plot-season he may see, from the SAME rows and the SAME
+        // library listing this pull already holds (so a row he may not see is never named, and no query path skips the reader's filter).
+        var mainFacts = MainScheduleFactsReader.FromListing(scheduleTemplates);
+        var plotMainSchedules = followedNow
+            .GroupBy(s => (s.PlotId, s.CropCycleId))
+            .Select(g => (Plot: g.Key.PlotId, Cycle: g.Key.CropCycleId, Main: MainSchedule.Pick(g.ToList(), mainFacts)))
+            .Where(m => m.Main is not null)
+            .OrderBy(m => m.Plot)
+            .ThenBy(m => m.Cycle)
+            .Select(m => new PlotMainScheduleDto(m.Plot, m.Cycle, m.Main!.Id))
+            .ToList();
         var cropTypes = GetScheduleTemplatesHandler.BuildCropTypes(scheduleTemplates);
         var referenceDataVersionHash = scheduleTemplates.Count > 0
             ? scheduleTemplates[0].VersionHash
@@ -855,7 +869,9 @@ public sealed class PullSyncChangesHandler(
                 .Select(s => s.ToDto(scheduleTemplates.FirstOrDefault(t => t.Id == s.ScheduleTemplateId.Value)?.Check?.State ?? nameof(Domain.Planning.ScheduleCheckState.NotChecked)))
                 .ToList(),
             // lane L8c-1 (founder D-24c, D-26, D-79) - the tasks and reminders he may see (additive and last, P11).
-            PlannedWork: plannedWork);
+            PlannedWork: plannedWork,
+            // lane L8b-3 (R6, D-76) - which followed schedule is the मुख्य one of each plot-season he may see (FULL every pull; additive and last, P11).
+            PlotMainSchedules: plotMainSchedules);
 
         return Result.Success(response);
     }

@@ -161,7 +161,8 @@ public static class ScheduleEndpoints
                 ClientCommandId: request.ClientCommandId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                SubscriptionId: request.SubscriptionId);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -203,7 +204,8 @@ public static class ScheduleEndpoints
                 ClientCommandId: request.ClientCommandId,
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                SubscriptionId: request.SubscriptionId);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
@@ -262,8 +264,12 @@ public sealed record MigrateScheduleRequest(
 public sealed record AbandonScheduleRequest(
     Guid FarmId,
     string? ReasonText = null,
-    string? ClientCommandId = null);
+    string? ClientCommandId = null,
+    // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - which followed schedule to let go (optional; none = the plot-season's one Active schedule, P11).
+    Guid? SubscriptionId = null);
 
 public sealed record CompleteScheduleRequest(
     Guid FarmId,
-    string? ClientCommandId = null);
+    string? ClientCommandId = null,
+    // spec: plr-d10 lane L8b-3 - which followed schedule to complete (optional; none = the plot-season's one Active schedule, P11).
+    Guid? SubscriptionId = null);

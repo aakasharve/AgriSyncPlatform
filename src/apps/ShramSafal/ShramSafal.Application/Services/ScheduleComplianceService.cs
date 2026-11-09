@@ -25,11 +25,12 @@ public sealed class ScheduleComplianceService(IShramSafalRepository repo) : ISch
             return ComplianceResult.Unscheduled();
         }
 
-        var active = await repo.GetActiveScheduleSubscriptionAsync(
-            cycle.PlotId,
-            cycle.CropName,
-            cycle.Id,
-            ct);
+        // spec: plr-d10 lane L8b-3 (R6, D-76) - a plot-season may follow several schedules (3 + 1); a record is measured against the
+        // मुख्य one, the same pick the pull sends. One followed schedule is that one (no lookups).
+        var followed = await repo.GetActiveScheduleSubscriptionsAsync(cycle.PlotId, cycle.Id, ct);
+        var active = followed.Count <= 1
+            ? followed.FirstOrDefault()
+            : MainSchedule.Pick(followed, await MainScheduleFactsReader.FromRepositoryAsync(repo, followed.Select(s => s.ScheduleTemplateId).ToList(), ct));
         if (active is null)
         {
             return ComplianceResult.Unscheduled();

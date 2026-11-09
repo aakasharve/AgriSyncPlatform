@@ -22,7 +22,9 @@ namespace ShramSafal.Domain.Tests.Schedules;
 /// <summary>
 /// Phase 3 MIS — AdoptScheduleHandler invariant coverage:
 ///   - Happy path writes subscription + audit event + SaveChanges.
-///   - I-14: duplicate active subscription on same (plot, crop, cycle) is rejected.
+///   - lane L8b-3 (founder D-74, "3 + 1", replacing I-14): the SAME schedule twice on a plot-season is rejected; a different one takes
+///     the next place (outside 1..3, his own 0); a 4th outside is refused ScheduleLimitReached with nothing written; a schedule the
+///     check rule refuses never takes a place; two phones racing for one place: the loser re-reads once, then is told the limit.
 ///   - lane L8b-1: the schedule comes from the LIBRARY (rows, else the built-in catalog); another account's private
 ///     schedule answers like an unknown id; the day 0 is kept; the schedule gate refuses a कामगार.
 ///   - Template crop mismatch is rejected.
@@ -74,7 +76,7 @@ public sealed class AdoptScheduleHandlerTests
         var template = BuildPublishedTemplate(cropKey: "grapes");
         repo.Templates[template.TemplateId] = template;
 
-        // Seed a pre-existing active subscription so I-14 fires.
+        // Seed a pre-existing active subscription of the SAME schedule: the same one twice is still refused (3 + 1).
         var existing = ScheduleSubscription.Adopt(
             Guid.NewGuid(), FarmIdVal, PlotIdVal, CycleIdVal, "grapes",
             template.TemplateId, template.VersionTag, Now.AddDays(-1));
@@ -180,6 +182,206 @@ public sealed class AdoptScheduleHandlerTests
         Assert.Equal(0, repo.SaveCalls);
     }
 
+    private static AdoptScheduleCommand AdoptOf(Guid templateId, bool carryOver = false) => new(
+        FarmId: FarmIdVal.Value,
+        PlotId: PlotIdVal,
+        CropCycleId: CycleIdVal,
+        ScheduleTemplateId: templateId,
+        ActorUserId: ActorIdVal,
+        CarryOver: carryOver);
+
+    private static ScheduleSubscription FollowingAt(LibraryTemplate template, short slot, ScheduleOrigin origin = ScheduleOrigin.Outside) =>
+        ScheduleSubscription.Adopt(
+            Guid.NewGuid(), FarmIdVal, PlotIdVal, CycleIdVal, "grapes", template.TemplateId, template.VersionTag,
+            Now.AddDays(-slot - 1), null, origin, ScheduleCheckState.NotChecked, slot);
+
+    [Fact]
+    public async Task Three_outside_schedules_take_places_1_2_3_in_turn()
+    {
+        var repo = BuildRepoWithBasics();
+        var templates = Enumerable.Range(1, 3).Select(i => BuildPublishedTemplate("grapes")).ToList();
+        foreach (var t in templates) repo.Templates[t.TemplateId] = t;
+        var handler = CreateHandler(repo);
+
+        foreach (var t in templates)
+        {
+            var result = await handler.HandleAsync(AdoptOf(t.Id));
+            Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        }
+
+        Assert.Equal(new short?[] { 1, 2, 3 }, repo.Subscriptions.Select(s => s.Slot).ToArray());
+        Assert.All(repo.Subscriptions, s => Assert.Equal(ScheduleOrigin.Outside, s.Origin));
+        Assert.Equal(
+            new[] { 1, 2, 3 },
+            repo.AuditEvents.Select(a => System.Text.Json.JsonDocument.Parse(a.Payload).RootElement.GetProperty("slot").GetInt32()).ToArray());
+    }
+
+    [Fact]
+    public async Task A_fourth_outside_schedule_is_refused_ScheduleLimitReached_and_nothing_is_written()
+    {
+        var repo = BuildRepoWithBasics();
+        for (short slot = 1; slot <= 3; slot++)
+        {
+            var held = BuildPublishedTemplate("grapes");
+            repo.Templates[held.TemplateId] = held;
+            repo.Subscriptions.Add(FollowingAt(held, slot));
+        }
+
+        var fourth = BuildPublishedTemplate("grapes");
+        repo.Templates[fourth.TemplateId] = fourth;
+
+        var result = await CreateHandler(repo).HandleAsync(AdoptOf(fourth.Id));
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(ShramSafalErrors.ScheduleLimitReached, result.Error);
+        Assert.Equal(3, repo.Subscriptions.Count);
+        Assert.Empty(repo.AuditEvents);
+        Assert.Equal(0, repo.SaveCalls);
+    }
+
+    [Fact]
+    public async Task An_abandoned_place_is_free_again()
+    {
+        var repo = BuildRepoWithBasics();
+        for (short slot = 1; slot <= 3; slot++)
+        {
+            var t = BuildPublishedTemplate("grapes");
+            repo.Templates[t.TemplateId] = t;
+            repo.Subscriptions.Add(FollowingAt(t, slot));
+        }
+
+        repo.Subscriptions[1].Abandon(Now); // place 2 is let go
+        var next = BuildPublishedTemplate("grapes");
+        repo.Templates[next.TemplateId] = next;
+
+        var result = await CreateHandler(repo).HandleAsync(AdoptOf(next.Id));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.Equal((short?)2, repo.Subscriptions.Single(s => s.ScheduleTemplateId == next.TemplateId).Slot);
+    }
+
+    [Fact]
+    public async Task A_different_schedule_on_a_plot_that_follows_one_is_adopted_not_refused()
+    {
+        var repo = BuildRepoWithBasics();
+        var first = BuildPublishedTemplate("grapes");
+        var second = BuildPublishedTemplate("grapes");
+        repo.Templates[first.TemplateId] = first;
+        repo.Templates[second.TemplateId] = second;
+        repo.Subscriptions.Add(FollowingAt(first, 1));
+
+        var result = await CreateHandler(repo).HandleAsync(AdoptOf(second.Id));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.Equal((short?)2, result.Value.Slot);
+        Assert.Equal(2, repo.Subscriptions.Count(s => s.State == ScheduleSubscriptionState.Active));
+    }
+
+    [Fact]
+    public async Task A_schedule_the_check_rule_refuses_takes_no_place_even_when_the_plot_is_full()
+    {
+        // The check rule runs FIRST (ScheduleLibrary.ChooseAsync): a schedule of another crop is a crop mismatch, never "limit reached".
+        var repo = BuildRepoWithBasics();
+        for (short slot = 1; slot <= 3; slot++)
+        {
+            var held = BuildPublishedTemplate("grapes");
+            repo.Templates[held.TemplateId] = held;
+            repo.Subscriptions.Add(FollowingAt(held, slot));
+        }
+
+        var onion = BuildPublishedTemplate("onion");
+        repo.Templates[onion.TemplateId] = onion;
+
+        var result = await CreateHandler(repo).HandleAsync(AdoptOf(onion.Id));
+
+        Assert.Equal(ShramSafalErrors.ScheduleTemplateCropMismatch, result.Error);
+        Assert.Equal(3, repo.Subscriptions.Count);
+    }
+
+    [Fact]
+    public async Task A_carry_over_onto_a_plot_season_that_already_follows_something_is_refused_ScheduleAlreadyAdopted()
+    {
+        var repo = BuildRepoWithBasics();
+        var held = BuildPublishedTemplate("grapes");
+        var carried = BuildPublishedTemplate("grapes");
+        repo.Templates[held.TemplateId] = held;
+        repo.Templates[carried.TemplateId] = carried;
+        repo.Subscriptions.Add(FollowingAt(held, 1));
+
+        var result = await CreateHandler(repo).HandleAsync(AdoptOf(carried.Id, carryOver: true));
+
+        Assert.Equal(ShramSafalErrors.ScheduleAlreadyAdopted, result.Error);
+        Assert.Single(repo.Subscriptions);
+    }
+
+    [Fact]
+    public async Task A_place_taken_once_by_a_rival_is_retried_once_and_takes_the_next_free_place()
+    {
+        var repo = BuildRepoWithBasics();
+        var mine = BuildPublishedTemplate("grapes");
+        var rivalTemplate = BuildPublishedTemplate("grapes");
+        repo.Templates[mine.TemplateId] = mine;
+        repo.Templates[rivalTemplate.TemplateId] = rivalTemplate;
+        repo.RivalsOnPlaceTaken.Enqueue(FollowingAt(rivalTemplate, 1));
+
+        var result = await CreateHandler(repo).HandleAsync(AdoptOf(mine.Id));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.Equal((short?)2, result.Value.Slot);
+        Assert.Equal(2, repo.TrySaveCalls);
+        Assert.Equal(2, repo.Subscriptions.Count);
+        Assert.Single(repo.AuditEvents); // the lost attempt's audit row was discarded with it
+    }
+
+    [Fact]
+    public async Task A_place_taken_twice_is_told_ScheduleLimitReached_and_writes_nothing()
+    {
+        var repo = BuildRepoWithBasics();
+        var mine = BuildPublishedTemplate("grapes");
+        var a = BuildPublishedTemplate("grapes");
+        var b = BuildPublishedTemplate("grapes");
+        repo.Templates[mine.TemplateId] = mine;
+        repo.RivalsOnPlaceTaken.Enqueue(FollowingAt(a, 1));
+        repo.RivalsOnPlaceTaken.Enqueue(FollowingAt(b, 2));
+
+        var result = await CreateHandler(repo).HandleAsync(AdoptOf(mine.Id));
+
+        Assert.Equal(ShramSafalErrors.ScheduleLimitReached, result.Error);
+        Assert.Equal(2, repo.TrySaveCalls);
+        Assert.DoesNotContain(repo.Subscriptions, s => s.ScheduleTemplateId == mine.TemplateId);
+        Assert.Empty(repo.AuditEvents);
+    }
+
+    [Fact]
+    public async Task The_same_schedule_taken_at_the_same_moment_is_ScheduleAlreadyAdopted()
+    {
+        var repo = BuildRepoWithBasics();
+        var mine = BuildPublishedTemplate("grapes");
+        repo.Templates[mine.TemplateId] = mine;
+        repo.TemplateAlreadyFollowedOnSave = true;
+
+        var result = await CreateHandler(repo).HandleAsync(AdoptOf(mine.Id));
+
+        Assert.Equal(ShramSafalErrors.ScheduleAlreadyAdopted, result.Error);
+        Assert.Empty(repo.Subscriptions);
+    }
+
+    [Fact]
+    public void A_place_and_its_origin_must_agree()
+    {
+        var template = ScheduleTemplateId.New();
+        Assert.Throws<ArgumentException>(() => ScheduleSubscription.Adopt(
+            Guid.NewGuid(), FarmIdVal, PlotIdVal, CycleIdVal, "grapes", template, "v1", Now, null, ScheduleOrigin.Own, null, 1));
+        Assert.Throws<ArgumentException>(() => ScheduleSubscription.Adopt(
+            Guid.NewGuid(), FarmIdVal, PlotIdVal, CycleIdVal, "grapes", template, "v1", Now, null, ScheduleOrigin.Outside, null, 0));
+        Assert.Throws<ArgumentException>(() => ScheduleSubscription.Adopt(
+            Guid.NewGuid(), FarmIdVal, PlotIdVal, CycleIdVal, "grapes", template, "v1", Now, null, ScheduleOrigin.Outside, null, 4));
+        Assert.Throws<ArgumentException>(() => ScheduleSubscription.Adopt(
+            Guid.NewGuid(), FarmIdVal, PlotIdVal, CycleIdVal, "grapes", template, "v1", Now, null, null, null, 1));
+        Assert.Equal((short?)0, ScheduleSubscription.Adopt(
+            Guid.NewGuid(), FarmIdVal, PlotIdVal, CycleIdVal, "grapes", template, "v1", Now, null, ScheduleOrigin.Own, null, 0).Slot);
+    }
+
     private static FakeAdoptRepo BuildRepoWithBasics()
     {
         var repo = new FakeAdoptRepo();
@@ -263,6 +465,39 @@ public sealed class AdoptScheduleHandlerTests
         public HashSet<(Guid farmId, Guid userId)> FarmMembers { get; } = new();
         public int SaveCalls { get; private set; }
 
+        // lane L8b-3 - simulate the database's places index: each enqueued rival takes its place just before the next save, and that
+        // save is refused (PlaceTaken) after discarding what was staged, exactly as TrySaveScheduleSubscriptionAsync does.
+        public Queue<ScheduleSubscription> RivalsOnPlaceTaken { get; } = new();
+        public bool TemplateAlreadyFollowedOnSave { get; set; }
+        public int TrySaveCalls { get; private set; }
+        private int _stagedSubscriptions;
+        private int _stagedAudit;
+
+        public Task<ScheduleSubscriptionSave> TrySaveScheduleSubscriptionAsync(CancellationToken ct = default)
+        {
+            TrySaveCalls++;
+            var refused = RivalsOnPlaceTaken.Count > 0 || TemplateAlreadyFollowedOnSave;
+            if (!refused)
+            {
+                _stagedSubscriptions = 0;
+                _stagedAudit = 0;
+                SaveCalls++;
+                return Task.FromResult(ScheduleSubscriptionSave.Saved);
+            }
+
+            Subscriptions.RemoveRange(Subscriptions.Count - _stagedSubscriptions, _stagedSubscriptions);
+            AuditEvents.RemoveRange(AuditEvents.Count - _stagedAudit, _stagedAudit);
+            _stagedSubscriptions = 0;
+            _stagedAudit = 0;
+            if (TemplateAlreadyFollowedOnSave)
+            {
+                return Task.FromResult(ScheduleSubscriptionSave.TemplateAlreadyFollowed);
+            }
+
+            Subscriptions.Add(RivalsOnPlaceTaken.Dequeue());
+            return Task.FromResult(ScheduleSubscriptionSave.PlaceTaken);
+        }
+
         public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) =>
             Task.FromResult(Farms.TryGetValue(farmId, out var f) ? f : null);
 
@@ -286,27 +521,25 @@ public sealed class AdoptScheduleHandlerTests
         public Task<List<Guid>> GetFarmIdsForUserAsync(Guid userId, CancellationToken ct = default) =>
             Task.FromResult(FarmMembers.Where(m => m.userId == userId).Select(m => m.farmId).ToList());
 
-        public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
-            Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default)
-        {
-            var normalized = (cropKey ?? string.Empty).Trim().ToLowerInvariant();
-            var sub = Subscriptions.FirstOrDefault(s =>
-                s.PlotId == plotId
-                && s.CropCycleId == cropCycleId
-                && s.CropKey == normalized
-                && s.State == ScheduleSubscriptionState.Active);
-            return Task.FromResult(sub);
-        }
+        // spec: plr-d10 lane L8b-3 - every Active subscription of the plot-season (the single read it replaces relied on I-14), by place.
+        public Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsAsync(
+            Guid plotId, Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult(Subscriptions
+                .Where(s => s.PlotId == plotId && s.CropCycleId == cropCycleId && s.State == ScheduleSubscriptionState.Active)
+                .OrderBy(s => s.Slot is null).ThenBy(s => s.Slot).ThenBy(s => s.AdoptedAtUtc).ThenBy(s => s.Id)
+                .ToList());
 
         public Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default)
         {
             Subscriptions.Add(subscription);
+            _stagedSubscriptions++;
             return Task.CompletedTask;
         }
 
         public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)
         {
             AuditEvents.Add(auditEvent);
+            _stagedAudit++;
             return Task.CompletedTask;
         }
 

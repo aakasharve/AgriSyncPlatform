@@ -11,9 +11,10 @@ using ShramSafal.Domain.Schedules;
 namespace ShramSafal.Application.UseCases.Schedules.CompleteSchedule;
 
 /// <summary>
-/// Phase 3 MIS — transitions the single Active <see cref="ScheduleSubscription"/>
-/// for (plot, cropKey, cycle) to <see cref="ScheduleSubscriptionState.Completed"/>
-/// when the crop cycle reaches its end. Emits <c>schedule.completed</c> analytics.
+/// Phase 3 MIS — transitions one Active <see cref="ScheduleSubscription"/> of a plot-season to
+/// <see cref="ScheduleSubscriptionState.Completed"/> when the crop cycle reaches its end. Emits <c>schedule.completed</c> analytics.
+/// spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - which one is named by <see cref="CompleteScheduleCommand.SubscriptionId"/>;
+/// without it the plot-season's one Active schedule is meant (P11); several without a name are refused (<c>ScheduleChoiceNeeded</c>).
 /// </summary>
 public sealed class CompleteScheduleHandler(
     IShramSafalRepository repository,
@@ -73,12 +74,15 @@ public sealed class CompleteScheduleHandler(
         if (gate is not null) return gate;
 
         var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
-        var subscription = await repository.GetActiveScheduleSubscriptionAsync(
-            command.PlotId, cropKey, command.CropCycleId, ct);
-        if (subscription is null)
+        var active = await repository.GetActiveScheduleSubscriptionsAsync(command.PlotId, command.CropCycleId, ct);
+        var picked = await Services.FollowedScheduleChoice.PickAsync(
+            repository, active, command.SubscriptionId, farmId, command.PlotId, command.CropCycleId, ct);
+        if (!picked.IsSuccess)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleSubscriptionNotFound);
+            return Result.Failure<ScheduleSubscriptionDto>(picked.Error);
         }
+
+        var subscription = picked.Value;
 
         if (subscription.State != ScheduleSubscriptionState.Active)
         {

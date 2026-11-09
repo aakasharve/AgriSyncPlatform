@@ -94,67 +94,121 @@ public sealed class AdoptScheduleHandler(
         var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
         var versionTag = Services.ScheduleLibrary.VersionTagOf(template);
 
-        // Invariant I-14: at most one Active subscription per (plot, cropKey, cycle).
-        var existingActive = await repository.GetActiveScheduleSubscriptionAsync(
-            command.PlotId, cropKey, command.CropCycleId, ct);
-        if (existingActive is not null)
+        // Stages the choice in place `slot`: the subscription, its audit row and the late-change flag (one unit of work, saved by the caller).
+        async Task<ScheduleSubscription> StageAsync(short slot)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleAlreadyAdopted);
+            var nowUtc = clock.UtcNow;
+            var staged = ScheduleSubscription.Adopt(
+                command.SubscriptionId ?? idGenerator.New(),
+                farmId,
+                command.PlotId,
+                command.CropCycleId,
+                cropKey,
+                templateId,
+                versionTag,
+                nowUtc,
+                command.ReferenceDate,
+                choice.Value.Origin,
+                choice.Value.CheckStateAtAdopt,
+                slot);
+
+            await repository.AddScheduleSubscriptionAsync(staged, ct);
+            // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
+            // (sentinel provenance) to AuditEventFactory.Create with the real
+            // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
+            // AuditContextAccessor.
+            await repository.AddAuditEventAsync(
+                AuditEventFactory.Create(
+                    entityType: "ScheduleSubscription",
+                    entityId: staged.Id,
+                    action: "Adopted",
+                    actorUserId: command.ActorUserId,
+                    actorRole: command.ActorRole ?? "unknown",
+                    payload: new
+                    {
+                        subscriptionId = staged.Id,
+                        farmId = command.FarmId,
+                        plotId = command.PlotId,
+                        cropCycleId = command.CropCycleId,
+                        cropKey,
+                        templateId = template.Id,
+                        templateName = template.Name,
+                        versionTag,
+                        referenceDate = command.ReferenceDate,
+                        origin = choice.Value.Origin.ToString(),
+                        checkStateAtAdopt = choice.Value.CheckStateAtAdopt.ToString(),
+                        slot
+                    },
+                    farmId: command.FarmId,
+                    clientCommandId: command.ClientCommandId,
+                    appVersion: command.ClientAppVersion,
+                    deviceId: command.AuditDeviceId,
+                    ipHash: command.AuditIpHash,
+                    sourceAiJobId: null),
+                ct);
+
+            await Services.ScheduleChangeGate.FlagIfLateAsync(
+                repository, decision, staged.Id, "Adopted", command.FarmId, command.ActorUserId, command.ActorRole ?? "unknown",
+                clock.UtcNow, command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash, ct);
+
+            return staged;
         }
 
-        var nowUtc = clock.UtcNow;
-        var subscription = ScheduleSubscription.Adopt(
-            command.SubscriptionId ?? idGenerator.New(),
-            farmId,
-            command.PlotId,
-            command.CropCycleId,
-            cropKey,
-            templateId,
-            versionTag,
-            nowUtc,
-            command.ReferenceDate,
-            choice.Value.Origin,
-            choice.Value.CheckStateAtAdopt);
+        var origin = choice.Value.Origin;
+        var limit = origin == ScheduleOrigin.Own ? ShramSafalErrors.OwnScheduleLimitReached : ShramSafalErrors.ScheduleLimitReached;
 
-        await repository.AddScheduleSubscriptionAsync(subscription, ct);
-        // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
-        // (sentinel provenance) to AuditEventFactory.Create with the real
-        // X-Device-Id / IP hash / X-App-Version sourced from the endpoint's
-        // AuditContextAccessor.
-        await repository.AddAuditEventAsync(
-            AuditEventFactory.Create(
-                entityType: "ScheduleSubscription",
-                entityId: subscription.Id,
-                action: "Adopted",
-                actorUserId: command.ActorUserId,
-                actorRole: command.ActorRole ?? "unknown",
-                payload: new
-                {
-                    subscriptionId = subscription.Id,
-                    farmId = command.FarmId,
-                    plotId = command.PlotId,
-                    cropCycleId = command.CropCycleId,
-                    cropKey,
-                    templateId = template.Id,
-                    templateName = template.Name,
-                    versionTag,
-                    referenceDate = command.ReferenceDate,
-                    origin = choice.Value.Origin.ToString(),
-                    checkStateAtAdopt = choice.Value.CheckStateAtAdopt.ToString()
-                },
-                farmId: command.FarmId,
-                clientCommandId: command.ClientCommandId,
-                appVersion: command.ClientAppVersion,
-                deviceId: command.AuditDeviceId,
-                ipHash: command.AuditIpHash,
-                sourceAiJobId: null),
-            ct);
+        // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - replaces invariant I-14 (one Active schedule per plot-season): a
+        // plot-season follows up to 3 outside schedules plus 1 of his own, each in its own place (slot). The same schedule twice is
+        // still refused. The check rule above runs FIRST: a schedule it refuses never takes a place. Two phones can compute the same
+        // lowest free place; the database holds the places unique, so the loser re-reads ONCE and takes the next free one of its
+        // origin, else is told the limit (Open point 7).
+        ScheduleSubscription? subscription = null;
+        for (var attempt = 0; attempt < 2 && subscription is null; attempt++)
+        {
+            var active = await repository.GetActiveScheduleSubscriptionsAsync(command.PlotId, command.CropCycleId, ct);
+            if (active.Any(s => s.ScheduleTemplateId == templateId))
+            {
+                return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleAlreadyAdopted);
+            }
 
-        await Services.ScheduleChangeGate.FlagIfLateAsync(
-            repository, decision, subscription.Id, "Adopted", command.FarmId, command.ActorUserId, command.ActorRole ?? "unknown",
-            clock.UtcNow, command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash, ct);
+            // spec: plr-d10 lane L8b-1F (R7) - a carry-over is the phone's one-time upload of the single choice it held BEFORE 3 + 1
+            // existed; onto a plot-season that already follows something on the server it must not become a second followed schedule
+            // nobody chose there (Open point 5). The phone then shows the server's choice.
+            if (command.CarryOver && active.Count > 0)
+            {
+                return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleAlreadyAdopted);
+            }
 
-        await repository.SaveChangesAsync(ct);
+            // A row with no place (written by a binary that sets none) still counts toward the limit of its kind.
+            var ofThisKind = active.Count(s => (s.Origin == ScheduleOrigin.Own) == (origin == ScheduleOrigin.Own));
+            var maxOfKind = origin == ScheduleOrigin.Own ? ScheduleSlots.MaxOwnSchedulesPerPlot : ScheduleSlots.MaxOutsideSchedulesPerPlot;
+            var slot = ofThisKind >= maxOfKind
+                ? null
+                : ScheduleSlots.NextFree(origin, active.Where(s => s.Slot.HasValue).Select(s => s.Slot!.Value));
+            if (slot is null)
+            {
+                return Result.Failure<ScheduleSubscriptionDto>(limit);
+            }
+
+            var staged = await StageAsync(slot.Value);
+            switch (await repository.TrySaveScheduleSubscriptionAsync(ct))
+            {
+                case ScheduleSubscriptionSave.Saved:
+                    subscription = staged;
+                    break;
+                case ScheduleSubscriptionSave.TemplateAlreadyFollowed:
+                    return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleAlreadyAdopted);
+                default:
+                    // A rival took the place first: the next loop re-reads once; a second loss is the limit.
+                    break;
+            }
+        }
+
+        if (subscription is null)
+        {
+            return Result.Failure<ScheduleSubscriptionDto>(limit);
+        }
+
         return Result.Success(subscription.ToDto(choice.Value.LiveCheckState.ToString()));
     }
 }

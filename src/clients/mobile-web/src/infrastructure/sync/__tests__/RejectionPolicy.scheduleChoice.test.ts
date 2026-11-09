@@ -16,6 +16,14 @@ describe('schedule-choice refusals', () => {
         expect(getPermanentRejectionCodes()).toContain('ScheduleAlreadyAdopted');
     });
 
+    it.each(['ScheduleLimitReached', 'OwnScheduleLimitReached', 'ScheduleChoiceNeeded'])(
+        'lane L8b-3: ShramSafal.%s is permanent (3 + 1: a 4th outside / 2nd own / an unnamed one of several can never succeed on a retry)',
+        code => {
+            expect(categorizeRejection({ errorCode: `ShramSafal.${code}` })).toBe('PERMANENT');
+            expect(getPermanentRejectionCodes()).toContain(code);
+        },
+    );
+
     it('ShramSafal.Forbidden is permanent', () => {
         expect(categorizeRejection({ errorCode: 'ShramSafal.Forbidden' })).toBe('PERMANENT');
     });

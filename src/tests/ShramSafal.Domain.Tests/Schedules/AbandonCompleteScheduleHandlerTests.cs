@@ -176,6 +176,135 @@ public sealed class AbandonCompleteScheduleHandlerTests
         Assert.Equal(0, repo.SaveCalls);
     }
 
+    // ------- lane L8b-3 (founder D-74, "3 + 1"): which one -------
+
+    private static ScheduleSubscription FollowingAt(short slot, Guid? farm = null, Guid? plot = null, Guid? cycle = null) =>
+        ScheduleSubscription.Adopt(
+            Guid.NewGuid(), new FarmId(farm ?? FarmIdVal.Value), plot ?? PlotIdVal, cycle ?? CycleIdVal, "grapes",
+            ScheduleTemplateId.New(), "v1", Now.AddDays(-10 + slot), null, ScheduleOrigin.Outside, ScheduleCheckState.NotChecked, slot);
+
+    private static (AbandonScheduleHandler Handler, CapturingAnalyticsWriter Analytics) AbandonHandler(FakeAbandonCompleteRepo repo)
+    {
+        var analytics = new CapturingAnalyticsWriter();
+        return (new AbandonScheduleHandler(repo, new FixedClock(Now), new AllowEntitlementPolicy(), analytics), analytics);
+    }
+
+    private static AbandonScheduleCommand AbandonOf(Guid? subscription) => new(
+        FarmId: FarmIdVal.Value, PlotId: PlotIdVal, CropCycleId: CycleIdVal, ActorUserId: ActorIdVal, SubscriptionId: subscription);
+
+    private static CompleteScheduleCommand CompleteOf(Guid? subscription) => new(
+        FarmId: FarmIdVal.Value, PlotId: PlotIdVal, CropCycleId: CycleIdVal, ActorUserId: ActorIdVal, SubscriptionId: subscription);
+
+    [Fact]
+    public async Task Abandon_with_an_id_acts_on_that_row_only()
+    {
+        var repo = BuildRepoWithBasics();
+        var one = FollowingAt(1);
+        var two = FollowingAt(2);
+        repo.Subscriptions.AddRange([one, two]);
+
+        var result = (await AbandonHandler(repo).Handler.HandleAsync(AbandonOf(two.Id)));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.Equal(two.Id, result.Value.Id);
+        Assert.Equal(ScheduleSubscriptionState.Abandoned, two.State);
+        Assert.Equal(ScheduleSubscriptionState.Active, one.State);
+    }
+
+    [Fact]
+    public async Task Abandon_without_an_id_and_one_active_acts_on_that_row_P11()
+    {
+        var repo = BuildRepoWithBasics();
+        var only = FollowingAt(1);
+        repo.Subscriptions.Add(only);
+
+        var result = await AbandonHandler(repo).Handler.HandleAsync(AbandonOf(null));
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.Equal(ScheduleSubscriptionState.Abandoned, only.State);
+    }
+
+    [Fact]
+    public async Task Abandon_without_an_id_and_several_active_is_ScheduleChoiceNeeded_and_nothing_changes()
+    {
+        var repo = BuildRepoWithBasics();
+        var one = FollowingAt(1);
+        var two = FollowingAt(2);
+        repo.Subscriptions.AddRange([one, two]);
+        var (handler, analytics) = AbandonHandler(repo);
+
+        var result = await handler.HandleAsync(AbandonOf(null));
+
+        Assert.Equal(ShramSafalErrors.ScheduleChoiceNeeded, result.Error);
+        Assert.Equal(ScheduleSubscriptionState.Active, one.State);
+        Assert.Equal(ScheduleSubscriptionState.Active, two.State);
+        Assert.Equal(0, repo.SaveCalls);
+        Assert.Empty(repo.AuditEvents);
+        Assert.Empty(analytics.Events);
+    }
+
+    [Fact]
+    public async Task Abandon_with_the_id_of_a_row_already_ended_is_ScheduleChangedElsewhere()
+    {
+        var repo = BuildRepoWithBasics();
+        var ended = FollowingAt(1);
+        ended.Abandon(Now.AddDays(-1));
+        repo.Subscriptions.AddRange([ended, FollowingAt(2)]);
+
+        var result = await AbandonHandler(repo).Handler.HandleAsync(AbandonOf(ended.Id));
+
+        Assert.Equal(ShramSafalErrors.ScheduleChangedElsewhere, result.Error);
+        Assert.Equal(0, repo.SaveCalls);
+    }
+
+    [Fact]
+    public async Task Abandon_with_an_unknown_other_plot_or_other_farm_id_answers_like_a_made_up_id_E4()
+    {
+        var repo = BuildRepoWithBasics();
+        repo.Subscriptions.Add(FollowingAt(1));
+        var otherPlot = FollowingAt(1, plot: Guid.NewGuid());
+        var otherCycle = FollowingAt(1, cycle: Guid.NewGuid());
+        var otherFarm = FollowingAt(1, farm: Guid.NewGuid(), plot: Guid.NewGuid());
+        repo.Subscriptions.AddRange([otherPlot, otherCycle, otherFarm]);
+        var handler = AbandonHandler(repo).Handler;
+
+        var madeUp = await handler.HandleAsync(AbandonOf(Guid.NewGuid()));
+        Assert.Equal(ShramSafalErrors.ScheduleSubscriptionNotFound, madeUp.Error);
+        foreach (var foreign in new[] { otherPlot, otherCycle, otherFarm })
+        {
+            var result = await handler.HandleAsync(AbandonOf(foreign.Id));
+            Assert.Equal(madeUp.Error, result.Error);
+            Assert.Equal(ScheduleSubscriptionState.Active, foreign.State);
+        }
+
+        Assert.Equal(0, repo.SaveCalls);
+    }
+
+    [Fact]
+    public async Task Complete_with_an_id_acts_on_that_row_only_and_without_one_follows_the_same_rules()
+    {
+        var repo = BuildRepoWithBasics();
+        var one = FollowingAt(1);
+        var two = FollowingAt(2);
+        repo.Subscriptions.AddRange([one, two]);
+        var handler = new CompleteScheduleHandler(repo, new FixedClock(Now), new AllowEntitlementPolicy(), new CapturingAnalyticsWriter());
+
+        var unnamed = await handler.HandleAsync(CompleteOf(null));
+        Assert.Equal(ShramSafalErrors.ScheduleChoiceNeeded, unnamed.Error);
+        Assert.Equal(0, repo.SaveCalls);
+
+        var named = await handler.HandleAsync(CompleteOf(one.Id));
+        Assert.True(named.IsSuccess, named.IsFailure ? named.Error.Code : null);
+        Assert.Equal(ScheduleSubscriptionState.Completed, one.State);
+        Assert.Equal(ScheduleSubscriptionState.Active, two.State);
+
+        var foreign = await handler.HandleAsync(CompleteOf(Guid.NewGuid()));
+        Assert.Equal(ShramSafalErrors.ScheduleSubscriptionNotFound, foreign.Error);
+
+        var ended = await handler.HandleAsync(CompleteOf(one.Id));
+        Assert.Equal(ShramSafalErrors.ScheduleChangedElsewhere, ended.Error);
+    }
+
     // ------- Helpers ---------
 
     private static FakeAbandonCompleteRepo BuildRepoWithBasics()
@@ -267,17 +396,13 @@ public sealed class AbandonCompleteScheduleHandlerTests
         public Task<bool> IsUserMemberOfFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) =>
             Task.FromResult(FarmMembers.Contains((farmId, userId)));
 
-        public Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
-            Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default)
-        {
-            var normalized = (cropKey ?? string.Empty).Trim().ToLowerInvariant();
-            var sub = Subscriptions.FirstOrDefault(s =>
-                s.PlotId == plotId
-                && s.CropCycleId == cropCycleId
-                && s.CropKey == normalized
-                && s.State == ScheduleSubscriptionState.Active);
-            return Task.FromResult(sub);
-        }
+        // spec: plr-d10 lane L8b-3 - every Active subscription of the plot-season (the single read it replaces relied on I-14), by place.
+        public Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsAsync(
+            Guid plotId, Guid cropCycleId, CancellationToken ct = default) =>
+            Task.FromResult(Subscriptions
+                .Where(s => s.PlotId == plotId && s.CropCycleId == cropCycleId && s.State == ScheduleSubscriptionState.Active)
+                .OrderBy(s => s.Slot is null).ThenBy(s => s.Slot).ThenBy(s => s.AdoptedAtUtc).ThenBy(s => s.Id)
+                .ToList());
 
         public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default)
         {
@@ -347,7 +472,8 @@ public sealed class AbandonCompleteScheduleHandlerTests
         public Task<CropScheduleTemplate?> GetCropScheduleTemplateByIdAsync(ScheduleTemplateId templateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<List<CropScheduleTemplate>> GetCropScheduleTemplatesForCropAsync(string cropKey, string? regionCode, CancellationToken ct = default) => throw new NotSupportedException();
         public Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) =>
+            Task.FromResult(Subscriptions.FirstOrDefault(s => s.Id == subscriptionId.Value));
         public Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw new NotSupportedException();

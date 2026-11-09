@@ -31,7 +31,29 @@ import type { ScheduleChoice } from './scheduleSubscriptions';
 /** adopted = the crop's chosen schedule; plot = the plot's own; default = the app's first schedule for the crop (nobody chose it). */
 export type ScheduleSource = 'adopted' | 'plot' | 'default';
 
-export interface ResolvedSchedule { template: CropScheduleTemplate; instance: PlotScheduleInstance; source: ScheduleSource }
+/**
+ * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - one schedule a plot follows, in the place it holds: 0 = his own, 1..3 = outside
+ * (`slot` null = the server sent none). `isMain` is the SERVER'S pick (R6), never worked out here. `template` is null while the phone's
+ * catalog does not hold it yet; `pending` = this phone's unanswered addition.
+ */
+export interface FollowedPlace {
+    subscriptionId: string;
+    templateId: string;
+    template: CropScheduleTemplate | null;
+    slot: number | null;
+    origin: 'Outside' | 'Own';
+    checkState: 'Checked' | 'NotChecked' | 'Returned' | 'Withdrawn';
+    isMain: boolean;
+    pending: boolean;
+    /** spec: lane L8b-3 fix 1 (L004) - this phone's unanswered choice was REFUSED or given up: it is no longer "on its way". */
+    refused: boolean;
+}
+
+/**
+ * `template` / `instance` / `source` are the plot's मुख्य schedule (R6) - the header, the stage line and the tabs follow it; `followed` is
+ * every schedule the plot follows, in place order (empty when nobody chose: the app's default is not a followed schedule).
+ */
+export interface ResolvedSchedule { template: CropScheduleTemplate; instance: PlotScheduleInstance; source: ScheduleSource; followed: FollowedPlace[] }
 
 /** The plot's own mark: its schedule was chosen for THIS plot in the editor (an extra field the stored schedule carries). */
 const PLOT_CHOICE_FIELD = 'plotChoice';
@@ -40,6 +62,22 @@ export { isPlotChoice };
 /** A schedule someone really made (not the app's stand-in, not empty), else undefined. */
 const real = (t: CropScheduleTemplate | undefined): CropScheduleTemplate | undefined =>
     t && !isFallbackTemplate(t) && t.stages.length > 0 ? t : undefined;
+
+const followedPlaces = (choice: ScheduleChoice | null | undefined): FollowedPlace[] =>
+    (choice?.followed ?? (choice ? [choice] : [])).map(c => {
+        const template = real(getScheduleById(c.templateId)) ?? null;
+        return {
+            subscriptionId: c.subscriptionId ?? '',
+            templateId: c.templateId,
+            template,
+            slot: typeof c.slot === 'number' ? c.slot : null,
+            origin: c.origin === 'Own' ? 'Own' : 'Outside',
+            checkState: template?.check?.state ?? c.checkState ?? 'NotChecked',
+            isMain: c.isMain === true,
+            pending: c.pending,
+            refused: c.refused === true,
+        };
+    });
 
 export function resolvePlotSchedule(crop: CropProfile, plot: Plot, todayKey: string, choice?: ScheduleChoice | null): ResolvedSchedule | null {
     const stored = plot.schedule as Partial<PlotScheduleInstance> | undefined;
@@ -61,6 +99,7 @@ export function resolvePlotSchedule(crop: CropProfile, plot: Plot, todayKey: str
             // The subscription's day 0 is the plot's day 0 (null = the season's own start, never a stale edit).
             instance: { ...instance, templateId: chosen.id, referenceDate: choice.referenceDate ?? toDayKey(plot.startDate) ?? todayKey },
             source: 'adopted',
+            followed: followedPlaces(choice),
         };
     }
     // Each step skips the app's stand-in: a plot added before the catalog synced stores the stand-in's id
@@ -81,7 +120,7 @@ export function resolvePlotSchedule(crop: CropProfile, plot: Plot, todayKey: str
         referenceType: template.referenceType,
         referenceDate: toDayKey(plot.startDate) ?? todayKey,
     });
-    return { template, instance, source };
+    return { template, instance, source, followed: [] };
 }
 
 /** The plot's schedule as stored, made readable (old wizard objects included) — the base an edit starts from. */

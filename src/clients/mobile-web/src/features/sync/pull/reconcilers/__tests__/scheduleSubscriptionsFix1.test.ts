@@ -187,7 +187,7 @@ describe('B003 + B008 - the upload follows the server\'s rows; the same schedule
         expect(await ConflictResolutionService.list()).toHaveLength(0); // nothing parked for him to resolve
     });
 
-    it('a DIFFERENT schedule is parked, with the words', async () => {
+    it('a refused schedule while the server holds another is parked, with the words (the list on the server stands)', async () => {
         await seedSeason();
         await reconcileSyncPull(body());
         await saveScheduleChoice([{ plotId: PLOT, templateId: TEMPLATE_ID }]);
@@ -195,7 +195,7 @@ describe('B003 + B008 - the upload follows the server\'s rows; the same schedule
         await park(request.clientRequestId, 'ShramSafal.ScheduleAlreadyAdopted');
         await reconcileSyncPull(body({ scheduleSubscriptions: [sub({ id: THEIR_ID, scheduleTemplateId: SPRAY_TEMPLATE_ID })] }));
         expect((await choiceOfPlot())?.templateId).toBe(SPRAY_TEMPLATE_ID);
-        expect((await ConflictResolutionService.list())[0].hint).toContain('दुसऱ्या फोनवरून वेगळं शेड्यूल निवडलं आहे');
+        expect((await ConflictResolutionService.list())[0].hint).toContain('हे शेड्यूल या प्लॉटवर आधीच पाळताय'); // L8b-3: words changed on purpose
     });
 });
 

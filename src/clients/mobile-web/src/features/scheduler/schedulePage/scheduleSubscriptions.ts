@@ -14,6 +14,8 @@
 import { getDatabase, type AgriLogDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import type { ScheduleSubscriptionRow } from '../../../infrastructure/storage/scheduleSubscriptionRow';
 import type { ScheduleSubscriptionDto } from '../../../infrastructure/api/dtos';
+import { mutationQueue } from '../../../infrastructure/sync/MutationQueue';
+import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 
 export type { ScheduleSubscriptionRow };
 
@@ -26,6 +28,21 @@ export interface ScheduleChoice {
     pending: boolean;
     /** spec: plr-d10 lane L8b-1F - what ShramSafal's check says now about the schedule followed (absent: the server has not said). */
     checkState?: ScheduleSubscriptionRow['checkState'];
+    /**
+     * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - which subscription this is, the place it holds (0 = his own, 1..3 = outside;
+     * absent = the server sent none), whose schedule it is, and whether the SERVER named it the मुख्य one (R6; never worked out here).
+     */
+    subscriptionId?: string;
+    slot?: number;
+    origin?: 'Outside' | 'Own';
+    isMain?: boolean;
+    /** spec: lane L8b-3 fix 1 (L004) - a pending choice whose request the server refused (or this phone gave up on). Read live from the queue, never stored. */
+    refused?: boolean;
+    /**
+     * On the plot's MAIN choice only: every schedule the plot follows this season, in place order (this one included; this phone's
+     * unanswered additions after the server's). Absent on a choice built from a single row.
+     */
+    followed?: readonly ScheduleChoice[];
 }
 
 const STATES = new Set(['Active', 'Migrated', 'Abandoned', 'Completed']);
@@ -48,6 +65,8 @@ export function rowFromDto(dto: ScheduleSubscriptionDto | null | undefined): Sch
         // spec: plr-d10 lane L8b-1F - additive: an older server sends neither, and an unreadable word is left out (never guessed).
         ...(typeof dto.checkState === 'string' && CHECK_STATES.has(dto.checkState) ? { checkState: dto.checkState } : {}),
         ...(dto.origin === 'Outside' || dto.origin === 'Own' ? { origin: dto.origin } : {}),
+        // spec: plr-d10 lane L8b-3 - a place is an integer 0..3; anything else is left out, never guessed.
+        ...(typeof dto.slot === 'number' && Number.isInteger(dto.slot) && dto.slot >= 0 && dto.slot <= 3 ? { slot: dto.slot } : {}),
     };
 }
 
@@ -60,17 +79,64 @@ export function bestActive(rows: readonly ScheduleSubscriptionRow[], currentCycl
         .sort((a, b) => Number(b.pending === true) - Number(a.pending === true) || b.adoptedAtUtc.localeCompare(a.adoptedAtUtc))[0];
 }
 
-export const choiceOf = (row: ScheduleSubscriptionRow): ScheduleChoice =>
-    ({ templateId: row.templateId, referenceDate: row.referenceDate, pending: row.pending === true, ...(row.checkState ? { checkState: row.checkState } : {}) });
+export const choiceOf = (row: ScheduleSubscriptionRow): ScheduleChoice => ({
+    templateId: row.templateId,
+    referenceDate: row.referenceDate,
+    pending: row.pending === true,
+    ...(row.checkState ? { checkState: row.checkState } : {}),
+    subscriptionId: row.id,
+    ...(typeof row.slot === 'number' ? { slot: row.slot } : {}),
+    ...(row.origin ? { origin: row.origin } : {}),
+    ...(row.isMain === true ? { isMain: true } : {}),
+    ...(row.refused === true ? { refused: true } : {}),
+});
 
-/** Every Active row of one plot (the server's, and this phone's unanswered one), newest intent first. */
+/** The plot's current season on this phone: a row of that season, or one kept before its season reached the server (''). */
+const inSeason = (row: ScheduleSubscriptionRow, currentCycleId?: string | null): boolean =>
+    !currentCycleId || row.cropCycleId === currentCycleId || row.cropCycleId === '';
+
+/**
+ * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - every schedule a plot follows this season, in place order: his own (0), then the
+ * outside ones (1..3); a row with no place after those that have one; this phone's unanswered ADDITIONS after the server's. A row this
+ * phone has let go (`ending`) and a row a pending switch replaces are not drawn.
+ */
+export function followedRows(rows: readonly ScheduleSubscriptionRow[], currentCycleId?: string | null): ScheduleSubscriptionRow[] {
+    const replaced = new Set(rows.filter(r => r.pending === true && r.replacesId).map(r => r.replacesId));
+    return rows
+        .filter(r => r.state === 'Active' && r.ending !== true && !replaced.has(r.id) && inSeason(r, currentCycleId))
+        .sort((a, b) =>
+            (a.slot ?? 99) - (b.slot ?? 99)
+            || Number(a.pending === true) - Number(b.pending === true)
+            || a.adoptedAtUtc.localeCompare(b.adoptedAtUtc)
+            || a.id.localeCompare(b.id));
+}
+
+/**
+ * The मुख्य row of a plot: the one the SERVER named on the last pull (`isMain`), else - a server that names none (older) or a plot-season
+ * it has not named yet - today's answer, the phone's unanswered choice first, else the newest Active row (`bestActive`). Never counted here.
+ */
+export function mainRow(rows: readonly ScheduleSubscriptionRow[], currentCycleId?: string | null): ScheduleSubscriptionRow | undefined {
+    const followed = followedRows(rows, currentCycleId);
+    return followed.find(r => r.isMain === true) ?? bestActive(followed, currentCycleId);
+}
+
+/** The plot's MAIN choice with every followed schedule attached (place order). */
+export function choiceForPlot(rows: readonly ScheduleSubscriptionRow[], currentCycleId?: string | null): ScheduleChoice | undefined {
+    const followed = followedRows(rows, currentCycleId);
+    const main = followed.find(r => r.isMain === true) ?? bestActive(followed, currentCycleId);
+    if (!main) return undefined;
+    return { ...choiceOf(main), isMain: true, followed: followed.map(r => ({ ...choiceOf(r), isMain: r.id === main.id })) };
+}
+
+/**
+ * Every Active row of one plot's current season (the server's, and this phone's unanswered ones): the मुख्य one first, then the rest
+ * in place order (spec: plr-d10 lane L8b-3 - was "newest intent first" while a plot followed one schedule).
+ */
 export async function activeSubscriptionsForPlot(plotId: string, db: AgriLogDatabase = getDatabase()): Promise<ScheduleSubscriptionRow[]> {
     const rows = await db.scheduleSubscriptions.where('plotId').equals(plotId).toArray();
     const current = (await currentCycleByPlot(db)).get(plotId);
-    const best = bestActive(rows, current);
-    return rows
-        .filter(r => r.state === 'Active' && (!current || r.cropCycleId === current || r.cropCycleId === ''))
-        .sort((a, b) => (a === best ? -1 : b === best ? 1 : b.adoptedAtUtc.localeCompare(a.adoptedAtUtc)));
+    const main = mainRow(rows, current);
+    return followedRows(rows, current).sort((a, b) => (a === main ? -1 : b === main ? 1 : 0));
 }
 
 /** Each plot's CURRENT crop season on this phone: the newest by start date (the season the screen shows). */
@@ -89,8 +155,11 @@ export async function currentCycleByPlot(db: AgriLogDatabase = getDatabase()): P
     return new Map([...newest].map(([plotId, v]) => [plotId, v.id]));
 }
 
-/** The one choice each plot follows, from the whole store. Fails soft: an unreadable store is "no choices". */
-export async function readPlotChoices(db: AgriLogDatabase = getDatabase()): Promise<Map<string, ScheduleSubscriptionRow>> {
+/**
+ * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - EVERY schedule each plot follows this season, in place order (this phone's
+ * unanswered additions after the server's), from the whole store. Fails soft: an unreadable store is "no choices".
+ */
+export async function readFollowedByPlot(db: AgriLogDatabase = getDatabase()): Promise<Map<string, ScheduleSubscriptionRow[]>> {
     const byPlot = new Map<string, ScheduleSubscriptionRow[]>();
     const current = await currentCycleByPlot(db);
     try {
@@ -100,10 +169,37 @@ export async function readPlotChoices(db: AgriLogDatabase = getDatabase()): Prom
     } catch {
         return new Map();
     }
-    const out = new Map<string, ScheduleSubscriptionRow>();
+    // spec: lane L8b-3 fix 1 (L004) - a pending row whose request the server refused (or this phone gave up on) is marked on the copy
+    // returned here, read live from the queue: the page then stops saying it is "on its way". Nothing is stored.
+    const refused = new Set<string>();
+    try {
+        const deviceId = mutationQueue.getDeviceId();
+        for (const rows of byPlot.values()) {
+            for (const row of rows.filter(r => r.pending === true)) {
+                for (const name of [SyncMutationName.AdoptSchedule, SyncMutationName.MigrateSchedule]) {
+                    const request = await db.mutationQueue.where('[deviceId+clientRequestId]').equals([deviceId, `${name}:${row.id}`]).first();
+                    if (request && (request.status === 'REJECTED_USER_REVIEW' || request.status === 'REJECTED_DROPPED')) refused.add(row.id);
+                }
+            }
+        }
+    } catch {
+        refused.clear();
+    }
+    const out = new Map<string, ScheduleSubscriptionRow[]>();
     byPlot.forEach((rows, plotId) => {
-        const best = bestActive(rows, current.get(plotId));
-        if (best) out.set(plotId, best);
+        const followed = followedRows(rows, current.get(plotId)).map(r => (refused.has(r.id) ? { ...r, refused: true as const } : r));
+        if (followed.length > 0) out.set(plotId, followed);
+    });
+    return out;
+}
+
+/** The ONE choice each plot is shown by - its मुख्य schedule - from the whole store. Fails soft: an unreadable store is "no choices". */
+export async function readPlotChoices(db: AgriLogDatabase = getDatabase()): Promise<Map<string, ScheduleSubscriptionRow>> {
+    const out = new Map<string, ScheduleSubscriptionRow>();
+    const current = await currentCycleByPlot(db);
+    (await readFollowedByPlot(db)).forEach((rows, plotId) => {
+        const main = mainRow(rows, current.get(plotId));
+        if (main) out.set(plotId, main);
     });
     return out;
 }

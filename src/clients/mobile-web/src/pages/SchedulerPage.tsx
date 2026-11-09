@@ -25,7 +25,7 @@ import { useBackDismiss } from '../core/navigation/useBackDismiss';
 import { computeDayState, getTaskCompletion } from '../shared/utils/dayState';
 import { financeSelectors } from '../features/finance/financeSelectors';
 import { MoneyLensDrawer } from '../features/finance/components/MoneyLensDrawer';
-import { ChoiceChips, GlassCard, PageBar, SANS } from '../shared/components/ui/placeUi';
+import { ChoiceChips, GlassCard, PageBar, SANS, Tap } from '../shared/components/ui/placeUi';
 import SchedulerTimeline from '../features/scheduler/components/SchedulerTimeline';
 import ScheduleMaker from '../features/scheduler/components/ScheduleMaker';
 import ScheduleLibraryView, { libraryTemplates } from '../features/scheduler/components/ScheduleLibraryView';
@@ -40,7 +40,9 @@ import { buildScheduleModel, dueTodayCount } from '../features/scheduler/schedul
 import { adoptForCrop, applyEditorChoice, resolvePlotSchedule, type EditorChoice } from '../features/scheduler/schedulePage/resolveSchedule';
 import { usePlotClips } from '../features/scheduler/schedulePage/usePlotClips';
 import { usePlotScheduleChoices } from '../features/scheduler/schedulePage/usePlotScheduleChoices';
-import { saveScheduleChoice, type ScheduleChoiceTarget } from '../features/scheduler/schedulePage/saveScheduleChoice';
+import { saveScheduleAbandon, saveScheduleChoice, type ScheduleChoiceTarget } from '../features/scheduler/schedulePage/saveScheduleChoice';
+import { THREE_PLUS_ONE_WORDS } from '../features/scheduler/schedulePage/threePlusOneCopy';
+import { BOTTOM_BAR_CLEARANCE } from '../shared/utils/bottomBar';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 import { cropNameIn } from '../shared/names/namesIn';
 
@@ -75,6 +77,17 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const [openDayKey, setOpenDayKey] = useState<string | null>(null);
     const [moneyOpen, setMoneyOpen] = useState(false);
     const [choiceNote, setChoiceNote] = useState<string | null>(null);
+    // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - the library opened from "हे शेड्यूल पण पाळा" follows one more on THIS plot; and the
+    // working screen's toast ("हे शेड्यूल पण पाळताय" / "हे शेड्यूल सोडलं") with its undo = the reverse act queued at once.
+    const [libraryMode, setLibraryMode] = useState<'crop' | 'add'>('crop');
+    const [toast, setToast] = useState<{ text: string; undo: () => void } | null>(null);
+    // The working screen's toast hides itself after 4 s (setTimeout); the timer is cleared when the toast is replaced, closed or the page goes (fix 1, L003).
+    useEffect(() => {
+        if (!toast) return undefined;
+        const timer = window.setTimeout(() => setToast(null), 4000);
+        return () => window.clearTimeout(timer);
+    }, [toast]);
+    const words = THREE_PLUS_ONE_WORDS[language === 'en' ? 'en' : 'mr'];
     // spec: plr-d10 lane L8b-2 (founder D-32) - the schedule each plot follows on the SERVER (or this phone's own, not yet answered).
     const choices = usePlotScheduleChoices();
     const todayKey = getDateKey();
@@ -135,6 +148,15 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         return followedCheckNote(resolved.template, choices.get(plot.id)?.checkState, hasChecked);
     }, [crop, plot, resolved, choices]);
 
+    // spec: plr-d10 lane L8b-3 - does the crop have a Checked schedule in the library this phone holds? (decides which line a free place says)
+    const cropHasChecked = useMemo(() => {
+        if (!crop) return false;
+        const code = scheduleCropCode(crop.name);
+        return libraryTemplates([crop]).some(t => scheduleCropCode(t.cropCode) === code && t.check?.state === 'Checked');
+    }, [crop]);
+    const followedIds = useMemo(() => new Set((resolved?.followed ?? []).map(f => f.templateId)), [resolved]);
+    const outsideFull = (resolved?.followed ?? []).filter(f => f.origin !== 'Own').length >= 3;
+
     const saveCrops = (next: CropProfile[]) => onUpdateCrops(next);
 
     const handleAdopt = (templateId: string) => {
@@ -154,6 +176,30 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
             result => setChoiceNote(result.notSent.length > 0 ? SC.choiceNotSent : null),
             () => setChoiceNote(SC.choiceNotSent),
         );
+    };
+
+    // "हे शेड्यूल पण पाळा" - follow one more on THIS plot (an adopt for this plot only; never crop-wide, never a switch).
+    const followToo = (templateId: string) => {
+        if (!plot) return;
+        const plotKey = plot.id;
+        setView('HOME');
+        setLibraryMode('crop');
+        void saveScheduleChoice([{ plotId: plotKey, templateId, add: true }]).then(result => {
+            setChoiceNote(result.notSent.length > 0 ? words.notSent : null);
+            const made = result.subscriptionIds[plotKey];
+            if (made) setToast({ text: words.toastFollowing, undo: () => { void saveScheduleAbandon(made); } });
+        });
+    };
+
+    // "हे सोडा" - let ONE followed schedule go (the server acts on that row only).
+    const leaveSchedule = (subscriptionId: string) => {
+        if (!plot) return;
+        const plotKey = plot.id;
+        void saveScheduleAbandon(subscriptionId).then(result => {
+            if (!result.done) return;
+            const dropped = result.templateId;
+            setToast({ text: words.toastLeft, undo: () => { if (dropped) void saveScheduleChoice([{ plotId: plotKey, templateId: dropped, add: true }]); } });
+        });
     };
 
     // The editor's choice really takes effect: the schedule is adopted for the crop, the plot's day 0 is set,
@@ -179,6 +225,14 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
             <PageBar title={title} onBack={back} />
             <div className="space-y-4">{body}</div>
             <MoneyLensDrawer isOpen={moneyOpen} onClose={() => setMoneyOpen(false)} filters={moneyFilters} />
+            {toast && (
+                // Above the bottom bar, never behind it (FOOT-1: the bar's room, BOTTOM_BAR_CLEARANCE, not a height of its own).
+                <div className="fixed inset-x-4 z-[60] mx-auto flex max-w-md items-center justify-between gap-3 rounded-2xl bg-stone-900 px-4 py-3 text-white shadow-lg" style={{ bottom: BOTTOM_BAR_CLEARANCE }} role="status" data-testid="schedule-toast">
+                    <span className="text-[16px] font-extrabold" data-testid="schedule-toast-text">{toast.text}</span>
+                    <Tap onClick={() => { const undo = toast.undo; setToast(null); undo(); }} data-testid="schedule-toast-undo"
+                        className="min-h-[48px] rounded-full px-3 text-[16px] font-extrabold text-emerald-300 underline underline-offset-2">{words.undo}</Tap>
+                </div>
+            )}
         </div>
     );
 
@@ -192,11 +246,14 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     }
 
     if (view === 'LIBRARY') {
-        return shell(SC.library, () => setView('HOME'), (
+        const adding = libraryMode === 'add' && !!plot;
+        return shell(adding ? words.libraryTitle : SC.library, () => { setView('HOME'); setLibraryMode('crop'); }, (
             <>
-                {cropChips}
+                {!adding && cropChips}
                 {choiceNote && <p className="m-0 px-1 text-[14px] font-bold text-stone-600" data-testid="sched-choice-note">{choiceNote}</p>}
-                <ScheduleLibraryView crop={crop} allCrops={crops} adoptedScheduleId={(plot && choices.get(plot.id)?.templateId) || crop?.activeScheduleId || null} onAdopt={handleAdopt} />
+                <ScheduleLibraryView crop={crop} allCrops={crops} adoptedScheduleId={(plot && choices.get(plot.id)?.templateId) || crop?.activeScheduleId || null}
+                    onAdopt={adding ? followToo : handleAdopt}
+                    plotAdd={adding ? { followedTemplateIds: followedIds, full: outsideFull, words: { follow: (resolved?.followed.length ?? 0) === 0 ? words.firstChoice : words.follow, fullWhy: words.fullButtonWhy, alreadyFollowed: words.alreadyFollowed, title: words.libraryTitle } } : undefined} />
             </>
         ));
     }
@@ -243,7 +300,9 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
             )}
             {crop && plot && resolved && model && (
                 <PlotScheduleHome cropName={nameOf(crop)} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips} checkNote={checkNote}
-                    tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => setView('LIBRARY')} />
+                    tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
+                    followed={resolved.followed} cropHasChecked={cropHasChecked}
+                    onAddSchedule={() => { setLibraryMode('add'); setView('LIBRARY'); }} onLeaveSchedule={leaveSchedule} />
             )}
             <ScheduleTools
                 facts={facts}

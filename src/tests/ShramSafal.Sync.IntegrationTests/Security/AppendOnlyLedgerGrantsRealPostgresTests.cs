@@ -261,6 +261,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    tables - only what Up() added. Up() grants SELECT, INSERT, UPDATE on its own two tables and revokes DELETE / TRUNCATE
         //    there; it touches no existing ledger, grant or privilege. Safe to revert and re-apply mid-proof.
         "20261108180000_AddPlannedWork",
+        // ── Reviewed 2026-11-09 (spec: plr-d10 lane L8b-3, founder D-74); Up() and Down() read in full: ssf.schedule_subscriptions only (not a ledger):
+        //    a nullable column, its back-fill, two CHECKs, two partial unique indexes. No grant or privilege is touched anywhere. Down() raises while any
+        //    plot-season follows two or more schedules (this proof's data has none), else drops only what Up() added. Safe to revert and re-apply mid-proof.
+        "20261109090000_AllowThreePlusOneSchedulesPerPlot",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

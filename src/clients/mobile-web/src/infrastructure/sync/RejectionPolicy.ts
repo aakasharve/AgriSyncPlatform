@@ -162,6 +162,13 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     // (SCH-OWN). Refused, nothing written, never re-sent: parked with their words, the phone's choice stays visible (P10).
     'ScheduleNotChecked',
     'OwnScheduleNotOpenYet',
+    // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - a plot-season follows at most 3 outside schedules and 1 of his own: a 4th outside
+    // (or a 2nd own) can never succeed on a retry, so it is parked with its words (two codes: only the tail after the last dot is kept,
+    // so a suffix could not name the limit); a request that names no schedule when several are followed ("which one?") is a command
+    // error that can never succeed as sent either. Nothing was written; the phone's other schedules stay visible.
+    'ScheduleLimitReached',
+    'OwnScheduleLimitReached',
+    'ScheduleChoiceNeeded',
 ];
 
 const PERMANENT_SET = new Set(

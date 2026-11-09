@@ -83,7 +83,7 @@ public static class ShramSafalErrors
     // account must never be answered with the success a repeat upload by its owner gets:
     // that would acknowledge a recording the server did not store for the caller.
     public static readonly Error RetainedClipIdTaken = Error.Conflict("ShramSafal.RetainedClipIdTaken", "This recording id belongs to another account.");
-    public static readonly Error ScheduleAlreadyAdopted = Error.Conflict("ShramSafal.ScheduleAlreadyAdopted", "An active schedule subscription already exists for this plot-crop-cycle.");
+    public static readonly Error ScheduleAlreadyAdopted = Error.Conflict("ShramSafal.ScheduleAlreadyAdopted", "This schedule is already followed on this plot-season.");
     // spec: plr-d10 lane L8b-2 fix round 1 (B006): a switch that names the choice it switches from, and that choice is no longer the plot's.
     public static readonly Error ScheduleChangedElsewhere = Error.Conflict("ShramSafal.ScheduleChangedElsewhere", "The plot's schedule was changed from another phone first.");
     public static readonly Error ScheduleTemplateUnpublished = Error.Conflict("ShramSafal.ScheduleTemplateUnpublished", "Schedule template has not been published.");
@@ -335,6 +335,12 @@ public static class ShramSafalErrors
     public static readonly Error ScheduleNotChecked = Error.Validation("ShramSafal.ScheduleNotChecked", "ShramSafal has not checked this schedule yet.");
     // spec: plr-d10 lane L8b-1F - the Own branch (a farm's own schedule) opens in SCH-OWN; until then it answers this and writes nothing.
     public static readonly Error OwnScheduleNotOpenYet = Error.Validation("ShramSafal.OwnScheduleNotOpenYet", "Following the farm's own schedule is not open yet.");
+    // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - a plot-season follows at most 3 outside schedules plus 1 of his own. Two codes, not one with a
+    // suffix: the phone keeps only the tail after the last dot of a code (RejectionPolicy.normalizeCode), so a suffix could not say which limit.
+    public static readonly Error ScheduleLimitReached = Error.Conflict("ShramSafal.ScheduleLimitReached", "This plot-season already follows 3 outside schedules.");
+    public static readonly Error OwnScheduleLimitReached = Error.Conflict("ShramSafal.OwnScheduleLimitReached", "This plot-season already follows 1 schedule of the farm's own.");
+    // spec: plr-d10 lane L8b-3 - the plot-season follows several schedules and the request named none of them: never an arbitrary row.
+    public static readonly Error ScheduleChoiceNeeded = Error.Conflict("ShramSafal.ScheduleChoiceNeeded", "This plot-season follows several schedules; say which one.");
     public static readonly Error ScheduleTemplateCropMismatch = Error.Validation("ShramSafal.ScheduleTemplateCropMismatch", "Schedule template crop does not match the crop cycle.");
 
     // --- Internal (server-side fault / config / external service) --------------------------

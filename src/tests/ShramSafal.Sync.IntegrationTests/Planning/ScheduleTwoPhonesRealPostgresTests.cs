@@ -1,7 +1,9 @@
 // spec: plr-d10-redesign-real-integration-2026-10-25 — lane L8b-2 fix round 1 (B006, B012; Review Focus 1).
 //
 // Two phones of one farm choose a plot's schedule while offline: the second arrival is refused, never a silent overwrite.
-//   - the second phone's ADOPT answers exactly ShramSafal.ScheduleAlreadyAdopted;
+//   - lane L8b-3 (founder D-74, "3 + 1"; ruling: open point 6, DELIBERATE): the plot-season now follows up to 3 outside schedules, so the second
+//     phone's ADOPT of a DIFFERENT schedule is kept too (place 2; nothing is overwritten). Only the SAME schedule twice is still refused,
+//     and it answers exactly ShramSafal.ScheduleAlreadyAdopted;
 //   - two offline SWITCHES: the second names the subscription it believed active (fromSubscriptionId) and is refused with
 //     ShramSafal.ScheduleChangedElsewhere, nothing written;
 //   - a switch that names no fromSubscriptionId behaves exactly as before (P11: no phone before this lane sends one).
@@ -53,15 +55,30 @@ public sealed class ScheduleTwoPhonesRealPostgresTests(ITestOutputHelper output)
     {
         await AssertAppRoleIsNotVacuousAsync();
         var first = await SeedTemplateRowAsync("Grapes - L8b-2 first");
-        var second = await SeedTemplateRowAsync("Grapes - L8b-2 second");
 
         (await PushAsync(Owner, "adopt_schedule", "phone-a-adopt", Adopt(first))).Status.Should().Be("applied");
-        var refused = await PushAsync(Owner, "adopt_schedule", "phone-b-adopt", Adopt(second));
+        // lane L8b-3: the SAME schedule from the second phone is still refused (a different one is kept: see the next fact).
+        var refused = await PushAsync(Owner, "adopt_schedule", "phone-b-adopt", Adopt(first));
 
         refused.Status.Should().Be("failed");
         refused.ErrorCode.Should().Be("ShramSafal.ScheduleAlreadyAdopted");
         var rows = await SubscriptionsAsync();
         rows.Should().ContainSingle("the second choice wrote nothing").Which.Template.Should().Be(first);
+    }
+
+    [Fact]
+    public async Task Second_phone_push_adopt_of_a_different_schedule_is_kept_too_in_the_next_place()
+    {
+        await AssertAppRoleIsNotVacuousAsync();
+        var first = await SeedTemplateRowAsync("Grapes - L8b-2 first");
+        var second = await SeedTemplateRowAsync("Grapes - L8b-2 second");
+
+        (await PushAsync(Owner, "adopt_schedule", "phone-a-adopt", Adopt(first))).Status.Should().Be("applied");
+        var kept = await PushAsync(Owner, "adopt_schedule", "phone-b-adopt", Adopt(second));
+
+        kept.Status.Should().Be("applied", $"{kept.ErrorCode}: {kept.ErrorMessage}");
+        var rows = await SubscriptionsAsync();
+        rows.Where(r => r.State == 0).Select(r => r.Template).Should().BeEquivalentTo(new[] { first, second }, "both phones' choices are followed; nothing is overwritten");
     }
 
     [Fact]
@@ -94,13 +111,13 @@ public sealed class ScheduleTwoPhonesRealPostgresTests(ITestOutputHelper output)
     {
         await AssertAppRoleIsNotVacuousAsync();
         var a = await SeedTemplateRowAsync("Grapes - L8b-2 A");
-        var b = await SeedTemplateRowAsync("Grapes - L8b-2 B");
         var c = await SeedTemplateRowAsync("Grapes - L8b-2 C");
 
         (await PushAsync(Owner, "adopt_schedule", "other-phone-adopt", Adopt(a))).Status.Should().Be("applied");
-        // This phone adopted B offline (refused), then switched to C: the switch names ITS pending id, which never existed.
+        // This phone adopted the SAME schedule A offline (refused, lane L8b-3: a different one would be kept), then switched to C: the switch
+        // names ITS pending id, which never existed.
         var pending = Guid.NewGuid();
-        (await PushAsync(Owner, "adopt_schedule", "my-adopt", Adopt(b, pending))).ErrorCode.Should().Be("ShramSafal.ScheduleAlreadyAdopted");
+        (await PushAsync(Owner, "adopt_schedule", "my-adopt", Adopt(a, pending))).ErrorCode.Should().Be("ShramSafal.ScheduleAlreadyAdopted");
         var switched = await PushAsync(Owner, "migrate_schedule", "my-switch", Switch(c, pending));
 
         switched.ErrorCode.Should().Be("ShramSafal.ScheduleChangedElsewhere");
