@@ -50,6 +50,10 @@ export interface LocalPlannedWork {
     note: string | null;
     status: PlannedWorkStatusName;
     sourceKind: PlannedWorkSourceKindName | null;
+    /** Lane L8c-4 - the plot the log it was made from stood on (a single-plot log), for the source line; null = none. */
+    sourcePlotId?: string | null;
+    /** Lane L8c-4 - the log it was made from, if it was made from one. */
+    sourceDailyLogId?: string | null;
     recordedOn: string;
     createdByUserId: string | null;
     modifiedAtUtc: string | null;
@@ -109,11 +113,14 @@ function fromServer(row: PlannedWorkRow): LocalPlannedWork {
         note: row.note,
         status: row.status,
         sourceKind: row.sourceKind,
+        sourcePlotId: row.sourcePlotId ?? null,
+        sourceDailyLogId: row.sourceDailyLogId ?? null,
         recordedOn: row.recordedOn,
         createdByUserId: row.createdByUserId || null,
         modifiedAtUtc: row.modifiedAtUtc,
-        source: 'server',
-        keptOnPhone: false,
+        // Lane L8c-4: a spoken reminder mirrored from a log saved on this phone is "made here, not yet acknowledged".
+        source: row.mirror === true ? 'queue' : 'server',
+        keptOnPhone: row.mirror === true,
         pendingSteps: [],
         refused: false,
         plots: row.plots.map(p => ({ plotId: p.plotId, status: p.status, confirmationState: p.confirmationState ?? null })),
@@ -213,6 +220,8 @@ export async function getLocalPlannedWork(farmId: string): Promise<LocalPlannedW
                 note: null,
                 status: str(payload.assigneeUserId) ? 'Assigned' : 'Open',
                 sourceKind: (str(payload.sourceKind) as PlannedWorkSourceKindName | null) ?? 'PlanForm',
+                sourcePlotId: null,
+                sourceDailyLogId: null,
                 recordedOn: str(payload.recordedOn) ?? '',
                 createdByUserId: null,
                 modifiedAtUtc: null,

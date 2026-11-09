@@ -104,8 +104,12 @@ public static class PlannedWorkAuthority
 /// every seat that holds it, a कामगार's and a स्वतःचं काम seat's included, exactly as lab records and confirm records do
 /// (<c>FarmReadScope.Of</c>): the owner switched it on for that person.</item>
 /// <item>A crew headcount gives nobody else access.</item>
+/// <item>Lane L8c-4 (D-26, D-31): a task made from a SPOKEN log is no more visible than the log itself. When the log is kept
+/// from this reader by its audience ("फक्त मी"), a SeeAllTasks grant no longer widens his view of it - only its maker and the
+/// primary owner (and an assignee, if the work was later handed to him by their act) still see it.</item>
 /// </list>
-/// REM-1 may later WIDEN who sees each kind of reminder; nothing narrows this base.
+/// REM-1 may later WIDEN who sees each kind of reminder; nothing narrows this base (except the line above, which is the
+/// log's own privacy, not a narrowing of the task's).
 /// </summary>
 public static class PlannedWorkVisibility
 {
@@ -113,7 +117,10 @@ public static class PlannedWorkVisibility
     /// The plot rows of <paramref name="task"/> this seat sees (possibly none, for a task with no plots), or <c>null</c> when
     /// he does not see the task at all.
     /// </summary>
-    public static IReadOnlyList<Guid>? VisiblePlots(PlannedWorkSeat seat, PlannedWork task)
+    /// <param name="seat">The reader's seat.</param>
+    /// <param name="task">The task.</param>
+    /// <param name="sourceLogHidden">True when the log this task was made from is kept from this reader by its audience.</param>
+    public static IReadOnlyList<Guid>? VisiblePlots(PlannedWorkSeat seat, PlannedWork task, bool sourceLogHidden = false)
     {
         ArgumentNullException.ThrowIfNull(task);
         if (!seat.Active)
@@ -128,7 +135,7 @@ public static class PlannedWorkVisibility
         }
 
         var isAssignee = task.AssigneeUserId == seat.UserId;
-        var seesAll = seat.HoldsSeeAllTasks;
+        var seesAll = seat.HoldsSeeAllTasks && !sourceLogHidden;
         if (!isAssignee && !seesAll)
         {
             return null;

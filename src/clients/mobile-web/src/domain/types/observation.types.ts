@@ -113,4 +113,11 @@ export interface PlannedTask {
     // ANTI-FABRICATION GUARDRAIL (spec: dfes-companion-2026-07-11) — see
     // CropActivityEvent.provenanceVerified for the contract. Missing = verified.
     provenanceVerified?: boolean;
+
+    /**
+     * Lane L8c-4 (the ONE list): set ONLY on a task that is a VIEW of an item of the `plannedWork` store (what the server keeps), never
+     * on the old local copy. `tickable`: this person may say "झाले" on it here (his own reminder); a task handed to someone is done
+     * through the log (L8c-3). `scope`: where the work is, as the server keeps it ("Unspecified" shows no place).
+     */
+    listSource?: { scope: 'Plot' | 'MultiPlot' | 'Farm' | 'Unspecified'; tickable: boolean; keptOnPhone: boolean };
 }

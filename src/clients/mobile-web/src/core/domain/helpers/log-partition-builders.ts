@@ -253,8 +253,9 @@ export function buildManualPartitionLog(
             priority: (obs.severity === 'important' || obs.severity === 'urgent') ? 'high' : 'normal',
             sourceType: 'observation_derived' as const,
             sourceObservationId: obs.id,
-            createdAt: nowISO,
-            dueDate: data.date
+            createdAt: nowISO
+            // Lane L8c-4 (founder D-29): NO due date - it used to be `data.date`, the day it was WRITTEN ("today by default").
+            // A reminder is dated only by a clear cue he gave; a typed note gave none, so it is undated (and never late).
         }));
 
     const finalPlannedTasks = [...mirroredTasks, ...manualRemindersAsTasks];

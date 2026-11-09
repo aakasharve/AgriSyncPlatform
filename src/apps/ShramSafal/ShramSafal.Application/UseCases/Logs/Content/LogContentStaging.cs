@@ -70,6 +70,15 @@ public static class LogContentStaging
             await AddTaskLinesAsync(repository, complianceService, log, parsed.RootElement, taskLines, nowUtc, audit, ct);
         }
 
+        // spec: plr-d10 lane L8c-4 (D-78 = 1) - the planned items of the document become the speaker's own reminders, in this same
+        // unit of work, for every app version (see SpokenReminders). Independent of the task LINES above: an older phone's
+        // manual draft writes no line here, but its planned items still become reminders.
+        using (var reminded = JsonDocument.Parse(documentJson))
+        {
+            await SpokenReminders.StageFromContentAsync(
+                repository, log, reminded.RootElement, isRevision: baseVersion is not null, nowUtc, audit, ct);
+        }
+
         // AddTask stamps the phone's capture time on the log's clock, which can be EARLIER than
         // this save; the pull is a delta on that clock, so move it forward to now, never back.
         log.MarkContentRevised(nowUtc);

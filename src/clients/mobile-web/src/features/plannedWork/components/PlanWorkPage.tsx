@@ -114,7 +114,9 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
     };
 
     const shown = useMemo(() => {
-        const visible = mayPlan ? items : items.filter(t => t.assigneeUserId !== null && t.assigneeUserId === userId && !isReminderTask(t, userId));
+        // Lane L8c-4 fix 1 (L002): a non-planner also sees his OWN refused creates here (and only here), so a refusal is never silent (P10).
+        const visible = mayPlan ? items : items.filter(t => (t.assigneeUserId !== null && t.assigneeUserId === userId && !isReminderTask(t, userId))
+            || (t.refused && (t.createdByUserId ?? userId) === userId));
         const open = sortByWhen(visible.filter(isOpenTask));
         return [...open, ...sortByWhen(visible.filter(t => !isOpenTask(t)))];
     }, [items, mayPlan, userId]);
@@ -171,6 +173,11 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                                 parked={parkedStep} onOpenConflicts={onOpenConflicts} plotNames={plotName}
                                 actions={(
                                     <>
+                                        {task.sourceKind === 'Spoken' && !task.refused && isReminderTask(task, userId) && isOpenTask(task) && farmId && (
+                                            // Lane L8c-4 (D-78 = 1): a reminder made from what he said is removed with ONE tap (it is cancelled, never deleted).
+                                            <button type="button" data-testid={`plan-remove-${task.id}`} onClick={() => { void PlannedWorkCommands.cancel(task.id, farmId).then(() => reload()); }}
+                                                className="min-h-[48px] rounded-full border-2 border-stone-400 bg-white px-5 text-[15px] font-extrabold text-stone-800 active:scale-95">{words.removeSpoken}</button>
+                                        )}
                                         {canAccept && (
                                             <button type="button" data-testid={`plan-accept-${task.id}`} onClick={() => { void accept(task); }}
                                                 className="min-h-[48px] rounded-full bg-[#1448E6] px-5 text-[15px] font-extrabold text-white active:scale-95">{words.accept}</button>

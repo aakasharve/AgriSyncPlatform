@@ -73,6 +73,8 @@ export const PlanCard: React.FC<PlanCardProps> = ({
     const words = plannedWorkWords(language);
     const when = whenView(task, today, words, language);
     const reminder = isReminderTask(task, me);
+    // L007: the day he spoke it, written with the card's own date helper (localised), never a raw YYYY-MM-DD.
+    const recordedDay = task.recordedOn ? whenView({ plannedDate: task.recordedOn, looseWhen: null, status: task.status }, today, words, language).sub ?? null : null;
     const stage = trailStage(task, me);
     const mine = task.assigneeUserId !== null && task.assigneeUserId === me;
     const crew = crewLine(task, words);
@@ -114,6 +116,12 @@ export const PlanCard: React.FC<PlanCardProps> = ({
                         </span>
                     )}
             </p>
+            {task.sourceKind === 'Spoken' && (
+                // Lane L8c-4 (D-78 = 1): a reminder made from what he said says so, with the plot and the day of the recording.
+                <p className="m-0 mt-1 text-[12px] font-bold text-stone-600" data-testid="plan-card-source">
+                    {[words.spokenFrom, task.sourcePlotId ? plotNames?.get(task.sourcePlotId) : null, recordedDay].filter((x): x is string => !!x).join(' · ')}
+                </p>
+            )}
             {crew && <p className="m-0 mt-1 text-[13px] font-extrabold text-stone-800" data-testid="plan-card-crew">{crew}</p>}
             {details.length > 0 && (
                 <div className="mt-1.5 space-y-0.5 rounded-xl bg-stone-50 px-2.5 py-1.5 text-[13px] font-semibold leading-snug text-stone-800" data-testid="plan-card-details">

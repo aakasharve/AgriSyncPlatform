@@ -61,9 +61,15 @@ internal static class PlannedWorkDoor
             return (null, seat, ShramSafalErrors.PlannedWorkNotFound);
         }
 
-        if (mustSee && PlannedWorkVisibility.VisiblePlots(seat, work) is null)
+        if (mustSee)
         {
-            return (null, seat, ShramSafalErrors.PlannedWorkNotFound);
+            // Lane L8c-4: a task made from a log is no more visible than the log (asked only for a task that has a source log).
+            var logHidden = work.SourceDailyLogId is not null
+                && PlannedWorkSourceLog.HiddenFrom(await RecordVisibility.ForFarmAsync(repository, farmId, actor, nowUtc, ct), work);
+            if (PlannedWorkVisibility.VisiblePlots(seat, work, logHidden) is null)
+            {
+                return (null, seat, ShramSafalErrors.PlannedWorkNotFound);
+            }
         }
 
         return (work, seat, null);

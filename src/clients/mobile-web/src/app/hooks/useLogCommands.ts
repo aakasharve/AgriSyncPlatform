@@ -61,6 +61,7 @@ import { seededIdGenerator } from '../../core/domain/services/IdGenerator';
 // future ones) keep working.
 import type { AutoSaveOptions, ManualSubmitOutcome, UseLogCommandsResult } from './useLogCommands.types';
 import { alreadySaved, asAutoSaved } from '../helpers/autoSavedVoiceLog';
+import { rememberLogTasks } from '../helpers/rememberLogTasks';
 import { isAfterFarmToday } from '../../core/domain/services/farmDay';
 export type { ManualSubmitOutcome, UseLogCommandsResult };
 
@@ -346,11 +347,8 @@ export const useLogCommands = ({
             // where nothing is meant to reach a server at all.
             const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
 
-            // Sync: Extract and add any planned tasks from the new logs to global state
-            const newTasks = newLogs.flatMap(l => l.plannedTasks || []);
-            if (newTasks.length > 0) {
-                setPlannedTasks(prev => mergeUniqueTasks(prev, newTasks));
-            }
+            // Lane L8c-4: the planned items become his own reminders (shown at once in the one list; demo: the old list).
+            rememberLogTasks(isDemoMode, setPlannedTasks, newLogs);
             // Lane OF (D-59): saved from आवाज नोंदी — the log tab stays as it was; fix 1 (M2): the same honest words as there.
             if (options.stayOnScreen) { setToast(buildSkippedSyncToast(syncOutcome, language) ?? { message: onPhoneClaim(language), type: 'success' }); return newLogs; }
             // Calculate Summary for Feedback
@@ -420,11 +418,7 @@ export const useLogCommands = ({
             // T2 — see handleAutoSave: the enqueue result decides the wording.
             const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
 
-            // Sync: Extract and add any planned tasks from the new logs to global state
-            const newCreatedTasks = newLogs.flatMap(l => l.plannedTasks || []);
-            if (newCreatedTasks.length > 0) {
-                setPlannedTasks(prev => mergeUniqueTasks(prev, newCreatedTasks));
-            }
+            rememberLogTasks(isDemoMode, setPlannedTasks, newLogs); // Lane L8c-4 (see handleAutoSave)
 
             setDraftLog(null);
             setRecordingSegment(null);
@@ -624,11 +618,7 @@ export const useLogCommands = ({
                 // T2 — see handleAutoSave: the enqueue result decides the wording.
                 const syncOutcome = await enqueueForSyncAndNoteSkips(newLogs);
 
-                // Sync
-                const manualTasks = newLogs.flatMap(l => l.plannedTasks || []);
-                if (manualTasks.length > 0) {
-                    setPlannedTasks(prev => mergeUniqueTasks(prev, manualTasks));
-                }
+                rememberLogTasks(isDemoMode, setPlannedTasks, newLogs); // Lane L8c-4 (see handleAutoSave)
 
                 calculateLogSummary(newLogs, syncOutcome);
                 setLastSavedLogIds(newLogs.map(l => l.id));
@@ -727,10 +717,7 @@ export const useLogCommands = ({
             // T2 — see handleAutoSave: the enqueue result decides the wording.
             const syncOutcome = await enqueueForSyncAndNoteSkips(logs);
 
-            const wizardTasks = logs.flatMap(log => log.plannedTasks || []);
-            if (wizardTasks.length > 0) {
-                setPlannedTasks(prev => mergeUniqueTasks(prev, wizardTasks));
-            }
+            rememberLogTasks(isDemoMode, setPlannedTasks, logs); // Lane L8c-4 (see handleAutoSave)
 
             calculateLogSummary(logs, syncOutcome);
             setLastSavedLogIds(logs.map(log => log.id));
@@ -788,12 +775,4 @@ export const useLogCommands = ({
         handleUpdateNote,
         service: logCommandService
     };
-};
-
-const mergeUniqueTasks = (existing: PlannedTask[], incoming: PlannedTask[]): PlannedTask[] => {
-    if (incoming.length === 0) return existing;
-    const merged = new Map<string, PlannedTask>();
-    existing.forEach(task => merged.set(task.id, task));
-    incoming.forEach(task => merged.set(task.id, task));
-    return Array.from(merged.values());
 };

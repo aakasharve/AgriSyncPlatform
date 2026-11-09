@@ -44,6 +44,8 @@ export interface TodoItem {
     /** Plot · crop (with the crop's colour), the whole farm, or nothing when the place is not known. */
     place?: { label: string; color?: string };
     canToggle: boolean;
+    /** Lane L8c-4 (D-78 = 1): a reminder made from what he said, still his own and open, is removed with ONE tap. */
+    canRemove: boolean;
 }
 
 export interface TodoList {
@@ -67,6 +69,14 @@ const PRIORITY_RANK: Record<PlannedTask['priority'], number> = { urgent: 3, high
 
 const isClosed = (t: PlannedTask) => t.status === 'done' || t.status === 'cancelled';
 const isFarmWide = (t: PlannedTask) => (!t.plotId || t.plotId === FARM_GLOBAL) && (!t.cropId || t.cropId === FARM_GLOBAL);
+
+/**
+ * Lane L8c-4 (the ONE list): the ids the person may tick here. A task that is a view of the server's list carries its own answer
+ * (`listSource.tickable`: his own reminder, still open); a task of the old in-memory (demo) list is always tickable, as it was.
+ */
+export function tickableIds(tasks: readonly PlannedTask[]): Set<string> {
+    return new Set(tasks.filter(t => t.listSource?.tickable ?? true).map(t => t.id));
+}
 
 /** Store first, then the logs' tasks it does not already hold: the store's copy wins. */
 export function mergeTasks(store: readonly PlannedTask[], fromLogs: readonly PlannedTask[]): PlannedTask[] {
@@ -162,6 +172,8 @@ export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayK
     };
 
     const placeOf = (t: PlannedTask): TodoItem['place'] => {
+        // Lane L8c-4: a reminder whose place he did not say shows no place (never "पूर्ण शेत", which is a place he named).
+        if (t.listSource?.scope === 'Unspecified' && isFarmWide(t)) return undefined;
         if (isFarmWide(t)) return { label: 'पूर्ण शेत' };
         const owner = t.plotId ? plotOwner.get(t.plotId) : undefined;
         // spec I18 — the crop in his language; the plot's own name as he wrote it.
@@ -197,6 +209,7 @@ export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayK
             priorityLabel: t.priority === 'urgent' ? 'तातडीचं' : t.priority === 'high' ? 'महत्त्वाचं' : undefined,
             place: placeOf(t),
             canToggle: storeIds.has(t.id),
+            canRemove: t.sourceType === 'ai_extracted' && t.listSource?.tickable === true && !isClosed(t),
         };
     };
 

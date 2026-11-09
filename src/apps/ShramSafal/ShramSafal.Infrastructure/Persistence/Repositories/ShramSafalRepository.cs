@@ -472,6 +472,19 @@ internal sealed class ShramSafalRepository(
         return await db.PlannedWork.Include(w => w.Plots).Where(w => ids.Contains(w.Id)).ToListAsync(ct);
     }
 
+    public async Task<List<PlannedWork>> GetPlannedWorkBySourceLogAsync(Guid farmId, Guid dailyLogId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty || dailyLogId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var farmKey = new FarmId(farmId);
+        return await db.PlannedWork.Include(w => w.Plots)
+            .Where(w => w.FarmId == farmKey && w.SourceDailyLogId == dailyLogId)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)
     {

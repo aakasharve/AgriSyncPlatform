@@ -128,6 +128,18 @@ export async function readPendingPlannedWorkIds(db: AgriLogDatabase): Promise<Se
         const id = (r.payload as { plannedWorkId?: unknown } | null)?.plannedWorkId;
         if (!FINISHED.has(r.status) && typeof id === 'string') out.add(id);
     }
+    // Lane L8c-4 (P10): a spoken reminder mirrored on this phone from a log whose create has not been acknowledged yet is not the
+    // server's to take away - the server cannot have made it until it has the log. Once the log is applied, the server's row replaces
+    // the mirror (same id); if the server made none, a full pull removes the mirror then.
+    const mirrors = (await db.plannedWork.toArray()).filter(r => r.mirror === true && typeof r.sourceDailyLogId === 'string');
+    if (mirrors.length > 0) {
+        const unsentLogs = new Set<string>();
+        for (const r of await db.mutationQueue.where('mutationType').equals(SyncMutationName.CreateDailyLog).toArray()) {
+            const logId = (r.payload as { dailyLogId?: unknown } | null)?.dailyLogId;
+            if (!FINISHED.has(r.status) && typeof logId === 'string') unsentLogs.add(logId);
+        }
+        for (const m of mirrors) if (m.sourceDailyLogId && unsentLogs.has(m.sourceDailyLogId)) out.add(m.id);
+    }
     return out;
 }
 
@@ -171,10 +183,11 @@ export async function reconcilePlannedWork(
     const notReadable = new Set(all.filter(s => !isReadableScope(s)).map(s => s.farmId));
     const reads = new Set(scopes.map(s => s.farmId));
     const sent = new Set(fromServer.map(r => r.id));
+    const pending = options.pendingPlannedWorkIds ?? await readPendingPlannedWorkIds(db);
     const gone: string[] = [];
     for (const row of await db.plannedWork.toArray()) {
         if (notReadable.has(row.farmId) && !reads.has(row.farmId)) gone.push(row.id);
-        else if (reads.has(row.farmId) && options.fullPull === true && !sent.has(row.id)) gone.push(row.id);
+        else if (reads.has(row.farmId) && options.fullPull === true && !sent.has(row.id) && !(row.mirror === true && pending.has(row.id))) gone.push(row.id);
     }
     if (gone.length > 0) await db.plannedWork.bulkDelete(gone);
     await sweepToCurrentScope(db, scopes as ScopeWithTasks[], options);
@@ -193,7 +206,10 @@ async function sweepToCurrentScope(db: AgriLogDatabase, scopes: ScopeWithTasks[]
     const trimmed: PlannedWorkRow[] = [];
     for (const row of await db.plannedWork.toArray()) {
         const scope = byFarm.get(row.farmId);
-        if (!scope || pending.has(row.id)) continue;
+        // Lane L8c-4 fix 1 (L001): a mirror is his own spoken reminder by definition (the phone made it from what HE just said), so the
+        // scope rule never takes it: only the pull's row of the same id replaces it (the flag goes with it), or a full pull that finds
+        // it stale (above). Otherwise a pull that started before the server committed the log made his own reminder flicker away.
+        if (!scope || pending.has(row.id) || row.mirror === true) continue;
         const keep = visiblePlotIds(row, userId, scope);
         if (keep === null) remove.push(row.id);
         else if (keep.length !== row.plots.length) trimmed.push({ ...row, plots: row.plots.filter(p => keep.includes(p.plotId)) });

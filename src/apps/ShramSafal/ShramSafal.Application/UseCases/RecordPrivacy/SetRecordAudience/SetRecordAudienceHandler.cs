@@ -143,6 +143,12 @@ public sealed class SetRecordAudienceHandler(
         {
             log.SetAudience(command.Audience, now);
             changedAt = log.AudienceChangedAtUtc!.Value;
+            // Lane L8c-4: the tasks made from this log follow who may see it - moved past every phone's cursor, so the next pull
+            // resends them to the readers who still see them and names them (content-free) to the ones who no longer do.
+            foreach (var spoken in await repository.GetPlannedWorkBySourceLogAsync(farmId, log.Id, ct))
+            {
+                spoken.NoteLinkedLogChanged(changedAt);
+            }
         }
         else
         {

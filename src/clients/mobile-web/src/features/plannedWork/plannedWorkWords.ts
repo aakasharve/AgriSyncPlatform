@@ -48,6 +48,12 @@ export interface PlannedWorkWords {
     seen: string;
     accept: string;
     cancelWork: string;
+    /** Lane L8c-4 (D-78 = 1): the source line of a reminder made from what he said, and the one tap that removes it. */
+    spokenFrom: string;
+    removeSpoken: string;
+    /** Lane L8c-4 fix 1 (L008): the short button on a to-do row, and its spoken label. */
+    removeShort: string;
+    removeLabel: string;
     // Refusals the farmer reads (the server's rule, said plainly).
     notAllowedToAssign: string;
     personNotOnFarm: string;
@@ -185,6 +191,10 @@ const mr: PlannedWorkWords = {
     seen: 'पाहिलं',
     accept: 'ठीक आहे, करतो', // the preview's
     cancelWork: 'काम रद्द करा', // PROPOSED (Marathi)
+    spokenFrom: 'बोलण्यातून', // PROPOSED (Marathi) - the old list's own word for a spoken reminder
+    removeSpoken: 'काढून टाका', // PROPOSED (Marathi)
+    removeShort: 'काढा', // PROPOSED (Marathi)
+    removeLabel: 'ही आठवण काढून टाका', // PROPOSED (Marathi)
     notAllowedToAssign: 'श्रमसफलच्या नियमानुसार हे काम दुसऱ्याला सोपवता आलं नाही. आठवण म्हणून ठेवता येईल.', // PROPOSED (Marathi)
     personNotOnFarm: 'ही व्यक्ती या शेतावर सध्या नाही, म्हणून तिला काम सोपवता येत नाही.', // PROPOSED (Marathi)
     personNotOnPlots: 'या व्यक्तीकडे यातले सगळे प्लॉट नाहीत, म्हणून तिला हे काम सोपवता येत नाही.', // PROPOSED (Marathi)
@@ -311,6 +321,10 @@ const en: PlannedWorkWords = {
     seen: 'Seen', // PROPOSED (English)
     accept: 'Okay, I will do it', // PROPOSED (English)
     cancelWork: 'Cancel the work', // PROPOSED (English)
+    spokenFrom: 'From what you said', // PROPOSED (English)
+    removeSpoken: 'Remove', // PROPOSED (English)
+    removeShort: 'Remove', // PROPOSED (English)
+    removeLabel: 'Remove this reminder', // PROPOSED (English)
     notAllowedToAssign: "By ShramSafal's rules this work could not be handed to someone else. It can be kept as a reminder.", // PROPOSED (English)
     personNotOnFarm: 'This person is not on the farm now, so the work cannot be handed to him.', // PROPOSED (English)
     personNotOnPlots: 'This person does not cover all the plots of this work, so it cannot be handed to him.', // PROPOSED (English)

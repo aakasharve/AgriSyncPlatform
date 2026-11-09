@@ -83,7 +83,8 @@ import { buildDayCardCore, buildPlotDayCard, placeDayLogs } from './overview/plo
 import { PlotDayCards } from './overview/PlotDayCards';
 import { atNoon, relLabel } from './overview/reflectDates';
 import { isLogInScope, plotRefsInScope, selectAll, toViewScope, type PlotRef, type ReflectSelection } from './overview/reflectSelection';
-import { buildTodoList, mergeTasks, newTodoTask, toggledTask, type NewTodo, type TodoItem } from './overview/todoModel';
+import { buildTodoList, mergeTasks, newTodoTask, tickableIds, toggledTask, type NewTodo, type TodoItem } from './overview/todoModel';
+import { spokenTaskId } from '../plannedWork/data/plannedWorkIds';
 import { TodoCount, TodoSection } from './overview/TodoSection';
 import { Num, SANS, SectionBlock, Tap } from './overview/ui';
 import { useMoneyLedger } from './overview/useMoneyLedger';
@@ -228,8 +229,11 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
 
     const todoList = useMemo(() => {
         const store = tasks ?? [];
-        const fromLogs = history.filter(l => l.date === dateKey && isLogInScope(l, scope)).flatMap(l => l.plannedTasks ?? []);
-        return buildTodoList({ tasks: mergeTasks(store, fromLogs), storeIds: new Set(store.map(t => t.id)), crops, scope, wholeFarm, todayKey, language });
+        // Lane L8c-4: a log's planned item the one list already holds (under the id it is made with) is not listed a second time.
+        const held = new Set(store.map(t => t.id));
+        const fromLogs = history.filter(l => l.date === dateKey && isLogInScope(l, scope))
+            .flatMap(l => (l.plannedTasks ?? []).filter(t => !held.has(spokenTaskId(l.id, t.id))));
+        return buildTodoList({ tasks: mergeTasks(store, fromLogs), storeIds: tickableIds(store), crops, scope, wholeFarm, todayKey, language });
     }, [tasks, history, dateKey, scope, crops, wholeFarm, todayKey, language]);
     const openTasks = useMemo(() => [...todoList.late, ...todoList.today, ...todoList.later].map(i => i.task), [todoList]);
     const dayOf = useCallback((d: Date) => buildCalendarDay({ date: d, history, crops, scope, dueTasks: openTasks }), [history, crops, scope, openTasks]);
@@ -247,6 +251,8 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
     // ── actions ────────────────────────────────────────────────────────────────────────────────
     const pickDay = (d: Date) => { setDate(atNoon(d)); setCalView(atNoon(d)); };
     const toggleTask = (t: TodoItem) => { if (t.canToggle) onUpdateTask?.(toggledTask(t.task)); };
+    // Lane L8c-4 (D-78 = 1): one tap removes a reminder made from what he said - it is cancelled, never deleted (P3).
+    const removeTask = (t: TodoItem) => { if (t.canRemove) onUpdateTask?.({ ...t.task, status: 'cancelled' }); };
     // spec plr-d10 (I14, T2) — a to-do typed in place: the one plot the page is narrowed to, else the whole farm.
     // Same record and the same `next_action.created` event the task sheet emits (`TaskCreationSheet.handleSave`).
     const addTodo = onSaveTask ? (todo: Omit<NewTodo, 'place'>) => {
@@ -320,7 +326,7 @@ const ReflectPage: React.FC<ReflectPageProps> = ({
                 return (
                     <SectionBlock id="todo" title="करायची कामे" icon={<ListChecks size={22} aria-hidden="true" />} tone="amber"
                         hint="कामं आणि आठवणी — वेळ उलटली की लाल" count={<TodoCount list={todoList} />} {...fold}>
-                        <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} onAddTodo={addTodo} onTell={tellTodo} />
+                        <TodoSection list={todoList} onToggle={toggleTask} onAdd={onAddTask} onAddTodo={addTodo} onTell={tellTodo} onRemove={removeTask} />
                     </SectionBlock>
                 );
             case 'day':

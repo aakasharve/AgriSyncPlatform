@@ -32,12 +32,17 @@ internal static class PullPlannedWork
         {
             var farmId = (Guid)work.FarmId;
             var seat = PlannedWorkSeats.From(accesses.GetValueOrDefault(farmId), readerUserId, serverNowUtc);
-            if (PlannedWorkVisibility.VisiblePlots(seat, work) is { } rows)
+            // Lane L8c-4: a task made from a log is no more visible than the log (a log hidden "फक्त मी" hides its tasks).
+            var logHidden = PlannedWorkSourceLog.HiddenFrom(audience.Visibility, work);
+            if (PlannedWorkVisibility.VisiblePlots(seat, work, logHidden) is { } rows)
             {
                 seen.Add((work, rows));
             }
-            else if (PlannedWorkVisibility.MustForget(seat, work))
+            else if (PlannedWorkVisibility.MustForget(seat, work)
+                || (logHidden && PlannedWorkVisibility.VisiblePlots(seat, work) is not null))
             {
+                // Taken from him by a reassign, or by the log's audience (the tasks of a log the owner hid): his phone is told,
+                // content-free, to forget it - the same delivered-once rule as a withdrawn record.
                 audience.Withdraw(RecordKinds.PlannedWork, work.Id, farmId, work.ModifiedAtUtc);
             }
         }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     CropProfile, FarmerProfile, DailyLog, PlannedTask, LedgerDefaults,
     ResourceItem, Person, VerificationStatus, OperatorCapability
@@ -9,11 +9,11 @@ import { ProcurementExpense } from '../../features/procurement/procurement.types
 import { backgroundSyncWorker } from '../../infrastructure/sync/BackgroundSyncWorker';
 import { useAuth } from '../providers/AuthProvider';
 import { generateDemoHarvestSessions, generateDemoPlannedTasks, generateDemoProcurementExpenses } from '../../features/demo/DemoDataService';
-import { getDatabase } from '../../infrastructure/storage/DexieDatabase';
 import { keepDatedLogs } from '../helpers/datedHistory';
 import { useFarmerSetupPersistence } from './useFarmerSetupPersistence';
-
-const PLANNED_TASKS_META_KEY = 'agrisync_local_planned_tasks_v1';
+import { useOptionalFarmContext } from '../../core/session/FarmContext';
+import { useOneTaskList } from '../../features/plannedWork/data/useOneTaskList';
+import { useLegacyTodoUpload } from '../../features/plannedWork/data/useLegacyTodoUpload';
 
 export interface UseAppDataResult {
     // State
@@ -165,7 +165,7 @@ export function createInitialFarmerProfile(): FarmerProfile {
 export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     // --- DATA SOURCE INTEGRATION ---
     const { dataSource, isDemoMode, setDemoMode } = useDataSource();
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, session } = useAuth();
 
     // --- LOCAL STATE (Mirrors DataSource) ---
     // Start with empty crops - will be populated based on demo mode
@@ -186,7 +186,10 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
     const [userResources, setUserResources] = useState<ResourceItem[]>([]);
 
     // --- TODO: Move these to DataSource/Repositories ---
-    const [plannedTasks, setPlannedTasks] = useState<PlannedTask[]>([]);
+    // Lane L8c-4: this in-memory list is the DEMO list only. In the real app the one task list is the server's (`plannedWork`, read below
+    // through `useOneTaskList`); the old local copy (`agrisync_local_planned_tasks_v1`) is left in Dexie as it is and uploaded once
+    // (`useLegacyTodoUpload`), never rewritten from here.
+    const [demoTasks, setPlannedTasks] = useState<PlannedTask[]>([]);
     const [harvestSessions, setHarvestSessions] = useState<HarvestSession[]>([]);
     const [procurementExpenses, setProcurementExpenses] = useState<ProcurementExpense[]>([]);
 
@@ -221,7 +224,6 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         let mounted = true;
 
         const hydrateRealData = async () => {
-            const db = getDatabase();
             const loadedCrops = await dataSource.crops.getAll();
             if (!mounted) return;
 
@@ -241,9 +243,7 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
             // Dexie, untouched). Why, and why here: helpers/datedHistory.ts.
             setHistory(keepDatedLogs(loadedLogs));
 
-            const plannedTasksMeta = await db.appMeta.get(PLANNED_TASKS_META_KEY);
-            if (!mounted) return;
-            setPlannedTasks(Array.isArray(plannedTasksMeta?.value) ? plannedTasksMeta.value as PlannedTask[] : []);
+            setPlannedTasks([]);
             setHarvestSessions([]);
             setProcurementExpenses([]);
             // Last line of the pass, after every `await` above resolved —
@@ -306,27 +306,6 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         };
     }, [dataSource, isDemoMode, isAuthenticated, noteStoredProfile]);
 
-    useEffect(() => {
-        if (isDemoMode) {
-            return;
-        }
-
-        const persistPlannedTasks = async () => {
-            try {
-                const db = getDatabase();
-                await db.appMeta.put({
-                    key: PLANNED_TASKS_META_KEY,
-                    value: plannedTasks,
-                    updatedAt: new Date().toISOString(),
-                });
-            } catch (error) {
-                console.error('Failed to persist planned tasks', error);
-            }
-        };
-
-        void persistPlannedTasks();
-    }, [plannedTasks, isDemoMode]);
-
     // --- HANDLERS ---
 
     const handleUpdateCrops = async (newCrops: CropProfile[]) => {
@@ -358,19 +337,21 @@ export const useAppData = (_props?: UseAppDataProps): UseAppDataResult => {
         }));
     };
 
-    const handleSaveTask = (task: PlannedTask) => {
-        setPlannedTasks(prev => {
-            const exists = prev.find(p => p.id === task.id);
-            if (exists) return prev.map(p => p.id === task.id ? task : p);
-            return [...prev, task];
-        });
-        // TODO: dataSource.tasks.save(task);
-    };
-
-    const handleUpdateTask = (id: string, updates: Partial<PlannedTask>) => {
-        setPlannedTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-        // TODO: dataSource.tasks.update(id, updates);
-    };
+    // Lane L8c-4: ONE task list. Real app: what the server keeps, and every change a queued command; demo: the old list, as it was.
+    const farmId = useOptionalFarmContext()?.currentFarmId ?? null;
+    const userId = session?.userId ?? null;
+    const knownPlotIds = useMemo(() => new Set(crops.flatMap(c => (c.plots ?? []).map(p => p.id))), [crops]);
+    const demo = useMemo(() => ({
+        tasks: demoTasks,
+        save: (task: PlannedTask) => setPlannedTasks(prev => (prev.some(p => p.id === task.id) ? prev.map(p => (p.id === task.id ? task : p)) : [...prev, task])),
+        update: (id: string, updates: Partial<PlannedTask>) => setPlannedTasks(prev => prev.map(t => (t.id === id ? { ...t, ...updates } : t))),
+    }), [demoTasks]);
+    const oneList = useOneTaskList({ farmId, userId, isDemoMode, knownPlotIds, demo });
+    const plannedTasks = oneList.tasks;
+    const handleSaveTask = oneList.save;
+    const handleUpdateTask = oneList.update;
+    // The old local to-dos are uploaded once per sign-in and farm after the first successful sync (never in demo mode).
+    useLegacyTodoUpload({ farmId, userId, isDemoMode, isAuthenticated });
 
     return {
         isDemoMode,

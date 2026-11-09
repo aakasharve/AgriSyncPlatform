@@ -1,0 +1,21 @@
+{
+  "_comment": "spec: plr-d10-redesign-real-integration-2026-10-25 (lane L8c-4). The ids of a task made from a spoken planned item, the same on the server (ShramSafal.Domain.Planning.PlannedWorkIds) and the phone (features/plannedWork/data/plannedWorkIds.ts). RFC 4122 UUIDv5. Name = '<log id, lower case>:plannedTasks:<item id>' (a content item) or '<log id, lower case>:job:<index>' (an item of the voice parse a 1.0.17 phone confirmed), in this namespace. 'legacyTodo' is the phone's one-time upload only: name = 'legacy-todo:<old to-do id>' in the same namespace. Values computed with the 'uuid' package (v13) and checked against the C# port.",
+  "namespace": "c2f6d3a8-4b1e-4f57-9d0a-6e8b7a1c5d93",
+  "spoken": [
+    { "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12", "itemId": "t1", "id": "be008260-bc42-5afd-91bf-e910c70bbd16" },
+    { "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12", "itemId": "t2", "id": "59334a4f-546c-5743-8b5c-2e896ed8a24e" },
+    { "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12", "itemId": "पाईपलाईन", "id": "ccfbc82a-0281-564c-8589-86bf933a2086" },
+    { "logId": "9f1d2c3b-5a64-4e78-b0c9-1a2b3c4d5e6f", "itemId": "t1", "id": "60aff296-c089-5bb9-a842-1a8e946ffe75" },
+    { "logId": "9F1D2C3B-5A64-4E78-B0C9-1A2B3C4D5E6F", "itemId": "t1", "id": "60aff296-c089-5bb9-a842-1a8e946ffe75" },
+    { "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12", "itemId": "7d1c6a52-81e0-4a39-9c2f-b4d5e6f70812", "id": "1bb5e437-8775-59e3-8ae6-d2d4d0bb581c" }
+  ],
+  "job": [
+    { "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12", "index": 0, "id": "e6668e03-8e7d-5e16-988f-bbbd0b9cf6a8" },
+    { "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12", "index": 1, "id": "3aa3530e-f203-5df5-892a-c348ac919eec" }
+  ],
+  "legacyTodo": [
+    { "oldId": "task_1730000000000", "id": "ff9e753e-a078-550e-8888-683f199d09b7" },
+    { "oldId": "7d1c6a52-81e0-4a39-9c2f-b4d5e6f70812", "id": "24c3de2d-2315-5376-9808-0178f1c8f441" },
+    { "oldId": "सिंचन", "id": "1ddbaa56-ae0f-5feb-b54e-835ce6c05f1e" }
+  ]
+}
