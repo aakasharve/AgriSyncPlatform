@@ -101,6 +101,8 @@ export const VoiceResultContainer: React.FC<VoiceResultContainerProps> = ({
         ownName: ownNameOf(farmerProfile.name),
         unknownLabel: RS.unknownPerson,
         language,
+        // Lane IT-D2 (founder D-123b): in Marathi mode this screen writes its numbers and times in Devanagari digits.
+        nativeDigits: true,
     }), [farmerProfile.activeOperatorId, farmerProfile.name, sessionUserId, operatorNameById, RS, language]);
     const day = useMemo(() => buildDayView(current, history, deps), [current, history, deps]);
     const dayLogs = useMemo(() => sameDayLogs(current, history), [current, history]);

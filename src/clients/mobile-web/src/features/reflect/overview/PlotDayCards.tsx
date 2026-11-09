@@ -24,10 +24,19 @@ import { rupees } from './reflectDates';
 import type { PlotRef } from './reflectSelection';
 import { CropPhoto, Num, Tap } from './ui';
 import { useLogAttachmentCount } from './useLogAttachmentCount';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
 
 const WATER_TONE: Record<WaterState, string> = { ON_TRACK: 'bg-green-100 text-green-800', MISSED: 'bg-orange-100 text-orange-800', EXTRA: 'bg-blue-100 text-blue-800' };
 /** The result screen's खर्च colour, for the ledger's money chip. */
 const MONEY_TINT = partMeta('expense').tint;
+
+/**
+ * A counter or an amount on the card. English keeps the page's number font (Latin digits); Marathi mode writes the digits in Devanagari
+ * (lane IT-D2, founder D-123b) in the card's own font, which has them - the number font does not.
+ */
+const Digits: React.FC<{ children: string | number; language: string | undefined }> = ({ children, language }) => (
+    language === 'en' ? <Num>{children}</Num> : <span>{digitsFor(children, language)}</span>
+);
 
 /** One thing that happened: its part's colour and icon, as said; an unsure one keeps its mark. */
 export const Chip: React.FC<{ chip: DayChip }> = ({ chip }) => {
@@ -62,12 +71,12 @@ const Chips: React.FC<{ card: DayCardCore; testKey: string; onCost?: () => void 
     const inner = money && (
         <>
             <span className="grid h-[26px] w-[26px] place-items-center rounded-lg bg-white/65"><IndianRupee size={16} aria-hidden="true" /></span>
-            <Num>{rupees(money.amount as number)}</Num>
+            <Digits language={language}>{rupees(money.amount as number)}</Digits>
             <span className="text-[11.5px] font-bold text-stone-700" data-testid={`plot-money-source-${testKey}`}>{copy.fromLedger}</span>
             {money.partial.length > 0 && <span className="text-[11px] text-amber-800" data-testid={`plot-money-partial-${testKey}`}>· {copy.partialTag}</span>}
         </>
     );
-    const label = money ? `${partNameIn('expense', language)} ${rupees(money.amount as number)} ${copy.fromLedger}` : '';
+    const label = money ? `${partNameIn('expense', language)} ${digitsFor(rupees(money.amount as number), language)} ${copy.fromLedger}` : '';
     const look = 'inline-flex items-center gap-1.5 rounded-xl px-2 py-1 text-[14.5px] font-extrabold text-stone-900';
     return (
         <span className="mt-2.5 flex flex-wrap gap-1.5" data-testid={`plot-chips-${testKey}`}>
@@ -161,7 +170,7 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">
                     {card.confirmed !== undefined && <StatusChip confirmed={card.confirmed} testId={`plot-state-${ref.key}`} />}
-                    {files > 0 && <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[12px] font-bold text-blue-700 ring-1 ring-blue-100" aria-label={`जोडलेल्या फाइल ${files}`} data-testid={`plot-files-${ref.key}`}><Paperclip size={12} aria-hidden="true" /><Num>{files}</Num></span>}
+                    {files > 0 && <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 px-1.5 py-0.5 text-[12px] font-bold text-blue-700 ring-1 ring-blue-100" aria-label={`जोडलेल्या फाइल ${digitsFor(files, language)}`} data-testid={`plot-files-${ref.key}`}><Paperclip size={12} aria-hidden="true" /><Digits language={language}>{files}</Digits></span>}
                 </span>
             </span>
             <Chips card={card} testKey={ref.key} onCost={onCost ? () => onCost(ref) : undefined} />
@@ -169,7 +178,7 @@ const PlotDayCardView: React.FC<{ card: PlotDayCard; isToday: boolean; onOpen: (
             {(card.water || card.weather) && (
                 <span className="mt-2 flex flex-wrap gap-1.5">
                     {card.water && <span className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[12.5px] font-extrabold ${WATER_TONE[card.water]}`}><Droplets size={13} aria-hidden="true" />{WATER_LABEL[card.water]}</span>}
-                    {card.weather && <span className="flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-[12.5px] font-bold text-sky-800 ring-1 ring-sky-100"><Thermometer size={13} aria-hidden="true" /><Num>{card.weather.temp}</Num> · {card.weather.condition}</span>}
+                    {card.weather && <span className="flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-[12.5px] font-bold text-sky-800 ring-1 ring-sky-100"><Thermometer size={13} aria-hidden="true" /><Digits language={language}>{card.weather.temp}</Digits> · {card.weather.condition}</span>}
                 </span>
             )}
             <Foot card={card} isToday={isToday} testKey={ref.key} />

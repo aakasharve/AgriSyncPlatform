@@ -31,6 +31,7 @@ import type { TodoItem } from '../reflect/overview/todoModel';
 import { fromDateKey, offsetOf } from '../reflect/overview/reflectDates';
 import { attentionRankOrder, suggestedActionOf } from './attentionWire';
 import { toMarathiDigits } from '../labour/marathiDate';
+import { toDevanagariDigits } from '../../shared/utils/marathiDigits';
 import { isRescheduledLocally, stepDueTextMr, stepLabelMr, type ScheduledWorkItem, type StoredScheduledWork } from './scheduledWork';
 
 // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 1) - `first`: "आधी हे पाहा", a wrong mix in one tank, above everything.
@@ -204,6 +205,6 @@ export function mostUrgentLineMr(model: AttentionModel): string | null {
     const first = model.first[0] ?? model.late[0] ?? model.today[0] ?? model.decide[0];
     if (!first) return null;
     if (first.kind === 'step') return `${first.label}${first.step.plotName ? ` · ${first.step.plotName}` : ''} — ${first.dueText}`;
-    if (first.kind === 'reminder') return `${first.todo.title} — ${first.todo.dueText}`;
+    if (first.kind === 'reminder') return `${first.todo.title} — ${toDevanagariDigits(first.todo.dueText)}`;
     return first.card.titleMr?.trim() || null;
 }

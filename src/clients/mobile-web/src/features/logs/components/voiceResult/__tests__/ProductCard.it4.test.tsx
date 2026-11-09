@@ -109,7 +109,7 @@ describe('the bill line (lane IT4 Task 2)', () => {
         showCard(log, kitFor(log, { canSeeMoney: false, billOf: () => bill }));
         const line = screen.getByTestId('vr-fact-bill');
         expect(line.textContent).toContain('खरेदी बिलाशी जुळलं');
-        expect(line.textContent).toContain('3 नोव्हें.');
+        expect(line.textContent).toContain('३ नोव्हें.'); // IT-D2: the date's digits follow Marathi mode
         expect(line.textContent).not.toMatch(/540|५४०|₹/); // no rupee amount for someone who may not see money
         cleanup();
 

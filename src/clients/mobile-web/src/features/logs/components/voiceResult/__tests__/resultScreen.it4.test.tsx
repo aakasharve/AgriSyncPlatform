@@ -230,13 +230,13 @@ describe('Task 2 - the product rows, the card, and हो / नाही / फ�
         const row = screen.getByTestId('vr-prow-m-conf');
         expect(row.getAttribute('data-type')).toBe('insecticide');
         expect(within(row).getByTestId('vr-prow-type').textContent).toBe('कीटकनाशक');
-        expect(within(row).getByTestId('vr-prow-ingredient').textContent).toBe('इमिडाक्लोप्रिड 17.8%');
-        expect(within(row).getByTestId('vr-prow-amount').textContent).toBe('1 मिली');
+        expect(within(row).getByTestId('vr-prow-ingredient').textContent).toBe('इमिडाक्लोप्रिड १७.८%'); // IT-D2: the percentage's digits are Devanagari in Marathi mode
+        expect(within(row).getByTestId('vr-prow-amount').textContent).toBe('१ मिली');
         tapRow('m-conf');
         const card = screen.getByTestId('vr-product-card');
-        expect(within(card).getByTestId('vr-fact-ingredient').textContent).toContain('इमिडाक्लोप्रिड 17.8% · एसएल');
+        expect(within(card).getByTestId('vr-fact-ingredient').textContent).toContain('इमिडाक्लोप्रिड १७.८% · एसएल');
         expect(within(card).getByTestId('vr-fact-company').textContent).toContain('बायर');
-        expect(within(card).getByTestId('vr-fact-dose').textContent).toContain('1 मिली'); // what he said, not a library dose
+        expect(within(card).getByTestId('vr-fact-dose').textContent).toContain('१ मिली'); // what he said, not a library dose
         expect(within(card).getByTestId('vr-card-source').textContent).toBe('माहिती: श्रमसफल लायब्ररी');
         expect(card.textContent).not.toContain('मार्गदर्शिका');
         expect(card.textContent).not.toMatch(/[A-Za-z]/);

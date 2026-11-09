@@ -109,8 +109,8 @@ describe('TodayActivityClipsSheet — ▶ and the glance', () => {
 
         const glance = screen.getByTestId('clip-glance');
         expect(within(glance).getByTestId('clip-glance-understood').textContent).toContain('यातून काय समजलं');
-        expect(glance.textContent).toContain('4 जण');
-        expect(glance.textContent).toContain('2 तास');
+        expect(glance.textContent).toContain('४ जण'); // IT-D2: Devanagari digits in Marathi mode
+        expect(glance.textContent).toContain('२ तास');
         expect(within(glance).getByTestId('clip-glance-state').textContent).toBe('पक्कं नाही');
         const marks = [...within(glance).getByTestId('clip-glance-words').querySelectorAll('mark')].map(m => m.getAttribute('data-part'));
         expect(marks).toEqual(['labour', 'irrigation']);
@@ -155,8 +155,8 @@ describe('round 2 — the feed and the glance', () => {
         const glance = screen.getByTestId('clip-glance');
         expect(within(glance).getByTestId('clip-glance-words').textContent).toBe(SAID);
         expect(within(glance).getByTestId('clip-glance-play')).toBeTruthy();
-        expect(glance.textContent).toContain('1 तास'); // the sibling's own part …
-        expect(glance.textContent).toContain('4 जण'); // … and the rest of what that one recording said
+        expect(glance.textContent).toContain('१ तास'); // the sibling's own part …
+        expect(glance.textContent).toContain('४ जण'); // … and the rest of what that one recording said (IT-D2: in Devanagari digits)
     });
 
     it('a card never headlines what the server could not verify', () => {
@@ -178,7 +178,7 @@ describe('round 4 — his clock, in Marathi, on the card and in the glance (I13-
 
         fireEvent.click(within(cards()[0]).getByTestId('card-open'));
         const glance = screen.getByTestId('clip-glance');
-        expect(glance.textContent).toContain('सकाळी 10:30');
+        expect(glance.textContent).toContain('सकाळी १०:३०');
         expect(glance.textContent ?? '').not.toMatch(LATIN); // the WHOLE open sheet, not only its headline
         fireEvent.click(screen.getByTestId('clip-glance-back'));
         fireEvent.click(within(cards()[1]).getByTestId('card-open'));

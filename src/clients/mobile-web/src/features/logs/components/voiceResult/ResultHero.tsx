@@ -27,6 +27,7 @@ import { getRootStore } from '../../../../app/state/RootStore';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { dayShort } from '../dayPick/dayWords';
+import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { useDayUnderstanding } from '../../hooks/useDayUnderstanding';
 import { usePlotDayUnderstanding } from '../../hooks/usePlotDayUnderstanding';
 import { subscribeDfesAnswered } from '../../services/dfesAnswerSignal';
@@ -172,7 +173,7 @@ const Meter: React.FC<ResultHeroProps> = ({ farmId, dayDate, plotId, savedLogId,
 
 /** Lane OF fix 1 (L2): the approved line says "आज"; a recording saved for a past day names that day instead. */
 const sathiLineFor = (todayLine: string, dayDate: string | undefined, language: string | undefined): string =>
-    (dayDate && dayDate !== getDateKey() ? resultDayStr(language).sathi(dayShort(dayDate, language)) : todayLine);
+    (dayDate && dayDate !== getDateKey() ? resultDayStr(language).sathi(digitsFor(dayShort(dayDate, language), language)) : todayLine);
 
 export const ResultHero: React.FC<ResultHeroProps> = (props) => {
     const RS = useResultStr();

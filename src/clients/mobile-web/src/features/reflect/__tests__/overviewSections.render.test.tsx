@@ -124,7 +124,7 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
         expect(chips).toEqual(['crop', 'labour', 'labour', 'observation']);
         const labour = [...card.querySelectorAll('[data-kind="labour"]')].map(c => c.textContent);
         // spec I18 — the counts in his language.
-        expect(labour).toEqual(language === 'en' ? ['5 people', '10 people'] : ['5 जण', '10 जण']);
+        expect(labour).toEqual(language === 'en' ? ['5 people', '10 people'] : ['५ जण', '१० जण']);
         expect(card.textContent).not.toContain('15');
         // the farmer's note is an "निरीक्षण" chip, not the amber box
         expect(card.querySelector('[data-kind="observation"]')).toHaveTextContent('पानं पिवळी');
@@ -132,7 +132,7 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
         // each chip carries its part's icon (the result screen's) and colour
         expect(card.querySelector('[data-kind="crop"] [data-icon="work"]')).not.toBeNull();
         expect((card.querySelector('[data-kind="crop"]') as HTMLElement).style.background).not.toBe('');
-        expect(card).toHaveTextContent(language === 'en' ? 'Told 2 times today' : 'आज 2 वेळा सांगितलं');
+        expect(card).toHaveTextContent(language === 'en' ? 'Told 2 times today' : 'आज २ वेळा सांगितलं');
     });
 
     it('an empty day says so plainly; a stopped day shows its stoppage chip', () => {
@@ -148,7 +148,7 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
         const onOpen = vi.fn();
         const onCost = vi.fn();
         render(wrap(<PlotDayCards cards={cards} isToday onOpen={onOpen} onCost={onCost} />));
-        expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('1,500');
+        expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent(language === 'en' ? '1,500' : '१,५००'); // IT-D2: Devanagari digits in Marathi mode
         // D5: the money chip says it is the accounts' figure
         expect(screen.getByTestId('plot-money-source-grape:g1')).toHaveTextContent(language === 'en' ? 'from the accounts' : 'हिशोबातून');
         expect(screen.getByTestId('plot-money-partial-grape:g1')).toHaveTextContent(language === 'en' ? 'partial' : 'अपूर्ण');
@@ -177,7 +177,7 @@ describe.each(['mr', 'en'] as const)('प्लॉटनिहाय काम (
         const farm = { chips: [], status: 'empty' as const, recordings: 0, money: { amount: 1800, hidden: false, partial: [] } };
         render(wrap(<PlotDayCards cards={cards} farm={farm} isToday onOpen={vi.fn()} onOpenFarm={vi.fn()} onCost={vi.fn()} />));
         expect(screen.getByTestId('plot-empty-farm')).toHaveTextContent(language === 'en' ? 'Nothing was said' : 'बोलून काही सांगितलं नाही');
-        expect(screen.getByTestId('plot-money-farm')).toHaveTextContent('1,800');
+        expect(screen.getByTestId('plot-money-farm')).toHaveTextContent(language === 'en' ? '1,800' : '१,८००');
         expect(screen.getByTestId('plot-money-farm')).toHaveAttribute('data-tappable', 'no');
         expect(screen.getByTestId('plot-money-source-farm')).toHaveTextContent(language === 'en' ? 'from the accounts' : 'हिशोबातून');
     });

@@ -27,6 +27,7 @@ import { blockersOf, groupByRecording, isConfirmed, markTranscript, partEntriesO
 import { useResultStr } from './resultStrings';
 import { clipSeconds, useClipPlayback, useLogClips, type AudioFactory } from './useClipPlayback';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
+import { digitsFor } from '../../../../shared/utils/marathiDigits';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
@@ -52,7 +53,8 @@ export const ClipGlanceSheet: React.FC<GlanceProps> = ({ entry, recording, clip,
     const language = useOptionalLanguage()?.language;
     const logs = recording && recording.length > 0 ? recording : entry.log ? [entry.log] : [];
     const said = primaryOf(logs)?.fullTranscript?.trim() ?? '';
-    const entries = logs.flatMap(l => partEntriesOf(l, language));
+    // Lane IT-D2 (founder D-123b): this sheet writes its numbers and times in Devanagari digits in Marathi mode.
+    const entries = logs.flatMap(l => partEntriesOf(l, language, true));
     const blockers: BlockerEntry[] = logs.flatMap(l => blockersOf(l, language));
     const words = said ? markTranscript(said, entries) : [];
     const confirmed = logs.length > 0 && logs.every(isConfirmed);
@@ -65,7 +67,7 @@ export const ClipGlanceSheet: React.FC<GlanceProps> = ({ entry, recording, clip,
                         <span className="grid h-9 w-9 place-items-center rounded-full bg-stone-100"><ArrowLeft size={22} strokeWidth={2.75} /></span>
                         <span className="text-[17px] font-extrabold">{RS.back}</span>
                     </button>
-                    <TimePill label={entry.timeLabel} strong />
+                    <TimePill label={digitsFor(entry.timeLabel, language)} strong />
                     {/* Who spoke it, the result screen's way: a real name, the phone holder's own name too (lane IT5; never "तुम्ही"). */}
                     <WhoChip who={{ name: entry.loggedBy, you: !!entry.byYou }} testId="clip-glance-who" />
                     <span className={`text-[12px] font-extrabold ${confirmed ? 'text-emerald-700' : 'text-stone-600'}`} data-testid="clip-glance-state">
@@ -74,7 +76,7 @@ export const ClipGlanceSheet: React.FC<GlanceProps> = ({ entry, recording, clip,
                 </div>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-24 pt-3">
                     {words.length > 0 && <Words runs={words} testId="clip-glance-words" />}
-                    {clip && <ClipPlayer clipKey={clip.id} durationSec={lengthSec} playing={playing} progress={progress} big onToggle={onToggle} testId="clip-glance-play" />}
+                    {clip && <ClipPlayer clipKey={clip.id} durationSec={lengthSec} playing={playing} progress={progress} big onToggle={onToggle} testId="clip-glance-play" nativeDigits={language !== 'en'} />}
                     <div data-testid="clip-glance-understood">
                         <div className="mb-1.5 text-[13px] font-extrabold text-emerald-800">{RS.addedTitle}</div>
                         {entries.length === 0 && blockers.length === 0 && <p className="m-0 text-[14px] font-semibold text-stone-600" data-testid="clip-glance-nothing">{NOTHING}</p>}
@@ -111,6 +113,7 @@ export const TodayActivityClipsSheet: React.FC<{ entries: readonly FeedEntry[]; 
     const floor = useMemo(() => clipScanFloor(logs), [logs]);
     const { clips } = useLogClips(logs.map(l => l.id), floor);
     const playback = useClipPlayback(createAudio);
+    const language = useOptionalLanguage()?.language;
     const [glanceId, setGlanceId] = useState<string | null>(null);
 
     // Playback is keyed by the log that holds the clip, so every plot's card of one recording shows it playing.
@@ -126,7 +129,7 @@ export const TodayActivityClipsSheet: React.FC<{ entries: readonly FeedEntry[]; 
         return {
             ...e,
             audio: clip && e.logId
-                ? { durationLabel: len == null ? '' : playing ? `${mmss(playback.progress * len)} / ${mmss(len)}` : mmss(len), playing, onToggle: () => toggle(e.logId as string) }
+                ? { durationLabel: len == null ? '' : digitsFor(playing ? `${mmss(playback.progress * len)} / ${mmss(len)}` : mmss(len), language), playing, onToggle: () => toggle(e.logId as string) }
                 : e.audio,
             onOpen: e.log ? () => { playback.stop(); setGlanceId(e.id); } : e.onOpen,
         };

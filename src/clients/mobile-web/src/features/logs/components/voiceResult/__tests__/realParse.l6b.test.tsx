@@ -169,9 +169,9 @@ describe('the real typed Marathi entry, after the first sync pull', () => {
         fireEvent.click(spray);
         const box = container.querySelector('[data-testid^="vr-tank-"]') as HTMLElement;
         expect(box.getAttribute('data-kind')).toBe('spray');
-        expect(within(box).getByTestId('vr-product-water').textContent).toBe('पाणी: 500 लिटर');
+        expect(within(box).getByTestId('vr-product-water').textContent).toBe('पाणी: ५०० लिटर');
         expect(within(box).getAllByTestId('vr-prow-name').map(r => r.textContent)).toEqual(['इथरेल']);
-        expect(within(box).getAllByTestId('vr-prow-amount').map(r => r.textContent)).toEqual(['250 मिली']);
+        expect(within(box).getAllByTestId('vr-prow-amount').map(r => r.textContent)).toEqual(['२५० मिली']);
 
         expect(container.textContent).not.toMatch(/Spray|Weeding|\/ ?लिटर/); // no raw method, no English work type, no per-litre
         expect(screen.getByTestId('vr-latest-typed').textContent).toBe('लिहिलेलं');
@@ -190,7 +190,8 @@ describe('the real spoken English sample (the other field names)', () => {
         expect(box.water).toEqual([{ litres: 500 }]);
         expect(productName(box.items[0], 'mr')).toBe('ethyl'); // "Ethrel" has no Marathi: his own word, not a hidden row
         expect(productName(box.items[0], 'en')).toBe('Ethrel');
-        expect(amountText(box.items[0].amount, 'mr')).toBe('250 मिलीलीटर');
+        expect(amountText(box.items[0].amount, 'mr')).toBe('250 मिलीलीटर'); // default: the digits as recorded (the check / correction screens)
+        expect(amountText(box.items[0].amount, 'mr', true)).toBe('२५० मिलीलीटर'); // IT-D2: the result screen's Devanagari digits
         expect(amountText(box.items[0].amount, 'en')).toBe('250 ml');
 
         const history = await pulled(logs);
@@ -201,7 +202,7 @@ describe('the real spoken English sample (the other field names)', () => {
         const line = document.querySelector('[data-testid^="vr-line-head-inputs:"]') as HTMLElement;
         expect(line.textContent).toBe('ethyl');
         fireEvent.click(document.querySelector('[data-testid^="vr-line-row-inputs:"]') as HTMLElement);
-        expect(screen.getAllByTestId('vr-prow-amount').map(c => c.textContent)).toEqual(['250 मिलीलीटर']);
+        expect(screen.getAllByTestId('vr-prow-amount').map(c => c.textContent)).toEqual(['२५० मिलीलीटर']);
     });
 
     it('a dose filed as per litre is shown per litre only when HIS words say so', () => {
@@ -209,6 +210,7 @@ describe('the real spoken English sample (the other field names)', () => {
             fullTranscript: 'इथरेल प्रति लिटर अडीचशे मिली फवारली' };
         const [box] = productBoxesOf(written(perLitre, true)[0]);
         expect(amountText(box.items[0].amount, 'mr')).toBe('250 मिली / लिटर');
+        expect(amountText(box.items[0].amount, 'mr', true)).toBe('२५० मिली / लिटर');
         const [plain] = productBoxesOf(written(TYPED_MARATHI, true)[0]);
         expect(amountText(plain.items[0].amount, 'mr')).toBe('250 मिली');
     });

@@ -74,7 +74,7 @@ describe('ResultHero — the meter leads', () => {
         // lane OF fix 1 (L2): a recording saved for a past day names that day, never "आज"
         cleanup();
         render(<ResultHero {...props()} dayDate="2026-10-24" />);
-        expect(screen.getByTestId('vr-hero-line').textContent).toBe('श्रम सफल मध्ये तुम्ही 24 ऑक्टो ला केलेले काम समजून घेत आहे');
+        expect(screen.getByTestId('vr-hero-line').textContent).toBe('श्रम सफल मध्ये तुम्ही २४ ऑक्टो ला केलेले काम समजून घेत आहे');
     });
 
     it('no server score yet: the gentle pending line, never a 0', () => {

@@ -11,6 +11,7 @@ import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 import { voiceNotesWords } from '../../voiceDiary/waiting/voiceNotesWords';
 import { syncDrawerWords, mutationLabel, reasonForRow } from './syncDrawerWords';
 import { useUnsentRecordCount } from '../../approval/unsentRecords';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
 
 interface Props {
      isOpen: boolean;
@@ -208,7 +209,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                     {/* Body */}
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                          {/* E2E: always-present pending count for Playwright assertions */}
-                         <span data-testid="sync-pending-count" aria-label={`${totalPending} pending`} className="sr-only">{totalPending}</span>
+                         <span data-testid="sync-pending-count" aria-label={`${digitsFor(totalPending, language ?? 'en')} pending`} className="sr-only">{digitsFor(totalPending, language ?? 'en')}</span>
 
                          {/* 1. Connection */}
                          <div className={`flex items-center gap-3 p-3 rounded-xl border ${status.isOnline ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
@@ -231,7 +232,7 @@ const SyncStatusDrawer: React.FC<Props> = ({ isOpen, onClose, onOpenConflicts })
                                         {status.pendingCount > 0 && <span>{words.changes(status.pendingCount)}</span>}
                                         {status.pendingUploads > 0 && <span>{words.uploads(status.pendingUploads)}</span>}
                                         {/* Lane OF (founder 2026-10-31, register F77): never "AI" — plain words. */}
-                                        {status.pendingAiJobs > 0 && <span data-testid="sync-waiting-recordings">{voiceNotesWords(language).syncLine(status.pendingAiJobs)}</span>}
+                                        {status.pendingAiJobs > 0 && <span data-testid="sync-waiting-recordings">{digitsFor(voiceNotesWords(language ?? 'en').syncLine(status.pendingAiJobs), language ?? 'en')}</span>}
                                    </div>
                               </div>
                          )}

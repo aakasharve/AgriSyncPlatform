@@ -192,7 +192,7 @@ describe('ReflectPage (redesigned, real data)', () => {
         expect(within(screen.getByTestId('todo-group-today')).getByText('फवारणी')).toBeInTheDocument();
         expect(screen.getByTestId('cal-chip-g1-today')).toBeInTheDocument();
         expect(screen.getByTestId('week-total')).toHaveTextContent('₹ 1,500');
-        expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('₹ 1,500');
+        expect(screen.getByTestId('plot-money-grape:g1')).toHaveTextContent('₹ १,५००'); // IT-D2: the card's chip; the week total is not on the plot card
         expect(document.body.textContent).not.toContain('9,999'); // the log's own guessed total is gone
         expect(screen.getByTestId('plot-state-grape:g1')).toHaveTextContent('पक्कं नाही');
         // no income in the ledger: "—", not ₹ 0
@@ -310,7 +310,7 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         fireEvent.click(screen.getByTestId('activity-feed-button'));
         const blocks = Array.from(document.querySelectorAll('[data-testid^="rf-feed-block-"]')).map(e => e.getAttribute('data-testid')).filter(id => !id!.endsWith('-times'));
         expect(blocks).toEqual(['rf-feed-block-grape:g1', 'rf-feed-block-farm']); // only places with work that day
-        expect(screen.getByTestId('rf-feed-block-grape:g1-times')).toHaveTextContent('आज 1 वेळा सांगितलं');
+        expect(screen.getByTestId('rf-feed-block-grape:g1-times')).toHaveTextContent('आज १ वेळा सांगितलं');
         expect(screen.getByTestId('rf-feed-block-farm')).toHaveTextContent('संपूर्ण शेत');
         // ONE row of time chips per block; a tap opens that recording RIGHT THERE: its work as rows, and one small line
         const block = screen.getByTestId('rf-feed-block-grape:g1');
@@ -330,7 +330,7 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         const farmWide = log({ id: 'farm-today', cropId: 'FARM_GLOBAL', plotIds: [], labour: [{ id: 'l', type: 'HIRED', count: 3 }],
             meta: { createdAtISO: '2026-10-25T04:00:00.000Z', createdByOperatorId: 'op-sunil' } });
         renderPage({ history: [...history, farmWide] });
-        expect(screen.getByTestId('plot-card-farm').querySelector('[data-kind="labour"]')).toHaveTextContent('3 जण');
+        expect(screen.getByTestId('plot-card-farm').querySelector('[data-kind="labour"]')).toHaveTextContent('३ जण');
         expect(screen.getByTestId('plot-card-grape:g1').querySelector('[data-kind="labour"]')).toBeNull();
     });
 
@@ -362,6 +362,7 @@ describe('ReflectPage — lane RF: every piece of work, the result screen\'s way
         expect(screen.queryByTestId('plot-money-grape:g1')).toBeNull();
         expect(screen.queryByTestId('open-finance')).toBeNull();
         expect(document.body.textContent).not.toContain('1,500');
+        expect(document.body.textContent).not.toContain('१,५००'); // IT-D2: nor in the card's Devanagari digits
         fireEvent.click(screen.getByTestId('overview-money'));
         expect(props.navigate).not.toHaveBeenCalled();
     });

@@ -65,6 +65,7 @@ const fakeDb = {
 };
 
 import AttentionPage from '../AttentionPage';
+import { toDevanagariDigits } from '../../../../shared/utils/marathiDigits';
 
 // spec: plr-d10 (I14) — the empty board's sentence is the founder's own (D-1, FOUNDER-ANSWERS-2026-10-26).
 const FALSE_REASSURANCE = 'सध्या लक्ष देण्यासारखे काही नाही.';
@@ -92,7 +93,7 @@ describe('AttentionPage — the all-clear says WHEN it is from, even on a stale-
         expect(time).not.toBe('');
         await waitFor(() => expect(screen.getByTestId('attention-as-of')).toBeInTheDocument());
         const stamp = screen.getByTestId('attention-as-of').textContent ?? '';
-        expect(stamp).toBe(`28 ऑग, ${time} पर्यंतची माहिती`);
+        expect(stamp).toBe(toDevanagariDigits(`28 ऑग, ${time} पर्यंतची माहिती`)); // IT-D2: Devanagari digits
         expect(stamp).not.toMatch(/as of|आज/);
     });
 });

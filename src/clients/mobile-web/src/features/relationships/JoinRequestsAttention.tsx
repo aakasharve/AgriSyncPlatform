@@ -22,6 +22,7 @@ import { invitationCopy } from '../invitations/invitationCopy';
 import { approveInvitationClaim, invitationRefusal, type InvitationRefusal } from '../invitations/personalInvitationClient';
 import { useInvitedFor } from '../invitations/useInvitedFor';
 import { relationshipCopy } from './relationshipCopy';
+import { digitsFor } from '../../shared/utils/marathiDigits';
 
 export const JoinRequestsAttention: React.FC = () => {
     const farmContext = useOptionalFarmContext();
@@ -67,7 +68,8 @@ export const JoinRequestsAttention: React.FC = () => {
 
     return (
         <section className="space-y-2" data-testid="attention-requests">
-            <SectionHead title={copy.requests.title(requests.length)} />
+            {/* IT-D2: the count follows the language's digits; `relationshipCopy` is shared with other screens and stays as it was. */}
+            <SectionHead title={digitsFor(copy.requests.title(requests.length), language)} />
             {(decisions.error || inviteRefusal) && (
                 <p role="alert" data-testid="attention-requests-error"
                     className="m-0 rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-[14px] font-bold text-rose-800">

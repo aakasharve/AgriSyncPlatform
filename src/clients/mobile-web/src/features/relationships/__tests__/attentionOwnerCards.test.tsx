@@ -85,7 +85,7 @@ describe('joining requests on लक्ष द्या', () => {
         approveMember.mockResolvedValue(row({ userId: 'sunil', role: 'Worker', displayName: 'सुनील', approvedByOwner: true }));
         render(inContext(farm({ farmId: 'f1' }), <JoinRequestsAttention />));
         expect(await screen.findByText('सुनील आत येऊ इच्छितात')).toBeInTheDocument();
-        expect(screen.getByTestId('attention-requests')).toHaveTextContent('1 जण आत येऊ इच्छितात');
+        expect(screen.getByTestId('attention-requests')).toHaveTextContent('१ जण आत येऊ इच्छितात');
         fireEvent.click(screen.getByTestId('approve-work-sunil'));
         await waitFor(() => expect(approveMember).toHaveBeenCalledWith('f1', 'sunil', expect.objectContaining({ role: 'Worker' })));
         await waitFor(() => expect(screen.queryByTestId('join-request-sunil')).toBeNull());
@@ -159,7 +159,7 @@ describe('the owner\'s kept-work card', () => {
         render(inContext(farm({ farmId: 'f1' }), <KeptWorkAttention />));
         const card = await screen.findByTestId('kept-work');
         expect(fetchKeptWork).toHaveBeenCalledWith('f1');
-        expect(card).toHaveTextContent('तुमच्यासाठी ठेवलेलं काम (3)');
+        expect(card).toHaveTextContent('तुमच्यासाठी ठेवलेलं काम (३)');
         const refused = within(screen.getByTestId('kept-work-k1'));
         expect(refused.getByTestId('kept-what')).toHaveTextContent('खर्चाची नोंद');
         expect(refused.getByTestId('kept-who-when').textContent).toMatch(/^गोपाळ · /);

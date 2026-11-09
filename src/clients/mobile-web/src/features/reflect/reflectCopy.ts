@@ -20,6 +20,7 @@ import { resultCopy } from '../logs/components/voiceResult/resultCopy';
 import { RESULT_STR } from '../logs/components/voiceResult/resultStrings';
 import { offsetOf, relLabel } from './overview/reflectDates';
 import { ruleWithheldCopy } from '../../i18n/ruleWithheldTranslations';
+import { toDevanagariDigits } from '../../shared/utils/marathiDigits';
 
 export interface ReflectCopy {
     /** Who spoke it: the person holding this phone, or nobody recorded (never a guessed name). */
@@ -111,7 +112,8 @@ const mr: ReflectCopy = {
     // PROPOSED (Marathi) — today's: the founder's screen 1 (and lane RF's card); another day's: new.
     nothingTold: (isToday: boolean) => (isToday ? 'आज अजून काही सांगितलं नाही' : 'या दिवशी काही सांगितलं नाही'),
     // REUSED for today (RESULT_STR.todayCount, the founder's screen 1); PROPOSED (Marathi) for another day.
-    timesTold: (n: number, isToday: boolean) => (isToday ? RESULT_STR.todayCount(n) : `${RESULT_STR.times(n)} सांगितलं`),
+    // Lane IT-D2 (founder D-123b): every count in Marathi mode is in Devanagari digits.
+    timesTold: (n: number, isToday: boolean) => toDevanagariDigits(isToday ? RESULT_STR.todayCount(n) : `${RESULT_STR.times(n)} सांगितलं`),
     // PROPOSED (Marathi) — the founder's screen 1.
     seeAll: 'सगळं बघा',
     // The preview's own words (DFES-meter-and-names, screen 3): "सांगितलं:", "अजून सांगा:" and the mic's "बोला".
@@ -135,11 +137,11 @@ const mr: ReflectCopy = {
     fromLedger: 'हिशोबातून',
     nothingSpoken: 'बोलून काही सांगितलं नाही',
     // REUSED — the plot card's own words for a season day (plotDayModel dayLabelOf, "दिवस 25").
-    seasonDay: (n: number) => `दिवस ${n}`,
+    seasonDay: (n: number) => `दिवस ${toDevanagariDigits(n)}`,
     // PROPOSED (Marathi)
     noteSource: 'कुठून आलं ते पाहा',
     // PROPOSED (Marathi) — the feed card's existing words (ActivityFeedCard CARD_STR.attachments).
-    photos: (n: number) => `जोडलेले फोटो ${n}`,
+    photos: (n: number) => `जोडलेले फोटो ${toDevanagariDigits(n)}`,
     // Founder W2 (MU-3 fix 1, item 16) — founder D-22 "work access ≠ money access"; the server's see-money answer
     // decides (mayShowFarmMoney), and the line reads as ShramSafal's rule, never as the owner's distrust.
     moneyHidden: ruleWithheldCopy('mr').moneyAccounts,

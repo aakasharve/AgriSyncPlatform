@@ -114,7 +114,7 @@ describe('the review card - the products of the record (IT5 Task 2b)', () => {
         const conf = statusOf('m-conf');
         expect(conf?.textContent).toBe('सुनील: हो, हेच');
         expect(conf?.getAttribute('data-status')).toBe('said');
-        expect(screen.getByTestId('vr-prow-m-conf')).toHaveTextContent('1 मिली'); // the dose HE said, from the record this phone holds
+        expect(screen.getByTestId('vr-prow-m-conf')).toHaveTextContent('१ मिली'); // the dose HE said, from the record this phone holds
         // a product the library does not know is shown as such, never as found
         expect(screen.getByTestId('vr-prow-m-prem')).toHaveTextContent('हे औषध ओळखता आलं नाही');
 

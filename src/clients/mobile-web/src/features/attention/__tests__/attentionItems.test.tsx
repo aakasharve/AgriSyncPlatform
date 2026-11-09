@@ -65,7 +65,7 @@ describe('buildAttentionModel — the one list', () => {
         expect(attentionSummaryMr(model.counts)).toBe('२ कामे उशिराची · १ आठवण आज');
         expect(model.total).toBe(model.late.length + model.today.length + model.decide.length);
         expect(model.total).toBe(3);
-        expect(mostUrgentLineMr(model)).toBe('ठिबकने पाणी · प्लॉट 2 — 2 दिवस उशीर');
+        expect(mostUrgentLineMr(model)).toBe('ठिबकने पाणी · प्लॉट 2 — २ दिवस उशीर');
     });
 
     it('a done reminder is not counted anywhere; a missed step asks for a decision', () => {
@@ -112,7 +112,7 @@ describe('scheduledWork — read, never guessed', () => {
         expect(stepLabelMr({ activityName: 'Drip Irrigation #3' })).toBe('ठिबकने पाणी');
         expect(stepLabelMr({ activityName: 'Fungicide round B' })).toBe('फवारणी');
         expect(stepLabelMr({ activityName: 'Something new' })).toBe('काम');
-        expect([0, 1, 4].map(stepDueTextMr)).toEqual(['आज', 'काल', '4 दिवस उशीर']);
+        expect([0, 1, 4].map(stepDueTextMr)).toEqual(['आज', 'काल', '४ दिवस उशीर']);
     });
 });
 
@@ -123,7 +123,7 @@ describe('AttentionStrip — लक्ष द्या\'s preview on आढा�
         render(<AttentionStrip tasks={[task('r', 'फोन करा', TODAY)]} crops={[]} onOpen={onOpen} />);
         await waitFor(() => expect(screen.getByTestId('attention-strip')).toBeInTheDocument());
         expect(screen.getByTestId('attention-strip-summary')).toHaveTextContent('२ कामे उशिराची · १ आठवण आज');
-        expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('3');
+        expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('३');
         expect(screen.getByTestId('attention-strip-first')).toHaveTextContent('फवारणी · प्लॉट 2 — काल');
         fireEvent.click(screen.getByTestId('attention-strip'));
         expect(onOpen).toHaveBeenCalled();

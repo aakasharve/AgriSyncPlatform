@@ -16,6 +16,7 @@
  */
 import type { CompareCategory } from '../compare/comparePageHelpers';
 import { plannedLabelMr } from '../compare/compareText';
+import { toDevanagariDigits } from '../../shared/utils/marathiDigits';
 
 export const SCHEDULED_WORK_META_KEY = 'shramsafal_attention_scheduled_work_v1';
 
@@ -90,11 +91,11 @@ export function categoryOfStep(name: string): CompareCategory {
 export const stepLabelMr = (item: Pick<ScheduledWorkItem, 'activityName'>): string =>
     plannedLabelMr(item.activityName, categoryOfStep(item.activityName));
 
-/** "आज" / "काल" / "5 दिवस उशीर". PROPOSED (Marathi) */
+/** "आज" / "काल" / "५ दिवस उशीर" (Devanagari digits, founder D-123b). PROPOSED (Marathi) */
 export function stepDueTextMr(daysLate: number): string {
     if (daysLate <= 0) return 'आज';
     if (daysLate === 1) return 'काल';
-    return `${daysLate} दिवस उशीर`;
+    return `${toDevanagariDigits(daysLate)} दिवस उशीर`;
 }
 
 // ── "पुढे ठरवा" the server confirmed, hidden until the next pull answers for itself ──────────────────────

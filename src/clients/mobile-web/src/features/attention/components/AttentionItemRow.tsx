@@ -18,6 +18,7 @@
 import React, { useState } from 'react';
 import { Bell, CalendarClock, Check, ClipboardCheck, Mic } from 'lucide-react';
 import { Tap } from '../../../shared/components/ui/placeUi';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 import type { TodoItem, TodoWhen } from '../../reflect/overview/todoModel';
 import type { ScheduledWorkItem } from '../scheduledWork';
 
@@ -85,7 +86,7 @@ export const ReminderRow: React.FC<{
     return (
         <Shell tone={tone} testId={`attention-reminder-${t.id}`} title={t.title} place={t.place?.label} placeColor={t.place?.color}
             icon={t.kindLabel === 'आठवण' ? <Bell size={13} aria-hidden="true" /> : <ClipboardCheck size={13} aria-hidden="true" />}
-            kind={t.kindLabel} due={t.dueText}>
+            kind={t.kindLabel} due={toDevanagariDigits(t.dueText)}>
             {canChange && (onDone || onMove) && (
                 <div className="mt-2 flex gap-2">
                     {onDone && <ActionButton primary onClick={() => onDone(t)} testId={`attention-done-${t.id}`}><Check size={18} strokeWidth={3} aria-hidden="true" />झाले</ActionButton>}
