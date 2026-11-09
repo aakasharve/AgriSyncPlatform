@@ -47,10 +47,13 @@ export function usePlannedWork(farmId: string | null | undefined): PlannedWorkSt
         const again = () => { void reload(); };
         window.addEventListener('agrisync:sync-reconciled', again);
         window.addEventListener('online', again);
+        // Lane L8c-4: a spoken reminder was mirrored from a log he just saved, or the one-time upload queued the old to-dos.
+        window.addEventListener('agrisync:planned-work-changed', again);
         return () => {
             alive.current = false;
             window.removeEventListener('agrisync:sync-reconciled', again);
             window.removeEventListener('online', again);
+            window.removeEventListener('agrisync:planned-work-changed', again);
         };
     }, [reload]);
 

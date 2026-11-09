@@ -66,4 +66,10 @@ export interface PlannedWorkRow {
     plots: PlannedWorkPlotRow[];
     /** Lane L8c-3 - Confirmed | Disputed | Waiting, from ALL the task's linked logs; null = no linked log. Plain field, no index. */
     confirmationState?: PlannedWorkConfirmationName | null;
+    /**
+     * Lane L8c-4 (D-78 = 1) - a spoken reminder MADE ON THIS PHONE from a log he just saved, shown at once under the id the server
+     * will give it (`spokenTaskId`), until the pull brings the server's row, which replaces this one (same id: never doubled). Absent
+     * on every server row. Shown as "फोनवर ठेवलं" until then; kept through a pull while its log's create is still on the phone (P10).
+     */
+    mirror?: true;
 }

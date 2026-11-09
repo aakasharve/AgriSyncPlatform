@@ -37,9 +37,13 @@ public sealed class PlannedWorkReads(IShramSafalRepository repository, IClock cl
         }
 
         var rows = await repository.GetPlannedWorkChangedSinceAsync([farmId], sinceUtc ?? DateTime.UnixEpoch, ct);
+        // Lane L8c-4: a task made from a log is no more visible than the log.
+        var visibility = rows.Any(w => w.SourceDailyLogId is not null)
+            ? await RecordVisibility.ForFarmAsync(repository, farmId, callerUserId, clock.UtcNow, ct)
+            : RecordVisibility.None(callerUserId);
         var seen = rows
             .Where(w => (Guid)w.FarmId == farmId)
-            .Select(w => (Work: w, Rows: PlannedWorkVisibility.VisiblePlots(seat, w)))
+            .Select(w => (Work: w, Rows: PlannedWorkVisibility.VisiblePlots(seat, w, PlannedWorkSourceLog.HiddenFrom(visibility, w))))
             .Where(x => x.Rows is not null)
             .ToList();
         var standing = await PlannedWorkConfirmations.LoadAsync(repository, seen.Select(x => x.Work), ct);

@@ -1,0 +1,227 @@
+{
+  "_comment": "spec: plr-d10-redesign-real-integration-2026-10-25 (lane L8c-4). Which planned items of a content document become a spoken reminder, and exactly what each carries - the same on the server (PlannedWorkProjection) and the phone (features/plannedWork/data/spokenReminders.ts). Every case is read with logId and logDay below. An expected id of null means: the id is spokenTaskId(logId, itemKey) (the id vectors are pinned by planned-work-ids.json).",
+  "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12",
+  "logDay": "2026-11-08",
+  "cases": [
+    {
+      "name": "two items, one with a clear cue",
+      "content": {
+        "schema": 1,
+        "fullTranscript": "आज फवारणी केली उद्या पाईपलाईन दुरुस्त करायची",
+        "plannedTasks": [
+          {
+            "id": "t1",
+            "title": "पाईपलाईन दुरुस्त करायची",
+            "dueHint": "उद्या",
+            "status": "pending",
+            "sourceType": "ai_extracted",
+            "plotId": "FARM_GLOBAL",
+            "sourceText": "उद्या पाईपलाईन",
+            "systemInterpretation": "pipeline"
+          },
+          {
+            "id": "t2",
+            "title": "खत आणायचं",
+            "status": "pending",
+            "sourceType": "ai_extracted"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "itemKey": "t1",
+          "id": "be008260-bc42-5afd-91bf-e910c70bbd16",
+          "title": "पाईपलाईन दुरुस्त करायची",
+          "dueDate": "2026-11-09",
+          "namedPlotId": null,
+          "itemSourceType": "ai_extracted"
+        },
+        {
+          "itemKey": "t2",
+          "id": "59334a4f-546c-5743-8b5c-2e896ed8a24e",
+          "title": "खत आणायचं",
+          "dueDate": null,
+          "namedPlotId": null,
+          "itemSourceType": "ai_extracted"
+        }
+      ]
+    },
+    {
+      "name": "unclear cues are undated, and a date the phone wrote is not a cue",
+      "content": {
+        "schema": 1,
+        "plannedTasks": [
+          {
+            "id": "t1",
+            "title": "a",
+            "dueHint": "नंतर"
+          },
+          {
+            "id": "t2",
+            "title": "b",
+            "dueHint": "या आठवड्यात"
+          },
+          {
+            "id": "x",
+            "title": "typed",
+            "dueDate": "2026-11-08",
+            "sourceType": "observation_derived"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "itemKey": "t1",
+          "id": "be008260-bc42-5afd-91bf-e910c70bbd16",
+          "title": "a",
+          "dueDate": null,
+          "namedPlotId": null,
+          "itemSourceType": null
+        },
+        {
+          "itemKey": "t2",
+          "id": "59334a4f-546c-5743-8b5c-2e896ed8a24e",
+          "title": "b",
+          "dueDate": null,
+          "namedPlotId": null,
+          "itemSourceType": null
+        },
+        {
+          "itemKey": "x",
+          "id": null,
+          "title": "typed",
+          "dueDate": null,
+          "namedPlotId": null,
+          "itemSourceType": "observation_derived"
+        }
+      ]
+    },
+    {
+      "name": "done, cancelled, schedule, blank and non-string titles make nothing; a description stands in for a missing title",
+      "content": {
+        "schema": 1,
+        "plannedTasks": [
+          {
+            "id": "d",
+            "title": "x",
+            "status": "done"
+          },
+          {
+            "id": "c",
+            "title": "x",
+            "status": "cancelled"
+          },
+          {
+            "id": "s",
+            "title": "x",
+            "sourceType": "schedule"
+          },
+          {
+            "id": "b",
+            "title": "   "
+          },
+          {
+            "id": "n",
+            "title": 7
+          },
+          {
+            "id": "e",
+            "description": " ठिबक तपासा "
+          },
+          {
+            "title": "no id"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "itemKey": "e",
+          "id": null,
+          "title": "ठिबक तपासा",
+          "dueDate": null,
+          "namedPlotId": null,
+          "itemSourceType": null
+        }
+      ]
+    },
+    {
+      "name": "a long title is cut between words at the cap",
+      "content": {
+        "schema": 1,
+        "plannedTasks": [
+          {
+            "id": "t1",
+            "title": "abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "itemKey": "t1",
+          "id": "be008260-bc42-5afd-91bf-e910c70bbd16",
+          "title": "abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi abcdefghi",
+          "dueDate": null,
+          "namedPlotId": null,
+          "itemSourceType": null
+        }
+      ]
+    },
+    {
+      "name": "a place is named only by a real plot id",
+      "content": {
+        "schema": 1,
+        "plannedTasks": [
+          {
+            "id": "t1",
+            "title": "a",
+            "plotId": "3d030000-0000-4000-8000-0000000000a3"
+          },
+          {
+            "id": "t2",
+            "title": "b",
+            "plotId": "FARM_GLOBAL"
+          },
+          {
+            "id": "c",
+            "title": "c",
+            "plotId": "not-an-id"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "itemKey": "t1",
+          "id": "be008260-bc42-5afd-91bf-e910c70bbd16",
+          "title": "a",
+          "dueDate": null,
+          "namedPlotId": "3d030000-0000-4000-8000-0000000000a3",
+          "itemSourceType": null
+        },
+        {
+          "itemKey": "t2",
+          "id": "59334a4f-546c-5743-8b5c-2e896ed8a24e",
+          "title": "b",
+          "dueDate": null,
+          "namedPlotId": null,
+          "itemSourceType": null
+        },
+        {
+          "itemKey": "c",
+          "id": null,
+          "title": "c",
+          "dueDate": null,
+          "namedPlotId": null,
+          "itemSourceType": null
+        }
+      ]
+    },
+    {
+      "name": "no planned items, null, or not an object makes nothing",
+      "content": {
+        "schema": 1,
+        "plannedTasks": null
+      },
+      "expected": []
+    }
+  ]
+}

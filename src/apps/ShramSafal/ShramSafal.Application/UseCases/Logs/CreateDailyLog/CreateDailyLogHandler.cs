@@ -742,6 +742,24 @@ public sealed class CreateDailyLogHandler(
                 ct);
             storedContentOrigin = contentOrigin;
         }
+        else if (!labourOnly && sourceJobForEvidence?.NormalizedResultJson is { } parsedForReminders)
+        {
+            // spec: plr-d10 lane L8c-4 (D-78 = 1, P11) - a 1.0.17 phone confirms a spoken log through its voice parse and sends no
+            // content document: the parse's planned items are the speaker's reminders, by the same rule, in this same save.
+            await SpokenReminders.StageFromJobAsync(
+                repository,
+                log,
+                parsedForReminders,
+                clock.UtcNow,
+                new ContentAuditStamp(
+                    command.OperatorUserId,
+                    command.ActorRole,
+                    command.ClientRequestId,
+                    stampedAppVersion,
+                    command.AuditDeviceId,
+                    command.AuditIpHash),
+                ct);
+        }
 
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create
         // (sentinel provenance) to AuditEventFactory.Create with the real

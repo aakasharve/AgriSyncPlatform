@@ -20,9 +20,12 @@ import { AlarmClock, Bell, Check, ClipboardCheck, Plus } from 'lucide-react';
 import type { NewTodo, TodoItem, TodoList } from './todoModel';
 import { TodoAddForm } from './TodoAddForm';
 import { Num, Tap } from './ui';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { plannedWorkWords } from '../../plannedWork/plannedWorkWords';
 
-export const TodoRow: React.FC<{ t: TodoItem; onToggle: () => void }> = ({ t, onToggle }) => {
+export const TodoRow: React.FC<{ t: TodoItem; onToggle: () => void; onRemove?: () => void }> = ({ t, onToggle, onRemove }) => {
     const late = t.group === 'late';
+    const removeWords = plannedWorkWords(useOptionalLanguage()?.language);
     const tickLabel = !t.canToggle ? 'हे काम इथून बदलता येत नाही' : t.done ? 'झालं — पुन्हा बाकी करा' : 'झालं म्हणून खूण करा';
     return (
         <div data-testid={`todo-row-${t.id}`} className={`flex items-start gap-3 rounded-2xl px-3 py-2.5 ring-1 ${t.done ? 'bg-stone-50 ring-stone-200' : late ? 'bg-rose-50/70 ring-rose-200' : 'bg-white ring-stone-200'}`}>
@@ -44,17 +47,24 @@ export const TodoRow: React.FC<{ t: TodoItem; onToggle: () => void }> = ({ t, on
                     {t.priorityLabel && !t.done && <span className={`rounded-full px-2 py-0.5 text-white ${t.priorityLabel === 'तातडीचं' ? 'bg-rose-600' : 'bg-amber-600'}`}>{t.priorityLabel}</span>}
                 </div>
             </div>
-            <span className={`shrink-0 pt-1 text-[12.5px] font-extrabold ${late ? 'text-rose-700' : 'text-stone-500'}`}>{t.task.status === 'done' ? `${t.dueText} ✓` : t.dueText}</span>
+            <div className="flex shrink-0 flex-col items-end gap-1 pt-1">
+                <span className={`text-[12.5px] font-extrabold ${late ? 'text-rose-700' : 'text-stone-500'}`}>{t.task.status === 'done' ? `${t.dueText} ✓` : t.dueText}</span>
+                {/* Lane L8c-4 (D-78 = 1): one tap removes a reminder made from what he said; its words are plannedWorkWords' (PROPOSED, both languages). */}
+                {t.canRemove && onRemove && (
+                    <Tap onClick={onRemove} data-testid={`todo-remove-${t.id}`} aria-label={removeWords.removeLabel}
+                        className="min-h-[36px] rounded-full bg-stone-100 px-3 text-[12.5px] font-extrabold text-stone-700">{removeWords.removeShort}</Tap>
+                )}
+            </div>
         </div>
     );
 };
 
-const Group: React.FC<{ title: string; tone: string; items: readonly TodoItem[]; onToggle: (t: TodoItem) => void; testId: string; note?: string }> = ({ title, tone, items, onToggle, testId, note }) =>
+const Group: React.FC<{ title: string; tone: string; items: readonly TodoItem[]; onToggle: (t: TodoItem) => void; onRemove?: (t: TodoItem) => void; testId: string; note?: string }> = ({ title, tone, items, onToggle, onRemove, testId, note }) =>
     items.length ? (
         <div className="space-y-2" data-testid={testId}>
             <p className={`m-0 flex items-center gap-1.5 px-1 text-[14px] font-extrabold ${tone}`}>{title} <Num className="opacity-70">({items.length})</Num></p>
             {note && <p className="m-0 px-1 text-[12.5px] font-semibold text-stone-500" data-testid={`${testId}-note`}>{note}</p>}
-            {items.map(t => <TodoRow key={t.id} t={t} onToggle={() => onToggle(t)} />)}
+            {items.map(t => <TodoRow key={t.id} t={t} onToggle={() => onToggle(t)} onRemove={onRemove ? () => onRemove(t) : undefined} />)}
         </div>
     ) : null;
 
@@ -67,9 +77,11 @@ interface TodoSectionProps {
     onAddTodo?: (todo: Omit<NewTodo, 'place'>) => void;
     /** "बोलून सांगा": the real voice log flow (a spoken reminder becomes a to-do there). */
     onTell?: () => void;
+    /** Lane L8c-4: remove a reminder made from what he said (one tap). */
+    onRemove?: (t: TodoItem) => void;
 }
 
-export const TodoSection: React.FC<TodoSectionProps> = ({ list, onToggle, onAdd, onAddTodo, onTell }) => {
+export const TodoSection: React.FC<TodoSectionProps> = ({ list, onToggle, onAdd, onAddTodo, onTell, onRemove }) => {
     const [showDone, setShowDone] = useState(false);
     const addButton = onAddTodo ? <TodoAddForm onAdd={onAddTodo} onTell={onTell} /> : onAdd && (
         <Tap onClick={onAdd} data-testid="todo-add" className="flex min-h-[52px] w-full items-center justify-center gap-1.5 rounded-full border-2 border-emerald-600 bg-white text-[15px] font-extrabold text-emerald-800">
@@ -99,10 +111,10 @@ export const TodoSection: React.FC<TodoSectionProps> = ({ list, onToggle, onAdd,
                     </div>
                 ))}
             </div>
-            <Group testId="todo-group-late" title="⏰ वेळ उलटून गेली" tone="text-rose-700" note="ही कामं 'लक्ष द्या' मध्येही दिसतात." items={list.late} onToggle={onToggle} />
-            <Group testId="todo-group-today" title="आज करायचं" tone="text-amber-800" items={list.today} onToggle={onToggle} />
-            <Group testId="todo-group-later" title="पुढचे दिवस" tone="text-blue-800" items={list.later} onToggle={onToggle} />
-            <Group testId="todo-group-nodate" title="तारीख ठरलेली नाही" tone="text-stone-700" items={list.noDate} onToggle={onToggle} />
+            <Group testId="todo-group-late" title="⏰ वेळ उलटून गेली" tone="text-rose-700" note="ही कामं 'लक्ष द्या' मध्येही दिसतात." items={list.late} onToggle={onToggle} onRemove={onRemove} />
+            <Group testId="todo-group-today" title="आज करायचं" tone="text-amber-800" items={list.today} onToggle={onToggle} onRemove={onRemove} />
+            <Group testId="todo-group-later" title="पुढचे दिवस" tone="text-blue-800" items={list.later} onToggle={onToggle} onRemove={onRemove} />
+            <Group testId="todo-group-nodate" title="तारीख ठरलेली नाही" tone="text-stone-700" items={list.noDate} onToggle={onToggle} onRemove={onRemove} />
             {list.openCount === 0 && <p className="m-0 rounded-2xl bg-emerald-50 p-3 text-center text-[15px] font-extrabold text-emerald-800" data-testid="todo-all-done">सगळी कामं झाली — छान!</p>}
             {addButton}
             {list.done.length > 0 && (

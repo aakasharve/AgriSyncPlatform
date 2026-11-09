@@ -11,7 +11,7 @@ import { useEffect, useMemo, useReducer } from 'react';
 import type { CropProfile, PlannedTask } from '../../../types';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { useOptionalFarmContext } from '../../../core/session/FarmContext';
-import { buildTodoList } from '../../reflect/overview/todoModel';
+import { buildTodoList, tickableIds } from '../../reflect/overview/todoModel';
 import { buildAttentionModel, type AttentionModel } from '../attentionItems';
 import { onRescheduledChange } from '../scheduledWork';
 import { onSeenSignalsChange, seenSignalsSnapshot } from '../seenSignals';
@@ -37,7 +37,7 @@ export function useAttentionModel(tasks: readonly PlannedTask[] | undefined, cro
         if (!tasks?.length) return { late: [], today: [] };
         const list = buildTodoList({
             tasks,
-            storeIds: new Set(tasks.map(t => t.id)),
+            storeIds: tickableIds(tasks),
             crops: crops ?? [],
             scope: { viewCrops: [], viewPlots: {} },
             wholeFarm: true,

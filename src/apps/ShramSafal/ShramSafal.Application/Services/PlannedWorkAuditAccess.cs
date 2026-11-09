@@ -22,8 +22,15 @@ public static class PlannedWorkAuditAccess
             return [];
         }
 
-        return (await repository.GetPlannedWorkChangedSinceAsync([farmId], DateTime.UnixEpoch, ct))
-            .Where(w => (Guid)w.FarmId == farmId && PlannedWorkVisibility.VisiblePlots(seat, w) is not null)
+        var tasks = (await repository.GetPlannedWorkChangedSinceAsync([farmId], DateTime.UnixEpoch, ct))
+            .Where(w => (Guid)w.FarmId == farmId)
+            .ToList();
+        // Lane L8c-4: a task made from a log is no more visible than the log.
+        var visibility = tasks.Any(w => w.SourceDailyLogId is not null)
+            ? await RecordVisibility.ForFarmAsync(repository, farmId, userId, atUtc, ct)
+            : RecordVisibility.None(userId);
+        return tasks
+            .Where(w => PlannedWorkVisibility.VisiblePlots(seat, w, PlannedWorkSourceLog.HiddenFrom(visibility, w)) is not null)
             .Select(w => w.Id)
             .ToHashSet();
     }

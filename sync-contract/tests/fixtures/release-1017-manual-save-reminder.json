@@ -1,0 +1,32 @@
+{
+  "_comment": "spec: plr-d10-redesign-real-integration-2026-10-25 (lane L8c-4, P11). The manual-save payload release b3d28967 (1.0.17) builds for a typed reminder: made by that release's OWN LogFactory.createFromManualEntry + buildManualDraft (extracted with git show) for a reminder note typed on a plot. Note its planned task is filed under the log's own day (dueDate = logDate): 'today by default', which the server must not take for a clear cue (D-29).",
+  "logDate": "2026-11-08",
+  "manualDraft": {
+    "observations": [
+      {
+        "id": "obs-1017::3d030000-0000-4000-8000-0000000000a3",
+        "textRaw": "ठिबकची नळी तपासायची",
+        "noteType": "reminder",
+        "severity": "normal",
+        "plotId": "3d030000-0000-4000-8000-0000000000a3",
+        "cropId": "cane",
+        "dateKey": "2026-11-08",
+        "timestamp": "2026-11-08T05:00:00.000Z"
+      }
+    ],
+    "plannedTasks": [
+      {
+        "id": "ff9b3307-a0b1-4a88-8ffa-1847544840b2",
+        "title": "ठिबकची नळी तपासायची",
+        "plotId": "3d030000-0000-4000-8000-0000000000a3",
+        "cropId": "cane",
+        "status": "pending",
+        "priority": "normal",
+        "sourceType": "observation_derived",
+        "sourceObservationId": "obs-1017::3d030000-0000-4000-8000-0000000000a3",
+        "createdAt": "2026-11-08T05:00:00.000Z",
+        "dueDate": "2026-11-08"
+      }
+    ]
+  }
+}
