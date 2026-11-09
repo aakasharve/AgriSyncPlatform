@@ -22,6 +22,7 @@ import { setStoredLibrary, type CatalogFile } from '../../../../../domain/inputs
 import type { DailyLog, InputIdentityAnswer } from '../../../../../domain/types/log.types';
 import { productBoxesOf } from '../productModel';
 import ProductCard, { type ProductAnswerKit } from '../ProductCard';
+import { resultCopy } from '../resultCopy';
 
 const LOG = 'c3c3c3c3-0000-4000-8000-000000000003';
 const CONFIDOR = 'p-imidacloprid-17-8-sl';
@@ -120,5 +121,30 @@ describe('the bill line (lane IT4 Task 2)', () => {
         // No matched bill: no bill line at all.
         showCard(log, kitFor(log, { canSeeMoney: true }));
         expect(screen.queryByTestId('vr-fact-bill')).toBeNull();
+    });
+});
+
+describe('the card labels (lane IT-W1, founder wording 2026-11-09)', () => {
+    it('CardLabels_AreTheFounderWords_InMarathi_AndTheProposedEnglishTwins', () => {
+        const mr = resultCopy('mr');
+        expect(mr.factIngredient).toBe('घटक आणि मूलद्रव्य');
+        expect(mr.factBenefit).toBe('कशासाठी वापरायचं');
+        expect(mr.factCompany).toBe('कंपनी');
+        expect(mr.factBill).toBe('बिल');
+        // Marathi mode shows Marathi only: no Latin letters in any of the four labels.
+        for (const label of [mr.factIngredient, mr.factBenefit, mr.factCompany, mr.factBill]) expect(label).not.toMatch(/[A-Za-z]/);
+        const en = resultCopy('en');
+        expect(en.factIngredient).toBe('Ingredients and nutrients'); // PROPOSED (English)
+        expect(en.factBenefit).toBe('What it is used for'); // PROPOSED (English)
+        for (const label of [en.factIngredient, en.factBenefit]) expect(label).not.toMatch(/[ऀ-ॿ]/);
+    });
+
+    it('CardLabels_AreWhatTheCardDraws', () => {
+        expect(setStoredLibrary(libraryWith([benefit('founder')]))).toBe(true);
+        const log = logWith([answer('confirmed')]);
+        showCard(log, kitFor(log));
+        expect(screen.getByTestId('vr-fact-benefit').textContent).toContain('कशासाठी वापरायचं');
+        expect(screen.getByTestId('vr-fact-ingredient').textContent).toContain('घटक आणि मूलद्रव्य');
+        expect(screen.getByTestId('vr-fact-benefit').textContent).not.toContain('फायदा');
     });
 });

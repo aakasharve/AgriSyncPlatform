@@ -136,11 +136,11 @@ const mr: ResultCopy = {
     // तपासतील.", "माहीत असेल तर सांगा (ऐच्छिक)", "माहीत नाही, मालक पाहतील" (D-95). PREVIEW: wording of DFES-owner-check-scenario.html /
     // DFES-simple-day-preview.html. The rest is PROPOSED (Marathi).
     typeNames: { fungicide: 'बुरशीनाशक', insecticide: 'कीटकनाशक', herbicide: 'तणनाशक', pgr: 'वाढ नियंत्रक', fertilizer: 'खत', unknown: 'ओळख नाही' },
-    factIngredient: 'घटक',
+    factIngredient: 'घटक आणि मूलद्रव्य', // founder wording 2026-11-09 (IT-W1)
     factCompany: 'कंपनी',
     factDose: 'सांगितलेलं प्रमाण', // PROPOSED (Marathi)
     factBill: 'बिल',
-    factBenefit: 'फायदा',
+    factBenefit: 'कशासाठी वापरायचं', // founder wording 2026-11-09 (IT-W1)
     statusAsk: 'हेच का? तपासा',
     statusOwnerWillCheck: 'मालक तपासतील',
     saidYes: (name: string) => `${name}: हो, हेच`,
@@ -197,11 +197,11 @@ const en: ResultCopy = {
 
     // Lane IT4 - the English twin, all PROPOSED (English).
     typeNames: { fungicide: 'Fungicide', insecticide: 'Insecticide', herbicide: 'Weedkiller', pgr: 'Growth regulator', fertilizer: 'Fertiliser', unknown: 'Not identified' },
-    factIngredient: 'Ingredient',
+    factIngredient: 'Ingredients and nutrients', // PROPOSED (English)
     factCompany: 'Company',
     factDose: 'Amount said',
     factBill: 'Bill',
-    factBenefit: 'Benefit',
+    factBenefit: 'What it is used for', // PROPOSED (English)
     statusAsk: 'Is this it? Check',
     statusOwnerWillCheck: 'The owner will check',
     saidYes: (name: string) => `${name}: yes, this one`,
