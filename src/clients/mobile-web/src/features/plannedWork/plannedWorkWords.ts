@@ -119,6 +119,8 @@ export interface PlannedWorkWords {
     confirmed: string;
     disputed: string;
     waitingConfirm: string;
+    /** Lane L8c-5 (D-24d) - the door on a card waiting for the owner's word: opens the one review sheet. */
+    approvalDoor: string;
     /** The whole task when only some plots are done, and a plot's own line. */
     partlyDone: string;
     plotDone: string;
@@ -259,6 +261,7 @@ const mr: PlannedWorkWords = {
     confirmed: 'मंजूर', // PROPOSED (Marathi) - the review sheet's own word
     disputed: 'शंका — मालकाशी बोला', // PROPOSED (Marathi)
     waitingConfirm: 'मंजुरी बाकी', // PROPOSED (Marathi)
+    approvalDoor: 'मंजुरी बाकी — तपासा', // PROPOSED (Marathi)
     partlyDone: 'अर्धवट झालं', // PROPOSED (Marathi)
     plotDone: 'झालं', // PROPOSED (Marathi)
     plot: 'प्लॉट', // PROPOSED (Marathi)
@@ -389,6 +392,7 @@ const en: PlannedWorkWords = {
     confirmed: 'Approved', // PROPOSED (English)
     disputed: 'Doubt - talk to the owner', // PROPOSED (English)
     waitingConfirm: 'Approval pending', // PROPOSED (English)
+    approvalDoor: 'Approval pending - review', // PROPOSED (English)
     partlyDone: 'Partly done', // PROPOSED (English)
     plotDone: 'Done', // PROPOSED (English)
     plot: 'Plot', // PROPOSED (English)

@@ -69,6 +69,8 @@ export interface LocalPlannedWork {
     plots: LocalPlannedWorkPlot[];
     /** Lane L8c-3 - the owner's word on the logs the work was done with; null = none (nothing linked). From the server only. */
     confirmationState: PlannedWorkConfirmationName | null;
+    /** Lane L8c-5 - the logs the work was done with, in the order they were linked (the server appends: the last is the newest); the card's door reads it. Absent on a task made on this phone. */
+    linkedDailyLogIds?: string[];
 }
 
 export interface LocalPlannedWorkPlot {
@@ -125,6 +127,7 @@ function fromServer(row: PlannedWorkRow): LocalPlannedWork {
         refused: false,
         plots: row.plots.map(p => ({ plotId: p.plotId, status: p.status, confirmationState: p.confirmationState ?? null })),
         confirmationState: row.confirmationState ?? null,
+        linkedDailyLogIds: [...(row.linkedDailyLogIds ?? [])],
     };
 }
 
