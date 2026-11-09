@@ -649,7 +649,15 @@ public sealed class AiEndpointsTests
         multipart.Add(file, "image", "bad.txt");
 
         var response = await harness.Client.PostAsync("/shramsafal/ai/receipt-extract", multipart);
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+
+        // F152 (lane IT-S2): a file that is not an allowed image is the CALLER's mistake, so the route refuses it with 400 and
+        // the stable InvalidCommand body before it opens any farm scope or calls a provider (TryValidateImageFile). 503 is for a
+        // provider that failed (see the next fact); this fact asserted 503 and never matched the route.
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("ShramSafal.InvalidCommand", doc.RootElement.GetProperty("error").GetString());
+        Assert.Equal("Unsupported image mime type.", doc.RootElement.GetProperty("message").GetString());
+        Assert.Equal(0, harness.Providers[AiProviderType.Gemini].ReceiptCallCount);
     }
 
     [Fact]
@@ -663,7 +671,11 @@ public sealed class AiEndpointsTests
 
         var response = await PostReceiptExtractAsync(harness.Client, farmId, "receipt-ocr-lock-1");
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        // F152 (lane IT-S2): the receipt reader is Gemini-only (founder-locked OCR) and a failed provider is not the caller's
+        // mistake: the route maps ShramSafal.AiParsingFailed to 503 on receipt-extract, patti-extract and the two document-session routes
+        // (voice-parse answers 400 for it; its own facts pin that), so the phone's retry logic can
+        // tell "try again later" from "your input is wrong" (400). This fact asserted 400 and never matched the route.
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
         Assert.Equal(1, harness.Providers[AiProviderType.Gemini].ReceiptCallCount);
         Assert.Equal(0, harness.Providers[AiProviderType.Sarvam].ReceiptCallCount);
     }
