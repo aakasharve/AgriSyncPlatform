@@ -1,6 +1,6 @@
 // <UnderstandingRing> – the animated "मला किती समजलं" reveal for the post-save success surface.
 //
-// Drop-in for the score block of DayUnderstandingCard. The card keeps owning the fetch (useDayUnderstanding), the
+// Drop-in for the score block of the farm-day card (DayUnderstandingCard, since deleted, D-122). The owner keeps owning the fetch (useDayUnderstanding), the
 // flag gate, the pending state and the DeclaredNoWorkDay path; this component only animates a day that HAS a score.
 // A null / 0 score renders `fallback` (pass the card's existing "अजून समजतंय…" line) – never a 0 on screen.
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';

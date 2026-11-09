@@ -34,7 +34,8 @@
  * gradient) and in `DailyLoopHero`. This is the ONLY "understanding number"
  * this role can guarantee; the server's separate `/10` Day Understanding
  * Score already carries its own DOCUMENTED non-monotonicity defect (see
- * `DayUnderstandingCard.tsx` "NOTE the score's monotonicity defect" comment)
+ * `DayUnderstandingCard.tsx` "NOTE the score's monotonicity defect" comment, the
+ * card was deleted by D-122 on 2026-11-09; the defect note went with it)
  * which is backend-owned and out of scope here.
  *
  * This is WHY it needs to be a property test over a spread of scenarios, not

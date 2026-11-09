@@ -40,7 +40,7 @@ import { scrollBelowHeader } from './scrollBelowHeader';
 import { partNameIn } from './partNames';
 
 const SERIF = "'Noto Serif Devanagari', serif";
-/** The server's stored classification for a day he said had no work (DayUnderstandingCard). Compared, never computed. */
+/** The server's stored classification for a day he said had no work. Compared, never computed. */
 const DECLARED_NO_WORK_DAY = 'DeclaredNoWorkDay';
 
 const SathiOrb: React.FC = () => (

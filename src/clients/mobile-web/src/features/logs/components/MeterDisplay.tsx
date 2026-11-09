@@ -5,10 +5,10 @@
  * MeterDisplay — Sathi's daily QUESTION / gap surface (flag-gated; SIMPLE visuals).
  *
  * 2026-07-19 (founder request, spec: dfes-companion-2026-07-11): the Day
- * Understanding Score X/१० + UnderstandingBar MOVED OUT of here into
- * `shramsathi/DayUnderstandingCard`, which mainView now renders at the TOP of the
- * post-save success surface (directly under "Saved to Ledger"). That card is the
- * SINGLE owner of the useDayUnderstanding fetch — do NOT re-add a second call here.
+ * Understanding Score X/१० + UnderstandingBar MOVED OUT of here into a farm-day
+ * card (DayUnderstandingCard), which founder decision D-122 (2026-11-09) then
+ * deleted. The plot meter on the result screen (ResultHero) is the only
+ * understanding number — do NOT draw a score here.
  *
  * What remains here: the combined D8 question card (tap-to-answer options + the
  * "नंतर" dismiss), the ranked question-gap placeholders, and the (currently
@@ -141,9 +141,9 @@ export function MeterDisplay({
         <div data-testid="meter-display" className="mt-6 rounded-2xl border border-dashed border-stone-300 p-4 text-left">
             {/* The rich-day counter is PAUSED by founder decision (2026-07-19):
                 it only ever gated the deferred spoken-unlock reward, and a
-                counter frozen at 0/25 reads as failure. The Day Understanding
-                bar (now in shramsathi/DayUnderstandingCard, at the top of the
-                success surface) is deliberately NOT gated on this. */}
+                counter frozen at 0/25 reads as failure. (The farm-day
+                understanding bar that used to sit above was deleted, D-122;
+                it was never gated on this.) */}
             {!FEATURE_FLAGS.unlockCounterPaused && (
                 <div data-testid="meter-arrival" className="mt-2 text-xs text-stone-500" style={{ fontFamily: SANS }}>
                     {t('dfes.meterArrivalProgress')

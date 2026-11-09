@@ -12,9 +12,10 @@
  * in production while all flags are OFF.
  *
  * 2026-07-19 (founder request): the Day Understanding Score + UnderstandingBar
- * are NO LONGER hosted here. They live in shramsathi/DayUnderstandingCard, which
- * mainView renders at the TOP of the success surface, directly under "Saved to
- * Ledger" — above the crop summary, the clarity line and this panel.
+ * were moved OUT of this panel into a farm-day card (DayUnderstandingCard). That
+ * card was then deleted (founder decision D-122, 2026-11-09): the saved surface
+ * shows no farm-day score, and the PLOT meter on the result screen (ResultHero)
+ * is the only understanding number.
  *
  * Task 3B (spec: dfes-companion-2026-07-11): this is also where the
  * DailyQuestionInputs object is assembled, so it's the call site for

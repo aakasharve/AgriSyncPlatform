@@ -2,13 +2,14 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * dfesAnswerSignal — tiny in-memory pub/sub so the Day Understanding Score
- * card can refetch the moment a DFES gap question is answered (Task 4, spec:
+ * dfesAnswerSignal — tiny in-memory pub/sub so the understanding meter
+ * can refetch the moment a DFES gap question is answered (Task 4, spec:
  * dfes-farmer-facing-deploy-readiness-2026-08-14). Founder ruling A: "the
  * number he is looking at must reflect it before he looks away."
  *
- * Why this exists instead of a prop: DayUnderstandingCard (owns the
- * useDayUnderstanding fetch) and MeterQuestionHost (owns useDfesQuestion,
+ * Why this exists instead of a prop: the meter's owner (ResultHero, which owns the
+ * useDayUnderstanding fetch; it was DayUnderstandingCard before D-122 deleted
+ * that card) and MeterQuestionHost (owns useDfesQuestion,
  * nested inside LedgerRecognitionPanel) are SIBLINGS under mainView.tsx's
  * `renderLogView` — a route-render function `routeContext.ts` documents as
  * deliberately hook-free ("Keeps route render functions free of hook calls,
@@ -20,7 +21,7 @@
  * their own hooks, so each subscribes/notifies directly instead.
  *
  * Deliberately UNSCOPED (no farmId/plotId/date) — review round 1 verified this
- * is safe, not an oversight: the one subscriber (DayUnderstandingCard) always
+ * is safe, not an oversight: the one subscriber (ResultHero) always
  * refetches its OWN farmId/dayDate regardless of which farm/day the answer
  * was for, so a cross-day/cross-farm notify costs at most one redundant GET
  * and can never display another day's score. Adding scope would only be
@@ -32,7 +33,7 @@ type Listener = () => void;
 
 const listeners = new Set<Listener>();
 
-/** DayUnderstandingCard subscribes in a useEffect to learn about new answers. */
+/** ResultHero subscribes in a useEffect to learn about new answers. */
 export function subscribeDfesAnswered(listener: Listener): () => void {
     listeners.add(listener);
     return () => { listeners.delete(listener); };

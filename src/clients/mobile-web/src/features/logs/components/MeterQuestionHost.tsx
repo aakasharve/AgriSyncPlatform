@@ -8,10 +8,10 @@
  * interaction telemetry into MeterDisplay. MeterDisplay itself early-returns null
  * unless understandingMeter is ON, so the question surface needs BOTH flags.
  *
- * 2026-07-19: the Day Understanding Score moved OUT of MeterDisplay into
- * shramsathi/DayUnderstandingCard (rendered by mainView at the top of the success
- * surface), so this host no longer threads farmId/dayDate/savedLogId down for the
- * score fetch — `farmId` here now serves useDfesQuestion only.
+ * 2026-07-19: the Day Understanding Score moved OUT of MeterDisplay into a
+ * farm-day card (since deleted, D-122, 2026-11-09), so this host no longer threads
+ * farmId/dayDate/savedLogId down for the score fetch — `farmId` here now serves
+ * useDfesQuestion only.
  *
  * spec: dfes-companion-2026-07-11
  */
@@ -62,11 +62,10 @@ export function MeterQuestionHost({
 }: MeterQuestionHostProps): React.ReactElement | null {
     const enabled = FEATURE_FLAGS.stageQuestions && !!farmId;
     // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14) — notify the
-    // Day Understanding Score card the moment the server has accepted the
-    // answer, so it can refetch. See dfesAnswerSignal.ts for why this is a
-    // same-feature pub/sub rather than a prop: this host and
-    // DayUnderstandingCard are siblings under mainView's hook-free route
-    // render function.
+    // understanding meter the moment the server has accepted the answer, so it
+    // can refetch. See dfesAnswerSignal.ts for why this is a same-feature pub/sub
+    // rather than a prop: this host and the meter's owner (ResultHero) are
+    // siblings under mainView's hook-free route render function.
     const { selected, recordOutcome, shownAtUtc } = useDfesQuestion(farmId ?? '', plotId, questionInputs, enabled, notifyDfesAnswered);
     // Task 2A: a tapped answer option carries the REAL response into the SAME
     // single INSERT (recordOutcome/recordQuestionEvent) — question_events is

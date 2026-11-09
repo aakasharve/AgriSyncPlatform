@@ -107,7 +107,7 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
             expect.objectContaining({ crop: 'grapes', todayLocalDate: '2026-07-11' }),
             true,
             // Task 4 — the 5th positional arg is notifyDfesAnswered
-            // (dfesAnswerSignal.ts), always passed so DayUnderstandingCard can
+            // (dfesAnswerSignal.ts), always passed so the understanding meter can
             // refetch after an accepted answer.
             expect.any(Function),
         );
@@ -142,7 +142,7 @@ describe('MeterQuestionHost (Phase 5, Task 5.9)', () => {
     // -------------------------------------------------------------------------
     // Task 4 (spec: dfes-farmer-facing-deploy-readiness-2026-08-14)
     // -------------------------------------------------------------------------
-    it('wires the real notifyDfesAnswered signal in as onAnswered, so DayUnderstandingCard can refetch', async () => {
+    it('wires the real notifyDfesAnswered signal in as onAnswered, so the understanding meter can refetch', async () => {
         const { MeterQuestionHost } = await loadComponent(true, true);
         const { notifyDfesAnswered } = await import('../../services/dfesAnswerSignal');
         render(

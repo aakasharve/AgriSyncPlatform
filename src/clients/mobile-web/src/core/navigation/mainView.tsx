@@ -5,12 +5,11 @@
 
 import React from 'react';
 import { FEATURE_FLAGS } from '../../app/featureFlags';
-// `MeterDisplay` is NOT imported here any more. main rendered it directly on the
-// success card; dfes-companion moved that score block INTO
-// `LedgerRecognitionPanel` (via `DayUnderstandingCard`), and
-// `mainView.dayUnderstandingOrder.test.tsx` asserts it renders EXACTLY ONCE with
-// the real panel mounted — so a second, direct render here would be the copy that
-// test exists to forbid.
+// `MeterDisplay` is NOT imported here any more. The farm-day score card that once
+// sat on the saved surface (`DayUnderstandingCard`) was deleted by founder decision
+// D-122 (2026-11-09); the PLOT meter on the result screen (`ResultHero`) is the only
+// understanding number, and `mainView.dayUnderstandingOrder.test.tsx` asserts the
+// saved surface draws no score block.
 // spec: plr-d10-redesign-real-integration-2026-10-25 (I12) — the आजची कामे tab's entry flow (work
 // home -> crop -> plots + mic) and the band for saying one part again. They REPLACE the owner-oversight
 // SathiGuideCard + HelpBar on this screen (the guide's question is now Sathi's, in the founder's words;
