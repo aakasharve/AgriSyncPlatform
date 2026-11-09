@@ -357,7 +357,18 @@ public sealed class GetAttentionBoardHandler(
         string labelEn, labelMr;
         string titleEn, titleMr, descEn, descMr;
 
-        if (rank == AttentionRank.Critical && disputeCount > 0)
+        if (highestSeveritySignal is { RuleCode: ComplianceRuleCode.InputMixNeverTogether })
+        {
+            // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT-S1; F168) - the card is filed by this signal's rule code
+            // (TopSignalRuleCode below), so it says this signal's own words whatever rank branch would match first (overdue
+            // work, a dispute, stage health): rank, counts and ids stay as they are.
+            action = MapComplianceSuggestedAction(highestSeveritySignal.SuggestedAction);
+            labelEn = "View compliance signal"; labelMr = "अनुपालन सिग्नल पहा";
+            titleEn = highestSeveritySignal.TitleEn; titleMr = highestSeveritySignal.TitleMr;
+            descEn = highestSeveritySignal.DescriptionEn;
+            descMr = highestSeveritySignal.DescriptionMr;
+        }
+        else if (rank == AttentionRank.Critical && disputeCount > 0)
         {
             action = SuggestedActionKind.ResolveDispute;
             labelEn = "Open disputes"; labelMr = "वाद सोडवा";
