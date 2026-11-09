@@ -31,6 +31,10 @@ import { plannedWorkWords } from '../plannedWorkWords';
 import { PlanCard, fontFor } from './PlanCard';
 import { PlanDoneActions } from './PlanDoneActions';
 import { PlanForm, type PlanSavedInfo } from './PlanForm';
+import { ScheduleAsk } from '../../scheduler/schedulePage/ScheduleAsk';
+import { useScheduleGate } from '../../scheduler/schedulePage/useScheduleGate';
+import { defaultScheduleForCrop } from '../../scheduler/planning/followableDefault';
+import { cropNameIn } from '../../../shared/names/namesIn';
 
 export interface PlanWorkPageProps {
     farmId: string | null;
@@ -72,6 +76,11 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
     // After a work is saved the form folds away so the new card is right there under the confirmation; one button opens it again.
     const [formOpen, setFormOpen] = useState(true);
     const sentSeen = useRef(new Set<string>());
+    // spec: plr-d10 lane SCH-GATE-b (D-83 = 1, open point 9 (b)) - the ask stands in front of the new-planning FORM only: for a CHOSEN plot
+    // whose state says NeedsSchedule. Farm-wide work, a place not yet chosen, the list of handed-out work and "काम झालं" are never asked.
+    const gate = useScheduleGate();
+    const [place, setPlace] = useState<{ plotIds: readonly string[]; whole: boolean }>({ plotIds: [], whole: false });
+    const onPlaceChanged = useCallback((next: { plotIds: readonly string[]; whole: boolean }) => setPlace(next), []);
 
     // The people he may hand work to: the server's list, kept on the phone for the times there is no net.
     useEffect(() => {
@@ -121,6 +130,19 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
         return [...open, ...sortByWhen(visible.filter(t => !isOpenTask(t)))];
     }, [items, mayPlan, userId]);
 
+    // The chosen plots to ask about, with the crop that decides what can be offered; a plot the phone has nothing to offer for is not asked.
+    const askAbout = useMemo(() => {
+        if (!mayPlan || !formOpen || place.whole) return [];
+        const out: Array<{ plotId: string; cropName: string; label: string }> = [];
+        for (const plotId of place.plotIds) {
+            const crop = crops.find(c => c.plots.some(p => p.id === plotId));
+            const plot = crop?.plots.find(p => p.id === plotId);
+            if (!crop || !plot || !gate.needsSchedule(plotId) || !defaultScheduleForCrop(crop.name)) continue;
+            out.push({ plotId, cropName: crop.name, label: `${cropNameIn(crop.name, language === 'en' ? 'en' : 'mr', crop.masterId)} · ${plot.name}` });
+        }
+        return out;
+    }, [mayPlan, formOpen, place, crops, gate, language]);
+
     const saved = (info: PlanSavedInfo) => {
         setBanner(info.reminder || !info.assignedTo ? words.remindedDone : words.assignedDone(info.assignedTo));
         setFormOpen(false);
@@ -148,10 +170,13 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                             <Plus size={22} strokeWidth={3} aria-hidden="true" />{words.moreWork}
                         </button>
                     )}
+                    {formOpen && askAbout.map(a => (
+                        <ScheduleAsk key={a.plotId} cropName={a.cropName} plotId={a.plotId} plotLabel={a.label} where="planning" language={language} />
+                    ))}
                     {formOpen && (
                         <PlanForm farmId={farmId} userId={userId} language={language} crops={crops} farmerProfile={farmerProfile}
                             mayAssign={mayAssign} assignees={mayAssign ? assignees.assignees : NO_ASSIGNEES} assigneesFromCache={assignees.source === 'cache'}
-                            today={today} understand={understand} onSaved={saved} />
+                            today={today} understand={understand} onSaved={saved} onPlaceChanged={onPlaceChanged} saveHeld={askAbout.length > 0} />
                     )}
                 </>
             )}

@@ -18,6 +18,7 @@ import type { CropScheduleTemplate } from '../scheduler.types';
 import { AheadTab } from './AheadTab';
 import { DoneTab } from './DoneTab';
 import type { FollowedPlace, ScheduleSource } from './resolveSchedule';
+import type { DefaultKind } from '../planning/followableDefault';
 import { ThreePlusOneSection } from './ThreePlusOneSection';
 import { addDays } from './scheduleDates';
 import { LOOK_AHEAD_DAYS, PARTS, aheadItemCount, owedWork, pastDays, stageTally, todayOf, type Part, type ScheduleModel, type Tally } from './scheduleModel';
@@ -25,6 +26,9 @@ import { ScheduleTabs, type ScheduleTab } from './ScheduleTabs';
 import { TodayTab } from './TodayTab';
 import type { ClipsByDay } from './usePlotClips';
 import { BehindBanner, DefaultScheduleNote, ScheduleHeader, StageProgress } from './WhereYouAre';
+import { TrialStages, trialStageOf } from './TrialStages';
+import { StagePlanCard } from './StagePlanCard';
+import type { PlotPlanningStateDto } from '../../../infrastructure/api/planningStateDtos';
 import type { FollowedCheckNote } from './followedCheck';
 
 export const PlotScheduleHome: React.FC<{
@@ -48,26 +52,45 @@ export const PlotScheduleHome: React.FC<{
     cropHasChecked?: boolean;
     onAddSchedule?: () => void;
     onLeaveSchedule?: (subscriptionId: string) => void;
-}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule }) => {
+    /**
+     * spec: plr-d10 lane SCH-GATE-b (D-83 = 1) - "आधी शेड्यूल निवडा", drawn IN FRONT of the page when the server says this plot needs a
+     * schedule (it stands in for the "nobody chose" note). `defaultKind` = the default shown is the unchecked sample, and says so.
+     */
+    ask?: React.ReactNode;
+    defaultKind?: DefaultKind;
+    /**
+     * spec: plr-d10 lane SCH-GATE-b (R10) - set while the server says the plot is in its TRIAL: today's stage (the one the server names) is
+     * shown in full and the others by name and days only. `named` is the server's `trialStage` (absent: the phone's own day count).
+     */
+    trial?: { named: PlotPlanningStateDto['trialStage'] };
+    /** spec: plr-d10 lane SCH-GATE-b - the plot this page is about; with it the stage panel (what the schedules ask in this stage) is drawn. */
+    plotId?: string;
+}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId }) => {
+    // R10: in the trial only today's stage is laid open - the पुढे list and tomorrow's line hold only its work.
+    const trialStageId = trial ? trialStageOf(model, template, trial.named)?.id ?? null : null;
     const facts = useMemo(() => {
         const total = stageTally(model);
         const byPart = Object.fromEntries(PARTS.map(p => [p, stageTally(model, p)])) as Record<Part, Tally>;
         const owed = owedWork(model);
         const today = todayOf(model);
-        const tomorrow = model.byKey.get(addDays(model.todayKey, 1));
-        return { total, byPart, owed, today, tomorrow, past: pastDays(model), ahead: aheadItemCount(model, LOOK_AHEAD_DAYS) };
-    }, [model]);
+        const nextDay = model.byKey.get(addDays(model.todayKey, 1));
+        const tomorrow = trialStageId && nextDay && nextDay.stageId !== trialStageId ? undefined : nextDay;
+        return { total, byPart, owed, today, tomorrow, past: pastDays(model), ahead: aheadItemCount(model, LOOK_AHEAD_DAYS, trialStageId) };
+    }, [model, trialStageId]);
     const clipCount = (key: string) => clips.get(key)?.length ?? 0;
 
     return (
         <div className="space-y-4" data-testid="plot-schedule">
+            {ask}
             <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} />
             {followed && onAddSchedule && onLeaveSchedule && (
                 <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} />
             )}
-            {source === 'default' && <DefaultScheduleNote onLibrary={onLibrary} />}
+            {/* spec: plr-d10 lane SCH-GATE-b (D-99, R10) - the stage panel: after the "3 + 1" section, before the three buttons. */}
+            {plotId && <StagePlanCard plotId={plotId} followedKey={(followed ?? []).map(f => f.subscriptionId || f.templateId).join(',')} />}
+            {source === 'default' && !ask && <DefaultScheduleNote onLibrary={onLibrary} sample={defaultKind === 'sample'} />}
             <BehindBanner model={model} />
-            <StageProgress model={model} />
+            {trial ? <TrialStages model={model} template={template} named={trial.named} /> : <StageProgress model={model} />}
             <ScheduleTabs tab={tab} onTab={onTab} counts={{
                 done: facts.total.done,
                 missed: facts.total.missed,
@@ -77,7 +100,7 @@ export const PlotScheduleHome: React.FC<{
             }} />
             {tab === 'done' && <DoneTab total={facts.total} byPart={facts.byPart} past={facts.past} clipCount={clipCount} onOpenDay={onOpenDay} />}
             {tab === 'today' && <TodayTab owed={facts.owed} today={facts.today} tomorrow={facts.tomorrow} totalDays={model.totalDays} ended={model.ended} onOpenDay={onOpenDay} onSeeAhead={() => onTab('ahead')} />}
-            {tab === 'ahead' && <AheadTab model={model} />}
+            {tab === 'ahead' && <AheadTab model={model} onlyStageId={trialStageId} />}
         </div>
     );
 };

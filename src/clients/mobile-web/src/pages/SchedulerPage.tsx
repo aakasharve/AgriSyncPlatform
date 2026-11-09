@@ -42,6 +42,10 @@ import { usePlotClips } from '../features/scheduler/schedulePage/usePlotClips';
 import { usePlotScheduleChoices } from '../features/scheduler/schedulePage/usePlotScheduleChoices';
 import { saveScheduleAbandon, saveScheduleChoice, type ScheduleChoiceTarget } from '../features/scheduler/schedulePage/saveScheduleChoice';
 import { THREE_PLUS_ONE_WORDS } from '../features/scheduler/schedulePage/threePlusOneCopy';
+import { ScheduleAsk } from '../features/scheduler/schedulePage/ScheduleAsk';
+import { defaultScheduleForCrop } from '../features/scheduler/planning/followableDefault';
+import { SCHEDULE_GATE_WORDS } from '../features/scheduler/schedulePage/scheduleGateCopy';
+import { useScheduleGate } from '../features/scheduler/schedulePage/useScheduleGate';
 import { BOTTOM_BAR_CLEARANCE } from '../shared/utils/bottomBar';
 import { useOptionalLanguage } from '../i18n/LanguageContext';
 import { cropNameIn } from '../shared/names/namesIn';
@@ -90,6 +94,9 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const words = THREE_PLUS_ONE_WORDS[language === 'en' ? 'en' : 'mr'];
     // spec: plr-d10 lane L8b-2 (founder D-32) - the schedule each plot follows on the SERVER (or this phone's own, not yet answered).
     const choices = usePlotScheduleChoices();
+    // spec: plr-d10 lane SCH-GATE-b (D-83 = 1) - what the server says about each plot's planning gate; the page asks first where it says so.
+    const gate = useScheduleGate();
+    const gateWords = SCHEDULE_GATE_WORDS[language === 'en' ? 'en' : 'mr'];
     const todayKey = getDateKey();
 
     const pick = (id: string) => {
@@ -295,13 +302,19 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                 <GlassCard testId="sched-no-schedule">
                     <p className="m-0 text-[18px] font-black text-stone-900">{nameOf(crop)} · {plot.name}</p>
                     <p className="m-0 mt-1 text-[17px] font-extrabold text-stone-900">{SC.noSchedule}</p>
-                    <p className="m-0 mt-1 text-[15px] font-bold text-stone-600">{SC.noScheduleHint}</p>
+                    {/* spec: plr-d10 lane SCH-GATE-b - nothing the plot may follow: no default, no ask, and the honest line (P4). */}
+                    <p className="m-0 mt-1 text-[15px] font-bold text-stone-600" data-testid="sched-no-followable">{gateWords.noCheckedForCrop}</p>
                 </GlassCard>
             )}
             {crop && plot && resolved && model && (
-                <PlotScheduleHome cropName={nameOf(crop)} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips} checkNote={checkNote}
+                <PlotScheduleHome plotId={plot.id} cropName={nameOf(crop)} plotName={plot.name} template={resolved.template} source={resolved.source} model={model} clips={clips} checkNote={checkNote}
                     tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
-                    followed={resolved.followed} cropHasChecked={cropHasChecked}
+                    followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
+                    trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
+                    ask={gate.needsSchedule(plot.id) && defaultScheduleForCrop(crop.name) ? (
+                        <ScheduleAsk cropName={crop.name} plotId={plot.id} where="page"
+                            onSaved={result => setChoiceNote(result.notSent.length > 0 ? words.notSent : null)} />
+                    ) : undefined}
                     onAddSchedule={() => { setLibraryMode('add'); setView('LIBRARY'); }} onLeaveSchedule={leaveSchedule} />
             )}
             <ScheduleTools

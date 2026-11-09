@@ -22,6 +22,7 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { readPendingLogIds, readWithdrawalHolds } from './internal/pendingMutations';
 import { reconcileProfileAndCrops } from './reconcilers/profileAndCropsReconciler';
 import { reconcileScheduleSubscriptions } from './reconcilers/scheduleSubscriptionsReconciler';
+import { reconcilePlanningState } from './reconcilers/planningStateReconciler';
 import { reconcilePlannedWork } from './reconcilers/plannedWorkReconciler';
 import { uploadHeldScheduleChoices } from '../../scheduler/schedulePage/uploadHeldScheduleChoices';
 import { reconcileLogs } from './reconcilers/logsReconciler';
@@ -131,6 +132,8 @@ export async function reconcileSyncPull(payload: SyncPullResponse, options: Reco
         await reconcileFinance(db, payload, receivedAtUtc);
         await reconcileAttendance(db, payload, receivedAtUtc);
         await reconcileFarmsPlotsCycles(db, payload, receivedAtUtc);
+        // spec: plr-d10 lane SCH-GATE-b (D-83 = 1) - the server's planning gate per plot, stored whole in appMeta (an absent key leaves it).
+        await reconcilePlanningState(db, payload, receivedAtUtc);
         await reconcileAttentionBoard(db, payload);
         // lane MU-3 (plan step 4a) — keep only what the server lets this person read: after every other
         // reconciler, so what this pull just wrote is scanned too. An older server sends no scopes: no-op.

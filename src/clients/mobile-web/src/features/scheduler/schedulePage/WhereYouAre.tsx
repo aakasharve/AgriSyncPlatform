@@ -23,6 +23,8 @@ import { scheduleNameMr } from './scheduleNames';
 import { ScheduleCheckBadge } from '../components/ScheduleCheckBadge';
 import { GLASS } from './scheduleUi';
 import type { FollowedCheckNote } from './followedCheck';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
+import { SCHEDULE_GATE_WORDS } from './scheduleGateCopy';
 
 /** The saved author is shown only when it is a real name, not the catalog's internal English tag. */
 const INTERNAL_AUTHORS = new Set(['ShramSafal Reference Data', 'System Fallback']);
@@ -145,16 +147,25 @@ export const StageProgress: React.FC<{ model: ScheduleModel }> = ({ model }) => 
     );
 };
 
-/** Nobody chose this schedule: it is the app's first one for the crop. Said plainly, with the way to choose. */
-export const DefaultScheduleNote: React.FC<{ onLibrary: () => void }> = ({ onLibrary }) => (
+/**
+ * Nobody chose this schedule: it is the app's default for the crop. Said plainly, with the way to choose.
+ * spec: plr-d10 lane SCH-GATE-b - `sample` = the default is the unchecked SAMPLE of a crop with no checked schedule: it says so (D-91 = 1).
+ */
+export const DefaultScheduleNote: React.FC<{ onLibrary: () => void; sample?: boolean }> = ({ onLibrary, sample = false }) => (
     <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3" data-testid="default-schedule-note">
         <p className="m-0 text-[16px] font-extrabold text-amber-950">{SC.defaultSchedule}</p>
+        {sample && <SampleMark />}
         <Tap onClick={onLibrary} data-testid="default-schedule-library"
             className="mt-2 flex min-h-[48px] w-full items-center justify-center rounded-full border-2 border-amber-600 bg-white px-4 text-[16px] font-extrabold text-amber-900">
             {SC.chooseSchedule} →
         </Tap>
     </div>
 );
+
+const SampleMark: React.FC = () => {
+    const language = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
+    return <p className="m-0 mt-1 text-[15px] font-extrabold text-amber-950" data-testid="default-schedule-sample">{SCHEDULE_GATE_WORDS[language].sampleMark}</p>;
+};
 
 /**
  * The kept 'N days behind' banner, in Marathi. Counted by the page's own rule (V2-06), so it can never give

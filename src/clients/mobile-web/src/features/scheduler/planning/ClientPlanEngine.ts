@@ -26,6 +26,7 @@ import {
     getTemplateById,
 } from '../../../infrastructure/reference/TemplateCatalog';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
+import { defaultScheduleForCrop } from './followableDefault';
 
 // ============================================
 // 1. OPERATION REGISTRY
@@ -113,7 +114,10 @@ export const scheduleTemplateForPlot = (
     (isPlotChoice(plot.schedule) ? getTemplateById(plot.schedule?.templateId || '') : undefined)
     || getTemplateById(crop.activeScheduleId || '')
     || getTemplateById(plot.schedule?.templateId || '')
-    || getTemplateForCrop(crop.name);
+    // spec: plr-d10 lane SCH-GATE-b (open point 9 (c)) - the crop's DEFAULT, from the ONE followable-only helper the शेड्यूल page also
+    // asks (`resolvePlotSchedule`): a checked schedule (the Institution one first), the sample only on a crop with no checked one,
+    // else nothing - never the app's invented stand-in.
+    || defaultScheduleForCrop(crop.name)?.template;
 
 // ============================================
 // 3. PLAN DERIVATION (CORE ENGINE)

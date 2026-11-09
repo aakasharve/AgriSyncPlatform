@@ -70,12 +70,19 @@ export interface PlanFormProps {
     /** Understands what he said. Absent = the log's own pipeline (`understandPlanSpeech`). */
     understand?: (audio: AudioData) => Promise<PlanSpeechResult>;
     onSaved: (info: PlanSavedInfo) => void;
+    /**
+     * spec: plr-d10 lane SCH-GATE-b (D-83 = 1, open point 9 (b)) - told every time the chosen place changes: the plots chosen, or the whole
+     * farm. The page in front of the form uses it to ask "आधी शेड्यूल निवडा" for a chosen plot that needs a schedule. Absent = nobody listens.
+     */
+    onPlaceChanged?: (place: { plotIds: readonly string[]; whole: boolean }) => void;
+    /** While true the work cannot be saved (the ask in front of the form is standing); nothing else about the form changes. */
+    saveHeld?: boolean;
 }
 
 type VoiceState = 'idle' | 'working' | 'offline' | 'failed';
 
 export const PlanForm: React.FC<PlanFormProps> = ({
-    farmId, userId, language, crops, farmerProfile, mayAssign, assignees, assigneesFromCache, today, understand, onSaved,
+    farmId, userId, language, crops, farmerProfile, mayAssign, assignees, assigneesFromCache, today, understand, onSaved, onPlaceChanged, saveHeld = false,
 }) => {
     const words = plannedWorkWords(language);
     const font = fontFor(language);
@@ -101,6 +108,9 @@ export const PlanForm: React.FC<PlanFormProps> = ({
     const whole = cropIds.includes('FARM_GLOBAL');
     const plotIds = [...new Set(Object.values(plotsByCrop).flat())];
     const placeChosen = whole || plotIds.length > 0;
+    // spec: plr-d10 lane SCH-GATE-b - the page in front of the form hears which place is chosen (keyed, so it hears a change only once).
+    const placeKey = `${whole ? 'W' : 'P'}:${plotIds.join('|')}`;
+    useEffect(() => { onPlaceChanged?.({ plotIds, whole }); }, [placeKey]); // eslint-disable-line react-hooks/exhaustive-deps
     const when = whenFields(whenPick, dateText, today);
 
     const person = assignee?.kind === 'person' ? assignees.find(a => a.userId === assignee.userId) ?? null : null;
@@ -116,7 +126,7 @@ export const PlanForm: React.FC<PlanFormProps> = ({
         if (note.trim().length > LIMITS.note) return { box: words.note, max: LIMITS.note };
         return null;
     })();
-    const ready = work.trim().length >= 2 && placeChosen && when !== null && assignee !== null && over === null && !saving;
+    const ready = work.trim().length >= 2 && placeChosen && when !== null && assignee !== null && over === null && !saving && !saveHeld;
 
     const hear = useCallback(async (audio: AudioData) => {
         setVoice('working');

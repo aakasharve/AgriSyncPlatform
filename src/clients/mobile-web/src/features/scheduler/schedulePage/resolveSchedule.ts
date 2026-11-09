@@ -22,7 +22,8 @@
  */
 import type { CropProfile, Plot } from '../../../types';
 import type { CropScheduleTemplate, PlotScheduleInstance } from '../scheduler.types';
-import { createInitialScheduleInstance, getScheduleById, getTemplateForCrop, isPlotChoice } from '../planning/ClientPlanEngine';
+import { createInitialScheduleInstance, getScheduleById, isPlotChoice } from '../planning/ClientPlanEngine';
+import { defaultScheduleForCrop, type DefaultKind } from '../planning/followableDefault';
 import { isFallbackTemplate } from '../../../infrastructure/reference/TemplateCatalog';
 import { toDayKey } from './scheduleDates';
 import { normalizeInstance } from './scheduleModel';
@@ -53,7 +54,17 @@ export interface FollowedPlace {
  * `template` / `instance` / `source` are the plot's मुख्य schedule (R6) - the header, the stage line and the tabs follow it; `followed` is
  * every schedule the plot follows, in place order (empty when nobody chose: the app's default is not a followed schedule).
  */
-export interface ResolvedSchedule { template: CropScheduleTemplate; instance: PlotScheduleInstance; source: ScheduleSource; followed: FollowedPlace[] }
+export interface ResolvedSchedule {
+    template: CropScheduleTemplate;
+    instance: PlotScheduleInstance;
+    source: ScheduleSource;
+    followed: FollowedPlace[];
+    /**
+     * spec: plr-d10 lane SCH-GATE-b - set ONLY when `source` is 'default': the default is a schedule ShramSafal checked, or the unchecked
+     * SAMPLE of a crop that has no checked one (marked as a sample, D-91 = 1). Never set on a schedule somebody chose.
+     */
+    defaultKind?: DefaultKind;
+}
 
 /** The plot's own mark: its schedule was chosen for THIS plot in the editor (an extra field the stored schedule carries). */
 const PLOT_CHOICE_FIELD = 'plotChoice';
@@ -106,7 +117,10 @@ export function resolvePlotSchedule(crop: CropProfile, plot: Plot, todayKey: str
     // ('tpl_fallback_grape'), and that must not hide the crop's real schedule once it is here (V2-04).
     const adopted = real(getScheduleById(crop.activeScheduleId || ''));
     const own = real(getScheduleById(typeof stored?.templateId === 'string' ? stored.templateId : ''));
-    const cropDefault = real(getTemplateForCrop(crop.name));
+    // spec: plr-d10 lane SCH-GATE-b (open point 9 (c)) - the default comes ONLY from a schedule the plot may follow (the one helper
+    // `scheduleTemplateForPlot` also uses); with nothing followable there is no default and the page says so (P4).
+    const followable = defaultScheduleForCrop(crop.name);
+    const cropDefault = real(followable?.template);
     // spec: plr-d10 lane L8b-2 (founder C2) - a schedule chosen in "शेड्यूल बदला" is THAT PLOT's (marked on its stored schedule),
     // and outranks the crop's own schedule for that plot only; the library's adopt clears the mark (the crop-wide door).
     const plotChosen = isPlotChoice(stored) ? own : undefined;
@@ -120,7 +134,7 @@ export function resolvePlotSchedule(crop: CropProfile, plot: Plot, todayKey: str
         referenceType: template.referenceType,
         referenceDate: toDayKey(plot.startDate) ?? todayKey,
     });
-    return { template, instance, source, followed: [] };
+    return { template, instance, source, followed: [], ...(source === 'default' && followable && template.id === followable.template.id ? { defaultKind: followable.kind } : {}) };
 }
 
 /** The plot's schedule as stored, made readable (old wizard objects included) — the base an edit starts from. */
