@@ -9,14 +9,19 @@
  * "फोनवर ठेवलं — नेट आल्यावर पाठवलं जाईल"; a parked step says its own words and opens the conflict page, and never shows as done.
  * The headcount, quantity and pay mode are shown as the words they are (P4): no हजेरी, wage or cost is drawn from them.
  * Lane L8c-3 (founder D-24d, D-30): a done task says "झालं · मंजुरी बाकी" / "झालं · मंजूर" / "झालं · शंका — मालकाशी बोला" - the owner's word on
- * the logs it was done with, TEXT ONLY (the approval door is lane L8c-5); a task done on some of its plots says "अर्धवट झालं" with a line
- * per plot ("ऊस 1 — झालं · ऊस 2 — बाकी").
+ * the logs it was done with; a task done on some of its plots says "अर्धवट झालं" with a line per plot ("ऊस 1 — झालं · ऊस 2 — बाकी").
+ * Lane L8c-5 (founder D-24d, D-3, TAP-1): a card WAITING for the owner's word also has ONE door, "मंजुरी बाकी — तपासा", shown only when the one
+ * approval list says this person may confirm here (`useApprovalQueue(farm).mayConfirm`, the server's own answer - the card keeps no rule of its own
+ * and reads no role or authority). It calls `openApprovalReview` with the newest linked record the one list still holds (or none), and that is all:
+ * the card never approves or doubts anything; the one review sheet does.
  *
  * Marathi mode shows Marathi only and English mode English only (names through `shared/names/namesIn`).
  */
 import React from 'react';
 import { Bell, CalendarClock, Check, MapPin, User } from 'lucide-react';
 import { workTypeNameIn } from '../../../shared/names/namesIn';
+import { openApprovalReview } from '../../approval/openApprovalReview';
+import { useApprovalQueue } from '../../approval/useApprovalQueue';
 import type { LocalPlannedWork } from '../data/plannedWorkStore';
 import { parkedWords, type ParkedStep } from '../data/plannedWorkParked';
 import { crewLine, isReminderTask, trailStage, TRAIL_STATUSES } from '../planCardModel';
@@ -44,6 +49,22 @@ export const Trail: React.FC<{ stage: number; labels: readonly string[] }> = ({ 
         })}
     </ol>
 );
+
+/**
+ * Lane L8c-5 - the door on a card whose logs wait for the owner's word. Its only inputs are the one approval list's `mayConfirm` and its
+ * waiting records. The task's logs are linked in the order the work was done (the server appends), so the LAST one still in the list is the
+ * newest still waiting; none in the list (not read yet, or all decided) opens the sheet with no record first.
+ */
+const ApprovalDoor: React.FC<{ farmId: string; linkedDailyLogIds: readonly string[] | undefined; label: string }> = ({ farmId, linkedDailyLogIds, label }) => {
+    const queue = useApprovalQueue(farmId);
+    if (!queue.mayConfirm) return null;
+    const waiting = new Set((queue.data?.review ?? []).map(r => r.id));
+    const focus = [...(linkedDailyLogIds ?? [])].reverse().find(id => waiting.has(id)) ?? null;
+    return (
+        <button type="button" onClick={() => openApprovalReview(focus)} data-testid="plan-card-approval-door"
+            className="mt-1.5 min-h-[48px] rounded-full border-2 border-[#1448E6] bg-white px-5 text-[14px] font-extrabold text-[#1448E6] active:scale-95">{label}</button>
+    );
+};
 
 export interface PlanCardProps {
     task: LocalPlannedWork;
@@ -136,6 +157,7 @@ export const PlanCard: React.FC<PlanCardProps> = ({
                         {[partly ? words.partlyDone : words.status.Done, confirmWord].filter(Boolean).join(' · ')}
                     </p>
                     {partly && plotLines.length > 0 && <p className="m-0 mt-0.5 text-[13px] font-bold text-stone-800" data-testid="plan-card-plot-lines">{plotLines.join(' · ')}</p>}
+                    {task.confirmationState === 'Waiting' && <ApprovalDoor farmId={task.farmId} linkedDailyLogIds={task.linkedDailyLogIds} label={words.approvalDoor} />}
                 </div>
             )}
             {reminder && task.status !== 'Cancelled' && <p className="m-0 mt-1 text-[12px] font-extrabold text-amber-900" data-testid="plan-card-reminder">{words.reminder}</p>}
