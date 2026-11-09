@@ -776,6 +776,7 @@ public sealed partial class PurveshDemoSeeder
                $"cropCycles={farm.CropCycles}, templates={farm.Templates}, templateActivities={farm.TemplateActivities}, " +
                $"plannedActivities={farm.PlannedActivities}, dailyLogs={farm.DailyLogs}, dayLedgers={farm.DayLedgers}, " +
                $"costEntries={farm.CostEntries}, corrections={farm.Corrections}, costEntryApprovals={farm.CostEntryApprovals}, " +
+               $"inputAnswers={farm.InputAnswers}, " +
                $"attachments={farm.Attachments}, " +
                $"priceConfigs={farm.PriceConfigs}, memberships={deletedMembershipCount}, " +
                $"farmMemberships={farm.FarmMemberships}, " +
@@ -855,6 +856,7 @@ public sealed partial class PurveshDemoSeeder
         int CostEntries,
         int Corrections,
         int CostEntryApprovals,
+        int InputAnswers,
         int Attachments,
         int PriceConfigs,
         int FarmMemberships,
@@ -1216,6 +1218,10 @@ public sealed partial class PurveshDemoSeeder
             _ssfContext.FarmMemberships.RemoveRange(farmMemberships);
         }
 
+        // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT-S1; F150) - his answers about products (D-92) are append-only by
+        // privilege and their key to the farm is RESTRICT: they go last before the farm row, through the admin path.
+        var deletedInputAnswersCount = await DeleteDemoFarmInputAnswersAsync(farmId, cancellationToken);
+
         var farm = await _ssfContext.Farms.FirstOrDefaultAsync(f => f.Id == farmId, cancellationToken);
         var deletedFarmCount = 0;
         if (farm is not null)
@@ -1252,6 +1258,7 @@ public sealed partial class PurveshDemoSeeder
         Survived("ssf.field_operator_work_rows", await _ssfContext.FieldOperatorWorkRows.CountAsync(r => r.FarmId == farmId, cancellationToken));
         Survived("ssf.attendance_marks", await _ssfContext.AttendanceMarks.CountAsync(m => m.FarmId == farmId, cancellationToken));
         Survived("ssf.farm_memberships", await _ssfContext.FarmMemberships.CountAsync(m => m.FarmId == farmId, cancellationToken));
+        Survived("ssf.input_identity_assertions", await _ssfContext.InputIdentityAssertions.CountAsync(a => a.FarmId == farmId, cancellationToken));
         // lane MU-2 fix round 1 (L-10): the farm's personal invitations go with it (ON DELETE CASCADE; the app role holds no
         // DELETE of its own on them).
         Survived("ssf.farm_personal_invitations", await _ssfContext.PersonalInvitations.CountAsync(i => i.FarmId == farmId, cancellationToken));
@@ -1288,6 +1295,7 @@ public sealed partial class PurveshDemoSeeder
             CostEntries: deletedCostEntriesCount,
             Corrections: deletedCorrectionsCount,
             CostEntryApprovals: deletedApprovalsCount,
+            InputAnswers: deletedInputAnswersCount,
             Attachments: deletedAttachmentsCount,
             PriceConfigs: deletedPriceConfigsCount,
             FarmMemberships: deletedFarmMembershipsCount,
@@ -1331,6 +1339,41 @@ public sealed partial class PurveshDemoSeeder
             actorUserId: null,
             token => admin.CostEntryApprovals
                 .Where(a => a.FarmId == farmId && ids.Contains(a.CostEntryId))
+                .ExecuteDeleteAsync(token),
+            ct);
+    }
+
+    /// <summary>
+    /// spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT-S1; F150) - every answer on the demo farm in
+    /// <c>ssf.input_identity_assertions</c>, deleted through the admin context under the farm's own tenant scope (the app role may
+    /// only append to that table, and the table's key to the farm is RESTRICT). None: nothing is opened. An answer with no admin
+    /// path: refused with nothing deleted from this table.
+    /// </summary>
+    private async Task<int> DeleteDemoFarmInputAnswersAsync(FarmId farmId, CancellationToken ct)
+    {
+        var answered = await _ssfContext.InputIdentityAssertions.AsNoTracking()
+            .CountAsync(a => a.FarmId == farmId, ct);
+        if (answered == 0)
+        {
+            return 0;
+        }
+
+        if (_adminFactory is null)
+        {
+            throw new InvalidOperationException(
+                $"The demo farm {farmId.Value} holds {answered} answer(s) about products (ssf.input_identity_assertions), which only "
+                + "the admin path may remove. Nothing was deleted. Run with the migration connection configured.");
+        }
+
+        await using var admin = await _adminFactory.CreateAsync(
+            $"{nameof(PurveshDemoSeeder)}.clear.answers.{farmId.Value:N}", AgriSync.BuildingBlocks.Auditing.SystemActor.Worker, ct);
+        return await RlsIdentityScope.RunAsFarmAsync(
+            admin,
+            farmId.Value,
+            (Guid)PurveshOwnerAccountId,
+            actorUserId: null,
+            token => admin.InputIdentityAssertions
+                .Where(a => a.FarmId == farmId)
                 .ExecuteDeleteAsync(token),
             ct);
     }

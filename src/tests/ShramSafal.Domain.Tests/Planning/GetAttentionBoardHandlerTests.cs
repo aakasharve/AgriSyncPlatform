@@ -500,6 +500,141 @@ public sealed class GetAttentionBoardHandlerTests
         Assert.Contains(holder.Value!.Cards, c => c.TopSignalId == signal.Id);
     }
 
+    // ---------------------------------------------------------------------------
+    // lane IT-S1 (F168) - a wrong-mix card says the wrong-mix words, whichever rank branch matches first
+    // ---------------------------------------------------------------------------
+    private static ShramSafal.Domain.Compliance.ComplianceSignal MixSignalOfSeverity(
+        Guid plotId, Guid cycleId, ShramSafal.Domain.Compliance.ComplianceSeverity severity) =>
+        ShramSafal.Domain.Compliance.ComplianceSignal.Open(
+            Guid.NewGuid(), new FarmId(FarmId), plotId, cycleId,
+            ShramSafal.Domain.Compliance.ComplianceRuleCode.InputMixNeverTogether,
+            severity,
+            ShramSafal.Domain.Compliance.ComplianceSuggestedAction.AcknowledgeOnly,
+            "Products that must not be mixed were given together", "हे मिश्रण चुकीचं आहे",
+            "These must not share a tank.", "हे एकाच टाकीत चालत नाहीत.", "{\"logId\":\"" + Guid.NewGuid() + "\"}", Now.AddHours(-1));
+
+    private static GetAttentionBoardHandler HandlerWithSignals(
+        FakeAttentionRepo repo, params ShramSafal.Domain.Compliance.ComplianceSignal[] signals) =>
+        new(repo, new FakeTestInstanceRepo(), new FixedSignals(signals), new FakeClock(Now),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<GetAttentionBoardHandler>.Instance);
+
+    private static async Task<AttentionCardDto> OnlyCardAsync(GetAttentionBoardHandler handler)
+    {
+        var result = await handler.HandleAsync(new GetAttentionBoardQuery(UserId), CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        return Assert.Single(result.Value.Cards);
+    }
+
+    /// <summary>The card says the signal's own words and nobody else's; rank, counts and ids are exactly what they were.</summary>
+    private static void AssertSaysTheMixWords(
+        AttentionCardDto card, AttentionCardDto withoutTheSignal, ShramSafal.Domain.Compliance.ComplianceSignal signal)
+    {
+        Assert.Equal(signal.TitleEn, card.TitleEn);
+        Assert.Equal(signal.TitleMr, card.TitleMr);
+        Assert.Equal(signal.DescriptionEn, card.DescriptionEn);
+        Assert.Equal(signal.DescriptionMr, card.DescriptionMr);
+        Assert.Equal(SuggestedActionKind.OpenPlot, card.SuggestedAction); // AcknowledgeOnly maps to OpenPlot
+        Assert.Equal("View compliance signal", card.SuggestedActionLabelEn);
+        Assert.Equal("अनुपालन सिग्नल पहा", card.SuggestedActionLabelMr);
+        Assert.Equal(signal.Id, card.TopSignalId);
+        Assert.Equal(ShramSafal.Domain.Compliance.ComplianceRuleCode.InputMixNeverTogether, card.TopSignalRuleCode);
+        Assert.Equal(1, card.OpenComplianceSignalCount);
+        Assert.Equal(withoutTheSignal.OverdueTaskCount, card.OverdueTaskCount);
+        Assert.Equal(withoutTheSignal.UnresolvedDisputeCount, card.UnresolvedDisputeCount);
+        Assert.Equal(withoutTheSignal.MissingTestCount, card.MissingTestCount);
+        Assert.Equal(withoutTheSignal.LatestHealthScore, card.LatestHealthScore);
+        Assert.NotEqual(withoutTheSignal.TitleMr, card.TitleMr); // the words really differ from what the rank branch says
+    }
+
+    [Fact]
+    public async Task WrongMix_OnAWatchCardWithOverdueWork_SaysTheMixWords_NotTheOverdueWords()
+    {
+        // Four spray steps done on their days and a fifth not recorded: one overdue step on a stage that is otherwise fine.
+        var (repo, cycle) = PlotWithSchedule(
+            ("Foliar Spray", -12), ("Foliar Spray", -10), ("Foliar Spray", -8), ("Foliar Spray", -6), ("Foliar Spray", -1));
+        foreach (var day in new[] { -12, -10, -8, -6 })
+        {
+            Record(repo, cycle, "Spray Sulphur", workDayOffset: day);
+        }
+
+        var without = await OnlyCardAsync(HandlerWithSignals(repo));
+        Assert.Equal(1, without.OverdueTaskCount);
+        Assert.Equal(AttentionRank.Watch, without.Rank);
+
+        var signal = MixSignalOfSeverity(PlotId1, cycle.Id, ShramSafal.Domain.Compliance.ComplianceSeverity.Watch);
+        var card = await OnlyCardAsync(HandlerWithSignals(repo, signal));
+
+        Assert.Equal(AttentionRank.Watch, card.Rank);
+        AssertSaysTheMixWords(card, without, signal);
+    }
+
+    [Fact]
+    public async Task WrongMix_OnACriticalCardWithADispute_SaysTheMixWords_NotTheDisputeWords()
+    {
+        var (repo, cycle) = PlotWithACycle();
+        repo.SetDisputedLogCount(PlotId1, 2);
+        var without = await OnlyCardAsync(HandlerWithSignals(repo));
+        Assert.Equal("Log disputes need resolution", without.TitleEn);
+
+        var signal = MixSignalOfSeverity(PlotId1, cycle.Id, ShramSafal.Domain.Compliance.ComplianceSeverity.Critical);
+        var card = await OnlyCardAsync(HandlerWithSignals(repo, signal));
+
+        Assert.Equal(AttentionRank.Critical, card.Rank);
+        Assert.Equal(2, card.UnresolvedDisputeCount);
+        AssertSaysTheMixWords(card, without, signal);
+    }
+
+    [Fact]
+    public async Task WrongMix_OnACriticalCardFromStageHealth_SaysTheMixWords_NotTheStageWords()
+    {
+        // Three steps due and none recorded: the stage reads Critical, and a quieter mix signal does not outrank it.
+        var (repo, cycle) = PlotWithSchedule(("Foliar Spray", -9), ("Drip Irrigation", -8), ("Pruning", -7));
+        var without = await OnlyCardAsync(HandlerWithSignals(repo));
+        Assert.Equal(AttentionRank.Critical, without.Rank);
+        Assert.Equal("Stage compliance is critical", without.TitleEn);
+
+        var signal = MixSignalOfSeverity(PlotId1, cycle.Id, ShramSafal.Domain.Compliance.ComplianceSeverity.Watch);
+        var card = await OnlyCardAsync(HandlerWithSignals(repo, signal));
+
+        Assert.Equal(AttentionRank.Critical, card.Rank);
+        AssertSaysTheMixWords(card, without, signal);
+    }
+
+    [Fact]
+    public async Task AnotherRulesSignal_OnADisputeCard_KeepsTheDisputeWords()
+    {
+        var (repo, cycle) = PlotWithACycle();
+        repo.SetDisputedLogCount(PlotId1, 1);
+        var other = ShramSafal.Domain.Compliance.ComplianceSignal.Open(
+            Guid.NewGuid(), new FarmId(FarmId), PlotId1, cycle.Id,
+            ShramSafal.Domain.Compliance.ComplianceRuleCode.UnresolvedDisputeAgeHigh,
+            ShramSafal.Domain.Compliance.ComplianceSeverity.Watch,
+            ShramSafal.Domain.Compliance.ComplianceSuggestedAction.ResolveDispute,
+            "A dispute is old", "वाद जुना आहे", "Three days.", "तीन दिवस.", "{}", Now.AddHours(-1));
+
+        var card = await OnlyCardAsync(HandlerWithSignals(repo, other));
+
+        Assert.Equal("Log disputes need resolution", card.TitleEn);
+        Assert.Equal("नोंदींमध्ये वाद आहेत", card.TitleMr);
+        Assert.Equal(SuggestedActionKind.ResolveDispute, card.SuggestedAction);
+        Assert.Equal(other.Id, card.TopSignalId);
+        Assert.Equal(ShramSafal.Domain.Compliance.ComplianceRuleCode.UnresolvedDisputeAgeHigh, card.TopSignalRuleCode);
+    }
+
+    [Fact]
+    public async Task ACardWithNoSignal_KeepsItsRankBranchWords()
+    {
+        var (repo, _) = PlotWithACycle();
+        repo.SetDisputedLogCount(PlotId1, 1);
+
+        var card = await OnlyCardAsync(HandlerWithSignals(repo));
+
+        Assert.Equal("Log disputes need resolution", card.TitleEn);
+        Assert.Equal("Open disputes", card.SuggestedActionLabelEn);
+        Assert.Null(card.TopSignalId);
+        Assert.Null(card.TopSignalRuleCode);
+    }
+
     [Fact]
     public void OldPhonePayload_StillDeserialises()
     {
