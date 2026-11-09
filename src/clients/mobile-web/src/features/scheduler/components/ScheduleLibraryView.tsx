@@ -18,6 +18,7 @@ import { CheckCircle2, Eye, Search } from 'lucide-react';
 import { CropProfile, CropScheduleTemplate } from '../../../types';
 import { UNKNOWN_CROP, getAllTemplates, scheduleCropCode, sortTemplates } from '../../../infrastructure/reference/TemplateCatalog';
 import { getOperationCategory } from '../planning/ClientPlanEngine';
+import { isSampleSchedule, offeredForCrop } from '../planning/followableDefault';
 import { useBackDismiss } from '../../../core/navigation/useBackDismiss';
 import { BigButton, ChoiceChips, Chip, GlassCard, SANS, Tap } from '../../../shared/components/ui/placeUi';
 import { OWNER_LABEL, SC, frequencyMr, opNameMr, stageNameMr } from '../schedulePage/scheduleCopy';
@@ -77,15 +78,8 @@ const canonicalCropCode = scheduleCropCode;
  * own schedules (Team / Private) stay hidden until SCH-OWN opens that branch, so no "हे शेड्यूल वापरा" ever leads to a refusal.
  * A plot that already follows a schedule keeps it whatever this says (the page reads the plot's choice, not this list).
  */
-const isOutside = (t: CropScheduleTemplate): boolean => !t.scope || t.scope === 'Public';
-// A sample = a built-in or a row without stored days, and not checked. An unchecked row that STORES its days is never a sample: it can
-// reach the phone only because a plot follows it (the pull sends followed schedules), so it shows on that plot and is not offered.
-const isSample = (t: CropScheduleTemplate): boolean => (!t.check || t.check.state === 'NotChecked') && t.hasStoredDays !== true;
-const offeredForCrop = (bucket: readonly CropScheduleTemplate[]): CropScheduleTemplate[] => {
-    const outside = bucket.filter(isOutside);
-    const checked = outside.filter(t => t.check?.state === 'Checked');
-    return checked.length > 0 ? checked : outside.filter(isSample);
-};
+// spec: plr-d10 lane SCH-GATE-b (open point 9 (c)) - the rule itself (`isOutsideSchedule`, `isSampleSchedule`, `offeredForCrop`) now lives in
+// `planning/followableDefault.ts`, the one file the crop's default and this library both read; it is unchanged.
 
 /** Up to three schedules per crop the farmer grows (most detailed first) — the same rule the page counts by. */
 export function libraryTemplates(allCrops: readonly CropProfile[]): CropScheduleTemplate[] {
@@ -194,7 +188,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                                 {/* spec: plr-d10 lane SCH-A - ShramSafal's check, from the server's record only */}
                                 <ScheduleCheckBadge template={t} testId={`library-check-${t.id}`} />
                                 {/* spec: plr-d10 lane L8b-1F (D-91 = 1) - a sample says it will go once its crop has a checked schedule */}
-                                {isSample(t) && <p className="m-0 mt-1 text-[13.5px] font-bold text-stone-600" data-testid={`library-sample-line-${t.id}`}>{SC.sampleWillHide(sampleCropName(t))}</p>}
+                                {isSampleSchedule(t) && <p className="m-0 mt-1 text-[13.5px] font-bold text-stone-600" data-testid={`library-sample-line-${t.id}`}>{SC.sampleWillHide(sampleCropName(t))}</p>}
                             </div>
                             {/* PROPOSED (Marathi) */}
                             {adopted && <Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />वापरात आहे</Chip>}

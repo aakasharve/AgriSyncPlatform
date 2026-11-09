@@ -29,8 +29,8 @@ import { checkWords, THREE_PLUS_ONE_WORDS, type ThreePlusOneLanguage } from './t
 const INTERNAL_AUTHORS = new Set(['ShramSafal Reference Data', 'System Fallback']);
 
 /** The place colours of the working screen's rail (outside 1, 2, 3 and his own). */
-const PLACE_COLOUR = ['#0f766e', '#7c3aed', '#c2410c'] as const;
-const OWN_COLOUR = '#b45309';
+export const PLACE_COLOUR = ['#0f766e', '#7c3aed', '#c2410c'] as const;
+export const OWN_COLOUR = '#b45309';
 
 export interface ThreePlusOneSectionProps {
     /** Every schedule the plot follows, in place order (`resolvePlotSchedule(...).followed`). */

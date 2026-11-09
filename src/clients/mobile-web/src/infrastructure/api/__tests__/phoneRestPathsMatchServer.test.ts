@@ -360,6 +360,8 @@ describe('lane F99 (F100, N-3): every phone REST path is a route the server has,
         expect(shown).toContain('GET infrastructure/api/resources/AuthResource.ts /user/auth/me/context');
         expect(shown).toContain('POST features/dataRights/ErasureRequestScreen.tsx /shramsafal/me/erasure/request');
         expect(shown.some(s => s.startsWith('POST infrastructure/api/resources/SyncResource.ts /sync/'))).toBe(true);
+        // spec: plr-d10 lane SCH-GATE-b - the stage panel's call (a helper that builds the path; the server's `GetPlotStagePlan` route has it).
+        expect(shown.some(s => s.endsWith('features/scheduler/schedulePage/stagePlanClient.ts /shramsafal/farms/{…}/plots/{…}/stage-plan'))).toBe(true);
     });
 
     it('no phone path is missing from the server, and no call uses a method the route does not answer', () => {

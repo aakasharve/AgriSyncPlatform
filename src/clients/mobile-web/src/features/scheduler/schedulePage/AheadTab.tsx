@@ -12,9 +12,10 @@ import { SC } from './scheduleCopy';
 import { upcomingDays, type ScheduleModel } from './scheduleModel';
 import { GLASS, PartGroup } from './scheduleUi';
 
-export const AheadTab: React.FC<{ model: ScheduleModel }> = ({ model }) => {
+export const AheadTab: React.FC<{ model: ScheduleModel; onlyStageId?: string | null }> = ({ model, onlyStageId }) => {
     const [win, setWin] = useState<3 | 8>(8);
-    const days = upcomingDays(model, win);
+    // spec: plr-d10 lane SCH-GATE-b (R10) - in the trial only today's stage's days are laid open (`onlyStageId`); absent = every stage.
+    const days = upcomingDays(model, win, onlyStageId);
     const tomorrowKey = addDays(model.todayKey, 1);
     return (
         <section data-testid="ahead">

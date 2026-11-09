@@ -351,11 +351,12 @@ export function owedWork(model: ScheduleModel): OwedEntry[] {
 }
 
 /** Days after today, up to `n`, that the schedule expects something on (S12). */
-export const upcomingDays = (model: ScheduleModel, n: number): ScheduleDay[] =>
-    model.days.filter(d => d.when === 'future' && daysBetween(model.todayKey, d.key) <= n && d.items.length > 0);
+/** `onlyStageId` (spec: plr-d10 lane SCH-GATE-b, R10) - in the trial only today's stage's days are laid open. Absent = every stage, as before. */
+export const upcomingDays = (model: ScheduleModel, n: number, onlyStageId?: string | null): ScheduleDay[] =>
+    model.days.filter(d => d.when === 'future' && daysBetween(model.todayKey, d.key) <= n && d.items.length > 0 && (!onlyStageId || d.stageId === onlyStageId));
 
-export const aheadItemCount = (model: ScheduleModel, n: number): number =>
-    upcomingDays(model, n).reduce((sum, d) => sum + d.items.length, 0);
+export const aheadItemCount = (model: ScheduleModel, n: number, onlyStageId?: string | null): number =>
+    upcomingDays(model, n, onlyStageId).reduce((sum, d) => sum + d.items.length, 0);
 
 /** Days already gone, newest first (S8). */
 export const pastDays = (model: ScheduleModel): ScheduleDay[] => model.days.filter(d => d.when === 'past').reverse();
