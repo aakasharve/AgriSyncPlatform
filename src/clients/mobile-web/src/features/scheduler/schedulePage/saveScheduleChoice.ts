@@ -14,8 +14,15 @@
  * and a download cannot put the crop-type default over it (P10). The server's own row replaces it on the next pull.
  * A plot the server cannot be told about (no season yet, not a server plot, no farm) keeps the choice on this phone and is
  * returned in `notSent`, for the page to say so. Never throws into the screen (P9).
+ *
+ * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - a plot follows up to 3 outside schedules and 1 of his own, so:
+ *   - `add: true` ("हे शेड्यूल पण पाळा") is an ADOPT for THIS plot only - never crop-wide, never a switch;
+ *   - the existing switch (the editor's save, the library's crop-wide adopt) now explicitly switches the plot's मुख्य schedule:
+ *     `fromSubscriptionId` is the मुख्य row's id, the new row keeps its place, and the pending row stands in for it meanwhile;
+ *   - `saveScheduleAbandon` ("हे सोडा") lets ONE followed schedule go, named by its subscription id.
+ * The phone never counts places or limits: the server refuses a 4th outside schedule (ScheduleLimitReached) and a repeated one.
  */
-import { AdoptScheduleCommand, MigrateScheduleCommand } from '../../../application/usecases/sync/ScheduleChoiceCommands';
+import { AbandonScheduleCommand, AdoptScheduleCommand, MigrateScheduleCommand } from '../../../application/usecases/sync/ScheduleChoiceCommands';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { idGenerator } from '../../../core/domain/services/IdGenerator';
 import { getDatabase, type AgriLogDatabase } from '../../../infrastructure/storage/DexieDatabase';
@@ -25,7 +32,7 @@ import type { ScheduleSubscriptionRow } from '../../../infrastructure/storage/sc
 import { backgroundSyncWorker } from '../../../infrastructure/sync/BackgroundSyncWorker';
 import type { CropCycleDto } from '../../../infrastructure/api/AgriSyncClient';
 import { cropCycleIdForPlot, findSendablePendingPlot } from '../../sync/plots/pendingPlots';
-import { bestActive, currentCycleByPlot } from './scheduleSubscriptions';
+import { currentCycleByPlot, followedRows, mainRow } from './scheduleSubscriptions';
 
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NIL_GUID = '00000000-0000-4000-8000-000000000000';
@@ -37,6 +44,8 @@ export interface ScheduleChoiceTarget {
     referenceDate?: string | null;
     /** spec: plr-d10 lane L8b-1F (R7) - this is a choice the phone ALREADY held (the one-time upload): the adopt says so. */
     carryOver?: boolean;
+    /** spec: plr-d10 lane L8b-3 - follow this schedule IN ADDITION on this plot (an adopt for this plot only), never a switch. */
+    add?: boolean;
 }
 
 export interface SaveScheduleChoiceResult {
@@ -48,6 +57,8 @@ export interface SaveScheduleChoiceResult {
     unchanged: string[];
     /** The queue rows made for the server (their client request ids), in the order of the plots in `queued`. */
     clientRequestIds: string[];
+    /** spec: plr-d10 lane L8b-3 - the subscription id made for each plot's new choice (so the page can offer to take it back). */
+    subscriptionIds: Record<string, string>;
 }
 
 /** The server's season for a plot (the newest by start date), else the one derived for a plot made on this phone. */
@@ -68,7 +79,7 @@ export async function cropCycleIdForSchedule(
 const dayKey = (v: string | null | undefined): string | null => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
 
 export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[]): Promise<SaveScheduleChoiceResult> {
-    const result: SaveScheduleChoiceResult = { queued: [], notSent: [], unchanged: [], clientRequestIds: [] };
+    const result: SaveScheduleChoiceResult = { queued: [], notSent: [], unchanged: [], clientRequestIds: [], subscriptionIds: {} };
     const db = getDatabase();
     const nowIso = systemClock.nowISO();
     const sessionUser = getAuthSession()?.userId;
@@ -77,12 +88,18 @@ export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[
     for (const target of targets) {
         try {
             const referenceDate = dayKey(target.referenceDate);
-            const held = bestActive(
-                await db.scheduleSubscriptions.where('plotId').equals(target.plotId).toArray(),
-                (await currentCycleByPlot(db)).get(target.plotId),
-            );
+            const plotRows = await db.scheduleSubscriptions.where('plotId').equals(target.plotId).toArray();
+            const currentCycle = (await currentCycleByPlot(db)).get(target.plotId);
+            const followed = followedRows(plotRows, currentCycle);
+            // The plot's मुख्य schedule: the one a switch replaces (L8b-3). Never counted here: the server said which it is.
+            const held = target.add === true ? undefined : mainRow(plotRows, currentCycle);
             // Already this exact choice (same schedule; the same day 0, or none named): nothing to say to the server.
             if (held && held.templateId === target.templateId && (referenceDate === null || referenceDate === held.referenceDate)) {
+                result.unchanged.push(target.plotId);
+                continue;
+            }
+            // Already followed (an addition), or followed in ANOTHER place (a switch would be refused): nothing to say either.
+            if (followed.some(r => r.templateId === target.templateId && (target.add === true || r.id !== held?.id))) {
                 result.unchanged.push(target.plotId);
                 continue;
             }
@@ -91,18 +108,27 @@ export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[
                 ? await cropCycleIdForSchedule(db, target.plotId)
                 : null;
             const id = idGenerator.generate();
+            // The day is the plot's, not the schedule's: a switch keeps the plot's day 0 when it names none (the server does the same), and an
+            // addition starts from the same day 0 as the schedule the plot already follows (sent with it, so both phones agree).
+            const day0 = referenceDate ?? (target.add === true ? mainRow(plotRows, currentCycle) : held)?.referenceDate ?? null;
             const sendable = where !== null && GUID_RE.test(where.farmId) && GUID_RE.test(where.cropCycleId);
-            // A switch keeps the plot's day 0 when it names none (the server does the same).
             const row: ScheduleSubscriptionRow = {
                 id,
                 farmId: where?.farmId ?? SessionStore.getCurrentFarmId() ?? '',
                 plotId: target.plotId,
                 cropCycleId: where?.cropCycleId ?? '',
                 templateId: target.templateId,
-                referenceDate: referenceDate ?? held?.referenceDate ?? null,
+                referenceDate: day0,
                 state: 'Active',
                 adoptedAtUtc: nowIso,
                 pending: true,
+                // A switch stands in for the मुख्य row it replaces (its place, its mark) while the server has not answered; an addition has none.
+                ...(held ? {
+                    replacesId: held.id,
+                    ...(typeof held.slot === 'number' ? { slot: held.slot } : {}),
+                    ...(held.origin ? { origin: held.origin } : {}),
+                    ...(held.isMain === true ? { isMain: true as const } : {}),
+                } : {}),
             };
 
             // The mutation first, the local row second: if the app stops in between, the choice is not shown as saved
@@ -113,10 +139,10 @@ export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[
                     plotId: target.plotId,
                     cropCycleId: where.cropCycleId,
                     actorUserId,
-                    ...(referenceDate ? { referenceDate } : {}),
+                    ...((target.add === true ? day0 : referenceDate) ? { referenceDate: (target.add === true ? day0 : referenceDate) as string } : {}),
                     decidedAtUtc: nowIso,
                 };
-                if (held && held.cropCycleId === where.cropCycleId) {
+                if (target.add !== true && held && held.cropCycleId === where.cropCycleId) {
                     result.clientRequestIds.push(await MigrateScheduleCommand.enqueue({ ...common, newScheduleTemplateId: target.templateId, reason: 'Other', newSubscriptionId: id, fromSubscriptionId: held.id }));
                 } else {
                     result.clientRequestIds.push(await AdoptScheduleCommand.enqueue({
@@ -131,6 +157,7 @@ export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[
             // B001: the row it would replace is NOT touched. The change lives on the pending row only (it ranks first while its request
             // waits); if the server refuses the switch, dropping the pending row is all it takes to show the server's choice again.
             await db.scheduleSubscriptions.put(row);
+            result.subscriptionIds[target.plotId] = id;
             (sendable ? result.queued : result.notSent).push(target.plotId);
         } catch (error) {
             console.error('[saveScheduleChoice] the choice for a plot could not be saved', target.plotId, error);
@@ -144,4 +171,54 @@ export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[
         });
     }
     return result;
+}
+
+export interface SaveScheduleAbandonResult {
+    /** The schedule's row was found and let go on this phone (it is no longer drawn). */
+    done: boolean;
+    /** The request made for the server; absent when the server was never told of the schedule (nothing to let go there). */
+    clientRequestId?: string;
+    /** The schedule that was let go, so the page can offer to take it back. */
+    templateId?: string;
+}
+
+/**
+ * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - "हे सोडा": let ONE followed schedule go, named by its subscription id (the server
+ * acts on that row only). The row stays in the phone's store, marked `ending`, so it is not drawn while the request waits; the server's
+ * own row (Abandoned) replaces it on the next pull, and a refusal clears the mark (`sweepPendingScheduleChoices`). An addition the server
+ * never heard of (no request was made) is simply forgotten. Never throws into the screen (P9).
+ */
+export async function saveScheduleAbandon(subscriptionId: string): Promise<SaveScheduleAbandonResult> {
+    try {
+        const db = getDatabase();
+        const row = await db.scheduleSubscriptions.get(subscriptionId);
+        if (!row || row.state !== 'Active') return { done: false };
+        const sessionUser = getAuthSession()?.userId;
+        const actorUserId = sessionUser && GUID_RE.test(sessionUser) ? sessionUser : NIL_GUID;
+        const nowIso = systemClock.nowISO();
+
+        const sendable = GUID_RE.test(row.id) && GUID_RE.test(row.farmId) && GUID_RE.test(row.plotId) && GUID_RE.test(row.cropCycleId);
+        if (!sendable) {
+            // Never reached the server (kept on this phone only): nothing to tell it; forget it here.
+            await db.scheduleSubscriptions.delete(row.id);
+            return { done: true, templateId: row.templateId };
+        }
+
+        const clientRequestId = await AbandonScheduleCommand.enqueue({
+            farmId: row.farmId,
+            plotId: row.plotId,
+            cropCycleId: row.cropCycleId,
+            actorUserId,
+            subscriptionId: row.id,
+            decidedAtUtc: nowIso,
+        });
+        await db.scheduleSubscriptions.put({ ...row, ending: true });
+        backgroundSyncWorker.triggerNow().catch((err: unknown) => {
+            console.error('[saveScheduleAbandon] sync run after queueing the request failed', err);
+        });
+        return { done: true, clientRequestId, templateId: row.templateId };
+    } catch (error) {
+        console.error('[saveScheduleAbandon] the schedule could not be let go', subscriptionId, error);
+        return { done: false };
+    }
 }

@@ -390,7 +390,8 @@ internal static class DtoMappingExtensions
             sub.StateChangedAtUtc,
             sub.ReferenceDate,
             liveCheckState,
-            sub.Origin?.ToString());
+            sub.Origin?.ToString(),
+            sub.Slot);
 
     public static FieldOperatorDto ToDto(this FieldOperator fieldOperator) =>
         new(

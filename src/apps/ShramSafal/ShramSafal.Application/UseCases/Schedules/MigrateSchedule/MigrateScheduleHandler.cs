@@ -11,11 +11,16 @@ using ShramSafal.Domain.Schedules;
 namespace ShramSafal.Application.UseCases.Schedules.MigrateSchedule;
 
 /// <summary>
-/// Phase 3 MIS — migrates the Active <see cref="ScheduleSubscription"/> for a
-/// (plot, crop, cycle) to a new template. Enforces invariants I-14 and I-15.
+/// Phase 3 MIS — migrates one Active <see cref="ScheduleSubscription"/> of a plot-season to a new template. Enforces invariant I-15
+/// and, since lane L8b-3 (founder D-74, "3 + 1"), the places rule that replaced I-14: a plot-season follows up to 3 outside schedules
+/// plus 1 of his own, each in its own place, and never the same schedule twice.
+///
+/// Which one is switched: the one named by <see cref="MigrateScheduleCommand.FromSubscriptionId"/>; without it the plot-season's one
+/// Active schedule (P11), and several without a name are refused (<c>ScheduleChoiceNeeded</c>). The new row keeps the old row's place
+/// when it is the same kind of schedule (outside or his own), else takes the lowest free place of its kind.
 ///
 /// Atomic sequence (single EF <c>SaveChangesAsync</c> → single DB tx):
-///   1. Load current Active subscription (fail if none).
+///   1. Load the plot-season's Active subscriptions and pick the one to switch (fail if none).
 ///   2. Validate the new template (exists, published, crop matches).
 ///   3. Transition prev → <see cref="ScheduleSubscriptionState.Migrated"/>.
 ///   4. Insert new subscription in <see cref="ScheduleSubscriptionState.Active"/>
@@ -23,9 +28,9 @@ namespace ShramSafal.Application.UseCases.Schedules.MigrateSchedule;
 ///   5. Insert <see cref="ScheduleMigrationEvent"/> (I-16 append-only).
 ///   6. Emit audit event + <c>schedule.migrated</c> analytics event.
 ///
-/// The DB's partial unique index (I-14) is the ultimate safety net for
-/// concurrent adoption/migration attempts: two concurrent callers cannot
-/// both leave an Active row on the same (plotId, cropKey, cropCycleId).
+/// The DB's partial unique indexes (<c>ux_sched_sub_active_slot</c>, <c>ux_sched_sub_active_template</c>) are the ultimate safety net
+/// for concurrent adoption/migration attempts: two concurrent callers cannot both hold one place of a plot-season, nor follow one
+/// schedule twice.
 /// </summary>
 public sealed class MigrateScheduleHandler(
     IShramSafalRepository repository,
@@ -110,23 +115,63 @@ public sealed class MigrateScheduleHandler(
 
         var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
 
-        var prev = await repository.GetActiveScheduleSubscriptionAsync(
-            command.PlotId, cropKey, command.CropCycleId, ct);
-        if (prev is null)
+        var active = await repository.GetActiveScheduleSubscriptionsAsync(command.PlotId, command.CropCycleId, ct);
+        if (active.Count == 0)
         {
             return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleSubscriptionNotFound);
         }
 
-        // spec: plr-d10 lane L8b-2 fix round 1 (B006) - the caller named the choice he is switching FROM. If the plot-season's Active
-        // one is another, someone changed it first (another phone, offline): refuse, write nothing, never overwrite it silently.
-        if (command.FromSubscriptionId is { } from && from != prev.Id)
+        ScheduleSubscription prev;
+        if (command.FromSubscriptionId is { } from)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleChangedElsewhere);
+            // spec: plr-d10 lane L8b-2 fix round 1 (B006) - the caller named the choice he is switching FROM. If it is not one of the
+            // plot-season's Active ones, someone changed it first (another phone, offline): refuse, write nothing, never overwrite
+            // silently. L8b-3: it may be any ONE of several followed schedules.
+            var named = active.FirstOrDefault(s => s.Id == from);
+            if (named is null)
+            {
+                return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleChangedElsewhere);
+            }
+
+            prev = named;
+        }
+        else if (active.Count == 1)
+        {
+            prev = active[0]; // P11: no phone before this lane names one
+        }
+        else
+        {
+            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleChoiceNeeded);
         }
 
-        if (prev.State != ScheduleSubscriptionState.Active)
+        // spec: plr-d10 lane L8b-3 - the schedule he is switching TO is already followed in ANOTHER place: never the same one twice.
+        if (active.Any(s => s.Id != prev.Id && s.ScheduleTemplateId == newTemplateId))
         {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleNotActive);
+            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleAlreadyAdopted);
+        }
+
+        // The new row keeps the old row's place when it is the same kind of schedule; else the lowest free place of its kind (the old
+        // place counted free), else the limit of that kind.
+        var origin = choice.Value.Origin;
+        var others = active.Where(s => s.Id != prev.Id).ToList();
+        short? slot;
+        if ((prev.Origin ?? ScheduleOrigin.Outside) == origin && prev.Slot is { } keptPlace)
+        {
+            slot = keptPlace;
+        }
+        else
+        {
+            var ofThisKind = others.Count(s => (s.Origin == ScheduleOrigin.Own) == (origin == ScheduleOrigin.Own));
+            var maxOfKind = origin == ScheduleOrigin.Own ? ScheduleSlots.MaxOwnSchedulesPerPlot : ScheduleSlots.MaxOutsideSchedulesPerPlot;
+            slot = ofThisKind >= maxOfKind
+                ? null
+                : ScheduleSlots.NextFree(origin, others.Where(s => s.Slot.HasValue).Select(s => s.Slot!.Value));
+        }
+
+        if (slot is null)
+        {
+            return Result.Failure<ScheduleSubscriptionDto>(
+                origin == ScheduleOrigin.Own ? ShramSafalErrors.OwnScheduleLimitReached : ShramSafalErrors.ScheduleLimitReached);
         }
 
         var nowUtc = clock.UtcNow;
@@ -134,8 +179,8 @@ public sealed class MigrateScheduleHandler(
             command.NewSubscriptionId ?? idGenerator.New());
 
         // I-15: all four writes below happen inside the single EF SaveChangesAsync
-        // transaction. If any step fails (including the I-14 partial unique index
-        // race), the whole migration rolls back.
+        // transaction. If any step fails (including a lost race for the place, the
+        // places unique index), the whole migration rolls back.
         prev.Migrate(newSubscriptionId, command.Reason, nowUtc);
 
         var newSubscription = ScheduleSubscription.Adopt(
@@ -151,7 +196,8 @@ public sealed class MigrateScheduleHandler(
             // schedule's, so switching schedules never silently loses it (P10).
             command.ReferenceDate ?? prev.ReferenceDate,
             choice.Value.Origin,
-            choice.Value.CheckStateAtAdopt);
+            choice.Value.CheckStateAtAdopt,
+            slot);
         newSubscription.AttachMigratedFrom(prev.SubscriptionId);
 
         // Phase 4 will populate this from ScheduleComplianceSnapshot rollups.
@@ -199,7 +245,8 @@ public sealed class MigrateScheduleHandler(
                     newScheduleId = newTemplate.Id,
                     reason = command.Reason.ToString(),
                     command.ReasonText,
-                    complianceAtMigrationPct
+                    complianceAtMigrationPct,
+                    slot
                 },
                 farmId: command.FarmId,
                 clientCommandId: command.ClientCommandId,
@@ -213,7 +260,16 @@ public sealed class MigrateScheduleHandler(
             repository, decision, newSubscription.Id, "Migrated", command.FarmId, command.ActorUserId, command.ActorRole ?? "unknown",
             clock.UtcNow, command.ClientCommandId, command.ClientAppVersion, command.AuditDeviceId, command.AuditIpHash, ct);
 
-        await repository.SaveChangesAsync(ct);
+        switch (await repository.TrySaveScheduleSubscriptionAsync(ct))
+        {
+            case ScheduleSubscriptionSave.Saved:
+                break;
+            case ScheduleSubscriptionSave.TemplateAlreadyFollowed:
+                return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleAlreadyAdopted);
+            default:
+                // A rival took the place first: the plot-season's schedules were changed from another phone. Nothing was kept.
+                return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleChangedElsewhere);
+        }
 
         await analytics.EmitAsync(new AnalyticsEvent(
             EventId: Guid.NewGuid(),

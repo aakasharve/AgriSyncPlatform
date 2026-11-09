@@ -1760,24 +1760,24 @@ internal sealed class ShramSafalRepository(
             .FirstOrDefaultAsync(s => s.Id == subscriptionId.Value, ct);
     }
 
-    public async Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(
+    public async Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsAsync(
         Guid plotId,
-        string cropKey,
         Guid cropCycleId,
         CancellationToken ct = default)
     {
-        var normalizedCrop = cropKey.Trim().ToLowerInvariant();
-
-        // spec: plr-d10 lane L8b-1 — TRACKED: migrate / abandon / complete change this row's state and save it. Read
-        // untracked, the state change was never written (an abandon answered "Abandoned" and kept the row Active; a
-        // migrate then hit the one-active index), unseen while no adopt could succeed.
+        // spec: plr-d10 lane L8b-3 - keyed on the plot-season (plot, crop cycle), NOT on crop_key: crop_key is the cycle's crop name,
+        // so one cycle has one key except after a crop rename, and a followed schedule must not drop out of sight then.
+        // TRACKED (as the single read it replaces was, lane L8b-1): migrate / abandon / complete change a row's state and save it. Read
+        // untracked, the state change was never written.
         return await db.ScheduleSubscriptions
-            .FirstOrDefaultAsync(
-                s => s.PlotId == plotId
-                     && s.CropKey == normalizedCrop
-                     && s.CropCycleId == cropCycleId
-                     && s.State == ScheduleSubscriptionState.Active,
-                ct);
+            .Where(s => s.PlotId == plotId
+                        && s.CropCycleId == cropCycleId
+                        && s.State == ScheduleSubscriptionState.Active)
+            .OrderBy(s => s.Slot == null)
+            .ThenBy(s => s.Slot)
+            .ThenBy(s => s.AdoptedAtUtc)
+            .ThenBy(s => s.Id)
+            .ToListAsync(ct);
     }
 
     public async Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsOfFarmsAsync(
@@ -2368,6 +2368,52 @@ internal sealed class ShramSafalRepository(
             }
 
             return false;
+        }
+    }
+
+    // spec: plr-d10 lane L8b-3 (Open point 7) - see IShramSafalRepository.TrySaveScheduleSubscriptionAsync.
+    public async Task<ScheduleSubscriptionSave> TrySaveScheduleSubscriptionAsync(CancellationToken ct = default)
+    {
+        // Inside a sync mutation the save runs in the mutation's transaction, and Postgres aborts a transaction on a unique violation:
+        // a SAVEPOINT lets the caller re-read after a lost race (the same way TryAddRecordMoneyAsync does). Without an ambient
+        // transaction (REST) the save is its own, and a refusal leaves nothing behind either.
+        var transaction = db.Database.IsRelational() ? db.Database.CurrentTransaction : null;
+        const string savepoint = "ssf_schedule_subscription";
+        if (transaction is not null)
+        {
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            if (transaction is not null)
+            {
+                await transaction.ReleaseSavepointAsync(savepoint, ct);
+            }
+
+            return ScheduleSubscriptionSave.Saved;
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ux_sched_sub_active_slot") || IsUniqueViolationOn(ex, "ux_sched_sub_active_template"))
+        {
+            var outcome = IsUniqueViolationOn(ex, "ux_sched_sub_active_slot")
+                ? ScheduleSubscriptionSave.PlaceTaken
+                : ScheduleSubscriptionSave.TemplateAlreadyFollowed;
+            if (transaction is not null)
+            {
+                await transaction.RollbackToSavepointAsync(savepoint, ct);
+            }
+
+            // Discard everything this unit staged (the subscription, its audit rows, a switch's ended row and event) so a later
+            // SaveChanges cannot replay the doomed writes; the caller re-reads or answers.
+            foreach (var entry in db.ChangeTracker.Entries()
+                         .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                         .ToList())
+            {
+                entry.State = EntityState.Detached;
+            }
+
+            return outcome;
         }
     }
 

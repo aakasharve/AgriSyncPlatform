@@ -11,9 +11,11 @@ using ShramSafal.Domain.Schedules;
 namespace ShramSafal.Application.UseCases.Schedules.AbandonSchedule;
 
 /// <summary>
-/// Phase 3 MIS — transitions the single Active <see cref="ScheduleSubscription"/>
-/// for (plot, cropKey, cycle) to <see cref="ScheduleSubscriptionState.Abandoned"/>.
-/// No new subscription is created. Emits <c>schedule.abandoned</c> analytics.
+/// Phase 3 MIS — transitions one Active <see cref="ScheduleSubscription"/> of a plot-season to
+/// <see cref="ScheduleSubscriptionState.Abandoned"/>. No new subscription is created. Emits <c>schedule.abandoned</c> analytics.
+/// spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - a plot-season may follow several schedules, so the request says which
+/// (<see cref="AbandonScheduleCommand.SubscriptionId"/>); without it the plot-season's one Active schedule is meant (P11), and
+/// several without a name are refused (<c>ScheduleChoiceNeeded</c>), never an arbitrary row. See <see cref="Services.FollowedScheduleChoice"/>.
 /// </summary>
 public sealed class AbandonScheduleHandler(
     IShramSafalRepository repository,
@@ -75,12 +77,15 @@ public sealed class AbandonScheduleHandler(
         if (gate is not null) return gate;
 
         var cropKey = (cropCycle.CropName ?? string.Empty).Trim().ToLowerInvariant();
-        var subscription = await repository.GetActiveScheduleSubscriptionAsync(
-            command.PlotId, cropKey, command.CropCycleId, ct);
-        if (subscription is null)
+        var active = await repository.GetActiveScheduleSubscriptionsAsync(command.PlotId, command.CropCycleId, ct);
+        var picked = await Services.FollowedScheduleChoice.PickAsync(
+            repository, active, command.SubscriptionId, farmId, command.PlotId, command.CropCycleId, ct);
+        if (!picked.IsSuccess)
         {
-            return Result.Failure<ScheduleSubscriptionDto>(ShramSafalErrors.ScheduleSubscriptionNotFound);
+            return Result.Failure<ScheduleSubscriptionDto>(picked.Error);
         }
+
+        var subscription = picked.Value;
 
         if (subscription.State != ScheduleSubscriptionState.Active)
         {

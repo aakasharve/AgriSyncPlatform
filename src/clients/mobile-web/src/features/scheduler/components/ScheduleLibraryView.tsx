@@ -26,11 +26,25 @@ import { PART_LABEL, partOf } from '../schedulePage/scheduleModel';
 import { scheduleNameMr, taskNameMr } from '../schedulePage/scheduleNames';
 import { ScheduleCheckBadge } from './ScheduleCheckBadge';
 
+/**
+ * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - the library opened from a plot's "हे शेड्यूल पण पाळा": a pick FOLLOWS the schedule on
+ * THIS plot as well (`onAdopt` is then an adopt for this plot only - never crop-wide, never a switch). A schedule the plot already follows
+ * says so; when the three outside places are taken the button is disabled with the words that say why. The words arrive in the person's
+ * language (`threePlusOneCopy`); the phone never counts - `full` is what the page draws, the server refuses a 4th.
+ */
+export interface LibraryPlotAdd {
+    followedTemplateIds: ReadonlySet<string>;
+    full: boolean;
+    words: { follow: string; fullWhy: string; alreadyFollowed: string; title: string };
+}
+
 interface ScheduleLibraryViewProps {
     crop?: CropProfile;
     allCrops?: CropProfile[];
     adoptedScheduleId?: string | null;
     onAdopt: (templateId: string) => void;
+    /** Set when the library was opened to follow one more schedule on one plot (L8b-3). */
+    plotAdd?: LibraryPlotAdd;
 }
 
 const opLabel = (opId: string): string => opNameMr(opId) ?? PART_LABEL[partOf(getOperationCategory(opId))];
@@ -137,7 +151,7 @@ const StagesSheet: React.FC<{ template: CropScheduleTemplate; onClose: () => voi
     );
 };
 
-const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrops = [], adoptedScheduleId, onAdopt }) => {
+const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrops = [], adoptedScheduleId, onAdopt, plotAdd }) => {
     const [search, setSearch] = useState('');
     const [order, setOrder] = useState<Order>('usual');
     const [detail, setDetail] = useState<CropScheduleTemplate | null>(null);
@@ -167,7 +181,8 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
             {/* PROPOSED (Marathi) */}
             {schedules.length === 0 && <p className="m-0 rounded-2xl bg-stone-50 p-3 text-[15px] font-bold text-stone-600 ring-1 ring-stone-200" data-testid="library-empty">तुमच्या पिकांसाठी अजून एकही शेड्यूल आलेलं नाही. इंटरनेट चालू असताना ॲप उघडा.</p>}
             {shown.map(t => {
-                const adopted = t.id === adoptedScheduleId;
+                const adopted = plotAdd ? false : t.id === adoptedScheduleId;
+                const alreadyFollowed = plotAdd?.followedTemplateIds.has(t.id) === true;
                 const canAdopt = !!activeCropCode && canonicalCropCode(t.cropCode) === activeCropCode;
                 return (
                     <GlassCard key={t.id} testId={`library-${t.id}`}>
@@ -183,6 +198,7 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                             </div>
                             {/* PROPOSED (Marathi) */}
                             {adopted && <Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />वापरात आहे</Chip>}
+                            {alreadyFollowed && <Chip tone="green"><CheckCircle2 size={14} aria-hidden="true" />{plotAdd!.words.alreadyFollowed}</Chip>}
                         </div>
                         <div className="mt-3 grid grid-cols-2 gap-2">
                             <div className="rounded-xl bg-stone-50 p-2.5 ring-1 ring-stone-200">
@@ -200,7 +216,14 @@ const ScheduleLibraryView: React.FC<ScheduleLibraryViewProps> = ({ crop, allCrop
                                 <Eye size={18} aria-hidden="true" />पाहा
                             </Tap>
                             {/* PROPOSED (Marathi) */}
-                            {!adopted && canAdopt && <div className="min-w-[60%] flex-1"><BigButton onClick={() => onAdopt(t.id)} testId={`library-adopt-${t.id}`}>हे शेड्यूल वापरा</BigButton></div>}
+                            {!adopted && canAdopt && !plotAdd && <div className="min-w-[60%] flex-1"><BigButton onClick={() => onAdopt(t.id)} testId={`library-adopt-${t.id}`}>हे शेड्यूल वापरा</BigButton></div>}
+                            {/* spec: plr-d10 lane L8b-3 - follow one more on this plot; disabled with its words while the three outside places are taken */}
+                            {plotAdd && canAdopt && !alreadyFollowed && (
+                                <div className="min-w-[60%] flex-1">
+                                    <BigButton onClick={() => onAdopt(t.id)} testId={`library-adopt-${t.id}`} disabled={plotAdd.full}>{plotAdd.words.follow}</BigButton>
+                                    {plotAdd.full && <p className="m-0 mt-1 text-[14px] font-bold text-stone-600" data-testid={`library-full-${t.id}`}>{plotAdd.words.fullWhy}</p>}
+                                </div>
+                            )}
                             {/* PROPOSED (Marathi) */}
                             {!adopted && !canAdopt && <span className="text-[14px] font-bold text-stone-500" data-testid={`library-other-crop-${t.id}`}>हे दुसऱ्या पिकाचं शेड्यूल आहे</span>}
                         </div>

@@ -50,6 +50,15 @@ export const SCHEDULE_NOT_CHECKED_CODE = 'ShramSafal.ScheduleNotChecked';
 /** spec: plr-d10 lane L8b-1F - `ShramSafalErrors.OwnScheduleNotOpenYet`: following the farm's own schedule is not open yet. PERMANENT. */
 export const OWN_SCHEDULE_NOT_OPEN_YET_CODE = 'ShramSafal.OwnScheduleNotOpenYet';
 
+/**
+ * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - a plot-season follows 3 outside schedules and 1 of his own at most. Two codes, not one
+ * with a suffix: `RejectionPolicy.normalizeCode` keeps only the tail after the last dot, so a suffix could not say which limit. PERMANENT.
+ */
+export const SCHEDULE_LIMIT_REACHED_CODE = 'ShramSafal.ScheduleLimitReached';
+export const OWN_SCHEDULE_LIMIT_REACHED_CODE = 'ShramSafal.OwnScheduleLimitReached';
+/** spec: plr-d10 lane L8b-3 - the plot-season follows several schedules and the request named none. PERMANENT. */
+export const SCHEDULE_CHOICE_NEEDED_CODE = 'ShramSafal.ScheduleChoiceNeeded';
+
 export interface RejectedMutationView {
     mutationId: string;
     mutationType: string;
@@ -228,11 +237,21 @@ export class ConflictResolutionService {
         if (errorCode === COST_ENTRY_ID_CONFLICT_CODE) {
             return 'हीच खर्चाची नोंद दुसऱ्या शेतावर किंवा दुसऱ्या व्यक्तीच्या नावाने आधीच आहे. ती पुन्हा पाठवली जाणार नाही — श्रम सफलच्या नंबरला कॉल करा.';
         }
-        // spec: plr-d10 lane L8b-2 (Review Focus 1) - two phones chose different schedules for one plot offline; the server
-        // kept the first. His phone shows the server's choice after the next sync; nothing is overwritten silently.
+        // spec: plr-d10 lane L8b-2 (Review Focus 1) - two phones chose the same plot's schedule offline. Lane L8b-3 (3 + 1): a DIFFERENT
+        // schedule is now kept as well (up to 3 outside), so this answer means the SAME schedule is already followed on the plot.
         // PROPOSED (Marathi)
         if (errorCode === SCHEDULE_ALREADY_ADOPTED_CODE) {
-            return 'दुसऱ्या फोनवरून वेगळं शेड्यूल निवडलं आहे. आता सर्व फोनवर तेच शेड्यूल दिसेल.';
+            return 'हे शेड्यूल या प्लॉटवर आधीच पाळताय';
+        }
+        // spec: plr-d10 lane L8b-3 - the 3 + 1 limits and the "which one" answer. PROPOSED (Marathi)
+        if (errorCode === SCHEDULE_LIMIT_REACHED_CODE) {
+            return 'बाहेरची 3 शेड्यूल आधीच पाळताय';
+        }
+        if (errorCode === OWN_SCHEDULE_LIMIT_REACHED_CODE) {
+            return 'तुमचं स्वतःचं 1 शेड्यूल आधीच पाळताय';
+        }
+        if (errorCode === SCHEDULE_CHOICE_NEEDED_CODE) {
+            return 'कोणतं शेड्यूल ते निवडा';
         }
         // B006 - another phone switched this plot's schedule first. PROPOSED (Marathi)
         if (errorCode === SCHEDULE_CHANGED_ELSEWHERE_CODE) {

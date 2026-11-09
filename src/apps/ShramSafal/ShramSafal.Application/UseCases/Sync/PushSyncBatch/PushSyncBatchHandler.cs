@@ -3122,7 +3122,7 @@ public sealed class PushSyncBatchHandler(
         return ToOutcome(result);
     }
 
-    /// <summary>spec: plr-d10 lane L8b-1 Task 2 — <c>abandon_schedule</c> on the REST door's own handler (same actor rule).</summary>
+    /// <summary>spec: plr-d10 lane L8b-1 Task 2 — <c>abandon_schedule</c> on the REST door's own handler (same actor rule). Lane L8b-3: it may name which followed schedule (<c>subscriptionId</c>).</summary>
     private async Task<MutationExecutionOutcome> HandleAbandonScheduleAsync(
         string deviceId,
         string clientRequestId,
@@ -3132,7 +3132,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "actorUserId", "reasonText", "actorRole", "clientCommandId", "decidedAtUtc"))
+        if (!PayloadHasOnly(payload, "farmId", "plotId", "cropCycleId", "actorUserId", "reasonText", "actorRole", "clientCommandId", "decidedAtUtc", "subscriptionId"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -3161,7 +3161,9 @@ public sealed class PushSyncBatchHandler(
                 ClientCommandId: request.ClientCommandId ?? clientRequestId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
                 AuditDeviceId: deviceId,
-                DecidedAtUtc: request.DecidedAtUtc),
+                DecidedAtUtc: request.DecidedAtUtc,
+                // spec: plr-d10 lane L8b-3 - which followed schedule to let go; absent = the plot-season's one Active schedule (P11).
+                SubscriptionId: request.SubscriptionId),
             ct);
 
         return ToOutcome(result);

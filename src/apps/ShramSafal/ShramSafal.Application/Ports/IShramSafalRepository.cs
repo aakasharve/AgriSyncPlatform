@@ -575,11 +575,27 @@ public interface IShramSafalRepository
     Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default);
 
     /// <summary>
-    /// Returns the single <see cref="ScheduleSubscriptionState.Active"/> subscription for
-    /// (<paramref name="plotId"/>, <paramref name="cropKey"/>, <paramref name="cropCycleId"/>)
-    /// or <c>null</c> when none exists. Invariant I-14 guarantees at most one.
+    /// spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - EVERY <see cref="ScheduleSubscriptionState.Active"/> subscription of a
+    /// plot-season (<paramref name="plotId"/>, <paramref name="cropCycleId"/>), at most 3 outside and 1 of his own, ordered by place
+    /// (a row with no place last), then by when it was adopted, then by id. TRACKED on purpose: migrate, abandon and complete change a
+    /// row's state and save it. Replaces the single read that relied on "at most one" (invariant I-14, which 3 + 1 replaces). The
+    /// default refuses: a repository that cannot read a plot's followed schedules must never answer "none" (P5).
     /// </summary>
-    Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default);
+    Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsAsync(Guid plotId, Guid cropCycleId, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot read a plot's followed schedules.");
+
+    /// <summary>
+    /// spec: plr-d10 lane L8b-3 (Open point 7) - saves a staged schedule choice (the subscription, its audit rows, and for a switch the
+    /// row it ends). When the database refuses because a rival took the place (unique index <c>ux_sched_sub_active_slot</c>) or already
+    /// holds the same schedule on the plot-season (<c>ux_sched_sub_active_template</c>), everything this unit of work staged is
+    /// discarded (and, inside a sync mutation's transaction, rolled back to a savepoint so the transaction stays usable for the
+    /// caller's re-read) and the outcome says which one; any other failure is thrown as before. The default (test doubles) saves.
+    /// </summary>
+    async Task<ScheduleSubscriptionSave> TrySaveScheduleSubscriptionAsync(CancellationToken ct = default)
+    {
+        await SaveChangesAsync(ct);
+        return ScheduleSubscriptionSave.Saved;
+    }
 
     Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default);
 

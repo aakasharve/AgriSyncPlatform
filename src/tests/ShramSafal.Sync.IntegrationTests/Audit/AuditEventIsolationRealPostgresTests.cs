@@ -1381,6 +1381,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    two tables Up() created (ssf.planned_work_plots, ssf.planned_work) - only what Up() added. Up() and Down() never touch
         //    ssf.audit_events, its policies or its grants. Safe mid-proof.
         "20261108180000_AddPlannedWork",
+        // ── Reviewed 2026-11-09 (spec: plr-d10 lane L8b-3, founder D-74); Up() and Down() read in full: Up() adds ssf.schedule_subscriptions.slot, back-fills
+        //    it, adds two CHECKs and two partial unique indexes and drops ux_sched_sub_active; Down() first RAISES while any plot-season follows
+        //    two or more schedules (nothing changed), else drops only those indexes / CHECKs / the column and recreates ux_sched_sub_active. Neither
+        //    touches ssf.audit_events, its policies or its grants. The proof's data has no plot-season following two schedules, so Down() runs.
+        "20261109090000_AllowThreePlusOneSchedulesPerPlot",
     ];
 
     /// <summary>

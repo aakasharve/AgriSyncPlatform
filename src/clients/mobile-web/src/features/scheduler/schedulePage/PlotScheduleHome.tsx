@@ -7,8 +7,9 @@
  * The शेड्यूल page for ONE plot that follows a real schedule, top to bottom as in the PLR-D8 preview:
  * where you are (crop · plot, who made it, day N of total, the stage line), the 'N days behind' banner, the
  * filled bar with "तुम्ही इथे आहात" and every stage's own bar, then the three big buttons झालं / आज / पुढे
- * and only the chosen list (opens on आज). The preview's "one card per followed schedule" (S4) is not here:
- * a plot follows one schedule today, and that schedule is already named on the card above.
+ * and only the chosen list (opens on आज). The preview's "one card per followed schedule" (S4) is the L8b-3 section right under the
+ * header (`ThreePlusOneSection`): up to 3 outside schedules and 1 of his own, the मुख्य one marked. The card, the stage line and
+ * the tabs below follow the मुख्य schedule (R6).
  * When nobody chose the schedule (the app's first one for the crop), the page says so under the card and
  * offers the library, so its राहिलं lines are not read as misses against a plan he picked.
  */
@@ -16,7 +17,8 @@ import React, { useMemo } from 'react';
 import type { CropScheduleTemplate } from '../scheduler.types';
 import { AheadTab } from './AheadTab';
 import { DoneTab } from './DoneTab';
-import type { ScheduleSource } from './resolveSchedule';
+import type { FollowedPlace, ScheduleSource } from './resolveSchedule';
+import { ThreePlusOneSection } from './ThreePlusOneSection';
 import { addDays } from './scheduleDates';
 import { LOOK_AHEAD_DAYS, PARTS, aheadItemCount, owedWork, pastDays, stageTally, todayOf, type Part, type ScheduleModel, type Tally } from './scheduleModel';
 import { ScheduleTabs, type ScheduleTab } from './ScheduleTabs';
@@ -38,7 +40,15 @@ export const PlotScheduleHome: React.FC<{
     onLibrary: () => void;
     /** spec: plr-d10 lane L8b-1F - set when the followed schedule is not checked (a sample) or its check was withdrawn. */
     checkNote?: FollowedCheckNote | null;
-}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary, checkNote }) => {
+    /**
+     * spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - every schedule the plot follows, in place order, with the SERVER'S मुख्य one marked;
+     * the header, the stage line and the tabs below follow the मुख्य one. The section is drawn when the page is given the doors it needs.
+     */
+    followed?: readonly FollowedPlace[];
+    cropHasChecked?: boolean;
+    onAddSchedule?: () => void;
+    onLeaveSchedule?: (subscriptionId: string) => void;
+}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule }) => {
     const facts = useMemo(() => {
         const total = stageTally(model);
         const byPart = Object.fromEntries(PARTS.map(p => [p, stageTally(model, p)])) as Record<Part, Tally>;
@@ -52,6 +62,9 @@ export const PlotScheduleHome: React.FC<{
     return (
         <div className="space-y-4" data-testid="plot-schedule">
             <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} />
+            {followed && onAddSchedule && onLeaveSchedule && (
+                <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} />
+            )}
             {source === 'default' && <DefaultScheduleNote onLibrary={onLibrary} />}
             <BehindBanner model={model} />
             <StageProgress model={model} />

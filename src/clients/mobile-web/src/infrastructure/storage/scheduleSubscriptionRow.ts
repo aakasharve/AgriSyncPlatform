@@ -27,4 +27,17 @@ export interface ScheduleSubscriptionRow {
     checkState?: 'Checked' | 'NotChecked' | 'Returned' | 'Withdrawn';
     /** spec: plr-d10 lane L8b-1F - Outside | Own; absent = chosen before the lane, read as Outside. */
     origin?: 'Outside' | 'Own';
+    /** spec: plr-d10 lane L8b-3 (founder D-74) - the place this schedule holds on its plot-season: 0 = his own, 1..3 = outside. Absent = the server sent none. */
+    slot?: number;
+    /**
+     * spec: plr-d10 lane L8b-3 (R6) - this is the plot-season's मुख्य schedule, as the SERVER said on the last pull (`plotMainSchedules`).
+     * The phone never works it out. A pending switch carries the mark of the row it replaces.
+     */
+    isMain?: true;
+    /** spec: plr-d10 lane L8b-3 - on a pending SWITCH: the row it replaces (that row is not drawn while this request waits). */
+    replacesId?: string;
+    /** spec: plr-d10 lane L8b-3 - this phone let this schedule go and the server has not answered yet: it is not drawn. A refusal clears it. */
+    ending?: true;
+    /** spec: lane L8b-3 fix 1 (L004) - set on the COPY a reader returns for a pending row whose request was refused / given up (read from the queue; never stored). */
+    refused?: true;
 }

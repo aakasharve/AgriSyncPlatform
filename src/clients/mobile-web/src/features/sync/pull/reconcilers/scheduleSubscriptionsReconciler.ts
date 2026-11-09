@@ -4,24 +4,24 @@
  *
  * spec: plr-d10-redesign-real-integration-2026-10-25 (lane L8b-2, founder D-32, register F09) - the SERVER WINS on download.
  *
- * The pull carries `scheduleSubscriptions`: each plot's chosen schedule, every state, changed since this phone's cursor. They
- * are kept in Dexie `scheduleSubscriptions` (schema v27) and `resolvePlotSchedule` reads a plot's Active row first, so every
- * phone of the farm follows the same schedule and a download can never put the crop-type default over a choice.
+ * The pull carries `scheduleSubscriptions`: each plot's chosen schedules, every state, changed since this phone's cursor. They
+ * are kept in Dexie `scheduleSubscriptions` (schema v27) and `resolvePlotSchedule` reads a plot's Active rows first, so every
+ * phone of the farm follows the same schedules and a download can never put the crop-type default over a choice.
  *
  * What this step does, in order:
  *   1. every row the server sent replaces the phone's copy of that subscription (by id; the phone's `pending` mark goes);
- *   2. then, for each plot, a choice made on THIS phone that is still unanswered (`pending`) is dropped when the server holds
- *      a DIFFERENT Active row for the plot AND the phone's own request is no longer waiting to be sent (it was refused and
- *      parked, or discarded): "दुसऱ्या फोनवरून वेगळं शेड्यूल निवडलं आहे" - the server's choice stands, never a silent
- *      overwrite either way. A request still waiting keeps the phone's choice visible until the server has answered it (P10).
- *      A plot with NO server row keeps its pending choice (a refusal, e.g. no authority, keeps it visible and parked).
+ *   2. spec: plr-d10 lane L8b-3 (R6, D-76) - the pull's `plotMainSchedules` (FULL on every pull) says which followed schedule is the
+ *      मुख्य one of each plot-season: the phone marks its own rows from it (`isMain`) and never works it out; a key that is absent
+ *      (an older server) leaves the marks as they are;
+ *   3. then this phone's unanswered choices are swept (`sweepPendingScheduleChoices`).
  * Runs on every pull, also when the pull carries no rows, because a refusal can arrive after the row it lost to.
  * An older server sends no key: nothing is received, the sweep still runs, nothing is lost (P11).
  */
 import type { AgriLogDatabase } from '../../../../infrastructure/storage/DexieDatabase';
 import { mutationQueue } from '../../../../infrastructure/sync/MutationQueue';
 import type { ScheduleSubscriptionRow } from '../../../../infrastructure/storage/scheduleSubscriptionRow';
-import { AdoptScheduleCommand, MigrateScheduleCommand } from '../../../../application/usecases/sync/ScheduleChoiceCommands';
+import { AbandonScheduleCommand, AdoptScheduleCommand, MigrateScheduleCommand } from '../../../../application/usecases/sync/ScheduleChoiceCommands';
+import type { PlotMainScheduleDto } from '../../../../infrastructure/api/scheduleSubscriptionDtos';
 import type { SyncPullResponse } from '../../../../infrastructure/api/AgriSyncClient';
 import { rowFromDto } from '../../../scheduler/schedulePage/scheduleSubscriptions';
 
@@ -39,33 +39,71 @@ async function requestOf(db: AgriLogDatabase, deviceId: string, subscriptionId: 
 
 const codeTail = (code: string | undefined): string => (code ?? '').split('.').pop()?.toUpperCase() ?? '';
 
+/** The statuses that mean the server REFUSED the request or it was given up on (a parked or dropped one). */
+const REFUSED = new Set(['REJECTED_USER_REVIEW', 'REJECTED_DROPPED']);
+
 /**
- * This phone's unanswered choices against what the server holds for the same plot (B001, B003, B008):
+ * This phone's unanswered choices against what the server holds (B001, B003, B008; rewritten for 3 + 1, lane L8b-3: a plot-season may
+ * hold several Active rows, so "the server holds a DIFFERENT row" no longer means "the server's choice stands"):
  *   - a request still waiting keeps its pending row (his intent is shown until the server answers, P10);
- *   - once it is not waiting, and the server holds a DIFFERENT Active row for the plot, the server's choice stands: the pending
- *     row goes (the parked request stays on the conflict page with its words);
- *   - a `ScheduleAlreadyAdopted` refusal whose server Active row is the SAME schedule is not a conflict: both phones agree, so
- *     the pending row goes AND the refusal is dropped from the conflict page - nothing is parked;
- *   - a plot with no server row keeps its pending row (a refusal, e.g. no authority, keeps his choice visible and parked).
+ *   - once it is not waiting, a pending row goes ONLY when (a) the server holds an Active row of the SAME schedule on that plot (both
+ *     phones agree: the pending row is redundant; a `ScheduleAlreadyAdopted` refusal of it is no conflict and is dropped from the
+ *     conflict page too), or (b) its request was refused or given up AND the plot-season already follows something on the server (the
+ *     server's list stands; the parked request keeps its words). A refusal on a plot-season with NO server row keeps the pending row
+ *     visible (P10: a refusal, e.g. no authority, never makes his choice vanish);
+ *   - a request the server applied keeps its pending row until the server's own row (under the same id) replaces it on a pull;
+ *   - a row with no request at all (kept on this phone only: no season on the server yet) is kept;
+ *   - a schedule this phone let go (`ending`) whose request was refused or given up is drawn again (the mark clears).
  */
 export async function sweepPendingScheduleChoices(db: AgriLogDatabase): Promise<void> {
     const deviceId = mutationQueue.getDeviceId();
     const all = await db.scheduleSubscriptions.toArray();
-    const serverActive = new Map<string, ScheduleSubscriptionRow>();
+    const serverActive = all.filter(r => r.pending !== true && r.state === 'Active');
     for (const row of all) {
-        if (row.pending !== true && row.state === 'Active') serverActive.set(row.plotId, row);
-    }
-    for (const row of all) {
-        if (row.pending !== true) continue;
-        const server = serverActive.get(row.plotId);
-        if (!server || server.id === row.id) continue;
-        const request = await requestOf(db, deviceId, row.id);
-        if (request && WAITING.has(request.status)) continue;
-        if (request?.id !== undefined && request.status === 'REJECTED_USER_REVIEW'
-            && codeTail(request.errorCode) === 'SCHEDULEALREADYADOPTED' && server.templateId === row.templateId) {
-            await db.mutationQueue.update(request.id, { status: 'REJECTED_DROPPED' });
+        if (row.pending === true) {
+            const request = await requestOf(db, deviceId, row.id);
+            if (!request || WAITING.has(request.status)) continue;
+            // fix 1 (L004): a request this phone GAVE UP on (REJECTED_DROPPED) is never going to the server: its pending row goes, whatever the
+            // server holds. A refused one (REJECTED_USER_REVIEW) keeps the existing rule below.
+            if (request.status === 'REJECTED_DROPPED') {
+                await db.scheduleSubscriptions.delete(row.id);
+                continue;
+            }
+            const ofSeason = serverActive.filter(s => s.plotId === row.plotId && (!row.cropCycleId || s.cropCycleId === row.cropCycleId) && s.id !== row.id);
+            const sameOnServer = ofSeason.find(s => s.templateId === row.templateId);
+            const refused = REFUSED.has(request.status);
+            if (!sameOnServer && !(refused && ofSeason.length > 0)) continue;
+            if (request.id !== undefined && request.status === 'REJECTED_USER_REVIEW'
+                && codeTail(request.errorCode) === 'SCHEDULEALREADYADOPTED' && sameOnServer) {
+                await db.mutationQueue.update(request.id, { status: 'REJECTED_DROPPED' });
+            }
+            await db.scheduleSubscriptions.delete(row.id);
+        } else if (row.ending === true) {
+            const request = await db.mutationQueue
+                .where('[deviceId+clientRequestId]').equals([deviceId, AbandonScheduleCommand.requestIdFor(row.id)]).first();
+            if (!request || REFUSED.has(request.status)) {
+                const { ending: _ending, ...kept } = row;
+                await db.scheduleSubscriptions.put(kept);
+            }
         }
-        await db.scheduleSubscriptions.delete(row.id);
+    }
+}
+
+/**
+ * spec: plr-d10 lane L8b-3 (R6, D-76) - mark each plot-season's मुख्य row from the pull's `plotMainSchedules`. The key is FULL, so a row
+ * of a plot-season the server names a DIFFERENT row for (or none) loses the mark. Server rows only (a pending switch carries the mark
+ * of the row it replaces until the server's own row arrives). The phone never decides which is main (thin client).
+ */
+async function markMainSchedules(db: AgriLogDatabase, mains: readonly PlotMainScheduleDto[]): Promise<void> {
+    const named = new Set(mains.map(m => m.subscriptionId));
+    for (const row of await db.scheduleSubscriptions.toArray()) {
+        if (row.pending === true) continue;
+        const shouldBeMain = named.has(row.id);
+        if (shouldBeMain && row.isMain !== true) await db.scheduleSubscriptions.put({ ...row, isMain: true });
+        if (!shouldBeMain && row.isMain === true) {
+            const { isMain: _isMain, ...rest } = row;
+            await db.scheduleSubscriptions.put(rest);
+        }
     }
 }
 
@@ -82,6 +120,9 @@ export async function reconcileScheduleSubscriptions(db: AgriLogDatabase, payloa
                 await db.scheduleSubscriptions.bulkPut(fromServer);
                 kept = fromServer.length;
             }
+            // lane L8b-3 - the server's pick of the मुख्य schedule; an absent key (an older server) leaves the marks as they are.
+            const mains = (payload as SyncPullResponse & { plotMainSchedules?: PlotMainScheduleDto[] }).plotMainSchedules;
+            if (Array.isArray(mains)) await markMainSchedules(db, mains.filter(m => typeof m?.subscriptionId === 'string'));
             await sweepPendingScheduleChoices(db);
         });
         return kept;

@@ -13,4 +13,7 @@ public sealed record CompleteScheduleCommand(
     // unit tests stay green.
     string ClientAppVersion = "unknown",
     string AuditDeviceId = "unknown",
-    string AuditIpHash = "sha256:unknown");
+    string AuditIpHash = "sha256:unknown",
+    // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - which followed schedule to complete (REST only). Null = the plot-season's one
+    // Active schedule (P11); several followed and none named: ScheduleChoiceNeeded, nothing changed.
+    Guid? SubscriptionId = null);

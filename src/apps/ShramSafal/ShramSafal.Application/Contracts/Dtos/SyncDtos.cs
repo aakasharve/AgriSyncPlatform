@@ -115,7 +115,15 @@ public sealed record SyncPullResponseDto(
     // cursor, as HE may see them (PlannedWorkVisibility: the maker, the assignee, the primary owner, a holder of SeeAllTasks;
     // a chosen-plots seat only his plots' rows). A task taken from him (a reassign) is named in WithdrawnRecords under kind
     // "PlannedWork". Additive and last (P11): 1.0.17 parses the pull with no schema and never reads it.
-    IReadOnlyList<PlannedWorkDto>? PlannedWork = null);
+    IReadOnlyList<PlannedWorkDto>? PlannedWork = null,
+    // spec: plr-d10 lane L8b-3 (R6, D-76) - which followed schedule is the मुख्य one of each plot-season this person may see, computed by
+    // the server (MainSchedule.Pick) and sent in FULL on every pull (the subscriptions above are a delta: a flag stamped on each would go
+    // stale when ANOTHER row changed or a check was withdrawn). Same filter as the subscriptions: farms whose overview he reads, his
+    // plots, Active only. Additive and last (P11): 1.0.17 never reads it; a phone that does not know it keeps its own best guess.
+    IReadOnlyList<PlotMainScheduleDto>? PlotMainSchedules = null);
+
+/// <summary>spec: plr-d10 lane L8b-3 - the मुख्य schedule of one plot-season: the subscription (an Active row) the stage line follows.</summary>
+public sealed record PlotMainScheduleDto(Guid PlotId, Guid CropCycleId, Guid SubscriptionId);
 
 /// <summary>
 /// lane PRV — one record taken back from a phone: its kind (<c>DailyLog</c> / <c>CostEntry</c>) and id. Content-free.

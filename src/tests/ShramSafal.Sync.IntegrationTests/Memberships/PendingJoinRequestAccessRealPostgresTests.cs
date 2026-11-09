@@ -573,6 +573,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // ssf.planned_work_plots with their own farm-scoped policies only; no farm_memberships or farm_join_requests object, no
         // ssf.farms policy, no seat touched, no p_user_select_* policy on an existing table. Down() drops the policies and the two tables.
         "20261108180000_AddPlannedWork",
+        // spec plr-d10 lane L8b-3 (founder D-74) - Up() and Down() read in full: ssf.schedule_subscriptions only (a nullable slot column, its
+        // back-fill, two CHECKs, the swap of one partial unique index for two). No farm_memberships or farm_join_requests object, no policy, no
+        // grant, no seat touched. Down() refuses while a plot-season follows two or more schedules (this proof's data has none), else drops what Up() added.
+        "20261109090000_AllowThreePlusOneSchedulesPerPlot",
     ];
 
     /// <summary>

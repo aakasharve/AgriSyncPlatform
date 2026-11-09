@@ -88,7 +88,7 @@ public class FakeShramSafalRepository : IShramSafalRepository
     public virtual Task<List<CropScheduleTemplate>> GetCropScheduleTemplatesForCropAsync(string cropKey, string? regionCode, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task AddScheduleSubscriptionAsync(ScheduleSubscription subscription, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<ScheduleSubscription?> GetScheduleSubscriptionByIdAsync(ScheduleSubscriptionId subscriptionId, CancellationToken ct = default) => throw NotStubbed();
-    public virtual Task<ScheduleSubscription?> GetActiveScheduleSubscriptionAsync(Guid plotId, string cropKey, Guid cropCycleId, CancellationToken ct = default) => throw NotStubbed();
+    public virtual Task<List<ScheduleSubscription>> GetActiveScheduleSubscriptionsAsync(Guid plotId, Guid cropCycleId, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task AddScheduleMigrationEventAsync(ScheduleMigrationEvent migrationEvent, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<ScheduleTemplate?> GetScheduleTemplateByIdAsync(Guid templateId, CancellationToken ct = default) => throw NotStubbed();
     public virtual Task<bool> HasActiveOwnerMembershipAsync(Guid userId, CancellationToken ct = default) => throw NotStubbed();
