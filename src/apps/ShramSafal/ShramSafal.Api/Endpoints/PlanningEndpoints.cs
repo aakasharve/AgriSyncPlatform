@@ -119,6 +119,32 @@ public static class PlanningEndpoints
         })
         .WithName("GetStagePlan");
 
+        // spec: plr-d10 lane SCH-GATE-a (D-99, R28, E4) - what each schedule a plot follows asks in the plot's stage. A seat that does
+        // not read the farm's overview gets 403; a plot that is not his to see answers 404, like a made-up id.
+        group.MapGet("/farms/{farmId:guid}/plots/{plotId:guid}/stage-plan", async (
+            Guid farmId,
+            Guid plotId,
+            DateOnly? forDate,
+            ClaimsPrincipal user,
+            ShramSafal.Application.Services.ScheduleStagePlan stagePlan,
+            ICallerFarmTenantScope farmScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (await RouteFarmScope.OpenAsync(farmScope, farmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
+            }
+
+            var result = await stagePlan.ForPlotAsync(farmId, plotId, actorUserId, forDate, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetPlotStagePlan");
+
         group.MapGet("/compare", async (
             Guid cropCycleId,
             ClaimsPrincipal user,

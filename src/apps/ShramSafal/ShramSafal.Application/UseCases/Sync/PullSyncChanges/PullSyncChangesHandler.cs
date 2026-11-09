@@ -20,6 +20,7 @@ public sealed class PullSyncChangesHandler(
     IShramSafalRepository repository,
     IClock clock,
     GetScheduleTemplatesHandler getScheduleTemplatesHandler,
+    ScheduleRequirement scheduleRequirement,
     GetAttentionBoardHandler getAttentionBoardHandler,
     ITestInstanceRepository testInstanceRepository,
     ITestProtocolRepository testProtocolRepository,
@@ -432,6 +433,16 @@ public sealed class PullSyncChangesHandler(
             .OrderBy(m => m.Plot)
             .ThenBy(m => m.Cycle)
             .Select(m => new PlotMainScheduleDto(m.Plot, m.Cycle, m.Main!.Id))
+            .ToList();
+        // spec: plr-d10 lane SCH-GATE-a (D-76, D-83 = 1) - what the planning gate says about each plot he may see, from the SAME followed rows and the SAME
+        // library listing this pull holds (no second listing call). FULL on every pull. A seat without the farm overview gets none (same filter as above).
+        var plotPlanningState = (await scheduleRequirement.ForPullAsync(
+                query.UserId,
+                window.Scopes.Where(s => s.Value.SeeFarmOverview).ToDictionary(s => s.Key, s => s.Value),
+                followedNow,
+                scheduleTemplates,
+                ct))
+            .Select(state => state.ToDto())
             .ToList();
         var cropTypes = GetScheduleTemplatesHandler.BuildCropTypes(scheduleTemplates);
         var referenceDataVersionHash = scheduleTemplates.Count > 0
@@ -871,7 +882,9 @@ public sealed class PullSyncChangesHandler(
             // lane L8c-1 (founder D-24c, D-26, D-79) - the tasks and reminders he may see (additive and last, P11).
             PlannedWork: plannedWork,
             // lane L8b-3 (R6, D-76) - which followed schedule is the मुख्य one of each plot-season he may see (FULL every pull; additive and last, P11).
-            PlotMainSchedules: plotMainSchedules);
+            PlotMainSchedules: plotMainSchedules,
+            // lane SCH-GATE-a (D-76, D-83 = 1) - the planning gate per plot he may see (FULL every pull; additive and last, P11).
+            PlotPlanningState: plotPlanningState);
 
         return Result.Success(response);
     }

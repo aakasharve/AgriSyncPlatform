@@ -120,7 +120,13 @@ public sealed record SyncPullResponseDto(
     // the server (MainSchedule.Pick) and sent in FULL on every pull (the subscriptions above are a delta: a flag stamped on each would go
     // stale when ANOTHER row changed or a check was withdrawn). Same filter as the subscriptions: farms whose overview he reads, his
     // plots, Active only. Additive and last (P11): 1.0.17 never reads it; a phone that does not know it keeps its own best guess.
-    IReadOnlyList<PlotMainScheduleDto>? PlotMainSchedules = null);
+    IReadOnlyList<PlotMainScheduleDto>? PlotMainSchedules = null,
+    // spec: plr-d10 lane SCH-GATE-a (founder D-76, D-83 = 1) - what the planning gate says about EACH plot this person may see (the trial, whether
+    // the plot follows a schedule it may, whether there is something to choose, today's trial stage, whether he must choose first), computed by
+    // the server and sent in FULL on every pull: the trial ends with no row changing, so a delta would go stale (the reason PlotMainSchedules is full).
+    // Same filter as PlotMainSchedules: farms whose overview he reads, his plots. Additive and last (P11): 1.0.17 parses the pull with no schema and
+    // never reads it. Only planning, the schedule page and the comparison read it; no record door ever does.
+    IReadOnlyList<PlotPlanningStateDto>? PlotPlanningState = null);
 
 /// <summary>spec: plr-d10 lane L8b-3 - the मुख्य schedule of one plot-season: the subscription (an Active row) the stage line follows.</summary>
 public sealed record PlotMainScheduleDto(Guid PlotId, Guid CropCycleId, Guid SubscriptionId);
