@@ -38,6 +38,7 @@ import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { GlassCard, PageBar, SANS, Tap } from '../../../shared/components/ui/placeUi';
 import { rescheduledTask, toggledTask, type TodoItem, type TodoWhen } from '../../reflect/overview/todoModel';
 import { addDays, dateLabel, fromDateKey } from '../../reflect/overview/reflectDates';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 // TASK 8 — reused as-is, no new copy. See the note in `JobCardsPage.tsx`.
 import { LoadErrorBanner } from '../../labour/components/LabourUiKit';
 // spec: plr-d10 lane MU-1 - the PRIMARY account holder's two cards: people waiting to join, and the work the server kept for him.
@@ -51,7 +52,7 @@ export function asOfLabelMr(asOf: string | null, todayKey: string = getDateKey()
     if (!time) return '';
     const key = getDateKey(asOf);
     const day = key === todayKey ? 'आज' : `${dateLabel(fromDateKey(key))},`;
-    return `${day} ${time} पर्यंतची माहिती`;
+    return toDevanagariDigits(`${day} ${time} पर्यंतची माहिती`);
 }
 
 export interface AttentionPageProps {
@@ -173,7 +174,7 @@ const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews
                 if (items.length === 0) return null;
                 return (
                     <section key={g.key} className="space-y-2" data-testid={`attention-group-${g.key}`}>
-                        <p className={`m-0 px-1 text-[15px] font-extrabold ${g.tone}`}>{g.title} ({items.length})</p>
+                        <p className={`m-0 px-1 text-[15px] font-extrabold ${g.tone}`}>{g.title} ({toDevanagariDigits(items.length)})</p>
                         {items.map(item => renderItem(item))}
                     </section>
                 );

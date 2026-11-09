@@ -35,6 +35,7 @@ import type { IconName } from '../shramsathi/understandingRing/icons';
 import { productBoxesOf, withoutTaskPrefix, type ProductBox } from './productModel';
 import { workTypeNameIn } from '../../../../shared/names/namesIn';
 import { ruleWithheldCopy } from '../../../../i18n/ruleWithheldTranslations';
+import { toDevanagariDigits } from '../../../../shared/utils/marathiDigits';
 
 export type PartKey = 'crop' | 'labour' | 'irrigation' | 'inputs' | 'expense' | 'machinery' | 'observation' | 'planned';
 
@@ -133,6 +134,9 @@ const DEVANAGARI = /[ऀ-ॿ]/;
 const clean = (s?: string | null): string => (s ?? '').trim();
 /** A number exactly as recorded (no rounding up into something he did not say). */
 const asRecorded = (n: number): string => String(n);
+/** How a number is written on a screen: the same digits, in this reader's script (IT-D2). Display only; `asRecorded` is the default. */
+type Numeral = (n: number) => string;
+const devanagariNumeral: Numeral = n => toDevanagariDigits(asRecorded(n));
 /**
  * A label the PARSER wrote (an activity title, a reason, a product name). Kept when it is Marathi — a brand
  * name in Latin letters inside Marathi words stays, they are his words. A label with NO Marathi at all
@@ -199,7 +203,7 @@ const unitsIn = (language: string): Units => (language === 'en' ? UNITS_EN : UNI
 const join = (...parts: Array<string | null | undefined>): string => parts.map(clean).filter(Boolean).join(' · ');
 const positive = (n: number | undefined): n is number => typeof n === 'number' && n > 0;
 /** A rupee amount exactly as stated; nothing when none was stated (never "₹0"). */
-const rupees = (n: number | undefined, unit = ''): string => (positive(n) ? `₹${asRecorded(n)}${unit ? ` ${unit}` : ''}` : '');
+const rupees = (n: number | undefined, unit = '', num: Numeral = asRecorded): string => (positive(n) ? `₹${num(n)}${unit ? ` ${unit}` : ''}` : '');
 
 /**
  * Labour as he said it, by the app's own headcount rule (`resolveLabourHeadcount`: a total counts only when it
@@ -211,13 +215,13 @@ const rupees = (n: number | undefined, unit = ''): string => (positive(n) ? `₹
  * understood" (the server now removes it at the source); "nobody came" is an observation, not a labour row. So a 0
  * reads like silence: the task, else his own words (the entry's quote).
  */
-const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: number; activity?: string }, language = 'mr'): string => {
+const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: number; activity?: string }, language = 'mr', num: Numeral = asRecorded): string => {
     const u = unitsIn(language);
-    const split = join(positive(e.maleCount) ? `${asRecorded(e.maleCount)} ${u.male}` : '', positive(e.femaleCount) ? `${asRecorded(e.femaleCount)} ${u.female}` : '');
+    const split = join(positive(e.maleCount) ? `${num(e.maleCount)} ${u.male}` : '', positive(e.femaleCount) ? `${num(e.femaleCount)} ${u.female}` : '');
     if (positive(e.count)) {
-        if (!split) return `${asRecorded(e.count)} ${u.people}`;
+        if (!split) return `${num(e.count)} ${u.people}`;
         // Compared, never shown: is the split the same people as his total?
-        return (e.maleCount ?? 0) + (e.femaleCount ?? 0) === e.count ? split : join(`${asRecorded(e.count)} ${u.people}`, split);
+        return (e.maleCount ?? 0) + (e.femaleCount ?? 0) === e.count ? split : join(`${num(e.count)} ${u.people}`, split);
     }
     return split || workIn(language, e.activity) || labelIn(language)(e.activity);
 };
@@ -229,10 +233,11 @@ const labourValue = (e: { count?: number; maleCount?: number; femaleCount?: numb
 const labourMoney = (
     e: { totalCost?: number; wagePerPerson?: number; rate?: number; totalCostWithheld?: true; wageWithheld?: true },
     language = 'mr',
+    num: Numeral = asRecorded,
 ): string =>
     join(
         e.totalCostWithheld || e.wageWithheld ? ruleWithheldCopy(language).amount : '',
-        rupees(e.totalCost), rupees(e.wagePerPerson, unitsIn(language).each), e.rate !== e.wagePerPerson ? rupees(e.rate, unitsIn(language).rate) : '',
+        rupees(e.totalCost, '', num), rupees(e.wagePerPerson, unitsIn(language).each, num), e.rate !== e.wagePerPerson ? rupees(e.rate, unitsIn(language).rate, num) : '',
     );
 
 /** Water actually given, by the app's own rule; a spray tank's water belongs to the spray, not to पाणी. */
@@ -275,8 +280,10 @@ export function plannedOnce(log: DailyLog): { observations: ObservationNote[]; t
  * Everything understood from ONE log, part by part, in the parts' order — its words in `language` (spec I18: Marathi
  * mode Marathi only, English mode English only; his own quoted words stay as he said them).
  */
-export function partEntriesOf(log: DailyLog, language: string | null | undefined = 'mr'): PartEntry[] {
+export function partEntriesOf(log: DailyLog, language: string | null | undefined = 'mr', nativeDigits = false): PartEntry[] {
     const lang = language === 'en' ? 'en' : 'mr';
+    // IT-D2 (founder D-123b): only the result screen asks for Devanagari digits; every other reader of this model keeps what it had.
+    const num: Numeral = nativeDigits && lang === 'mr' ? devanagariNumeral : asRecorded;
     const u = unitsIn(lang);
     const inLang = labelIn(lang);
     const transcript = log.fullTranscript;
@@ -304,14 +311,14 @@ export function partEntriesOf(log: DailyLog, language: string | null | undefined
         inLang(a.notes),
     )));
     (log.labour ?? []).forEach((e, i) => {
-        add('labour', i, e, labourValue(e, lang));
-        addCost('labour', i, e, '', labourMoney(e, lang));
+        add('labour', i, e, labourValue(e, lang, num));
+        addCost('labour', i, e, '', labourMoney(e, lang, num));
     });
     (log.irrigation ?? []).forEach((e, i) => {
         if (!isGivenWater(e)) return; // not given: a stoppage (blockersOf); a spray's water: the spray's
         add('irrigation', i, e, join(
-            positive(e.durationHours) ? `${asRecorded(e.durationHours)} ${u.hours}` : '',
-            positive(e.waterVolumeLitres) ? `${asRecorded(e.waterVolumeLitres)} ${u.litres}` : '',
+            positive(e.durationHours) ? `${num(e.durationHours)} ${u.hours}` : '',
+            positive(e.waterVolumeLitres) ? `${num(e.waterVolumeLitres)} ${u.litres}` : '',
             inLang(e.notes),
         ));
     });
@@ -321,15 +328,15 @@ export function partEntriesOf(log: DailyLog, language: string | null | undefined
         const names = (e.mix ?? []).map(m => inLang(withoutTaskPrefix(m.productName))).filter(Boolean);
         const what = names.length > 0 ? names.join(', ') : inLang(withoutTaskPrefix(e.productName));
         add('inputs', i, e, what, boxes[i]);
-        addCost('inputs', i, e, what, rupees(e.cost));
+        addCost('inputs', i, e, what, rupees(e.cost, '', num));
     });
-    (log.activityExpenses ?? []).forEach((e, i) => add('expense', i, e, join(inLang(e.reason), rupees(e.totalAmount))));
+    (log.activityExpenses ?? []).forEach((e, i) => add('expense', i, e, join(inLang(e.reason), rupees(e.totalAmount, '', num))));
     (log.machinery ?? []).forEach((e, i) => {
-        add('machinery', i, e, join(u.machine[e.type], positive(e.hoursUsed) ? `${asRecorded(e.hoursUsed)} ${u.hours}` : ''));
-        addCost('machinery', i, e, u.machine[e.type] ?? '', join(rupees(e.rentalCost) && `${u.rent} ${rupees(e.rentalCost)}`, rupees(e.fuelCost) && `${u.fuel} ${rupees(e.fuelCost)}`));
+        add('machinery', i, e, join(u.machine[e.type], positive(e.hoursUsed) ? `${num(e.hoursUsed)} ${u.hours}` : ''));
+        addCost('machinery', i, e, u.machine[e.type] ?? '', join(rupees(e.rentalCost) && `${u.rent} ${rupees(e.rentalCost, '', num)}`, rupees(e.fuelCost) && `${u.fuel} ${rupees(e.fuelCost, '', num)}`));
     });
     // A day total he typed on the form (no voice behind it): shown as typed, under its approved name.
-    if (positive(log.manualTotalCost)) costs.push({ id: `${log.id}:manualTotal`, logId: log.id, part: 'expense', value: `${u.dayTotal} ${rupees(log.manualTotalCost)}`, verified: true });
+    if (positive(log.manualTotalCost)) costs.push({ id: `${log.id}:manualTotal`, logId: log.id, part: 'expense', value: `${u.dayTotal} ${rupees(log.manualTotalCost, '', num)}`, verified: true });
     const { observations, tasks } = plannedOnce(log);
     // An "issue" note is a stoppage (blockersOf), as the ring reads it.
     observations.forEach((o, i) => { if (o.noteType !== 'issue') add(o.noteType === 'reminder' ? 'planned' : 'observation', i, o, saidIn(lang)(o.textRaw)); });
@@ -403,6 +410,11 @@ export interface WhoDeps {
     unknownLabel: string;
     /** spec I18 — the language the entries' words are built in (default Marathi). */
     language?: string;
+    /**
+     * Lane IT-D2 (founder D-123b): write the numbers and the time of a Marathi-mode recording in Devanagari digits. Only the result
+     * screen sets it; आढावा, the activity feed and the check / correction screens read the same model and are left as they were.
+     */
+    nativeDigits?: boolean;
 }
 
 /**
@@ -467,6 +479,12 @@ export interface RecordingView {
     wordsWithheld: boolean;
 }
 
+/** The clock label of a recording: the app's fixed Marathi time words; in Devanagari digits only where the screen asked (IT-D2). */
+const timeLabelOf = (log: DailyLog, deps: WhoDeps): string => {
+    const label = formatFarmerLogTime(log.meta?.createdAtISO);
+    return deps.nativeDigits && deps.language !== 'en' ? toDevanagariDigits(label) : label;
+};
+
 /** One recording from the (non-empty) list of logs it became. */
 export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingView => {
     const log = primaryOf(all) as DailyLog;
@@ -474,7 +492,7 @@ export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingV
         log,
         id: log.id,
         logIds: all.map(l => l.id),
-        timeLabel: formatFarmerLogTime(log.meta?.createdAtISO), // '' for a typed log's placeholder: no made-up time
+        timeLabel: timeLabelOf(log, deps), // '' for a typed log's placeholder: no made-up time
         who: whoSpoke(log, deps),
         confirmed: all.every(isConfirmed),
         typed: all.every(isTyped),
@@ -482,7 +500,7 @@ export const recordingOf = (all: readonly DailyLog[], deps: WhoDeps): RecordingV
         wordsWithheld: all.some(l => l.wordsWithheldForMoney === true),
         byForm: all.every(l => l.meta?.provenance?.source === 'manual'),
         transcript: clean(log.fullTranscript),
-        entries: all.flatMap(l => partEntriesOf(l, deps.language)),
+        entries: all.flatMap(l => partEntriesOf(l, deps.language, deps.nativeDigits)),
         blockers: all.flatMap(l => blockersOf(l, deps.language)),
     };
 };

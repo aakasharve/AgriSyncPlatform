@@ -32,6 +32,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, Check, MapPin, Mic, Pencil } from 'lucide-react';
 import { getDateKey } from '../../../../core/domain/services/DateKeyService';
 import { dayRel, dayShort } from '../dayPick/dayWords';
+import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import FlowBackButton from '../../../context/components/FlowBackButton';
 import { NotQueuedForServerBadge } from '../../../../core/navigation/mainViewComponents';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
@@ -154,7 +155,9 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
     if (!primary) return null;
     // Lane OF fix 1 (L2): a recording saved for a PAST day (D-60) names that day — never "आज".
     const DS = resultDayStr(language);
-    const onDay = primary.log.date && primary.log.date !== getDateKey() ? dayShort(primary.log.date, language) : null;
+    // Lane IT-D2 (founder D-123b): the numbers this screen words itself (a date, a count) follow the language's digits.
+    const nd = (text: string): string => digitsFor(text, language);
+    const onDay = primary.log.date && primary.log.date !== getDateKey() ? nd(dayShort(primary.log.date, language)) : null;
 
     const addedEntries = day.current.flatMap(r => r.entries);
     const runs = markTranscript(primary.transcript, addedEntries);
@@ -195,11 +198,11 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
             <div className="flex flex-wrap items-center gap-2">
                 <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800" data-testid="vr-place"><MapPin size={16} aria-hidden="true" />{typeof p.placeLabel === 'function' ? p.placeLabel(language) : p.placeLabel}</span>
                 {p.onChangeDay ? (
-                    <button type="button" onClick={p.onChangeDay} data-testid="vr-day" className="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800"><CalendarDays size={16} aria-hidden="true" />{dayRel(primary.log.date, getDateKey(), language)}</button>
+                    <button type="button" onClick={p.onChangeDay} data-testid="vr-day" className="inline-flex items-center gap-1 rounded-full border border-stone-300 bg-white px-3 py-1.5 text-sm font-extrabold text-stone-800"><CalendarDays size={16} aria-hidden="true" />{nd(dayRel(primary.log.date, getDateKey(), language))}</button>
                 ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm font-extrabold text-stone-700" data-testid="vr-day"><CalendarDays size={16} aria-hidden="true" />{dayRel(primary.log.date, getDateKey(), language)}</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-50 px-3 py-1.5 text-sm font-extrabold text-stone-700" data-testid="vr-day"><CalendarDays size={16} aria-hidden="true" />{nd(dayRel(primary.log.date, getDateKey(), language))}</span>
                 )}
-                <span className="text-xs font-bold text-stone-600" data-testid="vr-count">{onDay ? (count > 1 ? DS.count(count, onDay) : DS.first(onDay)) : count > 1 ? RS.todayCount(count) : RS.firstToday}</span>
+                <span className="text-xs font-bold text-stone-600" data-testid="vr-count">{onDay ? (count > 1 ? nd(DS.count(count, onDay)) : DS.first(onDay)) : count > 1 ? nd(RS.todayCount(count)) : RS.firstToday}</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-2.5 py-1.5" data-testid="vr-speakers">
@@ -207,7 +210,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 {day.speakers.map(s => (
                     <span key={`${s.you}-${s.name}`} data-you={s.you ? 'yes' : 'no'}
                         className={`rounded-full border px-2 py-0.5 text-[12px] font-extrabold ${s.you ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-blue-300 bg-blue-50 text-blue-900'}`}>
-                        {s.name} · {RS.times(s.times)}
+                        {s.name} · {nd(RS.times(s.times))}
                     </span>
                 ))}
             </div>
@@ -251,7 +254,7 @@ export const VoiceResultScreen: React.FC<VoiceResultScreenProps> = (p) => {
                 <WordsFold open={wordsOpen} onToggle={() => setWordsOpen(o => !o)}
                     player={primary.typed ? <TypedNote /> : clip ? (
                         <ClipPlayer clipKey={clip.id} durationSec={p.lengthOf(primary.id)} playing={p.playingId === primary.id} progress={p.progress} big
-                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr-play" />
+                            onToggle={() => p.onTogglePlay(primary.id)} testId="vr-play" nativeDigits={language !== 'en'} />
                     ) : undefined}>
                     {primary.wordsWithheld
                         ? <MoneyWordsWithheldCard testId="vr-words-withheld" />

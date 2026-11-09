@@ -199,6 +199,7 @@ export const EarlierRecording: React.FC<{
     rec: RecordingView; clip?: VoiceClipCacheRecord; playing: boolean; progress: number; lengthSec: number | null; onToggle: () => void;
 }> = ({ rec, clip, playing, progress, lengthSec, onToggle }) => {
     const RS = useResultStr();
+    const language = useOptionalLanguage()?.language;
     return (
     <details data-testid={`vr-earlier-${rec.id}`} className="rounded-2xl border border-stone-200 bg-white p-2.5">
         <summary className="flex cursor-pointer list-none items-center gap-2">
@@ -222,7 +223,7 @@ export const EarlierRecording: React.FC<{
             )}
             {rec.typed
                 ? <TypedNote testId={`vr-earlier-typed-note-${rec.id}`} />
-                : clip && <ClipPlayer clipKey={clip.id} durationSec={lengthSec} playing={playing} progress={progress} onToggle={onToggle} testId={`vr-earlier-play-${rec.id}`} />}
+                : clip && <ClipPlayer clipKey={clip.id} durationSec={lengthSec} playing={playing} progress={progress} onToggle={onToggle} testId={`vr-earlier-play-${rec.id}`} nativeDigits={language !== 'en'} />}
         </div>
     </details>
     );

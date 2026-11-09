@@ -87,9 +87,9 @@ describe('लक्ष द्या — Marathi page in the common look (H14)', 
         // the server's Marathi, and Marathi rank words, Marathi chips (the one Critical card was a dispute: not here, D-1)
         expect(screen.queryByText('गंभीर')).toBeNull();
         expect(screen.getAllByText('लक्ष द्या').length).toBeGreaterThan(1);
-        expect(screen.getByText('4 कामं बाकी')).toBeInTheDocument();
+        expect(screen.getByText('४ कामं बाकी')).toBeInTheDocument();
         expect(screen.getByText('तब्येत: लक्ष द्या')).toBeInTheDocument();
-        expect(screen.getByTestId('attention-as-of')).toHaveTextContent('आज सकाळी 9:00 पर्यंतची माहिती');
+        expect(screen.getByTestId('attention-as-of')).toHaveTextContent('आज सकाळी ९:०० पर्यंतची माहिती');
     });
 
     it('most serious first', async () => {
@@ -303,9 +303,9 @@ describe('लक्ष द्या — founder D-1: three groups from one list 
         render(<AttentionPage onGo={vi.fn()} tasks={TASKS} crops={CROPS} onUpdateTask={vi.fn()} />);
         await waitFor(() => expect(screen.getByTestId('attention-group-decide')).toBeInTheDocument());
 
-        expect(groupText('late')).toHaveTextContent('वेळ निघून गेली (2)');
+        expect(groupText('late')).toHaveTextContent('वेळ निघून गेली (२)');
         expect(rowIds('late')).toEqual(['attention-reminder-late', 'attention-step-s-late']); // 2 days late, then 1
-        expect(groupText('today')).toHaveTextContent('आज करायचे (2)');
+        expect(groupText('today')).toHaveTextContent('आज करायचे (२)');
         expect(rowIds('today')).toEqual(['attention-step-s-today', 'attention-reminder-today']);
         expect(groupText('decide')).toHaveTextContent('निर्णय घ्यायचा');
         expect(rowIds('decide')[0]).toBe('attention-step-s-missed');
@@ -318,7 +318,7 @@ describe('लक्ष द्या — founder D-1: three groups from one list 
         expect(screen.getByTestId('attention-step-s-late')).toHaveTextContent('फवारणी');
         expect(screen.getByTestId('attention-step-s-late')).toHaveTextContent('काल');
         expect(screen.getByTestId('attention-step-s-today')).toHaveTextContent('ठिबकने पाणी');
-        expect(screen.getByTestId('attention-step-s-missed')).toHaveTextContent('6 दिवस उशीर');
+        expect(screen.getByTestId('attention-step-s-missed')).toHaveTextContent('६ दिवस उशीर');
         expect((screen.getByTestId('attention-page').textContent ?? '')).not.toMatch(/Foliar|Drip|Pruning/);
     });
 

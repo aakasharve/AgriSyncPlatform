@@ -14,6 +14,7 @@ import React from 'react';
 import { ChevronRight, CircleAlert } from 'lucide-react';
 import type { CropProfile, PlannedTask } from '../../../types';
 import { Tap } from '../../../shared/components/ui/placeUi';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 import { attentionSummaryMr, mostUrgentLineMr } from '../attentionItems';
 import { useAttentionModel } from '../hooks/useAttentionModel';
 
@@ -35,7 +36,7 @@ export const AttentionStrip: React.FC<{
                 <span className="block text-[13px] font-bold leading-snug text-stone-600" data-testid="attention-strip-summary">{attentionSummaryMr(model.counts)}</span>
             </span>
             <span className={`grid h-8 min-w-8 shrink-0 place-items-center rounded-full px-2 text-[14px] font-extrabold text-white ${urgent ? 'bg-rose-600' : 'bg-amber-600'}`}
-                style={{ fontFamily: "'DM Sans', sans-serif" }} data-testid="attention-strip-total">{model.total}</span>
+                style={{ fontFamily: "'DM Sans', sans-serif" }} data-testid="attention-strip-total">{toDevanagariDigits(model.total)}</span>
             <ChevronRight size={20} aria-hidden="true" className="shrink-0 text-stone-400" />
         </Tap>
     );

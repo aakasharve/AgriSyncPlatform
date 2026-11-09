@@ -20,7 +20,7 @@ import React, { useState } from 'react';
 import { Camera, CircleHelp, ShieldCheck, X } from 'lucide-react';
 import { useOptionalLanguage } from '../../../../i18n/LanguageContext';
 import { inputWords } from '../../../../domain/inputs/inputWords';
-import { toMarathiNumber } from '../../services/disciplineRecognition';
+import { digitsFor } from '../../../../shared/utils/marathiDigits';
 import { amountText, productName, type ProductItem } from './productModel';
 import {
     answersOf,
@@ -68,7 +68,8 @@ export function ingredientLine(identity: ItemIdentity, language: string | undefi
     if (identity.state !== 'found') return '';
     const en = language === 'en';
     return identity.product.activeIngredients
-        .map(i => [en ? i.en : i.mr, en ? i.pct : (i.pctMr ?? i.pct)].map(t => inLanguage(t, language)).filter(Boolean).join(' '))
+        // The percentage is a number: its digits follow the screen's language (IT-D2). The ingredient's name is a name and is left as the library has it.
+        .map(i => [inLanguage(en ? i.en : i.mr, language), digitsFor(inLanguage(en ? i.pct : (i.pctMr ?? i.pct), language), language)].filter(Boolean).join(' '))
         .filter(Boolean)
         .join(' + ');
 }
@@ -115,7 +116,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
     const found = identity.state === 'found';
     const answerable = isAnswerable(item);
     const name = productName(item, language) || (item.matchName ?? '');
-    const amount = amountText(item.amount, language);
+    const amount = amountText(item.amount, language, true);
     const bill = kit.billOf?.(logId, item);
     const benefit = found ? benefitFor(identity.product, kit.cropNamesOf(logId), answers) : undefined;
     const photoKept = answers.speaker?.verdict === 'photo' || answers.check?.verdict === 'photo';
@@ -175,8 +176,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ item, logId, kit, onCl
                         {bill && (
                             <Fact label={copy.factBill} testId="vr-fact-bill">
                                 <span className="text-sky-800">
-                                    {copy.billMatched(bill.date, kit.canSeeMoney && typeof bill.amount === 'number'
-                                        ? `₹${language === 'en' ? bill.amount : toMarathiNumber(bill.amount)}` : undefined)}
+                                    {copy.billMatched(digitsFor(bill.date, language), kit.canSeeMoney && typeof bill.amount === 'number'
+                                        ? `₹${digitsFor(bill.amount, language)}` : undefined)}
                                 </span>
                             </Fact>
                         )}

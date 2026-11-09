@@ -13,6 +13,7 @@ import React from 'react';
 import { Pause, Play } from 'lucide-react';
 import { useResultStr } from './resultStrings';
 import { PlaybackUnavailableNote, usePlaybackSwitch } from './playbackSwitch';
+import { toDevanagariDigits } from '../../../../shared/utils/marathiDigits';
 
 const WAVE_BARS = 64;
 const WAVE_GREEN = 'rgb(34, 176, 72)';
@@ -89,14 +90,20 @@ export interface ClipPlayerProps {
     big?: boolean;
     onToggle: () => void;
     testId: string;
+    /**
+     * Lane IT-D2 (founder D-123b): write the clock in Devanagari digits. Only the result screen and today's recordings sheet ask for
+     * it; आढावा's player, which shares this component, keeps what it had.
+     */
+    nativeDigits?: boolean;
 }
 
-export const ClipPlayer: React.FC<ClipPlayerProps> = ({ clipKey, durationSec, playing, progress, big, onToggle, testId }) => {
+export const ClipPlayer: React.FC<ClipPlayerProps> = ({ clipKey, durationSec, playing, progress, big, onToggle, testId, nativeDigits }) => {
     const RS = useResultStr();
     const playbackAllowed = usePlaybackSwitch();
     const env = React.useMemo(() => envelopeOf(clipKey, WAVE_BARS), [clipKey]);
     const colours = React.useMemo(() => colourRuns(clipKey, WAVE_BARS), [clipKey]);
     const prog = playing ? progress : 0;
+    const clock = (sec: number): string => (nativeDigits ? toDevanagariDigits(mmss(sec)) : mmss(sec));
     const lit = Math.round(prog * WAVE_BARS);
     // Fix round 3 (M1): while the playback switch is OFF there is no ▶ - the founder's D-31 words stand where the player would be.
     if (playbackAllowed === false) return <PlaybackUnavailableNote testId={`${testId}-off`} />;
@@ -119,8 +126,8 @@ export const ClipPlayer: React.FC<ClipPlayerProps> = ({ clipKey, durationSec, pl
                 </div>
                 {playing && <ElectricWave env={env} testId={`${testId}-electric`} />}
                 <div className="mt-1 flex items-center justify-between text-[12px] font-bold tabular-nums text-stone-700">
-                    <span>{durationSec != null ? mmss(prog * durationSec) : '—'}</span>
-                    <span data-testid={`${testId}-length`}>{durationSec != null ? mmss(durationSec) : '—'}</span>
+                    <span>{durationSec != null ? clock(prog * durationSec) : '—'}</span>
+                    <span data-testid={`${testId}-length`}>{durationSec != null ? clock(durationSec) : '—'}</span>
                 </div>
             </div>
         </div>

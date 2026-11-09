@@ -25,6 +25,7 @@
  */
 import type { DailyLog, InputEvent, IrrigationEvent } from '../../../../types';
 import type { NumericFacts } from '../../../../domain/types/log.types';
+import { digitsFor } from '../../../../shared/utils/marathiDigits';
 
 export type ProductBoxKind = 'spray' | 'drip' | 'other';
 
@@ -211,16 +212,19 @@ export const showsProducts = (box: ProductBox | undefined, language: string | nu
  * its unit and "per what". '' when it cannot be shown in this language without English letters in Marathi mode (the
  * record keeps it; "बदला" opens it) — a number without its unit is never shown, it would read as something else.
  */
-export function amountText(amount: ProductAmount | undefined, language: string | null | undefined): string {
+export function amountText(amount: ProductAmount | undefined, language: string | null | undefined, nativeDigits = false): string {
     if (!amount) return '';
-    if ('spoken' in amount) return amount.spoken;
+    // Lane IT-D2 (founder D-123b): where a screen asks (`nativeDigits`), Marathi mode writes the digits of a number in Devanagari - the same
+    // number, only its script; English keeps 0-9. The check-and-save and correction screens read this too and do not ask (D-128 pending).
+    const d = (text: string): string => (nativeDigits ? digitsFor(text, language) : text);
+    if ('spoken' in amount) return d(amount.spoken);
     const unit = amount.unit ? unitIn(amount.unit, language) : '';
     if (!unit) return '';
     const per = amount.per ? unitIn(amount.per.unit, language) : '';
     if (amount.per && !per) return '';
-    const main = `${asRecorded(amount.qty)} ${unit}`;
+    const main = `${d(asRecorded(amount.qty))} ${unit}`;
     if (!amount.per) return main;
-    return amount.per.qty !== undefined ? `${main} / ${asRecorded(amount.per.qty)} ${per}` : `${main} / ${per}`;
+    return amount.per.qty !== undefined ? `${main} / ${d(asRecorded(amount.per.qty))} ${per}` : `${main} / ${per}`;
 }
 
 /**

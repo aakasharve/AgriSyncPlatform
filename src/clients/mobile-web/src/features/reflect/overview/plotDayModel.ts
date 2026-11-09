@@ -24,6 +24,7 @@
  */
 import type { CropPhase, DailyLog } from '../../../types';
 import { entryText } from '../../logs/components/voiceResult/partNames';
+import { digitsFor } from '../../../shared/utils/marathiDigits';
 import {
     PARTS, groupByRecording, isConfirmed, primaryOf, recordingKeyOf, recordingOf, whoSpoke, withoutInventedStoppage,
     type PartEntry, type PartKey, type WhoDeps,
@@ -89,10 +90,12 @@ export interface PlotDayCard extends DayCardCore {
     nextHint?: string | null;
 }
 
-const dayLabelOf = (phase: CropPhase, day: number | null, hasPlot: boolean): string | undefined => {
+const dayLabelOf = (phase: CropPhase, day: number | null, hasPlot: boolean, language?: string | null): string | undefined => {
     if (!hasPlot) return undefined;
-    if (phase === 'CROP_CYCLE') return day == null ? undefined : `दिवस ${day}`;
-    return day == null ? 'जमीन तयारी' : `जमीन तयारी · दिवस ${day}`;
+    // Lane IT-D2 (founder D-123b): the day number follows the language's digits (Marathi mode: Devanagari).
+    const n = day == null ? '' : digitsFor(day, language);
+    if (phase === 'CROP_CYCLE') return day == null ? undefined : `दिवस ${n}`;
+    return day == null ? 'जमीन तयारी' : `जमीन तयारी · दिवस ${n}`;
 };
 
 /** When a log was saved (ms); unknown times go last. */
@@ -138,10 +141,11 @@ export function dayChipsOf(logs: readonly DailyLog[], language?: string | null):
         byPart.get(part)!.push({ id: `chip:label:${id}`, kind: part, text: '', verified, ...(key && { recordingKey: key }) });
     };
     for (const group of groupByRecording(logs)) {
-        const view = withoutInventedStoppage(recordingOf(group, { ...NO_WHO, language: language ?? undefined }), group);
+        // Lane IT-D2: the card's chips carry the numbers he said in Devanagari digits in Marathi mode (English mode keeps 0-9).
+        const view = withoutInventedStoppage(recordingOf(group, { ...NO_WHO, language: language ?? undefined, nativeDigits: true }), group);
         const key = recordingKeyOf(view.log);
         const legacy = view.legacyPartial;
-        const textOf = (e: PartEntry): string => (legacy ? '' : entryText(e, language));
+        const textOf = (e: PartEntry): string => (legacy ? '' : entryText(e, language, true));
         const perPart = new Map<PartKey, PartEntry[]>();
         for (const e of view.entries) {
             if (e.part === 'expense') continue; // money: the ledger's, on its own chip
@@ -226,8 +230,8 @@ export function buildPlotDayCard(ref: PlotRef, history: readonly DailyLog[], _sc
         weather: weatherLog?.weatherSnapshot
             ? { temp: formatTemperature(weatherLog.weatherSnapshot.current.tempC), condition: weatherLog.weatherSnapshot.current.conditionText }
             : undefined,
-        area: baseline?.totalArea ? `${baseline.totalArea} ${AREA_UNIT[baseline.unit] ?? baseline.unit}` : undefined,
-        dayLabel: dayLabelOf(timeline.phase, timeline.day, !!timelinePlot),
+        area: baseline?.totalArea ? `${digitsFor(baseline.totalArea, language)} ${AREA_UNIT[baseline.unit] ?? baseline.unit}` : undefined,
+        dayLabel: dayLabelOf(timeline.phase, timeline.day, !!timelinePlot, language),
         phase: timeline.phase,
         water: water === 'ON_TRACK' || water === 'MISSED' || water === 'EXTRA' ? water : undefined,
         speakers: who ? speakersOf(logs, who) : [],

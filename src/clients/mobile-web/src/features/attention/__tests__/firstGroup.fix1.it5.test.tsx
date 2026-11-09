@@ -150,7 +150,7 @@ describe('F4 - while the acknowledge is only queued, the card stays away', () =>
     it('after a tap the page, the strip and the bottom-bar total all drop (one list)', async () => {
         await putBoard([mixCard()]);
         render(<Surfaces />);
-        await waitFor(() => expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('1'));
+        await waitFor(() => expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('१'));
         expect(screen.getByTestId('bottom-total')).toHaveTextContent('1');
 
         await act(async () => { fireEvent.click(screen.getByTestId('attention-first-seen-mix')); });

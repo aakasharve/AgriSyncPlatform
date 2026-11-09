@@ -98,7 +98,7 @@ describe('लक्ष द्या - "आधी हे पाहा" (IT5 Task 
         await waitFor(() => expect(screen.getByTestId('attention-group-first')).toBeInTheDocument());
 
         const first = screen.getByTestId('attention-group-first');
-        expect(first).toHaveTextContent('आधी हे पाहा (1)');
+        expect(first).toHaveTextContent('आधी हे पाहा (१)');
         expect(within(first).getByTestId('attention-card-mix')).toBeInTheDocument();
         expect(within(first).getByTestId('attention-first-badge')).toHaveTextContent('चुकीचं मिश्रण');
         // the other card is NOT in the first group, and the group sits above the late group in the page
@@ -148,12 +148,12 @@ describe('लक्ष द्या - "आधी हे पाहा" (IT5 Task 
         const BottomTotal: React.FC = () => <span data-testid="bottom-total">{useAttentionModel([], []).total}</span>;
         render(<><AttentionPage onGo={vi.fn()} /><AttentionStrip tasks={[]} crops={[]} onOpen={vi.fn()} /><BottomTotal /></>);
         await waitFor(() => expect(screen.getByTestId('attention-first-seen-mix')).toBeInTheDocument());
-        expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('2');
+        expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('२');
         expect(screen.getByTestId('bottom-total')).toHaveTextContent('2');
 
         fireEvent.click(screen.getByTestId('attention-first-seen-mix'));
         await waitFor(() => expect(screen.queryByTestId('attention-card-mix')).toBeNull());
-        await waitFor(() => expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('1'));
+        await waitFor(() => expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('१'));
         expect(screen.getByTestId('bottom-total')).toHaveTextContent('1');
         expect(screen.getByTestId('attention-strip-first')).not.toHaveTextContent('हे मिश्रण चुकीचं आहे');
 
@@ -202,7 +202,7 @@ describe('लक्ष द्या - "आधी हे पाहा" (IT5 Task 
 
         board.cards = input.cards;
         render(<AttentionStrip tasks={[]} crops={[]} onOpen={vi.fn()} />);
-        await waitFor(() => expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('3'));
+        await waitFor(() => expect(screen.getByTestId('attention-strip-total')).toHaveTextContent('३'));
     });
 
     it('Seen_QueuesComplianceAcknowledge_WithTopSignalId_AndLeavesList (queue words): the queued acknowledge has a name in the sync sheet in both languages, not the bare wire name', () => {

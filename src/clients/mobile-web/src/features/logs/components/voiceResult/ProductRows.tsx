@@ -20,6 +20,7 @@ import { inputWords } from '../../../../domain/inputs/inputWords';
 import { ingredientLine, type ProductAnswerKit } from './ProductCard';
 import { answersOf, identityOf, statusOf, TYPE_STYLE, typeKeyOf, type ItemStatus } from './inputIdentityModel';
 import { resultCopy, type ResultCopy } from './resultCopy';
+import { digitsFor } from '../../../../shared/utils/marathiDigits';
 
 const SANS = "'Noto Sans Devanagari', sans-serif";
 
@@ -29,12 +30,13 @@ interface Shown { id: string; name: string; amount: string }
 const shownOf = (boxes: readonly ProductBox[], language: string | undefined): Shown[] =>
     boxes.flatMap(b => b.items)
         // His whole phrase standing for the name already holds the amount he said: not repeated beside it.
-        .map(i => ({ id: i.id, name: productName(i, language), amount: nameIsPhrase(i, language) ? '' : amountText(i.amount, language) }))
+        .map(i => ({ id: i.id, name: productName(i, language), amount: nameIsPhrase(i, language) ? '' : amountText(i.amount, language, true) }))
         .filter(p => p.name || p.amount);
 
-/** His words for the water, else the number(s) exactly as recorded (the screen's own digits, as everywhere on it). */
-const waterText = (w: ProductWater, copy: ResultCopy): string =>
-    w.spoken ?? [w.litres ? copy.litres(String(w.litres)) : '', w.hours ? copy.hours(String(w.hours)) : ''].filter(Boolean).join(' · ');
+/** His words for the water, else the number(s) exactly as recorded; the digits follow the screen's language (IT-D2: Devanagari in Marathi mode). */
+const waterText = (w: ProductWater, copy: ResultCopy, language: string | undefined): string =>
+    w.spoken !== undefined ? digitsFor(w.spoken, language)
+        : [w.litres ? copy.litres(digitsFor(w.litres, language)) : '', w.hours ? copy.hours(digitsFor(w.hours, language)) : ''].filter(Boolean).join(' · ');
 
 /** "यातून काय समजलं": all the products of this recording on one row (design `AddedProducts`). */
 export const AddedProducts: React.FC<{ boxes: readonly ProductBox[] }> = ({ boxes }) => {
@@ -69,7 +71,7 @@ export const ProductBoxCard: React.FC<{ box: ProductBox }> = ({ box }) => {
     const shown = shownOf([box], language);
     if (shown.length === 0) return null;
     const Icon = KIND_ICON[box.kind];
-    const water = box.water.map(w => waterText(w, copy)).filter(Boolean);
+    const water = box.water.map(w => waterText(w, copy, language)).filter(Boolean);
     return (
         <section className="overflow-hidden rounded-2xl border border-violet-200 bg-white" data-testid={`vr-product-box-${box.id}`} data-kind={box.kind} style={{ fontFamily: SANS }}>
             <header className="bg-violet-50 px-2.5 py-1.5">
@@ -155,7 +157,7 @@ export const ProductRow: React.FC<ProductRowProps> = ({ item, logId, kit, onOpen
     const status = statusWords(rawStatus, kit, language);
     const Icon = status ? STATUS_ICON[status.icon] : null;
     const name = productName(item, language) || (item.matchName ?? '');
-    const amount = nameIsPhrase(item, language) ? '' : amountText(item.amount, language);
+    const amount = nameIsPhrase(item, language) ? '' : amountText(item.amount, language, true);
     const ingredient = ingredientLine(identity, language);
     return (
         <button type="button" onClick={() => onOpen(item, logId)} data-testid={`vr-prow-${item.id}`} data-type={key}
@@ -183,9 +185,9 @@ export const ProductRow: React.FC<ProductRowProps> = ({ item, logId, kit, onOpen
 export const ProductTank: React.FC<{ box: ProductBox; logId: string; kit: ProductAnswerKit; onOpen: ProductRowProps['onOpen'] }> = ({ box, logId, kit, onOpen }) => {
     const language = useOptionalLanguage()?.language;
     const copy = resultCopy(language);
-    const items = box.items.filter(i => productName(i, language) || amountText(i.amount, language));
+    const items = box.items.filter(i => productName(i, language) || amountText(i.amount, language, true));
     if (items.length === 0) return null;
-    const water = box.water.map(w => waterText(w, copy)).filter(Boolean);
+    const water = box.water.map(w => waterText(w, copy, language)).filter(Boolean);
     const Icon = KIND_ICON[box.kind];
     return (
         <section className="rounded-2xl border-2 border-violet-300 bg-white p-2.5" data-testid={`vr-tank-${box.id}`} data-kind={box.kind} style={{ fontFamily: SANS }}>

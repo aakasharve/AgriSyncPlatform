@@ -24,10 +24,10 @@ export const partNameIn = (part: PartKey, language: string | null | undefined): 
  * What one entry says, as recorded: a spray / fertiliser's products with their amounts when they can be shown in this
  * language, else the entry's value, else his phrase; '' when there is nothing to show (the part's name stands for it).
  */
-export function entryText(e: PartEntry, language: string | null | undefined): string {
+export function entryText(e: PartEntry, language: string | null | undefined, nativeDigits = false): string {
     if (e.verified && showsProducts(e.products, language)) {
         const items = e.products.items
-            .map(i => [productName(i, language), nameIsPhrase(i, language) ? '' : amountText(i.amount, language)].filter(Boolean).join(' · '))
+            .map(i => [productName(i, language), nameIsPhrase(i, language) ? '' : amountText(i.amount, language, nativeDigits)].filter(Boolean).join(' · '))
             .filter(Boolean);
         if (items.length > 0) return items.join(', ');
     }

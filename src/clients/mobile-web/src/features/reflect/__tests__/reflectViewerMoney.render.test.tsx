@@ -90,12 +90,14 @@ describe('a WORKER\'s phone (review B001, B002)', () => {
         renderAs('worker');
         // the card: what happened, never the owner's money (no ledger figure he may see, no record amount)
         expect(screen.getByTestId('plot-card-grape:g1').textContent).not.toContain('800');
+        expect(screen.getByTestId('plot-card-grape:g1').textContent).not.toContain('८००'); // IT-D2: nor in Devanagari digits
         openRecording('grape:g1', 'dz');
         const day = screen.getByTestId('rf-day');
         expect(screen.getByTestId('rf-rec-dz-who')).toHaveTextContent('मालक');
         expect(screen.getByTestId('rf-rec-dz-who')).toHaveAttribute('data-you', 'no');
         expect(day).not.toHaveTextContent('तुम्ही');
         expect(day.textContent).not.toContain('800');
+        expect(day.textContent).not.toContain('८००');
         expect(within(screen.getByTestId('rf-rec-dz-parts')).getByText('—')).toBeInTheDocument();
     });
 
@@ -110,8 +112,8 @@ describe('a WORKER\'s phone (review B001, B002)', () => {
     it('lane RF2: the whole farm\'s card holds the whole-farm work — no money chip for him, the deleted record not counted', () => {
         renderAs('worker');
         const farm = screen.getByTestId('plot-card-farm');
-        expect(farm.querySelector('[data-kind="labour"]')).toHaveTextContent('2 जण');
-        expect(screen.getByTestId('plot-times-farm')).toHaveTextContent('आज 1 वेळा सांगितलं');
+        expect(farm.querySelector('[data-kind="labour"]')).toHaveTextContent('२ जण');
+        expect(screen.getByTestId('plot-times-farm')).toHaveTextContent('आज १ वेळा सांगितलं');
         expect(screen.queryByTestId('plot-money-farm')).toBeNull();
         expect(farm.textContent).not.toContain('खुरपणी');
     });
@@ -122,7 +124,7 @@ describe('a WORKER\'s phone (review B001, B002)', () => {
         expect(panel).toHaveTextContent('रु. —');
         expect(screen.getByTestId('farm-wide-record-count')).toHaveTextContent('1');
         const page = document.body.textContent ?? '';
-        for (const amount of ['800', '9,999', '9999', '5,555', '5555']) expect(page).not.toContain(amount);
+        for (const amount of ['800', '9,999', '9999', '5,555', '5555', '८००', '९,९९९', '९९९९', '५,५५५', '५५५५']) expect(page).not.toContain(amount);
     });
 });
 
@@ -141,7 +143,7 @@ describe('the OWNER\'s phone, the same day', () => {
 
     it('lane RF2: the whole farm\'s card shows the LEDGER\'s whole-farm money as its chip, never a record\'s own total', () => {
         renderAs('owner');
-        expect(screen.getByTestId('plot-money-farm')).toHaveTextContent('800');
+        expect(screen.getByTestId('plot-money-farm')).toHaveTextContent('८००');
         expect(screen.getByTestId('plot-card-farm').textContent).not.toContain('9,999');
     });
 

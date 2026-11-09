@@ -19,6 +19,7 @@ import { useOptionalLanguage } from '../../i18n/LanguageContext';
 import { dayOf } from '../invitations/invitationModel';
 import { fetchKeptWork, type KeptWorkItem } from './keptWorkClient';
 import { relationshipCopy, type RelationshipCopy } from './relationshipCopy';
+import { digitsFor } from '../../shared/utils/marathiDigits';
 
 /** The words of one kept item: what it was, who sent it and when, and why it was kept. */
 export function keptItemWords(
@@ -81,17 +82,19 @@ export const KeptWorkAttention: React.FC = () => {
     return (
         <section className="space-y-2" data-testid="kept-work">
             <p className="m-0 flex items-center gap-1.5 px-1 text-[15px] font-extrabold text-stone-800">
-                <Archive size={17} aria-hidden="true" />{copy.kept.title(items.length)}
+                <Archive size={17} aria-hidden="true" />{digitsFor(copy.kept.title(items.length), language)}
             </p>
             <p className="m-0 px-1 text-[13px] font-semibold leading-snug text-stone-600">{copy.kept.intro}</p>
             <ul className="m-0 space-y-2 p-0">
                 {items.map(item => {
+                    // IT-D2: a count and a day are numbers - the language's digits (the copy file is shared with other screens).
                     const words = keptItemWords(item, copy, language);
+                    const shown = { what: words.what, whoWhen: digitsFor(words.whoWhen, language), why: digitsFor(words.why, language) };
                     return (
                         <li key={item.id} className="list-none rounded-2xl bg-white p-3 ring-1 ring-stone-200" data-testid={`kept-work-${item.id}`} data-kind={item.kind}>
-                            <p className="m-0 text-[15.5px] font-extrabold text-stone-900" data-testid="kept-what">{words.what}</p>
-                            <p className="m-0 text-[13.5px] font-bold text-stone-700 [overflow-wrap:anywhere]" data-testid="kept-who-when">{words.whoWhen}</p>
-                            <p className="m-0 text-[13.5px] font-semibold text-stone-600" data-testid="kept-why">{words.why}</p>
+                            <p className="m-0 text-[15.5px] font-extrabold text-stone-900" data-testid="kept-what">{shown.what}</p>
+                            <p className="m-0 text-[13.5px] font-bold text-stone-700 [overflow-wrap:anywhere]" data-testid="kept-who-when">{shown.whoWhen}</p>
+                            <p className="m-0 text-[13.5px] font-semibold text-stone-600" data-testid="kept-why">{shown.why}</p>
                         </li>
                     );
                 })}

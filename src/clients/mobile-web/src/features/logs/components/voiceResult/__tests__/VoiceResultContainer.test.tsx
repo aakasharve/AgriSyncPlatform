@@ -213,14 +213,14 @@ describe('the ONE result screen — what he reads', () => {
         const card = screen.getByTestId('vr-link-card');
         expect(card.getAttribute('data-part')).toBe('irrigation');
         expect(card.textContent).toContain('“दोन तास पाणी”');
-        expect(card.textContent).toContain('2 तास'); // what Sathi noted, as recorded
+        expect(card.textContent).toContain('२ तास'); // what Sathi noted, as recorded (IT-D2: Devanagari digits in Marathi mode)
         expect(screen.queryByTestId('vr-link-labour')).toBeNull();
     });
 
     it('what the day holds is ONE tappable line per part (lane IT4 Task 1); this recording\'s parts carry "नवीन"', () => {
         mount(props());
         const lines = screen.getByTestId('vr-lines');
-        expect(within(lines).getByTestId('vr-line-head-part:irrigation').textContent).toBe('2 तास');
+        expect(within(lines).getByTestId('vr-line-head-part:irrigation').textContent).toBe('२ तास');
         expect(lines.textContent).toContain('छाटणी'); // the morning's work is part of the day
         expect(screen.getByTestId('vr-line-part:irrigation').getAttribute('data-touched')).toBe('yes');
         expect(screen.getByTestId('vr-line-part:crop').getAttribute('data-touched')).toBe('no');
@@ -250,7 +250,7 @@ describe('the ONE result screen — what he reads', () => {
         expect(screen.getByTestId(`vr-earlier-state-${NOON}`).textContent).toBe('पक्कं नाही');
         await waitFor(() => expect(screen.getByTestId(`vr-earlier-play-${NOON}`)).toBeTruthy());
         expect(screen.queryByTestId(`vr-earlier-play-${MORNING}`)).toBeNull(); // his clip is not on this phone
-        expect(screen.getByTestId('vr-count').textContent).toBe('आज 3 वेळा सांगितलं');
+        expect(screen.getByTestId('vr-count').textContent).toBe('आज ३ वेळा सांगितलं');
     });
 
     it('has no English and no "नोंद" anywhere on the screen', async () => {
@@ -420,7 +420,7 @@ describe('the ONE result screen — one recording, several plots; a stoppage; a 
         });
         mount(p);
         expect(screen.getByTestId('vr-count').textContent).toBe('आज पहिल्यांदा सांगितलं');
-        expect(screen.getByTestId('vr-speakers').textContent).toContain('सुनील · 1 वेळा');
+        expect(screen.getByTestId('vr-speakers').textContent).toContain('सुनील · १ वेळा');
         expect(screen.queryByTestId('vr-edit')).toBeNull();
         expect(within(screen.getByTestId(`vr-plot-${NOW}`)).queryByText(/जाणार नाही/)).toBeNull();
         expect(screen.getByTestId(`vr-plot-${PLOT2}`).textContent).toContain('जाणार नाही');
@@ -452,8 +452,8 @@ describe('the ONE result screen — one recording, several plots; a stoppage; a 
             }),
         ];
         mount(props({ history }));
-        expect(screen.getByTestId('vr-count').textContent).toBe('आज 2 वेळा सांगितलं');
-        expect(screen.getByTestId('vr-speakers').textContent).toContain('रमेश · 1 वेळा');
+        expect(screen.getByTestId('vr-count').textContent).toBe('आज २ वेळा सांगितलं');
+        expect(screen.getByTestId('vr-speakers').textContent).toContain('रमेश · १ वेळा');
         expect(screen.getAllByTestId(/^vr-earlier-who-/)).toHaveLength(1);
     });
 
@@ -483,7 +483,7 @@ describe('the ONE result screen — one recording, several plots; a stoppage; a 
         expect(screen.queryByTestId(`vr-earlier-typed-${NOW}`)).toBeNull();
         // Round 3 (I13-V2-m5): an entry typed on the form is not a time he SAID it.
         expect(screen.getByTestId('vr-count').textContent).toBe('आज पहिल्यांदा सांगितलं');
-        expect(screen.getByTestId('vr-speakers').textContent).toContain('सुनील · 1 वेळा');
+        expect(screen.getByTestId('vr-speakers').textContent).toContain('सुनील · १ वेळा');
     });
 
     it('the money he said with the labour makes खर्च told on the screen and shows the ₹ as he said it (round 3)', () => {
@@ -494,7 +494,7 @@ describe('the ONE result screen — one recording, several plots; a stoppage; a 
         });
         mount(props({ history: [paid] }));
         expect(screen.getByTestId('vr-part-expense').getAttribute('data-told')).toBe('yes'); // never a red "tell it again"
-        expect(screen.getByTestId('vr-line-head-part:expense').textContent).toContain('मजूर · ₹1600');
+        expect(screen.getByTestId('vr-line-head-part:expense').textContent).toContain('मजूर · ₹१६००');
     });
 
     it('a save whose sync enqueue gave NO evidence (null) offers no confirm: its verify would reach the server before any create', async () => {
@@ -587,10 +587,10 @@ describe('the ONE result screen — lane L6b (founder design)', () => {
         const box = screen.getByTestId('vr-tank-sp');
         expect(box.getAttribute('data-kind')).toBe('spray');
         expect(box.textContent).toContain('फवारणी');
-        expect(within(box).getByTestId('vr-product-water').textContent).toBe('पाणी: 500 लिटर');
+        expect(within(box).getByTestId('vr-product-water').textContent).toBe('पाणी: ५०० लिटर');
         const rows = within(box).getAllByTestId('vr-prow-name');
         expect(rows.map(r => r.textContent)).toEqual(['इथरेल', 'बाविस्तीन']);
-        expect(within(box).getAllByTestId('vr-prow-amount').map(r => r.textContent)).toEqual(['250 मिली']); // no amount said for the second: none shown
+        expect(within(box).getAllByTestId('vr-prow-amount').map(r => r.textContent)).toEqual(['२५० मिली']); // no amount said for the second: none shown
         expect(container.textContent).not.toMatch(/9999|777/);
         expect(container.textContent).not.toMatch(/मात्रा सांगितली नाही/);
         expect(container.textContent).not.toMatch(/[A-Za-z]/); // Marathi mode: the units in Marathi, no English labels
@@ -602,7 +602,7 @@ describe('lane OF fix 1 (L2) — a recording saved for a PAST day never says "�
     // he spoke on that day ("24 ऑक्टो ला … सांगितलं"). (Fix 2 also repairs this test's English check: its word-boundary
     // regex had been written with control characters, so it could never match anything.)
     const WORDS = {
-        mr: { count: '24 ऑक्टो च्या कामाबद्दल पहिल्यांदा सांगितलं', who: '24 ऑक्टो च्या कामाबद्दल कोणी सांगितलं', title: '24 ऑक्टो चं काम', today: /आज |24 ऑक्टो ला (पहिल्यांदा|कोणी|[0-9])/ },
+        mr: { count: '२४ ऑक्टो च्या कामाबद्दल पहिल्यांदा सांगितलं', who: '२४ ऑक्टो च्या कामाबद्दल कोणी सांगितलं', title: '२४ ऑक्टो चं काम', today: /आज |२४ ऑक्टो ला (पहिल्यांदा|कोणी|[0-9०-९])/ },
         en: { count: 'First time telling about the work of 24 Oct', who: 'Who told about the work of 24 Oct', title: 'Work on 24 Oct', today: /\btoday\b|told on 24 Oct|First time on/i },
     } as const;
     afterEach(() => { lng.v = 'mr'; });

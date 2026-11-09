@@ -51,9 +51,9 @@ describe('buildPlotDayCard — only what happened, as chips', () => {
         expect(card.status).toBe('worked');
         expect(kinds(card.chips)).toEqual(['crop', 'labour', 'irrigation', 'machinery', 'observation']);
         expect(textsOf(card.chips, 'crop')).toEqual(['छाटणी']);
-        expect(textsOf(card.chips, 'labour')).toEqual(['6 जण']);
-        expect(textsOf(card.chips, 'irrigation')).toEqual(['2 तास']);
-        expect(textsOf(card.chips, 'machinery')).toEqual(['ट्रॅक्टर · 3 तास']);
+        expect(textsOf(card.chips, 'labour')).toEqual(['६ जण']); // IT-D2: Devanagari digits on the plot card (Marathi mode)
+        expect(textsOf(card.chips, 'irrigation')).toEqual(['२ तास']);
+        expect(textsOf(card.chips, 'machinery')).toEqual(['ट्रॅक्टर · ३ तास']);
         // the farmer's note is an "निरीक्षण" chip, not an amber box
         expect(textsOf(card.chips, 'observation')).toEqual(['पानं पिवळी']);
         // the record's own money (₹1800) is never a chip: the ledger's figure is, and none was passed
@@ -67,7 +67,7 @@ describe('buildPlotDayCard — only what happened, as chips', () => {
         const card = buildPlotDayCard(g1, [evening, morning], scope, TODAY_KEY, TODAY);
         const labour = card.chips.filter(c => c.kind === 'labour');
         expect(labour).toHaveLength(2);
-        expect(labour.map(c => c.text)).toEqual([expect.stringContaining('5'), '10 जण']);
+        expect(labour.map(c => c.text)).toEqual([expect.stringContaining('५'), '१० जण']);
         expect(JSON.stringify(card.chips)).not.toContain('17');
         expect(new Set(labour.map(c => c.recordingKey)).size).toBe(2);
         expect(card.recordings).toBe(2);
@@ -84,7 +84,7 @@ describe('buildPlotDayCard — only what happened, as chips', () => {
     it('an item the server could not verify keeps its mark; it is never folded into a verified chip', () => {
         const day = log({ id: 'u', meta: meta('03:00'), labour: [{ id: 'l1', type: 'HIRED', count: 4 }, { id: 'l2', type: 'HIRED', count: 2, provenanceVerified: false }] });
         const labour = buildPlotDayCard(g1, [day], scope, TODAY_KEY, TODAY).chips.filter(c => c.kind === 'labour');
-        expect(labour.map(c => [c.text, c.verified])).toEqual([['4 जण', true], ['2 जण', false]]);
+        expect(labour.map(c => [c.text, c.verified])).toEqual([['४ जण', true], ['२ जण', false]]);
     });
 
     it('a stoppage is a chip of its own; a whole-day stop marks the card stopped', () => {
@@ -119,10 +119,14 @@ describe('buildPlotDayCard — only what happened, as chips', () => {
     });
 
     it('day of the season and the area, as before', () => {
-        expect(buildPlotDayCard(g1, [], scope, TODAY_KEY, TODAY).dayLabel).toBe('दिवस 25');
+        // IT-D2 (founder D-123b): Marathi mode (and no language, which reads Marathi) writes the day in Devanagari digits; English keeps 0-9.
+        expect(buildPlotDayCard(g1, [], scope, TODAY_KEY, TODAY).dayLabel).toBe('दिवस २५');
+        expect(buildPlotDayCard(g1, [], scope, TODAY_KEY, TODAY, undefined, 'mr').dayLabel).toBe('दिवस २५');
+        expect(buildPlotDayCard(g1, [], scope, TODAY_KEY, TODAY, undefined, 'en').dayLabel).toBe('दिवस 25');
         expect(buildPlotDayCard(g2, [], scope, TODAY_KEY, TODAY).dayLabel).toBe('जमीन तयारी');
         const withArea = { ...g1, plot: { ...g1.plot!, baseline: { totalArea: 2.5, unit: 'Acre' as const } } };
-        expect(buildPlotDayCard(withArea, [], scope, TODAY_KEY, TODAY).area).toBe('2.5 एकर');
+        expect(buildPlotDayCard(withArea, [], scope, TODAY_KEY, TODAY).area).toBe('२.५ एकर');
+        expect(buildPlotDayCard(withArea, [], scope, TODAY_KEY, TODAY, undefined, 'en').area).toBe('2.5 एकर');
     });
 
     it('reads only the chosen plot and the chosen day', () => {
@@ -139,7 +143,7 @@ describe('the "संपूर्ण शेत" card (lane RF2) — whole-farm w
         const logs = placeDayLogs([farm, plotDay], TODAY_KEY, farmLogFilter(new Set()));
         expect(logs.map(l => l.id)).toEqual(['f']);
         const card = buildDayCardCore(logs);
-        expect(textsOf(card.chips, 'labour')).toEqual(['3 जण']);
+        expect(textsOf(card.chips, 'labour')).toEqual(['३ जण']);
         expect(card.chips.some(c => c.kind === 'expense')).toBe(false); // money: the ledger's only
         expect(card.recordings).toBe(1);
     });
@@ -155,7 +159,7 @@ describe('dayChipsOf — a spray keeps its amount as said, the result screen\'s 
     it('Marathi: the product with its dose, "इथरेल · 300 मिली"', () => {
         const day = log({ id: 's', meta: meta('03:00'), inputs: [{ id: 'in', method: 'Spray', productName: 'इथरेल', quantity: 300, unit: 'ml' } as never] });
         const [chip] = dayChipsOf([day], 'mr').filter(c => c.kind === 'inputs');
-        expect(chip.text).toBe('इथरेल · 300 मिली');
+        expect(chip.text).toBe('इथरेल · ३०० मिली');
     });
 
     it('English: a product label in English letters with the English unit, "Ethrel · 300 ml" (review B009)', () => {
@@ -169,7 +173,7 @@ describe('dayChipsOf — fix pass (review B007, founder live test D1 / D2)', () 
     it('B007: within one recording a value said twice shows twice ("5 जण · 5 जण"), never merged into one', () => {
         const day = log({ id: 'd', meta: meta('03:00'), labour: [{ id: 'a', type: 'HIRED', count: 5 }, { id: 'b', type: 'CONTRACT', count: 5 }] });
         const labour = dayChipsOf([day], 'mr').filter(c => c.kind === 'labour');
-        expect(labour.map(c => c.text)).toEqual(['5 जण · 5 जण']);
+        expect(labour.map(c => c.text)).toEqual(['५ जण · ५ जण']);
     });
 
     it('D1: an older record kept only as task lines gives its part a LABEL chip, never the free text of its task line', () => {
@@ -186,6 +190,6 @@ describe('dayChipsOf — fix pass (review B007, founder live test D1 / D2)', () 
         const d = log({ id: 'e', meta: meta('09:00', 'op3'), labour: [{ id: 'l2', type: 'HIRED', count: 4 }] });
         const chips = dayChipsOf([a, b, c, d], 'mr');
         expect(chips.filter(x => x.kind === 'irrigation')).toEqual([expect.objectContaining({ text: '' })]);
-        expect(chips.filter(x => x.kind === 'labour').map(x => x.text)).toEqual(['4 जण', '4 जण']);
+        expect(chips.filter(x => x.kind === 'labour').map(x => x.text)).toEqual(['४ जण', '४ जण']);
     });
 });

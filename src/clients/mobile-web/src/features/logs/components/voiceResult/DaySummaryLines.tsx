@@ -42,7 +42,7 @@ export interface DayLine {
 }
 
 const shownNames = (box: ProductBox, language: string | undefined): string =>
-    box.items.map(i => productName(i, language)).filter(Boolean).join(' + ') || box.items.map(i => amountText(i.amount, language)).filter(Boolean).join(' + ');
+    box.items.map(i => productName(i, language)).filter(Boolean).join(' + ') || box.items.map(i => amountText(i.amount, language, true)).filter(Boolean).join(' + ');
 
 /** The lines of a day, in the parts' order. Pure. */
 export function dayLinesOf(day: DayView, language: string | undefined): DayLine[] {

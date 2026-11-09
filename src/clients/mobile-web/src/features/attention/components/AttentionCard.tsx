@@ -11,6 +11,7 @@ import AttentionRankPill from './AttentionRankPill';
 import type { AttentionCardCacheRecord } from '../../../infrastructure/storage/DexieDatabase';
 import { GlassCard, IconDot, Tap, type Tone } from '../../../shared/components/ui/placeUi';
 import { stageNameMr } from '../../../shared/utils/stageNameMr';
+import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 import { attentionRankOf, type AttentionRankName } from '../attentionWire';
 
 interface AttentionCardProps {
@@ -75,14 +76,14 @@ const AttentionCard: React.FC<AttentionCardProps> = ({ card, onAction, actionLab
                 <div className="mt-2 flex flex-wrap gap-1.5">
                     {card.overdueTaskCount != null && card.overdueTaskCount > 0 && (
                         // PROPOSED (Marathi) — was "{n} overdue"
-                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[12.5px] font-bold text-amber-800 ring-1 ring-amber-200">{card.overdueTaskCount} कामं बाकी</span>
+                        <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-[12.5px] font-bold text-amber-800 ring-1 ring-amber-200">{toDevanagariDigits(card.overdueTaskCount)} कामं बाकी</span>
                     )}
                     {health && <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-[12.5px] font-bold text-stone-700">{health}</span>}
                     {openComplianceSignalCount != null && openComplianceSignalCount > 0 && onComplianceChipTap && (
                         <Tap onClick={() => onComplianceChipTap(card.plotId, card.farmId)}
                             className="rounded-full bg-rose-100 px-2.5 py-0.5 text-[12.5px] font-bold text-rose-800 ring-1 ring-rose-200">
                             {/* "चेतावण्या" = the app's own word for these (ComplianceSignalsPage title) */}
-                            ⚠ {openComplianceSignalCount} चेतावण्या
+                            ⚠ {toDevanagariDigits(openComplianceSignalCount)} चेतावण्या
                         </Tap>
                     )}
                 </div>
