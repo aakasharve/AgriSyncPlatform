@@ -435,7 +435,7 @@ public sealed class PlotScopeFixPass1RealPostgresTests(ITestOutputHelper output)
         Row(Worker).GetProperty("effectivePlotScope").GetString().Should().Be("OwnWork", "a कामगार reads his own work");
         Names(Row(Worker), "plotScopeChoices").Should().Equal(["OwnWork", "ChosenPlots"], "every plot would read as his own work");
         // lane MU-1 (MU-2 review N-3): review money needs see money, so it does nothing on his own-work seat either.
-        Names(Row(Worker), "authoritiesNotInForce").Should().BeEquivalentTo(["SeeMoney", "SeeWages", "ReviewMoney"]);
+        Names(Row(Worker), "authoritiesNotInForce").Should().BeEquivalentTo(["SeeMoney", "SeeWages", "ReviewMoney", "SeeCompare"]); // lane CMP-D1: a Worker seat never holds it
         Names(Row(CoOwner), "authoritiesNotInForce").Should().BeEmpty();
         Row(CoOwner).GetProperty("effectivePlotScope").GetString().Should().Be("AllPlots");
 

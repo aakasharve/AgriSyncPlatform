@@ -311,7 +311,11 @@ public sealed class ManageMembershipHandler(
                     var permissions = command.ResetPermissions ? null
                         : command.Permissions is not null ? requestedPermissions
                         : roleChanges ? null
-                        : seat.Permissions;
+                        // spec: plr-d10 lane CMP-D1 fix round 1 (review N002) - the stored choice is re-sent UNCHANGED, but a bit the
+                        // label can never hold ("तुलना पाहणे" on a Worker row an older build or a hand left behind) is dropped
+                        // here instead of failing the owner's unrelated change; an EXPLICIT grant of it still refuses (above).
+                        : seat.Permissions is { } kept ? kept & ~FarmPermissionDefaults.BarredFor(role)
+                        : null;
                     // The owner tier carries the grant by role: the stored flag stays off there.
                     var grant = LabourManagementPermission.IsCarriedByRole(role)
                         ? (roleChanges ? false : null)

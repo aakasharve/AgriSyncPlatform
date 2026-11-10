@@ -6,7 +6,8 @@
  * spec: plr-d10-redesign-real-integration-2026-10-25 (I14 — CMP-3 = H05 = P-1 = MU-21)
  *
  * Founder, 2026-10-25 (PENDING-DECISIONS, answered): "Workers do not see तुलना." Pinned on every door:
- *   - the rule itself (`hiddenMainViewsFor`): Worker → तुलना hidden; owner / mukadam / unknown → nothing hidden;
+ *   - the rule itself (`hiddenMainViewsFor`): lane CMP-D1 (founder D-81) - decided from the seat's authorities, fail closed;
+ *     the full matrix is in `hiddenViews.seeCompare.test.ts`; here: Worker → hidden, primary owner / a SeeCompare holder → shown;
  *   - the page switcher (`OversightNavCards`): no तुलना card for a worker, the other two share the row;
  *   - the swipe (`MainViewTransition`): never lands on तुलना, and does not start from it;
  *   - the router (`AppRouter`): hands the hidden list to the swipe and to every route, and sends a worker
@@ -102,17 +103,19 @@ const swipe = (el: HTMLElement, fromX: number, toX: number) => {
 };
 
 describe('the rule: who may not open तुलना', () => {
-    it('a worker: तुलना hidden; owner, partner, mukadam or an unknown role: nothing hidden', () => {
-        expect(hiddenMainViewsFor('Worker')).toEqual(['compare']);
-        for (const role of ['PrimaryOwner', 'SecondaryOwner', 'Mukadam', undefined, null]) {
-            expect(hiddenMainViewsFor(role)).toEqual([]);
+    it('a worker: तुलना hidden; the primary owner and a holder of SeeCompare: nothing hidden; an unknown seat: hidden (CMP-D1)', () => {
+        expect(hiddenMainViewsFor({ role: 'Worker' })).toEqual(['compare']);
+        expect(hiddenMainViewsFor({ role: 'PrimaryOwner' })).toEqual([]);
+        expect(hiddenMainViewsFor({ role: 'Mukadam', authorities: [{ name: 'SeeCompare', expiresAtUtc: null }] })).toEqual([]);
+        for (const seat of [{ role: 'SecondaryOwner', authorities: [] }, { role: 'Mukadam' }, undefined, null]) {
+            expect(hiddenMainViewsFor(seat)).toEqual(['compare']);
         }
     });
 });
 
 describe('the page switcher', () => {
     it('a worker sees आजची कामे and पूर्ण शेतीचा आढावा only — no तुलना card', () => {
-        render(<OversightNavCards language="mr" view="log" onChange={vi.fn()} hiddenViews={hiddenMainViewsFor('Worker')} />);
+        render(<OversightNavCards language="mr" view="log" onChange={vi.fn()} hiddenViews={hiddenMainViewsFor({ role: 'Worker' })} />);
         expect(screen.getByTestId('oversight-nav-card-log')).toBeInTheDocument();
         expect(screen.getByTestId('oversight-nav-card-reflect')).toBeInTheDocument();
         expect(screen.queryByTestId('oversight-nav-card-compare')).toBeNull();
@@ -120,13 +123,13 @@ describe('the page switcher', () => {
     });
 
     it('an owner still sees all three', () => {
-        render(<OversightNavCards language="mr" view="log" onChange={vi.fn()} hiddenViews={hiddenMainViewsFor('PrimaryOwner')} />);
+        render(<OversightNavCards language="mr" view="log" onChange={vi.fn()} hiddenViews={hiddenMainViewsFor({ role: 'PrimaryOwner' })} />);
         expect(screen.getByTestId('oversight-nav-card-compare')).toBeInTheDocument();
     });
 });
 
 describe('the swipe between tabs', () => {
-    const worker = hiddenMainViewsFor('Worker');
+    const worker = hiddenMainViewsFor({ role: 'Worker' });
 
     it('a worker swiping on from पूर्ण शेतीचा आढावा does not land on तुलना', () => {
         const onChangeView = vi.fn();

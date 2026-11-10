@@ -26,6 +26,8 @@ export const AUTHORITY = {
     labRecords: 'LabRecords',
     scheduleTemplates: 'ScheduleTemplates',
     seeAllTasks: 'SeeAllTasks',
+    // lane CMP-D1 (founder D-81) - "तुलना पाहणे": the तुलना tab (and, from lane CMP-D2, the compare read).
+    seeCompare: 'SeeCompare',
 } as const;
 
 export type AuthorityName = typeof AUTHORITY[keyof typeof AUTHORITY];
@@ -36,6 +38,7 @@ export type AuthorityName = typeof AUTHORITY[keyof typeof AUTHORITY];
  * follows them); lane L8b-1 (founder D-73) made plan work real (ScheduleChangeGate on every planning door).
  * Lane L8c-2: assign work and see all tasks are enforced by the server since L8c-1 (the planned-work doors and reads), so they have
  * switches too, in the server's own order (`FarmAuthorities.Switchable`).
+ * Lane CMP-D1 (founder D-81): see the comparison is the last one - off until the primary owner gives it; never on a कामगार seat.
  */
 export const SWITCHABLE_AUTHORITIES: readonly AuthorityName[] = [
     AUTHORITY.takeAttendance,
@@ -49,6 +52,7 @@ export const SWITCHABLE_AUTHORITIES: readonly AuthorityName[] = [
     AUTHORITY.labRecords,
     AUTHORITY.scheduleTemplates,
     AUTHORITY.seeAllTasks,
+    AUTHORITY.seeCompare,
 ];
 
 /** An authority that means nothing without another (review money needs see money, §11.1). */

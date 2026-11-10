@@ -173,7 +173,7 @@ public sealed partial class MembershipLifecycleRoutesRealPostgresTests
         owner.Permissions.Should().BeEquivalentTo(new[]
         {
             "SeeMoney", "SeeWages", "ReviewMoney", "PlanWork", "AddTestRecord",
-            "AssignWork", "ConfirmRecords", "EditFarmSetup", "ManageScheduleTemplates", "SeeAllTasks",
+            "AssignWork", "ConfirmRecords", "EditFarmSetup", "ManageScheduleTemplates", "SeeAllTasks", "SeeCompare",
         });
         owner.Authorities!.Select(a => a.Name).Should().BeEquivalentTo(FarmAuthorities.All.Select(FarmAuthorities.NameOf));
         owner.Authorities!.Should().OnlyContain(a => a.ExpiresAtUtc == null);

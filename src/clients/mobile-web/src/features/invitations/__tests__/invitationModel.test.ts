@@ -54,7 +54,7 @@ describe('the three questions edit one grant', () => {
         expect(chosen.plotIds).toEqual(['p1', 'p3']);
         expect(withPlots(chosen, 'AllPlots', ['p1']).plotIds).toEqual([]);
         expect(notInForce(chosen)).toEqual(['EditFarmSetup']);
-        expect(notInForce(presetGrant('Worker'))).toEqual(['EditFarmSetup', 'SeeMoney', 'SeeWages', 'ReviewMoney']);
+        expect(notInForce(presetGrant('Worker'))).toEqual(['EditFarmSetup', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'SeeCompare']); // lane CMP-D1: a कामगार seat never holds तुलना पाहणे
     });
 
     // Lane L8c-2: AssignWork and SeeAllTasks are enforced by the server since L8c-1 (like PlanWork since L8b-1), so they are kept

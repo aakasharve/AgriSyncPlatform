@@ -700,6 +700,7 @@ public sealed class FarmMembership : Entity<Guid>
         }
 
         EnsureKnown(permissions);
+        EnsureHoldable(role, permissions);
 
         Status = MembershipStatus.Active;
         Role = role;
@@ -816,6 +817,7 @@ public sealed class FarmMembership : Entity<Guid>
 
         RequireActor(changedByUserId);
         EnsureKnown(permissions);
+        EnsureHoldable(role, permissions);
 
         if (Role == role && Permissions == permissions)
         {
@@ -858,6 +860,12 @@ public sealed class FarmMembership : Entity<Guid>
             if (!Enum.IsDefined(authority))
             {
                 throw new ArgumentException("Unknown authority.", nameof(desired));
+            }
+
+            // spec: plr-d10 lane CMP-D1 (founder D-81) - a Worker seat can never be given "तुलना पाहणे": refused, never trimmed.
+            if (!FarmAuthorities.CanBeHeldBy(Role, authority))
+            {
+                throw new ArgumentException($"{authority} cannot be given to a {Role} seat.", nameof(desired));
             }
 
             if (end is { } instant && instant <= utcNow)
@@ -1022,6 +1030,27 @@ public sealed class FarmMembership : Entity<Guid>
         if (byUserId.IsEmpty)
         {
             throw new ArgumentException("The deciding user is required.", nameof(byUserId));
+        }
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D1 (founder D-81) - a stored choice that names an authority this label can never hold is refused
+    /// whole (an approval or an access change to a Worker seat carrying "तुलना पाहणे"), never stored and never trimmed.
+    /// </summary>
+    private static void EnsureHoldable(AppRole role, FarmPermission? permissions)
+    {
+        if (permissions is not { } value)
+        {
+            return;
+        }
+
+        foreach (var authority in FarmAuthorities.All)
+        {
+            var bit = FarmAuthorities.BitOf(authority);
+            if (bit != FarmPermission.None && (value & bit) == bit && !FarmAuthorities.CanBeHeldBy(role, authority))
+            {
+                throw new ArgumentException($"{authority} cannot be given to a {role} seat.", nameof(permissions));
+            }
         }
     }
 

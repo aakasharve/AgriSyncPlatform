@@ -30,7 +30,8 @@ public static class FarmPermissionDefaults
         | FarmPermission.ConfirmRecords
         | FarmPermission.EditFarmSetup
         | FarmPermission.ManageScheduleTemplates
-        | FarmPermission.SeeAllTasks;
+        | FarmPermission.SeeAllTasks
+        | FarmPermission.SeeCompare;
 
     /// <summary>Every bit a stored value may legally carry (a pre-2b row may still hold a retired bit).</summary>
     public const FarmPermission Known = All | FarmPermission.Invite | FarmPermission.AddCost;
@@ -49,7 +50,25 @@ public static class FarmPermissionDefaults
     public static FarmPermission Effective(AppRole role, FarmPermission? stored) =>
         role == AppRole.PrimaryOwner
             ? All
-            : (stored ?? For(role)) & All;
+            : (stored ?? For(role)) & All & ~BarredFor(role);
+
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D1 - the bits a seat of this label can never hold (<see cref="FarmAuthorities.CanBeHeldBy"/>):
+    /// "तुलना पाहणे" on a Worker seat. A stored bit like that is dropped here, the same way an unknown bit is.
+    /// </summary>
+    public static FarmPermission BarredFor(AppRole role)
+    {
+        var barred = FarmPermission.None;
+        foreach (var authority in FarmAuthorities.All)
+        {
+            if (!FarmAuthorities.CanBeHeldBy(role, authority))
+            {
+                barred |= FarmAuthorities.BitOf(authority);
+            }
+        }
+
+        return barred;
+    }
 
     /// <summary><c>true</c> when <paramref name="value"/> uses only bits a stored value may carry.</summary>
     public static bool IsKnown(FarmPermission value) => (value & ~Known) == 0;
@@ -109,5 +128,6 @@ public static class FarmPermissionDefaults
         FarmPermission.EditFarmSetup,
         FarmPermission.ManageScheduleTemplates,
         FarmPermission.SeeAllTasks,
+        FarmPermission.SeeCompare,
     ];
 }
