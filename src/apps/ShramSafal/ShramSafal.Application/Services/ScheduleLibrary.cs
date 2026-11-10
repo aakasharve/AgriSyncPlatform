@@ -38,13 +38,13 @@ namespace ShramSafal.Application.Services;
 /// </summary>
 /// <summary>
 /// spec: plr-d10 lane L8b-1F - what <see cref="ScheduleLibrary.ChooseAsync"/> found a plot may follow: the schedule as listed,
-/// whose it is (<see cref="Origin"/>), what the check said when chosen (<see cref="CheckStateAtAdopt"/>, stored) and what it says now
-/// (<see cref="LiveCheckState"/>, shown).
+/// whose it is (<see cref="Origin"/>), what the check said when chosen (<see cref="CheckStateAtAdopt"/>, stored; <c>null</c> for a farm's own
+/// schedule, which no check applies to - SCH-OWN, D-82 = 3) and what it says now (<see cref="LiveCheckState"/>, shown).
 /// </summary>
 public sealed record ScheduleChoice(
     ScheduleTemplateDto Template,
     ScheduleOrigin Origin,
-    ScheduleCheckState CheckStateAtAdopt,
+    ScheduleCheckState? CheckStateAtAdopt,
     ScheduleCheckState LiveCheckState);
 
 public sealed class ScheduleLibrary(IShramSafalRepository repository)
@@ -160,7 +160,11 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     /// <see cref="FollowableOnPlot.Classify"/> says this plot's farm may not follow it (another farm's Team row, any Private
     /// row): <see cref="ShramSafalErrors.ScheduleTemplateNotFound"/>, exactly like an unknown id.</item>
     /// <item>Another crop than the season's: <see cref="ShramSafalErrors.ScheduleTemplateCropMismatch"/>.</item>
-    /// <item>A farm's own schedule: <see cref="ShramSafalErrors.OwnScheduleNotOpenYet"/> until SCH-OWN opens that branch.</item>
+    /// <item>A farm's own schedule (SCH-OWN, D-82 = 3): ONLY a row whose <c>own_farm_id</c> is this plot's farm (fix round 1, M001; session A's
+    /// ruling). One that stores no days is <see cref="ShramSafalErrors.OwnScheduleEmpty"/>; one that does is accepted with NO check (stamped with no
+    /// check state). A Team row that names no farm - every row made before the lane, and a plain Team copy of any schedule, a Withdrawn one
+    /// included - is recognised as his team's (<see cref="FollowableOnPlot.Classify"/>, so it is not "not found") but is NOT a farm's own schedule: it
+    /// answers <see cref="ShramSafalErrors.OwnScheduleNotOpenYet"/>, exactly what x1 answered for it, and nothing is written.</item>
     /// <item>An Outside schedule: Checked is accepted. A carry-over (the phone's earlier choice, R7) is always accepted. A
     /// <b>sample</b> (a built-in id, or a library row that stores no days) is accepted, stamped NotChecked, while its crop has no
     /// Checked Outside schedule; once it has one: <see cref="ShramSafalErrors.ScheduleNotChecked"/>. Any other unchecked row
@@ -168,7 +172,7 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     /// </list>
     /// </summary>
     public async Task<Result<ScheduleChoice>> ChooseAsync(
-        Guid templateId, Guid callerUserId, Guid plotFarmOwnerUserId, string? cropName, bool carryOver, CancellationToken ct = default)
+        Guid templateId, Guid callerUserId, Guid plotFarmOwnerUserId, Guid plotFarmId, string? cropName, bool carryOver, CancellationToken ct = default)
     {
         if (templateId == Guid.Empty)
         {
@@ -187,7 +191,8 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
         var isBuiltIn = row is null && ReferenceDataCatalog.ScheduleTemplates.Any(t => t.Id == templateId);
         var scope = row?.TenantScope ?? TenantScope.Public;
         var owner = row is null ? null : await viewer.OwnerOfAsync(row, ct);
-        var origin = FollowableOnPlot.Classify(scope, owner, isBuiltIn, plotFarmOwnerUserId);
+        // spec: plr-d10 lane SCH-OWN (R30) - a row that names its farm is Own exactly on a plot of THAT farm (not on the same owner's other farm).
+        var origin = FollowableOnPlot.Classify(scope, owner, isBuiltIn, plotFarmOwnerUserId, row?.OwnFarmId, plotFarmId);
         if (origin is null || (row is null && !isBuiltIn))
         {
             return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleTemplateNotFound);
@@ -201,8 +206,19 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
         var live = Enum.TryParse<ScheduleCheckState>(template.Check?.State, out var parsed) ? parsed : ScheduleCheckState.NotChecked;
         if (origin == ScheduleOrigin.Own)
         {
-            // SCH-OWN Task 3 fills this branch (no check, D-82 = 3); until then nothing is written.
-            return Result.Failure<ScheduleChoice>(ShramSafalErrors.OwnScheduleNotOpenYet);
+            // Fix round 1 (M001): a Team row that names no farm is not a farm's own schedule - no check applies to a row only because it is
+            // Team and its owner's. It stays closed, with x1's own answer.
+            if (row?.OwnFarmId is null)
+            {
+                return Result.Failure<ScheduleChoice>(ShramSafalErrors.OwnScheduleNotOpenYet);
+            }
+
+            // SCH-OWN Task 3 (D-82 = 3): no check applies to a farm's own schedule - it is accepted exactly when it STORES its days (the
+            // same rule NewChoiceOpen gives the planning gate), stamped with NO check state; one that stores none has nothing to follow
+            // (P4: never an invented stage or day), so nothing is written.
+            return NewChoiceOpen(origin, isBuiltIn, row.HasStoredDays, live, cropHasChecked: false)
+                ? Result.Success(new ScheduleChoice(template, origin.Value, null, live))
+                : Result.Failure<ScheduleChoice>(ShramSafalErrors.OwnScheduleEmpty);
         }
 
         var atAdopt = live == ScheduleCheckState.Checked ? ScheduleCheckState.Checked : ScheduleCheckState.NotChecked;
@@ -231,8 +247,9 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     /// him to choose what adopt would refuse (P5). Pure.
     /// <list type="bullet">
     /// <item><paramref name="origin"/> <c>null</c> (the plot's farm may not follow it - <see cref="FollowableOnPlot.Classify"/>): closed.</item>
-    /// <item><see cref="ScheduleOrigin.Own"/>: closed until SCH-OWN opens that branch (adopt answers
-    /// <see cref="ShramSafalErrors.OwnScheduleNotOpenYet"/>).</item>
+    /// <item><see cref="ScheduleOrigin.Own"/> (SCH-OWN, D-82 = 3): a TRUE own schedule (one that names the plot's farm - the callers give
+    /// <c>null</c> for a Team row that names none, M001) is open exactly when it stores its days - no check applies to it; an empty one is
+    /// refused by adopt (<see cref="ShramSafalErrors.OwnScheduleEmpty"/>).</item>
     /// <item>Outside and <b>Checked</b> now: open.</item>
     /// <item>Outside and a <b>sample</b> (a built-in id, or a row that stores no days): open exactly while its crop has no Checked
     /// Outside schedule (<paramref name="cropHasChecked"/>).</item>
@@ -243,9 +260,16 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     public static bool NewChoiceOpen(
         ScheduleOrigin? origin, bool isBuiltIn, bool hasStoredDays, ScheduleCheckState live, bool cropHasChecked)
     {
-        if (origin is null || origin == ScheduleOrigin.Own)
+        if (origin is null)
         {
             return false;
+        }
+
+        // spec: plr-d10 lane SCH-OWN (D-82 = 3) - the farm's own schedule is open exactly when it STORES its days: no check applies to it, so
+        // neither the check state nor the crop's checked schedules matter; an empty one has nothing to follow (OwnScheduleEmpty).
+        if (origin == ScheduleOrigin.Own)
+        {
+            return hasStoredDays;
         }
 
         if (live == ScheduleCheckState.Checked)

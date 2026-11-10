@@ -5451,6 +5451,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("name");
 
+                    b.Property<Guid?>("OwnFarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("own_farm_id");
+
                     b.Property<string>("OwnerType")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
@@ -5488,6 +5492,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnName("version");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OwnFarmId")
+                        .HasDatabaseName("ix_schedule_templates_own_farm_id")
+                        .HasFilter("own_farm_id IS NOT NULL");
 
                     b.ToTable("schedule_templates", "ssf");
                 });

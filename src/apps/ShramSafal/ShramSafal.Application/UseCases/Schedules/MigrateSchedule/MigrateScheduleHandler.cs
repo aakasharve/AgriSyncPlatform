@@ -105,7 +105,7 @@ public sealed class MigrateScheduleHandler(
         // spec: plr-d10 lane L8b-1F - what this plot's farm may follow and the check rule are decided in ScheduleLibrary.ChooseAsync, as
         // adopt does (R8: a switch to a newer Checked version is allowed; a Withdrawn one the plot follows stays Active meanwhile).
         var choice = await new Services.ScheduleLibrary(repository).ChooseAsync(
-            command.NewScheduleTemplateId, command.ActorUserId, farm.OwnerUserId.Value, cropCycle.CropName, carryOver: false, ct);
+            command.NewScheduleTemplateId, command.ActorUserId, farm.OwnerUserId.Value, command.FarmId, cropCycle.CropName, carryOver: false, ct);
         if (!choice.IsSuccess)
         {
             return Result.Failure<ScheduleSubscriptionDto>(choice.Error);
@@ -294,6 +294,6 @@ public sealed class MigrateScheduleHandler(
             })
         ), ct);
 
-        return Result.Success(newSubscription.ToDto(choice.Value.LiveCheckState.ToString()));
+        return Result.Success(newSubscription.ToDto(choice.Value.Origin == ScheduleOrigin.Own ? null : choice.Value.LiveCheckState.ToString()));
     }
 }

@@ -10,9 +10,33 @@ using System.Collections.Generic;
 
 namespace ShramSafal.Application.Contracts.Sync.Payloads;
 
+public sealed record StagesItem(
+    string Name,
+    int StartDay,
+    int EndDay
+);
+
+public sealed record ActivitiesItem(
+    string Name,
+    /// <summary>Allowed values: "irrigation", "nutrition", "spray", "work".</summary>
+    string Part,
+    int StartDay,
+    int EndDay,
+    /// <summary>Allowed values: "one_time", "every_n_days", "per_week".</summary>
+    string FrequencyMode,
+    int IntervalDays,
+    string? OperationKey = null
+);
+
 public sealed record EditSchedulePayload(
     Guid ScheduleTemplateId,
+    Guid NewScheduleTemplateId,
     Guid ActorUserId,
     string? ActorRole = null,
-    string? ClientCommandId = null
+    string? ClientCommandId = null,
+    string? NewName = null,
+    string? NewStage = null,
+    Guid? FarmId = null,
+    IReadOnlyList<StagesItem>? Stages = null,
+    IReadOnlyList<ActivitiesItem>? Activities = null
 );

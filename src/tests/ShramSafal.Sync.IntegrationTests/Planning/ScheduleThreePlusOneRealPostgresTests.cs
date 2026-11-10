@@ -363,11 +363,14 @@ public sealed class ScheduleThreePlusOneRealPostgresTests(ITestOutputHelper outp
     }
 
     [Fact]
-    public async Task A_second_own_is_refused_by_the_database_and_adopt_cannot_make_one_before_SCH_OWN()
+    public async Task A_second_own_is_refused_by_the_database_and_adopt_cannot_make_one()
     {
         await AssertAppRoleIsNotVacuousAsync();
         var own = await SeedTemplateRowAsync("Grapes - the farm's own", TenantScope.Team, author: Owner);
-        var other = await SeedTemplateRowAsync("Grapes - the farm's other own", TenantScope.Team, author: Owner);
+        // spec: plr-d10 lane SCH-OWN - changed on purpose: the Own branch is open, so the second own schedule must be a TRUE one - it names the plot's farm
+        // (fix round 1, M001: a Team row naming no farm is never Own) - and STORE its days to reach the place count.
+        var other = (await SeedStoredRowAsync("Grapes - the farm's other own", TenantScope.Team, maker: Owner)).Id;
+        await ExecOnSuperuserAsync("UPDATE ssf.schedule_templates SET own_farm_id = @farm WHERE \"Id\" = @id", ("farm", FarmA), ("id", other));
         await SeedRowAsync(FarmA, PlotA, CycleA, own, "Own", 0);
 
         // The database: one own per plot-season (place 0 is unique).
@@ -375,10 +378,10 @@ public sealed class ScheduleThreePlusOneRealPostgresTests(ITestOutputHelper outp
         second!.SqlState.Should().Be("23505");
         second.ConstraintName.Should().Be("ux_sched_sub_active_slot");
 
-        // Adopt: the Own branch is still SCH-OWN's - ChooseAsync answers OwnScheduleNotOpenYet before any place is counted, and writes nothing.
+        // Adopt: a plot-season follows at most 1 of his own - the second one is refused with its own words, and nothing is written.
         var pushed = await PushAsync(Owner, "adopt_schedule", "l8b3-second-own", AdoptPayload(FarmA, PlotA, CycleA, other));
         pushed.Status.Should().Be("failed");
-        pushed.ErrorCode.Should().Be("ShramSafal.OwnScheduleNotOpenYet");
+        pushed.ErrorCode.Should().Be("ShramSafal.OwnScheduleLimitReached");
         (await PlacesAsync(activeOnly: true)).Should().ContainSingle();
     }
 

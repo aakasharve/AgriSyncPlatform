@@ -34,5 +34,10 @@ public sealed class EditScheduleTemplateValidator : IValidator<EditScheduleTempl
         {
             yield return ShramSafalErrors.InvalidCommand;
         }
+        else if (command.Stages is null && command.Activities is not null)
+        {
+            // spec: plr-d10 lane SCH-OWN (D7) - works with no stages to hold them: the version would store days outside every stage.
+            yield return ShramSafalErrors.InvalidCommand;
+        }
     }
 }

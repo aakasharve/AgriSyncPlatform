@@ -472,6 +472,9 @@
 //     row (e.g. "Post Pruning", days 0-15): no person, no words of a farmer, no amount. The person link of a schedule is each
 //     version's maker, ssf.schedule_templates.created_by_user_id (since L8b-1 fix round 1 "who made this version", not
 //     "whose"), an opaque user id. Doctrine P6: anonymise the person, never the work.
+//     spec: plr-d10 lane SCH-OWN (founder D-74, D-82 = 3) — ssf.schedule_templates.own_farm_id, the farm a farm's OWN schedule belongs to,
+//     is a FARM id, not a person (R30: it belongs to the farm whoever owns it): KEEP. Erasing a person leaves the farm's schedule and its
+//     farm id; only his opaque maker id stays on the versions he made, as above.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
 //   - ssf.schedule_checks (plr-d10 lane SCH-A, founder D-74) — KEEP. One row is one decision (Approved / Returned /

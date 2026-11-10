@@ -44,6 +44,8 @@ export { AddLocationPayload } from './add_location.zod';
 export { PublishSchedulePayload } from './schedule_publish.zod';
 export { EditSchedulePayload } from './schedule_edit.zod';
 export { CloneSchedulePayload } from './schedule_clone.zod';
+// lane SCH-OWN (founder D-74, D-82 = 3) - "start blank": make the farm's own schedule, empty, for a crop the farm grows.
+export { CreateSchedulePayload } from './schedule_create.zod';
 export { AddPlannedPayload } from './plan_add.zod';
 export { OverridePlannedPayload } from './plan_override.zod';
 export { RemovePlannedPayload } from './plan_remove.zod';

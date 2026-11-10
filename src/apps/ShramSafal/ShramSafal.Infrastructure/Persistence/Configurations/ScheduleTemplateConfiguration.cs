@@ -93,6 +93,16 @@ internal sealed class ScheduleTemplateConfiguration : IEntityTypeConfiguration<S
             .HasColumnName("crop_key")
             .HasMaxLength(ScheduleTemplate.MaxCropKeyLength);
 
+        // spec: plr-d10 lane SCH-OWN (Task 1) - the farm a schedule is the OWN schedule of (every version of its chain); null for every other row.
+        // Plain data: the foreign key to ssf.farms is raw SQL in the migration (like 20261102163914_AddWorkerIdentity), ON DELETE RESTRICT. The
+        // two partial UNIQUE indexes that keep one copy per (source, version) and one own copy per (source, farm) are raw SQL there too.
+        builder.Property(x => x.OwnFarmId)
+            .HasColumnName("own_farm_id");
+
+        builder.HasIndex(x => x.OwnFarmId)
+            .HasDatabaseName("ix_schedule_templates_own_farm_id")
+            .HasFilter("own_farm_id IS NOT NULL");
+
         builder.Ignore(x => x.DomainEvents);
     }
 }

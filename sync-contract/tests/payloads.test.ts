@@ -949,34 +949,78 @@ describe('PublishSchedulePayload', () => {
     });
 });
 
+// spec: plr-d10 lane SCH-OWN - schedule.edit / schedule.clone are WIRED: the new version's id is required and `.passthrough()` is gone.
 describe('EditSchedulePayload', () => {
-    it('accepts a valid payload', () => {
-        const r = payloads.EditSchedulePayload.safeParse({
-            scheduleTemplateId: VALID_GUID_A,
-            actorUserId: VALID_GUID_B,
-        });
-        expect(r.success).toBe(true);
+    const base = { scheduleTemplateId: VALID_GUID_A, newScheduleTemplateId: VALID_GUID_C, actorUserId: VALID_GUID_B };
+    const stage = { name: 'Pruning', startDay: 0, endDay: 20 };
+    const work = { name: 'ठिबक सिंचन', part: 'irrigation', startDay: 0, endDay: 10, frequencyMode: 'every_n_days', intervalDays: 3 };
+
+    it('accepts the old shape (a rename) and the whole-version shape', () => {
+        expect(payloads.EditSchedulePayload.safeParse(base).success).toBe(true);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, newName: 'नवं नाव', farmId: VALID_GUID_D }).success).toBe(true);
+        expect(
+            payloads.EditSchedulePayload.safeParse({
+                ...base,
+                farmId: VALID_GUID_D,
+                stages: [stage],
+                activities: [work, { ...work, operationKey: 'op_pruning', part: 'work', frequencyMode: 'one_time', intervalDays: 1 }],
+            }).success,
+        ).toBe(true);
     });
-    it('rejects non-UUID scheduleTemplateId', () => {
-        const r = payloads.EditSchedulePayload.safeParse({
-            scheduleTemplateId: 'nope',
-            actorUserId: VALID_GUID_B,
-        });
-        expect(r.success).toBe(false);
+    it('rejects a key it does not know at the top level (M005), and an operationKey the column cannot hold', () => {
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, somethingNew: 1 }).success).toBe(false);
+        const op40 = 'op_' + 'a'.repeat(37);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], activities: [{ ...work, operationKey: op40 }] }).success).toBe(true);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], activities: [{ ...work, operationKey: op40 + 'a' }] }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], activities: [{ ...work, operationKey: '' }] }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], activities: [{ ...work, operationKey: 'Pruning' }] }).success).toBe(false);
+    });
+    it('rejects non-UUID scheduleTemplateId and a missing newScheduleTemplateId', () => {
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, scheduleTemplateId: 'nope' }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ scheduleTemplateId: VALID_GUID_A, actorUserId: VALID_GUID_B }).success).toBe(false);
+    });
+    it('rejects a part, a repeat, a day or a stage the server would refuse', () => {
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], activities: [{ ...work, part: 'magic' }] }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], activities: [{ ...work, frequencyMode: 'sometimes' }] }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], activities: [{ ...work, startDay: -1 }] }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [{ ...stage, name: '' }] }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [] }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [{ ...stage, extra: 1 }] }).success).toBe(false);
     });
 });
 
 describe('CloneSchedulePayload', () => {
-    it('accepts a valid payload', () => {
-        const r = payloads.CloneSchedulePayload.safeParse({
-            sourceScheduleTemplateId: VALID_GUID_A,
-            actorUserId: VALID_GUID_B,
-        });
-        expect(r.success).toBe(true);
+    const base = { sourceScheduleTemplateId: VALID_GUID_A, newScheduleTemplateId: VALID_GUID_C, actorUserId: VALID_GUID_B };
+    it('accepts a valid payload, plain and into the farm own schedule', () => {
+        expect(payloads.CloneSchedulePayload.safeParse(base).success).toBe(true);
+        expect(
+            payloads.CloneSchedulePayload.safeParse({ ...base, newScope: 'Team', farmId: VALID_GUID_D, intoFarmOwn: true, reason: 'माझं शेड्यूल' }).success,
+        ).toBe(true);
     });
-    it('rejects missing sourceScheduleTemplateId', () => {
-        const r = payloads.CloneSchedulePayload.safeParse({ actorUserId: VALID_GUID_B });
-        expect(r.success).toBe(false);
+    it('rejects a key it does not know at the top level (M005)', () => {
+        expect(payloads.CloneSchedulePayload.safeParse({ ...base, somethingNew: 1 }).success).toBe(false);
+    });
+    it('rejects missing sourceScheduleTemplateId, a missing new id and a scope that is not one of the three', () => {
+        expect(payloads.CloneSchedulePayload.safeParse({ actorUserId: VALID_GUID_B, newScheduleTemplateId: VALID_GUID_C }).success).toBe(false);
+        expect(payloads.CloneSchedulePayload.safeParse({ sourceScheduleTemplateId: VALID_GUID_A, actorUserId: VALID_GUID_B }).success).toBe(false);
+        expect(payloads.CloneSchedulePayload.safeParse({ ...base, newScope: 'Public' }).success).toBe(false);
+    });
+});
+
+describe('CreateSchedulePayload', () => {
+    const base = { scheduleTemplateId: VALID_GUID_A, farmId: VALID_GUID_B, cropKey: 'Grapes', name: 'माझं द्राक्ष शेड्यूल' };
+    it('accepts a valid payload', () => {
+        expect(payloads.CreateSchedulePayload.safeParse(base).success).toBe(true);
+    });
+    it('rejects a missing id or farm, a blank or over-long crop or name, and any key it does not know', () => {
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, scheduleTemplateId: undefined }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, farmId: 'nope' }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, cropKey: '' }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, cropKey: 'c'.repeat(61) }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, name: '' }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, name: 'n'.repeat(121) }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, actorUserId: VALID_GUID_C }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, cropKey: 'c'.repeat(60), name: 'n'.repeat(120) }).success).toBe(true);
     });
 });
 

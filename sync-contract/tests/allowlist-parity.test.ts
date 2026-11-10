@@ -59,7 +59,9 @@ const HANDLER_PATH = resolve(
 // 24 -> 25 on 2026-11-08 (lane IT2, founders D-92 / D-95): assert_input_identity, its own PayloadHasOnly.
 // 25 -> 30 on 2026-11-08 (lane L8c-1, founder D-24c): plannedwork.create / .edit / .seen / .accept / .cancel, each its own PayloadHasOnly.
 // 30 -> 32 on 2026-11-08 (lane L8c-3, founder D-24d): plannedwork.complete and plannedwork.reopen, each its own PayloadHasOnly.
-const EXPECTED_ALLOWLIST_COUNT = 32;
+// 32 -> 35 on 2026-11-09 (lane SCH-OWN, founder D-74 / D-82 = 3): schedule.create (new), schedule.clone and schedule.edit (WIRED: they answered
+// MUTATION_TYPE_UNIMPLEMENTED before), each its own PayloadHasOnly. schedule.publish stays unwired.
+const EXPECTED_ALLOWLIST_COUNT = 35;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -110,6 +112,10 @@ const EXPECTED_GUARDED_MUTATIONS = [
     // lane L8c-3 - the work done through the real log, and the owner's reopen.
     'plannedwork.complete',
     'plannedwork.reopen',
+    // lane SCH-OWN - the farm's own schedule: make it empty, copy a checked schedule into it, write its next version.
+    'schedule.create',
+    'schedule.clone',
+    'schedule.edit',
 ].sort();
 
 interface CatalogEntry {

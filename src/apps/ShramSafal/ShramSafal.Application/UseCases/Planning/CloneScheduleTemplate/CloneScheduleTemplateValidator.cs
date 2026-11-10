@@ -35,5 +35,10 @@ public sealed class CloneScheduleTemplateValidator : IValidator<CloneScheduleTem
         {
             yield return ShramSafalErrors.InvalidCommand;
         }
+        else if (command.IntoFarmOwn && command.NewScope != ShramSafal.Domain.Planning.TenantScope.Team)
+        {
+            // spec: plr-d10 lane SCH-OWN - a farm's own schedule is its team's: nothing else is made "into the farm's own".
+            yield return ShramSafalErrors.InvalidCommand;
+        }
     }
 }

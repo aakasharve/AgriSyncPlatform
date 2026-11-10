@@ -4,7 +4,9 @@ using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Planning;
+using ShramSafal.Application.UseCases.Planning.CheckSchedule;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
 using ShramSafal.Domain.Planning;
@@ -17,6 +19,10 @@ public sealed class EditScheduleTemplateHandler(
     IClock clock)
     : IHandler<EditScheduleTemplateCommand, EditScheduleTemplateResult>
 {
+    // spec: plr-d10 lane SCH-OWN fix round 1 (M008) - a stored answer belongs to the PERSON who made the request: another person's command id never
+    // returns it. (The store's first key part is a device id elsewhere; here it is "user:<id>".)
+    private static string ReplayKey(Guid callerUserId) => $"user:{callerUserId:N}";
+
     private const string MutationType = "schedule.edit";
 
     public async Task<Result<EditScheduleTemplateResult>> HandleAsync(
@@ -24,7 +30,8 @@ public sealed class EditScheduleTemplateHandler(
         CancellationToken ct = default)
     {
         // Step 1: validate
-        if (command.SourceTemplateId == Guid.Empty || command.NewTemplateId == Guid.Empty || command.CallerUserId == Guid.Empty)
+        if (command.SourceTemplateId == Guid.Empty || command.NewTemplateId == Guid.Empty || command.CallerUserId == Guid.Empty
+            || (command.Stages is null && command.Activities is not null))
         {
             return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.InvalidCommand);
         }
@@ -33,7 +40,7 @@ public sealed class EditScheduleTemplateHandler(
         if (!string.IsNullOrWhiteSpace(command.ClientCommandId))
         {
             var existing = await syncMutationStore.GetAsync(
-                command.ClientCommandId, command.ClientCommandId, ct);
+                ReplayKey(command.CallerUserId), command.ClientCommandId, ct);
             if (existing is not null)
             {
                 var cached = JsonSerializer.Deserialize<EditScheduleTemplateResult>(existing.ResponsePayloadJson);
@@ -52,22 +59,67 @@ public sealed class EditScheduleTemplateHandler(
         }
 
         // Step 4: authz
-        // spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88) — whose schedule the source is: one he may not see
-        // is not found; a Private one is its maker's; a Team or Licensed one needs the farm named, and is that farm's
-        // schedule edited by a holder of "पीक वेळापत्रकाचे नमुने" there, or his own (ScheduleTemplateWriteGate).
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88) and lane SCH-OWN (R32) — whose schedule the source is: one he may not see
+        // is not found; a Private one is its owner's; a farm's OWN schedule (names its farm) needs the farm named to BE that farm and is then
+        // written by the farm's owner or an Active seat holding "पीक वेळापत्रकाचे नमुने" there; any other Team or Licensed one needs the farm named
+        // and is its OWNER's alone, under the scope's author rule (a delegate no longer versions it: R32). All in ScheduleTemplateWriteGate.
         if (await ScheduleTemplateWriteGate.RefuseEditAsync(
                 repository, source, command.FarmId, command.CallerUserId, command.CallerRole, clock.UtcNow, ct) is { } refused)
         {
             return Result.Failure<EditScheduleTemplateResult>(refused);
         }
 
+        // spec: plr-d10 lane SCH-OWN (E4; D10) — the id is a new one: a row that already has it is never overwritten.
+        if (await repository.GetScheduleTemplateByIdAsync(command.NewTemplateId, ct) is not null)
+        {
+            return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.ScheduleIdTaken);
+        }
+
         // Step 5: copy-on-write edit — the new version records its maker, the editor (D-88: "each version shows who made it")
-        var newTemplate = source.EditCopyOnWrite(
-            command.NewTemplateId,
-            command.NewName,
-            command.NewStage,
-            new UserId(command.CallerUserId),
-            clock.UtcNow);
+        ScheduleTemplate newTemplate;
+        if (command.Stages is null)
+        {
+            // The old edit (a rename / a new stage label): unchanged, so a release that sends only that keeps working (P11).
+            newTemplate = source.EditCopyOnWrite(
+                command.NewTemplateId,
+                command.NewName,
+                command.NewStage,
+                new UserId(command.CallerUserId),
+                clock.UtcNow);
+        }
+        else
+        {
+            // spec: plr-d10 lane SCH-OWN (D7, D9) — the next version written whole, as sent: exactly these stages and works; the version
+            // before is left as it was (P3). A day that does not hold is refused with the import rule's own words.
+            var drafts = new List<ScheduleActivityDraft>(command.Activities?.Count ?? 0);
+            foreach (var a in command.Activities ?? [])
+            {
+                if (!ImportScheduleTemplateHandler.TryParseMode(a.FrequencyMode, out var mode))
+                {
+                    return Result.Failure<EditScheduleTemplateResult>(Error.Validation(
+                        "ShramSafal.ScheduleImportRepeat",
+                        $"\"{a.Name}\": the repeat must be one_time, every_n_days or per_week."));
+                }
+
+                drafts.Add(new ScheduleActivityDraft(a.Name ?? string.Empty, a.Part ?? string.Empty, a.OperationKey, a.StartDay, a.EndDay, mode, a.IntervalDays));
+            }
+
+            var edited = source.EditCopyOnWrite(
+                command.NewTemplateId,
+                command.NewName,
+                command.NewStage,
+                command.Stages.Select(s => new StageDefinition(s.Name ?? string.Empty, s.StartDay, s.EndDay)).ToList(),
+                drafts,
+                new UserId(command.CallerUserId),
+                clock.UtcNow,
+                out var problem);
+            if (edited is null)
+            {
+                return Result.Failure<EditScheduleTemplateResult>(Error.Validation($"ShramSafal.{problem!.Code}", problem.Message));
+            }
+
+            newTemplate = edited;
+        }
 
         // Step 6: persist
         await repository.AddScheduleTemplateAsync(newTemplate, ct);
@@ -98,8 +150,21 @@ public sealed class EditScheduleTemplateHandler(
 
         await repository.AddAuditEventAsync(audit, ct);
 
-        // Step 8: save
-        await repository.SaveChangesAsync(ct);
+        // Step 8: save (spec: plr-d10 lane SCH-OWN - a rival that took the id between the check above and this save is answered, never a 500)
+        switch (await repository.TrySaveNewScheduleAsync(ct))
+        {
+            case ScheduleCopySave.CopyExists:
+                return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.ScheduleCopyExists);
+            case ScheduleCopySave.IdTaken:
+                // M011: a rival saved this id between the check and the save - this request's own earlier success is a replay, anything else is taken.
+                if (await repository.GetScheduleTemplateByIdAsync(command.NewTemplateId, ct) is not { } stored
+                    || !ScheduleReplay.IsSameRequest(stored, newTemplate))
+                {
+                    return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.ScheduleIdTaken);
+                }
+
+                break;
+        }
 
         // Step 9: store idempotency result
         var result = new EditScheduleTemplateResult(command.NewTemplateId, newTemplate.Version);
@@ -107,7 +172,7 @@ public sealed class EditScheduleTemplateHandler(
         if (!string.IsNullOrWhiteSpace(command.ClientCommandId))
         {
             await syncMutationStore.TryStoreSuccessAsync(
-                command.ClientCommandId,
+                ReplayKey(command.CallerUserId),
                 command.ClientCommandId,
                 MutationType,
                 JsonSerializer.Serialize(result),
