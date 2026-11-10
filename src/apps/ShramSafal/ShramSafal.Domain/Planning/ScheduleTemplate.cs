@@ -68,11 +68,28 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
     public DateTime? PublishedAtUtc { get; private set; }
 
     /// <summary>
-    /// spec: plr-d10 lane SCH-OWN (founder D-74, D-82 = 3; register R30) - the farm this schedule is the OWN schedule of, for every
-    /// version of its chain; null = not a farm's own schedule (every row made before the lane). Plain data, no foreign-key
-    /// navigation: it is a farm id, not an owner (R30: a farm's own schedule belongs to the FARM, whoever owns it).
+    /// spec: plr-d10 lane SCH-OWN-c (founder D-133 withdrawn, D-136, D-137; register F218, F222) - the PERSON whose own schedule this is, for
+    /// every version of its chain: the owner (<c>ssf.farms.owner_user_id</c>) of the farm it was made on, copied from the farm row the gate
+    /// trusted - never the typist (<see cref="CreatedByUserId"/> keeps the typist, D-88). Null = not a person's own schedule (every row made
+    /// before SCH-OWN, and every plain copy): such a row is NEVER Own on any plot (F218), only recognised. Plain data, typed like the maker:
+    /// the users table is another context's (no foreign key, E4: the gate is the defence).
     /// </summary>
-    public Guid? OwnFarmId { get; private set; }
+    public UserId? OwnerUserId { get; private set; }
+
+    /// <summary>spec: plr-d10 lane SCH-OWN-c (D-137, Q10 = 1) - what it was made for: tags, never a refusal. See <see cref="ScheduleMadeFor"/>.</summary>
+    public string? Variety { get; private set; }
+
+    /// <inheritdoc cref="Variety"/>
+    public string? SoilType { get; private set; }
+
+    /// <inheritdoc cref="Variety"/>
+    public string? Region { get; private set; }
+
+    /// <inheritdoc cref="Variety"/>
+    public string? Climate { get; private set; }
+
+    /// <summary>The four made-for tags as one value (<see cref="ScheduleMadeFor.None"/> when none is set).</summary>
+    public ScheduleMadeFor MadeFor => new(Variety, SoilType, Region, Climate);
 
     // spec: plr-d10 lane SCH-A (Task 1) — who the schedule comes from (the phone's own owner types), the source as written,
     // and the crop it is for. All null on a row made before the lane.
@@ -157,7 +174,9 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
         copy.OwnerType = OwnerType;
         copy.SourceLabel = SourceLabel;
         copy.CropKey = CropKey;
-        copy.OwnFarmId = OwnFarmId; // spec: plr-d10 lane SCH-OWN - every version of a farm's own schedule names its farm
+        // spec: plr-d10 lane SCH-OWN-c - every version of a person's own schedule names its owner; a rename carries what it was made for.
+        copy.OwnerUserId = OwnerUserId;
+        copy.CopyMadeForFrom(MadeFor);
 
         // Copy activities by value onto the new template (SCH-A: the stored days, role and order travel with them; the
         // order link is remapped to the NEW activity ids — R34).
@@ -175,14 +194,15 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
     }
 
     /// <summary>
-    /// spec: plr-d10 lane SCH-OWN (Task 2; founder D-74, D-82 = 3) - a farm's OWN schedule, made EMPTY: version 1, <see cref="TenantScope.Team"/>
-    /// (its team is the farm's people), the farmer's own (<see cref="ScheduleOwnerType.User"/>), for one crop, naming the FARM it belongs
-    /// to. It stores no stage and no activity yet, so it <see cref="HasStoredDays">stores no days</see> and can never be followed or checked
-    /// until a version with days is made (P4: nothing invented). The maker is the first version's maker, hence the schedule's owner
-    /// (<c>ScheduleViewer.OwnerOfAsync</c>); the farm, not the owner, decides whose plots may follow it (R30).
+    /// spec: plr-d10 lane SCH-OWN (Task 2; founder D-74, D-82 = 3) and SCH-OWN-c (D-137 Q9 = 1, Q10 = 1) - a person's OWN schedule, made EMPTY:
+    /// version 1, <see cref="TenantScope.Team"/> (its team is the people of the farms he owns), the farmer's own (<see cref="ScheduleOwnerType.User"/>),
+    /// for one crop, naming its OWNER (<paramref name="ownerUserId"/>: the owner of the farm it was made on, copied by the handler from the farm row the
+    /// gate trusted) and its typist (<paramref name="madeBy"/>, who may be a holder of the authority). It stores no stage and no activity yet, so it
+    /// <see cref="HasStoredDays">stores no days</see> and can never be followed or checked until a version with days is made (P4: nothing invented).
+    /// <paramref name="madeFor"/>: what it was made for (tags, normalised; the shape is checked here, the lists by the Application layer).
     /// </summary>
     public static ScheduleTemplate CreateOwn(
-        Guid id, string name, string cropKey, Guid ownFarmId, UserId madeBy, DateTime at)
+        Guid id, string name, string cropKey, UserId ownerUserId, UserId madeBy, DateTime at, ScheduleMadeFor? madeFor = null)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > MaxNameLength)
         {
@@ -194,19 +214,35 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
             throw new ArgumentException($"The schedule needs a crop of 1 to {MaxCropKeyLength} characters.", nameof(cropKey));
         }
 
-        if (ownFarmId == Guid.Empty)
+        if (ownerUserId.IsEmpty)
         {
-            throw new ArgumentException("A farm's own schedule needs the farm.", nameof(ownFarmId));
+            throw new ArgumentException("A person's own schedule needs its owner.", nameof(ownerUserId));
         }
 
-        return new ScheduleTemplate(
+        var tags = (madeFor ?? ScheduleMadeFor.None).Normalize();
+        if (ScheduleMadeFor.Check(tags) is { } problem)
+        {
+            throw new ArgumentException(problem.Message, nameof(madeFor));
+        }
+
+        var own = new ScheduleTemplate(
             id, name.Trim(), stage: string.Empty, at, madeBy, TenantScope.Team,
             version: 1, previousVersionId: null, derivedFromTemplateId: null)
         {
             OwnerType = ScheduleOwnerType.User,
             CropKey = cropKey.Trim(),
-            OwnFarmId = ownFarmId,
+            OwnerUserId = ownerUserId,
         };
+        own.CopyMadeForFrom(tags);
+        return own;
+    }
+
+    private void CopyMadeForFrom(ScheduleMadeFor tags)
+    {
+        Variety = tags.Variety;
+        SoilType = tags.SoilType;
+        Region = tags.Region;
+        Climate = tags.Climate;
     }
 
     /// <summary>
@@ -226,7 +262,8 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
         IReadOnlyList<ScheduleActivityDraft> activities,
         UserId editedByUserId,
         DateTime occurredAtUtc,
-        out ScheduleImportProblem? problem)
+        out ScheduleImportProblem? problem,
+        ScheduleMadeFor? madeFor = null)
     {
         _ = newStage; // the stage label of a version that has stages is its first stage
         problem = CheckStages(stages);
@@ -238,6 +275,15 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
         // Fix round 1 (M002): the sync contract's bounds (stages <= 40, activities <= 300, every day number <= 3650) are the SERVER's too - a request
         // that breaks them is a refusal with words (permanent for a phone), never a database fault.
         problem = CheckEditBounds(stages, activities);
+        if (problem is not null)
+        {
+            return null;
+        }
+
+        // spec: plr-d10 lane SCH-OWN-c (D7's spirit, P3) - a whole version writes its made-for block AS SENT, exactly like its works: absent = none; the
+        // version before keeps its own tags. (The parameter trails the out parameter so that every older caller compiles unchanged.)
+        var tags = (madeFor ?? ScheduleMadeFor.None).Normalize();
+        problem = ScheduleMadeFor.Check(tags);
         if (problem is not null)
         {
             return null;
@@ -295,8 +341,9 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
             OwnerType = OwnerType,
             SourceLabel = SourceLabel,
             CropKey = CropKey,
-            OwnFarmId = OwnFarmId,
+            OwnerUserId = OwnerUserId, // every version of a person's own schedule names its owner (SCH-OWN-c)
         };
+        copy.CopyMadeForFrom(tags);
 
         for (var i = 0; i < drafts.Count; i++)
         {
@@ -331,7 +378,7 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
         TenantScope newScope,
         string reason,
         DateTime occurredAtUtc,
-        Guid? ownFarmId = null)
+        UserId? ownerUserId = null)
     {
         var copy = new ScheduleTemplate(
             newId,
@@ -349,11 +396,14 @@ public sealed partial class ScheduleTemplate : Entity<Guid>
         copy.OwnerType = ScheduleOwnerType.User;
         copy.SourceLabel = SourceLabel;
         copy.CropKey = CropKey;
-        // spec: plr-d10 lane SCH-OWN - a clone INTO a farm's own schedule names that farm (null = a plain copy: the source's farm is not carried).
-        copy.OwnFarmId = ownFarmId;
+        // spec: plr-d10 lane SCH-OWN-c - a clone INTO his own schedule names its OWNER (the owner of the farm named, never the maker); null = a plain copy,
+        // nobody's own (F218). The source's four made-for tags travel with every copy (a Checked import has none today).
+        copy.OwnerUserId = ownerUserId;
+        copy.CopyMadeForFrom(MadeFor);
 
         copy.CopyActivitiesFrom(this);
 
+        // Note: the event's NewOwnerUserId parameter is the MAKER of the copy (its name predates SCH-OWN-c), not the schedule's owner column.
         copy.Raise(new ScheduleTemplateClonedEvent(
             Guid.NewGuid(),
             occurredAtUtc,

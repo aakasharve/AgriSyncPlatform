@@ -472,9 +472,12 @@
 //     row (e.g. "Post Pruning", days 0-15): no person, no words of a farmer, no amount. The person link of a schedule is each
 //     version's maker, ssf.schedule_templates.created_by_user_id (since L8b-1 fix round 1 "who made this version", not
 //     "whose"), an opaque user id. Doctrine P6: anonymise the person, never the work.
-//     spec: plr-d10 lane SCH-OWN (founder D-74, D-82 = 3) — ssf.schedule_templates.own_farm_id, the farm a farm's OWN schedule belongs to,
-//     is a FARM id, not a person (R30: it belongs to the farm whoever owns it): KEEP. Erasing a person leaves the farm's schedule and its
-//     farm id; only his opaque maker id stays on the versions he made, as above.
+//     spec: plr-d10 lane SCH-OWN-c (founder D-137; register F222 (b)) — ssf.schedule_templates.owner_user_id is a PERSON's opaque id: the owner of
+//     the farm the schedule was made on (whose own schedule it is). KEEP, like created_by_user_id above and like ssf.farms.owner_user_id, which this
+//     worker does not scrub either: scrubbing one without the other would break every plot of his farms that follows it (the Own rule compares the
+//     two ids at call time), so after erasure his farms' plots keep following, his farms' seats keep seeing and following, and the typist ids stay.
+//     P6: anonymise the person, never the work - the phone names people only through the operator directory, which erasure anonymises.
+//     variety / soil_type / region_code / climate hold list codes (what the schedule was made for), no person. No action, no ScrubbedColumnsFor entry.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
 //   - ssf.schedule_checks (plr-d10 lane SCH-A, founder D-74) — KEEP. One row is one decision (Approved / Returned /

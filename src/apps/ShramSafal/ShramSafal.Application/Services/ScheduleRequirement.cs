@@ -192,7 +192,7 @@ public sealed class ScheduleRequirement(
         var (standing, extension) = await StandingOfAsync(farm.OwnerAccountId, now, ct);
         var originFor = await OriginsAsync(library, callerUserId, ct);
         return Result.Success(new PlanningFacts(
-            plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value, (Guid)farm.Id)));
+            plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value)));
     }
 
     public async Task<Result<PlotPlanningState>> ForPlotAsync(Guid farmId, Guid plotId, Guid callerUserId, CancellationToken ct = default)
@@ -256,7 +256,7 @@ public sealed class ScheduleRequirement(
             var season = CurrentSeason(cyclesByPlot.GetValueOrDefault(plot.Id) ?? []);
             states.Add(Decide(new PlanningFacts(
                 plot.Id, season, now, standing.Standing, standing.Extension,
-                followedByPlot.GetValueOrDefault(plot.Id) ?? [], listing, originFor(farm.OwnerUserId.Value, (Guid)farm.Id))));
+                followedByPlot.GetValueOrDefault(plot.Id) ?? [], listing, originFor(farm.OwnerUserId.Value))));
         }
 
         return states;
@@ -286,10 +286,10 @@ public sealed class ScheduleRequirement(
     /// <summary>
     /// Whose a listed row is for a plot's farm, as <see cref="ScheduleLibrary.ChooseAsync"/> reads it: Public and built-in rows are
     /// Outside with no read; a row of any other scope is classified through <see cref="ScheduleViewer.OwnerOfAsync"/> and
-    /// <see cref="FollowableOnPlot.Classify"/> against the plot farm's owner AND the plot's farm - a row that names its farm (SCH-OWN, R30) is
-    /// Own only on a plot of that farm (the rows are read only when the listing holds such a row).
+    /// <see cref="FollowableOnPlot.Classify"/> against the plot farm's OWNER alone (spec: plr-d10 lane SCH-OWN-c: a person's own schedule is Own on a
+    /// plot of ANY farm he owns; the plot's farm id decides nothing). The rows are read only when the listing holds a non-Public row.
     /// </summary>
-    private async Task<Func<Guid, Guid, Func<ScheduleTemplateDto, ScheduleOrigin?>>> OriginsAsync(
+    private async Task<Func<Guid, Func<ScheduleTemplateDto, ScheduleOrigin?>>> OriginsAsync(
         IReadOnlyList<ScheduleTemplateDto> listing, Guid callerUserId, CancellationToken ct)
     {
         var nonPublic = listing
@@ -297,7 +297,7 @@ public sealed class ScheduleRequirement(
             .ToList();
         if (nonPublic.Count == 0)
         {
-            return (_, _) => _ => ScheduleOrigin.Outside;
+            return _ => _ => ScheduleOrigin.Outside;
         }
 
         var rows = await repository.GetScheduleTemplatesAsync(ct);
@@ -312,7 +312,7 @@ public sealed class ScheduleRequirement(
             }
         }
 
-        return (farmOwner, plotFarmId) => t =>
+        return farmOwner => t =>
         {
             if (t.Scope is null || string.Equals(t.Scope, nameof(TenantScope.Public), StringComparison.Ordinal))
             {
@@ -324,12 +324,13 @@ public sealed class ScheduleRequirement(
                 return null;
             }
 
-            var ownFarm = rowById.TryGetValue(t.Id, out var listed) ? listed.OwnFarmId : null;
-            var origin = FollowableOnPlot.Classify(scope, owners.GetValueOrDefault(t.Id), isBuiltIn: false, farmOwner, ownFarm, plotFarmId);
+            var scheduleOwner = rowById.TryGetValue(t.Id, out var listed) ? listed.OwnerUserId?.Value : null;
+            var origin = FollowableOnPlot.Classify(scope, owners.GetValueOrDefault(t.Id), isBuiltIn: false, farmOwner, scheduleOwner);
 
-            // Fix round 1 (M001): Own is a row that names THIS plot's farm. A Team row that names no farm is recognised by Classify (R23, so adopt can
-            // answer it as x1 did) but is closed to the gate - the same answer adopt gives (P5).
-            return origin == ScheduleOrigin.Own && ownFarm is null ? null : origin;
+            // Fix round 1 (M001), kept by SCH-OWN-c (F218): Own is a row whose OWNER is this plot farm's owner. A Team row with no owner (every row made
+            // before SCH-OWN, every plain copy) is recognised by Classify (R23, so adopt can answer it as x1 did) but is closed to the gate - the same
+            // answer adopt gives (P5).
+            return origin == ScheduleOrigin.Own && scheduleOwner is null ? null : origin;
         };
     }
 }

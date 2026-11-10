@@ -577,10 +577,15 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // back-fill, two CHECKs, the swap of one partial unique index for two). No farm_memberships or farm_join_requests object, no policy, no
         // grant, no seat touched. Down() refuses while a plot-season follows two or more schedules (this proof's data has none), else drops what Up() added.
         "20261109090000_AllowThreePlusOneSchedulesPerPlot",
-        // spec plr-d10 lane SCH-OWN (founders D-74 / D-82) - Up() and Down() read in full: ssf.schedule_templates only (a nullable own_farm_id column, a partial
+        // spec plr-d10 lane SCH-OWN (founders D-74 / D-82) - Up() and Down() read in full: ssf.schedule_templates only (a nullable own-farm column, a partial
         // index, a foreign key to ssf.farms, the swap of one partial unique index for two). No farm_memberships or farm_join_requests object, no policy, no
         // grant, no seat touched. Down() refuses while a schedule row names a farm (this proof's data has none), else drops what Up() added.
         "20261109120000_AddScheduleTemplateOwnFarm",
+        // spec plr-d10 lane SCH-OWN-c (founder D-137) - Up() and Down() read in full: ssf.schedule_templates only (a nullable owner_user_id and four tag
+        // columns, a conversion of SOWN-a's own-farm rows to their farm's owner, the re-key of two partial unique indexes, the drop of SOWN-a's own-farm column
+        // with its foreign key and index). No farm_memberships or farm_join_requests object, no policy, no grant, no seat touched. Down() refuses while a row has an owner or a tag
+        // (this proof's data has none), else rebuilds SOWN-a's shape and drops what Up() added.
+        "20261110120000_ScheduleTemplateOwnerAndMadeFor",
     ];
 
     /// <summary>

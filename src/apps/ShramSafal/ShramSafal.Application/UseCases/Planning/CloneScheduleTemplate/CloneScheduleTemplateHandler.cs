@@ -74,15 +74,23 @@ public sealed class CloneScheduleTemplateHandler(
         // Team     → all Licensed roles + FpcTechnicalManager
         // Private  → any authenticated farm member (no role restriction)
         //
-        // spec: plr-d10 lane SCH-OWN — into the farm's OWN schedule (D-82 = 3) the rule is OwnScheduleGate (never ScopeRoleGate: the account's
-        // global role decides nothing here, R31), asked BEFORE own_farm_id is ever set (E4: a foreign-key check bypasses row-level security),
-        // and the source must be a schedule ShramSafal has checked NOW (D4) of a crop this farm grows (D5).
+        // spec: plr-d10 lane SCH-OWN — into his OWN schedule (D-82 = 3) the rule is OwnScheduleGate (never ScopeRoleGate: the account's global role
+        // decides nothing here, R31), asked BEFORE anything about the farm or the source is learned (E4), and the source must be a schedule ShramSafal
+        // has checked NOW (D4) of a crop this farm grows (D5). SCH-OWN-c: the copy then belongs to the OWNER of the farm named, read from the same farm
+        // row the gate trusted (OwnerIfAllowedAsync, one more farm read), never from the body (Q9 = 1).
+        Guid? owner = null;
         if (command.IntoFarmOwn)
         {
             if (await ScheduleTemplateWriteGate.RefuseCloneIntoFarmOwnAsync(
                     repository, source, command.FarmId, command.NewScope, command.CallerUserId, clock.UtcNow, ct) is { } refusedOwn)
             {
                 return Result.Failure<CloneScheduleTemplateResult>(refusedOwn);
+            }
+
+            owner = await OwnScheduleGate.OwnerIfAllowedAsync(repository, command.FarmId!.Value, command.CallerUserId, clock.UtcNow, ct);
+            if (owner is null)
+            {
+                return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.Forbidden);
             }
         }
         else if (!await ScopeRoleGate.IsAllowedAsync(
@@ -105,7 +113,7 @@ public sealed class CloneScheduleTemplateHandler(
             command.NewScope,
             command.Reason,
             clock.UtcNow,
-            ownFarmId: command.IntoFarmOwn ? command.FarmId : null);
+            ownerUserId: owner is { } o ? new UserId(o) : null);
 
         // Step 6: persist new template
         await repository.AddScheduleTemplateAsync(newTemplate, ct);
@@ -128,7 +136,7 @@ public sealed class CloneScheduleTemplateHandler(
                 newScope = command.NewScope.ToString(),
                 reason = command.Reason,
                 intoFarmOwn = command.IntoFarmOwn,
-                ownFarmId = command.IntoFarmOwn ? command.FarmId : null
+                ownerUserId = owner
             },
             farmId: null,
             clientCommandId: command.ClientCommandId,
@@ -143,8 +151,8 @@ public sealed class CloneScheduleTemplateHandler(
         // spec: plr-d10 lane L8b-1 fix round 1 (review M1) — one copy per source and version is all the index allows
         // (ix_schedule_templates_derived_version, which lane SCH-OWN re-keys): a second copy is answered 409 with words,
         // never a 500, and nothing of it is kept.
-        // spec: plr-d10 lane SCH-OWN — the same save also answers the own-copy-per-farm index (one own copy of a source per farm) and a rival
-        // that took the id between the check above and this save.
+        // spec: plr-d10 lane SCH-OWN — the same save also answers the own-copy index (SCH-OWN-c: one own copy of a source PER PERSON, whichever of his
+        // farms is named) and a rival that took the id between the check above and this save.
         switch (await repository.TrySaveNewScheduleAsync(ct))
         {
             case ScheduleCopySave.CopyExists:

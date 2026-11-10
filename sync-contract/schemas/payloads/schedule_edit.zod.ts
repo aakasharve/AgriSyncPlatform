@@ -15,6 +15,7 @@
 //     `operationKey` is WORK-ID's op_* key when the phone knows it; otherwise the server proposes one from the name.
 //   - `actorUserId` / `actorRole` are kept for the phones that send them and read by nobody: the actor is the authenticated person.
 import { z } from 'zod';
+import { ZClimate, ZRegion, ZSoilType, ZVariety } from './_madeFor.zod';
 import { ZGuid } from './_shared.zod';
 
 export const EditScheduleStageItem = z
@@ -44,6 +45,10 @@ export const EditScheduleActivityItem = z
     .strict();
 
 // `.strict()`: a key the server does not know is refused by its allow-list, so the contract refuses it too (fix round 1, M005).
+// spec: plr-d10 lane SCH-OWN-c (founder D-137, Q10 = 1): `variety` / `soilType` / `region` / `climate` - the made-for TAGS of the version written WHOLE,
+// as sent (absent = none; the version before keeps its own, P3). Only with `stages`: a rename carries the tags before it and never rewrites them (the
+// server refuses a tag without `stages`). List codes from ../schedule-made-for.json (PROPOSED); the variety is checked per crop by the server. Tags only:
+// never a refusal of a follow.
 export const EditSchedulePayload = z
     .object({
         scheduleTemplateId: ZGuid,
@@ -56,6 +61,10 @@ export const EditSchedulePayload = z
         farmId: ZGuid.optional(),
         stages: z.array(EditScheduleStageItem).min(1).max(40).optional(),
         activities: z.array(EditScheduleActivityItem).max(300).optional(),
+        variety: ZVariety.optional(),
+        soilType: ZSoilType.optional(),
+        region: ZRegion.optional(),
+        climate: ZClimate.optional(),
     })
     .strict();
 

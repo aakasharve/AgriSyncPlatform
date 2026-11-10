@@ -1,7 +1,9 @@
-// spec: plr-d10-redesign-real-integration-2026-10-25 - lane SCH-OWN Task 3 (R30, R31, R32; D4, D5, D11; E4).
+// spec: plr-d10-redesign-real-integration-2026-10-25 - lane SCH-OWN Task 3 (R31, R32; D4, D5, D11; E4) and lane SCH-OWN-c (founder D-137; F222).
 // The write gate of the schedule-template doors, asked as the handlers ask it, against a fake that COUNTS what is read. Pure: no I/O.
-// The order matters and is pinned here: the farm named is the chain's farm BEFORE any authority is read (D11); the gate is asked BEFORE anything about
-// the farm or the source is learned and before own_farm_id is ever set (E4); a delegate no longer versions the owner's Team chain (R32).
+// The order matters and is pinned here: a person's own chain may be written only naming a farm whose OWNER is the chain's owner - the named farm is
+// read ONCE and compared BEFORE any authority is read (D11, re-aimed); then the gate on that farm (its owner, or an Active seat holding the authority
+// there). The clone-into-own gate is asked BEFORE anything about the farm or the source is learned (E4); a delegate no longer versions the owner's
+// Team chain that names no owner (R32).
 using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
@@ -23,12 +25,18 @@ public sealed class OwnScheduleWriteGateTests
     private static readonly DateTime Now = new(2026, 11, 9, 6, 0, 0, DateTimeKind.Utc);
     private static readonly Guid FarmA = Guid.Parse("a0a00000-0000-4000-8000-0000000000a1");
     private static readonly Guid FarmB = Guid.Parse("a0a00000-0000-4000-8000-0000000000b1");
+    private static readonly Guid FarmOfOtherOwner = Guid.Parse("a0a00000-0000-4000-8000-0000000000c1");
     private static readonly Guid Owner = Guid.Parse("a0a00000-0000-4000-8000-000000000011");
     private static readonly Guid Delegate = Guid.Parse("a0a00000-0000-4000-8000-000000000012");
     private static readonly Guid Plain = Guid.Parse("a0a00000-0000-4000-8000-000000000013");
     private static readonly Guid Outsider = Guid.Parse("a0a00000-0000-4000-8000-000000000014");
+    private static readonly Guid HolderB = Guid.Parse("a0a00000-0000-4000-8000-000000000015");
+    private static readonly Guid SeatOfBoth = Guid.Parse("a0a00000-0000-4000-8000-000000000016");
 
-    /// <summary>One owner with farm A (and farm B), a delegate holding the authority on A, a seat holding none, an outsider; counts what is read.</summary>
+    /// <summary>
+    /// One owner with farms A and B, an outsider who owns a third farm; a delegate holding the authority on A, a seat holding none, a holder on B
+    /// only, a seat of A and of the outsider's farm. Counts what is read.
+    /// </summary>
     private sealed class Repo : FakeShramSafalRepository, IShramSafalRepository
     {
         public Dictionary<Guid, ScheduleTemplate> Templates { get; } = [];
@@ -45,7 +53,9 @@ public sealed class OwnScheduleWriteGateTests
         {
             FarmReads++;
             return Task.FromResult<Farm?>(
-                farmId == FarmA || farmId == FarmB ? Farm.Create(new FarmId(farmId), "शेत", new UserId(Owner), Now) : null);
+                farmId == FarmA || farmId == FarmB ? Farm.Create(new FarmId(farmId), "शेत", new UserId(Owner), Now)
+                : farmId == FarmOfOtherOwner ? Farm.Create(new FarmId(farmId), "दुसऱ्याचं शेत", new UserId(Outsider), Now)
+                : null);
         }
 
         public Task<FarmAccess?> GetFarmAccessForUserAsync(Guid farmId, Guid userId, CancellationToken ct = default)
@@ -79,18 +89,24 @@ public sealed class OwnScheduleWriteGateTests
         repo.FarmsOf[Owner] = [FarmA, FarmB];
         repo.FarmsOf[Delegate] = [FarmA];
         repo.FarmsOf[Plain] = [FarmA];
+        repo.FarmsOf[HolderB] = [FarmB];
+        repo.FarmsOf[Outsider] = [FarmOfOtherOwner];
+        repo.FarmsOf[SeatOfBoth] = [FarmA, FarmOfOtherOwner];
         repo.Seats[(FarmA, Delegate)] = new(AppRole.SecondaryOwner, MembershipStatus.Active, false, FarmPermission.ManageScheduleTemplates);
         repo.Seats[(FarmA, Plain)] = new(AppRole.SecondaryOwner, MembershipStatus.Active, false, FarmPermission.SeeMoney);
         repo.Seats[(FarmA, Owner)] = new(AppRole.PrimaryOwner, MembershipStatus.Active, IsRegistrant: true, null);
         repo.Seats[(FarmB, Owner)] = new(AppRole.PrimaryOwner, MembershipStatus.Active, IsRegistrant: true, null);
+        repo.Seats[(FarmB, HolderB)] = new(AppRole.Mukadam, MembershipStatus.Active, false, FarmPermission.ManageScheduleTemplates);
+        repo.Seats[(FarmA, SeatOfBoth)] = new(AppRole.SecondaryOwner, MembershipStatus.Active, false, FarmPermission.ManageScheduleTemplates);
+        repo.Seats[(FarmOfOtherOwner, SeatOfBoth)] = new(AppRole.Worker, MembershipStatus.Active, false, FarmPermission.SeeMoney);
         return repo;
     }
 
-    private static ScheduleTemplate OwnChain(Repo repo, Guid farm, Guid maker, TenantScope scope = TenantScope.Team)
+    /// <summary>A person's own chain (owner <paramref name="owner"/>), typed by <paramref name="maker"/>.</summary>
+    private static ScheduleTemplate OwnChain(Repo repo, Guid owner, Guid maker)
     {
-        var own = ScheduleTemplate.CreateOwn(Guid.NewGuid(), "माझं", "Grapes", farm, new UserId(maker), Now);
+        var own = ScheduleTemplate.CreateOwn(Guid.NewGuid(), "माझं", "Grapes", new UserId(owner), new UserId(maker), Now);
         repo.Templates[own.Id] = own;
-        _ = scope;
         return own;
     }
 
@@ -107,44 +123,47 @@ public sealed class OwnScheduleWriteGateTests
     private static Task<Error?> PublishAsync(Repo repo, ScheduleTemplate source, Guid? farm, Guid caller, AppRole role = AppRole.Worker) =>
         ScheduleTemplateWriteGate.RefusePublishAsync(repo, source, farm, caller, role, Now, CancellationToken.None);
 
-    // ---- D11: the farm named is the chain's farm, before any authority is read -----------------------------------
+    // ---- D11 re-aimed: the farm named must be one of the OWNER's farms, read once, before any authority is read -------
 
     [Fact]
-    public async Task Naming_a_farm_other_than_the_chains_own_farm_is_refused_before_any_authority_is_read()
+    public async Task Naming_a_farm_whose_owner_is_not_the_chains_owner_is_refused_before_any_authority_is_read()
     {
         var repo = World();
-        var chain = OwnChain(repo, FarmA, Owner);
-        repo.FarmsOf[Delegate] = [FarmA, FarmB]; // he sees it (farm A's seat) and holds the authority on A
+        var chain = OwnChain(repo, Owner, Owner);
 
-        foreach (var caller in new[] { Owner, Delegate })
-        {
-            (await EditAsync(repo, chain, FarmB, caller)).Should().Be(ShramSafalErrors.Forbidden, $"{caller} naming farm B");
-            (await PublishAsync(repo, chain, FarmB, caller)).Should().Be(ShramSafalErrors.Forbidden);
-        }
+        // The owner himself, naming another owner's farm (the viewer answers "his" without a read; the named farm is read ONCE to compare its owner).
+        (await EditAsync(repo, chain, FarmOfOtherOwner, Owner)).Should().Be(ShramSafalErrors.Forbidden);
+        repo.FarmReads.Should().Be(1, "the named farm was read once, to compare its owner");
+        repo.AuthorityReads.Should().Be(0, "and no seat was read: the farm named was refused first");
 
+        (await PublishAsync(repo, chain, FarmOfOtherOwner, Owner)).Should().Be(ShramSafalErrors.Forbidden);
         repo.AuthorityReads.Should().Be(0);
-        repo.FarmReads.Should().Be(0, "no farm and no seat was read: the farm named was refused first");
+
+        // A seat of farm A who holds the authority there, naming the other owner's farm: the same refusal, still no authority read.
+        (await EditAsync(repo, chain, FarmOfOtherOwner, Delegate)).Should().Be(ShramSafalErrors.Forbidden);
+        repo.AuthorityReads.Should().Be(0);
     }
 
     [Fact]
-    public async Task No_farm_named_on_the_farms_own_chain_is_refused_for_edit_and_for_publish()
+    public async Task No_farm_named_on_the_persons_own_chain_is_refused_for_edit_and_for_publish()
     {
         var repo = World();
-        var chain = OwnChain(repo, FarmA, Owner);
+        var chain = OwnChain(repo, Owner, Owner);
 
         (await EditAsync(repo, chain, null, Owner)).Should().Be(ShramSafalErrors.Forbidden);
         (await EditAsync(repo, chain, Guid.Empty, Owner)).Should().Be(ShramSafalErrors.Forbidden);
         (await PublishAsync(repo, chain, null, Owner)).Should().Be(ShramSafalErrors.Forbidden);
         repo.AuthorityReads.Should().Be(0);
+        repo.FarmReads.Should().Be(0);
     }
 
-    // ---- the farm's own chain: the gate alone --------------------------------------------------------------------
+    // ---- his own chain: the gate on the farm named ------------------------------------------------------------------
 
     [Fact]
-    public async Task The_owner_and_a_holder_edit_and_publish_the_farms_own_chain_and_a_seat_without_it_does_not()
+    public async Task The_owner_and_a_holder_edit_and_publish_his_own_chain_and_a_seat_without_it_does_not()
     {
         var repo = World();
-        var chain = OwnChain(repo, FarmA, Owner);
+        var chain = OwnChain(repo, Owner, Owner);
 
         (await EditAsync(repo, chain, FarmA, Owner)).Should().BeNull();
         (await EditAsync(repo, chain, FarmA, Delegate)).Should().BeNull("the seat decides, not the label");
@@ -155,10 +174,39 @@ public sealed class OwnScheduleWriteGateTests
     }
 
     [Fact]
-    public async Task The_global_role_decides_nothing_on_the_farms_own_chain()
+    public async Task A_holder_on_the_owners_other_farm_edits_and_publishes_naming_that_farm()
+    {
+        // R-c8 (founder-eyes): the library is the PERSON's (D-137) - a holder of the authority on ANY farm of the owner may version / publish his
+        // schedule naming that farm; an edit never moves a plot (Q8). Naming a farm where he holds nothing is still refused.
+        var repo = World();
+        var chain = OwnChain(repo, Owner, Owner);
+
+        (await EditAsync(repo, chain, FarmB, HolderB)).Should().BeNull("he holds the authority on farm B, which the owner owns");
+        (await PublishAsync(repo, chain, FarmB, HolderB)).Should().BeNull();
+        (await EditAsync(repo, chain, FarmA, HolderB)).Should().Be(ShramSafalErrors.Forbidden, "farm A is the owner's too, but he holds nothing there");
+        (await PublishAsync(repo, chain, FarmA, HolderB)).Should().Be(ShramSafalErrors.Forbidden);
+    }
+
+    [Fact]
+    public async Task A_seat_of_both_owners_farms_sees_the_other_owners_chain_but_cannot_write_it_naming_the_farm_he_holds_on()
     {
         var repo = World();
-        var chain = OwnChain(repo, FarmA, Owner);
+        var chain = OwnChain(repo, Outsider, Outsider);
+        var before = repo.AuthorityReads;
+
+        // He works on the outsider's farm too, so he SEES the chain (the Team rule); he holds the authority on farm A only - farm A's owner is not
+        // the chain's owner, so naming A is refused before any authority is read; naming the outsider's farm meets the gate, where he holds nothing.
+        (await EditAsync(repo, chain, FarmA, SeatOfBoth)).Should().Be(ShramSafalErrors.Forbidden);
+        repo.AuthorityReads.Should().Be(before, "farm A's owner is not the chain's owner: refused before any authority is read");
+        (await EditAsync(repo, chain, FarmOfOtherOwner, SeatOfBoth)).Should().Be(ShramSafalErrors.Forbidden);
+        (await PublishAsync(repo, chain, FarmOfOtherOwner, SeatOfBoth)).Should().Be(ShramSafalErrors.Forbidden);
+    }
+
+    [Fact]
+    public async Task The_global_role_decides_nothing_on_his_own_chain()
+    {
+        var repo = World();
+        var chain = OwnChain(repo, Owner, Owner);
 
         // A Worker-token holder passes; a PrimaryOwner-token seat without the authority does not (R31).
         (await EditAsync(repo, chain, FarmA, Delegate, AppRole.Worker)).Should().BeNull();
@@ -170,30 +218,44 @@ public sealed class OwnScheduleWriteGateTests
     public async Task The_owner_publishes_the_version_his_delegate_made_with_no_maker_check()
     {
         var repo = World();
-        var v1 = OwnChain(repo, FarmA, Owner);
+        var v1 = OwnChain(repo, Owner, Owner);
         var v2 = v1.EditCopyOnWrite(Guid.NewGuid(), "नवं", null, new UserId(Delegate), Now);
         repo.Templates[v2.Id] = v2;
 
         v2.CreatedByUserId.Should().Be(new UserId(Delegate));
+        v2.OwnerUserId.Should().Be(new UserId(Owner));
         (await PublishAsync(repo, v2, FarmA, Owner)).Should().BeNull();
         (await PublishAsync(repo, v2, FarmA, Delegate)).Should().BeNull();
     }
 
     [Fact]
-    public async Task A_person_who_does_not_work_on_the_farm_does_not_see_its_own_chain()
+    public async Task A_holder_typed_chain_is_the_owners_and_is_written_under_the_owners_farms()
+    {
+        // Q9 = 1: the owner owns a holder-typed chain; the version names the typist. The write rule reads the OWNER column, never the maker.
+        var repo = World();
+        var chain = OwnChain(repo, Owner, Delegate);
+
+        chain.CreatedByUserId.Should().Be(new UserId(Delegate));
+        (await EditAsync(repo, chain, FarmA, Owner)).Should().BeNull();
+        (await EditAsync(repo, chain, FarmB, HolderB)).Should().BeNull();
+        (await EditAsync(repo, chain, FarmA, Plain)).Should().Be(ShramSafalErrors.Forbidden);
+    }
+
+    [Fact]
+    public async Task A_person_who_does_not_work_on_any_of_his_farms_does_not_see_his_own_chain()
     {
         var repo = World();
-        var chain = OwnChain(repo, FarmA, Owner);
+        var chain = OwnChain(repo, Owner, Owner);
 
         (await EditAsync(repo, chain, FarmA, Outsider)).Should().Be(ShramSafalErrors.ScheduleTemplateNotFound, "answered like a made-up id (E4)");
         repo.AuthorityReads.Should().Be(0);
-        repo.FarmReads.Should().Be(0);
+        repo.FarmReads.Should().Be(1, "only the outsider's own farm, read by the viewer to learn whose team he is on");
     }
 
-    // ---- a Team chain that names no farm: R32 --------------------------------------------------------------------
+    // ---- a Team chain that names no owner: R32 -----------------------------------------------------------------------
 
     [Fact]
-    public async Task A_delegate_cannot_version_or_publish_the_owners_Team_chain_that_names_no_farm()
+    public async Task A_delegate_cannot_version_or_publish_the_owners_Team_chain_that_names_no_owner()
     {
         var repo = World();
         var chain = PlainTeam(repo, Owner);
@@ -242,7 +304,7 @@ public sealed class OwnScheduleWriteGateTests
         (await PublishAsync(repo, pub, FarmA, Owner, AppRole.PrimaryOwner)).Should().Be(ShramSafalErrors.Forbidden);
     }
 
-    // ---- clone INTO the farm's own schedule: the order ------------------------------------------------------------
+    // ---- clone INTO his own schedule: the order ------------------------------------------------------------------
 
     private static ScheduleTemplate CheckedPublic(Repo repo, string cropKey = "grape")
     {

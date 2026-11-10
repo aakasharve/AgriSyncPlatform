@@ -2375,8 +2375,9 @@ internal sealed class ShramSafalRepository(
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
+            // spec: plr-d10 lane SCH-OWN-c (R-c4) - the own-copy index is keyed per PERSON (ix_schedule_templates_derived_owner); SOWN-a's per-farm name is gone.
             var copyExists = IsUniqueViolationOn(ex, "ix_schedule_templates_derived_version")
-                || IsUniqueViolationOn(ex, "ix_schedule_templates_derived_own_farm");
+                || IsUniqueViolationOn(ex, "ix_schedule_templates_derived_owner");
             // The ids this unit tried to add: after the refusal the database is asked about THEM (never about the primary key's name, which an
             // older script may have given another name - F219).
             var addedIds = db.ChangeTracker.Entries<ScheduleTemplate>()

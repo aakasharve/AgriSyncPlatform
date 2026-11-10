@@ -269,6 +269,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    nullable column, a partial index, a foreign key to ssf.farms, two partial unique indexes. No grant or privilege is touched anywhere. Down() raises
         //    while a schedule row names a farm (this proof's data has none), else drops only what Up() added. Safe to revert and re-apply mid-proof.
         "20261109120000_AddScheduleTemplateOwnFarm",
+        // ── Reviewed 2026-11-10 (spec: plr-d10 lane SCH-OWN-c, founder D-137); Up() and Down() read in full: ssf.schedule_templates only (not a ledger): a
+        //    nullable owner_user_id and four nullable tag columns, one UPDATE converting SOWN-a's own-farm rows to their farm's owner, two partial unique indexes
+        //    re-keyed, SOWN-a's own-farm column dropped with its foreign key and index. No grant or privilege is touched anywhere. Down() raises while any row has an owner
+        //    or a tag (this proof's data has none), else rebuilds SOWN-a's shape and drops only what Up() added. Safe to revert and re-apply mid-proof.
+        "20261110120000_ScheduleTemplateOwnerAndMadeFor",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

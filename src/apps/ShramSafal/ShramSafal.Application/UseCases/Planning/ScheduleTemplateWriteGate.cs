@@ -19,11 +19,13 @@ namespace ShramSafal.Application.UseCases.Planning;
 /// unknown id: <see cref="ShramSafalErrors.ScheduleTemplateNotFound"/> (E4).</item>
 /// <item><b>Clone</b> then asks, as before, who may write a copy of the scope he chose (<see cref="ScopeRoleGate"/>).</item>
 /// <item><b>Edit or publish of a Private source</b>: only its owner (the maker of its first version), as before.</item>
-/// <item><b>Edit or publish of a Team or Licensed source that is a farm's OWN schedule</b> (spec: plr-d10 lane SCH-OWN; R30, R31, R32; D11): the
-/// farm named must be THE chain's farm - checked FIRST, before any authority is read, so a holder of the authority on another farm (even one
-/// person owning both) learns and changes nothing here - and then <see cref="OwnScheduleGate"/>: the farm's owner, or an Active seat of that
-/// farm that holds "पीक वेळापत्रकाचे नमुने" (<see cref="FarmAuthority.ScheduleTemplates"/>); the seat decides, never a label and never the
-/// account's global role (D-26). Publishing needs no further maker check: the owner publishes his delegate's version.</item>
+/// <item><b>Edit or publish of a Team source that is a person's OWN schedule</b> (spec: plr-d10 lane SCH-OWN-c; founder D-137; R31; D11 re-aimed;
+/// R-c8): the farm named (required for edit AND publish) must be a farm whose OWNER is the chain's owner - the named farm is read ONCE and compared
+/// FIRST, before any authority is read, so a holder of the authority on another owner's farm learns and changes nothing here - and then
+/// <see cref="OwnScheduleGate"/> on THAT farm: its owner, or an Active seat there that holds "पीक वेळापत्रकाचे नमुने"
+/// (<see cref="FarmAuthority.ScheduleTemplates"/>); the seat decides, never a label and never the account's global role (D-26). The library is the
+/// PERSON's, so a holder on ANY of his farms may version / publish it naming that farm; an edit never moves a plot (Q8). Publishing needs no further
+/// maker check: the owner publishes his delegate's version.</item>
 /// <item><b>Edit or publish of any other Team or Licensed source</b> (an expert's schedule that names no farm): an edit always needs the farm
 /// named (D-88's approach: "nobody from another farm can touch it"; publish has always tolerated none and still does), and it is its OWNER's alone (<see cref="ScheduleViewer.OwnerOfAsync"/>), under the
 /// scope's author rule (<see cref="ScopeRoleGate"/>: the expert sign-up roles, plus that farm's authority). A seat of the owner's farm can no
@@ -45,12 +47,12 @@ internal static class ScheduleTemplateWriteGate
     }
 
     /// <summary>
-    /// spec: plr-d10 lane SCH-OWN (Task 3; D4, D5, R31; E4) - the rules of a clone INTO the farm's own schedule, in an order that keeps the
+    /// spec: plr-d10 lane SCH-OWN (Task 3; D4, D5, R31; E4) - the rules of a clone INTO his own schedule, in an order that keeps the
     /// answers honest: the farm named (else Forbidden), the scope (Team, else InvalidCommand), <b>the gate before anything about the farm or the
-    /// source is learned</b> (<see cref="OwnScheduleGate"/>; else Forbidden - and before <c>own_farm_id</c> is ever set, because a foreign-key check
-    /// bypasses row-level security, E4), then the source (a Public schedule ShramSafal has CHECKED NOW: a sample, a waiting, sent-back or withdrawn
-    /// one is <see cref="ShramSafalErrors.ScheduleNotChecked"/>, D4), then the crop (a crop this farm grows, any season, D5). Returns <c>null</c>
-    /// when all hold.
+    /// source is learned</b> (<see cref="OwnScheduleGate"/>; else Forbidden - the copy's OWNER is then read from the same farm row through
+    /// <see cref="OwnScheduleGate.OwnerIfAllowedAsync"/>, never from the body, E4), then the source (a Public schedule ShramSafal has CHECKED NOW: a
+    /// sample, a waiting, sent-back or withdrawn one is <see cref="ShramSafalErrors.ScheduleNotChecked"/>, D4), then the crop (a crop this farm grows,
+    /// any season, D5). Returns <c>null</c> when all hold.
     /// </summary>
     public static async Task<Error?> RefuseCloneIntoFarmOwnAsync(
         IShramSafalRepository repository,
@@ -172,15 +174,21 @@ internal static class ScheduleTemplateWriteGate
                 return ShramSafalErrors.Forbidden;
         }
 
-        if (source.OwnFarmId is { } ownFarm)
+        // spec: plr-d10 lane SCH-OWN-c (D-137; D11 re-aimed; R-c8) - a person's own chain is written only naming a farm whose OWNER is the chain's owner,
+        // for edit and for publish: the named farm is read ONCE and compared BEFORE any authority is read; then the gate on THAT farm.
+        if (source.OwnerUserId is { } owner)
         {
-            // D11: the farm named must be the chain's own farm - BEFORE any authority is read.
-            if (source.TenantScope != TenantScope.Team || farmId != ownFarm)
+            if (source.TenantScope != TenantScope.Team || farmId is not { } ownersFarm || ownersFarm == Guid.Empty)
             {
                 return ShramSafalErrors.Forbidden;
             }
 
-            return await OwnScheduleGate.AllowsAsync(repository, ownFarm, callerUserId, nowUtc, ct) ? null : ShramSafalErrors.Forbidden;
+            if (await repository.GetFarmByIdAsync(ownersFarm, ct) is not { } farm || farm.OwnerUserId != owner)
+            {
+                return ShramSafalErrors.Forbidden;
+            }
+
+            return await OwnScheduleGate.AllowsAsync(repository, ownersFarm, callerUserId, nowUtc, ct) ? null : ShramSafalErrors.Forbidden;
         }
 
         // Edit always needs the farm named (D-88). Publish has always let a global-role holder publish without one (ScopeRoleGate), and still does.

@@ -53,7 +53,11 @@ public static class ScheduleTemplateEndpoints
                 ClientCommandId: request.ClientCommandId,
                 ClientAppVersion: ResolveClientAppVersion(httpContext),
                 AuditDeviceId: auditDeviceId,
-                AuditIpHash: auditIpHash);
+                AuditIpHash: auditIpHash,
+                Variety: request.Variety,
+                SoilType: request.SoilType,
+                Region: request.Region,
+                Climate: request.Climate);
 
             var result = await handler.HandleAsync(command, ct);
             return result.IsSuccess
@@ -171,7 +175,11 @@ public static class ScheduleTemplateEndpoints
                 FarmId: farmId,
                 Stages: request.Stages?.Select(s => new EditScheduleStageInput(s.Name ?? string.Empty, s.StartDay, s.EndDay)).ToList(),
                 Activities: request.Activities?.Select(a => new EditScheduleActivityInput(
-                    a.Name ?? string.Empty, a.Part ?? string.Empty, a.OperationKey, a.StartDay, a.EndDay, a.FrequencyMode ?? string.Empty, a.IntervalDays)).ToList());
+                    a.Name ?? string.Empty, a.Part ?? string.Empty, a.OperationKey, a.StartDay, a.EndDay, a.FrequencyMode ?? string.Empty, a.IntervalDays)).ToList(),
+                Variety: request.Variety,
+                SoilType: request.SoilType,
+                Region: request.Region,
+                Climate: request.Climate);
 
             // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
             // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
@@ -361,6 +369,8 @@ public static class ScheduleTemplateEndpoints
         [ShramSafal.Domain.Common.ShramSafalErrors.OwnScheduleEmpty.Code] = "आधी कामं जोडा",
         // fix round 1 (M002) - PROPOSED: the work's key does not fit (the phone sends the key; the words say it is not right).
         ["ShramSafal.ScheduleImportOperationKey"] = "कामाची ओळख बरोबर नाही.",
+        // spec: plr-d10 lane SCH-OWN-c (D-137, Q10 = 1) - PROPOSED: a made-for tag that is not one of its list's choices (part b adds the code to RejectionPolicy as permanent).
+        ["ShramSafal.ScheduleMadeFor"] = "ही निवड यादीत नाही.",
     };
 
     private static IResult ToErrorResult(AgriSync.BuildingBlocks.Results.Error error)
@@ -407,7 +417,12 @@ public sealed record EditScheduleTemplateRequest(
     string? ClientCommandId,
     // spec: plr-d10 lane SCH-OWN (D7) - the next version written whole. Both absent = the old rename (P11).
     IReadOnlyList<EditScheduleStageRequest>? Stages = null,
-    IReadOnlyList<EditScheduleActivityRequest>? Activities = null);
+    IReadOnlyList<EditScheduleActivityRequest>? Activities = null,
+    // spec: plr-d10 lane SCH-OWN-c (D-137, Q10 = 1) - the made-for tags of the whole version, as sent (list codes; absent = none). Only with Stages.
+    string? Variety = null,
+    string? SoilType = null,
+    string? Region = null,
+    string? Climate = null);
 
 // spec: plr-d10 lane SCH-OWN - the shapes of Stages / Activities are the sync contract's own (schedule.edit): part is irrigation | nutrition | spray | work;
 // frequencyMode one_time | every_n_days | per_week.
@@ -422,13 +437,18 @@ public sealed record EditScheduleActivityRequest(
     string? FrequencyMode,
     int IntervalDays);
 
-// spec: plr-d10 lane SCH-OWN (Task 4) - POST /shramsafal/schedule-templates: the farm's own schedule, made empty.
+// spec: plr-d10 lane SCH-OWN (Task 4) - POST /shramsafal/schedule-templates: his own schedule, made empty, on the farm named (whose OWNER it then is:
+// SCH-OWN-c). The four made-for tags (SCH-OWN-c, Q10 = 1) are optional list codes; absent = none (P11: a 1.0.17 phone never calls this door).
 public sealed record CreateOwnScheduleRequest(
     Guid? ScheduleTemplateId,
     Guid? FarmId,
     string? CropKey,
     string? Name,
-    string? ClientCommandId);
+    string? ClientCommandId,
+    string? Variety = null,
+    string? SoilType = null,
+    string? Region = null,
+    string? Climate = null);
 
 public sealed record PublishScheduleTemplateRequest(
     string? ClientCommandId);

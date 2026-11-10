@@ -5428,6 +5428,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Climate")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("climate");
+
                     b.Property<DateTime>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at_utc");
@@ -5451,14 +5456,14 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(120)")
                         .HasColumnName("name");
 
-                    b.Property<Guid?>("OwnFarmId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("own_farm_id");
-
                     b.Property<string>("OwnerType")
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("owner_type");
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
 
                     b.Property<Guid?>("PreviousVersionId")
                         .HasColumnType("uuid")
@@ -5467,6 +5472,16 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("PublishedAtUtc")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("published_at_utc");
+
+                    b.Property<string>("Region")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("region_code");
+
+                    b.Property<string>("SoilType")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("soil_type");
 
                     b.Property<string>("SourceLabel")
                         .HasMaxLength(160)
@@ -5485,6 +5500,11 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(3)
                         .HasColumnName("tenant_scope");
 
+                    b.Property<string>("Variety")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("variety");
+
                     b.Property<int>("Version")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -5493,9 +5513,9 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OwnFarmId")
-                        .HasDatabaseName("ix_schedule_templates_own_farm_id")
-                        .HasFilter("own_farm_id IS NOT NULL");
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_schedule_templates_owner_user_id")
+                        .HasFilter("owner_user_id IS NOT NULL");
 
                     b.ToTable("schedule_templates", "ssf");
                 });

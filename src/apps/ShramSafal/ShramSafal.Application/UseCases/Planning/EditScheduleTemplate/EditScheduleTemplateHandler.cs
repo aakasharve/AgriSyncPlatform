@@ -29,9 +29,11 @@ public sealed class EditScheduleTemplateHandler(
         EditScheduleTemplateCommand command,
         CancellationToken ct = default)
     {
-        // Step 1: validate
+        // Step 1: validate. spec: plr-d10 lane SCH-OWN-c (R-c18) - a made-for tag comes only with a whole version (Stages): a rename carries the tags of
+        // the version before and never rewrites them.
+        var anyTag = command.Variety is not null || command.SoilType is not null || command.Region is not null || command.Climate is not null;
         if (command.SourceTemplateId == Guid.Empty || command.NewTemplateId == Guid.Empty || command.CallerUserId == Guid.Empty
-            || (command.Stages is null && command.Activities is not null))
+            || (command.Stages is null && (command.Activities is not null || anyTag)))
         {
             return Result.Failure<EditScheduleTemplateResult>(ShramSafalErrors.InvalidCommand);
         }
@@ -59,10 +61,10 @@ public sealed class EditScheduleTemplateHandler(
         }
 
         // Step 4: authz
-        // spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88) and lane SCH-OWN (R32) — whose schedule the source is: one he may not see
-        // is not found; a Private one is its owner's; a farm's OWN schedule (names its farm) needs the farm named to BE that farm and is then
-        // written by the farm's owner or an Active seat holding "पीक वेळापत्रकाचे नमुने" there; any other Team or Licensed one needs the farm named
-        // and is its OWNER's alone, under the scope's author rule (a delegate no longer versions it: R32). All in ScheduleTemplateWriteGate.
+        // spec: plr-d10 lane L8b-1 fix round 1 (review H3; founder D-88), lane SCH-OWN (R32) and SCH-OWN-c (D-137) — whose schedule the source is: one he
+        // may not see is not found; a Private one is its owner's; a person's OWN schedule (names its owner) needs the farm named to be one of the
+        // OWNER's farms and is then written by that farm's owner or an Active seat holding "पीक वेळापत्रकाचे नमुने" there; any other Team or Licensed one
+        // needs the farm named and is its OWNER's alone, under the scope's author rule (a delegate no longer versions it: R32). All in ScheduleTemplateWriteGate.
         if (await ScheduleTemplateWriteGate.RefuseEditAsync(
                 repository, source, command.FarmId, command.CallerUserId, command.CallerRole, clock.UtcNow, ct) is { } refused)
         {
@@ -104,6 +106,14 @@ public sealed class EditScheduleTemplateHandler(
                 drafts.Add(new ScheduleActivityDraft(a.Name ?? string.Empty, a.Part ?? string.Empty, a.OperationKey, a.StartDay, a.EndDay, mode, a.IntervalDays));
             }
 
+            // spec: plr-d10 lane SCH-OWN-c (D-137, Q10 = 1) — the made-for tags of the whole version, as sent (absent = none; the version before keeps its
+            // own, P3); a tag outside its list is refused with words BEFORE anything is written (400 ShramSafal.ScheduleMadeFor / a permanent push failure).
+            var madeFor = new ScheduleMadeFor(command.Variety, command.SoilType, command.Region, command.Climate).Normalize();
+            if (MadeForLists.Check(source.CropKey, madeFor) is { } tagProblem)
+            {
+                return Result.Failure<EditScheduleTemplateResult>(Error.Validation("ShramSafal.ScheduleMadeFor", tagProblem.Message));
+            }
+
             var edited = source.EditCopyOnWrite(
                 command.NewTemplateId,
                 command.NewName,
@@ -112,7 +122,8 @@ public sealed class EditScheduleTemplateHandler(
                 drafts,
                 new UserId(command.CallerUserId),
                 clock.UtcNow,
-                out var problem);
+                out var problem,
+                madeFor: madeFor);
             if (edited is null)
             {
                 return Result.Failure<EditScheduleTemplateResult>(Error.Validation($"ShramSafal.{problem!.Code}", problem.Message));

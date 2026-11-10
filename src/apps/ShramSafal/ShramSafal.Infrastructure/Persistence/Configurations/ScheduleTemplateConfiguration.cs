@@ -93,15 +93,39 @@ internal sealed class ScheduleTemplateConfiguration : IEntityTypeConfiguration<S
             .HasColumnName("crop_key")
             .HasMaxLength(ScheduleTemplate.MaxCropKeyLength);
 
-        // spec: plr-d10 lane SCH-OWN (Task 1) - the farm a schedule is the OWN schedule of (every version of its chain); null for every other row.
-        // Plain data: the foreign key to ssf.farms is raw SQL in the migration (like 20261102163914_AddWorkerIdentity), ON DELETE RESTRICT. The
-        // two partial UNIQUE indexes that keep one copy per (source, version) and one own copy per (source, farm) are raw SQL there too.
-        builder.Property(x => x.OwnFarmId)
-            .HasColumnName("own_farm_id");
+        // spec: plr-d10 lane SCH-OWN-c (founder D-137; F218, F222) - the PERSON whose own schedule this is (every version of its chain): the owner of
+        // the farm it was made on, an opaque user id like created_by_user_id. Null for every other row. No foreign key: the users table is another
+        // context's (public.users) and no ssf table points at it; the gate is the defence (E4). The two partial UNIQUE indexes that keep one plain copy
+        // per (source, version) and one own copy per (source, owner) are raw SQL in the migration 20261110120000_ScheduleTemplateOwnerAndMadeFor.
+        builder.Property(x => x.OwnerUserId)
+            .HasColumnName("owner_user_id")
+            .HasConversion(
+                v => v.HasValue ? (Guid?)v.Value.Value : null,
+                v => v.HasValue ? (UserId?)new UserId(v.Value) : null);
 
-        builder.HasIndex(x => x.OwnFarmId)
-            .HasDatabaseName("ix_schedule_templates_own_farm_id")
-            .HasFilter("own_farm_id IS NOT NULL");
+        builder.HasIndex(x => x.OwnerUserId)
+            .HasDatabaseName("ix_schedule_templates_owner_user_id")
+            .HasFilter("owner_user_id IS NOT NULL");
+
+        // spec: plr-d10 lane SCH-OWN-c (D-137, Q10 = 1) - what the schedule was made for: four optional list codes (tags, never a refusal). region_code
+        // is varchar(40) like the legacy crop_schedule_templates.region_code.
+        builder.Property(x => x.Variety)
+            .HasColumnName("variety")
+            .HasMaxLength(ScheduleMadeFor.MaxTagLength);
+
+        builder.Property(x => x.SoilType)
+            .HasColumnName("soil_type")
+            .HasMaxLength(ScheduleMadeFor.MaxTagLength);
+
+        builder.Property(x => x.Region)
+            .HasColumnName("region_code")
+            .HasMaxLength(ScheduleMadeFor.MaxTagLength);
+
+        builder.Property(x => x.Climate)
+            .HasColumnName("climate")
+            .HasMaxLength(ScheduleMadeFor.MaxTagLength);
+
+        builder.Ignore(x => x.MadeFor);
 
         builder.Ignore(x => x.DomainEvents);
     }

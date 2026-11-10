@@ -19,22 +19,35 @@ namespace ShramSafal.Application.Services;
 /// </summary>
 public static class OwnScheduleGate
 {
-    public static async Task<bool> AllowsAsync(
+    /// <summary>
+    /// spec: plr-d10 lane SCH-OWN-c (E4) - the OWNER of <paramref name="farmId"/> (its <c>owner_user_id</c>, the person a new own chain belongs
+    /// to) when <paramref name="callerUserId"/> may write that farm's own schedules; <c>null</c> when he may not (or the farm cannot be read).
+    /// One farm read; the id comes from the SAME farm row the gate trusted, never from a request body.
+    /// </summary>
+    public static async Task<Guid?> OwnerIfAllowedAsync(
         IShramSafalRepository repository, Guid farmId, Guid callerUserId, DateTime nowUtc, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(repository);
         if (farmId == Guid.Empty || callerUserId == Guid.Empty)
         {
-            return false;
+            return null;
         }
 
         if (await repository.GetFarmByIdAsync(farmId, ct) is not { } farm)
         {
             // An unreadable farm fails closed: no owner can be named and no seat is trusted without it.
-            return false;
+            return null;
         }
 
-        return farm.OwnerUserId.Value == callerUserId
-            || await FarmAuthorityGate.HoldsAsync(repository, farmId, callerUserId, FarmAuthority.ScheduleTemplates, nowUtc, ct);
+        var owner = farm.OwnerUserId.Value;
+        return owner == callerUserId
+            || await FarmAuthorityGate.HoldsAsync(repository, farmId, callerUserId, FarmAuthority.ScheduleTemplates, nowUtc, ct)
+                ? owner
+                : null;
     }
+
+    /// <summary>May <paramref name="callerUserId"/> write the own schedules of <paramref name="farmId"/>'s owner, naming that farm?</summary>
+    public static async Task<bool> AllowsAsync(
+        IShramSafalRepository repository, Guid farmId, Guid callerUserId, DateTime nowUtc, CancellationToken ct = default) =>
+        await OwnerIfAllowedAsync(repository, farmId, callerUserId, nowUtc, ct) is not null;
 }

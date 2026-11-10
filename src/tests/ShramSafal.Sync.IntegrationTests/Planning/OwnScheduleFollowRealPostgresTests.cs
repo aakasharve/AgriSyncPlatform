@@ -1,9 +1,10 @@
-// spec: plr-d10-redesign-real-integration-2026-10-25 - lane SCH-OWN Task 3 ("his own schedule", following it; founder D-74, D-82 = 3, D-83 = 1; R30, R32; P4).
+// spec: plr-d10-redesign-real-integration-2026-10-25 - lane SCH-OWN Task 3 ("his own schedule", following it; founder D-74, D-82 = 3, D-83 = 1; P4) and lane
+// SCH-OWN-c (the schedule belongs to the PERSON; founder D-133 withdrawn, D-137; F218, F222 (d)).
 //
-// A plot follows the farm's OWN schedule with NO check (D-82 = 3): adopt and migrate take it exactly when it STORES its days; an empty one answers
+// A plot follows his OWN schedule with NO check (D-82 = 3): adopt and migrate take it exactly when it STORES its days; an empty one answers
 // OwnScheduleEmpty and writes nothing (never an invented stage or day). It is stamped with no check state, never reaches the check waiting list, and
-// belongs to its FARM: a plot of the same owner's OTHER farm cannot follow it, and another farm's people never receive it. Real Postgres as
-// agrisync_app (E3 first), through the real host, the real push handler and the real pull.
+// belongs to its OWNER: a plot of ANY farm he owns follows it, every seat of every farm he owns receives it, and another owner's people never do. A Team
+// row with no owner is never Own (F218). Real Postgres as agrisync_app (E3 first), through the real host, the real push handler and the real pull.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -89,7 +90,7 @@ public sealed class OwnScheduleFollowRealPostgresTests(ITestOutputHelper output)
     public async Task An_own_schedule_with_stored_days_is_followed_without_any_check()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        var own = await SeedOwnWithDaysAsync(FarmA, Owner);
+        var own = await SeedOwnWithDaysAsync(Owner, Owner);
         (await ChecksOfAsync(own)).Should().Be(0);
 
         var (status, body) = await AdoptAsync(Owner, FarmA, PlotA, CycleA, own);
@@ -104,7 +105,7 @@ public sealed class OwnScheduleFollowRealPostgresTests(ITestOutputHelper output)
         // It needs no check even when the crop HAS a checked schedule (that rule is for outside schedules), and both are followed side by side.
         var outside = await CheckedGrapeScheduleAsync();
         (await AdoptAsync(Owner, FarmA, PlotA, CycleA, outside.Id)).Status.Should().Be(HttpStatusCode.OK);
-        var second = await SeedOwnWithDaysAsync(FarmA, Owner, "दुसरं माझं");
+        var second = await SeedOwnWithDaysAsync(Owner, Owner, "दुसरं माझं");
         var (plotP, cycleP) = await SeedSeasonAsync("Grapes");
         var viaPush = await PushAsync(Owner, "adopt_schedule", "sown-own-push", Adopt(FarmA, plotP, cycleP, second));
         viaPush.Status.Should().Be("applied", $"{viaPush.ErrorCode}: {viaPush.ErrorMessage}");
@@ -122,7 +123,7 @@ public sealed class OwnScheduleFollowRealPostgresTests(ITestOutputHelper output)
     {
         await AssertAppRoleIsNotVacuousAsync();
         await EnsureReviewSeatsAsync();
-        var withDays = await SeedOwnWithDaysAsync(FarmA, Owner);
+        var withDays = await SeedOwnWithDaysAsync(Owner, Owner);
         var empty = IdOf((await CreateAsync(Owner, FarmA, "Grapes", "रिकामं")).Body, "scheduleTemplateId");
         var waiting = await SeedStoredRowAsync("Grapes - an outside row waiting for its check");
 
@@ -142,7 +143,7 @@ public sealed class OwnScheduleFollowRealPostgresTests(ITestOutputHelper output)
     public async Task Its_subscription_and_library_entry_carry_no_check_state()
     {
         await AssertAppRoleIsNotVacuousAsync();
-        var own = await SeedOwnWithDaysAsync(FarmA, Owner);
+        var own = await SeedOwnWithDaysAsync(Owner, Owner);
         (await AdoptAsync(Owner, FarmA, PlotA, CycleA, own)).Status.Should().Be(HttpStatusCode.OK);
 
         var (_, workerRoot) = await PullAsync(Worker);
@@ -162,7 +163,7 @@ public sealed class OwnScheduleFollowRealPostgresTests(ITestOutputHelper output)
         await AssertAppRoleIsNotVacuousAsync();
         (await AdoptAsync(Owner, FarmA, PlotA, CycleA, BuiltInGrapes)).Status.Should().Be(HttpStatusCode.OK);
         var empty = IdOf((await CreateAsync(Owner, FarmA, "Grapes", "रिकामं")).Body, "scheduleTemplateId");
-        var withDays = await SeedOwnWithDaysAsync(FarmA, Owner);
+        var withDays = await SeedOwnWithDaysAsync(Owner, Owner);
 
         async Task<(HttpStatusCode Status, string Body)> SwitchAsync(Guid template) =>
             await SendJsonAsync(HttpMethod.Post, $"/shramsafal/plots/{PlotA}/cycles/{CycleA}/schedule/migrate", Owner,
@@ -190,57 +191,89 @@ public sealed class OwnScheduleFollowRealPostgresTests(ITestOutputHelper output)
         marks.Should().Contain(m => m.Template == BuiltInGrapes && m.State != 0, "the switch ended the earlier one");
     }
 
+    // ── SCH-OWN-c (D-133 withdrawn, D-137; F222 (d)): the schedule is the PERSON's - Own on a plot of ANY farm he owns, seen by every seat of every farm he owns ──
+
     [Fact]
-    public async Task A_chain_of_farm_A_is_not_Own_on_a_plot_of_the_same_owners_farm_B()
+    public async Task The_owners_schedule_is_Own_on_a_plot_of_his_other_farm_C()
     {
         await AssertAppRoleIsNotVacuousAsync();
         await SeedSecondFarmOfOwnerAsync();
-        var ofA = await SeedOwnWithDaysAsync(FarmA, Owner);
+        var ofA = await SeedOwnWithDaysAsync(Owner, Owner);
 
         var onC = await AdoptAsync(Owner, FarmC, PlotC, CycleC, ofA);
-        var pushedOnC = await PushAsync(Owner, "adopt_schedule", "sown-other-farm", Adopt(FarmC, PlotC, CycleC, ofA));
 
-        onC.Status.Should().Be(HttpStatusCode.NotFound, onC.Body);
-        ErrorCode(onC.Body).Should().Be("ShramSafal.ScheduleTemplateNotFound", "answered like a made-up id (R30, E4)");
-        pushedOnC.ErrorCode.Should().Be("ShramSafal.ScheduleTemplateNotFound");
-        (await MarksOfPlotAsync(PlotC)).Should().BeEmpty();
-        (await AdoptAsync(Owner, FarmA, PlotA, CycleA, ofA)).Status.Should().Be(HttpStatusCode.OK, "not vacuous: its own farm's plot follows it");
+        onC.Status.Should().Be(HttpStatusCode.OK, onC.Body);
+        Json(onC.Body).GetProperty("origin").GetString().Should().Be("Own", "a plot of ANY farm he owns follows his own schedule (D-133 withdrawn)");
+        (await MarksOfPlotAsync(PlotC)).Should().ContainSingle().Which.Should().Be(new Marks("Own", null, 0, 0, ofA));
+
+        // and as a push, on a second Grapes season of farm C
+        await ExecOnSuperuserAsync("""
+            INSERT INTO ssf.plots ("Id", farm_id, name, area_in_acres, created_at_utc, modified_at_utc) VALUES (@plot, @farmC, 'प्लॉट C2', 1.0, NOW(), NOW());
+            INSERT INTO ssf.crop_cycles ("Id", farm_id, plot_id, crop_name, stage, start_date, created_at_utc, modified_at_utc)
+            VALUES (@cycle, @farmC, @plot, 'Grapes', 'Vegetative', DATE '2026-01-01', NOW(), NOW());
+            """, ("plot", Guid.Parse("3d030000-0000-4000-8000-0000000000c5")), ("cycle", Guid.Parse("3d030000-0000-4000-8000-0000000000c6")), ("farmC", FarmC));
+        var pushedOnC = await PushAsync(Owner, "adopt_schedule", "sownc-own-on-c",
+            Adopt(FarmC, Guid.Parse("3d030000-0000-4000-8000-0000000000c5"), Guid.Parse("3d030000-0000-4000-8000-0000000000c6"), ofA));
+        pushedOnC.Status.Should().Be("applied", $"{pushedOnC.ErrorCode}: {pushedOnC.ErrorMessage}");
+
+        // Another owner's farm never: OwnerB on his farm B is answered like a made-up id (E4).
+        var onB = await AdoptAsync(OwnerB, FarmB, PlotB, CycleB, ofA);
+        onB.Status.Should().Be(HttpStatusCode.NotFound, onB.Body);
+        ErrorCode(onB.Body).Should().Be("ShramSafal.ScheduleTemplateNotFound");
+        (await MarksOfPlotAsync(PlotB)).Should().BeEmpty();
+        (await AdoptAsync(Owner, FarmA, PlotA, CycleA, ofA)).Status.Should().Be(HttpStatusCode.OK, "and the plot of the farm it was made on follows it too");
     }
 
     [Fact]
-    public async Task Another_farms_seat_never_receives_this_farms_own_schedule_in_the_library_pull()
+    public async Task The_owners_other_farms_seat_receives_his_own_schedule_and_another_owner_does_not()
     {
         await AssertAppRoleIsNotVacuousAsync();
         await EnsureReviewSeatsAsync();
         await SeedSecondFarmOfOwnerAsync();
-        // A person who works ONLY on the owner's other farm (D2: his other farms' seats do not see farm A's own schedule).
+        // A person who works ONLY on the owner's other farm: the library is the PERSON's, so every seat of every farm he owns receives it (the Team rule).
         await SeedSeatAsync(FarmC, PlatformEmployee, "Worker", FarmAuthority.SeeMoney);
-        var own = await SeedOwnWithDaysAsync(FarmA, Owner);
-        var empty = await SeedOwnEmptyAsync(FarmA, Owner, "रिकामं");
+        var own = await SeedOwnWithDaysAsync(Owner, Owner);
+        var empty = await SeedOwnEmptyAsync(Owner, Owner, "रिकामं");
 
         async Task<List<Guid>> PulledAsync(Guid user) =>
             IdsOf((await PullAsync(user)).Root, "scheduleTemplates").ToList();
 
-        (await PulledAsync(Owner)).Should().Contain(new[] { own, empty }, "the farm's owner");
-        (await PulledAsync(Worker)).Should().Contain(new[] { own, empty }, "the farm's own seat");
-        (await PulledAsync(OwnerB)).Should().NotContain(new[] { own, empty }, "another farm's owner");
-        (await PulledAsync(PlatformEmployee)).Should().NotContain(new[] { own, empty }, "a seat of the same owner's OTHER farm (D2)");
+        (await PulledAsync(Owner)).Should().Contain(new[] { own, empty }, "the owner");
+        (await PulledAsync(Worker)).Should().Contain(new[] { own, empty }, "a seat of farm A");
+        (await PulledAsync(PlatformEmployee)).Should().Contain(new[] { own, empty }, "a seat of the same owner's OTHER farm C (D-133 withdrawn)");
+        (await PulledAsync(OwnerB)).Should().NotContain(new[] { own, empty }, "another owner");
+        (await LibraryAsync(PlatformEmployee)).Select(t => t.GetProperty("id").GetGuid()).Should().Contain(new[] { own, empty });
         (await LibraryAsync(OwnerB)).Select(t => t.GetProperty("id").GetGuid()).Should().NotContain(new[] { own, empty });
-        (await LibraryAsync(PlatformEmployee)).Select(t => t.GetProperty("id").GetGuid()).Should().NotContain(new[] { own, empty });
+        var onB = await AdoptAsync(OwnerB, FarmB, PlotB, CycleB, own);
+        onB.Status.Should().Be(HttpStatusCode.NotFound, "the other owner cannot adopt it either");
     }
 
     [Fact]
-    public async Task Release_1_0_17_receives_a_pull_that_holds_an_empty_and_a_stored_own_schedule()
+    public async Task Release_1_0_17_receives_a_pull_that_holds_an_empty_a_stored_a_stages_only_and_a_tagged_own_schedule()
     {
         // P11: the pull and the library keep every field release 1.0.17 reads; the new rows are ordinary entries of the same shapes. The bodies are kept
-        // (SCHA_P11_BODIES) for the P11 run: release b3d28967's OWN reconciler on them. An EMPTY own schedule lists no stage (1.0.17 drops a template it
-        // cannot place); a STORED one is listed like any schedule.
+        // (SCHA_P11_BODIES) for the P11 run: release b3d28967's OWN reconciler on them. An EMPTY own schedule and a STAGES-ONLY version list no stage
+        // (M004: 1.0.17 drops a template it cannot place and would churn on adopting one it can never follow); a STORED one is listed like any schedule.
+        // SCH-OWN-c: four bodies - the owner, a seat of farm A, a seat of the owner's farm C, and the other owner - and the additive fields.
         await AssertAppRoleIsNotVacuousAsync();
+        await EnsureReviewSeatsAsync();
+        await SeedSecondFarmOfOwnerAsync();
+        await SeedSeatAsync(FarmC, PlatformEmployee, "Worker", FarmAuthority.SeeMoney);
         var empty = IdOf((await CreateAsync(Owner, FarmA, "Grapes", "रिकामं")).Body, "scheduleTemplateId");
-        var stored = await SeedOwnWithDaysAsync(FarmA, Owner);
+        var stored = await SeedOwnWithDaysAsync(Owner, Owner);
         (await AdoptAsync(Owner, FarmA, PlotA, CycleA, stored)).Status.Should().Be(HttpStatusCode.OK);
+        var stagesOnly = Guid.NewGuid();
+        (await EditAsync(Owner, empty, FarmA, stagesOnly, stages: SomeStages())).Status.Should().Be(HttpStatusCode.Created);
+        var taggedV1 = IdOf((await CreateAsync(Owner, FarmA, "Grapes", "टॅग केलेलं", variety: "Thompson Seedless", soilType: "black", region: "mh_nashik", climate: "dry")).Body, "scheduleTemplateId");
+        var tagged = Guid.NewGuid();
+        (await EditAsync(Owner, taggedV1, FarmA, tagged, stages: SomeStages(), activities: SomeWorks(),
+            variety: "Thompson Seedless", soilType: "black", region: "mh_nashik", climate: "dry")).Status.Should().Be(HttpStatusCode.Created);
 
-        foreach (var (who, user) in new[] { ("owner-with-own-schedules", Owner), ("worker-seat-with-own-schedules", Worker), ("other-farm-owner-without-them", OwnerB) })
+        foreach (var (who, user) in new[]
+                 {
+                     ("owner-with-own-schedules", Owner), ("worker-seat-with-own-schedules", Worker),
+                     ("seat-of-farm-c-with-own-schedules", PlatformEmployee), ("other-farm-owner-without-them", OwnerB),
+                 })
         {
             using var response = await SendAsync(HttpMethod.Get, $"/sync/pull?since={Uri.EscapeDataString(PhoneCursor(DateTime.UnixEpoch))}", user, null, "1.0.17", null);
             var body = await response.Content.ReadAsStringAsync();
@@ -266,16 +299,34 @@ public sealed class OwnScheduleFollowRealPostgresTests(ITestOutputHelper output)
             var listed = ArrayOf(root, "scheduleTemplates").ToDictionary(t => t.GetProperty("id").GetGuid());
             if (user == OwnerB)
             {
-                listed.Keys.Should().NotContain(new[] { empty, stored });
+                listed.Keys.Should().NotContain(new[] { empty, stored, stagesOnly, taggedV1, tagged });
                 continue;
             }
 
             listed[empty].GetProperty("stages").GetArrayLength().Should().Be(0, "an empty own schedule lists no stage (nothing invented)");
+            listed[stagesOnly].GetProperty("stages").GetArrayLength().Should().Be(0, "M004: a version with stages and no works lists no stage for 1.0.17");
+            listed[stagesOnly].GetProperty("totalDays").GetInt32().Should().Be(0);
+            listed[stagesOnly].GetProperty("draftStages").GetArrayLength().Should().Be(3, "its stored stages reach new phones as draftStages");
             listed[stored].GetProperty("stages").GetArrayLength().Should().BeGreaterThan(0);
+
+            // The additive fields (SCH-OWN-c): on the owner's own rows, never on a built-in.
+            var entry = listed[stored];
+            entry.GetProperty("ownerUserId").GetGuid().Should().Be(Owner, who);
+            entry.GetProperty("madeByUserId").GetGuid().Should().Be(Owner, who);
+            entry.GetProperty("madeAtUtc").ValueKind.Should().Be(JsonValueKind.String, who);
+            entry.GetProperty("previousVersionId").ValueKind.Should().Be(JsonValueKind.String, "v2 names v1");
+            var t = listed[tagged];
+            (t.GetProperty("variety").GetString(), t.GetProperty("soilType").GetString(), t.GetProperty("region").GetString(), t.GetProperty("climate").GetString())
+                .Should().Be(("Thompson Seedless", "black", "mh_nashik", "dry"), who);
+            var builtIn = listed[BuiltInGrapes];
+            foreach (var key in new[] { "ownerUserId", "madeByUserId", "madeAtUtc", "previousVersionId", "variety", "soilType", "region", "climate", "draftStages" })
+            {
+                (builtIn.TryGetProperty(key, out var v) ? v.ValueKind : JsonValueKind.Null).Should().Be(JsonValueKind.Null, $"{who}: a built-in carries no {key}");
+            }
         }
     }
 
-    // ── fix round 1, M001 (session A's ruling): Own = a row whose own_farm_id is THE PLOT's farm, nothing else ──
+    // ── fix round 1, M001 (session A's ruling), kept by SCH-OWN-c as F218: Own = a row whose owner_user_id is the plot farm's OWNER; a row with NO owner never ──
 
     [Fact]
     public async Task A_plain_Team_copy_of_a_public_row_is_never_own_and_cannot_be_followed_or_switched_to()
@@ -296,7 +347,7 @@ public sealed class OwnScheduleFollowRealPostgresTests(ITestOutputHelper output)
             var made = await ClonePlainAsync(Owner, source, null, copy, TenantScope.Team);
             made.Status.Should().Be(HttpStatusCode.Created, $"{name}: {made.Body}");
             var row = (await RowAsync(copy))!;
-            (row.OwnFarm, row.Scope, row.Activities > 0).Should().Be(((Guid?)null, (int)TenantScope.Team, true), $"{name}: a plain Team copy that stores its days, naming no farm");
+            (row.OwnerUser, row.Scope, row.Activities > 0).Should().Be(((Guid?)null, (int)TenantScope.Team, true), $"{name}: a plain Team copy that stores its days, naming no owner (F218)");
             copies.Add((name, copy));
         }
 

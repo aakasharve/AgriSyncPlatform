@@ -112,14 +112,30 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     }
 
     /// <summary>
-    /// spec: plr-d10 lane L8b-1F (R7, P10) - these schedules (the ones a person's plots already follow) as listed, whether or not
-    /// they are still listed for a NEW choice. Only what he may see; an id he may not see is not returned.
+    /// spec: plr-d10 lane L8b-1F (R7, P10) and SCH-OWN-c (F222 (a); R-c9; fix round 1, review P001) - these schedules (the ones a person's plots ALREADY
+    /// follow) as listed, whether or not the listing offers them for a NEW choice - and whether or not the viewer would show them: <paramref name="ids"/> are
+    /// the reader's own plots' facts (the Active subscriptions of the farms whose overview he reads, PullSyncChangesHandler), so a version row a plot of his
+    /// follows reaches him WHOEVER OWNS IT NOW - after a transfer of the farm the new owner's seats keep receiving the row their plot follows (nothing moves a
+    /// plot, Q8). Only the pull asks this; the REST reference route stays listing-only. The check rides on the rows that store their days, as always; a
+    /// followed BUILT-IN sample (no row) is carried too, as before: the Pool listing appends every sample and the ids asked for are kept (R7).
+    /// <para>The visibility filter changes who RECEIVES a row, never the INPUT to the mapping: a thin row's stages and totalDays are an equal split over every
+    /// thin row of its crop in that input. So the mapping runs over the rows <paramref name="callerUserId"/> may see PLUS any followed row he may not (by id,
+    /// once), exactly the set adopt and the main listing map - and only the followed ids are kept. A followed sample therefore arrives with the same stages and
+    /// totalDays it was listed and adopted with, whatever the listing offers now.</para>
     /// </summary>
     public static async Task<IReadOnlyList<ScheduleTemplateDto>> FollowedAsync(
         IShramSafalRepository repository, IReadOnlyList<ScheduleTemplate> rows, Guid callerUserId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
     {
-        var (_, _, pool) = await PoolAsync(repository, rows, callerUserId, ct);
-        return pool.Where(t => ids.Contains(t.Id)).ToList();
+        ArgumentNullException.ThrowIfNull(rows);
+        var viewer = new ScheduleViewer(repository, callerUserId, rows);
+        var input = await viewer.VisibleAsync(rows, ct);
+        var inInput = input.Select(r => r.Id).ToHashSet();
+        input.AddRange(rows.Where(r => ids.Contains(r.Id) && inInput.Add(r.Id)));
+
+        IReadOnlyList<ScheduleCheck> checks = input.Count == 0
+            ? []
+            : await repository.GetScheduleChecksAsync(input.Where(r => r.HasStoredDays).Select(r => r.Id).ToList(), ct);
+        return GetScheduleTemplatesHandler.Listing(input, checks, ScheduleListingMode.Pool).Where(t => ids.Contains(t.Id)).ToList();
     }
 
     private static async Task<(List<ScheduleTemplate> Visible, IReadOnlyList<ScheduleCheck> Checks, ScheduleViewer Viewer)> ReadAsync(
@@ -160,11 +176,12 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     /// <see cref="FollowableOnPlot.Classify"/> says this plot's farm may not follow it (another farm's Team row, any Private
     /// row): <see cref="ShramSafalErrors.ScheduleTemplateNotFound"/>, exactly like an unknown id.</item>
     /// <item>Another crop than the season's: <see cref="ShramSafalErrors.ScheduleTemplateCropMismatch"/>.</item>
-    /// <item>A farm's own schedule (SCH-OWN, D-82 = 3): ONLY a row whose <c>own_farm_id</c> is this plot's farm (fix round 1, M001; session A's
-    /// ruling). One that stores no days is <see cref="ShramSafalErrors.OwnScheduleEmpty"/>; one that does is accepted with NO check (stamped with no
-    /// check state). A Team row that names no farm - every row made before the lane, and a plain Team copy of any schedule, a Withdrawn one
-    /// included - is recognised as his team's (<see cref="FollowableOnPlot.Classify"/>, so it is not "not found") but is NOT a farm's own schedule: it
-    /// answers <see cref="ShramSafalErrors.OwnScheduleNotOpenYet"/>, exactly what x1 answered for it, and nothing is written.</item>
+    /// <item>A person's own schedule (SCH-OWN, D-82 = 3; SCH-OWN-c, D-137): ONLY a row whose <c>owner_user_id</c> is this plot farm's OWNER, read at
+    /// call time (so Own on a plot of ANY farm he owns; F218 keeps fix round 1's M001). One that stores no days is
+    /// <see cref="ShramSafalErrors.OwnScheduleEmpty"/>; one that does is accepted with NO check (stamped with no check state). A Team row with NO owner -
+    /// every row made before SCH-OWN, and a plain Team copy of any schedule, a Withdrawn one included - is recognised as his team's
+    /// (<see cref="FollowableOnPlot.Classify"/>, so it is not "not found") but is NOT a person's own schedule: it answers
+    /// <see cref="ShramSafalErrors.OwnScheduleNotOpenYet"/>, exactly what x1 answered for it, and nothing is written.</item>
     /// <item>An Outside schedule: Checked is accepted. A carry-over (the phone's earlier choice, R7) is always accepted. A
     /// <b>sample</b> (a built-in id, or a library row that stores no days) is accepted, stamped NotChecked, while its crop has no
     /// Checked Outside schedule; once it has one: <see cref="ShramSafalErrors.ScheduleNotChecked"/>. Any other unchecked row
@@ -172,7 +189,7 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
     /// </list>
     /// </summary>
     public async Task<Result<ScheduleChoice>> ChooseAsync(
-        Guid templateId, Guid callerUserId, Guid plotFarmOwnerUserId, Guid plotFarmId, string? cropName, bool carryOver, CancellationToken ct = default)
+        Guid templateId, Guid callerUserId, Guid plotFarmOwnerUserId, string? cropName, bool carryOver, CancellationToken ct = default)
     {
         if (templateId == Guid.Empty)
         {
@@ -191,8 +208,7 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
         var isBuiltIn = row is null && ReferenceDataCatalog.ScheduleTemplates.Any(t => t.Id == templateId);
         var scope = row?.TenantScope ?? TenantScope.Public;
         var owner = row is null ? null : await viewer.OwnerOfAsync(row, ct);
-        // spec: plr-d10 lane SCH-OWN (R30) - a row that names its farm is Own exactly on a plot of THAT farm (not on the same owner's other farm).
-        var origin = FollowableOnPlot.Classify(scope, owner, isBuiltIn, plotFarmOwnerUserId, row?.OwnFarmId, plotFarmId);
+        var origin = FollowableOnPlot.Classify(scope, owner, isBuiltIn, plotFarmOwnerUserId, row?.OwnerUserId?.Value);
         if (origin is null || (row is null && !isBuiltIn))
         {
             return Result.Failure<ScheduleChoice>(ShramSafalErrors.ScheduleTemplateNotFound);
@@ -206,9 +222,9 @@ public sealed class ScheduleLibrary(IShramSafalRepository repository)
         var live = Enum.TryParse<ScheduleCheckState>(template.Check?.State, out var parsed) ? parsed : ScheduleCheckState.NotChecked;
         if (origin == ScheduleOrigin.Own)
         {
-            // Fix round 1 (M001): a Team row that names no farm is not a farm's own schedule - no check applies to a row only because it is
-            // Team and its owner's. It stays closed, with x1's own answer.
-            if (row?.OwnFarmId is null)
+            // Fix round 1 (M001), kept by SCH-OWN-c (F218): a Team row with NO owner is not a person's own schedule - no check applies to a row only
+            // because it is Team and its owner's. It stays closed, with x1's own answer.
+            if (row?.OwnerUserId is null)
             {
                 return Result.Failure<ScheduleChoice>(ShramSafalErrors.OwnScheduleNotOpenYet);
             }

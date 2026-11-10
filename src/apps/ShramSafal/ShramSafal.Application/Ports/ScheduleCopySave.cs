@@ -11,7 +11,7 @@ public enum ScheduleCopySave
 
     /// <summary>
     /// A copy of this source is already kept: one plain copy per source and version (<c>ix_schedule_templates_derived_version</c>), or one own
-    /// copy per source and farm (<c>ix_schedule_templates_derived_own_farm</c>); nothing staged was kept.
+    /// copy per source and PERSON (<c>ix_schedule_templates_derived_owner</c>, SCH-OWN-c); nothing staged was kept.
     /// </summary>
     CopyExists = 1,
 

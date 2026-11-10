@@ -87,7 +87,7 @@ public sealed class ScheduleIdRaceReplayTests
     {
         var id = Guid.NewGuid();
         var handler = new CreateOwnScheduleHandler(
-            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "माझं", "Grapes", FarmA, new UserId(Owner), Now)), new Store(), new Clock());
+            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "माझं", "Grapes", new UserId(Owner), new UserId(Owner), Now)), new Store(), new Clock());
 
         var result = await handler.HandleAsync(CreateCmd(id));
 
@@ -100,12 +100,34 @@ public sealed class ScheduleIdRaceReplayTests
     {
         var id = Guid.NewGuid();
         var otherName = new CreateOwnScheduleHandler(
-            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "दुसरं नाव", "Grapes", FarmA, new UserId(Owner), Now)), new Store(), new Clock());
+            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "दुसरं नाव", "Grapes", new UserId(Owner), new UserId(Owner), Now)), new Store(), new Clock());
         var otherMaker = new CreateOwnScheduleHandler(
-            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "माझं", "Grapes", FarmA, new UserId(Rival), Now)), new Store(), new Clock());
+            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "माझं", "Grapes", new UserId(Owner), new UserId(Rival), Now)), new Store(), new Clock());
 
         Assert.Equal(ShramSafalErrors.ScheduleIdTaken, (await otherName.HandleAsync(CreateCmd(id))).Error);
         Assert.Equal(ShramSafalErrors.ScheduleIdTaken, (await otherMaker.HandleAsync(CreateCmd(id))).Error);
+    }
+
+    // spec: plr-d10 lane SCH-OWN-c - the owner and the four made-for tags are part of "the same request" too.
+    [Fact]
+    public async Task Create_whose_id_a_rival_saved_for_another_owner_or_with_other_tags_is_ScheduleIdTaken_and_the_same_tags_replay()
+    {
+        var id = Guid.NewGuid();
+        var tags = new ScheduleMadeFor("Thompson Seedless", "black", null, null);
+        var tagged = CreateCmd(id) with { Variety = "Thompson Seedless", SoilType = "black" };
+
+        var otherOwner = new CreateOwnScheduleHandler(
+            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "माझं", "Grapes", new UserId(Rival), new UserId(Owner), Now)), new Store(), new Clock());
+        var otherTags = new CreateOwnScheduleHandler(
+            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "माझं", "Grapes", new UserId(Owner), new UserId(Owner), Now, tags)), new Store(), new Clock());
+        var sameTags = new CreateOwnScheduleHandler(
+            new RaceRepo(null, ScheduleTemplate.CreateOwn(id, "माझं", "Grapes", new UserId(Owner), new UserId(Owner), Now, tags)), new Store(), new Clock());
+
+        Assert.Equal(ShramSafalErrors.ScheduleIdTaken, (await otherOwner.HandleAsync(CreateCmd(id))).Error);
+        Assert.Equal(ShramSafalErrors.ScheduleIdTaken, (await otherTags.HandleAsync(CreateCmd(id))).Error);
+        var replay = await sameTags.HandleAsync(tagged);
+        Assert.True(replay.IsSuccess, replay.Error?.ToString());
+        Assert.Equal(new CreateOwnScheduleResult(id, 1), replay.Value);
     }
 
     // ---- edit -----------------------------------------------------------------------------------------------
@@ -113,7 +135,7 @@ public sealed class ScheduleIdRaceReplayTests
     [Fact]
     public async Task Edit_whose_id_a_rival_saved_as_the_same_request_is_a_replay_and_another_content_is_ScheduleIdTaken()
     {
-        var source = ScheduleTemplate.CreateOwn(Guid.NewGuid(), "माझं", "Grapes", FarmA, new UserId(Owner), Now);
+        var source = ScheduleTemplate.CreateOwn(Guid.NewGuid(), "माझं", "Grapes", new UserId(Owner), new UserId(Owner), Now);
         var id = Guid.NewGuid();
         var command = new EditScheduleTemplateCommand(
             source.Id, id, Owner, AppRole.PrimaryOwner, null, null, null, FarmId: FarmA,
@@ -130,6 +152,29 @@ public sealed class ScheduleIdRaceReplayTests
 
         Assert.Equal(ShramSafalErrors.ScheduleIdTaken, (await new EditScheduleTemplateHandler(new RaceRepo(source, other), new Store(), new Clock()).HandleAsync(command)).Error);
         Assert.Equal(ShramSafalErrors.ScheduleIdTaken, (await new EditScheduleTemplateHandler(new RaceRepo(source, byRival), new Store(), new Clock()).HandleAsync(command)).Error);
+    }
+
+    // spec: plr-d10 lane SCH-OWN-c - the made-for tags of a whole edit are part of "the same request" too.
+    [Fact]
+    public async Task Edit_whose_id_a_rival_saved_with_other_tags_is_ScheduleIdTaken_and_the_same_tags_replay()
+    {
+        var source = ScheduleTemplate.CreateOwn(Guid.NewGuid(), "माझं", "Grapes", new UserId(Owner), new UserId(Owner), Now);
+        var id = Guid.NewGuid();
+        var command = new EditScheduleTemplateCommand(
+            source.Id, id, Owner, AppRole.PrimaryOwner, null, null, null, FarmId: FarmA,
+            Stages: [new("Pruning", 0, 20)],
+            Activities: [new("पहिलं", "work", null, 0, 5, "one_time", 1)],
+            Climate: "dry");
+        var tags = new ScheduleMadeFor(null, null, null, "dry");
+
+        var same = source.EditCopyOnWrite(id, null, null, Stages, [Work("पहिलं")], new UserId(Owner), Now, out _, madeFor: tags)!;
+        var otherTags = source.EditCopyOnWrite(id, null, null, Stages, [Work("पहिलं")], new UserId(Owner), Now, out _, madeFor: new ScheduleMadeFor(null, null, null, "hot"))!;
+        var noTags = source.EditCopyOnWrite(id, null, null, Stages, [Work("पहिलं")], new UserId(Owner), Now, out _)!;
+
+        var replay = await new EditScheduleTemplateHandler(new RaceRepo(source, same), new Store(), new Clock()).HandleAsync(command);
+        Assert.True(replay.IsSuccess, replay.Error?.ToString());
+        Assert.Equal(ShramSafalErrors.ScheduleIdTaken, (await new EditScheduleTemplateHandler(new RaceRepo(source, otherTags), new Store(), new Clock()).HandleAsync(command)).Error);
+        Assert.Equal(ShramSafalErrors.ScheduleIdTaken, (await new EditScheduleTemplateHandler(new RaceRepo(source, noTags), new Store(), new Clock()).HandleAsync(command)).Error);
     }
 
     // ---- clone ----------------------------------------------------------------------------------------------
