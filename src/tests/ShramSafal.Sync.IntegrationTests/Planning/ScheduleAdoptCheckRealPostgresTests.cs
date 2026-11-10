@@ -4,7 +4,8 @@
 //   - an OUTSIDE schedule (a built-in sample or a Public row) is followed only once Checked; a SAMPLE (a built-in id, or a row
 //     without stored days) stays choosable, marked NotChecked, only until THAT crop has a Checked schedule (D-91 = 1);
 //   - a carry-over (the phone's one-time upload of a choice it already made) is accepted either way and stamped (R7);
-//   - a Team schedule of this plot's farm owner is Own (answers OwnScheduleNotOpenYet until SCH-OWN); anything else a plot may not
+//   - a Team schedule of this plot's farm owner that names no farm is NOT a farm's own schedule (SCH-OWN fix round 1, M001): it answers
+//     OwnScheduleNotOpenYet, as before; only a row whose own_farm_id is the plot's farm is followed as Own; anything else a plot may not
 //     follow answers exactly like an unknown id and writes nothing;
 //   - the library lists each crop's samples until the crop has a checked schedule, and never a row still waiting for its check.
 // Real Postgres as agrisync_app (E3 first), through the real host, the real push handler and the real pull.
@@ -202,8 +203,11 @@ public sealed class ScheduleAdoptCheckRealPostgresTests(ITestOutputHelper output
     }
 
     [Fact]
-    public async Task An_own_adopt_answers_OwnScheduleNotOpenYet_until_SCH_OWN()
+    public async Task An_adopt_of_a_Team_row_that_names_no_farm_answers_OwnScheduleNotOpenYet()
     {
+        // spec: plr-d10 lane SCH-OWN fix round 1 (M001; session A's ruling) - the Own branch is open ONLY for a row whose own_farm_id is the plot's
+        // farm. A Team row of the farm owner that names no farm (every row made before the lane, and a plain Team copy) is not one: it answers
+        // what x1 answered, and writes nothing (OwnScheduleFollowRealPostgresTests holds the stored-days and plain-copy cases).
         await AssertAppRoleIsNotVacuousAsync();
         var own = await SeedTemplateRowAsync("Grapes - the farm's own", TenantScope.Team, author: Owner);
 
@@ -213,7 +217,7 @@ public sealed class ScheduleAdoptCheckRealPostgresTests(ITestOutputHelper output
         rest.Status.Should().Be(HttpStatusCode.BadRequest, rest.Body);
         ErrorCode(rest.Body).Should().Be("ShramSafal.OwnScheduleNotOpenYet");
         pushed.ErrorCode.Should().Be("ShramSafal.OwnScheduleNotOpenYet");
-        (await SubscriptionsAsync()).Should().BeEmpty("nothing is lost and nothing is written: no door makes a farm's own schedule before SCH-OWN");
+        (await SubscriptionsAsync()).Should().BeEmpty("nothing is lost and nothing is written");
     }
 
     // ── the D-91 = 1 bridge ──
@@ -504,7 +508,8 @@ public sealed class ScheduleAdoptCheckRealPostgresTests(ITestOutputHelper output
 
         var result = await AdoptAsync(Owner, FarmA, PlotA, CycleA, v2Id);
 
-        // Version 2's MAKER is the delegate; its OWNER (the first version's maker) is the farm owner: Own, not unknown.
+        // Version 2's MAKER is the delegate; its OWNER (the first version's maker) is the farm owner: recognised as his team's row (not unknown, which
+        // would answer 404), and - naming no farm - not followable as Own: OwnScheduleNotOpenYet, as on x1 (SCH-OWN fix round 1, M001).
         ErrorCode(result.Body).Should().Be("ShramSafal.OwnScheduleNotOpenYet", result.Body);
         (await SubscriptionsAsync()).Should().BeEmpty();
     }

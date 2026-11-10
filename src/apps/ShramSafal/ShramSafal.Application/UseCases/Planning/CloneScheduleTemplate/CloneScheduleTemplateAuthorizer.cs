@@ -61,6 +61,16 @@ public sealed class CloneScheduleTemplateAuthorizer : IAuthorizationCheck<CloneS
             return Result.Failure(unseen);
         }
 
+        // spec: plr-d10 lane SCH-OWN - into the farm's OWN schedule: the farm named, the scope, the gate (before anything about the farm or the
+        // source is learned), the source checked now, the crop grown (ScheduleTemplateWriteGate.RefuseCloneIntoFarmOwnAsync).
+        if (command.IntoFarmOwn)
+        {
+            return await ScheduleTemplateWriteGate.RefuseCloneIntoFarmOwnAsync(
+                    _repository, source, command.FarmId, command.NewScope, command.CallerUserId, _clock.UtcNow, ct) is { } refused
+                ? Result.Failure(refused)
+                : Result.Success();
+        }
+
         if (!await ScopeRoleGate.IsAllowedAsync(
                 _repository, command.NewScope, command.FarmId, command.CallerUserId, command.CallerRole, _clock.UtcNow, ct))
         {

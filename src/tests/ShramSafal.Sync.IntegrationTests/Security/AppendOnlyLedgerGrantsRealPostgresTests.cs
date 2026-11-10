@@ -265,6 +265,10 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    a nullable column, its back-fill, two CHECKs, two partial unique indexes. No grant or privilege is touched anywhere. Down() raises while any
         //    plot-season follows two or more schedules (this proof's data has none), else drops only what Up() added. Safe to revert and re-apply mid-proof.
         "20261109090000_AllowThreePlusOneSchedulesPerPlot",
+        // ── Reviewed 2026-11-09 (spec: plr-d10 lane SCH-OWN, founders D-74 / D-82); Up() and Down() read in full: ssf.schedule_templates only (not a ledger): a
+        //    nullable column, a partial index, a foreign key to ssf.farms, two partial unique indexes. No grant or privilege is touched anywhere. Down() raises
+        //    while a schedule row names a farm (this proof's data has none), else drops only what Up() added. Safe to revert and re-apply mid-proof.
+        "20261109120000_AddScheduleTemplateOwnFarm",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

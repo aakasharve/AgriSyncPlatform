@@ -183,7 +183,12 @@ public sealed class PushSyncBatchHandler(
     ShramSafal.Application.UseCases.Planning.PlannedWork.CancelPlannedWorkHandler cancelPlannedWorkHandler,
     // spec: plr-d10 lane L8c-3 (founder D-24d) - the work done through the real log, and the owner's reopen.
     ShramSafal.Application.UseCases.Planning.PlannedWork.CompletePlannedWorkHandler completePlannedWorkHandler,
-    ShramSafal.Application.UseCases.Planning.PlannedWork.ReopenPlannedWorkHandler reopenPlannedWorkHandler)
+    ShramSafal.Application.UseCases.Planning.PlannedWork.ReopenPlannedWorkHandler reopenPlannedWorkHandler,
+    // spec: plr-d10 lane SCH-OWN (founder D-74, D-82 = 3) - the farm's OWN schedule: make it empty, copy a checked one into it, write its next version
+    // (schedule.create / .clone / .edit), the SAME handlers the REST routes call. schedule.publish stays unwired.
+    ShramSafal.Application.UseCases.Planning.CreateOwnSchedule.CreateOwnScheduleHandler createOwnScheduleHandler,
+    ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateHandler cloneScheduleTemplateHandler,
+    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateHandler editScheduleTemplateHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -1172,10 +1177,15 @@ public sealed class PushSyncBatchHandler(
                 return await HandlePlannedWorkCompleteAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "plannedwork.reopen":
                 return await HandlePlannedWorkReopenAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
-            // Schedule-template + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
-            case "schedule.publish":
+            // spec: plr-d10 lane SCH-OWN - the farm's own schedule: make it empty, copy a checked schedule into it, write its next version.
+            case "schedule.create":
+                return await HandleScheduleCreateAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "schedule.edit":
+                return await HandleScheduleEditAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
             case "schedule.clone":
+                return await HandleScheduleCloneAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // Schedule-template publish + Plan mutations (Sub-plan 03 wires real handlers; plan.* is lane L8c-1).
+            case "schedule.publish":
             case "plan.add":
             case "plan.override":
             case "plan.remove":
@@ -3013,6 +3023,179 @@ public sealed class PushSyncBatchHandler(
 
         return ToOutcome(result);
     }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-OWN (founder D-74, D-82 = 3) - <c>schedule.create</c>: "start blank", on the REST door's own handler
+    /// (<c>POST /shramsafal/schedule-templates</c>). The actor is the token's user, never a body field (the contract has none). The farm is
+    /// named, so its scope is opened first (the gate reads the farm under it); a person who is no member of it is refused like every
+    /// farm-named mutation. A re-sent request is the same schedule (<c>clientRequestId</c>); an id that already exists answers
+    /// <c>ShramSafal.ScheduleIdTaken.Conflict</c>, which every shipped phone parks as permanent.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleScheduleCreateAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "scheduleTemplateId", "farmId", "cropKey", "name"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "schedule.create payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<CreateSchedulePayload>(payload, out var request) || request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for schedule.create.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+        }
+
+        var result = await createOwnScheduleHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.CreateOwnSchedule.CreateOwnScheduleCommand(
+                ScheduleTemplateId: request.ScheduleTemplateId,
+                FarmId: request.FarmId,
+                CropKey: request.CropKey,
+                Name: request.Name,
+                CallerUserId: actorUserId,
+                CallerRole: ScheduleActorRole(actorRole),
+                ClientCommandId: clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-OWN - <c>schedule.clone</c> on the REST door's own handler (<c>POST /shramsafal/schedule-templates/{id}/clone</c>).
+    /// The actor is the token's user, never the payload's <c>actorUserId</c> / <c>actorRole</c> (kept in the contract for the phones that send them,
+    /// read by nobody). Defaults: reason <c>schedule.clone</c>; scope Private - or Team when it is copied INTO the farm's own schedule.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleScheduleCloneAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "sourceScheduleTemplateId", "newScheduleTemplateId", "actorUserId", "actorRole", "clientCommandId", "newScope", "reason", "farmId", "intoFarmOwn"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "schedule.clone payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<CloneSchedulePayload>(payload, out var request) || request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for schedule.clone.");
+        }
+
+        var intoFarmOwn = request.IntoFarmOwn == true;
+        var scope = intoFarmOwn ? Domain.Planning.TenantScope.Team : Domain.Planning.TenantScope.Private;
+        if (request.NewScope is { } wireScope
+            && (!Enum.TryParse(wireScope, ignoreCase: false, out scope) || !Enum.IsDefined(scope) || scope == Domain.Planning.TenantScope.Public))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for schedule.clone.");
+        }
+
+        if (request.FarmId is { } farm)
+        {
+            var (isMember, _) = await EstablishFarmScopeForDerivationAsync(farm, actorUserId, ct);
+            if (!isMember)
+            {
+                return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+            }
+        }
+
+        var result = await cloneScheduleTemplateHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateCommand(
+                SourceTemplateId: request.SourceScheduleTemplateId,
+                NewTemplateId: request.NewScheduleTemplateId,
+                CallerUserId: actorUserId,
+                CallerRole: ScheduleActorRole(actorRole),
+                NewScope: scope,
+                Reason: string.IsNullOrWhiteSpace(request.Reason) ? "schedule.clone" : request.Reason,
+                ClientCommandId: request.ClientCommandId ?? clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId,
+                FarmId: request.FarmId,
+                IntoFarmOwn: intoFarmOwn),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-OWN (D7) - <c>schedule.edit</c> on the REST door's own handler (<c>POST /shramsafal/schedule-templates/{id}/edit</c>):
+    /// the next version, a rename only (no <c>stages</c>) or written whole (<c>stages</c> with its <c>activities</c>). The actor is the token's user.
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleScheduleEditAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string actorRole,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        if (!PayloadHasOnly(payload, "scheduleTemplateId", "newScheduleTemplateId", "actorUserId", "actorRole", "clientCommandId", "newName", "newStage", "farmId", "stages", "activities"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "schedule.edit payload contains unsupported fields.");
+        }
+
+        if (!TryDeserializeSchedulePayload<EditSchedulePayload>(payload, out var request) || request is null)
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for schedule.edit.");
+        }
+
+        if (request.FarmId is { } farm)
+        {
+            var (isMember, _) = await EstablishFarmScopeForDerivationAsync(farm, actorUserId, ct);
+            if (!isMember)
+            {
+                return MutationExecutionOutcome.Failure("ShramSafal.Forbidden", "User is not a member of the target farm.");
+            }
+        }
+
+        var result = await editScheduleTemplateHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateCommand(
+                SourceTemplateId: request.ScheduleTemplateId,
+                NewTemplateId: request.NewScheduleTemplateId,
+                CallerUserId: actorUserId,
+                CallerRole: ScheduleActorRole(actorRole),
+                NewName: request.NewName,
+                NewStage: request.NewStage,
+                ClientCommandId: request.ClientCommandId ?? clientRequestId,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId,
+                FarmId: request.FarmId,
+                Stages: request.Stages?
+                    .Select(s => new ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleStageInput(s.Name, s.StartDay, s.EndDay))
+                    .ToList(),
+                Activities: request.Activities?
+                    .Select(a => new ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleActivityInput(
+                        a.Name, a.Part, a.OperationKey, a.StartDay, a.EndDay, a.FrequencyMode, a.IntervalDays))
+                    .ToList()),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>The role string the batch carries, as the schedule-template handlers read it (audit and the scope role gate); unknown reads as Worker.</summary>
+    private static AppRole ScheduleActorRole(string actorRole) =>
+        Enum.TryParse<AppRole>(actorRole, ignoreCase: true, out var role) ? role : AppRole.Worker;
 
     /// <summary>
     /// spec: plr-d10 lane L8b-1 Task 2 — <c>adopt_schedule</c> on the REST door's own handler. The actor is the token's

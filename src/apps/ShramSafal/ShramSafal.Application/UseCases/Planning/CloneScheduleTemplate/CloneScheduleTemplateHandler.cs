@@ -5,6 +5,7 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using AgriSync.SharedKernel.Contracts.Roles;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Application.UseCases.Planning;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -18,6 +19,10 @@ public sealed class CloneScheduleTemplateHandler(
     IClock clock)
     : IHandler<CloneScheduleTemplateCommand, CloneScheduleTemplateResult>
 {
+    // spec: plr-d10 lane SCH-OWN fix round 1 (M008) - a stored answer belongs to the PERSON who made the request: another person's command id never
+    // returns it. (The store's first key part is a device id elsewhere; here it is "user:<id>".)
+    private static string ReplayKey(Guid callerUserId) => $"user:{callerUserId:N}";
+
     private const string MutationType = "schedule.clone";
 
     public async Task<Result<CloneScheduleTemplateResult>> HandleAsync(
@@ -37,7 +42,7 @@ public sealed class CloneScheduleTemplateHandler(
         if (!string.IsNullOrWhiteSpace(command.ClientCommandId))
         {
             var existing = await syncMutationStore.GetAsync(
-                command.ClientCommandId, command.ClientCommandId, ct);
+                ReplayKey(command.CallerUserId), command.ClientCommandId, ct);
             if (existing is not null)
             {
                 var cached = JsonSerializer.Deserialize<CloneScheduleTemplateResult>(existing.ResponsePayloadJson);
@@ -68,10 +73,29 @@ public sealed class CloneScheduleTemplateHandler(
         // Licensed → PrimaryOwner | SecondaryOwner | Agronomist | Consultant
         // Team     → all Licensed roles + FpcTechnicalManager
         // Private  → any authenticated farm member (no role restriction)
-        if (!await ScopeRoleGate.IsAllowedAsync(
+        //
+        // spec: plr-d10 lane SCH-OWN — into the farm's OWN schedule (D-82 = 3) the rule is OwnScheduleGate (never ScopeRoleGate: the account's
+        // global role decides nothing here, R31), asked BEFORE own_farm_id is ever set (E4: a foreign-key check bypasses row-level security),
+        // and the source must be a schedule ShramSafal has checked NOW (D4) of a crop this farm grows (D5).
+        if (command.IntoFarmOwn)
+        {
+            if (await ScheduleTemplateWriteGate.RefuseCloneIntoFarmOwnAsync(
+                    repository, source, command.FarmId, command.NewScope, command.CallerUserId, clock.UtcNow, ct) is { } refusedOwn)
+            {
+                return Result.Failure<CloneScheduleTemplateResult>(refusedOwn);
+            }
+        }
+        else if (!await ScopeRoleGate.IsAllowedAsync(
                 repository, command.NewScope, command.FarmId, command.CallerUserId, command.CallerRole, clock.UtcNow, ct))
         {
             return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.Forbidden);
+        }
+
+        // spec: plr-d10 lane SCH-OWN (E4; D10) — the id is a new one: a row that already has it is never overwritten (the table has no row
+        // policy, so the answer is the same for a row the caller may not see).
+        if (await repository.GetScheduleTemplateByIdAsync(command.NewTemplateId, ct) is not null)
+        {
+            return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.ScheduleIdTaken);
         }
 
         // Step 5: clone
@@ -80,7 +104,8 @@ public sealed class CloneScheduleTemplateHandler(
             new UserId(command.CallerUserId),
             command.NewScope,
             command.Reason,
-            clock.UtcNow);
+            clock.UtcNow,
+            ownFarmId: command.IntoFarmOwn ? command.FarmId : null);
 
         // Step 6: persist new template
         await repository.AddScheduleTemplateAsync(newTemplate, ct);
@@ -101,7 +126,9 @@ public sealed class CloneScheduleTemplateHandler(
             {
                 sourceTemplateId = command.SourceTemplateId,
                 newScope = command.NewScope.ToString(),
-                reason = command.Reason
+                reason = command.Reason,
+                intoFarmOwn = command.IntoFarmOwn,
+                ownFarmId = command.IntoFarmOwn ? command.FarmId : null
             },
             farmId: null,
             clientCommandId: command.ClientCommandId,
@@ -116,9 +143,21 @@ public sealed class CloneScheduleTemplateHandler(
         // spec: plr-d10 lane L8b-1 fix round 1 (review M1) — one copy per source and version is all the index allows
         // (ix_schedule_templates_derived_version, which lane SCH-OWN re-keys): a second copy is answered 409 with words,
         // never a 500, and nothing of it is kept.
-        if (!await repository.TrySaveScheduleCopyAsync(ct))
+        // spec: plr-d10 lane SCH-OWN — the same save also answers the own-copy-per-farm index (one own copy of a source per farm) and a rival
+        // that took the id between the check above and this save.
+        switch (await repository.TrySaveNewScheduleAsync(ct))
         {
-            return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.ScheduleCopyExists);
+            case ScheduleCopySave.CopyExists:
+                return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.ScheduleCopyExists);
+            case ScheduleCopySave.IdTaken:
+                // M011: a rival saved this id between the check and the save - this request's own earlier success is a replay, anything else is taken.
+                if (await repository.GetScheduleTemplateByIdAsync(command.NewTemplateId, ct) is not { } stored
+                    || !ScheduleReplay.IsSameRequest(stored, newTemplate))
+                {
+                    return Result.Failure<CloneScheduleTemplateResult>(ShramSafalErrors.ScheduleIdTaken);
+                }
+
+                break;
         }
 
         // Step 10: store idempotency result
@@ -130,7 +169,7 @@ public sealed class CloneScheduleTemplateHandler(
         if (!string.IsNullOrWhiteSpace(command.ClientCommandId))
         {
             await syncMutationStore.TryStoreSuccessAsync(
-                command.ClientCommandId,
+                ReplayKey(command.CallerUserId),
                 command.ClientCommandId,
                 MutationType,
                 JsonSerializer.Serialize(result),

@@ -877,7 +877,10 @@ public sealed class PullSyncChangesHandler(
             // lane L8b-2 (founder D-32) - each plot's chosen schedule, all states (additive and last, P11).
             // lane L8b-1F - and what ShramSafal's check says NOW about the schedule each follows (a withdrawal shows here, R8).
             ScheduleSubscriptions: scheduleSubscriptions
-                .Select(s => s.ToDto(scheduleTemplates.FirstOrDefault(t => t.Id == s.ScheduleTemplateId.Value)?.Check?.State ?? nameof(Domain.Planning.ScheduleCheckState.NotChecked)))
+                // spec: plr-d10 lane SCH-OWN (D-82 = 3) - a followed schedule of the farm's own has no check state: none applies to it.
+                .Select(s => s.ToDto(s.Origin == Domain.Schedules.ScheduleOrigin.Own
+                    ? null
+                    : scheduleTemplates.FirstOrDefault(t => t.Id == s.ScheduleTemplateId.Value)?.Check?.State ?? nameof(Domain.Planning.ScheduleCheckState.NotChecked)))
                 .ToList(),
             // lane L8c-1 (founder D-24c, D-26, D-79) - the tasks and reminders he may see (additive and last, P11).
             PlannedWork: plannedWork,

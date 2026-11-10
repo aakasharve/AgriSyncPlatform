@@ -82,7 +82,7 @@ public sealed class ScheduleLibraryVisibilityRealPostgresTests(ITestOutputHelper
         listed.Should().BeEquivalentTo(new[] { shared, aTeam }.Concat(samples), "farm A's owner lists the public schedule, his team's, and the samples");
 
         // Every listed schedule a plot may FOLLOW is adopted: the Public row and the samples. His team's own schedule is listed (the phone
-        // hides it) but answers "not open yet" until SCH-OWN (R23).
+        // hides it) but answers "not open yet": it names no farm, so it is not a farm's own schedule (SCH-OWN fix round 1, M001).
         var adopted = new List<Guid>();
         foreach (var id in new[] { shared, BuiltInGrapes })
         {

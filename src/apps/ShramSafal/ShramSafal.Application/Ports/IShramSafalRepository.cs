@@ -1579,6 +1579,17 @@ public interface IShramSafalRepository
     }
 
     /// <summary>
+    /// spec: plr-d10 lane SCH-OWN - <see cref="TrySaveScheduleCopyAsync"/> told apart: saves a staged NEW schedule row (a clone, a new
+    /// version or a farm's own schedule made empty) and answers WHICH uniqueness refused it, having discarded everything this unit staged:
+    /// <see cref="ScheduleCopySave.CopyExists"/> (the one-copy index <c>ix_schedule_templates_derived_version</c>, or the own-copy-per-farm index
+    /// <c>ix_schedule_templates_derived_own_farm</c>) or <see cref="ScheduleCopySave.IdTaken"/> (the primary key: a rival used the id first). Inside
+    /// a transaction (a sync push) a savepoint keeps the refusal from aborting the rest. The default (test doubles) follows
+    /// <see cref="TrySaveScheduleCopyAsync"/>: <c>true</c> = saved, <c>false</c> = a copy exists.
+    /// </summary>
+    async Task<ScheduleCopySave> TrySaveNewScheduleAsync(CancellationToken ct = default)
+        => await TrySaveScheduleCopyAsync(ct) ? ScheduleCopySave.Saved : ScheduleCopySave.CopyExists;
+
+    /// <summary>
     /// spec: plr-d10 (lane F1, review N1) — saves a staged content revision. Returns <c>false</c>,
     /// having discarded everything this unit of work staged, when another writer took the same
     /// record version first (unique key <c>ux_daily_log_contents_log_version</c>, error 23505): the

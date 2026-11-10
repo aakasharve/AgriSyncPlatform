@@ -54,20 +54,13 @@ public sealed class PublishScheduleTemplateAuthorizer : IAuthorizationCheck<Publ
             return Result.Failure(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
-        // Only the original author may publish.
-        if (template.CreatedByUserId is null || template.CreatedByUserId.Value.Value != command.CallerUserId)
-        {
-            return Result.Failure(ShramSafalErrors.Forbidden);
-        }
-
-        // Scope role gate (CEI Phase 2 §4.7). Publishing to Licensed /
-        // Team scopes requires the matching role set.
-        if (!await ScopeRoleGate.IsAllowedAsync(
-                _repository, template.TenantScope, command.FarmId, command.CallerUserId, command.CallerRole, _clock.UtcNow, ct))
-        {
-            return Result.Failure(ShramSafalErrors.Forbidden);
-        }
-
-        return Result.Success();
+        // spec: plr-d10 lane SCH-OWN (R32) - the one write rule (ScheduleTemplateWriteGate): a Private schedule is its owner's; a farm's OWN
+        // schedule is published by the farm's owner or an Active seat holding "पीक वेळापत्रकाचे नमुने" there, the farm named being the chain's
+        // (the owner publishes his delegate's version too); any other Team / Licensed schedule is its owner's, under the scope role gate
+        // (CEI Phase 2 §4.7); a Public one is never published through a handler.
+        return await ScheduleTemplateWriteGate.RefusePublishAsync(
+                _repository, template, command.FarmId, command.CallerUserId, command.CallerRole, _clock.UtcNow, ct) is { } refused
+            ? Result.Failure(refused)
+            : Result.Success();
     }
 }

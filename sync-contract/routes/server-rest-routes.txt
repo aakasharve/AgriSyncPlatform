@@ -191,6 +191,7 @@ POST /shramsafal/plots/{plotId:guid}/cycles/{cycleId:guid}/schedule/adopt
 POST /shramsafal/plots/{plotId:guid}/cycles/{cycleId:guid}/schedule/complete
 POST /shramsafal/plots/{plotId:guid}/cycles/{cycleId:guid}/schedule/migrate
 POST /shramsafal/question-events
+POST /shramsafal/schedule-templates
 POST /shramsafal/schedule-templates/import
 POST /shramsafal/schedule-templates/{id:guid}/check
 POST /shramsafal/schedule-templates/{id}/clone

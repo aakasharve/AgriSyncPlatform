@@ -536,6 +536,8 @@ describe('fix round 1', () => {
         // once he follows one, it is "too" again
         await seed([server(S.a, T.university, 1, { isMain: true })]);
         mount();
-        expect(await screen.findByTestId('three-plus-one-add')).toHaveTextContent(THREE_PLUS_ONE_WORDS[lang].follow);
+        // spec: plr-d10 lane SCH-OWN carry-in F206 (test only) - the button is found at once with its old words and the plot's schedule arrives
+        // a tick later; waiting for the words (not just for the element) is what makes this stable.
+        await waitFor(() => expect(screen.getByTestId('three-plus-one-add')).toHaveTextContent(THREE_PLUS_ONE_WORDS[lang].follow));
     });
 });

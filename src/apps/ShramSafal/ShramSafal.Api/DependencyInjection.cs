@@ -266,6 +266,8 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.Services.ScheduleRequirement>();
         services.AddScoped<ShramSafal.Application.Services.ScheduleStagePlan>();
         services.AddScoped<CloneScheduleTemplateHandler>();
+        // spec: plr-d10 lane SCH-OWN - "start blank": the farm's own schedule, made empty (REST door and sync push alike).
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.CreateOwnSchedule.CreateOwnScheduleHandler>();
         services.AddScoped<EditScheduleTemplateHandler>();
         services.AddScoped<PublishScheduleTemplateHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.ImportScheduleTemplateHandler>();

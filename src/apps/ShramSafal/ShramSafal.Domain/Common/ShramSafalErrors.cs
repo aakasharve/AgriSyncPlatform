@@ -333,8 +333,17 @@ public static class ShramSafalErrors
         "A correction field exceeds its stored length. The value is refused, not truncated — a shortened prompt version is not the prompt version.");
     // spec: plr-d10 lane L8b-1F - an outside schedule is followed only once ShramSafal has checked it (D-82); a sample only while its crop has none (D-91 = 1).
     public static readonly Error ScheduleNotChecked = Error.Validation("ShramSafal.ScheduleNotChecked", "ShramSafal has not checked this schedule yet.");
-    // spec: plr-d10 lane L8b-1F - the Own branch (a farm's own schedule) opens in SCH-OWN; until then it answers this and writes nothing.
+    // spec: plr-d10 lane L8b-1F - the Own branch (a farm's own schedule) opened in SCH-OWN (D-82 = 3): NOTHING PRODUCES THIS CODE ANY MORE. Kept because
+    // shipped phones still classify it (RejectionPolicy) and a parked row of theirs may still carry it.
     public static readonly Error OwnScheduleNotOpenYet = Error.Validation("ShramSafal.OwnScheduleNotOpenYet", "Following the farm's own schedule is not open yet.");
+    // spec: plr-d10 lane SCH-OWN (D-82 = 3; P4) - a farm's own schedule that stores no days has nothing to follow: adopt / migrate refuse it and write nothing
+    // (never an invented stage or day). Words PROPOSED: "आधी कामं जोडा" ("add the works first").
+    public static readonly Error OwnScheduleEmpty = Error.Validation("ShramSafal.OwnScheduleEmpty", "Add the works to this schedule before following it.");
+    // spec: plr-d10 lane SCH-OWN (D5) - a farm's own schedule is made for a crop the farm grows (any season, past ones too). Words PROPOSED.
+    public static readonly Error ScheduleCropNotOnFarm = Error.Validation("ShramSafal.ScheduleCropNotOnFarm", "This farm has no season of that crop.");
+    // spec: plr-d10 lane SCH-OWN (E4; D10) - a schedule id the phone made is already taken (by anyone: the table has no row policy, so the answer is the
+    // same for a row the caller may not see). THREE SEGMENTS, tail CONFLICT: every shipped phone classifies it PERMANENT (P11). Nothing is overwritten.
+    public static readonly Error ScheduleIdTaken = Error.Conflict("ShramSafal.ScheduleIdTaken.Conflict", "A schedule with this id already exists.");
     // spec: plr-d10 lane L8b-3 (founder D-74, "3 + 1") - a plot-season follows at most 3 outside schedules plus 1 of his own. Two codes, not one with a
     // suffix: the phone keeps only the tail after the last dot of a code (RejectionPolicy.normalizeCode), so a suffix could not say which limit.
     public static readonly Error ScheduleLimitReached = Error.Conflict("ShramSafal.ScheduleLimitReached", "This plot-season already follows 3 outside schedules.");

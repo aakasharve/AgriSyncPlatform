@@ -23,4 +23,7 @@ public sealed record CloneScheduleTemplateCommand(
     string AuditDeviceId = "unknown",
     string AuditIpHash = "sha256:unknown",
     // lane 2b — the farm whose seat authorises a Team / Licensed write (schedule templates).
-    Guid? FarmId = null);
+    Guid? FarmId = null,
+    // spec: plr-d10 lane SCH-OWN (D-82 = 3; D4, D5) — true: copy a CHECKED Public schedule INTO the farm's own schedule (FarmId required,
+    // NewScope Team): the copy names that farm and stores the source's days; OwnScheduleGate decides who may. False: a plain copy, as before.
+    bool IntoFarmOwn = false);

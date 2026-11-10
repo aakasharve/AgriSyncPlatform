@@ -50,18 +50,13 @@ public sealed class PublishScheduleTemplateHandler(
             return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.ScheduleTemplateNotFound);
         }
 
-        // Step 4a: only the author may publish
-        if (template.CreatedByUserId is null || template.CreatedByUserId.Value.Value != command.CallerUserId)
+        // Step 4: who may publish (spec: plr-d10 lane SCH-OWN, R32) - the same rule as the authorizer: ScheduleTemplateWriteGate.RefusePublishAsync.
+        // Own schedule of a farm: that farm's gate alone (no maker check); another Team / Licensed one: its owner under the scope role gate
+        // (CEI Phase 2 §4.7); a Private one: its owner; a Public one: nobody.
+        if (await ScheduleTemplateWriteGate.RefusePublishAsync(
+                repository, template, command.FarmId, command.CallerUserId, command.CallerRole, clock.UtcNow, ct) is { } refused)
         {
-            return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.Forbidden);
-        }
-
-        // Step 4b: scope role gate (CEI Phase 2 §4.7)
-        // Publishing to Licensed / Team scopes requires the matching role set.
-        if (!await ScopeRoleGate.IsAllowedAsync(
-                repository, template.TenantScope, command.FarmId, command.CallerUserId, command.CallerRole, clock.UtcNow, ct))
-        {
-            return Result.Failure<PublishScheduleTemplateResult>(ShramSafalErrors.Forbidden);
+            return Result.Failure<PublishScheduleTemplateResult>(refused);
         }
 
         // Step 5: publish (mutates template in-place)

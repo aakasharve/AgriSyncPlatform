@@ -2349,17 +2349,47 @@ internal sealed class ShramSafalRepository(
     }
 
     // spec: plr-d10 lane L8b-1 fix round 1 (review M1) — see IShramSafalRepository.TrySaveScheduleCopyAsync.
-    public async Task<bool> TrySaveScheduleCopyAsync(CancellationToken ct = default)
+    public async Task<bool> TrySaveScheduleCopyAsync(CancellationToken ct = default) =>
+        await TrySaveNewScheduleAsync(ct) == ScheduleCopySave.Saved;
+
+    // spec: plr-d10 lane SCH-OWN - see IShramSafalRepository.TrySaveNewScheduleAsync. A SAVEPOINT inside an ambient transaction (a sync push, the
+    // REST scope's transaction): Postgres aborts a transaction on a unique violation, and the caller goes on to answer the phone.
+    public async Task<ScheduleCopySave> TrySaveNewScheduleAsync(CancellationToken ct = default)
     {
+        var transaction = db.Database.IsRelational() ? db.Database.CurrentTransaction : null;
+        const string savepoint = "ssf_schedule_copy";
+        if (transaction is not null)
+        {
+            await transaction.CreateSavepointAsync(savepoint, ct);
+        }
+
         try
         {
             await db.SaveChangesAsync(ct);
-            return true;
+            if (transaction is not null)
+            {
+                await transaction.ReleaseSavepointAsync(savepoint, ct);
+            }
+
+            return ScheduleCopySave.Saved;
         }
-        catch (DbUpdateException ex) when (IsUniqueViolationOn(ex, "ix_schedule_templates_derived_version"))
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // A copy of this source and version is already kept. Discard everything this unit staged (the copy, its
-            // tasks, its audit row) so a later SaveChanges cannot replay the doomed INSERTs; the caller answers 409.
+            var copyExists = IsUniqueViolationOn(ex, "ix_schedule_templates_derived_version")
+                || IsUniqueViolationOn(ex, "ix_schedule_templates_derived_own_farm");
+            // The ids this unit tried to add: after the refusal the database is asked about THEM (never about the primary key's name, which an
+            // older script may have given another name - F219).
+            var addedIds = db.ChangeTracker.Entries<ScheduleTemplate>()
+                .Where(e => e.State == EntityState.Added)
+                .Select(e => e.Entity.Id)
+                .ToList();
+            if (transaction is not null)
+            {
+                await transaction.RollbackToSavepointAsync(savepoint, ct);
+            }
+
+            // A copy of this source (and version, or farm) is already kept, or the id is taken. Discard everything this unit staged (the copy,
+            // its tasks, its audit row) so a later SaveChanges cannot replay the doomed INSERTs; the caller answers 409.
             foreach (var entry in db.ChangeTracker.Entries()
                          .Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
                          .ToList())
@@ -2367,7 +2397,18 @@ internal sealed class ShramSafalRepository(
                 entry.State = EntityState.Detached;
             }
 
-            return false;
+            if (copyExists)
+            {
+                return ScheduleCopySave.CopyExists;
+            }
+
+            // Any other unique violation: if a row already holds one of the ids, the id is taken; if none does, it is some other fault and is not hidden.
+            if (addedIds.Count > 0 && await db.ScheduleTemplates.AsNoTracking().AnyAsync(t => addedIds.Contains(t.Id), ct))
+            {
+                return ScheduleCopySave.IdTaken;
+            }
+
+            throw;
         }
     }
 

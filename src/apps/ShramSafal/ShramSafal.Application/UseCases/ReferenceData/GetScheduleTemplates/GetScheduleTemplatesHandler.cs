@@ -226,10 +226,38 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
                 return new CropTypeDto(
                     orderedTemplates[0].CropType,
                     stageNames,
-                    orderedTemplates[0].Id);
+                    DefaultTemplateIdOf(group));
             })
             .OrderBy(item => item.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-OWN carry-in F207 (D-91 = 1, P4, P5) - the crop's DEFAULT schedule, the one rule the phone reads as
+    /// <c>followableDefault.ts</c> (<c>defaultScheduleForCrop</c>): chosen from the OUTSIDE rows of the listing only (a built-in sample,
+    /// which carries no scope, or a Public row) - never the farm's own (Team) rows and never another scope's.
+    /// <list type="number">
+    /// <item>an outside schedule ShramSafal has CHECKED: the Institution one first (R6), else the first in the listing's order;</item>
+    /// <item>else the first <b>sample</b> (not checked and not storing its days) - offered only on a crop with no checked schedule;</item>
+    /// <item>else <c>null</c>: nothing followable, and the phone invents no stand-in (P4).</item>
+    /// </list>
+    /// It used to be the template with the MOST activities, which could be an unchecked sample the phone never offers, or a row of the farm's own.
+    /// A withdrawn, sent-back or waiting outside schedule is neither checked nor a sample (a waiting row stores its days), so it is never the default.
+    /// </summary>
+    private static Guid? DefaultTemplateIdOf(IEnumerable<ScheduleTemplateDto> cropTemplates)
+    {
+        var outside = cropTemplates
+            .Where(t => t.Scope is null || string.Equals(t.Scope, nameof(TenantScope.Public), StringComparison.Ordinal))
+            .ToList();
+        var checkedRows = outside.Where(t => t.Check?.State == nameof(ScheduleCheckState.Checked)).ToList();
+        if (checkedRows.Count > 0)
+        {
+            return (checkedRows.FirstOrDefault(t => string.Equals(t.OwnerType, "INSTITUTION", StringComparison.Ordinal)) ?? checkedRows[0]).Id;
+        }
+
+        return outside
+            .FirstOrDefault(t => (t.Check is null || t.Check.State == nameof(ScheduleCheckState.NotChecked)) && t.HasStoredDays != true)
+            ?.Id;
     }
 
     private static IReadOnlyList<ScheduleTemplateDto> MapFromDb(
@@ -238,7 +266,9 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         // spec: plr-d10 lane SCH-A (Task 1) - a row that STORES its days is listed exactly as stored (R3: no equal split,
         // no repeat guessed from the name); the guesses below stay for the other rows only (P11). The equal-split stage
         // list is worked out from the thin rows alone, so a stored row never changes what a thin row reads.
-        var thin = templates.Where(template => !template.HasStoredDays).ToList();
+        // spec: plr-d10 lane SCH-OWN (D6) - a farm's own schedule that stores no days (made empty) is NOT a thin row: it feeds no equal-split stage
+        // list (that would invent stages for it and for every other row of its crop, P4), and 1.0.17 drops stage-less templates it cannot place.
+        var thin = templates.Where(template => !template.HasStoredDays && template.OwnFarmId is null).ToList();
         var stageDefinitionsByCrop = BuildStageDefinitionsByCrop(thin);
         var totalDaysByCrop = stageDefinitionsByCrop.ToDictionary(
             pair => pair.Key,
@@ -250,7 +280,8 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             .Select(template =>
             {
                 var rowChecks = checksByRow.GetValueOrDefault(template.Id) ?? [];
-                var check = ToCheckDto(template, rowChecks);
+                // spec: plr-d10 lane SCH-OWN (D-82 = 3) - no check applies to a farm's own schedule: its entry carries none (never "not checked yet").
+                var check = template.OwnFarmId is null ? ToCheckDto(template, rowChecks) : null;
                 var ownerType = template.OwnerType is { } owner ? ScheduleOwnerTypeWire.ToWire(owner) : null;
                 var rowTag = $"v{template.Version}";
 
@@ -259,10 +290,14 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
                     return MapStored(template, check, ownerType, rowTag);
                 }
 
-                var cropType = DeriveCropType(template.Name);
-                var stageDefinitions = stageDefinitionsByCrop.TryGetValue(cropType, out var stages)
-                    ? stages
-                    : [new StageDefinitionDto(template.Stage, 0, 59)];
+                // D6: a row that names its crop (SCH-OWN) is listed under that crop's name - never one read from its title.
+                var cropType = Services.ScheduleLibrary.CropTypeNameFor(template.CropKey) ?? DeriveCropType(template.Name);
+                var emptyOwn = template.OwnFarmId is not null;
+                IReadOnlyList<StageDefinitionDto> stageDefinitions = emptyOwn
+                    ? []
+                    : stageDefinitionsByCrop.TryGetValue(cropType, out var stages)
+                        ? stages
+                        : [new StageDefinitionDto(template.Stage, 0, 59)];
 
                 var activities = template.Activities
                     .OrderBy(activity => activity.OffsetDays)
@@ -284,7 +319,7 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
                     })
                     .ToList();
 
-                var totalDays = totalDaysByCrop.GetValueOrDefault(cropType, 60);
+                var totalDays = emptyOwn ? 0 : totalDaysByCrop.GetValueOrDefault(cropType, 60);
 
                 return new ScheduleTemplateDto(
                     template.Id,
@@ -308,7 +343,7 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         return mapped;
     }
 
-    private static ScheduleTemplateDto MapStored(ScheduleTemplate template, ScheduleCheckDto check, string? ownerType, string rowTag)
+    private static ScheduleTemplateDto MapStored(ScheduleTemplate template, ScheduleCheckDto? check, string? ownerType, string rowTag)
     {
         var stages = template.Stages.Select(stage => new StageDefinitionDto(stage.Name, stage.StartDay, stage.EndDay)).ToList();
         var activities = template.Activities

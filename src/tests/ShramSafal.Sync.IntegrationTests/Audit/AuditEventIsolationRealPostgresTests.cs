@@ -1386,6 +1386,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    two or more schedules (nothing changed), else drops only those indexes / CHECKs / the column and recreates ux_sched_sub_active. Neither
         //    touches ssf.audit_events, its policies or its grants. The proof's data has no plot-season following two schedules, so Down() runs.
         "20261109090000_AllowThreePlusOneSchedulesPerPlot",
+        // ── Reviewed 2026-11-09 (spec: plr-d10 lane SCH-OWN, founders D-74 / D-82); Up() and Down() read in full: Up() adds ssf.schedule_templates.own_farm_id
+        //    (nullable), a partial index, a foreign key to ssf.farms and swaps the one-copy unique index for two; Down() first RAISES while any schedule row
+        //    names a farm (nothing changed), else restores the old index and drops only those objects. Neither touches ssf.audit_events, its policies or its
+        //    grants. The proof's data has no such row, so Down() runs.
+        "20261109120000_AddScheduleTemplateOwnFarm",
     ];
 
     /// <summary>

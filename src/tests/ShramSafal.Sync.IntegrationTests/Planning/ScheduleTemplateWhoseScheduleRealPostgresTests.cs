@@ -113,6 +113,9 @@ public sealed class ScheduleTemplateWhoseScheduleRealPostgresTests(ITestOutputHe
     {
         await AssertAppRoleIsNotVacuousAsync();
         var aTeam = await SeedTemplateRowAsync("Grapes - L8b-1 team of farm A", TenantScope.Team, author: Owner);
+        // spec: plr-d10 lane SCH-OWN (R32) - changed on purpose: a delegate no longer versions an owner's Team chain that names no farm; the farm's
+        // schedule he versions is the farm's OWN (own_farm_id = this farm), which is what the owner makes it through the own-schedule doors.
+        await ExecOnSuperuserAsync("UPDATE ssf.schedule_templates SET own_farm_id = @farm WHERE \"Id\" = @id", ("farm", FarmA), ("id", aTeam));
 
         // Without "पीक वेळापत्रकाचे नमुने" the सहमालक may not change the farm's schedule.
         await SetAuthoritiesAsync(FarmA, CoOwner, FarmAuthority.SeeMoney);

@@ -29,6 +29,14 @@ public sealed partial class ScheduleTemplate
     public const int MaxSourceLabelLength = 160;
     public const int MaxCropKeyLength = 60;
 
+    // spec: plr-d10 lane SCH-OWN fix round 1 (M002) - the sync contract's bounds for a farm's own edit (schedule_edit.zod.ts), enforced by the server too.
+    public const int MaxEditStages = 40;
+    public const int MaxEditActivities = 300;
+    public const int MaxEditDay = 3650;
+
+    /// <summary>The widest an operation key may be: the width of <c>template_activities.operation_key</c> (the column is not widened).</summary>
+    public const int MaxOperationKeyLength = 40;
+
     /// <summary>
     /// Builds a schedule that STORES all its days (spec: plr-d10 lane SCH-A Task 4). Refused, with words: an end before its
     /// start; an activity outside every stage; an order (R34) that points outside the row, is not between two
@@ -68,25 +76,10 @@ public sealed partial class ScheduleTemplate
             return null;
         }
 
-        if (stages is null || stages.Count == 0)
+        problem = CheckStages(stages);
+        if (problem is not null)
         {
-            problem = new("ScheduleImportStages", "A schedule needs at least one stage.");
             return null;
-        }
-
-        foreach (var stage in stages)
-        {
-            if (string.IsNullOrWhiteSpace(stage.Name) || stage.Name.Trim().Length > MaxStageNameLength)
-            {
-                problem = new("ScheduleImportStages", $"Every stage needs a name of at most {MaxStageNameLength} characters.");
-                return null;
-            }
-
-            if (stage.StartDay < 0 || stage.EndDay < stage.StartDay)
-            {
-                problem = new("ScheduleImportStageDays", $"Stage \"{stage.Name.Trim()}\": the end day ({stage.EndDay}) is before the start day ({stage.StartDay}).");
-                return null;
-            }
         }
 
         if (activities is null || activities.Count == 0)
@@ -103,34 +96,9 @@ public sealed partial class ScheduleTemplate
         var byKey = new Dictionary<string, ImportedActivity>(StringComparer.Ordinal);
         foreach (var a in activities)
         {
-            if (string.IsNullOrWhiteSpace(a.Name) || a.Name.Trim().Length > MaxNameLength)
+            problem = CheckActivityDays(a.Name, a.StartDay, a.EndDay, a.Mode, a.IntervalDays, orderedStages, lastDay);
+            if (problem is not null)
             {
-                problem = new("ScheduleImportActivityName", $"Every activity needs a name of at most {MaxNameLength} characters.");
-                return null;
-            }
-
-            if (a.StartDay < 0 || a.EndDay < a.StartDay)
-            {
-                problem = new("ScheduleImportActivityDays", $"\"{a.Name.Trim()}\": the end day ({a.EndDay}) is before the start day ({a.StartDay}).");
-                return null;
-            }
-
-            if (!orderedStages.Any(s => s.StartDay <= a.StartDay && a.StartDay <= s.EndDay) || a.EndDay > lastDay)
-            {
-                problem = new("ScheduleImportOutsideStages", $"\"{a.Name.Trim()}\" (days {a.StartDay}-{a.EndDay}) is outside every stage.");
-                return null;
-            }
-
-            var intervalOk = a.Mode switch
-            {
-                FrequencyMode.OneTime => a.IntervalDays >= 1,
-                FrequencyMode.EveryNDays => a.IntervalDays >= 1,
-                FrequencyMode.PerWeek => a.IntervalDays is >= 1 and <= 7,
-                _ => false,
-            };
-            if (!intervalOk)
-            {
-                problem = new("ScheduleImportRepeat", $"\"{a.Name.Trim()}\": the repeat is not valid (every N days needs N of 1 or more; per week needs 1 to 7).");
                 return null;
             }
 
@@ -223,5 +191,130 @@ public sealed partial class ScheduleTemplate
         }
 
         return template;
+    }
+
+    /// <summary>
+    /// Fix round 1 (M002) - the bounds of a farm's own edit that the sync contract states and the database or the phone's list cannot hold.
+    /// Counts first, then the day numbers (stage, activity, repeat). Codes are import's own.
+    /// </summary>
+    private static ScheduleImportProblem? CheckEditBounds(IReadOnlyList<StageDefinition> stages, IReadOnlyList<ScheduleActivityDraft>? activities)
+    {
+        if (stages.Count > MaxEditStages)
+        {
+            return new("ScheduleImportStages", $"A schedule may have at most {MaxEditStages} stages.");
+        }
+
+        if (activities is not null && activities.Count > MaxEditActivities)
+        {
+            return new("ScheduleImportActivities", $"A schedule may have at most {MaxEditActivities} activities.");
+        }
+
+        foreach (var stage in stages)
+        {
+            if (stage.StartDay > MaxEditDay || stage.EndDay > MaxEditDay)
+            {
+                return new("ScheduleImportStageDays", $"Stage \"{stage.Name.Trim()}\": a day may be at most {MaxEditDay}.");
+            }
+        }
+
+        foreach (var a in activities ?? [])
+        {
+            if (a.StartDay > MaxEditDay || a.EndDay > MaxEditDay)
+            {
+                return new("ScheduleImportActivityDays", $"\"{a.Name?.Trim()}\": a day may be at most {MaxEditDay}.");
+            }
+
+            if (a.IntervalDays > MaxEditDay)
+            {
+                return new("ScheduleImportRepeat", $"\"{a.Name?.Trim()}\": the repeat may be at most {MaxEditDay}.");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Fix round 1 (M002) - a phone-supplied operation key: absent is fine (WORK-ID proposes it); a given one must be a work key's SHAPE
+    /// (<c>op_</c> + lower-case letters, digits and underscores) and fit the column (at most <see cref="MaxOperationKeyLength"/>); an empty or
+    /// blank one is refused, never stored. The shape is checked, not the vocabulary: the phone's own keys (<c>op_local</c>, <c>op_unknown</c>,
+    /// <c>op_harvest_plan</c>, ...) are wider than WORK-ID's list, and refusing them would refuse the phone's own writes.
+    /// </summary>
+    private static ScheduleImportProblem? CheckOperationKey(ScheduleActivityDraft a)
+    {
+        if (a.OperationKey is null)
+        {
+            return null;
+        }
+
+        var key = a.OperationKey.Trim();
+        var shaped = key.Length is > 3 and <= MaxOperationKeyLength
+            && key.StartsWith("op_", StringComparison.Ordinal)
+            && key.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_');
+        return shaped
+            ? null
+            : new("ScheduleImportOperationKey", $"\"{a.Name?.Trim()}\": the operation key must be like op_pruning (lower case, at most {MaxOperationKeyLength} characters).");
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-OWN (D9) - the stage rules of <see cref="Import"/>, one place, shared with a farm's own edit
+    /// (<see cref="EditCopyOnWrite(Guid, string?, string?, IReadOnlyList{StageDefinition}, IReadOnlyList{ScheduleActivityDraft}, UserId, DateTime, out ScheduleImportProblem?)"/>):
+    /// at least one stage; every stage named (at most 80) and not ending before it starts.
+    /// </summary>
+    private static ScheduleImportProblem? CheckStages(IReadOnlyList<StageDefinition>? stages)
+    {
+        if (stages is null || stages.Count == 0)
+        {
+            return new("ScheduleImportStages", "A schedule needs at least one stage.");
+        }
+
+        foreach (var stage in stages)
+        {
+            if (string.IsNullOrWhiteSpace(stage.Name) || stage.Name.Trim().Length > MaxStageNameLength)
+            {
+                return new("ScheduleImportStages", $"Every stage needs a name of at most {MaxStageNameLength} characters.");
+            }
+
+            if (stage.StartDay < 0 || stage.EndDay < stage.StartDay)
+            {
+                return new("ScheduleImportStageDays", $"Stage \"{stage.Name.Trim()}\": the end day ({stage.EndDay}) is before the start day ({stage.StartDay}).");
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-OWN (D9) - the day rules of <see cref="Import"/> for ONE activity, in the order import has always checked
+    /// them (name, days, inside a stage, repeat), shared with a farm's own edit. <paramref name="orderedStages"/> are the stages by day.
+    /// </summary>
+    private static ScheduleImportProblem? CheckActivityDays(
+        string? name, int startDay, int endDay, FrequencyMode mode, int intervalDays,
+        IReadOnlyList<StageDefinition> orderedStages, int lastDay)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > MaxNameLength)
+        {
+            return new("ScheduleImportActivityName", $"Every activity needs a name of at most {MaxNameLength} characters.");
+        }
+
+        if (startDay < 0 || endDay < startDay)
+        {
+            return new("ScheduleImportActivityDays", $"\"{name.Trim()}\": the end day ({endDay}) is before the start day ({startDay}).");
+        }
+
+        if (!orderedStages.Any(s => s.StartDay <= startDay && startDay <= s.EndDay) || endDay > lastDay)
+        {
+            return new("ScheduleImportOutsideStages", $"\"{name.Trim()}\" (days {startDay}-{endDay}) is outside every stage.");
+        }
+
+        var intervalOk = mode switch
+        {
+            FrequencyMode.OneTime => intervalDays >= 1,
+            FrequencyMode.EveryNDays => intervalDays >= 1,
+            FrequencyMode.PerWeek => intervalDays is >= 1 and <= 7,
+            _ => false,
+        };
+        return intervalOk
+            ? null
+            : new("ScheduleImportRepeat", $"\"{name.Trim()}\": the repeat is not valid (every N days needs N of 1 or more; per week needs 1 to 7).");
     }
 }

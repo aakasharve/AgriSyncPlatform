@@ -31,8 +31,10 @@ describe('mutation-types.json', () => {
   // 40 -> 45 on 2026-11-08 (lane L8c-1, founder D-24c): plannedwork.{create,edit,seen,accept,cancel}; 1.9.0 -> 1.10.0.
   // 45 -> 47 on 2026-11-08 (lane L8c-3, founder D-24d): plannedwork.complete + plannedwork.reopen; 1.10.0 -> 1.11.0.
   // 47 -> 47 on 2026-11-09 (lane L8b-3, founder D-74): abandon_schedule gains an optional subscriptionId; 1.11.0 -> 1.12.0.
-  it('declares 47 mutations', () => {
-    expect(json.mutationTypes).toHaveLength(47);
+  // 47 -> 48 on 2026-11-09 (lane SCH-OWN, founder D-74 / D-82 = 3): schedule.create ("start blank"); schedule.clone and schedule.edit are WIRED
+  // and gain their fields (no new entry); 1.12.0 -> 1.13.0.
+  it('declares 48 mutations', () => {
+    expect(json.mutationTypes).toHaveLength(48);
   });
 
   it('has unique mutation names', () => {

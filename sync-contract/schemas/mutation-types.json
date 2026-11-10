@@ -1,6 +1,6 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "lastUpdated": "2026-11-09",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
@@ -20,6 +20,7 @@
     { "name": "schedule.publish",       "ownerAggregate": "ScheduleTemplate", "sinceVersion": "0.8.0", "payloadSchema": "PublishSchedule" },
     { "name": "schedule.edit",          "ownerAggregate": "ScheduleTemplate", "sinceVersion": "0.8.0", "payloadSchema": "EditSchedule" },
     { "name": "schedule.clone",         "ownerAggregate": "ScheduleTemplate", "sinceVersion": "0.8.0", "payloadSchema": "CloneSchedule" },
+    { "name": "schedule.create",        "ownerAggregate": "ScheduleTemplate", "sinceVersion": "1.0.18", "payloadSchema": "CreateSchedule" },
     { "name": "plan.add",               "ownerAggregate": "PlannedActivity",  "sinceVersion": "0.8.0", "payloadSchema": "AddPlanned" },
     { "name": "plan.override",          "ownerAggregate": "PlannedActivity",  "sinceVersion": "0.8.0", "payloadSchema": "OverridePlanned" },
     { "name": "plan.remove",            "ownerAggregate": "PlannedActivity",  "sinceVersion": "0.8.0", "payloadSchema": "RemovePlanned" },

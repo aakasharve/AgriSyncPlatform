@@ -577,6 +577,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // back-fill, two CHECKs, the swap of one partial unique index for two). No farm_memberships or farm_join_requests object, no policy, no
         // grant, no seat touched. Down() refuses while a plot-season follows two or more schedules (this proof's data has none), else drops what Up() added.
         "20261109090000_AllowThreePlusOneSchedulesPerPlot",
+        // spec plr-d10 lane SCH-OWN (founders D-74 / D-82) - Up() and Down() read in full: ssf.schedule_templates only (a nullable own_farm_id column, a partial
+        // index, a foreign key to ssf.farms, the swap of one partial unique index for two). No farm_memberships or farm_join_requests object, no policy, no
+        // grant, no seat touched. Down() refuses while a schedule row names a farm (this proof's data has none), else drops what Up() added.
+        "20261109120000_AddScheduleTemplateOwnFarm",
     ];
 
     /// <summary>

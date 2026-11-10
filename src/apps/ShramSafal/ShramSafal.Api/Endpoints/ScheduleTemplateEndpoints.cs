@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Audit;
 using ShramSafal.Application.Ports;
 using ShramSafal.Application.UseCases.Planning.CheckSchedule;
 using ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate;
+using ShramSafal.Application.UseCases.Planning.CreateOwnSchedule;
 using ShramSafal.Application.UseCases.Planning.EditScheduleTemplate;
 using ShramSafal.Application.UseCases.Planning.GetScheduleLineage;
 using ShramSafal.Application.UseCases.Planning.PublishScheduleTemplate;
@@ -14,6 +15,53 @@ public static class ScheduleTemplateEndpoints
 {
     public static RouteGroupBuilder MapScheduleTemplateEndpoints(this RouteGroupBuilder group)
     {
+        // spec: plr-d10 lane SCH-OWN (Task 4; founder D-74, D-82 = 3) - "start blank": make the farm's OWN schedule, empty, for a crop the farm grows.
+        // The farm decides who may (its owner, or an Active seat holding "पीक वेळापत्रकाचे नमुने" there) and whose it is, so its scope is opened
+        // FIRST; the handler asks the gate before anything about the farm is read. The actor is the authenticated person.
+        group.MapPost("/schedule-templates", async (
+            CreateOwnScheduleRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            CreateOwnScheduleHandler handler,
+            ICallerFarmTenantScope scope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (request.FarmId is not { } farmId || farmId == Guid.Empty)
+            {
+                return Results.Forbid();
+            }
+
+            var farmScope = await scope.EstablishForCallerAsync(farmId, actorUserId, ct);
+            if (!farmScope.IsSuccess)
+            {
+                return Results.Forbid();
+            }
+
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var command = new CreateOwnScheduleCommand(
+                ScheduleTemplateId: request.ScheduleTemplateId ?? Guid.NewGuid(),
+                FarmId: farmId,
+                CropKey: request.CropKey ?? string.Empty,
+                Name: request.Name ?? string.Empty,
+                CallerUserId: actorUserId,
+                CallerRole: EndpointActorContext.GetActorRoleEnum(user),
+                ClientCommandId: request.ClientCommandId,
+                ClientAppVersion: ResolveClientAppVersion(httpContext),
+                AuditDeviceId: auditDeviceId,
+                AuditIpHash: auditIpHash);
+
+            var result = await handler.HandleAsync(command, ct);
+            return result.IsSuccess
+                ? Results.Created($"/schedule-templates/{result.Value.ScheduleTemplateId}", result.Value)
+                : ToErrorResult(result.Error);
+        })
+        .WithName("CreateOwnSchedule");
+
         // TODO: add rate limit 30/hr/user when rate limiting middleware is configured with a dedicated "schedule-clone" policy
         group.MapPost("/schedule-templates/{id}/clone", async (
             Guid id,
@@ -61,7 +109,8 @@ public static class ScheduleTemplateEndpoints
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash,
-                FarmId: farmId);
+                FarmId: farmId,
+                IntoFarmOwn: request.IntoFarmOwn == true);
 
             // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
             // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
@@ -119,7 +168,10 @@ public static class ScheduleTemplateEndpoints
                 ClientAppVersion: clientAppVersion,
                 AuditDeviceId: auditDeviceId,
                 AuditIpHash: auditIpHash,
-                FarmId: farmId);
+                FarmId: farmId,
+                Stages: request.Stages?.Select(s => new EditScheduleStageInput(s.Name ?? string.Empty, s.StartDay, s.EndDay)).ToList(),
+                Activities: request.Activities?.Select(a => new EditScheduleActivityInput(
+                    a.Name ?? string.Empty, a.Part ?? string.Empty, a.OperationKey, a.StartDay, a.EndDay, a.FrequencyMode ?? string.Empty, a.IntervalDays)).ToList());
 
             // spec: plr-d10 lane L8b-1 — a schedule template belongs to no farm: with no farm named, the caller's OWN user
             // scope is opened for the work (the route opened none, and its first read failed closed: 500 once the Include
@@ -303,6 +355,12 @@ public static class ScheduleTemplateEndpoints
     private static readonly IReadOnlyDictionary<string, string> MarathiWords = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         [ShramSafal.Domain.Common.ShramSafalErrors.ScheduleCopyExists.Code] = "ही प्रत आधीच बनवलेली आहे.",
+        // spec: plr-d10 lane SCH-OWN (D10) - PROPOSED words; the phone (part b) shows them.
+        [ShramSafal.Domain.Common.ShramSafalErrors.ScheduleIdTaken.Code] = "हे शेड्यूल आधीच बनवलेलं आहे.",
+        [ShramSafal.Domain.Common.ShramSafalErrors.ScheduleCropNotOnFarm.Code] = "या शेतात हे पीक नाही.",
+        [ShramSafal.Domain.Common.ShramSafalErrors.OwnScheduleEmpty.Code] = "आधी कामं जोडा",
+        // fix round 1 (M002) - PROPOSED: the work's key does not fit (the phone sends the key; the words say it is not right).
+        ["ShramSafal.ScheduleImportOperationKey"] = "कामाची ओळख बरोबर नाही.",
     };
 
     private static IResult ToErrorResult(AgriSync.BuildingBlocks.Results.Error error)
@@ -316,6 +374,10 @@ public static class ScheduleTemplateEndpoints
 
         if (error.Code.EndsWith("Forbidden", StringComparison.Ordinal))
             return Results.Forbid();
+
+        // spec: plr-d10 lane SCH-OWN - a refusal this door words itself carries its Marathi twin; every other 400 keeps its old shape.
+        if (MarathiWords.TryGetValue(error.Code, out var marathi))
+            return Results.BadRequest(new { error = error.Code, message = error.Description, messageMr = marathi });
 
         return Results.BadRequest(new { error = error.Code, message = error.Description });
     }
@@ -334,12 +396,38 @@ public sealed record CloneScheduleTemplateRequest(
     Guid? NewId,
     TenantScope NewScope,
     string Reason,
-    string? ClientCommandId);
+    string? ClientCommandId,
+    // spec: plr-d10 lane SCH-OWN - true: copy a CHECKED schedule INTO the farm's own schedule (?farmId= required, scope Team). Absent = false (P11).
+    bool? IntoFarmOwn = null);
 
 public sealed record EditScheduleTemplateRequest(
     Guid NewId,
     string? NewName,
     string? NewStage,
+    string? ClientCommandId,
+    // spec: plr-d10 lane SCH-OWN (D7) - the next version written whole. Both absent = the old rename (P11).
+    IReadOnlyList<EditScheduleStageRequest>? Stages = null,
+    IReadOnlyList<EditScheduleActivityRequest>? Activities = null);
+
+// spec: plr-d10 lane SCH-OWN - the shapes of Stages / Activities are the sync contract's own (schedule.edit): part is irrigation | nutrition | spray | work;
+// frequencyMode one_time | every_n_days | per_week.
+public sealed record EditScheduleStageRequest(string? Name, int StartDay, int EndDay);
+
+public sealed record EditScheduleActivityRequest(
+    string? Name,
+    string? Part,
+    string? OperationKey,
+    int StartDay,
+    int EndDay,
+    string? FrequencyMode,
+    int IntervalDays);
+
+// spec: plr-d10 lane SCH-OWN (Task 4) - POST /shramsafal/schedule-templates: the farm's own schedule, made empty.
+public sealed record CreateOwnScheduleRequest(
+    Guid? ScheduleTemplateId,
+    Guid? FarmId,
+    string? CropKey,
+    string? Name,
     string? ClientCommandId);
 
 public sealed record PublishScheduleTemplateRequest(

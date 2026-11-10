@@ -12,7 +12,13 @@ namespace ShramSafal.Application.Contracts.Sync.Payloads;
 
 public sealed record CloneSchedulePayload(
     Guid SourceScheduleTemplateId,
+    Guid NewScheduleTemplateId,
     Guid ActorUserId,
     string? ActorRole = null,
-    string? ClientCommandId = null
+    string? ClientCommandId = null,
+    /// <summary>Allowed values: "Private", "Team", "Licensed".</summary>
+    string? NewScope = null,
+    string? Reason = null,
+    Guid? FarmId = null,
+    bool? IntoFarmOwn = null
 );

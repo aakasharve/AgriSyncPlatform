@@ -243,14 +243,20 @@ public sealed class FarmWorkTablesRlsRealPostgresTests(ITestOutputHelper output)
         await MigrateSsfToAsync(BaseMigration);
         (await ForcedCountAsync()).Should().Be(0, "Down() takes every table back out of the row policy");
         (await RowCountsAsync()).Should().Equal(rowsBefore, "Down() keeps every row");
-        var onBase = await AnswersAsync();
-        walled.Should().BeEquivalentTo(onBase, "the wall changes no answer for the owner or a member (P11)");
+        // spec: plr-d10 lane SCH-OWN carry-in F204 (test only) - on the base schema the PULL cannot answer at all: it reads tables that later
+        // migrations created (e.g. ssf.input_identity_assertions), so it fails there with or without this lane's migration. The three
+        // reads that exist on the base (the money summary and the two attention boards) are compared with the walled answers; the pulls are
+        // compared on the head schema only - before the Down and after each Up.
+        var onBase = await BaseAnswersAsync();
+        (onBase.OwnerSummary, onBase.OwnerBoard, onBase.MemberBoard).Should().Be(
+            (walled.OwnerSummary, walled.OwnerBoard, walled.MemberBoard),
+            "the wall changes no answer for the owner or a member (P11)");
 
         // Up again on a database holding rows in every table: nothing lost, all walled again; and once more round.
         await MigrateSsfToAsync(null);
         (await RowCountsAsync()).Should().Equal(rowsBefore, "Up() on a database with rows keeps every row");
         (await ForcedCountAsync()).Should().Be(Tables.Length);
-        (await AnswersAsync()).Should().BeEquivalentTo(onBase);
+        (await AnswersAsync()).Should().BeEquivalentTo(walled);
         await MigrateSsfToAsync(BaseMigration);
         await MigrateSsfToAsync(null);
         (await RowCountsAsync()).Should().Equal(rowsBefore);
@@ -263,6 +269,14 @@ public sealed class FarmWorkTablesRlsRealPostgresTests(ITestOutputHelper output)
         string OwnerLedgers, string OwnerPlanned, string OwnerTasks,
         string MemberLedgers, string MemberPlanned, string MemberTasks,
         string OwnerSummary, string OwnerBoard, string MemberBoard);
+
+    /// <summary>F204: the reads that exist on the base schema (the money summary and the attention boards), no pull.</summary>
+    private sealed record BaseAnswers(string OwnerSummary, string OwnerBoard, string MemberBoard);
+
+    private async Task<BaseAnswers> BaseAnswersAsync() => new(
+        await BodyAsync(Owner, "/shramsafal/finance/summary?groupBy=plot&fromDate=2026-01-01&toDate=2026-12-31"),
+        await BodyAsync(Owner, "/shramsafal/attention?asOf=2026-10-31T06:00:00Z"),
+        await BodyAsync(Mukadam, "/shramsafal/attention?asOf=2026-10-31T06:00:00Z"));
 
     private async Task<Answers> AnswersAsync()
     {

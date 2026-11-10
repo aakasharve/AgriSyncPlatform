@@ -259,16 +259,33 @@ public sealed class ScheduleRequirementTests
     }
 
     [Fact]
-    public void An_own_schedule_that_adopt_cannot_take_yet_makes_nothing_ask()
+    public void An_own_schedule_with_stored_days_is_something_to_follow_and_one_without_is_not()
     {
-        // ChooseAsync answers OwnScheduleNotOpenYet for the Own branch (SCH-OWN opens it): the gate must not ask him to choose
-        // something the server would refuse (P5). The same predicate answers both.
+        // spec: plr-d10 lane SCH-OWN (D-82 = 3) - SCH-GATE-a left this closed ("the day SCH-OWN opens his own schedules the gate counts them
+        // with no change here"). ChooseAsync now takes an Own schedule that stores days, with no check; one with no days is refused
+        // (OwnScheduleEmpty). The same predicate answers both, so the gate never asks him to choose what adopt would refuse (P5).
         var mine = OwnRow(storedDays: true);
         var state = ScheduleRequirement.Decide(Facts(Expired, [mine]));
 
-        Assert.False(state.CanFollowSomething);
+        Assert.True(state.CanFollowSomething);
+        Assert.True(state.NeedsSchedule);
+        Assert.True(ScheduleLibrary.NewChoiceOpen(ScheduleOrigin.Own, isBuiltIn: false, hasStoredDays: true, ScheduleCheckState.NotChecked, cropHasChecked: false));
+        Assert.True(ScheduleLibrary.NewChoiceOpen(ScheduleOrigin.Own, isBuiltIn: false, hasStoredDays: true, ScheduleCheckState.NotChecked, cropHasChecked: true));
+
+        var empty = ScheduleRequirement.Decide(Facts(Expired, [OwnRow(storedDays: false)]));
+        Assert.False(empty.CanFollowSomething);
+        Assert.False(empty.NeedsSchedule);
+        Assert.False(ScheduleLibrary.NewChoiceOpen(ScheduleOrigin.Own, isBuiltIn: false, hasStoredDays: false, ScheduleCheckState.NotChecked, cropHasChecked: false));
+    }
+
+    [Fact]
+    public void An_own_schedule_that_is_followed_with_stored_days_stops_the_asking()
+    {
+        var mine = OwnRow(storedDays: true);
+        var state = ScheduleRequirement.Decide(Facts(Expired, [mine, CheckedOutside()], [Follow(mine, ScheduleOrigin.Own, 0)]));
+
+        Assert.True(state.FollowsAllowed);
         Assert.False(state.NeedsSchedule);
-        Assert.False(ScheduleLibrary.NewChoiceOpen(ScheduleOrigin.Own, isBuiltIn: false, hasStoredDays: true, ScheduleCheckState.NotChecked, cropHasChecked: false));
     }
 
     [Fact]
