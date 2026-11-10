@@ -1,6 +1,8 @@
-// spec: plr-d10-redesign-real-integration-2026-10-25 - lane SCH-OWN Task 2 (founder D-74, D-82 = 3; register R30, R32, R34).
-// The domain half of "his own schedule": a farm's own schedule is a Team chain that names its FARM (OwnFarmId), is made empty (CreateOwn), and is
-// changed by a whole new version (EditCopyOnWrite with stages and activities) that leaves the version before it untouched (P3). Pure: no I/O.
+// spec: plr-d10-redesign-real-integration-2026-10-25 - lane SCH-OWN Task 2 (founder D-74, D-82 = 3; register R34) and lane SCH-OWN-c (founder D-133
+// withdrawn, D-136, D-137 Q9 = 1 / Q10 = 1; register F218, F222).
+// The domain half of "his own schedule": a person's own schedule is a Team chain that names its OWNER (OwnerUserId, the owner of the farm it was made
+// on - never the typist, who is CreatedByUserId), is made empty (CreateOwn), may say what it was MADE FOR (four tags, never a refusal), and is changed by a
+// whole new version (EditCopyOnWrite with stages and activities) that leaves the version before it untouched (P3). Pure: no I/O.
 using AgriSync.SharedKernel.Contracts.Ids;
 using FluentAssertions;
 using ShramSafal.Domain.Compare;
@@ -11,41 +13,57 @@ namespace ShramSafal.Domain.Tests.Planning;
 
 public sealed class OwnScheduleDomainTests
 {
-    private static readonly Guid FarmA = Guid.Parse("a0a00000-0000-4000-8000-0000000000a1");
-    private static readonly Guid FarmB = Guid.Parse("b0b00000-0000-4000-8000-0000000000b1");
+    private static readonly UserId OwnerA = new(Guid.Parse("a0a00000-0000-4000-8000-0000000000a1"));
+    private static readonly UserId OwnerB = new(Guid.Parse("b0b00000-0000-4000-8000-0000000000b1"));
     private static readonly UserId Maker = UserId.New();
     private static readonly UserId Delegate = UserId.New();
     private static readonly DateTime Now = new(2026, 11, 9, 6, 0, 0, DateTimeKind.Utc);
 
     private static readonly StageDefinition[] Stages = [new("Pruning", 0, 20), new("Growth", 21, 60)];
 
+    private static readonly ScheduleMadeFor AllFour = new("Thompson Seedless", "black", "mh_nashik", "dry");
+
     private static ScheduleActivityDraft Draft(
         string name = "Drip Irrigation", string part = "irrigation", string? op = null, int start = 0, int end = 10,
         FrequencyMode mode = FrequencyMode.EveryNDays, int interval = 3) =>
         new(name, part, op, start, end, mode, interval);
 
-    private static ScheduleTemplate EmptyOwn() =>
-        ScheduleTemplate.CreateOwn(Guid.NewGuid(), "माझं द्राक्ष शेड्यूल", "Grapes", FarmA, Maker, Now);
+    private static ScheduleTemplate EmptyOwn(ScheduleMadeFor? madeFor = null) =>
+        ScheduleTemplate.CreateOwn(Guid.NewGuid(), "माझं द्राक्ष शेड्यूल", "Grapes", OwnerA, Maker, Now, madeFor);
 
     // ---- CreateOwn --------------------------------------------------------------------------------------------
 
     [Fact]
-    public void CreateOwn_makes_an_empty_Team_version_1_that_names_its_farm()
+    public void CreateOwn_makes_an_empty_Team_version_1_that_names_its_owner_and_its_typist()
     {
-        var own = EmptyOwn();
+        var own = ScheduleTemplate.CreateOwn(Guid.NewGuid(), "माझं द्राक्ष शेड्यूल", "Grapes", OwnerA, Delegate, Now);
 
-        own.OwnFarmId.Should().Be(FarmA);
+        own.OwnerUserId.Should().Be(OwnerA, "the OWNER owns it (Q9 = 1)");
+        own.CreatedByUserId.Should().Be(Delegate, "the version names its typist (D-88)");
         own.TenantScope.Should().Be(TenantScope.Team);
         own.Version.Should().Be(1);
         own.OwnerType.Should().Be(ScheduleOwnerType.User);
         own.CropKey.Should().Be("Grapes");
-        own.CreatedByUserId.Should().Be(Maker);
         own.PreviousVersionId.Should().BeNull();
         own.DerivedFromTemplateId.Should().BeNull();
         own.Stage.Should().BeEmpty("a blank start has no stage yet");
         own.Stages.Should().BeEmpty();
         own.Activities.Should().BeEmpty();
         own.HasStoredDays.Should().BeFalse("an empty schedule stores no days, so it can never be followed (R3, P4)");
+        own.MadeFor.Should().Be(ScheduleMadeFor.None, "no tag unless given");
+    }
+
+    [Fact]
+    public void CreateOwn_takes_the_four_made_for_tags_and_normalises_blank_ones_to_none()
+    {
+        var tagged = EmptyOwn(AllFour);
+        (tagged.Variety, tagged.SoilType, tagged.Region, tagged.Climate).Should().Be(("Thompson Seedless", "black", "mh_nashik", "dry"));
+        tagged.MadeFor.Should().Be(AllFour);
+
+        var sparse = EmptyOwn(new ScheduleMadeFor("  ", "", null, " dry "));
+        (sparse.Variety, sparse.SoilType, sparse.Region, sparse.Climate).Should().Be(((string?)null, (string?)null, (string?)null, "dry"));
+        sparse.MadeFor.IsEmpty.Should().BeFalse();
+        EmptyOwn(ScheduleMadeFor.None).MadeFor.IsEmpty.Should().BeTrue();
     }
 
     [Theory]
@@ -55,69 +73,166 @@ public sealed class OwnScheduleDomainTests
     [InlineData("name", "  ")]
     public void CreateOwn_refuses_a_blank_name_or_crop(string name, string crop)
     {
-        var make = () => ScheduleTemplate.CreateOwn(Guid.NewGuid(), name, crop, FarmA, Maker, Now);
+        var make = () => ScheduleTemplate.CreateOwn(Guid.NewGuid(), name, crop, OwnerA, Maker, Now);
         make.Should().Throw<ArgumentException>();
     }
 
     [Fact]
     public void CreateOwn_refuses_a_name_over_120_and_a_crop_over_60_but_takes_the_limit()
     {
-        ScheduleTemplate.CreateOwn(Guid.NewGuid(), new string('न', 120), new string('c', 60), FarmA, Maker, Now).Name.Length.Should().Be(120);
-        var longName = () => ScheduleTemplate.CreateOwn(Guid.NewGuid(), new string('न', 121), "Grapes", FarmA, Maker, Now);
-        var longCrop = () => ScheduleTemplate.CreateOwn(Guid.NewGuid(), "name", new string('c', 61), FarmA, Maker, Now);
+        ScheduleTemplate.CreateOwn(Guid.NewGuid(), new string('न', 120), new string('c', 60), OwnerA, Maker, Now).Name.Length.Should().Be(120);
+        var longName = () => ScheduleTemplate.CreateOwn(Guid.NewGuid(), new string('न', 121), "Grapes", OwnerA, Maker, Now);
+        var longCrop = () => ScheduleTemplate.CreateOwn(Guid.NewGuid(), "name", new string('c', 61), OwnerA, Maker, Now);
         longName.Should().Throw<ArgumentException>();
         longCrop.Should().Throw<ArgumentException>();
     }
 
     [Fact]
-    public void CreateOwn_refuses_an_empty_farm_id()
+    public void CreateOwn_refuses_an_empty_owner()
     {
-        var make = () => ScheduleTemplate.CreateOwn(Guid.NewGuid(), "name", "Grapes", Guid.Empty, Maker, Now);
+        var make = () => ScheduleTemplate.CreateOwn(Guid.NewGuid(), "name", "Grapes", UserId.Empty, Maker, Now);
         make.Should().Throw<ArgumentException>();
     }
 
-    // ---- the farm travels with every version ------------------------------------------------------------------
+    [Fact]
+    public void CreateOwn_refuses_a_tag_over_40_characters_or_with_a_control_character()
+    {
+        var tooLong = () => EmptyOwn(new ScheduleMadeFor(new string('a', 41), null, null, null));
+        var control = () => EmptyOwn(new ScheduleMadeFor(null, "black\u0007", null, null));
+        tooLong.Should().Throw<ArgumentException>();
+        control.Should().Throw<ArgumentException>();
+        EmptyOwn(new ScheduleMadeFor(new string('a', 40), null, null, null)).Variety!.Length.Should().Be(40, "the limit itself fits");
+    }
 
     [Fact]
-    public void Every_EditCopyOnWrite_copies_the_farm_the_schedule_belongs_to()
+    public void ScheduleMadeFor_Check_refuses_the_shape_only_and_names_its_code()
+    {
+        ScheduleMadeFor.Check(ScheduleMadeFor.None).Should().BeNull();
+        ScheduleMadeFor.Check(AllFour).Should().BeNull();
+        ScheduleMadeFor.Check(new ScheduleMadeFor("anything-not-in-a-list", null, null, null)).Should().BeNull("list membership is the Application layer's");
+        var problem = ScheduleMadeFor.Check(new ScheduleMadeFor(null, null, new string('r', 41), null));
+        problem.Should().NotBeNull();
+        problem!.Code.Should().Be("ScheduleMadeFor");
+        problem.Message.Should().Contain("40");
+        ScheduleMadeFor.Check(new ScheduleMadeFor(null, null, null, "dry\n"))!.Code.Should().Be("ScheduleMadeFor");
+    }
+
+    // ---- the owner travels with every version; the tags travel with a rename ----------------------------------
+
+    [Fact]
+    public void Every_EditCopyOnWrite_copies_the_owner_the_schedule_belongs_to()
     {
         var own = EmptyOwn();
 
         var rename = own.EditCopyOnWrite(Guid.NewGuid(), "नवीन नाव", null, Delegate, Now);
+        var whole = own.EditCopyOnWrite(Guid.NewGuid(), null, null, Stages, [Draft()], Delegate, Now, out var problem)!;
 
-        rename.OwnFarmId.Should().Be(FarmA);
+        problem.Should().BeNull();
+        rename.OwnerUserId.Should().Be(OwnerA);
         rename.Version.Should().Be(2);
         rename.TenantScope.Should().Be(TenantScope.Team);
         rename.CreatedByUserId.Should().Be(Delegate, "each version shows who made it (D-88)");
+        whole.OwnerUserId.Should().Be(OwnerA, "the owner never changes with the typist (Q9 = 1)");
+        whole.CreatedByUserId.Should().Be(Delegate);
     }
 
     [Fact]
-    public void An_edit_of_a_row_with_no_farm_has_no_farm()
+    public void A_rename_carries_the_tags_of_the_version_before()
+    {
+        var tagged = EmptyOwn(AllFour);
+
+        var rename = tagged.EditCopyOnWrite(Guid.NewGuid(), "नवीन नाव", null, Delegate, Now);
+
+        rename.MadeFor.Should().Be(AllFour, "a rename never drops what it was made for");
+    }
+
+    [Fact]
+    public void A_whole_edit_writes_the_tags_as_sent_and_the_version_before_keeps_its_own()
+    {
+        var v1 = EmptyOwn(AllFour);
+
+        var v2 = v1.EditCopyOnWrite(Guid.NewGuid(), null, null, Stages, [Draft()], Delegate, Now, out var p2, madeFor: new ScheduleMadeFor("Sharad Seedless", null, null, null))!;
+        var v3 = v2.EditCopyOnWrite(Guid.NewGuid(), null, null, Stages, [Draft()], Delegate, Now, out var p3)!;
+
+        p2.Should().BeNull();
+        p3.Should().BeNull();
+        (v2.Variety, v2.SoilType, v2.Region, v2.Climate).Should().Be(("Sharad Seedless", (string?)null, (string?)null, (string?)null), "written whole, as sent (D7's spirit)");
+        v3.MadeFor.Should().Be(ScheduleMadeFor.None, "absent = none, like the works");
+        v1.MadeFor.Should().Be(AllFour, "P3: the version before is exactly as it was");
+    }
+
+    [Fact]
+    public void A_whole_edit_refuses_a_tag_that_does_not_fit_with_ScheduleMadeFor_and_changes_nothing()
+    {
+        var v1 = EmptyOwn();
+
+        var v2 = v1.EditCopyOnWrite(Guid.NewGuid(), null, null, Stages, [Draft()], Delegate, Now, out var problem, madeFor: new ScheduleMadeFor(null, new string('s', 41), null, null));
+
+        v2.Should().BeNull();
+        problem!.Code.Should().Be("ScheduleMadeFor");
+        v1.DomainEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void An_edit_of_a_row_with_no_owner_has_no_owner()
     {
         var plain = ScheduleTemplate.Create(Guid.NewGuid(), "Grapes", "Pruning", Now, Maker, TenantScope.Team);
-        plain.EditCopyOnWrite(Guid.NewGuid(), "x", null, Maker, Now).OwnFarmId.Should().BeNull();
+        plain.EditCopyOnWrite(Guid.NewGuid(), "x", null, Maker, Now).OwnerUserId.Should().BeNull();
+        plain.EditCopyOnWrite(Guid.NewGuid(), null, null, Stages, [Draft()], Maker, Now, out _)!.OwnerUserId.Should().BeNull();
     }
 
+    // ---- Clone ---------------------------------------------------------------------------------------------------
+
     [Fact]
-    public void Clone_with_a_farm_makes_that_farms_own_copy_and_without_one_makes_none()
+    public void Clone_with_an_owner_makes_his_own_copy_and_without_one_makes_a_plain_copy()
     {
         var source = ScheduleTemplate.Create(Guid.NewGuid(), "Grapes", "Pruning", Now, Maker, TenantScope.Public);
 
-        var intoOwn = source.Clone(Guid.NewGuid(), Maker, TenantScope.Team, "माझं शेड्यूल", Now, ownFarmId: FarmA);
+        var intoOwn = source.Clone(Guid.NewGuid(), Delegate, TenantScope.Team, "माझं शेड्यूल", Now, ownerUserId: OwnerA);
         var plain = source.Clone(Guid.NewGuid(), Maker, TenantScope.Private, "माझी प्रत", Now);
 
-        intoOwn.OwnFarmId.Should().Be(FarmA);
+        intoOwn.OwnerUserId.Should().Be(OwnerA, "the owner of the farm named, not the typist");
+        intoOwn.CreatedByUserId.Should().Be(Delegate, "the typist (the event's NewOwnerUserId is the maker)");
         intoOwn.TenantScope.Should().Be(TenantScope.Team);
         intoOwn.Version.Should().Be(1);
         intoOwn.DerivedFromTemplateId.Should().Be(source.Id, "it keeps where it came from");
-        plain.OwnFarmId.Should().BeNull();
+        plain.OwnerUserId.Should().BeNull("a plain copy is nobody's own: never Own on any plot (F218)");
     }
 
     [Fact]
-    public void Clone_of_a_farms_own_schedule_into_a_plain_copy_does_not_keep_the_farm()
+    public void Clone_copies_the_sources_tags_and_a_rename_carries_them()
+    {
+        var tagged = EmptyOwn(AllFour);
+
+        var copy = tagged.Clone(Guid.NewGuid(), Delegate, TenantScope.Private, "प्रत", Now);
+        var ownCopy = tagged.Clone(Guid.NewGuid(), Delegate, TenantScope.Team, "प्रत", Now, ownerUserId: OwnerB);
+        var renamed = copy.EditCopyOnWrite(Guid.NewGuid(), "नवं", null, Delegate, Now);
+
+        copy.MadeFor.Should().Be(AllFour, "a copy of a tagged schedule keeps what it was made for");
+        copy.OwnerUserId.Should().BeNull("but not the owner");
+        ownCopy.MadeFor.Should().Be(AllFour);
+        ownCopy.OwnerUserId.Should().Be(OwnerB);
+        renamed.MadeFor.Should().Be(AllFour);
+    }
+
+    [Fact]
+    public void Clone_of_a_persons_own_schedule_into_a_plain_copy_does_not_keep_the_owner()
     {
         var own = EmptyOwn();
-        own.Clone(Guid.NewGuid(), Delegate, TenantScope.Private, "प्रत", Now).OwnFarmId.Should().BeNull();
+        own.Clone(Guid.NewGuid(), Delegate, TenantScope.Private, "प्रत", Now).OwnerUserId.Should().BeNull();
+    }
+
+    [Fact]
+    public void Two_owners_copies_of_one_source_are_different_chains()
+    {
+        var source = ScheduleTemplate.Create(Guid.NewGuid(), "Grapes", "Pruning", Now, Maker, TenantScope.Public);
+        var a = source.Clone(Guid.NewGuid(), Maker, TenantScope.Team, "r", Now, ownerUserId: OwnerA);
+        var b = source.Clone(Guid.NewGuid(), Delegate, TenantScope.Team, "r", Now, ownerUserId: OwnerB);
+
+        a.DerivedFromTemplateId.Should().Be(b.DerivedFromTemplateId);
+        a.OwnerUserId.Should().Be(OwnerA);
+        b.OwnerUserId.Should().Be(OwnerB);
+        a.Id.Should().NotBe(b.Id);
     }
 
     // ---- EditCopyOnWrite with stages and activities -----------------------------------------------------------
@@ -136,7 +251,7 @@ public sealed class OwnScheduleDomainTests
         v2.Should().NotBeNull();
         v2!.Version.Should().Be(2);
         v2.PreviousVersionId.Should().Be(v1.Id);
-        v2.OwnFarmId.Should().Be(FarmA);
+        v2.OwnerUserId.Should().Be(OwnerA);
         v2.CreatedByUserId.Should().Be(Delegate);
         v2.Stage.Should().Be("Pruning", "the first stage by day");
         v2.Stages.Select(s => (s.Name, s.StartDay, s.EndDay)).Should().Equal(("Pruning", 0, 20), ("Growth", 21, 60));
@@ -341,19 +456,8 @@ public sealed class OwnScheduleDomainTests
             [new ImportedActivity("a", "Pruning", 0, 2, FrequencyMode.OneTime, 1)], out var none);
         none.Should().BeNull();
         good!.HasStoredDays.Should().BeTrue();
-        good.OwnFarmId.Should().BeNull("an import is never a farm's own schedule");
-    }
-
-    [Fact]
-    public void Two_farms_own_schedules_of_the_same_source_are_different_chains()
-    {
-        var source = ScheduleTemplate.Create(Guid.NewGuid(), "Grapes", "Pruning", Now, Maker, TenantScope.Public);
-        var a = source.Clone(Guid.NewGuid(), Maker, TenantScope.Team, "r", Now, ownFarmId: FarmA);
-        var b = source.Clone(Guid.NewGuid(), Delegate, TenantScope.Team, "r", Now, ownFarmId: FarmB);
-
-        a.DerivedFromTemplateId.Should().Be(b.DerivedFromTemplateId);
-        a.OwnFarmId.Should().Be(FarmA);
-        b.OwnFarmId.Should().Be(FarmB);
+        good.OwnerUserId.Should().BeNull("an import is never a person's own schedule");
+        good.MadeFor.Should().Be(ScheduleMadeFor.None, "an import carries no tag today");
     }
 
     // ---- fix round 1, M002: the operation key and the contract's bounds are enforced by the domain ----------------

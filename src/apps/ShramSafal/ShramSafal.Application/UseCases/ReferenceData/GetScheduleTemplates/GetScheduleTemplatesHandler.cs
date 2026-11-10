@@ -73,7 +73,10 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             return listed;
         }
 
-        var extras = await Services.ScheduleLibrary.FollowedAsync(repository, await repository.GetScheduleTemplatesAsync(ct), callerUserId, missing, ct);
+        // spec: plr-d10 lane SCH-OWN-c (F222 (a); R-c9) - the followed extras are NOT filtered by the viewer: the ids are the reader's own plots' facts, so a
+        // version row a plot of his follows reaches him whoever owns it now (after a transfer of the farm, the new owner's seats keep receiving it).
+        var allRows = await repository.GetScheduleTemplatesAsync(ct);
+        var extras = await Services.ScheduleLibrary.FollowedAsync(repository, allRows, callerUserId, missing, ct);
         if (extras.Count == 0)
         {
             return listed;
@@ -266,9 +269,9 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         // spec: plr-d10 lane SCH-A (Task 1) - a row that STORES its days is listed exactly as stored (R3: no equal split,
         // no repeat guessed from the name); the guesses below stay for the other rows only (P11). The equal-split stage
         // list is worked out from the thin rows alone, so a stored row never changes what a thin row reads.
-        // spec: plr-d10 lane SCH-OWN (D6) - a farm's own schedule that stores no days (made empty) is NOT a thin row: it feeds no equal-split stage
+        // spec: plr-d10 lane SCH-OWN (D6) - a person's own schedule that stores no days (made empty) is NOT a thin row: it feeds no equal-split stage
         // list (that would invent stages for it and for every other row of its crop, P4), and 1.0.17 drops stage-less templates it cannot place.
-        var thin = templates.Where(template => !template.HasStoredDays && template.OwnFarmId is null).ToList();
+        var thin = templates.Where(template => !template.HasStoredDays && template.OwnerUserId is null).ToList();
         var stageDefinitionsByCrop = BuildStageDefinitionsByCrop(thin);
         var totalDaysByCrop = stageDefinitionsByCrop.ToDictionary(
             pair => pair.Key,
@@ -281,18 +284,18 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
             {
                 var rowChecks = checksByRow.GetValueOrDefault(template.Id) ?? [];
                 // spec: plr-d10 lane SCH-OWN (D-82 = 3) - no check applies to a farm's own schedule: its entry carries none (never "not checked yet").
-                var check = template.OwnFarmId is null ? ToCheckDto(template, rowChecks) : null;
+                var check = template.OwnerUserId is null ? ToCheckDto(template, rowChecks) : null;
                 var ownerType = template.OwnerType is { } owner ? ScheduleOwnerTypeWire.ToWire(owner) : null;
                 var rowTag = $"v{template.Version}";
 
                 if (template.HasStoredDays)
                 {
-                    return MapStored(template, check, ownerType, rowTag);
+                    return WithProvenance(MapStored(template, check, ownerType, rowTag), template);
                 }
 
                 // D6: a row that names its crop (SCH-OWN) is listed under that crop's name - never one read from its title.
                 var cropType = Services.ScheduleLibrary.CropTypeNameFor(template.CropKey) ?? DeriveCropType(template.Name);
-                var emptyOwn = template.OwnFarmId is not null;
+                var emptyOwn = template.OwnerUserId is not null;
                 IReadOnlyList<StageDefinitionDto> stageDefinitions = emptyOwn
                     ? []
                     : stageDefinitionsByCrop.TryGetValue(cropType, out var stages)
@@ -321,26 +324,56 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
 
                 var totalDays = emptyOwn ? 0 : totalDaysByCrop.GetValueOrDefault(cropType, 60);
 
-                return new ScheduleTemplateDto(
-                    template.Id,
-                    template.Name,
-                    cropType,
-                    totalDays,
-                    stageDefinitions,
-                    activities,
-                    string.Empty,
-                    OwnerType: ownerType,
-                    SourceLabel: template.SourceLabel,
-                    Check: check,
-                    RowVersionTag: rowTag,
-                    HasStoredDays: false,
-                    Scope: template.TenantScope.ToString());
+                // M004 ruling (SCH-OWN-c, R-c10; P11): an own version with stages but no works still lists Stages [] and TotalDays 0 - release 1.0.17 lists
+                // any template with a stage and treats OwnScheduleEmpty (unknown to it) as retryable, so a stages-only entry would make it churn to the
+                // retry cap on adopt. The stored stages reach NEW phones through DraftStages (WithProvenance).
+                return WithProvenance(
+                    new ScheduleTemplateDto(
+                        template.Id,
+                        template.Name,
+                        cropType,
+                        totalDays,
+                        stageDefinitions,
+                        activities,
+                        string.Empty,
+                        OwnerType: ownerType,
+                        SourceLabel: template.SourceLabel,
+                        Check: check,
+                        RowVersionTag: rowTag,
+                        HasStoredDays: false,
+                        Scope: template.TenantScope.ToString()),
+                    template);
             })
             .OrderBy(template => template.CropType, StringComparer.OrdinalIgnoreCase)
             .ThenBy(template => template.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return mapped;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-OWN-c (founder D-137; F222; R-c11) - the additive, optional provenance of a DB row (P11: at the END of the DTO, null
+    /// elsewhere): whose own schedule it is (<c>owner_user_id</c>, the PERSON), who typed THIS version, when, and the version before - on every row
+    /// that is not Public (a Public import's maker is ShramSafal staff: least exposure); the four made-for tags on any row that carries them; and
+    /// <c>DraftStages</c>, the stored stages of a version that has stages but no works yet (its <c>Stages</c> stays [] for 1.0.17, M004).
+    /// </summary>
+    private static ScheduleTemplateDto WithProvenance(ScheduleTemplateDto dto, ScheduleTemplate template)
+    {
+        var isPublic = template.TenantScope == TenantScope.Public;
+        return dto with
+        {
+            OwnerUserId = isPublic ? null : template.OwnerUserId?.Value,
+            MadeByUserId = isPublic ? null : template.CreatedByUserId?.Value,
+            MadeAtUtc = isPublic ? null : template.CreatedAtUtc,
+            PreviousVersionId = isPublic ? null : template.PreviousVersionId,
+            Variety = template.Variety,
+            SoilType = template.SoilType,
+            Region = template.Region,
+            Climate = template.Climate,
+            DraftStages = template.StageRows.Count > 0 && !template.HasStoredDays
+                ? template.Stages.Select(stage => new StageDefinitionDto(stage.Name, stage.StartDay, stage.EndDay)).ToList()
+                : null,
+        };
     }
 
     private static ScheduleTemplateDto MapStored(ScheduleTemplate template, ScheduleCheckDto? check, string? ownerType, string rowTag)
@@ -591,6 +624,18 @@ public sealed class GetScheduleTemplatesHandler(IShramSafalRepository repository
         if (decided.Count > 0)
         {
             json += "|" + string.Join(",", decided);
+        }
+
+        // spec: plr-d10 lane SCH-OWN-c (R-c12) - a made-for tag is CONTENT: a tag change is a library change the phone must fetch. Appended only when a
+        // row carries a tag, so a library with no tag hashes exactly as before the lane (no needless refetch on every phone); owner and maker are not
+        // content and do not hash.
+        var tagged = templates
+            .Where(template => template.Variety is not null || template.SoilType is not null || template.Region is not null || template.Climate is not null)
+            .Select(template => $"{template.Id:N}:{template.Variety}|{template.SoilType}|{template.Region}|{template.Climate}")
+            .ToList();
+        if (tagged.Count > 0)
+        {
+            json += "|madeFor:" + string.Join(",", tagged);
         }
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(json));

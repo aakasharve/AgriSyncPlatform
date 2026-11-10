@@ -3040,7 +3040,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "scheduleTemplateId", "farmId", "cropKey", "name"))
+        if (!PayloadHasOnly(payload, "scheduleTemplateId", "farmId", "cropKey", "name", "variety", "soilType", "region", "climate"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -3068,7 +3068,11 @@ public sealed class PushSyncBatchHandler(
                 CallerRole: ScheduleActorRole(actorRole),
                 ClientCommandId: clientRequestId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
-                AuditDeviceId: deviceId),
+                AuditDeviceId: deviceId,
+                Variety: request.Variety,
+                SoilType: request.SoilType,
+                Region: request.Region,
+                Climate: request.Climate),
             ct);
 
         return ToOutcome(result);
@@ -3148,7 +3152,7 @@ public sealed class PushSyncBatchHandler(
         string? appVersion,
         CancellationToken ct)
     {
-        if (!PayloadHasOnly(payload, "scheduleTemplateId", "newScheduleTemplateId", "actorUserId", "actorRole", "clientCommandId", "newName", "newStage", "farmId", "stages", "activities"))
+        if (!PayloadHasOnly(payload, "scheduleTemplateId", "newScheduleTemplateId", "actorUserId", "actorRole", "clientCommandId", "newName", "newStage", "farmId", "stages", "activities", "variety", "soilType", "region", "climate"))
         {
             return MutationExecutionOutcome.Failure(
                 "ShramSafal.SyncInvalidPayload",
@@ -3187,7 +3191,11 @@ public sealed class PushSyncBatchHandler(
                 Activities: request.Activities?
                     .Select(a => new ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleActivityInput(
                         a.Name, a.Part, a.OperationKey, a.StartDay, a.EndDay, a.FrequencyMode, a.IntervalDays))
-                    .ToList()),
+                    .ToList(),
+                Variety: request.Variety,
+                SoilType: request.SoilType,
+                Region: request.Region,
+                Climate: request.Climate),
             ct);
 
         return ToOutcome(result);

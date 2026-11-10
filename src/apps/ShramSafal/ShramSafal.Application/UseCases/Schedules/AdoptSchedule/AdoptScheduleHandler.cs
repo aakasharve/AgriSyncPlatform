@@ -83,7 +83,7 @@ public sealed class AdoptScheduleHandler(
         // (D-82, D-91 = 1, R7) are decided in the same one place, ScheduleLibrary.ChooseAsync, for adopt and migrate alike.
         var templateId = new ScheduleTemplateId(command.ScheduleTemplateId);
         var choice = await new Services.ScheduleLibrary(repository).ChooseAsync(
-            command.ScheduleTemplateId, command.ActorUserId, farm.OwnerUserId.Value, command.FarmId, cropCycle.CropName, command.CarryOver, ct);
+            command.ScheduleTemplateId, command.ActorUserId, farm.OwnerUserId.Value, cropCycle.CropName, command.CarryOver, ct);
         if (!choice.IsSuccess)
         {
             return Result.Failure<ScheduleSubscriptionDto>(choice.Error);

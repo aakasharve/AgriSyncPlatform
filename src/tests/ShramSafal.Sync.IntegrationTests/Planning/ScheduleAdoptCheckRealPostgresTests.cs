@@ -4,9 +4,9 @@
 //   - an OUTSIDE schedule (a built-in sample or a Public row) is followed only once Checked; a SAMPLE (a built-in id, or a row
 //     without stored days) stays choosable, marked NotChecked, only until THAT crop has a Checked schedule (D-91 = 1);
 //   - a carry-over (the phone's one-time upload of a choice it already made) is accepted either way and stamped (R7);
-//   - a Team schedule of this plot's farm owner that names no farm is NOT a farm's own schedule (SCH-OWN fix round 1, M001): it answers
-//     OwnScheduleNotOpenYet, as before; only a row whose own_farm_id is the plot's farm is followed as Own; anything else a plot may not
-//     follow answers exactly like an unknown id and writes nothing;
+//   - a Team schedule of this plot's farm owner that names no OWNER is NOT a person's own schedule (SCH-OWN fix round 1, M001; kept by SCH-OWN-c
+//     as F218): it answers OwnScheduleNotOpenYet, as before; only a row whose owner_user_id is the plot farm's owner is followed as Own; anything
+//     else a plot may not follow answers exactly like an unknown id and writes nothing;
 //   - the library lists each crop's samples until the crop has a checked schedule, and never a row still waiting for its check.
 // Real Postgres as agrisync_app (E3 first), through the real host, the real push handler and the real pull.
 using System;
@@ -205,9 +205,9 @@ public sealed class ScheduleAdoptCheckRealPostgresTests(ITestOutputHelper output
     [Fact]
     public async Task An_adopt_of_a_Team_row_that_names_no_farm_answers_OwnScheduleNotOpenYet()
     {
-        // spec: plr-d10 lane SCH-OWN fix round 1 (M001; session A's ruling) - the Own branch is open ONLY for a row whose own_farm_id is the plot's
-        // farm. A Team row of the farm owner that names no farm (every row made before the lane, and a plain Team copy) is not one: it answers
-        // what x1 answered, and writes nothing (OwnScheduleFollowRealPostgresTests holds the stored-days and plain-copy cases).
+        // spec: plr-d10 lane SCH-OWN fix round 1 (M001; session A's ruling), kept by SCH-OWN-c as F218 - the Own branch is open ONLY for a row whose
+        // owner_user_id is the plot farm's OWNER. A Team row of the farm owner that names no owner (every row made before SCH-OWN, and a plain Team copy)
+        // is not one: it answers what x1 answered, and writes nothing (OwnScheduleFollowRealPostgresTests holds the stored-days and plain-copy cases).
         await AssertAppRoleIsNotVacuousAsync();
         var own = await SeedTemplateRowAsync("Grapes - the farm's own", TenantScope.Team, author: Owner);
 

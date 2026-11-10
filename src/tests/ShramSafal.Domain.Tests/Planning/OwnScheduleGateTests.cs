@@ -52,6 +52,24 @@ public sealed class OwnScheduleGateTests
         repo.AccessReads.Should().Be(0, "the owner is the owner; no authority is read");
     }
 
+    // spec: plr-d10 lane SCH-OWN-c (E4; founder D-137 Q9 = 1) - the gate also NAMES the farm's owner, the person a new own chain belongs to.
+    [Fact]
+    public async Task OwnerIfAllowed_answers_the_farms_owner_for_the_owner_and_for_a_holder_and_null_for_everyone_else()
+    {
+        var holder = new Repo(TheFarm(), new() { [(FarmId, SeatId)] = Seat(AppRole.Mukadam, FarmPermission.ManageScheduleTemplates) });
+
+        (await OwnScheduleGate.OwnerIfAllowedAsync(holder, FarmId, OwnerId, Now)).Should().Be(OwnerId);
+        (await OwnScheduleGate.OwnerIfAllowedAsync(holder, FarmId, SeatId, Now)).Should().Be(OwnerId, "the OWNER's id, never the holder's (Q9 = 1)");
+        (await OwnScheduleGate.OwnerIfAllowedAsync(holder, FarmId, StrangerId, Now)).Should().BeNull();
+        holder.AccessReads.Should().Be(2, "the owner needs no seat read; the holder and the stranger one each");
+
+        var noAuthority = new Repo(TheFarm(), new() { [(FarmId, SeatId)] = Seat(AppRole.SecondaryOwner, FarmPermission.SeeMoney) });
+        (await OwnScheduleGate.OwnerIfAllowedAsync(noAuthority, FarmId, SeatId, Now)).Should().BeNull();
+        (await OwnScheduleGate.OwnerIfAllowedAsync(new Repo(null, []), FarmId, OwnerId, Now)).Should().BeNull("a farm that cannot be read fails closed");
+        (await OwnScheduleGate.OwnerIfAllowedAsync(holder, Guid.Empty, OwnerId, Now)).Should().BeNull();
+        (await OwnScheduleGate.OwnerIfAllowedAsync(holder, FarmId, Guid.Empty, Now)).Should().BeNull();
+    }
+
     [Fact]
     public async Task A_seat_holding_ScheduleTemplates_succeeds_whatever_its_label()
     {

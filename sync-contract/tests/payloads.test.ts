@@ -1022,6 +1022,32 @@ describe('CreateSchedulePayload', () => {
         expect(payloads.CreateSchedulePayload.safeParse({ ...base, actorUserId: VALID_GUID_C }).success).toBe(false);
         expect(payloads.CreateSchedulePayload.safeParse({ ...base, cropKey: 'c'.repeat(60), name: 'n'.repeat(120) }).success).toBe(true);
     });
+    // spec: plr-d10 lane SCH-OWN-c (founder D-137, Q10 = 1) - the four made-for TAGS: optional list codes (schedule-made-for.json); the contract knows the
+    // union of every crop's varieties, the server checks the variety per crop. A label is not a code; null is refused (the phone omits).
+    it('accepts the four listed made-for tags and refuses a code outside its list, a label, an over-long variety and null', () => {
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, variety: 'Thompson Seedless', soilType: 'black', region: 'mh_nashik', climate: 'dry' }).success).toBe(true);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, variety: 'Local' }).success).toBe(true);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, soilType: 'sandyish' }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, region: 'nashik' }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, soilType: 'काळी' }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, climate: 'monsoon' }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, variety: 'v'.repeat(41) }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, variety: 'Other' }).success).toBe(false);
+        expect(payloads.CreateSchedulePayload.safeParse({ ...base, variety: null }).success).toBe(false);
+    });
+});
+
+describe('EditSchedulePayload made-for tags (SCH-OWN-c)', () => {
+    const base = { scheduleTemplateId: VALID_GUID_A, newScheduleTemplateId: VALID_GUID_C, actorUserId: VALID_GUID_B, farmId: VALID_GUID_D };
+    const stage = { name: 'Pruning', startDay: 0, endDay: 20 };
+    it('accepts the four listed tags with a whole version and refuses a code outside its list, a label, an over-long variety and null', () => {
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], variety: 'Bhagwa', soilType: 'medium', region: 'mh', climate: 'humid' }).success).toBe(true);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], soilType: 'sandyish' }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], region: 'nashik' }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], climate: 'कोरडं' }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], variety: 'v'.repeat(41) }).success).toBe(false);
+        expect(payloads.EditSchedulePayload.safeParse({ ...base, stages: [stage], variety: null }).success).toBe(false);
+    });
 });
 
 describe('AddPlannedPayload', () => {

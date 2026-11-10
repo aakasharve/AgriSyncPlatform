@@ -1386,11 +1386,16 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    two or more schedules (nothing changed), else drops only those indexes / CHECKs / the column and recreates ux_sched_sub_active. Neither
         //    touches ssf.audit_events, its policies or its grants. The proof's data has no plot-season following two schedules, so Down() runs.
         "20261109090000_AllowThreePlusOneSchedulesPerPlot",
-        // ── Reviewed 2026-11-09 (spec: plr-d10 lane SCH-OWN, founders D-74 / D-82); Up() and Down() read in full: Up() adds ssf.schedule_templates.own_farm_id
-        //    (nullable), a partial index, a foreign key to ssf.farms and swaps the one-copy unique index for two; Down() first RAISES while any schedule row
+        // ── Reviewed 2026-11-09 (spec: plr-d10 lane SCH-OWN, founders D-74 / D-82); Up() and Down() read in full: Up() adds ssf.schedule_templates' own-farm
+        //    column (nullable), a partial index, a foreign key to ssf.farms and swaps the one-copy unique index for two; Down() first RAISES while any schedule row
         //    names a farm (nothing changed), else restores the old index and drops only those objects. Neither touches ssf.audit_events, its policies or its
         //    grants. The proof's data has no such row, so Down() runs.
         "20261109120000_AddScheduleTemplateOwnFarm",
+        // ── Reviewed 2026-11-10 (spec: plr-d10 lane SCH-OWN-c, founder D-137); Up() and Down() read in full: ssf.schedule_templates only - Up() adds the
+        //    nullable owner_user_id and four made-for tag columns, converts SOWN-a's own-farm rows to their farm's owner, re-keys the two partial unique
+        //    indexes and drops SOWN-a's own-farm column with its foreign key and index; Down() first RAISES while any row has an owner or a tag (nothing changed), else rebuilds
+        //    SOWN-a's shape and drops only what Up() added. No grant, no policy, no audit_events object. The proof's data has no owned or tagged row, so Down() runs.
+        "20261110120000_ScheduleTemplateOwnerAndMadeFor",
     ];
 
     /// <summary>

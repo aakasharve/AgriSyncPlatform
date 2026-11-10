@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "soilType": ["black", "red", "medium", "murum", "sandy"],
+  "climate": ["dry", "humid", "cold", "hot", "heavy_rain"],
+  "region": ["mh", "mh_nashik", "mh_solapur", "mh_pune", "mh_sangli", "mh_satara"],
+  "variety": {
+    "grape": ["Super Sonaka", "Sharad Seedless", "Thompson Seedless", "Crimson Seedless", "Flame Seedless", "Manik Chaman"],
+    "pomegranate": ["Bhagwa", "Ganesh", "Mridula", "Arakta"],
+    "tomato": ["Abhinav", "Shivam", "Arka Rakshak"],
+    "onion": ["Nashik Red", "Puna Fursungi", "N-53"],
+    "_other": ["Local", "Hybrid"]
+  },
+  "labelsMr": {
+    "soilType": { "black": "काळी", "red": "तांबडी", "medium": "मध्यम", "murum": "मुरमाड", "sandy": "रेताड" },
+    "climate": { "dry": "कोरडं", "humid": "दमट", "cold": "थंड", "hot": "उष्ण", "heavy_rain": "जास्त पावसाचं" },
+    "region": { "mh": "महाराष्ट्र", "mh_nashik": "नाशिक", "mh_solapur": "सोलापूर", "mh_pune": "पुणे", "mh_sangli": "सांगली", "mh_satara": "सातारा" }
+  },
+  "labelsEn": {
+    "soilType": { "black": "Black", "red": "Red", "medium": "Medium", "murum": "Murum", "sandy": "Sandy" },
+    "climate": { "dry": "Dry", "humid": "Humid", "cold": "Cold", "hot": "Hot", "heavy_rain": "Heavy rain" },
+    "region": { "mh": "Maharashtra", "mh_nashik": "Nashik", "mh_solapur": "Solapur", "mh_pune": "Pune", "mh_sangli": "Sangli", "mh_satara": "Satara" }
+  }
+}

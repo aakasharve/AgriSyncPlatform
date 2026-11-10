@@ -52,7 +52,22 @@ public sealed record ScheduleTemplateDto(
     bool? HasStoredDays = null,
     // spec: plr-d10 lane L8b-1F - additive at the END and optional (P11). Whose row this is: Public | Team | Private | Licensed; null =
     // a built-in sample (Public). The phone offers only Public/null rows for a plot to follow until SCH-OWN opens the Own branch.
-    string? Scope = null);
+    string? Scope = null,
+    // spec: plr-d10 lane SCH-OWN-c (founder D-137; register F222) - additive at the END and optional (P11: release 1.0.17 parses the pull with no
+    // schema and reads named fields only). Whose own schedule this row is (OwnerUserId = ssf.schedule_templates.owner_user_id, the PERSON), who typed
+    // THIS version and when, and the version before it - set on every DB row that is not Public (a Public import's maker is ShramSafal staff: least
+    // exposure); all null on a built-in sample. The four made-for TAGS (D-137, Q10 = 1) are set on any row that carries them. DraftStages carries the
+    // stored stages of a version that has stages but no works yet (Stages stays [] for it: a 1.0.17 phone lists any template with a stage and would
+    // churn on adopting one it can never follow - M004); a new phone derives "the days it runs" from it and rebuilds the next whole edit.
+    Guid? OwnerUserId = null,
+    Guid? MadeByUserId = null,
+    DateTime? MadeAtUtc = null,
+    Guid? PreviousVersionId = null,
+    string? Variety = null,
+    string? SoilType = null,
+    string? Region = null,
+    string? Climate = null,
+    IReadOnlyList<StageDefinitionDto>? DraftStages = null);
 
 public sealed record CropTypeDto(
     string Name,

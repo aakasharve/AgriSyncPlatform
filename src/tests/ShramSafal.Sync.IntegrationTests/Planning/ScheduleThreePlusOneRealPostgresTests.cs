@@ -367,10 +367,10 @@ public sealed class ScheduleThreePlusOneRealPostgresTests(ITestOutputHelper outp
     {
         await AssertAppRoleIsNotVacuousAsync();
         var own = await SeedTemplateRowAsync("Grapes - the farm's own", TenantScope.Team, author: Owner);
-        // spec: plr-d10 lane SCH-OWN - changed on purpose: the Own branch is open, so the second own schedule must be a TRUE one - it names the plot's farm
-        // (fix round 1, M001: a Team row naming no farm is never Own) - and STORE its days to reach the place count.
+        // spec: plr-d10 lane SCH-OWN - changed on purpose: the Own branch is open, so the second own schedule must be a TRUE one - SCH-OWN-c: it names its
+        // OWNER, the plot farm's owner (F218: a Team row with no owner is never Own) - and STORE its days to reach the place count.
         var other = (await SeedStoredRowAsync("Grapes - the farm's other own", TenantScope.Team, maker: Owner)).Id;
-        await ExecOnSuperuserAsync("UPDATE ssf.schedule_templates SET own_farm_id = @farm WHERE \"Id\" = @id", ("farm", FarmA), ("id", other));
+        await ExecOnSuperuserAsync("UPDATE ssf.schedule_templates SET owner_user_id = @owner WHERE \"Id\" = @id", ("owner", Owner), ("id", other));
         await SeedRowAsync(FarmA, PlotA, CycleA, own, "Own", 0);
 
         // The database: one own per plot-season (place 0 is unique).

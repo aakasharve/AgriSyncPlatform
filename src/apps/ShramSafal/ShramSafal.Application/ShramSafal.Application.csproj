@@ -43,4 +43,13 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <!-- spec: plr-d10 lane SCH-OWN-c (founder D-137, Q10 = 1) — the made-for lists a schedule tag is chosen from (variety / soil / region /
+       climate), the ONE source the sync contract's Zod enums import too. Linked, never copied: one file (MadeForLists reads it). -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\..\sync-contract\schemas\schedule-made-for.json">
+      <LogicalName>ShramSafal.Application.ScheduleMadeFor.json</LogicalName>
+      <Link>Services\ScheduleMadeFor.json</Link>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

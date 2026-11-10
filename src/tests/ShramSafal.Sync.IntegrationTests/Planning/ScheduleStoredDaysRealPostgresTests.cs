@@ -130,7 +130,13 @@ public sealed class ScheduleStoredDaysRealPostgresTests(ITestOutputHelper output
         // optional, so a reader that ignores unknown names (1.0.17 parses the JSON with no schema) reads the same library.
         string[] oldTemplate = ["id", "name", "cropType", "totalDays", "stages", "activities", "versionHash"];
         string[] oldActivity = ["name", "category", "stageName", "startDay", "endDay", "frequencyMode", "intervalDays"];
-        string[] newTemplate = ["ownerType", "sourceLabel", "check", "rowVersionTag", "hasStoredDays", "scope"]; // L8b-1F appended "scope"
+        // L8b-1F appended "scope"; SCH-OWN-c (D-137; F222) appended whose own row it is, who typed the version, when, the version before, the four made-for
+        // tags and the draft stages - all optional, all at the END (null on these rows: none is a person's own, none is tagged).
+        string[] newTemplate =
+        [
+            "ownerType", "sourceLabel", "check", "rowVersionTag", "hasStoredDays", "scope",
+            "ownerUserId", "madeByUserId", "madeAtUtc", "previousVersionId", "variety", "soilType", "region", "climate", "draftStages",
+        ];
         string[] newActivity = ["operationKey", "id", "part", "role", "nutrientKey", "afterActivityId", "storedFrequencyMode"];
 
         var library = JsonDocument.Parse(body).RootElement;

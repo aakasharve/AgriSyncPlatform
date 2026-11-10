@@ -38,5 +38,13 @@ public sealed record EditSchedulePayload(
     string? NewStage = null,
     Guid? FarmId = null,
     IReadOnlyList<StagesItem>? Stages = null,
-    IReadOnlyList<ActivitiesItem>? Activities = null
+    IReadOnlyList<ActivitiesItem>? Activities = null,
+    /// <summary>Allowed values: "Super Sonaka", "Sharad Seedless", "Thompson Seedless", "Crimson Seedless", "Flame Seedless", "Manik Chaman", "Bhagwa", "Ganesh", "Mridula", "Arakta", "Abhinav", "Shivam", "Arka Rakshak", "Nashik Red", "Puna Fursungi", "N-53", "Local", "Hybrid".</summary>
+    string? Variety = null,
+    /// <summary>Allowed values: "black", "red", "medium", "murum", "sandy".</summary>
+    string? SoilType = null,
+    /// <summary>Allowed values: "mh", "mh_nashik", "mh_solapur", "mh_pune", "mh_sangli", "mh_satara".</summary>
+    string? Region = null,
+    /// <summary>Allowed values: "dry", "humid", "cold", "hot", "heavy_rain".</summary>
+    string? Climate = null
 );

@@ -27,7 +27,13 @@ public sealed record EditScheduleTemplateCommand(
     // version is exactly these stages and exactly these works (none given = none; nothing is carried over silently). Works without stages are
     // refused. Neither given: the old rename (P11). Each item is the phone's own shape.
     IReadOnlyList<EditScheduleStageInput>? Stages = null,
-    IReadOnlyList<EditScheduleActivityInput>? Activities = null);
+    IReadOnlyList<EditScheduleActivityInput>? Activities = null,
+    // spec: plr-d10 lane SCH-OWN-c (D-137, Q10 = 1) - the made-for tags of the version written WHOLE, as sent (absent = none; the version before keeps
+    // its own, P3). Only with Stages: a rename carries the tags of the version before and never rewrites them (any tag here without Stages is refused).
+    string? Variety = null,
+    string? SoilType = null,
+    string? Region = null,
+    string? Climate = null);
 
 /// <summary>One stage of an edit that writes the version whole (spec: plr-d10 lane SCH-OWN).</summary>
 public sealed record EditScheduleStageInput(string Name, int StartDay, int EndDay);
