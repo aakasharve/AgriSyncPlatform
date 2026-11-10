@@ -90,13 +90,15 @@ export function withPlots(grant: InviteGrant, plotScope: PlotScopeName, plotIds?
 
 /**
  * The responsibilities that do nothing on this grant (the team card's rule, MU-4 fix pass 1): setup needs every plot; a
- * कामगार or a स्वतःचं काम seat sees only its own records, so money and wages are not in force.
+ * कामगार or a स्वतःचं काम seat sees only its own records, so money and wages are not in force; a कामगार never holds तुलना पाहणे.
  */
 export function notInForce(grant: Pick<InviteGrant, 'label' | 'plotScope'>): string[] {
     const out: string[] = [];
     if (grant.plotScope !== 'AllPlots') out.push(AUTHORITY.editFarmSetup);
     // lane MU-1 (MU-2 review N-3): review money needs see money, so it is not in force wherever money is not.
     if (grant.label === 'Worker' || grant.plotScope === 'OwnWork') out.push(AUTHORITY.seeMoney, AUTHORITY.seeWages, AUTHORITY.reviewMoney);
+    // lane CMP-D1 (founder D-81): a कामगार seat can never hold "तुलना पाहणे" - the server refuses it, so no card offers it.
+    if (grant.label === 'Worker') out.push(AUTHORITY.seeCompare);
     return out;
 }
 

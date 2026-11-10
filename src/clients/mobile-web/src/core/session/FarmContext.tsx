@@ -29,6 +29,7 @@ import { useAuth } from '../../app/providers/AuthProvider';
 import { SessionStore } from '../../infrastructure/storage/SessionStore';
 import { purgeLabourCachesForFarm } from '../../infrastructure/storage/labourFarmAccess';
 import { isActiveSeat } from './seatStatus';
+import { rememberSeats } from './lastKnownSeats';
 
 interface FarmContextValue {
     meContext: MeContext | null;
@@ -103,6 +104,9 @@ export const FarmContextProvider: React.FC<{ children: React.ReactNode }> = ({ c
             const ctx = await fetchMeContext({ force });
             setLoadFailed(false);
             setMeContext(ctx);
+            // lane CMP-D1 - keep the seat(s) the server just described, so an offline cold start still knows who this is
+            // (the तुलना tab is decided from it, fail closed). Fire and forget: a failed write only hides the tab next time.
+            void rememberSeats(ctx.farms, userId);
             // spec: plr-d7-m1-multiuser-2026-10-26 (step 1, F2) — /me/context lists every seat
             // that has not ended, a typed-code join request (PendingApproval) included. Only an
             // Active seat is a farm this person is in, so only one can become the current farm.

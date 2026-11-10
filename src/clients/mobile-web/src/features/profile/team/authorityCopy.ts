@@ -55,6 +55,7 @@ const mr: AuthorityCopy = {
         PlanWork: 'कामाचं नियोजन करणे', // PROPOSED (Marathi) — lane L8b-1 (founder D-73: "the people you give it")
         AssignWork: 'काम सोपवणे', // PROPOSED (Marathi) — lane L8c-1 (founder D-24c: assigning to someone else)
         SeeAllTasks: 'सगळी कामे पाहणे', // PROPOSED (Marathi) — lane L8c-1 (founder D-24e1, D-79)
+        SeeCompare: 'तुलना पाहणे', // PROPOSED (Marathi) — lane CMP-D1 (founder D-81)
     },
     note: {
         SeeWages: 'यासोबत पैसे पाहणेही मिळते.', // PROPOSED (Marathi) — lane MU-3, the same line as below
@@ -73,6 +74,7 @@ const mr: AuthorityCopy = {
         SeeMoney: 'याला फक्त स्वतःच्या नोंदी दिसतात, म्हणून फक्त स्वतःचे पैसे दिसतात.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
         SeeWages: 'याला फक्त स्वतःच्या नोंदी दिसतात, म्हणून फक्त स्वतःची मजुरी दिसते.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
         ReviewMoney: 'पैसे दिसत नसतील तर पैशांच्या नोंदी तपासता येत नाहीत.', // PROPOSED (Marathi) — lane MU-1 (MU-2 N-3)
+        SeeCompare: 'कामगाराला तुलना दिसत नाही.', // PROPOSED (Marathi) — lane CMP-D1 (founder D-81)
     },
     payoutNeedsWages: 'नोंदी तपासता येतील, पण "इतरांची मजुरी पाहणे" नसेल तर मजुरीचे पैसे देणं पूर्ण करता येणार नाही.', // PROPOSED (Marathi) — lane MU-1
     dayWagesNotOnChosenPlots: 'निवडलेले प्लॉट असतील तर दिवसाच्या हिशोबाची मजुरी दिसत नाही; फक्त उक्ते कामाचे पैसे त्या प्लॉटचे दिसतात.', // PROPOSED (Marathi) — lane MU-1, D-70 option 2
@@ -93,6 +95,7 @@ const en: AuthorityCopy = {
         PlanWork: 'Plan the work', // PROPOSED (English) — lane L8b-1 (founder D-73)
         AssignWork: 'Hand work to others', // PROPOSED (English) — lane L8c-1 (founder D-24c)
         SeeAllTasks: 'See all the tasks', // PROPOSED (English) — lane L8c-1 (founder D-24e1, D-79)
+        SeeCompare: 'See the comparison', // PROPOSED (English) — lane CMP-D1 (founder D-81)
     },
     note: {
         SeeWages: 'Comes with seeing money.', // PROPOSED (English) — lane MU-3
@@ -111,6 +114,7 @@ const en: AuthorityCopy = {
         SeeMoney: 'He sees only his own records, so only his own money shows.', // PROPOSED (English) — lane MU-4 fix pass 1
         SeeWages: 'He sees only his own records, so only his own wages show.', // PROPOSED (English) — lane MU-4 fix pass 1
         ReviewMoney: 'Money entries cannot be checked where money is not seen.', // PROPOSED (English) — lane MU-1 (MU-2 N-3)
+        SeeCompare: 'A worker does not see the comparison.', // PROPOSED (English) — lane CMP-D1 (founder D-81)
     },
     payoutNeedsWages: "He can check entries, but without 'See other people's wages' he cannot complete a wage payout.", // PROPOSED (English) — lane MU-1
     dayWagesNotOnChosenPlots: 'With chosen plots, day wages are not shown to him; only job-work money of those plots is.', // PROPOSED (English) — lane MU-1, D-70 option 2

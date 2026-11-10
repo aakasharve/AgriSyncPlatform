@@ -164,7 +164,8 @@ public sealed class PlotScopeFixPass1RulesTests
         card.EffectivePlotScope.Should().Be("OwnWork", "the label narrows to his own work");
         card.PlotScopeChoices.Should().Equal(["OwnWork", "ChosenPlots"], "every plot would read exactly as his own work");
         // lane MU-1 (MU-2 review N-3): review money needs see money, so it does nothing here either - closed over what it needs.
-        card.AuthoritiesNotInForce.Should().BeEquivalentTo(["SeeMoney", "SeeWages", "ReviewMoney"], "only his own money, whatever he holds");
+        // lane CMP-D1: a Worker seat never holds "तुलना पाहणे" either.
+        card.AuthoritiesNotInForce.Should().BeEquivalentTo(["SeeMoney", "SeeWages", "ReviewMoney", "SeeCompare"], "only his own money, whatever he holds");
 
         var ownWork = Seat(AppRole.Mukadam, FarmAuthority.SeeMoney, FarmAuthority.SeeWages);
         ownWork.SetPlotScope(MembershipPlotScope.OwnWork, null, Now);

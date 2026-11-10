@@ -16,9 +16,11 @@ public sealed class FarmAccessPolicyTests
         FarmAuthorities.All.Select(a => new object[] { a });
 
     /// <summary>A seat that stores exactly <paramref name="authority"/> (and see money when it needs it), ending at <paramref name="end"/>.</summary>
-    private static FarmAccess Holding(FarmAuthority authority, DateTime? end = null, AppRole role = AppRole.Worker,
+    private static FarmAccess Holding(FarmAuthority authority, DateTime? end = null, AppRole? roleOrNull = null,
         MembershipStatus status = MembershipStatus.Active)
     {
+        // lane CMP-D1: a Worker seat can never hold SeeCompare, so that one authority is theory-tested on a Mukadam seat.
+        var role = roleOrNull ?? (authority == FarmAuthority.SeeCompare ? AppRole.Mukadam : AppRole.Worker);
         var bits = FarmAuthorities.BitOf(authority);
         var expiries = new Dictionary<FarmPermission, DateTime>();
         if (FarmAuthorities.RequiredBy(authority) is { } needed)
@@ -210,8 +212,8 @@ public sealed class FarmAccessPolicyTests
     [Fact]
     public void Unknown_bits_are_dropped_and_unknown_names_refuse_the_whole_request()
     {
-        Assert.Equal(FarmPermission.ReviewMoney, FarmPermissionDefaults.Effective(AppRole.Worker, (FarmPermission)(1024 | 4096)));
-        Assert.False(FarmPermissionDefaults.IsKnown((FarmPermission)4096));
+        Assert.Equal(FarmPermission.ReviewMoney, FarmPermissionDefaults.Effective(AppRole.Worker, (FarmPermission)(1024 | 8192)));
+        Assert.False(FarmPermissionDefaults.IsKnown((FarmPermission)8192));
         Assert.True(FarmPermissionDefaults.TryParse(new[] { "reviewmoney", " PlanWork " }, out var parsed));
         Assert.Equal(FarmPermission.ReviewMoney | FarmPermission.PlanWork, parsed);
         Assert.False(FarmPermissionDefaults.TryParse(new[] { "ReviewMoney", "Verify" }, out _));

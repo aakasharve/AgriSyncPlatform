@@ -35,6 +35,7 @@ import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRe
 import FirstRunWait from '../../features/onboarding/firstRun/FirstRunWait';
 // spec: plr-d10 (I14, CMP-3) — the one role → hidden-tab rule (a worker gets no तुलना).
 import { hiddenMainViewsFor } from './hiddenViews';
+import { useSeatForTabs } from '../session/lastKnownSeats';
 import { useHomeAttendanceDoor } from '../../features/labour/useHomeAttendanceDoor';
 // Lanes MIC-1 + E1 — the ONE mic and the "बदला" screen, over every screen.
 import { SpeakHost, type CorrectionSaveDeps } from '../speak/SpeakHost';
@@ -104,7 +105,8 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
     const userId = meContext?.me?.userId ?? null;
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
-    const hiddenViews = hiddenMainViewsFor(currentFarm?.role);
+    // lane CMP-D1 (founder D-81): from the seat's authorities, live or last known for this farm; unknown hides it.
+    const hiddenViews = hiddenMainViewsFor(useSeatForTabs(currentFarmId, currentFarm));
     // A tab this person may not open is never left on screen (e.g. a farm switch from an owner seat to a
     // worker seat while तुलना was open): back to आजची कामे. Above every early return (rules of hooks).
     const onHiddenView = hiddenViews.includes(mainView);

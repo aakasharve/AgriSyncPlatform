@@ -61,6 +61,13 @@ public enum FarmAuthority
     /// covers. ENFORCED by <c>PlannedWorkVisibility</c> on the pull, the REST reads and the audit.
     /// </summary>
     SeeAllTasks,
+
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D1 (founder D-81) - See the comparison ("तुलना पाहणे"): the तुलना tab. The primary owner always
+    /// holds it; every other seat only when he gives it; a Worker seat never (<see cref="FarmAuthorities.CanBeHeldBy"/>).
+    /// The compare read that requires it is lane CMP-D2.
+    /// </summary>
+    SeeCompare,
 }
 
 /// <summary>
@@ -91,6 +98,7 @@ public static class FarmAuthorities
         FarmAuthority.LabRecords,
         FarmAuthority.ScheduleTemplates,
         FarmAuthority.SeeAllTasks,
+        FarmAuthority.SeeCompare,
     ];
 
     /// <summary>
@@ -111,6 +119,7 @@ public static class FarmAuthorities
         FarmAuthority.LabRecords,
         FarmAuthority.ScheduleTemplates,
         FarmAuthority.SeeAllTasks,
+        FarmAuthority.SeeCompare,
     ];
 
     /// <summary>
@@ -137,6 +146,16 @@ public static class FarmAuthorities
         {
             notInForce.Add(FarmAuthority.SeeMoney);
             notInForce.Add(FarmAuthority.SeeWages);
+        }
+
+        // spec: plr-d10 lane CMP-D1 (founder D-81) - a Worker seat can never hold "तुलना पाहणे": the card says so and an
+        // invitation naming it is refused for what it is (the grant routes refuse it too, CanBeHeldBy).
+        foreach (var authority in All)
+        {
+            if (!CanBeHeldBy(role, authority))
+            {
+                notInForce.Add(authority);
+            }
         }
 
         // spec: plr-d10 lane MU-1 (MU-2 review N-3) - an authority that REQUIRES one that is not in force is not in force
@@ -166,8 +185,18 @@ public static class FarmAuthorities
         FarmAuthority.LabRecords => FarmPermission.AddTestRecord,
         FarmAuthority.ScheduleTemplates => FarmPermission.ManageScheduleTemplates,
         FarmAuthority.SeeAllTasks => FarmPermission.SeeAllTasks,
+        FarmAuthority.SeeCompare => FarmPermission.SeeCompare,
         _ => throw new ArgumentOutOfRangeException(nameof(authority), authority, "Unknown authority."),
     };
+
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D1 (founder D-81) - can a seat of this label EVER hold <paramref name="authority"/>? Every
+    /// authority can be held by every label except one: "तुलना पाहणे" (<see cref="FarmAuthority.SeeCompare"/>) is never a
+    /// Worker seat's. The grant doors refuse it (<see cref="FarmMembership"/>) and <see cref="IsHeld"/> answers false for it,
+    /// so a stored bit on a Worker seat (a hand-written row, an old build) holds nothing. The primary owner passes by label.
+    /// </summary>
+    public static bool CanBeHeldBy(AgriSync.SharedKernel.Contracts.Roles.AppRole role, FarmAuthority authority) =>
+        !(authority == FarmAuthority.SeeCompare && role == AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker);
 
     /// <summary>The authority this one needs to mean anything (D-26 / §11.1): wages and reviewing money need money.</summary>
     public static FarmAuthority? RequiredBy(FarmAuthority authority) => authority switch
@@ -220,6 +249,11 @@ public static class FarmAuthorities
         if (role == AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner)
         {
             return true;
+        }
+
+        if (!CanBeHeldBy(role, authority))
+        {
+            return false;
         }
 
         var expiries = ParseExpiries(expiriesJson);

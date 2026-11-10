@@ -16,6 +16,7 @@ import { cleanup, render } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({
     role: 'Worker' as string | undefined,
+    authorities: undefined as Array<{ name: string; expiresAtUtc: string | null }> | undefined,
     headerProps: [] as Array<{ hiddenViews?: readonly string[] }>,
 }));
 const { Nothing } = vi.hoisted(() => ({ Nothing: () => null }));
@@ -27,7 +28,10 @@ vi.mock('../../../features/context/components/MeAlertRail', () => ({ default: No
 // multi-user step 2's access notice reads FarmContext, and the first run's 0-farm doors sign out
 // through useAuth; this test is about the hidden tabs only.
 vi.mock('../../../features/context/components/AccessStatusNotice', () => ({ default: Nothing }));
-vi.mock('../../../app/providers/AuthProvider', () => ({ useAuth: () => ({ logout: vi.fn() }) }));
+vi.mock('../../../app/providers/AuthProvider', () => ({
+    useAuth: () => ({ logout: vi.fn() }),
+    useOptionalAuth: () => ({ session: { userId: 'user-A' } }),
+}));
 vi.mock('../AppRouter', () => ({ default: Nothing }));
 vi.mock('../../../shared/components/ui/ActionToast', () => ({ default: Nothing }));
 vi.mock('../../../features/weather/components/WeatherReactionPrompt', () => ({ default: Nothing }));
@@ -64,15 +68,19 @@ vi.mock('../../../app/compositionRoot', () => ({
     }),
 }));
 vi.mock('../../session/FarmContext', () => ({
-    useOptionalFarmContext: () => ({ currentFarm: h.role ? { farmId: 'farm-1', role: h.role } : null }),
+    useOptionalFarmContext: () => ({
+        currentFarmId: 'farm-1',
+        currentFarm: h.role ? { farmId: 'farm-1', role: h.role, authorities: h.authorities } : null,
+    }),
 }));
 
 import AppContent from '../../../AppContent';
 
 afterEach(() => { cleanup(); h.headerProps.length = 0; });
 
-const renderShell = (role: string | undefined) => {
+const renderShell = (role: string | undefined, authorities?: Array<{ name: string; expiresAtUtc: string | null }>) => {
     h.role = role;
+    h.authorities = authorities;
     render(<AppContent crops={[]} setCrops={vi.fn()} />);
     return h.headerProps.at(-1);
 };
@@ -82,13 +90,19 @@ describe('the app shell hands AppHeader the tabs this person may not open', () =
         expect(renderShell('Worker')?.hiddenViews).toEqual(['compare']);
     });
 
-    it('an owner or a mukadam: nothing hidden', () => {
+    it('the primary owner, or a seat that holds SeeCompare: nothing hidden (lane CMP-D1)', () => {
         expect(renderShell('PrimaryOwner')?.hiddenViews).toEqual([]);
         cleanup();
-        expect(renderShell('Mukadam')?.hiddenViews).toEqual([]);
+        expect(renderShell('Mukadam', [{ name: 'SeeCompare', expiresAtUtc: null }])?.hiddenViews).toEqual([]);
     });
 
-    it('role not known yet (no /me/context answer): nothing hidden — the documented fail-open limit', () => {
-        expect(renderShell(undefined)?.hiddenViews).toEqual([]);
+    it('a मुकादम or co-owner WITHOUT SeeCompare: hidden (the label gives nothing)', () => {
+        expect(renderShell('Mukadam', [{ name: 'TakeAttendance', expiresAtUtc: null }])?.hiddenViews).toEqual(['compare']);
+        cleanup();
+        expect(renderShell('SecondaryOwner', [])?.hiddenViews).toEqual(['compare']);
+    });
+
+    it('seat not known yet (no /me/context answer, nothing stored): hidden - fails CLOSED (lane CMP-D1, was fail-open)', () => {
+        expect(renderShell(undefined)?.hiddenViews).toEqual(['compare']);
     });
 });

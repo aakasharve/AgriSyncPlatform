@@ -96,6 +96,48 @@ public sealed class ManageMembershipHandlerTests
         Assert.Equal(new[] { "SeeMoney", "ReviewMoney" }, result.Value!.Permissions!);
     }
 
+    /// <summary>
+    /// lane CMP-D1 fix round 1 (review N002): a Worker row that somehow carries "तुलना पाहणे" (a hand-written row, an older
+    /// build) must not make the owner's UNRELATED change fail with a 400 nobody can explain. The unchanged stored permissions
+    /// are stripped of the bit the label can never hold; an EXPLICIT grant of it to a Worker is still refused.
+    /// </summary>
+    [Fact]
+    public async Task A_worker_row_carrying_the_barred_bit_still_takes_an_unrelated_change_and_loses_the_bit()
+    {
+        var repo = new Repo();
+        var who = new UserId(Guid.NewGuid());
+        var seat = repo.AddActive(who, AppRole.Mukadam);
+        seat.SetAuthorities(new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.SeeCompare] = null }, Now.AddDays(-1));
+        seat.ChangeRole(AppRole.Worker, Now.AddDays(-1)); // the row as an older build left it: a Worker holding bit 12
+        Assert.Equal(FarmPermission.SeeCompare, seat.Permissions);
+
+        var result = await Handle(repo, Decision(MembershipDecision.SetAccess, who) with { LabourGrant = true });
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.True(seat.CanManageLabourRecords, "the unrelated change was applied");
+        Assert.False(((seat.Permissions ?? FarmPermission.None) & FarmPermission.SeeCompare) == FarmPermission.SeeCompare, "the barred bit is gone");
+        Assert.False(seat.Holds(FarmAuthority.SeeCompare, Now));
+        Assert.DoesNotContain("SeeCompare", result.Value!.Permissions!);
+    }
+
+    [Fact]
+    public async Task An_explicit_grant_of_the_barred_bit_to_a_worker_is_still_refused_and_writes_nothing()
+    {
+        var repo = new Repo();
+        var who = new UserId(Guid.NewGuid());
+        var seat = repo.AddActive(who, AppRole.Worker);
+        var savesBefore = repo.Saves;
+
+        AssertRefused(await Handle(repo, Decision(MembershipDecision.SetAccess, who) with { Permissions = ["SeeCompare"] }),
+            ShramSafalErrors.InvalidCommand, repo);
+        Assert.Null(seat.Permissions);
+        Assert.Equal(savesBefore, repo.Saves);
+
+        // CONTROL: the same words are fine for a seat that is not a Worker.
+        Assert.True((await Handle(repo, Decision(MembershipDecision.SetAccess, who) with { Role = "Mukadam", Permissions = ["SeeCompare"] })).IsSuccess);
+        Assert.Equal(FarmPermission.SeeCompare, seat.Permissions);
+    }
+
     [Fact]
     public async Task Decline_pause_restore_remove_each_write_one_audit_row_with_the_reason()
     {

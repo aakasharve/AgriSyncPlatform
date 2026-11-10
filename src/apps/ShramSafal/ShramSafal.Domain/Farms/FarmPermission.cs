@@ -68,4 +68,12 @@ public enum FarmPermission
     /// reminder of the farm on the plots the seat covers, not only the ones he made or was given (D-24e1, D-79).
     /// </summary>
     SeeAllTasks = 1 << 11,
+
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D1 (founder D-81; R19: the next free bit at this base) - See the comparison ("तुलना पाहणे"): the
+    /// तुलना tab and the compare read. OFF for every seat until the primary owner gives it; the primary owner always holds it;
+    /// a Worker seat can never hold it (<see cref="FarmAuthorities.CanBeHeldBy"/>). Stored only here - the read that requires
+    /// it is lane CMP-D2.
+    /// </summary>
+    SeeCompare = 1 << 12,
 }

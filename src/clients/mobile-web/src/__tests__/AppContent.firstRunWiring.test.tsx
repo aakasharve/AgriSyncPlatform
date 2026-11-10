@@ -18,7 +18,10 @@ const h = vi.hoisted(() => ({
     farmState: {} as Record<string, unknown>,
 }));
 
-vi.mock('../app/providers/AuthProvider', () => ({ useAuth: () => ({ logout: h.logout }) }));
+vi.mock('../app/providers/AuthProvider', () => ({
+    useAuth: () => ({ logout: h.logout }),
+    useOptionalAuth: () => ({ session: { userId: 'user-A' } }), // lane CMP-D1: the tab rule reads the signed-in user
+}));
 vi.mock('../app/hooks/useFarmContextState', () => ({
     OPEN_CREATE_FARM_WIZARD_EVENT: 'test:open-create-farm-wizard',
     useFarmContextState: () => h.farmState,
