@@ -917,6 +917,85 @@ public static class ErrorExplanations
             + "partially decoded or hand-typed code looks like, not a wrong code. A "
             + "wrong-but-complete code fails later, with a different error."),
 
+        // ── Worker identity (codes carry the identity. prefix) ───────────────
+        // Declared in ShramSafalErrors, returned by WorkerIdentityService. Each is
+        // a question the phone asks calmly; none names a person, a number or
+        // another farm, and neither does anything written below.
+        ["identity.not_found"] = new(
+            "No working card or verified number matches, or this farm is not the one that may act for this worker.",
+            "Eleven sites, in two kinds that are made to look alike on purpose. Genuinely unknown: "
+            + "FindCardAsync (WorkerIdentityService.cs:1033) finds no card for the code; the "
+            + "typed-number link (:224-233) finds no verified holder, or the holder is erased; "
+            + "the person a code went to is gone (:1161); CreateFieldOperatorHandler.cs:115 "
+            + "links a new worker to a person who no longer exists. The other kind is 'not "
+            + "yours to ask': the farm does not hold the worker's proof (HoldsHisProofAsync "
+            + "false) when it asks for his first verification (:502, :562), a number move on "
+            + "card or owner's word (:647), a card reissue on owner's word (:739) or an erasure "
+            + "(:901); and a cancel of an erasure by someone who did not request it (:936). "
+            + "When the worker plainly exists, check which farm issued his card."),
+
+        ["identity.proof_needed"] = new(
+            "The step needs the worker's own proof, his card or a code sent to his phone, and it was missing or did not hold.",
+            "ProveWorkerAsync: a card was shown for a worker who has a verified number and no code "
+            + "ticket came with it (WorkerIdentityService.cs:1136-1138), or neither a card nor a "
+            + "ticket was sent (:1147-1149). Three steps also FLATTEN every failure of their "
+            + "second proof into this code: a number move whose old-number code, card or proof "
+            + "kind did not hold (:672-677), a card reissue whose code did not hold (:753-757), "
+            + "and a merge whose source card is not the source person's (:806-809). So on move "
+            + "and reissue a wrong or expired code shows up here, not as identity.code_wrong."),
+
+        ["identity.code_wrong"] = new(
+            "The code read back is not the one that was sent for this step.",
+            "ConsumeAsync (WorkerIdentityService.cs:1206-1213): the try was counted and the "
+            + "comparison failed, the ordinary mistyped code. Also RefusalFor (:1222): the code "
+            + "was issued for a different purpose than the step now using it. And the number "
+            + "move (:660-664): the new-number code was correct but had been sent to a different "
+            + "number than the one the request names. Each counted wrong try spends one of the "
+            + "code's five tries and counts toward the day's cap."),
+
+        ["identity.code_expired"] = new(
+            "The code can no longer be used: it has expired, was already used, or does not belong to this request.",
+            "Four routes. No challenge exists for the ticket, or it was asked for by another farm "
+            + "(WorkerIdentityService.cs:1152-1155). In ConsumeAsync the ticket is unknown, went "
+            + "to a different person, or belongs to another farm (:1185-1188). The challenge "
+            + "refused before its try was counted for any reason other than purpose or tries "
+            + "(:1192-1195, RefusalFor's default). Or a parallel try spent the code first "
+            + "(:1203, counted.Spent). Usual shape: the worker read the code back after its "
+            + "time ran out, or the phone sent an older ticket after a newer code was asked for."),
+
+        ["identity.code_used_up"] = new(
+            "This one code has had all five of its tries, so a new code has to be asked for.",
+            "RefusalFor (WorkerIdentityService.cs:1223) when the challenge reports its own tries "
+            + "spent before counting, and :1203 when the single-statement try counter refuses "
+            + "to count past the limit. It is the limit of ONE code, not the daily cap: a fresh "
+            + "code works the same day. The daily cap is identity.too_many_tries. Usual shape: "
+            + "the same wrong code entered repeatedly."),
+
+        ["identity.too_many_codes"] = new(
+            "Too many codes were asked for in the allowed time, so no new code was sent.",
+            "SendCodeAsync (WorkerIdentityService.cs:1236-1240), before anything is sent. One of "
+            + "three budgets is spent: the number's own (3 codes in 15 minutes and 6 in a day, "
+            + "counted per NumberBudgetSpentAsync), the asking farm's codes for the day, or the "
+            + "asking user's codes for the day. Usual shape: repeated taps on send while the SMS "
+            + "was slow to arrive. Nothing is sent and the limits clear with time."),
+
+        ["identity.too_many_tries"] = new(
+            "The day's allowance of wrong codes is spent, for this farm or for this worker.",
+            "TooManyWrongTriesAsync is true: the farm has used its wrong tries for the day, or the "
+            + "worker's codes have taken his day's wrong tries from every farm together. Checked "
+            + "in ConsumeAsync before any code is read (WorkerIdentityService.cs:1179-1181) and "
+            + "ALSO in SendCodeAsync (:1243-1245), so once it is reached no new code can even "
+            + "be sent until the day has passed. A burst of these from one farm is worth a "
+            + "look as possible guessing."),
+
+        ["identity.card_retired"] = new(
+            "The card that was scanned or typed no longer works.",
+            "FindCardAsync: the card exists and is not active (WorkerIdentityService.cs:1038-1040), "
+            + "which is what a reissue does to the card it replaces; or the card's person cannot "
+            + "be found or has been erased (:1043-1046). Usual shape: the worker is still "
+            + "carrying the old card after a new one was issued. A code that matches no card at "
+            + "all answers identity.not_found instead."),
+
         // ── User ─────────────────────────────────────────────────────────────
         ["User.PhoneAlreadyRegistered"] = new(
             "Someone already holds an account on this phone number.",
