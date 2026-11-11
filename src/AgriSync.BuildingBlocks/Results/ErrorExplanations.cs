@@ -996,6 +996,78 @@ public static class ErrorExplanations
             + "carrying the old card after a new one was issued. A code that matches no card at "
             + "all answers identity.not_found instead."),
 
+        ["identity.already_on_team"] = new(
+            "The worker whose card or code was just proved already has a record on this farm's team.",
+            "Link step, after the proof succeeded: `alreadyHere` (WorkerIdentityService.cs:279-283) "
+            + "finds another worker record of this farm already pointing at the same identity. "
+            + "Returned at :296-298 when re-pointing an existing record and at :309-312 when "
+            + "adding a new team member. Linking the same record to the identity it already has "
+            + "is answered as success, not this. Usual shape: the worker was added to the farm "
+            + "twice, once by name and once by card; the farm has a duplicate record to tidy."),
+
+        ["identity.erased"] = new(
+            "This worker's identity has been erased, so nothing more can be done with it.",
+            "The identity's root reads IsErased. Checked at the start of adding or changing a "
+            + "number (WorkerIdentityService.cs:404-406), sending a code (:490-492), moving a "
+            + "number (:638-640) and reissuing a card (:723-725); and at :908, where "
+            + "RequestErasure returns false because the person is already erased "
+            + "(ShramPerson.cs:126-131). Erasure reaches every farm's record of the person, so a "
+            + "farm that did not ask for it can meet this on a worker it still lists."),
+
+        ["identity.flow_off"] = new(
+            "This worker-identity step is switched off on this server.",
+            "`UnscreenedOpen` is false (WorkerIdentityService.cs:49): the configuration key "
+            + "ShramSafal:WorkerIdentity:UnscreenedFlowsEnabled is not true. It closes the steps "
+            + "that have no approved screen yet: re-pointing an existing record to an identity "
+            + "(:256-259), unlink (:338-340), sending a code for a number move (:484-486), "
+            + "moving a number (:619-621), merge (:788-790), unmerge (:843-845), and asking for "
+            + "or cancelling a worker's erasure (:884-886, :920-922). A DEPLOYMENT setting, the "
+            + "same for every farm; a row here means a client is calling a step that is not "
+            + "open, not that anything is wrong with the worker."),
+
+        ["identity.no_phone"] = new(
+            "There is no phone number on record for this worker on this farm to send or match a code against.",
+            "Sending a code (WorkerIdentityService.cs:524-527): no target number could be worked "
+            + "out for the purpose asked. Confirming a code (:572-577): none of the worker's "
+            + "active numbers is the number the code was sent to, which means the number was "
+            + "changed or removed between the send and the read-back. First check whether the "
+            + "worker's record on this farm has a number at all."),
+
+        ["identity.nothing_to_undo"] = new(
+            "There is no earlier step of this kind left to undo for this worker's record.",
+            "Unlink (WorkerIdentityService.cs:349-353): the record's history has no link that is "
+            + "not already reversed, or the record no longer points at the person that link "
+            + "named. Unmerge (:855-859): no unreversed merge, or the merged person no longer "
+            + "points at this one. Cancel erasure (:940-942): no erasure request is pending. "
+            + "Usual shape: a second tap on undo, or two people undoing the same step."),
+
+        ["identity.number_verified_elsewhere"] = new(
+            "The phone number already belongs to another verified ShramSafal identity.",
+            "HeldByAnotherAsync is true for the number, checked when sending a verify or move code "
+            + "(WorkerIdentityService.cs:530-533), when confirming a verify (:580-583) and when "
+            + "moving a number (:681-683). The save can also lose a race for the number (:605, "
+            + ":703-705). The person who verified the number must prove himself by his card or "
+            + "a code to his phone. Usual shape: a shared family phone, or a number entered "
+            + "against the wrong worker. The answer names nobody, by design."),
+
+        ["identity.owner_only"] = new(
+            "A step confirmed on the owner's word was sent by someone who is not an owner of the farm.",
+            "The proof kind is OwnerConfirms and IsOwnerTierAsync is false for the sender: moving a "
+            + "worker's number (WorkerIdentityService.cs:650-652) and reissuing his card "
+            + "(:742-744). Checked after the farm-holds-his-proof check, so the farm is the "
+            + "right one and the person is not. A manager who may otherwise manage workers "
+            + "reaches this; the phone should not offer the owner's-word route to him."),
+
+        ["identity.use_move"] = new(
+            "The worker already has a verified number, and that number changes only by the move step with a code.",
+            "The worker holds an active verified number and the request would give him a different "
+            + "one another way: editing his number (WorkerIdentityService.cs:428-430), asking a "
+            + "verify code for a second number (:536-540), confirming such a verify (:587-590, "
+            + "and :601-603 when two verifies raced), or merging him into another person "
+            + "(:802-804). One verified number at a time is the rule. Note the move step itself "
+            + "is behind the identity.flow_off switch, so where that is off there is no route "
+            + "open at all."),
+
         // ── User ─────────────────────────────────────────────────────────────
         ["User.PhoneAlreadyRegistered"] = new(
             "Someone already holds an account on this phone number.",
