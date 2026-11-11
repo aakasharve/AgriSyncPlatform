@@ -445,6 +445,86 @@ public static class ErrorExplanations
             + "exhausted quota. Check Tomorrow.io's status and our quota before reading any of our "
             + "code."),
 
+        // ── ShramSafal — Saving, revising, confirming and moving a record ────
+        // Most of these carry THREE segments on purpose: every shipped phone reads
+        // the tail after the last dot (CONFLICT / INVALIDCOMMAND / FORBIDDEN) and
+        // parks the row for the farmer instead of retrying it for ever.
+        ["ShramSafal.LogVersion.Conflict"] = new(
+            "The record or bill being confirmed changed after the reviewer's phone last showed it, so nothing was confirmed.",
+            "Two producers, and despite the name one of them is a bill. VerifyLogHandler.cs:188-192: "
+            + "an owner confirmation that names the version it reviewed (ExpectedLogVersion) and "
+            + "that version is no longer the log's ContentVersion; a phone that sends no version "
+            + "never reaches it. ApproveCostEntryHandler.cs:121-123: a bill approval whose "
+            + "BillVersion is not the bill's ContentVersion (a re-sent approval that already made "
+            + "its stamp is answered as success first). Someone edited or moved the record while "
+            + "it sat on the reviewer's screen; the reviewer needs the new version, not a retry."),
+
+        ["ShramSafal.LogContent.InvalidCommand"] = new(
+            "The details document sent with a record is not in the shape or size the server accepts, so nothing was saved.",
+            "CreateDailyLogHandler.cs:112 (IsAcceptableContent) and ReviseLogContentHandler.cs:80 "
+            + "both check the document before anything is staged. The phone applies the same rules "
+            + "before it queues, so a current phone should not reach either. The reachable case is "
+            + "the size cap: ReviseLogContentHandler.cs:198, 216 and 234 re-check the document "
+            + "AFTER the server carries forward the words, amounts or prices the editor's copy was "
+            + "sent without, and only the cap can fail there, so an edit that fitted on the phone "
+            + "no longer fits once the carried content is added. The server log line names which "
+            + "rule failed."),
+
+        ["ShramSafal.LogContent.Conflict"] = new(
+            "An edit to a record's details lost the race for the record's next version every time the server tried to apply it.",
+            "One call site: ReviseLogContentHandler.cs:94-99, after MaxAttempts (3) re-applications "
+            + "each found that another edit to the same record had landed first. It takes three "
+            + "other writes to one record inside the time one edit is saved, so it points at "
+            + "several devices or a replaying queue editing the same record at once, not at the "
+            + "edit itself. Nothing was saved."),
+
+        ["ShramSafal.LogContentPrices.Conflict"] = new(
+            "An edit changed a price on a saved record, and the editor neither made the record nor reviews money.",
+            "EditMoney.cs:132. MayChangePricesAsync (EditMoney.cs:286) passes only for the log's own "
+            + "operator, or for a member who holds FarmAuthority.ReviewMoney and from whom the "
+            + "record's money is not hidden. Anyone else is refused only for a REAL price change: "
+            + "the edit must differ in price from the current version and also from the version "
+            + "the editor saw (or that version cannot be found); otherwise the edit simply takes "
+            + "the current prices. The phone shows such a person the prices read-only, so this is "
+            + "a backstop: look for an authority switched off while the edit was queued, or a "
+            + "client that let a price be typed."),
+
+        ["ShramSafal.LogDateInFuture.InvalidCommand"] = new(
+            "The record names a day that has not happened yet on the farm's India calendar.",
+            "Two handlers with DIFFERENT limits. CreateDailyLogHandler.cs:318 refuses only a day "
+            + "after the farm's TOMORROW (LogDayRule.IsAfterFarmTomorrow): one day of slack on "
+            + "purpose, because installed phones date a save by their own clock. It sits after the "
+            + "idempotency return, so a resend of a record already stored is still answered as "
+            + "saved. MoveDailyLogHandler.cs:152 refuses a chosen day after the farm's TODAY. On "
+            + "create this is nearly always a phone whose date is set ahead; on move it is a "
+            + "future day picked in the day chooser."),
+
+        ["ShramSafal.LogMove.Conflict"] = new(
+            "A move of a record to another day or plot was made from an older version than the one the server holds.",
+            "MoveDailyLogHandler.cs:206, `command.BaseVersion < log.ContentVersion`. The record was "
+            + "changed after this phone last pulled it; an offline move queued behind another "
+            + "device's edit is the usual shape. The check runs AFTER the already-there shortcut "
+            + "(line 200), so a move to where the record already sits succeeds even from a stale "
+            + "version. Nothing was changed."),
+
+        ["ShramSafal.LogMoveNoCropCycle.InvalidCommand"] = new(
+            "A record was being placed on a single plot on a day that no crop season on that plot covers.",
+            "MoveDailyLogHandler.cs:189-195: the target is exactly one plot and CycleCoveringAsync "
+            + "(line 455) finds no cycle on it with StartDate <= day and EndDate null or >= day. "
+            + "It applies to a day-only move too, because the record's existing single plot is "
+            + "re-checked against the new day; whole-farm and multi-plot targets skip it. Usual "
+            + "shape: the chosen day is before the season on that plot began or after it was "
+            + "closed. Compare the day against that plot's cycle dates."),
+
+        ["ShramSafal.LogMoveAttendance.Conflict"] = new(
+            "A record cannot move to another day because an attendance ruling already names a person on it.",
+            "MoveDailyLogHandler.cs:284-297, reached only when the DAY changes; a place-only move is "
+            + "never stopped here. For each worker named on the record's labour rows, either an "
+            + "attendance mark exists for that worker on the record's CURRENT day (line 284), or "
+            + "the worker is marked Absent on the TARGET day (line 293). A present mark on the "
+            + "target day does not block. Compare the record's named workers against the "
+            + "attendance marks of both days."),
+
         // ── Memberships / ClaimJoin (codes carry no ShramSafal. prefix) ──────
         ["join.unauthenticated"] = new(
             "The server could not tell who is making this request.",
