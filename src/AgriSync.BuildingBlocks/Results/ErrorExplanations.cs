@@ -823,6 +823,78 @@ public static class ErrorExplanations
             + "mutation. Check the entry's stated count: the usual cause is a count spoken or "
             + "typed lower than the crew that is now being named."),
 
+        // ── ShramSafal — Money entries, bills and the price list ─────────────
+        ["ShramSafal.CostEntry.Conflict"] = new(
+            "The id sent for a new money entry is already held by an entry of another farm or another person.",
+            "A money entry's id is derived on the phone from its source, so the same source re-sends "
+            + "the same id. AddCostEntryHandler.cs:103-110: a stored entry has the id and its farm "
+            + "or its creator differs from the request's (same farm and same person is answered "
+            + "with the stored entry as success). PushSyncBatchHandler.cs:976-982: the insert hit "
+            + "the primary key because the stored row was invisible to this farm's scope; the "
+            + "first such clash is answered with a recheck code and only the second with this "
+            + "one. Usual shape: two people on one farm entering money from the same bill line "
+            + "or record line. Nothing was stored twice."),
+
+        ["ShramSafal.BillPrice.Conflict"] = new(
+            "A price change was sent for a bill that has been approved, by someone who is not the farm's main owner.",
+            "CorrectCostEntryHandler.cs:85-91: the bill has at least one approval stamp (any "
+            + "version's stamp counts, they are append-only) and the corrector is not the farm's "
+            + "primary account holder. Asked after the authority gates, so the sender is someone "
+            + "otherwise allowed to correct money. Usual shape: a correction queued before the "
+            + "bill was approved, or a phone that had not yet pulled the approval. Nothing was "
+            + "changed."),
+
+        ["ShramSafal.PriceList.Forbidden"] = new(
+            "Someone other than ShramSafal's platform admin tried to change the shared price list.",
+            "SetPriceConfigVersionHandler.cs:41-43: adminResolver.IsPlatformOwnerAsync is false for "
+            + "the sender. The price list is one list for every farm, and the rule sits in the "
+            + "handler so REST and push obey it alike. No farmer role can pass it, an owner "
+            + "included, so a row here means a phone still offers or still has queued a "
+            + "price-list write from before the rule; it is not a membership problem."),
+
+        // ── ShramSafal — Privacy, voice archive, workers, plots per person ───
+        ["ShramSafal.ErasureRequest.NotFound"] = new(
+            "No erasure request with this id belongs to the person trying to cancel it.",
+            "CancelErasureHandler.cs:47-51: no request has the id, or the caller is neither the one "
+            + "who asked for it nor the person it is about. Both answer alike on purpose. Usual "
+            + "shape: a cancel sent from a different account than the one that made the request, "
+            + "or an id the phone kept from an earlier sign-in."),
+
+        ["ShramSafal.ErasureRequest.AlreadyStarted"] = new(
+            "The erasure has already begun or finished, so the request can no longer be cancelled.",
+            "CancelErasureHandler.cs:59-61: the request is no longer waiting (`!request.IsWaiting`); "
+            + "a request already Cancelled is answered as success before this. Lines 65-68: the "
+            + "guarded update lost to the erasure worker between the read and the write. The "
+            + "cancel came after the waiting period ended. This is final by design; there is "
+            + "nothing to retry."),
+
+        ["ShramSafal.RetainedClipIdTaken"] = new(
+            "The id sent for a voice clip to keep is already held by a clip of another account.",
+            "PersistVoiceClipRetainedHandler.cs:135-138 catches RetainedClipIdConflictException, "
+            + "thrown at S3RetainedBlobStore.cs:150-157 when a row with that clip id exists under "
+            + "a different user. The phone mints clip ids, so all accounts share one id space; "
+            + "the same id from the same account is a no-op success. Usual shape: one phone used "
+            + "by two accounts, re-sending clips recorded under the earlier sign-in. Nothing was "
+            + "stored for this caller."),
+
+        ["ShramSafal.FieldOperatorNotFound"] = new(
+            "The worker record this request names is not a record of this farm.",
+            "WorkerIdentityService.RecordOnFarmAsync (WorkerIdentityService.cs:979-982) returns null "
+            + "when no worker record has the id OR its OriginatingFarmId is not the farm in the "
+            + "request, so a real worker of another farm reads as missing. Returned from "
+            + "ManagedRecordAsync (:994) and OwnerRecordAsync (:1006), which a dozen "
+            + "worker-identity steps go through after their permission check, and from :267. "
+            + "Usual shape: a worker id carried over after switching farms on a multi-farm "
+            + "login."),
+
+        ["ShramSafal.MembershipPlot.InvalidCommand"] = new(
+            "One of the plots chosen for a member is not a plot of this farm.",
+            "ManageMembershipHandler.cs:205-213: the plots chosen for the member's seat are checked "
+            + "against GetPlotsByFarmIdAsync for the farm and at least one is not among them. A "
+            + "plot of another farm and a made-up id answer alike. Usual shape: a plot removed "
+            + "from the farm after the owner's phone last refreshed, or plot ids left over from "
+            + "another farm on a multi-farm login."),
+
         // ── Memberships / ClaimJoin (codes carry no ShramSafal. prefix) ──────
         ["join.unauthenticated"] = new(
             "The server could not tell who is making this request.",
