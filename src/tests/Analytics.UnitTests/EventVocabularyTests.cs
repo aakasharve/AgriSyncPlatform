@@ -6,11 +6,12 @@ using Xunit;
 namespace Analytics.UnitTests;
 
 /// <summary>
-/// Lockdown coverage for the frozen 13-event vocabulary (DWC v2 §2.3 +
-/// ADR-2026-05-02). Three classes of assertion:
+/// Lockdown coverage for the frozen event vocabulary (DWC v2 §2.3 +
+/// ADR-2026-05-02, which froze it at 13 events; ADR 0027 D1 extends it with
+/// the server-only <c>api.refused</c>, making 14). Three classes of assertion:
 /// </summary>
 /// <list type="number">
-/// <item><b>Registry shape</b> — exactly 13 entries, every name matches the ADR.</item>
+/// <item><b>Registry shape</b> — exactly 14 entries, every name matches the ADRs.</item>
 /// <item><b>Validator rejects</b> — unknown event_type and missing required prop.</item>
 /// <item><b>Round-trip</b> — every entry validates with its own RequiredProps populated.</item>
 /// </list>
@@ -21,12 +22,20 @@ public sealed class EventVocabularyTests
     // -----------------------------------------------------------------
 
     [Fact]
-    public void Registry_Has_Exactly_13_Entries()
+    public void Registry_Has_Exactly_14_Entries()
     {
-        // Adding a 14th event without a new ADR is a process violation —
-        // bump this number deliberately and only after the ADR is signed.
-        EventVocabulary.Registry.Should().HaveCount(13,
-            "ADR-2026-05-02 freezes the vocabulary at 13 events; a new ADR is required to extend it");
+        // Adding an event without a new ADR is a process violation — bump
+        // this number deliberately and only after the ADR is signed.
+        //
+        // 13 -> 14 on 2026-11-11: ADR 0027 D1 adds api.refused (spec
+        // control-room-go-live-must-haves-2026-11-10, plan CR-1a Task K3).
+        // This test was Registry_Has_Exactly_13_Entries; it is the same pin,
+        // moved by name, not a new one. ADR 0027 D6 takes the registry to 15
+        // when sync.push_outcome lands (Task C2) — that entry is not pinned
+        // here yet, and this number moves again in the commit that adds it.
+        EventVocabulary.Registry.Should().HaveCount(14,
+            "ADR-2026-05-02 froze the vocabulary at 13 events and ADR 0027 D1 adds api.refused; "
+            + "a new ADR is required to extend it further");
     }
 
     [Fact]
@@ -38,6 +47,8 @@ public sealed class EventVocabularyTests
             "proof.attached", "closure_summary.viewed", "closure.verified",
             "next_action.created", "log.created", "ai.invocation",
             "api.error", "client.error", "worker.named", "admin.farmer_lookup",
+            // ADR 0027 D1 (server-only; written by RequestObservabilityMiddleware).
+            "api.refused",
         };
 
         EventVocabulary.Registry.Keys.Should().BeEquivalentTo(expected,
@@ -61,6 +72,33 @@ public sealed class EventVocabularyTests
             "nothing has ever emitted or read a key called 'status' — requiring it would have "
             + "broken three live queries");
         def.Optional.Should().Contain(new[] { "farmId", "message", "appVersion" });
+    }
+
+    [Fact]
+    public void Api_refused_requires_endpoint_and_status_code()
+    {
+        // ADR 0027 D1 — spec control-room-go-live-must-haves-2026-11-10, plan
+        // CR-1a Task K3. A refused write on a route outside the critical list,
+        // from a signed-in person. It is deliberately NOT an api.error, so it
+        // does not inherit api.error's contract.
+        var def = EventVocabulary.Registry["api.refused"];
+
+        def.RequiredProps.Should().BeEquivalentTo(new[] { "endpoint", "statusCode" },
+            "a refusal always knows where it happened and how it was answered, and nothing "
+            + "else is guaranteed: errorCode is present only when a mapper stamped one, and "
+            + "nobody observed a work outcome, so requiring errorCode or workKept would force "
+            + "the middleware to invent a value");
+        def.RequiredProps.Should().NotContain("status",
+            "the key is statusCode, as on api.error — nothing has ever emitted or read 'status'");
+
+        def.Optional.Should().BeEquivalentTo(
+            new[]
+            {
+                "errorCode", "route", "appVersion", "serverBuild",
+                "personId", "routeFarmId", "latencyMs", "traceId",
+            },
+            "these are the keys ADR 0027 D1 lists, and analytics.events is append-only: a key "
+            + "that is not in the ADR should not reach a row through this entry unreviewed");
     }
 
     [Theory]

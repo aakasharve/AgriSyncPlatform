@@ -40,7 +40,12 @@ public sealed class ApiErrorContractParityTests
             rejectedWorkReason: rejected > 0 ? "sync.mutation_rejected" : null,
             farmId: null,
             traceId: "trace-1",
-            unhandledExceptionType: null);
+            unhandledExceptionType: null,
+            personId: null,
+            routeFarmId: null,
+            routePattern: null,
+            serverBuild: null,
+            rejectedWorkCodes: null);
     }
 
     [Theory]
