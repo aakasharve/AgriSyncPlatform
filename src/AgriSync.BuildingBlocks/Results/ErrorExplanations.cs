@@ -525,6 +525,80 @@ public static class ErrorExplanations
             + "target day does not block. Compare the record's named workers against the "
             + "attendance marks of both days."),
 
+        ["ShramSafal.LogMoveJobCard.Conflict"] = new(
+            "A record cannot be moved because a job card is tied to it or to its money.",
+            "Two checks in MoveDailyLogHandler. Lines 216-222: any job card linked to the log whose "
+            + "status is not Cancelled. Lines 256-259: one of the money entries made from the "
+            + "record's lines carries a JobCardId, meaning it is a card's payout. Nothing the "
+            + "sender can change clears it (a verified or paid card is never cancelled), so this "
+            + "is a standing limit of the record, not a fault to chase."),
+
+        ["ShramSafal.LogMoveMoneyShared.Conflict"] = new(
+            "A record cannot be moved because its money was already shared out across plots.",
+            "MoveDailyLogHandler.cs:262-265: GetDayLedgerBySourceCostEntryIdAsync finds a day ledger "
+            + "for one of the money entries made from the record's lines, meaning that entry went "
+            + "through allocate-global-expense. No command removes an allocation, so the record "
+            + "stays where it is; nothing was changed."),
+
+        ["ShramSafal.LogMoveMoneyNotFound.Conflict"] = new(
+            "A record cannot be moved because a line of it states an amount and the matching money entry is not on the server.",
+            "MoveDailyLogHandler.cs:242-251: a line the record's create-time details priced has no "
+            + "cost entry under its derived id on the record's farm. Three shapes: the money was "
+            + "saved by an older app with random ids, it is still queued on a phone, or its push "
+            + "was refused. Check the sync queue of the phone that made the record before "
+            + "anything else. This is the one code whose Description is rewritten per request "
+            + "(the missing ids are appended), which is why descriptions are never recorded."),
+
+        ["ShramSafal.LogMoveDetailsNotHeld.Conflict"] = new(
+            "A record cannot be moved because the server never held its details as they were when it was created.",
+            "MoveDailyLogHandler.cs:231-234, `!lines.HeldFromCreate` from RecordFirstMoney.OfAsync. "
+            + "Without the create-time details the server cannot tell which lines made money, so "
+            + "it cannot show the money moving with the record and refuses whole. The record was "
+            + "saved by app 1.0.15 to 1.0.17, or its create arrived without its details. No phone "
+            + "can unlock it; it is a property of when the record was made."),
+
+        ["ShramSafal.RecordedBeforeConsent"] = new(
+            "A voice clip sent for cloud keeping says it was recorded before the current cloud-save consent began.",
+            "One call site: PersistVoiceClipRetainedHandler.cs:87-92, after the consent gate itself "
+            + "has passed. The consent ledger shows when the CURRENT continuous grant began and the "
+            + "clip's client-declared recordedAt is earlier. Usual shape: clips recorded while the "
+            + "toggle was off (or before it was turned off and on again) and uploaded once it was "
+            + "on. The phone is meant to filter these first, so a row here means that filter "
+            + "missed, or the phone's clock runs behind. When the ledger cannot show a start the "
+            + "check is skipped."),
+
+        ["ShramSafal.PlotScope.Forbidden"] = new(
+            "The work names a plot outside the plots this member's seat on the farm covers.",
+            "Only a seat limited to CHOSEN plots can get this (FarmReadGate scope with PlotIds set); "
+            + "every other seat passes. Producers: PlotScopeGate.cs:47 (a named plot not among "
+            + "his) and :104 (a crop season on another farm or on a plot not his), called from "
+            + "about two dozen write handlers; PushSyncBatchHandler.cs:4597 (a change to an "
+            + "existing record that lies outside his plots) and :4686 (a new mutation naming such "
+            + "a plot); MoveDailyLogHandler.cs:141 (a move that reaches a plot not his). Usual "
+            + "shape: work queued offline on a plot that the owner has since taken out of the "
+            + "member's plots. Read the member's chosen plots on the farm first; the push keeps "
+            + "the refused change for the owner."),
+
+        ["ShramSafal.ReadNotAllowed"] = new(
+            "The caller is on the farm but may not read this particular information.",
+            "A READ refusal with four producers. GetFieldOperatorsHandler.cs:72-76: an own-records "
+            + "seat asking for the crew list while holding neither the take-attendance nor the "
+            + "confirm-records authority. GetLogOriginalVoiceHandler.cs:113: no role on the "
+            + "record's farm at all; :119: the record's chosen audience leaves the caller out; "
+            + ":133: RecordWordsGate says this caller may not hear the record's words (not the "
+            + "speaker and no confirm-records authority). Check which endpoint answered, then the "
+            + "caller's authorities on that farm."),
+
+        ["ShramSafal.ScheduleChangedElsewhere"] = new(
+            "The schedule choice this request acts on is no longer one the plot-season follows.",
+            "Three producers. FollowedScheduleChoice.cs:39-41: an abandon or complete names a "
+            + "subscription that belongs to this plot-season and is no longer Active. "
+            + "MigrateScheduleHandler.cs:130-133: a switch names the schedule it switches FROM and "
+            + "that one is not among the Active ones. MigrateScheduleHandler.cs:271: the save "
+            + "itself lost the place to a rival write. In all three another phone, or an offline "
+            + "action that synced first, already changed the plot's schedules; nothing was "
+            + "written and the phone needs a fresh pull."),
+
         // ── Memberships / ClaimJoin (codes carry no ShramSafal. prefix) ──────
         ["join.unauthenticated"] = new(
             "The server could not tell who is making this request.",
