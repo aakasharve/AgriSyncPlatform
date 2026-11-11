@@ -159,9 +159,10 @@ public sealed class RequestObservabilityPropsTests
         // ops list, and a workKept verdict would be a claim nothing observed.
         // That is still true after ADR 0027: D5 reverses the 2026-08-31 ruling
         // that this row keeps exactly its earlier shape, so a slow row now
-        // gains route, serverBuild, appVersion, personId and routeFarmId
-        // when there is a value to record (D3) — and it still gains no
-        // error identity.
+        // gains appVersion (present with null when no header was sent, as on
+        // api.error) and, each only when there is a value, route,
+        // serverBuild, personId and routeFarmId (D3) — and it still gains
+        // no error identity.
         Assert.False(props.ContainsKey("errorCode"));
         Assert.False(props.ContainsKey("workKept"));
         Assert.False(props.ContainsKey("message"));
@@ -192,10 +193,11 @@ public sealed class RequestObservabilityPropsTests
         // paged the founder about an API failure while the API was healthy.
         // That separation stands. What changed is the row's width: ADR 0027 D5
         // reverses the 2026-08-31 ruling that it keeps exactly its earlier
-        // shape, so a refused sync row now gains route, serverBuild,
-        // appVersion, personId and routeFarmId when there is a value to
-        // record, plus rejectedWorkCodes naming what was refused (D3). It
-        // still gains no error identity: no errorCode and no workKept verdict.
+        // shape, so a refused sync row now gains appVersion (present with
+        // null when no header was sent, as on api.error) and, each only when
+        // there is a value, route, serverBuild, personId, routeFarmId and
+        // rejectedWorkCodes naming what was refused (D3). It still gains no
+        // error identity: no errorCode and no workKept verdict.
         Assert.False(props.ContainsKey("errorCode"));
         Assert.False(props.ContainsKey("workKept"));
         Assert.Equal(2, props["rejectedWorkItems"]);
@@ -251,7 +253,13 @@ public sealed class RequestObservabilityPropsTests
     //
     // The rule every "has no ... key" test below holds (Doctrine P4): a value
     // that was not captured is an ABSENT key — never a null placeholder, never
-    // Guid.Empty, never a word such as "unknown".
+    // Guid.Empty, never a word such as "unknown". It is the rule for the keys
+    // ADR 0027 adds: personId, routeFarmId, route, serverBuild and
+    // rejectedWorkCodes.
+    //
+    // appVersion is older and keeps its own rule on every row type: the key
+    // is present, with null when the header is missing, exactly as
+    // A_missing_app_version_is_null_and_never_the_word_malformed pins it.
     // ------------------------------------------------------------------
 
     /// <summary>

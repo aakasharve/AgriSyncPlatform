@@ -357,6 +357,128 @@ public sealed class RequestObservabilityMiddlewareTests
     }
 
     // ------------------------------------------------------------------
+    // ADR 0027 D3 — the wiring of the two keys that come from the ROUTER:
+    // route (plan CR-1a Task K1) and routeFarmId (Task B1). The props tests
+    // prove Build writes what it is handed; these prove the middleware hands
+    // it what the router matched. They go through a real router on purpose:
+    // an endpoint object built by hand would only prove the test can read
+    // back its own setup.
+    //
+    // serverBuild has no test here, deliberately. The middleware reads
+    // BUILD_SHA from the process environment once at start, and a test that
+    // sets a process-wide variable would be flaky. That key is held by the
+    // props tests and by the production proof.
+    // ------------------------------------------------------------------
+
+    private const string FarmLogsPattern = "/shramsafal/farms/{farmId:guid}/logs";
+
+    /// <summary>
+    /// One POST through the same kind of TestServer pipeline as
+    /// <see cref="An_exception_is_recorded_AND_still_reaches_the_upstream_handler"/>,
+    /// with routing added: an endpoint DECLARED as <see cref="FarmLogsPattern"/>
+    /// that answers 500, reached by a request whose path carries a real id.
+    /// The principal is set by a one-line middleware standing in for
+    /// authentication. Returns the status the client saw (to prove the declared
+    /// endpoint is what answered) and the row the middleware emitted.
+    /// </summary>
+    private static async Task<(int Status, AnalyticsEvent? Row)> PostToTheDeclaredFarmRoute(
+        string path, ClaimsPrincipal user)
+    {
+        var writer = new CapturingWriter();
+
+        using var host = await new HostBuilder()
+            .ConfigureWebHost(web => web
+                .UseTestServer()
+                .ConfigureServices(services =>
+                {
+                    services.AddLogging();
+                    services.AddRouting();
+                    services.AddScoped<IAnalyticsWriter>(_ => writer);
+                })
+                .Configure(app =>
+                {
+                    app.UseRouting();
+                    app.Use((HttpContext ctx, RequestDelegate next) =>
+                    {
+                        ctx.User = user;
+                        return next(ctx);
+                    });
+                    app.UseMiddleware<RequestObservabilityMiddleware>();
+                    app.UseEndpoints(endpoints =>
+                        endpoints.MapPost(FarmLogsPattern, Answering(StatusCodes.Status500InternalServerError)));
+                }))
+            .StartAsync();
+
+        var response = await host.GetTestClient().PostAsync(path, new StringContent(string.Empty));
+
+        return ((int)response.StatusCode, await WaitForEvent(writer));
+    }
+
+    [Fact]
+    public async Task An_error_row_carries_its_route_pattern()
+    {
+        const string path = "/shramsafal/farms/bbbbbbbb-1111-2222-3333-444444444444/logs";
+
+        var (status, ev) = await PostToTheDeclaredFarmRoute(
+            path, SignedIn(Guid.Parse("aaaaaaaa-1111-2222-3333-444444444444")));
+
+        status.Should().Be(500,
+            "the request has to reach the declared endpoint for there to be a matched route to record");
+        ev.Should().NotBeNull();
+        ev!.EventType.Should().Be(AnalyticsEventType.ApiError);
+
+        var props = PropsOf(ev);
+
+        // The method, a space, and the pattern text exactly as it was declared
+        // — parameter name, constraint and all. This is what lets a thousand
+        // failures on a thousand farms be read as ONE failing route.
+        props.Should().ContainKey("route",
+            "an endpoint matched this request, so the row has a route to name");
+        props["route"].GetString().Should().Be("POST " + FarmLogsPattern);
+
+        // endpoint is not replaced by it: it still holds the raw method and
+        // path, with the real id, which the admin SQL readers select by key.
+        props["endpoint"].GetString().Should().Be("POST " + path);
+    }
+
+    [Fact]
+    public async Task An_error_row_carries_the_farm_the_route_addressed()
+    {
+        var userId = Guid.Parse("aaaaaaaa-1111-2222-3333-444444444444");
+        var claimFarm = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        const string addressedFarm = "bbbbbbbb-1111-2222-3333-444444444444";
+
+        // A person whose token carries one farm, addressing ANOTHER.
+        var (status, ev) = await PostToTheDeclaredFarmRoute(
+            $"/shramsafal/farms/{addressedFarm}/logs", SignedIn(userId, farmClaim: claimFarm));
+
+        status.Should().Be(500, "the request has to reach the declared endpoint");
+        ev.Should().NotBeNull();
+
+        var props = PropsOf(ev!);
+        props.Should().ContainKey("routeFarmId",
+            "the route named a farm, and which farm a failure was about is half of who to call");
+        props["routeFarmId"].GetString().Should().Be(addressedFarm,
+            "routeFarmId is the farm the ROUTE addressed, never the farm in the token");
+        ev!.FarmId.HasValue.Should().BeTrue("the farm_id column is still written from the claim");
+        ev.FarmId!.Value.Value.Should().Be(claimFarm,
+            "the farm_id column is whatever the claim gives (ADR 0027 D4); the addressed farm "
+            + "is recorded beside it in props, not instead of it");
+
+        // No farm claim at all, and the same id typed in UPPER case in the URL.
+        var (status2, ev2) = await PostToTheDeclaredFarmRoute(
+            $"/shramsafal/farms/{addressedFarm.ToUpperInvariant()}/logs", SignedIn(userId));
+
+        status2.Should().Be(500, "the guid route constraint accepts either case");
+        ev2.Should().NotBeNull();
+        PropsOf(ev2!)["routeFarmId"].GetString().Should().Be(addressedFarm,
+            "the id is recorded in the D format (lower case, hyphenated) however it was typed, "
+            + "so one farm is one value to group by");
+        ev2!.FarmId.HasValue.Should().BeFalse(
+            "with no farm claim the farm_id column stays null; the route's farm does not fill it");
+    }
+
+    // ------------------------------------------------------------------
     // ADR 0027 D3 — plan CR-1a Task K2: the codes an endpoint stamps reach
     // the sync.mutation_rejected row.
     // ------------------------------------------------------------------
