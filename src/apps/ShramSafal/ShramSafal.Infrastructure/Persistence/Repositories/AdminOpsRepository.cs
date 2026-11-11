@@ -1,5 +1,7 @@
 using AgriSync.BuildingBlocks.Analytics;
+using AgriSync.BuildingBlocks.Results;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using System.Text.Json;
@@ -14,8 +16,36 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 /// (e.g. api.error events before Ops Phase 1 middleware is deployed),
 /// the query returns empty collections rather than throwing.
 /// </summary>
-public sealed class AdminOpsRepository(AnalyticsDbContext analyticsContext) : IAdminOpsRepository
+public sealed class AdminOpsRepository(
+    AnalyticsDbContext analyticsContext,
+    ILogger<AdminOpsRepository> logger) : IAdminOpsRepository
 {
+    /// <summary>
+    /// Builds the DTO from a reader positioned on a row of either error
+    /// projection. Shared so /admin/ops/health and /admin/ops/errors cannot
+    /// drift into giving an admin two different answers about one failure.
+    /// Column order must match both SELECTs.
+    /// </summary>
+    private static OpsErrorEventDto ReadErrorRow(System.Data.Common.DbDataReader r)
+    {
+        var errorCode = r.IsDBNull(6) ? null : r.GetString(6);
+        var explanation = ErrorExplanations.For(errorCode);
+
+        return new OpsErrorEventDto(
+            EventType: r.GetString(0),
+            Endpoint: r.GetString(1),
+            StatusCode: r.IsDBNull(2) ? null : r.GetInt32(2),
+            LatencyMs: r.IsDBNull(3) ? null : r.GetInt32(3),
+            FarmId: r.IsDBNull(4) ? null : r.GetGuid(4),
+            OccurredAtUtc: r.GetDateTime(5),
+            ErrorCode: errorCode,
+            WorkKept: r.IsDBNull(7) ? null : r.GetString(7),
+            Message: r.IsDBNull(8) ? null : r.GetString(8),
+            AppVersion: r.IsDBNull(9) ? null : r.GetString(9),
+            Meaning: explanation?.Meaning,
+            UsualCause: explanation?.UsualCause);
+    }
+
     public async Task<AdminOpsHealthDto> GetOpsHealthAsync(CancellationToken ct = default)
     {
         var conn = analyticsContext.Database.GetDbConnection();
@@ -25,7 +55,7 @@ public sealed class AdminOpsRepository(AnalyticsDbContext analyticsContext) : IA
         try
         {
             var voice = await GetVoiceHealthAsync(conn, ct);
-            var errors = await GetRecentErrorsAsync(conn, ct);
+            var errors = await GetRecentErrorsAsync(conn, logger, ct);
             var suffering = await GetTopSufferingFarmsAsync(conn, ct);
             var (r9, r10) = await GetAlertBreachesAsync(conn, ct);
 
@@ -83,7 +113,7 @@ public sealed class AdminOpsRepository(AnalyticsDbContext analyticsContext) : IA
     }
 
     private static async Task<IReadOnlyList<OpsErrorEventDto>> GetRecentErrorsAsync(
-        System.Data.Common.DbConnection conn, CancellationToken ct)
+        System.Data.Common.DbConnection conn, ILogger logger, CancellationToken ct)
     {
         var results = new List<OpsErrorEventDto>();
         try
@@ -99,7 +129,11 @@ public sealed class AdminOpsRepository(AnalyticsDbContext analyticsContext) : IA
                     (props->>'statusCode')::int              AS status_code,
                     (props->>'latencyMs')::int               AS latency_ms,
                     farm_id,
-                    occurred_at_utc
+                    occurred_at_utc,
+                    props->>'errorCode'                      AS error_code,
+                    props->>'workKept'                       AS work_kept,
+                    props->>'message'                        AS message,
+                    props->>'appVersion'                     AS app_version
                 FROM analytics.events
                 WHERE event_type IN ('api.error', 'api.slow', 'client.error')
                   AND occurred_at_utc >= NOW() - INTERVAL '2 hours'
@@ -109,16 +143,19 @@ public sealed class AdminOpsRepository(AnalyticsDbContext analyticsContext) : IA
             using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
             {
-                results.Add(new OpsErrorEventDto(
-                    EventType: r.GetString(0),
-                    Endpoint: r.GetString(1),
-                    StatusCode: r.IsDBNull(2) ? null : r.GetInt32(2),
-                    LatencyMs: r.IsDBNull(3) ? null : r.GetInt32(3),
-                    FarmId: r.IsDBNull(4) ? null : r.GetGuid(4),
-                    OccurredAtUtc: r.GetDateTime(5)));
+                results.Add(ReadErrorRow(r));
             }
         }
-        catch { /* graceful — returns empty */ }
+        catch (Exception ex)
+        {
+            // Still graceful — an ops dashboard must not 500 because a props
+            // key is missing — but no longer silent. Before 2026-08-30 a wrong
+            // projection here returned an empty list and nothing anywhere said
+            // why; the admin just saw a blank panel.
+            logger.LogWarning(ex,
+                "AdminOpsRecentErrorsProjectionFailed. Returning an empty list; the "
+                + "/admin/ops/health error panel will be blank until this is fixed.");
+        }
         return results;
     }
 
@@ -226,7 +263,11 @@ public sealed class AdminOpsRepository(AnalyticsDbContext analyticsContext) : IA
                     (props->>'statusCode')::int,
                     (props->>'latencyMs')::int,
                     farm_id,
-                    occurred_at_utc
+                    occurred_at_utc,
+                    props->>'errorCode',
+                    props->>'workKept',
+                    props->>'message',
+                    props->>'appVersion'
                 FROM analytics.events
                 WHERE event_type IN ('api.error', 'api.slow', 'client.error')
                   AND occurred_at_utc >= @since
@@ -241,16 +282,18 @@ public sealed class AdminOpsRepository(AnalyticsDbContext analyticsContext) : IA
 
             using var r = await dataCmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct))
-                items.Add(new OpsErrorEventDto(
-                    r.GetString(0), r.GetString(1),
-                    r.IsDBNull(2) ? null : r.GetInt32(2),
-                    r.IsDBNull(3) ? null : r.GetInt32(3),
-                    r.IsDBNull(4) ? null : r.GetGuid(4),
-                    r.GetDateTime(5)));
+                items.Add(ReadErrorRow(r));
 
             return new OpsErrorsPageDto(items, total, page, pageSize);
         }
-        catch { return new OpsErrorsPageDto([], 0, page, pageSize); }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "AdminOpsErrorsPagedProjectionFailed: page={Page} pageSize={PageSize}. "
+                + "Returning an empty page; /admin/ops/errors will look healthy when it is not.",
+                page, pageSize);
+            return new OpsErrorsPageDto([], 0, page, pageSize);
+        }
         finally { if (!wasOpen) await conn.CloseAsync(); }
     }
 

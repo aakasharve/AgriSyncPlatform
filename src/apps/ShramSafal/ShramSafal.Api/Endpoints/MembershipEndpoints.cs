@@ -694,6 +694,9 @@ public static class MembershipEndpoints
         return group;
     }
 
+    private static IResult ToErrorResult(Error error)
+        => ErrorCapture.Stamp(error, MapErrorResult(error));
+
     /// <summary>
     /// spec: plr-d7-m1-multiuser-2026-10-26 (step 2) — the shared tail of the six owner-decision
     /// routes, AFTER each route established the caller's farm scope: the pipeline-wrapped handler.
@@ -749,7 +752,7 @@ public static class MembershipEndpoints
     /// would be a breaking contract change tracked in a separate
     /// pending task.
     /// </summary>
-    private static IResult ToErrorResult(Error error)
+    private static IResult MapErrorResult(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
         return error.Kind switch
