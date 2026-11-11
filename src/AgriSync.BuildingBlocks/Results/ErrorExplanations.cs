@@ -750,6 +750,79 @@ public static class ErrorExplanations
             + "hidden from the sender answers ShramSafal.DailyLogNotFound instead. Check that the "
             + "day's record was saved on the same plots the work names."),
 
+        // ── ShramSafal — Who may see one record (record audience) ────────────
+        ["ShramSafal.RecordAudience.Forbidden"] = new(
+            "A change was sent to a record that the sender is no longer among the people allowed to see.",
+            "The record's audience was narrowed by the farm's holder and leaves the sender out. "
+            + "About twenty producers, all the same guard (RecordAudienceGate / RecordAudienceRule "
+            + "MaySee is false): PushSyncBatchHandler.cs:4606-4616 for any queued change to an "
+            + "existing record, and the REST doors for confirm (VerifyLogHandler.cs:85), add "
+            + "task, attachments, cost approve and correct, allocate, labour attach and correct, "
+            + "job-card complete and verify, compliance acknowledge and resolve. One odd case: "
+            + "CreateDailyLogHandler.cs:262-273 answers it to a RE-SENT create whose stored "
+            + "record is now kept from the sender. Usual shape: an edit queued offline before "
+            + "the audience changed. Nothing was applied; the phone keeps the change."),
+
+        ["ShramSafal.RecordAudienceHolder.Forbidden"] = new(
+            "Someone other than the farm's primary account holder tried to choose who sees a record.",
+            "SetRecordAudienceHandler.cs:75-79: GetFarmAccessForUserAsync for the sender is not "
+            + "`{ IsRegistrant: true }`. The test is the farm's REGISTRANT, not the PrimaryOwner "
+            + "role, so a second owner-tier member is refused here too. A current phone only "
+            + "offers the control to the registrant, so look for a stale client or a farm whose "
+            + "registrant is not who the team assumes."),
+
+        ["ShramSafal.RecordAudienceMember.Forbidden"] = new(
+            "One of the people chosen to see a record holds no active seat on that record's farm.",
+            "SetRecordAudienceHandler.cs:83-89: FarmAccessPolicy.MayRead is false for a chosen user "
+            + "on the record's own farm. Checked after the holder check, so the sender is the "
+            + "registrant. Usual shape: a member who was removed or left after the sender's "
+            + "phone last refreshed its people list; the whole request is refused, not just "
+            + "that one person."),
+
+        ["ShramSafal.RecordAudienceState.InvalidCommand"] = new(
+            "Who sees this record cannot be chosen separately, because it follows another record.",
+            "One call site: SetRecordAudienceHandler.cs:93-96, for a money entry that is a job "
+            + "card's payout (IsJobCardPayout). Its audience follows its job card, so no request "
+            + "can set it here. The phone offered a control it should not have for this entry."),
+
+        // ── ShramSafal — Attendance and labour corrections ───────────────────
+        ["ShramSafal.AttendanceFutureDate.InvalidCommand"] = new(
+            "An attendance mark was sent for a day that has not happened yet on the farm's India calendar.",
+            "RecordAttendanceMarkHandler.cs:64, `command.WorkDate > FarmLocalDay.From(now)`. The "
+            + "server's clock in India time decides today, never the phone and never UTC, and "
+            + "unlike creating a record there is NO one-day slack. Usual shape: a phone whose "
+            + "date is set ahead, or a mark made just after midnight on a phone clock running "
+            + "fast. Past days are never refused here."),
+
+        ["ShramSafal.LabourDoorLog.InvalidCommand"] = new(
+            "The record was saved at the attendance door and holds labour only, so this change does not apply to it.",
+            "LogEditGate.cs:58, `log.WasCapturedAtLabourDoor`, the last check of the shared gate "
+            + "(membership, entitlement and who-may-edit all passed first). The gate serves two "
+            + "handlers, so the code reaches the wire from an edit of the record's details "
+            + "(ReviseLogContentHandler.cs:140) AND from a move of the record "
+            + "(MoveDailyLogHandler.cs:123), although its wording speaks only of details. The "
+            + "phone offered an edit or a move on an attendance-door record; that is the thing "
+            + "to check."),
+
+        ["ShramSafal.LabourCorrection.Conflict"] = new(
+            "A correction to a work entry's worker count or hours was made against values the entry no longer holds.",
+            "CorrectLabourHandler.cs:233-238: the request carries what the reviewer saw (Seen) and "
+            + "IsStale finds a section he is correcting no longer matches it. Only the sections "
+            + "being corrected are compared, and a request without Seen never reaches the check. "
+            + "A replay of a correction already applied is answered as success just above. Two "
+            + "people corrected the same entry, or one phone corrected from a stale copy; the "
+            + "newer correction stands and nothing was written."),
+
+        ["ShramSafal.Attribution.ExceedsHeadcount"] = new(
+            "Naming one more person on a work entry would name more people than the entry says worked.",
+            "AttachFieldOperatorHandler.cs:136-140: the person is not already on the work and the "
+            + "names already attached plus one exceed the entry's stated headcount. "
+            + "CorrectLabourHandler.cs:276-284: a correction that adds names exceeds the "
+            + "headcount as it will stand after that same correction's own count section. The "
+            + "count is read and never raised to fit the names. REST only, never a sync "
+            + "mutation. Check the entry's stated count: the usual cause is a count spoken or "
+            + "typed lower than the crew that is now being named."),
+
         // ── Memberships / ClaimJoin (codes carry no ShramSafal. prefix) ──────
         ["join.unauthenticated"] = new(
             "The server could not tell who is making this request.",
