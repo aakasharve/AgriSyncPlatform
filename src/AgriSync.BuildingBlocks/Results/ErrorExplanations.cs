@@ -599,6 +599,81 @@ public static class ErrorExplanations
             + "action that synced first, already changed the plot's schedules; nothing was "
             + "written and the phone needs a fresh pull."),
 
+        // ── ShramSafal — Schedules: following, copying and making one ────────
+        ["ShramSafal.ScheduleChoiceNeeded"] = new(
+            "The plot-season follows several schedules and the request did not say which one it means.",
+            "FollowedScheduleChoice.cs:45-49 (an abandon or complete with no subscriptionId while "
+            + "more than one subscription is Active) and MigrateScheduleHandler.cs:138-144 (a "
+            + "switch that names no schedule to switch from, same condition). Phones built before "
+            + "a plot-season could follow several never name one, so this is an older app acting "
+            + "on a plot-season that a newer app gave a second schedule. Nothing was written; the "
+            + "server never picks one arbitrarily."),
+
+        ["ShramSafal.ScheduleCopy.Conflict"] = new(
+            "A copy of this schedule is already kept, so a second one was not made.",
+            "TrySaveNewScheduleAsync answered CopyExists at the save: CloneScheduleTemplateHandler.cs:159, "
+            + "CreateOwnScheduleHandler.cs:123, EditScheduleTemplateHandler.cs:168. A unique index "
+            + "refused the row: one copy per source and version, and one own copy of a source per "
+            + "PERSON whichever of his farms is named. So besides a second tap on copy, a person "
+            + "copying the same schedule for a second farm lands here. The first copy is intact."),
+
+        ["ShramSafal.ScheduleCropNotOnFarm"] = new(
+            "The schedule is for a crop this farm has no season of.",
+            "ScheduleTemplateWriteGate.FarmGrowsAsync (ScheduleTemplateWriteGate.cs:101) is false, "
+            + "returned from CreateOwnScheduleHandler.cs:85-87 (making the farm's own schedule) "
+            + "and ScheduleTemplateWriteGate.cs:93 (copying a checked schedule into the farm's "
+            + "own). Two ways to fail: the crop key is not a crop the library knows at all, or no "
+            + "crop cycle on the farm, past ones included, has the same crop code. The comparison "
+            + "is on the derived crop code, so check how the farm's cycle names its crop before "
+            + "concluding the farm does not grow it."),
+
+        ["ShramSafal.ScheduleIdTaken.Conflict"] = new(
+            "The id the phone made for a new schedule is already used by a stored schedule.",
+            "Two places in each of CloneScheduleTemplateHandler, CreateOwnScheduleHandler and "
+            + "EditScheduleTemplateHandler. The pre-check (Clone :104, CreateOwn :80, Edit :75) "
+            + "refuses whenever any row has the id, and it does NOT tell a re-send of this "
+            + "request's own earlier success from someone else's row. The save branch (Clone "
+            + ":165, CreateOwn :130, Edit :174) fires when a rival took the id between check and "
+            + "save and ScheduleReplay.IsSameRequest says the stored row is not this request. "
+            + "First thing to check: whether the schedule with that id is in fact the sender's "
+            + "own, saved by an earlier attempt whose answer the phone never received."),
+
+        ["ShramSafal.ScheduleLimitReached"] = new(
+            "The plot-season already follows the most outside schedules it may, which is three.",
+            "ScheduleSlots.MaxOutsideSchedulesPerPlot = 3. AdoptScheduleHandler.cs:183-191 and "
+            + "MigrateScheduleHandler.cs:164-174 count the Active subscriptions of outside origin "
+            + "on the plot-season (a row with no slot still counts) and refuse a fourth. "
+            + "AdoptScheduleHandler.cs:207-209 is the second route: two phones raced for the last "
+            + "free place and this one lost twice. One of the followed schedules has to be ended "
+            + "before another can be followed."),
+
+        ["ShramSafal.ScheduleNotChecked"] = new(
+            "The schedule has not passed ShramSafal's check, so it cannot be followed or copied yet.",
+            "Two producers. ScheduleLibrary.ChooseAsync (ScheduleLibrary.cs:241-253), on adopt and "
+            + "switch: an outside schedule whose check state is not Checked, that is neither a "
+            + "bridged carry-over nor a sample still open for its crop. A sample (a built-in, or a "
+            + "library row storing no days) stops being open once its crop has a Checked outside "
+            + "schedule, so a schedule that could be followed last week can be refused today. "
+            + "ScheduleTemplateWriteGate.cs:82-90, on copying into the farm's own: the source is "
+            + "not a Public row with stored days, or its check state is not Checked. Read the "
+            + "schedule's check state, then whether its crop gained a checked schedule."),
+
+        ["ShramSafal.OwnScheduleEmpty"] = new(
+            "The farm's own schedule has no works stored in it yet, so there is nothing to follow.",
+            "ScheduleLibrary.cs:235-237, on adopt and switch: the chosen schedule is the farm's own "
+            + "and its row stores no days (HasStoredDays false). The schedule was made and then "
+            + "followed before any work was added to it. Refused rather than followed, because "
+            + "following it would need invented days. The phone should send the person to add "
+            + "works first."),
+
+        ["ShramSafal.OwnScheduleLimitReached"] = new(
+            "The plot-season already follows one schedule of the farm's own, which is the most it may.",
+            "ScheduleSlots.MaxOwnSchedulesPerPlot = 1. Same counting as ScheduleLimitReached "
+            + "(AdoptScheduleHandler.cs:183-191 and :207-209, MigrateScheduleHandler.cs:164-174), "
+            + "for a schedule whose origin is Own. Two codes instead of one on purpose: the phone "
+            + "keeps only the tail after the last dot, so a suffix could not say which limit was "
+            + "hit. The own schedule already followed has to be ended, or switched from, first."),
+
         // ── Memberships / ClaimJoin (codes carry no ShramSafal. prefix) ──────
         ["join.unauthenticated"] = new(
             "The server could not tell who is making this request.",
