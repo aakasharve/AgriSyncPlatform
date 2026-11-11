@@ -44,6 +44,13 @@ public static class RequestObservabilityKeys
     public const string RejectedWorkReason = "observability.rejected_work_reason";
 
     /// <summary>
+    /// <c>string[]</c> — the distinct error codes of the refused work items,
+    /// at most ten (ADR 0027 D3). Set only when not empty. Codes from the
+    /// error catalogue only; never a message and never farmer content.
+    /// </summary>
+    public const string RejectedWorkCodes = "observability.rejected_work_codes";
+
+    /// <summary>
     /// <c>string</c> — the <c>Error.Code</c> of the catalogued failure that
     /// produced this response, e.g. <c>ShramSafal.CropCycleOverlap</c>. Stamped
     /// by <see cref="AgriSync.BuildingBlocks.Results.ErrorCapture"/> when the

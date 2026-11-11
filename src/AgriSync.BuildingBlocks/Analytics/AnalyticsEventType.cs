@@ -70,6 +70,13 @@ public static class AnalyticsEventType
     // its own name and its own alarm; see ops/aws/alarms/.
     public const string SyncMutationRejected = "sync.mutation_rejected";
 
+    // api.refused = a signed-in write answered 400-499 (not 401) on a route
+    // outside the critical paths (ADR 0027 D1). DELIBERATELY NOT `api.error`,
+    // for the same reason as above: a farmer correcting a refused save must
+    // not move mis.alert_r9_api_error_spike. Everything that was api.error
+    // before this type existed stays api.error.
+    public const string ApiRefused = "api.refused";
+
     // Admin scope resolution (W0-A §4.4b). Emitted by IEntitlementResolver
     // + OrgFarmScopeProjector. Powers mis.admin_scope_health (Metabase card 15).
     public const string AdminScopeResolved = "admin.scope.resolved";

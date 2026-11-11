@@ -4,6 +4,7 @@ using System.Text.Json;
 using AgriSync.BuildingBlocks.Analytics;
 using AgriSync.BuildingBlocks.Results;
 using Microsoft.Extensions.Logging;
+using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.UseCases.Sync.PullSyncChanges;
 using ShramSafal.Application.UseCases.Sync.PushSyncBatch;
 
@@ -72,6 +73,15 @@ public static class SyncEndpoints
             {
                 httpContext.Items[RequestObservabilityKeys.RejectedWorkItemCount] = rejectedCount;
                 httpContext.Items[RequestObservabilityKeys.RejectedWorkReason] = "sync.mutation_rejected";
+
+                // ADR 0027 D3 — the count says how many saves were refused;
+                // the codes say what was refused. Stamped only, never added
+                // to the response (P11).
+                var rejectedCodes = DistinctRejectedCodes(result.Value.Results);
+                if (rejectedCodes.Length > 0)
+                {
+                    httpContext.Items[RequestObservabilityKeys.RejectedWorkCodes] = rejectedCodes;
+                }
             }
 
             return Results.Ok(result.Value);
@@ -149,6 +159,23 @@ public static class SyncEndpoints
 
         return endpoints;
     }
+
+    /// <summary>
+    /// ADR 0027 D3 — the error codes a refused sync save records: the
+    /// <c>ErrorCode</c> of every result whose <c>Status</c> is
+    /// <see cref="PushSyncBatchHandler.RejectedStatus"/>, nulls skipped, each
+    /// code once, ordinal-sorted, at most ten. Codes only — a result's
+    /// <c>ErrorMessage</c> can carry interpolated text and is never read here.
+    /// </summary>
+    public static string[] DistinctRejectedCodes(IEnumerable<SyncMutationResultDto> results) =>
+        results
+            .Where(r => string.Equals(r.Status, PushSyncBatchHandler.RejectedStatus, StringComparison.Ordinal))
+            .Select(r => r.ErrorCode)
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .Take(10)
+            .ToArray();
 
     private static IResult ToErrorResult(Error error)
         => ErrorCapture.Stamp(error, MapErrorResult(error));

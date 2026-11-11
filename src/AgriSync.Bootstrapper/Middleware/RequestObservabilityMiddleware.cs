@@ -15,6 +15,7 @@ namespace AgriSync.Bootstrapper.Middleware;
 ///   >2000ms on any POST/PUT/PATCH → api.slow (farmer on Jio gave up)
 ///   2xx that refused work inside it → api.error (RG5, see below)
 ///   an exception that escaped the endpoint → api.error (G1, see below)
+///   4xx (not 401) on any other write, signed in → api.refused (ADR 0027 D1)
 ///
 /// What is NOT emitted (to avoid noise):
 ///   2xx/3xx success responses that actually succeeded
@@ -69,6 +70,12 @@ public sealed class RequestObservabilityMiddleware(
         "/schedule/adopt", "/schedule/migrate", "/schedule/abandon",
         "/farms", "/verif"
     ];
+
+    // ADR 0027 D3 — the same source /version reports (Program.cs), read once
+    // at start. Null when unset or empty, so the row has no serverBuild key
+    // rather than the word "unknown".
+    private static readonly string? ServerBuild =
+        Environment.GetEnvironmentVariable("BUILD_SHA") is { Length: > 0 } sha ? sha : null;
 
     public async Task InvokeAsync(HttpContext ctx)
     {
@@ -161,7 +168,18 @@ public sealed class RequestObservabilityMiddleware(
         var rejectedWorkItems = TryExtractRejectedWorkItems(ctx);
         var hasRejectedWork = rejectedWorkItems > 0;
 
-        if (!isError && !isCritical4xx && !isSlow && !hasRejectedWork) return;
+        // ADR 0027 D1 — a refusal an endpoint itself answered on a write route
+        // OUTSIDE the critical paths, from a signed-in request. Never an
+        // api.error (mis.alert_r9_api_error_spike counts those), and
+        // everything that is an api.error above stays one. Anonymous requests
+        // are left out so a stranger cannot fill an append-only store.
+        var isRefused = status is >= 400 and < 500
+                     && status != StatusCodes.Status401Unauthorized
+                     && isWrite
+                     && !isCritical4xx
+                     && ctx.User.Identity?.IsAuthenticated == true;
+
+        if (!isError && !isCritical4xx && !isSlow && !hasRejectedWork && !isRefused) return;
 
         // A refused work item inside a 2xx is NOT an api.error. It gets its own
         // type so the existing api.error consumers keep their meaning — see the
@@ -173,7 +191,9 @@ public sealed class RequestObservabilityMiddleware(
             ? AnalyticsEventType.ApiError
             : hasRejectedWork
                 ? AnalyticsEventType.SyncMutationRejected
-                : AnalyticsEventType.ApiSlow;
+                : isRefused
+                    ? AnalyticsEventType.ApiRefused
+                    : AnalyticsEventType.ApiSlow;
 
         var farmId = TryExtractFarmId(ctx.User);
         var traceId = Activity.Current?.TraceId.ToString()
@@ -200,7 +220,19 @@ public sealed class RequestObservabilityMiddleware(
                 // analytics.events is append-only (DO INSTEAD NOTHING on
                 // UPDATE/DELETE), so anything written there could never be
                 // scrubbed.
-                unhandled?.GetType().Name));
+                unhandled?.GetType().Name,
+                // ADR 0027 D3/D4 — the person and the addressed farm go into
+                // props. ActorUserId and FarmId on the event below stay
+                // exactly as they were: the activity numbers count them.
+                personId: ClaimsUserId.TryGet(ctx.User),
+                routeFarmId: Guid.TryParse(ctx.Request.RouteValues["farmId"]?.ToString(), out var routeFarm)
+                    ? routeFarm
+                    : null,
+                routePattern: (ctx.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText,
+                serverBuild: ServerBuild,
+                rejectedWorkCodes: ctx.Items.TryGetValue(RequestObservabilityKeys.RejectedWorkCodes, out var codes)
+                    ? codes as IReadOnlyList<string>
+                    : null));
 
         // Fire-and-forget in a new scope — IAnalyticsWriter is scoped
         _ = Task.Run(async () =>
