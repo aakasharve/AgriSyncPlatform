@@ -30,7 +30,7 @@ namespace AgriSync.ArchitectureTests;
 /// </summary>
 public sealed class ErrorCaptureCoverageTests
 {
-    private const int KnownMapperCount = 27;
+    private const int KnownMapperCount = 32;
 
     private static IReadOnlyList<MethodInfo> ErrorMapperEntryPoints()
     {
@@ -48,6 +48,11 @@ public sealed class ErrorCaptureCoverageTests
                 return ps.Length == 1 && ps[0].ParameterType == typeof(Error);
             })
             .Where(m => m.Name != "MapErrorResult")
+            // PlotRefusalResult.For is half of a mapper, not an entry point: it answers
+            // null unless the error is a plot refusal, and every caller returns its
+            // result through a stamped ToErrorResult.
+            .Where(m => !(m.DeclaringType!.FullName == "ShramSafal.Api.Endpoints.PlotRefusalResult"
+                          && m.Name == "For"))
             .ToList();
     }
 
@@ -57,8 +62,8 @@ public sealed class ErrorCaptureCoverageTests
         // A drop in this number means a mapper was deleted or renamed past the
         // signature filter. Change it deliberately, never to turn a red test green.
         ErrorMapperEntryPoints().Should().HaveCount(KnownMapperCount,
-            "ShramSafal.Api declared exactly 27 private Error->IResult entry points on "
-            + "2026-08-30; adding or removing one is a deliberate act that must be "
+            "ShramSafal.Api declared exactly 32 private Error->IResult entry points on "
+            + "2026-11-11; adding or removing one is a deliberate act that must be "
             + "reviewed, not absorbed");
     }
 

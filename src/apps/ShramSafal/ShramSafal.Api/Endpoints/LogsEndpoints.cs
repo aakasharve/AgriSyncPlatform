@@ -361,12 +361,12 @@ public static class LogsEndpoints
     private static IResult OriginalVoiceRefusal(Error error)
     {
         var body = new { error = error.Code, message = error.Description };
-        return error.Kind switch
+        return ErrorCapture.Stamp(error, error.Kind switch
         {
             ErrorKind.NotFound => Results.NotFound(body),
             ErrorKind.Forbidden => Results.Json(body, statusCode: StatusCodes.Status403Forbidden),
             _ => Results.BadRequest(body),
-        };
+        });
     }
 
     private static IResult ToErrorResult(Error error)
