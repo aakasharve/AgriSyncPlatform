@@ -917,6 +917,46 @@ public static class ErrorExplanations
             + "partially decoded or hand-typed code looks like, not a wrong code. A "
             + "wrong-but-complete code fails later, with a different error."),
 
+        ["join.code_unknown"] = new(
+            "No farm has the farm code that was typed.",
+            "JoinByCodeHandler.cs:58-61: the typed code does not normalise to a farm code at all "
+            + "(blank or malformed). Lines 72-75: it is well formed and no farm carries it. One "
+            + "answer for both on purpose, and it never names a farm. The sign-in and "
+            + "phone-verified gates run earlier in the validator, so the caller is a verified "
+            + "account. Usual shape: a mistyped character, or a code the owner has since "
+            + "changed."),
+
+        // The owner's decisions about a person's seat on the farm. Conflict, not
+        // Forbidden: the caller IS allowed to manage people; this one decision is
+        // what cannot happen.
+        ["membership.last_owner"] = new(
+            "The decision would leave the farm without an active primary owner, so it was refused.",
+            "ManageMembershipHandler.cs:159-171: the seat is an Active PrimaryOwner, the farm has "
+            + "at most one of those, and the decision is Suspend, Remove, or a SetAccess to any "
+            + "other role. Lines 243-245 catch the same rule thrown by the domain as "
+            + "LastPrimaryOwnerRevocationException. Usual shape: the only owner trying to step "
+            + "down or leave before another person has been made primary owner."),
+
+        ["membership.wrong_status"] = new(
+            "The person's membership is not in a state where this decision applies.",
+            "ManageMembershipHandler: setting authorities (:176-180) or plots (:194-197) on a seat "
+            + "that is neither Active nor Suspended, typically a request still waiting for "
+            + "approval; and :246-249, the domain refusing the decision with "
+            + "InvalidOperationException. PersonalInvitationService.cs:333-343, the one-tap "
+            + "approve of a personal invitation: the invitation is not Accepted and waiting for "
+            + "the owner, or the claimant's seat is missing, not PendingApproval, or not from "
+            + "that invitation. Nearly always a second tap, or two owners deciding about the "
+            + "same person; read the seat's current Status."),
+
+        ["membership.claimed_from_invitation"] = new(
+            "The general approval was used on a join request that came from a personal invitation.",
+            "One call site: ManageMembershipHandler.cs:153-156, an Approve decision on a seat whose "
+            + "PersonalInvitationId is set. Such a person is let in by the invitation's own "
+            + "one-tap approve route, with exactly the role and authorities the invitation "
+            + "carried; the general approval would choose them afresh, so it refuses. The phone "
+            + "showed the general approve control for an invitation request. Declining still "
+            + "works from the general route."),
+
         // ── Worker identity (codes carry the identity. prefix) ───────────────
         // Declared in ShramSafalErrors, returned by WorkerIdentityService. Each is
         // a question the phone asks calmly; none names a person, a number or
@@ -1068,6 +1108,27 @@ public static class ErrorExplanations
             + "is behind the identity.flow_off switch, so where that is off there is no route "
             + "open at all."),
 
+        ["identity.sms_off"] = new(
+            "Sending a worker's code by SMS is not switched on for this server, so no code was sent.",
+            "The configured code sender refused before sending, and SendCodeAsync passes its error "
+            + "straight through (WorkerIdentityService.cs:1250-1253). Two producers: "
+            + "SwitchedOffWorkerPhoneCodeSender (WorkerPhoneCodeSenders.cs:33), the Production "
+            + "default until the host registers the real sender "
+            + "(ShramSafal:WorkerPhoneCode:SmsEnabled true), answers this to every send; and "
+            + "WorkerPhoneCodeSmsBridge.cs:18-20 answers it when SMS is enabled and the "
+            + "template id is blank. A DEPLOYMENT state, the same for every farm: the "
+            + "worker-code SMS template is not approved or not configured yet. No challenge is "
+            + "stored."),
+
+        ["identity.sms_failed"] = new(
+            "The SMS provider did not accept the worker's code, so no code was sent.",
+            "One producer: WorkerPhoneCodeSmsBridge.cs:24-25, when the shared SMS sender's "
+            + "SendCodeWithTemplateAsync does not succeed. SendCodeAsync returns it before the "
+            + "challenge is stored (WorkerIdentityService.cs:1250-1257), so no code exists that "
+            + "the worker could read back. Check the SMS provider's status, balance and the "
+            + "template id before the request; a run of these across farms is a provider "
+            + "incident."),
+
         // ── User ─────────────────────────────────────────────────────────────
         ["User.PhoneAlreadyRegistered"] = new(
             "Someone already holds an account on this phone number.",
@@ -1110,6 +1171,32 @@ public static class ErrorExplanations
             + "anywhere but its own declaration. It belongs to the deprecated AppMembership model "
             + "that FarmMembership replaced (spec §3.2). Farm-level duplicate membership is handled "
             + "on the ShramSafal side; do not wire new code to this."),
+
+        // ── Auth (codes carry the auth. prefix; declared in UserErrors) ──────
+        ["auth.password_registration_closed"] = new(
+            "Sign-up with a password is closed on this server; accounts are made with the SMS code.",
+            "RegisterUserHandler.cs:39-41: the option AllowPasswordRegistration is off, which is "
+            + "its default everywhere; the setting Auth:AllowPasswordRegistration is for tests "
+            + "only. It is the first check, so every call to the password sign-up endpoint gets "
+            + "this whatever it sends. A row here is an old client, a script or a probe still "
+            + "calling that endpoint; a current phone signs up through start-otp and "
+            + "verify-otp."),
+
+        ["auth.register_role_not_allowed"] = new(
+            "A sign-up request tried to choose its own account role.",
+            "RegisterUserHandler.cs:44-46: the Role field on the request is not blank. It runs "
+            + "AFTER the closed check above, so it is reachable only where password sign-up has "
+            + "been switched on, which is a test setup. No app sends a role at sign-up; in any "
+            + "other place treat an occurrence as someone trying to grant themselves a role."),
+
+        ["auth.device_check_not_asked"] = new(
+            "A phone answered 'this account is not mine' when it was not being asked the new-phone question.",
+            "One call site: AnswerDeviceCheckHandler.cs:59-66. The session is active and is not "
+            + "held for the device check (the phone is already known, or the question was "
+            + "already answered yes), and the answer sent is no. A yes in the same state is "
+            + "answered as success. Usual shape: a no tapped after a yes had already gone "
+            + "through, or a retried request after the screen moved on. An expired or unknown "
+            + "session answers User.InvalidRefreshToken instead."),
     };
 
     /// <summary>
