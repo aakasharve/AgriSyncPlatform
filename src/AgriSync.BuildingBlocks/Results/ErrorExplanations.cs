@@ -674,6 +674,82 @@ public static class ErrorExplanations
             + "keeps only the tail after the last dot, so a suffix could not say which limit was "
             + "hit. The own schedule already followed has to be ended, or switched from, first."),
 
+        ["ShramSafal.OwnScheduleNotOpenYet"] = new(
+            "The schedule is filed as a farm's own but has no owner on its row, so it cannot be followed.",
+            "One call site remains: ScheduleLibrary.cs:227-229, on adopt and switch, when the chosen "
+            + "schedule classifies as Own and its row's OwnerUserId is null (a Team row nobody "
+            + "owns). The declaration comment at ShramSafalErrors.cs:336-337 says nothing produces "
+            + "this code any more; that comment is stale for this one branch. A current row here "
+            + "means an ownerless Team schedule row exists, which is a data question, not "
+            + "something the farmer did. Shipped phones may also still hold older parked rows "
+            + "carrying it."),
+
+        // ── ShramSafal — Planned work and reminders ──────────────────────────
+        ["ShramSafal.PlannedWorkNotFound"] = new(
+            "The planned work this request names is not one this person can act on in this farm.",
+            "PlannedWorkDoor.OpenAsync. Lines 58-61: no row with that id, or the row belongs to "
+            + "another farm than the one the request names. Lines 64-71: the row exists and the "
+            + "caller's seat sees none of its plots, or it was made from a record the caller may "
+            + "not see. All three answer alike on purpose, so one cannot be told from another "
+            + "from outside. Usual shapes: a task queued offline whose create never landed, or a "
+            + "member whose plots or record access changed after the task reached his phone. A "
+            + "seat that reads nothing of the farm gets ShramSafal.Forbidden instead."),
+
+        ["ShramSafal.PlannedWork.InvalidCommand"] = new(
+            "A planned-work request was missing a required part or had a shape the record forbids.",
+            "Thirteen sites in PlannedWorkHandlers.cs, in four kinds. Empty ids or a missing caller "
+            + "or details at the top of every step (:30, :110, :185, :229, :294, :437). A create "
+            + "whose id already belongs to a task of another farm or another maker (:45-49; the "
+            + "same maker's re-send is answered as success). A create whose recorded-on day is "
+            + "more than two days from the server's today (:68, PlannedWorkDoor.cs:40). And the "
+            + "domain object refusing the shape with ArgumentException on create, edit, cancel or "
+            + "reopen (:86, :159, :254, :462), which includes a reopen sent without a reason. On "
+            + "complete: an empty, repeated or too many linked log ids (:301-305). Read which "
+            + "step answered; a phone clock days off shows up as the recorded-on case."),
+
+        ["ShramSafal.PlannedWorkAssigneeNotMember.InvalidCommand"] = new(
+            "The person the work is being given to is not an active member of this farm.",
+            "PlannedWorkDoor.cs:103-108: the assignee is someone other than the sender and "
+            + "FarmAccessPolicy.MayRead is false for his access on the farm. He was removed, left, "
+            + "or never completed joining, after the sender's phone last refreshed its list of "
+            + "people. Read the assignee's membership row and its status on that farm."),
+
+        ["ShramSafal.PlannedWorkAssigneeOutsidePlots.InvalidCommand"] = new(
+            "The person the work is being given to does not cover every plot the work names.",
+            "PlannedWorkDoor.cs:111-113: the assignee's seat is limited to chosen plots "
+            + "(CoveredPlotIds set) and at least one plot of the work is not among them. A seat "
+            + "with no plot limit never fails here. Either the work names a plot too many, or the "
+            + "assignee's plots were narrowed after the sender's phone last refreshed. Compare "
+            + "the work's plots with the assignee's chosen plots."),
+
+        ["ShramSafal.PlannedWorkState.InvalidCommand"] = new(
+            "The planned work was changed first, so this step no longer applies to it.",
+            "Declared with kind Conflict although the code's tail is InvalidCommand (the tail is "
+            + "what makes phones park it). Producers in PlannedWorkHandlers.cs: an edit of a "
+            + "closed task (:125), an edit that would take off a plot already done (:150), a seen "
+            + "or accept on a closed task (:207), a cancel of a done task (:261), a complete of a "
+            + "cancelled task (:324) or one the domain reports closed (:416), a reopen of a task "
+            + "that is not Done (:467). PlannedWorkDoor.cs:158-160 adds the lost save race. "
+            + "Nearly always two people, or one person on two phones, acting on the same task; "
+            + "the earlier action stands."),
+
+        ["ShramSafal.PlannedWorkPlots.InvalidCommand"] = new(
+            "The plots named when marking planned work done are not plots that work still has open.",
+            "PlannedWorkHandlers.cs:337-342: a plot id is empty, repeated, or not one of the work's "
+            + "live plots, or no plot was named while some are still Pending. Line 407-409: the "
+            + "domain's Complete refused the plots with ArgumentException. A plot of another farm "
+            + "and a made-up plot get this same answer. Usual shape: the task was edited to other "
+            + "plots after the sender's phone last pulled it."),
+
+        ["ShramSafal.PlannedWorkLog.InvalidCommand"] = new(
+            "Handed-out work was marked done without a record made on the plots it was done on.",
+            "Applies only to work given to someone, never to a reminder (`!work.IsReminder`). "
+            + "PlannedWorkHandlers.cs:346-348: no record id was sent at all. Line 375-377: a "
+            + "record was sent that stands on none of the plots this step is about. Line 397-399: "
+            + "one of the named plots has no record on it. A record that is on another farm or "
+            + "hidden from the sender answers ShramSafal.DailyLogNotFound instead. Check that the "
+            + "day's record was saved on the same plots the work names."),
+
         // ── Memberships / ClaimJoin (codes carry no ShramSafal. prefix) ──────
         ["join.unauthenticated"] = new(
             "The server could not tell who is making this request.",
