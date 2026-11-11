@@ -30,6 +30,7 @@ const SERVER_ONLY = new Set([
     'log.created',
     'ai.invocation',
     'api.error',
+    'api.refused',
     'worker.named',
     'admin.farmer_lookup',
 ]);

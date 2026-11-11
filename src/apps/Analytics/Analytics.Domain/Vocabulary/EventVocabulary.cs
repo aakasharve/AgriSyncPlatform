@@ -9,10 +9,11 @@ namespace Analytics.Domain.Vocabulary;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Source of truth: <c>ADR-2026-05-02_event-vocabulary.md</c>. Adding a
-/// 14th event requires a new ADR — do not extend this dictionary
-/// silently. The parity gate fails the build the moment the C# and
-/// TypeScript registries drift.
+/// Source of truth: <c>ADR-2026-05-02_event-vocabulary.md</c>, extended by
+/// ADR 0027 (2026-11-11), which added <c>api.refused</c> and
+/// <c>sync.push_outcome</c>. Adding an event requires a new ADR — do not
+/// extend this dictionary silently. The parity gate fails the build the
+/// moment the C# and TypeScript registries drift.
 /// </para>
 /// <para>
 /// Each entry declares its <see cref="EventDefinition.RequiredProps"/>
@@ -28,7 +29,8 @@ namespace Analytics.Domain.Vocabulary;
 public static class EventVocabulary
 {
     /// <summary>
-    /// The 13 frozen event names mapped to their property contracts.
+    /// The frozen event names mapped to their property contracts. The count
+    /// is pinned in <c>EventVocabularyTests</c>, not here.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, EventDefinition> Registry =
         new Dictionary<string, EventDefinition>(StringComparer.Ordinal)
@@ -92,11 +94,29 @@ public static class EventVocabulary
             // props->>'statusCode' (AdminOpsRepository.GetRecentErrorsAsync,
             // its GetErrorsPagedAsync, and AdminFarmerHealthRepository).
             // The doc was wrong, not the code.
+            // 2026-11-11 (ADR 0027): `personId`, `routeFarmId`, `route` and
+            // `serverBuild` are optional keys on every row the request
+            // middleware writes. The person and the addressed farm live in
+            // props, NOT in the actor_user_id / farm_id columns: the
+            // weekly-active and retention views count those columns, and a
+            // person who only hit an error must not count as active.
             ["api.error"] = new(
                 RequiredProps: ["endpoint", "statusCode", "errorCode", "workKept"],
                 Optional: ["farmId", "message", "appVersion",
                            "latencyMs", "traceId",
-                           "rejectedWorkItems", "rejectedWorkReason"]),
+                           "rejectedWorkItems", "rejectedWorkReason",
+                           "personId", "routeFarmId", "route", "serverBuild"]),
+
+            // 2026-11-11 (ADR 0027): a write that an endpoint itself refused
+            // (4xx, never 401) on a route outside the critical list, from a
+            // signed-in person. Server-only. Deliberately NOT `api.error`:
+            // mis.alert_r9_api_error_spike counts `api.error` rows, and a
+            // farmer retrying a form must not trip it. The key is
+            // `statusCode`, as on `api.error`.
+            ["api.refused"] = new(
+                RequiredProps: ["endpoint", "statusCode"],
+                Optional: ["errorCode", "route", "appVersion", "serverBuild",
+                           "personId", "routeFarmId", "latencyMs", "traceId"]),
 
             ["client.error"] = new(
                 RequiredProps: ["message"],
