@@ -77,6 +77,14 @@ public static class AnalyticsEventType
     // before this type existed stays api.error.
     public const string ApiRefused = "api.refused";
 
+    // app.seen = a signed-in person used the farmer app on a version
+    // (ADR 0028). Written by AppSeenMiddleware at most once per person, app
+    // version and UTC day. The person is props.personId; actor_user_id and
+    // farm_id stay EMPTY on this row, because the weekly-active, retention and
+    // suffering readers count any row that has one of them set, and merely
+    // opening the app must not move those numbers.
+    public const string AppSeen = "app.seen";
+
     // Admin scope resolution (W0-A §4.4b). Emitted by IEntitlementResolver
     // + OrgFarmScopeProjector. Powers mis.admin_scope_health (Metabase card 15).
     public const string AdminScopeResolved = "admin.scope.resolved";

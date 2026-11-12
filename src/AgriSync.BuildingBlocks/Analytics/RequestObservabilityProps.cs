@@ -175,18 +175,25 @@ public static class RequestObservabilityProps
         return props;
     }
 
+    /// <summary>What <see cref="SanitiseAppVersion"/> returns in place of a value that is not version-shaped.</summary>
+    public const string MalformedAppVersion = "malformed";
+
     // A client can send anything in this header, and analytics.events is
     // append-only — whatever lands there cannot be edited out later. Cap the
     // length and allow only version-shaped characters. Anything else is
     // recorded as "malformed" rather than dropped, so a client sending junk
     // stays visible instead of silently becoming null.
-    private static string? SanitiseAppVersion(string? raw)
+    //
+    // Public since ADR 0028: AppSeenMiddleware reads the same header through
+    // this one sanitiser, so the two middlewares cannot disagree about what a
+    // version is.
+    public static string? SanitiseAppVersion(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
-        if (raw.Length > 32) return "malformed";
+        if (raw.Length > 32) return MalformedAppVersion;
         foreach (var c in raw)
         {
-            if (!char.IsAsciiLetterOrDigit(c) && c != '.' && c != '-' && c != '+') return "malformed";
+            if (!char.IsAsciiLetterOrDigit(c) && c != '.' && c != '-' && c != '+') return MalformedAppVersion;
         }
         return raw;
     }

@@ -618,6 +618,10 @@ try
     app.UseMiddleware<AgriSync.BuildingBlocks.Persistence.TenantTransactionMiddleware>();
     // Ops observability — placed after auth so FarmId claim is available in middleware
     app.UseMiddleware<AgriSync.Bootstrapper.Middleware.RequestObservabilityMiddleware>();
+    // spec: control-room-app-versions-2026-11-12 (ADR 0028) — notes, at most once per person, app version and UTC day,
+    // that a signed-in person used the app on a version. After authentication (it reads the principal) and after the
+    // device-check gate and authorization (a request they refuse never reaches it). It never changes a response.
+    app.UseMiddleware<AgriSync.Bootstrapper.Middleware.AppSeenMiddleware>();
 
     app.MapGet("/health", () =>
     {
