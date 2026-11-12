@@ -155,6 +155,33 @@ public static class EventVocabulary
     /// on unknown event types before paying the dictionary-lookup cost twice.
     /// </summary>
     public static bool IsKnown(string eventType) => Registry.ContainsKey(eventType);
+
+    /// <summary>
+    /// Event types that only the server itself may write. A client must never
+    /// be able to place one of these rows: readers trust them (the control
+    /// room's app-versions page trusts <c>app.seen</c>; an alert counts
+    /// <c>api.error</c>). <c>POST /analytics/ingest</c> refuses them through
+    /// <c>IngestEventsValidator.ValidateFromClient</c>.
+    /// </summary>
+    /// <remarks>
+    /// Must stay equal to <c>SERVER_ONLY</c> in
+    /// <c>.github/scripts/check-event-vocabulary-parity.mjs</c>; a unit test
+    /// pins the seven names. Review round 2 of lane CR-1c (2026-11-12) found
+    /// that "server-only" was a convention the server did not enforce.
+    /// </remarks>
+    public static readonly IReadOnlySet<string> ServerOnly = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "log.created",
+        "ai.invocation",
+        "api.error",
+        "api.refused",
+        "app.seen",
+        "worker.named",
+        "admin.farmer_lookup",
+    };
+
+    /// <summary>True when only the server may write this event type.</summary>
+    public static bool IsServerOnly(string eventType) => ServerOnly.Contains(eventType);
 }
 
 /// <summary>

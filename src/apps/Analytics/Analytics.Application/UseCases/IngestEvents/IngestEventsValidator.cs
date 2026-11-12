@@ -98,6 +98,68 @@ public sealed class IngestEventsValidator
 
         return new ValidationOutcome(errors.Count == 0, errors);
     }
+
+    /// <summary>
+    /// The check for a batch that arrives from a client over
+    /// <c>POST /analytics/ingest</c>: everything <see cref="Validate"/>
+    /// reports, plus one error per event whose type only the server may
+    /// write (<see cref="EventVocabulary.ServerOnly"/>), code
+    /// <c>analytics.server_only_event_type</c>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Validate"/> stays the producer-agnostic shape check, so the
+    /// server's own producers can still be tested against the vocabulary.
+    /// Without this method any signed-in account could post, for example, an
+    /// <c>app.seen</c> row naming any person and any app version (review
+    /// round 2 of lane CR-1c, 2026-11-12).
+    /// </remarks>
+    public ValidationOutcome ValidateFromClient(IngestEventsCommand command)
+    {
+        var shape = Validate(command);
+
+        List<ValidationError>? refused = null;
+        for (var i = 0; i < command.Events.Count; i++)
+        {
+            var ev = command.Events[i];
+            if (ev is null || string.IsNullOrWhiteSpace(ev.EventType) || !EventVocabulary.IsServerOnly(ev.EventType))
+            {
+                continue;
+            }
+
+            (refused ??= []).Add(new ValidationError(
+                i,
+                EventType: ev.EventType,
+                ServerOnlyEventTypeCode,
+                $"event_type '{ev.EventType}' is written by the server only"));
+        }
+
+        if (refused is null)
+        {
+            return shape;
+        }
+
+        // By batch index; at the same index the refusal comes first, so the
+        // first error a caller sees for a forged row is the refusal.
+        var all = new List<ValidationError>(refused.Count + shape.Errors.Count);
+        all.AddRange(refused);
+        all.AddRange(shape.Errors);
+        all.Sort(static (a, b) =>
+        {
+            var byIndex = a.Index.CompareTo(b.Index);
+            if (byIndex != 0)
+            {
+                return byIndex;
+            }
+
+            var aRefusal = a.Code == ServerOnlyEventTypeCode ? 0 : 1;
+            var bRefusal = b.Code == ServerOnlyEventTypeCode ? 0 : 1;
+            return aRefusal.CompareTo(bRefusal);
+        });
+        return new ValidationOutcome(false, all);
+    }
+
+    /// <summary>The error code for a client batch that carries a server-only event type.</summary>
+    public const string ServerOnlyEventTypeCode = "analytics.server_only_event_type";
 }
 
 /// <summary>

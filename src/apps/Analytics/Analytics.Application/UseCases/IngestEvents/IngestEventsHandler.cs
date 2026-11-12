@@ -67,7 +67,9 @@ public sealed class IngestEventsHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var outcome = validator.Validate(command);
+        // ValidateFromClient, not Validate: this handler serves the client
+        // ingest route only, and a client must never write a server-only type.
+        var outcome = validator.ValidateFromClient(command);
         if (!outcome.IsValid)
         {
             // Rolled-up message stays under the 200-char Error.Description
