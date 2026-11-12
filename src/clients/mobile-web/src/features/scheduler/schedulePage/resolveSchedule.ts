@@ -43,7 +43,8 @@ export interface FollowedPlace {
     template: CropScheduleTemplate | null;
     slot: number | null;
     origin: 'Outside' | 'Own';
-    checkState: 'Checked' | 'NotChecked' | 'Returned' | 'Withdrawn';
+    /** spec: plr-d10 lane SCH-OWN-b (F228; D-82 = 3) - null on his OWN place: no check applies to it (a missing check is NOT "not checked" there). */
+    checkState: 'Checked' | 'NotChecked' | 'Returned' | 'Withdrawn' | null;
     isMain: boolean;
     pending: boolean;
     /** spec: lane L8b-3 fix 1 (L004) - this phone's unanswered choice was REFUSED or given up: it is no longer "on its way". */
@@ -83,7 +84,8 @@ const followedPlaces = (choice: ScheduleChoice | null | undefined): FollowedPlac
             template,
             slot: typeof c.slot === 'number' ? c.slot : null,
             origin: c.origin === 'Own' ? 'Own' : 'Outside',
-            checkState: template?.check?.state ?? c.checkState ?? 'NotChecked',
+            // F228: a missing check on an Own row means "no check applies" (null); an Outside row with none keeps reading "not checked".
+            checkState: c.origin === 'Own' ? null : template?.check?.state ?? c.checkState ?? 'NotChecked',
             isMain: c.isMain === true,
             pending: c.pending,
             refused: c.refused === true,

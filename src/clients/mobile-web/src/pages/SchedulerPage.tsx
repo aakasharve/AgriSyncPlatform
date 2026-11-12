@@ -66,11 +66,17 @@ interface SchedulerPageProps {
     onCloseDay?: () => void;
     /** The page bar's "← मागे" (route: goBackOr). */
     onBack?: () => void;
+    /**
+     * spec: plr-d10 lane SCH-OWN-b (founder D-132 Q1 = 1 "entry only from planning") - this seat may make an own schedule (the owner or ScheduleTemplates, from
+     * the server's authorities; absent = no, fail closed) and the door that takes him to planning where the maker opens. The page writes and decides nothing.
+     */
+    mayMakeOwnSchedule?: boolean;
+    onMakeOwnSchedule?: (cropId: string) => void;
 }
 
 type View = 'HOME' | 'LIBRARY' | 'EDITOR' | 'GRID';
 
-const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack }) => {
+const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], onUpdateCrops, onCloseDay, onBack, mayMakeOwnSchedule = false, onMakeOwnSchedule }) => {
     // spec I18 — a crop's name in his language (the server's "Grapes" is "द्राक्ष" in Marathi mode).
     const language = useOptionalLanguage()?.language ?? 'mr';
     const nameOf = (c: { name: string; masterId?: string }): string => cropNameIn(c.name, language, c.masterId);
@@ -152,7 +158,9 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
         if (!crop || !plot || !resolved || resolved.source === 'default') return null;
         const code = scheduleCropCode(crop.name);
         const hasChecked = libraryTemplates([crop]).some(t => scheduleCropCode(t.cropCode) === code && t.check?.state === 'Checked' && t.id !== resolved.template.id);
-        return followedCheckNote(resolved.template, choices.get(plot.id)?.checkState, hasChecked);
+        // F228 (D-82 = 3): no check applies to a person's own schedule - the main place's origin says so.
+        const main = resolved.followed.find(f => f.isMain) ?? resolved.followed[0];
+        return followedCheckNote(resolved.template, choices.get(plot.id)?.checkState, hasChecked, main?.origin);
     }, [crop, plot, resolved, choices]);
 
     // spec: plr-d10 lane L8b-3 - does the crop have a Checked schedule in the library this phone holds? (decides which line a free place says)
@@ -165,6 +173,10 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
     const outsideFull = (resolved?.followed ?? []).filter(f => f.origin !== 'Own').length >= 3;
 
     const saveCrops = (next: CropProfile[]) => onUpdateCrops(next);
+
+    // spec: plr-d10 lane SCH-OWN-b (Q1 = 1) - the live "स्वतःचं शेड्यूल बनवा" only asks to go to planning, on this crop; nothing else on the page changes.
+    const makeOwn = mayMakeOwnSchedule === true && !!onMakeOwnSchedule;
+    const openMaker = () => { if (onMakeOwnSchedule && cropId) onMakeOwnSchedule(cropId); };
 
     const handleAdopt = (templateId: string) => {
         if (!crop) return;
@@ -311,8 +323,9 @@ const SchedulerPage: React.FC<SchedulerPageProps> = ({ crops, logs, tasks = [], 
                     tab={tab} onTab={setTab} onOpenDay={setOpenDayKey} onLibrary={() => { setLibraryMode('crop'); setView('LIBRARY'); }}
                     followed={resolved.followed} cropHasChecked={cropHasChecked} defaultKind={resolved.defaultKind}
                     trial={gate.inTrial(plot.id) ? { named: gate.stateOf(plot.id)?.trialStage ?? null } : undefined}
+                    mayMakeOwn={makeOwn} onMakeOwn={openMaker}
                     ask={gate.needsSchedule(plot.id) && defaultScheduleForCrop(crop.name) ? (
-                        <ScheduleAsk cropName={crop.name} plotId={plot.id} where="page"
+                        <ScheduleAsk cropName={crop.name} plotId={plot.id} where="page" mayMakeOwn={makeOwn} onMakeOwn={openMaker}
                             onSaved={result => setChoiceNote(result.notSent.length > 0 ? words.notSent : null)} />
                     ) : undefined}
                     onAddSchedule={() => { setLibraryMode('add'); setView('LIBRARY'); }} onLeaveSchedule={leaveSchedule} />

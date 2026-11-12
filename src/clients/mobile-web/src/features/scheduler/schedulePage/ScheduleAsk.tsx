@@ -10,7 +10,8 @@
  *   - the crop's CHECKED schedule (the Institution one first) - or, on a crop with no checked one, the sample, said to be a sample;
  *     the choice goes through the existing adopt (`saveScheduleChoice`, this plot only - the same door "हे शेड्यूल पण पाळा" uses),
  *     not a new write. With nothing the phone could offer it draws nothing at all (ask nothing where nothing can be chosen: P5);
- *   - "स्वतःचं शेड्यूल बनवा", DISABLED with "नियोजनात बनवता येईल": the maker opens with SCH-OWN, and a button that does nothing is not drawn.
+ *   - "स्वतःचं शेड्यूल बनवा" (lane SCH-OWN-b, Q1 = 1): LIVE, and only for a seat that may make (the owner or ScheduleTemplates) - it takes him to planning, where
+ *     the maker opens, and writes nothing. Any other seat, or one the phone does not know, is not shown it at all (nothing greyed, no promise line: P10).
  * Words: `scheduleGateCopy` (Marathi mode Marathi only, English mode English only). Targets are 64px high.
  */
 import React, { useState } from 'react';
@@ -33,9 +34,13 @@ export interface ScheduleAskProps {
     onSaved?: (result: SaveScheduleChoiceResult, plotId: string) => void;
     /** Absent = the app's chosen language (the language context). The planning page passes the language it was given. */
     language?: string | null;
+    /** spec: plr-d10 lane SCH-OWN-b - this seat may make an own schedule. Absent = no (fail closed). */
+    mayMakeOwn?: boolean;
+    /** Goes to planning where the maker opens (in planning itself: opens it there). */
+    onMakeOwn?: () => void;
 }
 
-export const ScheduleAsk: React.FC<ScheduleAskProps> = ({ cropName, plotId, plotLabel, where, onSaved, language: languageProp }) => {
+export const ScheduleAsk: React.FC<ScheduleAskProps> = ({ cropName, plotId, plotLabel, where, onSaved, language: languageProp, mayMakeOwn = false, onMakeOwn }) => {
     const contextLanguage = useOptionalLanguage()?.language;
     const language: GateLanguage = (languageProp ?? contextLanguage) === 'en' ? 'en' : 'mr';
     const words = SCHEDULE_GATE_WORDS[language];
@@ -69,15 +74,15 @@ export const ScheduleAsk: React.FC<ScheduleAskProps> = ({ cropName, plotId, plot
                     <span className="block text-[15px] font-bold leading-snug text-stone-700" data-testid="schedule-ask-offer-name">{name}</span>
                 </span>
             </Tap>
-            {/* P5: the maker opens in SCH-OWN. Shown, with its words, and cannot be tapped. */}
-            <button type="button" disabled aria-disabled="true" data-testid="schedule-ask-own"
-                className="flex min-h-[64px] w-full cursor-not-allowed items-center gap-3 rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 px-3 py-2 text-left opacity-80">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-stone-300 text-white"><Pencil size={18} aria-hidden="true" /></span>
-                <span className="min-w-0">
-                    <strong className="block text-[17px] font-black leading-snug text-stone-700">{words.ownTitle}</strong>
-                    <span className="block text-[14px] font-bold leading-snug text-stone-600" data-testid="schedule-ask-own-hint">{words.ownHint}</span>
-                </span>
-            </button>
+            {mayMakeOwn && onMakeOwn && (
+                <Tap onClick={onMakeOwn} data-testid="schedule-ask-own"
+                    className="flex min-h-[64px] w-full items-center gap-3 rounded-2xl border-2 border-amber-500 bg-white px-3 py-2 text-left">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-700 text-white"><Pencil size={18} aria-hidden="true" /></span>
+                    <span className="min-w-0">
+                        <strong className="block text-[17px] font-black leading-snug text-stone-900">{words.ownTitle}</strong>
+                    </span>
+                </Tap>
+            )}
         </section>
     );
 };

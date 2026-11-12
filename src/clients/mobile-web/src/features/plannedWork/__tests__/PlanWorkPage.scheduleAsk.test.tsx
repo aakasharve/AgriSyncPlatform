@@ -89,8 +89,9 @@ describe('the ask in front of the new-planning form (open point 9 (b))', () => {
         expect(screen.getByTestId('schedule-ask-why')).toHaveTextContent('नवीन काम ठरवण्याआधी या प्लॉटसाठी शेड्यूल निवडा.');
         expect(screen.getByTestId('schedule-ask-plot')).toHaveTextContent('द्राक्ष · सोनाका');
         expect(screen.getByTestId('schedule-ask-choose')).toHaveTextContent('द्राक्ष विद्यापीठ शेड्यूल');
-        expect(screen.getByTestId('schedule-ask-own')).toBeDisabled();
-        expect(screen.getByTestId('schedule-ask-own')).toHaveTextContent('नियोजनात बनवता येईल');
+        // lane SCH-OWN-b: no authority given to this page = no maker, nothing greyed (the live button: PlanWorkPage.ownSchedule.test.tsx)
+        expect(screen.queryByTestId('schedule-ask-own')).toBeNull();
+        expect(ask.textContent).not.toContain('नियोजनात बनवता येईल');
         // in front of the form, not inside it and not after it
         expect(ask.compareDocumentPosition(screen.getByTestId('plan-form')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });

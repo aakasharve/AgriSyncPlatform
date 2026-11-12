@@ -156,13 +156,14 @@ describe('the section: four places', () => {
         expect(screen.queryByTestId(`library-adopt-${T.university}`)).toBeNull(); // the one he follows says so instead
     });
 
-    it('Own_place_disabled_with_words: empty = no tap target, P5', async () => {
+    it('Own_place_plain_for_a_seat_that_may_not_make: empty = the plain sentence, no tap target, nothing greyed (SCH-OWN-b; the live button: OwnScheduleEntry.test.tsx)', async () => {
         await seed([server(S.a, T.university, 1, { isMain: true })]);
         mount();
         const own = await screen.findByTestId('three-plus-one-own-empty');
-        expect(own).toHaveAttribute('aria-disabled', 'true');
-        expect(own).toHaveTextContent('स्वतःचं शेड्यूल बनवा');
-        expect(own).toHaveTextContent('सुरुवातीला ही जागा रिकामी असते. नियोजनात बनवता येईल.');
+        expect(own).not.toHaveAttribute('aria-disabled');
+        expect(own).toHaveTextContent('सुरुवातीला ही जागा रिकामी असते.');
+        expect(own.textContent).not.toContain('नियोजनात बनवता येईल'); // P10: no promise of a feature this seat cannot use
+        expect(own.textContent).not.toContain('स्वतःचं शेड्यूल बनवा');
         expect(within(own).queryByRole('button')).toBeNull();
         fireEvent.click(own);
         expect(await allSchedule()).toHaveLength(0); // nothing happens, nothing is queued
@@ -205,7 +206,9 @@ describe('the section: four places', () => {
         await seed([server(S.a, T.expert, 1), server(S.b, T.bloom, 2), server(S.c, T.university, 3, { isMain: true })]);
         mount();
         await screen.findByTestId('three-plus-one');
-        expect(screen.getByTestId(`followed-main-${S.c}`)).toHaveTextContent('मुख्य');
+        // (lane SCH-OWN-b: waits for the server's rows to be drawn - the section is drawn, empty, at the first paint, and this test used to rely on the
+        // pull being delivered within one tick; it fails alone on the unedited code too)
+        expect(await screen.findByTestId(`followed-main-${S.c}`)).toHaveTextContent('मुख्य');
         expect(screen.queryByTestId(`followed-main-${S.a}`)).toBeNull();
         expect(screen.queryByTestId(`followed-main-${S.b}`)).toBeNull();
         // the stage line follows the main schedule, and says so when two or more are followed
@@ -384,7 +387,8 @@ describe('words: one language at a time', () => {
         expect(text).toContain('Main');
         expect(text).toContain('Stop following');
         expect(text).toContain('Follow this one too');
-        expect(text).toContain('Make your own schedule');
+        expect(text).toContain('This place starts empty.'); // lane SCH-OWN-b: a seat with no authority given sees the plain sentence; the live button's English: OwnScheduleEntry.test.tsx
+        expect(text).not.toContain('Make your own schedule');
         expect(text).toContain('Checked by ShramSafal');
         expect(text).not.toMatch(/[ऀ-ॿ]/); // no Devanagari anywhere in the section
         fireEvent.click(screen.getByTestId('three-plus-one-help-open'));

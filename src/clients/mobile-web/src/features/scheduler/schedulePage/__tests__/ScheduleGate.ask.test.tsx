@@ -119,10 +119,10 @@ describe('the ask on the शेड्यूल page (D-83 = 1)', () => {
         const choose = screen.getByTestId('schedule-ask-choose');
         expect(choose).toHaveTextContent('श्रमसफलचं तपासलेलं शेड्यूल');
         expect(choose).toHaveTextContent('द्राक्ष विद्यापीठ शेड्यूल'); // the Institution one, though the expert one is listed first
-        const own = screen.getByTestId('schedule-ask-own');
-        expect(own).toBeDisabled();
-        expect(own).toHaveTextContent('स्वतःचं शेड्यूल बनवा');
-        expect(own).toHaveTextContent('नियोजनात बनवता येईल');
+        // lane SCH-OWN-b (Q1 = 1): the grey button and its promise line are gone. This mount gives the page no authority (an unknown seat: fail closed),
+        // so no maker is shown; the live button for a seat that may make is pinned in OwnScheduleEntry.test.tsx.
+        expect(screen.queryByTestId('schedule-ask-own')).toBeNull();
+        expect(screen.getByTestId('schedule-ask').textContent).not.toContain('नियोजनात बनवता येईल');
         // in front of the page: it comes before the schedule's own header, and it replaces the "nobody chose" note
         expect(ask.compareDocumentPosition(screen.getByTestId('sched-header')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(screen.queryByTestId('default-schedule-note')).toBeNull();
@@ -251,19 +251,18 @@ describe('words and targets', () => {
         const ask = await screen.findByTestId('schedule-ask');
         expect(screen.getByTestId('schedule-ask-title')).toHaveTextContent('Choose a schedule first');
         expect(screen.getByTestId('schedule-ask-choose')).toHaveTextContent("ShramSafal's checked schedule");
-        expect(screen.getByTestId('schedule-ask-own')).toHaveTextContent('Make your own schedule');
-        expect(screen.getByTestId('schedule-ask-own')).toHaveTextContent('Can be made in planning');
+        expect(screen.queryByTestId('schedule-ask-own')).toBeNull(); // lane SCH-OWN-b: no authority given = no maker (English twin of the live button: OwnScheduleEntry.test.tsx)
+        expect(screen.getByTestId('schedule-ask').textContent).not.toContain('Can be made in planning');
         // the schedule's own NAME is data (written in Marathi in this fixture); every word the app added is English
         const words = (ask.textContent ?? '').replace('द्राक्ष विद्यापीठ शेड्यूल', '');
         expect(words).not.toMatch(/[ऀ-ॿ]/);
     });
 
-    it('Targets_are_at_least_44px: the choose button and the (disabled) own button', async () => {
+    it('Targets_are_at_least_44px: the choose button', async () => {
         await seed();
         await saveStates(stateOf(PLOT_1));
         mount();
         await screen.findByTestId('schedule-ask');
         expect(minHeight(screen.getByTestId('schedule-ask-choose'))).toBeGreaterThanOrEqual(44);
-        expect(minHeight(screen.getByTestId('schedule-ask-own'))).toBeGreaterThanOrEqual(44);
     });
 });
