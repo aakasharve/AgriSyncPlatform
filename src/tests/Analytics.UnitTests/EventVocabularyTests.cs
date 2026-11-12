@@ -8,10 +8,11 @@ namespace Analytics.UnitTests;
 /// <summary>
 /// Lockdown coverage for the frozen event vocabulary (DWC v2 §2.3 +
 /// ADR-2026-05-02, which froze it at 13 events; ADR 0027 D1 extends it with
-/// the server-only <c>api.refused</c>, making 14). Three classes of assertion:
+/// the server-only <c>api.refused</c>, making 14; ADR 0028 adds the
+/// server-only <c>app.seen</c>, making 15). Three classes of assertion:
 /// </summary>
 /// <list type="number">
-/// <item><b>Registry shape</b> — exactly 14 entries, every name matches the ADRs.</item>
+/// <item><b>Registry shape</b> — exactly 15 entries, every name matches the ADRs.</item>
 /// <item><b>Validator rejects</b> — unknown event_type and missing required prop.</item>
 /// <item><b>Round-trip</b> — every entry validates with its own RequiredProps populated.</item>
 /// </list>
@@ -22,7 +23,7 @@ public sealed class EventVocabularyTests
     // -----------------------------------------------------------------
 
     [Fact]
-    public void Registry_Has_Exactly_14_Entries()
+    public void Registry_Has_Exactly_15_Entries()
     {
         // Adding an event without a new ADR is a process violation — bump
         // this number deliberately and only after the ADR is signed.
@@ -30,12 +31,20 @@ public sealed class EventVocabularyTests
         // 13 -> 14 on 2026-11-11: ADR 0027 D1 adds api.refused (spec
         // control-room-go-live-must-haves-2026-11-10, plan CR-1a Task K3).
         // This test was Registry_Has_Exactly_13_Entries; it is the same pin,
-        // moved by name, not a new one. ADR 0027 D6 takes the registry to 15
-        // when sync.push_outcome lands (Task C2) — that entry is not pinned
-        // here yet, and this number moves again in the commit that adds it.
-        EventVocabulary.Registry.Should().HaveCount(14,
-            "ADR-2026-05-02 froze the vocabulary at 13 events and ADR 0027 D1 adds api.refused; "
-            + "a new ADR is required to extend it further");
+        // moved by name, not a new one.
+        //
+        // 14 -> 15 on 2026-11-12: ADR 0028 adds app.seen (spec
+        // control-room-app-versions-2026-11-12, plan CR-1c Task V1). This
+        // test was Registry_Has_Exactly_14_Entries; again the same pin, moved
+        // by name.
+        //
+        // ADR 0027 D6 adds sync.push_outcome on the CR-1a lane (Task C2),
+        // which also moves this pin by one. That entry is not pinned here:
+        // whichever of the two lanes merges second raises the number to 16
+        // and says so in its commit.
+        EventVocabulary.Registry.Should().HaveCount(15,
+            "ADR-2026-05-02 froze the vocabulary at 13 events, ADR 0027 D1 adds api.refused and "
+            + "ADR 0028 adds app.seen; a new ADR is required to extend it further");
     }
 
     [Fact]
@@ -49,6 +58,8 @@ public sealed class EventVocabularyTests
             "api.error", "client.error", "worker.named", "admin.farmer_lookup",
             // ADR 0027 D1 (server-only; written by RequestObservabilityMiddleware).
             "api.refused",
+            // ADR 0028 (server-only; written by AppSeenMiddleware).
+            "app.seen",
         };
 
         EventVocabulary.Registry.Keys.Should().BeEquivalentTo(expected,
@@ -99,6 +110,25 @@ public sealed class EventVocabularyTests
             },
             "these are the keys ADR 0027 D1 lists, and analytics.events is append-only: a key "
             + "that is not in the ADR should not reach a row through this entry unreviewed");
+    }
+
+    [Fact]
+    public void App_seen_requires_app_version_and_person()
+    {
+        // ADR 0028 — spec control-room-app-versions-2026-11-12, plan CR-1c
+        // Task V1. A signed-in person used the app on a version: written by
+        // the server at most once per person, version and UTC day.
+        var def = EventVocabulary.Registry["app.seen"];
+
+        def.RequiredProps.Should().BeEquivalentTo(new[] { "appVersion", "personId" },
+            "the row exists to say WHO used WHICH version, so it is never written without "
+            + "both; the person is a prop because the actor_user_id column stays empty, or "
+            + "merely opening the app would count as weekly-active");
+
+        def.Optional.Should().BeEquivalentTo(new[] { "platform" },
+            "the platform is written only when the app reported android, and that is the whole "
+            + "list: analytics.events is append-only, so no device identifier, farm or endpoint "
+            + "may reach a row through this entry unreviewed (ADR 0027 D7)");
     }
 
     [Theory]
