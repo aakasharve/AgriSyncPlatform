@@ -11,7 +11,8 @@ namespace Analytics.Domain.Vocabulary;
 /// <para>
 /// Source of truth: <c>ADR-2026-05-02_event-vocabulary.md</c>, extended by
 /// ADR 0027 (2026-11-11), which added <c>api.refused</c> and
-/// <c>sync.push_outcome</c>. Adding an event requires a new ADR — do not
+/// <c>sync.push_outcome</c>, and by ADR 0028 (2026-11-12), which added
+/// <c>app.seen</c>. Adding an event requires a new ADR — do not
 /// extend this dictionary silently. The parity gate fails the build the
 /// moment the C# and TypeScript registries drift.
 /// </para>
@@ -117,6 +118,16 @@ public static class EventVocabulary
                 RequiredProps: ["endpoint", "statusCode"],
                 Optional: ["errorCode", "route", "appVersion", "serverBuild",
                            "personId", "routeFarmId", "latencyMs", "traceId"]),
+
+            // 2026-11-12 (ADR 0028): a signed-in person used the app on this
+            // version. Server-only, written at most once per person, version
+            // and UTC day. The person is in props and the actor_user_id and
+            // farm_id columns stay empty, so merely opening the app never
+            // moves the weekly-active or retention numbers. No device
+            // identifier (ADR 0027 D7).
+            ["app.seen"] = new(
+                RequiredProps: ["appVersion", "personId"],
+                Optional: ["platform"]),
 
             ["client.error"] = new(
                 RequiredProps: ["message"],
