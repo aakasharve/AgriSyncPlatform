@@ -1,4 +1,6 @@
+using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Ports;
+using ShramSafal.Domain.Compare;
 using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.Services;
@@ -39,7 +41,9 @@ public sealed class ScheduleComplianceService(IShramSafalRepository repo) : ISch
         var template = await repo.GetCropScheduleTemplateByIdAsync(active.ScheduleTemplateId, ct);
         if (template is null || template.Tasks.Count == 0)
         {
-            return ComplianceResult.Unscheduled();
+            // spec: plr-d10 lane CMP-D2 - a LIBRARY schedule (schedule_templates) is not in the old model: it used to stamp every record
+            // "Unscheduled". It is read from its row, counting from the subscription's own day 0.
+            return await EvaluateLibraryAsync(query, cycle, active, ct);
         }
 
         var normalizedType = query.TaskType.Trim().ToLowerInvariant();
@@ -83,5 +87,44 @@ public sealed class ScheduleComplianceService(IShramSafalRepository repo) : ISch
             bestMatch.Id,
             finalDelta,
             bestMatch.ToleranceDaysPlusMinus);
+    }
+
+    /// <summary>
+    /// A library row that STORES its days: the nearest stored day of the SAME work (WORK-ID, either language) within the match window wins. A row
+    /// that stores no days, or work that is not in it, is "Unscheduled" - never a guess from the name (P4).
+    /// </summary>
+    private async Task<ComplianceResult> EvaluateLibraryAsync(
+        ScheduleComplianceQuery query, Domain.Crops.CropCycle cycle, ScheduleSubscription active, CancellationToken ct)
+    {
+        var row = await repo.GetScheduleTemplateByIdAsync(active.ScheduleTemplateId.Value, ct);
+        if (row is null || !row.HasStoredDays)
+        {
+            return ComplianceResult.Unscheduled();
+        }
+
+        var dayZero = active.ReferenceDate ?? cycle.StartDate;
+        ExpectedStep? best = null;
+        var bestAbs = int.MaxValue;
+        foreach (var step in ScheduleFollowEngine.Expand(ScheduleDefinitionMapper.FromRow(row), dayZero))
+        {
+            var abs = Math.Abs(query.LoggedOn.DayNumber - step.Date.DayNumber);
+            if (abs > DefaultMatchWindowDays || abs >= bestAbs || !WorkRecogniser.SameWork(step.Title, query.TaskType).Matched)
+            {
+                continue;
+            }
+
+            best = step;
+            bestAbs = abs;
+        }
+
+        // fix round 1 (P006): a library schedule keeps no per-work tolerance (the old model did); the stamp reads the ONE shared
+        // on-time constant (the attention board's, ScheduledWorkMatcher), read-only - लक्ष द्या keeps its own day rule and तुलना reads none (R35).
+        return best is null
+            ? ComplianceResult.Unscheduled()
+            : ComplianceResult.Matched(
+                active.SubscriptionId,
+                new PrescribedTaskId(best.ActivityId),
+                query.LoggedOn.DayNumber - best.Date.DayNumber,
+                ScheduledWorkMatcher.OnTimeToleranceDays);
     }
 }
