@@ -1,0 +1,1156 @@
+{
+  "note": "Day numbers from the schedule's day 0. reference = the library JSON as the phone gets it. Regenerate with AGRISYNC_WRITE_PARITY_FIXTURE=1.",
+  "schedules": [
+    {
+      "key": "Grapes - Standard Seasonal Template",
+      "reference": {
+        "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77301",
+        "name": "Grapes - Standard Seasonal Template",
+        "cropType": "Grapes",
+        "totalDays": 150,
+        "stages": [
+          {
+            "name": "Post Pruning",
+            "startDay": 0,
+            "endDay": 15
+          },
+          {
+            "name": "Canopy Build",
+            "startDay": 16,
+            "endDay": 35
+          },
+          {
+            "name": "Flowering & Fruit Set",
+            "startDay": 36,
+            "endDay": 60
+          },
+          {
+            "name": "Berry Development",
+            "startDay": 61,
+            "endDay": 110
+          },
+          {
+            "name": "Maturity & Harvest",
+            "startDay": 111,
+            "endDay": 150
+          }
+        ],
+        "activities": [
+          {
+            "name": "Pruning",
+            "category": "Pruning",
+            "stageName": "Post Pruning",
+            "startDay": 0,
+            "endDay": 1,
+            "frequencyMode": "one_time",
+            "intervalDays": null
+          },
+          {
+            "name": "Spraying",
+            "category": "Spraying",
+            "stageName": "Canopy Build",
+            "startDay": 18,
+            "endDay": 35,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 5
+          },
+          {
+            "name": "Fertigation",
+            "category": "Fertigation",
+            "stageName": "Flowering & Fruit Set",
+            "startDay": 36,
+            "endDay": 60,
+            "frequencyMode": "per_week",
+            "intervalDays": 2
+          },
+          {
+            "name": "Irrigation",
+            "category": "Irrigation",
+            "stageName": "Berry Development",
+            "startDay": 61,
+            "endDay": 110,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 2
+          },
+          {
+            "name": "Harvest",
+            "category": "Harvest",
+            "stageName": "Maturity & Harvest",
+            "startDay": 130,
+            "endDay": 150,
+            "frequencyMode": "one_time",
+            "intervalDays": null
+          }
+        ],
+        "versionHash": "2ec3fe0c5a4bcfa32e3f3e9af12b41a6d9e549717ead5194ff3d28784ecfed6f"
+      },
+      "dates": [
+        {
+          "stage": "Post Pruning",
+          "activities": [
+            {
+              "index": 0,
+              "days": [
+                0
+              ]
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Canopy Build",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": [
+                18,
+                23,
+                28,
+                33
+              ]
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Flowering & Fruit Set",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": [
+                36,
+                39,
+                42,
+                45,
+                48,
+                51,
+                54,
+                57,
+                60
+              ]
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Berry Development",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": [
+                61,
+                63,
+                65,
+                67,
+                69,
+                71,
+                73,
+                75,
+                77,
+                79,
+                81,
+                83,
+                85,
+                87,
+                89,
+                91,
+                93,
+                95,
+                97,
+                99,
+                101,
+                103,
+                105,
+                107,
+                109
+              ]
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Maturity & Harvest",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": [
+                130
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "Pomegranate - Mrig Bahar Template",
+      "reference": {
+        "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77302",
+        "name": "Pomegranate - Mrig Bahar Template",
+        "cropType": "Pomegranate",
+        "totalDays": 180,
+        "stages": [
+          {
+            "name": "Bahar Treatment",
+            "startDay": 0,
+            "endDay": 30
+          },
+          {
+            "name": "Vegetative Growth",
+            "startDay": 31,
+            "endDay": 75
+          },
+          {
+            "name": "Fruit Development",
+            "startDay": 76,
+            "endDay": 135
+          },
+          {
+            "name": "Maturity & Harvest",
+            "startDay": 136,
+            "endDay": 180
+          }
+        ],
+        "activities": [
+          {
+            "name": "Bahar Treatment",
+            "category": "Pruning",
+            "stageName": "Bahar Treatment",
+            "startDay": 0,
+            "endDay": 5,
+            "frequencyMode": "one_time",
+            "intervalDays": null
+          },
+          {
+            "name": "Irrigation",
+            "category": "Irrigation",
+            "stageName": "Vegetative Growth",
+            "startDay": 31,
+            "endDay": 75,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 3
+          },
+          {
+            "name": "Spraying",
+            "category": "Spraying",
+            "stageName": "Fruit Development",
+            "startDay": 80,
+            "endDay": 135,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 7
+          },
+          {
+            "name": "Fertigation",
+            "category": "Fertigation",
+            "stageName": "Fruit Development",
+            "startDay": 90,
+            "endDay": 130,
+            "frequencyMode": "per_week",
+            "intervalDays": 1
+          },
+          {
+            "name": "Harvest",
+            "category": "Harvest",
+            "stageName": "Maturity & Harvest",
+            "startDay": 150,
+            "endDay": 180,
+            "frequencyMode": "one_time",
+            "intervalDays": null
+          }
+        ],
+        "versionHash": "2ec3fe0c5a4bcfa32e3f3e9af12b41a6d9e549717ead5194ff3d28784ecfed6f"
+      },
+      "dates": [
+        {
+          "stage": "Bahar Treatment",
+          "activities": [
+            {
+              "index": 0,
+              "days": [
+                0
+              ]
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Vegetative Growth",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": [
+                31,
+                34,
+                37,
+                40,
+                43,
+                46,
+                49,
+                52,
+                55,
+                58,
+                61,
+                64,
+                67,
+                70,
+                73
+              ]
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Fruit Development",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": [
+                80,
+                87,
+                94,
+                101,
+                108,
+                115,
+                122,
+                129
+              ]
+            },
+            {
+              "index": 3,
+              "days": [
+                90,
+                97,
+                104,
+                111,
+                118,
+                125
+              ]
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Maturity & Harvest",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": [
+                150
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "Sugarcane - Standard Annual Template",
+      "reference": {
+        "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77303",
+        "name": "Sugarcane - Standard Annual Template",
+        "cropType": "Sugarcane",
+        "totalDays": 365,
+        "stages": [
+          {
+            "name": "Germination",
+            "startDay": 0,
+            "endDay": 45
+          },
+          {
+            "name": "Tillering",
+            "startDay": 46,
+            "endDay": 120
+          },
+          {
+            "name": "Grand Growth",
+            "startDay": 121,
+            "endDay": 270
+          },
+          {
+            "name": "Maturity",
+            "startDay": 271,
+            "endDay": 365
+          }
+        ],
+        "activities": [
+          {
+            "name": "Planting",
+            "category": "Planting",
+            "stageName": "Germination",
+            "startDay": 0,
+            "endDay": 7,
+            "frequencyMode": "one_time",
+            "intervalDays": null
+          },
+          {
+            "name": "Irrigation",
+            "category": "Irrigation",
+            "stageName": "Tillering",
+            "startDay": 46,
+            "endDay": 120,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 7
+          },
+          {
+            "name": "Weeding",
+            "category": "Weeding",
+            "stageName": "Tillering",
+            "startDay": 60,
+            "endDay": 120,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 15
+          },
+          {
+            "name": "Fertigation",
+            "category": "Fertigation",
+            "stageName": "Grand Growth",
+            "startDay": 121,
+            "endDay": 270,
+            "frequencyMode": "per_week",
+            "intervalDays": 1
+          },
+          {
+            "name": "Harvest",
+            "category": "Harvest",
+            "stageName": "Maturity",
+            "startDay": 320,
+            "endDay": 365,
+            "frequencyMode": "one_time",
+            "intervalDays": null
+          }
+        ],
+        "versionHash": "2ec3fe0c5a4bcfa32e3f3e9af12b41a6d9e549717ead5194ff3d28784ecfed6f"
+      },
+      "dates": [
+        {
+          "stage": "Germination",
+          "activities": [
+            {
+              "index": 0,
+              "days": [
+                0
+              ]
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Tillering",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": [
+                46,
+                53,
+                60,
+                67,
+                74,
+                81,
+                88,
+                95,
+                102,
+                109,
+                116
+              ]
+            },
+            {
+              "index": 2,
+              "days": [
+                60,
+                75,
+                90,
+                105,
+                120
+              ]
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Grand Growth",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": [
+                121,
+                128,
+                135,
+                142,
+                149,
+                156,
+                163,
+                170,
+                177,
+                184,
+                191,
+                198,
+                205,
+                212,
+                219,
+                226,
+                233,
+                240,
+                247,
+                254,
+                261,
+                268
+              ]
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Maturity",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": [
+                320
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "Onion - Rabi Season Template",
+      "reference": {
+        "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77304",
+        "name": "Onion - Rabi Season Template",
+        "cropType": "Onion",
+        "totalDays": 110,
+        "stages": [
+          {
+            "name": "Transplant Establishment",
+            "startDay": 0,
+            "endDay": 20
+          },
+          {
+            "name": "Bulb Initiation",
+            "startDay": 21,
+            "endDay": 50
+          },
+          {
+            "name": "Bulb Development",
+            "startDay": 51,
+            "endDay": 90
+          },
+          {
+            "name": "Maturity & Harvest",
+            "startDay": 91,
+            "endDay": 110
+          }
+        ],
+        "activities": [
+          {
+            "name": "Transplanting",
+            "category": "Planting",
+            "stageName": "Transplant Establishment",
+            "startDay": 0,
+            "endDay": 2,
+            "frequencyMode": "one_time",
+            "intervalDays": null
+          },
+          {
+            "name": "Irrigation",
+            "category": "Irrigation",
+            "stageName": "Bulb Initiation",
+            "startDay": 21,
+            "endDay": 50,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 3
+          },
+          {
+            "name": "Spraying",
+            "category": "Spraying",
+            "stageName": "Bulb Development",
+            "startDay": 51,
+            "endDay": 90,
+            "frequencyMode": "per_week",
+            "intervalDays": 1
+          },
+          {
+            "name": "Monitoring",
+            "category": "Monitoring",
+            "stageName": "Bulb Development",
+            "startDay": 51,
+            "endDay": 90,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 5
+          },
+          {
+            "name": "Harvest",
+            "category": "Harvest",
+            "stageName": "Maturity & Harvest",
+            "startDay": 95,
+            "endDay": 110,
+            "frequencyMode": "one_time",
+            "intervalDays": null
+          }
+        ],
+        "versionHash": "2ec3fe0c5a4bcfa32e3f3e9af12b41a6d9e549717ead5194ff3d28784ecfed6f"
+      },
+      "dates": [
+        {
+          "stage": "Transplant Establishment",
+          "activities": [
+            {
+              "index": 0,
+              "days": [
+                0
+              ]
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Bulb Initiation",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": [
+                21,
+                24,
+                27,
+                30,
+                33,
+                36,
+                39,
+                42,
+                45,
+                48
+              ]
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Bulb Development",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": [
+                51,
+                58,
+                65,
+                72,
+                79,
+                86
+              ]
+            },
+            {
+              "index": 3,
+              "days": [
+                51,
+                56,
+                61,
+                66,
+                71,
+                76,
+                81,
+                86
+              ]
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "Maturity & Harvest",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": [
+                95
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "Grapes - parity schedule that stores its days",
+      "reference": {
+        "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77399",
+        "name": "Grapes - parity schedule that stores its days",
+        "cropType": "Grapes",
+        "totalDays": 90,
+        "stages": [
+          {
+            "name": "A",
+            "startDay": 0,
+            "endDay": 30
+          },
+          {
+            "name": "B",
+            "startDay": 31,
+            "endDay": 60
+          },
+          {
+            "name": "C",
+            "startDay": 61,
+            "endDay": 90
+          }
+        ],
+        "activities": [
+          {
+            "name": "Fungicide spray",
+            "category": "Spraying",
+            "stageName": "A",
+            "startDay": 18,
+            "endDay": 28,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 5
+          },
+          {
+            "name": "Drip irrigation",
+            "category": "Irrigation",
+            "stageName": "B",
+            "startDay": 31,
+            "endDay": 56,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 5
+          },
+          {
+            "name": "Fertigation",
+            "category": "Fertigation",
+            "stageName": "B",
+            "startDay": 40,
+            "endDay": 60,
+            "frequencyMode": "per_week",
+            "intervalDays": 2
+          },
+          {
+            "name": "Bunch thinning",
+            "category": "Pruning",
+            "stageName": "B",
+            "startDay": 38,
+            "endDay": 38,
+            "frequencyMode": "one_time",
+            "intervalDays": 1
+          },
+          {
+            "name": "Weeding",
+            "category": "Weeding",
+            "stageName": "C",
+            "startDay": 61,
+            "endDay": 90,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 10
+          }
+        ],
+        "versionHash": "parity"
+      },
+      "dates": [
+        {
+          "stage": "A",
+          "activities": [
+            {
+              "index": 0,
+              "days": [
+                18,
+                23,
+                28
+              ]
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "B",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": [
+                31,
+                36,
+                41,
+                46,
+                51,
+                56
+              ]
+            },
+            {
+              "index": 2,
+              "days": [
+                40,
+                43,
+                46,
+                49,
+                52,
+                55,
+                58
+              ]
+            },
+            {
+              "index": 3,
+              "days": [
+                38
+              ]
+            },
+            {
+              "index": 4,
+              "days": []
+            }
+          ]
+        },
+        {
+          "stage": "C",
+          "activities": [
+            {
+              "index": 0,
+              "days": []
+            },
+            {
+              "index": 1,
+              "days": []
+            },
+            {
+              "index": 2,
+              "days": []
+            },
+            {
+              "index": 3,
+              "days": []
+            },
+            {
+              "index": 4,
+              "days": [
+                61,
+                71,
+                81
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "knownDivergences": [
+    {
+      "label": "KNOWN DIVERGENCE (server counts overrun in the later stage, phone clips to its own stage): CTO call pending",
+      "reference": {
+        "id": "f3b8b9aa-0a53-4f7b-84a7-6ba6f1f77398",
+        "name": "Grapes - parity schedule with a routine that overruns its stage",
+        "cropType": "Grapes",
+        "totalDays": 60,
+        "stages": [
+          {
+            "name": "A",
+            "startDay": 0,
+            "endDay": 30
+          },
+          {
+            "name": "B",
+            "startDay": 31,
+            "endDay": 60
+          }
+        ],
+        "activities": [
+          {
+            "name": "Fungicide spray",
+            "category": "Spraying",
+            "stageName": "A",
+            "startDay": 25,
+            "endDay": 40,
+            "frequencyMode": "every_n_days",
+            "intervalDays": 5
+          }
+        ],
+        "versionHash": "parity-overrun"
+      },
+      "server": [
+        {
+          "stage": "A",
+          "days": [
+            25,
+            30
+          ]
+        },
+        {
+          "stage": "B",
+          "days": [
+            35,
+            40
+          ]
+        }
+      ],
+      "phone": [
+        {
+          "stage": "A",
+          "days": [
+            25,
+            30
+          ]
+        },
+        {
+          "stage": "B",
+          "days": []
+        }
+      ]
+    }
+  ]
+}

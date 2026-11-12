@@ -1969,6 +1969,17 @@ internal sealed class ShramSafalRepository(
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<DailyLog>> GetDailyLogsWithTasksForFarmByIdsAsync(FarmId farmId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        if (ids.Count == 0) return [];
+        return await db.DailyLogs
+            .AsNoTracking()
+            .Where(l => l.FarmId == farmId && ids.Contains(l.Id))
+            .Include(l => l.Tasks)
+            .Include(l => l.VerificationEvents)
+            .ToListAsync(ct);
+    }
+
     public async Task<List<PlannedActivity>> GetPlannedActivitiesForFarmSinceAsync(FarmId farmId, DateOnly sinceDate, CancellationToken ct = default)
     {
         // Get all crop cycle IDs for the farm first, then query planned activities

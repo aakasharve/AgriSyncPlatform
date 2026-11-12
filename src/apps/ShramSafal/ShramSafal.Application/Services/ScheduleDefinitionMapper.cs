@@ -56,6 +56,27 @@ public static class ScheduleDefinitionMapper
     }
 
     /// <summary>
+    /// spec: plr-d10 lane CMP-D2 - the same engine input read straight from a library ROW (compliance stamps a record against the row a plot
+    /// follows; it has no caller to list it for). Only a row that STORES its days is described (<see cref="ScheduleTemplate.HasStoredDays"/>): a
+    /// thin row has no stored stages or repeats, so it describes nothing and a record is never stamped against a day the library invented (P4).
+    /// </summary>
+    public static ScheduleDefinition FromRow(ScheduleTemplate row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (!row.HasStoredDays)
+        {
+            return new ScheduleDefinition(row.Id, row.Name, [], []);
+        }
+
+        var activities = row.Activities
+            .Select(a => new ScheduleActivityDef(
+                a.Id, a.ActivityName, a.Part?.Trim().ToLowerInvariant(), a.OperationKey, a.Role, a.NutrientKey,
+                a.OffsetDays, a.EndDay, a.StoredFrequencyMode, a.StoredIntervalDays, a.AfterActivityId))
+            .ToList();
+        return new ScheduleDefinition(row.Id, row.Name, row.Stages.ToList(), activities);
+    }
+
+    /// <summary>
     /// The stage of the मुख्य schedule that holds <paramref name="day"/> (the first by start day, then end day - the order the engine's
     /// windows use), with its dates; <c>null</c> when the schedule stores no stages or the day is in none (before day 0, after the last stage).
     /// </summary>

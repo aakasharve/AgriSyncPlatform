@@ -46,6 +46,7 @@ GET /shramsafal/export/monthly-cost
 GET /shramsafal/export/verification
 GET /shramsafal/farms/mine
 GET /shramsafal/farms/{farmId:guid}
+GET /shramsafal/farms/{farmId:guid}/compare
 GET /shramsafal/farms/{farmId:guid}/compliance
 GET /shramsafal/farms/{farmId:guid}/job-cards
 GET /shramsafal/farms/{farmId:guid}/kept-work

@@ -265,6 +265,7 @@ public static class DependencyInjection
         // spec: plr-d10 lane SCH-GATE-a - the planning gate and the stage plan (read by the pull and the stage-plan route only, D-83 = 1).
         services.AddScoped<ShramSafal.Application.Services.ScheduleRequirement>();
         services.AddScoped<ShramSafal.Application.Services.ScheduleStagePlan>();
+        services.AddScoped<ShramSafal.Application.Services.FarmCompareService>();
         services.AddScoped<CloneScheduleTemplateHandler>();
         // spec: plr-d10 lane SCH-OWN - "start blank": the farm's own schedule, made empty (REST door and sync push alike).
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CreateOwnSchedule.CreateOwnScheduleHandler>();
