@@ -19,9 +19,18 @@
 //   - the period is 7 or 30 days, anything else is 7, counted back from now
 //   - a failing repository throws; it is never answered as an empty success
 //
-// Not held here, stated plainly: the cap of 200 people on the older-version
-// list, and the SQL behind the five repository methods (that needs a
-// database; an integration test is owed before merge).
+// Added in review round 2 (plan CR-1c Task V4):
+//   - the answer always carries the number that every release up to 1.0.17
+//     reports instead of its own ("0.9.0"), so the page can show those rows
+//     as "1.0.17 or earlier" and never as a release called 0.9.0
+//   - a phone reporting that number is counted like any other version: it
+//     sorts below every real release and its person is listed as older
+//   - the list of people on older versions stops at 200, most recent first;
+//     the counts do not stop
+//
+// Not held here, stated plainly: the SQL behind the five repository methods.
+// That needs a database and lives in
+// ShramSafal.Admin.IntegrationTests/AdminOpsAppVersionsQueryTests.cs.
 
 using FluentAssertions;
 using ShramSafal.Application.Contracts.Dtos;
@@ -302,6 +311,164 @@ public sealed class GetAppVersionsHandlerTests
         oneBehind.NameCalls.SelectMany(ids => ids).Distinct().Should().BeEquivalentTo(new[] { Asha });
     }
 
+    [Fact]
+    public async Task The_list_of_people_on_older_versions_stops_at_200()
+    {
+        // 205 people are behind. Person 1 used the app a minute ago, person
+        // 205 two hundred and five minutes ago.
+        var repo = OneUpToDateAnd(205);
+
+        var (data, _) = await Ask(repo);
+
+        data.OnOlderVersions.Should().HaveCount(200,
+            "the list is for a person to read and act on; it stops at 200");
+        data.OnOlderVersions.Select(p => p.Name ?? "(no name)").Should().Equal(
+            Enumerable.Range(1, 200).Select(PersonName),
+            "the 200 kept are the 200 most recently seen, most recent first; the five left off "
+            + "are the five who used the app longest ago");
+        data.OnOlderVersions[0].LastSeenUtc.Should().Be(Now.AddMinutes(-1));
+        data.OnOlderVersions[199].LastSeenUtc.Should().Be(Now.AddMinutes(-200));
+        data.OnOlderVersions.Should().OnlyContain(p => p.AppVersion == "1.0.17");
+
+        // The limit is on the list only. The figures still count everybody,
+        // or the page would say 200 people are behind when 205 are.
+        data.People.Should().Be(206, "one person on the newest version and all 205 behind it");
+        data.Versions.Should().Equal(
+            new AppVersionRowDto("1.0.18", 1, true),
+            new AppVersionRowDto("1.0.17", 205, false));
+
+        repo.FarmNameCalls.Should().ContainSingle("the cross-farm reader is still opened once, not once per person");
+        repo.FarmNameCalls[0].PersonIds.Should().NotContain(Sunita, "the person on the newest version is not looked up");
+
+        // The control: exactly 200 behind is not over the limit. All 200 are
+        // listed, so the test above is about the 201st person and beyond, not
+        // about a list that is always cut short.
+        var (atTheLimit, _) = await Ask(OneUpToDateAnd(200));
+
+        atTheLimit.OnOlderVersions.Should().HaveCount(200);
+        atTheLimit.OnOlderVersions.Select(p => p.Name ?? "(no name)").Should().Equal(
+            Enumerable.Range(1, 200).Select(PersonName));
+        atTheLimit.People.Should().Be(201);
+    }
+
+    // ------------------------------------------------------------------
+    // Releases up to 1.0.17 all report "0.9.0" (review round 2)
+    //
+    // Until lane fix F69 the app sent package.json's version, "0.9.0", as
+    // X-App-Version; from 1.0.18 it sends its real release. So every phone on
+    // an old release is recorded as 0.9.0: a number that was never released,
+    // and one that cannot tell 1.0.15, 1.0.16 and 1.0.17 apart. The handler
+    // does not rewrite it (the rows keep what the phones really sent) and
+    // does not count it differently. It names the number in every answer, and
+    // the page shows "1.0.17 or earlier" wherever a version equals it.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task The_answer_names_the_number_old_releases_report()
+    {
+        GetAppVersionsHandler.LegacyVersionNumber.Should().Be("0.9.0",
+            "that is the number every release up to 1.0.17 sends in place of its own");
+
+        // Nothing recorded yet. The page still needs the number: it is a fact
+        // about old releases, not something worked out from the rows.
+        var (nothingYet, _) = await Ask(new FakeOpsRepository { CountingBeganUtc = null });
+
+        nothingYet.MeasuredSinceUtc.Should().BeNull();
+        nothingYet.LegacyVersionNumber.Should().Be("0.9.0");
+
+        // Everybody is on a release that reports its real version.
+        var upToDate = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-6) };
+        upToDate.Rows.Add(Seen(Sunita, "1.0.18", Now.AddHours(-1)));
+        upToDate.Rows.Add(Seen(Ramesh, "1.0.18", Now.AddDays(-2)));
+
+        var (current, _) = await Ask(upToDate, days: 30);
+
+        current.LegacyVersionNumber.Should().Be("0.9.0",
+            "the number is in every answer, whether or not anybody reported it this period");
+
+        // Somebody is on an old release.
+        var mixed = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-6) };
+        mixed.Rows.Add(Seen(Sunita, "1.0.18", Now.AddHours(-1)));
+        mixed.Rows.Add(Seen(Ramesh, "0.9.0", Now.AddHours(-2)));
+
+        var (withOld, _) = await Ask(mixed, days: 7);
+
+        withOld.LegacyVersionNumber.Should().Be(GetAppVersionsHandler.LegacyVersionNumber,
+            "the answer and the handler name one and the same number");
+        withOld.LegacyVersionNumber.Should().Be("0.9.0");
+    }
+
+    [Fact]
+    public async Task A_phone_on_an_old_release_reports_0_9_0_and_is_listed_as_older()
+    {
+        var repo = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-6) };
+
+        // Sunita is on 1.0.18, which reports its real version.
+        repo.Rows.Add(Seen(Sunita, "1.0.18", Now.AddDays(-2)));
+
+        // Ramesh and Meena are on releases from before 1.0.18. Whichever one
+        // it is, the phone says 0.9.0. Ramesh used the app an hour ago, more
+        // recently than anybody on 1.0.18: being behind is about the version,
+        // not about who was seen last.
+        repo.Rows.Add(Seen(Ramesh, "0.9.0", Now.AddHours(-1)));
+        repo.Rows.Add(Seen(Meena, "0.9.0", Now.AddDays(-3)));
+
+        // Asha updated from an old release to 1.0.18 during the week. She
+        // counts once, on the version of her latest use.
+        repo.Rows.Add(Seen(Asha, "0.9.0", Now.AddDays(-5)));
+        repo.Rows.Add(Seen(Asha, "1.0.18", Now.AddDays(-1)));
+
+        repo.Names[Ramesh] = "Ramesh Patil";
+        repo.Names[Meena] = "Meena Jadhav";
+        repo.FarmNames[Ramesh] = new[] { "Patil Wadi" };
+        repo.FarmNames[Meena] = new[] { "Jadhav Mala" };
+
+        var (data, _) = await Ask(repo);
+
+        data.People.Should().Be(4);
+        data.NewestVersion.Should().Be("1.0.18",
+            "0.9.0 sorts below every real release, so an old phone can never look like the newest");
+        data.Versions.Should().Equal(
+            new AppVersionRowDto("1.0.18", 2, true),
+            new AppVersionRowDto("0.9.0", 2, false));
+
+        data.OnOlderVersions.Select(p => p.Name ?? "(no name)").Should().Equal(
+            new[] { "Ramesh Patil", "Meena Jadhav" },
+            "the two people whose phones report 0.9.0 are the ones behind, most recently seen first; "
+            + "Asha has moved on to 1.0.18");
+        data.OnOlderVersions[0].FarmNames.Should().Equal("Patil Wadi");
+        data.OnOlderVersions[1].FarmNames.Should().Equal("Jadhav Mala");
+
+        // The rows keep the number the phones really sent. It is the page
+        // that words it, by comparing with LegacyVersionNumber; a handler
+        // that wrote "1.0.17 or earlier" (or "1.0.17") here would be stating
+        // something no phone reported.
+        data.OnOlderVersions.Should().OnlyContain(p => p.AppVersion == "0.9.0");
+
+        var legacy = data.LegacyVersionNumber;
+        legacy.Should().Be("0.9.0");
+        data.OnOlderVersions.Should().OnlyContain(p => p.AppVersion == legacy,
+            "this equality is how the page knows which rows to show as \"1.0.17 or earlier\"");
+        data.Versions[1].AppVersion.Should().Be(legacy);
+
+        // Counting is unchanged, so it has no special case either way. Before
+        // anybody has updated, every phone reports 0.9.0: it is then the only
+        // version seen in use, which makes it the newest seen, and nobody is
+        // behind anybody.
+        var allOld = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-6) };
+        allOld.Rows.Add(Seen(Ramesh, "0.9.0", Now.AddHours(-1)));
+        allOld.Rows.Add(Seen(Meena, "0.9.0", Now.AddDays(-3)));
+
+        var (before, _) = await Ask(allOld);
+
+        before.People.Should().Be(2);
+        before.NewestVersion.Should().Be("0.9.0", "newest means newest seen in use, and nothing newer was seen");
+        before.Versions.Should().Equal(new AppVersionRowDto("0.9.0", 2, true));
+        before.OnOlderVersions.Should().BeEmpty("nobody is on a lower version than anybody else");
+        before.LegacyVersionNumber.Should().Be("0.9.0");
+        allOld.FarmNameCalls.Should().BeEmpty("with nobody behind, the cross-farm reader is not opened");
+    }
+
     // ------------------------------------------------------------------
     // Nothing measured yet, and the device totals
     // ------------------------------------------------------------------
@@ -497,6 +664,33 @@ public sealed class GetAppVersionsHandlerTests
         var repo = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-40) };
         repo.Rows.Add(Seen(Sunita, "1.0.18", Now.AddDays(-2)));
         repo.Rows.Add(Seen(Ramesh, "1.0.18", Now.AddDays(-10)));
+        return repo;
+    }
+
+    /// <summary>One of the many people behind, numbered from 1. None collides with the named people above.</summary>
+    private static Guid Person(int number) => new(number, 0, 0, new byte[8]);
+
+    private static string PersonName(int number) => $"Person {number:D3}";
+
+    /// <summary>
+    /// Counting began six days ago. Sunita is on 1.0.18. <paramref name="behind"/>
+    /// more people are on 1.0.17, person <c>n</c> last seen <c>n</c> minutes
+    /// ago, each with a name. The rows are added in a scrambled order, because
+    /// the repository promises none.
+    /// </summary>
+    private static FakeOpsRepository OneUpToDateAnd(int behind)
+    {
+        var repo = new FakeOpsRepository { CountingBeganUtc = Now.AddDays(-6) };
+        repo.Rows.Add(Seen(Sunita, "1.0.18", Now.AddSeconds(-30)));
+
+        // 211 is a prime above every count used here, so n -> 37n mod 211
+        // gives each person a different sort key: a fixed, scrambled order.
+        foreach (var number in Enumerable.Range(1, behind).OrderBy(n => (n * 37) % 211))
+        {
+            repo.Rows.Add(Seen(Person(number), "1.0.17", Now.AddMinutes(-number)));
+            repo.Names[Person(number)] = PersonName(number);
+        }
+
         return repo;
     }
 

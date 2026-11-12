@@ -27,7 +27,21 @@ namespace AgriSync.ArchitectureTests;
 /// merely opening the app never moves the weekly-active, retention or
 /// suffering numbers, and it carries no device identifier;</item>
 /// <item>recording can never cost a request: a failing writer does not fail
-/// it, and a failing request is still recorded.</item>
+/// it, a writer that never finishes does not hold it up, and a failing
+/// request is still recorded.</item>
+/// </list>
+///
+/// <para>
+/// Review round 2 (plan CR-1c Task V4) adds two more:
+/// </para>
+/// <list type="number">
+/// <item>one person is recorded on at most
+/// <c>AppSeenMiddleware.MaxVersionsPerPersonPerDay</c> different versions in
+/// a UTC day, so one account sending made-up versions cannot fill the day's
+/// allowance and stop the recording for everybody else;</item>
+/// <item>the row says the server wrote it: role <c>system</c> and no actor.
+/// The control room reads only such rows, and client ingest can never write
+/// one.</item>
 /// </list>
 ///
 /// <para>
@@ -47,17 +61,18 @@ namespace AgriSync.ArchitectureTests;
 /// </para>
 ///
 /// <para>
-/// Not tested here, stated plainly: the cap of 50,000 claims a day, and that
-/// a writer which hangs does not hold the request up.
+/// Not tested here, stated plainly: the cap of 50,000 claims a day.
 /// </para>
 /// </summary>
 public sealed class AppSeenMiddlewareTests
 {
     private const string SunitaId = "aaaaaaaa-1111-2222-3333-444444444444";
     private const string RameshId = "bbbbbbbb-1111-2222-3333-444444444444";
+    private const string MeenaId = "dddddddd-1111-2222-3333-444444444444";
 
     private static readonly Guid Sunita = Guid.Parse(SunitaId);
     private static readonly Guid Ramesh = Guid.Parse(RameshId);
+    private static readonly Guid Meena = Guid.Parse(MeenaId);
 
     /// <summary>08:00 UTC on 12 November 2026.</summary>
     private static readonly DateTimeOffset Morning = new(2026, 11, 12, 8, 0, 0, TimeSpan.Zero);
@@ -104,6 +119,63 @@ public sealed class AppSeenMiddlewareTests
             Interlocked.Increment(ref _calls);
             throw new InvalidOperationException("the analytics store is down");
         }
+    }
+
+    /// <summary>
+    /// The analytics store has stopped answering: the write is started and
+    /// never finishes. <see cref="Release"/> lets it finish, so a test does
+    /// not leave a write hanging behind it.
+    /// </summary>
+    private sealed class HangingWriter : IAnalyticsWriter
+    {
+        private readonly TaskCompletionSource _never = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public Task EmitAsync(AnalyticsEvent e, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _calls);
+            return _never.Task;
+        }
+
+        public Task EmitManyAsync(IEnumerable<AnalyticsEvent> es, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _calls);
+            return _never.Task;
+        }
+
+        public void Release() => _never.TrySetResult();
+    }
+
+    /// <summary>
+    /// The harsher kind of slow: the write does not return a pending task, it
+    /// holds the very thread it was called on until <see cref="Release"/>.
+    /// A middleware that started the write on the request's own thread would
+    /// be stuck here before it ever reached the rest of the pipeline.
+    /// </summary>
+    private sealed class BlockingWriter : IAnalyticsWriter
+    {
+        private readonly ManualResetEventSlim _gate = new(initialState: false);
+        private int _calls;
+
+        public int Calls => Volatile.Read(ref _calls);
+
+        public Task EmitAsync(AnalyticsEvent e, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _calls);
+            _gate.Wait(CancellationToken.None);
+            return Task.CompletedTask;
+        }
+
+        public Task EmitManyAsync(IEnumerable<AnalyticsEvent> es, CancellationToken ct = default)
+        {
+            Interlocked.Increment(ref _calls);
+            _gate.Wait(CancellationToken.None);
+            return Task.CompletedTask;
+        }
+
+        public void Release() => _gate.Set();
     }
 
     /// <summary>
@@ -197,6 +269,34 @@ public sealed class AppSeenMiddlewareTests
             NullLogger<AppSeenMiddleware>.Instance);
 
         return (mw, writer);
+    }
+
+    /// <summary>The same middleware over a writer of the test's choosing.</summary>
+    private static AppSeenMiddleware BuildOver(IAnalyticsWriter writer, RequestDelegate next, TimeProvider clock)
+    {
+        var services = new ServiceCollection();
+        services.AddScoped<IAnalyticsWriter>(_ => writer);
+
+        return new AppSeenMiddleware(
+            next,
+            services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            clock,
+            NullLogger<AppSeenMiddleware>.Instance);
+    }
+
+    /// <summary>
+    /// Sends one request and says whether it came back within five seconds.
+    /// The request is started on another thread, so a middleware that got
+    /// stuck before returning anything fails the test instead of hanging it.
+    /// Five seconds is not a performance bar: the writers these tests use
+    /// never finish on their own, so any limit tells "did not wait" from
+    /// "waited".
+    /// </summary>
+    private static async Task<(bool CameBack, Task Request)> Send(AppSeenMiddleware mw, HttpContext ctx)
+    {
+        var request = Task.Run(() => mw.InvokeAsync(ctx));
+        var first = await Task.WhenAny(request, Task.Delay(TimeSpan.FromSeconds(5)));
+        return (ReferenceEquals(first, request), request);
     }
 
     /// <summary>
@@ -437,6 +537,162 @@ public sealed class AppSeenMiddlewareTests
     }
 
     // ------------------------------------------------------------------
+    // One person, at most five versions a day (review round 2)
+    //
+    // The version comes from a header the caller writes. Without a limit per
+    // person, one signed-in account sending a new made-up version on every
+    // request would write up to 50,000 rows in a day and use up the whole
+    // day's allowance, and then nobody at all would be recorded until UTC
+    // midnight.
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_person_is_recorded_on_at_most_five_versions_a_day()
+    {
+        AppSeenMiddleware.MaxVersionsPerPersonPerDay.Should().Be(5,
+            "five is the agreed limit: far more than a real person updates in a day, and far "
+            + "too few to fill the store");
+
+        var next = new CountingNext();
+        var (mw, writer) = Build(next.Invoke, new MovableClock(Morning));
+
+        // Requests that are not recorded use up none of the five: the limit
+        // counts versions a person was RECORDED on, not requests they sent.
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "unknown"));
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "1.0;drop"));
+        await mw.InvokeAsync(Request(SignedIn(Sunita), appVersion: null));
+
+        // Five different versions in one day: every one is recorded.
+        string[] firstFive = ["1.0.14", "1.0.15", "1.0.16", "1.0.17", "1.0.18"];
+        foreach (var version in firstFive)
+        {
+            await mw.InvokeAsync(Request(SignedIn(Sunita), version));
+        }
+
+        // Coming back on one of those five is not a sixth version.
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "1.0.16"));
+
+        // A sixth, a seventh and an eighth different version that day.
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "1.0.19"));
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "2.0.0"));
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "99.99.99"));
+
+        // The control: another person, through the same instance, on the very
+        // version Sunita was just refused. So the middleware was still
+        // recording, and it is not that version which is refused.
+        await mw.InvokeAsync(Request(SignedIn(Ramesh), "1.0.19"));
+
+        var events = await SettledEvents(writer, expected: 6);
+
+        events.Where(e => PersonOf(e) == SunitaId).Select(VersionOf).Should().BeEquivalentTo(
+            firstFive,
+            "she is recorded on the first five different versions of the day and on no further "
+            + "one: not the sixth, and not any after it");
+        events.Where(e => PersonOf(e) == RameshId).Select(VersionOf).Should().Equal(
+            new[] { "1.0.19" },
+            "Ramesh's row proves the middleware was still recording when Sunita's sixth version passed through");
+        events.Should().HaveCount(6, "five rows for Sunita, one for Ramesh, and nothing else");
+        events.Should().OnlyContain(e => e.EventType == "app.seen");
+        next.Calls.Should().Be(13, "a request that is not recorded is still passed on, every time");
+    }
+
+    [Fact]
+    public async Task Another_person_is_still_recorded_after_one_person_reaches_the_limit()
+    {
+        var next = new CountingNext();
+        var (mw, writer) = Build(next.Invoke, new MovableClock(Morning));
+
+        // One account sends a new made-up version on every request, forty-five
+        // of them. This is the abuse the limit exists for.
+        for (var i = 1; i <= 45; i++)
+        {
+            await mw.InvokeAsync(Request(SignedIn(Sunita), $"7.0.{i}"));
+        }
+
+        // Ramesh, the same day, through the same instance, has his own five,
+        // whole. One of them is a version Sunita's account was refused on.
+        string[] rameshFive = ["1.0.15", "1.0.16", "1.0.17", "1.0.18", "7.0.45"];
+        foreach (var version in rameshFive)
+        {
+            await mw.InvokeAsync(Request(SignedIn(Ramesh), version));
+        }
+
+        // His allowance is five as well: the limit is each person's own, it
+        // was not lifted for him.
+        await mw.InvokeAsync(Request(SignedIn(Ramesh), "1.0.19"));
+
+        // And a third person who opens the app once.
+        await mw.InvokeAsync(Request(SignedIn(Meena), "1.0.18"));
+
+        var events = await SettledEvents(writer, expected: 11);
+
+        events.Where(e => PersonOf(e) == SunitaId).Select(VersionOf).Should().BeEquivalentTo(
+            new[] { "7.0.1", "7.0.2", "7.0.3", "7.0.4", "7.0.5" },
+            "forty-five made-up versions from one account leave five rows, not forty-five");
+        events.Where(e => PersonOf(e) == RameshId).Select(VersionOf).Should().BeEquivalentTo(
+            rameshFive,
+            "one person reaching the limit takes nothing from anybody else: Ramesh is recorded "
+            + "on all five of his versions, and his own sixth is the one that is not");
+        events.Where(e => PersonOf(e) == MeenaId).Select(VersionOf).Should().Equal(
+            new[] { "1.0.18" },
+            "and a person who simply opens the app is recorded as on any other day");
+        events.Should().HaveCount(11);
+        next.Calls.Should().Be(52);
+    }
+
+    [Fact]
+    public async Task The_per_person_limit_resets_the_next_day()
+    {
+        var next = new CountingNext();
+
+        // 23:50 UTC on 12 November.
+        var clock = new MovableClock(new DateTimeOffset(2026, 11, 12, 23, 50, 0, TimeSpan.Zero));
+        var (mw, writer) = Build(next.Invoke, clock);
+
+        string[] dayOne = ["1.0.14", "1.0.15", "1.0.16", "1.0.17", "1.0.18"];
+        foreach (var version in dayOne)
+        {
+            await mw.InvokeAsync(Request(SignedIn(Sunita), version));
+        }
+
+        // Her sixth version of the 12th: not recorded.
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "1.0.19"));
+
+        var firstDay = await SettledEvents(writer, expected: 5);
+        firstDay.Select(VersionOf).Should().BeEquivalentTo(dayOne,
+            "on the 12th she reaches the limit, and the sixth version is not recorded");
+
+        // Twenty minutes later it is 00:10 UTC on the 13th. In the clock's
+        // local zone the date has not changed (05:20 to 05:40): what counts is
+        // the UTC date, as for the once-a-day rule.
+        clock.Advance(TimeSpan.FromMinutes(20));
+
+        // The version she was refused yesterday is recorded today, and so are
+        // four she was already recorded on yesterday: a new day is a new five.
+        string[] dayTwo = ["1.0.19", "1.0.18", "1.0.17", "1.0.16", "1.0.15"];
+        foreach (var version in dayTwo)
+        {
+            await mw.InvokeAsync(Request(SignedIn(Sunita), version));
+        }
+
+        // The new day has the same limit; it did not switch the limit off.
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "1.0.20"));
+
+        // The control: Ramesh on the version she was just refused.
+        await mw.InvokeAsync(Request(SignedIn(Ramesh), "1.0.20"));
+
+        var events = await SettledEvents(writer, expected: 11);
+
+        events.Where(e => PersonOf(e) == SunitaId).Select(VersionOf).Should().BeEquivalentTo(
+            dayOne.Concat(dayTwo),
+            "five rows on the 12th and five more on the 13th: the count starts again with the "
+            + "UTC day, and on the new day the sixth version is again the one not recorded");
+        events.Where(e => PersonOf(e) == RameshId).Select(VersionOf).Should().Equal("1.0.20");
+        events.Should().HaveCount(11);
+        next.Calls.Should().Be(13);
+    }
+
+    // ------------------------------------------------------------------
     // What is NOT recorded
     // ------------------------------------------------------------------
 
@@ -646,6 +902,55 @@ public sealed class AppSeenMiddlewareTests
         return PropsOf(events[0]);
     }
 
+    /// <summary>
+    /// Review round 2. The control room counts only rows the server itself
+    /// wrote, and it tells them apart by two columns: no actor, and the role
+    /// <c>system</c>. Client ingest stamps every row it writes <c>user</c> or
+    /// <c>anonymous</c>, so it can never produce this pair. If the middleware
+    /// wrote any other role, its own rows would vanish from the page; if it
+    /// set the actor, opening the app would count as weekly activity.
+    /// </summary>
+    [Fact]
+    public async Task The_row_is_marked_as_written_by_the_server()
+    {
+        var (mw, writer) = Build(new CountingNext().Invoke, new MovableClock(Morning));
+
+        // A farm's owner, with the claims a real token carries. Whoever the
+        // person is and whatever roles they hold, the WRITER of this row is
+        // the server.
+        var owner = new ClaimsPrincipal(new ClaimsIdentity(
+            new[]
+            {
+                new Claim("sub", SunitaId),
+                new Claim(ClaimTypes.Role, "PrimaryOwner"),
+                new Claim("role", "admin"),
+                new Claim("farm_id", "11111111-2222-3333-4444-555555555555"),
+            },
+            authenticationType: "Test"));
+
+        await mw.InvokeAsync(Request(owner, "1.0.18", platform: "android", method: "POST", path: "/shramsafal/logs"));
+
+        // And a person with nothing on their token but who they are.
+        await mw.InvokeAsync(Request(SignedIn(Ramesh), "1.0.18"));
+
+        var events = await SettledEvents(writer, expected: 2);
+        events.Should().HaveCount(2);
+
+        foreach (var ev in events)
+        {
+            ev.EventType.Should().Be("app.seen");
+            ev.ActorRole.Should().Be("system",
+                "the server wrote this row, and \"system\" is how a server-written row says so; "
+                + "the page reads only rows with this role and no actor");
+            ev.ActorUserId.HasValue.Should().BeFalse(
+                "no actor: the person is in props, and a row with an actor is one the page "
+                + "must treat as written by a client");
+        }
+
+        events.Select(PersonOf).Should().BeEquivalentTo(new[] { SunitaId, RameshId },
+            "both people are still recorded, each in props");
+    }
+
     // ------------------------------------------------------------------
     // Recording may never cost a request, and a failed request is still seen
     // ------------------------------------------------------------------
@@ -699,6 +1004,81 @@ public sealed class AppSeenMiddlewareTests
         ctx2.Response.StatusCode.Should().Be(StatusCodes.Status204NoContent);
         (await Eventually(() => bareLogger.HasWarning)).Should().BeTrue(
             "a writer that cannot be resolved is a failed write like any other, and is logged the same way");
+    }
+
+    /// <summary>
+    /// A failing writer is the easy case: it comes back at once, with an
+    /// exception. The store that costs a farmer time is the one that does not
+    /// come back at all. The middleware must start the write and go on, never
+    /// wait for it.
+    /// </summary>
+    [Fact]
+    public async Task A_slow_writer_never_delays_the_request()
+    {
+        // 1. The write is started and never completes.
+        var hanging = new HangingWriter();
+        try
+        {
+            var next = new CountingNext();
+            var mw = BuildOver(hanging, next.Invoke, new MovableClock(Morning));
+
+            var ctx = Request(SignedIn(Sunita), "1.0.18");
+            var (cameBack, request) = await Send(mw, ctx);
+
+            cameBack.Should().BeTrue(
+                "the request does not wait for the write: this writer never finishes, so a "
+                + "middleware that awaited it would hold the farmer's request for ever");
+            await request;
+
+            next.Calls.Should().Be(1, "the rest of the pipeline ran while the write was still in flight");
+            ctx.Response.StatusCode.Should().Be(StatusCodes.Status204NoContent,
+                "the farmer gets the endpoint's answer whether or not the write ever lands");
+
+            (await Eventually(() => hanging.Calls > 0)).Should().BeTrue(
+                "this request is one that is recorded, so the hanging writer really was asked; "
+                + "if it never was, this test proved nothing");
+
+            // That write is still hanging. The next person's request must not
+            // queue up behind it.
+            var ctx2 = Request(SignedIn(Ramesh), "1.0.18");
+            var (secondCameBack, second) = await Send(mw, ctx2);
+
+            secondCameBack.Should().BeTrue("one write that hangs does not hold up the requests that follow it");
+            await second;
+
+            next.Calls.Should().Be(2);
+            ctx2.Response.StatusCode.Should().Be(StatusCodes.Status204NoContent);
+        }
+        finally
+        {
+            hanging.Release();
+        }
+
+        // 2. The write holds the thread it was called on.
+        var blocking = new BlockingWriter();
+        try
+        {
+            var next = new CountingNext();
+            var mw = BuildOver(blocking, next.Invoke, new MovableClock(Morning));
+
+            var ctx = Request(SignedIn(Sunita), "1.0.18");
+            var (cameBack, request) = await Send(mw, ctx);
+
+            cameBack.Should().BeTrue(
+                "the write is started off the request's own thread: a writer that blocks its "
+                + "caller must not be able to block the request");
+            await request;
+
+            next.Calls.Should().Be(1);
+            ctx.Response.StatusCode.Should().Be(StatusCodes.Status204NoContent);
+
+            (await Eventually(() => blocking.Calls > 0)).Should().BeTrue(
+                "the blocking writer really was asked; if it never was, this proved nothing");
+        }
+        finally
+        {
+            blocking.Release();
+        }
     }
 
     [Fact]

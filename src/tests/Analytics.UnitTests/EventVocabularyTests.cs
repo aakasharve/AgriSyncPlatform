@@ -14,8 +14,17 @@ namespace Analytics.UnitTests;
 /// <list type="number">
 /// <item><b>Registry shape</b> — exactly 15 entries, every name matches the ADRs.</item>
 /// <item><b>Validator rejects</b> — unknown event_type and missing required prop.</item>
-/// <item><b>Round-trip</b> — every entry validates with its own RequiredProps populated.</item>
+/// <item><b>Shape check</b> — every entry passes <c>Validate</c> with its own RequiredProps populated.</item>
 /// </list>
+/// <remarks>
+/// Every validator test in this class calls <c>IngestEventsValidator.Validate</c>,
+/// the SHAPE check: is the type in the vocabulary, and are its required props
+/// there. Since review round 2 of spec control-room-app-versions-2026-11-12
+/// that is no longer the same question as "may a client send this": seven of
+/// the fifteen types are server-only, and <c>ValidateFromClient</c> refuses
+/// them at <c>POST /analytics/ingest</c>. That door is held in
+/// <see cref="ServerOnlyEventTypeTests"/>.
+/// </remarks>
 public sealed class EventVocabularyTests
 {
     // -----------------------------------------------------------------
@@ -315,15 +324,39 @@ public sealed class EventVocabularyTests
     }
 
     // -----------------------------------------------------------------
-    // Round-trip — every vocabulary entry validates with its required props
+    // Shape check — every vocabulary entry passes Validate with its required props
     // -----------------------------------------------------------------
 
     public static IEnumerable<object[]> AllVocabularyEvents() =>
         EventVocabulary.Registry.Select(kv => new object[] { kv.Key, kv.Value });
 
+    /// <summary>
+    /// Was <c>Every_Vocabulary_Event_RoundTrips_With_Its_Required_Props</c>;
+    /// the same theory, renamed on 2026-11-12 (spec
+    /// control-room-app-versions-2026-11-12, plan CR-1c Task V4) to say which
+    /// check it exercises.
+    ///
+    /// <para>
+    /// When it was written, <c>Validate</c> was the only check and the ingest
+    /// route used it, so this theory passing for <c>app.seen</c> (and for
+    /// <c>api.error</c>, <c>log.created</c> and the other server-written
+    /// types) read as "the ingest validator accepts it". That reading was the
+    /// defect review round 2 found. What the theory holds is narrower and
+    /// still wanted: <c>Validate</c> is the SHAPE check any producer can use,
+    /// and every entry in the vocabulary, server-only or not, passes it once
+    /// its required props are there. It says nothing about who may send the
+    /// event.
+    /// </para>
+    ///
+    /// <para>
+    /// The last assertion states the other half next to it, so the two are
+    /// not confused again: the very same well-shaped event, coming from a
+    /// client, is accepted only when its type is not server-only.
+    /// </para>
+    /// </summary>
     [Theory]
     [MemberData(nameof(AllVocabularyEvents))]
-    public void Every_Vocabulary_Event_RoundTrips_With_Its_Required_Props(
+    public void Every_Vocabulary_Event_Passes_The_Shape_Check_With_Its_Required_Props(
         string eventType, EventDefinition def)
     {
         var sut = new IngestEventsValidator();
@@ -340,10 +373,19 @@ public sealed class EventVocabularyTests
             new IngestedEvent(eventType, props),
         });
 
-        var result = sut.Validate(cmd);
+        // The shape check: Validate, not ValidateFromClient.
+        var shape = sut.Validate(cmd);
 
-        result.IsValid.Should().BeTrue(
-            $"event '{eventType}' must validate when every required prop is supplied — failure here means EventVocabulary and IngestEventsValidator have drifted from the ADR");
-        result.Errors.Should().BeEmpty();
+        shape.IsValid.Should().BeTrue(
+            $"event '{eventType}' must pass the shape check when every required prop is supplied — failure here means EventVocabulary and IngestEventsValidator have drifted from the ADR");
+        shape.Errors.Should().BeEmpty();
+
+        // The client door is a different check. Passing the shape check does
+        // not mean a client may send the event.
+        var fromClient = sut.ValidateFromClient(cmd);
+
+        fromClient.IsValid.Should().Be(!EventVocabulary.IsServerOnly(eventType),
+            $"a well-shaped '{eventType}' is accepted from a client only if it is not a server-only type; "
+            + "the shape check passing for a server-only type is not permission to ingest it");
     }
 }
