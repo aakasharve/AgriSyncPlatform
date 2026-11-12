@@ -12,16 +12,23 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { KpiCard } from '@/components/ui/KpiCard';
 
-// spec: control-room-app-versions-2026-11-12 (CR-1c Task V3).
+// spec: control-room-app-versions-2026-11-12 (CR-1c Tasks V3 and V4).
 // The page shows nothing the server did not measure: before the first row exists it says
 // "Not measured yet" (never zero), a failed load says so (never an empty table), and
 // "newest" always reads "newest seen in use" because the server does not know what the
 // store has published. No phone number and no device identifier is ever shown.
+//
+// Every release up to 1.0.17 reports the same number, which was never a release. The server
+// names that number (legacyVersionNumber); the page shows it as "1.0.17 or earlier" with the
+// reported number beside it, never as if it were a release.
 
 const PERIODS: AppVersionsDays[] = [7, 30];
 const NOT_MEASURED = 'Not measured yet';
 const NO_NAME = 'No name on record';
 const NO_FARM = 'No farm on record';
+const LEGACY_LABEL = '1.0.17 or earlier';
+/** Used only in the "How this is counted" sentence, and only when the server did not name the number. */
+const LEGACY_NUMBER_IN_WORDS = '0.9.0';
 
 const TH = 'py-3 pr-4 text-left text-[11px] font-extrabold uppercase tracking-[0.08em] text-text-muted first:pl-4';
 const TD = 'py-2.5 pr-4 align-top first:pl-4';
@@ -49,6 +56,44 @@ function farmLine(p: OlderVersionPerson): string {
   return p.farmNames.length > 0 ? p.farmNames.join(', ') : NO_FARM;
 }
 
+/**
+ * The day counting began, or null when nothing has been recorded yet. The one test the whole
+ * page uses: null, undefined and an empty string all mean "not measured".
+ */
+function measuredSince(data: AppVersions): string | null {
+  const since: unknown = data.measuredSinceUtc;
+  return typeof since === 'string' && since !== '' ? since : null;
+}
+
+/**
+ * The number old releases report, or null when the server did not send it. When it is null
+ * nothing is relabelled and every version is shown as it came.
+ */
+function legacyNumberOf(data: AppVersions): string | null {
+  const reported: unknown = data.legacyVersionNumber;
+  return typeof reported === 'string' && reported !== '' ? reported : null;
+}
+
+/**
+ * "reports as 0.9.0" for the number old releases report; null for every other version. The
+ * one place that decides whether a version is relabelled.
+ */
+function legacyNote(appVersion: string, legacyNumber: string | null): string | null {
+  return legacyNumber !== null && appVersion === legacyNumber ? `reports as ${legacyNumber}` : null;
+}
+
+/** What the page shows for a version: its own number, or the label for the number old releases report. */
+function versionLabel(appVersion: string, legacyNumber: string | null): string {
+  return legacyNote(appVersion, legacyNumber) !== null ? LEGACY_LABEL : appVersion;
+}
+
+/** Everything the search box looks through for one person: what is on the screen, plus the raw number. */
+function searchText(p: OlderVersionPerson, legacyNumber: string | null): string {
+  const note = legacyNote(p.appVersion, legacyNumber);
+  const version = note !== null ? `${p.appVersion} ${LEGACY_LABEL} ${note}` : p.appVersion;
+  return `${personName(p)} ${farmLine(p)} ${version}`.toLowerCase();
+}
+
 export default function AppVersionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const days: AppVersionsDays = searchParams.get('days') === '30' ? 30 : 7;
@@ -59,6 +104,7 @@ export default function AppVersionsPage() {
   }
 
   const loaded = !isError && !isPending && data ? data : null;
+  const since = loaded ? measuredSince(loaded) : null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -72,8 +118,8 @@ export default function AppVersionsPage() {
         </h1>
         {loaded && (
           <span className="text-sm font-semibold text-text-muted">
-            {loaded.measuredSinceUtc
-              ? `Counting since ${readableDay(loaded.measuredSinceUtc)}`
+            {since !== null
+              ? `Counting since ${readableDay(since)}`
               : 'Counting has not started'}
           </span>
         )}
@@ -142,13 +188,12 @@ export default function AppVersionsPage() {
 function Loaded({ data, days }: { data: AppVersions; days: AppVersionsDays }) {
   const [search, setSearch] = useState('');
 
-  const measured = data.measuredSinceUtc !== null;
+  const measured = measuredSince(data) !== null;
+  const legacyNumber = legacyNumberOf(data);
   const olderCount = data.versions.reduce((sum, v) => (v.isNewest ? sum : sum + v.people), 0);
 
   const q = search.trim().toLowerCase();
-  const shown = data.onOlderVersions.filter(
-    (p) => !q || `${personName(p)} ${farmLine(p)} ${p.appVersion}`.toLowerCase().includes(q)
-  );
+  const shown = data.onOlderVersions.filter((p) => !q || searchText(p, legacyNumber).includes(q));
 
   const deviceNote =
     `${countOf(data.otherDevices, 'browser sign-in', 'browser sign-ins')} · ` +
@@ -204,10 +249,13 @@ function Loaded({ data, days }: { data: AppVersions; days: AppVersionsDays }) {
                 )}
                 {data.versions.map((v) => {
                   const pct = sharePct(v.people, data.people);
+                  const note = legacyNote(v.appVersion, legacyNumber);
                   return (
                     <tr key={v.appVersion} className="border-b border-row-divider last:border-0 hover:bg-surface-sidebar">
                       <td className={TD}>
-                        <span className="font-mono text-[13px] font-bold text-text-primary">{v.appVersion}</span>
+                        <span className="font-mono text-[13px] font-bold text-text-primary">
+                          {versionLabel(v.appVersion, legacyNumber)}
+                        </span>
                         <span
                           className={`ml-2 inline-block rounded px-1.5 py-0.5 text-[11px] font-bold text-text-primary ${
                             v.isNewest ? 'bg-success/15' : 'bg-warning/15'
@@ -215,6 +263,9 @@ function Loaded({ data, days }: { data: AppVersions; days: AppVersionsDays }) {
                         >
                           {v.isNewest ? 'newest seen in use' : 'older'}
                         </span>
+                        {note !== null && (
+                          <span className="mt-0.5 block text-[12px] text-text-muted">{note}</span>
+                        )}
                       </td>
                       <td className={TD}>
                         <span className="font-mono text-[13px] font-bold text-text-primary">{v.people.toLocaleString()}</span>
@@ -242,9 +293,12 @@ function Loaded({ data, days }: { data: AppVersions; days: AppVersionsDays }) {
             <CardHeader><CardTitle>How this is counted</CardTitle></CardHeader>
             <CardContent>
               <p className="max-w-3xl text-sm text-text-primary">
-                Each person is counted once, on the version they were most recently seen using in
-                the period. Phones are one total taken from sign-ins, so they cannot be split by
-                version. People whose app sends no version are not on this page.
+                Each person is counted once. If a person was seen on two versions in the period,
+                the one that appeared later counts. Releases up to 1.0.17 all report the same
+                number ({legacyNumber ?? LEGACY_NUMBER_IN_WORDS}), so they cannot be told apart;
+                from 1.0.18 the app reports its real version. Phones are one total taken from
+                sign-ins, so they cannot be split by version. People whose app sends no version
+                are not on this page.
               </p>
             </CardContent>
           </Card>
@@ -295,22 +349,28 @@ function Loaded({ data, days }: { data: AppVersions; days: AppVersionsDays }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {shown.map((p, i) => (
-                        <tr key={i} className="border-b border-row-divider last:border-0 hover:bg-surface-sidebar">
-                          <td className={TD}>
-                            <span className="block font-bold text-text-primary">{personName(p)}</span>
-                            <span className="block text-[12px] text-text-muted">{farmLine(p)}</span>
-                          </td>
-                          <td className={TD}>
-                            <span className="inline-block rounded bg-warning/15 px-1.5 py-0.5 font-mono text-[12px] font-bold text-text-primary">
-                              {p.appVersion}
-                            </span>
-                          </td>
-                          <td className={TD}>
-                            <span className="whitespace-nowrap text-[13px] text-text-primary">{readableDay(p.lastSeenUtc)}</span>
-                          </td>
-                        </tr>
-                      ))}
+                      {shown.map((p, i) => {
+                        const note = legacyNote(p.appVersion, legacyNumber);
+                        return (
+                          <tr key={i} className="border-b border-row-divider last:border-0 hover:bg-surface-sidebar">
+                            <td className={TD}>
+                              <span className="block font-bold text-text-primary">{personName(p)}</span>
+                              <span className="block text-[12px] text-text-muted">{farmLine(p)}</span>
+                            </td>
+                            <td className={TD}>
+                              <span className="inline-block whitespace-nowrap rounded bg-warning/15 px-1.5 py-0.5 font-mono text-[12px] font-bold text-text-primary">
+                                {versionLabel(p.appVersion, legacyNumber)}
+                              </span>
+                              {note !== null && (
+                                <span className="mt-0.5 block whitespace-nowrap text-[12px] text-text-muted">{note}</span>
+                              )}
+                            </td>
+                            <td className={TD}>
+                              <span className="whitespace-nowrap text-[13px] text-text-primary">{readableDay(p.lastSeenUtc)}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
