@@ -18,6 +18,13 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// The newest version seen IN USE in the period. The server does not know what
 /// the store has published. Null when nobody was seen.
 /// </param>
+/// <param name="LegacyVersionNumber">
+/// The number every release up to 1.0.17 reports in place of its own
+/// (<c>0.9.0</c>); from 1.0.18 the app reports its real version. It is in
+/// every answer, whether or not anybody reported it in the period. The rows
+/// keep what the phones really sent; the page shows a version equal to this as
+/// "1.0.17 or earlier".
+/// </param>
 /// <param name="Versions">One row per version with at least one person, newest first.</param>
 /// <param name="OnOlderVersions">People on a version lower than the newest, most recently seen first, at most 200.</param>
 public sealed record AppVersionsDto(
@@ -28,6 +35,7 @@ public sealed record AppVersionsDto(
     int OtherDevices,
     int PeopleWithUnknownDevice,
     string? NewestVersion,
+    string LegacyVersionNumber,
     IReadOnlyList<AppVersionRowDto> Versions,
     IReadOnlyList<OlderVersionPersonDto> OnOlderVersions);
 

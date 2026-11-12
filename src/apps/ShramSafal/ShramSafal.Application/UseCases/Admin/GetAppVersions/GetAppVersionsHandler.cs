@@ -32,6 +32,17 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
 {
     public const int MaxOlderVersionPeople = 200;
 
+    /// <summary>
+    /// The number every release up to 1.0.17 sends as its version: until then
+    /// the app sent the version in its <c>package.json</c>, which was never a
+    /// release. From 1.0.18 it sends its real version. So a row on this number
+    /// means "1.0.17 or earlier", and 1.0.15, 1.0.16 and 1.0.17 cannot be told
+    /// apart. It is named in every answer so the page can word those rows;
+    /// nothing is rewritten and nothing is counted differently because of it
+    /// (it already sorts below every real release).
+    /// </summary>
+    public const string LegacyVersionNumber = "0.9.0";
+
     public async Task<Result<AdminResponseDto<AppVersionsDto>>> HandleAsync(
         GetAppVersionsQuery query, CancellationToken ct = default)
     {
@@ -56,6 +67,7 @@ public sealed class GetAppVersionsHandler(IAdminOpsRepository opsRepo, TimeProvi
             OtherDevices: devices.OtherDevices,
             PeopleWithUnknownDevice: devices.PeopleWithUnknownDevice,
             NewestVersion: versions.Count > 0 ? versions[0].AppVersion : null,
+            LegacyVersionNumber: LegacyVersionNumber,
             Versions: versions,
             OnOlderVersions: onOlderVersions);
 

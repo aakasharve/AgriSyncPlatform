@@ -43,6 +43,21 @@ namespace AgriSync.Bootstrapper.Middleware;
 /// person can be recorded twice in a day. Readers count distinct people, so a
 /// duplicate is harmless.
 /// </para>
+///
+/// <para>
+/// <b>One person, at most <see cref="MaxVersionsPerPersonPerDay"/> versions a
+/// day.</b> The version is a header the caller writes. Without a limit per
+/// person, one signed-in account sending a new made-up version on every
+/// request could use up <see cref="MaxClaimsPerDay"/> on its own and stop the
+/// recording for everybody until UTC midnight.
+/// </para>
+///
+/// <para>
+/// <b>Who wrote the row.</b> <c>actor_role</c> is <c>system</c> and there is no
+/// actor. The control room reads only rows with that pair
+/// (<c>AdminOpsRepository.GetAppSeenAsync</c>), and client ingest can never
+/// write it: ingest stamps every row <c>user</c> or <c>anonymous</c>.
+/// </para>
 /// </summary>
 public sealed class AppSeenMiddleware(
     RequestDelegate next,
@@ -57,6 +72,18 @@ public sealed class AppSeenMiddleware(
     /// Warning says so.
     /// </summary>
     public const int MaxClaimsPerDay = 50_000;
+
+    /// <summary>
+    /// The most different versions one person is recorded on in one UTC day:
+    /// far more than a real person updates in a day, and far too few for one
+    /// account to use up <see cref="MaxClaimsPerDay"/>. Past it a further new
+    /// version from that person is not recorded that day, and one Warning per
+    /// person says so. Other people are unaffected, and the count starts
+    /// again with the next UTC day. A request that is not recorded anyway (no
+    /// version, a malformed or wordy one, a version already recorded today)
+    /// uses none of the five.
+    /// </summary>
+    public const int MaxVersionsPerPersonPerDay = 5;
 
     private const string AndroidPlatform = "android";
 
@@ -183,7 +210,28 @@ public sealed class AppSeenMiddleware(
             return false;
         }
 
-        return claims.TryAdd(personId, appVersion);
+        if (claims.TryAdd(personId, appVersion, out var reportPersonLimit))
+        {
+            return true;
+        }
+
+        if (reportPersonLimit)
+        {
+            // Once per person and day, so at most MaxClaimsPerDay /
+            // MaxVersionsPerPersonPerDay of these in a day. A real person
+            // does not get here; an account sending made-up versions does,
+            // and this line is how that gets noticed.
+            logger.LogWarning(
+                "AppSeenPersonLimitReached: personId={PersonId} was already recorded on "
+                + "{MaxVersionsPerPersonPerDay} different app versions on {DayUtc} (UTC). No further "
+                + "version is recorded for this person until the next UTC day; other people are still "
+                + "recorded and requests are unaffected.",
+                personId,
+                MaxVersionsPerPersonPerDay,
+                claims.Day);
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -212,9 +260,19 @@ public sealed class AppSeenMiddleware(
         }
     }
 
+    /// <summary>
+    /// Who has been recorded on which versions in one UTC day. It stays
+    /// bounded two ways: a person is added only while the day is not full and
+    /// is recorded on a version the moment they are added, so there are never
+    /// more people here than claims (<see cref="MaxClaimsPerDay"/>, plus the
+    /// few requests that were in flight when it filled); and each person
+    /// holds at most <see cref="MaxVersionsPerPersonPerDay"/> versions of at
+    /// most 32 characters. The whole object is dropped when the day moves on,
+    /// which is what resets both limits.
+    /// </summary>
     private sealed class DayClaims(DateOnly day)
     {
-        private readonly ConcurrentDictionary<(Guid PersonId, string AppVersion), byte> _seen = new();
+        private readonly ConcurrentDictionary<Guid, PersonVersions> _people = new();
         private int _count;
         private int _fullReported;
 
@@ -222,10 +280,16 @@ public sealed class AppSeenMiddleware(
 
         public bool IsFull => Volatile.Read(ref _count) >= MaxClaimsPerDay;
 
-        /// <summary>True only for the first claim of this person and version today.</summary>
-        public bool TryAdd(Guid personId, string appVersion)
+        /// <summary>
+        /// True only for the first claim of this person and version today,
+        /// and only while the person is under their limit for the day.
+        /// <paramref name="reportPersonLimit"/> is true the first time today
+        /// that this person is refused for being at the limit.
+        /// </summary>
+        public bool TryAdd(Guid personId, string appVersion, out bool reportPersonLimit)
         {
-            if (!_seen.TryAdd((personId, appVersion), 0))
+            var person = _people.GetOrAdd(personId, static _ => new PersonVersions());
+            if (!person.TryAdd(appVersion, out reportPersonLimit))
             {
                 return false;
             }
@@ -235,5 +299,44 @@ public sealed class AppSeenMiddleware(
         }
 
         public bool ReportFullOnce() => Interlocked.Exchange(ref _fullReported, 1) == 0;
+    }
+
+    /// <summary>
+    /// The versions one person has been recorded on today. Checking and
+    /// adding happen under one lock, so two requests from the same person
+    /// arriving together can neither record one version twice nor take the
+    /// person past the limit. The lock is this person's alone: nobody else's
+    /// request ever waits on it.
+    /// </summary>
+    private sealed class PersonVersions
+    {
+        // Almost everybody is on one version all day.
+        private readonly List<string> _versions = new(capacity: 1);
+        private bool _limitReported;
+
+        public bool TryAdd(string appVersion, out bool reportLimit)
+        {
+            lock (_versions)
+            {
+                reportLimit = false;
+
+                // Coming back on a version already recorded today is not a
+                // further version, at the limit or below it.
+                if (_versions.Contains(appVersion))
+                {
+                    return false;
+                }
+
+                if (_versions.Count >= MaxVersionsPerPersonPerDay)
+                {
+                    reportLimit = !_limitReported;
+                    _limitReported = true;
+                    return false;
+                }
+
+                _versions.Add(appVersion);
+                return true;
+            }
+        }
     }
 }

@@ -27,13 +27,18 @@ public interface IAdminOpsRepository
     // ───────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Every <c>app.seen</c> row from <paramref name="sinceUtc"/> on, in no
-    /// particular order. A row whose person or version cannot be read is
-    /// skipped.
+    /// Every <c>app.seen</c> row the server itself wrote (no actor, role
+    /// <c>system</c>) from <paramref name="sinceUtc"/> on, in no particular
+    /// order. A row with an actor or any other role was not written by the
+    /// server and is never read. A row whose person or version cannot be read
+    /// is skipped.
     /// </summary>
     Task<IReadOnlyList<AppSeenRow>> GetAppSeenAsync(DateTime sinceUtc, CancellationToken ct = default);
 
-    /// <summary>When the earliest <c>app.seen</c> row was written; null when there is none.</summary>
+    /// <summary>
+    /// When the earliest <c>app.seen</c> row the server itself wrote (no
+    /// actor, role <c>system</c>) was written; null when there is none.
+    /// </summary>
     Task<DateTime?> GetAppSeenStartAsync(CancellationToken ct = default);
 
     /// <summary>

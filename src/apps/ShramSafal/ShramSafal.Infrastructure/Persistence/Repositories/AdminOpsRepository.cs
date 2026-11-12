@@ -361,6 +361,15 @@ public sealed class AdminOpsRepository(
     // own error path logs it and answers 500, and the page says it could not
     // load. An empty answer here would read as "nobody is on an older
     // version" (P4).
+    //
+    // Both app.seen reads take only rows the SERVER wrote: no actor
+    // (actor_user_id IS NULL) and actor_role = 'system'. That pair is what
+    // AppSeenMiddleware writes and what client ingest can never write (ingest
+    // stamps every row 'user' or 'anonymous'). Ingest refuses app.seen as
+    // well; this is the second lock, and it also shuts out any such row
+    // already in an append-only store. Column names are the mapping in
+    // AnalyticsEventConfiguration. The trigger column is deliberately not
+    // part of the test.
     // ───────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<AppSeenRow>> GetAppSeenAsync(DateTime sinceUtc, CancellationToken ct = default)
@@ -382,6 +391,8 @@ public sealed class AdminOpsRepository(
                     occurred_at_utc
                 FROM analytics.events
                 WHERE event_type = 'app.seen'
+                  AND actor_user_id IS NULL
+                  AND actor_role = 'system'
                   AND occurred_at_utc >= @since
                 """;
             AddParam(cmd, "@since", AsUtc(sinceUtc));
@@ -416,6 +427,8 @@ public sealed class AdminOpsRepository(
                 SELECT MIN(occurred_at_utc)
                 FROM analytics.events
                 WHERE event_type = 'app.seen'
+                  AND actor_user_id IS NULL
+                  AND actor_role = 'system'
                 """;
             var raw = await cmd.ExecuteScalarAsync(ct);
             return raw is DateTime first ? first : null;
