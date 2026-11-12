@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, type KeyboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Zap, AlertTriangle, Mic, Star, Wheat, TrendingDown, Frown, Calendar, Users, Settings, Home } from 'lucide-react';
+import { Search, Zap, AlertTriangle, Mic, Smartphone, Star, Wheat, TrendingDown, Frown, Calendar, Users, Settings, Home } from 'lucide-react';
 
 interface Command { id: string; label: string; path: string; icon: React.ReactNode; group: string; }
 
@@ -9,6 +9,7 @@ const COMMANDS: Command[] = [
   { id:'live',    label:'Live Health',       path:'/ops/live',               icon:<Zap size={16}/>,          group:'Operations' },
   { id:'errors',  label:'API Errors',        path:'/ops/errors',             icon:<AlertTriangle size={16}/>, group:'Operations' },
   { id:'voice',   label:'Voice Pipeline',    path:'/ops/voice',              icon:<Mic size={16}/>,          group:'Operations' },
+  { id:'appver',  label:'App Versions',      path:'/ops/app-versions',       icon:<Smartphone size={16}/>,   group:'Operations' },
   { id:'nsm',     label:'WVFD North Star',   path:'/metrics/nsm',            icon:<Star size={16}/>,         group:'Metrics' },
   { id:'farms',   label:'All Farms',         path:'/farms',                  icon:<Wheat size={16}/>,        group:'Farms' },
   { id:'churn',   label:'Silent Churn',      path:'/farms/silent-churn',     icon:<TrendingDown size={16}/>, group:'Farms' },
