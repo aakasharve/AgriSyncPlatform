@@ -44,6 +44,8 @@ type ReferenceScheduleTemplate = {
     scope?: string;
     // spec: plr-d10 lane L8b-1F fix 1 (F002) - true only for a row that STORES its days (the server's `hasStoredDays`).
     hasStoredDays?: boolean;
+    // spec: plr-d10 lane SCH-OWN-b (F228) - the person whose own schedule this row is; no check applies to it.
+    ownerUserId?: string;
 };
 
 const STAGE_NOTE_FALLBACKS: Record<StageCode | 'CUSTOM', string> = {
@@ -375,6 +377,7 @@ function mapTemplate(referenceTemplate: ReferenceScheduleTemplate): CropSchedule
         ...(referenceTemplate.check ? { check: referenceTemplate.check } : {}),
         ...(referenceTemplate.scope ? { scope: referenceTemplate.scope } : {}),
         ...(referenceTemplate.hasStoredDays === true ? { hasStoredDays: true } : {}),
+        ...(referenceTemplate.ownerUserId ? { ownerUserId: referenceTemplate.ownerUserId } : {}),
         totalDurationDays: Math.max(1, referenceTemplate.totalDays),
         description: `Server-managed template for ${toDisplayName(cropCode)}.`,
         adoptionScore: 0,
@@ -457,6 +460,7 @@ function parseReferenceTemplate(input: unknown): ReferenceScheduleTemplate | nul
         ...parseOwnerAndCheck(source),
         ...(toStringValue(source.scope).trim() ? { scope: toStringValue(source.scope).trim() } : {}),
         ...(source.hasStoredDays === true ? { hasStoredDays: true } : {}),
+        ...(toStringValue(source.ownerUserId).trim() ? { ownerUserId: toStringValue(source.ownerUserId).trim() } : {}),
     };
 }
 

@@ -25,7 +25,6 @@ interface GateWords {
     chooseChecked: string;
     chooseSample: string;
     ownTitle: string;
-    ownHint: string;
     // nothing to follow
     noCheckedForCrop: string;
     sampleMark: string;
@@ -62,7 +61,6 @@ export const SCHEDULE_GATE_WORDS: Readonly<Record<GateLanguage, GateWords>> = {
         chooseChecked: 'श्रमसफलचं तपासलेलं शेड्यूल', // PLAN WORD LIST
         chooseSample: 'नमुना शेड्यूल — अजून तपासलेलं नाही', // PROPOSED (Marathi)
         ownTitle: 'स्वतःचं शेड्यूल बनवा', // PLAN WORD LIST
-        ownHint: 'नियोजनात बनवता येईल', // PLAN WORD LIST
         noCheckedForCrop: 'या पिकासाठी अजून श्रमसफलने तपासलेलं शेड्यूल नाही', // PLAN WORD LIST
         sampleMark: 'हे नमुना शेड्यूल आहे — श्रमसफलने अजून तपासलेलं नाही', // PROPOSED (Marathi)
         trialHeading: 'चाचणी', // PLAN WORD LIST
@@ -94,7 +92,6 @@ export const SCHEDULE_GATE_WORDS: Readonly<Record<GateLanguage, GateWords>> = {
         chooseChecked: "ShramSafal's checked schedule", // PLAN WORD LIST
         chooseSample: 'Sample schedule — not yet checked', // PROPOSED (English)
         ownTitle: 'Make your own schedule', // PLAN WORD LIST
-        ownHint: 'Can be made in planning', // PLAN WORD LIST
         noCheckedForCrop: 'No ShramSafal-checked schedule for this crop yet', // PLAN WORD LIST
         sampleMark: 'This is a sample schedule — not yet checked by ShramSafal', // PROPOSED (English)
         trialHeading: 'Trial', // PLAN WORD LIST

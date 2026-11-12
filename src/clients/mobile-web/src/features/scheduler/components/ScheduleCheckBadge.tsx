@@ -26,11 +26,13 @@ export function checkDateLabel(iso: string | undefined): string | null {
     }
 }
 
-export const ScheduleCheckBadge: React.FC<{ template: Pick<CropScheduleTemplate, 'check'>; tone?: 'light' | 'dark'; testId?: string }> = ({
+export const ScheduleCheckBadge: React.FC<{ template: Pick<CropScheduleTemplate, 'check' | 'ownerUserId'>; tone?: 'light' | 'dark'; testId?: string }> = ({
     template,
     tone = 'light',
     testId = 'schedule-check',
 }) => {
+    // spec: plr-d10 lane SCH-OWN-b (F228; founder D-82 = 3) - NO check applies to a person's own schedule: no badge at all, never "not checked".
+    if (template.ownerUserId) return null;
     const check = template.check;
     const dark = tone === 'dark';
     if (check?.state === 'Checked') {

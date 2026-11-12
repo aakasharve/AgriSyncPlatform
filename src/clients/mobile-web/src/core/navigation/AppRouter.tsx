@@ -35,6 +35,7 @@ import { useOpenSurfaceRequest } from '../../features/oversight/useOpenSurfaceRe
 import FirstRunWait from '../../features/onboarding/firstRun/FirstRunWait';
 // spec: plr-d10 (I14, CMP-3) — the one role → hidden-tab rule (a worker gets no तुलना).
 import { hiddenMainViewsFor } from './hiddenViews';
+import { mayMakeOwnSchedule } from '../session/ownScheduleAuthority';
 import { useSeatForTabs } from '../session/lastKnownSeats';
 import { useHomeAttendanceDoor } from '../../features/labour/useHomeAttendanceDoor';
 // Lanes MIC-1 + E1 — the ONE mic and the "बदला" screen, over every screen.
@@ -106,7 +107,10 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
 
     const { currentRoute, setCurrentRoute, mainView, setMainView, logIntent, setLogIntent, lastLabourLogIds } = navigation;
     // lane CMP-D1 (founder D-81): from the seat's authorities, live or last known for this farm; unknown hides it.
-    const hiddenViews = hiddenMainViewsFor(useSeatForTabs(currentFarmId, currentFarm));
+    const seatForTabs = useSeatForTabs(currentFarmId, currentFarm);
+    const hiddenViews = hiddenMainViewsFor(seatForTabs);
+    // lane SCH-OWN-b (founder D-88 = 2): the own-schedule maker is shown from the same seat, by the same fail-closed rule.
+    const maySeeOwnScheduleMaker = mayMakeOwnSchedule(seatForTabs);
     // A tab this person may not open is never left on screen (e.g. a farm switch from an owner seat to a
     // worker seat while तुलना was open): back to आजची कामे. Above every early return (rules of hooks).
     const onHiddenView = hiddenViews.includes(mainView);
@@ -320,6 +324,7 @@ const AppRouter: React.FC<AppRouterProps> = ({ firstRunFarm = null, farmsKnown =
         mayAssignWork: isPrimaryAccountHolderRole(currentFarm?.role) || holdsAuthority(currentFarm, AUTHORITY.assignWork),
         mayOpenPlanner: isPrimaryAccountHolderRole(currentFarm?.role)
             || holdsAuthority(currentFarm, AUTHORITY.planWork) || holdsAuthority(currentFarm, AUTHORITY.assignWork),
+        mayMakeOwnSchedule: maySeeOwnScheduleMaker,
         canOpenAttendanceFromHome,
         logScope, setLogScope, currentLogContext, hasActiveLogContext, isContextReady,
         isDemoMode, setIsDemoMode,

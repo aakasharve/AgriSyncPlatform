@@ -24,6 +24,7 @@ import { getDatabase } from '../../../infrastructure/storage/DexieDatabase';
 import { systemClock } from '../../../core/domain/services/Clock';
 import { getEditSurface } from './EditSurfaceRegistry';
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
+import { ownScheduleRefusalWords } from '../../scheduler/ownSchedule/ownScheduleWords';
 import { refusalHintForRow, refusalReasonOf } from '../../logs/components/correction/refusedRevision';
 import { applyPendingWithdrawals } from '../pull/reconcilers/withdrawnRecordsReconciler';
 import { getAuthSession } from '../../../infrastructure/storage/AuthTokenStore';
@@ -121,7 +122,7 @@ export class ConflictResolutionService {
                     reason: r.lastError ?? 'UNKNOWN',
                     // Lane OF-S fix 1 (B011): a refused move / worker count / future-day create says why in plain
                     // words, in his language; every other row keeps the hints below.
-                    hint: hints[index] ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode, r.mutationType),
+                    hint: hints[index] ?? this.hintFor(r.lastError, r.status === 'FAILED', r.errorCode, r.mutationType, language),
                     payloadPreview: payloadJson.slice(0, MAX_PAYLOAD_PREVIEW),
                     closedByRule: refusalReasonOf(r.errorCode) === 'recordClosed' || refusalReasonOf(r.errorCode) === 'plotClosed',
                 };
@@ -230,7 +231,8 @@ export class ConflictResolutionService {
         }
     }
 
-    private static hintFor(reason: string | undefined, autoRetriesExhausted = false, errorCode?: string, mutationType?: string): string | undefined {
+    private static hintFor(reason: string | undefined, autoRetriesExhausted = false, errorCode?: string, mutationType?: string, language?: string | null): string | undefined {
+        const lang = language === 'en' ? 'en' : 'mr';
         // spec: pre-launch-repair L2b (R-1) — the server holds this money entry's id on ANOTHER farm or for
         // another person, so it refused the entry instead of saving it twice. Re-sending cannot change that.
         // PROPOSED (Marathi)
@@ -263,6 +265,20 @@ export class ConflictResolutionService {
         }
         if (errorCode === OWN_SCHEDULE_NOT_OPEN_YET_CODE) {
             return 'तुमचं स्वतःचं शेड्यूल अजून सुरू झालेलं नाही';
+        }
+        // spec: plr-d10 lane SCH-OWN-b - the refusals of making / changing his own schedule (schedule.create / .clone / .edit), in words. PROPOSED (Marathi)
+        if (mutationType === SyncMutationName.ScheduleCreate || mutationType === SyncMutationName.ScheduleClone || mutationType === SyncMutationName.ScheduleEdit) {
+            // fix round 1 (P009): in his language, never the other. A stuck row keeps only the server's last message: its code is read from there.
+            const own = ownScheduleRefusalWords(errorCode ?? reason, lang);
+            if (own) return own;
+        }
+        // fix round 1 (P006): a follow of his own schedule the server "could not find" - most often a schedule of ANOTHER owner than the farm's. Said plainly
+        // (the code is NOT permanent, so the row reaches this page only once the retries are used up, with the server's message and no code).
+        if ((mutationType === SyncMutationName.AdoptSchedule || mutationType === SyncMutationName.MigrateSchedule)
+            && ((errorCode && /ScheduleTemplateNotFound$/i.test(errorCode)) || (reason && /schedule template was not found/i.test(reason)))) {
+            return lang === 'en'
+                ? "The server could not find this schedule for this farm. It may be another owner's schedule."
+                : 'सर्व्हरला हे शेड्यूल या शेतासाठी सापडलं नाही. ते दुसऱ्या मालकाचं असू शकतं.'; // PROPOSED (Marathi)
         }
         // B015 - a refusal of a SCHEDULE choice for want of authority (`ShramSafal.Forbidden`: L8b-1's gate): read from its CODE,
         // for these two mutations only (the server's message names no authority word); every other mutation keeps its words. PROPOSED (Marathi)

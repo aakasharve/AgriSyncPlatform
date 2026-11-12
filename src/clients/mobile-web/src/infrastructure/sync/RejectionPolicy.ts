@@ -169,6 +169,25 @@ const PERMANENT_REJECTION_CODES: readonly string[] = [
     'ScheduleLimitReached',
     'OwnScheduleLimitReached',
     'ScheduleChoiceNeeded',
+    // spec: plr-d10 lane SCH-OWN-b (founder D-132; D-83 = 1) - the refusals of the own-schedule WRITES (schedule.create / .clone / .edit). Each is a verdict on
+    // these bytes - the command's shape, or a list the server holds - so the same request gets the same answer for ever: parked with its words
+    // (`features/scheduler/ownSchedule/ownScheduleWords.ts`), not retried to the cap. Release 1.0.17 never sends these mutations and its policy has no
+    // Schedule* code of this kind; nothing else changes. (`ScheduleIdTaken.Conflict` and `ScheduleCopy.Conflict` are permanent already through their tail CONFLICT.)
+    //   OwnScheduleEmpty  - an own schedule with no works cannot be followed ("आधी कामं जोडा")
+    //   ScheduleCropNotOnFarm - the farm has no season of that crop
+    //   ScheduleMadeFor   - a made-for tag that is not one of its list's choices
+    //   ScheduleImport*   - the day rules and bounds of the whole-version edit (the phone asks them first; the server asks again)
+    'OwnScheduleEmpty',
+    'ScheduleCropNotOnFarm',
+    'ScheduleMadeFor',
+    'ScheduleImportOperationKey',
+    'ScheduleImportOutsideStages',
+    'ScheduleImportActivityDays',
+    'ScheduleImportActivityName',
+    'ScheduleImportActivities',
+    'ScheduleImportStageDays',
+    'ScheduleImportStages',
+    'ScheduleImportRepeat',
 ];
 
 const PERMANENT_SET = new Set(
@@ -291,6 +310,16 @@ const PLOT_DEPENDENCY_CODES = new Set(['PLOTNOTFOUND', 'CROPCYCLENOTFOUND']);
 export function isPlotDependencyRejection(input: RejectionInput): boolean {
     const code = input.errorCode ? normalizeCode(input.errorCode) : '';
     return PLOT_DEPENDENCY_CODES.has(code);
+}
+
+/**
+ * spec: plr-d10 lane SCH-OWN-b fix round 1 (P003) - a `schedule.edit` refused `ScheduleTemplateNotFound` may be a verdict about the schedule it depends on
+ * (its `schedule.create` / `schedule.clone`, still on its way or refused), not about the edit. Whether that is so is for `resolveScheduleDependency`
+ * to say; the code alone stays RETRYABLE for every other mutation (a statement about a different row).
+ */
+export function isScheduleParentRejection(input: RejectionInput): boolean {
+    const code = input.errorCode ? normalizeCode(input.errorCode) : '';
+    return code === 'SCHEDULETEMPLATENOTFOUND';
 }
 
 /**

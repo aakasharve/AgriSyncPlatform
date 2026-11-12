@@ -66,7 +66,7 @@ export const THREE_PLUS_ONE_WORDS: Readonly<Record<ThreePlusOneLanguage, Words>>
         fullNote: 'बाहेरची 3 शेड्यूल आधीच पाळताय. नवीन घेण्यासाठी आधी एक सोडा.',
         fullButtonWhy: 'बाहेरची 3 शेड्यूल आधीच पाळताय',
         ownEmptyTitle: 'स्वतःचं शेड्यूल बनवा',
-        ownEmptyHint: 'सुरुवातीला ही जागा रिकामी असते. नियोजनात बनवता येईल.',
+        ownEmptyHint: 'सुरुवातीला ही जागा रिकामी असते.', // spec: plr-d10 lane SCH-OWN-b (P10) - the button is live now: no promise line
         ownNoCheck: 'स्वतःच्या शेड्यूलला तपासणी लागत नाही',
         ownMadeBy: name => `बनवलं: ${name}`,
         checked: 'श्रमसफलने तपासलेलं',
@@ -82,7 +82,7 @@ export const THREE_PLUS_ONE_WORDS: Readonly<Record<ThreePlusOneLanguage, Words>>
         // line 5 (per-stage task count in planning) is withheld until CMP-E shows it - P10
         help: [
             'एका प्लॉटसाठी तुम्ही बाहेरची 3 शेड्यूल पाळू शकता — उदा. कृषी विद्यापीठ, तज्ज्ञ.',
-            'आणि 1 तुमचं स्वतःचं. सुरुवातीला ही जागा रिकामी असते; नियोजनात तुम्ही ते बनवू शकता.',
+            'आणि 1 तुमचं स्वतःचं. सुरुवातीला ही जागा रिकामी असते.', // fix round 1 (P004): true for every seat - no "you can make it in planning" for a seat that cannot
             'बाहेरचं शेड्यूल श्रमसफलचा कृषी तज्ज्ञ दिवसवार तपासतो; तपासल्यावरच ते इथे दिसतं, बॅजसह. एखाद्या पिकासाठी पहिलं तपासलेलं शेड्यूल येईपर्यंत ॲपमधलं नमुना शेड्यूल "अजून तपासलेलं नाही" म्हणून निवडता येतं.',
             'तुमचं स्वतःचं शेड्यूल तुमच्या मागच्या हंगामातून किंवा तुम्ही स्वतः बनवलेलं असतं; त्याला तपासणी लागत नाही आणि त्यावर श्रमसफलचा बॅज नसतो.',
             'शासन किंवा कृषी विद्यापीठाचं तपासलेलं शेड्यूल पाळत असाल तर ते "मुख्य" असतं; नसेल तर पहिलं बाहेरचं. स्टेजची ओळ मुख्य शेड्यूलवरून दिसते.',
@@ -107,7 +107,7 @@ export const THREE_PLUS_ONE_WORDS: Readonly<Record<ThreePlusOneLanguage, Words>>
         fullNote: 'You already follow 3 outside schedules. To take a new one, stop following one first.', // PROPOSED (English)
         fullButtonWhy: 'You already follow 3 outside schedules', // PLAN WORD LIST
         ownEmptyTitle: 'Make your own schedule', // PLAN WORD LIST
-        ownEmptyHint: 'This place starts empty. It can be made in planning.', // PLAN WORD LIST (second half) / PROPOSED (English)
+        ownEmptyHint: 'This place starts empty.', // PLAN WORD LIST (first half); lane SCH-OWN-b (P10): the button is live now, no promise line
         ownNoCheck: 'Your own schedule needs no check', // PROPOSED (English)
         ownMadeBy: name => `Made by: ${name}`, // PROPOSED (English)
         checked: 'Checked by ShramSafal', // PROPOSED (English)
@@ -122,7 +122,7 @@ export const THREE_PLUS_ONE_WORDS: Readonly<Record<ThreePlusOneLanguage, Words>>
         helpTitle: 'What does 3 + 1 mean?', // PLAN WORD LIST
         help: [
             'For one plot you can follow 3 outside schedules — for example an agricultural university, an expert.', // PROPOSED (English)
-            'And 1 of your own. This place starts empty; you can make it in planning.', // PROPOSED (English)
+            'And 1 of your own. This place starts empty.', // PROPOSED (English); fix round 1 (P004): true for every seat
             "An outside schedule is checked day by day by ShramSafal's agriculture expert; it shows here only once checked, with a badge. Until a crop has its first checked schedule, the app's sample schedule can be chosen, marked \"not yet checked\".", // PROPOSED (English)
             "Your own schedule comes from your earlier season or one you made yourself; it needs no check and carries no ShramSafal badge.", // PROPOSED (English)
             'The checked government or university schedule is the main one when you follow it; otherwise the first outside one. The stage line follows the main schedule.', // PLAN WORD LIST (the original sentence is "...is the main one when you follow it"; rest PROPOSED (English))

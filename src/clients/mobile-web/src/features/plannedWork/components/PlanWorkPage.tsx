@@ -35,6 +35,9 @@ import { ScheduleAsk } from '../../scheduler/schedulePage/ScheduleAsk';
 import { useScheduleGate } from '../../scheduler/schedulePage/useScheduleGate';
 import { defaultScheduleForCrop } from '../../scheduler/planning/followableDefault';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { OwnScheduleFlow, type OwnFlow } from '../../scheduler/ownSchedule/OwnScheduleFlow';
+import { OwnScheduleLibrary } from '../../scheduler/ownSchedule/OwnScheduleLibrary';
+import { takeOwnScheduleMakerRequest } from '../../scheduler/ownSchedule/makerHandoff';
 
 export interface PlanWorkPageProps {
     farmId: string | null;
@@ -51,6 +54,12 @@ export interface PlanWorkPageProps {
     isPrimaryOwner?: boolean;
     /** Lane L8c-3 - "काम झालं" on handed-out work: opens the recording on the task's plot(s). */
     onStartDone?: (task: LocalPlannedWork) => 'opened' | 'waiting';
+    /**
+     * spec: plr-d10 lane SCH-OWN-b (founder D-88 = 2, D-132 Q1 = 1) - this seat may make and change a person's own schedule (the owner or a holder of
+     * ScheduleTemplates, from the server's authorities; absent = no, fail closed). The maker and the library of his own schedules are drawn ONLY for such a
+     * seat - no card, no control, nothing greyed for anyone else - whether or not it may plan work.
+     */
+    mayMakeOwnSchedule?: boolean;
     onBack: () => void;
     /** Opens the conflict page (route `offline-conflicts`). */
     onOpenConflicts: () => void;
@@ -64,7 +73,7 @@ export interface PlanWorkPageProps {
 const NO_ASSIGNEES: readonly PlannedWorkAssigneeDto[] = [];
 
 export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
-    farmId, userId, language: languageProp, crops, farmerProfile, mayPlan, mayAssign, isPrimaryOwner = false, onStartDone, onBack, onOpenConflicts, today: todayProp, understand, loadAssigneeList,
+    farmId, userId, language: languageProp, crops, farmerProfile, mayPlan, mayAssign, isPrimaryOwner = false, onStartDone, mayMakeOwnSchedule = false, onBack, onOpenConflicts, today: todayProp, understand, loadAssigneeList,
 }) => {
     const contextLanguage = useOptionalLanguage()?.language;
     const language = languageProp ?? contextLanguage;
@@ -81,6 +90,17 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
     const gate = useScheduleGate();
     const [place, setPlace] = useState<{ plotIds: readonly string[]; whole: boolean }>({ plotIds: [], whole: false });
     const onPlaceChanged = useCallback((next: { plotIds: readonly string[]; whole: boolean }) => setPlace(next), []);
+    // spec: plr-d10 lane SCH-OWN-b (Q1 = 1: the maker is entered ONLY from planning) - the screens that replace the page body while he makes or looks at one of
+    // his own schedules. The शेड्यूल page's live button only asks to come here (`makerHandoff`); a seat that may not make ignores the ask (fail closed).
+    const [ownFlow, setOwnFlow] = useState<OwnFlow | null>(null);
+    const [ownFromSchedulePage, setOwnFromSchedulePage] = useState(false);
+    useEffect(() => {
+        const request = takeOwnScheduleMakerRequest();
+        if (!request || !mayMakeOwnSchedule) return;
+        setOwnFlow({ page: 'start', cropId: request.cropId });
+        setOwnFromSchedulePage(true);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once, on arrival
+    const ownLanguage = language === 'en' ? 'en' : 'mr';
 
     // The people he may hand work to: the server's list, kept on the phone for the times there is no net.
     useEffect(() => {
@@ -133,12 +153,12 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
     // The chosen plots to ask about, with the crop that decides what can be offered; a plot the phone has nothing to offer for is not asked.
     const askAbout = useMemo(() => {
         if (!mayPlan || !formOpen || place.whole) return [];
-        const out: Array<{ plotId: string; cropName: string; label: string }> = [];
+        const out: Array<{ plotId: string; cropId: string; cropName: string; label: string }> = [];
         for (const plotId of place.plotIds) {
             const crop = crops.find(c => c.plots.some(p => p.id === plotId));
             const plot = crop?.plots.find(p => p.id === plotId);
             if (!crop || !plot || !gate.needsSchedule(plotId) || !defaultScheduleForCrop(crop.name)) continue;
-            out.push({ plotId, cropName: crop.name, label: `${cropNameIn(crop.name, language === 'en' ? 'en' : 'mr', crop.masterId)} · ${plot.name}` });
+            out.push({ plotId, cropId: crop.id, cropName: crop.name, label: `${cropNameIn(crop.name, language === 'en' ? 'en' : 'mr', crop.masterId)} · ${plot.name}` });
         }
         return out;
     }, [mayPlan, formOpen, place, crops, gate, language]);
@@ -148,6 +168,17 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
         setFormOpen(false);
         void reload();
     };
+
+    if (ownFlow && mayMakeOwnSchedule && farmId) {
+        return (
+            <div className="space-y-3 px-3 pb-6 pt-3" style={{ fontFamily: fontFor(language) }} data-testid="plan-work" data-can-plan={mayPlan ? 'yes' : 'no'} data-own-schedule={ownFlow.page}>
+                <OwnScheduleFlow flow={ownFlow} setFlow={next => { setOwnFlow(next); if (!next) setOwnFromSchedulePage(false); }} farmId={farmId} userId={userId}
+                    language={ownLanguage} crops={crops} farmerProfile={farmerProfile} understand={understand}
+                    onLeave={() => { if (ownFromSchedulePage) onBack(); else { setOwnFlow(null); setOwnFromSchedulePage(false); } }}
+                    onSaved={note => setBanner(note)} />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-3 px-3 pb-6 pt-3" style={{ fontFamily: fontFor(language) }} data-testid="plan-work" data-can-plan={mayPlan ? 'yes' : 'no'}>
@@ -162,6 +193,11 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
 
             {banner && <div role="status" data-testid="plan-banner" className="rounded-2xl border-2 border-emerald-600 bg-emerald-50 p-3 text-[15px] font-extrabold text-emerald-900">{banner}</div>}
 
+            {mayMakeOwnSchedule && farmId && (
+                <OwnScheduleLibrary farmId={farmId} language={ownLanguage} crops={crops} farmerProfile={farmerProfile}
+                    onMake={() => setOwnFlow({ page: 'start', cropId: null })} onOpen={chainId => setOwnFlow({ page: 'detail', chainId })} />
+            )}
+
             {mayPlan && farmId && (
                 <>
                     {!formOpen && (
@@ -171,7 +207,8 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                         </button>
                     )}
                     {formOpen && askAbout.map(a => (
-                        <ScheduleAsk key={a.plotId} cropName={a.cropName} plotId={a.plotId} plotLabel={a.label} where="planning" language={language} />
+                        <ScheduleAsk key={a.plotId} cropName={a.cropName} plotId={a.plotId} plotLabel={a.label} where="planning" language={language}
+                            mayMakeOwn={mayMakeOwnSchedule} onMakeOwn={() => setOwnFlow({ page: 'start', cropId: a.cropId })} />
                     ))}
                     {formOpen && (
                         <PlanForm farmId={farmId} userId={userId} language={language} crops={crops} farmerProfile={farmerProfile}

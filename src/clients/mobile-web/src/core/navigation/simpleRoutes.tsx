@@ -49,6 +49,7 @@ import { todaysLabourAnchor } from '../../features/logs/components/entry/todayAt
 import { buildNoWorkDayPayload } from './noWorkDay';
 import { PageBar } from '../../shared/components/ui/placeUi';
 import { PlanWorkPage } from '../../features/plannedWork/components/PlanWorkPage';
+import { requestOwnScheduleMaker } from '../../features/scheduler/ownSchedule/makerHandoff';
 import { startTaskDone } from '../../features/plannedWork/doneFlow/startTaskDone';
 import { MoneyWithheldPage } from '../../features/finance/components/MoneyWithheldPage';
 import { getSessionUserId } from '../../infrastructure/storage/AuthTokenStore';
@@ -241,6 +242,7 @@ export const renderPlanWorkRoute = (ctx: AppRouterContext): React.ReactNode => {
                 farmerProfile={ctx.farmerProfile}
                 mayPlan={ctx.mayOpenPlanner ?? false}
                 mayAssign={ctx.mayAssignWork ?? false}
+                mayMakeOwnSchedule={ctx.mayMakeOwnSchedule ?? false}
                 isPrimaryOwner={ctx.isPrimaryOwner ?? false}
                 onStartDone={task => startTaskDone(ctx, task)}
                 onBack={() => ctx.goBackOr('main')}
@@ -274,6 +276,10 @@ export const renderScheduleRoute = (ctx: AppRouterContext): React.ReactNode => {
                 onCloseDay={() => requestOpenWaitingDrawer()}
                 // spec: plr-d10 (I15) — the redesigned शेड्यूल has one page bar with one big "← मागे".
                 onBack={() => ctx.goBackOr('main')}
+                // spec: plr-d10 lane SCH-OWN-b (Q1 = 1) — "स्वतःचं शेड्यूल बनवा" is live for a seat that may make, and ONLY takes him to planning,
+                // where the maker opens on that crop. Nothing is written here.
+                mayMakeOwnSchedule={ctx.mayMakeOwnSchedule ?? false}
+                onMakeOwnSchedule={cropId => { requestOwnScheduleMaker(cropId); ctx.setCurrentRoute('plan-work'); }}
             />
         </div>
     );

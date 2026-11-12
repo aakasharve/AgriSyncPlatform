@@ -10,7 +10,8 @@
  *     on the one the SERVER named (R6; never worked out here), and "हे सोडा";
  *   - a free outside place: ONE "हे शेड्यूल पण पाळा" with the line that says what may be chosen (checked ones; or the sample while the crop
  *     has no checked schedule: the phone decides this from the library it holds, D-91 = 1); full: the sentence that says why not;
- *   - his own place: empty = DISABLED (no tap target) with its words - the maker opens in SCH-OWN (P5, never a button that does nothing);
+ *   - his own place: empty = a LIVE "स्वतःचं शेड्यूल बनवा" that ONLY takes him to planning, where the maker opens (SCH-OWN-b, Q1 = 1) - drawn only for a
+ *     seat that may make (the owner or ScheduleTemplates); any other seat sees the plain "empty" sentence, nothing greyed;
  *     filled = the name, "बनवलं: ‹नाव›" only when the schedule carries a real maker name (D-88 = 2), the no-check line, never a badge,
  *     never "तपासणी बाकी" (D-82 = 3);
  *   - the stage-line note when two or more are followed.
@@ -41,6 +42,10 @@ export interface ThreePlusOneSectionProps {
     onAdd: () => void;
     /** "हे सोडा": lets that subscription go. */
     onLeave: (subscriptionId: string) => void;
+    /** spec: plr-d10 lane SCH-OWN-b - this seat may make an own schedule (the owner or ScheduleTemplates). Absent = no (unknown seat: hidden). */
+    mayMakeOwn?: boolean;
+    /** Takes him to planning where the maker opens. It writes nothing. */
+    onMakeOwn?: () => void;
 }
 
 const displayName = (place: FollowedPlace, language: ThreePlusOneLanguage): string => {
@@ -65,12 +70,14 @@ const Rail: React.FC<{ outside: readonly FollowedPlace[]; own: FollowedPlace | u
 );
 
 const CheckBadge: React.FC<{ place: FollowedPlace; language: ThreePlusOneLanguage }> = ({ place, language }) => {
-    const checked = place.checkState === 'Checked';
+    // An Outside place only: his own place never draws a check badge (F228, D-82 = 3).
+    const state = place.checkState ?? 'NotChecked';
+    const checked = state === 'Checked';
     return (
-        <span data-testid={`followed-check-${place.subscriptionId}`} data-check-state={place.checkState}
+        <span data-testid={`followed-check-${place.subscriptionId}`} data-check-state={state}
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[14px] font-extrabold ${checked ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200' : 'bg-stone-100 text-stone-600 ring-1 ring-stone-200'}`}>
             {checked ? <BadgeCheck size={16} aria-hidden="true" /> : <CircleDashed size={16} aria-hidden="true" />}
-            {checkWords(language, place.checkState)}
+            {checkWords(language, state)}
         </span>
     );
 };
@@ -130,7 +137,7 @@ const HelpSheet: React.FC<{ language: ThreePlusOneLanguage; onClose: () => void 
     );
 };
 
-export const ThreePlusOneSection: React.FC<ThreePlusOneSectionProps> = ({ followed, cropHasChecked, onAdd, onLeave }) => {
+export const ThreePlusOneSection: React.FC<ThreePlusOneSectionProps> = ({ followed, cropHasChecked, onAdd, onLeave, mayMakeOwn = false, onMakeOwn }) => {
     const language: ThreePlusOneLanguage = useOptionalLanguage()?.language === 'en' ? 'en' : 'mr';
     const words = THREE_PLUS_ONE_WORDS[language];
     const [help, setHelp] = useState(false);
@@ -177,15 +184,19 @@ export const ThreePlusOneSection: React.FC<ThreePlusOneSectionProps> = ({ follow
             <p className="m-0 text-[14px] font-extrabold uppercase tracking-wide text-stone-500" data-testid="three-plus-one-own-label">{words.ownGroup}</p>
             {own ? (
                 <PlaceCard place={own} colour={OWN_COLOUR} language={language} onLeave={onLeave} />
-            ) : (
-                // P5: the maker opens in SCH-OWN; until then this place is shown, with its words, and cannot be tapped.
-                <div role="group" aria-disabled="true" className="flex min-h-[64px] w-full items-center gap-3 rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 px-3 opacity-80" data-testid="three-plus-one-own-empty">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-stone-300 text-white"><Pencil size={18} aria-hidden="true" /></span>
+            ) : mayMakeOwn && onMakeOwn ? (
+                // SCH-OWN-b (Q1 = 1): live, and it ONLY goes to planning where the maker opens. No promise line (P10).
+                <Tap onClick={onMakeOwn} data-testid="three-plus-one-own-make"
+                    className="flex min-h-[64px] w-full items-center gap-3 rounded-2xl border-2 border-dashed border-amber-500 bg-amber-50/60 px-3 text-left">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-700 text-white"><Pencil size={18} aria-hidden="true" /></span>
                     <span className="min-w-0">
-                        <strong className="block text-[17px] font-black text-stone-700">{words.ownEmptyTitle}</strong>
+                        <strong className="block text-[17px] font-black text-stone-900">{words.ownEmptyTitle}</strong>
                         <span className="block text-[14px] font-bold text-stone-600">{words.ownEmptyHint}</span>
                     </span>
-                </div>
+                </Tap>
+            ) : (
+                // A seat without the authority (or one the phone does not know) sees no maker: only the plain sentence, nothing greyed.
+                <p className="m-0 rounded-2xl bg-stone-50 px-3 py-3 text-[15px] font-bold text-stone-600" data-testid="three-plus-one-own-empty">{words.ownEmptyHint}</p>
             )}
             {help && <HelpSheet language={language} onClose={() => setHelp(false)} />}
         </section>

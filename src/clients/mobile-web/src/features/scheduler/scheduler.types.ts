@@ -143,6 +143,11 @@ export interface CropScheduleTemplate {
     scope?: string;
     /** spec: plr-d10 lane L8b-1F fix 1 (F002): true only for a row that stores its days (never a sample). */
     hasStoredDays?: boolean;
+    /**
+     * spec: plr-d10 lane SCH-OWN-b (F228; founder D-82 = 3) - the PERSON whose own schedule this is (the server's `ownerUserId`). Present = a person's
+     * own schedule, to which NO check applies: a missing `check` on it means "no check applies", never "not checked". Absent on every outside row.
+     */
+    ownerUserId?: string;
 }
 
 // Overrides allow per-plot customization — definitions moved to

@@ -46,6 +46,16 @@ export interface ScheduleChoiceTarget {
     carryOver?: boolean;
     /** spec: plr-d10 lane L8b-3 - follow this schedule IN ADDITION on this plot (an adopt for this plot only), never a switch. */
     add?: boolean;
+    /**
+     * spec: plr-d10 lane SCH-OWN-b (founder D-132 Q6 = 1, Q8 = 1) - this is a schedule of HIS OWN (his own place, slot 0): the unanswered row the phone keeps
+     * says so (origin Own), so the page never draws a "not checked" badge on it. No new write kind: the same adopt / migrate.
+     */
+    own?: boolean;
+    /**
+     * spec: plr-d10 lane SCH-OWN-b (Q8 = 1) - a SWITCH from THIS subscription of the plot (his own place), not from the main one: taking a newer version of
+     * his own schedule, or another of his own, migrates FROM the own row. Absent = the main row, as before.
+     */
+    replaces?: string;
 }
 
 export interface SaveScheduleChoiceResult {
@@ -59,6 +69,8 @@ export interface SaveScheduleChoiceResult {
     clientRequestIds: string[];
     /** spec: plr-d10 lane L8b-3 - the subscription id made for each plot's new choice (so the page can offer to take it back). */
     subscriptionIds: Record<string, string>;
+    /** spec: plr-d10 lane SCH-OWN-b fix round 1 (P005) - plots whose tap named a row (`replaces`) the plot does not hold: NOTHING was sent or kept for them. */
+    missing: string[];
 }
 
 /** The server's season for a plot (the newest by start date), else the one derived for a plot made on this phone. */
@@ -79,7 +91,7 @@ export async function cropCycleIdForSchedule(
 const dayKey = (v: string | null | undefined): string | null => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
 
 export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[]): Promise<SaveScheduleChoiceResult> {
-    const result: SaveScheduleChoiceResult = { queued: [], notSent: [], unchanged: [], clientRequestIds: [], subscriptionIds: {} };
+    const result: SaveScheduleChoiceResult = { queued: [], notSent: [], unchanged: [], clientRequestIds: [], subscriptionIds: {}, missing: [] };
     const db = getDatabase();
     const nowIso = systemClock.nowISO();
     const sessionUser = getAuthSession()?.userId;
@@ -91,8 +103,15 @@ export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[
             const plotRows = await db.scheduleSubscriptions.where('plotId').equals(target.plotId).toArray();
             const currentCycle = (await currentCycleByPlot(db)).get(target.plotId);
             const followed = followedRows(plotRows, currentCycle);
+            // A tap that names the row it switches FROM migrates from THAT row only. If the plot does not hold it, nothing is sent and nothing is kept:
+            // falling back to the plot's main schedule would replace a schedule he never touched (P005).
+            const named = target.replaces ? followed.find(r => r.id === target.replaces) : undefined;
+            if (target.replaces && !named) {
+                result.missing.push(target.plotId);
+                continue;
+            }
             // The plot's मुख्य schedule: the one a switch replaces (L8b-3). Never counted here: the server said which it is.
-            const held = target.add === true ? undefined : mainRow(plotRows, currentCycle);
+            const held = target.add === true ? undefined : named ?? mainRow(plotRows, currentCycle);
             // Already this exact choice (same schedule; the same day 0, or none named): nothing to say to the server.
             if (held && held.templateId === target.templateId && (referenceDate === null || referenceDate === held.referenceDate)) {
                 result.unchanged.push(target.plotId);
@@ -122,13 +141,15 @@ export async function saveScheduleChoice(targets: readonly ScheduleChoiceTarget[
                 state: 'Active',
                 adoptedAtUtc: nowIso,
                 pending: true,
-                // A switch stands in for the मुख्य row it replaces (its place, its mark) while the server has not answered; an addition has none.
+                // A switch stands in for the row it replaces (its place, its mark) while the server has not answered; an addition has none.
                 ...(held ? {
                     replacesId: held.id,
                     ...(typeof held.slot === 'number' ? { slot: held.slot } : {}),
                     ...(held.origin ? { origin: held.origin } : {}),
                     ...(held.isMain === true ? { isMain: true as const } : {}),
                 } : {}),
+                // SCH-OWN-b: HIS OWN schedule sits in his own place (0) and says so, whatever it replaces.
+                ...(target.own === true ? { origin: 'Own' as const, slot: 0 } : {}),
             };
 
             // The mutation first, the local row second: if the app stops in between, the choice is not shown as saved
