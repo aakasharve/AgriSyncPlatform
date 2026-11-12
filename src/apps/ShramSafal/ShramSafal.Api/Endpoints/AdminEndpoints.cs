@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using ShramSafal.Application.Admin.Ports;
 using ShramSafal.Application.UseCases.Admin.GetAiProviderHealth24h;
 using ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly;
+using ShramSafal.Application.UseCases.Admin.GetAppVersions;
 using ShramSafal.Application.UseCases.Admin.GetFarmsList;
 using ShramSafal.Application.UseCases.Admin.GetOpsErrors;
 using ShramSafal.Application.UseCases.Admin.GetOpsHealth;
@@ -133,6 +134,27 @@ public static class AdminEndpoints
         })
         .WithName("GetAdminOpsErrors")
         .CacheOutput("AdminLive");
+
+        // spec: control-room-app-versions-2026-11-12 (ADR 0028) — who used the app on which version.
+        // Deliberately has no CacheOutput. The handler catches nothing: a repository failure escapes to the
+        // server's own error path and answers 500, so the page says it could not load instead of showing an
+        // empty list.
+        group.MapGet("/admin/ops/app-versions", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetAppVersionsHandler handler,
+            int? days,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.OpsLive)) return Results.Empty;
+
+            var result = await handler.HandleAsync(
+                new GetAppVersionsQuery(days, http.User.GetUserIdOrEmpty()), ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Problem();
+        })
+        .WithName("GetAdminOpsAppVersions");
 
         group.MapGet("/admin/ops/voice", async (
             HttpContext http,

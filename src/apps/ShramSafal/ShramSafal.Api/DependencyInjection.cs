@@ -787,6 +787,9 @@ public static class DependencyInjection
         // Admin ops — real-time operational health dashboard + Phase 2 paginated endpoints
         services.AddScoped<GetOpsHealthHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsErrors.GetOpsErrorsHandler>();
+        // spec: control-room-app-versions-2026-11-12 (ADR 0028) — who uses which app version. Takes TimeProvider,
+        // which AddBuildingBlocks and the Bootstrapper both register.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetAppVersions.GetAppVersionsHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetOpsVoice.GetOpsVoiceHandler>();
 
         // SARVAM_PRIMARY_VOICE_PIPELINE Task 3.1 + 3.2 — admin AI
