@@ -7,7 +7,7 @@ namespace Analytics.Application.UseCases.IngestEvents;
 /// <see cref="EventVocabulary"/>. Two failure classes:
 /// </summary>
 /// <list type="number">
-/// <item><b>Unknown event type</b> — <c>EventType</c> is not one of the 13 names.</item>
+/// <item><b>Unknown event type</b> — <c>EventType</c> is not in the vocabulary.</item>
 /// <item><b>Missing required prop</b> — a known type is missing one or more
 ///   keys declared in its <see cref="EventDefinition.RequiredProps"/>.</item>
 /// </list>

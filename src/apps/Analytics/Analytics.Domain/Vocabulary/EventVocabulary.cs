@@ -1,7 +1,7 @@
 namespace Analytics.Domain.Vocabulary;
 
 /// <summary>
-/// Frozen registry of the 13 closure-loop event names that may appear in
+/// Frozen registry of the event names (a unit test pins the count) that may appear in
 /// <c>analytics.events.event_type</c>. Mirrors the Zod registry on
 /// <c>mobile-web/src/core/telemetry/eventSchema.ts</c>; both producers and
 /// consumers MUST read the same name set, enforced at CI time by the
