@@ -300,6 +300,48 @@ public sealed class AppSeenMiddlewareTests
     }
 
     /// <summary>
+    /// Sends all the requests through one middleware at the same moment. Each
+    /// request gets a thread of its own, which reports that it is at the line
+    /// and then spins on one shared start signal; when every thread is there
+    /// the signal is given once. Spinning rather than sleeping is the point:
+    /// a sleeping thread takes longer to wake than the middleware takes to
+    /// decide, so sleepers would go through one after another and a missing
+    /// lock would never show.
+    /// </summary>
+    private static async Task SendTogether(AppSeenMiddleware mw, IReadOnlyList<HttpContext> requests)
+    {
+        using var atTheLine = new CountdownEvent(requests.Count);
+        var go = 0;
+
+        var sent = requests
+            .Select(ctx => Task.Factory.StartNew(
+                () =>
+                {
+                    atTheLine.Signal();
+                    while (Volatile.Read(ref go) == 0)
+                    {
+                        Thread.SpinWait(1);
+                    }
+
+                    return mw.InvokeAsync(ctx);
+                },
+                CancellationToken.None,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default).Unwrap())
+            .ToArray();
+
+        // The signal is given whether or not every thread got to the line, so
+        // that none is left spinning; the assertion comes after they are done.
+        var everyoneAtTheLine = atTheLine.Wait(TimeSpan.FromSeconds(30));
+        Volatile.Write(ref go, 1);
+        await Task.WhenAll(sent);
+
+        everyoneAtTheLine.Should().BeTrue(
+            "every request must be waiting on the start signal before it is given; "
+            + "otherwise they were not sent together and the round proved nothing");
+    }
+
+    /// <summary>
     /// One request. The default is a READ (<c>GET /sync/pull</c>): a person
     /// who opens the app and saves nothing is exactly who this middleware is
     /// for. A null <paramref name="user"/> leaves the framework's default
@@ -690,6 +732,125 @@ public sealed class AppSeenMiddlewareTests
         events.Where(e => PersonOf(e) == RameshId).Select(VersionOf).Should().Equal("1.0.20");
         events.Should().HaveCount(11);
         next.Calls.Should().Be(13);
+    }
+
+    /// <summary>
+    /// The five are five different VERSIONS a person was recorded on, not
+    /// five requests. A farmer who uses the app all morning sends far more
+    /// than five requests on the one version she has; if each of those took
+    /// one of her five, the update she installs in the afternoon would not be
+    /// recorded, and the control room would keep her on the old version until
+    /// the next day.
+    /// </summary>
+    [Fact]
+    public async Task Repeats_of_a_recorded_version_do_not_use_up_the_limit()
+    {
+        AppSeenMiddleware.MaxVersionsPerPersonPerDay.Should().Be(5);
+
+        var next = new CountingNext();
+        var (mw, writer) = Build(next.Invoke, new MovableClock(Morning));
+
+        // Sunita opens the app on 1.0.17 and is recorded.
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "1.0.17"));
+        (await WaitForCount(writer, 1)).Should().HaveCount(1, "the first request of the day is recorded");
+
+        // She goes on using it: nine more requests on the same version, ten in
+        // all, which is twice the limit. Reads and saves alike.
+        for (var i = 0; i < 9; i++)
+        {
+            var again = i % 2 == 0
+                ? Request(SignedIn(Sunita), "1.0.17")
+                : Request(SignedIn(Sunita), "1.0.17", method: "POST", path: "/shramsafal/logs");
+            await mw.InvokeAsync(again);
+        }
+
+        // The same day she updates. This is only her SECOND version.
+        await mw.InvokeAsync(Request(SignedIn(Sunita), "1.0.18"));
+
+        var events = await SettledEvents(writer, expected: 2);
+
+        events.Select(VersionOf).Should().Equal(
+            new[] { "1.0.17", "1.0.18" },
+            "ten requests on one version are one recorded version, so the new version is her "
+            + "second of five and is recorded; a limit that counted requests would have been "
+            + "used up before she updated");
+        events.Select(PersonOf).Should().Equal(SunitaId, SunitaId);
+        events.Should().OnlyContain(e => e.EventType == "app.seen");
+        next.Calls.Should().Be(11, "a request that writes nothing is still passed on");
+    }
+
+    /// <summary>
+    /// The limit has to hold when one person's requests arrive together. That
+    /// is how an account sending made-up versions would send them, and a
+    /// phone opens several requests at once as well. If "fewer than five so
+    /// far?" and "then note this one" were two separate steps, several
+    /// requests could each see four and each be recorded.
+    ///
+    /// <para>
+    /// One round is twelve different versions from one person, all started on
+    /// one signal. Which five win is not fixed, so the test asks only what
+    /// the rule promises: exactly five rows, five different versions, all of
+    /// them versions that were sent. Twenty rounds, each through a fresh
+    /// middleware, because one lucky round would prove little.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task Many_versions_at_once_from_one_person_still_stop_at_five()
+    {
+        const int Rounds = 20;
+        var versions = Enumerable.Range(1, 12).Select(i => $"4.0.{i}").ToArray();
+        versions.Length.Should().BeGreaterThan(AppSeenMiddleware.MaxVersionsPerPersonPerDay);
+
+        var rounds = new List<(CapturingWriter Writer, CountingNext Next)>();
+        for (var round = 0; round < Rounds; round++)
+        {
+            // A fresh middleware: its own day, and nobody recorded on it yet.
+            var next = new CountingNext();
+            var (mw, writer) = Build(next.Invoke, new MovableClock(Morning));
+            rounds.Add((writer, next));
+
+            // The requests are built before the start, so that the only thing
+            // the threads do together is go through the middleware.
+            var requests = versions.Select(v => Request(SignedIn(Sunita), v)).ToArray();
+            await SendTogether(mw, requests);
+        }
+
+        // Wait for every round's five rows, then leave the usual grace period
+        // once for all rounds: a sixth row from any of them would have landed.
+        foreach (var (writer, _) in rounds)
+        {
+            await WaitForCount(writer, AppSeenMiddleware.MaxVersionsPerPersonPerDay);
+        }
+
+        await Task.Delay(300);
+
+        for (var round = 0; round < Rounds; round++)
+        {
+            var (writer, next) = rounds[round];
+
+            List<AnalyticsEvent> events;
+            lock (writer.Events) { events = writer.Events.ToList(); }
+
+            var recorded = events.Where(e => PersonOf(e) == SunitaId).Select(VersionOf).ToList();
+
+            recorded.Should().HaveCount(
+                AppSeenMiddleware.MaxVersionsPerPersonPerDay,
+                $"round {round + 1} of {Rounds}: twelve different versions sent together by one "
+                + "person leave exactly five rows; more means two requests both got past the "
+                + "limit, fewer means a request that was within it was lost");
+            recorded.Should().OnlyHaveUniqueItems(
+                $"round {round + 1} of {Rounds}: the five rows are five different versions");
+            recorded.Should().BeSubsetOf(
+                versions,
+                $"round {round + 1} of {Rounds}: only versions that were really sent are recorded");
+            events.Should().HaveCount(
+                AppSeenMiddleware.MaxVersionsPerPersonPerDay,
+                $"round {round + 1} of {Rounds}: her five rows are the only rows");
+            events.Should().OnlyContain(e => e.EventType == "app.seen");
+            next.Calls.Should().Be(
+                versions.Length,
+                $"round {round + 1} of {Rounds}: every request is passed on, recorded or not");
+        }
     }
 
     // ------------------------------------------------------------------
