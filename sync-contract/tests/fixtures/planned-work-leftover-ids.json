@@ -1,0 +1,43 @@
+{
+  "_comment": "spec: plr-d10-redesign-real-integration-2026-10-25 (lane REM-1, founder D-79 'unfinished work from daily logs'; R14). The id of the reminder a log task saved Partial, Delayed or Skipped leaves behind, the same on the server (ShramSafal.Domain.Planning.PlannedWorkIds.ForLeftover / ForLeftoverJobItem) and the phone (features/plannedWork/data/plannedWorkIds.ts leftoverTaskId / leftoverJobTaskId). RFC 4122 UUIDv5 in the same namespace as planned-work-ids.json. Name = '<log id, lower case>:leftover:<log task id, lower case>' (a task line, or the id of the line a content item stands for) or '<log id, lower case>:leftover:job:<index>' (an item of the voice parse a 1.0.17 phone confirmed). Values computed with RFC 4122 version 5 (checked first against the L8c-4 vector for 'plannedTasks:t1', computed with the 'uuid' package) and pinned on both sides by the C# and TS tests.",
+  "namespace": "c2f6d3a8-4b1e-4f57-9d0a-6e8b7a1c5d93",
+  "leftover": [
+    {
+      "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12",
+      "taskId": "5e0f1a2b-3c4d-4e5f-8a6b-7c8d9e0f1a2b",
+      "id": "0cb32680-e5dd-58b3-adc4-ada35dbfbd9d"
+    },
+    {
+      "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12",
+      "taskId": "be008260-bc42-5afd-91bf-e910c70bbd16",
+      "id": "6e0d667d-8482-5822-904a-dc97c879d86e"
+    },
+    {
+      "logId": "9f1d2c3b-5a64-4e78-b0c9-1a2b3c4d5e6f",
+      "taskId": "5e0f1a2b-3c4d-4e5f-8a6b-7c8d9e0f1a2b",
+      "id": "848a4c08-09bd-5fee-9e7c-df86bf904e94"
+    },
+    {
+      "logId": "9F1D2C3B-5A64-4E78-B0C9-1A2B3C4D5E6F",
+      "taskId": "5E0F1A2B-3C4D-4E5F-8A6B-7C8D9E0F1A2B",
+      "id": "848a4c08-09bd-5fee-9e7c-df86bf904e94"
+    }
+  ],
+  "job": [
+    {
+      "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12",
+      "index": 0,
+      "id": "fedfb985-9223-5a31-91ae-ddd8fb344be2"
+    },
+    {
+      "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12",
+      "index": 1,
+      "id": "383ad01f-8684-59af-9605-7374f0ddd41f"
+    },
+    {
+      "logId": "2c8a1f6e-3b57-4d90-8a41-0e5d9b7c3f12",
+      "index": 2,
+      "id": "cf91e1b1-3ac6-503a-a5e1-d9f65d1c4c94"
+    }
+  ]
+}

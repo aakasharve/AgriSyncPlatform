@@ -129,7 +129,9 @@ public static class SpokenReminders
         HashSet<string> madeWords = [];
         if (isRevision)
         {
+            // REM-1: a leftover is made from a log task line, not from a planned item: its words are not "a task this log already made".
             madeWords = (await repository.GetPlannedWorkBySourceLogAsync(farmId, log.Id, ct))
+                .Where(t => t.Source != PlannedWorkSource.LogLeftover)
                 .Select(t => Words(t.Title))
                 .ToHashSet(StringComparer.Ordinal);
         }

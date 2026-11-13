@@ -227,7 +227,7 @@ public sealed class FarmMembershipSnapshotReader(
                 ? ShramSafal.Domain.Farms.FarmAuthorities.All
                     .Where(a => primary || (ShramSafal.Domain.Farms.FarmAuthorities.IsHeld(
                         r.Role, r.Permissions, r.CanManageLabourRecords, r.LabourGrantExpiresAtUtc,
-                        r.AuthorityExpiresAtJson, a, nowUtc)
+                        r.AuthorityExpiresAtJson, a, nowUtc, r.PlotScope)
                         // spec: plr-d10 lane MU-4 fix pass 1 (M7, P5) — editing the farm's setup needs a seat that
                         // covers every plot (FarmAccessPolicy.Holds); his phone is not told he holds it otherwise, so it
                         // offers no add-plot or boundary door the server would refuse.

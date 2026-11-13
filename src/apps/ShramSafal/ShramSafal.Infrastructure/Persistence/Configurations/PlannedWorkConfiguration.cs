@@ -82,6 +82,8 @@ internal sealed class PlannedWorkConfiguration : IEntityTypeConfiguration<Planne
             .HasConversion(v => v.ToArray(), v => v, GuidListComparer)
             .IsRequired();
 
+        builder.Property(x => x.ReminderAudienceChangedAtUtc).HasColumnName("reminder_audience_changed_at_utc");
+
         // The row version: Postgres' own transaction id of the last write (no column to add).
         builder.Property<uint>("xmin")
             .HasColumnName("xmin")

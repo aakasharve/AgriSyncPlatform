@@ -759,6 +759,29 @@ public sealed class CreateDailyLogHandler(
                     command.AuditDeviceId,
                     command.AuditIpHash),
                 ct);
+            // spec: plr-d10 lane REM-1 (founder D-79, R14, P11) - and the work that parse says was only half done, by the same rule.
+            try
+            {
+                using var parse = System.Text.Json.JsonDocument.Parse(parsedForReminders);
+                await LogLeftovers.StageFromJobAsync(
+                    repository,
+                    log,
+                    parse.RootElement,
+                    clock.UtcNow,
+                    new Planning.PlannedWork.PlannedWorkCaller(
+                        command.OperatorUserId,
+                        command.ActorRole ?? "unknown",
+                        command.ClientRequestId,
+                        stampedAppVersion,
+                        command.AuditDeviceId,
+                        command.AuditIpHash),
+                    ct);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // A stored parse that is not JSON has no unfinished work to read; the trace says so.
+                System.Diagnostics.Activity.Current?.AddEvent(new System.Diagnostics.ActivityEvent("planned_work.leftover.parse_unreadable"));
+            }
         }
 
         // DATA_PRINCIPLE_SPINE sub-phase 04.3b — migrate from AuditEvent.Create

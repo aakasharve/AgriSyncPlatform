@@ -35,13 +35,15 @@ describe('mutation-types.json', () => {
   // and gain their fields (no new entry); 1.12.0 -> 1.13.0.
   // 48 -> 48 on 2026-11-10 (lane SCH-OWN-c, founder D-137 Q10 = 1): schedule.create and schedule.edit gain the four optional made-for tags
   // (variety / soilType / region / climate, list codes from schedule-made-for.json); no new entry; 1.13.0 -> 1.14.0 (additive).
-  // 48 -> 49 on 2026-11-13 (lane CMP-D3, founder D-68 round 2): logreason.set - a reason kept on an existing record of work; 1.14.0 -> 1.15.0.
+  // 48 -> 48 on 2026-11-11 (lane REM-1, founder D-78 / D-84 = 1): no new mutation (the reminder settings are REST only, never queued: R21); the pull's
+  // `plannedWork` rows gain the additive fields createdByName, category, mayPlayVoice, wordsWithheld, makerAlwaysShown, fromChosenPeopleRecord; 1.14.0 -> 1.15.0.
+  // 48 -> 49 on 2026-11-13 (lane CMP-D3, founder D-68 round 2): logreason.set - a reason kept on an existing record of work; 1.15.0 -> 1.16.0.
   it('declares 49 mutations', () => {
     expect(json.mutationTypes).toHaveLength(49);
   });
 
-  it('is contract version 1.15.0 and names logreason.set', () => {
-    expect(json.version).toBe('1.15.0');
+  it('is contract version 1.16.0 and names logreason.set', () => {
+    expect(json.version).toBe('1.16.0');
     expect(json.mutationTypes.map((m) => m.name)).toContain('logreason.set');
   });
 

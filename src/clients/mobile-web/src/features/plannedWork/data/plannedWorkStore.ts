@@ -23,7 +23,7 @@ import type { MutationQueueStatus } from '../../../infrastructure/storage/DexieD
 import { SyncMutationName } from '../../../infrastructure/sync/SyncMutationCatalog';
 import type {
     PlannedWorkConfirmationName, PlannedWorkLooseWhenName, PlannedWorkPayModeName, PlannedWorkRow, PlannedWorkScopeName, PlannedWorkSourceKindName,
-    PlannedWorkStatusName,
+    PlannedWorkStatusName, ReminderCategoryName,
 } from '../../../infrastructure/storage/plannedWorkRow';
 import type { PlannedWorkVerb } from './plannedWorkCommands';
 
@@ -71,6 +71,20 @@ export interface LocalPlannedWork {
     confirmationState: PlannedWorkConfirmationName | null;
     /** Lane L8c-5 - the logs the work was done with, in the order they were linked (the server appends: the last is the newest); the card's door reads it. Absent on a task made on this phone. */
     linkedDailyLogIds?: string[];
+    /** Lane REM-1 - when it was made (the server's clock), for the card's "‹नाव› · ‹तारीख›, ‹वेळ›". Absent on a task made on this phone. */
+    createdAtUtc?: string | null;
+    /** Lane REM-1 - the maker's name as the farm sees it; null = not told (never guessed). */
+    createdByName?: string | null;
+    /** Lane REM-1 (D-79) - which of the three sources; null = not told by the server (the card then reads it from the door's words). */
+    category?: ReminderCategoryName | null;
+    /** Lane REM-1 (R15) - the server says this reader may hear the source log's voice. false / null: no button (P5). */
+    mayPlayVoice?: boolean | null;
+    /** Lane REM-1 (R16) - the words mention money and this reader may not hear them: the title is empty and the rule card stands in. */
+    wordsWithheld?: boolean | null;
+    /** Lane REM-1 (D-84 = 1) - the card says: by the owner's setting everyone on this plot sees this reminder. */
+    makerAlwaysShown?: boolean | null;
+    /** Lane REM-1 (D-84 = 1) - the card says: made from a record kept for chosen people, it stays with that record's people. */
+    fromChosenPeopleRecord?: boolean | null;
 }
 
 export interface LocalPlannedWorkPlot {
@@ -128,6 +142,13 @@ function fromServer(row: PlannedWorkRow): LocalPlannedWork {
         plots: row.plots.map(p => ({ plotId: p.plotId, status: p.status, confirmationState: p.confirmationState ?? null })),
         confirmationState: row.confirmationState ?? null,
         linkedDailyLogIds: [...(row.linkedDailyLogIds ?? [])],
+        createdAtUtc: row.createdAtUtc || null,
+        createdByName: row.createdByName ?? null,
+        category: row.category ?? null,
+        mayPlayVoice: row.mayPlayVoice ?? null,
+        wordsWithheld: row.wordsWithheld ?? null,
+        makerAlwaysShown: row.makerAlwaysShown ?? null,
+        fromChosenPeopleRecord: row.fromChosenPeopleRecord ?? null,
     };
 }
 

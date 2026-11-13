@@ -68,6 +68,12 @@ public enum FarmAuthority
     /// The compare read that requires it is lane CMP-D2.
     /// </summary>
     SeeCompare,
+
+    /// <summary>
+    /// spec: plr-d10 lane REM-1 (founder D-78, R17) - Change reminder settings ("आठवणींची मांडणी बदलणे"): who sees which reminders
+    /// and whose reminders always show. Only the primary account holder grants it (D-26); ENFORCED by the reminder-settings routes.
+    /// </summary>
+    ManageReminders,
 }
 
 /// <summary>
@@ -99,6 +105,7 @@ public static class FarmAuthorities
         FarmAuthority.ScheduleTemplates,
         FarmAuthority.SeeAllTasks,
         FarmAuthority.SeeCompare,
+        FarmAuthority.ManageReminders,
     ];
 
     /// <summary>
@@ -120,6 +127,7 @@ public static class FarmAuthorities
         FarmAuthority.ScheduleTemplates,
         FarmAuthority.SeeAllTasks,
         FarmAuthority.SeeCompare,
+        FarmAuthority.ManageReminders,
     ];
 
     /// <summary>
@@ -152,7 +160,7 @@ public static class FarmAuthorities
         // invitation naming it is refused for what it is (the grant routes refuse it too, CanBeHeldBy).
         foreach (var authority in All)
         {
-            if (!CanBeHeldBy(role, authority))
+            if (!CanBeHeldBy(role, authority, scope))
             {
                 notInForce.Add(authority);
             }
@@ -186,6 +194,7 @@ public static class FarmAuthorities
         FarmAuthority.ScheduleTemplates => FarmPermission.ManageScheduleTemplates,
         FarmAuthority.SeeAllTasks => FarmPermission.SeeAllTasks,
         FarmAuthority.SeeCompare => FarmPermission.SeeCompare,
+        FarmAuthority.ManageReminders => FarmPermission.ManageReminders,
         _ => throw new ArgumentOutOfRangeException(nameof(authority), authority, "Unknown authority."),
     };
 
@@ -196,7 +205,20 @@ public static class FarmAuthorities
     /// so a stored bit on a Worker seat (a hand-written row, an old build) holds nothing. The primary owner passes by label.
     /// </summary>
     public static bool CanBeHeldBy(AgriSync.SharedKernel.Contracts.Roles.AppRole role, FarmAuthority authority) =>
-        !(authority == FarmAuthority.SeeCompare && role == AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker);
+        CanBeHeldBy(role, authority, MembershipPlotScope.AllPlots);
+
+    /// <summary>
+    /// spec: plr-d10 lane REM-1 (CTO ruling on review m2) - the same question for a seat of this label AND plot scope. "आठवणींची मांडणी
+    /// बदलणे" (<see cref="FarmAuthority.ManageReminders"/>) changes who sees reminders farm-wide, so only a WHOLE-FARM seat may hold it:
+    /// never a Worker label, never a seat on स्वतःचं काम or on chosen plots. The grant doors refuse it, every read drops it (<see cref="IsHeld"/>),
+    /// and the card lists it as not in force (<see cref="NotInForce"/>). The primary owner passes by label.
+    /// </summary>
+    public static bool CanBeHeldBy(
+        AgriSync.SharedKernel.Contracts.Roles.AppRole role, FarmAuthority authority, MembershipPlotScope plotScope) =>
+        !(authority == FarmAuthority.SeeCompare && role == AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker)
+        && !(authority == FarmAuthority.ManageReminders
+            && role != AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner
+            && (role == AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker || plotScope != MembershipPlotScope.AllPlots));
 
     /// <summary>The authority this one needs to mean anything (D-26 / §11.1): wages and reviewing money need money.</summary>
     public static FarmAuthority? RequiredBy(FarmAuthority authority) => authority switch
@@ -244,14 +266,17 @@ public static class FarmAuthorities
         DateTime? labourGrantExpiresAtUtc,
         string? expiriesJson,
         FarmAuthority authority,
-        DateTime atUtc)
+        DateTime atUtc,
+        MembershipPlotScope? plotScope = null)
     {
         if (role == AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner)
         {
             return true;
         }
 
-        if (!CanBeHeldBy(role, authority))
+        // The plot scope is part of the question for an authority only a whole-farm seat may hold; a caller that cannot say it (null)
+        // is answered as a seat that covers part of the farm: fail closed.
+        if (!CanBeHeldBy(role, authority, plotScope ?? MembershipPlotScope.ChosenPlots))
         {
             return false;
         }

@@ -13,6 +13,7 @@ namespace ShramSafal.Domain.Planning;
 /// <param name="HoldsAssignWork">Assign work, held now.</param>
 /// <param name="HoldsSeeAllTasks">See all tasks, held now.</param>
 /// <param name="ChosenPlotIds">The plots a chosen-plots seat covers; <c>null</c> = every plot.</param>
+/// <param name="OwnWorkScope">Lane REM-1: the seat's scope is स्वतःचं काम (his own work, read by maker, not by plot): it is never "on" a plot, so the owner's "everyone on the plot" choices do not reach it.</param>
 public readonly record struct PlannedWorkSeat(
     Guid UserId,
     bool Active,
@@ -20,7 +21,8 @@ public readonly record struct PlannedWorkSeat(
     bool HoldsPlanWork,
     bool HoldsAssignWork,
     bool HoldsSeeAllTasks,
-    IReadOnlySet<Guid>? ChosenPlotIds);
+    IReadOnlySet<Guid>? ChosenPlotIds,
+    bool OwnWorkScope = false);
 
 /// <summary>
 /// WHO may make, change and cancel a task (D-24 / D-24c). One place.

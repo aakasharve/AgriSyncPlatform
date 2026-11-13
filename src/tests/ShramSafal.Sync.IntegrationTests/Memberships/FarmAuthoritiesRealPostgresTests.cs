@@ -65,7 +65,7 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
     // probe corrects a cost it entered itself; another person's cost is not there for it (CostEntryNotFound).
     private static readonly Guid HolderCost = Guid.Parse("2b000001-0000-0000-0000-0000000000d4");
 
-    private const int AllBits = 1 | 2 | 8 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096; // 2048 = SeeAllTasks (lane L8c-1), 4096 = SeeCompare (lane CMP-D1)
+    private const int AllBits = 1 | 2 | 8 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192; // 2048 = SeeAllTasks (lane L8c-1), 4096 = SeeCompare (lane CMP-D1), 8192 = ManageReminders (lane REM-1)
 
     private string _rootConn = string.Empty;
     private string _scratchDbName = string.Empty;
@@ -170,8 +170,9 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
         var now = DateTime.UtcNow;
 
         // lane CMP-D1 (founder D-81): a Worker seat can never hold "तुलना पाहणे", so its two holders are मुकादम seats for that
-        // one authority (its refusal on a Worker seat is proved in SeeCompareAuthorityRealPostgresTests).
-        if (authority == FarmAuthority.SeeCompare)
+        // one authority (its refusal on a Worker seat is proved in SeeCompareAuthorityRealPostgresTests); lane REM-1: the same for ManageReminders, which
+        // only a whole-farm seat holds (ReminderWholeFarmRealPostgresTests).
+        if (authority is FarmAuthority.SeeCompare or FarmAuthority.ManageReminders)
         {
             await ExecSuperAsync("UPDATE ssf.farm_memberships SET role = 'Mukadam' WHERE user_id IN (@a, @b)", ("a", Holder), ("b", HolderOnB));
         }

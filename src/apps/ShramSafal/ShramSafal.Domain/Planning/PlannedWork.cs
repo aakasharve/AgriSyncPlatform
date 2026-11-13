@@ -108,6 +108,15 @@ public sealed class PlannedWork : Entity<Guid>
     /// </summary>
     public IReadOnlyList<Guid> FormerAssigneeUserIds { get; private set; } = [];
 
+    /// <summary>
+    /// Lane REM-1 (MU-3: what you may no longer see leaves your phone): when the owner's reminder settings last changed in a way that
+    /// can change who sees THIS reminder (a category's audience, or its maker's always-show mark), or when the reminder was given to
+    /// someone else or moved to other plots (fix round, review M1). <c>null</c> = never. Only a task carrying it is named in a pull's
+    /// withdrawn list for a reader who no longer sees it, so a person who never held a reminder is told nothing (P10, D-26); and it is
+    /// named by THIS time, not by a later edit's, so each reader is told at most once. Moves <see cref="ModifiedAtUtc"/> with it.
+    /// </summary>
+    public DateTime? ReminderAudienceChangedAtUtc { get; private set; }
+
     public IReadOnlyList<PlannedWorkPlot> Plots => plots;
 
     public bool IsClosed => Status is PlannedWorkStatus.Done or PlannedWorkStatus.Cancelled;
@@ -195,7 +204,16 @@ public sealed class PlannedWork : Entity<Guid>
         }
 
         var before = AssigneeUserId;
+        var wasReminder = IsReminder;
+        var plotsBefore = LivePlots.Select(p => p.PlotId).OrderBy(id => id).ToList();
         Apply(details, nowUtc);
+        // Lane REM-1 fix round (review M1): a reminder that stops being one (given to someone else) or moves to other plots stops being
+        // widened-visible to the readers who may have held it; the stamp lets the pull name it to them once (MU-3), content-free.
+        if (wasReminder && (!IsReminder || !LivePlots.Select(p => p.PlotId).OrderBy(id => id).SequenceEqual(plotsBefore)))
+        {
+            ReminderAudienceChangedAtUtc = ModifiedAtUtc;
+        }
+
         if (AssigneeUserId != before)
         {
             if (before is { } old && old != CreatedByUserId && !FormerAssigneeUserIds.Contains(old))
@@ -443,6 +461,17 @@ public sealed class PlannedWork : Entity<Guid>
     /// with its new confirmation state. The state itself is never stored here: it is read from the logs.
     /// </summary>
     public void NoteLinkedLogChanged(DateTime nowUtc) => Touch(nowUtc);
+
+    /// <summary>
+    /// Lane REM-1: the owner's reminder settings changed in a way that can change who sees this reminder. Moves the task past every
+    /// phone's cursor and stamps why; what it says and where it stands are untouched. The next pull resends it to who now sees it
+    /// and withdraws it from who no longer does.
+    /// </summary>
+    public void NoteReminderAudienceChanged(DateTime nowUtc)
+    {
+        Touch(nowUtc);
+        ReminderAudienceChangedAtUtc = ModifiedAtUtc;
+    }
 
     /// <summary>True when <paramref name="dailyLogId"/> is linked to this task or to one of its plot rows.</summary>
     public bool Links(Guid dailyLogId) =>

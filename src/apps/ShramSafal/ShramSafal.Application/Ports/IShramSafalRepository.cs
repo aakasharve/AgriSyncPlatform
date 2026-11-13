@@ -310,6 +310,52 @@ public interface IShramSafalRepository
     Task<List<PlannedWork>> GetPlannedWorkBySourceLogAsync(Guid farmId, Guid dailyLogId, CancellationToken ct = default)
         => Task.FromResult(new List<PlannedWork>());
 
+    // ── spec: plr-d10 lane REM-1 (founder D-78, D-84 = 1) - the owner's reminder settings (ssf.farm_reminder_settings, one row per farm,
+    // made on the first change) and the always-show list (ssf.reminder_always_show). Current state, not ledgers: a mark can be taken
+    // off. The history of every change is the audit row. Defaults keep a test double honest: no row = the defaults, nobody marked.
+
+    /// <summary>
+    /// The reminder settings and the always-show list of these farms, untracked, as the caller's scope can read them (the row policy
+    /// lets an Active member of a farm read that farm's). A farm with no row is absent: the caller applies <see cref="ReminderAudiences.Defaults"/>.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, Services.ReminderAudiences>> GetReminderAudiencesAsync(
+        IEnumerable<Guid> farmIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyDictionary<Guid, Services.ReminderAudiences>>(new Dictionary<Guid, Services.ReminderAudiences>());
+
+    /// <summary>
+    /// The names of these people as the user directory has them (a person with no name is absent). The default knows none, so a test double
+    /// without a directory says no names - never an invented one (P4).
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetDisplayNamesAsync(IEnumerable<Guid> userIds, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
+
+    /// <summary>The farm's stored settings row, TRACKED, or <c>null</c> when its owner never changed anything.</summary>
+    Task<ReminderSettings?> GetReminderSettingsForChangeAsync(Guid farmId, CancellationToken ct = default)
+        => Task.FromResult<ReminderSettings?>(null);
+
+    /// <summary>Stages a farm's first settings row (no SaveChanges). The default refuses (P5).</summary>
+    Task AddReminderSettingsAsync(ReminderSettings settings, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot keep reminder settings.");
+
+    /// <summary>The farm's always-show marks, TRACKED. Default: none.</summary>
+    Task<List<ReminderAlwaysShow>> GetReminderAlwaysShowForChangeAsync(Guid farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<ReminderAlwaysShow>());
+
+    /// <summary>Stages a new always-show mark (no SaveChanges). The default refuses (P5).</summary>
+    Task AddReminderAlwaysShowAsync(ReminderAlwaysShow mark, CancellationToken ct = default)
+        => throw new NotSupportedException("This repository cannot keep reminder marks.");
+
+    /// <summary>Stages the removal of an always-show mark (no SaveChanges). The default refuses (P5).</summary>
+    void RemoveReminderAlwaysShow(ReminderAlwaysShow mark)
+        => throw new NotSupportedException("This repository cannot keep reminder marks.");
+
+    /// <summary>
+    /// The REMINDERS of this farm (no assignee but the maker), with their plot rows, TRACKED: the caller moves the clock of the ones a
+    /// settings change reaches and saves with its own change (MU-3: what you may no longer see leaves your phone). Default: none.
+    /// </summary>
+    Task<List<PlannedWork>> GetRemindersOfFarmForChangeAsync(Guid farmId, CancellationToken ct = default)
+        => Task.FromResult(new List<PlannedWork>());
+
     /// <summary>The pull: answers kept on these farms strictly after <paramref name="sinceUtc"/>, oldest first.</summary>
     Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(
         IEnumerable<Guid> farmIds, DateTime sinceUtc, CancellationToken ct = default)

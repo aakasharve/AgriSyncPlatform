@@ -528,6 +528,81 @@ public sealed class ManageMembershipHandlerTests
         Assert.Single(repo.Audits);
     }
 
+    // ── lane REM-1 (CTO ruling on review m2): "आठवणींची मांडणी बदलणे" only for a whole-farm seat - the handler's doors ──────────────
+
+    private static ShramSafal.Application.Contracts.Dtos.AuthorityGrantDto[] Grant() => [new("ManageReminders", null)];
+
+    [Theory]
+    [InlineData("OwnWork")]
+    [InlineData("ChosenPlots")]
+    public async Task ManageReminders_given_through_the_whole_set_to_a_part_farm_seat_is_refused_and_writes_nothing(string scope)
+    {
+        var repo = new Repo();
+        var who = new UserId(Guid.NewGuid());
+        var seat = repo.AddActive(who, AppRole.Mukadam);
+        seat.SetPlotScope(Enum.Parse<MembershipPlotScope>(scope), scope == "ChosenPlots" ? [Guid.NewGuid()] : null, Now.AddDays(-1));
+        var savesBefore = repo.Saves;
+
+        AssertRefusedWith(await Handle(repo, Decision(MembershipDecision.SetAuthorities, who) with { Authorities = Grant() }), ShramSafalErrors.InvalidCommand);
+        Assert.Null(seat.Permissions);
+        Assert.Equal(savesBefore, repo.Saves);
+        Assert.Empty(repo.Audits);
+
+        // CONTROL: the same words are fine once he sees the whole farm.
+        var whole = new UserId(Guid.NewGuid());
+        var wholeSeat = repo.AddActive(whole, AppRole.Mukadam);
+        Assert.True((await Handle(repo, Decision(MembershipDecision.SetAuthorities, whole) with { Authorities = Grant() })).IsSuccess);
+        Assert.Equal(FarmPermission.ManageReminders, wholeSeat.Permissions);
+    }
+
+    [Fact]
+    public async Task ManageReminders_given_in_an_approval_with_part_of_the_farm_chosen_in_the_same_tap_is_refused()
+    {
+        var repo = new Repo();
+        var seat = repo.AddRequest(Joiner);
+
+        AssertRefused(
+            await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Mukadam", Permissions = ["ManageReminders"], PlotScope = "OwnWork" }),
+            ShramSafalErrors.InvalidCommand, repo);
+        Assert.Equal(MembershipStatus.PendingApproval, seat.Status);
+
+        AssertRefused(
+            await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Worker", Permissions = ["ManageReminders"] }),
+            ShramSafalErrors.InvalidCommand, repo);
+
+        // CONTROL: whole farm (the default) takes it.
+        Assert.True((await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Mukadam", Permissions = ["ManageReminders"] })).IsSuccess);
+        Assert.Equal(FarmPermission.ManageReminders, seat.Permissions);
+    }
+
+    [Fact]
+    public async Task ManageReminders_given_in_an_access_change_to_a_part_farm_seat_is_refused_and_a_stale_bit_is_dropped_by_an_unrelated_change()
+    {
+        var repo = new Repo();
+        var who = new UserId(Guid.NewGuid());
+        var seat = repo.AddActive(who, AppRole.Mukadam);
+        seat.SetPlotScope(MembershipPlotScope.OwnWork, null, Now.AddDays(-1));
+        var savesBefore = repo.Saves;
+
+        AssertRefusedWith(await Handle(repo, Decision(MembershipDecision.SetAccess, who) with { Permissions = ["ManageReminders"] }), ShramSafalErrors.InvalidCommand);
+        Assert.Null(seat.Permissions);
+        Assert.Equal(savesBefore, repo.Saves);
+
+        // A stale grant (stored while he saw the whole farm, he was narrowed after): an UNRELATED change still lands and drops the bit.
+        var other = new UserId(Guid.NewGuid());
+        var stale = repo.AddActive(other, AppRole.Mukadam);
+        stale.SetAuthorities(new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.ManageReminders] = null }, Now.AddDays(-1));
+        stale.SetPlotScope(MembershipPlotScope.OwnWork, null, Now.AddDays(-1));
+        Assert.Equal(FarmPermission.ManageReminders, stale.Permissions);
+
+        var result = await Handle(repo, Decision(MembershipDecision.SetAccess, other) with { LabourGrant = true });
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.False(((stale.Permissions ?? FarmPermission.None) & FarmPermission.ManageReminders) == FarmPermission.ManageReminders, "the barred bit is gone");
+        Assert.False(stale.Holds(FarmAuthority.ManageReminders, Now));
+        Assert.DoesNotContain("ManageReminders", result.Value!.Permissions!);
+    }
+
     // ── harness ──────────────────────────────────────────────────────────────
 
     private static ManageMembershipCommand Decision(MembershipDecision decision, UserId? target = null) =>

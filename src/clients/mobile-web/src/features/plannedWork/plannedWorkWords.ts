@@ -18,7 +18,69 @@
  */
 import type { PlannedWorkPayModeName, PlannedWorkScopeName, PlannedWorkStatusName } from '../../infrastructure/storage/plannedWorkRow';
 
+/**
+ * Lane REM-1 (founder D-78, D-79, D-84 = 1; R14-R17, R21): the words of the reminder list (chips, the card's lines, "ऐका", "काढा" with its
+ * undo) and of the owner's screen "आठवणी कोणाला दिसतील". Exact Marathi from the lane's word table; everything not in the table is PROPOSED.
+ * One language at a time. No emoji, no "AI" wording.
+ */
+export interface ReminderWords {
+    /** The chips above the lists, and what each filters to. */
+    chipsLabel: string;
+    chipAll: string;
+    chipPlanning: string;
+    chipSchedule: string;
+    chipLogs: string;
+    /** The card's source line: spoken (with the place of its record when it is known) and left unfinished. */
+    fromSpoken: (place: string | null) => string;
+    leftover: string;
+    /** "ऐका": only when the server says this reader may hear the source voice; otherwise the rule line below. */
+    listen: string;
+    voiceRule: string;
+    /** D-84 = 1: the two lines a card may carry. */
+    markedMaker: string;
+    chosenPeople: string;
+    /** One tap removes it; the toast says so for a few seconds with the way back. */
+    removedToast: string;
+    undo: string;
+    // ---- the owner's screen ----
+    settingsTitle: string;
+    settingsEntry: string;
+    settingsHint: string;
+    settingsOffline: string;
+    settingsLoading: string;
+    settingsLoadFailed: string;
+    settingsForbidden: string;
+    retry: string;
+    saved: string;
+    saveFailed: string;
+    /** One row per category, with its choices. */
+    catLogs: string;
+    catOwn: string;
+    catSchedule: string;
+    choiceMakerAndOwner: string;
+    choicePlotTeam: string;
+    choicePlanners: string;
+    /** D-24e1: assigned work is a ShramSafal rule; no choice moves it. */
+    assignedLocked: string;
+    // D-84 = 1.
+    alwaysTitle: string;
+    alwaysException: string;
+    alwaysNone: string;
+    alwaysAdd: string;
+    alwaysRemove: string;
+    alwaysNoOne: string;
+    // R17: who may change it (the primary owner only grants it).
+    whoTitle: string;
+    whoHint: string;
+    whoSwitch: string;
+    whoOwnerOnly: string;
+    whoYes: string;
+    whoNo: string;
+}
+
 export interface PlannedWorkWords {
+    /** Lane REM-1. */
+    reminders: ReminderWords;
     // The five questions of the form (founder-named).
     what: string;
     where: string;
@@ -156,7 +218,98 @@ function devanagariDigits(n: number): string {
     return String(n).replace(/[0-9]/g, d => String.fromCharCode(0x0966 + Number(d)));
 }
 
+const mrReminders: ReminderWords = {
+    chipsLabel: 'आठवणी कुठून आल्या', // PROPOSED (Marathi)
+    chipAll: 'सगळ्या', // PROPOSED (Marathi)
+    chipPlanning: 'नियोजनातून', // the lane's word table (REM-1 chip)
+    chipSchedule: 'शेड्यूलमधून', // app word (the old list's FROM_LABEL)
+    chipLogs: 'नोंदीतून', // app word (the old list's FROM_LABEL)
+    fromSpoken: place => (place ? `बोलण्यातून — ${place}ची नोंद` : 'बोलण्यातून'), // PROPOSED (Marathi); बोलण्यातून is approved in D-78
+    leftover: 'अर्धवट राहिलेलं', // the lane's word table (R14)
+    listen: 'ऐका', // the lane's word table
+    voiceRule: 'श्रमसफलच्या नियमानुसार हा आवाज तुम्हाला ऐकता येत नाही', // the lane's word table (R15)
+    markedMaker: 'मालकाच्या मांडणीनुसार ही आठवण या प्लॉटवरच्या सगळ्यांना दिसते.', // the lane's word table (D-84 = 1)
+    chosenPeople: 'निवडक लोकांसाठी ठेवलेल्या नोंदीतून आलेली आठवण — त्या नोंदीच्या लोकांपुरतीच राहते.', // the lane's word table (D-84 = 1)
+    removedToast: 'आठवण काढली', // the lane's word table
+    undo: 'परत आणा', // the lane's word table
+    settingsTitle: 'आठवणी कोणाला दिसतील', // the lane's word table
+    settingsEntry: 'आठवणी कोणाला दिसतील', // the lane's word table
+    settingsHint: 'कोणाच्या आठवणी कोणाला दिसतील, हे तुम्ही ठरवता. नोंदवलेलं काहीही यातून पुसलं जात नाही.', // PROPOSED (Marathi)
+    settingsOffline: 'ही मांडणी बदलण्यासाठी नेट लागतं. आत्ता काहीही बदललेलं नाही; नेट आल्यावर पुन्हा उघडा.', // PROPOSED (Marathi) - R21
+    settingsLoading: 'माहिती आणत आहोत…', // PROPOSED (Marathi)
+    settingsLoadFailed: 'मांडणी आणता आली नाही. पुन्हा करून पाहा.', // PROPOSED (Marathi)
+    settingsForbidden: 'ही मांडणी फक्त मालक किंवा त्यांनी ज्याला दिली तोच बदलू शकतो.', // PROPOSED (Marathi)
+    retry: 'पुन्हा करा', // PROPOSED (Marathi)
+    saved: 'ठेवलं', // PROPOSED (Marathi)
+    saveFailed: 'आत्ता बदलता आलं नाही — काहीही बदललेलं नाही. पुन्हा करा.', // PROPOSED (Marathi)
+    catLogs: 'नोंदीतून आलेल्या आठवणी', // PROPOSED (Marathi)
+    catOwn: 'स्वतःसाठी केलेल्या आठवणी', // PROPOSED (Marathi)
+    catSchedule: 'शेड्यूलची कामं', // PROPOSED (Marathi)
+    choiceMakerAndOwner: 'बनवणारा आणि मालक', // the lane's word table
+    choicePlotTeam: 'प्लॉटवरचे सगळे', // the lane's word table
+    choicePlanners: 'नियोजन करणारे', // the lane's word table
+    assignedLocked: 'सोपवलेल्या कामाचा नियम श्रमसफलचा आहे: ज्याला सोपवलं, ज्याने सोपवलं आणि मालक यांना ते दिसतं. हा नियम कोणतीही मांडणी बदलत नाही.', // PROPOSED (Marathi) - D-24e1
+    alwaysTitle: 'यांच्या आठवणी नेहमी दिसतील', // the lane's word table (D-84 = 1)
+    alwaysException: 'लपवलेल्या (फक्त मी) किंवा निवडक लोकांसाठी ठेवलेल्या नोंदीतून आलेली आठवण मात्र त्या नोंदीच्या लोकांपुरतीच राहते.', // the lane's word table (D-84 = 1)
+    alwaysNone: 'सध्या कोणीही निवडलेला नाही.', // PROPOSED (Marathi)
+    alwaysAdd: 'कोणाला जोडायचं?', // PROPOSED (Marathi)
+    alwaysRemove: 'काढा', // the lane's word table
+    alwaysNoOne: 'जोडण्यासाठी आणखी कोणी नाही.', // PROPOSED (Marathi)
+    whoTitle: 'हे कोण बदलू शकतं', // the lane's word table (R17)
+    whoHint: 'हे फक्त मालकच देऊ शकतो. ज्याला दिलं तो मांडणी बदलू शकतो, पण ती दुसऱ्याला देऊ शकत नाही.', // PROPOSED (Marathi) - D-26
+    whoSwitch: 'आठवणींची मांडणी बदलणे', // the lane's word table (R17)
+    whoOwnerOnly: 'हे फक्त मालकाला दिसतं.', // PROPOSED (Marathi)
+    whoYes: 'आहे', // PROPOSED (Marathi)
+    whoNo: 'नाही', // PROPOSED (Marathi)
+};
+
+const enReminders: ReminderWords = {
+    chipsLabel: 'Where the reminders came from', // PROPOSED (English)
+    chipAll: 'All', // PROPOSED (English)
+    chipPlanning: 'From planning', // the lane's word table
+    chipSchedule: 'From the schedule', // the lane's word table
+    chipLogs: 'From records', // the lane's word table
+    fromSpoken: place => (place ? `From speech - the record of ${place}` : 'From speech'), // PROPOSED (English)
+    leftover: 'Left unfinished', // the lane's word table (R14)
+    listen: 'Listen', // the lane's word table
+    voiceRule: "By ShramSafal's rule you cannot listen to this voice", // the lane's word table (R15)
+    markedMaker: "By the owner's setting, everyone on this plot sees this reminder.", // the lane's word table (D-84 = 1)
+    chosenPeople: "A reminder from a record kept for chosen people stays with that record's people.", // the lane's word table (D-84 = 1)
+    removedToast: 'Reminder removed', // the lane's word table
+    undo: 'Undo', // the lane's word table
+    settingsTitle: 'Who sees reminders', // the lane's word table
+    settingsEntry: 'Who sees reminders', // the lane's word table
+    settingsHint: 'You decide whose reminders who sees. Nothing that was recorded is erased by this.', // PROPOSED (English)
+    settingsOffline: 'Changing this needs the internet. Nothing has been changed; open it again when you are online.', // PROPOSED (English) - R21
+    settingsLoading: 'Fetching...', // PROPOSED (English)
+    settingsLoadFailed: 'Could not fetch the settings. Please try again.', // PROPOSED (English)
+    settingsForbidden: 'Only the owner, or the person he gave this to, can change this.', // PROPOSED (English)
+    retry: 'Try again', // PROPOSED (English)
+    saved: 'Saved', // PROPOSED (English)
+    saveFailed: 'Could not change it right now - nothing was changed. Please try again.', // PROPOSED (English)
+    catLogs: 'Reminders from records', // PROPOSED (English)
+    catOwn: 'Reminders people make for themselves', // PROPOSED (English)
+    catSchedule: "The schedule's steps", // PROPOSED (English)
+    choiceMakerAndOwner: 'The maker and the owner', // the lane's word table
+    choicePlotTeam: 'Everyone on the plot', // the lane's word table
+    choicePlanners: 'The planners', // the lane's word table
+    assignedLocked: "Work given to a person follows ShramSafal's rule: the person it was given to, the one who gave it and the owner see it. No setting changes this rule.", // PROPOSED (English) - D-24e1
+    alwaysTitle: "These people's reminders always show", // the lane's word table (D-84 = 1)
+    alwaysException: "But a reminder from a record hidden (only me) or kept for chosen people stays with that record's people.", // the lane's word table (D-84 = 1)
+    alwaysNone: 'Nobody is chosen right now.', // PROPOSED (English)
+    alwaysAdd: 'Whom to add?', // PROPOSED (English)
+    alwaysRemove: 'Remove', // the lane's word table
+    alwaysNoOne: 'There is no one else to add.', // PROPOSED (English)
+    whoTitle: 'Who can change this', // the lane's word table (R17)
+    whoHint: 'Only the owner can give this. The person he gives it to can change the settings but cannot pass that on.', // PROPOSED (English) - D-26
+    whoSwitch: 'Change reminder settings', // the lane's word table (R17)
+    whoOwnerOnly: 'Only the owner sees this.', // PROPOSED (English)
+    whoYes: 'Yes', // PROPOSED (English)
+    whoNo: 'No', // PROPOSED (English)
+};
+
 const mr: PlannedWorkWords = {
+    reminders: mrReminders,
     what: 'काम काय',
     where: 'कुठे',
     when: 'कधी',
@@ -292,6 +445,7 @@ const mr: PlannedWorkWords = {
 };
 
 const en: PlannedWorkWords = {
+    reminders: enReminders,
     what: 'What work', // PROPOSED (English)
     where: 'Where', // PROPOSED (English)
     when: 'When', // PROPOSED (English)

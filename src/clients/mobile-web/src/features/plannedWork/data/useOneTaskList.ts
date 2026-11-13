@@ -116,7 +116,8 @@ export function useOneTaskList({ farmId, userId, isDemoMode, knownPlotIds, demo 
                     const pending = task.plots.filter(p => p.status === 'Pending').map(p => p.plotId);
                     await PlannedWorkCommands.complete({ plannedWorkId: id, farmId, plotIds: task.plots.length > 0 ? pending : [], dailyLogIds: [], somethingLeft: false });
                 } else if (updates.status === 'cancelled' && open) {
-                    await PlannedWorkCommands.cancel(id, farmId);
+                    // The only door that cancels from a list is "काढा" (one tap removes a reminder): the reason says so, history kept (P3).
+                    await PlannedWorkCommands.cancel(id, farmId, 'Removed');
                 } else if (open && (movedDay || retitled)) {
                     await PlannedWorkCommands.edit({
                         plannedWorkId: id,

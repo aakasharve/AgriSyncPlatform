@@ -278,6 +278,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    re-keyed, SOWN-a's own-farm column dropped with its foreign key and index. No grant or privilege is touched anywhere. Down() raises while any row has an owner
         //    or a tag (this proof's data has none), else rebuilds SOWN-a's shape and drops only what Up() added. Safe to revert and re-apply mid-proof.
         "20261110120000_ScheduleTemplateOwnerAndMadeFor",
+        // ── Reviewed 2026-11-11 (spec: plr-d10 lane REM-1, founder D-78 / D-84 = 1); Up() and Down() read in full: Up() adds one nullable column to
+        //    ssf.planned_work and creates two tables, ssf.farm_reminder_settings and ssf.reminder_always_show, granting SELECT, INSERT, UPDATE and DELETE on
+        //    THOSE TWO (current state, not ledgers; the history is the append-only audit row) to agrisync_app. It grants nothing on any ledger and revokes
+        //    nothing from any ledger. Down() drops the policies, the two tables and the column. Safe to revert and re-apply mid-proof.
+        "20261111090000_AddReminderSettings",
         // ── Reviewed 2026-11-13 (spec: plr-d10 lane ATT-W, R29); Up() and Down() read in full: Up() creates ssf.schedule_step_moves (FORCE RLS, its two
         //    policies) APPEND-ONLY BY PRIVILEGE with its own effective-privilege guard (it is on AppendOnlyLedgers above) and touches no
         //    other ledger's grants; it adds no column to any existing table. Down() drops its two policies and the table - only what

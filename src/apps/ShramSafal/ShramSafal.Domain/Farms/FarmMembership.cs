@@ -245,7 +245,7 @@ public sealed class FarmMembership : Entity<Guid>
     /// </summary>
     public FarmPermission EffectivePermissions =>
         Status == MembershipStatus.Active
-            ? FarmPermissionDefaults.Effective(Role, Permissions)
+            ? FarmPermissionDefaults.Effective(Role, Permissions, PlotScope)
             : FarmPermission.None;
 
     /// <summary>
@@ -276,7 +276,7 @@ public sealed class FarmMembership : Entity<Guid>
     public bool HoldsIgnoringStatus(FarmAuthority authority, DateTime atUtc) =>
         FarmAuthorities.IsHeld(
             Role, Permissions, CanManageLabourRecords, LabourGrantExpiresAtUtc, AuthorityExpiresAtJson,
-            authority, atUtc);
+            authority, atUtc, PlotScope);
 
     /// <summary>lane 2b — the primary account holder stored <paramref name="authority"/> for this seat (ended or not).</summary>
     public bool StoresAuthority(FarmAuthority authority) =>
@@ -700,7 +700,7 @@ public sealed class FarmMembership : Entity<Guid>
         }
 
         EnsureKnown(permissions);
-        EnsureHoldable(role, permissions);
+        EnsureHoldable(role, permissions, PlotScope);
 
         Status = MembershipStatus.Active;
         Role = role;
@@ -817,7 +817,7 @@ public sealed class FarmMembership : Entity<Guid>
 
         RequireActor(changedByUserId);
         EnsureKnown(permissions);
-        EnsureHoldable(role, permissions);
+        EnsureHoldable(role, permissions, PlotScope);
 
         if (Role == role && Permissions == permissions)
         {
@@ -863,9 +863,9 @@ public sealed class FarmMembership : Entity<Guid>
             }
 
             // spec: plr-d10 lane CMP-D1 (founder D-81) - a Worker seat can never be given "तुलना पाहणे": refused, never trimmed.
-            if (!FarmAuthorities.CanBeHeldBy(Role, authority))
+            if (!FarmAuthorities.CanBeHeldBy(Role, authority, PlotScope))
             {
-                throw new ArgumentException($"{authority} cannot be given to a {Role} seat.", nameof(desired));
+                throw new ArgumentException($"{authority} cannot be given to a {Role} seat on {PlotScope}.", nameof(desired));
             }
 
             if (end is { } instant && instant <= utcNow)
@@ -1037,7 +1037,7 @@ public sealed class FarmMembership : Entity<Guid>
     /// spec: plr-d10 lane CMP-D1 (founder D-81) - a stored choice that names an authority this label can never hold is refused
     /// whole (an approval or an access change to a Worker seat carrying "तुलना पाहणे"), never stored and never trimmed.
     /// </summary>
-    private static void EnsureHoldable(AppRole role, FarmPermission? permissions)
+    private static void EnsureHoldable(AppRole role, FarmPermission? permissions, MembershipPlotScope plotScope)
     {
         if (permissions is not { } value)
         {
@@ -1047,9 +1047,9 @@ public sealed class FarmMembership : Entity<Guid>
         foreach (var authority in FarmAuthorities.All)
         {
             var bit = FarmAuthorities.BitOf(authority);
-            if (bit != FarmPermission.None && (value & bit) == bit && !FarmAuthorities.CanBeHeldBy(role, authority))
+            if (bit != FarmPermission.None && (value & bit) == bit && !FarmAuthorities.CanBeHeldBy(role, authority, plotScope))
             {
-                throw new ArgumentException($"{authority} cannot be given to a {role} seat.", nameof(permissions));
+                throw new ArgumentException($"{authority} cannot be given to a {role} seat on {plotScope}.", nameof(permissions));
             }
         }
     }

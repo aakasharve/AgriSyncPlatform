@@ -61,6 +61,29 @@ public static class ShramSafalErrors
         "ShramSafal.PlannedWork.InvalidCommand",
         "The work is not well formed.");
 
+    // --- spec: plr-d10 lane REM-1 (founder D-78, R17, R21) - the owner's reminder settings. REST only, so no phone parks them: the
+    // screen says the rule. Forbidden ends ".Forbidden" (403), the rest are 400 with their code and words.
+
+    /// <summary>Only the primary owner, or a seat that holds "आठवणींची मांडणी बदलणे", may read or change the reminder settings. PROPOSED words.</summary>
+    public static readonly Error ReminderSettingsForbidden = Error.Forbidden(
+        "ShramSafal.ReminderSettings.Forbidden",
+        "Only the primary owner, or a person he gave this, can change who sees reminders.");
+
+    /// <summary>The choice named is not one this kind of reminder offers, or nothing was chosen. PROPOSED words.</summary>
+    public static readonly Error ReminderSettingsInvalid = Error.Validation(
+        "ShramSafal.ReminderSettings.InvalidCommand",
+        "That choice is not offered for that kind of reminder.");
+
+    /// <summary>The person marked is not an Active member of THIS farm (E4: another farm's person is refused). PROPOSED words.</summary>
+    public static readonly Error ReminderAlwaysShowNotMember = Error.Validation(
+        "ShramSafal.ReminderAlwaysShowNotMember.InvalidCommand",
+        "The person is not an active member of this farm.");
+
+    /// <summary>The settings were changed first by someone else: nothing of this change was kept. PROPOSED words.</summary>
+    public static readonly Error ReminderSettingsStateChanged = Error.Conflict(
+        "ShramSafal.ReminderSettingsState.InvalidCommand",
+        "The reminder settings were changed first, so this change could not be applied.");
+
     // --- lane L8c-3 (founder D-24d): "काम झालं" through the real log, plot by plot. Both end ".InvalidCommand" so every shipped
     // phone parks them; Forbidden and DailyLogNotFound keep their own codes.
 

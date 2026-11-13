@@ -55,8 +55,30 @@ export function toPlannedTask(task: LocalPlannedWork, me: string | null): Planne
         status: task.status === 'Done' ? 'done' : task.status === 'Cancelled' ? 'cancelled' : 'pending',
         sourceType: task.sourceKind ? SOURCE_OF[task.sourceKind] : 'manual',
         createdAt: task.recordedOn || task.modifiedAtUtc || '',
-        listSource: { scope: task.scope, tickable: isTickableHere(task, me), keptOnPhone: task.keptOnPhone },
+        listSource: {
+            scope: task.scope,
+            tickable: isTickableHere(task, me),
+            keptOnPhone: task.keptOnPhone,
+            farmId: task.farmId,
+            reminder: {
+                category: task.category ?? categoryOfKind(task.sourceKind),
+                kind: task.sourceKind,
+                createdByUserId: task.createdByUserId,
+                createdByName: task.createdByName ?? null,
+                createdAtUtc: task.createdAtUtc ?? null,
+                sourceDailyLogId: task.sourceDailyLogId ?? null,
+                mayPlayVoice: task.mayPlayVoice ?? null,
+                wordsWithheld: task.wordsWithheld === true,
+                makerAlwaysShown: task.makerAlwaysShown === true,
+                fromChosenPeopleRecord: task.fromChosenPeopleRecord === true,
+            },
+        },
     };
+}
+
+/** A server that did not say the category (an older one): the door's own words say it (Spoken, Leftover = records; the rest = planning). */
+function categoryOfKind(kind: LocalPlannedWork['sourceKind']): 'FromPlanning' | 'FromLogs' {
+    return kind === 'Spoken' || kind === 'Leftover' ? 'FromLogs' : 'FromPlanning';
 }
 
 /** The farm's one list as `PlannedTask`s, in the order the store has them. */

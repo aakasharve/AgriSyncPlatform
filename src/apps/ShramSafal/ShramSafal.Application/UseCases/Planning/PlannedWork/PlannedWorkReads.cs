@@ -41,13 +41,18 @@ public sealed class PlannedWorkReads(IShramSafalRepository repository, IClock cl
         var visibility = rows.Any(w => w.SourceDailyLogId is not null)
             ? await RecordVisibility.ForFarmAsync(repository, farmId, callerUserId, clock.UtcNow, ct)
             : RecordVisibility.None(callerUserId);
+        // Lane REM-1: the owner's settings (the defaults when he never changed any) widen the base, never narrow it.
+        var set = (await repository.GetReminderAudiencesAsync([farmId], ct)).GetValueOrDefault(farmId) ?? ReminderAudiences.Defaults(farmId);
         var seen = rows
             .Where(w => (Guid)w.FarmId == farmId)
-            .Select(w => (Work: w, Rows: PlannedWorkVisibility.VisiblePlots(seat, w, PlannedWorkSourceLog.HiddenFrom(visibility, w))))
+            .Select(w => (Work: w, Rows: ReminderVisibility.VisiblePlots(seat, w, set.Settings, set.AlwaysShow, PlannedWorkSourceLog.HiddenFrom(visibility, w))))
             .Where(x => x.Rows is not null)
             .ToList();
         var standing = await PlannedWorkConfirmations.LoadAsync(repository, seen.Select(x => x.Work), ct);
-        IReadOnlyList<PlannedWorkDto> visible = seen.Select(x => PlannedWorkDto.From(x.Work, x.Rows!, standing)).ToList();
+        var looks = await ReminderLooks.LoadAsync(
+            repository, seen.Select(x => x.Work).ToList(), callerUserId, clock.UtcNow, visibility: visibility,
+            audiences: new Dictionary<Guid, ReminderAudiences> { [farmId] = set }, ct: ct);
+        IReadOnlyList<PlannedWorkDto> visible = seen.Select(x => PlannedWorkDto.From(x.Work, x.Rows!, standing, looks(x.Work))).ToList();
         return Result.Success(visible);
     }
 
