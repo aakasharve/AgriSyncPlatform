@@ -79,6 +79,20 @@ public static class LogContentStaging
                 repository, log, reminded.RootElement, isRevision: baseVersion is not null, nowUtc, audit, ct);
         }
 
+        // spec: plr-d10 lane REM-1 (founder D-79, R14) - work he said was only half done leaves ONE reminder of the speaker behind, in
+        // this same unit of work, for a create and for a revision alike (replay-safe by id; never deleted by a later revision, P3).
+        using (var unfinished = JsonDocument.Parse(documentJson))
+        {
+            await LogLeftovers.StageFromContentAsync(
+                repository,
+                log,
+                unfinished.RootElement,
+                nowUtc,
+                new Planning.PlannedWork.PlannedWorkCaller(
+                    audit.ActorUserId, audit.ActorRole ?? "unknown", audit.ClientCommandId, audit.AppVersion, audit.DeviceId, audit.IpHash),
+                ct);
+        }
+
         // AddTask stamps the phone's capture time on the log's clock, which can be EARLIER than
         // this save; the pull is a delta on that clock, so move it forward to now, never back.
         log.MarkContentRevised(nowUtc);

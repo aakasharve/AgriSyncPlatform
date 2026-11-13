@@ -1396,6 +1396,11 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    indexes and drops SOWN-a's own-farm column with its foreign key and index; Down() first RAISES while any row has an owner or a tag (nothing changed), else rebuilds
         //    SOWN-a's shape and drops only what Up() added. No grant, no policy, no audit_events object. The proof's data has no owned or tagged row, so Down() runs.
         "20261110120000_ScheduleTemplateOwnerAndMadeFor",
+        // ── Reviewed 2026-11-11 (spec: plr-d10 lane REM-1, founder D-78 / D-84 = 1); Up() and Down() read in full: Up() adds one nullable column to
+        //    ssf.planned_work (reminder_audience_changed_at_utc), creates ssf.farm_reminder_settings and ssf.reminder_always_show and applies their two
+        //    policies each and one grant of SELECT, INSERT, UPDATE, DELETE to agrisync_app on those two new tables; Down() drops the four policies, the
+        //    two tables and the column - only what Up() added. Neither touches ssf.audit_events, its policies or its grants. Safe mid-proof.
+        "20261111090000_AddReminderSettings",
     ];
 
     /// <summary>

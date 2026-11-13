@@ -212,8 +212,9 @@ public sealed class FarmAccessPolicyTests
     [Fact]
     public void Unknown_bits_are_dropped_and_unknown_names_refuse_the_whole_request()
     {
-        Assert.Equal(FarmPermission.ReviewMoney, FarmPermissionDefaults.Effective(AppRole.Worker, (FarmPermission)(1024 | 8192)));
-        Assert.False(FarmPermissionDefaults.IsKnown((FarmPermission)8192));
+        // lane REM-1: bit 13 (8192) is ManageReminders now; the first bit nobody has defined is bit 14 (16384).
+        Assert.Equal(FarmPermission.ReviewMoney, FarmPermissionDefaults.Effective(AppRole.Worker, (FarmPermission)(1024 | 16384)));
+        Assert.False(FarmPermissionDefaults.IsKnown((FarmPermission)16384));
         Assert.True(FarmPermissionDefaults.TryParse(new[] { "reviewmoney", " PlanWork " }, out var parsed));
         Assert.Equal(FarmPermission.ReviewMoney | FarmPermission.PlanWork, parsed);
         Assert.False(FarmPermissionDefaults.TryParse(new[] { "ReviewMoney", "Verify" }, out _));

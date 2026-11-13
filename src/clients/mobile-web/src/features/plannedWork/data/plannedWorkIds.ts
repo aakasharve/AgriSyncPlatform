@@ -32,6 +32,19 @@ export function jobTaskId(dailyLogId: string, index: number): string {
     return uuidv5(`${logKey(dailyLogId)}:job:${index}`, SPOKEN_TASK_NAMESPACE);
 }
 
+/**
+ * Lane REM-1 (D-79, R14): the id of the reminder a log task saved Partial, Delayed or Skipped leaves behind (the SERVER makes it; this is the
+ * phone's half of the id pin, `planned-work-leftover-ids.json`): the log and the task line, "leftover".
+ */
+export function leftoverTaskId(dailyLogId: string, logTaskId: string): string {
+    return uuidv5(`${logKey(dailyLogId)}:leftover:${logTaskId.toLowerCase()}`, SPOKEN_TASK_NAMESPACE);
+}
+
+/** Lane REM-1: the leftover of the item at `index` of the voice parse a 1.0.17 phone confirmed (the server's rule). */
+export function leftoverJobTaskId(dailyLogId: string, index: number): string {
+    return uuidv5(`${logKey(dailyLogId)}:leftover:job:${index}`, SPOKEN_TASK_NAMESPACE);
+}
+
 /** The task id of an old local to-do uploaded once: the same old to-do is always the same task ("run twice" is one change). */
 export function legacyTodoTaskId(oldTodoId: string): string {
     return uuidv5(`${LEGACY_TODO_PREFIX}${oldTodoId}`, SPOKEN_TASK_NAMESPACE);

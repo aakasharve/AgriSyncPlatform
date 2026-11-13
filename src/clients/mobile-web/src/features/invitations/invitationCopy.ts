@@ -110,6 +110,7 @@ const mr: InvitationCopy = {
         AssignWork: 'काम सोपवू शकतात', // PROPOSED (Marathi) — lane L8c-2, the card's form of "काम सोपवणे"
         SeeAllTasks: 'सगळी कामे दिसतात', // PROPOSED (Marathi) — lane L8c-2, the card's form of "सगळी कामे पाहणे"
         SeeCompare: 'तुलना पाहू शकतात', // PROPOSED (Marathi) — lane CMP-D1, the card's form of "तुलना पाहणे"
+        ManageReminders: 'आठवणींची मांडणी बदलू शकतात', // PROPOSED (Marathi) — lane REM-1, the card's form of "आठवणींची मांडणी बदलणे"
         EditFarmSetup: 'शेताची रचना बदलू शकतात', // PROPOSED (Marathi)
         LabRecords: 'चाचण्यांच्या नोंदी करू शकतात', // PROPOSED (Marathi)
         ScheduleTemplates: 'पीक वेळापत्रकाचे नमुने बनवू शकतात', // PROPOSED (Marathi)
@@ -219,6 +220,7 @@ const en: InvitationCopy = {
         AssignWork: 'Can hand work to others', // PROPOSED (English) — lane L8c-2
         SeeAllTasks: 'Sees all the tasks', // PROPOSED (English) — lane L8c-2
         SeeCompare: 'Can see the comparison', // PROPOSED (English) — lane CMP-D1
+        ManageReminders: 'Can change reminder settings', // PROPOSED (English) — lane REM-1
         EditFarmSetup: 'Can change farm setup', // PROPOSED (English)
         LabRecords: 'Can record lab tests', // PROPOSED (English)
         ScheduleTemplates: 'Can make crop schedule templates', // PROPOSED (English)

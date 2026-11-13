@@ -586,6 +586,11 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // with its foreign key and index). No farm_memberships or farm_join_requests object, no policy, no grant, no seat touched. Down() refuses while a row has an owner or a tag
         // (this proof's data has none), else rebuilds SOWN-a's shape and drops what Up() added.
         "20261110120000_ScheduleTemplateOwnerAndMadeFor",
+        // ── Reviewed 2026-11-11 (spec: plr-d10 lane REM-1, founder D-78 / D-84 = 1); Up() and Down() read in full: Up() adds one nullable column to
+        //    ssf.planned_work, creates ssf.farm_reminder_settings and ssf.reminder_always_show (two policies and one grant each, to agrisync_app); Down() drops the
+        //    four policies, the two tables and the column - only what Up() added. No farm_memberships or farm_join_requests object, no policy of theirs, no grant of
+        //    theirs, no seat touched. Safe mid-proof.
+        "20261111090000_AddReminderSettings",
     ];
 
     /// <summary>
@@ -616,6 +621,9 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // spec plr-d10 lane L8c-1 - 20261108180000_AddPlannedWork (two tables, each born with its Active-member read policy).
         "p_user_select_planned_work",
         "p_user_select_planned_work_plots",
+        // spec plr-d10 lane REM-1 - 20261111090000_AddReminderSettings (two tables, each born with its Active-member read policy).
+        "p_user_select_farm_reminder_settings",
+        "p_user_select_reminder_always_show",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
     ];

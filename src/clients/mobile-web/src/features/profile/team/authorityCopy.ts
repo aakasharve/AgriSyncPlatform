@@ -56,6 +56,7 @@ const mr: AuthorityCopy = {
         AssignWork: 'काम सोपवणे', // PROPOSED (Marathi) — lane L8c-1 (founder D-24c: assigning to someone else)
         SeeAllTasks: 'सगळी कामे पाहणे', // PROPOSED (Marathi) — lane L8c-1 (founder D-24e1, D-79)
         SeeCompare: 'तुलना पाहणे', // PROPOSED (Marathi) — lane CMP-D1 (founder D-81)
+        ManageReminders: 'आठवणींची मांडणी बदलणे', // the lane's word table (R17) — lane REM-1
     },
     note: {
         SeeWages: 'यासोबत पैसे पाहणेही मिळते.', // PROPOSED (Marathi) — lane MU-3, the same line as below
@@ -96,6 +97,7 @@ const en: AuthorityCopy = {
         AssignWork: 'Hand work to others', // PROPOSED (English) — lane L8c-1 (founder D-24c)
         SeeAllTasks: 'See all the tasks', // PROPOSED (English) — lane L8c-1 (founder D-24e1, D-79)
         SeeCompare: 'See the comparison', // PROPOSED (English) — lane CMP-D1 (founder D-81)
+        ManageReminders: 'Change reminder settings', // the lane's word table (R17) — lane REM-1
     },
     note: {
         SeeWages: 'Comes with seeing money.', // PROPOSED (English) — lane MU-3

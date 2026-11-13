@@ -5228,6 +5228,10 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("recorded_on");
 
+                    b.Property<DateTime?>("ReminderAudienceChangedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reminder_audience_changed_at_utc");
+
                     b.Property<string>("Scope")
                         .IsRequired()
                         .HasMaxLength(12)
@@ -5363,6 +5367,85 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("planned_work_plots", "ssf", t =>
                         {
                             t.HasCheckConstraint("ck_planned_work_plots_status", "status IN ('Pending','Done','Dropped')");
+                        });
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ReminderAlwaysShow", b =>
+                {
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("AddedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at_utc");
+
+                    b.Property<Guid>("AddedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("added_by_user_id");
+
+                    b.HasKey("FarmId", "UserId");
+
+                    b.ToTable("reminder_always_show", "ssf");
+                });
+
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ReminderSettings", b =>
+                {
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("LogRemindersAudience")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("log_reminders_audience")
+                        .HasDefaultValueSql("'MakerAndOwner'");
+
+                    b.Property<string>("OwnRemindersAudience")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("own_reminders_audience")
+                        .HasDefaultValueSql("'MakerAndOwner'");
+
+                    b.Property<string>("ScheduleRemindersAudience")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("schedule_reminders_audience")
+                        .HasDefaultValueSql("'PlotTeam'");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at_utc");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_user_id");
+
+                    b.Property<uint>("xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("FarmId");
+
+                    b.ToTable("farm_reminder_settings", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_farm_reminder_settings_log", "log_reminders_audience IN ('MakerAndOwner','PlotTeam')");
+
+                            t.HasCheckConstraint("ck_farm_reminder_settings_own", "own_reminders_audience IN ('MakerAndOwner','PlotTeam')");
+
+                            t.HasCheckConstraint("ck_farm_reminder_settings_schedule", "schedule_reminders_audience IN ('PlotTeam','Planners')");
                         });
                 });
 

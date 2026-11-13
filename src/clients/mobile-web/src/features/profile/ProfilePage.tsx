@@ -41,6 +41,8 @@ import { isOwnerTierRole } from './helpers/teamRoster';
 import { AUTHORITY, holdsAuthority, isPrimaryAccountHolderRole } from '../../core/session/farmAuthorities';
 import { seatDoors } from '../../core/session/seatDoors';
 import { TeamPage } from './team/TeamPage';
+import { ReminderSettingsPage } from '../plannedWork/reminders/ReminderSettingsPage';
+import { plannedWorkWords } from '../plannedWork/plannedWorkWords';
 import { TEAM_COPY } from './team/teamCopy';
 import { BOTTOM_BAR_CLEARANCE } from '../../shared/utils/bottomBar';
 import { splitRoster } from './team/teamModel';
@@ -225,6 +227,8 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
     // from this seat's /me/context authorities on THIS farm. Farm not in /me/context → fail closed
     // (fix 1): only the primary account holder, who holds every authority, keeps the door.
     const setupFarm = meFarms.find(f => f.farmId === teamFarmId) ?? null;
+    // Lane REM-1: the owner's reminder screen is drawn for the primary owner and a seat that holds its authority (the server decides every request).
+    const mayManageReminders = callerIsPrimary || (setupFarm ? holdsAuthority(setupFarm, AUTHORITY.manageReminders) : false);
     const canEditFarmSetup = setupFarm
         ? holdsAuthority(setupFarm, AUTHORITY.editFarmSetup)
         : callerIsPrimary;
@@ -456,10 +460,27 @@ const ProfilePage: React.FC<ProfilePageProps> = ({
                     );
                 }
 
+                // Lane REM-1 (founder D-78, R17): "आठवणी कोणाला दिसतील", beside the team page - for the primary owner and a seat that
+                // holds "आठवणींची मांडणी बदलणे" only; online only (it says so when there is no net: R21).
+                if (activeExtra === 'reminders' && mayManageReminders) {
+                    return (
+                        <div data-testid="hub-page-reminders">
+                            <PageBar title={plannedWorkWords(language).reminders.settingsTitle} onBack={() => setActiveExtra(null)} />
+                            <ReminderSettingsPage farmId={teamFarmId} callerUserId={authSession?.userId ?? null} isPrimaryOwner={callerIsPrimary} roster={callerIsPrimary ? teamRoster : null} />
+                        </div>
+                    );
+                }
+
                 if (activeTab === 'team') {
                     return (
                         <div data-testid="hub-page-team">
                             <PageBar title={TEAM_COPY.pageTitle} onBack={() => setActiveTab(null)} />
+                            {mayManageReminders && (
+                                <Tap onClick={() => setActiveExtra('reminders')} data-testid="team-open-reminder-settings"
+                                    className="mb-3 flex min-h-[52px] w-full items-center justify-center rounded-full border-2 border-emerald-600 bg-white text-[15px] font-extrabold text-emerald-800">
+                                    {plannedWorkWords(language).reminders.settingsEntry}
+                                </Tap>
+                            )}
                             <TeamPage
                                 farmId={teamFarmId}
                                 farmCode={teamFarmCode}

@@ -32,7 +32,7 @@ import { SyncMutationName } from '../../../../infrastructure/sync/SyncMutationCa
 import { isReadableScope } from '../../../../infrastructure/storage/accessScopeStore';
 import type {
     PlannedWorkConfirmationName, PlannedWorkLooseWhenName, PlannedWorkPayModeName, PlannedWorkRow, PlannedWorkScopeName,
-    PlannedWorkSourceKindName, PlannedWorkSourceName, PlannedWorkStatusName,
+    PlannedWorkSourceKindName, PlannedWorkSourceName, PlannedWorkStatusName, ReminderCategoryName,
 } from '../../../../infrastructure/storage/plannedWorkRow';
 
 const STATUSES: readonly PlannedWorkStatusName[] = ['Open', 'Assigned', 'Seen', 'Accepted', 'Done', 'Cancelled'];
@@ -42,6 +42,9 @@ const PAY: readonly PlannedWorkPayModeName[] = ['Cash', 'Daily', 'Contract', 'La
 const SOURCES: readonly PlannedWorkSourceName[] = ['Planning', 'VoiceLog', 'LogLeftover', 'Schedule'];
 const KINDS: readonly PlannedWorkSourceKindName[] = ['Typed', 'PlanForm', 'Spoken', 'Leftover'];
 const CONFIRMATIONS: readonly PlannedWorkConfirmationName[] = ['Confirmed', 'Disputed', 'Waiting'];
+const CATEGORIES: readonly ReminderCategoryName[] = ['FromPlanning', 'FromSchedule', 'FromLogs'];
+/** Lane REM-1 (additive, P11): a flag the server did not send is "not told", never "no" - null. */
+const flag = (value: unknown): boolean | null => (typeof value === 'boolean' ? value : null);
 
 const known = <T extends string>(list: readonly T[], value: unknown): T | null =>
     typeof value === 'string' && (list as readonly string[]).includes(value) ? (value as T) : null;
@@ -98,6 +101,13 @@ export function plannedWorkRowFromDto(dto: PlannedWorkDto | null | undefined): P
             })),
         // Lane L8c-3 (additive, P11): a word we do not know, or none, is no word.
         confirmationState: known(CONFIRMATIONS, dto.confirmationState),
+        // Lane REM-1 (additive, P11): who made it, its source, the voice and money answers, the two card facts.
+        createdByName: text(dto.createdByName),
+        category: known(CATEGORIES, dto.category),
+        mayPlayVoice: flag(dto.mayPlayVoice),
+        wordsWithheld: flag(dto.wordsWithheld),
+        makerAlwaysShown: flag(dto.makerAlwaysShown),
+        fromChosenPeopleRecord: flag(dto.fromChosenPeopleRecord),
     };
 }
 
@@ -151,6 +161,31 @@ export async function readPendingPlannedWorkIds(db: AgriLogDatabase): Promise<Se
  *   assignee (the creator was answered first).
  */
 export function visiblePlotIds(row: PlannedWorkRow, userId: string, scope: ScopeWithTasks): string[] | null {
+    return baseVisiblePlotIds(row, userId, scope) ?? widenedPlotIds(row, scope);
+}
+
+/**
+ * Lane REM-1: what the owner's settings add on top of the base (`ReminderVisibility.Widened`): a reminder the server sent under its
+ * settings (it names a `category`; an older server does not) is, for a reader who is not otherwise entitled, seen by the plot team or
+ * as a marked maker's. The phone does not know the settings, so for REMOVAL it keeps whatever the server sent as long as the place is
+ * still his: a reminder on his plots (the rows he covers; the plot of its record when it has none; the whole farm only for a seat on every
+ * plot), never for a seat on his own work. A CHANGE of the settings is the server's to say: it names the reminder in `withdrawnRecords`.
+ */
+function widenedPlotIds(row: PlannedWorkRow, scope: ScopeWithTasks): string[] | null {
+    if (!row.category) return null;
+    const isReminder = !row.assigneeUserId || row.assigneeUserId === row.createdByUserId;
+    if (!isReminder || scope.plotScope === 'OwnWork') return null;
+    const live = row.plots.map(p => p.plotId);
+    if (scope.plotScope !== 'ChosenPlots') return live;
+    const chosen = new Set(scope.plotIds ?? []);
+    if (live.length > 0) {
+        const mine = live.filter(id => chosen.has(id));
+        return mine.length > 0 ? mine : null;
+    }
+    return row.sourcePlotId && chosen.has(row.sourcePlotId) ? [] : null;
+}
+
+function baseVisiblePlotIds(row: PlannedWorkRow, userId: string, scope: ScopeWithTasks): string[] | null {
     const live = row.plots.map(p => p.plotId);
     if (row.createdByUserId === userId) return live;
     const isAssignee = row.assigneeUserId === userId;

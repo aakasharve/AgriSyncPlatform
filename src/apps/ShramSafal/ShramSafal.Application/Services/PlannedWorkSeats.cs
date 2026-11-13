@@ -16,7 +16,7 @@ public static class PlannedWorkSeats
     {
         if (!FarmAccessPolicy.MayRead(access))
         {
-            return new PlannedWorkSeat(userId, false, false, false, false, false, null);
+            return new PlannedWorkSeat(userId, false, false, false, false, false, null, false);
         }
 
         var primary = FarmAccessPolicy.IsPrimaryAccountHolder(access);
@@ -28,7 +28,8 @@ public static class PlannedWorkSeats
             HoldsPlanWork: Holds(FarmAuthority.PlanWork),
             HoldsAssignWork: Holds(FarmAuthority.AssignWork),
             HoldsSeeAllTasks: Holds(FarmAuthority.SeeAllTasks),
-            ChosenPlotIds: primary ? null : access!.CoveredPlotIds);
+            ChosenPlotIds: primary ? null : access!.CoveredPlotIds,
+            OwnWorkScope: !primary && access!.OwnWorkScope);
     }
 
     /// <summary>The same, read from the repository: the person's seat on <paramref name="farmId"/>.</summary>

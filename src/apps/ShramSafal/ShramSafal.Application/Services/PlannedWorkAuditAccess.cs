@@ -29,8 +29,10 @@ public static class PlannedWorkAuditAccess
         var visibility = tasks.Any(w => w.SourceDailyLogId is not null)
             ? await RecordVisibility.ForFarmAsync(repository, farmId, userId, atUtc, ct)
             : RecordVisibility.None(userId);
+        // Lane REM-1: the owner's settings widen who sees a reminder; its audit trail follows the same readers.
+        var set = (await repository.GetReminderAudiencesAsync([farmId], ct)).GetValueOrDefault(farmId) ?? ReminderAudiences.Defaults(farmId);
         return tasks
-            .Where(w => PlannedWorkVisibility.VisiblePlots(seat, w, PlannedWorkSourceLog.HiddenFrom(visibility, w)) is not null)
+            .Where(w => ReminderVisibility.VisiblePlots(seat, w, set.Settings, set.AlwaysShow, PlannedWorkSourceLog.HiddenFrom(visibility, w)) is not null)
             .Select(w => w.Id)
             .ToHashSet();
     }

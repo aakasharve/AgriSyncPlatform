@@ -10,6 +10,7 @@ using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Work;
 using ShramSafal.Domain.Attachments;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.Services;
 using ShramSafal.Domain.Crops;
 using ShramSafal.Domain.Farms;
 using ShramSafal.Domain.Finance;
@@ -408,6 +409,13 @@ internal sealed class ShramSafalRepository(
             db.ChangeTracker.Clear();
             return false;
         }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation })
+        {
+            // Lane REM-1 fix round (review m1): two first-ever settings saves, or two marks of the same person, at once - the second hits the
+            // primary key. Same answer as a lost race: nothing of ours is kept, the caller says "this was changed first".
+            db.ChangeTracker.Clear();
+            return false;
+        }
     }
 
     public async Task<PlannedWork?> GetPlannedWorkByIdAsync(Guid id, CancellationToken ct = default)
@@ -483,6 +491,90 @@ internal sealed class ShramSafalRepository(
         return await db.PlannedWork.Include(w => w.Plots)
             .Where(w => w.FarmId == farmKey && w.SourceDailyLogId == dailyLogId)
             .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, string>> GetDisplayNamesAsync(IEnumerable<Guid> userIds, CancellationToken ct = default)
+    {
+        // No public.users directory without a relational provider (the in-memory hosts): no names, never an invented one.
+        if (!db.Database.IsRelational())
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        return (await GetOperatorsByIdsAsync(userIds, ct))
+            .Where(o => !string.IsNullOrWhiteSpace(o.DisplayName))
+            .GroupBy(o => o.UserId)
+            .ToDictionary(g => g.Key, g => g.First().DisplayName);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, ReminderAudiences>> GetReminderAudiencesAsync(
+        IEnumerable<Guid> farmIds, CancellationToken ct = default)
+    {
+        var ids = NormalizeFarmIds(farmIds).Select(id => new FarmId(id)).ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, ReminderAudiences>();
+        }
+
+        var settings = await db.ReminderSettings.AsNoTracking().Where(s => ids.Contains(s.FarmId)).ToListAsync(ct);
+        var marks = await db.ReminderAlwaysShow.AsNoTracking().Where(m => ids.Contains(m.FarmId)).ToListAsync(ct);
+        var result = new Dictionary<Guid, ReminderAudiences>();
+        foreach (var id in ids)
+        {
+            var row = settings.FirstOrDefault(s => s.FarmId == id);
+            var marked = marks.Where(m => m.FarmId == id).Select(m => m.UserId).ToHashSet();
+            if (row is not null || marked.Count > 0)
+            {
+                result[id.Value] = new ReminderAudiences(row ?? ReminderSettings.Defaults(id), marked);
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<ReminderSettings?> GetReminderSettingsForChangeAsync(Guid farmId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var key = new FarmId(farmId);
+        return await db.ReminderSettings.FirstOrDefaultAsync(s => s.FarmId == key, ct);
+    }
+
+    public async Task AddReminderSettingsAsync(ReminderSettings settings, CancellationToken ct = default) =>
+        await db.ReminderSettings.AddAsync(settings, ct);
+
+    public async Task<List<ReminderAlwaysShow>> GetReminderAlwaysShowForChangeAsync(Guid farmId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var key = new FarmId(farmId);
+        return await db.ReminderAlwaysShow.Where(m => m.FarmId == key).ToListAsync(ct);
+    }
+
+    public async Task AddReminderAlwaysShowAsync(ReminderAlwaysShow mark, CancellationToken ct = default) =>
+        await db.ReminderAlwaysShow.AddAsync(mark, ct);
+
+    public void RemoveReminderAlwaysShow(ReminderAlwaysShow mark) => db.ReminderAlwaysShow.Remove(mark);
+
+    public async Task<List<PlannedWork>> GetRemindersOfFarmForChangeAsync(Guid farmId, CancellationToken ct = default)
+    {
+        if (farmId == Guid.Empty)
+        {
+            return [];
+        }
+
+        var key = new FarmId(farmId);
+        // A reminder: no assignee, or the maker himself (PlannedWork.IsReminder). Read the farm's rows and filter in memory: the
+        // property is computed, one farm holds a few hundred tasks (the same scan GetPlannedWorkLinkingLogAsync makes).
+        return (await db.PlannedWork.Include(w => w.Plots).Where(w => w.FarmId == key).ToListAsync(ct))
+            .Where(w => w.IsReminder)
+            .ToList();
     }
 
     public async Task<List<InputIdentityAssertion>> GetInputIdentityAssertionsChangedSinceAsync(

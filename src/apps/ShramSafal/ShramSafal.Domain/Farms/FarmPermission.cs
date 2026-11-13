@@ -76,4 +76,11 @@ public enum FarmPermission
     /// it is lane CMP-D2.
     /// </summary>
     SeeCompare = 1 << 12,
+
+    /// <summary>
+    /// spec: plr-d10 lane REM-1 (founder D-78 "the owner can decide who can customise", R17; R19: the next free bit at this base) -
+    /// Change reminder settings ("आठवणींची मांडणी बदलणे"): who sees which reminders, and whose always show. Only the primary
+    /// owner grants it (D-26: no re-delegation); the primary owner always holds it.
+    /// </summary>
+    ManageReminders = 1 << 13,
 }

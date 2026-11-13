@@ -21,6 +21,9 @@ import { Tap } from '../../../shared/components/ui/placeUi';
 import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 import type { TodoItem, TodoWhen } from '../../reflect/overview/todoModel';
 import type { ScheduledWorkItem } from '../scheduledWork';
+import { ReminderCardLines } from '../../plannedWork/reminders/ReminderCardLines';
+import { reminderTitleIn } from '../../plannedWork/reminders/reminderModel';
+import { useOptionalLanguage } from '../../../i18n/LanguageContext';
 
 type Tone = 'late' | 'today' | 'decide';
 
@@ -83,10 +86,13 @@ export const ReminderRow: React.FC<{
 }> = ({ t, tone, onDone, onMove }) => {
     const [choosing, setChoosing] = useState(false);
     const canChange = t.canToggle;
+    const language = useOptionalLanguage()?.language;
     return (
-        <Shell tone={tone} testId={`attention-reminder-${t.id}`} title={t.title} place={t.place?.label} placeColor={t.place?.color}
+        <Shell tone={tone} testId={`attention-reminder-${t.id}`} title={reminderTitleIn(t.task, language) || t.title} place={t.place?.label} placeColor={t.place?.color}
             icon={t.kindLabel === 'आठवण' ? <Bell size={13} aria-hidden="true" /> : <ClipboardCheck size={13} aria-hidden="true" />}
             kind={t.kindLabel} due={toDevanagariDigits(t.dueText)}>
+            {/* Lane REM-1: who made it and when, where it came from, "ऐका" / the rule lines - only what the server said. */}
+            <ReminderCardLines task={t.task} placeLabel={t.place?.label} testIdPrefix="attention" />
             {canChange && (onDone || onMove) && (
                 <div className="mt-2 flex gap-2">
                     {onDone && <ActionButton primary onClick={() => onDone(t)} testId={`attention-done-${t.id}`}><Check size={18} strokeWidth={3} aria-hidden="true" />झाले</ActionButton>}

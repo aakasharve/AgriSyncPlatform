@@ -66,7 +66,9 @@ internal static class PlannedWorkDoor
             // Lane L8c-4: a task made from a log is no more visible than the log (asked only for a task that has a source log).
             var logHidden = work.SourceDailyLogId is not null
                 && PlannedWorkSourceLog.HiddenFrom(await RecordVisibility.ForFarmAsync(repository, farmId, actor, nowUtc, ct), work);
-            if (PlannedWorkVisibility.VisiblePlots(seat, work, logHidden) is null)
+            // Lane REM-1: the owner's settings widen who sees a reminder (the base never narrows).
+            var set = (await repository.GetReminderAudiencesAsync([farmId], ct)).GetValueOrDefault(farmId) ?? ReminderAudiences.Defaults(farmId);
+            if (ReminderVisibility.VisiblePlots(seat, work, set.Settings, set.AlwaysShow, logHidden) is null)
             {
                 return (null, seat, ShramSafalErrors.PlannedWorkNotFound);
             }
@@ -143,11 +145,19 @@ internal static class PlannedWorkDoor
 
     /// <summary>The task as the sender sees it (with the owner's word on its logs: lane L8c-3).</summary>
     public static async Task<PlannedWorkDto> DtoAsync(
-        IShramSafalRepository repository, Domain.Planning.PlannedWork work, PlannedWorkSeat seat, CancellationToken ct) =>
-        PlannedWorkDto.From(
+        IShramSafalRepository repository, Domain.Planning.PlannedWork work, PlannedWorkSeat seat, CancellationToken ct)
+    {
+        var set = (await repository.GetReminderAudiencesAsync([(Guid)work.FarmId], ct)).GetValueOrDefault((Guid)work.FarmId)
+            ?? ReminderAudiences.Defaults((Guid)work.FarmId);
+        // Lane REM-1: who made it, its source and what this reader may hear or read of it (the clock only settles a grant's end).
+        var looks = await ReminderLooks.LoadAsync(
+            repository, [work], seat.UserId, DateTime.UtcNow, audiences: new Dictionary<Guid, ReminderAudiences> { [(Guid)work.FarmId] = set }, ct: ct);
+        return PlannedWorkDto.From(
             work,
-            PlannedWorkVisibility.VisiblePlots(seat, work) ?? [],
-            await PlannedWorkConfirmations.LoadAsync(repository, [work], ct));
+            ReminderVisibility.VisiblePlots(seat, work, set.Settings, set.AlwaysShow) ?? [],
+            await PlannedWorkConfirmations.LoadAsync(repository, [work], ct),
+            looks(work));
+    }
 
     /// <summary>
     /// Saves the step and its audit row together. A lost race (another change to the same task was saved first) is

@@ -27,6 +27,8 @@ export interface OriginalVoiceButtonProps {
     farmId: string;
     /** Called once he has listened to the recording to the end. */
     onHeard?: (dailyLogId: string) => void;
+    /** Lane REM-1: the words on the play button where the screen has its own ("ऐका" on a reminder card); default: the record's own words. */
+    playLabel?: string;
     /** Test seams. */
     fetchVoice?: (dailyLogId: string, farmId: string) => Promise<OriginalVoiceOutcome>;
     createAudio?: (url: string) => HTMLAudioElement;
@@ -35,7 +37,7 @@ export interface OriginalVoiceButtonProps {
 const defaultAudio = (url: string): HTMLAudioElement => new Audio(url);
 
 export const OriginalVoiceButton: React.FC<OriginalVoiceButtonProps> = ({
-    dailyLogId, farmId, onHeard, fetchVoice = fetchLogOriginalVoice, createAudio = defaultAudio,
+    dailyLogId, farmId, onHeard, playLabel, fetchVoice = fetchLogOriginalVoice, createAudio = defaultAudio,
 }) => {
     // No provider (a screen mounted on its own) reads Marathi, the app's default language.
     const language = useOptionalLanguage()?.language;
@@ -82,7 +84,7 @@ export const OriginalVoiceButton: React.FC<OriginalVoiceButtonProps> = ({
     if (state === 'unavailable') {
         return <p className="m-0 mt-2 text-[13px] font-bold text-stone-600" data-testid={`ov-unavailable-${dailyLogId}`}>{copy.unavailable}</p>;
     }
-    const label = state === 'playing' ? copy.stop : state === 'loading' ? copy.loading : copy.play;
+    const label = state === 'playing' ? copy.stop : state === 'loading' ? copy.loading : playLabel ?? copy.play;
     return (
         <div className="mt-2">
             <button type="button" onClick={() => { void onTap(); }} disabled={state === 'loading'} aria-busy={state === 'loading'}

@@ -28,6 +28,8 @@ export const AUTHORITY = {
     seeAllTasks: 'SeeAllTasks',
     // lane CMP-D1 (founder D-81) - "तुलना पाहणे": the तुलना tab (and, from lane CMP-D2, the compare read).
     seeCompare: 'SeeCompare',
+    // lane REM-1 (founder D-78, R17) - "आठवणींची मांडणी बदलणे": who sees which reminders and whose always show. Only the primary owner gives it.
+    manageReminders: 'ManageReminders',
 } as const;
 
 export type AuthorityName = typeof AUTHORITY[keyof typeof AUTHORITY];
@@ -53,6 +55,8 @@ export const SWITCHABLE_AUTHORITIES: readonly AuthorityName[] = [
     AUTHORITY.scheduleTemplates,
     AUTHORITY.seeAllTasks,
     AUTHORITY.seeCompare,
+    // Lane REM-1 (R17): the server enforces it on the reminder-settings routes; the last switch, in the server's own order.
+    AUTHORITY.manageReminders,
 ];
 
 /** An authority that means nothing without another (review money needs see money, §11.1). */

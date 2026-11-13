@@ -4,7 +4,9 @@ using AgriSync.BuildingBlocks.Results;
 using AgriSync.SharedKernel.Contracts.Ids;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Logs.Content;
 using ShramSafal.Application.UseCases.Logs.CreateDailyLog;
+using ShramSafal.Application.UseCases.Planning.PlannedWork;
 using ShramSafal.Application.UseCases.ReferenceData.GetDeviationReasonCodes;
 using ShramSafal.Domain.Audit;
 using ShramSafal.Domain.Common;
@@ -324,6 +326,23 @@ public sealed class AddLogTaskHandler(
                     sourceAiJobId: null),
                 ct);
         }
+
+        // spec: plr-d10 lane REM-1 (founder D-79, R14) - a task saved Partial, Delayed or Skipped leaves ONE reminder of the log's speaker
+        // behind, in this same save (the line and its reminder commit together or not at all), for every app version: a 1.0.17
+        // phone sends this very push. Replay-safe by id; never deleted by anything later.
+        await LogLeftovers.StageForTaskAsync(
+            repository,
+            log,
+            task,
+            clock.UtcNow,
+            new PlannedWorkCaller(
+                command.ActorUserId,
+                command.ActorRole ?? "unknown",
+                command.ClientCommandId,
+                string.IsNullOrWhiteSpace(command.ClientAppVersion) ? "unknown" : command.ClientAppVersion,
+                command.AuditDeviceId,
+                command.AuditIpHash),
+            ct);
 
         await repository.SaveChangesAsync(ct);
 

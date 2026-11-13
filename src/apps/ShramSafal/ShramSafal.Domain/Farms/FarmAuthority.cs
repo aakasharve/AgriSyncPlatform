@@ -68,6 +68,12 @@ public enum FarmAuthority
     /// The compare read that requires it is lane CMP-D2.
     /// </summary>
     SeeCompare,
+
+    /// <summary>
+    /// spec: plr-d10 lane REM-1 (founder D-78, R17) - Change reminder settings ("आठवणींची मांडणी बदलणे"): who sees which reminders
+    /// and whose reminders always show. Only the primary account holder grants it (D-26); ENFORCED by the reminder-settings routes.
+    /// </summary>
+    ManageReminders,
 }
 
 /// <summary>
@@ -99,6 +105,7 @@ public static class FarmAuthorities
         FarmAuthority.ScheduleTemplates,
         FarmAuthority.SeeAllTasks,
         FarmAuthority.SeeCompare,
+        FarmAuthority.ManageReminders,
     ];
 
     /// <summary>
@@ -120,6 +127,7 @@ public static class FarmAuthorities
         FarmAuthority.ScheduleTemplates,
         FarmAuthority.SeeAllTasks,
         FarmAuthority.SeeCompare,
+        FarmAuthority.ManageReminders,
     ];
 
     /// <summary>
@@ -186,6 +194,7 @@ public static class FarmAuthorities
         FarmAuthority.ScheduleTemplates => FarmPermission.ManageScheduleTemplates,
         FarmAuthority.SeeAllTasks => FarmPermission.SeeAllTasks,
         FarmAuthority.SeeCompare => FarmPermission.SeeCompare,
+        FarmAuthority.ManageReminders => FarmPermission.ManageReminders,
         _ => throw new ArgumentOutOfRangeException(nameof(authority), authority, "Unknown authority."),
     };
 

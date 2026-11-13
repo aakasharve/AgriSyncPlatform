@@ -175,6 +175,7 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.CompletePlannedWorkHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.ReopenPlannedWorkHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.PlannedWorkReads>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.ReminderSettingsHandler>();
         services.AddScoped<GetFinanceSummaryHandler>();
         // lane MU-3 fix 1 (F94) — /finance/plot-summary asked for this and it was never registered (500).
         services.AddScoped<GetPlotFinanceSummaryHandler>();

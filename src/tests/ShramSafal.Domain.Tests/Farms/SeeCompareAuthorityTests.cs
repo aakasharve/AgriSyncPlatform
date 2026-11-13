@@ -50,6 +50,12 @@ public sealed class SeeCompareAuthorityTests
             .ToList();
         bits.Should().OnlyHaveUniqueItems();
         bits.Should().OnlyContain(b => b != 0 && (b & (b - 1)) == 0, "one flag bit each");
+        // spec: plr-d10 lane REM-1 (R19) - the same one test, over EVERY member of the stored mask (retired bits included): each is a
+        // distinct single bit, and none is ever renumbered (the values are persisted).
+        var members = Enum.GetValues<FarmPermission>().Where(p => p != FarmPermission.None).Select(p => (int)p).ToList();
+        members.Should().OnlyHaveUniqueItems();
+        members.Should().OnlyContain(b => (b & (b - 1)) == 0, "every member is a single bit");
+        ((int)FarmPermission.ManageReminders).Should().Be(1 << 13, "the next free bit after SeeCompare (1 << 12)");
         FarmAuthorities.Switchable.Should().BeEquivalentTo(FarmAuthorities.All, "every authority is enforced and offered");
     }
 
@@ -63,8 +69,8 @@ public sealed class SeeCompareAuthorityTests
         FarmPermissionDefaults.TryParse(["SeeAllTasks", "SeeCompare"], out var both).Should().BeTrue();
         FarmPermissionDefaults.Names(both).Should().Equal("SeeAllTasks", "SeeCompare");
         FarmPermissionDefaults.IsKnown(bit).Should().BeTrue();
-        // A bit nobody has defined yet is still unknown (bit 13).
-        FarmPermissionDefaults.IsKnown((FarmPermission)(1 << 13)).Should().BeFalse();
+        // A bit nobody has defined yet is still unknown (bit 14; bit 13 is ManageReminders since lane REM-1).
+        FarmPermissionDefaults.IsKnown((FarmPermission)(1 << 14)).Should().BeFalse();
     }
 
     // ── The start value is OFF: no label gets it by default; the primary owner always holds it ───────────────────────
