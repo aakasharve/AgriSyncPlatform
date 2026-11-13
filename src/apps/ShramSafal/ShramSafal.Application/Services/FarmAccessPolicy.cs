@@ -88,7 +88,8 @@ public static class FarmAccessPolicy
                 access.LabourGrantExpiresAtUtc,
                 access.AuthorityExpiresAtJson,
                 authority,
-                atUtc);
+                atUtc,
+                access.PlotScope);
     }
 
     /// <summary>

@@ -10,7 +10,7 @@
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { PlannedTask } from '../../../types';
 
 const h = vi.hoisted(() => ({ language: 'mr' as 'mr' | 'en' }));
@@ -19,7 +19,7 @@ vi.mock('../../../i18n/LanguageContext', () => ({
     useOptionalLanguage: () => ({ language: h.language }),
 }));
 
-import { TodoSection } from '../overview/TodoSection';
+import { REMOVE_UNDO_MS, TodoSection } from '../overview/TodoSection';
 import { buildTodoList, tickableIds } from '../overview/todoModel';
 import { plannedWorkWords } from '../../plannedWork/plannedWorkWords';
 
@@ -46,8 +46,13 @@ describe('L008 - "काढा" has an English twin', () => {
         expect(button).toHaveAttribute('aria-label', words.removeLabel);
         expect(words.removeShort).toBe('काढा');
         expect(button.textContent).not.toMatch(/[A-Za-z]/);
+        // Lane REM-1: the removal is sent when the way back ("परत आणा") has passed - one tap, never two.
+        vi.useFakeTimers();
         fireEvent.click(button);
+        expect(onRemove).not.toHaveBeenCalled();
+        act(() => { vi.advanceTimersByTime(REMOVE_UNDO_MS + 100); });
         expect(onRemove).toHaveBeenCalledTimes(1);
+        vi.useRealTimers();
     });
 
     it('English mode: the English word and label only', () => {

@@ -35,6 +35,21 @@ public static class PlannedWorkIds
     public static Guid ForJobItem(Guid dailyLogId, int index) =>
         UuidV5(Namespace, $"{LogKey(dailyLogId)}:job:{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
 
+    /// <summary>
+    /// Lane REM-1 (D-79, R14): the id of the reminder a log task saved Partial, Delayed or Skipped leaves behind - a UUIDv5 of
+    /// (log, task, "leftover"), the same every time, so a replay never makes a second one and the phone could derive it. The name is
+    /// <c>{log id, lower case}:leftover:{log task id, lower case}</c>, hashed in <see cref="Namespace"/>.
+    /// </summary>
+    public static Guid ForLeftover(Guid dailyLogId, Guid logTaskId) =>
+        UuidV5(Namespace, $"{LogKey(dailyLogId)}:leftover:{logTaskId.ToString("D").ToLowerInvariant()}");
+
+    /// <summary>
+    /// Lane REM-1: the id of the leftover of the item at <paramref name="index"/> of the voice parse a 1.0.17 phone confirmed (a parse's
+    /// items carry no id of their own, and no task line exists yet): <c>{log id}:leftover:job:{index}</c>. The confirmed parse never changes.
+    /// </summary>
+    public static Guid ForLeftoverJobItem(Guid dailyLogId, int index) =>
+        UuidV5(Namespace, $"{LogKey(dailyLogId)}:leftover:job:{index.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
+
     private static string LogKey(Guid dailyLogId) => dailyLogId.ToString("D").ToLowerInvariant();
 
     private static Guid UuidV5(Guid namespaceId, string name)

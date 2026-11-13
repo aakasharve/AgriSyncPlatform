@@ -13,6 +13,9 @@ export type PlannedWorkPayModeName = 'Cash' | 'Daily' | 'Contract' | 'Later';
 export type PlannedWorkSourceName = 'Planning' | 'VoiceLog' | 'LogLeftover' | 'Schedule';
 export type PlannedWorkSourceKindName = 'Typed' | 'PlanForm' | 'Spoken' | 'Leftover';
 
+/** Lane REM-1 (D-79): the three sources of a reminder, by the server's names. */
+export type ReminderCategoryName = 'FromPlanning' | 'FromSchedule' | 'FromLogs';
+
 /** The owner's word on the logs a task (or one of its plots) was done with (lane L8c-3; the server computes it from the logs). */
 export type PlannedWorkConfirmationName = 'Confirmed' | 'Disputed' | 'Waiting';
 
@@ -66,6 +69,13 @@ export interface PlannedWorkRow {
     plots: PlannedWorkPlotRow[];
     /** Lane L8c-3 - Confirmed | Disputed | Waiting, from ALL the task's linked logs; null = no linked log. Plain field, no index. */
     confirmationState?: PlannedWorkConfirmationName | null;
+    /** Lane REM-1 (additive, plain fields, no index: Dexie stays v28) - who made it and where it comes from, as this person may know it. */
+    createdByName?: string | null;
+    category?: ReminderCategoryName | null;
+    mayPlayVoice?: boolean | null;
+    wordsWithheld?: boolean | null;
+    makerAlwaysShown?: boolean | null;
+    fromChosenPeopleRecord?: boolean | null;
     /**
      * Lane L8c-4 (D-78 = 1) - a spoken reminder MADE ON THIS PHONE from a log he just saved, shown at once under the id the server
      * will give it (`spokenTaskId`), until the pull brings the server's row, which replaces this one (same id: never doubled). Absent

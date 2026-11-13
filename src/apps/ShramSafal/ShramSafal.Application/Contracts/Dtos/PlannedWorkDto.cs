@@ -41,13 +41,44 @@ public sealed record PlannedWorkDto(
     Guid? CancelledByUserId,
     string? CancelReason,
     IReadOnlyList<PlannedWorkPlotDto> Plots,
-    string? ConfirmationState = null)
+    string? ConfirmationState = null,
+    // spec: plr-d10 lane REM-1 (founder D-78, D-84 = 1; R15, R16) - who made it and where it comes from, as this reader may know it.
+    // Additive and last (P11): an older phone never reads them; an absent one means "not told" (never "no"). The words of a reminder
+    // that mentions money are NOT sent to a reader who may not hear them: Title is then empty and WordsWithheld is true.
+    string? CreatedByName = null,
+    string? Category = null,
+    bool? MayPlayVoice = null,
+    bool? WordsWithheld = null,
+    bool? MakerAlwaysShown = null,
+    bool? FromChosenPeopleRecord = null)
 {
     /// <summary>
     /// The task with only the plot rows in <paramref name="visiblePlots"/> (what this reader may see).
     /// <paramref name="statusOf"/> gives the standing of a linked log (<c>null</c> = not found): lane L8c-3's
     /// <see cref="ConfirmationState"/> is read from it, for the task and for each plot row from its own logs.
     /// </summary>
+    public static PlannedWorkDto From(
+        PlannedWork work, IReadOnlyCollection<Guid> visiblePlots, Func<Guid, ShramSafal.Domain.Logs.VerificationStatus?>? statusOf,
+        Services.ReminderLook? look)
+    {
+        var dto = From(work, visiblePlots, statusOf);
+        if (look is null)
+        {
+            return dto;
+        }
+
+        dto = dto with
+        {
+            CreatedByName = look.CreatedByName,
+            Category = look.Category,
+            MayPlayVoice = look.MayPlayVoice,
+            WordsWithheld = look.WordsWithheld,
+            MakerAlwaysShown = look.MakerAlwaysShown,
+            FromChosenPeopleRecord = look.FromChosenPeopleRecord,
+        };
+        return look.WordsWithheld ? dto with { Title = string.Empty, Note = null, CrewText = null, QuantityText = null } : dto;
+    }
+
     public static PlannedWorkDto From(
         PlannedWork work, IReadOnlyCollection<Guid> visiblePlots, Func<Guid, ShramSafal.Domain.Logs.VerificationStatus?>? statusOf = null)
     {

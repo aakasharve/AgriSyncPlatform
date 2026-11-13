@@ -217,6 +217,10 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     public DbSet<PlannedWork> PlannedWork => Set<PlannedWork>();
     public DbSet<PlannedWorkPlot> PlannedWorkPlots => Set<PlannedWorkPlot>();
 
+    // spec: plr-d10 lane REM-1 (founder D-78, D-84 = 1) - the owner's reminder settings and the always-show list (migration AddReminderSettings).
+    public DbSet<ReminderSettings> ReminderSettings => Set<ReminderSettings>();
+    public DbSet<ReminderAlwaysShow> ReminderAlwaysShow => Set<ReminderAlwaysShow>();
+
     public DbSet<MachineryUsage> MachineryUsages => Set<MachineryUsage>();
     public DbSet<ObservationEvent> ObservationEvents => Set<ObservationEvent>();
     public DbSet<DisturbanceEvent> DisturbanceEvents => Set<DisturbanceEvent>();

@@ -28,7 +28,7 @@ public sealed class AddLogTaskDeviationHandlerTests
     private static readonly Guid PlotGuid = Guid.NewGuid();
     private static readonly Guid CropCycleGuid = Guid.NewGuid();
 
-    private static (AddLogTaskHandler handler, Guid logId) BuildHandler()
+    private static (AddLogTaskHandler handler, Guid logId, FakeAddLogTaskRepo repo, DailyLog log) BuildFull()
     {
         var logId = Guid.NewGuid();
         var log = DailyLog.Create(
@@ -52,7 +52,64 @@ public sealed class AddLogTaskDeviationHandlerTests
             new NoopComplianceService(),
             new ShramSafal.Domain.Tests.Common.NullDailyRichnessDerivationService());
 
+        return (handler, logId, repo, log);
+    }
+
+    private static (AddLogTaskHandler handler, Guid logId) BuildHandler()
+    {
+        var (handler, logId, _, _) = BuildFull();
         return (handler, logId);
+    }
+
+    // spec: plr-d10 lane REM-1 (founder D-79, R14) - an unfinished line leaves ONE reminder of the log's speaker, in the same save; a finished one none.
+    [Theory]
+    [InlineData(ExecutionStatus.Partial, "weather.rain")]
+    [InlineData(ExecutionStatus.Delayed, "input.unavailable")]
+    [InlineData(ExecutionStatus.Skipped, "labour.absent")]
+    public async Task AddLogTask_UnfinishedWork_LeavesOneOwnReminderBehind(ExecutionStatus status, string reason)
+    {
+        var (handler, logId, repo, log) = BuildFull();
+        var lineId = Guid.NewGuid();
+
+        var result = await handler.HandleAsync(new AddLogTaskCommand(
+            DailyLogId: logId, ActivityType: "spray", Notes: "Cost: 500", LogTaskId: lineId, ActorUserId: OwnerGuid,
+            ExecutionStatus: status, DeviationReasonCode: reason));
+
+        result.IsSuccess.Should().BeTrue();
+        var reminder = repo.Reminders.Should().ContainSingle().Subject;
+        reminder.Id.Should().Be(PlannedWorkIds.ForLeftover(logId, lineId));
+        reminder.Source.Should().Be(PlannedWorkSource.LogLeftover);
+        reminder.SourceKind.Should().Be(PlannedWorkSourceKind.Leftover);
+        reminder.CreatedByUserId.Should().Be(log.OperatorUserId.Value, "the log's speaker");
+        reminder.AssigneeUserId.Should().BeNull();
+        reminder.Title.Should().Be("spray");
+        reminder.Note.Should().BeNull("a note may carry an amount");
+        reminder.PlannedDate.Should().BeNull();
+        reminder.SourceLogTaskId.Should().Be(lineId);
+        reminder.SourceDailyLogId.Should().Be(logId);
+        repo.Audit.Should().ContainSingle(a => a.Action == "PlannedWorkCreatedFromLeftover" && a.EntityId == reminder.Id);
+    }
+
+    [Fact]
+    public async Task AddLogTask_FinishedWork_LeavesNoReminder()
+    {
+        var (handler, logId, repo, _) = BuildFull();
+        (await handler.HandleAsync(new AddLogTaskCommand(DailyLogId: logId, ActivityType: "spray", Notes: null, ActorUserId: OwnerGuid))).IsSuccess.Should().BeTrue();
+        (await handler.HandleAsync(new AddLogTaskCommand(
+            DailyLogId: logId, ActivityType: "weed", Notes: null, ActorUserId: OwnerGuid,
+            ExecutionStatus: ExecutionStatus.Modified, DeviationReasonCode: "operator.other"))).IsSuccess.Should().BeTrue();
+        repo.Reminders.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AddLogTask_RefusedForItsReason_LeavesNoReminder()
+    {
+        var (handler, logId, repo, _) = BuildFull();
+        var result = await handler.HandleAsync(new AddLogTaskCommand(
+            DailyLogId: logId, ActivityType: "spray", Notes: null, ActorUserId: OwnerGuid,
+            ExecutionStatus: ExecutionStatus.Partial, DeviationReasonCode: "totally.bogus.code"));
+        result.IsSuccess.Should().BeFalse();
+        repo.Reminders.Should().BeEmpty("the add was refused: nothing of it is kept");
     }
 
     [Fact]
@@ -174,8 +231,14 @@ public sealed class AddLogTaskDeviationHandlerTests
         public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default)
             => Task.FromResult<CropCycle?>(_cropCycle.Id == cropCycleId ? _cropCycle : null);
 
-        public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default) => Task.CompletedTask;
+        public Task AddAuditEventAsync(AuditEvent auditEvent, CancellationToken ct = default) { Audit.Add(auditEvent); return Task.CompletedTask; }
         public Task SaveChangesAsync(CancellationToken ct = default) => Task.CompletedTask;
+
+        // spec: plr-d10 lane REM-1 - the reminder an unfinished line leaves behind (staged with the line, kept here in memory).
+        public List<PlannedWork> Reminders { get; } = [];
+        public List<AuditEvent> Audit { get; } = [];
+        public Task AddPlannedWorkAsync(PlannedWork work, CancellationToken ct = default) { Reminders.Add(work); return Task.CompletedTask; }
+        public Task<PlannedWork?> GetPlannedWorkByIdAsync(Guid id, CancellationToken ct = default) => Task.FromResult(Reminders.FirstOrDefault(r => r.Id == id));
 
         // ---- Unused members ----
         public Task AddFarmAsync(Farm farm, CancellationToken ct = default) => throw new NotSupportedException();

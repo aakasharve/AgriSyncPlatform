@@ -13,10 +13,11 @@ import { INVITATION_COPY_FOR_TESTS } from '../../../invitations/invitationCopy';
 import { createBody, notInForce, presetGrant, withAuthorities, cardLines } from '../../../invitations/invitationModel';
 
 describe('the authority exists on the phone the way the server has it', () => {
-    it('is named SeeCompare, switchable, last in the server\'s order, and needs nothing', () => {
+    it('is named SeeCompare, switchable, in the server\'s order (after SeeAllTasks, before the reminder switch of lane REM-1), and needs nothing', () => {
         expect(AUTHORITY.seeCompare).toBe('SeeCompare');
-        expect([...SWITCHABLE_AUTHORITIES].at(-1)).toBe('SeeCompare');
-        expect(SWITCHABLE_AUTHORITIES).toHaveLength(12);
+        expect([...SWITCHABLE_AUTHORITIES].at(-2)).toBe('SeeCompare');
+        expect([...SWITCHABLE_AUTHORITIES].at(-1)).toBe('ManageReminders');
+        expect(SWITCHABLE_AUTHORITIES).toHaveLength(13);
         expect(authorityNeeds(AUTHORITY.seeCompare)).toBeNull();
     });
 

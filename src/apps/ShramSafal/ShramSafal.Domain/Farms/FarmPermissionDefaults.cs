@@ -31,7 +31,8 @@ public static class FarmPermissionDefaults
         | FarmPermission.EditFarmSetup
         | FarmPermission.ManageScheduleTemplates
         | FarmPermission.SeeAllTasks
-        | FarmPermission.SeeCompare;
+        | FarmPermission.SeeCompare
+        | FarmPermission.ManageReminders;
 
     /// <summary>Every bit a stored value may legally carry (a pre-2b row may still hold a retired bit).</summary>
     public const FarmPermission Known = All | FarmPermission.Invite | FarmPermission.AddCost;
@@ -47,21 +48,21 @@ public static class FarmPermissionDefaults
     /// The stored-bit set for a label and the owner's stored choice: <see cref="All"/> for the
     /// primary owner, the stored choice (minus unknown and retired bits) for everyone else.
     /// </summary>
-    public static FarmPermission Effective(AppRole role, FarmPermission? stored) =>
+    public static FarmPermission Effective(AppRole role, FarmPermission? stored, MembershipPlotScope plotScope = MembershipPlotScope.AllPlots) =>
         role == AppRole.PrimaryOwner
             ? All
-            : (stored ?? For(role)) & All & ~BarredFor(role);
+            : (stored ?? For(role)) & All & ~BarredFor(role, plotScope);
 
     /// <summary>
     /// spec: plr-d10 lane CMP-D1 - the bits a seat of this label can never hold (<see cref="FarmAuthorities.CanBeHeldBy"/>):
     /// "तुलना पाहणे" on a Worker seat. A stored bit like that is dropped here, the same way an unknown bit is.
     /// </summary>
-    public static FarmPermission BarredFor(AppRole role)
+    public static FarmPermission BarredFor(AppRole role, MembershipPlotScope plotScope = MembershipPlotScope.AllPlots)
     {
         var barred = FarmPermission.None;
         foreach (var authority in FarmAuthorities.All)
         {
-            if (!FarmAuthorities.CanBeHeldBy(role, authority))
+            if (!FarmAuthorities.CanBeHeldBy(role, authority, plotScope))
             {
                 barred |= FarmAuthorities.BitOf(authority);
             }
@@ -129,5 +130,6 @@ public static class FarmPermissionDefaults
         FarmPermission.ManageScheduleTemplates,
         FarmPermission.SeeAllTasks,
         FarmPermission.SeeCompare,
+        FarmPermission.ManageReminders,
     ];
 }

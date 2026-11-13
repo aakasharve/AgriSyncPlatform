@@ -21,7 +21,7 @@
  * retry that re-runs the sync — never the all-clear; the all-clear says when it is from, and says only that
  * nothing needs attention now: "सध्या लक्ष देण्यासारखे काही नाही." — never that the farm is fine (D-1).
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { useAttentionModel } from '../hooks/useAttentionModel';
 import AttentionCard from '../components/AttentionCard';
@@ -37,6 +37,8 @@ import { formatFarmerTime } from '../../../shared/utils/displayTime';
 import { getDateKey } from '../../../core/domain/services/DateKeyService';
 import { GlassCard, PageBar, SANS, Tap } from '../../../shared/components/ui/placeUi';
 import { rescheduledTask, toggledTask, type TodoItem, type TodoWhen } from '../../reflect/overview/todoModel';
+import { ReminderChips } from '../../plannedWork/reminders/ReminderChips';
+import { chipOf, type ReminderChip } from '../../plannedWork/reminders/reminderModel';
 import { addDays, dateLabel, fromDateKey } from '../../reflect/overview/reflectDates';
 import { toDevanagariDigits } from '../../../shared/utils/marathiDigits';
 // TASK 8 — reused as-is, no new copy. See the note in `JobCardsPage.tsx`.
@@ -89,6 +91,19 @@ const GROUPS: readonly { key: AttentionGroupKey; title: string; tone: string }[]
 const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews, tasks, crops, onUpdateTask, onOpenTodos, onRecordWork, canReschedule }) => {
     const model = useAttentionModel(tasks, crops);
     const { board, todayKey } = model;
+    // Lane REM-1 (D-79): the same chips as करायची कामे, over this page's reminders (and the schedule's steps under शेड्यूलमधून). The
+    // health cards are not reminders: they show under सगळ्या only.
+    const [chip, setChip] = useState<ReminderChip>('all');
+    const chipOfItem = (item: AttentionItem): Exclude<ReminderChip, 'all'> | null =>
+        item.kind === 'reminder' ? chipOf(item.todo.task) : item.kind === 'step' ? 'schedule' : null;
+    const shown = (items: readonly AttentionItem[]): AttentionItem[] => (chip === 'all' ? [...items] : items.filter(i => chipOfItem(i) === chip));
+    const allItems: AttentionItem[] = [...model.late, ...model.today, ...model.decide];
+    const chipCountsOf: Record<ReminderChip, number> = {
+        all: allItems.length,
+        planning: allItems.filter(i => chipOfItem(i) === 'planning').length,
+        schedule: allItems.filter(i => chipOfItem(i) === 'schedule').length,
+        logs: allItems.filter(i => chipOfItem(i) === 'logs').length,
+    };
     const { asOf, isLoading, loadFailed, refresh } = board;
 
     const done = useCallback((t: TodoItem) => { if (t.canToggle) onUpdateTask?.(toggledTask(t.task)); }, [onUpdateTask]);
@@ -169,8 +184,9 @@ const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews
             {/* MU-1: self-contained and drawn only for the farm's primary account holder (nothing for anyone else). */}
             <JoinRequestsAttention />
             <KeptWorkAttention />
+            {allItems.some(i => chipOfItem(i) !== null) && <ReminderChips value={chip} onChange={setChip} counts={chipCountsOf} testId="attention-chips" />}
             {GROUPS.map(g => {
-                const items = model[g.key];
+                const items = shown(model[g.key]);
                 if (items.length === 0) return null;
                 return (
                     <section key={g.key} className="space-y-2" data-testid={`attention-group-${g.key}`}>

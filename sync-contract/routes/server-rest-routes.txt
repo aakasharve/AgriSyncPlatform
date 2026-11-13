@@ -4,6 +4,7 @@
 # Read by the phone's path test (src/clients/mobile-web/src/infrastructure/api/__tests__/phoneRestPathsMatchServer.test.ts).
 # Do not edit by hand.
 * /metrics
+DELETE /shramsafal/farms/{farmId:guid}/reminder-settings/always-show/{userId:guid}
 GET /accounts/affiliation/events
 GET /accounts/affiliation/stats
 GET /accounts/health
@@ -61,6 +62,7 @@ GET /shramsafal/farms/{farmId:guid}/planned-work/assignees
 GET /shramsafal/farms/{farmId:guid}/planned-work/{plannedWorkId:guid}
 GET /shramsafal/farms/{farmId:guid}/plots/{plotId:guid}/schedule-advice
 GET /shramsafal/farms/{farmId:guid}/plots/{plotId:guid}/stage-plan
+GET /shramsafal/farms/{farmId:guid}/reminder-settings
 GET /shramsafal/farms/{farmId:guid}/weather/current
 GET /shramsafal/farms/{farmId:guid}/weather/forecast
 GET /shramsafal/finance/farm-rates
@@ -226,3 +228,5 @@ PUT /shramsafal/farms/{farmId:guid}/labour/field-operators/{id:guid}/identity
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/access
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/authorities
 PUT /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/plot-scope
+PUT /shramsafal/farms/{farmId:guid}/reminder-settings
+PUT /shramsafal/farms/{farmId:guid}/reminder-settings/always-show/{userId:guid}

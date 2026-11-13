@@ -47,6 +47,17 @@ export interface PlannedWorkDto {
     plots?: PlannedWorkPlotDto[] | null;
     /** Lane L8c-3 (additive): Confirmed | Disputed | Waiting from all the linked logs, or null when none is linked. */
     confirmationState?: string | null;
+    /**
+     * Lane REM-1 (founder D-78, D-84 = 1; R15, R16) - who made it and where it comes from, as THIS reader may know it. Additive (P11): an
+     * older server sends none and the phone says nothing it was not told. `wordsWithheld`: the words mention money and this reader may not
+     * hear them, so `title` is empty (the ShramSafal-rule card stands in).
+     */
+    createdByName?: string | null;
+    category?: string | null;
+    mayPlayVoice?: boolean | null;
+    wordsWithheld?: boolean | null;
+    makerAlwaysShown?: boolean | null;
+    fromChosenPeopleRecord?: boolean | null;
 }
 
 /** One person the caller may give work to (GET /shramsafal/farms/{farmId}/planned-work/assignees). */

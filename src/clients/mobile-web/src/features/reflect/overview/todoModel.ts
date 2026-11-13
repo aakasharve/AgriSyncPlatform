@@ -26,6 +26,7 @@ import type { CropProfile, PlannedTask } from '../../../types';
 import { dateLabel, fromDateKey, offsetOf, weekdayOf } from './reflectDates';
 import type { ViewScope } from './reflectSelection';
 import { cropNameIn } from '../../../shared/names/namesIn';
+import { matchesChip, type ReminderChip } from '../../plannedWork/reminders/reminderModel';
 
 const FARM_GLOBAL = 'FARM_GLOBAL';
 
@@ -155,6 +156,21 @@ interface BuildArgs {
     language?: string;
 }
 
+/**
+ * Lane REM-1 (D-79): the list narrowed to one chip (सगळ्या · नियोजनातून · शेड्यूलमधून · नोंदीतून), counted again. `chip` all returns the list as it is.
+ * The tiles and the header count follow what is shown.
+ */
+export function filterTodoList(list: TodoList, chip: ReminderChip): TodoList {
+    if (chip === 'all') return list;
+    const keep = (items: TodoItem[]) => items.filter(i => matchesChip(i.task, chip));
+    const next = { late: keep(list.late), today: keep(list.today), later: keep(list.later), noDate: keep(list.noDate), done: keep(list.done) };
+    const open = next.late.length + next.today.length + next.later.length + next.noDate.length;
+    return { ...next, openCount: open, total: open + next.done.length };
+}
+
+/** Every item of the list, in the order the page shows them (for the chips' counts). */
+export const allTodoItems = (list: TodoList): TodoItem[] => [...list.late, ...list.today, ...list.later, ...list.noDate, ...list.done];
+
 export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayKey, language = 'mr' }: BuildArgs): TodoList {
     const plotOwner = new Map<string, CropProfile>();
     for (const c of crops) for (const p of c.plots ?? []) plotOwner.set(p.id, c);
@@ -209,7 +225,8 @@ export function buildTodoList({ tasks, storeIds, crops, scope, wholeFarm, todayK
             priorityLabel: t.priority === 'urgent' ? 'तातडीचं' : t.priority === 'high' ? 'महत्त्वाचं' : undefined,
             place: placeOf(t),
             canToggle: storeIds.has(t.id),
-            canRemove: t.sourceType === 'ai_extracted' && t.listSource?.tickable === true && !isClosed(t),
+            // Lane REM-1 (R14): a reminder left over from a log is removed the same way (one tap; history kept, P3).
+            canRemove: (t.sourceType === 'ai_extracted' || t.listSource?.reminder?.kind === 'Leftover') && t.listSource?.tickable === true && !isClosed(t),
         };
     };
 

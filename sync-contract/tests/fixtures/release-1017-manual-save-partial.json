@@ -1,0 +1,18 @@
+{
+  "_comment": "spec: plr-d10-redesign-real-integration-2026-10-25 (lane REM-1, P11). The manual-save payload release b3d28967 (1.0.17) builds for a crop activity saved only half done (status 'partial'): made by that release's OWN LogFactory.createFromManualEntry + buildManualDraft (extracted with git show) for a spray on a plot. The server must make the same leftover reminder from it as from the current phone's document (R14).",
+  "logDate": "2026-11-08",
+  "manualDraft": {
+    "cropActivities": [
+      {
+        "id": "act-1017::3d030000-0000-4000-8000-0000000000a3",
+        "title": "फवारणी",
+        "workTypes": [
+          "फवारणी"
+        ],
+        "status": "partial",
+        "date": "2026-11-08",
+        "loggedAt": "2026-11-08T05:00:00.000Z"
+      }
+    ]
+  }
+}

@@ -119,5 +119,28 @@ export interface PlannedTask {
      * on the old local copy. `tickable`: this person may say "झाले" on it here (his own reminder); a task handed to someone is done
      * through the log (L8c-3). `scope`: where the work is, as the server keeps it ("Unspecified" shows no place).
      */
-    listSource?: { scope: 'Plot' | 'MultiPlot' | 'Farm' | 'Unspecified'; tickable: boolean; keptOnPhone: boolean };
+    listSource?: {
+        scope: 'Plot' | 'MultiPlot' | 'Farm' | 'Unspecified';
+        tickable: boolean;
+        keptOnPhone: boolean;
+        /** Lane REM-1: the farm the task belongs to (the original-voice door is asked for this farm). */
+        farmId?: string;
+        /**
+         * Lane REM-1 (D-78, D-79, D-84 = 1): what the card says about a reminder of the server's list - who made it, when, which source,
+         * the voice and the money answers. Absent on a task of the demo list.
+         */
+        reminder?: {
+            category: 'FromPlanning' | 'FromSchedule' | 'FromLogs';
+            kind: 'Typed' | 'PlanForm' | 'Spoken' | 'Leftover' | null;
+            createdByUserId: string | null;
+            createdByName: string | null;
+            createdAtUtc: string | null;
+            sourceDailyLogId: string | null;
+            /** true = he may hear the source voice; false = a voice exists that he may not hear; null = no voice to speak of. */
+            mayPlayVoice: boolean | null;
+            wordsWithheld: boolean;
+            makerAlwaysShown: boolean;
+            fromChosenPeopleRecord: boolean;
+        };
+    };
 }

@@ -10,10 +10,10 @@ import { INVITATION_COPY_FOR_TESTS } from '../../../invitations/invitationCopy';
 import { cardLines, presetGrant, withAuthorities } from '../../../invitations/invitationModel';
 
 describe('the switch list is the server\'s Switchable, in its order (L8c-2)', () => {
-    it('twelve switches: ... PlanWork, AssignWork, EditFarmSetup, LabRecords, ScheduleTemplates, SeeAllTasks, SeeCompare (CMP-D1)', () => {
+    it('thirteen switches: ... PlanWork, AssignWork, EditFarmSetup, LabRecords, ScheduleTemplates, SeeAllTasks, SeeCompare (CMP-D1), ManageReminders (REM-1)', () => {
         expect([...SWITCHABLE_AUTHORITIES]).toEqual([
             'TakeAttendance', 'ConfirmRecords', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'PlanWork', 'AssignWork',
-            'EditFarmSetup', 'LabRecords', 'ScheduleTemplates', 'SeeAllTasks', 'SeeCompare',
+            'EditFarmSetup', 'LabRecords', 'ScheduleTemplates', 'SeeAllTasks', 'SeeCompare', 'ManageReminders',
         ]);
         expect(AUTHORITY.seeAllTasks).toBe('SeeAllTasks');
     });

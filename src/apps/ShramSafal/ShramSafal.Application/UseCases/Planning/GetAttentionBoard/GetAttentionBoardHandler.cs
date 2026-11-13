@@ -55,6 +55,11 @@ public sealed class GetAttentionBoardHandler(
         var cards = new List<AttentionCardDto>();
         var scheduledWork = new List<ScheduledWorkItemDto>();
 
+        // spec: plr-d10 lane REM-1 (founder D-79, R13) - who sees the schedule's own steps is the owner's setting for that kind of reminder:
+        // everyone on the plot (today's rule, and the default) or the planners (the primary owner and the holders of PlanWork / AssignWork).
+        // Read once for all the farms; a farm with no row has the default. The board's counts and cards are unchanged: ATT-W owns the board.
+        var reminderAudiences = await repository.GetReminderAudiencesAsync(farmIds, ct);
+
         // spec: plr-d10 lane PRV (founder D-26; fix pass 1, H3) — a planned step that work kept from him completed is DONE
         // for him too: the founder's own text, "the app must not simultaneously assign that hidden activity to someone who
         // cannot see it" (a member must never be told to repeat a private spray). So steps are matched against ALL the
@@ -75,6 +80,9 @@ public sealed class GetAttentionBoardHandler(
             if (farm is null) continue;
 
             var plots = await repository.GetPlotsByFarmIdAsync(farmId, ct);
+            var mayListScheduleSteps = Services.ReminderVisibility.MaySeeScheduleStep(
+                Services.PlannedWorkSeats.From(accesses.GetValueOrDefault(farmId), query.CallerUserId, clock.UtcNow),
+                (reminderAudiences.GetValueOrDefault(farmId) ?? Services.ReminderAudiences.Defaults(farmId)).Settings);
 
             // CEI Phase 2 §4.5 — pull Due/Overdue test instances for this farm and
             // bucket them per plot using only those whose planned due date has
@@ -125,6 +133,7 @@ public sealed class GetAttentionBoardHandler(
                         foreach (var status in statuses.Where(s => s.State != ScheduledWorkState.Done))
                         {
                             if (status.State == ScheduledWorkState.Overdue) overdueCount++;
+                            if (!mayListScheduleSteps) continue;
                             scheduledWork.Add(ItemOf(status, farmId, plot.Id, plot.Name, latestCycle.Id));
                         }
                     }
@@ -163,12 +172,14 @@ public sealed class GetAttentionBoardHandler(
                         {
                             // the merged item counts once; a step due today is not overdue
                             if (item.ReasonKey != ScheduledReasonKey.DueToday) overdueCount++;
+                            if (!mayListScheduleSteps) continue;
                             scheduledWork.Add(item);
                         }
 
                         foreach (var status in localStatuses.Where(s => s.State != ScheduledWorkState.Done))
                         {
                             if (status.State == ScheduledWorkState.Overdue) overdueCount++;
+                            if (!mayListScheduleSteps) continue;
                             scheduledWork.Add(ItemOf(status, farmId, plot.Id, plot.Name, latestCycle.Id));
                         }
                     }

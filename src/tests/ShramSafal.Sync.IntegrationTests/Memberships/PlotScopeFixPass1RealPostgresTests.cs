@@ -430,12 +430,12 @@ public sealed class PlotScopeFixPass1RealPostgresTests(ITestOutputHelper output)
         rosterStatus.Should().Be(HttpStatusCode.OK, roster);
         var rows = JsonDocument.Parse(roster).RootElement.EnumerateArray().ToList();
         JsonElement Row(Guid who) => rows.Single(r => r.GetProperty("userId").GetGuid() == who);
-        Names(Row(Mukadam), "authoritiesNotInForce").Should().Equal(["EditFarmSetup"], "farm setup needs every plot");
+        Names(Row(Mukadam), "authoritiesNotInForce").Should().Equal(["EditFarmSetup", "ManageReminders"], "farm setup needs every plot; lane REM-1: so does changing who sees reminders");
         Names(Row(Mukadam), "authorities").Should().Contain("EditFarmSetup", "still stored: it comes back with every plot");
         Row(Worker).GetProperty("effectivePlotScope").GetString().Should().Be("OwnWork", "a कामगार reads his own work");
         Names(Row(Worker), "plotScopeChoices").Should().Equal(["OwnWork", "ChosenPlots"], "every plot would read as his own work");
         // lane MU-1 (MU-2 review N-3): review money needs see money, so it does nothing on his own-work seat either.
-        Names(Row(Worker), "authoritiesNotInForce").Should().BeEquivalentTo(["SeeMoney", "SeeWages", "ReviewMoney", "SeeCompare"]); // lane CMP-D1: a Worker seat never holds it
+        Names(Row(Worker), "authoritiesNotInForce").Should().BeEquivalentTo(["SeeMoney", "SeeWages", "ReviewMoney", "SeeCompare", "ManageReminders"]); // lane CMP-D1 / REM-1: a Worker seat never holds them
         Names(Row(CoOwner), "authoritiesNotInForce").Should().BeEmpty();
         Row(CoOwner).GetProperty("effectivePlotScope").GetString().Should().Be("AllPlots");
 

@@ -477,6 +477,17 @@
 //     GO-LIVE-REGISTER F98 and not closed here by assertion.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.farm_reminder_settings and ssf.reminder_always_show (plr-d10 lane REM-1, founders D-78 / D-84 = 1) — KEEP. The first holds
+//     one FARM's three audience choices for its reminders (the maker and the owner, or everyone on the plot; the schedule's steps for the
+//     plot team or the planners) and who last changed them (updated_by_user_id, an opaque user id) and when; the second holds, per farm,
+//     the opaque user ids of the people whose reminders always show to everyone on the plot and who added each (added_by_user_id). No
+//     name, no phone, no words of a farmer, no amount, no reminder: they are the farm's own settings about who sees what, and an erased
+//     person's opaque id stays on them exactly as on ssf.farm_memberships and ssf.audit_events (the phone names a person only through
+//     the operator directory, which erasure anonymises). Doctrine P6: anonymise the person, never the work. Both are current state
+//     (the app role may delete a mark); the append-only history of every change is the ReminderSettings audit row, which holds the
+//     choice words only and no reminder text.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.schedule_template_stages (plr-d10 lane SCH-A, founder D-74) — KEEP. A stage name and its day range of a schedule
 //     row (e.g. "Post Pruning", days 0-15): no person, no words of a farmer, no amount. The person link of a schedule is each
 //     version's maker, ssf.schedule_templates.created_by_user_id (since L8b-1 fix round 1 "who made this version", not
