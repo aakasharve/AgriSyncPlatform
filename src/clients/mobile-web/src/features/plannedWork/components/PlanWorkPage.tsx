@@ -213,7 +213,7 @@ export const PlanWorkPage: React.FC<PlanWorkPageProps> = ({
                     {formOpen && (
                         <PlanForm farmId={farmId} userId={userId} language={language} crops={crops} farmerProfile={farmerProfile}
                             mayAssign={mayAssign} assignees={mayAssign ? assignees.assignees : NO_ASSIGNEES} assigneesFromCache={assignees.source === 'cache'}
-                            today={today} understand={understand} onSaved={saved} onPlaceChanged={onPlaceChanged} saveHeld={askAbout.length > 0} />
+                            today={today} understand={understand} onSaved={saved} onPlaceChanged={onPlaceChanged} saveHeld={askAbout.length > 0} mayAdvise={mayPlan} />
                     )}
                 </>
             )}
