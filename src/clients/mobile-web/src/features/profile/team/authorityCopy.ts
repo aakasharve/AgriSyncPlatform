@@ -76,6 +76,7 @@ const mr: AuthorityCopy = {
         SeeWages: 'याला फक्त स्वतःच्या नोंदी दिसतात, म्हणून फक्त स्वतःची मजुरी दिसते.', // PROPOSED (Marathi) — lane MU-4 fix pass 1
         ReviewMoney: 'पैसे दिसत नसतील तर पैशांच्या नोंदी तपासता येत नाहीत.', // PROPOSED (Marathi) — lane MU-1 (MU-2 N-3)
         SeeCompare: 'कामगाराला तुलना दिसत नाही.', // PROPOSED (Marathi) — lane CMP-D1 (founder D-81)
+        ManageReminders: 'आठवणींची मांडणी फक्त संपूर्ण शेत दिसणारी व्यक्तीच बदलू शकते.', // PROPOSED (Marathi) — lane REM-1 (CTO ruling on review m2)
     },
     payoutNeedsWages: 'नोंदी तपासता येतील, पण "इतरांची मजुरी पाहणे" नसेल तर मजुरीचे पैसे देणं पूर्ण करता येणार नाही.', // PROPOSED (Marathi) — lane MU-1
     dayWagesNotOnChosenPlots: 'निवडलेले प्लॉट असतील तर दिवसाच्या हिशोबाची मजुरी दिसत नाही; फक्त उक्ते कामाचे पैसे त्या प्लॉटचे दिसतात.', // PROPOSED (Marathi) — lane MU-1, D-70 option 2
@@ -117,6 +118,7 @@ const en: AuthorityCopy = {
         SeeWages: 'He sees only his own records, so only his own wages show.', // PROPOSED (English) — lane MU-4 fix pass 1
         ReviewMoney: 'Money entries cannot be checked where money is not seen.', // PROPOSED (English) — lane MU-1 (MU-2 N-3)
         SeeCompare: 'A worker does not see the comparison.', // PROPOSED (English) — lane CMP-D1 (founder D-81)
+        ManageReminders: 'Only a person who sees the whole farm can change the reminder settings.', // PROPOSED (English) — lane REM-1 (CTO ruling on review m2)
     },
     payoutNeedsWages: "He can check entries, but without 'See other people's wages' he cannot complete a wage payout.", // PROPOSED (English) — lane MU-1
     dayWagesNotOnChosenPlots: 'With chosen plots, day wages are not shown to him; only job-work money of those plots is.', // PROPOSED (English) — lane MU-1, D-70 option 2

@@ -19,8 +19,9 @@ public sealed class FarmAccessPolicyTests
     private static FarmAccess Holding(FarmAuthority authority, DateTime? end = null, AppRole? roleOrNull = null,
         MembershipStatus status = MembershipStatus.Active)
     {
-        // lane CMP-D1: a Worker seat can never hold SeeCompare, so that one authority is theory-tested on a Mukadam seat.
-        var role = roleOrNull ?? (authority == FarmAuthority.SeeCompare ? AppRole.Mukadam : AppRole.Worker);
+        // lane CMP-D1: a Worker seat can never hold SeeCompare, so that one authority is theory-tested on a Mukadam seat; lane REM-1 (CTO ruling
+        // on review m2): nor ManageReminders, which only a whole-farm seat holds.
+        var role = roleOrNull ?? (authority is FarmAuthority.SeeCompare or FarmAuthority.ManageReminders ? AppRole.Mukadam : AppRole.Worker);
         var bits = FarmAuthorities.BitOf(authority);
         var expiries = new Dictionary<FarmPermission, DateTime>();
         if (FarmAuthorities.RequiredBy(authority) is { } needed)

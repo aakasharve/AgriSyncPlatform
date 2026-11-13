@@ -79,21 +79,21 @@ public sealed class ReminderSettingsRoutesRealPostgresTests(ITestOutputHelper ou
         await GrantAsync(CoOwner, FarmAuthority.ManageReminders);
 
         var attempt = new { authorities = new[] { new { name = "ManageReminders", expiresAtUtc = (DateTime?)null } } };
-        using (var refused = await SendAsync(HttpMethod.Put, $"/shramsafal/farms/{FarmA}/memberships/{Worker}/authorities", CoOwner, attempt))
+        using (var refused = await SendAsync(HttpMethod.Put, $"/shramsafal/farms/{FarmA}/memberships/{Mukadam}/authorities", CoOwner, attempt))
         {
             refused.StatusCode.Should().Be(HttpStatusCode.Forbidden, "D-26: no re-delegation");
         }
 
-        (await GetSettingsAsync(Worker)).Status.Should().Be(HttpStatusCode.Forbidden, "nothing was granted to him");
+        (await GetSettingsAsync(Mukadam)).Status.Should().Be(HttpStatusCode.Forbidden, "nothing was granted to him");
 
         // The primary owner grants it, by the same route.
-        using (var granted = await SendAsync(HttpMethod.Put, $"/shramsafal/farms/{FarmA}/memberships/{Worker}/authorities", Owner, attempt))
+        using (var granted = await SendAsync(HttpMethod.Put, $"/shramsafal/farms/{FarmA}/memberships/{Mukadam}/authorities", Owner, attempt))
         {
             granted.StatusCode.Should().Be(HttpStatusCode.OK, await granted.Content.ReadAsStringAsync());
         }
 
-        (await GetSettingsAsync(Worker)).Status.Should().Be(HttpStatusCode.OK, "the owner gave it to him");
-        (await PutSettingsAsync(Worker, log: "PlotTeam")).Status.Should().Be(HttpStatusCode.OK);
+        (await GetSettingsAsync(Mukadam)).Status.Should().Be(HttpStatusCode.OK, "the owner gave it to him (a whole-farm seat)");
+        (await PutSettingsAsync(Mukadam, log: "PlotTeam")).Status.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
