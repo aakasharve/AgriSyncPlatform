@@ -158,6 +158,7 @@ POST /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/suspend
 POST /shramsafal/farms/{farmId:guid}/personal-invitations
 POST /shramsafal/farms/{farmId:guid}/personal-invitations/{id:guid}/approve
 POST /shramsafal/farms/{farmId:guid}/personal-invitations/{id:guid}/withdraw
+POST /shramsafal/farms/{farmId:guid}/schedule-steps/move
 POST /shramsafal/finance/allocate
 POST /shramsafal/finance/cost-entry
 POST /shramsafal/finance/cost-entry/{id:guid}/approve

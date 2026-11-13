@@ -199,6 +199,10 @@ public sealed class ShramSafalDbContext(DbContextOptions<ShramSafalDbContext> op
     // version of a rate. APPEND-ONLY by privilege (migration AddFarmRates); FORCE-RLS on its own farm_id (F8).
     public DbSet<FarmRate> FarmRates => Set<FarmRate>();
 
+    // spec: plr-d10 lane ATT-W (R29) - "पुढे ठरवा" on a step a followed schedule asks: one unchangeable row per move. APPEND-ONLY by
+    // privilege (migration AddScheduleStepMoves); FORCE-RLS on its own farm_id (F8).
+    public DbSet<ShramSafal.Domain.Planning.ScheduleStepMove> ScheduleStepMoves => Set<ShramSafal.Domain.Planning.ScheduleStepMove>();
+
     // spec: plr-d10 lane BILL-1 (founder D-12) — a bill's मंजूर stamps (who, when, which version), one unchangeable row
     // each. APPEND-ONLY by privilege (migration AddCostEntryApprovals); FORCE-RLS on its own farm_id (F8).
     public DbSet<CostEntryApproval> CostEntryApprovals => Set<CostEntryApproval>();

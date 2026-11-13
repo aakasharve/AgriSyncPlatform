@@ -28,6 +28,28 @@ public enum ScheduledWorkState
 public sealed record ScheduledWorkStatus(PlannedActivity Planned, ScheduledWorkState State, int DaysLate);
 
 /// <summary>
+/// spec: plr-d10 lane ATT-W (R29, R35) - one dated step a followed schedule STORES, as the attention board matches it. <see cref="PlannedDate"/>
+/// is the day लक्ष द्या reminds (the schedule's own day, or the day a person moved it to). <see cref="Part"/>, <see cref="OperationKey"/>,
+/// <see cref="Role"/>, <see cref="NutrientKey"/> and <see cref="OnceOnly"/> come from the engine's <c>ExpectedStep</c> (<c>OnceOnly</c> only for a
+/// STORED one-time work); <see cref="StageFrom"/> / <see cref="StageTo"/> are the dates of the मुख्य schedule's stage that holds the step's own day
+/// (null when it stores none).
+/// </summary>
+public sealed record ScheduledStep(
+    Guid StepId,
+    string ActivityName,
+    DateOnly PlannedDate,
+    string Part,
+    string? OperationKey,
+    string? Role,
+    string? NutrientKey,
+    bool OnceOnly,
+    DateOnly? StageFrom,
+    DateOnly? StageTo);
+
+/// <summary>Where one <see cref="ScheduledStep"/> stands today (the planned-activity rule's own states).</summary>
+public sealed record ScheduledStepStatus(ScheduledStep Step, ScheduledWorkState State, int DaysLate);
+
+/// <summary>
 /// spec: plr-d10-redesign-real-integration-2026-10-25 (I22) — founder D-1: "Before trusting its overdue
 /// counts, fix how scheduled work is matched to completed records."
 ///
@@ -76,22 +98,163 @@ public static class ScheduledWorkMatcher
             .ThenBy(p => p.Id)
             .ToList();
 
-        var work = recorded
+        var work = DoneWork(recorded, today);
+        var taken = Core(
+            due.Select(p => p.PlannedDate).ToList(),
+            work,
+            (s, r) => SameWork(due[s].ActivityName, work[r].ActivityType),
+            onceOnly: null);
+
+        var result = new List<ScheduledWorkStatus>(due.Count);
+        for (var s = 0; s < due.Count; s++)
+        {
+            var daysLate = today.DayNumber - due[s].PlannedDate.DayNumber;
+            result.Add(new ScheduledWorkStatus(due[s], StateOf(taken[s], daysLate), daysLate));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane ATT-W (R29, R35) - the SAME rule over the steps a followed schedule STORES (<see cref="ScheduleFollowEngine.Expand"/>
+    /// dates, a moved step on its moved day), so लक्ष द्या, the stage panel and तुलना have one "expected". Passes 1 and 2 are the rule above,
+    /// asked of the step's work identity (what the schedule stores overrules its title, <see cref="IdentityOf"/>). Then, with one change for
+    /// followed schedules (R35): a ONCE-ONLY step still open takes an unused same-work record inside its own stage window, before or after
+    /// its day, so लक्ष द्या never reminds work तुलना already counts. That third pass runs AFTER the two, so it can never take a record an
+    /// on-time or late step needed. Same work there means the part, the operation key and the role - never the name alone. Repeated steps
+    /// keep the three-day rule. A step whose day has not come is neither late nor able to claim a record. The caller matches each
+    /// followed schedule's steps on their own.
+    /// </summary>
+    public static IReadOnlyList<ScheduledStepStatus> Match(
+        IEnumerable<ScheduledStep> steps,
+        IEnumerable<RecordedWork> recorded,
+        DateOnly today)
+    {
+        var due = steps
+            .Where(s => !string.IsNullOrWhiteSpace(s.ActivityName) && s.PlannedDate <= today)
+            .OrderBy(s => s.PlannedDate)
+            .ThenBy(s => s.StepId)
+            .ToList();
+
+        var work = DoneWork(recorded, today);
+        var stepIdentity = due.Select(IdentityOf).ToList();
+        var recordIdentity = work.Select(r => WorkRecogniser.Recognise(r.ActivityType)).ToList();
+
+        var taken = Core(
+            due.Select(s => s.PlannedDate).ToList(),
+            work,
+            (s, r) => SameStepWork(due[s], stepIdentity[s], work[r], recordIdentity[r]),
+            new OnceOnlyPass(
+                due.Select(s => s.OnceOnly).ToList(),
+                due.Select(s => (From: s.StageFrom, To: s.StageTo)).ToList(),
+                (s, r) => SameKeyedWork(stepIdentity[s], recordIdentity[r])));
+
+        var result = new List<ScheduledStepStatus>(due.Count);
+        for (var s = 0; s < due.Count; s++)
+        {
+            var daysLate = today.DayNumber - due[s].PlannedDate.DayNumber;
+            result.Add(new ScheduledStepStatus(due[s], StateOf(taken[s], daysLate), daysLate));
+        }
+
+        return result;
+    }
+
+    /// <summary>The identity of a scheduled step: its title read by <see cref="WorkRecogniser"/>, overruled by what the schedule stores (the engine's own rule).</summary>
+    public static WorkIdentity? IdentityOf(ScheduledStep step) =>
+        ScheduleFollowEngine.IdentityOf(step.ActivityName, step.Part, step.OperationKey, step.Role, step.NutrientKey);
+
+    /// <summary>
+    /// The day of the latest recorded work that is the same work as <paramref name="step"/> (WORK-ID <c>Same</c>) on or before
+    /// <paramref name="today"/>; <c>null</c> when there is none. Only rows that count as done (<see cref="CountsAsDone"/>) are read, and the
+    /// caller hands in only the records the READER may see, so the answer never names a day a hidden record was made on (PRV). Nothing is
+    /// estimated (P4).
+    /// </summary>
+    public static DateOnly? LastSameWorkDate(ScheduledStep step, IEnumerable<RecordedWork> visibleRecorded, DateOnly today)
+    {
+        var identity = IdentityOf(step);
+        DateOnly? last = null;
+        foreach (var record in DoneWork(visibleRecorded, today))
+        {
+            if (last is { } known && record.WorkDate <= known)
+            {
+                continue;
+            }
+
+            if (SameStepWork(step, identity, record, WorkRecogniser.Recognise(record.ActivityType)))
+            {
+                last = record.WorkDate;
+            }
+        }
+
+        return last;
+    }
+
+    /// <summary>Are two steps the same work (WORK-ID <c>Same</c> on their identities; a step nothing can read is the same only as its own name)?</summary>
+    public static bool SameStepWork(ScheduledStep a, ScheduledStep b)
+    {
+        var ia = IdentityOf(a);
+        var ib = IdentityOf(b);
+        return ia is not null && ib is not null
+            ? WorkRecogniser.Same(ia, ib).Matched
+            : string.Equals(a.ActivityName.Trim(), b.ActivityName.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static List<RecordedWork> DoneWork(IEnumerable<RecordedWork> recorded, DateOnly today) =>
+        recorded
             .Where(r => CountsAsDone(r) && r.WorkDate <= today)
             .OrderBy(r => r.WorkDate)
             .ToList();
 
-        var stepTaken = new bool[due.Count];
+    private static ScheduledWorkState StateOf(bool taken, int daysLate) =>
+        taken ? ScheduledWorkState.Done : daysLate > 0 ? ScheduledWorkState.Overdue : ScheduledWorkState.DueToday;
+
+    /// <summary>Passes 1 and 2 as the planned-activity rule's own: same work by the step's identity, else (nothing to read) by the old name rule.</summary>
+    private static bool SameStepWork(ScheduledStep step, WorkIdentity? stepIdentity, RecordedWork record, WorkIdentity? recordIdentity) =>
+        stepIdentity is not null && recordIdentity is not null
+            ? WorkRecogniser.Same(stepIdentity, recordIdentity).Matched
+            : SameWork(step.ActivityName, record.ActivityType);
+
+    /// <summary>
+    /// The once-only pass's "same work": both read, the same part, the same role (a nutrient also the same nutrient) or the same operation key.
+    /// A match that rests on the names alone (<c>same-name</c>) is never enough (R35).
+    /// </summary>
+    private static bool SameKeyedWork(WorkIdentity? step, WorkIdentity? record)
+    {
+        if (step is null || record is null)
+        {
+            return false;
+        }
+
+        var same = WorkRecogniser.Same(step, record);
+        return same.Matched && !string.Equals(same.ReasonKey, "same-name", StringComparison.Ordinal);
+    }
+
+    private sealed record OnceOnlyPass(
+        IReadOnlyList<bool> OnceOnly,
+        IReadOnlyList<(DateOnly? From, DateOnly? To)> Windows,
+        Func<int, int, bool> SameKeyed);
+
+    /// <summary>
+    /// The ONE matching body both overloads share: pass 1 (on time, closest pairs first), pass 2 (late), and - for steps only - the
+    /// once-only pass (R35). <paramref name="stepDays"/> and <paramref name="work"/> are already in their matching order.
+    /// </summary>
+    private static bool[] Core(
+        IReadOnlyList<DateOnly> stepDays,
+        IReadOnlyList<RecordedWork> work,
+        Func<int, int, bool> same,
+        OnceOnlyPass? onceOnly)
+    {
+        var stepTaken = new bool[stepDays.Count];
         var recordTaken = new bool[work.Count];
 
-        // Pass 1 — on time, closest pairs first (ties: the earlier step, then the earlier record).
+        // Pass 1 - on time, closest pairs first (ties: the earlier step, then the earlier record).
         var pairs = new List<(int Step, int Record, int Distance)>();
-        for (var s = 0; s < due.Count; s++)
+        for (var s = 0; s < stepDays.Count; s++)
         {
             for (var r = 0; r < work.Count; r++)
             {
-                var distance = Math.Abs(work[r].WorkDate.DayNumber - due[s].PlannedDate.DayNumber);
-                if (distance <= OnTimeToleranceDays && SameWork(due[s].ActivityName, work[r].ActivityType))
+                var distance = Math.Abs(work[r].WorkDate.DayNumber - stepDays[s].DayNumber);
+                if (distance <= OnTimeToleranceDays && same(s, r))
                 {
                     pairs.Add((s, r, distance));
                 }
@@ -105,32 +268,42 @@ public static class ScheduledWorkMatcher
             recordTaken[record] = true;
         }
 
-        // Pass 2 — late: the earliest unused record made after the step's on-time window.
-        for (var s = 0; s < due.Count; s++)
+        // Pass 2 - late: the earliest unused record made after the step's on-time window.
+        for (var s = 0; s < stepDays.Count; s++)
         {
             if (stepTaken[s]) continue;
-            var lateFrom = due[s].PlannedDate.DayNumber + OnTimeToleranceDays;
+            var lateFrom = stepDays[s].DayNumber + OnTimeToleranceDays;
             for (var r = 0; r < work.Count; r++)
             {
                 if (recordTaken[r] || work[r].WorkDate.DayNumber <= lateFrom) continue;
-                if (!SameWork(due[s].ActivityName, work[r].ActivityType)) continue;
+                if (!same(s, r)) continue;
                 stepTaken[s] = true;
                 recordTaken[r] = true;
                 break;
             }
         }
 
-        var result = new List<ScheduledWorkStatus>(due.Count);
-        for (var s = 0; s < due.Count; s++)
+        // Pass 3 (steps only, R35) - a ONCE-ONLY step still open takes the earliest unused same-work record inside its own stage window,
+        // before or after its day. After passes 1 and 2, so it never takes a record an on-time or late step needed.
+        if (onceOnly is not null)
         {
-            var daysLate = today.DayNumber - due[s].PlannedDate.DayNumber;
-            var state = stepTaken[s]
-                ? ScheduledWorkState.Done
-                : daysLate > 0 ? ScheduledWorkState.Overdue : ScheduledWorkState.DueToday;
-            result.Add(new ScheduledWorkStatus(due[s], state, daysLate));
+            for (var s = 0; s < stepDays.Count; s++)
+            {
+                if (stepTaken[s] || !onceOnly.OnceOnly[s]) continue;
+                var (windowFrom, windowTo) = onceOnly.Windows[s];
+                if (windowFrom is not { } first || windowTo is not { } last) continue;
+                for (var r = 0; r < work.Count; r++)
+                {
+                    if (recordTaken[r] || work[r].WorkDate < first || work[r].WorkDate > last) continue;
+                    if (!onceOnly.SameKeyed(s, r)) continue;
+                    stepTaken[s] = true;
+                    recordTaken[r] = true;
+                    break;
+                }
+            }
         }
 
-        return result;
+        return stepTaken;
     }
 
     /// <summary>Is this recorded row work that was done (and not a note, a skip or a disputed record)?</summary>

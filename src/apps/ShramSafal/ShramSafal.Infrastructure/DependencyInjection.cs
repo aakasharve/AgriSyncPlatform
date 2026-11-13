@@ -514,6 +514,9 @@ public static class DependencyInjection
         // CEI Phase 3 §4.5 — EF Core-backed test-stack repositories.
         services.AddScoped<ITestProtocolRepository, TestProtocolRepository>();
         services.AddScoped<ITestInstanceRepository, TestInstanceRepository>();
+
+        // spec: plr-d10 lane ATT-W (R29) - the moves of followed-schedule steps ("पुढे ठरवा"); append-only.
+        services.AddScoped<IScheduleStepMoveStore, ScheduleStepMoveStore>();
         services.AddScoped<ITestRecommendationRepository, TestRecommendationRepository>();
 
         // CEI Phase 3 §4.6 — compliance signal repository.

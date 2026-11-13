@@ -33,13 +33,15 @@ import { attentionRankOrder, suggestedActionOf } from './attentionWire';
 import { toMarathiDigits } from '../labour/marathiDate';
 import { toDevanagariDigits } from '../../shared/utils/marathiDigits';
 import { isRescheduledLocally, stepDueTextMr, stepLabelMr, type ScheduledWorkItem, type StoredScheduledWork } from './scheduledWork';
+import { scheduleWhyLineMr } from './scheduleWhy';
 
 // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT5, Task 1) - `first`: "आधी हे पाहा", a wrong mix in one tank, above everything.
 export type AttentionGroupKey = 'first' | 'late' | 'today' | 'decide';
 
 export type AttentionItem =
     | { kind: 'reminder'; id: string; group: 'late' | 'today'; daysLate: number; todo: TodoItem }
-    | { kind: 'step'; id: string; group: 'late' | 'today' | 'decide'; daysLate: number; step: ScheduledWorkItem; label: string; dueText: string }
+    // `why` (lane ATT-W): "का दिसतंय" - built only from the step's why-fields; absent for a step the server gave none for.
+    | { kind: 'step'; id: string; group: 'late' | 'today' | 'decide'; daysLate: number; step: ScheduledWorkItem; label: string; dueText: string; why?: string }
     | { kind: 'card'; id: string; group: 'first' | 'decide'; card: AttentionCardCacheRecord };
 
 export interface AttentionCounts {
@@ -112,15 +114,19 @@ const reminderDaysLate = (t: TodoItem, todayKey: string): number => {
     return Math.max(0, -offsetOf(fromDateKey(due), fromDateKey(todayKey)));
 };
 
-const stepItem = (step: ScheduledWorkItem): AttentionItem => ({
-    kind: 'step',
-    id: `step-${step.plannedActivityId}`,
-    group: step.daysLate === 0 ? 'today' : step.isMissed ? 'decide' : 'late',
-    daysLate: step.daysLate,
-    step,
-    label: stepLabelMr(step),
-    dueText: stepDueTextMr(step.daysLate),
-});
+const stepItem = (step: ScheduledWorkItem, todayKey: string): AttentionItem => {
+    const why = scheduleWhyLineMr(step, todayKey);
+    return {
+        kind: 'step',
+        id: `step-${step.plannedActivityId}`,
+        group: step.daysLate === 0 ? 'today' : step.isMissed ? 'decide' : 'late',
+        daysLate: step.daysLate,
+        step,
+        label: stepLabelMr(step),
+        dueText: stepDueTextMr(step.daysLate),
+        ...(why ? { why } : {}),
+    };
+};
 
 const byLateness = (a: AttentionItem, b: AttentionItem): number =>
     ('daysLate' in b ? b.daysLate : 0) - ('daysLate' in a ? a.daysLate : 0);
@@ -131,7 +137,7 @@ export function buildAttentionModel({ cards, scheduledWork, todos, farmId, today
 
     const steps = (scheduledWork?.items ?? [])
         .filter(s => onFarm(s.farmId) && !isRescheduledLocally(s.plannedActivityId, scheduledWork!.asOfUtc))
-        .map(stepItem);
+        .map(s => stepItem(s, todayKey));
 
     const reminders = (group: 'late' | 'today', list: readonly TodoItem[]): AttentionItem[] =>
         list.filter(t => !t.done).map(t => ({ kind: 'reminder', id: `todo-${t.id}`, group, daysLate: reminderDaysLate(t, todayKey), todo: t }));

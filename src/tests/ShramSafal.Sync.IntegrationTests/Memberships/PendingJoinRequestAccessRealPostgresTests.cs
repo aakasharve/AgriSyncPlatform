@@ -586,6 +586,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // with its foreign key and index). No farm_memberships or farm_join_requests object, no policy, no grant, no seat touched. Down() refuses while a row has an owner or a tag
         // (this proof's data has none), else rebuilds SOWN-a's shape and drops what Up() added.
         "20261110120000_ScheduleTemplateOwnerAndMadeFor",
+        // spec plr-d10 lane ATT-W (R29) - Up() and Down() read in full: Up() creates ssf.schedule_step_moves only, FORCE-RLS, with its user-select policy
+        // written ALREADY narrowed (m.status = 3) - see PoliciesCreatedAfterActiveOnly. No farm_memberships or farm_join_requests object, no ssf.farms
+        // policy, no seat touched. Down() drops its two policies and the table. Re-Up recreates them.
+        "20261113090000_AddScheduleStepMoves",
     ];
 
     /// <summary>
@@ -616,6 +620,8 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // spec plr-d10 lane L8c-1 - 20261108180000_AddPlannedWork (two tables, each born with its Active-member read policy).
         "p_user_select_planned_work",
         "p_user_select_planned_work_plots",
+        // spec plr-d10 lane ATT-W - 20261113090000_AddScheduleStepMoves (born with its Active-member read policy).
+        "p_user_select_schedule_step_moves",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
     ];

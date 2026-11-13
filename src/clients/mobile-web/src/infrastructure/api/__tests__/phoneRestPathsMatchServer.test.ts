@@ -364,6 +364,9 @@ describe('lane F99 (F100, N-3): every phone REST path is a route the server has,
         expect(shown.some(s => s.endsWith('features/scheduler/schedulePage/stagePlanClient.ts /shramsafal/farms/{…}/plots/{…}/stage-plan'))).toBe(true);
         // spec: plr-d10 lane SCH-ADV - the plan form's advice card call (the server's `GetPlotScheduleAdvice` route has it).
         expect(shown.some(s => s.endsWith('features/plannedWork/data/scheduleAdviceClient.ts /shramsafal/farms/{…}/plots/{…}/schedule-advice'))).toBe(true);
+        // spec: plr-d10 lane ATT-W - "पुढे ठरवा" on a step a followed schedule asks: the server's `MoveScheduleStep` route, with the method the phone uses.
+        expect(shown).toContain('POST features/attention/data/rescheduleStep.ts /shramsafal/farms/{…}/schedule-steps/move');
+        expect(routes).toContainEqual({ method: 'POST', path: '/shramsafal/farms/{farmId:guid}/schedule-steps/move' });
     });
 
     it('no phone path is missing from the server, and no call uses a method the route does not answer', () => {

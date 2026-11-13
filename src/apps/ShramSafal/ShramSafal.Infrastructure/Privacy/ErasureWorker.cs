@@ -410,6 +410,15 @@
 //     setter's opaque user id also stays on the rows he set, exactly as on ssf.audit_events; the
 //     phone names a setter only through the operator directory, which erasure anonymises.
 //
+//   - ssf.schedule_step_moves (plr-d10 lane ATT-W, R29) — KEEP. One row is one "पुढे ठरवा" on one step a followed schedule asks:
+//     the farm, the subscription, the schedule activity, the schedule's own day (original_date), the day लक्ष द्या reminds instead
+//     (new_date), who moved it as an opaque user id ONLY, and when. IDS AND DATES ONLY: there is no reason column and no free text, so no
+//     word of any person is held here. It is the farm's own reminder history, append-only by GRANT (SELECT + INSERT): the app role cannot
+//     rewrite or remove a row, and the latest row per step is its reminder day. P6: anonymise the person, never the work - an erased
+//     mover's opaque user id stays on the rows he made, exactly as on ssf.audit_events; the phone names people only through the operator
+//     directory, which erasure anonymises. No action, no ScrubbedColumnsFor entry.
+//     KEEP — conscious gate-4 disposition. No scrub action.
+//
 //   - ssf.schedule_subscriptions (plr-d10 lane L8b-1) — KEEP. One row is which library
 //     schedule one plot's crop season follows and its day 0: (farm_id, plot_id,
 //     crop_cycle_id, crop_key, schedule_template_id, version tag, state, dates) — NO user
