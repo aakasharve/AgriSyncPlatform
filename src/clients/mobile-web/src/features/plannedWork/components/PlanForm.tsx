@@ -19,7 +19,7 @@
  * with no net; the server decides who may do what (D-26). A task made here is `PlanForm`, whether he spoke or typed; the form keeps
  * no audio of its own and sends no voice reference (R15).
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { AudioData, CropProfile, FarmerProfile } from '../../../types';
 import CropSelector from '../../context/components/CropSelector';
@@ -36,6 +36,7 @@ import { fontFor } from './PlanCard';
 import { PlanAssigneeChips, type AssigneeChoice } from './PlanAssigneeChips';
 import { PlanChip, PlanQuestion } from './PlanChip';
 import { PlanMic } from './PlanMic';
+import { ScheduleAdviceCard } from './ScheduleAdviceCard';
 
 /** The selector's own two steps (controlled here, so the form can keep the plot step open). */
 type PlaceStep = 'crop' | 'plot';
@@ -77,12 +78,18 @@ export interface PlanFormProps {
     onPlaceChanged?: (place: { plotIds: readonly string[]; whole: boolean }) => void;
     /** While true the work cannot be saved (the ask in front of the form is standing); nothing else about the form changes. */
     saveHeld?: boolean;
+    /**
+     * spec: plr-d10 lane SCH-ADV - this seat may plan (the primary owner or a holder of PlanWork / AssignWork, from the server's authorities,
+     * never a label): the card "तुमची शेड्यूल ... काय सांगतात" is offered. Absent / false = no card and no request (the server refuses anyone
+     * else anyway). The card is advice only; nothing in it is ever copied into the saved task (D-24d).
+     */
+    mayAdvise?: boolean;
 }
 
 type VoiceState = 'idle' | 'working' | 'offline' | 'failed';
 
 export const PlanForm: React.FC<PlanFormProps> = ({
-    farmId, userId, language, crops, farmerProfile, mayAssign, assignees, assigneesFromCache, today, understand, onSaved, onPlaceChanged, saveHeld = false,
+    farmId, userId, language, crops, farmerProfile, mayAssign, assignees, assigneesFromCache, today, understand, onSaved, onPlaceChanged, saveHeld = false, mayAdvise = false,
 }) => {
     const words = plannedWorkWords(language);
     const font = fontFor(language);
@@ -112,6 +119,17 @@ export const PlanForm: React.FC<PlanFormProps> = ({
     const placeKey = `${whole ? 'W' : 'P'}:${plotIds.join('|')}`;
     useEffect(() => { onPlaceChanged?.({ plotIds, whole }); }, [placeKey]); // eslint-disable-line react-hooks/exhaustive-deps
     const when = whenFields(whenPick, dateText, today);
+    // spec: plr-d10 lane SCH-ADV - the question the advice card asks once the work, ONE plot and the day are there (the server reads one
+    // plot's schedules; the whole farm or several plots ask nothing). Only the plain words and the day go to the server; the result never comes back here.
+    const adviceWords = work.trim();
+    const advicePlot = !whole && plotIds.length === 1 ? plotIds[0] : null;
+    const advicePlannedDate = when?.plannedDate;
+    const adviceLoose = when?.looseWhen;
+    const adviceAsk = useMemo(() => (
+        mayAdvise && userId && advicePlot && adviceWords.length >= 2 && (advicePlannedDate || adviceLoose)
+            ? { farmId, plotId: advicePlot, userId, words: adviceWords, plannedDate: advicePlannedDate, looseWhen: adviceLoose }
+            : null
+    ), [mayAdvise, userId, farmId, advicePlot, adviceWords, advicePlannedDate, adviceLoose]);
 
     const person = assignee?.kind === 'person' ? assignees.find(a => a.userId === assignee.userId) ?? null : null;
     // Display only (the server decides): the crew fields open for a chosen person whose seat the server lists as मुकादम.
@@ -235,6 +253,8 @@ export const PlanForm: React.FC<PlanFormProps> = ({
                     ))}
                 </div>
             </div>
+
+            <ScheduleAdviceCard ask={adviceAsk} language={language} />
 
             <div>
                 <PlanQuestion>{words.q4}</PlanQuestion>

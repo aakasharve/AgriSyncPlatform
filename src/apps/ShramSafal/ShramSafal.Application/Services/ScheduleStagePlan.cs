@@ -9,6 +9,11 @@ using ShramSafal.Domain.Schedules;
 
 namespace ShramSafal.Application.Services;
 
+/// <summary>The stage plan together with the work each item IS (lane SCH-ADV); the plan is exactly what the stage panel gets.</summary>
+public sealed record StagePlanWithWork(
+    PlotStagePlanDto Plan,
+    IReadOnlyDictionary<(Guid SubscriptionId, Guid ActivityId), WorkIdentity?> Work);
+
 /// <summary>
 /// spec: plr-d10-redesign-real-integration-2026-10-25 (lane SCH-GATE-a; D-99 layout B, R10, R28, R34, P4, E4) - "what do my schedules
 /// ask in this stage?" for ONE plot, read by the phone's stage panel (and later SCH-ADV). Thin client: the numbers are computed here,
@@ -32,8 +37,28 @@ public sealed class ScheduleStagePlan(
     ScheduleRequirement requirement,
     IClock clock)
 {
-    public async Task<Result<PlotStagePlanDto>> ForPlotAsync(
+    public Task<Result<PlotStagePlanDto>> ForPlotAsync(
+        Guid farmId, Guid plotId, Guid callerUserId, DateOnly? forDate, CancellationToken ct = default) =>
+        BuildAsync(farmId, plotId, callerUserId, forDate, null, ct);
+
+    /// <summary>
+    /// spec: plr-d10 lane SCH-ADV - the same answer (the same rules, the same numbers: it IS <see cref="ForPlotAsync"/>) together with what work
+    /// each of its items IS (<see cref="ScheduleFollowEngine.IdentityOf"/>, the stored part / role / operation key over the title), keyed by
+    /// (subscription, activity), so "what do my schedules ask for THIS work" asks the one work rule instead of re-reading the titles.
+    /// </summary>
+    public async Task<Result<StagePlanWithWork>> ForPlotWithWorkAsync(
         Guid farmId, Guid plotId, Guid callerUserId, DateOnly? forDate, CancellationToken ct = default)
+    {
+        var identities = new Dictionary<(Guid SubscriptionId, Guid ActivityId), WorkIdentity?>();
+        var plan = await BuildAsync(farmId, plotId, callerUserId, forDate, identities, ct);
+        return plan.IsSuccess
+            ? Result.Success(new StagePlanWithWork(plan.Value, identities))
+            : Result.Failure<StagePlanWithWork>(plan.Error);
+    }
+
+    private async Task<Result<PlotStagePlanDto>> BuildAsync(
+        Guid farmId, Guid plotId, Guid callerUserId, DateOnly? forDate,
+        Dictionary<(Guid SubscriptionId, Guid ActivityId), WorkIdentity?>? identities, CancellationToken ct)
     {
         var now = clock.UtcNow;
         var scope = await FarmReadGate.ScopeAsync(repository, farmId, callerUserId, now, ct);
@@ -99,6 +124,13 @@ public sealed class ScheduleStagePlan(
                 items = ScheduleFollowEngine.StagePlan(def, ownDayZero, w.Window)
                     .Select(p => ToItem(p, def, mainDayZero!.Value))
                     .ToList();
+                if (identities is not null)
+                {
+                    foreach (var item in items)
+                    {
+                        identities[(sub.Id, item.ActivityId)] = ScheduleFollowEngine.IdentityOf(def, item.ActivityId);
+                    }
+                }
             }
 
             schedules.Add(new StagePlanScheduleDto(

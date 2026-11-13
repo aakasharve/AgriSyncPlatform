@@ -35,14 +35,15 @@ import { useStagePlan, type StagePlanResult } from './stagePlanClient';
 const asPart = (value: string): Part => (PARTS as readonly string[]).includes(value) ? (value as Part) : 'work';
 
 /** "26-10 14:30" - the day and time the server gave the answer, in digits only (no month name to translate). */
-const stamp = (utc: string): string => {
+export const stamp = (utc: string): string => {
     const d = new Date(utc);
     if (Number.isNaN(d.getTime())) return '';
     const two = (n: number) => String(n).padStart(2, '0');
     return `${two(d.getDate())}-${two(d.getMonth() + 1)} ${two(d.getHours())}:${two(d.getMinutes())}`;
 };
 
-const ItemLine: React.FC<{ item: StagePlanItemDto; language: GateLanguage }> = ({ item, language }) => {
+/** One work of a schedule with how often and "या स्टेजमध्ये N वेळा" - also the line the plan form's advice card draws (lane SCH-ADV): one piece, never a copy. */
+export const ItemLine: React.FC<{ item: StagePlanItemDto; language: GateLanguage }> = ({ item, language }) => {
     const words = SCHEDULE_GATE_WORDS[language];
     const [open, setOpen] = useState(false);
     const title = language === 'mr' ? taskNameMr(item.title) : item.title.trim();
@@ -78,10 +79,20 @@ const ItemLine: React.FC<{ item: StagePlanItemDto; language: GateLanguage }> = (
     );
 };
 
+/** The schedule's number chip (a place 1, 2, 3 in its colour; a pencil for his own; blank for a place the server did not name). */
+export const ScheduleChip: React.FC<{ slot: number | null; own: boolean }> = ({ slot, own }) => {
+    const colour = own ? OWN_COLOUR : typeof slot === 'number' ? PLACE_COLOUR[slot - 1] ?? PLACE_COLOUR[2] : '#78716c';
+    return (
+        <span data-testid="stage-plan-chip" data-slot={slot ?? ''} data-own={own ? 'yes' : 'no'}
+            className="grid h-8 min-w-[32px] shrink-0 place-items-center rounded-full px-2 text-[16px] font-black text-white" style={{ background: colour }}>
+            {own ? <Pencil size={16} aria-hidden="true" /> : typeof slot === 'number' ? slot : ''}
+        </span>
+    );
+};
+
 const ScheduleBlock: React.FC<{ schedule: StagePlanScheduleDto; language: GateLanguage }> = ({ schedule, language }) => {
     const words = SCHEDULE_GATE_WORDS[language];
     const own = schedule.origin === 'Own' || schedule.slot === 0;
-    const colour = own ? OWN_COLOUR : typeof schedule.slot === 'number' ? PLACE_COLOUR[schedule.slot - 1] ?? PLACE_COLOUR[2] : '#78716c';
     const name = language === 'mr' ? scheduleNameMr(schedule.name) : schedule.name;
     const partLabel = (p: Part) => (language === 'mr' ? PART_LABEL[p] : words.parts[p]);
     const filled = PARTS.filter(p => schedule.items.some(i => asPart(i.part) === p));
@@ -90,10 +101,7 @@ const ScheduleBlock: React.FC<{ schedule: StagePlanScheduleDto; language: GateLa
         <article className="space-y-2 rounded-3xl border border-stone-200 bg-white/90 p-3" data-testid={`stage-plan-schedule-${schedule.subscriptionId}`}
             data-slot={schedule.slot ?? ''} data-origin={own ? 'Own' : 'Outside'}>
             <div className="flex flex-wrap items-center gap-2">
-                <span data-testid="stage-plan-chip" data-slot={schedule.slot ?? ''} data-own={own ? 'yes' : 'no'}
-                    className="grid h-8 min-w-[32px] shrink-0 place-items-center rounded-full px-2 text-[16px] font-black text-white" style={{ background: colour }}>
-                    {own ? <Pencil size={16} aria-hidden="true" /> : typeof schedule.slot === 'number' ? schedule.slot : ''}
-                </span>
+                <ScheduleChip slot={schedule.slot} own={own} />
                 <strong className="min-w-0 flex-1 text-[17px] font-black leading-snug text-stone-900">{own ? `${words.ownShort} · ${name}` : name}</strong>
                 {schedule.isMain && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[14px] font-extrabold text-amber-900" data-testid="stage-plan-main">

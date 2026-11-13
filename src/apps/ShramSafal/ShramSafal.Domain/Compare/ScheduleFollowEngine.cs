@@ -267,7 +267,8 @@ public static class ScheduleFollowEngine
         }
     }
 
-    private static WorkIdentity? IdentityOf(ScheduleDefinition schedule, Guid activityId)
+    /// <summary>What work one activity of a schedule IS (the stored part / role / operation key overrule its title). Read by the engine and, since lane SCH-ADV, by "what do my schedules ask for this work".</summary>
+    public static WorkIdentity? IdentityOf(ScheduleDefinition schedule, Guid activityId)
     {
         var def = schedule.Activities.First(a => a.ActivityId == activityId);
         var id = WorkRecogniser.Recognise(def.Title);

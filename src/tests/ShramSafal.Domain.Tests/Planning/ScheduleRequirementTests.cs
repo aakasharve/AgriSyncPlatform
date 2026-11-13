@@ -429,6 +429,8 @@ public sealed class ScheduleRequirementTests
         {
             Path.Combine("ShramSafal.Application", "Services", "ScheduleStagePlan.cs"),
             Path.Combine("ShramSafal.Application", "Services", "ScheduleRequirement.cs"),
+            // lane SCH-ADV: the advice read asks the stage plan for the days it holds; it is a planning read, never a record door
+            Path.Combine("ShramSafal.Application", "Services", "ScheduleAdvice.cs"),
             Path.Combine("ShramSafal.Api", "Endpoints", "PlanningEndpoints.cs"),
             Path.Combine("ShramSafal.Api", "DependencyInjection.cs"),
         }.Select(p => Path.GetFullPath(Path.Combine(root, p))).ToHashSet(StringComparer.OrdinalIgnoreCase);

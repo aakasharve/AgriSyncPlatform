@@ -145,6 +145,45 @@ public static class PlanningEndpoints
         })
         .WithName("GetPlotStagePlan");
 
+        // spec: plr-d10 lane SCH-ADV (D-74 note, D-87 = 1, R28, E4) - what each schedule a plot follows asks for ONE work in the stage that holds
+        // the planned day (words = his words; date = the planned day, loose = Week | Month | Anytime = today's stage). Reads schedules only.
+        // The primary owner or a PlanWork / AssignWork holder; any other seat 403; a plot that is not his to see 404, like a made-up id.
+        group.MapGet("/farms/{farmId:guid}/plots/{plotId:guid}/schedule-advice", async (
+            Guid farmId,
+            Guid plotId,
+            string? words,
+            DateOnly? date,
+            string? loose,
+            ClaimsPrincipal user,
+            ShramSafal.Application.Services.ScheduleAdvice advice,
+            ICallerFarmTenantScope farmScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (await RouteFarmScope.OpenAsync(farmScope, farmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
+            }
+
+            // A loose "when" is today's stage (R28); a name that is not one of the three is refused, never guessed.
+            var looseKnown = loose is null
+                || (loose.All(char.IsLetter)
+                    && Enum.TryParse<ShramSafal.Domain.Planning.PlannedWorkLooseWhen>(loose, true, out var parsed)
+                    && Enum.IsDefined(parsed));
+            if (!looseKnown)
+            {
+                return Results.BadRequest(new { error = "ShramSafal.ScheduleAdviceLooseUnknown", message = "loose must be Week, Month or Anytime." });
+            }
+
+            var result = await advice.ForPlotAsync(farmId, plotId, actorUserId, words, loose is null ? date : null, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetPlotScheduleAdvice");
+
         // spec: plr-d10-redesign-real-integration-2026-10-25 lane CMP-D2 (founder D-68, D-81; CMP-D1 "तुलना पाहणे") - the farm's तुलना worked out
         // on the server: per plot, per stage, from the one engine. An AUTHORITY read: the primary owner or a seat that holds "तुलना पाहणे";
         // a Worker can never hold it. A farm he cannot open answers like one that does not exist (E4).
