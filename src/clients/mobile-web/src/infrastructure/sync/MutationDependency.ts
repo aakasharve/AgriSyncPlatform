@@ -85,6 +85,9 @@ const DAILY_LOG_PARENT_FIELD: Readonly<Record<string, string>> = {
     // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT4 fix 1, F2) - `assert_input_identity.zod.ts`: his हो / नाही / फोटो
     // answer waits for its record's create like every other change to it (the server answers `DailyLogNotFound` before that).
     [SyncMutationName.AssertInputIdentity]: 'dailyLogId',
+    // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - `logreason_set.zod.ts`: a reason kept on an item of a saved record ("का केलं") waits for its
+    // record's create like every other change to it (the server answers `DailyLogNotFound` before that).
+    [SyncMutationName.LogreasonSet]: 'dailyLogId',
     [SyncMutationName.VerifyLog]: 'dailyLogId',
     [SyncMutationName.VerifyLogV2]: 'logId',
     [SyncMutationName.JobcardComplete]: 'dailyLogId',

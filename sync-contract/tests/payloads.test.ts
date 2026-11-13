@@ -1440,3 +1440,37 @@ describe('lane L8c-3 — PlannedWork complete and reopen payloads', () => {
         expect(payloads.PlannedWorkReopenPayload.safeParse({ ...base, reason: 'x', status: 'Accepted' }).success).toBe(false);
     });
 });
+
+// spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - logreason.set: a reason kept on an existing record of work.
+describe('lane CMP-D3 - LogReasonSetPayload', () => {
+    const base = {
+        reasonId: VALID_GUID_A,
+        farmId: VALID_GUID_B,
+        dailyLogId: VALID_GUID_C,
+        workKey: 'work:op_tying',
+        kind: 'Weather',
+        saidByVoice: false,
+    };
+
+    it('accepts the three kinds, with and without words', () => {
+        for (const kind of ['Practice', 'Extra', 'Weather']) {
+            expect(payloads.LogReasonSetPayload.safeParse({ ...base, kind }).success, kind).toBe(true);
+        }
+        expect(payloads.LogReasonSetPayload.safeParse({ ...base, words: 'पाऊस आला म्हणून', saidByVoice: true }).success).toBe(true);
+        expect(payloads.LogReasonSetPayload.safeParse({ ...base, words: 'x'.repeat(1000) }).success).toBe(true);
+    });
+
+    it('refuses a kind outside the three, long words, a bad key or id, a missing flag and any field that is not its own', () => {
+        const bad: Array<Record<string, unknown>> = [
+            { kind: 'Other' }, { kind: 'weather' }, { kind: '' }, { words: 'x'.repeat(1001) }, { workKey: '' }, { workKey: 'x'.repeat(101) },
+            { reasonId: 'ram' }, { dailyLogId: 'not-a-guid' }, { farmId: 7 }, { saidByVoice: 'yes' }, { quantity: 5 }, { createdAtUtc: '2026-11-13T00:00:00Z' },
+        ];
+        for (const b of bad) {
+            expect(payloads.LogReasonSetPayload.safeParse({ ...base, ...b }).success, JSON.stringify(b).slice(0, 60)).toBe(false);
+        }
+        const { saidByVoice: _drop, ...noFlag } = base;
+        expect(payloads.LogReasonSetPayload.safeParse(noFlag).success).toBe(false);
+        const { workKey: _w, ...noKey } = base;
+        expect(payloads.LogReasonSetPayload.safeParse(noKey).success).toBe(false);
+    });
+});

@@ -517,6 +517,9 @@ public static class DependencyInjection
 
         // spec: plr-d10 lane ATT-W (R29) - the moves of followed-schedule steps ("पुढे ठरवा"); append-only.
         services.AddScoped<IScheduleStepMoveStore, ScheduleStepMoveStore>();
+
+        // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - the reasons kept on records of work ("का केलं"); append-only.
+        services.AddScoped<ILogPracticeReasonStore, LogPracticeReasonStore>();
         services.AddScoped<ITestRecommendationRepository, TestRecommendationRepository>();
 
         // CEI Phase 3 §4.6 — compliance signal repository.

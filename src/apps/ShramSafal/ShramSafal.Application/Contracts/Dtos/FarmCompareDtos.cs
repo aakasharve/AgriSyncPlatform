@@ -85,7 +85,8 @@ public sealed record OrderNoteDto(string FirstTitle, string ThenTitle, int? Firs
 
 /// <summary>
 /// A record of work none of the plot's schedules asks in that stage ("तुमचं स्वतःचं काम"). <see cref="Title"/> and <see cref="MatchedWords"/> are the record's
-/// own words, withheld (null / empty) from a reader who may not hear the words of a record that states money (D-66). <see cref="Reason"/> is CMP-D3's, null here.
+/// own words, withheld (null / empty) from a reader who may not hear the words of a record that states money (D-66). <see cref="Reason"/> is CMP-D3's: the
+/// reason kept on this item of this record ("का केलं"), null when none was kept.
 /// </summary>
 public sealed record OwnWorkDto(
     Guid DailyLogId,
@@ -95,7 +96,15 @@ public sealed record OwnWorkDto(
     string Part,
     string? Title,
     IReadOnlyList<string> MatchedWords,
-    string? Reason);
+    LogReasonDto? Reason);
+
+/// <summary>
+/// spec: plr-d10-redesign-real-integration-2026-10-25 - lane CMP-D3 (D-68 round 2; D-66 / D-69). The reason kept on one item of one record: its
+/// <see cref="Kind"/> (always given: <c>Practice | Extra | Weather</c>) and his <see cref="Words"/>, which are null when he said none, when erasure
+/// removed them, or when this reader may not hear them (the record states money and he does not hear wages, or the words state it themselves).
+/// <see cref="SaidByVoice"/> is true only with words from the mic.
+/// </summary>
+public sealed record LogReasonDto(string Kind, string? Words, bool SaidByVoice);
 
 /// <summary>A record the work recogniser could not read (R12): told neutrally, never counted as anything else.</summary>
 public sealed record NotRecognisedDto(Guid DailyLogId, string WorkKey, int Day, string StageName, string? Title);

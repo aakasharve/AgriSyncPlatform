@@ -188,7 +188,9 @@ public sealed class PushSyncBatchHandler(
     // (schedule.create / .clone / .edit), the SAME handlers the REST routes call. schedule.publish stays unwired.
     ShramSafal.Application.UseCases.Planning.CreateOwnSchedule.CreateOwnScheduleHandler createOwnScheduleHandler,
     ShramSafal.Application.UseCases.Planning.CloneScheduleTemplate.CloneScheduleTemplateHandler cloneScheduleTemplateHandler,
-    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateHandler editScheduleTemplateHandler)
+    ShramSafal.Application.UseCases.Planning.EditScheduleTemplate.EditScheduleTemplateHandler editScheduleTemplateHandler,
+    // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - a reason kept on one item of a saved record (logreason.set): an append-only overlay, never an edit.
+    ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonHandler setLogPracticeReasonHandler)
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -559,8 +561,11 @@ public sealed class PushSyncBatchHandler(
         // working seat, is not dropped: when the sender once worked on the farm, the server keeps
         // the whole mutation for the owner before answering. The refusal itself is unchanged (same
         // code, so every installed phone still parks it visibly; never a silent drop).
+        // spec: plr-d10 lane CMP-D3 fix round 1 (P001): NOT a refused reason ("logreason.set"). Keeping it whole would copy the author's words into an
+        // audit row that erasure does not scrub; his refusal stays on his phone, parked and visible, and the words reach no table.
         if (string.Equals(outcome.Status, RejectedStatus, StringComparison.Ordinal)
-            && IsAuthorityRefusal(outcome.ErrorCode))
+            && IsAuthorityRefusal(outcome.ErrorCode)
+            && !string.Equals(mutationType, "logreason.set", StringComparison.Ordinal))
         {
             await KeepRefusedWorkForOwnerAsync(
                 deviceId, clientRequestId, mutationType, mutation.Payload, actorUserId, outcome.ErrorCode, appVersion, ct);
@@ -897,6 +902,28 @@ public sealed class PushSyncBatchHandler(
         return false;
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D3 fix round 1 (P005) - did this write fail on the PRIMARY KEY of <c>ssf.log_practice_reasons</c> (SQLSTATE 23505)?
+    /// Matched by reflection, like <see cref="IsCostEntryIdClash"/>, so no provider type reaches this layer.
+    /// </summary>
+    private static bool IsLogReasonIdClash(DbUpdateException ex)
+    {
+        for (Exception? inner = ex; inner is not null; inner = inner.InnerException)
+        {
+            if (inner.GetType().Name != "PostgresException")
+            {
+                continue;
+            }
+
+            var sqlState = inner.GetType().GetProperty("SqlState")?.GetValue(inner) as string;
+            var constraint = inner.GetType().GetProperty("ConstraintName")?.GetValue(inner) as string;
+            return string.Equals(sqlState, "23505", StringComparison.Ordinal)
+                && string.Equals(constraint, "PK_log_practice_reasons", StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
     private async Task<SyncMutationResultDto> ExecuteMutationInTransactionAsync(
         string deviceId,
         string clientRequestId,
@@ -980,6 +1007,18 @@ public sealed class PushSyncBatchHandler(
                 return costEntryClashSeenBefore
                     ? CreateFailedResult(clientRequestId, mutationType, conflict.Code, conflict.Description)
                     : CreateFailedResult(clientRequestId, mutationType, CostEntryIdClashRecheckCode, conflict.Description);
+            }
+
+            // spec: plr-d10 lane CMP-D3 fix round 1 (P005): a reason id that is already the key of a row of ANOTHER farm (invisible under this farm's
+            // scope, so the handler's own lookup could not see it). Not this device's own earlier send (checked above). It can never be applied: the
+            // same refusal, word for word, as a reason id reused on this farm - it parks, it is never retried, and nothing was saved.
+            if (string.Equals(mutationType, "logreason.set", StringComparison.Ordinal) && IsLogReasonIdClash(ex))
+            {
+                return CreateFailedResult(
+                    clientRequestId,
+                    mutationType,
+                    ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonHandler.InvalidPayloadCode,
+                    ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonHandler.ReasonIdUsedDescription);
             }
 
             return CreateFailedResult(
@@ -1114,6 +1153,9 @@ public sealed class PushSyncBatchHandler(
             // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his answer about a product.
             case "assert_input_identity":
                 return await HandleAssertInputIdentityAsync(deviceId, clientRequestId, payload, actorUserId, actorRole, appVersion, ct);
+            // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - "का केलं": a reason kept on an existing record of work.
+            case "logreason.set":
+                return await HandleLogReasonSetAsync(deviceId, clientRequestId, payload, actorUserId, appVersion, ct);
             case "verify_log":
                 return await HandleVerifyLogAsync(clientRequestId, payload, actorUserId, actorRole, ct);
             case "verify_log_v2":
@@ -4136,6 +4178,62 @@ public sealed class PushSyncBatchHandler(
                 actorUserId,
                 clientRequestId,
                 actorRole,
+                ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
+                AuditDeviceId: deviceId),
+            ct);
+
+        return ToOutcome(result);
+    }
+
+    /// <summary>
+    /// spec: plr-d10-redesign-real-integration-2026-10-25 lane CMP-D3 (founder D-68 round 2) - a reason kept on ONE item of ONE saved record. The
+    /// payload names the record's farm, so the farm's scope is opened from it (a farm the sender is not an Active member of is refused with no farm
+    /// GUC ever set, like a farm that does not exist). Who may (the authority to open तुलना, asked FIRST), which record (its own farm: E4; its audience
+    /// and plots), which item and the idempotent repeat are <see cref="ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonHandler"/>'s.
+    /// Who wrote it is the authenticated sender, never a payload field. The record is not touched. Every refusal parks visibly (P10).
+    /// </summary>
+    private async Task<MutationExecutionOutcome> HandleLogReasonSetAsync(
+        string deviceId,
+        string clientRequestId,
+        JsonElement payload,
+        Guid actorUserId,
+        string? appVersion,
+        CancellationToken ct)
+    {
+        // Set equality with logreason_set.zod.ts is enforced by sync-contract/tests/allowlist-parity.test.ts, which parses
+        // THIS line - so it must stay on one line.
+        if (!PayloadHasOnly(payload, "reasonId", "farmId", "dailyLogId", "workKey", "kind", "words", "saidByVoice"))
+        {
+            return MutationExecutionOutcome.Failure(
+                "ShramSafal.SyncInvalidPayload",
+                "logreason.set payload contains unsupported fields.");
+        }
+
+        var request = DeserializePayload<LogReasonSetPayload>(payload);
+        if (request is null || request.ReasonId == Guid.Empty || request.FarmId == Guid.Empty || request.DailyLogId == Guid.Empty
+            || string.IsNullOrWhiteSpace(request.WorkKey) || string.IsNullOrWhiteSpace(request.Kind))
+        {
+            return MutationExecutionOutcome.Failure("ShramSafal.SyncInvalidPayload", "Invalid payload for logreason.set.");
+        }
+
+        var (isMember, _) = await EstablishFarmScopeForDerivationAsync(request.FarmId, actorUserId, ct);
+        if (!isMember)
+        {
+            return MutationExecutionOutcome.Failure(
+                Domain.Common.ShramSafalErrors.Forbidden.Code, "User is not a member of the target farm.");
+        }
+
+        var result = await setLogPracticeReasonHandler.HandleAsync(
+            new ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonCommand(
+                request.ReasonId,
+                request.FarmId,
+                request.DailyLogId,
+                request.WorkKey,
+                request.Kind,
+                request.Words,
+                request.SaidByVoice,
+                actorUserId,
+                clientRequestId,
                 ClientAppVersion: string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion,
                 AuditDeviceId: deviceId),
             ct);

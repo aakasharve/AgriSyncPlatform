@@ -1,7 +1,7 @@
 {
   "$schema": "./mutation-types.meta.json",
-  "version": "1.14.0",
-  "lastUpdated": "2026-11-10",
+  "version": "1.15.0",
+  "lastUpdated": "2026-11-13",
   "mutationTypes": [
     { "name": "create_farm",            "ownerAggregate": "Farm",             "sinceVersion": "0.1.0", "payloadSchema": "CreateFarm" },
     { "name": "create_plot",            "ownerAggregate": "Plot",             "sinceVersion": "0.1.0", "payloadSchema": "CreatePlot" },
@@ -50,6 +50,7 @@
     { "name": "plannedwork.accept",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkAccept" },
     { "name": "plannedwork.cancel",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkCancel" },
     { "name": "plannedwork.complete",   "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkComplete" },
-    { "name": "plannedwork.reopen",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkReopen" }
+    { "name": "plannedwork.reopen",     "ownerAggregate": "PlannedWork",      "sinceVersion": "1.0.18", "payloadSchema": "PlannedWorkReopen" },
+    { "name": "logreason.set",          "ownerAggregate": "LogPracticeReason", "sinceVersion": "1.0.18", "payloadSchema": "LogReasonSet" }
   ]
 }

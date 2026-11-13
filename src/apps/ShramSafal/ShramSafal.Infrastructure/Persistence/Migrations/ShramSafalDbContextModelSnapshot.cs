@@ -4851,6 +4851,66 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                     b.ToTable("daily_log_contents", "ssf");
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Logs.LogPracticeReason", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AuthorUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_user_id");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at_utc");
+
+                    b.Property<Guid>("DailyLogId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("daily_log_id");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("kind");
+
+                    b.Property<bool>("SaidByVoice")
+                        .HasColumnType("boolean")
+                        .HasColumnName("said_by_voice");
+
+                    b.Property<Guid?>("SupersedesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supersedes_id");
+
+                    b.Property<string>("Words")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("words");
+
+                    b.Property<string>("WorkKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("work_key");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_log_practice_reasons_farm");
+
+                    b.HasIndex("DailyLogId", "WorkKey", "CreatedAtUtc")
+                        .HasDatabaseName("ix_log_practice_reasons_log_item_created");
+
+                    b.ToTable("log_practice_reasons", "ssf", t =>
+                        {
+                            t.HasCheckConstraint("ck_log_practice_reasons_kind", "kind IN ('Practice', 'Extra', 'Weather')");
+                        });
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Logs.LogTask", b =>
                 {
                     b.Property<Guid>("Id")

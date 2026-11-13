@@ -95,6 +95,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.schedule_checks",
         // spec plr-d10 lane ATT-W (R29) - 20261113090000_AddScheduleStepMoves: each "पुढे ठरवा" on a followed schedule's step, ids and dates only.
         "ssf.schedule_step_moves",
+        // spec plr-d10 lane CMP-D3 (founder D-68 round 2) - 20261113120000_AddLogPracticeReasons: the reason kept on one item of one saved record; a later one supersedes, both stay.
+        "ssf.log_practice_reasons",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -281,6 +283,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    other ledger's grants; it adds no column to any existing table. Down() drops its two policies and the table - only what
         //    Up() added. Safe to revert and re-apply mid-proof.
         "20261113090000_AddScheduleStepMoves",
+        // ── Reviewed 2026-11-13 (spec: plr-d10 lane CMP-D3, founder D-68 round 2); Up() and Down() read in full: Up() creates ssf.log_practice_reasons (FORCE RLS, its
+        //    tenant policy) APPEND-ONLY BY PRIVILEGE with its own effective-privilege guard (it is on AppendOnlyLedgers above) and touches no other
+        //    ledger's grants; it adds no column to any existing table. Down() drops its policy and the table - only what Up() added. Safe to revert and
+        //    re-apply mid-proof.
+        "20261113120000_AddLogPracticeReasons",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

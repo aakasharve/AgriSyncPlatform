@@ -96,6 +96,32 @@ describe('the तुलना client (CMP-D2)', () => {
         expect(parseFarmCompare({})).toBeNull();
     });
 
+    // spec: lane CMP-D3 fix round 1 (P002): the server serves ownWork[].reason as { kind, words, saidByVoice } or null (never a string)
+    const withReason = (reason: unknown) => {
+        const a = JSON.parse(JSON.stringify(ANSWER));
+        a.plots[0].ownWork[0].reason = reason;
+        return a;
+    };
+
+    it('reads a reason the way the server serves it: its kind, its words (or null when withheld) and whether they were spoken', () => {
+        const said = parseFarmCompare(withReason({ kind: 'Weather', words: 'पाऊस आला', saidByVoice: true }));
+        expect(said?.plots[0].ownWork[0].reason).toEqual({ kind: 'Weather', words: 'पाऊस आला', saidByVoice: true });
+        // a record that states money, read by someone who does not hear wages: the kind is given, the words are null
+        const withheld = parseFarmCompare(withReason({ kind: 'Extra', words: null, saidByVoice: false }));
+        expect(withheld?.plots[0].ownWork[0].reason).toEqual({ kind: 'Extra', words: null, saidByVoice: false });
+        for (const kind of ['Practice', 'Extra', 'Weather']) {
+            expect(parseFarmCompare(withReason({ kind, words: null, saidByVoice: false }))).not.toBeNull();
+        }
+        expect(parseFarmCompare(ANSWER)?.plots[0].ownWork[0].reason).toBeNull();
+        expect(parseFarmCompare(withReason(undefined))?.plots[0].ownWork[0].reason).toBeNull();
+    });
+
+    it('a reason of the wrong shape draws nothing at all (whole or nothing)', () => {
+        for (const bad of ['पाऊस', { kind: 'Other', words: null, saidByVoice: false }, { kind: 'Weather', words: 5, saidByVoice: false }, { kind: 'Weather', words: null }, { words: 'x', saidByVoice: false }]) {
+            expect(parseFarmCompare(withReason(bad)), JSON.stringify(bad)).toBeNull();
+        }
+    });
+
     it('a bad answer from the server draws nothing and does not replace what was kept', async () => {
         serves(ANSWER);
         await loadFarmCompare(FARM);

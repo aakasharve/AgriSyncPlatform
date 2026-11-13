@@ -590,6 +590,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // written ALREADY narrowed (m.status = 3) - see PoliciesCreatedAfterActiveOnly. No farm_memberships or farm_join_requests object, no ssf.farms
         // policy, no seat touched. Down() drops its two policies and the table. Re-Up recreates them.
         "20261113090000_AddScheduleStepMoves",
+        // spec plr-d10 lane CMP-D3 - Up() and Down() read in full: Up() creates ssf.log_practice_reasons only, FORCE-RLS, with its tenant policy alone (NO user-select
+        // policy: every reader opens the farm's scope, so nothing here reads farm_memberships). No farm_memberships or farm_join_requests object, no
+        // ssf.farms policy, no seat touched. Down() drops its policy and the table. Re-Up recreates it.
+        "20261113120000_AddLogPracticeReasons",
     ];
 
     /// <summary>
