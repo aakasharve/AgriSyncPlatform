@@ -93,6 +93,8 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         "ssf.input_identity_assertions",
         // spec plr-d10 lane SCH-A (founder D-74) - 20261108120000_AddScheduleCheckAndStoredDays: ShramSafal's checks of library schedules.
         "ssf.schedule_checks",
+        // spec plr-d10 lane ATT-W (R29) - 20261113090000_AddScheduleStepMoves: each "पुढे ठरवा" on a followed schedule's step, ids and dates only.
+        "ssf.schedule_step_moves",
     ];
 
     private static readonly string[] ForbiddenPrivileges = ["UPDATE", "DELETE", "TRUNCATE"];
@@ -279,6 +281,11 @@ public sealed class AppendOnlyLedgerGrantsRealPostgresTests(Xunit.Abstractions.I
         //    THOSE TWO (current state, not ledgers; the history is the append-only audit row) to agrisync_app. It grants nothing on any ledger and revokes
         //    nothing from any ledger. Down() drops the policies, the two tables and the column. Safe to revert and re-apply mid-proof.
         "20261111090000_AddReminderSettings",
+        // ── Reviewed 2026-11-13 (spec: plr-d10 lane ATT-W, R29); Up() and Down() read in full: Up() creates ssf.schedule_step_moves (FORCE RLS, its two
+        //    policies) APPEND-ONLY BY PRIVILEGE with its own effective-privilege guard (it is on AppendOnlyLedgers above) and touches no
+        //    other ledger's grants; it adds no column to any existing table. Down() drops its two policies and the table - only what
+        //    Up() added. Safe to revert and re-apply mid-proof.
+        "20261113090000_AddScheduleStepMoves",
     ];
 
     private static readonly Guid Farm = Guid.Parse("a0a00000-1111-4111-8111-000000000001");

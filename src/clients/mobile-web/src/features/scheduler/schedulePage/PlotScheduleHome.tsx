@@ -65,7 +65,10 @@ export const PlotScheduleHome: React.FC<{
     trial?: { named: PlotPlanningStateDto['trialStage'] };
     /** spec: plr-d10 lane SCH-GATE-b - the plot this page is about; with it the stage panel (what the schedules ask in this stage) is drawn. */
     plotId?: string;
-}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId }) => {
+    /** spec: plr-d10 lane SCH-OWN-b (Q1 = 1) - the live "स्वतःचं शेड्यूल बनवा": drawn only for a seat that may make; it only goes to planning. */
+    mayMakeOwn?: boolean;
+    onMakeOwn?: () => void;
+}> = ({ cropName, plotName, template, source, model, clips, tab, onTab, onOpenDay, onLibrary, checkNote, followed, cropHasChecked = false, onAddSchedule, onLeaveSchedule, ask, defaultKind, trial, plotId, mayMakeOwn, onMakeOwn }) => {
     // R10: in the trial only today's stage is laid open - the पुढे list and tomorrow's line hold only its work.
     const trialStageId = trial ? trialStageOf(model, template, trial.named)?.id ?? null : null;
     const facts = useMemo(() => {
@@ -84,7 +87,7 @@ export const PlotScheduleHome: React.FC<{
             {ask}
             <ScheduleHeader cropName={cropName} plotName={plotName} template={template} model={model} checkNote={checkNote} onLibrary={onLibrary} />
             {followed && onAddSchedule && onLeaveSchedule && (
-                <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} />
+                <ThreePlusOneSection followed={followed} cropHasChecked={cropHasChecked} onAdd={onAddSchedule} onLeave={onLeaveSchedule} mayMakeOwn={mayMakeOwn} onMakeOwn={onMakeOwn} />
             )}
             {/* spec: plr-d10 lane SCH-GATE-b (D-99, R10) - the stage panel: after the "3 + 1" section, before the three buttons. */}
             {plotId && <StagePlanCard plotId={plotId} followedKey={(followed ?? []).map(f => f.subscriptionId || f.templateId).join(',')} />}

@@ -65,6 +65,39 @@ public static partial class MoneyMention
             content?.ToDto(withWords: true)));
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D2 fix round 1 (P001) - <see cref="InStoredRecordAsync"/> for MANY records at once: the SAME test on each record
+    /// (its stored content, task lines, crews and confirmations), with the content and the crews of all of them read in one read each instead
+    /// of one per record. Returns the ids of the records that mention money. <paramref name="logs"/> must carry their tasks and confirmations.
+    /// </summary>
+    public static async Task<HashSet<Guid>> InStoredRecordsAsync(
+        Ports.IShramSafalRepository repository, IReadOnlyCollection<Domain.Logs.DailyLog> logs, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(repository);
+        ArgumentNullException.ThrowIfNull(logs);
+        var mentioning = new HashSet<Guid>();
+        if (logs.Count == 0)
+        {
+            return mentioning;
+        }
+
+        var ids = logs.Select(l => l.Id).ToList();
+        var contents = (await repository.GetCurrentDailyLogContentsAsync(ids, ct)).GroupBy(c => c.DailyLogId).ToDictionary(g => g.Key, g => g.First());
+        var labour = (await repository.GetLabourAssignmentsForDailyLogsAsync(ids, ct)).ToLookup(a => a.DailyLogId);
+        foreach (var log in logs)
+        {
+            var dto = log.ToDto(
+                labour[log.Id].Select(a => a.ToDto([])).ToList(),
+                contents.TryGetValue(log.Id, out var content) ? content.ToDto(withWords: true) : null);
+            if (InRecord(dto))
+            {
+                mentioning.Add(log.Id);
+            }
+        }
+
+        return mentioning;
+    }
+
     /// <summary>Does a content document carry an amount or a money word anywhere?</summary>
     public static bool InDocument(JsonElement element)
     {

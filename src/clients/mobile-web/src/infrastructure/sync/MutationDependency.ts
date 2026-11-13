@@ -163,7 +163,7 @@ export type DependencyDisposition =
 export interface DependencyVerdict {
     disposition: DependencyDisposition;
     /** What the parent is — absent means a daily log, the original and commonest case. */
-    parentKind?: 'plot' | 'crop cycle' | 'money entry';
+    parentKind?: 'plot' | 'crop cycle' | 'money entry' | 'schedule';
     /** The parent plot / crop-cycle id, when `parentKind` is set. */
     parentId?: string;
     /** The parent daily-log id, when one could be read off the payload. */
@@ -172,6 +172,8 @@ export interface DependencyVerdict {
     parentClientRequestId?: string;
     /** The parent's queue status, or `undefined` when there is no parent row. */
     parentStatus?: MutationQueueStatus;
+    /** spec: plr-d10 lane SCH-OWN-b fix round 1 (P003) - the server's code that parked a schedule parent, so its dependent edit is parked with the same words. */
+    parentErrorCode?: string;
 }
 
 function readStringField(payload: unknown, field: string): string | null {
@@ -329,7 +331,7 @@ async function resolveOneDailyLogParent(deviceId: string, parentDailyLogId: stri
  * farm), so the ordinary classification stands.
  */
 interface QueuedParent {
-    kind: 'plot' | 'crop cycle' | 'money entry';
+    kind: 'plot' | 'crop cycle' | 'money entry' | 'schedule';
     id: string;
     clientRequestId: string;
 }
@@ -546,6 +548,50 @@ export const DEPENDENCY_PARENT_UNRESOLVED_CODE = 'DEPENDENCY_PARENT_UNRESOLVED';
 /** The same, when the parent is a phone-made plot or its crop cycle — the remedy differs. */
 export const DEPENDENCY_PLOT_UNRESOLVED_CODE = 'DEPENDENCY_PLOT_UNRESOLVED';
 
+/** spec: plr-d10 lane SCH-OWN-b fix round 1 (P003) - the same, when the parent is the create / copy a `schedule.edit` was queued behind. */
+export const DEPENDENCY_SCHEDULE_UNRESOLVED_CODE = 'DEPENDENCY_SCHEDULE_UNRESOLVED';
+
+// ---------------------------------------------------------------------------
+// spec: plr-d10 lane SCH-OWN-b fix round 1 (P003) - the SCHEDULE parent.
+// ---------------------------------------------------------------------------
+
+/**
+ * A `schedule.edit` writes the stages of a schedule the phone queued just before it: `schedule.create:<id>`, `schedule.clone:<id>`, or an earlier
+ * `schedule.edit:<id>` (`ownScheduleCommands.ts` mints those keys). The parent's key is DERIVABLE from the edit's `scheduleTemplateId`, so the lookup is one
+ * equality hit on the existing unique index each: no scan, no new field, no Dexie bump.
+ *
+ * ABSENT IS NOT A DEPENDENCY (as with plots): an edit of a version that came from the pull has no row here, and a `ScheduleTemplateNotFound` about it is the
+ * server saying something this module cannot interpret. APPLIED is satisfied: the same.
+ */
+export function scheduleParentKeysOf(mutationType: string, payload: unknown): { id: string; keys: string[] } | null {
+    if (mutationType !== SyncMutationName.ScheduleEdit) return null;
+    const id = readStringField(payload, 'scheduleTemplateId');
+    if (!id) return null;
+    return { id, keys: [SyncMutationName.ScheduleCreate, SyncMutationName.ScheduleClone, SyncMutationName.ScheduleEdit].map(type => `${type}:${id}`) };
+}
+
+export async function resolveScheduleDependency(
+    deviceId: string,
+    mutationType: string,
+    payload: unknown,
+): Promise<DependencyVerdict> {
+    const parent = scheduleParentKeysOf(mutationType, payload);
+    if (!parent) return { disposition: 'NOT_A_DEPENDENCY' };
+    for (const key of parent.keys) {
+        const row = await findQueuedRow(deviceId, key);
+        if (!row) continue;
+        return {
+            disposition: classifyParentStatus(row.status, row.retryCount),
+            parentKind: 'schedule',
+            parentId: parent.id,
+            parentClientRequestId: key,
+            parentStatus: row.status,
+            ...(row.errorCode ? { parentErrorCode: row.errorCode } : {}),
+        };
+    }
+    return { disposition: 'NOT_A_DEPENDENCY' };
+}
+
 function parentNamed(verdict: DependencyVerdict): string {
     return verdict.parentKind
         ? `${verdict.parentKind} ${verdict.parentId ?? '(unknown)'}`
@@ -581,7 +627,8 @@ export function describeDependencyRejection(verdict: DependencyVerdict): string 
         ? `its state here is ${verdict.parentStatus}`
         : 'it is not in this device\'s queue at all';
 
-    const code = verdict.parentKind ? DEPENDENCY_PLOT_UNRESOLVED_CODE : DEPENDENCY_PARENT_UNRESOLVED_CODE;
+    const code = verdict.parentKind === 'schedule' ? DEPENDENCY_SCHEDULE_UNRESOLVED_CODE
+        : verdict.parentKind ? DEPENDENCY_PLOT_UNRESOLVED_CODE : DEPENDENCY_PARENT_UNRESOLVED_CODE;
     return `${code}: the server has no ${parentNamed(verdict)}, and ${parentState}. `
         + `This record cannot be sent until that ${verdict.parentKind ?? 'log'} reaches the server.`;
 }

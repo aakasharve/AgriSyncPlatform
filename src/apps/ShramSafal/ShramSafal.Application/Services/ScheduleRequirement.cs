@@ -195,6 +195,68 @@ public sealed class ScheduleRequirement(
             plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value)));
     }
 
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D2 fix round 1 (P001) - the facts of EVERY plot in <paramref name="plotIds"/> of ONE farm, read ONCE for the farm
+    /// (the pull's batched way, <see cref="ForPullAsync"/>) instead of once per plot: the farm, its crop seasons, its Active subscriptions, the
+    /// caller's library listing (with every schedule these plots follow), the owner account's standing and the origins. Each plot's facts are
+    /// then exactly what <see cref="FactsForPlotAsync"/> gives for it (the plot's newest season, its Active subscriptions on it in place order),
+    /// except that the listing is read once for the farm, so it carries the schedules every plot of the farm follows (as the pull's does).
+    /// </summary>
+    public async Task<Result<IReadOnlyDictionary<Guid, PlanningFacts>>> FactsForFarmAsync(
+        Guid farmId, IReadOnlyCollection<Guid> plotIds, Guid callerUserId, CancellationToken ct = default)
+    {
+        var now = clock.UtcNow;
+        var result = new Dictionary<Guid, PlanningFacts>(plotIds.Count);
+        var farm = plotIds.Count == 0 ? null : await repository.GetFarmByIdAsync(farmId, ct);
+        if (farm is null)
+        {
+            foreach (var id in plotIds)
+            {
+                result[id] = new PlanningFacts(id, null, now, null, false, [], [], _ => null);
+            }
+
+            return Result.Success<IReadOnlyDictionary<Guid, PlanningFacts>>(result);
+        }
+
+        var wanted = plotIds.ToHashSet();
+        var cyclesByPlot = (await repository.GetCropCyclesChangedSinceAsync([farmId], DateTime.UnixEpoch, ct))
+            .Where(c => (Guid)c.FarmId == farmId && wanted.Contains(c.PlotId))
+            .GroupBy(c => c.PlotId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var seasonOf = wanted.ToDictionary(id => id, id => CurrentSeason(cyclesByPlot.GetValueOrDefault(id) ?? []));
+
+        // the repository's own order for a plot-season: by place (none last), when adopted, id
+        var active = (await repository.GetActiveScheduleSubscriptionsOfFarmsAsync([farmId], ct))
+            .Where(s => wanted.Contains(s.PlotId))
+            .OrderBy(s => s.Slot == null)
+            .ThenBy(s => s.Slot)
+            .ThenBy(s => s.AdoptedAtUtc)
+            .ThenBy(s => s.Id)
+            .ToList();
+        var followedByPlot = wanted.ToDictionary(
+            id => id,
+            id => (IReadOnlyList<ScheduleSubscription>)(seasonOf[id] is { } season
+                ? active.Where(s => s.PlotId == id && s.CropCycleId == season.CycleId).ToList()
+                : []));
+
+        var followedIds = followedByPlot.Values.SelectMany(l => l).Select(s => s.ScheduleTemplateId.Value).Distinct().ToList();
+        var listing = await templates.HandleAsync(callerUserId, followedIds, ct);
+        if (!listing.IsSuccess)
+        {
+            return Result.Failure<IReadOnlyDictionary<Guid, PlanningFacts>>(listing.Error);
+        }
+
+        var library = listing.Value ?? [];
+        var (standing, extension) = await StandingOfAsync(farm.OwnerAccountId, now, ct);
+        var originFor = (await OriginsAsync(library, callerUserId, ct))(farm.OwnerUserId.Value);
+        foreach (var id in wanted)
+        {
+            result[id] = new PlanningFacts(id, seasonOf[id], now, standing, extension, followedByPlot[id], library, originFor);
+        }
+
+        return Result.Success<IReadOnlyDictionary<Guid, PlanningFacts>>(result);
+    }
+
     public async Task<Result<PlotPlanningState>> ForPlotAsync(Guid farmId, Guid plotId, Guid callerUserId, CancellationToken ct = default)
     {
         var facts = await FactsForPlotAsync(farmId, plotId, callerUserId, ct);

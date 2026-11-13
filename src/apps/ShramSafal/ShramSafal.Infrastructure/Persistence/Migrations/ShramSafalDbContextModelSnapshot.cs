@@ -5506,6 +5506,50 @@ namespace ShramSafal.Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleStepMove", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("FarmId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("farm_id");
+
+                    b.Property<DateTime>("MovedAtUtc")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("moved_at_utc");
+
+                    b.Property<Guid>("MovedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("moved_by_user_id");
+
+                    b.Property<DateOnly>("NewDate")
+                        .HasColumnType("date")
+                        .HasColumnName("new_date");
+
+                    b.Property<DateOnly>("OriginalDate")
+                        .HasColumnType("date")
+                        .HasColumnName("original_date");
+
+                    b.Property<Guid>("ScheduleSubscriptionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("schedule_subscription_id");
+
+                    b.Property<Guid>("TemplateActivityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("template_activity_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FarmId")
+                        .HasDatabaseName("ix_schedule_step_moves_farm");
+
+                    b.HasIndex("ScheduleSubscriptionId", "TemplateActivityId", "OriginalDate", "MovedAtUtc")
+                        .HasDatabaseName("ix_schedule_step_moves_step_moved");
+
+                    b.ToTable("schedule_step_moves", "ssf");
+                });
+
             modelBuilder.Entity("ShramSafal.Domain.Planning.ScheduleTemplate", b =>
                 {
                     b.Property<Guid>("Id")

@@ -17,6 +17,7 @@ import {
     isEntitlementHeldRejection,
     isMoneyDependencyRejection,
     isPlotDependencyRejection,
+    isScheduleParentRejection,
 } from './RejectionPolicy';
 import {
     describeDependencyRejection,
@@ -25,6 +26,8 @@ import {
     resolveDailyLogDependency,
     resolveMoneyDependency,
     resolvePlotDependency,
+    resolveScheduleDependency,
+    DEPENDENCY_SCHEDULE_UNRESOLVED_CODE,
 } from './MutationDependency';
 import { resetFailedUploadsToPending } from './UploadQueueRetry';
 import { takeMovedMoney } from '../../features/finance/movedMoney';
@@ -377,7 +380,25 @@ export class BackgroundSyncWorker {
         }
 
         const supportedMutations: Array<{ id: number; clientRequestId: string; clientCommandId?: string; mutationType: SyncMutationType; payload: unknown; moneySource?: string }> = [];
+        const selectedKeys = new Set(pendingWithId.map(item => item.clientRequestId));
         for (const mutation of pendingWithId) {
+            // spec: plr-d10 lane SCH-OWN-b fix round 1 (P003) - a `schedule.edit` queued behind its create / copy is never judged or charged before that parent's
+            // fate is known. Parent parked for good (or stuck at the cap): the edit is parked now, with the PARENT'S code (the same words), and never sent.
+            // Parent still on its way but NOT in this batch (backing off, failed below the cap): the edit waits, uncharged. Parent in this batch: sent with it.
+            if (mutation.mutationType === SyncMutationName.ScheduleEdit) {
+                const parent = await resolveScheduleDependency(mutationQueue.getDeviceId(), mutation.mutationType, mutation.payload);
+                if (parent.disposition === 'PARENT_UNRECOVERABLE') {
+                    const reason = describeDependencyRejection(parent);
+                    await mutationQueue.markRejectedUserReview(mutation.id as number, reason, parent.parentErrorCode ?? DEPENDENCY_SCHEDULE_UNRESOLVED_CODE);
+                    notifySync({ type: 'MUTATION_REJECTED', mutationId: mutation.clientRequestId, reason });
+                    continue;
+                }
+                if (parent.disposition === 'PARENT_IN_PROGRESS' && !(parent.parentStatus === 'PENDING' && selectedKeys.has(parent.parentClientRequestId ?? ''))) {
+                    await mutationQueue.markFailed(mutation.id as number, describeDependencyWait(parent), 'DEPENDENCY');
+                    continue;
+                }
+            }
+
             const mutationType = toSyncMutationType(mutation.mutationType);
             if (!mutationType) {
                 // A verdict, reached locally: this client's own catalog refuses
@@ -520,7 +541,9 @@ export class BackgroundSyncWorker {
                         : isMoneyDependencyRejection(rejection)
                             ? (device: string, type: string, payload: unknown) =>
                                 resolveMoneyDependency(device, type, payload, missingMoneyIdsIn(result.errorMessage))
-                            : null;
+                            : isScheduleParentRejection(rejection) && mutation.mutationType === SyncMutationName.ScheduleEdit
+                                ? resolveScheduleDependency
+                                : null;
                 if (resolveDependency) {
                     const verdict = await resolveDependency(
                         mutationQueue.getDeviceId(),
@@ -547,7 +570,11 @@ export class BackgroundSyncWorker {
                         // resolvable, and `ConflictResolutionService` is where
                         // it now becomes resolvable.
                         const dependencyReason = describeDependencyRejection(verdict);
-                        await mutationQueue.markRejectedUserReview(mutationId, dependencyReason);
+                        // A schedule parent that was refused hands its own code to the edit, so both cards say the same words (P003).
+                        await mutationQueue.markRejectedUserReview(
+                            mutationId, dependencyReason,
+                            verdict.parentKind === 'schedule' ? verdict.parentErrorCode ?? DEPENDENCY_SCHEDULE_UNRESOLVED_CODE : undefined,
+                        );
                         notifySync({
                             type: 'MUTATION_REJECTED',
                             mutationId: mutation.clientRequestId,

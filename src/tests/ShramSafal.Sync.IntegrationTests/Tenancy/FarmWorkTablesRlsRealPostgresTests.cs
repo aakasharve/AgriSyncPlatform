@@ -245,12 +245,14 @@ public sealed class FarmWorkTablesRlsRealPostgresTests(ITestOutputHelper output)
         (await RowCountsAsync()).Should().Equal(rowsBefore, "Down() keeps every row");
         // spec: plr-d10 lane SCH-OWN carry-in F204 (test only) - on the base schema the PULL cannot answer at all: it reads tables that later
         // migrations created (e.g. ssf.input_identity_assertions), so it fails there with or without this lane's migration. The three
-        // reads that exist on the base (the money summary and the two attention boards) are compared with the walled answers; the pulls are
-        // compared on the head schema only - before the Down and after each Up.
+        // reads that exist on the base (the money summary) are compared with the walled answer; the pulls are compared on the head schema only -
+        // before the Down and after each Up.
+        // spec: plr-d10 lane ATT-W (test only) - the attention boards left the base comparison for the same reason: the board now also reads the
+        // Active schedule subscriptions (the steps a followed schedule asks), whose columns (e.g. check_state_at_adopt) a LATER migration added, so
+        // on this base schema it cannot answer at all, with or without this lane's wall. The boards are compared with the walled answers on the head
+        // schema, before the Down and after each Up (`AnswersAsync` below carries both).
         var onBase = await BaseAnswersAsync();
-        (onBase.OwnerSummary, onBase.OwnerBoard, onBase.MemberBoard).Should().Be(
-            (walled.OwnerSummary, walled.OwnerBoard, walled.MemberBoard),
-            "the wall changes no answer for the owner or a member (P11)");
+        onBase.OwnerSummary.Should().Be(walled.OwnerSummary, "the wall changes no answer for the owner (P11)");
 
         // Up again on a database holding rows in every table: nothing lost, all walled again; and once more round.
         await MigrateSsfToAsync(null);
@@ -270,13 +272,11 @@ public sealed class FarmWorkTablesRlsRealPostgresTests(ITestOutputHelper output)
         string MemberLedgers, string MemberPlanned, string MemberTasks,
         string OwnerSummary, string OwnerBoard, string MemberBoard);
 
-    /// <summary>F204: the reads that exist on the base schema (the money summary and the attention boards), no pull.</summary>
-    private sealed record BaseAnswers(string OwnerSummary, string OwnerBoard, string MemberBoard);
+    /// <summary>F204 / ATT-W: the reads that exist on the base schema (the money summary), no pull and no attention board.</summary>
+    private sealed record BaseAnswers(string OwnerSummary);
 
     private async Task<BaseAnswers> BaseAnswersAsync() => new(
-        await BodyAsync(Owner, "/shramsafal/finance/summary?groupBy=plot&fromDate=2026-01-01&toDate=2026-12-31"),
-        await BodyAsync(Owner, "/shramsafal/attention?asOf=2026-10-31T06:00:00Z"),
-        await BodyAsync(Mukadam, "/shramsafal/attention?asOf=2026-10-31T06:00:00Z"));
+        await BodyAsync(Owner, "/shramsafal/finance/summary?groupBy=plot&fromDate=2026-01-01&toDate=2026-12-31"));
 
     private async Task<Answers> AnswersAsync()
     {

@@ -164,6 +164,120 @@ public sealed class ScheduleComplianceServiceTests
         Assert.Equal(ComplianceOutcome.Unscheduled, result.Outcome);
     }
 
+    // ------- lane CMP-D2: compliance resolves a LIBRARY schedule (schedule_templates) and stamps against the मुख्य one -------
+
+    private static ScheduleTemplate SprayRow(Guid id, int day, string name = "Grapes - University Schedule")
+    {
+        var row = ScheduleTemplate.Import(
+            id, name, ScheduleOwnerType.Institution, "Test University", "grape",
+            new UserId(Guid.NewGuid()), TenantScope.Public, DateTime.UtcNow,
+            [new StageDefinition("Post Pruning", 0, 99)],
+            [new ImportedActivity("spray", "बुरशीनाशक फवारणी", day, day, FrequencyMode.OneTime, 1)],
+            out var problem);
+        Assert.Null(problem);
+        return row!;
+    }
+
+    [Fact]
+    public async Task A_library_subscription_is_stamped_against_its_stored_days_not_Unscheduled()
+    {
+        var templateId = ScheduleTemplateId.New();
+        var followed = FollowingAt(1, templateId);
+        var repo = new FakeRepo { Cycle = BuildCycle(), Followed = [followed], Template = null };
+        repo.LibraryRows[templateId.Value] = SprayRow(templateId.Value, day: 10);
+
+        var onTheDay = await new ScheduleComplianceService(repo).EvaluateAsync(
+            new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, CycleStart.AddDays(10)));
+        var late = await new ScheduleComplianceService(repo).EvaluateAsync(
+            new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, CycleStart.AddDays(15)));
+
+        Assert.Equal(ComplianceOutcome.OnTime, onTheDay.Outcome);
+        Assert.Equal(followed.SubscriptionId, onTheDay.SubscriptionId);
+        Assert.Equal(0, onTheDay.DeltaDays);
+        Assert.NotNull(onTheDay.MatchedTaskId);
+        Assert.Equal(ComplianceOutcome.Late, late.Outcome);
+        Assert.Equal(5, late.DeltaDays);
+    }
+
+    [Fact]
+    public void Compliance_keeps_ONE_tolerance_source_the_shared_on_time_days()
+    {
+        // P006 (review CMPD2-REVIEW-1): the library stamp reads the existing constant instead of a duplicate "3".
+        Assert.Null(typeof(ScheduleComplianceService).GetField("LibraryOnTimeDays"));
+    }
+
+    [Fact]
+    public async Task A_library_stamp_is_on_time_up_to_the_shared_tolerance_and_late_after_it()
+    {
+        var templateId = ScheduleTemplateId.New();
+        var repo = new FakeRepo { Cycle = BuildCycle(), Followed = [FollowingAt(1, templateId)], Template = null };
+        repo.LibraryRows[templateId.Value] = SprayRow(templateId.Value, day: 10);
+        var service = new ScheduleComplianceService(repo);
+        var tolerance = Domain.Compare.ScheduledWorkMatcher.OnTimeToleranceDays;
+
+        var edge = await service.EvaluateAsync(new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, CycleStart.AddDays(10 + tolerance)));
+        var past = await service.EvaluateAsync(new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, CycleStart.AddDays(10 + tolerance + 1)));
+
+        Assert.Equal(ComplianceOutcome.OnTime, edge.Outcome);
+        Assert.Equal(ComplianceOutcome.Late, past.Outcome);
+    }
+
+    [Fact]
+    public async Task A_library_subscription_counts_from_its_own_reference_date()
+    {
+        var templateId = ScheduleTemplateId.New();
+        var followed = ScheduleSubscription.Adopt(
+            Guid.NewGuid(), Farm, Plot, Cycle, CropKey, templateId, "v1", DateTime.UtcNow.AddDays(-10), new DateOnly(2026, 4, 11),
+            ScheduleOrigin.Outside, ScheduleCheckState.Checked, 1);
+        var repo = new FakeRepo { Cycle = BuildCycle(), Followed = [followed], Template = null };
+        repo.LibraryRows[templateId.Value] = SprayRow(templateId.Value, day: 10); // day 0 = 11 April -> 21 April
+
+        var result = await new ScheduleComplianceService(repo).EvaluateAsync(
+            new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, new DateOnly(2026, 4, 21)));
+
+        Assert.Equal(ComplianceOutcome.OnTime, result.Outcome);
+        Assert.Equal(0, result.DeltaDays);
+    }
+
+    [Fact]
+    public async Task A_library_row_that_does_not_store_its_days_stays_Unscheduled_and_other_work_is_not_matched()
+    {
+        var thin = ScheduleTemplate.Create(Guid.NewGuid(), "Grapes - sample", "Pruning", DateTime.UtcNow);
+        thin.AddActivity(Guid.NewGuid(), "बुरशीनाशक फवारणी", 10, FrequencyMode.OneTime, 1);
+        var stored = SprayRow(Guid.NewGuid(), day: 10);
+        var repo = new FakeRepo { Cycle = BuildCycle(), Template = null };
+
+        repo.Followed = [FollowingAt(1, new ScheduleTemplateId(thin.Id))];
+        repo.LibraryRows[thin.Id] = thin;
+        var unstored = await new ScheduleComplianceService(repo).EvaluateAsync(
+            new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, CycleStart.AddDays(10)));
+        Assert.Equal(ComplianceOutcome.Unscheduled, unstored.Outcome);
+
+        repo.Followed = [FollowingAt(1, new ScheduleTemplateId(stored.Id))];
+        repo.LibraryRows[stored.Id] = stored;
+        var otherWork = await new ScheduleComplianceService(repo).EvaluateAsync(
+            new ScheduleComplianceQuery(Cycle, "ठिबक सिंचन", Stage, CycleStart.AddDays(10)));
+        Assert.Equal(ComplianceOutcome.Unscheduled, otherWork.Outcome);
+    }
+
+    [Fact]
+    public async Task Several_library_schedules_are_stamped_against_the_main_one()
+    {
+        var mainId = ScheduleTemplateId.New();
+        var otherId = ScheduleTemplateId.New();
+        var main = FollowingAt(1, mainId);
+        var other = FollowingAt(2, otherId);
+        var repo = new FakeRepo { Cycle = BuildCycle(), Followed = [other, main], Template = null };
+        repo.LibraryRows[mainId.Value] = SprayRow(mainId.Value, day: 10, "Grapes - main");
+        repo.LibraryRows[otherId.Value] = SprayRow(otherId.Value, day: 12, "Grapes - other");
+
+        var result = await new ScheduleComplianceService(repo).EvaluateAsync(
+            new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, CycleStart.AddDays(10)));
+
+        Assert.Equal(main.SubscriptionId, result.SubscriptionId);
+        Assert.Equal(0, result.DeltaDays);
+    }
+
     private static CropCycle BuildCycle() =>
         CropCycle.Create(Cycle, Farm, Plot, CropKey, Stage, CycleStart, endDate: null, createdAtUtc: DateTime.UtcNow);
 

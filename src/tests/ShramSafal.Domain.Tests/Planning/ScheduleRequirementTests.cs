@@ -363,7 +363,7 @@ public sealed class ScheduleRequirementTests
         Assert.False(ScheduleLibrary.NewChoiceOpen(null, isBuiltIn: false, hasStoredDays: true, ScheduleCheckState.Checked, cropHasChecked: false));
     }
 
-    // ---- the gate is read by the pull and the stage plan only (D-83 = 1) --------------------------------------
+    // ---- the gate is read by the pull, the stage plan and the compare read only (D-83 = 1) -------------------
 
     [Fact]
     public void ScheduleRequirement_is_read_only_by_the_pull_and_the_stage_plan()
@@ -373,6 +373,9 @@ public sealed class ScheduleRequirementTests
         {
             Path.Combine("ShramSafal.Application", "Services", "ScheduleRequirement.cs"),
             Path.Combine("ShramSafal.Application", "Services", "ScheduleStagePlan.cs"),
+            // spec: plr-d10 lane CMP-D2 - the farm's तुलना read is the third READER (it counts nothing after the trial with no schedule, and
+            // never refuses a record): it is a read route, not a record door, so the guard still holds for every door that writes.
+            Path.Combine("ShramSafal.Application", "Services", "FarmCompareService.cs"),
             Path.Combine("ShramSafal.Application", "UseCases", "Sync", "PullSyncChanges", "PullSyncChangesHandler.cs"),
             Path.Combine("ShramSafal.Api", "DependencyInjection.cs"),
         }.Select(p => Path.GetFullPath(Path.Combine(root, p))).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -392,6 +395,32 @@ public sealed class ScheduleRequirementTests
     }
 
     [Fact]
+    public void FarmCompareService_is_read_only_by_its_route()
+    {
+        // spec: plr-d10 lane CMP-D2 - the compare read asks the gate, so a record door that took it would reach the gate by the back.
+        var root = SourceRoot();
+        var allowed = new[]
+        {
+            Path.Combine("ShramSafal.Application", "Services", "FarmCompareService.cs"),
+            Path.Combine("ShramSafal.Api", "Endpoints", "PlanningEndpoints.cs"),
+            Path.Combine("ShramSafal.Api", "DependencyInjection.cs"),
+        }.Select(p => Path.GetFullPath(Path.Combine(root, p))).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var namingIt = Directory.EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
+                        && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}"))
+            .Where(f => File.ReadAllText(f).Contains("FarmCompareService", StringComparison.Ordinal))
+            .Select(Path.GetFullPath)
+            .ToList();
+
+        var strangers = namingIt.Where(f => !allowed.Contains(f)).Select(f => Path.GetRelativePath(root, f)).ToList();
+        Assert.True(strangers.Count == 0,
+            "These files name FarmCompareService; only its route may ask it (a record door never waits for a schedule, D-83 = 1): "
+            + string.Join(", ", strangers));
+        Assert.True(namingIt.Count >= 2, "The guard found too few files: it may be scanning the wrong place.");
+    }
+
+    [Fact]
     public void ScheduleStagePlan_is_read_only_by_its_route_and_the_gate()
     {
         // The stage plan calls the gate, so a record door that took it would reach the gate by the back (SCH-GATE-a review L003).
@@ -400,6 +429,8 @@ public sealed class ScheduleRequirementTests
         {
             Path.Combine("ShramSafal.Application", "Services", "ScheduleStagePlan.cs"),
             Path.Combine("ShramSafal.Application", "Services", "ScheduleRequirement.cs"),
+            // lane SCH-ADV: the advice read asks the stage plan for the days it holds; it is a planning read, never a record door
+            Path.Combine("ShramSafal.Application", "Services", "ScheduleAdvice.cs"),
             Path.Combine("ShramSafal.Api", "Endpoints", "PlanningEndpoints.cs"),
             Path.Combine("ShramSafal.Api", "DependencyInjection.cs"),
         }.Select(p => Path.GetFullPath(Path.Combine(root, p))).ToHashSet(StringComparer.OrdinalIgnoreCase);

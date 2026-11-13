@@ -145,12 +145,18 @@ public static class PlanningEndpoints
         })
         .WithName("GetPlotStagePlan");
 
-        group.MapGet("/compare", async (
-            Guid cropCycleId,
+        // spec: plr-d10 lane SCH-ADV (D-74 note, D-87 = 1, R28, E4) - what each schedule a plot follows asks for ONE work in the stage that holds
+        // the planned day (words = his words; date = the planned day, loose = Week | Month | Anytime = today's stage). Reads schedules only.
+        // The primary owner or a PlanWork / AssignWork holder; any other seat 403; a plot that is not his to see 404, like a made-up id.
+        group.MapGet("/farms/{farmId:guid}/plots/{plotId:guid}/schedule-advice", async (
+            Guid farmId,
+            Guid plotId,
+            string? words,
+            DateOnly? date,
+            string? loose,
             ClaimsPrincipal user,
-            ComputePlannedVsExecutedDeltaHandler handler,
-            IShramSafalRepository repository,
-            ICallerUserTenantScope userScope,
+            ShramSafal.Application.Services.ScheduleAdvice advice,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -158,11 +164,70 @@ public static class PlanningEndpoints
                 return Results.Unauthorized();
             }
 
-            // spec: plr-d10 lane MU-4 - the route only: a season on a plot outside his chosen plots is not his to read.
-            // The comparison itself is lane CMP-T's (founder D-68) and is not touched here.
-            if (await CycleOutsidePlotsAsync(cropCycleId, actorUserId, repository, userScope, ct) is { } outside)
+            if (await RouteFarmScope.OpenAsync(farmScope, farmId, actorUserId, ct) is { } refused)
             {
-                return outside;
+                return ToErrorResult(refused);
+            }
+
+            // A loose "when" is today's stage (R28); a name that is not one of the three is refused, never guessed.
+            var looseKnown = loose is null
+                || (loose.All(char.IsLetter)
+                    && Enum.TryParse<ShramSafal.Domain.Planning.PlannedWorkLooseWhen>(loose, true, out var parsed)
+                    && Enum.IsDefined(parsed));
+            if (!looseKnown)
+            {
+                return Results.BadRequest(new { error = "ShramSafal.ScheduleAdviceLooseUnknown", message = "loose must be Week, Month or Anytime." });
+            }
+
+            var result = await advice.ForPlotAsync(farmId, plotId, actorUserId, words, loose is null ? date : null, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetPlotScheduleAdvice");
+
+        // spec: plr-d10-redesign-real-integration-2026-10-25 lane CMP-D2 (founder D-68, D-81; CMP-D1 "तुलना पाहणे") - the farm's तुलना worked out
+        // on the server: per plot, per stage, from the one engine. An AUTHORITY read: the primary owner or a seat that holds "तुलना पाहणे";
+        // a Worker can never hold it. A farm he cannot open answers like one that does not exist (E4).
+        group.MapGet("/farms/{farmId:guid}/compare", async (
+            Guid farmId,
+            ClaimsPrincipal user,
+            ShramSafal.Application.Services.FarmCompareService compare,
+            ICallerFarmTenantScope farmScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (await RouteFarmScope.OpenAsync(farmScope, farmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
+            }
+
+            var result = await compare.ForFarmAsync(farmId, actorUserId, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : ToErrorResult(result.Error);
+        })
+        .WithName("GetFarmCompare");
+
+        group.MapGet("/compare", async (
+            Guid cropCycleId,
+            ClaimsPrincipal user,
+            ComputePlannedVsExecutedDeltaHandler handler,
+            IShramSafalRepository repository,
+            ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            // spec: plr-d10 lane CMP-D2 (F235) - this season comparison is a compare read like the farm's: the primary owner or "तुलना पाहणे"
+            // (it used to ask farm membership only, so a Worker could call it); then lane MU-4's route rule: his plots' seasons only.
+            if (await OpenCycleFarmAsync(cropCycleId, actorUserId, repository, userScope, farmScope, ct, requireSeeCompare: true) is { } refused)
+            {
+                return refused;
             }
 
             var result = await handler.HandleAsync(new ComputePlannedVsExecutedDeltaQuery(actorUserId, cropCycleId), ct);
@@ -177,6 +242,7 @@ public static class PlanningEndpoints
             ComputePlannedVsExecutedDeltaHandler handler,
             IShramSafalRepository repository,
             ICallerUserTenantScope userScope,
+            ICallerFarmTenantScope farmScope,
             CancellationToken ct) =>
         {
             if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
@@ -184,10 +250,10 @@ public static class PlanningEndpoints
                 return Results.Unauthorized();
             }
 
-            // spec: plr-d10 lane MU-4 - the route only (CMP-T owns the comparison): his plots' seasons only.
-            if (await CycleOutsidePlotsAsync(cropCycleId, actorUserId, repository, userScope, ct) is { } outside)
+            // spec: plr-d10 lane CMP-D2 (F235) - gated exactly like /compare: "तुलना पाहणे" or the primary owner, then his plots only (MU-4).
+            if (await OpenCycleFarmAsync(cropCycleId, actorUserId, repository, userScope, farmScope, ct, requireSeeCompare: true) is { } refused)
             {
-                return outside;
+                return refused;
             }
 
             var result = await handler.HandleAsync(new ComputePlannedVsExecutedDeltaQuery(actorUserId, cropCycleId, stage), ct);
@@ -210,7 +276,8 @@ public static class PlanningEndpoints
         IShramSafalRepository repository,
         ICallerUserTenantScope userScope,
         ICallerFarmTenantScope farmScope,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool requireSeeCompare = false)
     {
         var farmId = await userScope.RunForCallerAsync(
             actorUserId,
@@ -225,6 +292,13 @@ public static class PlanningEndpoints
         if (!established.IsSuccess)
         {
             return ToErrorResult(established.Error);
+        }
+
+        // spec: plr-d10 lane CMP-D2 - a compare read asks the authority BEFORE anything of the season is read.
+        if (requireSeeCompare
+            && !await ShramSafal.Application.Services.FarmCompareService.MayAsync(repository, farm, actorUserId, DateTime.UtcNow, ct))
+        {
+            return ToErrorResult(ShramSafal.Domain.Common.ShramSafalErrors.Forbidden);
         }
 
         // spec: plr-d10 lane MU-4 (11.6) - a chosen-plots seat reads the plan of his plots' seasons only.

@@ -24,7 +24,10 @@ export function followedCheckNote(
     template: Pick<CropScheduleTemplate, 'check'>,
     subscriptionCheckState: ScheduleCheckState | undefined,
     cropHasCheckedSchedule: boolean,
+    /** spec: plr-d10 lane SCH-OWN-b (F228; D-82 = 3) - `Own`: no check applies to a person's own schedule, so there is nothing to say. Absent = as before. */
+    origin?: 'Outside' | 'Own',
 ): FollowedCheckNote | null {
+    if (origin === 'Own') return null;
     const state: ScheduleCheckState = template.check?.state ?? subscriptionCheckState ?? 'NotChecked';
     if (state === 'Checked') return null;
     if (state === 'Withdrawn') return { kind: 'withdrawn', reason: template.check?.note ?? '', offerNew: cropHasCheckedSchedule };

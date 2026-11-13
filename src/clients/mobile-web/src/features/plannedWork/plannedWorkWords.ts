@@ -206,6 +206,11 @@ export interface PlannedWorkWords {
     donePlotsRefused: string;
     doneLogRefused: string;
     reopenOwnerOnly: string;
+    // ---- lane SCH-ADV (D-74 note, D-87 = 1): what his schedules say about this work in this stage - advice only ----
+    adviceTitle: (work: string) => string;
+    adviceNothingInStage: string;
+    adviceOnlyAdvice: string;
+    adviceNotRecognised: string;
 }
 
 /** 10 -> १० (the farmer's digits in Marathi mode). */
@@ -433,6 +438,10 @@ const mr: PlannedWorkWords = {
     donePlotsRefused: 'यातले काही प्लॉट या कामाचे नाहीत, म्हणून काम झालं हे नोंदवता आलं नाही.', // PROPOSED (Marathi)
     doneLogRefused: 'काम ज्या प्लॉटवर झालं त्या प्लॉटची नोंद लागते, म्हणून काम झालं हे नोंदवता आलं नाही.', // PROPOSED (Marathi)
     reopenOwnerOnly: 'काम पुन्हा उघडण्याचा अधिकार फक्त मालकाला आहे.', // PROPOSED (Marathi)
+    adviceTitle: work => `तुमची शेड्यूल या स्टेजमध्ये ${work}बद्दल काय सांगतात`, // PROPOSED (Marathi)
+    adviceNothingInStage: 'या स्टेजमध्ये या शेड्यूलमध्ये हे काम नाही', // PROPOSED (Marathi)
+    adviceOnlyAdvice: 'हा फक्त सल्ला आहे; तुमच्या कामात यातलं काहीही आपोआप भरलं जात नाही.', // PROPOSED (Marathi)
+    adviceNotRecognised: 'हे काम शेड्यूलच्या कामांशी जुळवता आलं नाही, म्हणून शेड्यूलचा सल्ला दाखवला नाही.', // PROPOSED (Marathi)
 };
 
 const en: PlannedWorkWords = {
@@ -565,6 +574,10 @@ const en: PlannedWorkWords = {
     donePlotsRefused: 'Some of these plots are not plots of this work, so it could not be recorded as done.', // PROPOSED (English)
     doneLogRefused: 'A record made on the plot where the work was done is needed, so it could not be recorded as done.', // PROPOSED (English)
     reopenOwnerOnly: 'Only the owner can open the work again.', // PROPOSED (English)
+    adviceTitle: work => `What your schedules say about ${work} in this stage`, // PROPOSED (English)
+    adviceNothingInStage: 'This schedule has no such work in this stage', // PROPOSED (English)
+    adviceOnlyAdvice: 'This is only advice; nothing from it is filled into your work automatically.', // PROPOSED (English)
+    adviceNotRecognised: 'This work could not be matched to any work in the schedules, so no schedule advice is shown.', // PROPOSED (English)
 };
 
 /** English only for 'en'; every other language (Marathi, and Hindi which is not offered) reads Marathi. */

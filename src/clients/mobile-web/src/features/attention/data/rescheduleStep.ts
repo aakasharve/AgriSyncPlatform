@@ -16,7 +16,28 @@ import { markRescheduled, type ScheduledWorkItem } from '../scheduledWork';
 /** The reason the server keeps with the move. PROPOSED (Marathi) */
 export const RESCHEDULE_REASON_MR = 'लक्ष द्या: शेतकऱ्याने पुढे ठरवले';
 
-export async function rescheduleStep(step: Pick<ScheduledWorkItem, 'plannedActivityId' | 'farmId'>, newDateKey: string): Promise<void> {
+export async function rescheduleStep(
+    step: Pick<ScheduledWorkItem, 'plannedActivityId' | 'farmId' | 'subscriptionId' | 'activityId' | 'originalDate'>,
+    newDateKey: string,
+): Promise<void> {
+    // spec: plr-d10 lane ATT-W (R29) - a step a FOLLOWED schedule asks is read from the schedule's own days and has no planned-activity row, so
+    // the override door below cannot move it: it goes to the schedule-step route (ids and two days; the server appends a move). Every other
+    // step keeps today's override route.
+    if (step.subscriptionId && step.activityId && step.originalDate) {
+        const moved = await apiFetch(`/shramsafal/farms/${encodeURIComponent(step.farmId)}/schedule-steps/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                subscriptionId: step.subscriptionId,
+                activityId: step.activityId,
+                originalDate: step.originalDate,
+                newDate: newDateKey,
+            }),
+        });
+        if (!moved.ok) throw new Error(`reschedule failed: HTTP ${moved.status}`);
+        markRescheduled(step.plannedActivityId);
+        return;
+    }
     const response = await apiFetch(`/shramsafal/planned-activities/${encodeURIComponent(step.plannedActivityId)}/override`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

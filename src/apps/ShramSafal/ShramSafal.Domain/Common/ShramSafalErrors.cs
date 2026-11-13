@@ -356,6 +356,29 @@ public static class ShramSafalErrors
         "A correction field exceeds its stored length. The value is refused, not truncated — a shortened prompt version is not the prompt version.");
     // spec: plr-d10 lane L8b-1F - an outside schedule is followed only once ShramSafal has checked it (D-82); a sample only while its crop has none (D-91 = 1).
     public static readonly Error ScheduleNotChecked = Error.Validation("ShramSafal.ScheduleNotChecked", "ShramSafal has not checked this schedule yet.");
+
+    // spec: plr-d10 lane ATT-W (R29, "पुढे ठरवा" on a step a FOLLOWED schedule asks) - the refusals that write nothing. Every code ends in
+    // ".InvalidCommand" so each shipped phone PARKS the change for the farmer to see (RejectionPolicy), never retrying it silently (P10).
+    // A subscription of another farm, or a made-up id, answers ScheduleSubscriptionNotFound: one body for both (E4).
+    /// <summary>The schedule is no longer followed on this plot (not Active). PROPOSED words.</summary>
+    public static readonly Error ScheduleStepMoveInactive = Error.Validation(
+        "ShramSafal.ScheduleStepMoveInactive.InvalidCommand",
+        "This schedule is not followed on this plot any more, so its step cannot be moved.");
+
+    /// <summary>The step is not one the schedule asks: not an activity of that schedule, or not one of that activity's days. PROPOSED words.</summary>
+    public static readonly Error ScheduleStepNotInSchedule = Error.Validation(
+        "ShramSafal.ScheduleStepNotInSchedule.InvalidCommand",
+        "The schedule does not ask this step on that day, so it cannot be moved.");
+
+    /// <summary>The new day is before today. PROPOSED words.</summary>
+    public static readonly Error ScheduleStepMoveDate = Error.Validation(
+        "ShramSafal.ScheduleStepMoveDate.InvalidCommand",
+        "The new day cannot be before today.");
+
+    /// <summary>The new day is more than 90 days past the later of today and the day the schedule asks the step (fix round 1, P002). PROPOSED words.</summary>
+    public static readonly Error ScheduleStepMoveTooFar = Error.Validation(
+        "ShramSafal.ScheduleStepMoveTooFar.InvalidCommand",
+        "The new day is too far ahead: a step can be moved at most 90 days past today or past its own day.");
     // spec: plr-d10 lane L8b-1F - the Own branch (a farm's own schedule) opened in SCH-OWN (D-82 = 3): NOTHING PRODUCES THIS CODE ANY MORE. Kept because
     // shipped phones still classify it (RejectionPolicy) and a parked row of theirs may still carry it.
     public static readonly Error OwnScheduleNotOpenYet = Error.Validation("ShramSafal.OwnScheduleNotOpenYet", "Following the farm's own schedule is not open yet.");

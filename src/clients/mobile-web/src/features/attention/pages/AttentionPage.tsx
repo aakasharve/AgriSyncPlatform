@@ -137,7 +137,7 @@ const AttentionPage: React.FC<AttentionPageProps> = ({ onBack, onGo, hiddenViews
             return <ReminderRow key={item.id} t={item.todo} tone={item.group} onDone={onUpdateTask ? done : undefined} onMove={onUpdateTask ? moveReminder : undefined} />;
         }
         if (item.kind === 'step') {
-            return <StepRow key={item.id} step={item.step} label={item.label} dueText={item.dueText} tone={item.group}
+            return <StepRow key={item.id} step={item.step} label={item.label} dueText={item.dueText} tone={item.group} why={item.why}
                 onRecord={onRecordWork} onMove={canReschedule ? moveStep : undefined} />;
         }
         const target = attentionTargetFor(item.card, hiddenViews);

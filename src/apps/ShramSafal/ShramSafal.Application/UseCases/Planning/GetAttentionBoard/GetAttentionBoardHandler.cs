@@ -19,7 +19,9 @@ public sealed class GetAttentionBoardHandler(
     ITestInstanceRepository testInstanceRepository,
     IComplianceSignalRepository complianceSignalRepository,
     IClock clock,
-    ILogger<GetAttentionBoardHandler> logger)
+    ILogger<GetAttentionBoardHandler> logger,
+    // spec: plr-d10 lane ATT-W (R29) - optional so every existing construction compiles and a host that does not register it keeps today's board.
+    Services.ScheduleBoardSteps? scheduleBoardSteps = null)
 {
     private static readonly TestInstanceStatus[] MissingStatuses =
     [
@@ -66,6 +68,12 @@ public sealed class GetAttentionBoardHandler(
         // see are not counted for him.
         var visibility = await Services.RecordVisibility.ForFarmsAsync(repository, farmIds, query.CallerUserId, clock.UtcNow, ct);
 
+        // spec: plr-d10 lane ATT-W (R29, path b) - the steps the followed schedules ask, read ONCE for the whole request (three reads in all,
+        // none per plot). A plot with no Active subscription on its season reads its planned rows exactly as before (P11).
+        var scheduleSource = scheduleBoardSteps is null
+            ? Services.BoardScheduleSource.None
+            : await scheduleBoardSteps.LoadAsync(farmIds, query.CallerUserId, ct);
+
         foreach (var farmId in farmIds)
         {
             var farm = await repository.GetFarmByIdAsync(farmId, ct);
@@ -111,28 +119,69 @@ public sealed class GetAttentionBoardHandler(
                 // matched one-to-one by kind of work and by DATE (ScheduledWorkMatcher). It used to be one name
                 // set over every task of the cycle: one "Spray" cleared every planned spray of the season.
                 var overdueCount = 0;
-                if (planned.Any(p => p.PlannedDate <= today))
+                var plotSchedules = scheduleSource.For(plot.Id, latestCycle);
+                if (plotSchedules is null)
                 {
-                    // spec: plr-d10 (I22) — the day each recorded task's WORK was done is its log's date, and a
-                    // disputed log's work is not "done". Only this season's logs are read (this runs on every pull).
-                    var logFacts = await LoadLogFactsAsync(new FarmId(farmId), executed, ct);
-                    var statuses = ScheduledWorkMatcher.Match(planned, ToRecordedWork(executed, logFacts), today);
-                    health = HealthOfDueSteps(statuses);
-                    foreach (var status in statuses.Where(s => s.State != ScheduledWorkState.Done))
+                    // No Active subscription on this season: today's board, exactly (P11).
+                    if (planned.Any(p => p.PlannedDate <= today))
                     {
-                        if (status.State == ScheduledWorkState.Overdue) overdueCount++;
-                        if (!mayListScheduleSteps) continue;
-                        scheduledWork.Add(new ScheduledWorkItemDto(
-                            PlannedActivityId: status.Planned.Id,
-                            FarmId: farmId,
-                            PlotId: plot.Id,
-                            PlotName: plot.Name,
-                            CropCycleId: latestCycle.Id,
-                            ActivityName: status.Planned.ActivityName,
-                            Stage: status.Planned.Stage,
-                            PlannedDate: status.Planned.PlannedDate,
-                            DaysLate: status.DaysLate,
-                            IsMissed: status.DaysLate > ScheduledWorkMatcher.OnTimeToleranceDays));
+                        // spec: plr-d10 (I22) — the day each recorded task's WORK was done is its log's date, and a
+                        // disputed log's work is not "done". Only this season's logs are read (this runs on every pull).
+                        var logFacts = await LoadLogFactsAsync(new FarmId(farmId), executed, ct);
+                        var statuses = ScheduledWorkMatcher.Match(planned, ToRecordedWork(executed, logFacts), today);
+                        health = HealthOfDueSteps(statuses.Select(s => (s.Planned.ActivityName, s.State)));
+                        foreach (var status in statuses.Where(s => s.State != ScheduledWorkState.Done))
+                        {
+                            if (status.State == ScheduledWorkState.Overdue) overdueCount++;
+                            if (!mayListScheduleSteps) continue;
+                            scheduledWork.Add(ItemOf(status, farmId, plot.Id, plot.Name, latestCycle.Id));
+                        }
+                    }
+                }
+                else
+                {
+                    // spec: plr-d10 lane ATT-W (R29, R35) - a plot with an Active subscription: the schedule steps are each followed schedule's
+                    // stored days (a moved step on its moved day) plus the season's LOCALLY ADDED rows. The rows a template generated are NOT
+                    // read (the schedule asks the same steps: no double count).
+                    var local = planned.Where(p => p.IsLocallyAdded).ToList();
+                    if (plotSchedules.Any(sch => sch.Steps.Any(st => st.Step.PlannedDate <= today)) || local.Any(p => p.PlannedDate <= today))
+                    {
+                        var logFacts = await LoadLogFactsAsync(new FarmId(farmId), executed, ct);
+                        var recorded = ToRecordedWork(executed, logFacts);
+
+                        // Proof ("शेवटची फवारणी ‹N› दिवसांपूर्वी") is read only from records this reader may see (PRV): a record kept from him
+                        // clears a step for him, but its day never reaches him.
+                        var scope = plotScopes[farmId]!;
+                        var visibleRecorded = ToRecordedWork(
+                            executed.Where(t => logFacts.TryGetValue(t.DailyLogId, out var f)
+                                && visibility.MaySeeLog(t.DailyLogId)
+                                && scope.MayReadRecordOf(query.CallerUserId, f.OperatorUserId)),
+                            logFacts);
+
+                        // Each followed schedule's steps are matched on their own (R35), then the open ones merge.
+                        var perSchedule = plotSchedules
+                            .Select(sch => (Schedule: sch, Statuses: ScheduledWorkMatcher.Match(sch.Steps.Select(st => st.Step), recorded, today)))
+                            .ToList();
+                        var localStatuses = ScheduledWorkMatcher.Match(local, recorded, today);
+
+                        health = HealthOfDueSteps(
+                            perSchedule.SelectMany(p => p.Statuses.Select(s => (s.Step.ActivityName, s.State)))
+                                .Concat(localStatuses.Select(s => (s.Planned.ActivityName, s.State))));
+
+                        foreach (var item in MergeOpenSteps(perSchedule, farmId, plot.Id, plot.Name, latestCycle.Id, visibleRecorded, today))
+                        {
+                            // the merged item counts once; a step due today is not overdue
+                            if (item.ReasonKey != ScheduledReasonKey.DueToday) overdueCount++;
+                            if (!mayListScheduleSteps) continue;
+                            scheduledWork.Add(item);
+                        }
+
+                        foreach (var status in localStatuses.Where(s => s.State != ScheduledWorkState.Done))
+                        {
+                            if (status.State == ScheduledWorkState.Overdue) overdueCount++;
+                            if (!mayListScheduleSteps) continue;
+                            scheduledWork.Add(ItemOf(status, farmId, plot.Id, plot.Name, latestCycle.Id));
+                        }
                     }
                 }
 
@@ -255,28 +304,118 @@ public sealed class GetAttentionBoardHandler(
     /// CompareEngine's per-kind thresholds over the steps whose day has passed (plus today's that are already
     /// done). A step due today and not yet recorded is not a failure. <c>null</c> when nothing was due.
     /// </summary>
-    private static HealthScore? HealthOfDueSteps(IReadOnlyList<ScheduledWorkStatus> statuses)
+    private static HealthScore? HealthOfDueSteps(IEnumerable<(string ActivityName, ScheduledWorkState State)> statuses)
     {
         var judged = statuses.Where(s => s.State != ScheduledWorkState.DueToday).ToList();
         if (judged.Count == 0) return null;
         return CompareEngine.DetermineOverallHealth(judged
-            .GroupBy(s => CompareEngine.Categorize(s.Planned.ActivityName), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(s => CompareEngine.Categorize(s.ActivityName), StringComparer.OrdinalIgnoreCase)
             .Select(g => CompareEngine.DetermineBucketHealth(g.Count(s => s.State == ScheduledWorkState.Done), g.Count()))
             .ToList());
     }
 
+    /// <summary>One board item from a planned-activity row (today's shape; the lane ATT-W members stay null, only the reason key is set).</summary>
+    private static ScheduledWorkItemDto ItemOf(ScheduledWorkStatus status, Guid farmId, Guid plotId, string plotName, Guid cropCycleId)
+    {
+        var missed = status.DaysLate > ScheduledWorkMatcher.OnTimeToleranceDays;
+        return new ScheduledWorkItemDto(
+            PlannedActivityId: status.Planned.Id,
+            FarmId: farmId,
+            PlotId: plotId,
+            PlotName: plotName,
+            CropCycleId: cropCycleId,
+            ActivityName: status.Planned.ActivityName,
+            Stage: status.Planned.Stage,
+            PlannedDate: status.Planned.PlannedDate,
+            DaysLate: status.DaysLate,
+            IsMissed: missed,
+            ReasonKey: ScheduledReasonKey.Of(status.DaysLate, missed));
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane ATT-W (R13, R35) - the steps still OPEN after each followed schedule was matched on its own, as board items. Only open
+    /// steps that are the same work (WORK-ID <c>Same</c>) on the same reminder day, asked by DIFFERENT schedules, merge into ONE item: the first
+    /// schedule (the मुख्य one, then by place) is the item, the others' names go to <c>AlsoAskedBy</c>, and the item counts once in the overdue
+    /// count. A step the record already met never merges and never appears.
+    /// </summary>
+    private static List<ScheduledWorkItemDto> MergeOpenSteps(
+        IReadOnlyList<(Services.BoardScheduleSteps Schedule, IReadOnlyList<ScheduledStepStatus> Statuses)> perSchedule,
+        Guid farmId,
+        Guid plotId,
+        string plotName,
+        Guid cropCycleId,
+        IReadOnlyList<RecordedWork> visibleRecorded,
+        DateOnly today)
+    {
+        var groups = new List<(Services.BoardStep Primary, ScheduledStepStatus Status, List<string> Also, HashSet<Guid> Members)>();
+        foreach (var (schedule, statuses) in perSchedule)
+        {
+            var byStepId = schedule.Steps.ToDictionary(b => b.Step.StepId);
+            foreach (var status in statuses.Where(s => s.State != ScheduledWorkState.Done))
+            {
+                var step = byStepId[status.Step.StepId];
+                // Fix round 1 (P007): a group takes at most ONE step of each schedule, so two same-work same-day steps in each of two schedules
+                // make two groups that each name both schedules (never one group twice and the other not at all).
+                var at = groups.FindIndex(g =>
+                    !g.Members.Contains(step.SubscriptionId)
+                    && g.Primary.Step.PlannedDate == step.Step.PlannedDate
+                    && ScheduledWorkMatcher.SameStepWork(g.Primary.Step, step.Step));
+                if (at >= 0)
+                {
+                    var also = groups[at].Also;
+                    groups[at].Members.Add(step.SubscriptionId);
+                    if (step.ScheduleName != groups[at].Primary.ScheduleName && !also.Contains(step.ScheduleName, StringComparer.Ordinal))
+                    {
+                        also.Add(step.ScheduleName);
+                    }
+
+                    continue;
+                }
+
+                groups.Add((step, status, new List<string>(), new HashSet<Guid> { step.SubscriptionId }));
+            }
+        }
+
+        return groups
+            .Select(g =>
+            {
+                var missed = g.Status.DaysLate > ScheduledWorkMatcher.OnTimeToleranceDays;
+                return new ScheduledWorkItemDto(
+                    PlannedActivityId: g.Primary.Step.StepId,
+                    FarmId: farmId,
+                    PlotId: plotId,
+                    PlotName: plotName,
+                    CropCycleId: cropCycleId,
+                    ActivityName: g.Primary.Step.ActivityName,
+                    Stage: g.Primary.StageName ?? string.Empty,
+                    PlannedDate: g.Primary.Step.PlannedDate,
+                    DaysLate: g.Status.DaysLate,
+                    IsMissed: missed,
+                    SubscriptionId: g.Primary.SubscriptionId,
+                    ScheduleName: g.Primary.ScheduleName,
+                    AlsoAskedBy: g.Also.Count == 0 ? null : g.Also,
+                    LastSameWorkDate: ScheduledWorkMatcher.LastSameWorkDate(g.Primary.Step, visibleRecorded, today),
+                    RepeatText: g.Primary.RepeatCode,
+                    ReasonKey: ScheduledReasonKey.Of(g.Status.DaysLate, missed),
+                    ActivityId: g.Primary.ActivityId,
+                    OriginalDate: g.Primary.OriginalDate,
+                    ScheduleDay: g.Primary.ScheduleDay);
+            })
+            .ToList();
+    }
+
     /// <summary>The logs these tasks belong to, as the two facts the matcher needs: the work day and whether it is disputed.</summary>
-    private async Task<Dictionary<Guid, (DateOnly WorkDate, bool Disputed)>> LoadLogFactsAsync(
+    private async Task<Dictionary<Guid, (DateOnly WorkDate, bool Disputed, Guid OperatorUserId)>> LoadLogFactsAsync(
         FarmId farmId,
         IEnumerable<LogTask> executed,
         CancellationToken ct)
     {
         var ids = executed.Select(t => t.DailyLogId).Distinct().ToList();
         var logs = await repository.GetDailyLogsForFarmByIdsAsync(farmId, ids, ct);
-        var facts = new Dictionary<Guid, (DateOnly, bool)>(logs.Count);
+        var facts = new Dictionary<Guid, (DateOnly, bool, Guid)>(logs.Count);
         foreach (var log in logs)
         {
-            facts[log.Id] = (log.LogDate, log.CurrentVerificationStatus == VerificationStatus.Disputed);
+            facts[log.Id] = (log.LogDate, log.CurrentVerificationStatus == VerificationStatus.Disputed, log.OperatorUserId.Value);
         }
         return facts;
     }
@@ -287,7 +426,7 @@ public sealed class GetAttentionBoardHandler(
     /// </summary>
     private static List<RecordedWork> ToRecordedWork(
         IEnumerable<LogTask> executed,
-        IReadOnlyDictionary<Guid, (DateOnly WorkDate, bool Disputed)> logFacts) =>
+        IReadOnlyDictionary<Guid, (DateOnly WorkDate, bool Disputed, Guid OperatorUserId)> logFacts) =>
         executed
             .Select(t => logFacts.TryGetValue(t.DailyLogId, out var f)
                 ? new RecordedWork(t.ActivityType, f.WorkDate, t.ExecutionStatus, f.Disputed)

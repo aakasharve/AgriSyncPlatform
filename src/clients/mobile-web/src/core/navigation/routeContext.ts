@@ -129,6 +129,11 @@ export interface AppRouterContext {
      * (/me/context authorities): the plan door and the plan form. Absent = no (the "तुमच्यावर सोपवलेली कामे" view).
      */
     mayOpenPlanner?: boolean;
+    /**
+     * spec: plr-d10 lane SCH-OWN-b (founder D-88 = 2) - this seat may make and change a person's own schedule: the primary owner, or a seat holding
+     * ScheduleTemplates, from the seat's authorities (live, else the last known seat of this user on this farm). Absent / false = hidden (fail closed).
+     */
+    mayMakeOwnSchedule?: boolean;
     /** Lane L8c-2 - the primary account holder, or a holder of AssignWork: another person may be chosen (the server decides). */
     mayAssignWork?: boolean;
     /** Lane L8c-3 - this seat is the PRIMARY account holder (the only one who may reopen a done task; the server decides). */

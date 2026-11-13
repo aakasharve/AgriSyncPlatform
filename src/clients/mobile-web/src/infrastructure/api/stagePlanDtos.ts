@@ -17,14 +17,15 @@ import { z } from 'zod';
 const text = z.string();
 const optionalText = z.string().nullish().transform(v => v ?? null);
 
-const check = z.object({
+/** Shared with the plan form's advice card (`scheduleAdviceDtos`): one shape of a check, an item and a window, never a second copy. */
+export const stagePlanCheckShape = z.object({
     state: z.enum(['Checked', 'NotChecked', 'Returned', 'Withdrawn']),
     checkerDisplayName: optionalText,
     checkedAtUtc: optionalText,
     note: optionalText,
 });
 
-const item = z.object({
+export const stagePlanItemShape = z.object({
     activityId: z.string().min(1),
     part: text,
     title: text,
@@ -36,6 +37,8 @@ const item = z.object({
     afterTitle: optionalText,
 });
 
+export const stagePlanWindowShape = z.object({ name: text, startDay: z.number().int(), endDay: z.number().int(), dayToday: z.number().int() });
+
 const schedule = z.object({
     subscriptionId: z.string().min(1),
     templateId: z.string().min(1),
@@ -44,15 +47,15 @@ const schedule = z.object({
     slot: z.number().int().nullish().transform(v => v ?? null),
     origin: text,
     isMain: z.boolean(),
-    check: check.nullish().transform(v => v ?? null),
-    items: z.array(item),
+    check: stagePlanCheckShape.nullish().transform(v => v ?? null),
+    items: z.array(stagePlanItemShape),
 });
 
 const stagePlan = z.object({
     serverTimeUtc: z.string().min(1),
     plotId: z.string().min(1),
     needsSchedule: z.boolean(),
-    stage: z.object({ name: text, startDay: z.number().int(), endDay: z.number().int(), dayToday: z.number().int() }).nullish().transform(v => v ?? null),
+    stage: stagePlanWindowShape.nullish().transform(v => v ?? null),
     schedules: z.array(schedule),
 });
 

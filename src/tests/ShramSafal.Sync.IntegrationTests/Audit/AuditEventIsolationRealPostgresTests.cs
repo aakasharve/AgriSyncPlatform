@@ -1401,6 +1401,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    policies each and one grant of SELECT, INSERT, UPDATE, DELETE to agrisync_app on those two new tables; Down() drops the four policies, the
         //    two tables and the column - only what Up() added. Neither touches ssf.audit_events, its policies or its grants. Safe mid-proof.
         "20261111090000_AddReminderSettings",
+        // ── Reviewed 2026-11-13 (spec: plr-d10 lane ATT-W, R29); Up() and Down() read in full: Up() creates ssf.schedule_step_moves only (FORCE RLS, its two
+        //    policies, SELECT + INSERT for the app role); it adds no column to any existing table and never touches ssf.audit_events, its
+        //    policies or its grants. Down() drops its two policies and the table (the proof's data has no move row). Safe mid-proof.
+        "20261113090000_AddScheduleStepMoves",
     ];
 
     /// <summary>

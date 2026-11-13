@@ -266,6 +266,9 @@ public static class DependencyInjection
         // spec: plr-d10 lane SCH-GATE-a - the planning gate and the stage plan (read by the pull and the stage-plan route only, D-83 = 1).
         services.AddScoped<ShramSafal.Application.Services.ScheduleRequirement>();
         services.AddScoped<ShramSafal.Application.Services.ScheduleStagePlan>();
+        services.AddScoped<ShramSafal.Application.Services.FarmCompareService>();
+        // spec: plr-d10 lane SCH-ADV - what each followed schedule asks for one work in the stage (a read of schedules only).
+        services.AddScoped<ShramSafal.Application.Services.ScheduleAdvice>();
         services.AddScoped<CloneScheduleTemplateHandler>();
         // spec: plr-d10 lane SCH-OWN - "start blank": the farm's own schedule, made empty (REST door and sync push alike).
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CreateOwnSchedule.CreateOwnScheduleHandler>();
@@ -276,6 +279,9 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Planning.CheckSchedule.GetSchedulesWaitingForCheckHandler>();
         services.AddScoped<GetScheduleLineageHandler>();
         services.AddScoped<GetAttentionBoardHandler>();
+        // spec: plr-d10 lane ATT-W (R29) - the steps a followed schedule asks, for the board; and "पुढे ठरवा" on one of them.
+        services.AddScoped<ShramSafal.Application.Services.ScheduleBoardSteps>();
+        services.AddScoped<ShramSafal.Application.UseCases.Planning.MoveScheduleStep.MoveScheduleStepHandler>();
         services.AddScoped<GetCropTypesHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.ReferenceData.GetInputLibrary.GetInputLibraryHandler>();
         services.AddScoped<GetDeviationReasonCodesHandler>();

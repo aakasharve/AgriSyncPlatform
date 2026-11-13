@@ -47,6 +47,7 @@ GET /shramsafal/export/monthly-cost
 GET /shramsafal/export/verification
 GET /shramsafal/farms/mine
 GET /shramsafal/farms/{farmId:guid}
+GET /shramsafal/farms/{farmId:guid}/compare
 GET /shramsafal/farms/{farmId:guid}/compliance
 GET /shramsafal/farms/{farmId:guid}/job-cards
 GET /shramsafal/farms/{farmId:guid}/kept-work
@@ -59,6 +60,7 @@ GET /shramsafal/farms/{farmId:guid}/personal-invitations
 GET /shramsafal/farms/{farmId:guid}/planned-work
 GET /shramsafal/farms/{farmId:guid}/planned-work/assignees
 GET /shramsafal/farms/{farmId:guid}/planned-work/{plannedWorkId:guid}
+GET /shramsafal/farms/{farmId:guid}/plots/{plotId:guid}/schedule-advice
 GET /shramsafal/farms/{farmId:guid}/plots/{plotId:guid}/stage-plan
 GET /shramsafal/farms/{farmId:guid}/reminder-settings
 GET /shramsafal/farms/{farmId:guid}/weather/current
@@ -158,6 +160,7 @@ POST /shramsafal/farms/{farmId:guid}/memberships/{targetUserId:guid}/suspend
 POST /shramsafal/farms/{farmId:guid}/personal-invitations
 POST /shramsafal/farms/{farmId:guid}/personal-invitations/{id:guid}/approve
 POST /shramsafal/farms/{farmId:guid}/personal-invitations/{id:guid}/withdraw
+POST /shramsafal/farms/{farmId:guid}/schedule-steps/move
 POST /shramsafal/finance/allocate
 POST /shramsafal/finance/cost-entry
 POST /shramsafal/finance/cost-entry/{id:guid}/approve

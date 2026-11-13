@@ -591,6 +591,10 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         //    four policies, the two tables and the column - only what Up() added. No farm_memberships or farm_join_requests object, no policy of theirs, no grant of
         //    theirs, no seat touched. Safe mid-proof.
         "20261111090000_AddReminderSettings",
+        // spec plr-d10 lane ATT-W (R29) - Up() and Down() read in full: Up() creates ssf.schedule_step_moves only, FORCE-RLS, with its user-select policy
+        // written ALREADY narrowed (m.status = 3) - see PoliciesCreatedAfterActiveOnly. No farm_memberships or farm_join_requests object, no ssf.farms
+        // policy, no seat touched. Down() drops its two policies and the table. Re-Up recreates them.
+        "20261113090000_AddScheduleStepMoves",
     ];
 
     /// <summary>
@@ -624,6 +628,8 @@ public sealed class PendingJoinRequestAccessRealPostgresTests(ITestOutputHelper 
         // spec plr-d10 lane REM-1 - 20261111090000_AddReminderSettings (two tables, each born with its Active-member read policy).
         "p_user_select_farm_reminder_settings",
         "p_user_select_reminder_always_show",
+        // spec plr-d10 lane ATT-W - 20261113090000_AddScheduleStepMoves (born with its Active-member read policy).
+        "p_user_select_schedule_step_moves",
         // (lane PRV's p_user_select_record_audience_members is not here since fix pass 1, L2: its holder arm is the
         // registrant alone, so it carries no "m.status = 3" predicate to count.)
     ];

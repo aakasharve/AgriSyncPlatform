@@ -3,6 +3,7 @@ using AgriSync.BuildingBlocks.Application;
 using AgriSync.BuildingBlocks.Audit;
 using AgriSync.BuildingBlocks.Results;
 using ShramSafal.Application.Ports;
+using ShramSafal.Application.UseCases.Planning.MoveScheduleStep;
 using ShramSafal.Application.UseCases.Planning.OverridePlannedActivity;
 
 namespace ShramSafal.Api.Endpoints;
@@ -158,6 +159,46 @@ public static class PlannedActivityEndpoints
         })
         .WithName("RemovePlannedActivity");
 
+        // spec: plr-d10 lane ATT-W (R29; founder L8-C1 note) - "पुढे ठरवा" on a step a FOLLOWED schedule asks (a step of the schedule's own
+        // stored days, not a planned-activity row, so the override door above cannot move it). WHO: the schedule gate (PlanWork on this
+        // farm and, for a chosen-plots seat, the subscription's plot), never the role-based check of that door. The farm is in the path, so
+        // its scope is opened first (E4: a farm he cannot open answers like one that does not exist). Appends a row; nothing else changes.
+        group.MapPost("/farms/{farmId:guid}/schedule-steps/move", async (
+            Guid farmId,
+            MoveScheduleStepRequest request,
+            HttpContext httpContext,
+            ClaimsPrincipal user,
+            MoveScheduleStepHandler handler,
+            ICallerFarmTenantScope farmScope,
+            CancellationToken ct) =>
+        {
+            if (!EndpointActorContext.TryGetUserId(user, out var actorUserId))
+            {
+                return Results.Unauthorized();
+            }
+
+            if (await RouteFarmScope.OpenAsync(farmScope, farmId, actorUserId, ct) is { } refused)
+            {
+                return ToErrorResult(refused);
+            }
+
+            var (auditDeviceId, auditIpHash) = httpContext.AuditClaims();
+            var result = await handler.HandleAsync(
+                new MoveScheduleStepCommand(
+                    FarmId: farmId,
+                    SubscriptionId: request.SubscriptionId,
+                    ActivityId: request.ActivityId,
+                    OriginalDate: request.OriginalDate,
+                    NewDate: request.NewDate,
+                    CallerUserId: actorUserId,
+                    ClientAppVersion: ResolveClientAppVersion(httpContext),
+                    AuditDeviceId: auditDeviceId,
+                    AuditIpHash: auditIpHash),
+                ct);
+            return result.IsSuccess ? Results.Ok() : ToErrorResult(result.Error);
+        })
+        .WithName("MoveScheduleStep");
+
         return group;
     }
 
@@ -208,3 +249,10 @@ public sealed record RemovePlannedActivityRequest(
     Guid FarmId,
     string Reason,
     string? ClientCommandId = null);
+
+/// <summary>spec: plr-d10 lane ATT-W - the body of the schedule-step move: ids and two days, no reason text.</summary>
+public sealed record MoveScheduleStepRequest(
+    Guid SubscriptionId,
+    Guid ActivityId,
+    DateOnly OriginalDate,
+    DateOnly NewDate);

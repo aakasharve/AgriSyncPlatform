@@ -773,6 +773,25 @@ public interface IShramSafalRepository
         => (await GetDailyLogsByFarmAsync(farmId, ct)).Where(l => ids.Contains(l.Id)).ToList();
 
     /// <summary>
+    /// spec: plr-d10 lane CMP-D2 fix round 1 (P001) - the farm's logs with these ids WITH their task lines and confirmations, in ONE bounded,
+    /// untracked read (the money-word check of a record reads its task notes). The default body reads them one by one (test doubles);
+    /// production overrides it.
+    /// </summary>
+    async Task<IReadOnlyList<DailyLog>> GetDailyLogsWithTasksForFarmByIdsAsync(FarmId farmId, IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        var logs = new List<DailyLog>(ids.Count);
+        foreach (var id in ids)
+        {
+            if (await GetDailyLogByIdAsync(id, ct) is { } log && log.FarmId == farmId)
+            {
+                logs.Add(log);
+            }
+        }
+
+        return logs;
+    }
+
+    /// <summary>
     /// spec: plr-d10 lane PRV fix pass 2 (D-69) — the farm's records made from one voice parse (<c>source_ai_job_id</c>):
     /// its words and amounts are theirs. The default body filters <see cref="GetDailyLogsByFarmAsync"/> so the in-tree
     /// test doubles keep working; production overrides it with one bounded, untracked query.
