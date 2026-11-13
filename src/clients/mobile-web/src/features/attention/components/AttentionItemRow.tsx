@@ -113,10 +113,12 @@ export const StepRow: React.FC<{
     label: string;
     dueText: string;
     tone: Tone;
+    /** "का दिसतंय" (lane ATT-W): why this step is on the list, from the schedule's own words and the plot's own records. Omit -> no line. */
+    why?: string;
     onRecord?: (step: ScheduledWorkItem) => void;
     /** Resolves when the server confirmed the move; rejects when it did not. */
     onMove?: (step: ScheduledWorkItem, days: number) => Promise<void>;
-}> = ({ step, label, dueText, tone, onRecord, onMove }) => {
+}> = ({ step, label, dueText, tone, why, onRecord, onMove }) => {
     const [choosing, setChoosing] = useState(false);
     const [busy, setBusy] = useState(false);
     const [failed, setFailed] = useState(false);
@@ -133,6 +135,7 @@ export const StepRow: React.FC<{
     return (
         <Shell tone={tone} testId={`attention-step-${id}`} title={label} place={step.plotName || undefined}
             icon={<ClipboardCheck size={13} aria-hidden="true" />} kind="शेड्यूलचे काम" due={dueText}>
+            {why && <p className="m-0 mt-1.5 text-[13.5px] font-semibold leading-snug text-stone-700" data-testid={`attention-why-${id}`}>{why}</p>}
             {(onRecord || onMove) && (
                 <div className="mt-2 flex gap-2">
                     {onRecord && <ActionButton primary onClick={() => onRecord(step)} testId={`attention-record-${id}`}><Mic size={18} aria-hidden="true" />काम नोंदवा</ActionButton>}

@@ -1396,6 +1396,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    indexes and drops SOWN-a's own-farm column with its foreign key and index; Down() first RAISES while any row has an owner or a tag (nothing changed), else rebuilds
         //    SOWN-a's shape and drops only what Up() added. No grant, no policy, no audit_events object. The proof's data has no owned or tagged row, so Down() runs.
         "20261110120000_ScheduleTemplateOwnerAndMadeFor",
+        // ── Reviewed 2026-11-13 (spec: plr-d10 lane ATT-W, R29); Up() and Down() read in full: Up() creates ssf.schedule_step_moves only (FORCE RLS, its two
+        //    policies, SELECT + INSERT for the app role); it adds no column to any existing table and never touches ssf.audit_events, its
+        //    policies or its grants. Down() drops its two policies and the table (the proof's data has no move row). Safe mid-proof.
+        "20261113090000_AddScheduleStepMoves",
     ];
 
     /// <summary>

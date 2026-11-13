@@ -270,14 +270,24 @@ public static class ScheduleFollowEngine
     private static WorkIdentity? IdentityOf(ScheduleDefinition schedule, Guid activityId)
     {
         var def = schedule.Activities.First(a => a.ActivityId == activityId);
-        var id = WorkRecogniser.Recognise(def.Title);
+        return IdentityOf(def.Title, def.Part, def.OperationKey, def.Role, def.NutrientKey);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane ATT-W (R35) - the ONE rule that reads a scheduled work's identity from its title and what the schedule
+    /// STORES, public so the attention board's <see cref="ScheduledWorkMatcher"/> asks the very same rule and never keeps a copy
+    /// of it (a pure extraction: <see cref="Follow"/> reads exactly what it read before).
+    /// </summary>
+    public static WorkIdentity? IdentityOf(string title, string? part, string? operationKey, string? role, string? nutrientKey)
+    {
+        var id = WorkRecogniser.Recognise(title);
         if (id is null)
         {
             // stored truth beats words: a stored part with a stored role or operation key reads the work even when the
             // title is not recognised. Nothing stored -> no identity -> the activity takes no records (R12).
-            if (Enum.TryParse<WorkPart>(def.Part, true, out var storedPart) && (def.Role is not null || def.OperationKey is not null))
+            if (Enum.TryParse<WorkPart>(part, true, out var storedPart) && (role is not null || operationKey is not null))
             {
-                return new WorkIdentity(storedPart, def.OperationKey, null, [], def.Role, def.NutrientKey);
+                return new WorkIdentity(storedPart, operationKey, null, [], role, nutrientKey);
             }
 
             return null;
@@ -286,9 +296,9 @@ public static class ScheduleFollowEngine
         // what the schedule stores overrules what the title alone says
         return id with
         {
-            Role = def.Role ?? id.Role,
-            NutrientKey = def.NutrientKey ?? id.NutrientKey,
-            OperationKey = def.OperationKey ?? id.OperationKey,
+            Role = role ?? id.Role,
+            NutrientKey = nutrientKey ?? id.NutrientKey,
+            OperationKey = operationKey ?? id.OperationKey,
         };
     }
 
