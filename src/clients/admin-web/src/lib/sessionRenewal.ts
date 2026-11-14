@@ -86,6 +86,8 @@ async function renewOnce(tokenAtStart: string | null): Promise<AdminSession | nu
 
   let data: RefreshAnswer | null | undefined;
   try {
+    // The body names this browser and asks, every time, for a cookie that outlives a restart of
+    // the browser (`rememberDevice`): the server sets the cookie again with each renewal.
     ({ data } = await axios.post<RefreshAnswer>(
       `${API_BASE_URL}/user/auth/refresh`,
       deviceIdentity(),

@@ -1,18 +1,23 @@
 import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import { Leaf, Wheat, BarChart3, Shield } from 'lucide-react';
-import { adminApi, readSessionEndReason, type SessionEndReason } from '@/lib/api';
+import {
+  adminApi,
+  readSessionEndReason,
+  tellServerSignedOut,
+  type SessionEndReason,
+} from '@/lib/api';
 import { MAX_SESSION_HOURS, type AdminSession } from '@/lib/auth';
 import { deviceIdentity } from '@/lib/deviceIdentity';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 
-// 200 answer of POST /user/auth/login. The last two fields come only from an API that holds a
-// sign-in on a browser the account has not confirmed yet; an API without that rule sends neither.
+// 200 answer of POST /user/auth/login. On the web the refresh token is a cookie, so the body
+// never carries one. The last two fields come only from an API that holds a sign-in on a
+// browser the account has not confirmed yet; an API without that rule sends neither.
 interface LoginResponse {
   userId: string;
   accessToken: string;
-  refreshToken: string;
   expiresAtUtc: string;
   deviceCheckRequired?: boolean;
   accountName?: string | null;
@@ -49,11 +54,14 @@ interface DeviceCheckResponse {
 type Way = 'code' | 'password';
 type CodeStep = 'phone' | 'code' | 'account';
 
-// Every sentence the SMS-code way can show. Plain English: never a status number, never a raw error.
+// Every sentence either way in can show. Plain English: never a status number, never a raw error.
 const TEXT = {
   unreachable: 'The server could not be reached. Check your connection and try again.',
   wentWrong: 'Something went wrong. Please try again in a little while.',
   badPhone: 'That phone number does not look right. Enter a 10-digit mobile number.',
+  wrongPassword: 'The phone number or password is not right.',
+  storageRefused:
+    'This browser is blocking the console from remembering your sign-in. Allow site data for this site and try again.',
   notSent: 'The code could not be sent just now. Please try again in a little while.',
   wrongCode: 'That code is not right. Check the SMS and try again.',
   expiredCode: 'That code has expired. Send a new code.',
@@ -70,10 +78,13 @@ const TEXT = {
   newCodeSent: 'A new code has been sent.',
 } as const;
 
-// What the page says when the console itself signed the person out and sent them here.
+// What the page says when the console itself opened it: it signed the person out, or the
+// person signed out and the server could not be told.
 const SIGNED_OUT_TEXT: Record<SessionEndReason, string> = {
   'max-age': `You were signed out after ${MAX_SESSION_HOURS} hours. Sign in again.`,
   ended: 'Your session has ended. Sign in again.',
+  'not-told':
+    'You are signed out on this browser. The server could not be told, so close this browser window to finish signing out.',
 };
 
 function signedOutNotice(): string | null {
@@ -88,7 +99,7 @@ interface Refusal {
   unreachable: boolean;
   /** The server's error code, e.g. "otp.mismatch". Used to choose a sentence, never shown. */
   code: string | null;
-  /** The server's own sentence. Shown only for "too many" (429). */
+  /** The server's own sentence. Shown only for "too many" (429), and only on the code way. */
   message: string | null;
 }
 
@@ -134,6 +145,22 @@ function answerRefusalText(r: Refusal): string {
   return TEXT.answerNotSaved;
 }
 
+// The password way, in the code way's sentences. Nothing the server wrote is ever shown here:
+// its 401 has no body, and its other refusals are not written for a person to read.
+function passwordRefusalText(r: Refusal): string {
+  if (r.unreachable) return TEXT.unreachable;
+  switch (r.status) {
+    case 401:
+      return TEXT.wrongPassword;
+    case 429:
+      return TEXT.tooMany;
+    case 400:
+      return TEXT.badPhone;
+    default:
+      return TEXT.wentWrong;
+  }
+}
+
 // A session is built only from an answer that really carries one.
 function toSession(
   data: { userId?: unknown; accessToken?: unknown; expiresAtUtc?: unknown } | null | undefined,
@@ -143,7 +170,7 @@ function toSession(
   if (typeof userId !== 'string' || !userId) return null;
   if (typeof accessToken !== 'string' || !accessToken) return null;
   if (typeof expiresAtUtc !== 'string' || !expiresAtUtc) return null;
-  // A code sign-in has no refresh token in this page: on the web it is a cookie the browser holds.
+  // No sign-in has a refresh token in this page: on the web it is a cookie the browser holds.
   return {
     accessToken,
     refreshToken: null,
@@ -188,7 +215,6 @@ export default function LoginPage() {
   const [notice, setNotice] = useState<string | null>(signedOutNotice);
   const auth = useAdminAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   // The countdown reads the clock on every tick, so the wait it shows is still right after the
   // tab has been in the background.
@@ -208,14 +234,34 @@ export default function LoginPage() {
     setResendIn(seconds);
   }
 
-  // Both ways in end here: the same stored session and the same redirect.
+  // Both ways in end here: the same stored session and the same first page.
   function signIn(session: AdminSession) {
-    // Admin access is decided server-side by GET /admin/me/scope after login
-    // (W0-B pivot — tokens are identity, not authorization). If the user has
-    // no memberships, RequireScope will send them to /403.
-    auth.login(session);
-    const returnTo = (location.state as { from?: string } | null)?.from ?? '/';
-    navigate(returnTo, { replace: true });
+    try {
+      // Admin access is decided server-side by GET /admin/me/scope after login
+      // (W0-B pivot — tokens are identity, not authorization). If the user has
+      // no memberships, RequireScope will send them to /403.
+      auth.login(session);
+    } catch {
+      void undoRefusedSignIn();
+      return;
+    }
+    // Always the home page, never a page remembered from before: the last person to use this
+    // tab may have been somebody else.
+    navigate('/', { replace: true });
+  }
+
+  // The browser would not store the session, so nobody is signed in. The page says why and goes
+  // back to its first step; it never stays on "Signing in".
+  async function undoRefusedSignIn() {
+    // The server did sign this browser in and gave it a refresh cookie. It is asked to take that
+    // back first (it never throws, and waits five seconds at most), so that no sign-in the
+    // person cannot use is left standing, and so that this call cannot land on top of their
+    // next try.
+    await tellServerSignedOut();
+    setPassword('');
+    backToPhoneStep();
+    setError(TEXT.storageRefused);
+    setSubmitting(false);
   }
 
   // Held: the server has not let this browser in yet, with or without a name to ask about. The
@@ -232,36 +278,37 @@ export default function LoginPage() {
     setError(null);
     setNotice(null);
     setSubmitting(true);
+    let data: LoginResponse;
     try {
       // With credentials, like the code way: the answer sets the refresh cookie, and the browser
       // keeps it only then. Without it this session could not be renewed.
-      const { data } = await adminApi.post<LoginResponse>(
+      ({ data } = await adminApi.post<LoginResponse>(
         '/user/auth/login',
         { phone, password, ...deviceIdentity() },
         { withCredentials: true },
-      );
-      if (data?.deviceCheckRequired === true) {
-        // Now that the page names its browser, a server that asks the account question asks it
-        // after a password too, the first time in each browser.
-        setPassword('');
-        askAccountQuestion(data.accountName);
-        return;
-      }
-      const session: AdminSession = {
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken ?? null,
-        userId: data.userId,
-        expiresAtUtc: data.expiresAtUtc,
-        signedInAtUtc: new Date().toISOString(),
-      };
-      signIn(session);
+      ));
     } catch (err) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Login failed. Check phone + password.';
-      setError(msg);
+      setError(passwordRefusalText(readRefusal(err)));
       setSubmitting(false);
+      return;
     }
+
+    if (data?.deviceCheckRequired === true) {
+      // Now that the page names its browser, a server that asks the account question asks it
+      // after a password too, the first time in each browser.
+      setPassword('');
+      askAccountQuestion(data.accountName);
+      return;
+    }
+
+    const session = toSession(data);
+    if (!session) {
+      setPassword('');
+      setError(TEXT.notCompleted);
+      setSubmitting(false);
+      return;
+    }
+    signIn(session);
   }
 
   function backToPhoneStep() {

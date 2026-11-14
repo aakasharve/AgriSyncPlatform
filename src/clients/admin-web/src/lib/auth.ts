@@ -53,9 +53,14 @@ function read(): AdminSession | null {
   }
 }
 
+/** Milliseconds until the session reaches MAX_SESSION_HOURS. Zero or less once it has. */
+export function msUntilSessionOverAge(session: AdminSession, nowMs: number = Date.now()): number {
+  return Date.parse(session.signedInAtUtc) + MAX_SESSION_HOURS * 60 * 60 * 1000 - nowMs;
+}
+
 /** True when the session has reached MAX_SESSION_HOURS and the person must sign in again. */
 export function isSessionOverAge(session: AdminSession, nowMs: number = Date.now()): boolean {
-  return nowMs - Date.parse(session.signedInAtUtc) >= MAX_SESSION_HOURS * 60 * 60 * 1000;
+  return msUntilSessionOverAge(session, nowMs) <= 0;
 }
 
 /**

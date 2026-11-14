@@ -1,12 +1,20 @@
 import axios, {
   CanceledError,
   isAxiosError,
+  isCancel,
   type AxiosError,
   type AxiosInstance,
   type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from 'axios';
-import { accessTokenExpiresWithin, authStore, isSessionOverAge, type AdminSession } from './auth';
+import {
+  accessTokenExpiresWithin,
+  authStore,
+  isSessionOverAge,
+  msUntilSessionOverAge,
+  type AdminSession,
+} from './auth';
+import { queryClient } from './queryClient';
 import { API_BASE_URL, accessTokenNeedsRenewal, renewSession } from './sessionRenewal';
 import { getActiveOrgIdSnapshot } from '@/app/ActiveOrgProvider';
 
@@ -25,45 +33,178 @@ function isAuthRoute(url: string | undefined): boolean {
 }
 
 /**
- * Why the console signed a person out without their asking: the session reached
- * MAX_SESSION_HOURS ('max-age'), or it could not be renewed ('ended').
+ * What the login page is told when the console itself opened it:
+ *   'max-age'  the session reached MAX_SESSION_HOURS;
+ *   'ended'    the session could not be renewed;
+ *   'not-told' the person signed out, and the server could not be told.
+ * After a sign-out the server was told about, the login page opens with no reason at all.
  */
-export type SessionEndReason = 'max-age' | 'ended';
+export type SessionEndReason = 'max-age' | 'ended' | 'not-told';
 
 const SESSION_END_PARAM = 'signedOut';
+const SESSION_END_REASONS: readonly SessionEndReason[] = ['max-age', 'ended', 'not-told'];
 
-/** Reads the reason out of the login page's address, where `endSession` put it. */
+/** Reads the reason out of the login page's address, where the console put it. */
 export function readSessionEndReason(search: string): SessionEndReason | null {
   const value = new URLSearchParams(search).get(SESSION_END_PARAM);
-  return value === 'max-age' || value === 'ended' ? value : null;
+  return SESSION_END_REASONS.find((reason) => reason === value) ?? null;
 }
 
+/** How long the console waits for the server to answer a sign-out before going on without it. */
+const SIGN_OUT_WAIT_MS = 5_000;
+
 /**
- * Tells the server this browser has signed out, so the refresh cookie stops working. Best
- * effort: the console has already forgotten the session, whatever the server answers.
+ * Tells the server this browser has signed out, so the refresh cookie stops working. Waits for
+ * the answer, SIGN_OUT_WAIT_MS at most.
+ *
+ * Resolves with true when the server answered that it is done, and with false when it could not
+ * be told (no answer in time, or any refusal). Never rejects.
  */
-export async function tellServerSignedOut(): Promise<void> {
+export async function tellServerSignedOut(): Promise<boolean> {
   try {
-    await adminApi.post('/user/auth/logout', {}, { withCredentials: true, timeout: 5_000 });
+    await adminApi.post(
+      '/user/auth/logout',
+      {},
+      { withCredentials: true, timeout: SIGN_OUT_WAIT_MS },
+    );
+    return true;
   } catch {
-    // Nothing to do: the person is signed out of the console either way.
+    return false;
   }
 }
 
+/** Given by the page (AdminAuthProvider): takes every signed-in screen off the page. */
+let takeScreensDown: (() => void) | null = null;
+
+/**
+ * The page says how to take every signed-in screen down. It is called at every end of a
+ * session, before the console leaves for the login page: a browser may keep the page it leaves
+ * and show it again on "Back", and that kept copy must have nobody's names on it.
+ *
+ * Returns the function that takes the listener away again.
+ */
+export function onSessionForgotten(listener: () => void): () => void {
+  takeScreensDown = listener;
+  return () => {
+    if (takeScreensDown === listener) takeScreensDown = null;
+  };
+}
+
+/**
+ * Forgets the person in this tab: the stored session, everything that was loaded for them, and
+ * what is on the screen. Every end of a session goes through here, whatever ended it.
+ */
+function forgetSession(): void {
+  try {
+    authStore.clear();
+  } catch {
+    // A store the browser will not let the console touch holds no session to remove.
+  }
+  queryClient.clear();
+  try {
+    takeScreensDown?.();
+  } catch {
+    // Leaving for the login page matters more than tidying the page being left.
+  }
+}
+
+/** Loads the login page afresh, so nothing this page held in memory comes along. */
+function openLoginPage(reason: SessionEndReason | null): void {
+  window.location.assign(reason ? `/login?${SESSION_END_PARAM}=${reason}` : '/login');
+}
+
+/**
+ * Set from the moment a session begins to end, by the console or by the person, and never
+ * unset: the page is on its way to the login page. The first reason given is the one shown.
+ */
 let ending: Promise<void> | null = null;
 
 /**
- * Signs the person out and opens the login page with the reason. After MAX_SESSION_HOURS the
- * server is told as well, and the page waits for that call (a few seconds at most), because
- * leaving the page would cut the call off. The first reason given is the one that is shown.
+ * Signs the person out without their asking and opens the login page with the reason. The
+ * session is forgotten at once. After MAX_SESSION_HOURS the server is told as well, and the
+ * page waits for that call (a few seconds at most), because leaving the page would cut the
+ * call off.
  */
-export function endSession(reason: SessionEndReason): Promise<void> {
+export function endSession(reason: Exclude<SessionEndReason, 'not-told'>): Promise<void> {
   ending ??= (async () => {
-    authStore.clear();
+    forgetSession();
     if (reason === 'max-age') await tellServerSignedOut();
-    window.location.assign(`/login?${SESSION_END_PARAM}=${reason}`);
+    openLoginPage(reason);
   })();
   return ending;
+}
+
+/**
+ * The person's own sign-out. The server is told first and the console waits for its answer
+ * (SIGN_OUT_WAIT_MS at most): only the server can stop the refresh cookie from working, and
+ * leaving the page would cut the call off. Then the session is forgotten here whatever the
+ * answer was, and the login page opens. When the server could not be told, the login page says
+ * so.
+ *
+ * From the first press no data request goes out and no renewal starts (see `ending`), so a
+ * second press, or a page still asking for data, changes nothing.
+ */
+export function signOut(): Promise<void> {
+  ending ??= (async () => {
+    const told = await tellServerSignedOut();
+    forgetSession();
+    openLoginPage(told ? null : 'not-told');
+  })();
+  return ending;
+}
+
+/** An open page looks at the clock at least this often, to see whether the session is over age. */
+const AGE_CHECK_MS = 60_000;
+
+/**
+ * Ends the session when it reaches MAX_SESSION_HOURS while the page sits open with nobody
+ * using it. Without this the limit was only noticed at the next request, so an idle tab kept
+ * showing what it had loaded.
+ *
+ * A timer runs to the moment the limit is reached. It looks at the clock at least once a
+ * minute rather than once at the end, because a timer does not count the time a computer
+ * spent asleep. The clock is looked at again whenever the tab becomes visible. Both end the
+ * session the way a request made after the limit does: the server told, everything forgotten,
+ * the login page with the 12-hour message.
+ *
+ * Returns the function that stops the watch.
+ */
+export function watchSessionAge(): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const check = () => {
+    clearTimeout(timer);
+    // The store, not a copy: a renewal keeps the sign-in time, and a new sign-in in another tab
+    // of this browser starts the 12 hours again for the session both tabs share.
+    const stored = authStore.get();
+    if (stored && isSessionOverAge(stored)) {
+      void endSession('max-age');
+      return;
+    }
+    const left = stored ? msUntilSessionOverAge(stored) : AGE_CHECK_MS;
+    timer = setTimeout(check, left > 0 && left < AGE_CHECK_MS ? left : AGE_CHECK_MS);
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') check();
+  };
+
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  check();
+  return () => {
+    clearTimeout(timer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+  };
+}
+
+/**
+ * True when a request got no verdict from the server: no answer at all, too many calls (429),
+ * or a server error (5xx). That says nothing about the person or their rights, so it is never
+ * shown as a refusal. A request the console itself stopped is not one of these.
+ */
+export function gotNoVerdict(err: unknown): boolean {
+  if (!isAxiosError(err) || isCancel(err)) return false;
+  const status = err.response?.status;
+  return status === undefined || status === 429 || status >= 500;
 }
 
 /** A data request that found the person signed out is stopped with this, never sent. */
@@ -177,6 +318,13 @@ async function retryAfterRenewal(err: AxiosError): Promise<AxiosResponse> {
   const config = err.config as SentConfig | undefined;
   // A refused sign-in (a wrong code, a wrong password) belongs to the login page as it is.
   if (!config || isAuthRoute(config.url)) throw err;
+
+  // The session is already ending (the person pressed Sign out while this request was in the
+  // air, say): nothing is renewed and nothing is sent again.
+  if (ending) {
+    await ending;
+    throw err;
+  }
 
   if (config.retriedAfterRenewal) {
     // Refused again with a token that had just been renewed: this session opens nothing.

@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/Button';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 
 export default function ForbiddenPage() {
-  const { logout } = useAdminAuth();
+  // Sign out here ends on the login page like everywhere else: it used to leave the person on
+  // this page, signed out, with nothing to tell them so.
+  const { logout, signingOut } = useAdminAuth();
   const location = useLocation();
   const state = location.state as { module?: string; from?: string } | null;
 
@@ -29,8 +31,8 @@ export default function ForbiddenPage() {
           )}
         </p>
         <div className="flex justify-center gap-2">
-          <Button variant="outline" onClick={logout}>
-            Sign out
+          <Button variant="outline" disabled={signingOut} onClick={logout}>
+            {signingOut ? 'Signing out…' : 'Sign out'}
           </Button>
           <Link to="/login">
             <Button>Go to login</Button>

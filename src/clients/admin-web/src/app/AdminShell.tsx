@@ -51,9 +51,9 @@ const GROUP_ORDER: NavItem['group'][] = ['Overview', 'Operations', 'Product', 'F
 
 export function AdminShell() {
   const { mode, toggleMode } = useTheme();
-  // Signing out clears the session and tells the server; the sign-in gate around this shell
-  // then opens the login page.
-  const { logout } = useAdminAuth();
+  // Signing out tells the server and waits for it, forgets the session and everything loaded,
+  // and opens the login page. While it waits the control cannot be pressed again.
+  const { logout, signingOut } = useAdminAuth();
   const location = useLocation();
 
   const crumb = humanizePath(location.pathname);
@@ -83,9 +83,10 @@ export function AdminShell() {
             <button
               type="button"
               onClick={logout}
-              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-surface-border bg-white/60 px-2.5 text-[12px] font-semibold text-text-primary transition-colors hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/20"
+              disabled={signingOut}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-surface-border bg-white/60 px-2.5 text-[12px] font-semibold text-text-primary transition-colors hover:bg-white/90 disabled:pointer-events-none disabled:opacity-50 dark:bg-white/10 dark:hover:bg-white/20"
             >
-              <LogOut size={14} aria-hidden="true" /> Sign out
+              <LogOut size={14} aria-hidden="true" /> {signingOut ? 'Signing out…' : 'Sign out'}
             </button>
           </div>
         </header>

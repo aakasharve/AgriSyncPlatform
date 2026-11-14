@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Building2, CheckCircle2 } from 'lucide-react';
 import { useActiveOrg } from '@/app/ActiveOrgProvider';
+import { useAdminAuth } from '@/app/AdminAuthProvider';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import type { MembershipSummary } from '@/hooks/useAdminScope';
@@ -27,6 +28,7 @@ interface OrgSwitcherProps {
  */
 export function OrgSwitcher({ memberships, fullPage = false, headline, subline }: OrgSwitcherProps) {
   const { activeOrgId, setActiveOrgId } = useActiveOrg();
+  const { logout, signingOut } = useAdminAuth();
   const qc = useQueryClient();
 
   const choose = (orgId: string) => {
@@ -72,9 +74,18 @@ export function OrgSwitcher({ memberships, fullPage = false, headline, subline }
             );
           })}
         </ul>
-        {fullPage && activeOrgId && (
-          <div className="mt-6 text-right">
-            <Button onClick={() => window.location.reload()}>Continue</Button>
+        {/* The full-page chooser stands where the shell would be, so it carries the shell's
+            Sign out: a signed-in person must be able to sign out from here too. */}
+        {fullPage && (
+          <div className="mt-6 flex items-center justify-between gap-2">
+            <Button variant="outline" disabled={signingOut} onClick={logout}>
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </Button>
+            {activeOrgId && (
+              <Button disabled={signingOut} onClick={() => window.location.reload()}>
+                Continue
+              </Button>
+            )}
           </div>
         )}
       </CardContent>

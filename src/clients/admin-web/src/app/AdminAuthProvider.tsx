@@ -1,10 +1,20 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
-import { authStore, isSessionOverAge, type AdminSession } from '@/lib/auth';
-import { endSession, tellServerSignedOut } from '@/lib/api';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
+import { flushSync } from 'react-dom';
+import { accessTokenExpiresWithin, authStore, isSessionOverAge, type AdminSession } from '@/lib/auth';
+import { endSession, onSessionForgotten, signOut, watchSessionAge } from '@/lib/api';
+import { queryClient } from '@/lib/queryClient';
 import { accessTokenNeedsRenewal, renewSession } from '@/lib/sessionRenewal';
 
 interface AuthCtx {
+  /** The session this page holds. Kept while `status` is 'unreachable': nothing has ended it. */
   session: AdminSession | null;
   /**
    * Local-session status. After the W0-B pivot, admin access is decided
@@ -12,10 +22,25 @@ interface AuthCtx {
    * four outcomes (Resolved / Unauthorized / Ambiguous / NotInOrg). This
    * provider only tracks whether a session is held at all: one younger than
    * MAX_SESSION_HOURS, whatever the age of its access token.
+   *
+   * 'unreachable': a session is stored, its access token has expired, and the server gave no
+   * verdict on renewing it. The person is neither let in nor signed out; `retry` asks again.
    */
-  status: 'loading' | 'anonymous' | 'authenticated';
+  status: 'loading' | 'anonymous' | 'authenticated' | 'unreachable';
+  /**
+   * Stores the session and lets the person in. Throws when the browser refuses to store it;
+   * nothing has changed then, and the caller says so.
+   */
   login: (s: AdminSession) => void;
+  /**
+   * The person's own sign-out, from any page: the server is told and waited for, the session
+   * and everything loaded are forgotten, and the login page opens.
+   */
   logout: () => void;
+  /** True from the first press of a Sign out control until the page leaves. Disables them all. */
+  signingOut: boolean;
+  /** From 'unreachable': tries once more to renew the stored session. */
+  retry: () => void;
 }
 
 const AuthContext = createContext<AuthCtx | null>(null);
@@ -23,8 +48,11 @@ const AuthContext = createContext<AuthCtx | null>(null);
 export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [status, setStatus] = useState<AuthCtx['status']>('loading');
-  const qc = useQueryClient();
+  const [signingOut, setSigningOut] = useState(false);
+  // Counts the presses of "Try again": each one opens the stored session afresh.
+  const [attempt, setAttempt] = useState(0);
 
+  // Opens the stored session: at page load, and again at every "Try again".
   useEffect(() => {
     const stored = authStore.get();
     if (!stored) {
@@ -51,6 +79,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       (renewed) => {
         if (cancelled) return;
         if (!renewed) {
+          // A definite refusal, or a held sign-in: the session is over.
           void endSession('ended');
           return;
         }
@@ -58,40 +87,73 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         setStatus('authenticated');
       },
       () => {
-        // No verdict on the session (the server could not be reached): the person stays
-        // signed in, and each request tries the renewal again.
+        // No verdict on the session (no answer, too many calls, a server error): it is kept.
         if (cancelled) return;
         setSession(stored);
-        setStatus('authenticated');
+        // A token that still has time left opens the pages as it is, and each request tries
+        // the renewal again. An expired one opens nothing: every page would fail, and the
+        // person would be told "Access denied" for what is only an unreachable server. So the
+        // page says the server could not be reached, and offers to try again.
+        setStatus(accessTokenExpiresWithin(stored, 0) ? 'unreachable' : 'authenticated');
       },
     );
     return () => {
       cancelled = true;
     };
+  }, [attempt]);
+
+  // The 12-hour limit also ends a page that sits open and idle. The watch is stopped and
+  // started again whenever the session this page holds changes.
+  useEffect(() => (session ? watchSessionAge() : undefined), [session]);
+
+  useEffect(() => {
+    // At every end of a session the signed-in screens come down before the page is left.
+    // In a microtask: the end can begin in the middle of React's own work, where React cannot
+    // be told to draw at once, and a microtask still runs before the browser can leave the page.
+    const forget = onSessionForgotten(() => {
+      queueMicrotask(() => {
+        flushSync(() => {
+          setSession(null);
+          setStatus('loading');
+        });
+      });
+    });
+
+    // A page the browser kept and brings back on "Back" or "Forward" is the console as it was
+    // when it was left. It is loaded again, so it shows what the person signed in now may see.
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener('pageshow', onPageShow);
+
+    return () => {
+      forget();
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, []);
+
+  const login = useCallback((s: AdminSession) => {
+    // First, and alone when it throws: a browser that will not store the session lets nobody in.
+    authStore.set(s);
+    // Nothing loaded for whoever was here before is shown to the person signing in now.
+    queryClient.clear();
+    setSession(s);
+    setStatus('authenticated');
+  }, []);
+
+  const logout = useCallback(() => {
+    setSigningOut(true);
+    void signOut();
+  }, []);
+
+  const retry = useCallback(() => {
+    setStatus('loading');
+    setAttempt((n) => n + 1);
   }, []);
 
   const ctx = useMemo<AuthCtx>(
-    () => ({
-      session,
-      status,
-      login: (s) => {
-        authStore.set(s);
-        setSession(s);
-        setStatus('authenticated');
-        // Invalidate the scope so the next render re-fetches with the new JWT.
-        qc.invalidateQueries({ queryKey: ['admin', 'me', 'scope'] });
-      },
-      logout: () => {
-        authStore.clear();
-        setSession(null);
-        setStatus('anonymous');
-        qc.removeQueries({ queryKey: ['admin', 'me', 'scope'] });
-        // The person chose to sign out: the server is told too, so the refresh cookie it
-        // gave this browser stops working.
-        void tellServerSignedOut();
-      },
-    }),
-    [session, status, qc]
+    () => ({ session, status, login, logout, signingOut, retry }),
+    [session, status, login, logout, signingOut, retry],
   );
 
   return <AuthContext.Provider value={ctx}>{children}</AuthContext.Provider>;

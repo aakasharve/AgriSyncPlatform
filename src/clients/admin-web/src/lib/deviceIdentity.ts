@@ -8,6 +8,8 @@ export interface DeviceIdentity {
   deviceId: string;
   deviceName: string;
   platform: string;
+  /** Always true: see `deviceIdentity`. */
+  rememberDevice: true;
 }
 
 /** The id this page made, if it had to make one. The only copy when the store cannot be used. */
@@ -52,7 +54,19 @@ function readOrMakeId(): string {
  * The id is random, made once per browser profile and kept in the browser's store. Without it
  * the server files every console session under one shared device, so a sign-in in a second
  * browser ends the first browser's session. It is not a secret, and it is never logged.
+ *
+ * `rememberDevice` asks the server to give its refresh cookie an expiry. Without it the cookie
+ * dies when the browser is closed while the stored session lives on, so every restart inside
+ * MAX_SESSION_HOURS would end in "Your session has ended" and cost an SMS code. The server sets
+ * the cookie again on every renewal and reads this field each time, so it is part of what every
+ * sign-in and every renewal sends: leaving it out of one renewal would turn the cookie back into
+ * one that dies with the browser.
  */
 export function deviceIdentity(): DeviceIdentity {
-  return { deviceId: readOrMakeId(), deviceName: 'Control room (browser)', platform: 'web' };
+  return {
+    deviceId: readOrMakeId(),
+    deviceName: 'Control room (browser)',
+    platform: 'web',
+    rememberDevice: true,
+  };
 }
