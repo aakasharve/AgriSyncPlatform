@@ -6,8 +6,8 @@ import {
   adminApi,
   isSignOutOwed,
   readSessionEndReason,
-  settleOwedSignOut,
   tellServerSignedOut,
+  watchOwedSignOut,
   type SessionEndReason,
 } from '@/lib/api';
 import { MAX_SESSION_HOURS, type AdminSession } from '@/lib/auth';
@@ -229,16 +229,13 @@ export default function LoginPage() {
   const navigate = useNavigate();
 
   // Whenever the page opens it tries to tell the server about an owed sign-out, and says how
-  // that went. (When nothing is owed this asks the server nothing.)
-  useEffect(() => {
-    let left = false;
-    void settleOwedSignOut().then((outcome) => {
-      if (!left) setOwedSignOut(outcome === 'none' ? null : outcome);
-    });
-    return () => {
-      left = true;
-    };
-  }, []);
+  // that went. While the sign-out is still owed and this page stays open, it tries again every
+  // 30 seconds and when the browser comes back online, which is what the sentence promises;
+  // the trying stops when the page is left. (When nothing is owed the server is asked nothing.)
+  useEffect(
+    () => watchOwedSignOut((outcome) => setOwedSignOut(outcome === 'none' ? null : outcome)),
+    [],
+  );
 
   // The person has begun to act: what the page opened with has been read. A sign-out that is
   // still owed is not read and done with, so that sentence stays until the server is told.

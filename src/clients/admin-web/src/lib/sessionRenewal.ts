@@ -1,4 +1,4 @@
-import axios, { isAxiosError } from 'axios';
+import axios, { isAxiosError, isCancel } from 'axios';
 import { accessTokenExpiresWithin, authStore, type AdminSession } from './auth';
 import { deviceIdentity } from './deviceIdentity';
 
@@ -30,6 +30,18 @@ let inFlight: Promise<AdminSession | null> | null = null;
 
 /** When this tab last got a session from a renewal: its own, or one another tab had just made. */
 let lastRenewedAtMs = 0;
+
+/** The renewal call that is in the air, if any, so that a sign-out can cut it off. */
+let callInTheAir: AbortController | null = null;
+
+/**
+ * Cuts off the renewal call in the air, if there is one. For the moment a session is forgotten:
+ * the call's answer would be for nobody, and it would put a new refresh cookie in the browser
+ * just as the server is being told that this browser has signed out.
+ */
+export function stopRenewal(): void {
+  callInTheAir?.abort();
+}
 
 /**
  * True when the access token should be renewed before it is used: it has a minute or less left.
@@ -85,20 +97,26 @@ async function renewOnce(tokenAtStart: string | null): Promise<AdminSession | nu
   if (stored.accessToken !== tokenAtStart) return stored; // another tab has already renewed
 
   let data: RefreshAnswer | null | undefined;
+  const call = new AbortController();
+  callInTheAir = call;
   try {
     // The body names this browser and asks, every time, for a cookie that outlives a restart of
     // the browser (`rememberDevice`): the server sets the cookie again with each renewal.
     ({ data } = await axios.post<RefreshAnswer>(
       `${API_BASE_URL}/user/auth/refresh`,
       deviceIdentity(),
-      { withCredentials: true, timeout: 20_000 },
+      { withCredentials: true, timeout: 20_000, signal: call.signal },
     ));
   } catch (err) {
+    // Cut off by a sign-out (`stopRenewal`): there is no session left to renew.
+    if (isCancel(err)) return null;
     // 401 is the server's one refusal: the cookie is missing, unknown, expired or already used,
     // or the account is switched off. The session is over.
     if (isAxiosError(err) && err.response?.status === 401) return null;
     // No answer, 429 (the sign-in routes share a limit of calls per minute) or a server error.
     throw err;
+  } finally {
+    if (callInTheAir === call) callInTheAir = null;
   }
 
   // Held: the cookie now names a sign-in whose account question was never answered (a second

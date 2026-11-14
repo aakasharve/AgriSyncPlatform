@@ -40,8 +40,9 @@ interface AuthCtx {
    */
   login: (s: AdminSession) => void;
   /**
-   * The person's own sign-out, from any page: the server is told and waited for, the session
-   * and everything loaded are forgotten, and the login page opens.
+   * The person's own sign-out, from any page. At the press the session and everything loaded
+   * are forgotten in this browser; then the server is told and waited for, and the login page
+   * opens.
    */
   logout: () => void;
   /** True from the first press of a Sign out control until the page leaves. Disables them all. */

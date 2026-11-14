@@ -15,7 +15,12 @@ import {
   type AdminSession,
 } from './auth';
 import { queryClient } from './queryClient';
-import { API_BASE_URL, accessTokenNeedsRenewal, renewSession } from './sessionRenewal';
+import {
+  API_BASE_URL,
+  accessTokenNeedsRenewal,
+  renewSession,
+  stopRenewal,
+} from './sessionRenewal';
 import { getActiveOrgIdSnapshot } from '@/app/ActiveOrgProvider';
 
 export const adminApi: AxiosInstance = axios.create({
@@ -145,9 +150,54 @@ async function settleOwedSignOutOnce(): Promise<OwedSignOut> {
     unmarkSignOutOwed();
     return 'none';
   }
+  // Not now, when this page is itself telling the server (a session is ending here), and not
+  // while a sign-in call is in the air: this call's answer takes the refresh cookie away, and
+  // it could arrive after that sign-in's answer has put a new one there. Still owed; next time.
+  if (ending || signInsInTheAir > 0) return 'owed';
   if (!(await tellServerSignedOut())) return 'owed';
   unmarkSignOutOwed();
   return 'told';
+}
+
+/** While a sign-out is owed and the login page is open, the server is asked again this often. */
+const OWED_RETRY_MS = 30_000;
+
+/**
+ * For the login page, which tells the person "this page will tell it as soon as the server can
+ * be reached": pays an owed sign-out now, and for as long as the page is open and the sign-out
+ * is still owed, tries again every OWED_RETRY_MS and at once when the browser reports that it
+ * is back online. `onOutcome` hears how each try went. Once nothing is owed any more it stops
+ * by itself.
+ *
+ * Returns the function that stops it when the page is left: no timer and no listener stay.
+ */
+export function watchOwedSignOut(onOutcome: (outcome: OwedSignOut) => void): () => void {
+  let stopped = false;
+  let asking = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  function stop(): void {
+    stopped = true;
+    clearTimeout(timer);
+    window.removeEventListener('online', ask);
+  }
+
+  function ask(): void {
+    if (stopped || asking) return;
+    asking = true;
+    clearTimeout(timer);
+    void settleOwedSignOut().then((outcome) => {
+      asking = false;
+      if (stopped) return;
+      onOutcome(outcome);
+      if (outcome === 'owed') timer = setTimeout(ask, OWED_RETRY_MS);
+      else stop();
+    });
+  }
+
+  window.addEventListener('online', ask);
+  ask();
+  return stop;
 }
 
 /**
@@ -177,8 +227,15 @@ export function onSessionForgotten(listener: () => void): () => void {
 }
 
 /**
- * Forgets the person in this tab: the stored session, everything that was loaded for them, and
- * what is on the screen. Every end of a session goes through here, whatever ended it.
+ * Cut off the moment a session is forgotten. Every data request carries its signal, so the
+ * ones then in the air are stopped, and none can leave afterwards with the old token.
+ */
+const whileSignedIn = new AbortController();
+
+/**
+ * Forgets the person in this tab, at once and without waiting for anything: the stored session,
+ * the requests and the renewal in the air, everything that was loaded for them, and what is on
+ * the screen. Every end of a session goes through here, whatever ended it.
  */
 function forgetSession(): void {
   try {
@@ -186,6 +243,8 @@ function forgetSession(): void {
   } catch {
     // A store the browser will not let the console touch holds no session to remove.
   }
+  whileSignedIn.abort();
+  stopRenewal();
   queryClient.clear();
   try {
     takeScreensDown?.();
@@ -207,34 +266,41 @@ let ending: Promise<void> | null = null;
 
 /**
  * Signs the person out without their asking and opens the login page with the reason. The
- * session is forgotten at once. After MAX_SESSION_HOURS the server is told as well, and the
- * page waits for that call (a few seconds at most), because leaving the page would cut the
- * call off. When the server could not be told, the sign-out is remembered as owed.
+ * session is forgotten at once. After MAX_SESSION_HOURS the server is told as well, in the
+ * same order as the person's own sign-out (see `signOut`): owed first, forgotten, then told.
  */
 export function endSession(reason: SessionEndReason): Promise<void> {
   ending ??= (async () => {
+    const tellServer = reason === 'max-age';
+    if (tellServer) markSignOutOwed();
     forgetSession();
-    if (reason === 'max-age' && !(await tellServerSignedOut())) markSignOutOwed();
+    if (tellServer && (await tellServerSignedOut())) unmarkSignOutOwed();
     openLoginPage(reason);
   })();
   return ending;
 }
 
 /**
- * The person's own sign-out. The server is told first and the console waits for its answer
- * (SIGN_OUT_WAIT_MS at most): only the server can stop the refresh cookie from working, and
- * leaving the page would cut the call off. Then the session is forgotten here whatever the
- * answer was, and the login page opens. When the server could not be told, the sign-out is
- * remembered as owed: the login page says so, and tells the server when it can.
+ * The person's own sign-out. It takes effect at the press, before anything is waited for:
  *
- * From the first press no data request goes out and no renewal starts (see `ending`), so a
- * second press, or a page still asking for data, changes nothing.
+ *   1. the sign-out is marked as owed to the server;
+ *   2. the session is forgotten in this browser (see `forgetSession`);
+ *   3. only then is the server told, and waited for, SIGN_OUT_WAIT_MS at most. That call needs
+ *      nothing but the refresh cookie; the access token is already gone;
+ *   4. when the server answers that it is done, the mark is taken away.
+ *
+ * Then the login page opens. Steps 1 and 2 happen in the press itself, so closing the tab at
+ * any moment after it leaves this browser signed out, and leaves the mark for the next start
+ * of the app to act on if the server had not been reached (see `settleOwedSignOut`).
+ *
+ * From the press no data request goes out and no renewal starts (see `ending`), so a second
+ * press, or a page still asking for data, changes nothing.
  */
 export function signOut(): Promise<void> {
   ending ??= (async () => {
-    const told = await tellServerSignedOut();
+    markSignOutOwed();
     forgetSession();
-    if (!told) markSignOutOwed();
+    if (await tellServerSignedOut()) unmarkSignOutOwed();
     openLoginPage(null);
   })();
   return ending;
@@ -354,12 +420,20 @@ adminApi.interceptors.request.use(async (config: InternalAxiosRequestConfig) => 
   } else {
     const session = await sessionForRequest();
     if (session) config.headers.set('Authorization', `Bearer ${session.accessToken}`);
+    // Stopped the moment the session is forgotten, in the air or on its way out.
+    config.signal ??= whileSignedIn.signal;
   }
 
   // W0-B — send the currently-selected active org on every admin request.
   // Header name must match the backend CORS allowlist + AdminScopeHelper read.
   const orgId = getActiveOrgIdSnapshot();
   if (orgId) config.headers.set('X-Active-Org-Id', orgId);
+
+  // Last, so that nothing above can fail after the call has been counted.
+  if (isAuthRoute(config.url) && !isSignOutRoute(config.url)) {
+    (config as SentConfig).countedSignIn = true;
+    signInsInTheAir += 1;
+  }
 
   return config;
 });
@@ -394,8 +468,25 @@ export class AdminModuleForbiddenError extends Error {
   }
 }
 
-/** A request already sent again after a renewal carries this mark and is never sent a third time. */
-type SentConfig = InternalAxiosRequestConfig & { retriedAfterRenewal?: boolean };
+type SentConfig = InternalAxiosRequestConfig & {
+  /** A request already sent again after a renewal carries this and is never sent a third time. */
+  retriedAfterRenewal?: boolean;
+  /** A call to a sign-in route carries this from the moment it leaves until it is answered. */
+  countedSignIn?: boolean;
+};
+
+/**
+ * How many calls to the sign-in routes are in the air. While there is one, no owed sign-out is
+ * sent (see `settleOwedSignOutOnce`).
+ */
+let signInsInTheAir = 0;
+
+/** The call has its answer, or has failed: it is in the air no longer. Counted down once. */
+function signInAnswered(config: SentConfig | undefined): void {
+  if (!config?.countedSignIn) return;
+  config.countedSignIn = false;
+  signInsInTheAir -= 1;
+}
 
 function bearerTokenOf(config: InternalAxiosRequestConfig): string | null {
   const value = config.headers.get('Authorization');
@@ -443,12 +534,14 @@ async function retryAfterRenewal(err: AxiosError): Promise<AxiosResponse> {
 
 adminApi.interceptors.response.use(
   (r) => {
+    signInAnswered(r.config as SentConfig);
     // The server accepted a sign-in (held or not) and put a new cookie in this browser: the
     // cookie an owed sign-out was about is gone, and a sign-out call now would end the new one.
     if (isNewSignInRoute(r.config.url)) clearOwedSignOut();
     return r;
   },
   (err) => {
+    signInAnswered(err?.config as SentConfig | undefined);
     const status = err?.response?.status as number | undefined;
     const body = err?.response?.data as
       | { code?: string; memberships?: AdminScopeAmbiguousError['memberships']; moduleKey?: string }

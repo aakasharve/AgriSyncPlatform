@@ -34,22 +34,23 @@ const SettingsAdminsPage      = lazy(() => import('@/pages/settings/SettingsAdmi
 const FarmerHealthPage        = lazy(() => import('@/features/farmer-health/FarmerHealthPage'));
 const FarmerHealthDrilldown   = lazy(() => import('@/features/farmer-health/FarmerHealthDrilldown'));
 
-function Fallback() {
+function Fallback({ text = 'Loading…' }: { text?: string }) {
   return (
-    <div className="grid min-h-[400px] place-items-center text-sm text-text-muted">Loading…</div>
+    <div className="grid min-h-[400px] place-items-center text-sm text-text-muted">{text}</div>
   );
 }
 
 /**
  * Authentication gate — JWT must exist. No scope check here.
- *   loading     → spinner
+ *   loading     → spinner. A sign-out takes the screens down at the press, and the page then
+ *                 stays here while the server is told: it says so.
  *   unreachable → the stored session could not be renewed for want of an answer: say so
  *   anonymous   → /login. The page that was asked for is not remembered: whoever signs in next
  *                 always starts on the home page, never on the page of the person before.
  */
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { status, retry } = useAdminAuth();
-  if (status === 'loading') return <Fallback />;
+  const { status, retry, signingOut } = useAdminAuth();
+  if (status === 'loading') return <Fallback text={signingOut ? 'Signing out…' : undefined} />;
   if (status === 'unreachable') return <ServerUnreachable onRetry={retry} />;
   if (status === 'anonymous') return <Navigate to="/login" replace />;
   return <>{children}</>;

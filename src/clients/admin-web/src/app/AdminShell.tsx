@@ -51,8 +51,8 @@ const GROUP_ORDER: NavItem['group'][] = ['Overview', 'Operations', 'Product', 'F
 
 export function AdminShell() {
   const { mode, toggleMode } = useTheme();
-  // Signing out tells the server and waits for it, forgets the session and everything loaded,
-  // and opens the login page. While it waits the control cannot be pressed again.
+  // Signing out forgets the session and everything loaded at the press (this shell comes down
+  // with them), then tells the server and opens the login page. A second press changes nothing.
   const { logout, signingOut } = useAdminAuth();
   const location = useLocation();
 
