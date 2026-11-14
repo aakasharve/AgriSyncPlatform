@@ -186,4 +186,35 @@ describe('CropSelector layout="stepper"', () => {
         expect(slot.className).not.toContain('backdrop'); // no see-through panel laid over other things
         expect(screen.getByTestId('the-mic').parentElement).toBe(slot);
     });
+
+    it('lane CMP-T: hideEntireFarm leaves the "संपूर्ण शेत" card out of the crop step; by default it is there', () => {
+        const { unmount } = render(
+            <CropSelector mode="log" layout="stepper" crops={CROPS} selectedCrops={[]} selectedPlots={{}} onSelectionChange={() => {}} stepper={{ hideEntireFarm: true }} />,
+        );
+        expect(screen.queryByTestId('flow-crop-whole-farm')).toBeNull();
+        expect(screen.getByTestId('flow-crop-cane')).toBeTruthy();
+        unmount();
+        render(<CropSelector mode="log" layout="stepper" crops={CROPS} selectedCrops={[]} selectedPlots={{}} onSelectionChange={() => {}} />);
+        expect(screen.getByTestId('flow-crop-whole-farm')).toBeTruthy();
+    });
+
+    it('lane CMP-T: hideAddCrop leaves the "+" for another crop out of the plot step; by default it is there', () => {
+        const { unmount } = render(
+            <CropSelector mode="log" layout="stepper" crops={CROPS} selectedCrops={['cane']} selectedPlots={{ cane: [] }} onSelectionChange={() => {}} stepper={{ hideAddCrop: true }} />,
+        );
+        expect(screen.getByTestId('flow-step-plot')).toBeTruthy();
+        expect(screen.queryByTestId('flow-add-open')).toBeNull();
+        unmount();
+        render(<CropSelector mode="log" layout="stepper" crops={CROPS} selectedCrops={['cane']} selectedPlots={{ cane: [] }} onSelectionChange={() => {}} />);
+        expect(screen.getByTestId('flow-add-open')).toBeTruthy();
+    });
+
+    it('lane CMP-T fix round: a crop chosen but with no plot yet wears an amber ring by default (the log page, unchanged) and an emerald one with calmRings', () => {
+        const { unmount } = render(<CropSelector mode="log" layout="stepper" crops={CROPS} selectedCrops={['cane']} selectedPlots={{ cane: [] }} onSelectionChange={() => {}} />);
+        expect(screen.getByTestId('flow-sel-cane').className).toContain('ring-amber-300');
+        unmount();
+        render(<CropSelector mode="log" layout="stepper" crops={CROPS} selectedCrops={['cane']} selectedPlots={{ cane: [] }} onSelectionChange={() => {}} stepper={{ calmRings: true }} />);
+        expect(screen.getByTestId('flow-sel-cane').className).not.toContain('amber');
+        expect(screen.getByTestId('flow-sel-cane').className).toContain('ring-emerald-300');
+    });
 });

@@ -49,7 +49,7 @@ describe('online: the log\'s own parse', () => {
             { title: 'दुसरं', dueHint: null, category: 'general', sourceText: 's', systemInterpretation: 'i' },
         ], 'उद्या ऊस S1 ला युरिया टाकायचा')));
         const result = await understandPlanSpeech(AUDIO, { crops: CROPS, profile: PROFILE });
-        expect(result).toEqual({ ok: true, speech: { transcript: 'उद्या ऊस S1 ला युरिया टाकायचा', title: 'युरिया टाकणे', dueHint: 'उद्या' } });
+        expect(result).toEqual({ ok: true, speech: { transcript: 'उद्या ऊस S1 ला युरिया टाकायचा', title: 'युरिया टाकणे', dueHint: 'उद्या', words: 'उद्या ऊस S1 ला युरिया टाकायचा' } });
         const calls = voicePosts();
         expect(calls).toHaveLength(1);
         const form = calls[0][1] as FormData;
@@ -61,9 +61,15 @@ describe('online: the log\'s own parse', () => {
     it('no planned item: the words the result carries fill the box; no words either: "not understood"', async () => {
         post.mockResolvedValueOnce(answer(parsedLog(undefined, 'ऊसाला पाणी द्यायचं आहे')));
         expect(await understandPlanSpeech(AUDIO, { crops: CROPS, profile: PROFILE }))
-            .toEqual({ ok: true, speech: { transcript: 'ऊसाला पाणी द्यायचं आहे', title: 'ऊसाला पाणी द्यायचं आहे', dueHint: null } });
+            .toEqual({ ok: true, speech: { transcript: 'ऊसाला पाणी द्यायचं आहे', title: 'ऊसाला पाणी द्यायचं आहे', dueHint: null, words: 'ऊसाला पाणी द्यायचं आहे' } });
         post.mockResolvedValueOnce(answer(parsedLog(undefined, '')));
         expect(await understandPlanSpeech(AUDIO, { crops: CROPS, profile: PROFILE })).toEqual({ ok: false, reason: 'failed' });
+    });
+
+    it('lane CMP-T fix round: `words` is only what the parse heard - EMPTY when the result carries a planned task but no transcript (the task title is never passed off as his words)', async () => {
+        post.mockResolvedValueOnce(answer(parsedLog([{ title: 'युरिया टाकणे', dueHint: null, category: 'general', sourceText: 's', systemInterpretation: 'i' }], undefined)));
+        const result = await understandPlanSpeech(AUDIO, { crops: CROPS, profile: PROFILE });
+        expect(result).toMatchObject({ ok: true, speech: { transcript: 'युरिया टाकणे', title: 'युरिया टाकणे', words: '' } });
     });
 
     it('a failing call is "failed", and keeps nothing queued', async () => {

@@ -33,6 +33,12 @@ export interface PlanSpeech {
     title: string;
     /** The first planned task's spoken "when" ("उद्या", "३ दिवसांनी"), when it had one. */
     dueHint: string | null;
+    /**
+     * Lane CMP-T fix round (additive; the plan form ignores it): ONLY what the parse heard, as words - empty when the result carries no
+     * transcript. `transcript` falls back to the first planned item's title; this never does, so a caller that must not put a task title
+     * in someone's mouth (the तुलना reason box) reads this one.
+     */
+    words?: string;
 }
 
 export type PlanSpeechResult =
@@ -89,7 +95,7 @@ export async function understandPlanSpeech(audio: AudioData, deps: PlanVoiceDeps
         const words = (result.rawTranscript ?? result.data.fullTranscript ?? '').trim();
         const title = task?.title.trim() ?? words;
         if (!title) return { ok: false, reason: 'failed' };
-        return { ok: true, speech: { transcript: words || title, title, dueHint: task?.dueHint?.trim() || null } };
+        return { ok: true, speech: { transcript: words || title, title, dueHint: task?.dueHint?.trim() || null, words } };
     } catch {
         return { ok: false, reason: isOffline() ? 'offline' : 'failed' };
     }

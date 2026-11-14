@@ -70,10 +70,13 @@ export async function loadFarmCompare(farmId: string | null | undefined): Promis
  * `undefined` while the first answer is on its way. Never throws.
  */
 export function useFarmCompare(farmId: string | null | undefined, refreshKey = ''): FarmCompareResult | undefined {
-    const [result, setResult] = useState<{ key: string; value: FarmCompareResult } | undefined>(undefined);
+    const [result, setResult] = useState<{ scope: string; value: FarmCompareResult } | undefined>(undefined);
     const [syncs, setSyncs] = useState(0);
     const [dbEpoch, setDbEpoch] = useState(0);
     const key = `${farmId ?? ''}|${refreshKey}|${syncs}|${dbEpoch}`;
+    // The answer on screen belongs to a farm and a database, NOT to a sync: a refetch after a sync keeps the last good answer until the new one
+    // arrives (so an open sheet and the words typed in it survive). Another farm or another farmer's database drops it at once.
+    const scope = `${farmId ?? ''}|${dbEpoch}`;
 
     // Another farmer's database: the old answer is dropped in the same breath, then asked again.
     useEffect(() => onActiveDatabaseChanged(() => {
@@ -92,11 +95,11 @@ export function useFarmCompare(farmId: string | null | undefined, refreshKey = '
         if (!farmId) return undefined;
         let alive = true;
         void loadFarmCompare(farmId).then(
-            value => { if (alive) setResult({ key, value }); },
-            () => { if (alive) setResult({ key, value: NONE }); },
+            value => { if (alive) setResult({ scope, value }); },
+            () => { if (alive) setResult({ scope, value: NONE }); },
         );
         return () => { alive = false; };
-    }, [farmId, key]);
+    }, [farmId, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return result?.key === key ? result.value : undefined;
+    return result?.scope === scope ? result.value : undefined;
 }
