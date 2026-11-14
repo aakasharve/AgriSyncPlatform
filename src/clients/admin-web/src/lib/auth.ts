@@ -40,7 +40,8 @@ function read(): AdminSession | null {
     if (!raw) return null;
     const s = JSON.parse(raw) as Partial<AdminSession> | null;
     if (!s || typeof s.accessToken !== 'string' || !s.accessToken) return null;
-    if (typeof s.userId !== 'string' || typeof s.expiresAtUtc !== 'string') return null;
+    if (typeof s.userId !== 'string' || !s.userId) return null;
+    if (typeof s.expiresAtUtc !== 'string' || !s.expiresAtUtc) return null;
     if (typeof s.signedInAtUtc !== 'string' || Number.isNaN(Date.parse(s.signedInAtUtc))) {
       // Stored before the console kept the sign-in time: it is given the current time, once.
       const stamped = { ...s, signedInAtUtc: new Date().toISOString() } as AdminSession;
