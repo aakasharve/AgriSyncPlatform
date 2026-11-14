@@ -69,6 +69,35 @@ public interface IAdminOpsRepository
     /// </summary>
     Task<IReadOnlyDictionary<Guid, IReadOnlyList<string>>> GetFarmNamesByPersonAsync(
         Guid adminUserId, IReadOnlyCollection<Guid> personIds, CancellationToken ct = default);
+
+    // ───────────────────────────────────────────────────────────
+    // spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a Task R1).
+    // ───────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// What the failure recording wrote from <paramref name="sinceUtc"/> on:
+    /// the rows of six event types, newest first, at most 500 (the newest
+    /// 500 when there are more), each with its person and that person's
+    /// name. No phone number is read.
+    ///
+    /// <para>
+    /// Who wrote a row decides whether it is read. <c>api.error</c>,
+    /// <c>api.slow</c>, <c>api.refused</c> and <c>sync.mutation_rejected</c>
+    /// are written by the server, which never sets an actor: such a row is
+    /// read only when it has none, and its person is <c>props.personId</c>.
+    /// <c>client.error</c> and <c>sync.push_outcome</c> arrive from the app
+    /// through the ingest route, which always sets the sender as the actor:
+    /// such a row is read only when it has one, and its person is that actor.
+    /// </para>
+    ///
+    /// <para>
+    /// A value inside a row that cannot be read is returned as null (the list
+    /// of codes: empty); it never fails the read. <b>A failed query does:</b>
+    /// like the five methods above, this one throws. An empty list would say
+    /// that nothing failed.
+    /// </para>
+    /// </summary>
+    Task<IReadOnlyList<OpsRecordedRowDto>> GetRecordedAsync(DateTime sinceUtc, CancellationToken ct = default);
 }
 
 /// <summary>One <c>app.seen</c> row: this person used the app on this version at this time.</summary>

@@ -21,7 +21,9 @@ namespace ShramSafal.Infrastructure.Persistence.Repositories;
 ///
 /// <para>
 /// The app-versions methods at the end of this class are the exception: they
-/// let every failure escape (spec control-room-app-versions-2026-11-12).
+/// let every failure escape (spec control-room-app-versions-2026-11-12). So
+/// does <see cref="GetRecordedAsync"/> after them
+/// (spec control-room-go-live-must-haves-2026-11-10).
 /// </para>
 ///
 /// <para>
@@ -594,6 +596,272 @@ public sealed class AdminOpsRepository(
         }
 
         return result;
+    }
+
+    // ───────────────────────────────────────────────────────────
+    // What was recorded — spec: control-room-go-live-must-haves-2026-11-10
+    // (plan CR-1a Task R1, ADR 0027)
+    //
+    // No try/catch around the query. A failed query throws; the route logs it
+    // and answers 503. An empty list would read as "nothing failed" (P4).
+    //
+    // What may NOT fail the query is one unreadable row. analytics.events is
+    // append-only and client ingest checks only that a prop is present, so a
+    // row whose count is a word stays inside the window until it ages out and
+    // nobody can remove it. So the SQL casts nothing a row could make fail
+    // (its one cast sits behind a pattern that the cast always accepts), and
+    // every value inside props is read in code, where one that cannot be read
+    // becomes null.
+    // ───────────────────────────────────────────────────────────
+
+    /// <summary>The most rows <see cref="GetRecordedAsync"/> returns: the newest ones.</summary>
+    public const int MaxRecordedRows = 500;
+
+    /// <summary>Written by the request middleware, which never sets an actor.</summary>
+    private static readonly string[] ServerWrittenTypes =
+    [
+        AnalyticsEventType.ApiError,
+        AnalyticsEventType.ApiSlow,
+        AnalyticsEventType.ApiRefused,
+        AnalyticsEventType.SyncMutationRejected,
+    ];
+
+    /// <summary>Sent by the app through the ingest route, which always sets the sender as the actor.</summary>
+    private static readonly string[] AppSentTypes =
+    [
+        AnalyticsEventType.ClientError,
+        AnalyticsEventType.SyncPushOutcome,
+    ];
+
+    // The WHERE clause is two locks. The first is the six event types. The
+    // second is who wrote the row: a server-written type is read only with NO
+    // actor, an app-sent type only WITH one. Before commit 7e496f87 a
+    // signed-in account could post a forged api.error through ingest; ingest
+    // stamps the caller as the actor, so such a row never reads back as a
+    // server failure. An app-sent row with no actor has no sender to name.
+    //
+    // The person follows the same split. For an app-sent row it is the actor
+    // column, whatever its props say. For a server-written row it is
+    // props.personId, which is text: it is cast only when it has the shape of
+    // an id (the 8-4-4-4-12 form the middleware writes), so "not-a-person"
+    // gives no person instead of failing the query. CASE evaluates the cast
+    // only for rows that passed the pattern.
+    //
+    // The name is display_name from public.users, key "Id" (quoted, EF's
+    // default name; UserConfiguration). That is the only column read from the
+    // user record: no phone number. The join is on the primary key, so it
+    // can neither drop a row nor repeat one.
+    //
+    // The limit is applied to the events before the join and the order is
+    // stated again after it, because a join does not promise to keep one.
+    // event_id breaks ties so the newest 500 are the same 500 every time.
+    private const string RecordedSql = """
+        SELECT
+            r.event_id,
+            r.event_type,
+            r.occurred_at_utc,
+            r.person_id,
+            u.display_name,
+            r.props
+        FROM (
+            SELECT
+                e.event_id,
+                e.event_type,
+                e.occurred_at_utc,
+                e.props::text AS props,
+                CASE
+                    WHEN e.event_type = ANY(@app_types) THEN e.actor_user_id
+                    WHEN e.props->>'personId'
+                         ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                        THEN (e.props->>'personId')::uuid
+                END AS person_id
+            FROM analytics.events e
+            WHERE e.occurred_at_utc >= @since
+              AND (
+                      (e.event_type = ANY(@server_types) AND e.actor_user_id IS NULL)
+                   OR (e.event_type = ANY(@app_types)    AND e.actor_user_id IS NOT NULL)
+                  )
+            ORDER BY e.occurred_at_utc DESC, e.event_id DESC
+            LIMIT @limit
+        ) r
+        LEFT JOIN public.users u ON u."Id" = r.person_id
+        ORDER BY r.occurred_at_utc DESC, r.event_id DESC
+        """;
+
+    public async Task<IReadOnlyList<OpsRecordedRowDto>> GetRecordedAsync(
+        DateTime sinceUtc, CancellationToken ct = default)
+    {
+        var conn = analyticsContext.Database.GetDbConnection();
+        var wasOpen = conn.State == System.Data.ConnectionState.Open;
+        if (!wasOpen) await conn.OpenAsync(ct);
+        try
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = RecordedSql;
+            AddParam(cmd, "@since", AsUtc(sinceUtc));
+            AddParam(cmd, "@server_types", ServerWrittenTypes);
+            AddParam(cmd, "@app_types", AppSentTypes);
+            AddParam(cmd, "@limit", MaxRecordedRows);
+
+            var rows = new List<OpsRecordedRowDto>();
+            var rowsWithUnreadableProps = 0;
+
+            using var r = await cmd.ExecuteReaderAsync(ct);
+            while (await r.ReadAsync(ct))
+            {
+                rows.Add(ReadRecordedRow(r, out var propsReadable));
+                if (!propsReadable) rowsWithUnreadableProps++;
+            }
+
+            if (rowsWithUnreadableProps > 0)
+            {
+                // Not a failure of the read, and not silent either: these
+                // rows were returned with their type, time and person, and
+                // null for everything their props would have said.
+                logger.LogWarning(
+                    "AdminOpsRecordedPropsUnreadable: {Count} of {Total} recorded rows had props that "
+                    + "could not be read as a JSON object; their values were returned as null.",
+                    rowsWithUnreadableProps, rows.Count);
+            }
+
+            return rows;
+        }
+        finally { if (!wasOpen) await conn.CloseAsync(); }
+    }
+
+    /// <summary>
+    /// One recorded row. Column order must match <see cref="RecordedSql"/>.
+    ///
+    /// <para>
+    /// A row answers only for what its writer could know. The facts of a
+    /// request (its path, route, status, error name, refused saves, the
+    /// server build, the farm it addressed) are the server's: on a row the
+    /// app sent, keys of those names would be whatever the sender chose to
+    /// post, and are not read. The three counts are the app's own report and
+    /// are read on that row type alone.
+    /// </para>
+    /// </summary>
+    private static OpsRecordedRowDto ReadRecordedRow(System.Data.Common.DbDataReader r, out bool propsReadable)
+    {
+        var eventType = r.GetString(1);
+        var serverWritten = Array.IndexOf(ServerWrittenTypes, eventType) >= 0;
+        var isReport = string.Equals(eventType, AnalyticsEventType.SyncPushOutcome, StringComparison.Ordinal);
+
+        using var doc = ParseProps(r.IsDBNull(5) ? null : r.GetString(5));
+        propsReadable = doc is not null;
+        JsonElement? props = doc?.RootElement;
+
+        var personName = r.IsDBNull(4) ? null : r.GetString(4);
+
+        return new OpsRecordedRowDto(
+            EventId: r.GetGuid(0),
+            EventType: eventType,
+            OccurredAtUtc: AsUtc(r.GetDateTime(2)),
+            Endpoint: serverWritten ? ReadText(props, "endpoint") : null,
+            Route: serverWritten ? ReadText(props, "route") : null,
+            StatusCode: serverWritten ? ReadWholeNumber(props, "statusCode") : null,
+            ErrorCode: serverWritten ? ReadText(props, "errorCode") : null,
+            RejectedWorkCodes: serverWritten ? ReadCodes(props, "rejectedWorkCodes") : [],
+            RejectedWorkItems: serverWritten ? ReadCount(props, "rejectedWorkItems") : null,
+
+            // The server's rows went through this sanitiser when they were
+            // written, so for them it changes nothing. The app's report
+            // arrives through ingest, which does not check what a version
+            // looks like; reading it through the same sanitiser keeps one
+            // definition of a version on every row.
+            AppVersion: RequestObservabilityProps.SanitiseAppVersion(ReadText(props, "appVersion")),
+
+            ServerBuild: serverWritten ? ReadText(props, "serverBuild") : null,
+            PersonId: r.IsDBNull(3) ? null : r.GetGuid(3),
+
+            // No user record, or a blank name: null. Nothing is made up.
+            PersonName: string.IsNullOrWhiteSpace(personName) ? null : personName,
+
+            RouteFarmId: serverWritten ? ReadId(props, "routeFarmId") : null,
+            RecoveredCount: isReport ? ReadCount(props, "recoveredCount") : null,
+            NeedsReviewCount: isReport ? ReadCount(props, "needsReviewCount") : null,
+            PendingAfter: isReport ? ReadCount(props, "pendingAfter") : null);
+    }
+
+    /// <summary>
+    /// The props of a row as a JSON object; null when there are none or they
+    /// are not one. jsonb always prints valid JSON, so the catch is for the
+    /// parser's own limits (nesting deeper than it accepts).
+    /// </summary>
+    private static JsonDocument? ParseProps(string? propsJson)
+    {
+        if (string.IsNullOrEmpty(propsJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            var doc = JsonDocument.Parse(propsJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                return doc;
+            }
+
+            doc.Dispose();
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>A JSON string that is not blank; anything else is null.</summary>
+    private static string? ReadText(JsonElement? props, string key) =>
+        props is { } bag
+        && bag.TryGetProperty(key, out var value)
+        && value.ValueKind == JsonValueKind.String
+        && value.GetString() is { } text
+        && !string.IsNullOrWhiteSpace(text)
+            ? text
+            : null;
+
+    /// <summary>A JSON number that is a whole number; a word, a flag, an object or a fraction is null.</summary>
+    private static int? ReadWholeNumber(JsonElement? props, string key) =>
+        props is { } bag
+        && bag.TryGetProperty(key, out var value)
+        && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt32(out var number)
+            ? number
+            : null;
+
+    /// <summary>A whole number that is zero or more: a count of things cannot be negative.</summary>
+    private static int? ReadCount(JsonElement? props, string key) =>
+        ReadWholeNumber(props, key) is int count && count >= 0 ? count : null;
+
+    /// <summary>An id in the form the middleware writes it (8-4-4-4-12); anything else is null.</summary>
+    private static Guid? ReadId(JsonElement? props, string key) =>
+        ReadText(props, key) is { } text && Guid.TryParseExact(text, "D", out var id) ? id : null;
+
+    /// <summary>The distinct, non-blank strings of a JSON array, in its order; anything else is an empty list.</summary>
+    private static IReadOnlyList<string> ReadCodes(JsonElement? props, string key)
+    {
+        if (props is not { } bag
+            || !bag.TryGetProperty(key, out var value)
+            || value.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var codes = new List<string>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String
+                && item.GetString() is { } code
+                && !string.IsNullOrWhiteSpace(code)
+                && !codes.Contains(code))
+            {
+                codes.Add(code);
+            }
+        }
+
+        return codes;
     }
 
     // Npgsql sends a DateTime to a timestamptz column only when its Kind is Utc.
