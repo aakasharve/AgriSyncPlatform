@@ -1,5 +1,6 @@
 import axios, { isAxiosError } from 'axios';
 import { accessTokenExpiresWithin, authStore, type AdminSession } from './auth';
+import { deviceIdentity } from './deviceIdentity';
 
 /**
  * The server's address. It lives here, not in api.ts, because this file must not import api.ts:
@@ -15,11 +16,13 @@ const RENEW_AHEAD_MS = 60_000;
 const RENEWAL_LOCK = 'admin.session.renewal';
 
 // 200 answer of POST /user/auth/refresh on the web (User.Api AuthResponseBody). The new refresh
-// token travels in the HttpOnly cookie, never in the body.
+// token travels in the HttpOnly cookie, never in the body. The last field comes only from an API
+// that holds a sign-in until the account question is answered.
 interface RefreshAnswer {
   userId?: unknown;
   accessToken?: unknown;
   expiresAtUtc?: unknown;
+  deviceCheckRequired?: unknown;
 }
 
 /** The one renewal in the air in this tab, if any. Every caller waits on it. */
@@ -48,8 +51,9 @@ export function accessTokenNeedsRenewal(
  * Renews the access token from the refresh cookie the browser holds.
  *
  * Resolves with the renewed session, or with null when there is no session left to renew (the
- * server refused, or the person has signed out). Rejects when the call got no verdict (no
- * answer, too many calls, a server error): that says nothing about the session, so it is kept.
+ * server refused, the answer is a held sign-in, or the person has signed out). Rejects when the
+ * call got no verdict (no answer, too many calls, a server error): that says nothing about the
+ * session, so it is kept.
  *
  * Only one renewal call is ever in the air. Within this tab every caller waits on the same
  * call, and across tabs the browser lets one tab renew at a time. This matters: the server
@@ -84,7 +88,7 @@ async function renewOnce(tokenAtStart: string | null): Promise<AdminSession | nu
   try {
     ({ data } = await axios.post<RefreshAnswer>(
       `${API_BASE_URL}/user/auth/refresh`,
-      {},
+      deviceIdentity(),
       { withCredentials: true, timeout: 20_000 },
     ));
   } catch (err) {
@@ -94,6 +98,12 @@ async function renewOnce(tokenAtStart: string | null): Promise<AdminSession | nu
     // No answer, 429 (the sign-in routes share a limit of calls per minute) or a server error.
     throw err;
   }
+
+  // Held: the cookie now names a sign-in whose account question was never answered (a second
+  // sign-in was started in this browser and left there). Its token opens nothing, so it is
+  // never stored, and the session is over like one the server refused. Anything but a plain
+  // "not held" counts as held.
+  if ((data?.deviceCheckRequired ?? false) !== false) return null;
 
   const accessToken = typeof data?.accessToken === 'string' ? data.accessToken : '';
   const expiresAtUtc = typeof data?.expiresAtUtc === 'string' ? data.expiresAtUtc : '';

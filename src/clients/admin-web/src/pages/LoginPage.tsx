@@ -4,14 +4,18 @@ import { isAxiosError } from 'axios';
 import { Leaf, Wheat, BarChart3, Shield } from 'lucide-react';
 import { adminApi, readSessionEndReason, type SessionEndReason } from '@/lib/api';
 import { MAX_SESSION_HOURS, type AdminSession } from '@/lib/auth';
+import { deviceIdentity } from '@/lib/deviceIdentity';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 
-// Matches User.Application.Contracts.Dtos.AuthResponse exactly
+// 200 answer of POST /user/auth/login. The last two fields come only from an API that holds a
+// sign-in on a browser the account has not confirmed yet; an API without that rule sends neither.
 interface LoginResponse {
   userId: string;
   accessToken: string;
   refreshToken: string;
   expiresAtUtc: string;
+  deviceCheckRequired?: boolean;
+  accountName?: string | null;
 }
 
 // 200 answer of POST /user/auth/start-otp
@@ -58,6 +62,8 @@ const TEXT = {
   tooMany: 'Too many tries. Please wait a while, then try again.',
   notCompleted: 'The sign-in could not be completed. Please start again.',
   questionClosed: 'This sign-in is no longer waiting for an answer. Send a new code to start again.',
+  questionClosedPassword:
+    'This sign-in is no longer waiting for an answer. Enter your password to start again.',
   answerNotSaved: 'Your answer could not be saved. Please try again.',
   declined:
     'You were not signed in, because you said this account is not yours. Check the phone number and try again.',
@@ -212,6 +218,15 @@ export default function LoginPage() {
     navigate(returnTo, { replace: true });
   }
 
+  // Held: the server has not let this browser in yet, with or without a name to ask about. The
+  // token in that answer opens nothing, so it is not stored and not kept; the refresh cookie
+  // alone names the held sign-in when the question is answered.
+  function askAccountQuestion(name: unknown) {
+    setAccountName(typeof name === 'string' && name.trim() ? name.trim() : null);
+    setStep('account');
+    setSubmitting(false);
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
@@ -222,9 +237,16 @@ export default function LoginPage() {
       // keeps it only then. Without it this session could not be renewed.
       const { data } = await adminApi.post<LoginResponse>(
         '/user/auth/login',
-        { phone, password },
+        { phone, password, ...deviceIdentity() },
         { withCredentials: true },
       );
+      if (data?.deviceCheckRequired === true) {
+        // Now that the page names its browser, a server that asks the account question asks it
+        // after a password too, the first time in each browser.
+        setPassword('');
+        askAccountQuestion(data.accountName);
+        return;
+      }
       const session: AdminSession = {
         accessToken: data.accessToken,
         refreshToken: data.refreshToken ?? null,
@@ -271,11 +293,8 @@ export default function LoginPage() {
     setSubmitting(true);
     setResending(isResend);
     try {
-      const { data } = await adminApi.post<StartOtpResponse>(
-        '/user/auth/start-otp',
-        { phone },
-        { withCredentials: true },
-      );
+      // No credentials: this call sets no cookie and reads none.
+      const { data } = await adminApi.post<StartOtpResponse>('/user/auth/start-otp', { phone });
       const wait = Number(data?.resendAfterSeconds);
       startResendCountdown(Number.isFinite(wait) && wait > 0 ? Math.ceil(wait) : 0);
       setOtp('');
@@ -299,7 +318,7 @@ export default function LoginPage() {
       // another origin only when the request was sent with credentials.
       ({ data } = await adminApi.post<VerifyOtpResponse>(
         '/user/auth/verify-otp',
-        { phone, otp: otp.trim() },
+        { phone, otp: otp.trim(), ...deviceIdentity() },
         { withCredentials: true },
       ));
     } catch (err) {
@@ -315,13 +334,7 @@ export default function LoginPage() {
 
     setOtp('');
     if (data?.deviceCheckRequired === true) {
-      // Held: the server has not let this browser in yet, with or without a name to ask about.
-      // The token in this answer opens nothing, so it is not stored and not kept; the refresh
-      // cookie alone names the held sign-in when the question is answered.
-      const name = typeof data.accountName === 'string' ? data.accountName.trim() : '';
-      setAccountName(name || null);
-      setStep('account');
-      setSubmitting(false);
+      askAccountQuestion(data.accountName);
       return;
     }
 
@@ -353,7 +366,7 @@ export default function LoginPage() {
       if (refusal.status === 401) {
         // The server has no open question for this browser any more.
         backToPhoneStep();
-        setError(TEXT.questionClosed);
+        setError(way === 'code' ? TEXT.questionClosed : TEXT.questionClosedPassword);
       } else {
         setError(answerRefusalText(refusal));
       }
@@ -451,7 +464,7 @@ export default function LoginPage() {
           borderLeft: '1px solid rgba(82,192,190,0.2)',
         }}>
         <form
-          onSubmit={way === 'password' ? onSubmit : onCodeSubmit}
+          onSubmit={way === 'password' && step === 'phone' ? onSubmit : onCodeSubmit}
           className="w-full"
           style={{maxWidth:420, padding:'0 48px'}}
         >
@@ -510,7 +523,7 @@ export default function LoginPage() {
             </label>
           )}
 
-          {way === 'password' && (
+          {way === 'password' && step === 'phone' && (
             <label className="mb-6 block">
               <span className="mb-2 block text-[14px] font-bold text-black">Password</span>
               <input
@@ -602,20 +615,23 @@ export default function LoginPage() {
             </div>
           )}
 
-          {step === 'code' && (
+          {/* After the first step there is always a way back to it, so nobody is stuck. */}
+          {step !== 'phone' && (
             <div className="mt-5 flex flex-col items-center gap-3">
-              <button
-                type="button"
-                disabled={submitting || resendIn > 0}
-                onClick={() => void sendCode(true)}
-                className="text-[14px] font-bold text-black underline underline-offset-4 disabled:text-gray-400 disabled:no-underline"
-              >
-                {resending
-                  ? 'Sending…'
-                  : resendIn > 0
-                    ? `Send a new code in ${formatWait(resendIn)}`
-                    : 'Send a new code'}
-              </button>
+              {step === 'code' && (
+                <button
+                  type="button"
+                  disabled={submitting || resendIn > 0}
+                  onClick={() => void sendCode(true)}
+                  className="text-[14px] font-bold text-black underline underline-offset-4 disabled:text-gray-400 disabled:no-underline"
+                >
+                  {resending
+                    ? 'Sending…'
+                    : resendIn > 0
+                      ? `Send a new code in ${formatWait(resendIn)}`
+                      : 'Send a new code'}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={submitting}

@@ -15,6 +15,7 @@ import {
   Sun,
   Moon,
   Search,
+  LogOut,
   type LucideIcon,
 } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
@@ -50,7 +51,9 @@ const GROUP_ORDER: NavItem['group'][] = ['Overview', 'Operations', 'Product', 'F
 
 export function AdminShell() {
   const { mode, toggleMode } = useTheme();
-  useAdminAuth();
+  // Signing out clears the session and tells the server; the sign-in gate around this shell
+  // then opens the login page.
+  const { logout } = useAdminAuth();
   const location = useLocation();
 
   const crumb = humanizePath(location.pathname);
@@ -77,6 +80,13 @@ export function AdminShell() {
             <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-to-br from-brand-green to-brand-teal text-[11px] font-bold text-white shadow-[0_3px_10px_rgba(0,200,83,0.4)]">
               {initialsOf(null, null)}
             </div>
+            <button
+              type="button"
+              onClick={logout}
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-surface-border bg-white/60 px-2.5 text-[12px] font-semibold text-text-primary transition-colors hover:bg-white/90 dark:bg-white/10 dark:hover:bg-white/20"
+            >
+              <LogOut size={14} aria-hidden="true" /> Sign out
+            </button>
           </div>
         </header>
 
