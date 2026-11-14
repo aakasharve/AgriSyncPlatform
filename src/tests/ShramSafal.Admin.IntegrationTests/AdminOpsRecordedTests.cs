@@ -85,6 +85,20 @@ namespace ShramSafal.Admin.IntegrationTests;
 /// failure reporter's body that is a word, a list or a number (that route
 /// keeps whatever an anonymous caller posts).
 /// </para>
+///
+/// <para>
+/// <b>The guards on numbers and on a version's length</b> (asked for by the
+/// independent re-review of 2026-11-14) are held by the eight tests under
+/// that heading. A count, a status code or a refused count is read only when
+/// it is a whole number in range (3000000000, -1, 2.5, the text "7" and
+/// <c>true</c> are not counts); a version of 300 characters is not returned
+/// as a version; and a failure report whose body is the JSON value
+/// <c>null</c> is still returned. In each, the row is returned, only the
+/// offending value is null, and a well-formed row in the same answer reads
+/// back whole. Not pinned there, because the rule does not say: a NEGATIVE
+/// status code or refused count on a server-written row, and a whole number
+/// written with a fraction part (<c>2.0</c>).
+/// </para>
 /// </summary>
 [Collection(nameof(AdminTestCollection))]
 public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLifetime
@@ -984,6 +998,451 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
     }
 
     // ------------------------------------------------------------------
+    // The guards on numbers and on the length of a version
+    //
+    // Asked for by the independent re-review of 2026-11-14. The rule:
+    //   - each of a report's three counts is returned only when it is a
+    //     non-negative whole number that fits 32 bits, otherwise null;
+    //   - statusCode and rejectedWorkItems on a server-written row likewise
+    //     only when they are whole numbers in range;
+    //   - appVersion only when it is a plausible version;
+    //   - and nothing a client can post may fail the read.
+    //
+    // Every value below is one the database will happily turn into a number
+    // (or into text) if it is asked to. So each is the case where a guard is
+    // the only thing between the value and a wrong number in the answer, or
+    // between the value and a failed query: 3000000000 does not fit a 32-bit
+    // number, 2.5 rounds, the text "7" converts, and true has no number.
+    // ------------------------------------------------------------------
+
+    private static readonly string[] CountKeys = ["recoveredCount", "needsReviewCount", "pendingAfter"];
+
+    /// <summary>
+    /// The word the server's version sanitiser puts in place of a value that
+    /// is not a version (<c>RequestObservabilityPropsTests</c> pins it). It
+    /// is not a version, and no release was ever called it.
+    /// </summary>
+    private const string NotAVersionWord = "malformed";
+
+    [Fact]
+    public Task A_count_too_large_for_32_bits_reads_back_as_null() =>
+        ACountThatIsNotACountCostsOnlyItself(
+            Day(16), 3_000_000_000L, "3000000000",
+            "3000000000 does not fit 32 bits: it is not cut, wrapped or clamped to a number that does");
+
+    [Fact]
+    public Task A_negative_count_reads_back_as_null() =>
+        ACountThatIsNotACountCostsOnlyItself(
+            Day(17), -1, "-1",
+            "nobody can have minus one saves: a negative number is not a count, and it is not read as 0 or as 1");
+
+    [Fact]
+    public Task A_fractional_count_reads_back_as_null() =>
+        ACountThatIsNotACountCostsOnlyItself(
+            Day(18), 2.5, "2.5",
+            "2.5 is not a whole number: it is not rounded to 2 or to 3");
+
+    [Fact]
+    public Task A_count_sent_as_text_reads_back_as_null() =>
+        ACountThatIsNotACountCostsOnlyItself(
+            Day(19), "7", "\"7\"",
+            "the text \"7\" is not a number, although it could be read as one");
+
+    [Fact]
+    public Task A_count_that_is_true_reads_back_as_null() =>
+        ACountThatIsNotACountCostsOnlyItself(
+            Day(20), true, "true",
+            "true is not a count: it is not read as 1");
+
+    /// <summary>
+    /// Three reports from one sender, each holding <paramref name="notACount"/>
+    /// in ONE of the three counts and a real count in the other two, and one
+    /// well-formed report from somebody else beside them. So a guard that
+    /// protects only one of the three counts is caught, and so is a bad count
+    /// that costs more than itself.
+    /// </summary>
+    private async Task ACountThatIsNotACountCostsOnlyItself(DateTime at, object notACount, string asJson, string why)
+    {
+        JsonSerializer.Serialize(notACount).Should().Be(asJson,
+            "HARNESS: the value seeded has to be the value the test names");
+
+        var sunita = Guid.NewGuid();
+        var ramesh = Guid.NewGuid();
+        await UserAsync(sunita, "Sunita Pawar");
+        await UserAsync(ramesh, "Ramesh Patil");
+
+        // Three different numbers, so a count read from its neighbour's key shows.
+        var wellFormed = new Dictionary<string, int>
+        {
+            ["recoveredCount"] = 4,
+            ["needsReviewCount"] = 5,
+            ["pendingAfter"] = 6,
+        };
+
+        // As POST /analytics/ingest writes them. Ingest checks that a
+        // report's keys are present and not null, not what they hold, so any
+        // signed-in account can leave these rows in a table that is never
+        // cleaned.
+        var bad = new Dictionary<string, (Guid Id, DateTime At)>();
+        var minute = 1;
+        foreach (var offending in CountKeys)
+        {
+            var report = new Dictionary<string, object?>
+            {
+                ["recoveredCount"] = wellFormed["recoveredCount"],
+                ["needsReviewCount"] = wellFormed["needsReviewCount"],
+                ["pendingAfter"] = wellFormed["pendingAfter"],
+                ["appVersion"] = "1.0.18",
+                ["firstFailedAtUtc"] = "2025-03-04T05:40:00.000Z",
+            };
+            report[offending] = notACount;
+
+            var when = at.AddMinutes(minute++);
+            bad[offending] = (await AppRowAsync("sync.push_outcome", when, sunita, report), when);
+        }
+
+        // The control: a well-formed report in the same answer.
+        var goodAt = at.AddMinutes(minute);
+        var goodId = await AppRowAsync("sync.push_outcome", goodAt, ramesh, new Dictionary<string, object?>
+        {
+            ["recoveredCount"] = 2,
+            ["needsReviewCount"] = 1,
+            ["pendingAfter"] = 0,
+            ["appVersion"] = "1.0.18",
+            ["firstFailedAtUtc"] = "2025-03-04T05:40:00.000Z",
+        });
+
+        Func<Task<IReadOnlyList<OpsRecordedRowDto>>> read = () => Recorded(at);
+
+        var rows = (await read.Should().NotThrowAsync(
+            $"a count of {asJson} must not fail the read. Nothing a client can post may: the route "
+            + "would answer 503 for as long as the row is inside the window, and nobody can remove it")).Subject;
+
+        foreach (var offending in CountKeys)
+        {
+            var row = Row(rows, bad[offending].Id);
+
+            row.EventType.Should().Be("sync.push_outcome",
+                $"a report whose {offending} is {asJson} is still a report that was sent, and is returned");
+            row.OccurredAtUtc.Should().Be(bad[offending].At);
+
+            foreach (var key in CountKeys)
+            {
+                var count = CountOf(row, key);
+
+                if (key == offending)
+                {
+                    count.Should().BeNull($"{offending} holds {asJson}. {why}");
+                }
+                else
+                {
+                    count.Should().Be(wellFormed[key],
+                        $"{key} is a real count, and the {asJson} in {offending} beside it costs it nothing");
+                }
+            }
+
+            row.AppVersion.Should().Be("1.0.18", "the version beside the bad count is still read");
+            row.PersonId.Should().Be(sunita, "the sender is the actor column, and that was readable");
+            row.PersonName.Should().Be("Sunita Pawar");
+            ShouldCarryNoRequest(row);
+        }
+
+        var good = Row(rows, goodId);
+        good.EventType.Should().Be("sync.push_outcome");
+        good.OccurredAtUtc.Should().Be(goodAt);
+        good.RecoveredCount.Should().Be(2, "the well-formed report in the same answer is read back whole");
+        good.NeedsReviewCount.Should().Be(1);
+        good.PendingAfter.Should().Be(0, "a count of 0 is a measurement, and it is not what a bad count is turned into");
+        good.AppVersion.Should().Be("1.0.18");
+        good.PersonId.Should().Be(ramesh);
+        good.PersonName.Should().Be("Ramesh Patil");
+        ShouldCarryNoRequest(good);
+
+        Mine(rows).Select(r => r.EventId).Should().BeEquivalentTo(
+            bad.Values.Select(b => b.Id).Append(goodId),
+            "all four reports are returned, each once: the three that hold a bad count and the good one");
+    }
+
+    [Fact]
+    public async Task A_status_code_or_refused_count_that_is_not_a_whole_number_in_range_reads_back_as_null()
+    {
+        var at = Day(23);
+        var sunita = Guid.NewGuid();
+        await UserAsync(sunita, "Sunita Pawar");
+
+        // The server's own rows are well-formed today. Should one ever not
+        // be, it stays for ever, and the same guard has to hold for it: too
+        // large for 32 bits, not whole, and text that could be read as a
+        // number.
+        (object Value, string AsJson)[] notRefusedCounts = [(3_000_000_000L, "3000000000"), (2.5, "2.5"), ("3", "\"3\"")];
+        (object Value, string AsJson)[] notStatusCodes = [(3_000_000_000L, "3000000000"), (500.5, "500.5"), ("500", "\"500\"")];
+
+        var refusals = new List<(Guid Id, DateTime At, string AsJson)>();
+        var failures = new List<(Guid Id, DateTime At, string AsJson)>();
+        var minute = 1;
+
+        foreach (var (value, asJson) in notRefusedCounts)
+        {
+            JsonSerializer.Serialize(value).Should().Be(asJson, "HARNESS: the value seeded has to be the value named");
+
+            var props = MiddlewareProps("POST /sync/push", statusCode: 200, "POST /sync/push", personId: sunita);
+            props["rejectedWorkItems"] = value;
+            props["rejectedWorkReason"] = "sync.mutation_rejected";
+            props["rejectedWorkCodes"] = new[] { "ShramSafal.SyncInvalidPayload" };
+
+            var when = at.AddMinutes(minute++);
+            refusals.Add((await ServerRowAsync("sync.mutation_rejected", when, props), when, asJson));
+        }
+
+        foreach (var (value, asJson) in notStatusCodes)
+        {
+            JsonSerializer.Serialize(value).Should().Be(asJson, "HARNESS: the value seeded has to be the value named");
+
+            var props = MiddlewareProps("POST /shramsafal/logs", statusCode: 500, "POST /shramsafal/logs", personId: sunita);
+            props["statusCode"] = value;
+            props["errorCode"] = "ShramSafal.CropCycleOverlap";
+            props["workKept"] = "unknown";
+
+            var when = at.AddMinutes(minute++);
+            failures.Add((await ServerRowAsync("api.error", when, props), when, asJson));
+        }
+
+        // The control: a well-formed refusal in the same answer.
+        var goodProps = MiddlewareProps("POST /sync/push", statusCode: 200, "POST /sync/push", personId: sunita);
+        goodProps["rejectedWorkItems"] = 3;
+        goodProps["rejectedWorkReason"] = "sync.mutation_rejected";
+        goodProps["rejectedWorkCodes"] = new[] { "ShramSafal.SyncInvalidPayload" };
+        var goodId = await ServerRowAsync("sync.mutation_rejected", at.AddMinutes(minute), goodProps);
+
+        Func<Task<IReadOnlyList<OpsRecordedRowDto>>> read = () => Recorded(at);
+
+        var rows = (await read.Should().NotThrowAsync(
+            "a number that is out of range or not whole must cost that number at most, never the answer")).Subject;
+
+        foreach (var (id, when, asJson) in refusals)
+        {
+            var row = Row(rows, id);
+
+            row.EventType.Should().Be("sync.mutation_rejected",
+                $"a refusal whose count is {asJson} is still a recorded refusal, and is returned");
+            row.OccurredAtUtc.Should().Be(when);
+            row.RejectedWorkItems.Should().BeNull(
+                $"{asJson} is not a whole number that fits 32 bits: it is not cut, rounded or read from text");
+
+            // Everything beside it is intact.
+            row.StatusCode.Should().Be(200);
+            row.RejectedWorkCodes.Should().Equal(
+                new[] { "ShramSafal.SyncInvalidPayload" },
+                "what was refused is still named; only how many could not be read");
+            row.Endpoint.Should().Be("POST /sync/push");
+            row.Route.Should().Be("POST /sync/push");
+            row.AppVersion.Should().Be("1.0.18");
+            row.ServerBuild.Should().Be(ServerBuild);
+            row.PersonId.Should().Be(sunita);
+            row.PersonName.Should().Be("Sunita Pawar");
+            ShouldCarryNoReport(row);
+        }
+
+        foreach (var (id, when, asJson) in failures)
+        {
+            var row = Row(rows, id);
+
+            row.EventType.Should().Be("api.error",
+                $"a failure whose status is {asJson} is still a recorded failure, and is returned");
+            row.OccurredAtUtc.Should().Be(when);
+            row.StatusCode.Should().BeNull(
+                $"{asJson} is not a whole number in range: it is not cut, rounded or read from text");
+
+            // Everything beside it is intact.
+            row.ErrorCode.Should().Be("ShramSafal.CropCycleOverlap", "the failure still reads back with its name");
+            row.Endpoint.Should().Be("POST /shramsafal/logs");
+            row.Route.Should().Be("POST /shramsafal/logs");
+            row.AppVersion.Should().Be("1.0.18");
+            row.ServerBuild.Should().Be(ServerBuild);
+            row.PersonId.Should().Be(sunita);
+            row.PersonName.Should().Be("Sunita Pawar");
+            row.RejectedWorkItems.Should().BeNull();
+            row.RejectedWorkCodes.Should().NotBeNull().And.BeEmpty();
+            ShouldCarryNoReport(row);
+        }
+
+        var good = Row(rows, goodId);
+        good.RejectedWorkItems.Should().Be(3, "the well-formed refusal in the same answer is read back whole");
+        good.StatusCode.Should().Be(200);
+        good.RejectedWorkCodes.Should().Equal("ShramSafal.SyncInvalidPayload");
+        good.PersonId.Should().Be(sunita);
+        good.PersonName.Should().Be("Sunita Pawar");
+
+        Mine(rows).Select(r => r.EventId).Should().BeEquivalentTo(
+            refusals.Select(r => r.Id).Concat(failures.Select(f => f.Id)).Append(goodId),
+            "all seven rows are returned, each once");
+    }
+
+    [Fact]
+    public async Task A_version_of_300_characters_is_not_returned_as_a_version()
+    {
+        var at = Day(21);
+        var sunita = Guid.NewGuid();
+        var ramesh = Guid.NewGuid();
+        await UserAsync(sunita, "Sunita Pawar");
+        await UserAsync(ramesh, "Ramesh Patil");
+
+        // Only its length is wrong. Every character is one a version may
+        // have and it begins like a real release, so a reader that cut it to
+        // size would hand back something that looks exactly like a version.
+        var tooLong = "1.0.18" + new string('7', 294);
+        tooLong.Length.Should().Be(300, "HARNESS: the value seeded has to be 300 characters long");
+
+        // Through ingest, in a report (any signed-in account can post it).
+        var reportAt = at.AddMinutes(1);
+        var reportId = await AppRowAsync("sync.push_outcome", reportAt, sunita, new Dictionary<string, object?>
+        {
+            ["recoveredCount"] = 2,
+            ["needsReviewCount"] = 1,
+            ["pendingAfter"] = 0,
+            ["appVersion"] = tooLong,
+            ["firstFailedAtUtc"] = "2025-03-04T05:40:00.000Z",
+        });
+
+        // And through the app's failure reporter, which is anonymous and
+        // keeps the caller's body as it was posted.
+        var reporterAt = at.AddMinutes(2);
+        var reporterId = await ReporterRowAsync(reporterAt, new Dictionary<string, object?>
+        {
+            ["type"] = "api_failure",
+            ["endpoint"] = "/sync/push",
+            ["statusCode"] = 500,
+            ["appVersion"] = tooLong,
+        });
+
+        // The control: a well-formed report in the same answer.
+        var goodId = await AppRowAsync("sync.push_outcome", at.AddMinutes(3), ramesh, new Dictionary<string, object?>
+        {
+            ["recoveredCount"] = 1,
+            ["needsReviewCount"] = 0,
+            ["pendingAfter"] = 0,
+            ["appVersion"] = "1.0.18",
+        });
+
+        Func<Task<IReadOnlyList<OpsRecordedRowDto>>> read = () => Recorded(at);
+
+        var rows = (await read.Should().NotThrowAsync(
+            "a version of any length must not fail the read: nothing a client can post may")).Subject;
+
+        var report = Row(rows, reportId);
+        report.EventType.Should().Be("sync.push_outcome",
+            "a report that names an impossible version is still a report that was sent, and is returned");
+        report.OccurredAtUtc.Should().Be(reportAt);
+        ShouldNotBeReadAsAVersion(report.AppVersion, tooLong);
+
+        // Everything beside it is intact.
+        report.RecoveredCount.Should().Be(2, "the counts beside the bad version are still read");
+        report.NeedsReviewCount.Should().Be(1);
+        report.PendingAfter.Should().Be(0);
+        report.PersonId.Should().Be(sunita);
+        report.PersonName.Should().Be("Sunita Pawar");
+        ShouldCarryNoRequest(report);
+
+        var reported = Row(rows, reporterId);
+        reported.EventType.Should().Be("client.error",
+            "a failure report that names an impossible version is still a recorded row, and is returned");
+        reported.OccurredAtUtc.Should().Be(reporterAt);
+        ShouldNotBeReadAsAVersion(reported.AppVersion, tooLong);
+        reported.PersonId.Should().BeNull("the row has no actor, so it has no person");
+        reported.PersonName.Should().BeNull();
+        reported.RejectedWorkCodes.Should().NotBeNull().And.BeEmpty();
+        ShouldCarryNoReport(reported);
+
+        var good = Row(rows, goodId);
+        good.AppVersion.Should().Be("1.0.18", "the well-formed report in the same answer is read back whole");
+        good.RecoveredCount.Should().Be(1);
+        good.NeedsReviewCount.Should().Be(0);
+        good.PendingAfter.Should().Be(0);
+        good.PersonId.Should().Be(ramesh);
+        good.PersonName.Should().Be("Ramesh Patil");
+
+        Mine(rows).Select(r => r.EventId).Should().BeEquivalentTo(
+            new[] { reportId, reporterId, goodId },
+            "all three rows are returned, each once");
+
+        // What a caller would receive for these rows: the 300 characters are
+        // nowhere in it, whole or as a piece longer than a version may be.
+        var json = JsonSerializer.Serialize(Mine(rows), WebJson);
+        json.Should().NotContain(tooLong, "the value a client posted does not come back out as it went in");
+        json.Should().NotContain(new string('7', 33),
+            "nor cut to a shorter piece of itself: a version is at most 32 characters, and a piece "
+            + "of a value that was never a version is not one either");
+    }
+
+    [Fact]
+    public async Task A_client_error_whose_body_is_json_null_is_still_returned()
+    {
+        var at = Day(22);
+        var sunita = Guid.NewGuid();
+        await UserAsync(sunita, "Sunita Pawar");
+
+        // POST /telemetry/client-error stores the raw text of whatever JSON
+        // value it was sent. The value null is JSON too: the row then holds a
+        // JSON null where every other row holds an object. (It is not an
+        // empty column: the row has props, and they are the value null.)
+        const string jsonNull = "null";
+        JsonDocument.Parse(jsonNull).RootElement.ValueKind.Should().Be(JsonValueKind.Null);
+
+        var nullAt = at.AddMinutes(1);
+        var nullId = await ReporterRawRowAsync(nullAt, jsonNull);
+
+        // The control: a well-formed row of the server's own, in the same answer.
+        var goodAt = at.AddMinutes(2);
+        var goodProps = MiddlewareProps("POST /sync/push", 500, "POST /sync/push", personId: sunita);
+        goodProps["errorCode"] = "ShramSafal.CropCycleOverlap";
+        goodProps["workKept"] = "unknown";
+        var goodId = await ServerRowAsync("api.error", goodAt, goodProps);
+
+        Func<Task<IReadOnlyList<OpsRecordedRowDto>>> read = () => Recorded(at);
+
+        var rows = (await read.Should().NotThrowAsync(
+            "a body that is the JSON value null must not fail the read: the route would answer 503 "
+            + "for as long as the row is inside the window, and any anonymous caller could post one")).Subject;
+
+        var row = Row(rows, nullId);
+        row.EventType.Should().Be("client.error",
+            "a failure report whose body is null is still a recorded row, and is returned");
+        row.OccurredAtUtc.Should().Be(nullAt);
+
+        // There is nothing in it to read, so every value is null, and the
+        // list of codes is empty as it always is.
+        row.PersonId.Should().BeNull("the row has no actor, and null names nobody");
+        row.PersonName.Should().BeNull();
+        row.AppVersion.Should().BeNull("null holds no version, and no word is put in its place");
+        row.Endpoint.Should().BeNull();
+        row.Route.Should().BeNull();
+        row.StatusCode.Should().BeNull();
+        row.ErrorCode.Should().BeNull();
+        row.ServerBuild.Should().BeNull();
+        row.RouteFarmId.Should().BeNull();
+        row.RejectedWorkItems.Should().BeNull();
+        row.RejectedWorkCodes.Should().NotBeNull("the list of codes is empty, it is never null").And.BeEmpty();
+        ShouldCarryNoReport(row);
+
+        // The good row beside it is intact.
+        var good = Row(rows, goodId);
+        good.EventType.Should().Be("api.error");
+        good.OccurredAtUtc.Should().Be(goodAt);
+        good.StatusCode.Should().Be(500);
+        good.ErrorCode.Should().Be("ShramSafal.CropCycleOverlap");
+        good.Endpoint.Should().Be("POST /sync/push");
+        good.Route.Should().Be("POST /sync/push");
+        good.AppVersion.Should().Be("1.0.18");
+        good.ServerBuild.Should().Be(ServerBuild);
+        good.PersonId.Should().Be(sunita);
+        good.PersonName.Should().Be("Sunita Pawar");
+
+        Mine(rows).Select(r => r.EventId).Should().BeEquivalentTo(
+            new[] { nullId, goodId },
+            "both rows are returned, each once");
+    }
+
+    // ------------------------------------------------------------------
     // Asking the real repository
     // ------------------------------------------------------------------
 
@@ -1020,6 +1479,43 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
         row.RecoveredCount.Should().BeNull("only the app's own report carries counts; a 0 here would be an invented measurement");
         row.NeedsReviewCount.Should().BeNull();
         row.PendingAfter.Should().BeNull();
+    }
+
+    /// <summary>A report is not a request: it has none of a request's fields.</summary>
+    private static void ShouldCarryNoRequest(OpsRecordedRowDto row)
+    {
+        row.Endpoint.Should().BeNull("a report is not a request, and has none of a request's fields");
+        row.Route.Should().BeNull();
+        row.StatusCode.Should().BeNull();
+        row.ErrorCode.Should().BeNull();
+        row.ServerBuild.Should().BeNull();
+        row.RouteFarmId.Should().BeNull();
+        row.RejectedWorkItems.Should().BeNull();
+        row.RejectedWorkCodes.Should().NotBeNull("the list of codes is empty, it is never null").And.BeEmpty();
+    }
+
+    /// <summary>One of a report's three counts, by the key the app sends it under.</summary>
+    private static int? CountOf(OpsRecordedRowDto row, string key) => key switch
+    {
+        "recoveredCount" => row.RecoveredCount,
+        "needsReviewCount" => row.NeedsReviewCount,
+        "pendingAfter" => row.PendingAfter,
+        _ => throw new ArgumentOutOfRangeException(nameof(key), key, "HARNESS: not one of a report's three counts"),
+    };
+
+    /// <summary>
+    /// What may come back for a value that is not a version: nothing, or the
+    /// one word the server's own sanitiser puts in place of such a value.
+    /// Never the value, and never a piece of it.
+    /// </summary>
+    private static void ShouldNotBeReadAsAVersion(string? read, string posted)
+    {
+        read.Should().NotBe(posted, "a value of 300 characters is not a version, and is not returned as one");
+
+        (read is null || read == NotAVersionWord).Should().BeTrue(
+            "a value that is not a plausible version reads back as nothing, or as the sanitiser's own "
+            + $"word \"{NotAVersionWord}\"; it is never cut down to something that looks like a version. "
+            + $"Read back: {(read is null ? "null" : $"\"{read}\" ({read.Length} characters)")}");
     }
 
     // ------------------------------------------------------------------
