@@ -174,9 +174,9 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                             <p className="mt-2 text-xs text-stone-500">Let's start</p>
 
                             <p className="mt-8 text-[11px] leading-relaxed text-stone-400">
-                                तुम्हाला 14 दिवसांचे ट्रायल मिळेल. नंतर तुम्ही सब्स्क्रिप्शन निवडू शकता.
+                                तुम्हाला 21 दिवसांचे ट्रायल मिळेल. नंतर तुम्ही सब्स्क्रिप्शन निवडू शकता.
                                 <br />
-                                14-day trial, no card needed.
+                                21-day trial, no card needed.
                             </p>
                         </section>
                     )}
@@ -311,8 +311,8 @@ const FirstFarmWizard: React.FC<FirstFarmWizardProps> = ({
                                     </div>
                                     <div>
                                         <div className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Trial · ट्रायल</div>
-                                        <div className="text-sm font-bold text-emerald-700">14 days free</div>
-                                        <div className="text-[10px] text-stone-500">14 दिवस मोफत</div>
+                                        <div className="text-sm font-bold text-emerald-700">21 days free</div>
+                                        <div className="text-[10px] text-stone-500">21 दिवस मोफत</div>
                                     </div>
                                 </div>
                             </div>

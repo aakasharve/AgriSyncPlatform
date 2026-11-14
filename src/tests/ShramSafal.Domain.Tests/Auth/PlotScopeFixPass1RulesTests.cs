@@ -150,7 +150,7 @@ public sealed class PlotScopeFixPass1RulesTests
 
         seat.SetPlotScope(MembershipPlotScope.ChosenPlots, [P2], Now);
         var card = LabourPermissionProjection.From(seat, Now);
-        card.AuthoritiesNotInForce.Should().Equal(["EditFarmSetup", "ManageReminders"], "lane REM-1: a chosen-plots seat never holds आठवणींची मांडणी बदलणे");
+        card.AuthoritiesNotInForce.Should().Equal(["EditFarmSetup"], "lane REM-1b (founder B9): a chosen-plots मुकादम can hold आठवणींची मांडणी बदलणे, so it is in force");
         card.Authorities!.Select(a => a.Name).Should().Contain("EditFarmSetup", "still stored: it travels back unchanged in the whole set");
         card.EffectivePlotScope.Should().Be("ChosenPlots");
         card.PlotScopeChoices.Should().Equal(["AllPlots", "ChosenPlots", "OwnWork"]);
@@ -171,7 +171,7 @@ public sealed class PlotScopeFixPass1RulesTests
         ownWork.SetPlotScope(MembershipPlotScope.OwnWork, null, Now);
         var ownCard = LabourPermissionProjection.From(ownWork, Now);
         ownCard.EffectivePlotScope.Should().Be("OwnWork");
-        ownCard.AuthoritiesNotInForce.Should().BeEquivalentTo(["EditFarmSetup", "SeeMoney", "SeeWages", "ReviewMoney", "ManageReminders"]);
+        ownCard.AuthoritiesNotInForce.Should().BeEquivalentTo(["EditFarmSetup", "SeeMoney", "SeeWages", "ReviewMoney"]);
         ownCard.PlotScopeChoices.Should().Equal(["AllPlots", "ChosenPlots", "OwnWork"], "a मुकादम label: every choice changes something");
 
         var owner = FarmMembership.Create(Guid.NewGuid(), new FarmId(Farm), new UserId(Owner), AppRole.PrimaryOwner, Now.AddDays(-30), JoinedVia.OwnerManualAdd);

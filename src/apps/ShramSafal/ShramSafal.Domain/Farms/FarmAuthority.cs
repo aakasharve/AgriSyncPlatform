@@ -72,6 +72,8 @@ public enum FarmAuthority
     /// <summary>
     /// spec: plr-d10 lane REM-1 (founder D-78, R17) - Change reminder settings ("आठवणींची मांडणी बदलणे"): who sees which reminders
     /// and whose reminders always show. Only the primary account holder grants it (D-26); ENFORCED by the reminder-settings routes.
+    /// Lane REM-1b (founder B9): a मुकादम or a सहमालक / कुटुंब seat of ANY plot scope may hold it; the कामगार label never
+    /// (<see cref="FarmAuthorities.CanBeHeldBy"/>).
     /// </summary>
     ManageReminders,
 }
@@ -156,8 +158,8 @@ public static class FarmAuthorities
             notInForce.Add(FarmAuthority.SeeWages);
         }
 
-        // spec: plr-d10 lane CMP-D1 (founder D-81) - a Worker seat can never hold "तुलना पाहणे": the card says so and an
-        // invitation naming it is refused for what it is (the grant routes refuse it too, CanBeHeldBy).
+        // spec: plr-d10 lane CMP-D1 (founder D-81) / REM-1b (founder B9) - a Worker seat can never hold "तुलना पाहणे" or "आठवणींची मांडणी बदलणे":
+        // the card says so and an invitation naming either is refused for what it is (the grant routes refuse them too, CanBeHeldBy).
         foreach (var authority in All)
         {
             if (!CanBeHeldBy(role, authority, scope))
@@ -199,26 +201,27 @@ public static class FarmAuthorities
     };
 
     /// <summary>
-    /// spec: plr-d10 lane CMP-D1 (founder D-81) - can a seat of this label EVER hold <paramref name="authority"/>? Every
-    /// authority can be held by every label except one: "तुलना पाहणे" (<see cref="FarmAuthority.SeeCompare"/>) is never a
-    /// Worker seat's. The grant doors refuse it (<see cref="FarmMembership"/>) and <see cref="IsHeld"/> answers false for it,
-    /// so a stored bit on a Worker seat (a hand-written row, an old build) holds nothing. The primary owner passes by label.
+    /// spec: plr-d10 lane CMP-D1 (founder D-81) / REM-1b (founder B9) - can a seat of this label EVER hold <paramref name="authority"/>?
+    /// Every authority can be held by every label except two: "तुलना पाहणे" (<see cref="FarmAuthority.SeeCompare"/>) and "आठवणींची मांडणी
+    /// बदलणे" (<see cref="FarmAuthority.ManageReminders"/>) are never a Worker seat's. The grant doors refuse them (<see cref="FarmMembership"/>)
+    /// and <see cref="IsHeld"/> answers false for them, so a stored bit on a Worker seat (a hand-written row, an old build) holds nothing.
+    /// The primary owner passes by label.
     /// </summary>
     public static bool CanBeHeldBy(AgriSync.SharedKernel.Contracts.Roles.AppRole role, FarmAuthority authority) =>
         CanBeHeldBy(role, authority, MembershipPlotScope.AllPlots);
 
     /// <summary>
-    /// spec: plr-d10 lane REM-1 (CTO ruling on review m2) - the same question for a seat of this label AND plot scope. "आठवणींची मांडणी
-    /// बदलणे" (<see cref="FarmAuthority.ManageReminders"/>) changes who sees reminders farm-wide, so only a WHOLE-FARM seat may hold it:
-    /// never a Worker label, never a seat on स्वतःचं काम or on chosen plots. The grant doors refuse it, every read drops it (<see cref="IsHeld"/>),
-    /// and the card lists it as not in force (<see cref="NotInForce"/>). The primary owner passes by label.
+    /// spec: plr-d10 lane REM-1b (founder B9, reversing the REM-1 m2 ruling) - the same question for a seat of this label AND plot scope.
+    /// "आठवणींची मांडणी बदलणे" (<see cref="FarmAuthority.ManageReminders"/>) may be held by a मुकादम or a सहमालक / कुटुंब seat of ANY plot
+    /// scope (every plot, chosen plots, स्वतःचं काम); only the कामगार label can never hold it, exactly like <see cref="FarmAuthority.SeeCompare"/>.
+    /// The grant doors refuse it for a Worker, every read drops a stored Worker grant (<see cref="IsHeld"/>), and the card lists it as not in
+    /// force for a Worker (<see cref="NotInForce"/>). The primary owner passes by label. <paramref name="plotScope"/> is kept in the question
+    /// so every caller stays as it is (no authority depends on it today).
     /// </summary>
     public static bool CanBeHeldBy(
         AgriSync.SharedKernel.Contracts.Roles.AppRole role, FarmAuthority authority, MembershipPlotScope plotScope) =>
-        !(authority == FarmAuthority.SeeCompare && role == AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker)
-        && !(authority == FarmAuthority.ManageReminders
-            && role != AgriSync.SharedKernel.Contracts.Roles.AppRole.PrimaryOwner
-            && (role == AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker || plotScope != MembershipPlotScope.AllPlots));
+        !(authority is FarmAuthority.SeeCompare or FarmAuthority.ManageReminders
+            && role == AgriSync.SharedKernel.Contracts.Roles.AppRole.Worker);
 
     /// <summary>The authority this one needs to mean anything (D-26 / §11.1): wages and reviewing money need money.</summary>
     public static FarmAuthority? RequiredBy(FarmAuthority authority) => authority switch
@@ -274,8 +277,8 @@ public static class FarmAuthorities
             return true;
         }
 
-        // The plot scope is part of the question for an authority only a whole-farm seat may hold; a caller that cannot say it (null)
-        // is answered as a seat that covers part of the farm: fail closed.
+        // The plot scope is part of the question (CanBeHeldBy) even though no authority depends on it since lane REM-1b; a caller that
+        // cannot say it (null) is answered as a seat that covers part of the farm: fail closed.
         if (!CanBeHeldBy(role, authority, plotScope ?? MembershipPlotScope.ChosenPlots))
         {
             return false;

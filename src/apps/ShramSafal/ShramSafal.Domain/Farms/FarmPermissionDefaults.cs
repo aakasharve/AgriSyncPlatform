@@ -55,7 +55,8 @@ public static class FarmPermissionDefaults
 
     /// <summary>
     /// spec: plr-d10 lane CMP-D1 - the bits a seat of this label can never hold (<see cref="FarmAuthorities.CanBeHeldBy"/>):
-    /// "तुलना पाहणे" on a Worker seat. A stored bit like that is dropped here, the same way an unknown bit is.
+    /// "तुलना पाहणे" and (lane REM-1b, founder B9) "आठवणींची मांडणी बदलणे" on a Worker seat, whatever plots it sees. A stored bit like that is
+    /// dropped here, the same way an unknown bit is.
     /// </summary>
     public static FarmPermission BarredFor(AppRole role, MembershipPlotScope plotScope = MembershipPlotScope.AllPlots)
     {

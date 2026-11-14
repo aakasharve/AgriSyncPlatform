@@ -430,7 +430,7 @@ public sealed class PlotScopeFixPass1RealPostgresTests(ITestOutputHelper output)
         rosterStatus.Should().Be(HttpStatusCode.OK, roster);
         var rows = JsonDocument.Parse(roster).RootElement.EnumerateArray().ToList();
         JsonElement Row(Guid who) => rows.Single(r => r.GetProperty("userId").GetGuid() == who);
-        Names(Row(Mukadam), "authoritiesNotInForce").Should().Equal(["EditFarmSetup", "ManageReminders"], "farm setup needs every plot; lane REM-1: so does changing who sees reminders");
+        Names(Row(Mukadam), "authoritiesNotInForce").Should().Equal(["EditFarmSetup"], "farm setup needs every plot; lane REM-1b (founder B9): changing who sees reminders does not");
         Names(Row(Mukadam), "authorities").Should().Contain("EditFarmSetup", "still stored: it comes back with every plot");
         Row(Worker).GetProperty("effectivePlotScope").GetString().Should().Be("OwnWork", "a कामगार reads his own work");
         Names(Row(Worker), "plotScopeChoices").Should().Equal(["OwnWork", "ChosenPlots"], "every plot would read as his own work");
