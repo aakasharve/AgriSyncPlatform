@@ -26,8 +26,9 @@ namespace Analytics.UnitTests;
 /// vocabulary entry is one a client may send;</item>
 /// <item><see cref="IngestEventsValidator.ValidateFromClient"/> refuses each
 /// of the seven with <c>analytics.server_only_event_type</c>, on top of
-/// whatever the shape check reports, and still accepts the eight client
-/// types (the released app sends only those, so no old app breaks);</item>
+/// whatever the shape check reports, and still accepts the client types
+/// (the eight every released app sends, so no old app breaks, and from
+/// 1.0.18 <c>sync.push_outcome</c>, ADR 0027 D2);</item>
 /// <item><see cref="IngestEventsValidator.Validate"/> stays the shape check
 /// any producer can use, and still accepts the seven;</item>
 /// <item><see cref="IngestEventsHandler"/>, which serves the client route,
@@ -51,12 +52,22 @@ public sealed class ServerOnlyEventTypeTests
         "app.seen", "worker.named", "admin.farmer_lookup",
     ];
 
-    /// <summary>The eight types the app's own schema can send.</summary>
+    /// <summary>
+    /// The types the app's own schema can send: the eight every released app
+    /// sends, and, from app version 1.0.18, <c>sync.push_outcome</c> (ADR 0027
+    /// D2; spec control-room-go-live-must-haves-2026-11-10, plan CR-1a Task
+    /// C2). The ninth name was added here on 2026-11-14, deliberately: the
+    /// last assertion of <see cref="Server_only_set_is_exactly_the_seven_names"/>
+    /// fails for any vocabulary entry that has not been put on one side, and
+    /// this is the side it belongs on. That test's own text still says
+    /// "eight"; it was left as it stood.
+    /// </summary>
     private static readonly string[] ClientTypes =
     [
         "closure.started", "closure.submitted", "closure.abandoned",
         "proof.attached", "closure_summary.viewed", "closure.verified",
         "next_action.created", "client.error",
+        "sync.push_outcome",
     ];
 
     private static readonly Guid Farmer = Guid.Parse("c0000000-0000-0000-0000-000000000001");
@@ -189,9 +200,11 @@ public sealed class ServerOnlyEventTypeTests
     {
         var sut = new IngestEventsValidator();
 
-        // The released app (1.0.17 and this lane alike) can send only these
-        // eight. Refusing any of them would break a phone already in a
-        // farmer's hand (P11).
+        // The released app (1.0.17) can send only the first eight of these;
+        // from 1.0.18 the app also sends sync.push_outcome (ADR 0027 D2).
+        // Refusing any of the eight would break a phone already in a farmer's
+        // hand (P11), and refusing the ninth would cost 1.0.18 the whole
+        // batch it travels in.
         foreach (var type in ClientTypes)
         {
             var outcome = sut.ValidateFromClient(Batch(WellFormed(type)));
@@ -201,7 +214,7 @@ public sealed class ServerOnlyEventTypeTests
         }
 
         var all = sut.ValidateFromClient(Batch(ClientTypes.Select(WellFormed).ToArray()));
-        all.IsValid.Should().BeTrue("a batch of all eight client types is an ordinary flush");
+        all.IsValid.Should().BeTrue("a batch of every client type is an ordinary flush");
         all.Errors.Should().BeEmpty();
 
         var empty = sut.ValidateFromClient(new IngestEventsCommand(Array.Empty<IngestedEvent>()));
@@ -221,6 +234,93 @@ public sealed class ServerOnlyEventTypeTests
         missing.Errors.Should().ContainSingle();
         missing.Errors[0].Code.Should().Be("analytics.missing_required_prop");
         missing.Errors[0].MissingProps.Should().NotBeNull().And.Contain("ts");
+    }
+
+    // -----------------------------------------------------------------
+    // sync.push_outcome: a client type (ADR 0027 D2, plan CR-1a Task C2)
+    // -----------------------------------------------------------------
+
+    [Fact]
+    public void Sync_push_outcome_is_a_client_type_and_passes_the_client_door()
+    {
+        const string type = "sync.push_outcome";
+
+        EventVocabulary.IsKnown(type).Should().BeTrue("ADR 0027 D2 adds it to the vocabulary");
+        EventVocabulary.ServerOnly.Should().NotContain(type,
+            "the farmer app sends it; if it were server-only the ingest route would refuse the "
+            + "whole batch it arrives in, and that batch also carries the closure events");
+        EventVocabulary.IsServerOnly(type).Should().BeFalse();
+
+        var sut = new IngestEventsValidator();
+
+        // A full bag, with the values the app really sends (numbers and
+        // strings), passes the check the client route uses.
+        var full = sut.ValidateFromClient(Batch(FullPushOutcome()));
+
+        full.IsValid.Should().BeTrue("a complete report from the app is accepted at POST /analytics/ingest");
+        full.Errors.Should().BeEmpty();
+
+        // And in an ordinary flush, beside the closure events it travels with.
+        var flush = sut.ValidateFromClient(Batch(
+            WellFormed("closure.started"),
+            FullPushOutcome(),
+            WellFormed("closure.submitted")));
+
+        flush.IsValid.Should().BeTrue(
+            "the report must never cost the closure events in the same batch (ADR 0027 D8)");
+        flush.Errors.Should().BeEmpty();
+
+        // It is still checked for shape at that door: a report with no app
+        // version is refused for that, with the shape check's own code and
+        // not the server-only one.
+        var noVersion = FullPushOutcomeProps();
+        noVersion.Remove("appVersion");
+
+        var refused = sut.ValidateFromClient(Batch(new IngestedEvent(type, noVersion)));
+
+        refused.IsValid.Should().BeFalse();
+        refused.Errors.Should().ContainSingle();
+        refused.Errors[0].Code.Should().Be("analytics.missing_required_prop");
+        refused.Errors[0].MissingProps.Should().BeEquivalentTo(new[] { "appVersion" });
+    }
+
+    [Fact]
+    public async Task A_push_outcome_from_the_app_is_written_with_its_sender_as_the_actor()
+    {
+        var writer = new RecordingWriter();
+        var handler = new IngestEventsHandler(
+            writer,
+            new IngestEventsValidator(),
+            new FixedClock(new DateTime(2026, 11, 14, 6, 31, 0, DateTimeKind.Utc)),
+            NullLogger<IngestEventsHandler>.Instance);
+
+        var result = await handler.HandleAsync(Batch(FullPushOutcome()), Farmer);
+
+        result.IsSuccess.Should().BeTrue("the client route accepts the app's report");
+        writer.Events.Should().ContainSingle();
+
+        var row = writer.Events[0];
+        row.EventType.Should().Be("sync.push_outcome");
+
+        // The report names nobody in its props. Its person is the signed-in
+        // sender, stamped by the route: that is the one known effect on the
+        // weekly-active number (ADR 0027, Consequences), and it is what the
+        // control room's reader relies on to tell an app's report (an actor)
+        // from a row the server wrote (no actor).
+        row.ActorUserId.Should().NotBeNull("a report with no sender could never be matched to a person");
+        row.ActorUserId!.Value.Value.Should().Be(Farmer);
+        row.ActorRole.Should().Be("user");
+        row.FarmId.Should().BeNull("the report carries a person, not a farm");
+
+        using var props = System.Text.Json.JsonDocument.Parse(row.PropsJson);
+        props.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
+            new[] { "recoveredCount", "needsReviewCount", "pendingAfter", "appVersion", "firstFailedAtUtc" },
+            "what the app sent is what is stored: three counts, the app version and the time "
+            + "of the first failure, and nothing is added on the way in");
+        props.RootElement.GetProperty("recoveredCount").GetInt32().Should().Be(2);
+        props.RootElement.GetProperty("needsReviewCount").GetInt32().Should().Be(1);
+        props.RootElement.GetProperty("pendingAfter").GetInt32().Should().Be(0);
+        props.RootElement.GetProperty("appVersion").GetString().Should().Be("1.0.18");
     }
 
     // -----------------------------------------------------------------
@@ -313,6 +413,22 @@ public sealed class ServerOnlyEventTypeTests
 
         return new IngestedEvent(eventType, props);
     }
+
+    /// <summary>
+    /// A <c>sync.push_outcome</c> as the 1.0.18 app sends it, with real
+    /// values, not placeholders: two saves that had failed arrived, one was
+    /// sent to the farmer to review, nothing is left waiting.
+    /// </summary>
+    private static IngestedEvent FullPushOutcome() => new("sync.push_outcome", FullPushOutcomeProps());
+
+    private static Dictionary<string, object?> FullPushOutcomeProps() => new()
+    {
+        ["recoveredCount"] = 2,
+        ["needsReviewCount"] = 1,
+        ["pendingAfter"] = 0,
+        ["appVersion"] = "1.0.18",
+        ["firstFailedAtUtc"] = "2026-11-14T06:30:00.000Z",
+    };
 
     private sealed class FixedClock(DateTime utcNow) : IClock
     {

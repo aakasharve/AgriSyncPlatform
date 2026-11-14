@@ -329,5 +329,14 @@ public sealed class AdminOpsAppVersionsGateTests
 
         public Task<OpsVoiceTrendDto> GetVoiceTrendAsync(int days, CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        // Added to the port after this plan, by plan CR-1a Task R1 (spec
+        // control-room-go-live-must-haves-2026-11-10): the read behind
+        // GET /shramsafal/admin/ops/recorded. The app-versions route has no
+        // business reaching it; its own gate is held in
+        // AdminOpsRecordedRouteTests.
+        public Task<IReadOnlyList<OpsRecordedRowDto>> GetRecordedAsync(
+            DateTime sinceUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 }

@@ -1,3 +1,5 @@
+using System.Reflection;
+using AgriSync.BuildingBlocks.Analytics;
 using Analytics.Application.UseCases.IngestEvents;
 using Analytics.Domain.Vocabulary;
 using FluentAssertions;
@@ -9,10 +11,11 @@ namespace Analytics.UnitTests;
 /// Lockdown coverage for the frozen event vocabulary (DWC v2 §2.3 +
 /// ADR-2026-05-02, which froze it at 13 events; ADR 0027 D1 extends it with
 /// the server-only <c>api.refused</c>, making 14; ADR 0028 adds the
-/// server-only <c>app.seen</c>, making 15). Three classes of assertion:
+/// server-only <c>app.seen</c>, making 15; ADR 0027 D2 adds the client event
+/// <c>sync.push_outcome</c>, making 16). Three classes of assertion:
 /// </summary>
 /// <list type="number">
-/// <item><b>Registry shape</b> — exactly 15 entries, every name matches the ADRs.</item>
+/// <item><b>Registry shape</b> — exactly 16 entries, every name matches the ADRs.</item>
 /// <item><b>Validator rejects</b> — unknown event_type and missing required prop.</item>
 /// <item><b>Shape check</b> — every entry passes <c>Validate</c> with its own RequiredProps populated.</item>
 /// </list>
@@ -21,7 +24,7 @@ namespace Analytics.UnitTests;
 /// the SHAPE check: is the type in the vocabulary, and are its required props
 /// there. Since review round 2 of spec control-room-app-versions-2026-11-12
 /// that is no longer the same question as "may a client send this": seven of
-/// the fifteen types are server-only, and <c>ValidateFromClient</c> refuses
+/// the sixteen types are server-only, and <c>ValidateFromClient</c> refuses
 /// them at <c>POST /analytics/ingest</c>. That door is held in
 /// <see cref="ServerOnlyEventTypeTests"/>.
 /// </remarks>
@@ -32,7 +35,7 @@ public sealed class EventVocabularyTests
     // -----------------------------------------------------------------
 
     [Fact]
-    public void Registry_Has_Exactly_15_Entries()
+    public void Registry_Has_Exactly_16_Entries()
     {
         // Adding an event without a new ADR is a process violation — bump
         // this number deliberately and only after the ADR is signed.
@@ -47,13 +50,15 @@ public sealed class EventVocabularyTests
         // test was Registry_Has_Exactly_14_Entries; again the same pin, moved
         // by name.
         //
-        // ADR 0027 D6 adds sync.push_outcome on the CR-1a lane (Task C2),
-        // which also moves this pin by one. That entry is not pinned here:
-        // whichever of the two lanes merges second raises the number to 16
-        // and says so in its commit.
-        EventVocabulary.Registry.Should().HaveCount(15,
-            "ADR-2026-05-02 froze the vocabulary at 13 events, ADR 0027 D1 adds api.refused and "
-            + "ADR 0028 adds app.seen; a new ADR is required to extend it further");
+        // 15 -> 16 on 2026-11-14: ADR 0027 D2 and D6 add sync.push_outcome
+        // (spec control-room-go-live-must-haves-2026-11-10, plan CR-1a Task
+        // C2). This test was Registry_Has_Exactly_15_Entries; once more the
+        // same pin, moved by name. The app-versions work landed on this lane
+        // first, so this is the move the note that stood here said the
+        // second lane would make.
+        EventVocabulary.Registry.Should().HaveCount(16,
+            "ADR-2026-05-02 froze the vocabulary at 13 events, ADR 0027 adds api.refused and "
+            + "sync.push_outcome, and ADR 0028 adds app.seen; a new ADR is required to extend it further");
     }
 
     [Fact]
@@ -69,6 +74,8 @@ public sealed class EventVocabularyTests
             "api.refused",
             // ADR 0028 (server-only; written by AppSeenMiddleware).
             "app.seen",
+            // ADR 0027 D2 (a client event; sent by the farmer app's sync worker).
+            "sync.push_outcome",
         };
 
         EventVocabulary.Registry.Keys.Should().BeEquivalentTo(expected,
@@ -139,6 +146,110 @@ public sealed class EventVocabularyTests
             + "list: analytics.events is append-only, so no device identifier, farm or endpoint "
             + "may reach a row through this entry unreviewed (ADR 0027 D7)");
     }
+
+    [Fact]
+    public void Sync_push_outcome_requires_its_three_counts_and_the_app_version()
+    {
+        // ADR 0027 D2 — spec control-room-go-live-must-haves-2026-11-10, plan
+        // CR-1a Task C2. The farmer app's own report, at most once per sync
+        // cycle, of what happened to work that had failed.
+        var def = EventVocabulary.Registry["sync.push_outcome"];
+
+        def.RequiredProps.Should().BeEquivalentTo(
+            new[] { "recoveredCount", "needsReviewCount", "pendingAfter", "appVersion" },
+            "the three counts are the report; and the row carries a person, not a phone, so "
+            + "the app version is what tells a 1.0.18 report from anything else");
+
+        def.Optional.Should().BeEquivalentTo(new[] { "firstFailedAtUtc" },
+            "that is the whole list (ADR 0027 D2: it carries nothing else). There is no "
+            + "attempts count, because the queue's counter is reset when a backoff is cleared, "
+            + "and no dropped count, because nothing in a push cycle drops a save; and "
+            + "analytics.events is append-only, so no farmer text, phone number or device id "
+            + "may reach a row through this entry unreviewed (D7)");
+
+        var sut = new IngestEventsValidator();
+
+        // A full bag is accepted.
+        var full = sut.Validate(Outcome(FullOutcome()));
+
+        full.IsValid.Should().BeTrue("a report with its three counts and its app version is complete");
+        full.Errors.Should().BeEmpty();
+
+        // The optional first-failure time may be absent: a report of saves
+        // sent for review only has no recovered save to date.
+        var noFirstFailure = FullOutcome();
+        noFirstFailure.Remove("firstFailedAtUtc");
+
+        sut.Validate(Outcome(noFirstFailure)).IsValid.Should().BeTrue();
+
+        // Zero is a count, not a missing value: "nothing is left waiting" is
+        // exactly what a good report says.
+        var zeros = FullOutcome();
+        zeros["recoveredCount"] = 0;
+        zeros["pendingAfter"] = 0;
+
+        sut.Validate(Outcome(zeros)).IsValid.Should().BeTrue(
+            "a count of 0 is present and not null; refusing it would refuse the report the "
+            + "founder's acceptance walk expects (still waiting 0)");
+
+        // A bag missing any one required key is refused, and the refusal
+        // names that key and no other.
+        foreach (var key in new[] { "pendingAfter", "appVersion", "recoveredCount", "needsReviewCount" })
+        {
+            var bag = FullOutcome();
+            bag.Remove(key);
+
+            var outcome = sut.Validate(Outcome(bag));
+
+            outcome.IsValid.Should().BeFalse($"a report with no {key} is not a report");
+            outcome.Errors.Should().ContainSingle();
+            outcome.Errors[0].Code.Should().Be("analytics.missing_required_prop");
+            outcome.Errors[0].EventType.Should().Be("sync.push_outcome");
+            outcome.Errors[0].MissingProps.Should().BeEquivalentTo(new[] { key });
+        }
+
+        // A null value is a missing value.
+        var nullVersion = FullOutcome();
+        nullVersion["appVersion"] = null;
+
+        var refused = sut.Validate(Outcome(nullVersion));
+
+        refused.IsValid.Should().BeFalse();
+        refused.Errors[0].MissingProps.Should().BeEquivalentTo(new[] { "appVersion" });
+    }
+
+    [Fact]
+    public void Sync_push_outcome_has_its_event_type_constant()
+    {
+        // Plan CR-1a Task C2: AnalyticsEventType.SyncPushOutcome. Read by
+        // reflection so that this project still builds, and this one test is
+        // red, until the constant exists; nothing else here depends on it.
+        var field = typeof(AnalyticsEventType).GetField(
+            "SyncPushOutcome", BindingFlags.Public | BindingFlags.Static);
+
+        field.Should().NotBeNull(
+            "server code that reads or writes the type must name it through one constant, "
+            + "as it does for api.refused and app.seen");
+        field!.IsLiteral.Should().BeTrue("it is a const, like its neighbours");
+        field.GetRawConstantValue().Should().Be("sync.push_outcome",
+            "the constant and the vocabulary key are one name; a difference of one character "
+            + "would write rows no reader finds");
+
+        EventVocabulary.IsKnown((string)field.GetRawConstantValue()!).Should().BeTrue();
+    }
+
+    /// <summary>A report as the 1.0.18 app sends it: three counts, its version, and the time of the first failure.</summary>
+    private static Dictionary<string, object?> FullOutcome() => new()
+    {
+        ["recoveredCount"] = 2,
+        ["needsReviewCount"] = 1,
+        ["pendingAfter"] = 0,
+        ["appVersion"] = "1.0.18",
+        ["firstFailedAtUtc"] = "2026-11-14T06:30:00.000Z",
+    };
+
+    private static IngestEventsCommand Outcome(Dictionary<string, object?> props) =>
+        new(new[] { new IngestedEvent("sync.push_outcome", props) });
 
     [Theory]
     [InlineData("closure.started")]
