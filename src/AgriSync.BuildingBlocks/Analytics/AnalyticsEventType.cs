@@ -77,6 +77,14 @@ public static class AnalyticsEventType
     // before this type existed stays api.error.
     public const string ApiRefused = "api.refused";
 
+    // sync.push_outcome = the farmer app's own report, at most once per sync
+    // cycle, that work which had failed arrived or now needs the farmer
+    // (ADR 0027 D2). A CLIENT type: the server never writes it. It arrives
+    // through POST /analytics/ingest, which stamps the sender as the row's
+    // actor. It is named here because the server reads it back
+    // (GET /shramsafal/admin/ops/recorded).
+    public const string SyncPushOutcome = "sync.push_outcome";
+
     // app.seen = a signed-in person used the farmer app on a version
     // (ADR 0028). Written by AppSeenMiddleware at most once per person, app
     // version and UTC day. The person is props.personId; actor_user_id and
