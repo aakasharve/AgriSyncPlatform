@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using ShramSafal.Application.Contracts.Dtos;
 using ShramSafal.Application.Ports;
 using ShramSafal.Domain.Farms;
-using System.Text.Json;
 
 namespace ShramSafal.Infrastructure.Persistence.Repositories;
 
@@ -611,14 +610,48 @@ public sealed class AdminOpsRepository(
     // nobody can remove it. The app's failure reporter goes further: it keeps
     // the raw body of an anonymous caller as the props, and that body need
     // not be a JSON object at all (a word, a number, a list and null are all
-    // valid JSON). So the SQL casts nothing a row could make fail (its one
-    // cast sits behind a pattern that the cast always accepts), and every
-    // value inside props is read in code, where one that cannot be read
-    // becomes null.
+    // valid JSON).
+    //
+    // For the same reason the props of a row never leave the database whole
+    // (asked for by the independent review of 2026-11-14). The query takes
+    // out the keys this route returns and no others, so a body an anonymous
+    // caller posted is not copied into this process for one value in it.
+    //
+    // Every value is taken behind a test of its JSON type (jsonb_typeof), so
+    // no operator is handed a kind of value it could raise on:
+    //   - props that are not an object give no bag at all, and every value of
+    //     that row is NULL;
+    //   - text is taken only from a JSON string;
+    //   - a whole number only from a JSON number with no fraction part that
+    //     fits a 32-bit column, and it is cast only after that test, so the
+    //     cast cannot fail;
+    //   - the list of codes only from a JSON array, and only its strings.
+    // A value of any other kind is NULL (the list: empty). What the code
+    // below still decides is what a readable value means: blank text is no
+    // value, a count is not negative, an id has the form of one, a version
+    // goes through the one sanitiser.
     // ───────────────────────────────────────────────────────────
 
     /// <summary>The most rows <see cref="GetRecordedAsync"/> returns: the newest ones.</summary>
     public const int MaxRecordedRows = 500;
+
+    /// <summary>
+    /// How many characters of <c>props.appVersion</c> the query hands over:
+    /// the first 256. It is the one value read from a row a client wrote, so
+    /// its length is whatever the sender chose. A version is at most 32
+    /// characters (<see cref="RequestObservabilityProps.SanitiseAppVersion"/>),
+    /// so a longer value is not one, and the sanitiser says so from its first
+    /// 256 characters exactly as it would from all of them. Keep this number
+    /// well above the sanitiser's own limit: a value cut BELOW that limit
+    /// would be returned as a version nobody stated.
+    ///
+    /// <para>
+    /// The one answer this changes: a value that begins with 256 blank
+    /// characters and has other text after them now reads as no version,
+    /// where the whole value read as malformed.
+    /// </para>
+    /// </summary>
+    private const int AppVersionCharsRead = 256;
 
     /// <summary>
     /// Written by the request middleware, which never sets an actor. These are
@@ -672,42 +705,127 @@ public sealed class AdminOpsRepository(
     // The limit is applied to the events before the join and the order is
     // stated again after it, because a join does not promise to keep one.
     // event_id breaks ties so the newest 500 are the same 500 every time.
-    private const string RecordedSql = """
+    //
+    // The query has three levels, each with one job:
+    //
+    //   n  WHICH rows: the two locks, newest first, the limit. It hands the
+    //      props of those rows to the level above it, inside the database.
+    //
+    //   b  WHOSE row it is, and which bag may be read from it. A bag is the
+    //      props when they are a JSON object, and otherwise NULL:
+    //        bag      any row. Only the app version is taken from it.
+    //        request  a row the server wrote. The facts of a request (its
+    //                 path, route, status, error name, refused saves, the
+    //                 server build, the farm it addressed) are the server's:
+    //                 on a row the app sent, keys of those names would be
+    //                 whatever the sender chose to post, and are not read.
+    //        report   the app's own sync report. The three counts are read
+    //                 on that row type alone.
+    //
+    //   the outer SELECT  the values, each from its bag and each behind its
+    //      type test, and the person's name. Its list is everything that
+    //      leaves the database, in the order ReadRecordedRow reads it. It
+    //      runs on the rows n kept, so no more than the limit are opened.
+    private static readonly string RecordedSql = $$"""
         SELECT
-            r.event_id,
-            r.event_type,
-            r.occurred_at_utc,
-            r.person_id,
+            b.event_id,
+            b.event_type,
+            b.occurred_at_utc,
+            {{TextAt("b.request", "endpoint")}} AS endpoint,
+            {{TextAt("b.request", "route")}} AS route,
+            {{WholeNumberAt("b.request", "statusCode")}} AS status_code,
+            {{TextAt("b.request", "errorCode")}} AS error_code,
+            {{StringsAt("b.request", "rejectedWorkCodes")}} AS rejected_work_codes,
+            {{WholeNumberAt("b.request", "rejectedWorkItems")}} AS rejected_work_items,
+            left({{TextAt("b.bag", "appVersion")}}, {{AppVersionCharsRead}}) AS app_version,
+            {{TextAt("b.request", "serverBuild")}} AS server_build,
+            b.person_id,
             u.display_name,
-            r.props
+            {{TextAt("b.request", "routeFarmId")}} AS route_farm_id,
+            {{WholeNumberAt("b.report", "recoveredCount")}} AS recovered_count,
+            {{WholeNumberAt("b.report", "needsReviewCount")}} AS needs_review_count,
+            {{WholeNumberAt("b.report", "pendingAfter")}} AS pending_after,
+            b.props_are_an_object
         FROM (
             SELECT
-                e.event_id,
-                e.event_type,
-                e.occurred_at_utc,
-                e.props::text AS props,
+                n.event_id,
+                n.event_type,
+                n.occurred_at_utc,
+                jsonb_typeof(n.props) = 'object' AS props_are_an_object,
                 CASE
-                    WHEN e.event_type = ANY(@server_types) THEN
+                    WHEN jsonb_typeof(n.props) = 'object' THEN n.props
+                END AS bag,
+                CASE
+                    WHEN n.event_type = ANY(@server_types) AND jsonb_typeof(n.props) = 'object' THEN n.props
+                END AS request,
+                CASE
+                    WHEN n.event_type = @report_type AND jsonb_typeof(n.props) = 'object' THEN n.props
+                END AS report,
+                CASE
+                    WHEN n.event_type = ANY(@server_types) THEN
                         CASE
-                            WHEN e.props->>'personId'
+                            WHEN n.props->>'personId'
                                  ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-                                THEN (e.props->>'personId')::uuid
+                                THEN (n.props->>'personId')::uuid
                         END
-                    ELSE e.actor_user_id
+                    ELSE n.actor_user_id
                 END AS person_id
-            FROM analytics.events e
-            WHERE e.occurred_at_utc >= @since
-              AND (
-                      (e.event_type = ANY(@server_types) AND e.actor_user_id IS NULL)
-                   OR (e.event_type = @report_type       AND e.actor_user_id IS NOT NULL)
-                   OR  e.event_type = @client_error_type
-                  )
-            ORDER BY e.occurred_at_utc DESC, e.event_id DESC
-            LIMIT @limit
-        ) r
-        LEFT JOIN public.users u ON u."Id" = r.person_id
-        ORDER BY r.occurred_at_utc DESC, r.event_id DESC
+            FROM (
+                SELECT
+                    e.event_id,
+                    e.event_type,
+                    e.occurred_at_utc,
+                    e.actor_user_id,
+                    e.props
+                FROM analytics.events e
+                WHERE e.occurred_at_utc >= @since
+                  AND (
+                          (e.event_type = ANY(@server_types) AND e.actor_user_id IS NULL)
+                       OR (e.event_type = @report_type       AND e.actor_user_id IS NOT NULL)
+                       OR  e.event_type = @client_error_type
+                      )
+                ORDER BY e.occurred_at_utc DESC, e.event_id DESC
+                LIMIT @limit
+            ) n
+        ) b
+        LEFT JOIN public.users u ON u."Id" = b.person_id
+        ORDER BY b.occurred_at_utc DESC, b.event_id DESC
         """;
+
+    // The three ways a value is taken out of a bag. The bag and the key are
+    // names written in this file, never anything a caller sent.
+
+    /// <summary>
+    /// The text of a JSON string. NULL for a missing key, for a value of any
+    /// other kind, and when the bag itself is NULL.
+    /// </summary>
+    private static string TextAt(string bag, string key) =>
+        $"CASE WHEN jsonb_typeof({bag}->'{key}') = 'string' THEN {bag}->>'{key}' END";
+
+    /// <summary>
+    /// A JSON number that is written with no fraction part and fits a 32-bit
+    /// column, as that number; NULL for anything else (a word, a flag, an
+    /// object, 1.5, 500.0, a number too large). The inner CASE runs only for
+    /// a JSON number, and its cast to a whole number only for one that passed
+    /// both tests, so neither cast can fail.
+    /// </summary>
+    private static string WholeNumberAt(string bag, string key) =>
+        $"CASE WHEN jsonb_typeof({bag}->'{key}') = 'number' THEN "
+        + $"CASE WHEN scale(({bag}->>'{key}')::numeric) = 0 "
+        + $"AND ({bag}->>'{key}')::numeric BETWEEN -2147483648 AND 2147483647 "
+        + $"THEN ({bag}->>'{key}')::numeric::int END END";
+
+    /// <summary>
+    /// The strings of a JSON array, in its order, as a list of text; an empty
+    /// list for a missing key, for a value that is not an array, and when the
+    /// bag itself is NULL. Never NULL. jsonb_array_elements raises on
+    /// anything that is not an array, so it is only ever given one: the value
+    /// when it is an array, and an empty array when it is not.
+    /// </summary>
+    private static string StringsAt(string bag, string key) =>
+        "ARRAY(SELECT c.item #>> '{}' FROM jsonb_array_elements("
+        + $"CASE WHEN jsonb_typeof({bag}->'{key}') = 'array' THEN {bag}->'{key}' ELSE '[]'::jsonb END"
+        + ") WITH ORDINALITY AS c(item, place) WHERE jsonb_typeof(c.item) = 'string' ORDER BY c.place)";
 
     public async Task<IReadOnlyList<OpsRecordedRowDto>> GetRecordedAsync(
         DateTime sinceUtc, CancellationToken ct = default)
@@ -752,136 +870,81 @@ public sealed class AdminOpsRepository(
     }
 
     /// <summary>
-    /// One recorded row. Column order must match <see cref="RecordedSql"/>.
+    /// One recorded row. The columns are read in the order of the SELECT
+    /// list of <see cref="RecordedSql"/>, which is the order of the DTO.
     ///
     /// <para>
-    /// A row answers only for what its writer could know. The facts of a
-    /// request (its path, route, status, error name, refused saves, the
-    /// server build, the farm it addressed) are the server's: on a row the
-    /// app sent, keys of those names would be whatever the sender chose to
-    /// post, and are not read. The three counts are the app's own report and
-    /// are read on that row type alone.
+    /// Which values a row may carry (a request's facts on a row the server
+    /// wrote, the three counts on the app's report) and what kind each value
+    /// must be were decided in the query; a column that is NULL here is a
+    /// value the row did not have or could not give. This method decides only
+    /// what a value that was read means.
     /// </para>
     /// </summary>
     private static OpsRecordedRowDto ReadRecordedRow(System.Data.Common.DbDataReader r, out bool propsReadable)
     {
-        var eventType = r.GetString(1);
-        var serverWritten = Array.IndexOf(ServerWrittenTypes, eventType) >= 0;
-        var isReport = string.Equals(eventType, AnalyticsEventType.SyncPushOutcome, StringComparison.Ordinal);
-
-        using var doc = ParseProps(r.IsDBNull(5) ? null : r.GetString(5));
-        propsReadable = doc is not null;
-        JsonElement? props = doc?.RootElement;
-
-        var personName = r.IsDBNull(4) ? null : r.GetString(4);
+        propsReadable = r.GetBoolean(17);
 
         return new OpsRecordedRowDto(
             EventId: r.GetGuid(0),
-            EventType: eventType,
+            EventType: r.GetString(1),
             OccurredAtUtc: AsUtc(r.GetDateTime(2)),
-            Endpoint: serverWritten ? ReadText(props, "endpoint") : null,
-            Route: serverWritten ? ReadText(props, "route") : null,
-            StatusCode: serverWritten ? ReadWholeNumber(props, "statusCode") : null,
-            ErrorCode: serverWritten ? ReadText(props, "errorCode") : null,
-            RejectedWorkCodes: serverWritten ? ReadCodes(props, "rejectedWorkCodes") : [],
-            RejectedWorkItems: serverWritten ? ReadCount(props, "rejectedWorkItems") : null,
+            Endpoint: ReadText(r, 3),
+            Route: ReadText(r, 4),
+            StatusCode: ReadWholeNumber(r, 5),
+            ErrorCode: ReadText(r, 6),
+            RejectedWorkCodes: ReadCodes(r, 7),
+            RejectedWorkItems: ReadCount(r, 8),
 
             // The server's rows went through this sanitiser when they were
             // written, so for them it changes nothing. The app's report
             // arrives through ingest, which does not check what a version
             // looks like; reading it through the same sanitiser keeps one
             // definition of a version on every row.
-            AppVersion: RequestObservabilityProps.SanitiseAppVersion(ReadText(props, "appVersion")),
+            AppVersion: RequestObservabilityProps.SanitiseAppVersion(ReadText(r, 9)),
 
-            ServerBuild: serverWritten ? ReadText(props, "serverBuild") : null,
-            PersonId: r.IsDBNull(3) ? null : r.GetGuid(3),
+            ServerBuild: ReadText(r, 10),
+            PersonId: r.IsDBNull(11) ? null : r.GetGuid(11),
 
             // No user record, or a blank name: null. Nothing is made up.
-            PersonName: string.IsNullOrWhiteSpace(personName) ? null : personName,
+            PersonName: ReadText(r, 12),
 
-            RouteFarmId: serverWritten ? ReadId(props, "routeFarmId") : null,
-            RecoveredCount: isReport ? ReadCount(props, "recoveredCount") : null,
-            NeedsReviewCount: isReport ? ReadCount(props, "needsReviewCount") : null,
-            PendingAfter: isReport ? ReadCount(props, "pendingAfter") : null);
+            RouteFarmId: ReadId(r, 13),
+            RecoveredCount: ReadCount(r, 14),
+            NeedsReviewCount: ReadCount(r, 15),
+            PendingAfter: ReadCount(r, 16));
     }
 
-    /// <summary>
-    /// The props of a row as a JSON object; null when there are none or they
-    /// are not one. A <c>client.error</c> row from the app's failure reporter
-    /// holds whatever its caller posted, so a word, a number, a list or the
-    /// JSON null all arrive here: each gives null, and every value the row
-    /// would have taken from its props is then null (the list of codes:
-    /// empty). jsonb always prints valid JSON, so the catch is for the
-    /// parser's own limits (nesting deeper than it accepts).
-    /// </summary>
-    private static JsonDocument? ParseProps(string? propsJson)
-    {
-        if (string.IsNullOrEmpty(propsJson))
-        {
-            return null;
-        }
-
-        try
-        {
-            var doc = JsonDocument.Parse(propsJson);
-            if (doc.RootElement.ValueKind == JsonValueKind.Object)
-            {
-                return doc;
-            }
-
-            doc.Dispose();
-            return null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>A JSON string that is not blank; anything else is null.</summary>
-    private static string? ReadText(JsonElement? props, string key) =>
-        props is { } bag
-        && bag.TryGetProperty(key, out var value)
-        && value.ValueKind == JsonValueKind.String
-        && value.GetString() is { } text
-        && !string.IsNullOrWhiteSpace(text)
+    /// <summary>Text that is not blank; a NULL column or blank text is null.</summary>
+    private static string? ReadText(System.Data.Common.DbDataReader r, int column) =>
+        !r.IsDBNull(column) && r.GetString(column) is { } text && !string.IsNullOrWhiteSpace(text)
             ? text
             : null;
 
-    /// <summary>A JSON number that is a whole number; a word, a flag, an object or a fraction is null.</summary>
-    private static int? ReadWholeNumber(JsonElement? props, string key) =>
-        props is { } bag
-        && bag.TryGetProperty(key, out var value)
-        && value.ValueKind == JsonValueKind.Number
-        && value.TryGetInt32(out var number)
-            ? number
-            : null;
+    /// <summary>A whole number; a NULL column (the value was not a whole number, or was absent) is null.</summary>
+    private static int? ReadWholeNumber(System.Data.Common.DbDataReader r, int column) =>
+        r.IsDBNull(column) ? null : r.GetInt32(column);
 
     /// <summary>A whole number that is zero or more: a count of things cannot be negative.</summary>
-    private static int? ReadCount(JsonElement? props, string key) =>
-        ReadWholeNumber(props, key) is int count && count >= 0 ? count : null;
+    private static int? ReadCount(System.Data.Common.DbDataReader r, int column) =>
+        ReadWholeNumber(r, column) is int count && count >= 0 ? count : null;
 
     /// <summary>An id in the form the middleware writes it (8-4-4-4-12); anything else is null.</summary>
-    private static Guid? ReadId(JsonElement? props, string key) =>
-        ReadText(props, key) is { } text && Guid.TryParseExact(text, "D", out var id) ? id : null;
+    private static Guid? ReadId(System.Data.Common.DbDataReader r, int column) =>
+        ReadText(r, column) is { } text && Guid.TryParseExact(text, "D", out var id) ? id : null;
 
-    /// <summary>The distinct, non-blank strings of a JSON array, in its order; anything else is an empty list.</summary>
-    private static IReadOnlyList<string> ReadCodes(JsonElement? props, string key)
+    /// <summary>The distinct, non-blank strings of the list, in its order; a NULL column is an empty list.</summary>
+    private static IReadOnlyList<string> ReadCodes(System.Data.Common.DbDataReader r, int column)
     {
-        if (props is not { } bag
-            || !bag.TryGetProperty(key, out var value)
-            || value.ValueKind != JsonValueKind.Array)
+        if (r.IsDBNull(column))
         {
             return [];
         }
 
         var codes = new List<string>();
-        foreach (var item in value.EnumerateArray())
+        foreach (var code in r.GetFieldValue<string[]>(column))
         {
-            if (item.ValueKind == JsonValueKind.String
-                && item.GetString() is { } code
-                && !string.IsNullOrWhiteSpace(code)
-                && !codes.Contains(code))
+            if (!string.IsNullOrWhiteSpace(code) && !codes.Contains(code))
             {
                 codes.Add(code);
             }
