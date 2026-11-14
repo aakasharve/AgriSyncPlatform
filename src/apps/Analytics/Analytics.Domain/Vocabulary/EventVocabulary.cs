@@ -129,6 +129,19 @@ public static class EventVocabulary
                 RequiredProps: ["appVersion", "personId"],
                 Optional: ["platform"]),
 
+            // 2026-11-14 (ADR 0027 D2): sent by the farmer app, at most once
+            // per sync cycle, when work that had failed arrived or now needs
+            // the farmer. A CLIENT type: it arrives through the ingest route,
+            // so its sender is the row's actor (the one known effect on the
+            // weekly-active number, recorded in the ADR). Three counts and
+            // the app version, nothing else: no farmer text, no phone number,
+            // no device id. There is deliberately no attempts count (the
+            // queue's counter is reset when a backoff is cleared) and no
+            // dropped count (nothing in a push cycle drops work).
+            ["sync.push_outcome"] = new(
+                RequiredProps: ["recoveredCount", "needsReviewCount", "pendingAfter", "appVersion"],
+                Optional: ["firstFailedAtUtc"]),
+
             ["client.error"] = new(
                 RequiredProps: ["message"],
                 Optional: ["farmId", "stack"]),
