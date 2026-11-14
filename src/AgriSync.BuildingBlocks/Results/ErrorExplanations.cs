@@ -22,11 +22,29 @@ public sealed record ErrorExplanation(string Meaning, string UsualCause);
 /// </para>
 ///
 /// <para>
-/// <b>Why this lives in BuildingBlocks.</b> It must cover both ShramSafal (52)
-/// and User (6). ShramSafal.Domain may not reference User.Domain
+/// <b>Why this lives in BuildingBlocks.</b> It must cover both ShramSafal and
+/// User (how many errors each declares is pinned in
+/// <c>ErrorExplanationCoverageTests</c>, not written here, where it went
+/// stale). ShramSafal.Domain may not reference User.Domain
 /// (DependencyRuleTests.ShramSafal_Domain_Does_Not_Depend_On_User_Domain).
 /// BuildingBlocks is referenced by both, references neither, and already owns
 /// Error. It is keyed on strings precisely so it needs no reference back.
+/// </para>
+///
+/// <para>
+/// <b>What the coverage test cannot see.</b> It reads the public Error fields
+/// of <c>ShramSafalErrors</c> and <c>UserErrors</c> and nothing else. A code
+/// that is built at the place that returns it (<c>Error.Validation("...")</c>
+/// inside a handler, a code written straight onto a refused sync mutation, an
+/// Error field declared in some other class) is invisible to it, and nothing
+/// fails when such a code has no entry. The section "built where they are
+/// returned" below explains four of them. <b>It is not complete:</b> a search
+/// on 2026-11-14 found many more with no entry yet, among them the
+/// <c>ShramSafal.ScheduleImport*</c>, <c>ShramSafal.ScheduleCheck*</c>,
+/// <c>ShramSafal.FarmRate.*</c>, <c>invitation.*</c>, <c>otp.*</c>,
+/// <c>exit.*</c> and <c>msg91.*</c> families. For those, <see cref="For"/>
+/// answers null, which is the honest answer until each is read off its
+/// producer and written here.
 /// </para>
 ///
 /// <para>
@@ -167,11 +185,19 @@ public static class ErrorExplanations
             + "rather than whether the file failed."),
 
         ["ShramSafal.ScheduleAlreadyAdopted"] = new(
-            "This plot, crop and cycle already has a live schedule running.",
-            "Invariant I-14 allows at most one Active subscription per (plot, cropKey, cycle), and "
-            + "AdoptScheduleHandler.cs:88-91 refuses the second. Usually a double tap on Adopt, or "
-            + "two devices adopting the same plan. The first subscription is intact; abandon or "
-            + "migrate it if the intent was to change templates."),
+            "This plot-season already follows this schedule, so it was not followed a second time.",
+            "The rule is 'never the same schedule twice', NOT 'one schedule per plot-season': a "
+            + "plot-season may follow up to three outside schedules and one of the farm's own "
+            + "(this replaced invariant I-14; see ShramSafal.ScheduleLimitReached). Five producers. "
+            + "AdoptScheduleHandler.cs:169-172: one of the plot-season's Active subscriptions "
+            + "already has this template. :177-180 is the exception to the name: a carry-over "
+            + "(a phone's one-time upload of the single choice it held before several could be "
+            + "followed) onto a plot-season that already follows ANYTHING on the server, so there "
+            + "the schedule need not be the same one. :199-200 and MigrateScheduleHandler.cs:267-268: "
+            + "the save itself found the template already followed, which is two phones at once. "
+            + "MigrateScheduleHandler.cs:148-151: a switch TO a schedule already followed in "
+            + "another place. Usually a double tap or two devices; the subscription already "
+            + "there is intact."),
 
         ["ShramSafal.ScheduleTemplateUnpublished"] = new(
             "The schedule template is still a draft, so it cannot be adopted.",
@@ -678,11 +704,10 @@ public static class ErrorExplanations
             "The schedule is filed as a farm's own but has no owner on its row, so it cannot be followed.",
             "One call site remains: ScheduleLibrary.cs:227-229, on adopt and switch, when the chosen "
             + "schedule classifies as Own and its row's OwnerUserId is null (a Team row nobody "
-            + "owns). The declaration comment at ShramSafalErrors.cs:336-337 says nothing produces "
-            + "this code any more; that comment is stale for this one branch. A current row here "
-            + "means an ownerless Team schedule row exists, which is a data question, not "
-            + "something the farmer did. Shipped phones may also still hold older parked rows "
-            + "carrying it."),
+            + "owns). Every other own schedule has been followable since the own branch opened, "
+            + "or answers ShramSafal.OwnScheduleEmpty. A current row here means an ownerless "
+            + "Team schedule row exists, which is a data question, not something the farmer "
+            + "did. Shipped phones may also still hold older parked rows carrying it."),
 
         // ── ShramSafal — Planned work and reminders ──────────────────────────
         ["ShramSafal.PlannedWorkNotFound"] = new(
@@ -894,6 +919,69 @@ public static class ErrorExplanations
             + "plot of another farm and a made-up id answer alike. Usual shape: a plot removed "
             + "from the farm after the owner's phone last refreshed, or plot ids left over from "
             + "another farm on a multi-farm login."),
+
+        // ── ShramSafal — built where they are returned ───────────────────────
+        // None of these four is a field of ShramSafalErrors. Each is constructed
+        // at the place that returns it, so ErrorExplanationCoverageTests cannot
+        // see it. Not the whole set of such codes: see the class summary.
+        ["ShramSafal.ScheduleMadeFor"] = new(
+            "A schedule was sent with a made-for tag (variety, soil, region or climate) that is not one of the server's choices for it.",
+            "Built at three sites. CreateOwnScheduleHandler.cs:56-58 (making the farm's own "
+            + "schedule) and EditScheduleTemplateHandler.cs:112-114 (saving a new version) both "
+            + "ask MadeForLists.Check before anything is read or written; "
+            + "EditScheduleTemplateHandler.cs:129 is the domain's own repeat of the shape rule. A "
+            + "tag fails when it is longer than 40 characters or holds a control character, or "
+            + "when it is not in its list: soil, region and climate have one list each, and a "
+            + "variety is checked against the list of the schedule's CROP code (a crop with no "
+            + "list of its own takes the short _other list). The comparison is Ordinal on list "
+            + "codes, so `Black` fails where `black` passes. The lists are one JSON file built "
+            + "into both the server and the phone, so the usual shape is a phone and a server "
+            + "built from different versions of that file, or a variety chosen for one crop sent "
+            + "with a schedule of another. A tag never refuses FOLLOWING a schedule. On "
+            + "/sync/push the refusal is permanent. Its Description quotes the refused value, "
+            + "one more reason descriptions are never recorded."),
+
+        ["ShramSafal.ScheduleCheckDecision"] = new(
+            "A check of a library schedule was sent with a decision that is not approve, return or withdraw.",
+            "One site: RecordScheduleCheckHandler.cs:68-72. ParseDecision (:118-124) trims and "
+            + "lower-cases the word and knows only approved/approve, returned/return and "
+            + "withdrawn/withdraw. It is reached only after the caller passed the platform "
+            + "review-seat check and the schedule was found as a Public library row, so the "
+            + "sender is one of ShramSafal's own checkers, never a farmer. A row here means the "
+            + "checking screen sent a word the server does not know: a client and a server out "
+            + "of step, or a hand-made request. The check record is append-only and none was "
+            + "added."),
+
+        ["ShramSafal.SyncMutationStoreError"] = new(
+            "The database refused one save inside a sync push, and that save was rolled back whole.",
+            "Never an Error object: the code is written straight onto one refused mutation in "
+            + "the answer of POST /sync/push, so it shows among a refused sync row's codes and "
+            + "not as a response's own error code. Two producers in PushSyncBatchHandler. "
+            + ":985-1004 is the catch of ANY DbUpdateException raised anywhere in the mutation's "
+            + "transaction, the domain write included, once the request is known not to be this "
+            + "device's own earlier send and not a money-entry id clash. :3558-3562 is the rarer "
+            + "one: the row that remembers the request as done could not be stored and no "
+            + "earlier copy of it exists. Despite the name, the first is usually NOT about the "
+            + "sync store: it is a database constraint refusing the farmer's own write (a "
+            + "unique key already taken, for example). The phone treats this code as worth "
+            + "retrying and sends the same bytes again, so one person repeating it is a payload "
+            + "no retry can satisfy. That was the 2026-08-27 incident, which now has its own "
+            + "code, ShramSafal.LabourAssignment.Conflict. The answer does not say which "
+            + "constraint failed; the Postgres log for the same moment does. Find it, then give "
+            + "that failure a named code of its own."),
+
+        ["ShramSafal.Internal.CostEntryIdClashRecheck"] = new(
+            "An internal marker that a new money entry's id clashed once and must be looked at again; it is never sent to a phone.",
+            "A private constant (PushSyncBatchHandler.cs:872), not an Error. The DbUpdateException "
+            + "catch writes it (:977-982) when an add_cost_entry hit the primary key of "
+            + "ssf.cost_entries for the first time and the request is not this device's own "
+            + "earlier send. The caller (:543-554) sees it and runs the mutation once more in a "
+            + "fresh transaction with the clash marked as already seen. That second run cannot "
+            + "answer with the marker again: it either finds the stored entry, or clashes a "
+            + "second time and answers ShramSafal.CostEntry.Conflict. So the marker does not "
+            + "leave the handler and no recorded row should carry it. If one does, the second "
+            + "run was skipped: read the retry wrapper at :523-556 before reading the money "
+            + "entry."),
 
         // ── Memberships / ClaimJoin (codes carry no ShramSafal. prefix) ──────
         ["join.unauthenticated"] = new(

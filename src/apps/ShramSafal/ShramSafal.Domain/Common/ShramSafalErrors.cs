@@ -333,8 +333,8 @@ public static class ShramSafalErrors
         "A correction field exceeds its stored length. The value is refused, not truncated — a shortened prompt version is not the prompt version.");
     // spec: plr-d10 lane L8b-1F - an outside schedule is followed only once ShramSafal has checked it (D-82); a sample only while its crop has none (D-91 = 1).
     public static readonly Error ScheduleNotChecked = Error.Validation("ShramSafal.ScheduleNotChecked", "ShramSafal has not checked this schedule yet.");
-    // spec: plr-d10 lane L8b-1F - the Own branch (a farm's own schedule) opened in SCH-OWN (D-82 = 3): NOTHING PRODUCES THIS CODE ANY MORE. Kept because
-    // shipped phones still classify it (RejectionPolicy) and a parked row of theirs may still carry it.
+    // spec: plr-d10 lane L8b-1F - the Own branch (a farm's own schedule) opened in SCH-OWN (D-82 = 3). ONE PRODUCER REMAINS: ScheduleLibrary.ChooseAsync, for
+    // a schedule filed as Own whose row has no owner (F218). Kept also because shipped phones classify it (RejectionPolicy) and a parked row may carry it.
     public static readonly Error OwnScheduleNotOpenYet = Error.Validation("ShramSafal.OwnScheduleNotOpenYet", "Following the farm's own schedule is not open yet.");
     // spec: plr-d10 lane SCH-OWN (D-82 = 3; P4) - a farm's own schedule that stores no days has nothing to follow: adopt / migrate refuse it and write nothing
     // (never an invented stage or day). Words PROPOSED: "आधी कामं जोडा" ("add the works first").
