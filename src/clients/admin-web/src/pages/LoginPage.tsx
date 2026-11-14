@@ -4,7 +4,9 @@ import { isAxiosError } from 'axios';
 import { Leaf, Wheat, BarChart3, Shield } from 'lucide-react';
 import {
   adminApi,
+  isSignOutOwed,
   readSessionEndReason,
+  settleOwedSignOut,
   tellServerSignedOut,
   type SessionEndReason,
 } from '@/lib/api';
@@ -78,14 +80,18 @@ const TEXT = {
   newCodeSent: 'A new code has been sent.',
 } as const;
 
-// What the page says when the console itself opened it: it signed the person out, or the
-// person signed out and the server could not be told.
+// What the page says when the console itself signed the person out and sent them here.
 const SIGNED_OUT_TEXT: Record<SessionEndReason, string> = {
   'max-age': `You were signed out after ${MAX_SESSION_HOURS} hours. Sign in again.`,
   ended: 'Your session has ended. Sign in again.',
-  'not-told':
-    'You are signed out on this browser. The server could not be told, so close this browser window to finish signing out.',
 };
+
+// What the page says about a sign-out the server could not be told about: while it is still
+// owed, and once the page has managed to tell the server.
+const OWED_SIGN_OUT_TEXT = {
+  owed: 'You are signed out on this browser. The server could not be told just now; this page will tell it as soon as the server can be reached.',
+  told: 'The server has now been told. You are fully signed out.',
+} as const;
 
 function signedOutNotice(): string | null {
   const reason = readSessionEndReason(window.location.search);
@@ -213,8 +219,33 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   // Opens with the reason when the console signed the person out; gone at their first action.
   const [notice, setNotice] = useState<string | null>(signedOutNotice);
+  // A sign-out the server could not be told about: still owed, or told by this page just now.
+  // Read from the browser's store, so the sentence is there again each time the page opens,
+  // for as long as the sign-out is owed.
+  const [owedSignOut, setOwedSignOut] = useState<'owed' | 'told' | null>(() =>
+    isSignOutOwed() ? 'owed' : null,
+  );
   const auth = useAdminAuth();
   const navigate = useNavigate();
+
+  // Whenever the page opens it tries to tell the server about an owed sign-out, and says how
+  // that went. (When nothing is owed this asks the server nothing.)
+  useEffect(() => {
+    let left = false;
+    void settleOwedSignOut().then((outcome) => {
+      if (!left) setOwedSignOut(outcome === 'none' ? null : outcome);
+    });
+    return () => {
+      left = true;
+    };
+  }, []);
+
+  // The person has begun to act: what the page opened with has been read. A sign-out that is
+  // still owed is not read and done with, so that sentence stays until the server is told.
+  function clearNotices() {
+    setNotice(null);
+    setOwedSignOut((was) => (was === 'owed' ? was : null));
+  }
 
   // The countdown reads the clock on every tick, so the wait it shows is still right after the
   // tab has been in the background.
@@ -276,7 +307,7 @@ export default function LoginPage() {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    setNotice(null);
+    clearNotices();
     setSubmitting(true);
     let data: LoginResponse;
     try {
@@ -293,6 +324,8 @@ export default function LoginPage() {
       return;
     }
 
+    // The server accepted this sign-in, so a sign-out owed for the one before is owed no longer.
+    setOwedSignOut(null);
     if (data?.deviceCheckRequired === true) {
       // Now that the page names its browser, a server that asks the account question asks it
       // after a password too, the first time in each browser.
@@ -322,21 +355,21 @@ export default function LoginPage() {
     if (next === way) return;
     setWay(next);
     setError(null);
-    setNotice(null);
+    clearNotices();
     setPassword('');
     backToPhoneStep();
   }
 
   function changeNumber() {
     setError(null);
-    setNotice(null);
+    clearNotices();
     backToPhoneStep();
   }
 
   // Step 1 of the code way, and "Send a new code" on step 2.
   async function sendCode(isResend: boolean) {
     setError(null);
-    setNotice(null);
+    clearNotices();
     setSubmitting(true);
     setResending(isResend);
     try {
@@ -357,7 +390,7 @@ export default function LoginPage() {
   // Step 2 of the code way.
   async function checkCode() {
     setError(null);
-    setNotice(null);
+    clearNotices();
     setSubmitting(true);
     let data: VerifyOtpResponse;
     try {
@@ -380,6 +413,8 @@ export default function LoginPage() {
     }
 
     setOtp('');
+    // The server accepted this sign-in, so a sign-out owed for the one before is owed no longer.
+    setOwedSignOut(null);
     if (data?.deviceCheckRequired === true) {
       askAccountQuestion(data.accountName);
       return;
@@ -398,7 +433,7 @@ export default function LoginPage() {
   // Step 3 of the code way, only when the server asked the account question.
   async function answerAccountQuestion(answer: 'yes' | 'no') {
     setError(null);
-    setNotice(null);
+    clearNotices();
     setSubmitting(true);
     let data: DeviceCheckResponse;
     try {
@@ -619,6 +654,15 @@ export default function LoginPage() {
               className="mb-4 rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-[14px] font-semibold text-gray-700"
             >
               {notice}
+            </div>
+          )}
+
+          {owedSignOut && (
+            <div
+              role="status"
+              className="mb-4 rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-[14px] font-semibold text-gray-700"
+            >
+              {OWED_SIGN_OUT_TEXT[owedSignOut]}
             </div>
           )}
 

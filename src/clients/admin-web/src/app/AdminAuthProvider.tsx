@@ -9,7 +9,14 @@ import {
 } from 'react';
 import { flushSync } from 'react-dom';
 import { accessTokenExpiresWithin, authStore, isSessionOverAge, type AdminSession } from '@/lib/auth';
-import { endSession, onSessionForgotten, signOut, watchSessionAge } from '@/lib/api';
+import {
+  clearOwedSignOut,
+  endSession,
+  onSessionForgotten,
+  settleOwedSignOut,
+  signOut,
+  watchSessionAge,
+} from '@/lib/api';
 import { queryClient } from '@/lib/queryClient';
 import { accessTokenNeedsRenewal, renewSession } from '@/lib/sessionRenewal';
 
@@ -107,6 +114,11 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => (session ? watchSessionAge() : undefined), [session]);
 
   useEffect(() => {
+    // Every start of the app: a sign-out the server could not be told about last time is told
+    // now, if the server can be reached. (The login page does the same when it opens, and says
+    // how it went; the two share one call.)
+    void settleOwedSignOut();
+
     // At every end of a session the signed-in screens come down before the page is left.
     // In a microtask: the end can begin in the middle of React's own work, where React cannot
     // be told to draw at once, and a microtask still runs before the browser can leave the page.
@@ -135,6 +147,9 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback((s: AdminSession) => {
     // First, and alone when it throws: a browser that will not store the session lets nobody in.
     authStore.set(s);
+    // A sign-out still owed to the server is owed no longer: the server replaced this browser's
+    // old session when it accepted the sign-in.
+    clearOwedSignOut();
     // Nothing loaded for whoever was here before is shown to the person signing in now.
     queryClient.clear();
     setSession(s);

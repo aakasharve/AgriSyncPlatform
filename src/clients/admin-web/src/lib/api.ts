@@ -32,22 +32,28 @@ function isAuthRoute(url: string | undefined): boolean {
   return (url ?? '').includes('/user/auth/');
 }
 
+/** The two routes whose 2xx answer puts a new refresh cookie in this browser. */
+function isNewSignInRoute(url: string | undefined): boolean {
+  return (url ?? '').includes('/user/auth/login') || (url ?? '').includes('/user/auth/verify-otp');
+}
+
+function isSignOutRoute(url: string | undefined): boolean {
+  return (url ?? '').includes('/user/auth/logout');
+}
+
 /**
- * What the login page is told when the console itself opened it:
- *   'max-age'  the session reached MAX_SESSION_HOURS;
- *   'ended'    the session could not be renewed;
- *   'not-told' the person signed out, and the server could not be told.
- * After a sign-out the server was told about, the login page opens with no reason at all.
+ * Why the console signed a person out without their asking: the session reached
+ * MAX_SESSION_HOURS ('max-age'), or it could not be renewed ('ended'). The person's own
+ * sign-out opens the login page with no reason at all.
  */
-export type SessionEndReason = 'max-age' | 'ended' | 'not-told';
+export type SessionEndReason = 'max-age' | 'ended';
 
 const SESSION_END_PARAM = 'signedOut';
-const SESSION_END_REASONS: readonly SessionEndReason[] = ['max-age', 'ended', 'not-told'];
 
-/** Reads the reason out of the login page's address, where the console put it. */
+/** Reads the reason out of the login page's address, where `endSession` put it. */
 export function readSessionEndReason(search: string): SessionEndReason | null {
   const value = new URLSearchParams(search).get(SESSION_END_PARAM);
-  return SESSION_END_REASONS.find((reason) => reason === value) ?? null;
+  return value === 'max-age' || value === 'ended' ? value : null;
 }
 
 /** How long the console waits for the server to answer a sign-out before going on without it. */
@@ -71,6 +77,86 @@ export async function tellServerSignedOut(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Kept in the browser's store while a sign-out is owed to the server: the person was signed
+ * out here, but the server could not be told, so the refresh cookie it gave this browser still
+ * works. That cookie outlives a close of the browser, so the debt must outlive this page too.
+ * The value is the bare mark "1": no token, nothing about the person, nothing else.
+ */
+const SIGN_OUT_OWED_KEY = 'admin.signout.owed.v1';
+
+function markSignOutOwed(): void {
+  try {
+    localStorage.setItem(SIGN_OUT_OWED_KEY, '1');
+  } catch {
+    // A store that cannot be written cannot remember the debt; there is nowhere else to keep it.
+  }
+}
+
+function unmarkSignOutOwed(): void {
+  try {
+    localStorage.removeItem(SIGN_OUT_OWED_KEY);
+  } catch {
+    // The same: nothing more can be done here.
+  }
+}
+
+/** True while a sign-out is owed to the server. */
+export function isSignOutOwed(): boolean {
+  try {
+    return localStorage.getItem(SIGN_OUT_OWED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What became of an owed sign-out: there was none ('none'), the server still could not be told
+ * ('owed'), or it has now been told ('told').
+ */
+export type OwedSignOut = 'none' | 'owed' | 'told';
+
+/** The one settling in the air, if any; afterwards, kept only when its outcome was 'told'. */
+let settlingOwed: Promise<OwedSignOut> | null = null;
+
+/**
+ * Pays an owed sign-out, if there is one: tells the server again, and takes the mark away when
+ * the server answers that it is done. When it still cannot be told the mark stays for the next
+ * time. Called at every start of the app and whenever the login page opens. Never rejects.
+ *
+ * One call at a time. Once the server has been told, the answer 'told' is kept for the rest of
+ * this page load (until a sign-in), so a login page that opens a moment later can still say so.
+ */
+export function settleOwedSignOut(): Promise<OwedSignOut> {
+  settlingOwed ??= settleOwedSignOutOnce().then((outcome) => {
+    if (outcome !== 'told') settlingOwed = null;
+    return outcome;
+  });
+  return settlingOwed;
+}
+
+async function settleOwedSignOutOnce(): Promise<OwedSignOut> {
+  if (!isSignOutOwed()) return 'none';
+  // A session is stored, so somebody has signed in since: the cookie now belongs to that
+  // sign-in, and a sign-out call would end it. Nothing is owed any more.
+  if (authStore.get()) {
+    unmarkSignOutOwed();
+    return 'none';
+  }
+  if (!(await tellServerSignedOut())) return 'owed';
+  unmarkSignOutOwed();
+  return 'told';
+}
+
+/**
+ * Nothing is owed any more: a sign-in has been accepted, and the server replaces this browser's
+ * old session when it signs in (the cookie the debt was about is gone as well).
+ */
+export function clearOwedSignOut(): void {
+  unmarkSignOutOwed();
+  settlingOwed = null;
 }
 
 /** Given by the page (AdminAuthProvider): takes every signed-in screen off the page. */
@@ -123,12 +209,12 @@ let ending: Promise<void> | null = null;
  * Signs the person out without their asking and opens the login page with the reason. The
  * session is forgotten at once. After MAX_SESSION_HOURS the server is told as well, and the
  * page waits for that call (a few seconds at most), because leaving the page would cut the
- * call off.
+ * call off. When the server could not be told, the sign-out is remembered as owed.
  */
-export function endSession(reason: Exclude<SessionEndReason, 'not-told'>): Promise<void> {
+export function endSession(reason: SessionEndReason): Promise<void> {
   ending ??= (async () => {
     forgetSession();
-    if (reason === 'max-age') await tellServerSignedOut();
+    if (reason === 'max-age' && !(await tellServerSignedOut())) markSignOutOwed();
     openLoginPage(reason);
   })();
   return ending;
@@ -138,8 +224,8 @@ export function endSession(reason: Exclude<SessionEndReason, 'not-told'>): Promi
  * The person's own sign-out. The server is told first and the console waits for its answer
  * (SIGN_OUT_WAIT_MS at most): only the server can stop the refresh cookie from working, and
  * leaving the page would cut the call off. Then the session is forgotten here whatever the
- * answer was, and the login page opens. When the server could not be told, the login page says
- * so.
+ * answer was, and the login page opens. When the server could not be told, the sign-out is
+ * remembered as owed: the login page says so, and tells the server when it can.
  *
  * From the first press no data request goes out and no renewal starts (see `ending`), so a
  * second press, or a page still asking for data, changes nothing.
@@ -148,7 +234,8 @@ export function signOut(): Promise<void> {
   ending ??= (async () => {
     const told = await tellServerSignedOut();
     forgetSession();
-    openLoginPage(told ? null : 'not-told');
+    if (!told) markSignOutOwed();
+    openLoginPage(null);
   })();
   return ending;
 }
@@ -253,6 +340,12 @@ async function sessionForRequest(): Promise<AdminSession | null> {
 
 adminApi.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (isAuthRoute(config.url)) {
+    // A sign-in waits for an owed sign-out that is still in the air. The answer to that call
+    // takes this browser's refresh cookie away, and it must not arrive after the sign-in's
+    // answer has put a new one there. (The sign-out call itself never waits: it is the one
+    // being waited for.)
+    if (settlingOwed && !isSignOutRoute(config.url)) await settlingOwed;
+
     // Never a renewal here. A token that is still good goes along, as it always has.
     const session = authStore.get();
     if (session && !accessTokenExpiresWithin(session, 0)) {
@@ -349,7 +442,12 @@ async function retryAfterRenewal(err: AxiosError): Promise<AxiosResponse> {
 }
 
 adminApi.interceptors.response.use(
-  (r) => r,
+  (r) => {
+    // The server accepted a sign-in (held or not) and put a new cookie in this browser: the
+    // cookie an owed sign-out was about is gone, and a sign-out call now would end the new one.
+    if (isNewSignInRoute(r.config.url)) clearOwedSignOut();
+    return r;
+  },
   (err) => {
     const status = err?.response?.status as number | undefined;
     const body = err?.response?.data as
