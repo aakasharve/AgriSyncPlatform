@@ -194,6 +194,19 @@ public sealed class ExportWorker(
                     .ToListAsync(ct).ConfigureAwait(false),
                 ct).ConfigureAwait(false);
 
+            // log_practice_reasons (CMP-D3, F254 a): the reason ("why") kept beside a saved record of work. A person's export
+            // carries every reason they wrote AND every reason kept on a log they own (they are the data subject of that log).
+            // Admin context, so row-level security does not hide the farm rows; the filter is the person.
+            var userKey = new AgriSync.SharedKernel.Contracts.Ids.UserId(userId);
+            var ownLogIds = admin.DailyLogs.Where(l => l.OperatorUserId == userKey).Select(l => l.Id);
+            await WriteJsonEntryAsync(zip, "log_practice_reasons.json",
+                await admin.LogPracticeReasons
+                    .Where(r => r.AuthorUserId == userKey || ownLogIds.Contains(r.DailyLogId))
+                    .OrderBy(r => r.CreatedAtUtc)
+                    .Select(r => new { r.Id, r.FarmId, r.DailyLogId, r.WorkKey, r.Kind, r.Words, r.SaidByVoice, r.AuthorUserId, r.CreatedAtUtc, r.SupersedesId })
+                    .ToListAsync(ct).ConfigureAwait(false),
+                ct).ConfigureAwait(false);
+
             // cross_border_transfers — Phase 08 has no direct subject-user
             // pointer on the row (the table is keyed on AI job, not
             // user). For the export bundle we emit the full set scoped

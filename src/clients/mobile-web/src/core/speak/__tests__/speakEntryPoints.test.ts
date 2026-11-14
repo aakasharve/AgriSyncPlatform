@@ -77,7 +77,6 @@ const NOT_ROUTED: Array<{ id: string; file: string; why: 'the recorder itself' |
     { id: 'attendance-result-speak', file: 'features/labour/components/AttendanceResult.tsx', why: 'हजेरी (same recorder, meaning unchanged)' },
     // D-63 (2026-10-31): the old form's three mics left with the form — it and its own parts are deleted.
     { id: 'compare-tell', file: 'features/compare/ComparePage.tsx', why: 'excluded: तुलना' },
-    { id: 'compare-plot-tell', file: 'features/compare/ComparePlotCard.tsx', why: 'excluded: तुलना' },
     { id: 'consent-toggle', file: 'features/consent/VoiceRetainedConsentToggle.tsx', why: 'not speak-to-log' },
     { id: 'permissions-page', file: 'pages/OnboardingPermissionsPage.tsx', why: 'not speak-to-log' },
     { id: 'settings-page', file: 'pages/SettingsPage.tsx', why: 'not speak-to-log' },

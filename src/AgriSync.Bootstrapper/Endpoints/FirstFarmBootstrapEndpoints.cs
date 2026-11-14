@@ -27,6 +27,9 @@ namespace AgriSync.Bootstrapper.Endpoints;
 /// </summary>
 public static class FirstFarmBootstrapEndpoints
 {
+    /// <summary>Length of the first free trial, in days. One number for the new-farm path and the legacy-owner backfill (founder B2, F260).</summary>
+    public const int FirstTrialDays = 21;
+
     public static IEndpointRouteBuilder MapFirstFarmBootstrapEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/bootstrap/first-farm", async (
@@ -153,7 +156,7 @@ public static class FirstFarmBootstrapEndpoints
             ownerAccountId: ownerAccountId,
             planCode: PlanCode.ShramSafalPro,
             trialStartUtc: nowUtc,
-            trialEndsAtUtc: nowUtc.AddDays(21));
+            trialEndsAtUtc: nowUtc.AddDays(FirstTrialDays));
         accountsDb.Subscriptions.Add(trial);
         return trial;
     }
