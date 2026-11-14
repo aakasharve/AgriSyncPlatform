@@ -135,6 +135,24 @@ describe('a renewal the server accepts', () => {
     assert.equal((await renewSession())?.accessToken, 'token-new');
     assert.equal(keptSession(browser.store)?.accessToken, 'token-new');
   });
+
+  it('is accepted when its held-flag is null: null is read like a missing field', async () => {
+    const { renewSession } = await load();
+    const before = keepAnExpiredSession();
+    server.when('POST', REFRESH, ok({ ...renewedAt(NOON, 'token-new'), deviceCheckRequired: null }));
+
+    const renewed = await renewSession();
+
+    const ordinaryRenewal = {
+      accessToken: 'token-new',
+      refreshToken: null,
+      userId: PERSON,
+      expiresAtUtc: at(NOON + 15 * MINUTE),
+      signedInAtUtc: before.signedInAtUtc,
+    };
+    assert.deepEqual(renewed, ordinaryRenewal, 'it is returned');
+    assert.deepEqual(keptSession(browser.store), ordinaryRenewal, 'and it is stored');
+  });
 });
 
 describe('a renewal the server refuses', () => {
@@ -170,7 +188,8 @@ describe('a renewal that gets no verdict', () => {
 });
 
 describe('a held answer', () => {
-  // Anything but a plain `false`. (A missing field is the ordinary accepted answer above.)
+  // Held: anything other than `false`, a missing field or `null`. (Those three are the accepted
+  // answers above.)
   for (const held of [true, 'true', 'false', 1, 0, '', 'yes', {}, []]) {
     it(`deviceCheckRequired ${JSON.stringify(held)}: gives null and its token is never stored`, async () => {
       const { renewSession } = await load();
