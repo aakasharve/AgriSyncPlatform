@@ -35,6 +35,21 @@ import { lineAmountNow } from '../../features/finance/recordMoneyNow';
 import { restoreRefusedAudienceChoice } from '../../features/recordAudience/refusedAudience';
 import { settleBillVersions } from '../../features/finance/billVersionsMarker';
 import { settleScheduleSubscriptions } from '../../features/scheduler/schedulePage/scheduleSubscriptionsMarker';
+import { emitSyncPushOutcome } from '../../core/telemetry/eventEmitters';
+import { APP_VERSION } from '../../buildInfo';
+
+/**
+ * spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a Task C3, ADR 0027 D2) — what ONE cycle did with work that
+ * had failed. Counts and one time only: nothing of the rows themselves (no text, no ids) is kept here or reported.
+ */
+interface PushOutcomeTally {
+    /** Rows marked APPLIED in this cycle that had failed before (`firstFailedAt` set). */
+    recoveredCount: number;
+    /** Rows moved to REJECTED_USER_REVIEW in this cycle. */
+    needsReviewCount: number;
+    /** The earliest `firstFailedAt` among the recovered rows; absent when none recovered. */
+    firstFailedAtUtc?: string;
+}
 
 /** A record's first money that reached the server is in step only when it went at its line's current amount. */
 async function clearWhenInStep(moneySource: string, payload: unknown): Promise<void> {
@@ -376,7 +391,9 @@ export class BackgroundSyncWorker {
             return;
         }
 
-        const supportedMutations: Array<{ id: number; clientRequestId: string; clientCommandId?: string; mutationType: SyncMutationType; payload: unknown; moneySource?: string }> = [];
+        // `firstFailedAt` is read HERE, before any call below changes the row's status, and stays on this phone: like
+        // `moneySource` it is never part of the request (the payload below is built field by field).
+        const supportedMutations: Array<{ id: number; clientRequestId: string; clientCommandId?: string; mutationType: SyncMutationType; payload: unknown; moneySource?: string; firstFailedAt?: string }> = [];
         for (const mutation of pendingWithId) {
             const mutationType = toSyncMutationType(mutation.mutationType);
             if (!mutationType) {
@@ -397,6 +414,7 @@ export class BackgroundSyncWorker {
                 mutationType,
                 payload: mutation.payload,
                 moneySource: (mutation as QueueRowWithFacts).moneySource,
+                firstFailedAt: mutation.firstFailedAt,
             });
         }
 
@@ -407,6 +425,9 @@ export class BackgroundSyncWorker {
         for (const mutation of supportedMutations) {
             await mutationQueue.markSending(mutation.id as number);
         }
+
+        // plan CR-1a Task C3 (ADR 0027 D2) — kept as the answers are applied, reported once after them.
+        const outcome: PushOutcomeTally = { recoveredCount: 0, needsReviewCount: 0 };
 
         try {
             const body = await agriSyncClient.pushSyncBatch({
@@ -439,6 +460,15 @@ export class BackgroundSyncWorker {
 
                 if (result.status === 'applied' || result.status === 'duplicate') {
                     await mutationQueue.markApplied(mutationId);
+                    // plan CR-1a Task C3 — a save that had failed has now arrived. A save that only waited (held for
+                    // the farm's plan, or behind another save) carries no stamp and is ordinary work, not a recovery.
+                    if (mutation.firstFailedAt) {
+                        outcome.recoveredCount += 1;
+                        // Stamps are `toISOString()` values (one fixed-width UTC form), so they order as text.
+                        if (!outcome.firstFailedAtUtc || mutation.firstFailedAt < outcome.firstFailedAtUtc) {
+                            outcome.firstFailedAtUtc = mutation.firstFailedAt;
+                        }
+                    }
                     // spec: plr-d10 (lane OF-S fix pass 2, N1/N3) — a move answers with exactly the money it took along:
                     // written here at once (no waiting for a pull), and nothing else is moved on this phone. A failure is
                     // said, never swallowed; the pull at the end of the cycle carries the same rows.
@@ -548,6 +578,7 @@ export class BackgroundSyncWorker {
                         // it now becomes resolvable.
                         const dependencyReason = describeDependencyRejection(verdict);
                         await mutationQueue.markRejectedUserReview(mutationId, dependencyReason);
+                        outcome.needsReviewCount += 1;
                         notifySync({
                             type: 'MUTATION_REJECTED',
                             mutationId: mutation.clientRequestId,
@@ -572,6 +603,7 @@ export class BackgroundSyncWorker {
                     // route reads AttendanceContradiction parks) without
                     // matching the English message.
                     await mutationQueue.markRejectedUserReview(mutationId, errorMessage, result.errorCode ?? undefined);
+                    outcome.needsReviewCount += 1;
                     notifySync({
                         type: 'MUTATION_REJECTED',
                         mutationId: mutation.clientRequestId,
@@ -631,9 +663,53 @@ export class BackgroundSyncWorker {
             // otherwise.
             const message = error instanceof Error ? error.message : 'Unknown push error';
             const kind = categorizePushFailure(error);
+            // plan CR-1a Task C3 — every row of the batch is marked FAILED just below, including any the loop had
+            // already settled before it threw. So in this cycle nothing arrived and nothing went to the farmer.
+            outcome.recoveredCount = 0;
+            outcome.needsReviewCount = 0;
+            outcome.firstFailedAtUtc = undefined;
             for (const mutation of supportedMutations) {
                 await mutationQueue.markFailed(mutation.id as number, message, kind);
             }
+        }
+
+        await this.reportPushOutcome(outcome);
+    }
+
+    /**
+     * spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a Task C3, ADR 0027 D2) — the app's own report of what
+     * happened to work that had failed. At most ONE per cycle, and only when a save that had failed arrived or a save
+     * was sent to the farmer to review; an ordinary cycle says nothing and reads nothing extra.
+     *
+     * It leaves through the analytics outbox (`emitSyncPushOutcome`), never through `/sync/push`: that payload and the
+     * request headers are exactly what they were.
+     *
+     * TELEMETRY MAY NEVER COST A FARMER ANYTHING. The count read and the emitter both sit inside one try/catch that
+     * logs and swallows, so a broken report cannot fail the cycle: the rows keep the state the server's answer gave
+     * them and the pull still runs.
+     */
+    private async reportPushOutcome(outcome: PushOutcomeTally): Promise<void> {
+        if (outcome.recoveredCount + outcome.needsReviewCount === 0) {
+            return;
+        }
+
+        try {
+            // Still on the phone and not settled. A save with the farmer and a save that arrived are not "pending".
+            const pendingAfter = await getDatabase().mutationQueue
+                .where('status')
+                .anyOf(['PENDING', 'SENDING', 'FAILED'])
+                .count();
+
+            emitSyncPushOutcome({
+                recoveredCount: outcome.recoveredCount,
+                needsReviewCount: outcome.needsReviewCount,
+                pendingAfter,
+                appVersion: APP_VERSION,
+                // An absent key, never a default: a report of saves sent for review only names no first failure.
+                ...(outcome.firstFailedAtUtc ? { firstFailedAtUtc: outcome.firstFailedAtUtc } : {}),
+            });
+        } catch (error) {
+            console.warn('[BackgroundSyncWorker] Could not report what happened to work that had failed', error);
         }
     }
 

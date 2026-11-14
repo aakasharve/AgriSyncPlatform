@@ -134,6 +134,30 @@ export interface MutationQueueItem {
     attemptCount?: number;
     /** spec R-11 (c): farm stamped at enqueue (payload farmId, else the open farm); absent on older rows, so `queuedRowFarmId` falls back to the payload's farmId. NOT indexed, no Dexie bump. */
     farmId?: string;
+    /**
+     * spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a Task C3,
+     * ADR 0027 D2) — ISO time of the FIRST REAL failed attempt to send this
+     * row. Absent on a row that has never failed, and on every row queued by
+     * an older app. The sync worker reads it to say, when the row finally
+     * arrives, "this save had failed and has now arrived".
+     *
+     * A new field because neither counter can say that: `retryCount` counts
+     * only refusals the server answered, and `attemptCount` is set back to 0
+     * whenever a backoff is cleared.
+     *
+     * - SET, only when absent, by `MutationQueue.markFailed` for a real
+     *   attempt (every kind except `HELD` and `DEPENDENCY`, which are waits,
+     *   not failures) and by `MutationQueue.markRejectedUserReview`.
+     * - KEPT by every other transition: each is a partial update, so the
+     *   field survives a cleared backoff, a retry, a send in progress and a
+     *   corrected payload (the same piece of work).
+     * - CLEARED by `MutationQueue.enqueueRepeatable` when it re-arms the row
+     *   with new work: the new work has not failed.
+     *
+     * Phone-only: never part of a `/sync/push` payload. NOT INDEXED, so no
+     * Dexie version bump — same rule as `errorCode` and `nextRetryAfterMs`.
+     */
+    firstFailedAt?: string;
 }
 
 // =============================================================================
