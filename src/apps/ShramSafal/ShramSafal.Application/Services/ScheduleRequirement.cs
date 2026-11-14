@@ -37,7 +37,10 @@ public sealed record PlanningFacts(
     bool HasAccessExtension,
     IReadOnlyList<ScheduleSubscription> Followed,
     IReadOnlyList<ScheduleTemplateDto> Listing,
-    Func<ScheduleTemplateDto, ScheduleOrigin?> OriginOf);
+    Func<ScheduleTemplateDto, ScheduleOrigin?> OriginOf,
+    // spec: plr-d10 lane CMP-OWN - the OWNER of this plot's farm (null = not known, e.g. no such farm): the MainSchedule pick calls a followed schedule
+    // "his own" only when its owner_user_id column equals it (D-136). REQUIRED, so a loader that forgets it does not compile.
+    Guid? PlotFarmOwnerUserId);
 
 /// <summary>
 /// What the planning gate says about one plot (the plan's record, plus the season it was judged on - open point 6).
@@ -139,7 +142,7 @@ public sealed class ScheduleRequirement(
         PlanningFacts facts, PlanningSeason season, IReadOnlyList<ScheduleSubscription> followed,
         IReadOnlyDictionary<Guid, ScheduleTemplateDto> byId)
     {
-        var main = MainSchedule.Pick(followed, MainScheduleFactsReader.FromListing(facts.Listing));
+        var main = MainSchedule.Pick(followed, MainScheduleFactsReader.FromListing(facts.Listing), facts.PlotFarmOwnerUserId);
         if (main is null || !byId.TryGetValue(main.ScheduleTemplateId.Value, out var template) || template.HasStoredDays != true)
         {
             return null;
@@ -175,7 +178,7 @@ public sealed class ScheduleRequirement(
         var plot = await repository.GetPlotByIdAsync(plotId, ct);
         if (farm is null || plot is null || (Guid)plot.FarmId != farmId)
         {
-            return Result.Success(new PlanningFacts(plotId, null, now, null, false, [], [], _ => null));
+            return Result.Success(new PlanningFacts(plotId, null, now, null, false, [], [], _ => null, null));
         }
 
         var season = CurrentSeason(await repository.GetCropCyclesByPlotIdAsync(plotId, ct));
@@ -192,7 +195,7 @@ public sealed class ScheduleRequirement(
         var (standing, extension) = await StandingOfAsync(farm.OwnerAccountId, now, ct);
         var originFor = await OriginsAsync(library, callerUserId, ct);
         return Result.Success(new PlanningFacts(
-            plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value)));
+            plotId, season, now, standing, extension, followed, library, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value));
     }
 
     /// <summary>
@@ -212,7 +215,7 @@ public sealed class ScheduleRequirement(
         {
             foreach (var id in plotIds)
             {
-                result[id] = new PlanningFacts(id, null, now, null, false, [], [], _ => null);
+                result[id] = new PlanningFacts(id, null, now, null, false, [], [], _ => null, null);
             }
 
             return Result.Success<IReadOnlyDictionary<Guid, PlanningFacts>>(result);
@@ -251,7 +254,7 @@ public sealed class ScheduleRequirement(
         var originFor = (await OriginsAsync(library, callerUserId, ct))(farm.OwnerUserId.Value);
         foreach (var id in wanted)
         {
-            result[id] = new PlanningFacts(id, seasonOf[id], now, standing, extension, followedByPlot[id], library, originFor);
+            result[id] = new PlanningFacts(id, seasonOf[id], now, standing, extension, followedByPlot[id], library, originFor, farm.OwnerUserId.Value);
         }
 
         return Result.Success<IReadOnlyDictionary<Guid, PlanningFacts>>(result);
@@ -318,7 +321,7 @@ public sealed class ScheduleRequirement(
             var season = CurrentSeason(cyclesByPlot.GetValueOrDefault(plot.Id) ?? []);
             states.Add(Decide(new PlanningFacts(
                 plot.Id, season, now, standing.Standing, standing.Extension,
-                followedByPlot.GetValueOrDefault(plot.Id) ?? [], listing, originFor(farm.OwnerUserId.Value))));
+                followedByPlot.GetValueOrDefault(plot.Id) ?? [], listing, originFor(farm.OwnerUserId.Value), farm.OwnerUserId.Value)));
         }
 
         return states;
