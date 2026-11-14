@@ -11,7 +11,7 @@
  *     is waiting, which is shown instead and never moved to another plot (`openLogFlow.ts`);
  *   - "पूर्ण शेड्यूल पाहा" / "शेड्यूल लावा" open the real शेड्यूल page.
  */
-import type { CropProfile, DailyLog } from '../../types';
+import type { CropProfile, DailyLog, FarmerProfile } from '../../types';
 import type { AppRouterContext } from './routeContext';
 import { openLogFlow } from './openLogFlow';
 
@@ -21,6 +21,8 @@ export interface CompareTabProps {
     onTellPlot: (cropId: string, plotId: string) => void;
     onTell: () => void;
     onOpenSchedule: () => void;
+    /** Lane CMP-T: the farmer's profile, for the reason sheet's mic (the same parse the log's recorder is given). */
+    farmerProfile?: FarmerProfile;
 }
 
 export function compareTabProps(ctx: AppRouterContext): CompareTabProps | null {
@@ -34,5 +36,6 @@ export function compareTabProps(ctx: AppRouterContext): CompareTabProps | null {
         onTellPlot: (cropId, plotId) => { openLogFlow(ctx, { cropId, plotId }); },
         onTell: () => { openLogFlow(ctx); },
         onOpenSchedule: () => ctx.setCurrentRoute('schedule'),
+        farmerProfile: ctx.farmerProfile,
     };
 }

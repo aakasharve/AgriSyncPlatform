@@ -76,6 +76,14 @@ export interface StepperExtras {
      * never chosen for him: the same steps, nothing pre-picked.
      */
     marked?: { plotIds: readonly string[]; label: string };
+    /**
+     * Lane CMP-T — तुलना is per plot: the "संपूर्ण शेत" card is not drawn on the crop step. Default false (every other caller is unchanged).
+     */
+    hideEntireFarm?: boolean;
+    /** Lane CMP-T — one crop at a time: the "+" that adds another crop is not drawn. Default false. */
+    hideAddCrop?: boolean;
+    /** Lane CMP-T — two colours only: the ring of a chosen crop that still has no plot chosen is emerald, not amber. Default false (the log page keeps its amber). */
+    calmRings?: boolean;
 }
 export interface CropPlotStepperProps extends StepperExtras {
     crops: readonly StepperCrop[];
@@ -100,7 +108,7 @@ const CropPhotoCard: React.FC<Omit<React.ComponentProps<typeof CropCard>, 'image
 };
 
 export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
-    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked,
+    crops: storedCrops, selectedCrops, selectedPlots, onSelectionChange, disabled, step: stepProp, onStepChange, lead, footer, labels, focusFooter = false, marked, hideEntireFarm = false, hideAddCrop = false, calmRings = false,
 }) => {
     const languageContext = useOptionalLanguage();
     const language = languageContext?.language ?? 'en';
@@ -123,7 +131,7 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
     if (step === 'crop') {
         // Crops + the entire farm, as one grid of equal cards: one column on a phone, two where there is room.
         // With two columns an odd last card (the farm) spans both, so the grid never has a blank hole.
-        const lastWide = (crops.length + 1) % 2 === 1;
+        const lastWide = !hideEntireFarm && (crops.length + 1) % 2 === 1;
         return (
             <div className="px-3 pb-3 pt-2" style={{ fontFamily: SANS }} data-testid="flow-step-crop" data-crop-count={crops.length}>
                 {renderLead([])}
@@ -134,9 +142,11 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                             onClick={() => { emit(sel.crops.includes(c.id) ? sel : toggleCrop(sel, c)); go('plot'); }} />
                     ))}
                     {/* The whole-farm card keeps its meaning short here; the full sentence is on the next screen. */}
-                    <CropCard testId="flow-crop-whole-farm" name={entireFarm} sub={labels?.entireFarmShort ?? entireFarmHint}
-                        imageSrc={ENTIRE_FARM_IMAGE} focus={ENTIRE_FARM_FOCUS} disabled={disabled} wide={lastWide} delay={crops.length * 80} lazy
-                        onClick={() => { emit(toggleGlobal(EMPTY_SELECTION)); go('plot'); }} />
+                    {!hideEntireFarm && (
+                        <CropCard testId="flow-crop-whole-farm" name={entireFarm} sub={labels?.entireFarmShort ?? entireFarmHint}
+                            imageSrc={ENTIRE_FARM_IMAGE} focus={ENTIRE_FARM_FOCUS} disabled={disabled} wide={lastWide} delay={crops.length * 80} lazy
+                            onClick={() => { emit(toggleGlobal(EMPTY_SELECTION)); go('plot'); }} />
+                    )}
                 </div>
             </div>
         );
@@ -182,7 +192,7 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                         {chosen.map(c => (
                             <button key={c.id} type="button" disabled={disabled} aria-pressed="true" data-testid={`flow-sel-${c.id}`}
                                 onClick={() => { const n = toggleCrop(sel, c); emit(n); if (n.crops.length === 0) go('crop'); }}
-                                className={`relative flex h-[76px] [@media(max-height:720px)]:h-[64px] min-w-0 flex-1 rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-900 text-left text-white shadow-lg ring-[3px] active:scale-95 ${multiCrop ? 'flex-col justify-between px-2 py-1.5' : 'items-center gap-2.5 px-2.5'} ${pending.includes(c.id) ? 'ring-amber-300' : 'ring-emerald-300'}`}>
+                                className={`relative flex h-[76px] [@media(max-height:720px)]:h-[64px] min-w-0 flex-1 rounded-2xl bg-gradient-to-br from-emerald-700 to-emerald-900 text-left text-white shadow-lg ring-[3px] active:scale-95 ${multiCrop ? 'flex-col justify-between px-2 py-1.5' : 'items-center gap-2.5 px-2.5'} ${pending.includes(c.id) && !calmRings ? 'ring-amber-300' : 'ring-emerald-300'}`}>
                                 {multiCrop ? (
                                     <>
                                         {/* Narrow cards: photo and tick on top, the whole name below. */}
@@ -207,7 +217,7 @@ export const CropPlotStepper: React.FC<CropPlotStepperProps> = ({
                             </button>
                         ))}
                         {/* One "+" for another crop; the crops themselves open in a tray over the screen, so the chosen crop keeps the width. */}
-                        {others.length > 0 && (
+                        {others.length > 0 && !hideAddCrop && (
                             <button type="button" disabled={disabled} data-testid="flow-add-open" aria-expanded={adding} aria-label={labels?.addCrop}
                                 onClick={() => setAdding(v => !v)}
                                 className={`ml-1 flex h-[76px] [@media(max-height:720px)]:h-[64px] w-[70px] max-[339px]:w-[64px] shrink-0 flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed text-emerald-800 active:scale-95 ${adding ? 'border-emerald-600 bg-emerald-100' : 'border-emerald-500 bg-emerald-50'}`}>

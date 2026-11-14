@@ -88,7 +88,7 @@ public sealed class ScheduleStagePlan(
 
         var followed = ScheduleRequirement.FollowedNow(facts, season);
         var byId = facts.Listing.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
-        var main = MainSchedule.Pick(followed, MainScheduleFactsReader.FromListing(facts.Listing));
+        var main = MainSchedule.Pick(followed, MainScheduleFactsReader.FromListing(facts.Listing), facts.PlotFarmOwnerUserId);
 
         // The window: the मुख्य schedule's stage holding the day (R28); in the trial, today's (R10).
         var today = FarmLocalDay.From(now);

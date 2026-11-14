@@ -132,7 +132,7 @@ public sealed class FarmCompareService(
     }
 
     /// <summary>What one plot follows and which windows it counts, from the facts alone (no record is read).</summary>
-    private sealed record PlotPlan(
+    internal sealed record PlotPlan(
         Guid PlotId,
         PlanningSeason Season,
         PlotPlanningState State,
@@ -145,7 +145,7 @@ public sealed class FarmCompareService(
         IReadOnlyList<CompareStageDto> Stages,
         bool Counts);
 
-    private static PlotPlan? Prepare(PlanningFacts facts, DateOnly today)
+    internal static PlotPlan? Prepare(PlanningFacts facts, DateOnly today)
     {
         if (facts.Season is not { } season)
         {
@@ -155,7 +155,7 @@ public sealed class FarmCompareService(
         var state = ScheduleRequirement.Decide(facts);
         var followed = ScheduleRequirement.FollowedNow(facts, season);
         var byId = facts.Listing.GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
-        var main = MainSchedule.Pick(followed, MainScheduleFactsReader.FromListing(facts.Listing));
+        var main = MainSchedule.Pick(followed, MainScheduleFactsReader.FromListing(facts.Listing), facts.PlotFarmOwnerUserId);
 
         var mainDayZero = main?.ReferenceDate ?? season.StartDate;
         ScheduleDefinition? mainDef = main is not null && byId.TryGetValue(main.ScheduleTemplateId.Value, out var mainTemplate)

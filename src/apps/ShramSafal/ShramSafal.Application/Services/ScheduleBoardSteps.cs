@@ -43,14 +43,19 @@ public sealed class BoardScheduleSource
     private readonly IReadOnlyDictionary<Guid, ScheduleTemplateDto> templates;
     private readonly IReadOnlyDictionary<(Guid Subscription, Guid Activity, DateOnly Original), DateOnly> latestMoves;
     private readonly Func<ScheduleTemplateId, MainScheduleFacts?> factsOf;
+    private readonly IReadOnlyDictionary<Guid, Guid> farmOwners;
 
+    // spec: plr-d10 lane CMP-OWN - farmOwners: the owner of each farm the subscriptions are on (the MainSchedule pick calls a schedule "his own"
+    // only when its owner column names the owner of the PLOT's farm); a farm missing from it has no own plan.
     internal BoardScheduleSource(
         IReadOnlyList<ScheduleSubscription> active,
         IReadOnlyDictionary<Guid, ScheduleTemplateDto> templates,
-        IReadOnlyList<ScheduleStepMove> moveRows)
+        IReadOnlyList<ScheduleStepMove> moveRows,
+        IReadOnlyDictionary<Guid, Guid>? farmOwners = null)
     {
         this.active = active;
         this.templates = templates;
+        this.farmOwners = farmOwners ?? new Dictionary<Guid, Guid>();
         factsOf = MainScheduleFactsReader.FromListing(templates.Values);
 
         // moveRows come oldest first: the later row of a step replaces the earlier one (the latest wins; the history stays in the table).
@@ -79,7 +84,7 @@ public sealed class BoardScheduleSource
             return null;
         }
 
-        var main = MainSchedule.Pick(followed, factsOf);
+        var main = MainSchedule.Pick(followed, factsOf, farmOwners.TryGetValue(followed[0].FarmId.Value, out var farmOwner) ? farmOwner : null);
         IReadOnlyList<StageWindow> windows = [];
         if (main is not null && templates.TryGetValue(main.ScheduleTemplateId.Value, out var mainTemplate))
         {
@@ -156,7 +161,8 @@ public sealed class BoardScheduleSource
 /// <summary>
 /// spec: plr-d10 lane ATT-W (R29) - loads what <see cref="BoardScheduleSource"/> needs, once for the request: the Active subscriptions of the
 /// caller's farms (ONE read), the schedules they follow as the caller's library lists them with the followed ones added (ONE read, R7: never
-/// <c>ScheduleLibrary.FindAsync</c>, which is the new-choice list and would lose a kept sample), and the moves of those subscriptions (ONE read).
+/// <c>ScheduleLibrary.FindAsync</c>, which is the new-choice list and would lose a kept sample), the moves of those subscriptions (ONE read) and,
+/// for the मुख्य pick (lane CMP-OWN: his own plan), the owner of each of those farms (ONE read).
 /// When no farm has an Active subscription nothing more is read.
 /// </summary>
 public sealed class ScheduleBoardSteps(
@@ -188,6 +194,11 @@ public sealed class ScheduleBoardSteps(
 
         var byId = (listing.Value ?? []).GroupBy(t => t.Id).ToDictionary(g => g.Key, g => g.First());
         var rows = await moves.GetForSubscriptionsAsync(active.Select(s => s.Id).ToList(), ct);
-        return new BoardScheduleSource(active, byId, rows);
+        // spec: plr-d10 lane CMP-OWN - the owner of each farm the plots are on (ONE read for all of them, no read per plot).
+        var farmOwners = (await repository.GetFarmsChangedSinceAsync(
+                active.Select(s => s.FarmId.Value).Distinct().ToList(), DateTime.UnixEpoch, ct))
+            .DistinctBy(f => (Guid)f.Id)
+            .ToDictionary(f => (Guid)f.Id, f => f.OwnerUserId.Value);
+        return new BoardScheduleSource(active, byId, rows, farmOwners);
     }
 }

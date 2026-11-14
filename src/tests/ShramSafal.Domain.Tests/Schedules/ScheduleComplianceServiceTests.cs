@@ -278,6 +278,77 @@ public sealed class ScheduleComplianceServiceTests
         Assert.Equal(0, result.DeltaDays);
     }
 
+    // ------- lane CMP-OWN: his own plan with stages is the मुख्य one, a record is measured against it -------
+
+    private static readonly UserId FarmOwner = new(Guid.NewGuid());
+
+    private static ScheduleTemplate OwnRowWithStages(Guid id, int day, string name = "Grapes - mine")
+    {
+        var own = ScheduleTemplate.CreateOwn(id, name, "grape", FarmOwner, FarmOwner, DateTime.UtcNow);
+        var whole = own.EditCopyOnWrite(
+            Guid.NewGuid(), null, null, [new StageDefinition("Post Pruning", 0, 99)],
+            [new ScheduleActivityDraft("बुरशीनाशक फवारणी", "spray", null, day, day, FrequencyMode.OneTime, 1)],
+            FarmOwner, DateTime.UtcNow, out var problem);
+        Assert.Null(problem);
+        return whole!;
+    }
+
+    private static ScheduleSubscription OwnFollowingAt(short slot, ScheduleTemplateId templateId) =>
+        ScheduleSubscription.Adopt(
+            Guid.NewGuid(), Farm, Plot, Cycle, CropKey, templateId, "v1",
+            DateTime.UtcNow.AddDays(-10 + slot), null, ScheduleOrigin.Own, null, slot);
+
+    [Fact]
+    public async Task His_own_schedule_with_stages_is_the_one_a_record_is_stamped_against_even_when_a_checked_Institution_schedule_is_followed()
+    {
+        var institutionId = ScheduleTemplateId.New();
+        var ownRow = OwnRowWithStages(Guid.NewGuid(), day: 14);
+        var institution = FollowingAt(1, institutionId);
+        var own = OwnFollowingAt(0, new ScheduleTemplateId(ownRow.Id));
+        var repo = new FakeRepo
+        {
+            Cycle = BuildCycle(),
+            Followed = [institution, own],
+            Template = null,
+            FarmRow = ShramSafal.Domain.Farms.Farm.Create(Farm, "f", FarmOwner, DateTime.UtcNow),
+        };
+        var institutionRow = SprayRow(institutionId.Value, day: 10);
+        repo.LibraryRows[institutionId.Value] = institutionRow;
+        repo.LibraryRows[ownRow.Id] = ownRow;
+        repo.Checks.Add(ScheduleCheck.Approve(institutionRow, institutionRow.Activities.Select(a => a.Id).ToList(), new UserId(Guid.NewGuid()), "Checker", DateTime.UtcNow, out _)!);
+
+        var result = await new ScheduleComplianceService(repo).EvaluateAsync(
+            new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, CycleStart.AddDays(14)));
+
+        Assert.Equal(own.SubscriptionId, result.SubscriptionId);
+        Assert.Equal(0, result.DeltaDays);
+    }
+
+    [Fact]
+    public async Task A_schedule_owned_by_someone_else_is_not_his_own_so_the_old_pick_stays()
+    {
+        var institutionId = ScheduleTemplateId.New();
+        var ownRow = OwnRowWithStages(Guid.NewGuid(), day: 14);
+        var institution = FollowingAt(1, institutionId);
+        var own = OwnFollowingAt(0, new ScheduleTemplateId(ownRow.Id));
+        var repo = new FakeRepo
+        {
+            Cycle = BuildCycle(),
+            Followed = [institution, own],
+            Template = null,
+            FarmRow = ShramSafal.Domain.Farms.Farm.Create(Farm, "f", new UserId(Guid.NewGuid()), DateTime.UtcNow), // the farm now belongs to someone else
+        };
+        var institutionRow = SprayRow(institutionId.Value, day: 10);
+        repo.LibraryRows[institutionId.Value] = institutionRow;
+        repo.LibraryRows[ownRow.Id] = ownRow;
+        repo.Checks.Add(ScheduleCheck.Approve(institutionRow, institutionRow.Activities.Select(a => a.Id).ToList(), new UserId(Guid.NewGuid()), "Checker", DateTime.UtcNow, out _)!);
+
+        var result = await new ScheduleComplianceService(repo).EvaluateAsync(
+            new ScheduleComplianceQuery(Cycle, "बुरशीनाशक फवारणी", Stage, CycleStart.AddDays(10)));
+
+        Assert.Equal(institution.SubscriptionId, result.SubscriptionId);
+    }
+
     private static CropCycle BuildCycle() =>
         CropCycle.Create(Cycle, Farm, Plot, CropKey, Stage, CycleStart, endDate: null, createdAtUtc: DateTime.UtcNow);
 
@@ -331,6 +402,9 @@ public sealed class ScheduleComplianceServiceTests
         public List<ScheduleCheck> Checks { get; } = new();
         public CropScheduleTemplate? Template { get; set; }
 
+        /// <summary>lane CMP-OWN - the plot's farm, whose OWNER decides which followed schedule is his own (null = not known).</summary>
+        public Farm? FarmRow { get; set; }
+
         public Task<CropCycle?> GetCropCycleByIdAsync(Guid cropCycleId, CancellationToken ct = default) =>
             Task.FromResult(Cycle);
 
@@ -352,7 +426,7 @@ public sealed class ScheduleComplianceServiceTests
         // ---- Unused members — throw if touched by production code paths we don't expect. ----
 
         public Task AddFarmAsync(Farm farm, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<Farm?> GetFarmByIdAsync(Guid farmId, CancellationToken ct = default) => Task.FromResult(FarmRow);
         public Task AddFarmMembershipAsync(FarmMembership membership, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<FarmMembership?> GetFarmMembershipAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<AppRole?> GetUserRoleForFarmAsync(Guid farmId, Guid userId, CancellationToken ct = default) => throw new NotSupportedException();

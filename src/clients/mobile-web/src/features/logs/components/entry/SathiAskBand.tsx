@@ -27,21 +27,23 @@ export interface SathiAskBandProps {
     forDay?: string;
     /** Lane OF (CTX-1) — the same steps asking where an INCOME came from. */
     ask?: 'work' | 'income';
+    /** Lane CMP-T — the caller's own question and line (the तुलना selector asks which crop to COMPARE). Absent = every existing wording. */
+    text?: { question: string; hint?: string };
 }
 
-export const SathiAskBand: React.FC<SathiAskBandProps> = ({ step, cropNames, global, labour = false, forDay, ask = 'work' }) => {
+export const SathiAskBand: React.FC<SathiAskBandProps> = ({ step, cropNames, global, labour = false, forDay, ask = 'work', text }) => {
     const language = useOptionalLanguage()?.language;
     const dated = language === 'en' ? DATED_ASK.en : DATED_ASK.mr;
     const income = language === 'en' ? INCOME_ASK.en : INCOME_ASK.mr;
     const labourPlot = labour && step === 'plot';
     const names = cropNames.join(', ');
-    const question = global
+    const question = text ? text.question : global
         ? (ask === 'income' ? income.hint : ENTRY_WORDS.entireFarmHelp)
         : ask === 'income' ? (step === 'crop' ? income.cropQuestion : income.plotQuestion(names))
         : forDay ? (step === 'crop' ? dated.cropQuestion(forDay) : dated.plotQuestion(names, forDay))
         : step === 'crop' ? FOUNDER_ASK.cropQuestion
         : labourPlot ? LABOUR_ASK.plotQuestion : FOUNDER_ASK.plotQuestion(names);
-    const hint = global ? '' : ask === 'income' ? (step === 'crop' ? income.hint : '')
+    const hint = text ? (text.hint ?? '') : global ? '' : ask === 'income' ? (step === 'crop' ? income.hint : '')
         : step === 'crop' ? FOUNDER_ASK.cropHint : labourPlot ? LABOUR_ASK.plotHint : FOUNDER_ASK.plotHint;
     return (
         <div className="relative mb-4 [@media(max-height:720px)]:mb-3 flex min-h-[88px] [@media(max-height:720px)]:min-h-[70px] overflow-visible rounded-[28px] border border-emerald-200 bg-gradient-to-br from-emerald-50 via-lime-50 to-emerald-100/70 shadow-md" data-testid="flow-sathi" data-step={step} data-labour={labourPlot ? 'yes' : undefined}>

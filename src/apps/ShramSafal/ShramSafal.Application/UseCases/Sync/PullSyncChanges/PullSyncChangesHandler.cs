@@ -426,9 +426,18 @@ public sealed class PullSyncChangesHandler(
         // spec: plr-d10 lane L8b-3 (R6, D-76) - the मुख्य schedule of every plot-season he may see, from the SAME rows and the SAME
         // library listing this pull already holds (so a row he may not see is never named, and no query path skips the reader's filter).
         var mainFacts = MainScheduleFactsReader.FromListing(scheduleTemplates);
+        // spec: plr-d10 lane CMP-OWN - his own plan with stages is the main one: the pick needs the owner of each plot's farm. The `farms` above are a
+        // delta (changed since the cursor), so the owners are read for every farm that holds a followed schedule (ONE read), never from that delta.
+        var farmOwners = followedNow.Count == 0
+            ? new Dictionary<Guid, Guid>()
+            : (await repository.GetFarmsChangedSinceAsync(
+                    followedNow.Select(s => s.FarmId.Value).Distinct().ToList(), DateTime.UnixEpoch, ct))
+                .DistinctBy(f => (Guid)f.Id)
+                .ToDictionary(f => (Guid)f.Id, f => f.OwnerUserId.Value);
         var plotMainSchedules = followedNow
             .GroupBy(s => (s.PlotId, s.CropCycleId))
-            .Select(g => (Plot: g.Key.PlotId, Cycle: g.Key.CropCycleId, Main: MainSchedule.Pick(g.ToList(), mainFacts)))
+            .Select(g => (Plot: g.Key.PlotId, Cycle: g.Key.CropCycleId, Main: MainSchedule.Pick(
+                g.ToList(), mainFacts, farmOwners.TryGetValue(g.First().FarmId.Value, out var farmOwner) ? farmOwner : null)))
             .Where(m => m.Main is not null)
             .OrderBy(m => m.Plot)
             .ThenBy(m => m.Cycle)

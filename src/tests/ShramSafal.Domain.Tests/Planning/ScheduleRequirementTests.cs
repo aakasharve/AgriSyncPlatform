@@ -60,10 +60,11 @@ public sealed class ScheduleRequirementTests
         IReadOnlyList<ScheduleSubscription>? followed = null,
         bool extension = false,
         PlanningSeason? season = null,
-        bool noSeason = false) =>
+        bool noSeason = false,
+        Guid? plotFarmOwner = null) =>
         new(Plot,
             noSeason ? null : season ?? new PlanningSeason(Cycle, "Grapes", Today.AddDays(-15)),
-            Now, standing, extension, followed ?? [], listing, OriginOf);
+            Now, standing, extension, followed ?? [], listing, OriginOf, plotFarmOwner);
 
     // ---- the plan's table -------------------------------------------------------------------------------------
 
@@ -463,5 +464,90 @@ public sealed class ScheduleRequirementTests
         }
 
         throw new DirectoryNotFoundException("Could not locate apps/ShramSafal from the test execution directory.");
+    }
+
+    // ---- lane CMP-OWN: his own plan with stages is the main schedule, so the trial's stage is its stage ------
+
+    private static readonly Guid FarmOwner = Guid.NewGuid();
+
+    /// <summary>His own schedule (Team, owner column = the farm owner) that stores its own, different stages.</summary>
+    private static ScheduleTemplateDto OwnWithStages(Guid owner, bool storedDays = true) =>
+        new(Guid.NewGuid(), "Mine Grapes", "Grapes", 100,
+            storedDays ? [new StageDefinitionDto("Mine-early", 0, 19), new StageDefinitionDto("Mine-mid", 20, 99)] : [],
+            [], "h",
+            OwnerType: "USER", Check: new ScheduleCheckDto("NotChecked", null, null, null), HasStoredDays: storedDays, Scope: "Team",
+            OwnerUserId: owner);
+
+    [Fact]
+    public void In_the_trial_his_own_schedule_with_stages_gives_the_stage_even_when_a_checked_Institution_schedule_is_followed()
+    {
+        var university = CheckedOutside();
+        var mine = OwnWithStages(FarmOwner);
+
+        var state = ScheduleRequirement.Decide(Facts(
+            Trialing, [university, mine],
+            [Follow(university, ScheduleOrigin.Outside, 1), Follow(mine, ScheduleOrigin.Own, 0)],
+            plotFarmOwner: FarmOwner)); // today = day 15 -> Mine-early (0-19), where the Institution one says Growth (10-39)
+
+        Assert.Equal(new StageDefinition("Mine-early", 0, 19), state.TrialStage);
+    }
+
+    [Fact]
+    public void In_the_trial_a_schedule_owned_by_someone_else_or_with_no_stages_does_not_take_the_stage_from_the_Institution_one()
+    {
+        var university = CheckedOutside();
+        var theirs = OwnWithStages(Guid.NewGuid());
+        var blank = OwnWithStages(FarmOwner, storedDays: false);
+
+        var other = ScheduleRequirement.Decide(Facts(
+            Trialing, [university, theirs],
+            [Follow(university, ScheduleOrigin.Outside, 1), Follow(theirs, ScheduleOrigin.Own, 0)], plotFarmOwner: FarmOwner));
+        var blankOwn = ScheduleRequirement.Decide(Facts(
+            Trialing, [university, blank],
+            [Follow(university, ScheduleOrigin.Outside, 1), Follow(blank, ScheduleOrigin.Own, 0)], plotFarmOwner: FarmOwner));
+
+        Assert.Equal("Growth", other.TrialStage!.Name);
+        Assert.Equal("Growth", blankOwn.TrialStage!.Name);
+    }
+
+    [Fact]
+    public void The_listing_facts_carry_scope_owner_and_whether_the_schedule_stores_stages()
+    {
+        var mine = OwnWithStages(FarmOwner);
+        var blank = OwnWithStages(FarmOwner, storedDays: false);
+        var university = CheckedOutside();
+        var factsOf = MainScheduleFactsReader.FromListing([mine, blank, university]);
+
+        Assert.Equal(new MainScheduleFacts(ScheduleOwnerType.User, false, TenantScope.Team, FarmOwner, true), factsOf(new ScheduleTemplateId(mine.Id)));
+        Assert.Equal(new MainScheduleFacts(ScheduleOwnerType.User, false, TenantScope.Team, FarmOwner, false), factsOf(new ScheduleTemplateId(blank.Id)));
+        Assert.Equal(new MainScheduleFacts(ScheduleOwnerType.Institution, true, TenantScope.Public, null, true), factsOf(new ScheduleTemplateId(university.Id)));
+    }
+
+    [Fact]
+    public void In_the_trial_when_his_own_plans_stages_do_not_cover_today_the_compare_counts_nothing_even_though_the_Institution_schedule_would()
+    {
+        // founder: own plan primary. "Stores stages" does not mean "its stages cover today": day 120 is inside the University schedule's
+        // stage (100-150) but outside every stage of his own plan (0-19, 20-99). The own plan is the ONE main schedule, so the trial has no stage for
+        // today and the compare counts nothing for this plot. There is NO fall-back to the other schedule (that needs a founder ruling).
+        var university = new ScheduleTemplateDto(
+            Guid.NewGuid(), "Checked late", "Grapes", 150, [new StageDefinitionDto("Late", 100, 150)], [], "h",
+            OwnerType: "INSTITUTION", Check: new ScheduleCheckDto("Checked", null, null, null), HasStoredDays: true, Scope: "Public");
+        var mine = OwnWithStages(FarmOwner);
+        var followed = new[] { Follow(university, ScheduleOrigin.Outside, 1), Follow(mine, ScheduleOrigin.Own, 0) };
+        var season = new PlanningSeason(Cycle, "Grapes", Today.AddDays(-120));
+
+        // before: no own plan known as his own -> the Institution schedule is main and today's stage counts
+        var oldMain = Facts(Trialing, [university, mine], followed, season: season);
+        Assert.Equal("Late", ScheduleRequirement.Decide(oldMain).TrialStage!.Name);
+        Assert.True(FarmCompareService.Prepare(oldMain, Today)!.Counts);
+
+        // now: his own plan is main, today is in none of its stages
+        var ownMain = Facts(Trialing, [university, mine], followed, season: season, plotFarmOwner: FarmOwner);
+        var state = ScheduleRequirement.Decide(ownMain);
+        Assert.True(state.InTrial);
+        Assert.Null(state.TrialStage);
+        var plan = FarmCompareService.Prepare(ownMain, Today)!;
+        Assert.False(plan.Counts);
+        Assert.Equal(mine.Id, plan.Main!.ScheduleTemplateId.Value);
     }
 }
