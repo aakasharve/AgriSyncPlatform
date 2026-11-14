@@ -71,10 +71,19 @@ namespace ShramSafal.Admin.IntegrationTests;
 /// (5) The failure reporter's own keys (<c>type</c>, <c>endpoint</c>,
 /// <c>statusCode</c>, <c>message</c>): the plan does not say which of them
 /// are read back, so none is pinned.
-/// (6) A failure reporter's body that is not an object, or that holds values
-/// that cannot be read: that route keeps whatever an anonymous caller posts,
-/// and <c>A_row_with_unreadable_values_does_not_fail_the_read</c> seeds only
-/// a server-written row and an ingest row.
+/// (6) How large a failure reporter's body may be. That is the route's own
+/// rule, not this reader's; it is held in
+/// <c>ShramSafal.Sync.IntegrationTests/Contract/ClientErrorReportDoorTests.cs</c>.
+/// </para>
+///
+/// <para>
+/// <b>A row that holds something unreadable is still a row.</b> It is
+/// returned, with null for what could not be read and an empty list of codes:
+/// <c>A_row_with_unreadable_values_does_not_fail_the_read</c> for values of
+/// the wrong kind, and
+/// <c>A_client_error_whose_body_is_not_an_object_is_still_returned</c> for a
+/// failure reporter's body that is a word, a list or a number (that route
+/// keeps whatever an anonymous caller posts).
 /// </para>
 /// </summary>
 [Collection(nameof(AdminTestCollection))]
@@ -837,27 +846,141 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
 
         Row(rows, goodId).StatusCode.Should().Be(500, "the good row beside them is still returned, intact");
 
-        // Whether an unreadable row is left out or returned is not pinned.
-        // What is: nothing is made up for the values that could not be read.
-        var badReport = rows.SingleOrDefault(r => r.EventId == badReportId);
-        if (badReport is not null)
+        // A value that cannot be read costs that value and nothing else. The
+        // row itself IS returned (it happened, and leaving it out would hide
+        // a recorded failure for as long as the table lives), once, with its
+        // type, its time and its sender, with null for each value that could
+        // not be read, and with the values that could be read still read.
+        var badReport = Row(rows, badReportId);
+        badReport.EventType.Should().Be("sync.push_outcome");
+        badReport.OccurredAtUtc.Should().Be(at.AddMinutes(1));
+        badReport.RecoveredCount.Should().BeNull("\"many\" is not a count");
+        badReport.NeedsReviewCount.Should().BeNull("true is not a count");
+        badReport.PendingAfter.Should().BeNull("an object is not a count");
+        badReport.PersonId.Should().Be(sender, "the sender is the actor column, and that was readable");
+        badReport.AppVersion.Should().Be("1.0.18", "the one value of the report that could be read is still read");
+        badReport.RejectedWorkCodes.Should().NotBeNull().And.BeEmpty();
+
+        var badServerRow = Row(rows, badServerRowId);
+        badServerRow.EventType.Should().Be("sync.mutation_rejected");
+        badServerRow.OccurredAtUtc.Should().Be(at.AddMinutes(2));
+        badServerRow.Endpoint.Should().Be("POST /sync/push", "the one value of the row that could be read is still read");
+        badServerRow.StatusCode.Should().BeNull("\"two hundred\" is not a status code");
+        badServerRow.RejectedWorkItems.Should().BeNull("\"three\" is not a count");
+        badServerRow.RejectedWorkCodes.Should().NotBeNull("the list of codes is empty, it is never null")
+            .And.BeEmpty("a single word is not a list of codes, and it is not made into a list of one");
+        badServerRow.PersonId.Should().BeNull("\"not-a-person\" is not a person's id");
+        badServerRow.PersonName.Should().BeNull();
+        badServerRow.RouteFarmId.Should().BeNull("\"nowhere\" is not a farm's id");
+        ShouldCarryNoReport(badServerRow);
+
+        Mine(rows).Select(r => r.EventId).Should().BeEquivalentTo(
+            new[] { badReportId, badServerRowId, goodId },
+            "all three rows are returned: the two that hold unreadable values and the good one");
+    }
+
+    [Fact]
+    public async Task A_client_error_whose_body_is_not_an_object_is_still_returned()
+    {
+        var at = Day(15);
+        var sunita = Guid.NewGuid();
+        await UserAsync(sunita, "Sunita Pawar");
+
+        // POST /telemetry/client-error is anonymous, binds its body as any
+        // JSON value and stores that value's raw text as the row's props. So
+        // a caller who posts a word, a list or a number leaves exactly that
+        // in a table that can never be cleaned.
+        //
+        // The word and the list below are the awkward ones: each holds what
+        // would be a person and a version, were it the object it is not.
+        var wouldBeProps = new Dictionary<string, object?>
         {
-            badReport.RecoveredCount.Should().BeNull("\"many\" is not a count");
-            badReport.NeedsReviewCount.Should().BeNull("true is not a count");
-            badReport.PendingAfter.Should().BeNull("an object is not a count");
-            badReport.PersonId.Should().Be(sender);
+            ["personId"] = sunita.ToString("D"),
+            ["appVersion"] = "1.0.18",
+            ["statusCode"] = 500,
+        };
+
+        // A JSON string whose text happens to look like an object.
+        var aWord = JsonSerializer.Serialize(Json(wouldBeProps));
+
+        // A JSON array whose first element is an object.
+        var aList = JsonSerializer.Serialize(new object?[] { wouldBeProps, "TypeError: x is undefined", 3 });
+
+        // A JSON number.
+        const string aNumber = "42";
+
+        // And an object, as the app sends, in which the two values a reader
+        // might take are not text.
+        var numbersForText = Json(new Dictionary<string, object?>
+        {
+            ["type"] = "api_failure",
+            ["appVersion"] = 18,
+            ["personId"] = 12,
+        });
+
+        JsonDocument.Parse(aWord).RootElement.ValueKind.Should().Be(JsonValueKind.String);
+        JsonDocument.Parse(aList).RootElement.ValueKind.Should().Be(JsonValueKind.Array);
+        JsonDocument.Parse(aNumber).RootElement.ValueKind.Should().Be(JsonValueKind.Number);
+
+        var wordId = await ReporterRawRowAsync(at.AddMinutes(1), aWord);
+        var listId = await ReporterRawRowAsync(at.AddMinutes(2), aList);
+        var numberId = await ReporterRawRowAsync(at.AddMinutes(3), aNumber);
+        var numbersForTextId = await ReporterRawRowAsync(at.AddMinutes(4), numbersForText);
+
+        // The control: a well-formed row of the server's own, among them.
+        var goodId = await ServerRowAsync("api.error", at.AddMinutes(5),
+            MiddlewareProps("POST /sync/push", 500, "POST /sync/push", personId: sunita));
+
+        Func<Task<IReadOnlyList<OpsRecordedRowDto>>> read = () => Recorded(at);
+
+        var rows = (await read.Should().NotThrowAsync(
+            "a body that is not an object must not fail the read: the route would answer 503 for as "
+            + "long as the row is inside the window, and any anonymous caller could post one")).Subject;
+
+        var minute = 1;
+        foreach (var (id, what) in new[]
+                 {
+                     (wordId, "a word"), (listId, "a list"), (numberId, "a number"),
+                     (numbersForTextId, "an object with numbers where text belongs"),
+                 })
+        {
+            var row = Row(rows, id);
+
+            row.EventType.Should().Be("client.error",
+                $"a failure report whose body is {what} is still a recorded row, and is returned");
+            row.OccurredAtUtc.Should().Be(at.AddMinutes(minute++));
+
+            row.PersonId.Should().BeNull($"the row has no actor, and nothing inside {what} is believed to name one");
+            row.PersonName.Should().BeNull();
+            row.AppVersion.Should().BeNull($"{what} holds no version that can be read, and none is taken from inside it");
+
+            row.Endpoint.Should().BeNull();
+            row.Route.Should().BeNull();
+            row.StatusCode.Should().BeNull();
+            row.ErrorCode.Should().BeNull();
+            row.ServerBuild.Should().BeNull();
+            row.RouteFarmId.Should().BeNull();
+            row.RejectedWorkItems.Should().BeNull();
+            row.RejectedWorkCodes.Should().NotBeNull("the list of codes is empty, it is never null").And.BeEmpty();
+            ShouldCarryNoReport(row);
         }
 
-        var badServerRow = rows.SingleOrDefault(r => r.EventId == badServerRowId);
-        if (badServerRow is not null)
-        {
-            badServerRow.StatusCode.Should().BeNull("\"two hundred\" is not a status code");
-            badServerRow.RejectedWorkItems.Should().BeNull("\"three\" is not a count");
-            badServerRow.PersonId.Should().BeNull("\"not-a-person\" is not a person's id");
-            badServerRow.PersonName.Should().BeNull();
-            badServerRow.RouteFarmId.Should().BeNull("\"nowhere\" is not a farm's id");
-            badServerRow.RejectedWorkCodes.Should().NotBeNull();
-        }
+        // The good row beside them is intact, and it is the only row of this
+        // test that names Sunita: her id inside the word and inside the list
+        // gave her nothing.
+        var good = Row(rows, goodId);
+        good.StatusCode.Should().Be(500);
+        good.PersonId.Should().Be(sunita);
+        good.PersonName.Should().Be("Sunita Pawar");
+        good.AppVersion.Should().Be("1.0.18");
+
+        Mine(rows).Where(r => r.PersonId == sunita).Select(r => r.EventId).Should().BeEquivalentTo(
+            new[] { goodId },
+            "an anonymous caller cannot give a named person a failure, whatever shape the body has");
+
+        Mine(rows).Select(r => r.EventId).Should().BeEquivalentTo(
+            new[] { wordId, listId, numberId, numbersForTextId, goodId },
+            "every one of the five rows is returned, each once");
     }
 
     // ------------------------------------------------------------------
@@ -971,7 +1094,16 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
     /// its props.
     /// </summary>
     private Task<Guid> ReporterRowAsync(DateTime atUtc, Dictionary<string, object?> body) =>
-        EventAsync("client.error", atUtc, Json(body), actorRole: "client", trigger: "browser");
+        ReporterRawRowAsync(atUtc, Json(body));
+
+    /// <summary>
+    /// The same door, for any body. The route binds its body as a
+    /// <c>JsonElement</c> and stores <c>GetRawText()</c>, so whatever JSON
+    /// value was posted (an object, a word, a list, a number) is the row's
+    /// props, exactly as it was posted.
+    /// </summary>
+    private Task<Guid> ReporterRawRowAsync(DateTime atUtc, string rawBodyJson) =>
+        EventAsync("client.error", atUtc, rawBodyJson, actorRole: "client", trigger: "browser");
 
     /// <summary>
     /// One row in <c>analytics.events</c>; returns its id. The defaults are

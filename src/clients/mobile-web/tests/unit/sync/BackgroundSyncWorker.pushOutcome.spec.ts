@@ -78,16 +78,32 @@ Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: t
 import { mutationQueue, HELD_RECHECK_MS } from '../../../src/infrastructure/sync/MutationQueue';
 import { backgroundSyncWorker } from '../../../src/infrastructure/sync/BackgroundSyncWorker';
 import { SyncMutationName } from '../../../src/infrastructure/sync/SyncMutationCatalog';
+import { parentClientRequestIdForDailyLog } from '../../../src/infrastructure/sync/MutationDependency';
 import { APP_VERSION } from '../../../src/buildInfo';
 
 type PushRequest = { mutations: Array<{ clientRequestId: string; clientCommandId: string; mutationType: string }> };
 
 type Verdict =
     | { status: 'applied' }
+    | { status: 'duplicate' }
     | { status: 'failed'; errorCode?: string; errorMessage?: string };
 
 /** The server stored the save. */
 const APPLIED: Verdict = { status: 'applied' };
+
+/** The server already has this save from an earlier request: the same ids, sent again. */
+const ALREADY_HAS_IT: Verdict = { status: 'duplicate' };
+
+/**
+ * The server does not have the record this save belongs to. That says nothing
+ * about the save itself: what happens to it depends on what the record's own
+ * save is doing on this phone.
+ */
+const ITS_RECORD_IS_NOT_ON_THE_SERVER: Verdict = {
+    status: 'failed',
+    errorCode: 'ShramSafal.DailyLogNotFound',
+    errorMessage: 'Daily log was not found.',
+};
 
 /** A refusal only the farmer can settle: the same bytes get the same answer for ever. */
 const REFUSED_FOR_REVIEW: Verdict = {
@@ -502,6 +518,211 @@ describe('BackgroundSyncWorker — the report of what happened to work that had 
             pendingAfter: 0,
             appVersion: APP_VERSION,
             firstFailedAtUtc: iso(firstFailedAtMs),
+        });
+    });
+
+    it('throws the tally away when the cycle fails after a save was already marked applied', async () => {
+        const first = await save({ n: 1 });
+        const second = await save({ n: 2 });
+
+        // Both fail once. From here on each is a save that had failed before.
+        serverCannotBeReached();
+        await backgroundSyncWorker.triggerNow();
+        const firstFailedAtMs = nowMs;
+        expect(emitSyncPushOutcomeMock).not.toHaveBeenCalled();
+
+        // The server is back and answers "applied" for both. Nothing is wrong
+        // with the request or with the answer. The phone writes the first
+        // answer down, and then its own storage refuses the second write (a
+        // full disk, a database that closed). So this is not the transport
+        // rejecting up front: the loop that applies the answers throws, AFTER
+        // one save was already marked applied and counted.
+        advance(PAST_ANY_BACKOFF_MS);
+        pushBatchMock.mockClear();
+        serverAnswers(() => APPLIED);
+
+        const writeItDown = mutationQueue.markApplied.bind(mutationQueue);
+        const markedAppliedBeforeTheThrow: Array<{ clientRequestId: string; status: string; firstFailedAt?: string }> = [];
+        let markAppliedCalls = 0;
+        const markApplied = vi.spyOn(mutationQueue, 'markApplied').mockImplementation(async (id: number) => {
+            markAppliedCalls += 1;
+            if (markAppliedCalls > 1) {
+                throw new Error('QuotaExceededError: the phone could not write to its own storage');
+            }
+            await writeItDown(id);
+            const row = (await getDatabase().mutationQueue.get(id))!;
+            markedAppliedBeforeTheThrow.push({
+                clientRequestId: row.clientRequestId,
+                status: row.status,
+                firstFailedAt: row.firstFailedAt,
+            });
+        });
+
+        await expect(backgroundSyncWorker.triggerNow()).resolves.toBeUndefined();
+        markApplied.mockRestore();
+
+        // The scene is the one described: the request went out once and was
+        // answered; one save, one that had failed before, really was marked
+        // applied; and the next write is the one that threw.
+        expect(pushBatchMock).toHaveBeenCalledTimes(1);
+        expect(markAppliedCalls).toBe(2);
+        expect(markedAppliedBeforeTheThrow).toHaveLength(1);
+        expect([first, second]).toContain(markedAppliedBeforeTheThrow[0].clientRequestId);
+        expect(markedAppliedBeforeTheThrow[0].status).toBe('APPLIED');
+        expect(markedAppliedBeforeTheThrow[0].firstFailedAt).toBe(iso(firstFailedAtMs));
+
+        // What the phone holds after the cycle: the whole batch is marked
+        // failed, the save that had been marked applied included. Neither is
+        // held as arrived, and each still carries its first failure.
+        for (const id of [first, second]) {
+            const row = await rowFor(id);
+            expect(row.status, `save ${id} after a cycle that failed part-way`).toBe('FAILED');
+            expect(row.lastError).toContain('QuotaExceededError');
+            expect(row.firstFailedAt).toBe(iso(firstFailedAtMs));
+        }
+
+        // So the report may not say more than the phone holds. The count kept
+        // while the answers were being applied (one recovered) is thrown away
+        // with the cycle: no report claims that save recovered.
+        expect(reports().filter(report => report.recoveredCount !== 0),
+            'a save that was marked applied and then marked failed again with its batch has not recovered')
+            .toEqual([]);
+        expect(emitSyncPushOutcomeMock, 'with nothing recovered and nothing for the farmer, nothing is said')
+            .not.toHaveBeenCalled();
+
+        // The next cycle sends both again. The server has both from the
+        // request it answered, and says so. Now the phone holds both as
+        // arrived, and that is said once: two, not three. The count thrown
+        // away above was not carried into this cycle.
+        advance(PAST_ANY_BACKOFF_MS);
+        serverAnswers(() => ALREADY_HAS_IT);
+        await backgroundSyncWorker.triggerNow();
+
+        expect((await rowFor(first)).status).toBe('APPLIED');
+        expect((await rowFor(second)).status).toBe('APPLIED');
+        expect(theOneReport()).toEqual({
+            recoveredCount: 2,
+            needsReviewCount: 0,
+            pendingAfter: 0,
+            appVersion: APP_VERSION,
+            firstFailedAtUtc: iso(firstFailedAtMs),
+        });
+    });
+
+    it('counts a row whose parent can never arrive as needing the farmer', async () => {
+        const PARKED_RECORD = '11111111-1111-4111-8111-111111111111';
+        const MISSING_RECORD = '22222222-2222-4222-8222-222222222222';
+
+        // A record whose own save was sent to the farmer in an earlier cycle
+        // and is still with him. Nothing on this phone will send it again.
+        await getDatabase().mutationQueue.add({
+            deviceId: mutationQueue.getDeviceId(),
+            clientRequestId: parentClientRequestIdForDailyLog(PARKED_RECORD),
+            clientCommandId: parentClientRequestIdForDailyLog(PARKED_RECORD),
+            mutationType: SyncMutationName.CreateDailyLog,
+            payload: { dailyLogId: PARKED_RECORD },
+            status: 'REJECTED_USER_REVIEW',
+            createdAt: iso(START_MS),
+            updatedAt: iso(START_MS),
+            retryCount: 1,
+            firstFailedAt: iso(START_MS),
+        });
+
+        // Two pieces of work, each belonging to a record that can never
+        // arrive: one to the record above, one to a record whose save is not
+        // on this phone at all.
+        const ofTheParkedRecord = await mutationQueue.enqueue(SyncMutationName.AddLogTask, {
+            dailyLogId: PARKED_RECORD,
+            logTaskId: '55555555-5555-4555-8555-555555555555',
+            activityType: 'spray',
+        });
+        const ofTheMissingRecord = await mutationQueue.enqueue(SyncMutationName.AddLogTask, {
+            dailyLogId: MISSING_RECORD,
+            logTaskId: '66666666-6666-4666-8666-666666666666',
+            activityType: 'irrigation',
+        });
+
+        serverAnswers(() => ITS_RECORD_IS_NOT_ON_THE_SERVER);
+        await backgroundSyncWorker.triggerNow();
+
+        // Only the two children were sent: the parked record stays parked.
+        const sent = pushBatchMock.mock.calls.flatMap(
+            call => (call[0] as PushRequest).mutations.map(m => m.clientRequestId));
+        expect(sent.sort()).toEqual([ofTheParkedRecord, ofTheMissingRecord].sort());
+
+        // Each child is sent to the farmer BECAUSE OF ITS RECORD: the reason
+        // kept on the row names that record, which the server's own words
+        // ("Daily log was not found.") do not.
+        const childOfParked = await rowFor(ofTheParkedRecord);
+        expect(childOfParked.status).toBe('REJECTED_USER_REVIEW');
+        expect(childOfParked.lastError).toContain(PARKED_RECORD);
+
+        const childOfMissing = await rowFor(ofTheMissingRecord);
+        expect(childOfMissing.status).toBe('REJECTED_USER_REVIEW');
+        expect(childOfMissing.lastError).toContain(MISSING_RECORD);
+
+        // Both now need the farmer, and both are counted: a save parked for
+        // its record is as much the farmer's to settle as one refused for
+        // itself. The record parked in an earlier cycle is not counted again.
+        const report = theOneReport();
+        expect(report).toEqual({
+            recoveredCount: 0,
+            needsReviewCount: 2,
+            pendingAfter: 0,
+            appVersion: APP_VERSION,
+        });
+        expect(report.firstFailedAtUtc, 'nothing recovered, so there is no first failure to name').toBeUndefined();
+
+        // Counted in the cycle they were parked in, and not in the next.
+        emitSyncPushOutcomeMock.mockClear();
+        advance(PAST_ANY_BACKOFF_MS);
+        await backgroundSyncWorker.triggerNow();
+        expect(emitSyncPushOutcomeMock).not.toHaveBeenCalled();
+    });
+
+    it('does not count a row that is only waiting for its parent, nor call it recovered when it goes', async () => {
+        const RECORD = '33333333-3333-4333-8333-333333333333';
+
+        // The record's own save and a piece of work that belongs to it, made
+        // together, sent in one request.
+        const record = await mutationQueue.enqueue(SyncMutationName.CreateDailyLog, { dailyLogId: RECORD }, {
+            clientRequestId: parentClientRequestIdForDailyLog(RECORD),
+        });
+        const itsWork = await mutationQueue.enqueue(SyncMutationName.AddLogTask, {
+            dailyLogId: RECORD,
+            logTaskId: '77777777-7777-4777-8777-777777777777',
+            activityType: 'spray',
+        });
+
+        // The record is refused for now, and will be tried again by itself.
+        // Its work is therefore refused too: the server does not have the record.
+        serverAnswers(id => (id === record ? REFUSED_FOR_NOW : ITS_RECORD_IS_NOT_ON_THE_SERVER));
+        await backgroundSyncWorker.triggerNow();
+        const recordFailedAtMs = nowMs;
+
+        expect((await rowFor(record)).status).toBe('FAILED');
+
+        // The work waits behind its record. It was not sent to the farmer.
+        const waiting = await rowFor(itsWork);
+        expect(waiting.status).toBe('FAILED');
+        expect(waiting.lastError).toContain(RECORD);
+        expect(emitSyncPushOutcomeMock, 'a wait is not an outcome: nothing arrived and nothing needs the farmer')
+            .not.toHaveBeenCalled();
+
+        // Both go through on the next try. The record had failed and has now
+        // arrived: one recovered. Its work only waited: it is ordinary work.
+        advance(PAST_ANY_BACKOFF_MS);
+        serverAnswers(() => APPLIED);
+        await backgroundSyncWorker.triggerNow();
+
+        expect((await rowFor(record)).status).toBe('APPLIED');
+        expect((await rowFor(itsWork)).status).toBe('APPLIED');
+        expect(theOneReport()).toEqual({
+            recoveredCount: 1,
+            needsReviewCount: 0,
+            pendingAfter: 0,
+            appVersion: APP_VERSION,
+            firstFailedAtUtc: iso(recordFailedAtMs),
         });
     });
 

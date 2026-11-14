@@ -59,8 +59,8 @@ public sealed class ServerOnlyEventTypeTests
     /// C2). The ninth name was added here on 2026-11-14, deliberately: the
     /// last assertion of <see cref="Server_only_set_is_exactly_the_seven_names"/>
     /// fails for any vocabulary entry that has not been put on one side, and
-    /// this is the side it belongs on. That test's own text still says
-    /// "eight"; it was left as it stood.
+    /// this is the side it belongs on. That test's own messages say "nine"
+    /// since the same day.
     /// </summary>
     private static readonly string[] ClientTypes =
     [
@@ -97,17 +97,17 @@ public sealed class ServerOnlyEventTypeTests
         foreach (var name in ClientTypes)
         {
             EventVocabulary.IsServerOnly(name).Should().BeFalse(
-                $"'{name}' is one of the eight types the app itself sends");
+                $"'{name}' is one of the nine types the app itself sends");
         }
 
         EventVocabulary.IsServerOnly("closure.never_heard_of_it").Should().BeFalse(
             "a name outside the vocabulary is unknown, which is a different refusal");
 
-        // Every vocabulary entry is on exactly one side. A sixteenth entry
+        // Every vocabulary entry is on exactly one side. A seventeenth entry
         // fails here until somebody decides which side it is on.
         EventVocabulary.Registry.Keys.Should().BeEquivalentTo(
             ServerOnlyTypes.Concat(ClientTypes),
-            "seven server-only types and eight client types are the whole vocabulary; a new "
+            "seven server-only types and nine client types are the whole vocabulary; a new "
             + "entry has to be put on one side deliberately");
     }
 
