@@ -81,13 +81,18 @@ public interface IAdminOpsRepository
     /// name. No phone number is read.
     ///
     /// <para>
-    /// Who wrote a row decides whether it is read. <c>api.error</c>,
-    /// <c>api.slow</c>, <c>api.refused</c> and <c>sync.mutation_rejected</c>
-    /// are written by the server, which never sets an actor: such a row is
-    /// read only when it has none, and its person is <c>props.personId</c>.
-    /// <c>client.error</c> and <c>sync.push_outcome</c> arrive from the app
-    /// through the ingest route, which always sets the sender as the actor:
-    /// such a row is read only when it has one, and its person is that actor.
+    /// Who wrote a row decides whether it is read, type by type.
+    /// <c>api.error</c>, <c>api.slow</c>, <c>api.refused</c> and
+    /// <c>sync.mutation_rejected</c> are written by the server, which never
+    /// sets an actor: such a row is read only when it has none, and its
+    /// person is <c>props.personId</c>. <c>sync.push_outcome</c> arrives from
+    /// the app through the ingest route alone, which always sets the sender
+    /// as the actor: it is read only when it has one, and its person is that
+    /// actor. <c>client.error</c> arrives through ingest or through the app's
+    /// failure reporter (<c>POST /telemetry/client-error</c>), which is
+    /// anonymous and sets no actor: it is read in either case, and its person
+    /// is its actor when it has one and otherwise nobody.
+    /// <c>props.personId</c> is never believed on a row a client wrote.
     /// </para>
     ///
     /// <para>

@@ -608,16 +608,22 @@ public sealed class AdminOpsRepository(
     // What may NOT fail the query is one unreadable row. analytics.events is
     // append-only and client ingest checks only that a prop is present, so a
     // row whose count is a word stays inside the window until it ages out and
-    // nobody can remove it. So the SQL casts nothing a row could make fail
-    // (its one cast sits behind a pattern that the cast always accepts), and
-    // every value inside props is read in code, where one that cannot be read
+    // nobody can remove it. The app's failure reporter goes further: it keeps
+    // the raw body of an anonymous caller as the props, and that body need
+    // not be a JSON object at all (a word, a number, a list and null are all
+    // valid JSON). So the SQL casts nothing a row could make fail (its one
+    // cast sits behind a pattern that the cast always accepts), and every
+    // value inside props is read in code, where one that cannot be read
     // becomes null.
     // ───────────────────────────────────────────────────────────
 
     /// <summary>The most rows <see cref="GetRecordedAsync"/> returns: the newest ones.</summary>
     public const int MaxRecordedRows = 500;
 
-    /// <summary>Written by the request middleware, which never sets an actor.</summary>
+    /// <summary>
+    /// Written by the request middleware, which never sets an actor. These are
+    /// the only types on which <c>props.personId</c> is believed.
+    /// </summary>
     private static readonly string[] ServerWrittenTypes =
     [
         AnalyticsEventType.ApiError,
@@ -626,26 +632,37 @@ public sealed class AdminOpsRepository(
         AnalyticsEventType.SyncMutationRejected,
     ];
 
-    /// <summary>Sent by the app through the ingest route, which always sets the sender as the actor.</summary>
-    private static readonly string[] AppSentTypes =
-    [
-        AnalyticsEventType.ClientError,
-        AnalyticsEventType.SyncPushOutcome,
-    ];
-
     // The WHERE clause is two locks. The first is the six event types. The
-    // second is who wrote the row: a server-written type is read only with NO
-    // actor, an app-sent type only WITH one. Before commit 7e496f87 a
-    // signed-in account could post a forged api.error through ingest; ingest
-    // stamps the caller as the actor, so such a row never reads back as a
-    // server failure. An app-sent row with no actor has no sender to name.
+    // second is who wrote the row, and it is set type by type, because each
+    // type has its own doors (plan CR-1a, amendment 4 of 2026-11-14 and its
+    // correction):
     //
-    // The person follows the same split. For an app-sent row it is the actor
-    // column, whatever its props say. For a server-written row it is
-    // props.personId, which is text: it is cast only when it has the shape of
-    // an id (the 8-4-4-4-12 form the middleware writes), so "not-a-person"
-    // gives no person instead of failing the query. CASE evaluates the cast
-    // only for rows that passed the pattern.
+    //   api.error, api.slow, api.refused, sync.mutation_rejected
+    //     Written by the request middleware, which never sets an actor: read
+    //     only with NO actor. Before commit 7e496f87 a signed-in account
+    //     could post a forged api.error through ingest; ingest stamps the
+    //     caller as the actor, so such a row never reads back as a server
+    //     failure.
+    //
+    //   sync.push_outcome
+    //     Arrives through the ingest route alone, which requires sign-in and
+    //     always sets the sender as the actor: read only WITH one. A report
+    //     with no actor has no sender to name.
+    //
+    //   client.error
+    //     Has two doors. Ingest sets the sender as the actor. The app's
+    //     failure reporter, POST /telemetry/client-error (Program.cs), is
+    //     anonymous and writes the row with no actor: read in EITHER case.
+    //
+    // The person follows who wrote the row. props.personId is believed on the
+    // four server-written types and on no other. There it is text: it is cast
+    // only when it has the shape of an id (the 8-4-4-4-12 form the middleware
+    // writes), so "not-a-person" gives no person instead of failing the
+    // query. The inner CASE evaluates the cast only for rows that passed the
+    // pattern. On a row a client wrote the person is the actor column and
+    // nothing else, whatever its props say: a client.error row with no actor
+    // has no person, because its props are whatever an anonymous caller chose
+    // to post.
     //
     // The name is display_name from public.users, key "Id" (quoted, EF's
     // default name; UserConfiguration). That is the only column read from the
@@ -670,16 +687,20 @@ public sealed class AdminOpsRepository(
                 e.occurred_at_utc,
                 e.props::text AS props,
                 CASE
-                    WHEN e.event_type = ANY(@app_types) THEN e.actor_user_id
-                    WHEN e.props->>'personId'
-                         ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-                        THEN (e.props->>'personId')::uuid
+                    WHEN e.event_type = ANY(@server_types) THEN
+                        CASE
+                            WHEN e.props->>'personId'
+                                 ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+                                THEN (e.props->>'personId')::uuid
+                        END
+                    ELSE e.actor_user_id
                 END AS person_id
             FROM analytics.events e
             WHERE e.occurred_at_utc >= @since
               AND (
                       (e.event_type = ANY(@server_types) AND e.actor_user_id IS NULL)
-                   OR (e.event_type = ANY(@app_types)    AND e.actor_user_id IS NOT NULL)
+                   OR (e.event_type = @report_type       AND e.actor_user_id IS NOT NULL)
+                   OR  e.event_type = @client_error_type
                   )
             ORDER BY e.occurred_at_utc DESC, e.event_id DESC
             LIMIT @limit
@@ -700,7 +721,8 @@ public sealed class AdminOpsRepository(
             cmd.CommandText = RecordedSql;
             AddParam(cmd, "@since", AsUtc(sinceUtc));
             AddParam(cmd, "@server_types", ServerWrittenTypes);
-            AddParam(cmd, "@app_types", AppSentTypes);
+            AddParam(cmd, "@report_type", AnalyticsEventType.SyncPushOutcome);
+            AddParam(cmd, "@client_error_type", AnalyticsEventType.ClientError);
             AddParam(cmd, "@limit", MaxRecordedRows);
 
             var rows = new List<OpsRecordedRowDto>();
@@ -785,7 +807,11 @@ public sealed class AdminOpsRepository(
 
     /// <summary>
     /// The props of a row as a JSON object; null when there are none or they
-    /// are not one. jsonb always prints valid JSON, so the catch is for the
+    /// are not one. A <c>client.error</c> row from the app's failure reporter
+    /// holds whatever its caller posted, so a word, a number, a list or the
+    /// JSON null all arrive here: each gives null, and every value the row
+    /// would have taken from its props is then null (the list of codes:
+    /// empty). jsonb always prints valid JSON, so the catch is for the
     /// parser's own limits (nesting deeper than it accepts).
     /// </summary>
     private static JsonDocument? ParseProps(string? propsJson)

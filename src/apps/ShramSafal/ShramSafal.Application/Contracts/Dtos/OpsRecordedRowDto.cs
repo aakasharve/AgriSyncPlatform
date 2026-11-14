@@ -33,7 +33,9 @@ namespace ShramSafal.Application.Contracts.Dtos;
 /// <param name="ServerBuild">The server build that wrote the row.</param>
 /// <param name="PersonId">
 /// The signed-in person: the one the server recorded for its own rows, the
-/// sender for rows the app sent.
+/// sender for rows the app sent. Null when the row names nobody: a
+/// <c>client.error</c> that came through the app's failure reporter has no
+/// sender, because that route records none.
 /// </param>
 /// <param name="PersonName">That person's name on record; null when there is no user record or no name.</param>
 /// <param name="RouteFarmId">The farm the request addressed. Not proof the person belongs to it.</param>
