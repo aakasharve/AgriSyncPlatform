@@ -7,14 +7,15 @@
  * silent in production (a matview returns zero rows; nobody knows why for
  * weeks) — this script makes drift loud at PR time.
  *
- * The C# side carries 13 entries; the TS side carries the 8 client-emitted
- * events. We split the comparison: every TS event MUST appear in C#
- * (otherwise the backend would 400 the event), and the 5 server-only
- * events (log.created, ai.invocation, api.error, worker.named,
- * admin.farmer_lookup) MUST be present in C# but are expected to be
- * absent from the TS schema.
+ * The C# side carries every event; the TS side carries the client-emitted
+ * ones (unit tests pin both counts). We split the comparison: every TS
+ * event MUST appear in C# (otherwise the backend would 400 the event), and
+ * the server-only events listed in SERVER_ONLY below MUST be present in C#
+ * but are expected to be absent from the TS schema. SERVER_ONLY must stay
+ * equal to EventVocabulary.ServerOnly in C#: the client ingest route refuses
+ * exactly that set.
  *
- * Refs: ADR-2026-05-02_event-vocabulary.md
+ * Refs: ADR-2026-05-02_event-vocabulary.md, extended by ADR 0027 and ADR 0028
  *
  * Usage: node scripts/check-event-vocabulary-parity.mjs
  *        Exits 0 on parity, 1 on drift.
