@@ -2,8 +2,8 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 import { Leaf, Wheat, BarChart3, Shield } from 'lucide-react';
-import { adminApi } from '@/lib/api';
-import { type AdminSession } from '@/lib/auth';
+import { adminApi, readSessionEndReason, type SessionEndReason } from '@/lib/api';
+import { MAX_SESSION_HOURS, type AdminSession } from '@/lib/auth';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 
 // Matches User.Application.Contracts.Dtos.AuthResponse exactly
@@ -63,6 +63,17 @@ const TEXT = {
     'You were not signed in, because you said this account is not yours. Check the phone number and try again.',
   newCodeSent: 'A new code has been sent.',
 } as const;
+
+// What the page says when the console itself signed the person out and sent them here.
+const SIGNED_OUT_TEXT: Record<SessionEndReason, string> = {
+  'max-age': `You were signed out after ${MAX_SESSION_HOURS} hours. Sign in again.`,
+  ended: 'Your session has ended. Sign in again.',
+};
+
+function signedOutNotice(): string | null {
+  const reason = readSessionEndReason(window.location.search);
+  return reason ? SIGNED_OUT_TEXT[reason] : null;
+}
 
 interface Refusal {
   /** The HTTP status of the answer, or null when there was no answer. */
@@ -127,7 +138,13 @@ function toSession(
   if (typeof accessToken !== 'string' || !accessToken) return null;
   if (typeof expiresAtUtc !== 'string' || !expiresAtUtc) return null;
   // A code sign-in has no refresh token in this page: on the web it is a cookie the browser holds.
-  return { accessToken, refreshToken: null, userId, expiresAtUtc };
+  return {
+    accessToken,
+    refreshToken: null,
+    userId,
+    expiresAtUtc,
+    signedInAtUtc: new Date().toISOString(),
+  };
 }
 
 function formatWait(totalSeconds: number): string {
@@ -161,7 +178,8 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  // Opens with the reason when the console signed the person out; gone at their first action.
+  const [notice, setNotice] = useState<string | null>(signedOutNotice);
   const auth = useAdminAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -200,12 +218,19 @@ export default function LoginPage() {
     setNotice(null);
     setSubmitting(true);
     try {
-      const { data } = await adminApi.post<LoginResponse>('/user/auth/login', { phone, password });
+      // With credentials, like the code way: the answer sets the refresh cookie, and the browser
+      // keeps it only then. Without it this session could not be renewed.
+      const { data } = await adminApi.post<LoginResponse>(
+        '/user/auth/login',
+        { phone, password },
+        { withCredentials: true },
+      );
       const session: AdminSession = {
         accessToken: data.accessToken,
         refreshToken: data.refreshToken ?? null,
         userId: data.userId,
         expiresAtUtc: data.expiresAtUtc,
+        signedInAtUtc: new Date().toISOString(),
       };
       signIn(session);
     } catch (err) {
