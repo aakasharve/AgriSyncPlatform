@@ -100,6 +100,10 @@ export interface OwnWords {
     days: string;
     times: string;
     needName: string;
+    // lane SCH-MAKER-EMPTY (founder B3): the ONE line that says WHICH empty box holds a new stage / work back
+    needStageEnd: (stage: string) => string;
+    needEvery: (work: string) => string;
+    needTimes: (work: string) => string;
     less: string;
     more: string;
     unplaced: string;
@@ -212,6 +216,9 @@ export const OWN_WORDS: Readonly<Record<OwnLanguage, OwnWords>> = {
         days: 'दिवस', // v3
         times: 'वेळा', // v3
         needName: 'आधी काम सांगा किंवा लिहा', // v3
+        needStageEnd: stage => (stage ? `“${stage}” चा शेवटचा दिवस लिहा` : 'या स्टेजचा शेवटचा दिवस लिहा'), // PROPOSED (founder to approve)
+        needEvery: work => `“${work}” दर किती दिवसांनी करायचं ते लिहा`, // PROPOSED (founder to approve)
+        needTimes: work => `“${work}” आठवड्यातून किती वेळा करायचं ते लिहा`, // PROPOSED (founder to approve)
         less: 'कमी', // v3 (its stepper's label)
         more: 'जास्त', // v3 (its stepper's label)
         unplaced: 'स्टेजच्या दिवसांबाहेरची कामं', // PROPOSED (Marathi)
@@ -326,6 +333,9 @@ export const OWN_WORDS: Readonly<Record<OwnLanguage, OwnWords>> = {
         days: 'days', // PROPOSED (English)
         times: 'times', // PROPOSED (English)
         needName: 'First say or write the work', // PROPOSED (English)
+        needStageEnd: stage => (stage ? `Write the last day of “${stage}”` : 'Write the last day of this stage'), // PROPOSED (English; founder to approve)
+        needEvery: work => `Write how many days apart “${work}” is done`, // PROPOSED (English; founder to approve)
+        needTimes: work => `Write how many times a week “${work}” is done`, // PROPOSED (English; founder to approve)
         less: 'Less', // PROPOSED (English)
         more: 'More', // PROPOSED (English)
         unplaced: 'Works outside the stages', // PROPOSED (English)

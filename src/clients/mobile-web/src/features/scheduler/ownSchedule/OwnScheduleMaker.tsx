@@ -70,8 +70,10 @@ interface Draft {
     sourceId: string | null;
 }
 
-interface WorkForm { editIndex: number | null; name: string; part: WorkPart; from: number; to: number; mode: WorkMode; n: number; operationKey?: string; stageName: string; stageFrom: number; stageTo: number }
-interface StageForm { index: number | null; name: string; from: number; to: number }
+// Lane SCH-MAKER-EMPTY (founder B3): `n` (every N days / times a week) of a NEW work and `to` (the last day) of a NEW stage start EMPTY (null): the person
+// types them, nothing is suggested. A row that already has values opens with them.
+interface WorkForm { editIndex: number | null; name: string; part: WorkPart; from: number; to: number; mode: WorkMode; n: number | null; operationKey?: string; stageName: string; stageFrom: number; stageTo: number }
+interface StageForm { index: number | null; name: string; from: number; to: number | null }
 
 const PARTS: readonly WorkPart[] = ['irrigation', 'nutrition', 'spray', 'work'];
 const byStart = (a: OwnStage, b: OwnStage): number => a.startDay - b.startDay || a.endDay - b.endDay;
@@ -305,12 +307,17 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
     if (page === 'work' && wf) {
         const bad = wf.to < wf.from;
         const repeats = wf.mode !== 'one_time';
-        const ok = wf.name.trim().length >= 2 && !bad && (!repeats || wf.n >= 1);
-        const setMode = (m: WorkMode) => setWf(f => (f ? { ...f, mode: m, n: m === 'per_week' && (f.n > 7 || f.n < 1) ? 2 : f.n } : f));
+        const ok = wf.name.trim().length >= 2 && !bad && (!repeats || (wf.n !== null && wf.n >= 1));
+        // Changing how often: from one-time to a repeat the box starts empty (nothing is suggested); between the two repeats the typed number stays, unless a
+        // week cannot hold it - then he types again.
+        const setMode = (m: WorkMode) => setWf(f => (f ? { ...f, mode: m, n: m === 'one_time' ? f.n : f.mode === 'one_time' || (m === 'per_week' && f.n !== null && f.n > 7) ? null : f.n } : f));
+        // ONE line, and it says which box holds the work back: the name first, else the empty every-N-days / times-a-week box (PROPOSED words).
+        const nudge = wf.name.trim().length === 0 ? words.needName
+            : repeats && wf.n === null ? (wf.mode === 'every_n_days' ? words.needEvery(wf.name.trim()) : words.needTimes(wf.name.trim())) : null;
         const finish = () => {
             if (!ok) return;
             const work: OwnWork = {
-                name: wf.name.trim(), part: wf.part, startDay: wf.from, endDay: wf.to, mode: wf.mode, intervalDays: wf.mode === 'one_time' ? 1 : wf.n,
+                name: wf.name.trim(), part: wf.part, startDay: wf.from, endDay: wf.to, mode: wf.mode, intervalDays: wf.mode === 'one_time' ? 1 : wf.n ?? 1,
                 ...(wf.operationKey ? { operationKey: wf.operationKey } : {}),
             };
             setDraft(d => {
@@ -359,21 +366,21 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
                             </div>
                             <div role="radio" tabIndex={0} aria-checked={wf.mode === 'every_n_days'} data-testid="own-mode-every_n_days" onClick={() => setMode('every_n_days')}
                                 className={`flex min-h-[52px] items-center gap-3 rounded-2xl px-3 ring-1 ${wf.mode === 'every_n_days' ? 'bg-emerald-50 ring-emerald-500' : 'bg-white ring-stone-300'}`}>
-                                <span className="text-[16px] font-extrabold text-stone-900">{wf.mode === 'every_n_days' ? frequencyText('every_n_days', wf.n, language) : words.everyNDays}</span>
+                                <span className="text-[16px] font-extrabold text-stone-900">{wf.mode === 'every_n_days' && wf.n !== null ? frequencyText('every_n_days', wf.n, language) : words.everyNDays}</span>
                             </div>
                             <div role="radio" tabIndex={0} aria-checked={wf.mode === 'per_week'} data-testid="own-mode-per_week" onClick={() => setMode('per_week')}
                                 className={`flex min-h-[52px] items-center gap-3 rounded-2xl px-3 ring-1 ${wf.mode === 'per_week' ? 'bg-emerald-50 ring-emerald-500' : 'bg-white ring-stone-300'}`}>
-                                <span className="text-[16px] font-extrabold text-stone-900">{wf.mode === 'per_week' ? frequencyText('per_week', wf.n, language) : words.perWeek}</span>
+                                <span className="text-[16px] font-extrabold text-stone-900">{wf.mode === 'per_week' && wf.n !== null ? frequencyText('per_week', wf.n, language) : words.perWeek}</span>
                             </div>
                             {repeats && (
                                 <div className="max-w-[220px]">
-                                    <NumberBox testId="own-interval" value={wf.n} min={1} label={wf.mode === 'every_n_days' ? words.days : words.times} language={language} onChange={n => setWf(f => (f ? { ...f, n: wf.mode === 'per_week' ? Math.min(7, Math.max(1, n)) : n } : f))} />
+                                    <NumberBox testId="own-interval" allowEmpty value={wf.n} min={1} label={wf.mode === 'every_n_days' ? words.days : words.times} language={language} onChange={n => setWf(f => (f ? { ...f, n: n !== null && wf.mode === 'per_week' ? Math.min(7, Math.max(1, n)) : n } : f))} />
                                 </div>
                             )}
                         </div>
                     </section>
                 </div>
-                {wf.name.trim().length === 0 && <p className="m-0 rounded-2xl bg-stone-100 px-3 py-2 text-[14px] font-bold text-stone-700" data-testid="own-work-need">{words.needName}</p>}
+                {nudge && <p className="m-0 rounded-2xl bg-stone-100 px-3 py-2 text-[14px] font-bold text-stone-700" data-testid="own-work-need">{nudge}</p>}
                 <Tap onClick={finish} disabled={!ok} data-testid="own-work-ok" className="flex min-h-[58px] w-full items-center justify-center gap-2 rounded-2xl bg-amber-700 text-[18px] font-extrabold text-white disabled:opacity-50">
                     <Check size={20} aria-hidden="true" />{wf.editIndex === null ? words.addThis : words.changeThis}
                 </Tap>
@@ -390,7 +397,7 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
         const w = editIndex === null ? null : draft.works[editIndex];
         setWf({
             editIndex, name: w?.name ?? '', part: w?.part ?? 'work', from: w?.startDay ?? stage.startDay, to: w?.endDay ?? stage.endDay,
-            mode: w?.mode ?? 'one_time', n: w ? w.intervalDays : 7, ...(w?.operationKey ? { operationKey: w.operationKey } : {}),
+            mode: w?.mode ?? 'one_time', n: w ? w.intervalDays : null, ...(w?.operationKey ? { operationKey: w.operationKey } : {}),
             stageName: stage.name, stageFrom: stage.startDay, stageTo: stage.endDay,
         });
         go('work');
@@ -408,9 +415,9 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
                 className="min-h-[48px] rounded-full px-3 text-[15px] font-extrabold text-rose-700">{words.remove}</Tap>
         </div>
     );
-    const stageOk = sf !== null && sf.name.trim().length > 0 && sf.to >= sf.from;
+    const stageOk = sf !== null && sf.name.trim().length > 0 && sf.to !== null && sf.to >= sf.from;
     const commitStage = () => {
-        if (!sf || !stageOk) return;
+        if (!sf || !stageOk || sf.to === null) return;
         const stage: OwnStage = { name: sf.name.trim(), startDay: sf.from, endDay: sf.to };
         setDraft(d => {
             if (!d) return d;
@@ -423,7 +430,7 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
     const openStageForm = (index: number | null) => {
         const last = draft.stages.reduce((m, s) => Math.max(m, s.endDay), -1);
         const s = index === null ? null : draft.stages[index];
-        setSf({ index, name: s?.name ?? '', from: s?.startDay ?? last + 1, to: s?.endDay ?? last + 30 });
+        setSf({ index, name: s?.name ?? '', from: s?.startDay ?? last + 1, to: s?.endDay ?? null });
     };
 
     return (
@@ -468,10 +475,11 @@ export const OwnScheduleMaker: React.FC<OwnScheduleMakerProps> = ({ mode, farmId
                     <input id="own-stage-name" value={sf.name} maxLength={80} data-testid="own-stage-name" onChange={e => setSf(f => (f ? { ...f, name: e.target.value } : f))}
                         className="mt-1 min-h-[52px] w-full rounded-2xl border-2 border-stone-300 bg-white px-3 text-[18px] font-bold text-stone-900 outline-none focus:border-emerald-600" />
                     <div className="mt-2 grid grid-cols-2 gap-2">
-                        <div><div className="text-[13.5px] font-bold text-stone-600">{words.days} {words.from}</div><NumberBox testId="own-stage-from" value={sf.from} label={words.from} language={language} bad={sf.to < sf.from} onChange={n => setSf(f => (f ? { ...f, from: n } : f))} /></div>
-                        <div><div className="text-[13.5px] font-bold text-stone-600">{words.days} {words.to}</div><NumberBox testId="own-stage-to" value={sf.to} label={words.to} language={language} bad={sf.to < sf.from} onChange={n => setSf(f => (f ? { ...f, to: n } : f))} /></div>
+                        <div><div className="text-[13.5px] font-bold text-stone-600">{words.days} {words.from}</div><NumberBox testId="own-stage-from" value={sf.from} label={words.from} language={language} bad={sf.to !== null && sf.to < sf.from} onChange={n => setSf(f => (f ? { ...f, from: n } : f))} /></div>
+                        <div><div className="text-[13.5px] font-bold text-stone-600">{words.days} {words.to}</div><NumberBox testId="own-stage-to" allowEmpty value={sf.to} label={words.to} language={language} bad={sf.to !== null && sf.to < sf.from} onChange={n => setSf(f => (f ? { ...f, to: n } : f))} /></div>
                     </div>
-                    {sf.to < sf.from && <p className="m-0 mt-2 text-[14px] font-bold text-rose-800" role="alert" data-testid="own-stage-err">{words.errEnd}</p>}
+                    {sf.to !== null && sf.to < sf.from && <p className="m-0 mt-2 text-[14px] font-bold text-rose-800" role="alert" data-testid="own-stage-err">{words.errEnd}</p>}
+                    {sf.to === null && <p className="m-0 mt-2 rounded-2xl bg-stone-100 px-3 py-2 text-[14px] font-bold text-stone-700" data-testid="own-stage-need">{words.needStageEnd(sf.name.trim())}</p>}
                     <Tap onClick={commitStage} disabled={!stageOk} data-testid="own-stage-ok" className="mt-3 flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-700 text-[17px] font-extrabold text-white disabled:opacity-50">{sf.index === null ? words.addStage : words.done}</Tap>
                     <Tap onClick={() => setSf(null)} data-testid="own-stage-cancel" className="mt-2 flex min-h-[52px] w-full items-center justify-center rounded-2xl border border-stone-300 bg-white text-[16px] font-extrabold text-stone-800">{words.cancel}</Tap>
                 </section>

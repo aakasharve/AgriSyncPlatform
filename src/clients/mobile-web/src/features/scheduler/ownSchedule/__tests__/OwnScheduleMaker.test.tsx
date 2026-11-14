@@ -527,6 +527,152 @@ describe('changing one of his own schedules writes a NEW version (never in place
     });
 });
 
+describe('SCH-MAKER-EMPTY (founder B3): the person defines the days, nothing is suggested', () => {
+    const nonEnglish = /[ऀ-ॿ]/;
+
+    it('A_NEW_stage_starts_with_its_last_day_box_EMPTY_and_is_held_with_a_line_naming_that_box', async () => {
+        open();
+        await toStages();
+        fireEvent.click(screen.getByTestId('own-add-stage'));
+        expect(screen.getByTestId('own-stage-to')).toHaveValue(null); // empty, not "last + 30"
+        fireEvent.change(screen.getByTestId('own-stage-name'), { target: { value: 'फुलोरा' } });
+        expect(screen.getByTestId('own-stage-ok')).toBeDisabled();
+        expect(screen.getByTestId('own-stage-need')).toHaveTextContent('फुलोरा'); // WHICH stage
+        expect(screen.getByTestId('own-stage-need')).toHaveTextContent('शेवटचा दिवस');
+        expect(screen.getAllByTestId('own-stage-need')).toHaveLength(1); // ONE line
+        // typing a valid whole number lets him add it, and nothing else changed about the stage
+        fireEvent.change(screen.getByTestId('own-stage-to'), { target: { value: '45' } });
+        expect(screen.queryByTestId('own-stage-need')).toBeNull();
+        expect(screen.getByTestId('own-stage-ok')).toBeEnabled();
+        fireEvent.click(screen.getByTestId('own-stage-ok'));
+        expect(screen.getByTestId('own-stage-0')).toHaveTextContent('दिवस 0–45');
+    });
+
+    it('The_second_NEW_stage_also_starts_with_an_empty_last_day (the box never offers "last + 30")', async () => {
+        open();
+        await toStages();
+        addStage('फुलोरा', 31, 60);
+        fireEvent.click(screen.getByTestId('own-add-stage'));
+        expect(screen.getByTestId('own-stage-to')).toHaveValue(null);
+        expect(screen.getByTestId('own-stage-ok')).toBeDisabled();
+    });
+
+    it('A_blank_or_zero_less_stepper_never_invents_a_last_day: "more" starts him at 0, "less" on an empty box stays empty', async () => {
+        open();
+        await toStages();
+        fireEvent.click(screen.getByTestId('own-add-stage'));
+        fireEvent.click(screen.getByTestId('own-stage-to-less'));
+        expect(screen.getByTestId('own-stage-to')).toHaveValue(null);
+        fireEvent.change(screen.getByTestId('own-stage-to'), { target: { value: '30' } });
+        fireEvent.change(screen.getByTestId('own-stage-to'), { target: { value: '' } });
+        expect(screen.getByTestId('own-stage-to')).toHaveValue(null); // clearing it empties it again (it is not read as 0)
+        expect(screen.getByTestId('own-stage-ok')).toBeDisabled();
+    });
+
+    it('A_NEW_work_starts_with_BOTH_repeat_boxes_EMPTY_and_is_held_with_a_line_naming_which_work_and_which_box', async () => {
+        open();
+        await toStages();
+        addStage();
+        fireEvent.click(screen.getByTestId('own-add-work-0'));
+        fireEvent.change(screen.getByTestId('own-work-name'), { target: { value: 'ठिबक सिंचन' } });
+        // "एकदाच" needs no number
+        expect(screen.getByTestId('own-work-ok')).toBeEnabled();
+
+        fireEvent.click(screen.getByTestId('own-mode-every_n_days'));
+        expect(screen.getByTestId('own-interval')).toHaveValue(null); // not 7
+        expect(screen.getByTestId('own-work-ok')).toBeDisabled();
+        expect(screen.getByTestId('own-work-need')).toHaveTextContent('ठिबक सिंचन');
+        expect(screen.getByTestId('own-work-need')).toHaveTextContent('दर किती दिवसांनी');
+        expect(screen.getAllByTestId('own-work-need')).toHaveLength(1);
+
+        fireEvent.click(screen.getByTestId('own-mode-per_week'));
+        expect(screen.getByTestId('own-interval')).toHaveValue(null); // not 2
+        expect(screen.getByTestId('own-work-ok')).toBeDisabled();
+        expect(screen.getByTestId('own-work-need')).toHaveTextContent('ठिबक सिंचन');
+        expect(screen.getByTestId('own-work-need')).toHaveTextContent('आठवड्यातून किती वेळा');
+
+        fireEvent.change(screen.getByTestId('own-interval'), { target: { value: '3' } });
+        expect(screen.queryByTestId('own-work-need')).toBeNull();
+        expect(screen.getByTestId('own-work-ok')).toBeEnabled();
+        fireEvent.click(screen.getByTestId('own-work-ok'));
+        expect(screen.getByTestId('own-work-row-0-0')).toHaveTextContent('आठवड्यातून 3 वेळा');
+    });
+
+    it('Nothing_is_pushed_on_what_he_types: a large number of days stays as typed (the days rule only needs a whole number above 0)', async () => {
+        open();
+        await toStages();
+        addStage('लांब', 0, 400);
+        addWork('खत', 0, 400, 365);
+        expect(screen.getByTestId('own-work-row-0-0')).toHaveTextContent('दर 365 दिवसांनी');
+        expect(screen.queryByTestId('own-problem')).toBeNull();
+        expect(screen.getByTestId('own-save')).toBeEnabled();
+    });
+
+    it('Filled_valid_values_save_the_same_commands_as_before (create + edit with the typed days and interval)', async () => {
+        open();
+        fireEvent.change(await screen.findByTestId('own-name'), { target: { value: 'माझं द्राक्ष' } });
+        fireEvent.click(screen.getByTestId('own-start-blank'));
+        fireEvent.click(await screen.findByTestId('own-mf-next'));
+        await screen.findByTestId('own-stages');
+        addStage('फुलोरा', 31, 60);
+        addWork('फवारणी', 35, 50, 7);
+        await act(async () => { fireEvent.click(screen.getByTestId('own-save')); });
+        await waitFor(async () => expect((await queue()).map(r => r.mutationType)).toEqual([SyncMutationName.ScheduleCreate, SyncMutationName.ScheduleEdit]));
+        const edit = (await queue())[1].payload as Record<string, unknown>;
+        expect(edit.stages).toEqual([{ name: 'फुलोरा', startDay: 31, endDay: 60 }]);
+        expect(edit.activities).toEqual([{ name: 'फवारणी', part: 'irrigation', startDay: 35, endDay: 50, frequencyMode: 'every_n_days', intervalDays: 7 }]);
+    });
+
+    it('An_existing_schedule_loads_FILLED: its stage days and its work interval show as stored (only NEW rows start empty)', async () => {
+        const V1 = ownRow({ id: id(1), name: 'माझं द्राक्ष शेड्यूल', stages: STAGES_A, activities: WORKS_A, version: 1 });
+        await seedRows([CHECKED, V1]);
+        render(<Host initial={{ page: 'edit', chainId: id(1) }} />);
+        await screen.findByTestId('own-stages');
+        fireEvent.click(screen.getByTestId('own-stage-edit-2'));
+        expect(await screen.findByTestId('own-stage-to')).toHaveValue(60);
+        expect(screen.getByTestId('own-stage-ok')).toBeEnabled();
+        fireEvent.click(screen.getByTestId('own-stage-cancel'));
+        fireEvent.click(screen.getByTestId('own-work-edit-2-0'));
+        expect(await screen.findByTestId('own-interval')).toHaveValue(5);
+        expect(screen.queryByTestId('own-work-need')).toBeNull();
+        expect(screen.getByTestId('own-work-ok')).toBeEnabled();
+    });
+
+    it('Switching_an_existing_one-time_work_to_a_repeat_starts_the_box_empty (no "1" is suggested)', async () => {
+        const V1 = ownRow({ id: id(1), name: 'माझं द्राक्ष शेड्यूल', stages: STAGES_A, activities: WORKS_A, version: 1 });
+        await seedRows([CHECKED, V1]);
+        render(<Host initial={{ page: 'edit', chainId: id(1) }} />);
+        await screen.findByTestId('own-stages');
+        fireEvent.click(screen.getByTestId('own-work-edit-2-2')); // घड विरळणी: one time
+        await screen.findByTestId('own-work');
+        fireEvent.click(screen.getByTestId('own-mode-every_n_days'));
+        expect(screen.getByTestId('own-interval')).toHaveValue(null);
+        expect(screen.getByTestId('own-work-ok')).toBeDisabled();
+        expect(screen.getByTestId('own-work-need')).toHaveTextContent('घड विरळणी');
+    });
+
+    it('In_English_mode_the_lines_are_English_only', async () => {
+        language.current = 'en';
+        open();
+        await toStages();
+        fireEvent.click(screen.getByTestId('own-add-stage'));
+        fireEvent.change(screen.getByTestId('own-stage-name'), { target: { value: 'Flowering' } });
+        const stageLine = screen.getByTestId('own-stage-need');
+        expect(stageLine).toHaveTextContent('Flowering');
+        expect(stageLine.textContent).not.toMatch(nonEnglish);
+        fireEvent.change(screen.getByTestId('own-stage-to'), { target: { value: '45' } });
+        fireEvent.click(screen.getByTestId('own-stage-ok'));
+        fireEvent.click(screen.getByTestId('own-add-work-0'));
+        fireEvent.change(screen.getByTestId('own-work-name'), { target: { value: 'Drip' } });
+        fireEvent.click(screen.getByTestId('own-mode-every_n_days'));
+        const workLine = screen.getByTestId('own-work-need');
+        expect(workLine).toHaveTextContent('Drip');
+        expect(workLine.textContent).not.toMatch(nonEnglish);
+        fireEvent.click(screen.getByTestId('own-mode-per_week'));
+        expect(screen.getByTestId('own-work-need').textContent).not.toMatch(nonEnglish);
+    });
+});
+
 describe('English mode shows English only', () => {
     it('Start_screen_and_made_for_screen', async () => {
         language.current = 'en';

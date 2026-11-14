@@ -62,19 +62,29 @@ export const PickRow: React.FC<{ testId: string; label: string; optional: string
     </div>
 );
 
-/** A whole-number box with its less / more buttons (the v3 stepper). The box can be typed in; a blank or negative entry is read as 0. */
-export const NumberBox: React.FC<{ testId: string; value: number; min?: number; onChange: (n: number) => void; label: string; language: OwnLanguage; bad?: boolean }> = ({
-    testId, value, min = 0, onChange, label, language, bad = false,
-}) => {
+type NumberBoxProps = { testId: string; min?: number; label: string; language: OwnLanguage; bad?: boolean } & (
+    | { allowEmpty?: false; value: number; onChange: (n: number) => void }
+    | { allowEmpty: true; value: number | null; onChange: (n: number | null) => void }
+);
+
+/**
+ * A whole-number box with its less / more buttons (the v3 stepper). The box can be typed in. By default a blank or negative entry is read as the
+ * least number. With `allowEmpty` (lane SCH-MAKER-EMPTY, founder B3: the person defines the days himself, nothing is suggested) the box may be EMPTY:
+ * blank is `null`, "more" on an empty box starts at the least number, "less" on an empty box stays empty.
+ */
+export const NumberBox: React.FC<NumberBoxProps> = props => {
+    const { testId, min = 0, label, language, bad = false } = props;
+    const value: number | null = props.value;
     const words = OWN_WORDS[language];
+    const emit = (n: number | null) => { if (props.allowEmpty) props.onChange(n); else props.onChange(n ?? min); };
     return (
         <div className={`flex items-center gap-1.5 rounded-2xl p-1 ring-1 ${bad ? 'bg-rose-50 ring-rose-300' : 'bg-white ring-stone-300'}`}>
-            <Tap onClick={() => onChange(Math.max(min, value - 1))} aria-label={`${label} ${words.less}`} data-testid={`${testId}-less`}
+            <Tap onClick={() => emit(value === null ? null : Math.max(min, value - 1))} aria-label={`${label} ${words.less}`} data-testid={`${testId}-less`}
                 className="grid min-h-[48px] min-w-[48px] place-items-center rounded-xl bg-stone-100 text-stone-800"><Minus size={18} aria-hidden="true" /></Tap>
-            <input type="number" inputMode="numeric" min={min} value={value} aria-label={label} data-testid={testId}
-                onChange={e => { const n = Number.parseInt(e.target.value, 10); onChange(Number.isFinite(n) ? Math.max(min, n) : min); }}
+            <input type="number" inputMode="numeric" min={min} value={value ?? ''} aria-label={label} data-testid={testId}
+                onChange={e => { const n = Number.parseInt(e.target.value, 10); emit(Number.isFinite(n) ? Math.max(min, n) : null); }}
                 className="min-h-[48px] w-full min-w-0 bg-transparent text-center text-[18px] font-black text-stone-900 outline-none" />
-            <Tap onClick={() => onChange(value + 1)} aria-label={`${label} ${words.more}`} data-testid={`${testId}-more`}
+            <Tap onClick={() => emit(value === null ? min : value + 1)} aria-label={`${label} ${words.more}`} data-testid={`${testId}-more`}
                 className="grid min-h-[48px] min-w-[48px] place-items-center rounded-xl bg-stone-100 text-stone-800"><Plus size={18} aria-hidden="true" /></Tap>
         </div>
     );
