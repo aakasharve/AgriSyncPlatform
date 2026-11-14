@@ -419,6 +419,19 @@
 //     directory, which erasure anonymises. No action, no ScrubbedColumnsFor entry.
 //     KEEP — conscious gate-4 disposition. No scrub action.
 //
+//   - ssf.log_practice_reasons (plr-d10 lane CMP-D3, founder D-68 round 2) — KEEP THE ROW AND ITS KIND, ERASE HIS WORDS. One row is one reason
+//     ("का केलं") kept on one item of one saved record of a FARM: the farm, the record, the item key (a work key, never a word of a person), the
+//     KIND (Practice / Extra / Weather: one of three fixed words), `words` (what the author typed or said, at most 1000 characters: HIS WORDS,
+//     personal data under the notice), whether they came from the mic, when, who wrote it as an opaque user id ONLY and which reason it replaced.
+//     It is the farm's own record of why work was done the way it was, append-only by GRANT (SELECT + INSERT): the app role cannot rewrite
+//     or remove a row. Erasing the AUTHOR therefore runs through the privileged admin context, as ssf.daily_log_contents above
+//     (ScrubLogPracticeReasonWordsAsync, SET LOCAL row_security = off so that a connection row-level security would filter fails loudly,
+//     never quietly): it sets `words` NULL and `said_by_voice` false on every row he wrote, and the KIND, the item, the record, the time and his
+//     opaque id stay (P6: anonymise the person, never the work; the phone names a person only through the operator directory, which erasure
+//     anonymises). Idempotent (a second run changes 0 rows). A reason of another person on the same record is NOT touched: the
+//     record is his, the reason is its author's.
+//     ANONYMIZE (words only) — see ScrubbedColumnsFor.
+//
 //   - ssf.schedule_subscriptions (plr-d10 lane L8b-1) — KEEP. One row is which library
 //     schedule one plot's crop season follows and its day 0: (farm_id, plot_id,
 //     crop_cycle_id, crop_key, schedule_template_id, version tag, state, dates) — NO user
@@ -793,6 +806,11 @@ public sealed class ErasureWorker(
         // spec: plr-d10 lane SCH-A fix round 1 (S001, P6) - the checker's NAME on ShramSafal's schedule checks. The check stays.
         perTableCounts["schedule_checks"] = await ScrubScheduleCheckerNamesAsync(admin, targetUserId, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["schedule_checks"];
+
+        // spec: plr-d10 lane CMP-D3 (founder D-68 round 2; P6) - the WORDS of every reason he wrote. The kind stays. (Keyed by the author's own id,
+        // which is not scrubbed anywhere, so the order against AnonymizeDailyLogsAsync does not matter.)
+        perTableCounts["log_practice_reasons"] = await ScrubLogPracticeReasonWordsAsync(admin, targetUserId, ct).ConfigureAwait(false);
+        totalAnonymized += perTableCounts["log_practice_reasons"];
 
         perTableCounts["daily_logs"] = await AnonymizeDailyLogsAsync(admin, targetUserId, sentinel, ct).ConfigureAwait(false);
         totalAnonymized += perTableCounts["daily_logs"];
@@ -1241,6 +1259,51 @@ public sealed class ErasureWorker(
             "UPDATE ssf.schedule_checks SET checker_display_name = {0} WHERE checker_user_id = {1} AND checker_display_name <> {0}",
             new object[] { "श्रमसफल कृषी तज्ज्ञ", userId },
             ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// spec: plr-d10 lane CMP-D3 (founder D-68 round 2; doctrine P6: anonymise the person, never the work). Removes HIS WORDS from every reason he
+    /// wrote (<c>words</c> NULL, <c>said_by_voice</c> false) and keeps the row: its KIND, its item, its record, its time and his opaque id stay.
+    /// Like the daily-log scrub it runs on the migration-role context, the only one the append-only REVOKE leaves able to rewrite a row (the app role
+    /// has no UPDATE). The table is FORCE-RLS: the whole transaction runs under <c>SET LOCAL row_security = off</c>, so a connection row-level security
+    /// WOULD filter raises an error instead of reading none of his rows and reporting success. It then proves that none of his rows still holds words.
+    /// Idempotent: a row without words is skipped, so a second run changes 0 rows.
+    /// </summary>
+    internal static async Task<int> ScrubLogPracticeReasonWordsAsync(ShramSafalDbContext db, Guid userId, CancellationToken ct)
+    {
+        await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("SET LOCAL row_security = off", ct).ConfigureAwait(false);
+
+        int changed;
+        try
+        {
+            changed = await db.Database.ExecuteSqlRawAsync(
+                "UPDATE ssf.log_practice_reasons SET words = NULL, said_by_voice = false WHERE author_user_id = {0} AND words IS NOT NULL",
+                new object[] { userId },
+                ct).ConfigureAwait(false);
+        }
+        catch (Npgsql.PostgresException ex) when (ex.SqlState == Npgsql.PostgresErrorCodes.InsufficientPrivilege)
+        {
+            throw new InvalidOperationException(
+                "Erasure cannot reach every farm's reasons on this connection: row-level security would filter "
+                + $"ssf.log_practice_reasons ({ex.MessageText}). It must run on the migration connection (ShramSafalDb_Migration), "
+                + "as an identity row-level security does not filter.",
+                ex);
+        }
+
+        var left = await db.Database
+            .SqlQueryRaw<int>(
+                @"SELECT count(*)::int AS ""Value"" FROM ssf.log_practice_reasons WHERE author_user_id = {0} AND words IS NOT NULL",
+                userId)
+            .SingleAsync(ct)
+            .ConfigureAwait(false);
+        if (left != 0)
+        {
+            throw new InvalidOperationException($"Erasure left {left} reasons still holding the farmer's words.");
+        }
+
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        return changed;
     }
 
     /// <summary>
@@ -1720,6 +1783,8 @@ UPDATE ssf.labour_corrections
         // ssf.labour_assignments manifest comments above.
         "workers" => new[] { "name_raw", "name_normalized" },
         "labour_assignments" => new[] { "worker_names_json" },
+        // plr-d10 lane CMP-D3 - his WORDS on the reasons he kept ("का केलं"); the kind, the item, the record and his opaque id stay.
+        "log_practice_reasons" => new[] { "words", "said_by_voice" },
         // Labour V1 Task 10.5b — WORKER-subject erasure only
         // (AnonymizeFieldOperatorAsync), never creator/account erasure. These
         // tables are absent from the ProcessOneAsync sequence by design; the

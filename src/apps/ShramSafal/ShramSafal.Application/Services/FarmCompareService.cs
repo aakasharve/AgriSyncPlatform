@@ -34,13 +34,18 @@ namespace ShramSafal.Application.Services;
 /// <item><b>Cost (P001)</b>: the farm-wide reads are made ONCE for the farm (<see cref="ScheduleRequirement.FactsForFarmAsync"/>; one read of every log
 /// of every plot; one money-word check for every record that needs it). Each plot with a season costs at most TWO more commands: its season's row and
 /// that season's tasks (<see cref="IShramSafalRepository.GetExecutedTasksByCropCycleIdAsync"/>).</item>
+/// <item><b>Reasons (CMP-D3, "का केलं")</b>: the reason kept on an own-work item is read in ONE read for the whole farm
+/// (<see cref="ILogPracticeReasonStore.GetForLogsAsync"/>; none at all when no plot has own work), never one per plot. It is served only with an item the reader may
+/// see (a hidden record is never listed, so its reason never is). Its KIND is always given; its WORDS are withheld (null) from a reader who may not hear a
+/// record that states money, or words that state it themselves, unless he wrote them (D-66 / D-69, <see cref="MoneyMention"/>).</item>
 /// </list>
 /// Doses are not compared. No quantity, no amber, no "differed" - a record is yes or no (R33).
 /// </summary>
 public sealed class FarmCompareService(
     IShramSafalRepository repository,
     ScheduleRequirement requirement,
-    IClock clock)
+    IClock clock,
+    ILogPracticeReasonStore reasons)
 {
     private static readonly string[] PartOrder = ["irrigation", "nutrition", "spray", "work"];
 
@@ -48,8 +53,7 @@ public sealed class FarmCompareService(
     /// The one rule for every compare read: the primary account holder, or a seat that holds <see cref="FarmAuthority.SeeCompare"/> now.
     /// A Worker label can never hold it (<see cref="FarmAuthorities.CanBeHeldBy"/>), a paused or waiting seat holds nothing, no standing holds nothing.
     /// </summary>
-    public static bool Gate(FarmAccess? access, DateTime atUtc) =>
-        FarmAccessPolicy.IsPrimaryAccountHolder(access) || FarmAccessPolicy.Holds(access, FarmAuthority.SeeCompare, atUtc);
+    public static bool Gate(FarmAccess? access, DateTime atUtc) => FarmCompareGate.Gate(access, atUtc);
 
     /// <summary>The same rule for a route that names only a season (the two old compare routes): load his standing on the farm, then <see cref="Gate"/>.</summary>
     public static async Task<bool> MayAsync(
@@ -120,7 +124,10 @@ public sealed class FarmCompareService(
         // ONE money-word check for every record whose words may be withheld (D-66): not his own, he does not hear wages.
         var withheld = await WithheldRecordsAsync(farmId, drafts, scope, callerUserId, ct);
 
-        var result = drafts.Select(d => d.Build(withheld)).ToList();
+        // CMP-D3: ONE read of the reasons of every own-work record of the farm (none when there is no own work), then in memory.
+        var reasonsOf = await ReasonsAsync(drafts, withheld, scope, callerUserId, ct);
+
+        var result = drafts.Select(d => d.Build(withheld, reasonsOf)).ToList();
         return Result.Success(new FarmCompareDto(now, result, new RecogniserVersionsDto(WorkVocabulary.Version, InputCatalog.Version)));
     }
 
@@ -205,7 +212,7 @@ public sealed class FarmCompareService(
     /// <summary>One plot's answer, built except for the words that money may withhold.</summary>
     private sealed record Draft(PlotCompareDto Shell, IReadOnlyList<Pending> Pendings, int MainDayZero)
     {
-        public PlotCompareDto Build(IReadOnlySet<Guid> withheld)
+        public PlotCompareDto Build(IReadOnlySet<Guid> withheld, IReadOnlyDictionary<(Guid LogId, string WorkKey), LogReasonDto> reasonsOf)
         {
             var own = new List<OwnWorkDto>();
             var notRecognised = new List<NotRecognisedDto>();
@@ -216,15 +223,16 @@ public sealed class FarmCompareService(
                 if (p.Own is { } item)
                 {
                     var identity = WorkRecogniser.Recognise(p.Rec.Work.ActivityType);
+                    var workKey = CompareWorkKey.Of(identity);
                     own.Add(new OwnWorkDto(
                         p.Log.Id,
-                        WorkKeyOf(identity),
+                        workKey,
                         day,
                         item.StageName,
                         identity?.Part.ToString().ToLowerInvariant() ?? "work",
                         hide ? null : p.Rec.Work.ActivityType.Trim(),
                         hide ? [] : item.MatchedWords,
-                        null));
+                        reasonsOf.GetValueOrDefault((p.Log.Id, workKey))));
                 }
                 else if (p.NotRecognised is { } missed)
                 {
@@ -378,16 +386,39 @@ public sealed class FarmCompareService(
         return mentioning;
     }
 
-    private static string WorkKeyOf(WorkIdentity? identity)
+    /// <summary>
+    /// CMP-D3: the latest reason of every own-work item listed to this reader, from ONE read (zero commands when nothing is listed). The words are
+    /// withheld (null, the kind kept) when the record is one whose words stay with the holder (<paramref name="withheld"/>, D-66) or the words state money
+    /// themselves and he does not hear wages - and never from the person who wrote them.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<(Guid LogId, string WorkKey), LogReasonDto>> ReasonsAsync(
+        IReadOnlyList<Draft> drafts, IReadOnlySet<Guid> withheld, FarmReadScope scope, Guid readerUserId, CancellationToken ct)
     {
-        if (identity is null)
+        var listed = drafts
+            .SelectMany(d => d.Pendings)
+            .Where(p => p.Own is not null)
+            .Select(p => p.Log.Id)
+            .Distinct()
+            .ToList();
+        var answer = new Dictionary<(Guid LogId, string WorkKey), LogReasonDto>();
+        if (listed.Count == 0)
         {
-            return "unrecognised";
+            return answer;
         }
 
-        var part = identity.Part.ToString().ToLowerInvariant();
-        var detail = identity.Role ?? identity.NutrientKey ?? identity.OperationKey;
-        return detail is null ? part : $"{part}:{detail}";
+        var hears = MoneyMention.HearsMoneyWords(scope);
+        var latest = (await reasons.GetForLogsAsync(listed, ct))
+            .GroupBy(r => (r.DailyLogId, r.WorkKey))
+            .Select(g => g.OrderBy(r => r.CreatedAtUtc).ThenBy(r => r.Id).Last());
+        foreach (var r in latest)
+        {
+            var mine = r.AuthorUserId.Value == readerUserId;
+            var keep = r.Words is null || mine || (!withheld.Contains(r.DailyLogId) && (hears || !MoneyMention.InText(r.Words)));
+            answer[(r.DailyLogId, r.WorkKey)] = new LogReasonDto(
+                LogReasonKindWire.ToWire(r.Kind), keep ? r.Words : null, keep && r.SaidByVoice);
+        }
+
+        return answer;
     }
 
     private static ScheduleCompareDto Describe(

@@ -79,6 +79,14 @@ const stage = z.object({
     daysLeft: optionalInt,
 });
 
+// spec: lane CMP-D3 fix round 1 (P002): the reason kept on an own-work item ("का केलं"), exactly as the server serves it. The kind is always given;
+// the words are null when he said none or when this reader may not hear them (a record that states money).
+const reason = z.object({
+    kind: z.enum(['Practice', 'Extra', 'Weather']),
+    words: z.string().nullable(),
+    saidByVoice: z.boolean(),
+});
+
 const ownWork = z.object({
     dailyLogId: z.string().min(1),
     workKey: text,
@@ -88,7 +96,7 @@ const ownWork = z.object({
     // withheld (null) from a reader who may not hear the words of a record that states money
     title: optionalText,
     matchedWords: z.array(text),
-    reason: optionalText,
+    reason: reason.nullish().transform(v => v ?? null),
 });
 
 const notRecognised = z.object({

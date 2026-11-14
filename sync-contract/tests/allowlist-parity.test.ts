@@ -61,7 +61,8 @@ const HANDLER_PATH = resolve(
 // 30 -> 32 on 2026-11-08 (lane L8c-3, founder D-24d): plannedwork.complete and plannedwork.reopen, each its own PayloadHasOnly.
 // 32 -> 35 on 2026-11-09 (lane SCH-OWN, founder D-74 / D-82 = 3): schedule.create (new), schedule.clone and schedule.edit (WIRED: they answered
 // MUTATION_TYPE_UNIMPLEMENTED before), each its own PayloadHasOnly. schedule.publish stays unwired.
-const EXPECTED_ALLOWLIST_COUNT = 35;
+// 35 -> 36 on 2026-11-13 (lane CMP-D3, founder D-68 round 2): logreason.set, its own PayloadHasOnly.
+const EXPECTED_ALLOWLIST_COUNT = 36;
 
 // The mutations that carry a server allow-list today. A mutation dispatched
 // to a handler with no `PayloadHasOnly` guard (jobcard.*, compliance.*) is
@@ -116,6 +117,8 @@ const EXPECTED_GUARDED_MUTATIONS = [
     'schedule.create',
     'schedule.clone',
     'schedule.edit',
+    // lane CMP-D3 - a reason kept on an existing record of work ("का केलं"); an append-only overlay, never an edit of the record.
+    'logreason.set',
 ].sort();
 
 interface CatalogEntry {

@@ -166,6 +166,8 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Finance.ApproveCostEntry.ApproveCostEntryHandler>();
         // spec: dfes-input-truth-and-mix-check-2026-11-06 (lane IT2; founders D-92 / D-95) — his answer about a product (push only).
         services.AddScoped<ShramSafal.Application.UseCases.Inputs.AssertInputIdentity.AssertInputIdentityHandler>();
+        // spec: plr-d10 lane CMP-D3 (founder D-68 round 2) - a reason kept on an existing record of work ("का केलं"; push only).
+        services.AddScoped<ShramSafal.Application.UseCases.Compare.SetLogPracticeReason.SetLogPracticeReasonHandler>();
         // spec: plr-d10 lane L8c-1 (founder D-24c) - planned work and reminders: the five doors (push; the REST reads are in
         // PlannedWorkEndpoints).
         services.AddScoped<ShramSafal.Application.UseCases.Planning.PlannedWork.CreatePlannedWorkHandler>();

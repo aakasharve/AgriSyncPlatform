@@ -1405,6 +1405,10 @@ public sealed class AuditEventIsolationRealPostgresTests(Xunit.Abstractions.ITes
         //    policies, SELECT + INSERT for the app role); it adds no column to any existing table and never touches ssf.audit_events, its
         //    policies or its grants. Down() drops its two policies and the table (the proof's data has no move row). Safe mid-proof.
         "20261113090000_AddScheduleStepMoves",
+        // ── Reviewed 2026-11-13 (spec: plr-d10 lane CMP-D3, founder D-68 round 2); Up() and Down() read in full: Up() creates ssf.log_practice_reasons only (FORCE RLS,
+        //    its tenant policy, SELECT + INSERT for the app role); it adds no column to any existing table and never touches ssf.audit_events, its
+        //    policies or its grants. Down() drops its policy and the table (the proof's data has no reason row). Safe mid-proof.
+        "20261113120000_AddLogPracticeReasons",
     ];
 
     /// <summary>
