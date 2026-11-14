@@ -12,8 +12,12 @@
 //
 // It fails closed. No test file, a file that will not bundle, or a failing test: each one ends
 // with a non-zero exit code. A run that tested nothing is never reported as a pass.
+//
+// It also ends. A change that makes the code under test go round for ever must fail the run, not
+// hold it up: a test that is stuck waiting fails after TEST_LIMIT_MS, and a run that is still
+// going after RUN_LIMIT_MS is stopped, with every process it started, and ends with exit code 1.
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import path from 'node:path';
@@ -34,6 +38,85 @@ const outDir = path.join(appDir, 'node_modules', '.tmp', 'tests');
  * test. With no VITE_ value at all, the code's own defaults apply.
  */
 const IMPORT_META_ENV = { BASE_URL: '/', MODE: 'test', DEV: true, PROD: false, SSR: false };
+
+/**
+ * Node's test runner fails a test that is still waiting after this long: for an answer, for a
+ * timer, for anything that gives other work a turn. The other tests go on.
+ *
+ * It cannot reach code that never gives anything else a turn: a loop with no wait in it, or one
+ * that waits only for answers that are already there (a re-send loop against a fake server is
+ * one). The limit below is for those.
+ */
+const TEST_LIMIT_MS = 60_000;
+
+/**
+ * The whole run, bundling included, is stopped after this long, whatever it is doing. A normal
+ * run takes a few seconds.
+ */
+const RUN_LIMIT_MS = 5 * 60_000;
+
+/**
+ * Node's test runner, from the moment it is started. It starts one more process per test file.
+ *
+ * @type {import('node:child_process').ChildProcess | null}
+ */
+let runner = null;
+
+/**
+ * Stops the test runner and every process it started, at once and without asking them. Does
+ * nothing when the runner was never started or has already ended.
+ */
+function stopTestProcesses() {
+  if (!runner || runner.pid === undefined) return;
+  if (runner.exitCode !== null || runner.signalCode !== null) return;
+  if (process.platform === 'win32') {
+    // /T: with the processes it started. /F: without asking them first.
+    spawnSync('taskkill', ['/PID', String(runner.pid), '/T', '/F'], { stdio: 'ignore' });
+  } else {
+    try {
+      // The runner heads its own process group (see `runBundles`): minus means the whole group.
+      process.kill(-runner.pid, 'SIGKILL');
+    } catch {
+      // The group had already gone.
+    }
+  }
+  // Whatever became of the lines above, the runner itself is not left running.
+  runner.kill('SIGKILL');
+}
+
+/**
+ * Hands the bundles to Node's own test runner and waits for it to end.
+ *
+ * @param {string[]} bundles paths from the output folder
+ * @returns {Promise<number>} the runner's exit code; 1 when it gave none
+ */
+function runBundles(bundles) {
+  return new Promise((resolve) => {
+    // An explicit list of files: Node 20 expands no patterns here. The runner is started inside
+    // the output folder and given names from there, because newer Node leaves out any name that
+    // begins with `node_modules`, even one it was handed. Source maps make a failure point at
+    // the line in src/, not at the line in the bundle.
+    runner = spawn(
+      process.execPath,
+      ['--enable-source-maps', '--test', `--test-timeout=${TEST_LIMIT_MS}`, ...bundles],
+      {
+        cwd: outDir,
+        // The tests are given nothing to read, so none of them can sit waiting for it.
+        stdio: ['ignore', 'inherit', 'inherit'],
+        // Away from Windows the runner heads a process group of its own, so that it and the
+        // processes it starts can be stopped together. Windows stops them by their parent.
+        detached: process.platform !== 'win32',
+      },
+    );
+    runner.on('error', (err) => {
+      console.error('The test runner could not be started:');
+      console.error(err);
+      resolve(1);
+    });
+    // No exit code means the runner was stopped from outside: that is not a pass either.
+    runner.on('exit', (code) => resolve(code ?? 1));
+  });
+}
 
 /**
  * Every test file under src/test, as a path from that folder with forward slashes, in a fixed
@@ -137,23 +220,30 @@ async function main() {
     return 1;
   }
 
-  // An explicit list of files: Node 20 expands no patterns here. The runner is started inside
-  // the output folder and given names from there, because newer Node leaves out any name that
-  // begins with `node_modules`, even one it was handed. Source maps make a failure point at the
-  // line in src/, not at the line in the bundle.
-  const run = spawnSync(process.execPath, ['--enable-source-maps', '--test', ...bundles], {
-    cwd: outDir,
-    stdio: 'inherit',
+  return runBundles(bundles);
+}
+
+// The limit on the whole run. The test processes are stopped first, so that none is left
+// running behind a run that has been given up.
+const runLimit = setTimeout(() => {
+  stopTestProcesses();
+  console.error(`The tests did not finish within ${RUN_LIMIT_MS / 60_000} minutes.`);
+  process.exit(1);
+}, RUN_LIMIT_MS);
+
+// Stopped from outside (Ctrl+C, or CI giving up on the job): the test processes go as well.
+// Away from Windows they are in a group of their own, which such a signal does not reach.
+for (const signal of /** @type {const} */ (['SIGINT', 'SIGTERM'])) {
+  process.on(signal, () => {
+    stopTestProcesses();
+    process.exit(1);
   });
-  if (run.error) {
-    console.error('The test runner could not be started:');
-    console.error(run.error);
-    return 1;
-  }
-  // No exit code means the runner was stopped from outside: that is not a pass either.
-  return run.status ?? 1;
 }
 
 // Set before anything is awaited: if the run dies half-way, the exit code is already not zero.
 process.exitCode = 1;
-process.exitCode = await main();
+try {
+  process.exitCode = await main();
+} finally {
+  clearTimeout(runLimit);
+}
