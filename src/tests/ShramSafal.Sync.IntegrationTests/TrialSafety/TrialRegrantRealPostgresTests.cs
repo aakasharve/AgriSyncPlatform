@@ -67,7 +67,7 @@ public sealed class TrialRegrantRealPostgresTests(TrialSafetyDatabase db) : ICla
             SELECT count(*) FROM accounts.subscriptions
             WHERE owner_account_id = @a AND status = 1
               AND valid_until_utc BETWEEN NOW() + INTERVAL '13 days' AND NOW() + INTERVAL '15 days'
-            """, ("a", neverSubscribed))).Should().Be(1, "the trial length is unchanged: 14 days");
+            """, ("a", neverSubscribed))).Should().Be(1, "the startup backfill (legacy owners that never had a subscription) is unchanged: 14 days; a NEW farm via the route gets 21 (R5-SMALL TRIAL-21)");
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public sealed class TrialRegrantRealPostgresTests(TrialSafetyDatabase db) : ICla
     }
 
     [Fact]
-    public async Task CONTROL_a_brand_new_owner_still_gets_the_first_14_day_trial_once()
+    public async Task CONTROL_a_brand_new_owner_still_gets_the_first_trial_once_and_it_is_21_days()
     {
         await db.AssertAppRoleIsNotVacuousAsync();
         var owner = Guid.NewGuid();
@@ -147,6 +147,13 @@ public sealed class TrialRegrantRealPostgresTests(TrialSafetyDatabase db) : ICla
         var account = (Guid)(await ShramSafal.Sync.IntegrationTests.Labour.PurveshDemoReseedHarness.ScalarAsync(db.SuperuserConn,
             "SELECT owner_account_id FROM accounts.owner_accounts WHERE primary_owner_user_id = @o", ("o", owner)))!;
         (await SubscriptionCountAsync(account)).Should().Be(1, "the first trial is started once, not per attempt");
+        // lane R5-SMALL TRIAL-21 (founder B2): a new farm's first trial is 21 days (stored: valid until = trial end).
+        (await db.CountAsync("""
+            SELECT count(*) FROM accounts.subscriptions
+            WHERE owner_account_id = @a AND status = 1
+              AND valid_until_utc BETWEEN NOW() + INTERVAL '20 days' AND NOW() + INTERVAL '22 days'
+              AND trial_ends_at_utc BETWEEN NOW() + INTERVAL '20 days' AND NOW() + INTERVAL '22 days'
+            """, ("a", account))).Should().Be(1, "the trial is 21 days");
         farmId.Should().NotBe(Guid.Empty);
     }
 

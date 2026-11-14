@@ -14,7 +14,7 @@ using User.Infrastructure.Persistence;
 namespace AgriSync.Bootstrapper.Endpoints;
 
 /// <summary>
-/// First-farm bootstrap. Creates OwnerAccount → starts the FIRST 14-day trial (never a second, R-11 a) →
+/// First-farm bootstrap. Creates OwnerAccount → starts the FIRST 21-day trial (never a second, R-11 a; founder B2) →
 /// creates Farm attached to that account → assigns FarmCode → creates
 /// PrimaryOwner FarmMembership. All in one transaction across both
 /// DbContexts (following the pattern already established by
@@ -123,13 +123,13 @@ public static class FirstFarmBootstrapEndpoints
 
     /// <summary>
     /// Step 2 of <c>POST /bootstrap/first-farm</c>. spec R-11 (a) (pre-launch repair, founder N-1:
-    /// "Remove both accidental trial resets … repeated farm creation"): a 14-day trial is started
+    /// "Remove both accidental trial resets … repeated farm creation"): a 21-day trial is started
     /// ONLY for an owner account that has never had a subscription row of any status. It used to
     /// look for a Trialing/Active row only, so an owner whose trial had ended who walked through
     /// "create farm" again got a brand-new trial on the same farm. Otherwise the account's current
     /// subscription is returned unchanged (Trialing/Active first, else the most recently updated),
-    /// so invariant I6 (at most one Trialing/Active row) still holds. The trial length is NOT changed
-    /// here (14 days; the 21-day trial comes with the full N-1 plan).
+    /// so invariant I6 (at most one Trialing/Active row) still holds. The trial is 21 days (founder B2, lane R5-SMALL
+    /// TRIAL-21); a farm created before that keeps the date it was stored with (nothing here rewrites a stored row).
     /// Public so a real-Postgres test runs exactly this code.
     /// </summary>
     public static async Task<Subscription> StartFirstTrialOrGetCurrentAsync(
@@ -153,7 +153,7 @@ public static class FirstFarmBootstrapEndpoints
             ownerAccountId: ownerAccountId,
             planCode: PlanCode.ShramSafalPro,
             trialStartUtc: nowUtc,
-            trialEndsAtUtc: nowUtc.AddDays(14));
+            trialEndsAtUtc: nowUtc.AddDays(21));
         accountsDb.Subscriptions.Add(trial);
         return trial;
     }
