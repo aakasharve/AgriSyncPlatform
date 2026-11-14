@@ -171,7 +171,7 @@ public sealed class FarmAuthoritiesRealPostgresTests(ITestOutputHelper output) :
 
         // lane CMP-D1 (founder D-81): a Worker seat can never hold "तुलना पाहणे", so its two holders are मुकादम seats for that
         // one authority (its refusal on a Worker seat is proved in SeeCompareAuthorityRealPostgresTests); lane REM-1: the same for ManageReminders, which
-        // only a whole-farm seat holds (ReminderWholeFarmRealPostgresTests).
+        // a Worker label never holds (ReminderSeatsRealPostgresTests).
         if (authority is FarmAuthority.SeeCompare or FarmAuthority.ManageReminders)
         {
             await ExecSuperAsync("UPDATE ssf.farm_memberships SET role = 'Mukadam' WHERE user_id IN (@a, @b)", ("a", Holder), ("b", HolderOnB));

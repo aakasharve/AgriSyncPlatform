@@ -219,9 +219,9 @@ public sealed class ManageMembershipHandler(
         //       holds every power, so nothing he gives is a power he lacks (no re-delegation exists).
         var target = ResolveAccess(command, seat, requestedRole, requestedPermissions);
 
-        // ── 7b. lane REM-1 (CTO ruling on review m2) - an approval may choose the plots in the same tap: a grant of an authority that only
-        //        a whole-farm seat may hold ("आठवणींची मांडणी बदलणे") is judged against the plots he ends up with, never stored on a seat that
-        //        would then hold nothing (refused, never trimmed - the same refusal as every other grant door).
+        // ── 7b. lane REM-1 / REM-1b - an approval may choose the plots in the same tap: a grant of an authority the seat he ends up as can
+        //        never hold (a कामगार label with "आठवणींची मांडणी बदलणे") is never stored on a seat that would then hold nothing (refused, never
+        //        trimmed - the same refusal as every other grant door). Since founder B9 the plots chosen do not change that answer.
         if (target is { Permissions: { } chosen } && command.Decision == MembershipDecision.Approve
             && FarmAuthorities.All.Any(a => FarmAuthorities.BitOf(a) is var bit && bit != FarmPermission.None && (chosen & bit) == bit
                 && !FarmAuthorities.CanBeHeldBy(target.Role, a, requestedPlotScope?.Scope ?? seat.PlotScope)))

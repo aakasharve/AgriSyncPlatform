@@ -92,7 +92,7 @@ public sealed class ReminderSettingsRoutesRealPostgresTests(ITestOutputHelper ou
             granted.StatusCode.Should().Be(HttpStatusCode.OK, await granted.Content.ReadAsStringAsync());
         }
 
-        (await GetSettingsAsync(Mukadam)).Status.Should().Be(HttpStatusCode.OK, "the owner gave it to him (a whole-farm seat)");
+        (await GetSettingsAsync(Mukadam)).Status.Should().Be(HttpStatusCode.OK, "the owner gave it to him (a मुकादम seat)");
         (await PutSettingsAsync(Mukadam, log: "PlotTeam")).Status.Should().Be(HttpStatusCode.OK);
     }
 

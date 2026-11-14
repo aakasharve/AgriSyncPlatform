@@ -54,7 +54,7 @@ const body = (over: Record<string, unknown> = {}) => ({
 const roster = (over: Partial<UseLabourPermissionsResult> = {}): UseLabourPermissionsResult => ({
     rows: [
         { userId: RAJU, role: 'Mukadam', status: 'Active', canEditAuthorities: true, authorities: [{ name: 'PlanWork', expiresAtUtc: null }] },
-        { userId: SANTOSH, role: 'Worker', status: 'Active', canEditAuthorities: true, authorities: [{ name: 'ManageReminders', expiresAtUtc: null }] },
+        { userId: SANTOSH, role: 'Mukadam', status: 'Active', canEditAuthorities: true, authorities: [{ name: 'ManageReminders', expiresAtUtc: null }] },
     ],
     loading: false, loadFailed: false, savingUserId: null, error: null, reload: vi.fn(), setPermission: vi.fn(), dismissError: vi.fn(),
     setAuthorities: vi.fn(async () => {}), adoptRow: vi.fn(),

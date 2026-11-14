@@ -120,6 +120,26 @@ public sealed class ManageMembershipHandlerTests
         Assert.DoesNotContain("SeeCompare", result.Value!.Permissions!);
     }
 
+    /// <summary>lane REM-1b (review MINOR-2): the same for "आठवणींची मांडणी बदलणे" on a Worker row an older build or a hand left behind.</summary>
+    [Fact]
+    public async Task A_worker_row_carrying_ManageReminders_still_takes_an_unrelated_change_and_loses_the_bit()
+    {
+        var repo = new Repo();
+        var who = new UserId(Guid.NewGuid());
+        var seat = repo.AddActive(who, AppRole.Mukadam);
+        seat.SetAuthorities(new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.ManageReminders] = null }, Now.AddDays(-1));
+        seat.ChangeRole(AppRole.Worker, Now.AddDays(-1)); // the row as an older build left it: a Worker holding bit 13
+        Assert.Equal(FarmPermission.ManageReminders, seat.Permissions);
+
+        var result = await Handle(repo, Decision(MembershipDecision.SetAccess, who) with { LabourGrant = true });
+
+        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
+        Assert.True(seat.CanManageLabourRecords, "the unrelated change was applied");
+        Assert.False(((seat.Permissions ?? FarmPermission.None) & FarmPermission.ManageReminders) == FarmPermission.ManageReminders, "the barred bit is gone");
+        Assert.False(seat.Holds(FarmAuthority.ManageReminders, Now));
+        Assert.DoesNotContain("ManageReminders", result.Value!.Permissions!);
+    }
+
     [Fact]
     public async Task An_explicit_grant_of_the_barred_bit_to_a_worker_is_still_refused_and_writes_nothing()
     {
@@ -528,79 +548,94 @@ public sealed class ManageMembershipHandlerTests
         Assert.Single(repo.Audits);
     }
 
-    // ── lane REM-1 (CTO ruling on review m2): "आठवणींची मांडणी बदलणे" only for a whole-farm seat - the handler's doors ──────────────
+    // ── lane REM-1b (founder B9): "आठवणींची मांडणी बदलणे" for a मुकादम or a सहमालक seat of ANY plot scope, never a कामगार label - the handler's doors ──
 
     private static ShramSafal.Application.Contracts.Dtos.AuthorityGrantDto[] Grant() => [new("ManageReminders", null)];
 
     [Theory]
+    [InlineData("AllPlots")]
     [InlineData("OwnWork")]
     [InlineData("ChosenPlots")]
-    public async Task ManageReminders_given_through_the_whole_set_to_a_part_farm_seat_is_refused_and_writes_nothing(string scope)
+    public async Task ManageReminders_given_through_the_whole_set_is_refused_for_a_worker_and_given_to_a_mukadam_or_co_owner_of_any_plot_scope(string scope)
     {
         var repo = new Repo();
-        var who = new UserId(Guid.NewGuid());
-        var seat = repo.AddActive(who, AppRole.Mukadam);
-        seat.SetPlotScope(Enum.Parse<MembershipPlotScope>(scope), scope == "ChosenPlots" ? [Guid.NewGuid()] : null, Now.AddDays(-1));
+        MembershipPlotScope Scope() => Enum.Parse<MembershipPlotScope>(scope);
+        Guid[]? Plots() => scope == "ChosenPlots" ? [Guid.NewGuid()] : null;
+
+        var worker = new UserId(Guid.NewGuid());
+        var workerSeat = repo.AddActive(worker, AppRole.Worker);
+        workerSeat.SetPlotScope(Scope(), Plots(), Now.AddDays(-1));
         var savesBefore = repo.Saves;
 
-        AssertRefusedWith(await Handle(repo, Decision(MembershipDecision.SetAuthorities, who) with { Authorities = Grant() }), ShramSafalErrors.InvalidCommand);
-        Assert.Null(seat.Permissions);
+        AssertRefusedWith(await Handle(repo, Decision(MembershipDecision.SetAuthorities, worker) with { Authorities = Grant() }), ShramSafalErrors.InvalidCommand);
+        Assert.Null(workerSeat.Permissions);
         Assert.Equal(savesBefore, repo.Saves);
         Assert.Empty(repo.Audits);
 
-        // CONTROL: the same words are fine once he sees the whole farm.
-        var whole = new UserId(Guid.NewGuid());
-        var wholeSeat = repo.AddActive(whole, AppRole.Mukadam);
-        Assert.True((await Handle(repo, Decision(MembershipDecision.SetAuthorities, whole) with { Authorities = Grant() })).IsSuccess);
-        Assert.Equal(FarmPermission.ManageReminders, wholeSeat.Permissions);
+        foreach (var role in new[] { AppRole.Mukadam, AppRole.SecondaryOwner })
+        {
+            var who = new UserId(Guid.NewGuid());
+            var seat = repo.AddActive(who, role);
+            seat.SetPlotScope(Scope(), Plots(), Now.AddDays(-1));
+            var result = await Handle(repo, Decision(MembershipDecision.SetAuthorities, who) with { Authorities = Grant() });
+            Assert.True(result.IsSuccess, $"{role} on {scope}: {(result.IsFailure ? result.Error.Code : null)}");
+            Assert.Equal(FarmPermission.ManageReminders, seat.Permissions);
+            Assert.True(seat.Holds(FarmAuthority.ManageReminders, Now), $"{role} on {scope}: honoured on read");
+            Assert.Contains("ManageReminders", result.Value!.Permissions!);
+        }
     }
 
-    [Fact]
-    public async Task ManageReminders_given_in_an_approval_with_part_of_the_farm_chosen_in_the_same_tap_is_refused()
+    [Theory]
+    [InlineData("AllPlots")]
+    [InlineData("OwnWork")]
+    public async Task ManageReminders_given_in_an_approval_is_refused_for_a_worker_and_taken_by_a_mukadam_whatever_plots_are_chosen_in_the_same_tap(string scope)
     {
         var repo = new Repo();
         var seat = repo.AddRequest(Joiner);
 
         AssertRefused(
-            await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Mukadam", Permissions = ["ManageReminders"], PlotScope = "OwnWork" }),
+            await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Worker", Permissions = ["ManageReminders"], PlotScope = scope }),
             ShramSafalErrors.InvalidCommand, repo);
         Assert.Equal(MembershipStatus.PendingApproval, seat.Status);
 
-        AssertRefused(
-            await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Worker", Permissions = ["ManageReminders"] }),
-            ShramSafalErrors.InvalidCommand, repo);
-
-        // CONTROL: whole farm (the default) takes it.
-        Assert.True((await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Mukadam", Permissions = ["ManageReminders"] })).IsSuccess);
+        var approved = await Handle(repo, Decision(MembershipDecision.Approve) with { Role = "Mukadam", Permissions = ["ManageReminders"], PlotScope = scope });
+        Assert.True(approved.IsSuccess, approved.IsFailure ? approved.Error.Code : null);
         Assert.Equal(FarmPermission.ManageReminders, seat.Permissions);
+        Assert.Equal(Enum.Parse<MembershipPlotScope>(scope), seat.PlotScope);
+        Assert.True(seat.Holds(FarmAuthority.ManageReminders, Now));
     }
 
-    [Fact]
-    public async Task ManageReminders_given_in_an_access_change_to_a_part_farm_seat_is_refused_and_a_stale_bit_is_dropped_by_an_unrelated_change()
+    [Theory]
+    [InlineData("AllPlots")]
+    [InlineData("OwnWork")]
+    [InlineData("ChosenPlots")]
+    public async Task ManageReminders_given_in_an_access_change_is_refused_for_a_worker_and_kept_for_a_mukadam_of_any_plot_scope(string scope)
     {
         var repo = new Repo();
-        var who = new UserId(Guid.NewGuid());
-        var seat = repo.AddActive(who, AppRole.Mukadam);
-        seat.SetPlotScope(MembershipPlotScope.OwnWork, null, Now.AddDays(-1));
+        MembershipPlotScope Scope() => Enum.Parse<MembershipPlotScope>(scope);
+        Guid[]? Plots() => scope == "ChosenPlots" ? [Guid.NewGuid()] : null;
+
+        var worker = new UserId(Guid.NewGuid());
+        var workerSeat = repo.AddActive(worker, AppRole.Worker);
+        workerSeat.SetPlotScope(Scope(), Plots(), Now.AddDays(-1));
         var savesBefore = repo.Saves;
 
-        AssertRefusedWith(await Handle(repo, Decision(MembershipDecision.SetAccess, who) with { Permissions = ["ManageReminders"] }), ShramSafalErrors.InvalidCommand);
-        Assert.Null(seat.Permissions);
+        AssertRefusedWith(await Handle(repo, Decision(MembershipDecision.SetAccess, worker) with { Permissions = ["ManageReminders"] }), ShramSafalErrors.InvalidCommand);
+        Assert.Null(workerSeat.Permissions);
         Assert.Equal(savesBefore, repo.Saves);
 
-        // A stale grant (stored while he saw the whole farm, he was narrowed after): an UNRELATED change still lands and drops the bit.
-        var other = new UserId(Guid.NewGuid());
-        var stale = repo.AddActive(other, AppRole.Mukadam);
-        stale.SetAuthorities(new Dictionary<FarmAuthority, DateTime?> { [FarmAuthority.ManageReminders] = null }, Now.AddDays(-1));
-        stale.SetPlotScope(MembershipPlotScope.OwnWork, null, Now.AddDays(-1));
-        Assert.Equal(FarmPermission.ManageReminders, stale.Permissions);
+        var mukadam = new UserId(Guid.NewGuid());
+        var seat = repo.AddActive(mukadam, AppRole.Mukadam);
+        seat.SetPlotScope(Scope(), Plots(), Now.AddDays(-1));
+        var given = await Handle(repo, Decision(MembershipDecision.SetAccess, mukadam) with { Permissions = ["ManageReminders"] });
+        Assert.True(given.IsSuccess, given.IsFailure ? given.Error.Code : null);
+        Assert.Equal(FarmPermission.ManageReminders, seat.Permissions);
 
-        var result = await Handle(repo, Decision(MembershipDecision.SetAccess, other) with { LabourGrant = true });
-
-        Assert.True(result.IsSuccess, result.IsFailure ? result.Error.Code : null);
-        Assert.False(((stale.Permissions ?? FarmPermission.None) & FarmPermission.ManageReminders) == FarmPermission.ManageReminders, "the barred bit is gone");
-        Assert.False(stale.Holds(FarmAuthority.ManageReminders, Now));
-        Assert.DoesNotContain("ManageReminders", result.Value!.Permissions!);
+        // An unrelated change on a plot-limited mukadam keeps the grant (it used to drop it).
+        var other = await Handle(repo, Decision(MembershipDecision.SetAccess, mukadam) with { LabourGrant = true });
+        Assert.True(other.IsSuccess, other.IsFailure ? other.Error.Code : null);
+        Assert.True(seat.Holds(FarmAuthority.ManageReminders, Now), "the grant is kept");
+        Assert.Contains("ManageReminders", other.Value!.Permissions!);
     }
 
     // ── harness ──────────────────────────────────────────────────────────────

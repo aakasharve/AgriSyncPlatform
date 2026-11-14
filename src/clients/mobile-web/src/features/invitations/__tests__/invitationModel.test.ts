@@ -53,7 +53,7 @@ describe('the three questions edit one grant', () => {
         const chosen = withPlots(presetGrant('Mukadam'), 'ChosenPlots', ['p1', 'p3']);
         expect(chosen.plotIds).toEqual(['p1', 'p3']);
         expect(withPlots(chosen, 'AllPlots', ['p1']).plotIds).toEqual([]);
-        expect(notInForce(chosen)).toEqual(['EditFarmSetup', 'ManageReminders']); // lane REM-1: a chosen-plots seat never holds आठवणींची मांडणी बदलणे
+        expect(notInForce(chosen)).toEqual(['EditFarmSetup']); // lane REM-1b (founder B9): a chosen-plots मुकादम can hold आठवणींची मांडणी बदलणे
         expect(notInForce(presetGrant('Worker'))).toEqual(['EditFarmSetup', 'SeeMoney', 'SeeWages', 'ReviewMoney', 'SeeCompare', 'ManageReminders']); // lane REM-1 + lane CMP-D1: a कामगार seat never holds तुलना पाहणे
     });
 

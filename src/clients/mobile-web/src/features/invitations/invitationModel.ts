@@ -90,7 +90,7 @@ export function withPlots(grant: InviteGrant, plotScope: PlotScopeName, plotIds?
 
 /**
  * The responsibilities that do nothing on this grant (the team card's rule, MU-4 fix pass 1): setup needs every plot; a
- * कामगार or a स्वतःचं काम seat sees only its own records, so money and wages are not in force; a कामगार never holds तुलना पाहणे; only a whole-farm seat holds आठवणींची मांडणी बदलणे.
+ * कामगार or a स्वतःचं काम seat sees only its own records, so money and wages are not in force; a कामगार never holds तुलना पाहणे; a कामगार never holds आठवणींची मांडणी बदलणे either (any other seat may, whatever plots it sees).
  */
 export function notInForce(grant: Pick<InviteGrant, 'label' | 'plotScope'>): string[] {
     const out: string[] = [];
@@ -99,9 +99,9 @@ export function notInForce(grant: Pick<InviteGrant, 'label' | 'plotScope'>): str
     if (grant.label === 'Worker' || grant.plotScope === 'OwnWork') out.push(AUTHORITY.seeMoney, AUTHORITY.seeWages, AUTHORITY.reviewMoney);
     // lane CMP-D1 (founder D-81): a कामगार seat can never hold "तुलना पाहणे" - the server refuses it, so no card offers it.
     if (grant.label === 'Worker') out.push(AUTHORITY.seeCompare);
-    // lane REM-1 (CTO ruling on review m2): "आठवणींची मांडणी बदलणे" changes who sees reminders farm-wide, so only a whole-farm seat may hold it - never a
-    // कामगार label, a chosen-plots seat or a स्वतःचं काम seat (the server refuses it, so no card offers it).
-    if (grant.label === 'Worker' || grant.plotScope !== 'AllPlots') out.push(AUTHORITY.manageReminders);
+    // lane REM-1b (founder B9, reversing the REM-1 m2 ruling): "आठवणींची मांडणी बदलणे" may be held by a मुकादम or a सहमालक / कुटुंब seat of ANY plot scope;
+    // only a कामगार label never holds it (the server refuses it, so no card offers it).
+    if (grant.label === 'Worker') out.push(AUTHORITY.manageReminders);
     return out;
 }
 
