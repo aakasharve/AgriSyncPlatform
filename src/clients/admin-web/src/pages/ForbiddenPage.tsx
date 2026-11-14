@@ -1,12 +1,11 @@
-import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ShieldOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
-import { noAccessView, type NoAccessView } from '@/lib/noAccessView';
+import { noAccessView, signInKey, type NoAccessView } from '@/lib/noAccessView';
 
-// Everything the page can say. `wayBack` is the button to the home page: it is left out when
-// nothing in the console will open for the account.
+// Everything the page can say about why. `wayBack` is the button to the home page: it is left
+// out when nothing in the console will open for the account.
 const SAYS: Record<NoAccessView, { heading: string; sentence: string; wayBack: boolean }> = {
   'not-on-team': {
     heading: 'You do not have access to the control room.',
@@ -38,25 +37,22 @@ const SAYS: Record<NoAccessView, { heading: string; sentence: string; wayBack: b
  * opened with no reason it can trust: it then says only that the page is not open to this
  * account, and offers both buttons.
  *
- * A reason is trusted only for the account the gate named with it. The browser keeps what a
- * gate sent in its history: when one person signs out and another signs in on the same tab,
- * "Back" opens this page with the first person's reason, and the second is not told it.
+ * A reason is trusted only in the sign-in the gate found it in (`signInKey`). The browser keeps
+ * what a gate sent in its history: after a sign-out and a new sign-in on the same tab, by
+ * somebody else or by the same person, "Back" opens this page with the old reason, and it is
+ * not shown.
+ *
+ * From the press of Sign out the page gives no reason at all: "Signing out…" and nothing else.
+ * A browser may keep a copy of the page it leaves, exactly as it looked, and show that copy for
+ * a moment when the next person goes "Back", before the console can load the page afresh. A
+ * kept copy of this page must therefore carry nobody's reason.
  */
 export default function ForbiddenPage() {
   // Sign out here ends on the login page like everywhere else: it used to leave the person on
   // this page, signed out, with nothing to tell them so.
   const { logout, signingOut, session } = useAdminAuth();
   const location = useLocation();
-  // The session is forgotten at the press of Sign out, while this page is still on the screen
-  // waiting for the server. What the page said at the press stays until the login page opens.
-  const [saidAtSignOut, setSaidAtSignOut] = useState<NoAccessView | null>(null);
-  const view = saidAtSignOut ?? noAccessView(location.state, session?.userId ?? null);
-  const { heading, sentence, wayBack } = SAYS[view];
-
-  function onSignOut() {
-    setSaidAtSignOut(view);
-    logout();
-  }
+  const says = signingOut ? null : SAYS[noAccessView(location.state, signInKey(session))];
 
   return (
     <div className="relative z-10 grid min-h-screen place-items-center p-6">
@@ -64,13 +60,23 @@ export default function ForbiddenPage() {
         <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-danger to-warning text-white">
           <ShieldOff size={28} strokeWidth={2.5} />
         </div>
-        <h1 className="mb-2 text-xl font-extrabold tracking-tight text-text-primary">{heading}</h1>
-        <p className="mb-6 text-sm text-text-secondary">{sentence}</p>
+        {says ? (
+          <>
+            <h1 className="mb-2 text-xl font-extrabold tracking-tight text-text-primary">
+              {says.heading}
+            </h1>
+            <p className="mb-6 text-sm text-text-secondary">{says.sentence}</p>
+          </>
+        ) : (
+          <h1 className="mb-6 text-xl font-extrabold tracking-tight text-text-primary">
+            Signing out…
+          </h1>
+        )}
         <div className="flex justify-center gap-2">
-          <Button variant="outline" disabled={signingOut} onClick={onSignOut}>
+          <Button variant="outline" disabled={signingOut} onClick={logout}>
             {signingOut ? 'Signing out…' : 'Sign out'}
           </Button>
-          {wayBack && (
+          {says?.wayBack && (
             <Link to="/">
               <Button>Back to the home page</Button>
             </Link>

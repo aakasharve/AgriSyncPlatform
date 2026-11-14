@@ -13,7 +13,7 @@ import { EntitlementGuard } from '@/components/EntitlementGuard';
 import { ServerUnreachable } from '@/components/ServerUnreachable';
 import { gotNoVerdict } from '@/lib/api';
 import { ModuleKeys } from '@/lib/moduleKeys';
-import type { NoAccessState } from '@/lib/noAccessView';
+import { signInKey, type NoAccessState } from '@/lib/noAccessView';
 import { queryClient } from '@/lib/queryClient';
 
 const HomePage               = lazy(() => import('@/pages/HomePage'));
@@ -66,13 +66,16 @@ function RequireAuth({ children }: { children: ReactNode }) {
  *   notInOrg  → full-page OrgSwitcher (re-pick)
  *   resolved  → render children
  *
- * Both ways to /403 say why, and for which account: the no-access page tells nobody a reason
- * that was found for somebody else (see `noAccessView`).
+ * Both ways to /403 say why, and in which sign-in that was found (`signInKey`): the no-access
+ * page shows a reason only in that sign-in, never to whoever signs in next (see `noAccessView`).
  */
 function RequireScope({ children }: { children: ReactNode }) {
   const { session } = useAdminAuth();
   const { isLoading, isFetching, isError, error, refetch, outcome, memberships } = useAdminScope();
-  const notOnTeam: NoAccessState = { reason: 'not-on-team', account: session?.userId };
+  const notOnTeam: NoAccessState = {
+    reason: 'not-on-team',
+    account: signInKey(session) ?? undefined,
+  };
 
   if (isLoading) return <Fallback />;
   if (isError) {

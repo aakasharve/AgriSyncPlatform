@@ -8,12 +8,25 @@
 export type NoAccessView = 'not-on-team' | 'one-page' | 'no-reason';
 
 /**
+ * Names one sign-in: who, and when they signed in. Null when nobody is signed in.
+ *
+ * A renewal of the access token keeps the sign-in time, so it keeps this name. Signing out and
+ * in again gives a new one, even to the same person.
+ */
+export function signInKey(
+  session: { userId: string; signedInAtUtc: string } | null | undefined,
+): string | null {
+  return session ? `${session.userId}|${session.signedInAtUtc}` : null;
+}
+
+/**
  * What a gate sends along when it sends somebody to the no-access page.
  *
- * `account` is the id of the signed-in user the reason is true for. The browser keeps this
- * state in its history, where it outlives the session: somebody else can sign in on the same
- * tab and press Back. A reason without an account, or for another account, is therefore no
- * reason at all.
+ * `account` names the sign-in the reason was found in (see `signInKey`): who was signed in, and
+ * since when. The browser keeps this state in its history, where it outlives the session.
+ * Somebody else can sign in on the same tab and press Back. So can the same person, after the
+ * owner has added them to the team and they have signed in again as the page told them to. A
+ * reason that names no sign-in, or was found in another sign-in, is therefore no reason at all.
  */
 export interface NoAccessState {
   reason?: 'not-on-team';
@@ -28,8 +41,10 @@ export interface NoAccessState {
  * Chooses what the no-access page says, from what came with the navigation (`state`, which can
  * be anything: it is read back from the browser's history) and from who is signed in now.
  *
- * A reason counts only for the account it was given for. Without one, the page says no more
- * than that the page is not open to this account.
+ * `signedInUserId` is compared with `account` as it is. The gates and the page both give the
+ * name of the sign-in (`signInKey`), so a reason counts only in the sign-in it was found in.
+ * With no reason that counts, the page says no more than that the page is not open to this
+ * account.
  */
 export function noAccessView(state: unknown, signedInUserId: string | null): NoAccessView {
   if (typeof state !== 'object' || state === null) return 'no-reason';
