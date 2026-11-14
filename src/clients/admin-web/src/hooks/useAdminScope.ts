@@ -34,8 +34,12 @@ export interface MeScopeResponse {
 
 export interface UseAdminScopeResult {
   isLoading: boolean;
+  /** True while a request for the scope is in the air, the first one or a later one. */
+  isFetching: boolean;
   isError: boolean;
   error: unknown;
+  /** Asks the server for the scope again. */
+  refetch: () => void;
   data: MeScopeResponse | undefined;
   /** Convenience — true only when outcome === 'Resolved'. */
   isResolved: boolean;
@@ -87,8 +91,10 @@ export function useAdminScope(): UseAdminScopeResult {
 
   return {
     isLoading: q.isLoading,
+    isFetching: q.isFetching,
     isError: q.isError,
     error: q.error,
+    refetch: () => void q.refetch(),
     data: q.data,
     isResolved: q.data?.outcome === 'Resolved',
     scope,

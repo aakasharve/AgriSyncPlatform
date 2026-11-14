@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from '@/app/ThemeProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/app/AdminAuthProvider';
 import { ActiveOrgProvider } from '@/app/ActiveOrgProvider';
@@ -10,7 +10,11 @@ import { CommandPalette } from '@/app/CommandPalette';
 import { useAdminScope } from '@/hooks/useAdminScope';
 import { OrgSwitcher } from '@/components/OrgSwitcher';
 import { EntitlementGuard } from '@/components/EntitlementGuard';
+import { ServerUnreachable } from '@/components/ServerUnreachable';
+import { gotNoVerdict } from '@/lib/api';
 import { ModuleKeys } from '@/lib/moduleKeys';
+import { signInKey, type NoAccessState } from '@/lib/noAccessView';
+import { queryClient } from '@/lib/queryClient';
 
 const HomePage               = lazy(() => import('@/pages/HomePage'));
 const LoginPage               = lazy(() => import('@/pages/LoginPage'));
@@ -31,49 +35,56 @@ const SettingsAdminsPage      = lazy(() => import('@/pages/settings/SettingsAdmi
 const FarmerHealthPage        = lazy(() => import('@/features/farmer-health/FarmerHealthPage'));
 const FarmerHealthDrilldown   = lazy(() => import('@/features/farmer-health/FarmerHealthDrilldown'));
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60_000,
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
-
-function Fallback() {
+function Fallback({ text = 'Loading…' }: { text?: string }) {
   return (
-    <div className="grid min-h-[400px] place-items-center text-sm text-text-muted">Loading…</div>
+    <div className="grid min-h-[400px] place-items-center text-sm text-text-muted">{text}</div>
   );
 }
 
 /**
  * Authentication gate — JWT must exist. No scope check here.
+ *   loading     → spinner. A sign-out takes the screens down at the press, and the page then
+ *                 stays here while the server is told: it says so.
+ *   unreachable → the stored session could not be renewed for want of an answer: say so
+ *   anonymous   → /login. The page that was asked for is not remembered: whoever signs in next
+ *                 always starts on the home page, never on the page of the person before.
  */
 function RequireAuth({ children }: { children: ReactNode }) {
-  const { status } = useAdminAuth();
-  const location = useLocation();
-  if (status === 'loading') return <Fallback />;
-  if (status === 'anonymous')
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  const { status, retry, signingOut } = useAdminAuth();
+  if (status === 'loading') return <Fallback text={signingOut ? 'Signing out…' : undefined} />;
+  if (status === 'unreachable') return <ServerUnreachable onRetry={retry} />;
+  if (status === 'anonymous') return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 /**
  * Scope gate — must live inside <RequireAuth> and <ActiveOrgProvider>.
  *   loading → spinner
+ *   no verdict (no answer, 429, 5xx) → "The server could not be reached" (never /403)
  *   unresolved (Unauthorized) → /403 (no memberships — never going to work)
  *   ambiguous → full-page OrgSwitcher
  *   notInOrg  → full-page OrgSwitcher (re-pick)
  *   resolved  → render children
+ *
+ * Both ways to /403 say why, and in which sign-in that was found (`signInKey`): the no-access
+ * page shows a reason only in that sign-in, never to whoever signs in next (see `noAccessView`).
  */
 function RequireScope({ children }: { children: ReactNode }) {
-  const { isLoading, isError, outcome, memberships } = useAdminScope();
+  const { session } = useAdminAuth();
+  const { isLoading, isFetching, isError, error, refetch, outcome, memberships } = useAdminScope();
+  const notOnTeam: NoAccessState = {
+    reason: 'not-on-team',
+    account: signInKey(session) ?? undefined,
+  };
 
   if (isLoading) return <Fallback />;
-  if (isError) return <Navigate to="/403" replace />;
+  if (isError) {
+    // A server that did not answer has refused nobody: "Access denied" would be untrue.
+    if (gotNoVerdict(error)) return <ServerUnreachable onRetry={refetch} retrying={isFetching} />;
+    return <Navigate to="/403" state={notOnTeam} replace />;
+  }
 
-  if (outcome === 'Unauthorized') return <Navigate to="/403" replace />;
+  if (outcome === 'Unauthorized') return <Navigate to="/403" state={notOnTeam} replace />;
 
   if (outcome === 'Ambiguous') {
     return (

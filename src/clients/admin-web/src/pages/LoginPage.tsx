@@ -1,53 +1,365 @@
-import { useState, type FormEvent } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Leaf, Wheat, BarChart3, Shield } from 'lucide-react';
-import { adminApi } from '@/lib/api';
-import { type AdminSession } from '@/lib/auth';
+import { adminApi, isSignOutOwed, tellServerSignedOut, watchOwedSignOut } from '@/lib/api';
+import type { AdminSession } from '@/lib/auth';
+import { deviceIdentity } from '@/lib/deviceIdentity';
+// The sentences, and the rules that choose between them, live in a plain module so that they
+// can be tested without this page.
+import {
+  TEXT,
+  answerRefusalText,
+  checkCodeRefusalText,
+  formatWait,
+  passwordRefusalText,
+  readRefusal,
+  sendCodeRefusalText,
+  signedOutNotice,
+  toSession,
+} from '@/lib/signInMessages';
 import { useAdminAuth } from '@/app/AdminAuthProvider';
 
-// Matches User.Application.Contracts.Dtos.AuthResponse exactly
+// 200 answer of POST /user/auth/login. On the web the refresh token is a cookie, so the body
+// never carries one. The last two fields come only from an API that holds a sign-in on a
+// browser the account has not confirmed yet; an API without that rule sends neither.
 interface LoginResponse {
   userId: string;
   accessToken: string;
-  refreshToken: string;
   expiresAtUtc: string;
+  deviceCheckRequired?: boolean;
+  accountName?: string | null;
+}
+
+// 200 answer of POST /user/auth/start-otp
+interface StartOtpResponse {
+  expiresAtUtc: string;
+  resendAfterSeconds: number;
+  provider: string;
+}
+
+// 200 answer of POST /user/auth/verify-otp. On the web the refresh token is a cookie, so the
+// body never carries one. The last two fields come only from an API that holds a sign-in on a
+// browser the account has not confirmed yet; an API without that rule sends neither.
+interface VerifyOtpResponse {
+  userId: string;
+  accessToken: string;
+  expiresAtUtc: string;
+  createdNewUser: boolean;
+  deviceCheckRequired?: boolean;
+  accountName?: string | null;
+}
+
+// 200 answer of POST /user/auth/device-check: "yes" carries the session, "no" only the outcome.
+interface DeviceCheckResponse {
+  outcome: 'confirmed' | 'declined';
+  userId?: string;
+  accessToken?: string;
+  expiresAtUtc?: string;
+  deviceCheckRequired?: boolean;
+}
+
+type Way = 'code' | 'password';
+type CodeStep = 'phone' | 'code' | 'account';
+
+// What the page says about a sign-out the server could not be told about: while it is still
+// owed, and once the page has managed to tell the server.
+const OWED_SIGN_OUT_TEXT = {
+  owed: 'You are signed out on this browser. The server could not be told just now; this page will tell it as soon as the server can be reached.',
+  told: 'The server has now been told. You are fully signed out.',
+} as const;
+
+const PRIMARY_BUTTON_CLASS =
+  'w-full rounded-xl py-4 text-[16px] font-extrabold text-white transition-all disabled:opacity-70';
+
+function primaryButtonStyle(busy: boolean): CSSProperties {
+  return {
+    background: busy ? '#888' : 'linear-gradient(135deg, #00c853 0%, #52c0be 100%)',
+    boxShadow: busy ? 'none' : '0 6px 20px rgba(0,200,83,0.35)',
+  };
 }
 
 export default function LoginPage() {
+  const [way, setWay] = useState<Way>('code');
+  const [step, setStep] = useState<CodeStep>('phone');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [accountName, setAccountName] = useState<string | null>(null);
+  // The wait the server gave before a new code may be asked for (a fresh object each time, so
+  // the same wait can start again), and the whole seconds left to show.
+  const [resendWait, setResendWait] = useState({ seconds: 0 });
+  const [resendIn, setResendIn] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Opens with the reason when the console signed the person out; gone at their first action.
+  const [notice, setNotice] = useState<string | null>(signedOutNotice);
+  // A sign-out the server could not be told about: still owed, or told by this page just now.
+  // Read from the browser's store, so the sentence is there again each time the page opens,
+  // for as long as the sign-out is owed.
+  const [owedSignOut, setOwedSignOut] = useState<'owed' | 'told' | null>(() =>
+    isSignOutOwed() ? 'owed' : null,
+  );
   const auth = useAdminAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
+  // Whenever the page opens it tries to tell the server about an owed sign-out, and says how
+  // that went. While the sign-out is still owed and this page stays open, it tries again every
+  // 30 seconds and when the browser comes back online, which is what the sentence promises;
+  // the trying stops when the page is left. (When nothing is owed the server is asked nothing.)
+  useEffect(
+    () => watchOwedSignOut((outcome) => setOwedSignOut(outcome === 'none' ? null : outcome)),
+    [],
+  );
+
+  // The person has begun to act: what the page opened with has been read. A sign-out that is
+  // still owed is not read and done with, so that sentence stays until the server is told.
+  function clearNotices() {
+    setNotice(null);
+    setOwedSignOut((was) => (was === 'owed' ? was : null));
+  }
+
+  // The countdown reads the clock on every tick, so the wait it shows is still right after the
+  // tab has been in the background.
+  useEffect(() => {
+    if (resendWait.seconds === 0) return;
+    const deadline = Date.now() + resendWait.seconds * 1000;
+    const id = window.setInterval(() => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setResendIn(left);
+      if (left === 0) window.clearInterval(id);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [resendWait]);
+
+  function startResendCountdown(seconds: number) {
+    setResendWait({ seconds });
+    setResendIn(seconds);
+  }
+
+  // Both ways in end here: the same stored session and the same first page.
+  function signIn(session: AdminSession) {
     try {
-      const { data } = await adminApi.post<LoginResponse>('/user/auth/login', { phone, password });
-      const session: AdminSession = {
-        accessToken: data.accessToken,
-        refreshToken: data.refreshToken ?? null,
-        userId: data.userId,
-        expiresAtUtc: data.expiresAtUtc,
-      };
       // Admin access is decided server-side by GET /admin/me/scope after login
       // (W0-B pivot — tokens are identity, not authorization). If the user has
       // no memberships, RequireScope will send them to /403.
       auth.login(session);
-      const returnTo = (location.state as { from?: string } | null)?.from ?? '/';
-      navigate(returnTo, { replace: true });
-    } catch (err) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Login failed. Check phone + password.';
-      setError(msg);
-      setSubmitting(false);
+    } catch {
+      void undoRefusedSignIn();
+      return;
     }
+    // Always the home page, never a page remembered from before: the last person to use this
+    // tab may have been somebody else.
+    navigate('/', { replace: true });
   }
+
+  // The browser would not store the session, so nobody is signed in. The page says why and goes
+  // back to its first step; it never stays on "Signing in".
+  async function undoRefusedSignIn() {
+    // The server did sign this browser in and gave it a refresh cookie. It is asked to take that
+    // back first (it never throws, and waits five seconds at most), so that no sign-in the
+    // person cannot use is left standing, and so that this call cannot land on top of their
+    // next try.
+    await tellServerSignedOut();
+    setPassword('');
+    backToPhoneStep();
+    setError(TEXT.storageRefused);
+    setSubmitting(false);
+  }
+
+  // Held: the server has not let this browser in yet, with or without a name to ask about. The
+  // token in that answer opens nothing, so it is not stored and not kept; the refresh cookie
+  // alone names the held sign-in when the question is answered.
+  function askAccountQuestion(name: unknown) {
+    setAccountName(typeof name === 'string' && name.trim() ? name.trim() : null);
+    setStep('account');
+    setSubmitting(false);
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    clearNotices();
+    setSubmitting(true);
+    let data: LoginResponse;
+    try {
+      // With credentials, like the code way: the answer sets the refresh cookie, and the browser
+      // keeps it only then. Without it this session could not be renewed.
+      ({ data } = await adminApi.post<LoginResponse>(
+        '/user/auth/login',
+        { phone, password, ...deviceIdentity() },
+        { withCredentials: true },
+      ));
+    } catch (err) {
+      setError(passwordRefusalText(readRefusal(err)));
+      setSubmitting(false);
+      return;
+    }
+
+    // The server accepted this sign-in, so a sign-out owed for the one before is owed no longer.
+    setOwedSignOut(null);
+    if (data?.deviceCheckRequired === true) {
+      // Now that the page names its browser, a server that asks the account question asks it
+      // after a password too, the first time in each browser.
+      setPassword('');
+      askAccountQuestion(data.accountName);
+      return;
+    }
+
+    const session = toSession(data);
+    if (!session) {
+      setPassword('');
+      setError(TEXT.notCompleted);
+      setSubmitting(false);
+      return;
+    }
+    signIn(session);
+  }
+
+  function backToPhoneStep() {
+    setStep('phone');
+    setOtp('');
+    setAccountName(null);
+    startResendCountdown(0);
+  }
+
+  function chooseWay(next: Way) {
+    if (next === way) return;
+    setWay(next);
+    setError(null);
+    clearNotices();
+    setPassword('');
+    backToPhoneStep();
+  }
+
+  function changeNumber() {
+    setError(null);
+    clearNotices();
+    backToPhoneStep();
+  }
+
+  // Step 1 of the code way, and "Send a new code" on step 2.
+  async function sendCode(isResend: boolean) {
+    setError(null);
+    clearNotices();
+    setSubmitting(true);
+    setResending(isResend);
+    try {
+      // No credentials: this call sets no cookie and reads none.
+      const { data } = await adminApi.post<StartOtpResponse>('/user/auth/start-otp', { phone });
+      const wait = Number(data?.resendAfterSeconds);
+      startResendCountdown(Number.isFinite(wait) && wait > 0 ? Math.ceil(wait) : 0);
+      setOtp('');
+      setStep('code');
+      if (isResend) setNotice(TEXT.newCodeSent);
+    } catch (err) {
+      setError(sendCodeRefusalText(readRefusal(err)));
+    }
+    setSubmitting(false);
+    setResending(false);
+  }
+
+  // Step 2 of the code way.
+  async function checkCode() {
+    setError(null);
+    clearNotices();
+    setSubmitting(true);
+    let data: VerifyOtpResponse;
+    try {
+      // With credentials: this answer sets the refresh cookie, and a browser keeps a cookie from
+      // another origin only when the request was sent with credentials.
+      ({ data } = await adminApi.post<VerifyOtpResponse>(
+        '/user/auth/verify-otp',
+        { phone, otp: otp.trim(), ...deviceIdentity() },
+        { withCredentials: true },
+      ));
+    } catch (err) {
+      const refusal = readRefusal(err);
+      // This code is dead (expired, used up, or never there), so a new one may be asked for at once.
+      if (refusal.status === 410 || refusal.status === 404 || refusal.code === 'otp.locked_out') {
+        startResendCountdown(0);
+      }
+      setError(checkCodeRefusalText(refusal));
+      setSubmitting(false);
+      return;
+    }
+
+    setOtp('');
+    // The server accepted this sign-in, so a sign-out owed for the one before is owed no longer.
+    setOwedSignOut(null);
+    if (data?.deviceCheckRequired === true) {
+      askAccountQuestion(data.accountName);
+      return;
+    }
+
+    const session = toSession(data);
+    if (!session) {
+      backToPhoneStep();
+      setError(TEXT.notCompleted);
+      setSubmitting(false);
+      return;
+    }
+    signIn(session);
+  }
+
+  // Step 3 of the code way, only when the server asked the account question.
+  async function answerAccountQuestion(answer: 'yes' | 'no') {
+    setError(null);
+    clearNotices();
+    setSubmitting(true);
+    let data: DeviceCheckResponse;
+    try {
+      // With credentials: the server finds the held sign-in by the refresh cookie alone.
+      ({ data } = await adminApi.post<DeviceCheckResponse>(
+        '/user/auth/device-check',
+        { answer },
+        { withCredentials: true },
+      ));
+    } catch (err) {
+      const refusal = readRefusal(err);
+      if (refusal.status === 401) {
+        // The server has no open question for this browser any more.
+        backToPhoneStep();
+        setError(way === 'code' ? TEXT.questionClosed : TEXT.questionClosedPassword);
+      } else {
+        setError(answerRefusalText(refusal));
+      }
+      setSubmitting(false);
+      return;
+    }
+
+    if (answer === 'no') {
+      backToPhoneStep();
+      setNotice(TEXT.declined);
+      setSubmitting(false);
+      return;
+    }
+
+    // "Yes" signs in with the token this call returns, and only when the server says confirmed.
+    const confirmed = data?.outcome === 'confirmed' && data.deviceCheckRequired !== true;
+    const session = confirmed ? toSession(data) : null;
+    if (!session) {
+      backToPhoneStep();
+      setError(TEXT.notCompleted);
+      setSubmitting(false);
+      return;
+    }
+    signIn(session);
+  }
+
+  function onCodeSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (submitting) return;
+    if (step === 'phone') void sendCode(false);
+    else if (step === 'code') void checkCode();
+    // The account question is answered by its two buttons, never by the Enter key.
+  }
+
+  const signingIn = submitting && !resending;
+  const submitLabel =
+    way === 'code' && step === 'phone'
+      ? (submitting ? 'Sending…' : 'Send me a code →')
+      : (signingIn ? 'Signing in…' : 'Sign in →');
 
   return (
     /* Full-viewport split: shader+brand left / solid-white form right */
@@ -105,7 +417,11 @@ export default function LoginPage() {
           backdropFilter: 'blur(40px)',
           borderLeft: '1px solid rgba(82,192,190,0.2)',
         }}>
-        <form onSubmit={onSubmit} className="w-full" style={{maxWidth:420, padding:'0 48px'}}>
+        <form
+          onSubmit={way === 'password' && step === 'phone' ? onSubmit : onCodeSubmit}
+          className="w-full"
+          style={{maxWidth:420, padding:'0 48px'}}
+        >
           {/* Mobile logo (hidden on large screens) */}
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-brand-green to-brand-teal text-white">
@@ -119,49 +435,176 @@ export default function LoginPage() {
             Admin access only · enter your credentials
           </p>
 
-          <label className="mb-4 block">
-            <span className="mb-2 block text-[14px] font-bold text-black">Phone number</span>
-            <input
-              type="tel"
-              autoFocus
-              required
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 font-mono text-[16px] font-semibold text-black outline-none transition-colors focus:border-brand-teal focus:bg-white"
-              placeholder="10 digits"
-            />
-          </label>
+          {/* The two ways in. Shown on the first step only. */}
+          {step === 'phone' && (
+            <div
+              role="group"
+              aria-label="How to sign in"
+              className="mb-6 grid grid-cols-2 gap-1 rounded-xl border-2 border-gray-200 bg-gray-50 p-1"
+            >
+              {([
+                { key: 'code', label: 'SMS code' },
+                { key: 'password', label: 'Password' },
+              ] as const).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={way === key}
+                  disabled={submitting}
+                  onClick={() => chooseWay(key)}
+                  className={`rounded-lg py-2.5 text-[14px] font-bold transition-colors ${
+                    way === key ? 'bg-white text-black shadow-sm' : 'text-gray-500 hover:text-black'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          <label className="mb-6 block">
-            <span className="mb-2 block text-[14px] font-bold text-black">Password</span>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] font-semibold text-black outline-none transition-colors focus:border-brand-teal focus:bg-white"
-            />
-          </label>
+          {step === 'phone' && (
+            <label className={`${way === 'password' ? 'mb-4' : 'mb-6'} block`}>
+              <span className="mb-2 block text-[14px] font-bold text-black">Phone number</span>
+              <input
+                type="tel"
+                autoFocus
+                required
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 font-mono text-[16px] font-semibold text-black outline-none transition-colors focus:border-brand-teal focus:bg-white"
+                placeholder="10 digits"
+              />
+            </label>
+          )}
+
+          {way === 'password' && step === 'phone' && (
+            <label className="mb-6 block">
+              <span className="mb-2 block text-[14px] font-bold text-black">Password</span>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 text-[16px] font-semibold text-black outline-none transition-colors focus:border-brand-teal focus:bg-white"
+              />
+            </label>
+          )}
+
+          {step === 'code' && (
+            <>
+              <p className="mb-4 text-[14px] font-medium text-gray-500">
+                We sent a code by SMS to{' '}
+                <span className="font-mono font-semibold text-black">{phone}</span>.
+              </p>
+              <label className="mb-6 block">
+                <span className="mb-2 block text-[14px] font-bold text-black">Code from the SMS</span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  required
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  className="w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3.5 font-mono text-[16px] font-semibold text-black outline-none transition-colors focus:border-brand-teal focus:bg-white"
+                />
+              </label>
+            </>
+          )}
+
+          {step === 'account' && (
+            <p className="mb-6 text-[16px] font-semibold text-black">
+              {accountName
+                ? <>This number belongs to <span className="font-extrabold">{accountName}</span>. Is that you?</>
+                : 'This number already has an account. Is that you?'}
+            </p>
+          )}
+
+          {notice && (
+            <div
+              role="status"
+              className="mb-4 rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-[14px] font-semibold text-gray-700"
+            >
+              {notice}
+            </div>
+          )}
+
+          {owedSignOut && (
+            <div
+              role="status"
+              className="mb-4 rounded-xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-[14px] font-semibold text-gray-700"
+            >
+              {OWED_SIGN_OUT_TEXT[owedSignOut]}
+            </div>
+          )}
 
           {error && (
-            <div className="mb-4 rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-600">
+            <div
+              role="alert"
+              className="mb-4 rounded-xl border-2 border-red-200 bg-red-50 px-4 py-3 text-[14px] font-semibold text-red-600"
+            >
               {error}
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-xl py-4 text-[16px] font-extrabold text-white transition-all disabled:opacity-70"
-            style={{
-              background: submitting
-                ? '#888'
-                : 'linear-gradient(135deg, #00c853 0%, #52c0be 100%)',
-              boxShadow: submitting ? 'none' : '0 6px 20px rgba(0,200,83,0.35)',
-            }}
-          >
-            {submitting ? 'Signing in…' : 'Sign in →'}
-          </button>
+          {step !== 'account' ? (
+            <button
+              type="submit"
+              disabled={submitting}
+              className={PRIMARY_BUTTON_CLASS}
+              style={primaryButtonStyle(submitting)}
+            >
+              {submitLabel}
+            </button>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void answerAccountQuestion('yes')}
+                className={PRIMARY_BUTTON_CLASS}
+                style={primaryButtonStyle(submitting)}
+              >
+                Yes, it is me
+              </button>
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => void answerAccountQuestion('no')}
+                className="w-full rounded-xl border-2 border-gray-200 bg-white py-4 text-[16px] font-extrabold text-black transition-colors hover:border-gray-400 disabled:opacity-70"
+              >
+                No
+              </button>
+            </div>
+          )}
+
+          {/* After the first step there is always a way back to it, so nobody is stuck. */}
+          {step !== 'phone' && (
+            <div className="mt-5 flex flex-col items-center gap-3">
+              {step === 'code' && (
+                <button
+                  type="button"
+                  disabled={submitting || resendIn > 0}
+                  onClick={() => void sendCode(true)}
+                  className="text-[14px] font-bold text-black underline underline-offset-4 disabled:text-gray-400 disabled:no-underline"
+                >
+                  {resending
+                    ? 'Sending…'
+                    : resendIn > 0
+                      ? `Send a new code in ${formatWait(resendIn)}`
+                      : 'Send a new code'}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={changeNumber}
+                className="text-[14px] font-semibold text-gray-500 hover:text-black disabled:opacity-70"
+              >
+                Use a different number
+              </button>
+            </div>
+          )}
 
           <p className="mt-6 text-center text-[12px] font-medium text-gray-400">
             Not an admin? This console is restricted access.

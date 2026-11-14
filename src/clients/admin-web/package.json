@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint --max-warnings 9999 .",
+    "test": "node scripts/run-tests.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
