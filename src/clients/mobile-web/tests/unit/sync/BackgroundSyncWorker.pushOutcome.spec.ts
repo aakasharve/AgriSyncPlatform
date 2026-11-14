@@ -446,6 +446,65 @@ describe('BackgroundSyncWorker — the report of what happened to work that had 
         });
     });
 
+    it('a whole batch that fails reports nothing as recovered', async () => {
+        const first = await save({ n: 1 });
+        const second = await save({ n: 2 });
+
+        // Both fail once. From here on each is a save that had failed before.
+        serverCannotBeReached();
+        await backgroundSyncWorker.triggerNow();
+        const firstFailedAtMs = nowMs;
+
+        expect((await rowFor(first)).firstFailedAt).toBe(iso(firstFailedAtMs));
+        expect((await rowFor(second)).firstFailedAt).toBe(iso(firstFailedAtMs));
+        expect(emitSyncPushOutcomeMock).not.toHaveBeenCalled();
+
+        // They come due and are sent again, and the whole push fails again:
+        // the transport throws, so the server answered for none of them.
+        advance(PAST_ANY_BACKOFF_MS);
+        pushBatchMock.mockClear();
+        await backgroundSyncWorker.triggerNow();
+
+        // They really were sent in this cycle.
+        const sent = pushBatchMock.mock.calls.flatMap(
+            call => (call[0] as PushRequest).mutations.map(m => m.clientRequestId));
+        expect(sent).toEqual(expect.arrayContaining([first, second]));
+
+        // Neither arrived, and neither was sent to the farmer. Each still
+        // carries the time of its first failure, not of this one.
+        for (const id of [first, second]) {
+            const row = await rowFor(id);
+            expect(row.status).toBe('FAILED');
+            expect(row.firstFailedAt).toBe(iso(firstFailedAtMs));
+        }
+
+        // Being sent is not arriving. Nothing was applied, so nothing recovered.
+        expect(reports().filter(report => report.recoveredCount !== 0),
+            'a save that had failed before and failed again with its whole batch has not recovered')
+            .toEqual([]);
+
+        // And with nothing recovered and nothing needing the farmer, the
+        // sum of the two counts is zero: the worker says nothing at all.
+        expect(emitSyncPushOutcomeMock).not.toHaveBeenCalled();
+
+        // The failed batch did not use up the fact that they had failed.
+        // When they do arrive, that cycle reports both, once, and still
+        // names the first failure, not the second.
+        advance(PAST_ANY_BACKOFF_MS);
+        serverAnswers(() => APPLIED);
+        await backgroundSyncWorker.triggerNow();
+
+        expect((await rowFor(first)).status).toBe('APPLIED');
+        expect((await rowFor(second)).status).toBe('APPLIED');
+        expect(theOneReport()).toEqual({
+            recoveredCount: 2,
+            needsReviewCount: 0,
+            pendingAfter: 0,
+            appVersion: APP_VERSION,
+            firstFailedAtUtc: iso(firstFailedAtMs),
+        });
+    });
+
     it('a held save that later goes through is not reported as recovered', async () => {
         const id = await save();
 

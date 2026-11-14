@@ -11,28 +11,35 @@ using ShramSafal.Infrastructure.Persistence.Repositories;
 namespace ShramSafal.Admin.IntegrationTests;
 
 /// <summary>
-/// spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a Task R1 and
-/// its amendment 4 of 2026-11-14).
+/// spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a Task R1, its
+/// amendment 4 of 2026-11-14 and that amendment's correction of the same day).
 ///
 /// <para>
 /// The SQL behind <c>GET /shramsafal/admin/ops/recorded</c>, against a real
 /// database: <c>IAdminOpsRepository.GetRecordedAsync</c> reads back what the
 /// failure recording wrote into <c>analytics.events</c>, for six event types,
-/// newest first, each row with its person and that person's name. The route's
-/// own behaviour (the <c>ops.errors</c> gate, the 503) needs no database and
-/// is held in <c>AgriSync.ArchitectureTests/AdminOpsRecordedRouteTests.cs</c>.
+/// newest first, each row with its person and that person's name where it has
+/// one. The route's own behaviour (the <c>ops.errors</c> gate, the 503) needs
+/// no database and is held in
+/// <c>AgriSync.ArchitectureTests/AdminOpsRecordedRouteTests.cs</c>.
 /// </para>
 ///
 /// <para>
-/// <b>Who wrote a row decides whether it is read.</b> Four of the six types
-/// are written by the server's request middleware, which never sets
-/// <c>actor_user_id</c> (the person is in <c>props.personId</c>). The other
-/// two arrive from the app through the ingest route, which always sets it.
-/// So a row of a server-written type that carries an actor was not written by
-/// the server (before commit 7e496f87 a signed-in account could post a forged
+/// <b>Who wrote a row decides whether it is read, type by type.</b> Four of
+/// the six types are written by the server's request middleware, which never
+/// sets <c>actor_user_id</c> (the person is in <c>props.personId</c>). So a
+/// row of a server-written type that carries an actor was not written by the
+/// server (before commit 7e496f87 a signed-in account could post a forged
 /// <c>api.error</c> through ingest), and it is never read back as a server
-/// failure. A row of a client type with no actor has no sender and is not
-/// read either.
+/// failure. <c>sync.push_outcome</c> can arrive through the ingest route
+/// alone, which requires sign-in and always sets the actor: a report with no
+/// actor has no sender and is not read. <c>client.error</c> has two doors:
+/// the ingest route, and the app's failure reporter,
+/// <c>POST /telemetry/client-error</c>, which is anonymous and writes the row
+/// with no actor, the role <c>client</c>, the trigger <c>browser</c> and the
+/// caller's raw body as its props. So a <c>client.error</c> row is read in
+/// either case. Its person is its actor when it has one and otherwise nobody:
+/// <c>props.personId</c> on a row a client wrote is never believed.
 /// </para>
 ///
 /// <para>
@@ -61,6 +68,13 @@ namespace ShramSafal.Admin.IntegrationTests;
 /// the handler be the one that sorts, that test has to move with it.
 /// (3) A row exactly on the window's first instant.
 /// (4) A person whose user record has a blank name.
+/// (5) The failure reporter's own keys (<c>type</c>, <c>endpoint</c>,
+/// <c>statusCode</c>, <c>message</c>): the plan does not say which of them
+/// are read back, so none is pinned.
+/// (6) A failure reporter's body that is not an object, or that holds values
+/// that cannot be read: that route keeps whatever an anonymous caller posts,
+/// and <c>A_row_with_unreadable_values_does_not_fail_the_read</c> seeds only
+/// a server-written row and an ingest row.
 /// </para>
 /// </summary>
 [Collection(nameof(AdminTestCollection))]
@@ -511,7 +525,7 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
     }
 
     [Fact]
-    public async Task A_row_of_a_client_type_with_no_actor_is_not_returned()
+    public async Task A_sync_report_with_no_sender_is_not_returned()
     {
         var at = Day(9);
         var sunita = Guid.NewGuid();
@@ -524,22 +538,25 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
             ["pendingAfter"] = 0,
             ["appVersion"] = "1.0.18",
         };
-        var clientError = new Dictionary<string, object?> { ["message"] = "TypeError: x is undefined" };
 
         var senderless = new List<Guid>
         {
             // What ingest writes when it is given no user.
             await EventAsync("sync.push_outcome", at, Json(report), actorRole: "anonymous", trigger: string.Empty),
-            await EventAsync("client.error", at.AddMinutes(1), Json(clientError), actorRole: "anonymous", trigger: string.Empty),
 
             // The envelope of the server's own middleware, on a type the
             // server never writes.
-            await EventAsync("sync.push_outcome", at.AddMinutes(2), Json(report)),
-            await EventAsync("client.error", at.AddMinutes(3), Json(clientError)),
+            await EventAsync("sync.push_outcome", at.AddMinutes(1), Json(report)),
+
+            // The envelope of the app's failure reporter, the one door that
+            // lets a row in with no actor. That door is for client.error
+            // alone: a report does not come in through it.
+            await EventAsync("sync.push_outcome", at.AddMinutes(2), Json(report),
+                actorRole: "client", trigger: "browser"),
 
             // No actor, and a personId in props in place of one: a report's
             // person is its sender, never a name it gives itself.
-            await EventAsync("sync.push_outcome", at.AddMinutes(4),
+            await EventAsync("sync.push_outcome", at.AddMinutes(3),
                 Json(new Dictionary<string, object?>(report) { ["personId"] = sunita.ToString("D") }),
                 actorRole: "user", trigger: string.Empty),
         };
@@ -547,22 +564,130 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
         var onlySenderless = await Recorded(at.AddMinutes(-1));
 
         onlySenderless.Select(r => r.EventId).Should().NotIntersectWith(senderless,
-            "a row of a client type is read only when the ingest route stamped its sender; a "
-            + "report from nobody cannot be matched to a person and is not read");
+            "a sync report is read only when the ingest route stamped its sender; a report "
+            + "from nobody cannot be matched to a person and is not read");
         onlySenderless.Should().NotContain(r => r.PersonId == sunita);
         Mine(onlySenderless).Should().BeEmpty();
 
-        // The control: the same two types, as ingest writes them for a
-        // signed-in person, ARE read.
+        // The control: the same report, as ingest writes it for a signed-in
+        // person, IS read. So the rows above were left out for having no
+        // sender and for no other reason.
         var reportId = await AppRowAsync("sync.push_outcome", at.AddMinutes(10), sunita, report);
-        var errorId = await AppRowAsync("client.error", at.AddMinutes(11), sunita, clientError);
 
         var rows = Mine(await Recorded(at.AddMinutes(-1)));
 
-        rows.Select(r => r.EventId).Should().BeEquivalentTo(new[] { reportId, errorId },
-            "only the two rows with a sender are read; the five without one are still not");
-        rows.Should().OnlyContain(r => r.PersonId == sunita && r.PersonName == "Sunita Pawar");
-        Row(rows, reportId).RecoveredCount.Should().Be(3);
+        rows.Select(r => r.EventId).Should().BeEquivalentTo(new[] { reportId },
+            "only the report with a sender is read; the four without one are still not");
+
+        var sent = Row(rows, reportId);
+        sent.PersonId.Should().Be(sunita);
+        sent.PersonName.Should().Be("Sunita Pawar");
+        sent.RecoveredCount.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task A_client_error_from_the_failure_reporter_is_returned_without_a_person()
+    {
+        var at = Day(13);
+        var sunita = Guid.NewGuid();
+        await UserAsync(sunita, "Sunita Pawar");
+
+        // What the app's failure reporter posts when a request fails.
+        var asTheAppSendsIt = new Dictionary<string, object?>
+        {
+            ["type"] = "api_failure",
+            ["endpoint"] = "/sync/push",
+            ["statusCode"] = 500,
+        };
+
+        // The same, and one key the app never sends. The route is anonymous
+        // and keeps the caller's raw body, so anybody can post a body that
+        // names anybody. Sunita has a user record: her id would resolve.
+        var namingSomebody = new Dictionary<string, object?>(asTheAppSendsIt)
+        {
+            ["personId"] = sunita.ToString("D"),
+        };
+
+        var plainId = await ReporterRowAsync(at, asTheAppSendsIt);
+        var plantedId = await ReporterRowAsync(at.AddMinutes(1), namingSomebody);
+
+        var rows = await Recorded(at.AddMinutes(-1));
+
+        var plain = Row(rows, plainId);
+        plain.EventType.Should().Be("client.error",
+            "a failure the app reported with nobody signed in is still a recorded failure: "
+            + "client.error is read whether or not it has an actor");
+        plain.OccurredAtUtc.Should().Be(at);
+        plain.PersonId.Should().BeNull("the row has no actor, so it has no person");
+        plain.PersonName.Should().BeNull();
+        ShouldCarryNoReport(plain);
+
+        var planted = Row(rows, plantedId);
+        planted.EventType.Should().Be("client.error");
+        planted.PersonId.Should().BeNull(
+            "props.personId on a row a client wrote is never believed: the body is whatever "
+            + "an anonymous caller chose to post");
+        planted.PersonName.Should().BeNull("and so nobody's name is put on it");
+        ShouldCarryNoReport(planted);
+
+        rows.Should().NotContain(r => r.PersonId == sunita,
+            "an anonymous caller cannot give a named person a failure");
+
+        // The control: the same id, in the props of a row the server's own
+        // middleware wrote, IS believed and named. So the reporter's rows
+        // were left without a person for who wrote them, and not because
+        // Sunita could not be found.
+        var serverId = await ServerRowAsync("api.error", at.AddMinutes(2),
+            MiddlewareProps("POST /sync/push", 500, "POST /sync/push", personId: sunita));
+
+        var again = Mine(await Recorded(at.AddMinutes(-1)));
+
+        again.Select(r => r.EventId).Should().BeEquivalentTo(new[] { plainId, plantedId, serverId });
+        Row(again, serverId).PersonId.Should().Be(sunita);
+        Row(again, serverId).PersonName.Should().Be("Sunita Pawar");
+        Row(again, plantedId).PersonId.Should().BeNull("the server's row beside it changes nothing about this one");
+        Row(again, plantedId).PersonName.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task A_client_error_that_came_through_ingest_names_its_sender()
+    {
+        var at = Day(14);
+        var sunita = Guid.NewGuid();
+        var ramesh = Guid.NewGuid();
+        await UserAsync(sunita, "Sunita Pawar");
+        await UserAsync(ramesh, "Ramesh Patil");
+
+        // As POST /analytics/ingest writes it for a signed-in person: the
+        // sender is the actor.
+        var plainId = await AppRowAsync("client.error", at, sunita,
+            new Dictionary<string, object?> { ["message"] = "TypeError: x is undefined" });
+
+        // The same, with a props bag that names somebody else. The props
+        // are the app's own words; the actor is what the server stamped.
+        var plantedId = await AppRowAsync("client.error", at.AddMinutes(1), sunita,
+            new Dictionary<string, object?>
+            {
+                ["message"] = "TypeError: x is undefined",
+                ["personId"] = ramesh.ToString("D"),
+            });
+
+        var rows = await Recorded(at.AddMinutes(-1));
+
+        foreach (var id in new[] { plainId, plantedId })
+        {
+            var row = Row(rows, id);
+            row.EventType.Should().Be("client.error");
+            row.PersonId.Should().Be(sunita,
+                "the person of a client.error row that has an actor is that actor, whatever "
+                + "its props say");
+            row.PersonName.Should().Be("Sunita Pawar");
+            ShouldCarryNoReport(row);
+        }
+
+        rows.Should().NotContain(r => r.PersonId == ramesh,
+            "props.personId on a row a client wrote is never believed, with an actor or without one");
+        Mine(rows).Select(r => r.EventId).Should().BeEquivalentTo(new[] { plainId, plantedId });
     }
 
     // ------------------------------------------------------------------
@@ -838,6 +963,15 @@ public sealed class AdminOpsRecordedTests(AdminTestFixture fixture) : IAsyncLife
     /// </summary>
     private Task<Guid> AppRowAsync(string eventType, DateTime atUtc, Guid sender, Dictionary<string, object?> props) =>
         EventAsync(eventType, atUtc, Json(props), actorRole: "user", actorUserId: sender, trigger: string.Empty);
+
+    /// <summary>
+    /// A <c>client.error</c> row as <c>POST /telemetry/client-error</c>
+    /// writes it for an anonymous caller: no actor, no farm column, role
+    /// <c>client</c>, trigger <c>browser</c>, and the caller's raw body as
+    /// its props.
+    /// </summary>
+    private Task<Guid> ReporterRowAsync(DateTime atUtc, Dictionary<string, object?> body) =>
+        EventAsync("client.error", atUtc, Json(body), actorRole: "client", trigger: "browser");
 
     /// <summary>
     /// One row in <c>analytics.events</c>; returns its id. The defaults are

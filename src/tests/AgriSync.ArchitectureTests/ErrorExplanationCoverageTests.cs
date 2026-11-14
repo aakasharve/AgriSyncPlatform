@@ -29,10 +29,10 @@ public sealed class ErrorExplanationCoverageTests
     [Fact]
     public void The_catalogue_is_the_size_we_think_it_is()
     {
-        // 52 in ShramSafalErrors + 6 in UserErrors, measured 2026-08-30. If this
+        // 122 in ShramSafalErrors + 9 in UserErrors, measured 2026-11-14. If this
         // fails, an error was added or removed — go write its explanation, do
         // not just bump the number.
-        AllCataloguedErrors().Should().HaveCount(58);
+        AllCataloguedErrors().Should().HaveCount(131);
     }
 
     [Fact]
