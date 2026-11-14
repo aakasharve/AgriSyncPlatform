@@ -118,3 +118,8 @@ jobs:
       # implementation. Closes the recurring admin-web-lint @emnapi drift failure.
       - run: npm install --no-audit --no-fund
       - run: npx eslint --max-warnings 9999 .
+      # The console's own tests (sign-in, session renewal, sign-out). `npm test`
+      # bundles src/test/**/*.test.ts with the bundler Vite already brings and
+      # runs them with Node's test runner: no extra package. It exits non-zero
+      # when no test file is found, so an emptied folder cannot pass.
+      - run: npm test
