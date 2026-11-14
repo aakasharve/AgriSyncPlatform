@@ -712,6 +712,31 @@ try
 
     // Ops Phase 1 — client error telemetry (no auth, rate-limited by IP)
     {
+        // spec: control-room-go-live-must-haves-2026-11-10 (plan CR-1a; asked for by the independent review of
+        // 2026-11-14). The largest body this door reads: 64 KB (65,536 bytes). A larger one is answered 413 and
+        // nothing is written. A body of exactly this size, sent with its length declared (as the app sends it),
+        // is still accepted.
+        //
+        // WHY A LIMIT. The door is anonymous and keeps the caller's raw body as the row's props, in a table that is
+        // append-only and never cleaned. Without a limit of its own, the only one was the 50 MB the whole server
+        // allows (MaxRequestBodySize, top of this file), ten times a minute from one address.
+        //
+        // WHY 64 KB. The app's own reporter (mobile-web ClientErrorReporter.ts) posts a few short keys with
+        // `keepalive: true`, and a browser does not send a keepalive body larger than 64 KB (the Fetch standard's
+        // cap). So this number is the most an installed app could ever have sent, and no released app can be
+        // refused by it (P11).
+        //
+        // WHY IT IS ROUTE METADATA AND NOT A CHECK IN THE HANDLER. The handler binds `JsonElement body`, and the
+        // framework reads that body in full BEFORE the handler runs. A check written in the handler would be too
+        // late for a body sent in chunks with no Content-Length: the server would already have read all of it.
+        // As metadata, routing puts the limit on the request before anything reads the body, and the web server
+        // itself enforces it while reading: a declared length over the limit is refused before a byte of the body
+        // is read, and a body with no declared length is counted as it arrives and cut off once it passes the
+        // limit. The binder then answers with the server's own status, 413, and the handler never runs.
+        //
+        // This route only. Every other route keeps the server-wide limit.
+        const long clientErrorMaxBodyBytes = 64L * 1024L;
+
         var clientErrorCounts = new System.Collections.Concurrent.ConcurrentDictionary<string, (int count, DateTime window)>();
         app.MapPost("/telemetry/client-error", async (
             HttpContext ctx,
@@ -750,6 +775,7 @@ try
         })
         .WithName("PostClientError")
         .WithTags("Telemetry")
+        .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(clientErrorMaxBodyBytes))
         .AllowAnonymous();
     }
 
