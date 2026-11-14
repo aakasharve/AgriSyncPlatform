@@ -113,19 +113,20 @@ public static class EventVocabulary
             // signed-in person. Server-only. Deliberately NOT `api.error`:
             // mis.alert_r9_api_error_spike counts `api.error` rows, and a
             // farmer retrying a form must not trip it. The key is
-            // `statusCode`, as on `api.error`. The two rejectedWork* keys are
-            // listed because the shared props builder writes them (as null)
-            // on every row it builds; they carry a value only on a refused
-            // sync save. Two more row types the middleware writes,
-            // `api.slow` and `sync.mutation_rejected`, are not in this
-            // registry at all (so the client ingest route refuses them as
-            // unknown types); their keys are the ones listed here plus
-            // `rejectedWorkCodes`.
+            // `statusCode`, as on `api.error`. The optional list is exactly
+            // the eight keys of ADR 0027 D1 and a unit test pins it; do not
+            // add to it without a new ADR. For a reader of real rows: the
+            // shared props builder also writes `rejectedWorkItems` and
+            // `rejectedWorkReason` on every row it builds, as null except
+            // on a refused sync save. Two more row types the middleware
+            // writes, `api.slow` and `sync.mutation_rejected`, are not in
+            // this registry at all (so the client ingest route refuses them
+            // as unknown types); their keys are the ones of `api.error`
+            // plus `rejectedWorkCodes`.
             ["api.refused"] = new(
                 RequiredProps: ["endpoint", "statusCode"],
                 Optional: ["errorCode", "route", "appVersion", "serverBuild",
-                           "personId", "routeFarmId", "latencyMs", "traceId",
-                           "rejectedWorkItems", "rejectedWorkReason"]),
+                           "personId", "routeFarmId", "latencyMs", "traceId"]),
 
             // 2026-11-12 (ADR 0028): a signed-in person used the app on this
             // version. Server-only, written at most once per person, version
