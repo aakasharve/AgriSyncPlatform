@@ -66,8 +66,8 @@ public sealed class TrialRegrantRealPostgresTests(TrialSafetyDatabase db) : ICla
         (await db.CountAsync("""
             SELECT count(*) FROM accounts.subscriptions
             WHERE owner_account_id = @a AND status = 1
-              AND valid_until_utc BETWEEN NOW() + INTERVAL '13 days' AND NOW() + INTERVAL '15 days'
-            """, ("a", neverSubscribed))).Should().Be(1, "the startup backfill (legacy owners that never had a subscription) is unchanged: 14 days; a NEW farm via the route gets 21 (R5-SMALL TRIAL-21)");
+              AND valid_until_utc BETWEEN NOW() + INTERVAL '20 days' AND NOW() + INTERVAL '22 days'
+            """, ("a", neverSubscribed))).Should().Be(1, "the startup backfill (legacy owners that never had a subscription) now grants 21 days, the same as a new farm (F260)");
     }
 
     [Fact]

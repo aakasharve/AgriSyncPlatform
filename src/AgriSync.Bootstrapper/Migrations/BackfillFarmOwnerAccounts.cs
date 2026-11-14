@@ -3,6 +3,7 @@ using Accounts.Domain.Subscriptions;
 using Accounts.Infrastructure.Persistence;
 using AgriSync.BuildingBlocks.Auditing;
 using AgriSync.BuildingBlocks.Persistence;
+using AgriSync.Bootstrapper.Endpoints;
 using AgriSync.SharedKernel.Contracts.Ids;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -178,7 +179,7 @@ public sealed class BackfillFarmOwnerAccounts : IHostedService
                 ownerAccountId: account.Id,
                 planCode: PlanCode.ShramSafalPro,
                 trialStartUtc: nowUtc,
-                trialEndsAtUtc: nowUtc.AddDays(14));
+                trialEndsAtUtc: nowUtc.AddDays(FirstFarmBootstrapEndpoints.FirstTrialDays));
 
             accountsDb.Subscriptions.Add(trial);
             trialsCreated++;
@@ -187,8 +188,9 @@ public sealed class BackfillFarmOwnerAccounts : IHostedService
         await accountsDb.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Trial bootstrap: started {Count} first 14-day trial(s).",
-            trialsCreated);
+            "Trial bootstrap: started {Count} first {Days}-day trial(s).",
+            trialsCreated,
+            FirstFarmBootstrapEndpoints.FirstTrialDays);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
