@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * DEV-ONLY admin MIS preview — number and date formatting. Pure functions, no locale surprises:
+ * Company MIS — number and date formatting. Pure functions, no locale surprises:
  * dates are built from UTC parts so the preview reads the same on every machine.
  */
 
@@ -117,10 +117,10 @@ export function fmtPctPoints(v: number, digits = 1): string {
     return `${fmtDec(v, digits)}%`;
 }
 
-/** Signed difference between two values that are already percentages: "+2.5 pts" / "−1 pts" / "0 pts". */
+/** Signed difference between two values that are already percentages: "+2.5 pts" / "−1 pt" / "0 pts". */
 export function fmtDeltaPoints(cur: number, prev: number): string {
     const d = cur - prev;
     const s = fmtDec(Math.abs(d), 1);
     if (s === '0') return '0 pts';
-    return `${d > 0 ? '+' : '−'}${s} pts`;
+    return `${d > 0 ? '+' : '−'}${s} ${s === '1' ? 'pt' : 'pts'}`;
 }

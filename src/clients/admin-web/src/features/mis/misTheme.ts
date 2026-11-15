@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * DEV-ONLY admin MIS preview — chart colour roles. Every chart reads colour from here, never a raw hex.
+ * Company MIS — chart colour roles. Every chart reads colour from here, never a raw hex.
  *
  * Categorical order was run through the dataviz six-checks validator on the white card surface
  * (emerald → blue → orange → violet → yellow): every adjacent pair clears CVD ΔE 8 and the

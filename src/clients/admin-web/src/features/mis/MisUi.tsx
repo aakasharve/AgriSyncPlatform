@@ -236,6 +236,7 @@ export const KpiTile: React.FC<{ tile: MisTileModel; compare: boolean }> = ({ ti
     <div className="flex min-w-0 flex-col bg-white px-5 pb-4 pt-4" data-testid={`kpi-${tile.item}`} {...itemAttrs(tile.item, tile.fields)}>
         <p className="truncate text-[13px] font-medium text-stone-700" title={tile.hint}>{tile.label}</p>
         {tile.hint && <p className="text-[12px] leading-snug text-stone-500">{tile.hint}</p>}
+        {tile.note && <p className="text-[12px] leading-snug text-stone-500">{tile.note}</p>}
         {tile.current.kind === 'value'
             ? (
                 <>
@@ -381,7 +382,8 @@ export const Shown: React.FC<{ shown: MisShown }> = ({ shown }) =>
 
 /** A line with the period before drawn only from served previous values. */
 export function withPrevious(current: LineSeries, previous: (number | null)[] | null, compare: boolean): LineSeries[] {
-    return compare && previous
+    /* A previous list with no measured value draws nothing (B18 V3). */
+    return compare && previous && previous.some((v) => v !== null && Number.isFinite(v))
         ? [{ key: 'prev', label: 'Previous period', color: GHOST, values: previous, ghost: true }, current]
         : [current];
 }

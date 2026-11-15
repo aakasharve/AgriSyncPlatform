@@ -32,11 +32,13 @@ export const RetentionSection: React.FC<MisSectionProps<RetentionView>> = ({ vie
                     className="col-span-12 xl:col-span-7"
                     title="Return by sign-up week"
                     subtitle="Share of new people who saved an entry on day 1, 7, 14 and 30, by sign-up week (phone verified), not install"
-                    action={<span className="hidden md:block"><ScaleLegend low="0%" high="60%" /></span>}
+                    action={view.cohorts.kind === 'chart'
+                        ? <span className="hidden md:block"><ScaleLegend low="0%" high={`${view.cohorts.data.scaleTop}%`} /></span>
+                        : undefined}
                     footnote="'not yet' means that day has not come for those sign-ups; 'nobody' means no one signed up that week."
                 >
                     <ChartBody chart={view.cohorts} checkedAt={checkedAt}>
-                        {(c) => <CohortGrid rows={c.rows} days={COHORT_DAYS} scaleMax={60} />}
+                        {(c) => <CohortGrid rows={c.rows} days={COHORT_DAYS} scaleMax={c.scaleTop} />}
                     </ChartBody>
                 </ChartCard>
                 <ChartCard
@@ -88,7 +90,7 @@ export const RetentionSection: React.FC<MisSectionProps<RetentionView>> = ({ vie
                                 />
                                 {compare && (
                                     <ul className="mt-4 space-y-1.5 border-t border-stone-100 pt-3 text-[13px]">
-                                        {b.parts.slice(1).map((p) => (
+                                        {b.parts.map((p) => (
                                             <li key={p.key} className="flex items-center justify-between gap-3">
                                                 <span className="text-stone-600">{p.label}, change</span>
                                                 <Delta delta={p.delta} />

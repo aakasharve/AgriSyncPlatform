@@ -173,7 +173,7 @@ export default function MisPage({ section }: { section: MisSectionKey }) {
         {data && (
           <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-stone-500">
             <span data-testid="mis-counted-at">Counted at {fmtIndiaTime(data.countedAtUtc)}</span>
-            <span data-testid="mis-test-accounts">{data.excludedTestAccounts} test accounts left out</span>
+            <span data-testid="mis-test-accounts">{data.excludedTestAccounts} {data.excludedTestAccounts === 1 ? 'test account' : 'test accounts'} left out</span>
           </div>
         )}
       </div>

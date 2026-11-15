@@ -244,7 +244,7 @@ export const CohortGrid: React.FC<{ rows: CohortRowModel[]; days: readonly numbe
                             }
                             if (v === null) {
                                 return (
-                                    <td key={k} className="rounded-[4px] bg-stone-50 px-3 py-2 text-right text-stone-500" title="This week has not finished yet">
+                                    <td key={k} className="rounded-[4px] bg-stone-50 px-3 py-2 text-right text-stone-500" title="This day has not passed yet">
                                         not yet
                                     </td>
                                 );

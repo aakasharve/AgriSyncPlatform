@@ -57,9 +57,12 @@ export function formatterOf(kind: MisKind): (v: number) => string {
   }
 }
 
-/** "Not measured: " + the reason, for a value the server did not count (said for `item` when given, B11). */
+/**
+ * The reason, in words, for a value the server did not count (said for `item` when given, B11).
+ * No "Not measured:" prefix: every box that shows this already carries that word (B18 V5).
+ */
 export function notMeasuredWhy(code: string | null, item?: string): string {
-  return `Not measured: ${reasonSentenceFor(code, item)}`;
+  return reasonSentenceFor(code, item);
 }
 
 export function shownOf(v: MisValue, kind: MisKind, item?: string): MisShown {
@@ -89,7 +92,7 @@ export function deltaOf(n: MisNumber, kind: MisKind, upIsGood: boolean, item?: s
   const good = (cur > prev) === upIsGood;
   if (kind === 'pct') {
     const text = fmtDeltaPoints(cur, prev);
-    return { text: text === '0 pts' ? `${sign}less than 0.1 pts` : text, good };
+    return { text: text === '0 pts' ? 'less than 0.1 pts' : text, good };
   }
   if (prev === 0) return { text: 'up from 0', good };
   const text = fmtRelDelta(cur, prev) as string;
@@ -108,6 +111,20 @@ export interface MisTileModel {
   delta: MisDelta;
   /** The served day-by-day values; null entries are gaps. Null = no sparkline. */
   spark: (number | null)[] | null;
+  /** A caveat that changes how the number is read; shown under the hint. */
+  note?: string;
+}
+
+/**
+ * B18 V6: the tile names the count behind its share as its hint, e.g.
+ * "12 of 50 entries". A count the server did not measure leaves the hint out.
+ */
+function withCountHint(tile: MisTileModel, hint: string | null, note?: string): MisTileModel {
+  return { ...tile, hint: hint ?? '', ...(note ? { note } : {}) };
+}
+
+function countOf(v: MisValue): number | null {
+  return v.value === null || !Number.isFinite(v.value) ? null : v.value;
 }
 
 export function tileFrom(item: string, n: MisNumber, kind: MisKind, upIsGood: boolean): MisTileModel {
@@ -177,15 +194,29 @@ function byPosition(values: (number | null)[] | null | undefined, length: number
   return Array.from({ length }, (_, i) => (i < values.length ? values[i] : null));
 }
 
+/** True when a list holds at least one measured value. */
+export function hasServedValue(values: (number | null)[] | null | undefined): values is (number | null)[] {
+  return Array.isArray(values) && values.some((x) => x !== null && Number.isFinite(x));
+}
+
+/** A previous line by position, or null when the server sent none or every value is null (B18 V3). */
+function previousLine(values: (number | null)[] | null | undefined, length: number): (number | null)[] | null {
+  return hasServedValue(values) ? byPosition(values, length) : null;
+}
+
 /**
  * The day-by-day line of one number, or why there is none. B12: a line with
  * no measured day (all null, or no list) is a reason, never empty axes.
  */
 export function dayLineOf(n: MisNumber, range: MisRange, item?: string): MisChart<MisLineModel> {
-  const anyDay = Array.isArray(n.currentByDay) && n.currentByDay.some((x) => x !== null && Number.isFinite(x));
-  if (!anyDay) {
+  if (!Array.isArray(n.currentByDay)) {
+    /* No day list at all: the number has no day-by-day form (or it was not counted). */
     if (n.current.value === null) return { kind: 'notMeasured', why: notMeasuredWhy(n.current.notMeasuredReason, item) };
     return { kind: 'notMeasured', why: DAY_LINE_NOT_COUNTED };
+  }
+  if (!hasServedValue(n.currentByDay)) {
+    /* A day list with no measured day: the number's own reason (B18 V3). */
+    return { kind: 'notMeasured', why: notMeasuredWhy(n.current.notMeasuredReason ?? 'denominator_zero', item) };
   }
   const axis = dayAxis(range);
   return {
@@ -193,7 +224,7 @@ export function dayLineOf(n: MisNumber, range: MisRange, item?: string): MisChar
     data: {
       ...axis,
       current: byPosition(n.currentByDay, axis.labels.length) ?? [],
-      previous: byPosition(n.previousByDay, axis.labels.length),
+      previous: previousLine(n.previousByDay, axis.labels.length),
     },
   };
 }
@@ -308,7 +339,12 @@ export function overviewView(d: CompanyMis): OverviewView {
       tileFrom('overview.mau', o.mau, 'count', true),
       tileFrom('overview.stickiness', o.stickinessPct, 'pct', true),
       tileFrom('overview.logsRecorded', o.logsRecorded, 'count', true),
-      tileFrom('overview.voiceShare', o.voiceSharePct, 'pct', true),
+      (() => {
+        const voice = countOf(o.voiceLogs.current);
+        const all = countOf(o.logsRecorded.current);
+        const hint = voice === null || all === null ? null : `${fmtInt(voice)} of ${fmtInt(all)} ${noun(all, 'entry', 'entries')}`;
+        return withCountHint(tileFrom('overview.voiceShare', o.voiceSharePct, 'pct', true), hint, itemByKey('overview.voiceShare').hint);
+      })(),
       tileNotMeasured('overview.understanding'),
       tileNotMeasured('overview.crashFree'),
     ],
@@ -471,7 +507,8 @@ export interface BandModel {
 
 export interface RetentionView {
   tiles: MisTileModel[];
-  cohorts: MisChart<{ rows: CohortRowModel[] }>;
+  /** `scaleTop`: the largest served cell rounded up to the next 10 (B18 V4). */
+  cohorts: MisChart<{ rows: CohortRowModel[]; scaleTop: number }>;
   curve: MisChart<MisLineModel>;
   bands: MisChart<{ parts: BandModel[]; asOf: string }>;
   winBack: MisChart<MisLineModel>;
@@ -481,6 +518,13 @@ export const COHORT_DAYS = [1, 7, 14, 30] as const;
 
 function curveValues(points: MisCurvePoint[]): (number | null)[] {
   return [...points].sort((a, b) => a.day - b.day).map((p) => p.activePct);
+}
+
+/** The cohort colour scale's top: the largest served cell rounded up to the next 10, at least 10 (B18 V4). */
+export function cohortScaleTop(cells: (number | null)[]): number {
+  const served = cells.filter((c): c is number => c !== null && Number.isFinite(c));
+  const max = served.length ? Math.max(...served) : 0;
+  return Math.max(10, Math.ceil(max / 10) * 10);
 }
 
 export function retentionView(d: CompanyMis): RetentionView {
@@ -494,7 +538,7 @@ export function retentionView(d: CompanyMis): RetentionView {
   ];
   const blocked = bandDefs.find((b) => !b.n || b.n.current.value === null);
   const bands: RetentionView['bands'] = blocked
-    ? { kind: 'notMeasured', why: notMeasuredWhy(blocked.n ? blocked.n.current.notMeasuredReason : null) }
+    ? { kind: 'notMeasured', why: notMeasuredWhy(blocked.n ? blocked.n.current.notMeasuredReason : null, 'retention.bands') }
     : {
       kind: 'chart',
       data: {
@@ -510,20 +554,29 @@ export function retentionView(d: CompanyMis): RetentionView {
       },
     };
 
+  /* B18 V1: blocked farm numbers empty the curve and the week grid while sign-ups
+     stay measured. That is "not counted", never "nobody". */
+  const d1Reason = r.d1Pct.current.value === null ? r.d1Pct.current.notMeasuredReason : null;
+  const farmsBlocked = d1Reason === 'farm_list_unreadable' || d1Reason === 'too_many_farms_for_live_count';
+  const nobodySignedUp = d.overview.signUps.current.value === 0;
+
   const curvePoints = [...r.curve].sort((a, b) => a.day - b.day);
-  const curve: RetentionView['curve'] = curvePoints.length > 0
-    ? {
+  const curveCurrent = curveValues(curvePoints);
+  const curve: RetentionView['curve'] = farmsBlocked
+    ? { kind: 'notMeasured', why: notMeasuredWhy(d1Reason, 'retention.curve') }
+    : curvePoints.length === 0 || !hasServedValue(curveCurrent)
+      ? nobodySignedUp
+        ? { kind: 'none', what: 'No one verified a phone in this range' }
+        : { kind: 'notMeasured', why: notMeasuredWhy(d1Reason ?? 'no_complete_window', 'retention.curve') }
+      : {
       kind: 'chart',
       data: {
         labels: curvePoints.map((p) => `Day ${p.day}`),
         titles: curvePoints.map((p) => `Day ${p.day} after signing up`),
-        current: curveValues(curvePoints),
-        previous: Array.isArray(r.previousCurve) && r.previousCurve.length > 0
-          ? byPosition(curveValues(r.previousCurve), curvePoints.length)
-          : null,
+        current: curveCurrent,
+        previous: Array.isArray(r.previousCurve) ? previousLine(curveValues(r.previousCurve), curvePoints.length) : null,
       },
-    }
-    : { kind: 'none', what: 'No one verified a phone in this range' };
+    };
 
   const winBack: RetentionView['winBack'] = r.winBackByDay.length > 0
     ? {
@@ -532,7 +585,7 @@ export function retentionView(d: CompanyMis): RetentionView {
         labels: r.winBackByDay.map((p) => fmtDay(fromIsoDate(p.day))),
         titles: r.winBackByDay.map((p) => fmtWeekdayDay(fromIsoDate(p.day))),
         current: r.winBackByDay.map((p) => p.value),
-        previous: byPosition(r.quietFarms7To29.previousByDay, r.winBackByDay.length),
+        previous: previousLine(r.quietFarms7To29.previousByDay, r.winBackByDay.length),
       },
     }
     : { kind: 'notMeasured', why: notMeasuredWhy(r.quietFarms7To29.current.notMeasuredReason) };
@@ -544,12 +597,15 @@ export function retentionView(d: CompanyMis): RetentionView {
       tileFrom('retention.quiet', r.quietFarms7To29, 'count', false),
       tileFrom('retention.silent30', r.silentFarms30Plus, 'count', false),
     ],
-    cohorts: r.cohortByWeek.some((row) => !Array.isArray(row.activePctOnDays))
+    cohorts: farmsBlocked
+      ? { kind: 'notMeasured', why: notMeasuredWhy(d1Reason, 'retention.cohorts') }
+      : r.cohortByWeek.some((row) => !Array.isArray(row.activePctOnDays))
       ? { kind: 'notMeasured', why: 'The return on day 1, 7, 14 and 30 is not counted by this server yet.' }
       : r.cohortByWeek.length > 0
       ? {
         kind: 'chart',
         data: {
+          scaleTop: cohortScaleTop(r.cohortByWeek.flatMap((row) => row.activePctOnDays)),
           rows: r.cohortByWeek.map((row) => ({
             weekStart: row.weekStart,
             label: fmtDay(fromIsoDate(row.weekStart)),
@@ -593,10 +649,16 @@ export function qualityView(d: CompanyMis): QualityView {
     : avg;
   return {
     tiles: [
-      tileFrom('quality.voiceSaved', q.voiceRecordingsSavedPct, 'pct', true),
+      (() => {
+        const n = countOf(q.voiceRecordings.current);
+        return withCountHint(tileFrom('quality.voiceSaved', q.voiceRecordingsSavedPct, 'pct', true), n === null ? null : `${fmtInt(n)} ${noun(n, 'recording', 'recordings')}`);
+      })(),
       tileFrom('quality.transcriptionAvg', q.transcriptionAvgMs, 'ms', false),
       tileFrom('quality.transcriptionP95', q.transcriptionP95Ms, 'ms', false),
-      tileFrom('quality.corrected', q.logsCorrectedPct, 'pct', false),
+      (() => {
+        const n = countOf(q.logsCorrected.current);
+        return withCountHint(tileFrom('quality.corrected', q.logsCorrectedPct, 'pct', false), n === null ? null : `${fmtInt(n)} ${noun(n, 'entry', 'entries')} corrected`);
+      })(),
       tileNotMeasured('quality.syncFailTile'),
       tileNotMeasured('quality.crashFree'),
     ],
