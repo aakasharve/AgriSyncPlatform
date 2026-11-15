@@ -193,6 +193,27 @@ public sealed class CompanyMisRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         }
     }
 
+    /// <summary>Amendment A9 on the real database, read as agrisync_app.</summary>
+    [SkippableFact]
+    public async Task Day_series_come_back_from_the_database()
+    {
+        await GuardAsync();
+
+        await using (var db = new NpgsqlConnection(SuperuserConn))
+        {
+            await db.OpenAsync();
+            await SeedEntryAsync(db, F2, U2, new DateTime(2026, 11, 10, 18, 45, 0, DateTimeKind.Utc)); // 00:15 IST 11 Nov
+        }
+
+        var dto = await LoadAsync(BuildProvider(), new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 13));
+
+        Output.WriteLine($"[EVIDENCE] logsRecorded.currentByDay={string.Join(",", dto.Overview.LogsRecorded.CurrentByDay ?? Array.Empty<decimal?>())}");
+        dto.Overview.LogsRecorded.CurrentByDay.Should().Equal(new decimal?[] { 0m, 1m, 2m, 1m },
+            "the 00:15 entry is on 11 Nov in India time (10 Nov in UTC) and nowhere else; 12 Nov holds the two seeded on F1, 13 Nov the one on F2");
+        dto.Overview.LogsRecorded.PreviousByDay.Should().HaveCount(4);
+        dto.Overview.ActiveFarms.CurrentByDay.Should().Equal(new decimal?[] { 0m, 1m, 2m, 2m });
+    }
+
     [SkippableFact]
     public async Task The_app_role_sees_nothing_without_a_farm_setting()
     {

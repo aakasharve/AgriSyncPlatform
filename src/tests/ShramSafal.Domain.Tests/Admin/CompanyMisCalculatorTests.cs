@@ -826,17 +826,21 @@ public sealed class CompanyMisCalculatorTests
 
         dto.Range.Should().Be(new MisRangeDto(D(11, 7), D(11, 13), 7));
         dto.PreviousRange.Should().Be(new MisRangeDto(D(10, 31), D(11, 6), 7));
-        dto.Overview.LogsRecorded.Should().Be(new MisNumberDto(new MisValueDto(4m, null), new MisValueDto(3m, null)));
-        dto.Overview.VoiceLogs.Should().Be(new MisNumberDto(new MisValueDto(0m, null), new MisValueDto(1m, null)));
-        dto.Overview.VoiceSharePct.Should().Be(
-            new MisNumberDto(new MisValueDto(0.0m, null), new MisValueDto(33.3m, null)),
+        // Current and previous VALUES (the records also carry the A9 day lists, pinned in their own tests).
+        CurrentAndPrevious(dto.Overview.LogsRecorded).Should().Be((new MisValueDto(4m, null), new MisValueDto(3m, null)));
+        CurrentAndPrevious(dto.Overview.VoiceLogs).Should().Be((new MisValueDto(0m, null), new MisValueDto(1m, null)));
+        CurrentAndPrevious(dto.Overview.VoiceSharePct).Should().Be(
+            (new MisValueDto(0.0m, null), new MisValueDto(33.3m, null)),
             "0 of 4 is a measured 0%; 1 of 3 is 33.3%");
-        dto.Overview.ActiveFarms.Should().Be(
-            new MisNumberDto(new MisValueDto(1m, null), new MisValueDto(2m, null)),
+        CurrentAndPrevious(dto.Overview.ActiveFarms).Should().Be(
+            (new MisValueDto(1m, null), new MisValueDto(2m, null)),
             "at 13 Nov only f1; at 6 Nov f2 (5 Nov) and f3 (3 Nov)");
-        dto.Overview.SignUps.Should().Be(new MisNumberDto(new MisValueDto(1m, null), new MisValueDto(2m, null)));
-        dto.Farms.FarmsRegistered.Should().Be(new MisNumberDto(new MisValueDto(3m, null), new MisValueDto(3m, null)));
+        CurrentAndPrevious(dto.Overview.SignUps).Should().Be((new MisValueDto(1m, null), new MisValueDto(2m, null)));
+        CurrentAndPrevious(dto.Farms.FarmsRegistered).Should().Be((new MisValueDto(3m, null), new MisValueDto(3m, null)));
     }
+
+    private static (MisValueDto Current, MisValueDto Previous) CurrentAndPrevious(MisNumberDto number) =>
+        (number.Current, number.Previous);
 
     [Fact]
     public void Percentages_round_to_one_decimal_away_from_zero()
@@ -854,6 +858,321 @@ public sealed class CompanyMisCalculatorTests
 
         Measured(dto.Overview.VoiceSharePct).Should().Be(6.3m, "6.25 rounds away from zero, not to even (6.2)");
         Measured(dto.Quality.LogsCorrectedPct).Should().Be(31.3m, "31.25 rounds away from zero, not to even (31.2)");
+    }
+
+    // ------------------------------------------------------------------
+    // A9: day-by-day values
+    // ------------------------------------------------------------------
+
+    private static IEnumerable<(string Name, MisNumberDto Number)> AsOfDayNumbers(CompanyMisDto dto) => new[]
+    {
+        ("overview.activeFarms", dto.Overview.ActiveFarms),
+        ("overview.dau", dto.Overview.Dau),
+        ("overview.wau", dto.Overview.Wau),
+        ("overview.mau", dto.Overview.Mau),
+        ("overview.stickinessPct", dto.Overview.StickinessPct),
+        ("engagement.logsPerActiveFarmPerWeek", dto.Engagement.LogsPerActiveFarmPerWeek),
+        ("retention.activeFarms0To6", dto.Retention.ActiveFarms0To6),
+        ("retention.quietFarms7To29", dto.Retention.QuietFarms7To29),
+        ("retention.quietFarms7To13", dto.Retention.QuietFarms7To13),
+        ("retention.quietFarms14To29", dto.Retention.QuietFarms14To29),
+        ("retention.silentFarms30Plus", dto.Retention.SilentFarms30Plus),
+        ("retention.neverLoggedFarms", dto.Retention.NeverLoggedFarms),
+        ("farms.activeFarms", dto.Farms.ActiveFarms),
+        ("farms.farmsRegistered", dto.Farms.FarmsRegistered),
+        ("farms.acresCovered", dto.Farms.AcresCovered),
+        ("farms.farmsInFpo", dto.Farms.FarmsInFpo),
+        ("farms.activeFarmsInFpoPct", dto.Farms.ActiveFarmsInFpoPct),
+    };
+
+    private static IEnumerable<(string Name, MisNumberDto Number)> DuringDayNumbers(CompanyMisDto dto) => new[]
+    {
+        ("overview.signUps", dto.Overview.SignUps),
+        ("overview.logsRecorded", dto.Overview.LogsRecorded),
+        ("overview.voiceLogs", dto.Overview.VoiceLogs),
+        ("overview.voiceSharePct", dto.Overview.VoiceSharePct),
+        ("acquisition.verified", dto.Acquisition.Verified),
+        ("quality.voiceRecordings", dto.Quality.VoiceRecordings),
+        ("quality.voiceRecordingsSavedPct", dto.Quality.VoiceRecordingsSavedPct),
+        ("quality.transcriptionAvgMs", dto.Quality.TranscriptionAvgMs),
+        ("quality.transcriptionP95Ms", dto.Quality.TranscriptionP95Ms),
+        ("quality.logsCorrected", dto.Quality.LogsCorrected),
+        ("quality.logsCorrectedPct", dto.Quality.LogsCorrectedPct),
+    };
+
+    /// <summary>Two farms; A logs on 3 Nov only (in an FPO), B on 9 and 12 Nov. P = 9..12 Nov, Q = 5..8 Nov.</summary>
+    private static CompanyMisDto AsOfDayFixture()
+    {
+        var a = G(1); var b = G(2);
+        var rows = new Seed()
+            .Farm(a, G(101), Ist(10, 1)).Farm(b, G(102), Ist(10, 1))
+            .Plot(a, 2m).Plot(b, 3m)
+            .Scope(a, "Fake FPO Alpha", Ist(11, 1))
+            .Entry(a, G(101), Ist(11, 3))
+            .Entry(b, G(102), Ist(11, 9)).Entry(b, G(102), Ist(11, 12))
+            .Build();
+        return Compute(rows, D(11, 9), D(11, 12));
+    }
+
+    [Fact]
+    public void As_of_day_series_end_on_the_headline_value()
+    {
+        var dto = AsOfDayFixture();
+
+        foreach (var (name, number) in AsOfDayNumbers(dto))
+        {
+            number.CurrentByDay.Should().NotBeNull(name);
+            number.CurrentByDay!.Last().Should().Be(number.Current.Value, "{0}: the last day is `to`, the same rule", name);
+        }
+
+        // By hand. A's 3 Nov entry is inside the trailing 7 days on 9 Nov (age 6) and falls out on 10 Nov.
+        dto.Overview.ActiveFarms.CurrentByDay.Should().Equal(2m, 1m, 1m, 1m);
+        dto.Overview.ActiveFarms.PreviousByDay.Should().Equal(1m, 1m, 1m, 1m);
+        dto.Retention.QuietFarms7To29.CurrentByDay.Should().Equal(new decimal?[] { 0m, 1m, 1m, 1m }, "A reaches age 7 on 10 Nov");
+        dto.Farms.AcresCovered.CurrentByDay.Should().Equal(5m, 3m, 3m, 3m);
+        dto.Farms.FarmsInFpo.CurrentByDay.Should().Equal(1m, 1m, 1m, 1m);
+        dto.Farms.ActiveFarmsInFpoPct.CurrentByDay.Should().Equal(50.0m, 0.0m, 0.0m, 0.0m);
+        dto.Overview.Dau.CurrentByDay.Should().Equal(1m, 0m, 0m, 1m);
+    }
+
+    [Fact]
+    public void During_day_series_add_up_to_the_range_count()
+    {
+        var farm = G(1);
+        var op = G(101);
+        var rows = new Seed()
+            .Farm(farm, op, Ist(10, 1))
+            .Entry(farm, op, Ist(11, 8))                                   // previous period
+            .Entry(farm, op, Ist(11, 10, 9), voice: true)
+            .Entry(farm, op, Ist(11, 10, 11), version: 2)
+            .Entry(farm, op, Ist(11, 12), voice: true)
+            .User(G(201), Ist(11, 10)).User(G(202), Ist(11, 11, 8)).User(G(203), Ist(11, 11, 20))
+            .Job(G(501), farm, op, Ist(11, 11), "Succeeded", 300)
+            .Job(G(502), farm, op, Ist(11, 12), "Failed")
+            .Build();
+
+        var dto = Compute(rows, D(11, 10), D(11, 12));
+
+        dto.Overview.LogsRecorded.CurrentByDay.Should().Equal(2m, 0m, 1m);
+        dto.Overview.LogsRecorded.PreviousByDay.Should().Equal(0m, 1m, 0m);
+        dto.Overview.VoiceLogs.CurrentByDay.Should().Equal(1m, 0m, 1m);
+        dto.Quality.LogsCorrected.CurrentByDay.Should().Equal(1m, 0m, 0m);
+        dto.Overview.SignUps.CurrentByDay.Should().Equal(1m, 2m, 0m);
+        dto.Acquisition.Verified.CurrentByDay.Should().Equal(1m, 2m, 0m);
+        dto.Quality.VoiceRecordings.CurrentByDay.Should().Equal(0m, 1m, 1m);
+
+        foreach (var number in new[]
+                 {
+                     dto.Overview.SignUps, dto.Overview.LogsRecorded, dto.Overview.VoiceLogs,
+                     dto.Acquisition.Verified, dto.Quality.VoiceRecordings, dto.Quality.LogsCorrected,
+                 })
+        {
+            number.CurrentByDay!.Sum().Should().Be(number.Current.Value);
+            number.PreviousByDay!.Sum().Should().Be(number.Previous.Value);
+        }
+    }
+
+    [Fact]
+    public void A_day_with_nothing_to_divide_is_null_not_zero()
+    {
+        var farm = G(1);
+        var op = G(101);
+        var rows = new Seed()
+            .Farm(farm, op, Ist(10, 1))
+            .Entry(farm, op, Ist(11, 10))
+            .Entry(farm, op, Ist(11, 12), voice: true)
+            .Job(G(501), farm, op, Ist(11, 10), "Succeeded", 500)
+            .Build();
+
+        var dto = Compute(rows, D(11, 10), D(11, 12));
+
+        dto.Overview.LogsRecorded.CurrentByDay.Should().Equal(new decimal?[] { 1m, 0m, 1m }, "a day with no entry is a true 0");
+        dto.Overview.VoiceSharePct.CurrentByDay.Should().Equal(new decimal?[] { 0.0m, null, 100.0m }, "a share of nothing is null, never 0");
+        dto.Quality.LogsCorrectedPct.CurrentByDay.Should().Equal(0.0m, null, 0.0m);
+        dto.Quality.VoiceRecordingsSavedPct.CurrentByDay.Should().Equal(0.0m, null, null);
+        dto.Quality.TranscriptionAvgMs.CurrentByDay.Should().Equal(new decimal?[] { 500m, null, null }, "no samples is null");
+        dto.Quality.TranscriptionP95Ms.CurrentByDay.Should().Equal(500m, null, null);
+    }
+
+    [Fact]
+    public void Day_series_have_one_entry_per_day_of_each_period()
+    {
+        var farm = G(1);
+        var op = G(101);
+        var rows = new Seed()
+            .Farm(farm, op, Ist(10, 1))
+            .Entry(farm, op, new DateTime(2026, 11, 9, 19, 0, 0, DateTimeKind.Utc))  // 00:30 IST 10 Nov
+            .Entry(farm, op, new DateTime(2026, 11, 9, 18, 0, 0, DateTimeKind.Utc))  // 23:30 IST 9 Nov
+            .User(G(201), Ist(11, 11))
+            .Build();
+
+        var dto = Compute(rows, D(11, 10), D(11, 13)); // Q = 6..9 Nov
+
+        foreach (var (name, number) in AsOfDayNumbers(dto).Concat(DuringDayNumbers(dto)))
+        {
+            number.CurrentByDay.Should().NotBeNull(name).And.HaveCount(4, name);
+            number.PreviousByDay.Should().NotBeNull(name).And.HaveCount(4, name);
+        }
+
+        dto.Overview.LogsRecorded.CurrentByDay.Should().Equal(new decimal?[] { 1m, 0m, 0m, 0m }, "00:30 India time is 10 Nov, day `from` first");
+        dto.Overview.LogsRecorded.PreviousByDay.Should().Equal(new decimal?[] { 0m, 0m, 0m, 1m }, "23:30 India time is 9 Nov, the last previous day");
+    }
+
+    [Fact]
+    public void Numbers_without_a_daily_form_carry_no_series()
+    {
+        var dto = AsOfDayFixture();
+
+        foreach (var (name, number) in new[]
+                 {
+                     ("acquisition.hasFarm", dto.Acquisition.HasFarm),
+                     ("acquisition.firstLog", dto.Acquisition.FirstLog),
+                     ("acquisition.habit", dto.Acquisition.Habit),
+                     ("acquisition.habitEligible", dto.Acquisition.HabitEligible),
+                     ("retention.d1Pct", dto.Retention.D1Pct),
+                     ("retention.d30Pct", dto.Retention.D30Pct),
+                 })
+        {
+            number.CurrentByDay.Should().BeNull(name);
+            number.PreviousByDay.Should().BeNull(name);
+        }
+    }
+
+    [Fact]
+    public void Blocked_farm_numbers_carry_no_series()
+    {
+        var farm = G(1);
+        var owner = G(101);
+        var cases = new (string Why, CompanyMisRows Rows)[]
+        {
+            ("unreadable list", new Seed().Farm(farm, owner).Entry(farm, owner, Ist(11, 12)).User(owner, Ist(11, 11)).Build(notReadable: 1)),
+            ("empty list", new Seed().User(owner, Ist(11, 11)).Build()),
+            ("above the ceiling", new Seed().User(owner, Ist(11, 11)).Build(listed: 501, liveCountSkipped: true)),
+        };
+
+        foreach (var (why, rows) in cases)
+        {
+            var dto = Compute(rows, D(11, 10), D(11, 13));
+
+            foreach (var (name, number) in AsOfDayNumbers(dto).Concat(DuringDayNumbers(dto))
+                         .Where(n => n.Name != "overview.signUps" && n.Name != "acquisition.verified"))
+            {
+                number.CurrentByDay.Should().BeNull("{0}: {1}", why, name);
+                number.PreviousByDay.Should().BeNull("{0}: {1}", why, name);
+            }
+
+            dto.Retention.QuietFarms7To13.Current.Value.Should().BeNull(why);
+            dto.Retention.QuietFarms14To29.Current.Value.Should().BeNull(why);
+            dto.Farms.ActiveFarmsInFpoPct.Current.Value.Should().BeNull(why);
+            dto.Retention.PreviousCurve.Should().BeEmpty(why);
+
+            dto.Overview.SignUps.CurrentByDay.Should().Equal(new decimal?[] { 0m, 1m, 0m, 0m }, why + ": sign-ups keep their series");
+            dto.Overview.SignUps.PreviousByDay.Should().HaveCount(4, why);
+            dto.Acquisition.Verified.CurrentByDay.Should().Equal(new decimal?[] { 0m, 1m, 0m, 0m }, why);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // A10, A11, A12
+    // ------------------------------------------------------------------
+
+    [Fact]
+    public void The_previous_curve_uses_the_previous_sign_ups()
+    {
+        var farm = G(1);
+        var u1 = G(101); var p1 = G(201); var p2 = G(202);
+        var rows = new Seed()
+            .Farm(farm, u1, Ist(10, 1))
+            .User(u1, Ist(11, 10))                  // current period 10..13 Nov
+            .User(p1, Ist(11, 6)).User(p2, Ist(11, 9)) // previous period 6..9 Nov
+            .Entry(farm, p1, Ist(11, 7))            // p1 day 1
+            .Entry(farm, p2, Ist(11, 9, 12))        // p2 day 0
+            .Build();
+
+        var dto = Compute(rows, D(11, 10), D(11, 13));
+
+        var previous = dto.Retention.PreviousCurve.ToDictionary(c => c.Day);
+        previous.Should().HaveCount(31);
+        previous[0].Should().Be(new MisCurvePointDto(0, 50.0m, 2));
+        previous[1].Should().Be(new MisCurvePointDto(1, 50.0m, 2), "p2's day 1 (10 Nov) is complete");
+        previous[5].Should().Be(new MisCurvePointDto(5, 0.0m, 1), "p2's day 5 (14 Nov) is today, not complete");
+        previous[8].Should().Be(new MisCurvePointDto(8, null, 0), "p1's day 8 is 14 Nov");
+
+        dto.Retention.Curve.ToDictionary(c => c.Day)[0].Should().Be(new MisCurvePointDto(0, 0.0m, 1),
+            "the current curve is u1 alone");
+    }
+
+    [Fact]
+    public void Cohort_rows_carry_day_1_7_14_30()
+    {
+        var farm = G(1);
+        var c1 = G(101); var c2 = G(102); var c3 = G(103);
+        var rows = new Seed()
+            .Farm(farm, c1, Ist(9, 1))
+            .User(c1, Ist(10, 26)).User(c2, Ist(10, 28)).User(c3, Ist(11, 1))
+            .Entry(farm, c1, new DateTime(2026, 10, 26, 19, 0, 0, DateTimeKind.Utc))  // 00:30 IST 27 Oct = c1 day 1
+            .Entry(farm, c1, Ist(11, 2))                                              // c1 day 7
+            .Entry(farm, c1, Ist(11, 10))                                             // c1 day 15, not day 14
+            .Entry(farm, c2, new DateTime(2026, 11, 4, 18, 0, 0, DateTimeKind.Utc))  // 23:30 IST 4 Nov = c2 day 7
+            .Entry(farm, c2, Ist(11, 11))                                             // c2 day 14
+            .Build();
+
+        var dto = Compute(rows, D(10, 26), D(11, 1));
+
+        var row = dto.Retention.CohortByWeek.Should().ContainSingle().Which;
+        row.People.Should().Be(3);
+        // day 1: all three eligible, c1 active. day 7: all three, c1 and c2. day 14: c1, c2 (c3's is 15 Nov).
+        // day 30: nobody's has completed.
+        row.ActivePctOnDays.Should().Equal(33.3m, 66.7m, 50.0m, null);
+    }
+
+    [Fact]
+    public void The_two_quiet_bands_add_up_to_7_to_29()
+    {
+        var seed = new Seed();
+        var lastEntries = new[] { Ist(11, 7), Ist(11, 6), Ist(10, 31), Ist(10, 30), Ist(10, 15), Ist(10, 14) }; // ages 6, 7, 13, 14, 29, 30
+        for (var i = 0; i < lastEntries.Length; i++)
+        {
+            seed.Farm(G(i + 1), G(101 + i), Ist(9, 1)).Entry(G(i + 1), G(101 + i), lastEntries[i]);
+        }
+
+        var dto = Compute(seed.Build(), D(11, 10), D(11, 13));
+
+        Measured(dto.Retention.QuietFarms7To13).Should().Be(2, "ages 7 and 13");
+        Measured(dto.Retention.QuietFarms14To29).Should().Be(2, "ages 14 and 29");
+        Measured(dto.Retention.QuietFarms7To29).Should().Be(4);
+
+        var low = dto.Retention.QuietFarms7To13.CurrentByDay!;
+        var high = dto.Retention.QuietFarms14To29.CurrentByDay!;
+        var all = dto.Retention.QuietFarms7To29.CurrentByDay!;
+        all.Select((v, i) => low[i] + high[i] == v).Should().OnlyContain(same => same, "the two bands add up on every day");
+        dto.Retention.QuietFarms7To13.Previous.Value!.Value
+            .Should().Be(dto.Retention.QuietFarms7To29.Previous.Value!.Value - dto.Retention.QuietFarms14To29.Previous.Value!.Value);
+    }
+
+    [Fact]
+    public void Fpo_share_is_of_active_farms()
+    {
+        var a = G(1); var b = G(2); var c = G(3); var d = G(4);
+        var rows = new Seed()
+            .Farm(a, G(101), Ist(9, 1)).Farm(b, G(102), Ist(9, 1)).Farm(c, G(103), Ist(9, 1)).Farm(d, G(104), Ist(9, 1))
+            .Entry(a, G(101), Ist(11, 12)).Entry(b, G(102), Ist(11, 12)).Entry(d, G(104), Ist(11, 12))
+            .Entry(c, G(103), Ist(10, 20))                                                   // not active at 13 Nov
+            .Scope(a, "Fake FPO Alpha", Ist(11, 1))
+            .Scope(c, "Fake FPO Alpha", Ist(11, 1))
+            .Scope(d, "Fake FPO Alpha", new DateTime(2026, 11, 13, 19, 0, 0, DateTimeKind.Utc)) // 00:30 IST 14 Nov
+            .Build();
+
+        var dto = Compute(rows, D(11, 13), D(11, 13));
+
+        Measured(dto.Farms.FarmsInFpo).Should().Be(2);
+        Measured(dto.Farms.ActiveFarmsInFpoPct).Should().Be(33.3m, "of the 3 active farms only a counts as in an FPO");
+
+        var quiet = new Seed()
+            .Farm(a, G(101), Ist(9, 1)).Entry(a, G(101), Ist(10, 20)).Scope(a, "Fake FPO Alpha", Ist(10, 1))
+            .Build();
+        Compute(quiet, D(11, 13), D(11, 13)).Farms.ActiveFarmsInFpoPct.Current
+            .Should().Be(new MisValueDto(null, DenominatorZero), "no active farm: nothing to divide");
     }
 
     // ------------------------------------------------------------------
