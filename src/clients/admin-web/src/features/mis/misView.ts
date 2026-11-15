@@ -71,7 +71,8 @@ export function shownOf(v: MisValue, kind: MisKind, item?: string): MisShown {
 }
 
 export type MisDelta =
-  | { text: string; good: boolean | null }
+  /** `up` is set only where the text carries no sign ("less than 0.1%"), so the arrow can still point. */
+  | { text: string; good: boolean | null; up?: boolean }
   | { previousNotMeasured: string }
   | null;
 
@@ -88,15 +89,14 @@ export function deltaOf(n: MisNumber, kind: MisKind, upIsGood: boolean, item?: s
   if (prev === null) return { previousNotMeasured: notMeasuredWhy(n.previous.notMeasuredReason, item) };
   /* B13: a change of zero reads "no change", never "0%" or "0 pts". */
   if (cur === prev) return { text: 'no change', good: null };
-  const sign = cur > prev ? '+' : '−';
   const good = (cur > prev) === upIsGood;
   if (kind === 'pct') {
     const text = fmtDeltaPoints(cur, prev);
-    return { text: text === '0 pts' ? 'less than 0.1 pts' : text, good };
+    return text === '0 pts' ? { text: 'less than 0.1 pts', good, up: cur > prev } : { text, good };
   }
   if (prev === 0) return { text: 'up from 0', good };
   const text = fmtRelDelta(cur, prev) as string;
-  return { text: text === '0%' ? `${sign}less than 0.1%` : text, good };
+  return text === '0%' ? { text: 'less than 0.1%', good, up: cur > prev } : { text, good };
 }
 
 /* ── tiles ─────────────────────────────────────────────────────────────── */

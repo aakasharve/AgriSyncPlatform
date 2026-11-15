@@ -220,7 +220,7 @@ export const Delta: React.FC<{ delta: MisDelta; className?: string }> = ({ delta
     }
     const { text, good } = delta;
     const flat = good === null;
-    const up = text.startsWith('+') || text.startsWith('up');
+    const up = delta.up ?? (text.startsWith('+') || text.startsWith('up'));
     const Icon = flat ? Minus : up ? ArrowUpRight : ArrowDownRight;
     const tone = flat ? DELTA_TEXT.flat : good ? DELTA_TEXT.good : DELTA_TEXT.bad;
     return (

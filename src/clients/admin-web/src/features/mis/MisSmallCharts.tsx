@@ -273,6 +273,8 @@ export interface Part {
     detail?: string;
     /** B8: the share worked out by the adapter (count ÷ served sum); null = not printed. */
     share: string | null;
+    /** Shown at the end of the row, e.g. the change against the period before. */
+    extra?: React.ReactNode;
 }
 
 /** Bar widths follow the counts; the printed share is the adapter's, and absent when the sum is 0. */
@@ -297,6 +299,7 @@ export const PartBar: React.FC<{ parts: Part[]; ariaLabel: string }> = ({ parts,
                         <span className="truncate text-stone-700">{p.label}</span>
                         {p.share && <span className="ml-auto whitespace-nowrap tabular-nums text-stone-900">{p.share}</span>}
                         {p.detail && <span className={cx("whitespace-nowrap tabular-nums text-stone-500", !p.share && "ml-auto")}>{p.detail}</span>}
+                        {p.extra}
                     </li>
                 ))}
             </ul>

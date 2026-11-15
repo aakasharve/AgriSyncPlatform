@@ -83,22 +83,14 @@ export const RetentionSection: React.FC<MisSectionProps<RetentionView>> = ({ vie
                 >
                     <ChartBody chart={view.bands} checkedAt={checkedAt}>
                         {(b) => (
-                            <>
-                                <PartBar
-                                    ariaLabel="Registered farms by days since the last entry"
-                                    parts={b.parts.map((p, k) => ({ key: p.key, label: p.label, value: p.value, color: BAND_COLORS[k], detail: p.text, share: p.share }))}
-                                />
-                                {compare && (
-                                    <ul className="mt-4 space-y-1.5 border-t border-stone-100 pt-3 text-[13px]">
-                                        {b.parts.map((p) => (
-                                            <li key={p.key} className="flex items-center justify-between gap-3">
-                                                <span className="text-stone-600">{p.label}, change</span>
-                                                <Delta delta={p.delta} />
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </>
+                            /* Each band's change sits on its own row, the first band included (B18 V5). */
+                            <PartBar
+                                ariaLabel="Registered farms by days since the last entry"
+                                parts={b.parts.map((p, k) => ({
+                                    key: p.key, label: p.label, value: p.value, color: BAND_COLORS[k], detail: p.text, share: p.share,
+                                    extra: compare ? <Delta delta={p.delta} /> : undefined,
+                                }))}
+                            />
                         )}
                     </ChartBody>
                 </ChartCard>
