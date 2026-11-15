@@ -1,5 +1,7 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Http;
 using ShramSafal.Application.Admin.Ports;
+using ShramSafal.Application.UseCases.Admin.GetCompanyMis;
 using ShramSafal.Application.UseCases.Admin.GetAiProviderHealth24h;
 using ShramSafal.Application.UseCases.Admin.GetAiSpendMonthly;
 using ShramSafal.Application.UseCases.Admin.GetAppVersions;
@@ -267,6 +269,55 @@ public static class AdminEndpoints
         .WithName("GetAdminUsers")
         .CacheOutput("AdminLive");
 
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2a) — company-wide numbers counted live
+        // from real rows, India-time days. Platform owners only: metrics.nsm is also held by FPO owners,
+        // so the platform gate follows the module gate and the handler re-checks before reading anything.
+        // Deliberately has no CacheOutput (each load writes one cross-farm audit row). Failures are not
+        // caught: a read failure answers 500, never an empty answer.
+        group.MapGet("/admin/mis/company", async (
+            HttpContext http,
+            IEntitlementResolver resolver,
+            GetCompanyMisHandler h,
+            string? from,
+            string? to,
+            CancellationToken ct) =>
+        {
+            var scope = await AdminScopeHelper.ResolveOrDenyAsync(http, resolver, ct);
+            if (scope is null) return Results.Empty;
+            if (!await AdminScopeHelper.RequireReadAsync(http, scope, ModuleKey.MetricsNsm)) return Results.Empty;
+            if (!await AdminScopeHelper.RequirePlatformAdminAsync(http, scope)) return Results.Empty;
+
+            if (!TryParseMisDay(from, out var fromDay) || !TryParseMisDay(to, out var toDay))
+            {
+                return Results.BadRequest(new
+                {
+                    code = "mis_range_invalid",
+                    message = "Dates must be written yyyy-MM-dd."
+                });
+            }
+
+            var r = await h.HandleAsync(new GetCompanyMisQuery(
+                fromDay, toDay, http.User.GetUserIdOrEmpty(), scope.IsPlatformAdmin), ct);
+
+            if (r.IsSuccess) return Results.Ok(r.Value);
+
+            return r.Error.Kind switch
+            {
+                AgriSync.BuildingBlocks.Results.ErrorKind.Validation => Results.BadRequest(new
+                {
+                    code = "mis_range_invalid",
+                    message = r.Error.Description
+                }),
+                AgriSync.BuildingBlocks.Results.ErrorKind.Forbidden => Results.Json(new
+                {
+                    code = "admin_platform_only",
+                    message = "This action requires Platform+Owner scope."
+                }, statusCode: StatusCodes.Status403Forbidden),
+                _ => Results.Problem()
+            };
+        })
+        .WithName("GetAdminCompanyMis");
+
         // SARVAM_PRIMARY_VOICE_PIPELINE_2026-05-21 Task 3.1 — rolling 24h
         // provider-health rollup. Reads ssf.v_ai_provider_health_24h via
         // IAdminAiObservabilityRepository. Gated on ModuleKey.OpsVoice
@@ -311,6 +362,24 @@ public static class AdminEndpoints
         .CacheOutput("AdminMaterialized");
 
         return group;
+    }
+
+    /// <summary>
+    /// Company MIS date parameter: absent or blank is null (true); otherwise it must be
+    /// exactly yyyy-MM-dd, else false (the route answers 400 mis_range_invalid).
+    /// </summary>
+    private static bool TryParseMisDay(string? raw, out DateOnly? day)
+    {
+        day = null;
+        if (string.IsNullOrWhiteSpace(raw)) return true;
+        if (!DateOnly.TryParseExact(raw.Trim(), "yyyy-MM-dd", CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var parsed))
+        {
+            return false;
+        }
+
+        day = parsed;
+        return true;
     }
 }
 

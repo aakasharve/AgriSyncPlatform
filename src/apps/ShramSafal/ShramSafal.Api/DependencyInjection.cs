@@ -804,6 +804,10 @@ public static class DependencyInjection
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSilentChurn.GetSilentChurnHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetSuffering.GetSufferingHandler>();
         services.AddScoped<ShramSafal.Application.UseCases.Admin.GetUsersList.GetUsersListHandler>();
+        // spec: company-mis-real-numbers-2026-11-15 (plan CR-2a) — company MIS, platform owners only.
+        // Needs ICompanyMisReader and CompanyMisExclusions, registered with the reader (plan Task 3),
+        // and TimeProvider.
+        services.AddScoped<ShramSafal.Application.UseCases.Admin.GetCompanyMis.GetCompanyMisHandler>();
         services.AddScoped<ShramSafal.Application.Ports.IAdminMisRepository,
             ShramSafal.Infrastructure.Persistence.Repositories.AdminMisRepository>();
 
