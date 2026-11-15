@@ -20,7 +20,7 @@ import type {
   MisRange,
   MisValue,
 } from '@/hooks/useCompanyMis';
-import { itemByKey, reasonSentence, reasonSentenceFor, type MisFieldPath, type MisSectionKey } from './misItems';
+import { itemByKey, reasonSentenceFor, type MisFieldPath, type MisSectionKey } from './misItems';
 import {
   fmtDayYear,
   fmtDay,
@@ -683,9 +683,9 @@ function changeClause(n: MisNumber, kind: MisKind, upIsGood: boolean, compare: b
   return ` (${d.text} on the period before)`;
 }
 
-/** Headlines keep the generic reason sentences; the item-specific ones (B11) sit on the tiles and cards. */
-function notMeasuredClause(label: string, v: MisValue): string {
-  return `${label} is not measured: ${reasonSentence(v.notMeasuredReason)}`;
+/** A headline clause for a number the server did not count, in the item's own words (B11). */
+function notMeasuredClause(label: string, v: MisValue, item: string): string {
+  return `${label} is not measured: ${reasonSentenceFor(v.notMeasuredReason, item)}`;
 }
 
 /** B13: a counted noun agrees with its number — "1 farm", "2 farms". */
@@ -705,11 +705,11 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       const o = d.overview;
       const first = o.activeFarms.current.value !== null
         ? `${txt(o.activeFarms.current, 'count')} ${noun(o.activeFarms.current.value, 'farm', 'farms')} saved an entry in the 7 days to ${asOfText(d)}${changeClause(o.activeFarms, 'count', true, compare)}.`
-        : notMeasuredClause('Active farms', o.activeFarms.current);
+        : notMeasuredClause('Active farms', o.activeFarms.current, 'overview.activeFarms');
       const second = o.voiceSharePct.current.value === null
-        ? notMeasuredClause('The share saved by voice', o.voiceSharePct.current)
+        ? notMeasuredClause('The share saved by voice', o.voiceSharePct.current, 'overview.voiceShare')
         : o.logsRecorded.current.value === null
-          ? notMeasuredClause('Entries saved', o.logsRecorded.current)
+          ? notMeasuredClause('Entries saved', o.logsRecorded.current, 'overview.logsRecorded')
           : `Voice made ${txt(o.voiceSharePct.current, 'pct')} of the ${txt(o.logsRecorded.current, 'count')} ${noun(o.logsRecorded.current.value, 'entry', 'entries')} in this range.`;
       return `${first} ${second}`;
     }
@@ -717,10 +717,10 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       const a = d.acquisition;
       const first = a.verified.current.value !== null
         ? `${txt(a.verified.current, 'count')} ${noun(a.verified.current.value, 'person', 'people')} verified their phone${changeClause(a.verified, 'count', true, compare)}.`
-        : notMeasuredClause('Phone verification', a.verified.current);
+        : notMeasuredClause('Phone verification', a.verified.current, 'acquisition.verified');
       let second: string;
-      if (a.habit.current.value === null) second = notMeasuredClause('The habit', a.habit.current);
-      else if (a.habitEligible.current.value === null) second = notMeasuredClause('The habit', a.habitEligible.current);
+      if (a.habit.current.value === null) second = notMeasuredClause('The habit', a.habit.current, 'acquisition.habit');
+      else if (a.habitEligible.current.value === null) second = notMeasuredClause('The habit', a.habitEligible.current, 'acquisition.habit');
       else if (a.habitEligible.current.value === 0) second = 'Nobody who signed up in this range is 7 days in yet, so no habit is judged.';
       else second = `${txt(a.habit.current, 'count')} of ${txt(a.habitEligible.current, 'count')} old enough to judge saved entries on 3 of their first 7 days.`;
       return `${first} ${second} Installs and channels are not measured yet.`;
@@ -729,10 +729,10 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       const e = d.engagement;
       const first = e.logsPerActiveFarmPerWeek.current.value !== null
         ? `An active farm saved ${txt(e.logsPerActiveFarmPerWeek.current, 'decimal')} ${noun(e.logsPerActiveFarmPerWeek.current.value, 'entry', 'entries')} a week${changeClause(e.logsPerActiveFarmPerWeek, 'decimal', true, compare)}.`
-        : notMeasuredClause('Entries per active farm', e.logsPerActiveFarmPerWeek.current);
+        : notMeasuredClause('Entries per active farm', e.logsPerActiveFarmPerWeek.current, 'engagement.logsPerFarm');
       let second: string;
       if (e.whenLogged.length === 0) {
-        second = notMeasuredClause('When farmers log', d.overview.logsRecorded.current);
+        second = notMeasuredClause('When farmers log', d.overview.logsRecorded.current, 'engagement.whenLogged');
       } else {
         const { grid, max } = heatGrid(e.whenLogged);
         if (max === 0) {
@@ -756,25 +756,25 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       } else {
         const a = r.d1Pct.current.value !== null
           ? `${txt(r.d1Pct.current, 'pct')} of new sign-ups came back the next day.`
-          : notMeasuredClause('Next-day return', r.d1Pct.current);
+          : notMeasuredClause('Next-day return', r.d1Pct.current, 'retention.d1');
         const b = r.d30Pct.current.value !== null
           ? `${txt(r.d30Pct.current, 'pct')} were active on day 30.`
-          : notMeasuredClause('Day-30 return', r.d30Pct.current);
+          : notMeasuredClause('Day-30 return', r.d30Pct.current, 'retention.d30');
         first = `${a} ${b}`;
       }
       const second = r.quietFarms7To29.current.value !== null
         ? `${txt(r.quietFarms7To29.current, 'count')} ${noun(r.quietFarms7To29.current.value, 'farm has', 'farms have')} gone quiet for 7–29 days and can still be won back.`
-        : notMeasuredClause('Quiet farms', r.quietFarms7To29.current);
+        : notMeasuredClause('Quiet farms', r.quietFarms7To29.current, 'retention.quiet');
       return `${first} ${second}`;
     }
     case 'quality': {
       const q = d.quality;
       const first = q.voiceRecordingsSavedPct.current.value !== null
         ? `${txt(q.voiceRecordingsSavedPct.current, 'pct')} of voice recordings became a saved entry${changeClause(q.voiceRecordingsSavedPct, 'pct', true, compare)}.`
-        : notMeasuredClause('Voice recordings saved', q.voiceRecordingsSavedPct.current);
+        : notMeasuredClause('Voice recordings saved', q.voiceRecordingsSavedPct.current, 'quality.voiceSaved');
       const second = q.logsCorrectedPct.current.value !== null
         ? `Farmers corrected ${txt(q.logsCorrectedPct.current, 'pct')} of saved entries.`
-        : notMeasuredClause('Entries corrected', q.logsCorrectedPct.current);
+        : notMeasuredClause('Entries corrected', q.logsCorrectedPct.current, 'quality.corrected');
       return `${first} ${second}`;
     }
     case 'farms': {
@@ -783,9 +783,9 @@ export function headlineFor(section: MisSectionKey, d: CompanyMis | null, compar
       if (f.activeFarms.current.value !== null && f.acresCovered.current.value !== null) {
         first = `${txt(f.activeFarms.current, 'count')} ${noun(f.activeFarms.current.value, 'active farm', 'active farms')} covering ${txt(f.acresCovered.current, 'acres')} ${noun(f.acresCovered.current.value, 'acre', 'acres')}.`;
       } else if (f.activeFarms.current.value === null) {
-        first = notMeasuredClause('Active farms', f.activeFarms.current);
+        first = notMeasuredClause('Active farms', f.activeFarms.current, 'farms.activeFarms');
       } else {
-        first = `${txt(f.activeFarms.current, 'count')} ${noun(f.activeFarms.current.value, 'active farm', 'active farms')}. ${notMeasuredClause('Acres covered', f.acresCovered.current)}`;
+        first = `${txt(f.activeFarms.current, 'count')} ${noun(f.activeFarms.current.value, 'active farm', 'active farms')}. ${notMeasuredClause('Acres covered', f.acresCovered.current, 'farms.acres')}`;
       }
       return `${first} Districts are not measured yet.`;
     }
