@@ -163,12 +163,13 @@ public abstract class AdminCountingRealPostgresHarness(Xunit.Abstractions.ITestO
     /// <paramref name="analyticsConn"/> overrides the analytics connection (to
     /// point it at a database that does not exist).
     /// </summary>
-    protected ServiceProvider BuildProvider(IReadOnlyList<Guid>? excludedUserIds = null, string? analyticsConn = null)
+    protected ServiceProvider BuildProvider(
+        IReadOnlyList<Guid>? excludedUserIds = null, string? analyticsConn = null, string? migrationConn = null)
     {
         var settings = new Dictionary<string, string?>
         {
             ["ConnectionStrings:ShramSafalDb"] = AppConn,
-            ["ConnectionStrings:ShramSafalDb_Migration"] = SuperuserConn,
+            ["ConnectionStrings:ShramSafalDb_Migration"] = migrationConn ?? SuperuserConn,
             ["ConnectionStrings:UserDb"] = AppConn,
         };
         if (excludedUserIds is not null)

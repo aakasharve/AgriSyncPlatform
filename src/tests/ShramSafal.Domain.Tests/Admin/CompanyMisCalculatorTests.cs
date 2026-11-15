@@ -632,6 +632,32 @@ public sealed class CompanyMisCalculatorTests
     }
 
     [Fact]
+    public void Role_mix_reads_only_an_active_membership_on_the_chosen_farm()
+    {
+        // Amendment A8: no Active (status 3) membership on the chosen farm -> Unknown.
+        var f1 = G(1); var f2 = G(2);
+        var formerMukadam = G(101); var activeWorker = G(102);
+        var rows = new Seed()
+            .Farm(f1, G(901), Ist(9, 1)).Farm(f2, G(902), Ist(9, 1))
+            // chosen farm f1 (two entries); his membership there is no longer Active (status 4);
+            // an Active membership on f2, where he saved less, does not stand in for it.
+            .Member(f1, formerMukadam, "Mukadam", status: 4)
+            .Member(f2, formerMukadam, "SecondaryOwner", status: 3)
+            .Entry(f1, formerMukadam, Ist(11, 10)).Entry(f1, formerMukadam, Ist(11, 11)).Entry(f2, formerMukadam, Ist(11, 9))
+            .Member(f1, activeWorker, "Worker", status: 3)
+            .Entry(f1, activeWorker, Ist(11, 12))
+            .Build();
+
+        var dto = Compute(rows, D(11, 13), D(11, 13));
+
+        dto.Engagement.RoleMixOfMau.Should().BeEquivalentTo(new[]
+        {
+            new MisRoleCountDto("Unknown", 1),
+            new MisRoleCountDto("Worker", 1),
+        });
+    }
+
+    [Fact]
     public void The_heatmap_always_has_168_cells_in_india_time()
     {
         var farm = G(1);

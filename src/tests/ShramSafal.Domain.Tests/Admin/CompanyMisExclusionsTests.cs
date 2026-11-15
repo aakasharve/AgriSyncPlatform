@@ -34,6 +34,40 @@ public sealed class CompanyMisExclusionsTests
         CompanyMisExclusions.Parse(Array.Empty<string?>()).UserIds.Should().BeEmpty("appsettings.json carries []");
     }
 
+    // Review finding V1: CompanyMis__ExcludedUserIds=<id> (no __0) must not silently become an empty list.
+
+    [Fact]
+    public void A_single_value_with_no_list_entries_is_refused_and_asks_for_a_list()
+    {
+        var single = FakeOne.ToString("D");
+
+        var act = () => CompanyMisExclusions.FromConfiguration(single, Array.Empty<string?>());
+
+        var thrown = act.Should().Throw<InvalidOperationException>().Which;
+        thrown.Message.Should().Contain("CompanyMis:ExcludedUserIds", "the message names the key to fix");
+        thrown.Message.Should().MatchRegex("(?i)list|__0|:0", "the message asks for a list");
+        thrown.Message.Should().NotContain(single, "the value is never echoed");
+
+        var noChildren = () => CompanyMisExclusions.FromConfiguration(single, null);
+        noChildren.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void A_proper_list_is_accepted_from_configuration()
+    {
+        var parsed = CompanyMisExclusions.FromConfiguration(
+            null, new[] { FakeOne.ToString("D"), " " + FakeTwo.ToString("D") + " " });
+
+        parsed.UserIds.Should().BeEquivalentTo(new[] { FakeOne, FakeTwo });
+    }
+
+    [Fact]
+    public void An_absent_key_is_an_empty_list()
+    {
+        CompanyMisExclusions.FromConfiguration(null, null).UserIds.Should().BeEmpty();
+        CompanyMisExclusions.FromConfiguration(null, Array.Empty<string?>()).UserIds.Should().BeEmpty();
+    }
+
     [Fact]
     public void Parse_refuses_a_non_guid_without_echoing_it()
     {

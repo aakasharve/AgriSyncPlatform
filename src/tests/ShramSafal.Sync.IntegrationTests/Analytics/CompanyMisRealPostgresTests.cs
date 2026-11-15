@@ -115,6 +115,84 @@ public sealed class CompanyMisRealPostgresTests(Xunit.Abstractions.ITestOutputHe
             "the job's successful attempt is read; the failed attempt is not a sample");
     }
 
+    /// <summary>
+    /// Review finding V2. The test above would still pass if the per-farm rows were read through the
+    /// admin (superuser) context. Here <c>ShramSafalDb_Migration</c> is a login made for this test: it reads
+    /// past row-level security (BYPASSRLS) but holds privileges ONLY on what the plan lets the admin
+    /// context do (Task 3 step 1): the two columns of the farm keys and inserting the audit row. Any
+    /// entry, membership, plot, AI-job or farm-detail read through the admin context is refused with
+    /// permission denied, so the load would throw. The counts must still come back, read as agrisync_app.
+    /// </summary>
+    [SkippableFact]
+    public async Task Per_farm_rows_are_never_read_through_the_admin_context()
+    {
+        await GuardAsync();
+
+        var role = $"cr2a_lister_{Guid.NewGuid():N}"[..24];
+        var listerConn = new NpgsqlConnectionStringBuilder(SuperuserConn) { Username = role, Password = "x" }.ConnectionString;
+        await ExecAsSuperuserAsync($"""
+            CREATE ROLE {role} LOGIN BYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
+            GRANT CONNECT ON DATABASE "{ScratchDbName}" TO {role};
+            GRANT USAGE ON SCHEMA ssf TO {role};
+            GRANT SELECT ("Id", owner_account_id) ON ssf.farms TO {role};
+            GRANT INSERT ON ssf.audit_events TO {role};
+            """);
+        try
+        {
+            // The construction itself: the login lists both farm keys past row-level security ...
+            await using (var lister = new NpgsqlConnection(listerConn))
+            {
+                await lister.OpenAsync();
+                await using (var keys = lister.CreateCommand())
+                {
+                    keys.CommandText = "SELECT count(\"Id\") FROM ssf.farms";
+                    Convert.ToInt64(await keys.ExecuteScalarAsync()).Should().Be(2, "the login reads the farm keys past row-level security");
+                }
+
+                // ... and is refused everything a per-farm read would need.
+                foreach (var sql in new[]
+                         {
+                             "SELECT count(*) FROM ssf.daily_logs",
+                             "SELECT count(*) FROM ssf.farm_memberships",
+                             "SELECT count(*) FROM ssf.plots",
+                             "SELECT count(*) FROM ssf.ai_jobs",
+                             "SELECT count(*) FROM ssf.ai_job_attempts",
+                             "SELECT max(created_at_utc) FROM ssf.farms",
+                         })
+                {
+                    await using var cmd = lister.CreateCommand();
+                    cmd.CommandText = sql;
+                    var refused = async () => await cmd.ExecuteScalarAsync();
+                    (await refused.Should().ThrowAsync<PostgresException>(sql)).Which.SqlState.Should().Be("42501", sql);
+                }
+            }
+
+            var dto = await LoadAsync(BuildProvider(migrationConn: listerConn), new DateOnly(2026, 11, 10), new DateOnly(2026, 11, 13));
+            Evidence(dto);
+
+            dto.FarmsListed.Should().Be(2);
+            dto.FarmsNotReadable.Should().Be(0);
+            dto.Overview.LogsRecorded.Current.Should().Be(new MisValueDto(3m, null));
+            dto.Overview.VoiceLogs.Current.Should().Be(new MisValueDto(1m, null));
+            dto.Overview.ActiveFarms.Current.Should().Be(new MisValueDto(2m, null));
+            dto.Farms.FarmsRegistered.Current.Should().Be(new MisValueDto(2m, null));
+            dto.Farms.AcresCovered.Current.Should().Be(new MisValueDto(4.0m, null));
+            dto.Engagement.RoleMixOfMau.Should().BeEquivalentTo(new[] { new MisRoleCountDto("PrimaryOwner", 2) });
+            dto.Quality.VoiceRecordings.Current.Should().Be(new MisValueDto(1m, null));
+            dto.Quality.TranscriptionAvgMs.Current.Should().Be(new MisValueDto(1234m, null));
+            (await CrossFarmAuditRowsAsync(Admin)).Should().Be(1, "the audit row is written through the login");
+        }
+        finally
+        {
+            NpgsqlConnection.ClearAllPools();
+            await ExecAsSuperuserAsync(
+                $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename = '{role}'; DROP OWNED BY {role};");
+            await using var admin = new NpgsqlConnection(AdminConn);
+            await admin.OpenAsync();
+            await ExecAsync(admin, $"REVOKE ALL ON DATABASE \"{ScratchDbName}\" FROM {role}; DROP ROLE {role};");
+        }
+    }
+
     [SkippableFact]
     public async Task The_app_role_sees_nothing_without_a_farm_setting()
     {

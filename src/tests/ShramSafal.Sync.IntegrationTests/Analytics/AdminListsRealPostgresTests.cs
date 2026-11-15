@@ -174,6 +174,78 @@ public sealed class AdminListsRealPostgresTests(Xunit.Abstractions.ITestOutputHe
         mine.Single(u => u.UserId == NeverSignedInPerson).LastLoginAt.Should().BeNull();
     }
 
+    /// <summary>Review finding V3: the users order has a tie-breaker, so paging never repeats or drops a person.</summary>
+    [SkippableFact]
+    public async Task Users_with_the_same_sign_up_time_page_exactly_once_each()
+    {
+        await GuardAsync();
+
+        var twinA = G("401");
+        var twinB = G("402");
+        var sameTime = Ist(11, 1, 9);   // newer than every other seeded person
+        await using (var db = new NpgsqlConnection(SuperuserConn))
+        {
+            await db.OpenAsync();
+            await SeedUserAsync(db, twinA, "0000009401", "Fake Twin A", sameTime, sameTime);
+            await SeedUserAsync(db, twinB, "0000009402", "Fake Twin B", sameTime, sameTime);
+        }
+
+        var provider = BuildProvider();
+        for (var round = 0; round < 5; round++)
+        {
+            await using var scope = AdminScope(provider);
+            var repository = Repository(scope.ServiceProvider);
+            var page1 = await repository.GetUsersListAsync(1, 1, null);
+            var page2 = await repository.GetUsersListAsync(2, 1, null);
+
+            page1.Items.Should().ContainSingle();
+            page2.Items.Should().ContainSingle();
+            new[] { page1.Items[0].UserId, page2.Items[0].UserId }.Should().BeEquivalentTo(
+                new[] { twinA, twinB }, "pages 1 and 2 hold each of the two newest people exactly once (round {0})", round);
+        }
+    }
+
+    /// <summary>Review finding V3: '_' and '%' in a search are characters, not wildcards.</summary>
+    [SkippableFact]
+    public async Task A_search_for_underscore_or_percent_matches_only_that_character()
+    {
+        await GuardAsync();
+
+        var underscoreOwner = G("501");
+        var percentOwner = G("502");
+        await using (var db = new NpgsqlConnection(SuperuserConn))
+        {
+            await db.OpenAsync();
+            await SeedUserAsync(db, underscoreOwner, "0000009501", "Fake_Underscore Person", Ist(10, 25), Ist(10, 25));
+            await SeedUserAsync(db, percentOwner, "0000009502", "Fake 100% Person", Ist(10, 26), Ist(10, 26));
+            await SeedFarmAsync(db, G("f501"), "Fake_Underscore Farm", underscoreOwner, G("a501"), Ist(10, 25));
+            await SeedFarmAsync(db, G("f502"), "Fake 100% Farm", percentOwner, G("a502"), Ist(10, 26));
+        }
+
+        var provider = BuildProvider();
+
+        var underscoreFarms = await FarmsAsync(provider, 1, 50, "_");
+        underscoreFarms.Items.Select(i => i.Name).Should().Equal(new[] { "Fake_Underscore Farm" },
+            "only the farm whose name contains an underscore");
+        underscoreFarms.TotalCount.Should().Be(1);
+
+        var percentFarms = await FarmsAsync(provider, 1, 50, "%");
+        percentFarms.Items.Select(i => i.Name).Should().Equal(new[] { "Fake 100% Farm" });
+        percentFarms.TotalCount.Should().Be(1);
+
+        await using var scope = AdminScope(provider);
+        var repository = Repository(scope.ServiceProvider);
+        foreach (var ch in new[] { "_", "%" })
+        {
+            var users = await repository.GetUsersListAsync(1, 200, ch);
+            users.Items.Should().OnlyContain(
+                u => (u.DisplayName ?? string.Empty).Contains(ch) || u.Phone.Contains(ch),
+                "a search for '{0}' returns only people who really contain it", ch);
+            users.TotalCount.Should().Be(users.Items.Count);
+            users.TotalCount.Should().BeLessThanOrEqualTo(1, "at most the one seeded person contains '{0}'", ch);
+        }
+    }
+
     [SkippableFact]
     public async Task A_broken_read_is_an_error_not_an_empty_list()
     {
